@@ -55,6 +55,8 @@ Adopting **only** the planning half — the three artifacts, executed by an inte
 instead of `sdd run` — is a supported tier with a lighter setup (no budgets, no `TEST_CMD` the
 gates depend on, no preflight). See [`docs/plan-only.md`](docs/plan-only.md); the agents there are
 symlinked to this kit with `sdd-link-agents`, so an improvement here reaches every target at once.
+`sdd install --force` never writes through those links (a broken one included): it reports them and
+leaves them alone.
 
 `sdd install` is idempotent: running it again shows the agent diff instead of overwriting.
 `sdd preflight` compares the installed copies with the kit source **byte for byte** and fails on a
@@ -71,14 +73,15 @@ runner says nothing about language, and each session follows whatever the existi
 ## Usage
 
 ```bash
-sdd approve <mission>        # show the plan and, on an explicit y, write the human approval and commit it
+sdd approve <mission>        # show the plan and, on an explicit y, switch to the declared branch, write the approval and commit the mission directory
 sdd run <mission>            # run from the first unsatisfied gate through to the PR
 sdd status <mission>         # where it stands, what is missing, why it stalled
 sdd why <mission> [PHASE]    # why that phase's gate did not pass — start any diagnosis here
 sdd phase <mission>          # print only the current phase (or DONE) — for scripts
 sdd retry <mission>          # retry the current phase with a fresh session
 sdd close <mission>          # post-merge: close the JIRA issue (a real paid session — since 2026-09-11
-                             #   it writes its own ledger row, `event:"close"`, cost included)
+                             #   it writes its own ledger row, `event:"close"`, cost included), then
+                             #   returns to the base branch — with or without JIRA
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
 sdd autonomy                 # what the sessions did per kit version (advanced · churned · idle, waste), for THIS repo,
                              #   from the global ledger (~/.sdd/autonomy-log.jsonl)
@@ -104,8 +107,9 @@ sdd adr check [--mission <m>]         # read the links back; rc 0 clean, 1 viola
 
 `sdd approve <mission>` is the human gate with a command instead of a hand edit. It prints what you
 are about to approve — the title, the PLAN-AUTO evidence, the increments, the open questions —
-asks `[y/N]`, and only on an explicit yes writes `aprovacao: humano-<date>` and commits that one
-file. It never opens a session: approving is the one decision in the pipeline that has to come from
+asks `[y/N]`, and only on an explicit yes switches to the declared branch, writes
+`aprovacao: humano-<date>` and commits the mission directory (plus the file `adr:` names, when it
+is a path). It never opens a session: approving is the one decision in the pipeline that has to come from
 outside it. `N` or a bare Enter is an answer and exits 0; no answer at all — stdin closed, an empty
 pipe, a harness with no terminal — exits **66** and writes nothing, so a caller can tell "the human
 said no" from "nobody was asked". On a plan born of `sdd kaizen` it is the **only** way through the gate — `auto` is

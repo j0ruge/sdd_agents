@@ -376,11 +376,23 @@ frontmatter_has() {
 frontmatter_write() {
   local file="$1" key="$2" value="$3" tmp
   [ -f "$file" ] || die "frontmatter_write: $file does not exist"
+  # A symlink is refused, never followed and never replaced (#81). Writing THROUGH it lands the
+  # value in a file the caller's `git add -- <path>` does not carry; `mv -f` over it — what this
+  # function used to do — turns the link into a regular file, leaves the real target untouched and
+  # commits the type change. A link here is a choice someone made; neither write honours it.
+  if [ -L "$file" ]; then
+    die "frontmatter_write: $file is a symbolic link — writing through it would land outside the commit, and replacing it would undo the link; point the mission at a regular file"
+  fi
   # `|| die`: a mission directory the human cannot write to (a root-owned checkout, a 555 dir) makes
   # mktemp fail, and under `set -e` the script would exit through mktemp's own message — no `error:`
   # prefix, no mention of sdd or the artifact. Same family as the cmd_health item in TODO.md.
   tmp="$(mktemp "${file}.XXXXXX")" || die "frontmatter_write: could not create a temporary beside $file"
-  awk -v k="$key" -v v="$value" '
+  # Through ENVIRON and never `awk -v`: `-v` runs the value through escape processing, so a `\`
+  # in it would be rewritten on the way in — the same rule gate_REVIEW states. Limit declared: no
+  # probe builds that world, because no caller produces a backslash today (the approve writes
+  # `humano-<date>`, adr_declare writes a path it resolved) — the world not built is a value with `\`.
+  SDD_FM_KEY="$key" SDD_FM_VALUE="$value" awk '
+    BEGIN { k = ENVIRON["SDD_FM_KEY"]; v = ENVIRON["SDD_FM_VALUE"] }
     NR==1 && $0=="---" { inside=1; print; next }
     inside && $0=="---" { inside=0; print; next }
     inside && !written {
@@ -396,7 +408,11 @@ frontmatter_write() {
   # mktemp creates 0600; without this the artifact would come out of an approval readable only by
   # whoever approved it. Git would not show the change (it tracks the exec bit only), which is what
   # makes it worth a line here instead of a bug report later.
-  chmod --reference="$file" "$tmp" 2>/dev/null || true
+  # A warning and never a `die` (#81): `--reference` is GNU, and a userland without it used to
+  # leave the artifact 0600 in silence. Losing the mode is not worth losing the write the human
+  # asked for, but it is worth a line that names the file.
+  chmod --reference="$file" "$tmp" 2>/dev/null \
+    || warn "frontmatter_write: could not keep the mode of $file — it now carries the temporary's (0600); restore it with chmod"
   # `-f`: GNU mv ASKS before replacing a destination the user cannot write to, and only when stdin
   # is a terminal — which is exactly this command's situation. Without it a second, untranslated,
   # git-plumbing-flavoured question appears right after the [y/N] prompt and eats a line of the
@@ -452,7 +468,6 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
   rel="${target#"$REPO_ROOT/"}"
   line="- intervention: $what — $phase — $(date '+%Y-%m-%d %H:%M') · written by the runner"
   dirty_before="$(cd "$REPO_ROOT" && git status --porcelain -- "$rel" 2>/dev/null)" || dirty_before=""
-  tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"
   # Blank lines inside the notes section are buffered, so the note lands after the last note and
   # the blank line that separated the section from the next heading is printed after it, intact.
   # `mawk` is byte-oriented: the heading is matched on its ASCII prefix, never on the accented word.
@@ -462,7 +477,14 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
   if [ "$target" = "$nf" ]; then
     printf '%s\n' "$line" >> "$nf"
   else
-  awk -v line="$line" '
+  # The temporary is born HERE, in the only branch that uses it (#193): created before the `if`,
+  # the append branch leaked one empty file per note and failed outright on a TMPDIR that is not
+  # there. A failed awk removes it too.
+  # And a failure here is SAID, never swallowed (R1 of the r1): the chain used to end in
+  # `|| rm -f "$tmp"`, so a refused `mv` fell through to the commit, which found nothing, and the
+  # warning claimed "intervention noted" over a note that does not exist — the one line
+  # `sdd autonomy --by-mission` counts.
+  if tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")" && awk -v line="$line" '
     BEGIN { nb = 0; in_notes = 0; done = 0 }
     !done && !in_notes && /^## Notas de execu/ { in_notes = 1; print; next }
     in_notes && /^[[:space:]]*$/ { buf[nb++] = $0; next }
@@ -472,7 +494,13 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
     END {
       if (in_notes) { print line; for (i = 0; i < nb; i++) print buf[i]; done = 1 }
       if (!done) { print ""; print line }
-    }' "$ck" > "$tmp" && mv "$tmp" "$ck"
+    }' "$ck" > "$tmp" && mv "$tmp" "$ck"; then
+    :
+  else
+    [ -n "${tmp:-}" ] && rm -f "$tmp"
+    warn "intervention NOT written in $rel — the checkpoint could not be rewritten; add it by hand: $line"
+    return 0
+  fi
   fi
   if [ -n "$dirty_before" ]; then
     warn "intervention noted in $rel but NOT committed — the file was already dirty; commit it with the work it carries"
@@ -5074,7 +5102,16 @@ cmd_install() {
     [ -e "$a" ] || continue
     name="$(basename "$a")"
     target="$REPO_ROOT/.claude/agents/$name"
-    if [ ! -f "$target" ]; then
+    # A linked copy is the human's explicit choice (`sdd-link-agents`), and `cp` follows the link:
+    # `--force` overwrote the file at the other end, and a dangling link either died in GNU cp or
+    # created the file where it pointed (#173). Tested BEFORE the three arms, never written.
+    if [ -L "$target" ]; then
+      if [ "$(readlink -f "$target" 2>/dev/null || true)" = "$(readlink -f "$a")" ]; then
+        ok "agent $name linked to this kit"
+      else
+        warn "agent $name is a link to $(readlink "$target") — not touched; replace the link by hand to adopt this kit's version"
+      fi
+    elif [ ! -f "$target" ]; then
       cp "$a" "$target"; ok "agent $name copied"
     elif cmp -s "$a" "$target"; then
       ok "agent $name identical"
@@ -5186,7 +5223,7 @@ warn_if_on_base_branch() {
 # every run. In the SQ-97 pilot the step was skipped once and five phases committed into another
 # PR's branch — 16 commits, and a `rebase --onto` to undo them.
 #
-# ONE definition, two call sites (cmd_run, cmd_retry) — the same rule that gave is_escalation and
+# ONE definition, three call sites (cmd_run, cmd_retry, cmd_approve) — the same rule that gave is_escalation and
 # warn_if_on_base_branch a single home each: a decision read in more than one place drifts apart
 # one call site at a time, and the site that stays behind is the one nobody tests.
 #
@@ -5208,16 +5245,29 @@ warn_if_on_base_branch() {
 # failure this function exists to close — and guessing on top of a tree git already refused is how
 # a working tree gets destroyed. The reason is git's to give, so its own output is carried into
 # the message instead of being replaced by a paraphrase.
+# mission_branch_declared — the branch 00-missao.md declares, or NOTHING when none is declared.
+#
+# ONE definition read by ensure_mission_branch and by cmd_approve (#156): "is `branch:` real?" was
+# inline in the first, and a second copy in the approve is the shape this file refuses for every
+# rule read in more than one place. Two values print nothing: an empty field, and the `<...>`
+# placeholder templates/missao.md ships while the name is still unknown (the TICKET phase fills it
+# in). Neither is a branch name — git rejects the second for both the `<` and the spaces — and a
+# mission that never declared a branch must keep working exactly as it did before.
+#
+# Pure (prints, sets no global), so it is safe to read as `$(mission_branch_declared)`.
+mission_branch_declared() {
+  local want
+  want="$(frontmatter "$MISSION_DIR/00-missao.md" branch)"
+  case "$want" in '<'*) want="" ;; esac
+  printf '%s' "$want"
+}
+
 ensure_mission_branch() {
   [ "$DRY_RUN" = "1" ] && return 0
   local want current out rc=0 mission_rel mission_hash plan_hash target_hash mismatches artifact
-  want="$(frontmatter "$MISSION_DIR/00-missao.md" branch)"
-  # Two no-ops: an empty field, and the `<...>` placeholder templates/missao.md ships while the
-  # name is still unknown (the TICKET phase fills it in). Neither is a branch name — git rejects
-  # the second for both the `<` and the spaces — and a mission that never declared a branch must
-  # keep working exactly as it did before this function existed.
+  # Empty for the two no-ops mission_branch_declared names: no field, or the placeholder.
+  want="$(mission_branch_declared)"
   [ -n "$want" ] || return 0
-  case "$want" in '<'*) return 0 ;; esac
   # A name git would read as an OPTION dies here, before git sees it, and this is the one path in
   # this function that can destroy work rather than merely land in the wrong place. `git checkout
   # -f` is a legal command: it returns 0, switches to nothing, and throws away every uncommitted
@@ -7398,15 +7448,20 @@ cmd_approve() {
 
   info ""
   dim "  approving says: this plan is what you want built. It writes aprovacao: $approved_as"
-  dim "  into 00-missao.md and commits that one file. It does NOT start the pipeline."
+  dim "  into 00-missao.md and commits the mission directory (plus the file adr: names, when it is"
+  dim "  a path). It does NOT start the pipeline."
   # The fifth door, and the only one whose commit a human asks for out loud. It went in written by
   # the same mission that closed the silence of the fourth (`sdd retry`) and shipped silent itself:
   # standing on `main`, approving dropped a `chore(missao)` commit straight into the base branch
   # without a word — the SQ-97 class, reopened by the door this mission created. sdd-qa walked it.
   #
-  # A warning and NEVER a `die`, unlike the checkout of ensure_mission_branch: the plan legitimately
-  # lives on the base branch before the mission branch is cut, and it is from there that the cut is
-  # made — refusing would lock out the ordinary flow.
+  # A warning and NEVER a `die` for standing on the base branch: the plan legitimately lives there
+  # before the mission branch is cut, and it is from there that the cut is made — refusing would
+  # lock out the ordinary flow. Since #156 the approve makes that cut itself: with a real `branch:`
+  # that differs from where the human stands, the commit lands on the declared branch, so the line
+  # before the question ANNOUNCES the switch instead of warning about a base branch that will not
+  # get the commit (a warning that does not describe what happens next is the crying wolf). With
+  # an empty or placeholder `branch:` nothing switches, and the warning stays exactly as it was.
   #
   # HERE and not at the top of the command, which is where the other four doors call it: those four
   # print almost nothing before acting, while this one prints the entire mission body plus the
@@ -7415,7 +7470,14 @@ cmd_approve() {
   # it away" reads, at a prompt, as "in the breath before the decision". After the idempotence bail
   # for the second reason those comments give: a warning on a path that cannot commit is the crying
   # wolf that teaches people to skip reading them.
-  warn_if_on_base_branch
+  local declared here
+  declared="$(mission_branch_declared)"
+  here="$( cd "$REPO_ROOT" && git branch --show-current 2>/dev/null || true )"
+  if [ -n "$declared" ] && [ "$declared" != "$here" ]; then
+    dim "  approving switches to the branch '$declared' declared in 00-missao.md and commits the mission there."
+  else
+    warn_if_on_base_branch
+  fi
   printf '  approve this plan? [y/N] '
   # `|| got=$?`: with stdin closed, `read` returns non-zero and `set -e` would abort mid-prompt.
   # Anything that is not an explicit yes is a no — the default of a [y/N] prompt is the safe side.
@@ -7441,6 +7503,15 @@ cmd_approve() {
     *) info "  not approved — nothing was written"; return 0 ;;
   esac
 
+  # The declared branch, entered AFTER the `y` and BEFORE the write, and the order is contract (#156).
+  # Never on a "no": a refused plan must leave the tree where it was. Never after the write:
+  # ensure_mission_branch compares the hash of 00-missao.md with the destination's, and the approval
+  # line would make an existing branch that carries this very plan read as "another plan". A
+  # destination that does carry another plan dies inside it, before anything is written. The same
+  # definition the run and the retry call — the rule "the runner enters the declared branch" had
+  # reached those two doors only, and the approve kept committing into wherever the human stood.
+  ensure_mission_branch
+
   frontmatter_write "$m" aprovacao "$approved_as"
   # Read back through the same parser the gate uses. An absent `aprovacao:` key leaves
   # frontmatter_write a no-op by design, and committing that would be an approval that approves
@@ -7450,15 +7521,31 @@ cmd_approve() {
     || die "could not write 'aprovacao: $approved_as' into $m (it reads '${written:-<empty>}') — is the 'aprovacao:' key in the frontmatter?"
 
   local rel="${m#"$REPO_ROOT/"}"
-  # `-- "$rel"` on the commit, not `git commit -a`: whatever else the tree is carrying is none of
-  # this command's business. `git add` first so the path is known to the index even on the first
-  # commit of a brand-new mission directory.
+  local mission_rel="${MISSION_DIR#"$REPO_ROOT/"}"
+  # The WHOLE mission directory, not 00-missao.md alone (#156): approving with 01-plano.md and the
+  # checkpoint left as `??` handed the next gate_REVIEW a dirty tree, and someone committed the plan
+  # by hand. Plus the file `adr:` names when the value is a path that exists — read relative to the
+  # repo root, the way adr_check_link reads it; `none`, `TBD` and the `<...>` placeholder are
+  # decisions or blanks, not paths, the same split adr_new makes.
+  #
+  # `-- <paths>` on the commit, never `git commit -a` or `git add -A`: whatever else the tree is
+  # carrying is none of this command's business. `git add` first so the paths are known to the
+  # index even on the first commit of a brand-new mission directory.
+  local -a paths=( "$mission_rel" )
+  local adr_value; adr_value="$(frontmatter "$m" adr)"
+  case "$adr_value" in
+    ''|TBD|none|\<*) : ;;
+    *) if [ -f "$REPO_ROOT/$adr_value" ]; then
+         paths+=( "$adr_value" )
+       fi ;;
+  esac
   ( cd "$REPO_ROOT" \
-    && git add -- "$rel" \
+    && git add -- "${paths[@]}" \
     && git commit -q -m "chore(missao): plan $MISSION approved by the human" \
          -m "Written by 'sdd approve': closing the PLAN gate used to mean editing the frontmatter
-by hand, in the exact shape gate_PLAN greps. Only 00-missao.md enters this commit." \
-         -- "$rel" ) \
+by hand, in the exact shape gate_PLAN greps. The mission directory enters this commit, with the
+file adr: names when it is a path, and nothing else." \
+         -- "${paths[@]}" ) \
     || die "git refused the approval commit — 'aprovacao: $approved_as' IS written in $rel, commit it by hand"
 
   ok "approved: aprovacao: $approved_as"
@@ -10536,8 +10623,8 @@ close_query() {
 # bounded (`timeout 30`, `GIT_TERMINAL_PROMPT=0`): with no timeout(1) it is SKIPPED, because an
 # unbounded fetch could hang the close, and the fast-forward is still tried against the upstream
 # already on the machine — a local merge does not hang. The `ok` says whether anything moved.
-close_return_home() {
-  local current out rc=0 where upstream remote merge before after
+close_return_home() { # close_return_home <verified|unverified> — what cmd_close's merge check saw
+  local seen="${1:-unverified}" current out rc=0 where upstream remote merge before after
   [ -n "${DEFAULT_BRANCH:-}" ] || return 0
   current="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "" )"
   [ -n "$current" ] || return 0
@@ -10556,7 +10643,14 @@ close_return_home() {
       warn "could not return to '$DEFAULT_BRANCH' — still on '$current'. git said: $out"
       return 0
     fi
-    where="back on '$DEFAULT_BRANCH' — the mission branch is merged and spent"
+    # The claim is earned by the merge check and by nothing else, so the predicate names the one
+    # value that earns it: with no pr_url in 50-pr.md cmd_close asked nobody, and an argument
+    # forgotten at a call site falls to the sentence that claims less (CodeRabbit on PR #196).
+    if [ "$seen" = verified ]; then
+      where="back on '$DEFAULT_BRANCH' — the mission branch is merged and spent"
+    else
+      where="back on '$DEFAULT_BRANCH' — 50-pr.md names no pr_url, so the merge was not verified"
+    fi
   fi
   upstream="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref "$DEFAULT_BRANCH@{upstream}" 2>/dev/null || true )"
   if [ -z "$upstream" ]; then ok "$where; no upstream, nothing to fast-forward"; return 0; fi
@@ -10596,18 +10690,27 @@ cmd_close() {
   resolve_mission "${1:-}"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
 
-  [ "$JIRA_ENABLED" = "true" ] || { info "JIRA_ENABLED=false — nothing to close"; return 0; }
-  local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"
-  [ -n "$issue" ] || die "no 'issue:' found in 10-ticket.md — did the TICKET phase run?"
-
+  # The merge check sits ABOVE the JIRA fork, once, because both arms end in close_return_home and
+  # "post-merge" is what makes leaving the mission branch safe (#182: the JIRA-less arm returned
+  # early, before both the check and the trip home, and left the human on a spent branch).
   local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
+  local merge_seen=unverified
   if [ -n "$prurl" ]; then
     local merged
     merged="$( cd "$REPO_ROOT" && gh pr view "$prurl" --json state --jq .state 2>/dev/null || true )"
     if [ "$merged" != "MERGED" ]; then
       die "PR $prurl is '$merged', not MERGED — 'sdd close' is post-merge"
     fi
+    merge_seen=verified
   fi
+
+  if [ "$JIRA_ENABLED" != "true" ]; then
+    info "JIRA_ENABLED=false — nothing to close in JIRA"
+    close_return_home "$merge_seen"
+    return 0
+  fi
+  local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"
+  [ -n "$issue" ] || die "no 'issue:' found in 10-ticket.md — did the TICKET phase run?"
 
   local acli_bin="${SDD_ACLI_BIN:-acli}"
   command -v "$acli_bin" >/dev/null 2>&1 || die "cannot reach '$acli_bin' — 'sdd close' verifies the close against JIRA itself and will not report a close it did not see.
@@ -10633,7 +10736,7 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
     # nobody spent would be the same class of lie as the rc this whole function stopped believing.
     pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=none  rc=0  verified=true  log=none"
     ok "$issue is already Done — JIRA confirms it, and no session was spent"
-    close_return_home
+    close_return_home "$merge_seen"
     return 0
   fi
 
@@ -10757,7 +10860,7 @@ blocks the transition, say what it is and stop — but do not stop to request pe
     # second label ANDed onto the first. A session that fell over after closing the issue closed it.
     if [ "$rc" -ne 0 ]; then dim "  (the close session exited $rc — see $close_logs — but the issue is Done, so the artifact decides)"; fi
     ok "$issue closed — JIRA confirms it is Done"
-    close_return_home
+    close_return_home "$merge_seen"
     return 0
   fi
   # THREE outcomes, not two, and the third is why this branch exists: "I asked and JIRA said no" and

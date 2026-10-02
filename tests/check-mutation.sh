@@ -2027,6 +2027,36 @@ mut_RUN_intervention_ignores_notes_file() {
   sed -i '/^checkpoint_note_intervention() {/,/^}/ s@^  target="$ck"; \[ -f "$nf" \] && target="$nf"$@  target="$ck"@' "$1"
 }
 
+# #193 back: the intervention note creates its temporary BEFORE choosing the branch, so the append
+# branch (the sibling notes file) leaks one empty `sdd-ck-*` per note and dies on a TMPDIR that is
+# not there. Caught by "the intervention note leaves no temporary file behind" and "the notes-file
+# path writes the note with an unwritable TMPDIR" in check-autonomy.sh.
+mut_RUN_intervention_tmp_before_branch() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ s@^  if \[ "$target" = "$nf" \]; then$@  tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"; if [ "$target" = "$nf" ]; then@' "$1"
+}
+
+# R1 of the r1 back: the rewrite chain ends in `|| rm -f "$tmp"` again, so a refused `mv` is
+# swallowed, the branch reads as a success and the warning claims "intervention noted" over a note
+# that was never written. Caught by "the intervention note never claims a note it could not write"
+# in check-autonomy.sh.
+mut_RUN_intervention_claims_unwritten_note() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ s@ > "$tmp" \&\& mv "$tmp" "$ck"; then$@ > "$tmp" \&\& mv "$tmp" "$ck" || rm -f "$tmp"; then@' "$1"
+}
+
+# The symlink guard of frontmatter_write goes no-op: `mv -f` replaces the link with a regular
+# file again, the real target keeps an empty `aprovacao:` and the approve commits the type change
+# (#81). Caught by "sdd approve refuses a symlinked 00-missao.md and writes nothing" in
+# check-gates.sh.
+mut_FRONTMATTER_writes_over_link() {
+  sed -i '/^frontmatter_write() {/,/^}/ s@^  if \[ -L "$file" \]; then$@  if false; then@' "$1"
+}
+
+# The chmod warning goes back to silence: an artifact left 0600 by the mktemp says nothing again
+# (#81). Caught by "frontmatter_write warns when it cannot keep the mode" in check-gates.sh.
+mut_FRONTMATTER_chmod_silent() {
+  sed -i '/^frontmatter_write() {/,/^}/ s@^    || warn "frontmatter_write: could not keep the mode of .*$@    || true@' "$1"
+}
+
 # The reader goes back to one world: `sdd autonomy --by-mission` counts interventions only in
 # checkpoint.md, so every mission written after the split reports ZERO no matter how many times a
 # human had to step in — and zero is the answer this report reserves for "a human never did".
@@ -2275,6 +2305,12 @@ mut_RUN_sort_lexi() {
 # path with no `-f`, and is deliberately left alone.
 mut_RUN_install_no_guard() {
   sed -i 's@-f "$SDD_HOME/config/starter.conf"@-n "always-there"@' "$1"
+}
+
+# Not a gate: the install guard against a linked agent copy (#173) turns into a no-op, and `cp`
+# goes back to following the link — through it under --force, into GNU cp's refusal on a dangling one.
+mut_RUN_install_writes_through_link() {
+  sed -i '/^cmd_install()/,/^}/ s@if \[ -L "$target" \]; then@if false; then@' "$1"
 }
 
 # Not a gate: the ledger readers go back to asking "can this row be attributed to a kit version?"
@@ -2683,8 +2719,14 @@ mut_RUN_approve_eof_silent() {
 # The dry-run guard would have been the obvious anchor and is the wrong one: pipeline_log_line
 # carries a byte-identical line, so a `sed` on it sabotages two functions at once and the score
 # would credit this entry for whatever the other one broke.
+#
+# Since #156 the read lives in mission_branch_declared, the one definition ensure_mission_branch
+# and cmd_approve both call, so the range is that function's and blanking it also takes the
+# approve's switch: the approve pair (`lands on the declared branch`, `refuses a declared branch`)
+# dies alongside the run's. Which door still calls the function is what the per-door entries say
+# (mut_RETRY_branch_switch_dead, mut_APPROVE_skips_mission_branch).
 mut_RUN_branch_switch_dead() {
-  sed -i 's@^  want="\$(frontmatter "\$MISSION_DIR/00-missao.md" branch)"$@  want=""@' "$1"
+  sed -i '/^mission_branch_declared() {/,/^}/ s@^  want="\$(frontmatter "\$MISSION_DIR/00-missao.md" branch)"$@  want=""@' "$1"
 }
 
 # Lets a declared branch name that git reads as an OPTION through to the checkout. The case arm
@@ -2762,8 +2804,35 @@ mut_RETRY_base_branch_warn_dead() {
 # times, and an unaddressed substitution would gut all five while wearing this entry's name. The
 # range ends at the first column-zero `}`, which is cmd_approve's own — every line of the body is
 # indented, including the awk program and the two `-m` arguments of the commit.
+#
+# Since #156 the call sits in the `else` arm (empty or placeholder `branch:`), four spaces deep; the
+# fixture that kills it (`QW`, `branch:` empty) still walks that arm. A blank line would leave the
+# `else` empty, which bash refuses, so the call becomes `:`.
 mut_APPROVE_base_branch_warn_dead() {
-  sed -i '/^cmd_approve() {/,/^}/ s@^  warn_if_on_base_branch$@@' "$1"
+  sed -i '/^cmd_approve() {/,/^}/ s@^    warn_if_on_base_branch$@    :@' "$1"
+}
+
+# The approve stops entering the declared branch (#156) — the call stays in the source as a no-op,
+# so the rest of the command, the directory commit included, runs exactly as written and lands
+# wherever the human stands. Per door, like mut_RETRY_branch_switch_dead: the field read is
+# mut_RUN_branch_switch_dead's, and it cannot say which door still calls the function. Addressed
+# to cmd_approve, the line is byte-identical in cmd_run and cmd_retry.
+mut_APPROVE_skips_mission_branch() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^  ensure_mission_branch$@  :@' "$1"
+}
+
+# The approve commit shrinks back to 00-missao.md alone (#156): the plan and the checkpoint are left
+# as `??` for the next gate_REVIEW to refuse as a dirty tree. The commit then carries one path (two
+# with the ADR), never the four the approve probe demands.
+mut_APPROVE_commits_only_missao() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^  local -a paths=( "\$mission_rel" )$@  local -a paths=( "$rel" )@' "$1"
+}
+
+# The file `adr:` names leaves the approval commit: the decision the plan rests on stays untracked
+# on the branch the plan now lives on. Only visible because the approve fixture leaves its ADR
+# UNTRACKED — committed and intact, leaving it out would change nothing in the diff.
+mut_APPROVE_adr_file_left_out() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^         paths+=( "\$adr_value" )$@         :@' "$1"
 }
 
 # The ORDER of the two guards in cmd_run, not their presence. Both calls stay — the warning simply
@@ -3087,9 +3156,9 @@ mut_HEALTH_ratchet_eats_verdict() {
 }
 
 # `sdd retry` loses the checkout and goes back to committing wherever the human happens to stand.
-# ONE definition, two call sites: `mut_RUN_branch_switch_dead` above sabotages the FIELD READ inside
-# ensure_mission_branch, so it kills the function for both doors at once and can never say which of
-# the two still calls it. This one leaves the function whole and removes the CALL — the shape a
+# ONE definition, three call sites: `mut_RUN_branch_switch_dead` above sabotages the FIELD READ
+# (mission_branch_declared), so it kills the function for every door at once and can never say which
+# of them still calls it. This one leaves the function whole and removes the CALL — the shape a
 # refactor arrives at honestly — so the score stops crediting cmd_run's coverage to cmd_retry.
 #
 # Range-addressed to cmd_retry: the line is byte-identical in cmd_run, and an unaddressed `d` would
@@ -4856,6 +4925,22 @@ mut_CLOSE_fetch_unbounded() {           # with no timeout(1) the fetch is tried 
 mut_CLOSE_no_upstream_unsaid() {        # no upstream reads as a divergence
   sed -i '/^close_return_home() {/,/^}/ s@^  if \[ -z "\$upstream" \]; then ok@  if false; then ok@' "$1"
 }
+# #182: the JIRA-less arm of the close is a close too. Caught by "close: with JIRA off the tree goes
+# back to the default branch" and "close: with JIRA off an unmerged PR is still refused", one each.
+mut_CLOSE_no_jira_stays_put() {         # the JIRA-off arm returns before close_return_home
+  sed -i '/^cmd_close() {/,/^}/ s@^    info "JIRA_ENABLED=false — nothing to close in JIRA"$@&\n    return 0@' "$1"
+}
+mut_CLOSE_no_jira_skips_merge_check() { # the JIRA-off arm leaves before the merge check, as it used to
+  sed -i '/^cmd_close() {/,/^}/ s@^  local prurl; prurl="\$(frontmatter "\$MISSION_DIR/50-pr.md" pr_url)"$@  [ "$JIRA_ENABLED" = "true" ] || { info "JIRA_ENABLED=false — nothing to close"; close_return_home; return 0; }\n&@' "$1"
+}
+# CodeRabbit on PR #196: the trip home claims the merge only when cmd_close's check saw it. One
+# mutant per half of "close: without a pr_url the trip home claims no merge it did not check".
+mut_CLOSE_claims_unverified_merge() {   # the sentence claims the merge whatever the check saw
+  sed -i '/^close_return_home() {/,/^}/ s@^    if \[ "\$seen" = verified \]; then$@    if true; then@' "$1"
+}
+mut_CLOSE_never_records_the_merge() {  # a MERGED PR is checked and the verdict is never passed on
+  sed -i '/^cmd_close() {/,/^}/ s@^    merge_seen=verified$@    :@' "$1"
+}
 
 # CHECKOUT-UNAVAILABLE names what fell and in which interpreter (finding 8): back to the generic list,
 # and the operator diagnoses the PATH's python3 by hand again.
@@ -4939,6 +5024,10 @@ CATALOG=(
   CLOSE_fetch_failure_ignored
   CLOSE_fetch_unbounded
   CLOSE_no_upstream_unsaid
+  CLOSE_no_jira_stays_put
+  CLOSE_no_jira_skips_merge_check
+  CLOSE_claims_unverified_merge
+  CLOSE_never_records_the_merge
   COORD_select_pidfd
   RUN_branch_double_slash
   COORD_admission_missing
@@ -5207,6 +5296,7 @@ CATALOG=(
   RUN_degraded_label_blind
   RUN_sort_lexi
   RUN_install_no_guard
+  RUN_install_writes_through_link
   RUN_on_axis_forked
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
@@ -5254,6 +5344,9 @@ CATALOG=(
   RUN_branch_postcheck_blind
   RETRY_base_branch_warn_dead
   APPROVE_base_branch_warn_dead
+  APPROVE_skips_mission_branch
+  APPROVE_commits_only_missao
+  APPROVE_adr_file_left_out
   RUN_branch_order_swap
   FRONTMATTER_write_unscoped
   KAIZEN_adr_0003_orphan
@@ -5354,6 +5447,10 @@ CATALOG=(
   AUTONOMY_cache_read_dropped
   AUTONOMY_intervention_one_world
   RUN_intervention_ignores_notes_file
+  RUN_intervention_tmp_before_branch
+  RUN_intervention_claims_unwritten_note
+  FRONTMATTER_writes_over_link
+  FRONTMATTER_chmod_silent
   AUTONOMY_progress_null_blind
   AUTONOMY_historic_progress_dropped
   AUTONOMY_historic_total_change_blind
@@ -5538,7 +5635,19 @@ run_mutant() {
   SDD_MUTANT=1 SDD_MUTANT_FIRST="${KILLER[$slug]:-}" "$box/tests/run-all.sh" > "$box.log" 2>&1 || rc=$?
   echo "$((SECONDS - t0))" > "$box.secs"
   echo "$rc" > "$box.rc"
-  [ "$rc" -eq 0 ] || killer_of "$box.log" > "$box.killer"
+  # A timed-out mutant names no killer: the step that ran out of time did not kill it.
+  [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ] || killer_of "$box.log" > "$box.killer"
+}
+
+# rc_verdict <suite rc> → how the catalogue reads a mutant's rc: broken (90/91, the mutant never
+# applied), survived (0), missing (99, no rc written), timed-out (124, a step outlived its deadline
+# inside the mutant — run-all.sh's own number, issue #112) or caught. Its own function so that
+# check-health.sh can SOURCE it, as it does killer_of: 124 read as caught would let a slow machine
+# raise the score.
+rc_verdict() {
+  case "$1" in
+    90|91) echo broken ;; 0) echo survived ;; 99) echo missing ;; 124) echo timed-out ;; *) echo caught ;;
+  esac
 }
 
 # killer_of <suite log> → the name of the step that killed the mutant: the LAST step header the
@@ -5720,10 +5829,14 @@ fi
 caught=0; gaps=0; errors=0
 for slug in "${CATALOG[@]}"; do
   rc="$(cat "$WORK/$slug.rc" 2>/dev/null || echo 99)"
-  case "$rc" in
-    90|91)
+  case "$(rc_verdict "$rc")" in
+    broken)
       fail "CATALOGUE-BROKEN: $slug" "$(cat "$WORK/$slug.log")"; errors=$((errors + 1)) ;;
-    0)
+    timed-out)
+      fail "TIMED-OUT: $slug — a step outlived its timeout inside the mutant; inconclusive, never caught" \
+           "$(tail -5 "$WORK/$slug.log")"
+      errors=$((errors + 1)) ;;
+    survived)
       # The suite stayed GREEN with the runner sabotaged: nobody measures this sabotage.
       if in_gap_list "$slug"; then
         printf '  warn  %s — known gap, the suite does not catch it (yet)\n' "$slug"
@@ -5732,10 +5845,10 @@ for slug in "${CATALOG[@]}"; do
         fail "$slug is NOT caught" "the suite stayed green with the runner sabotaged — an assertion is missing"
         errors=$((errors + 1))
       fi ;;
-    99)
+    missing)
       fail "$slug produced no result" "the mutant died before writing its rc"
       errors=$((errors + 1)) ;;
-    *)
+    caught)
       if in_gap_list "$slug"; then
         fail "$slug is in KNOWN_GAPS but is ALREADY caught" \
              "gap closed — drop it from the list, or it becomes a permanent excuse"

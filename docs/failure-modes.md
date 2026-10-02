@@ -757,6 +757,31 @@ not an error.
 deliberate, keep it — and record in the kit's `TODO.md` why it exists: a recurring customisation
 is a sign the kit's agent needs to change.
 
+**A symlinked agent is never written through.** When `.claude/agents/sdd-<x>.md` is a link (what
+`sdd-link-agents` makes), `--force` says `linked to this kit` when it points here, and otherwise
+warns `is a link to <path> — not touched`, a broken link included. The destination is left byte
+for byte as it was: replacing the link would undo a choice the human made. To adopt this kit's
+version, replace the link by hand.
+
+---
+
+## A suite step `timed out after N s`
+
+**Symptom:** `tests/run-all.sh` prints `✗ <step> timed out after N s`, keeps going, and ends red.
+Inside the mutation catalogue the same thing shows up as `FAIL TIMED-OUT: <mutant> — a step
+outlived its timeout inside the mutant; inconclusive, never caught`, and `sdd health` is red.
+
+**Cause:** every step runs under the deadline `step_timeout` (in `tests/run-all.sh`) gives it —
+8 times its idle time, floor 60 s. A rule that recurses or a lock that never releases used to hang
+the suite with no message; now it is named. A loaded machine can also be slow enough to hit it. In
+a mutant, the suite exits 124 and the catalogue reads that as **inconclusive**: a deadline is not
+a kill, and counting it as one would let a slow machine buy a point the sabotage did not earn.
+
+**What you do:** run the named step alone. If it hangs, the bug is in that step. If it is only
+slow, measure it idle and move its number in `step_timeout` in a commit with a reason. A step added
+without a line in that table is refused (`declares no timeout`) and never run. Ctrl-C still stops
+the suite while a step runs (`timeout --foreground`).
+
 ---
 
 ## `sdd install` refuses to run: the kit has no `config/starter.conf`

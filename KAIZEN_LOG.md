@@ -4,6 +4,38 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-02 — Onde o comando do humano escreve
+
+**Problema (Gemba):** os comandos do começo e do fim da missão escreviam no lugar errado, e a suíte
+reprovava ou travava pelo ambiente de quem a chamava. Reproduzido sobre `5e75fdc` num repo de
+rascunho: o `sdd approve` commitou **na `main`**, com 1 arquivo, e deixou `01-plano.md` e o checkpoint
+como `??`. O `sdd close` sem JIRA ficou na branch da missão. Cada nota de intervenção deixava um
+`/tmp/sdd-ck-*` vazio (13 713 apagados em 2026-10-01). O approve e o `install --force` escreviam
+através de symlink. A suíte deu rc 1 sob `GIT_REFLOG_ACTION=sdd:REVIEW:…` e lançada com `&`, e não
+tinha prazo em passo nenhum.
+
+**Medição** (antes: Gemba do `00-missao.md`; depois: jornadas da QA sobre `baea108`, `30-handoff-qa.md`):
+
+| Fato | Antes | Depois |
+|---|---|---|
+| Commit do approve, com `branch: feat/x`, partindo da `main` | na `main`, 1 arquivo | em `feat/x`, os 4 arquivos da missão; `main` parada; arquivo sujo alheio fora |
+| `sdd close` com `JIRA_ENABLED=false` | fica em `feat/x` | volta à `main` |
+| `sdd-ck-*` novos em `/tmp` por suíte | 1 | 0 (52 → 52) |
+| approve sobre `00-missao.md` symlink | link trocado por arquivo, alvo sem `aprovacao:` | `die`, link e alvo intactos, sem commit |
+| `install --force` sobre agente ligado | destino do link sobrescrito | `warn … not touched`, destino intacto, link quebrado incluído |
+| Suíte sob rótulo REVIEW / lançada com `&` | rc 1 / rc 1 | verde / verde (`signal status: 2`) |
+| Passos da suíte com prazo | 0 | todos (`step_timeout`); estouro em mutante = `TIMED-OUT`, nunca pego |
+| Suíte (`tests/run-all.sh`) | 271 s | 298–310 s |
+| Catálogo de mutação (âncoras) | 532 | **542** |
+
+**Contramedida:** portas irmãs chamam a mesma definição — `ensure_mission_branch` no approve,
+`close_return_home` nos dois ramos do close —, o `run()` recusa passo sem prazo, os sensores armam
+o próprio veneno, e cada porta ganhou probe e mutante.
+
+**Ainda não medido:** o carimbo `N de N` do `sdd health` final, que o humano roda depois desta fase.
+
+---
+
 ## 2026-10-01 — A janela não se parte: a identidade do kit passa a ser o que ele executa
 
 **Problema (Gemba):** registrar um achado (princípio 5) colidia com duas identidades largas demais.

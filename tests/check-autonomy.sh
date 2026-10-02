@@ -467,7 +467,13 @@ assert_eq "an escalation row carries no cache_read" "blocked false" \
 echo "== retry invocation =="
 : > "$LEDGER"
 RETRY_LOG_BEFORE="$(grep -c 'BLOCKED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
-"$SDD" retry "$MISSION" >/dev/null 2>&1; RETRY_RC=$?
+# #193: the intervention note used to `mktemp` in TMPDIR BEFORE choosing its branch, and the append
+# branch neither used nor removed it — one empty `sdd-ck-*` leaked per note. Both retries of the
+# note's two worlds (this one is the checkpoint.md world, the next block the sibling world) run
+# with a TMPDIR private to the sensor, and the leftovers are counted after both.
+CK_TMP="$OUTSIDE/ck-tmp"; mkdir -p "$CK_TMP"
+ck_leftovers() { find "$CK_TMP" -maxdepth 1 -name 'sdd-ck-*' | grep -c . || true; }
+TMPDIR="$CK_TMP" "$SDD" retry "$MISSION" >/dev/null 2>&1; RETRY_RC=$?
 RETRY_LOG_AFTER="$(grep -c 'BLOCKED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "sdd retry writes one session row" "1" "$(rows 'select(.event == "session") | 1' | grep -c .)"
 assert_eq "and marks itself as a retry invocation" "retry" "$(rows 'select(.event == "session") | .invocation')"
@@ -513,15 +519,51 @@ ck_before="$(notes)"
 : > "$MDIR/checkpoint-notas.md"
 ( cd "$FIX" && git add -A && git commit -qm "chore: split the notes out" ) >/dev/null 2>&1
 : > "$LEDGER"
-"$SDD" retry "$MISSION" >/dev/null 2>&1 || true
+TMPDIR="$CK_TMP" "$SDD" retry "$MISSION" >/dev/null 2>&1 || true
 assert_eq "the intervention note lands in the sibling file, and the checkpoint does not grow" \
   "1 $ck_before" "$(nnotes) $(notes)"
 # Committed alone, on the same terms as the checkpoint path: the gate of the next phase reads a
 # clean tree, and a note left uncommitted would knock it down.
 assert_eq "and it is committed alone, like the checkpoint one" "clean" \
   "$( [ -z "$(git -C "$FIX" status --porcelain -- "docs/handoffs/$MISSION/checkpoint-notas.md")" ] && echo clean || echo dirty )"
+# Both worlds have now written one note each under TMPDIR=$CK_TMP. The floor is that both notes
+# really landed (the two assertions above), so a zero here is not a zero of nothing having run.
+assert_eq "the intervention note leaves no temporary file behind" "0" "$(ck_leftovers)"
+# And the append path does not need TMPDIR at all: pointed at a path that does not exist (not a
+# chmod, which does not stop root), the note still lands and is committed alone. Read the note and
+# the tree, never the retry's rc — the stub session that follows may fail for its own reasons.
+TMPDIR="$OUTSIDE/no-such-tmpdir" "$SDD" retry "$MISSION" >/dev/null 2>&1 || true
+assert_eq "the notes-file path writes the note with an unwritable TMPDIR" "2 clean" \
+  "$(nnotes) $( [ -z "$(git -C "$FIX" status --porcelain -- "docs/handoffs/$MISSION/checkpoint-notas.md")" ] && echo clean || echo dirty )"
 rm -f "$MDIR/checkpoint-notas.md"
 ( cd "$FIX" && git add -A && git commit -qm "chore: back to one file for the rest of the block" ) >/dev/null 2>&1
+
+# --- a note the runner could not write is never claimed (R1 of the r1, #193 follow-up) ---
+# In the checkpoint.md world the note is a rewrite: awk into a temporary, then `mv` over the file.
+# The #193 fix ended that chain with `|| rm -f "$tmp"`, so a failed `mv` was swallowed, the commit
+# found nothing to commit, and the warning said "intervention noted … but the commit failed" — rc 0
+# and a note that does not exist, the one line `sdd autonomy --by-mission` counts. The world is a
+# `mv` shim that refuses the checkpoint as destination (a chmod would not stop root), and its own
+# marker is the floor: without `fired` the assertion would be about a world where nothing failed.
+# Read as a group: no claim, a warning that NAMES the note as not written, the checkpoint unchanged,
+# and no temporary left behind in the sensor's private TMPDIR.
+echo "== a note it could not write is never claimed =="
+MV_SHIM="$OUTSIDE/mv-shim"; mkdir -p "$MV_SHIM"; rm -f "$MV_SHIM/fired"
+cat > "$MV_SHIM/mv" <<'EOF'
+#!/usr/bin/env bash
+case "${!#}" in
+  */checkpoint.md) : > "$MV_SHIM_DIR/fired"; echo "mv: cannot move to '${!#}': Permission denied" >&2; exit 1 ;;
+esac
+exec "$MV_SHIM_REAL" "$@"
+EOF
+chmod +x "$MV_SHIM/mv"
+nb_before="$(notes)"
+mv_out="$(PATH="$MV_SHIM:$PATH" MV_SHIM_DIR="$MV_SHIM" MV_SHIM_REAL="$(command -v mv)" TMPDIR="$CK_TMP" \
+  "$SDD" retry "$MISSION" 2>&1)" || true
+assert_eq "the intervention note never claims a note it could not write" \
+  "fired claimed:0 named:1 notes:$nb_before leftovers:0" \
+  "$( [ -f "$MV_SHIM/fired" ] && echo fired || echo not-fired ) claimed:$(grep -c 'intervention noted' <<< "$mv_out" || true) named:$(grep -c 'intervention NOT written' <<< "$mv_out" || true) notes:$(notes) leftovers:$(ck_leftovers)"
+( cd "$FIX" && git add -A && git commit -qm "chore: whatever the stub session left" ) >/dev/null 2>&1 || true
 
 echo "== --phase is the human's hand too, and the projection writes none =="
 : > "$LEDGER"
@@ -6462,10 +6504,24 @@ assert_eq "without a reflog the guard blames the session as before" \
 # the wrong remedy #51 exists to end, caused by its own fix. `elsewhere` differs from main in
 # bin/tool.sh and is cut BEFORE the session; `trips:2` is the floor that the two labelled checkouts
 # really happened (a labelled checkout writes the bare label).
+# The fixture's own checkouts run with the label scrubbed: they happen BEFORE the session, so a label
+# inherited from whoever runs the suite (a REVIEW session, #186) must not count as the session's trips.
 foreign_elsewhere() {   # foreign_elsewhere <dir> — a branch that differs from main in bin/tool.sh
-  ( cd "$1" && git checkout -qb elsewhere && printf 'echo elsewhere\n' > bin/tool.sh \
+  ( cd "$1" && unset GIT_REFLOG_ACTION && git checkout -qb elsewhere && printf 'echo elsewhere\n' > bin/tool.sh \
       && git commit -qam "chore: elsewhere" && git checkout -q main ) >/dev/null 2>&1
 }
+# The world runs under a REVIEW session label the sensor arms ITSELF (#186): a REVIEW session that
+# ran the suite inherited its own label into the fixture's checkouts and read trips:4. Armed here on
+# every run, a fixture that stops scrubbing the label is red everywhere, not only inside a REVIEW.
+# The floor proves the venom is armed: the value is in the environment, and a bare checkout in a
+# throwaway repo writes it to the reflog.
+export GIT_REFLOG_ACTION=sdd:REVIEW:0badc0de
+RSV="$OUTSIDE/reviewscope-venom"
+( git init -q -b main "$RSV" && git -C "$RSV" commit -q --allow-empty -m seed \
+    && git -C "$RSV" checkout -qb venom ) >/dev/null 2>&1
+assert_eq "the round-trip world runs under an armed session label" \
+  "env:sdd:REVIEW:0badc0de reflog:1" \
+  "env:${GIT_REFLOG_ACTION:-} reflog:$(git -C "$RSV" reflog show --format='%gs' HEAD 2>/dev/null | grep -cxF 'sdd:REVIEW:0badc0de')"
 RSR="$OUTSIDE/reviewscope-roundtrip"
 reviewscope_world "$RSR"
 foreign_elsewhere "$RSR"
@@ -6474,6 +6530,7 @@ foreign_run "$RSR"
 assert_eq "a round trip through another branch inside the window is not a crossing" \
   "trips:2 kind: hat:0 foreign:0" \
   "trips:$(git -C "$RSR" reflog show --format='%gs' HEAD | grep -cxE 'sdd:REVIEW:[0-9a-f]{8}') kind:$FR_KIND hat:$(grep -c 'HAT-CROSSED' <<< "$FR_LOG") foreign:$(grep -c 'FOREIGN-COMMIT' <<< "$FR_LOG")"
+unset GIT_REFLOG_ACTION
 # A rebase the session makes is the session's move. git writes it as `<label> (start|pick|finish): …`
 # — measured on git 2.43 — and read as foreign it printed the session's own label under "without
 # its label", with the concurrent-writer remedy. Rebasing onto `elsewhere` brings bin/tool.sh in, so

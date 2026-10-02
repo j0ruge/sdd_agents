@@ -161,7 +161,9 @@ leaves `aprovacao` empty, and the runner stops asking for explicit approval.
 
 **And that explicit approval is a command, not a hand edit.** `sdd approve <mission>` prints what is
 being approved — the title, the PLAN-AUTO evidence, the increments, the open questions — asks
-`[y/N]`, and only on an explicit yes writes `aprovacao: humano-<date>` and commits **that one file**.
+`[y/N]`, and only on an explicit yes switches to the branch `00-missao.md` declares, writes
+`aprovacao: humano-<date>` and commits **the mission directory** — plus the file `adr:` names, when
+it is a path.
 It never opens a session: approving is the one decision in the pipeline that has to come from
 outside it. `N` and a bare Enter are answers and exit 0; when not a single character reaches the
 prompt (stdin closed, an empty pipe, a harness with no terminal) it exits **66** (`EX_NOINPUT`) and
@@ -173,7 +175,9 @@ frontmatter by hand — which is the failure the command exists to end.
 mission's artifacts, the plan came out of [the kaizen loop](#the-kaizen-loop) — the kit planning
 its own next change, with no human in the room. The premise `auto` rests on is false there, so the
 gate stalls the mission with `run 'sdd approve <mission>'` however the field got filled. The human
-closes it with `sdd approve <mission>`, which writes `humano-<date>` and commits. This is
+closes it with `sdd approve <mission>`, which switches to the branch `00-missao.md` declares
+(`ensure_mission_branch`, the same definition `sdd run` uses), writes `humano-<date>` and commits
+the whole mission directory there — plus the file `adr:` names, when it is a path. This is
 `gate_KAIZEN`'s "the loop never approves its own plan" enforced a second time, at the gate
 `sdd run` actually asks.
 
@@ -475,8 +479,10 @@ discarded, is [ADR 0004](adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
 ## The mission's branch
 
 `branch:` in `00-missao.md` was decorative until `ensure_mission_branch()`. The runner now reads it
-**before the first gate** of every `sdd run` and every `sdd retry`, and puts the pipeline on the
-branch the plan declares:
+**before the first gate** of every `sdd run` and every `sdd retry` — and, since 2026-10-02 (#156),
+in `sdd approve` right after the `y` and before anything is written, so the approval commit (the
+whole mission directory) lands on the mission's branch and never on the base — and puts the
+pipeline on the branch the plan declares:
 
 | `branch:` | What the runner does |
 |---|---|
@@ -581,9 +587,9 @@ refusal is deliberate:
 
 | Condition | What happens |
 |---|---|
-| `JIRA_ENABLED=false` | not an error — reports "nothing to close" and exits 0 |
+| `50-pr.md` with a `pr_url:` whose PR is not `MERGED` | error, checked **before** the JIRA fork: `sdd close` is **post-merge**, with or without JIRA |
+| `JIRA_ENABLED=false` | not an error — reports "nothing to close in JIRA", comes home (below) and exits 0 |
 | no `issue:` in `10-ticket.md` | error: the TICKET phase did not run, there is nothing to close |
-| `50-pr.md` with a `pr_url:` whose PR is not `MERGED` | error: `sdd close` is **post-merge**, and closing the issue before the merge lies to the board |
 | `acli` not on `PATH` (or `SDD_ACLI_BIN` pointing at nothing) | error, **before** any session: the command will not report a close it could not see |
 | `acli` answering anything but a JSON array — expired auth, an unknown spelling | error, **before** any session, and it prints the query to run by hand |
 | the issue is already `Done` | reports it and exits 0, spending **no** session |
@@ -596,11 +602,14 @@ session that exited 0 without closing anything did not. When the tool stops answ
 two questions, the answer is `UNVERIFIED` and not "still open": both fall closed, but they send a
 human to different logs.
 
-After a verified close the command **comes home with the merge**: it checks out `DEFAULT_BRANCH`
+After a verified close — or straight away when `JIRA_ENABLED=false`, since 2026-10-02 (#182) — the
+command **comes home with the merge** (`close_return_home`, one definition for both arms): it checks out `DEFAULT_BRANCH`
 (unless the tree is dirty — then it stays and says so), fetches its upstream (`timeout 30`,
 `GIT_TERMINAL_PROMPT=0`) and `merge --ff-only`, including when the session was already on the base.
 The line says whether the branch moved (`fast-forwarded to origin/main (<sha>)` or
-`already up to date`). No upstream, no network, no `timeout(1)` (the fetch is skipped, never run
+`already up to date`), and it calls the mission branch "merged and spent" only when the merge check
+above saw the PR `MERGED`: with no `pr_url` in `50-pr.md` nothing was asked, so it says the merge
+was not verified instead. No upstream, no network, no `timeout(1)` (the fetch is skipped, never run
 unbounded) or a diverged branch each leave the sha where it was and **warn** — the close already
 succeeded, and nothing is forced. Before this the base stayed behind the PR just merged, and the
 next mission was cut from it (SQ-145, SQ-146).

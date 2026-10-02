@@ -274,6 +274,10 @@ novo entra lá. Os dezesseis de hoje: `check-templates.sh`, `check-gates.sh`, `c
 `check-health.sh`, `check-hat.sh`, `check-adr.sh` e `check-coordination.sh`.
 ⚠️ O número sai do comando e nunca desta linha — `ls tests/check-*.sh | wc -l` —, pela mesma
 régua do `44 caught of 44`: a lista envelheceu três vezes seguidas aqui, uma por sensor.
+⚠️ **Todo passo da suíte tem prazo** (`step_timeout` do `run-all.sh`, 8× o tempo ocioso, piso 60 s;
+desde #112): passo novo sem linha na tabela é recusado, estouro é vermelho nomeado, e dentro de
+mutante é rc 124, que o catálogo lê como `TIMED-OUT` (inconclusivo), nunca como pego. Sintoma e
+saída em [`docs/failure-modes.md`](docs/failure-modes.md).
 
 ⚠️ **Quinze dos dezesseis rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
 verifica CADA mutante rodando a suíte inteira numa sandbox, e isso segurava a árvore por mais de
@@ -305,7 +309,7 @@ REVIEW e de PR rodaram a suíte rápida, responderam verde, e a `main` carregou
 quando o catálogo volta verde, e o `gate_PR` **exige o carimbo**; o gate nunca roda o catálogo, que
 é exatamente o que `4c86712` desfez. Verbete "Carimbo de mutação" no `CONTEXT.md`, desenho e
 alternativas descartadas em [`docs/adr/0004`](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
-⚠️ **Consequência operacional que custa um `sdd health` a mais (~18 min desde o PR #170; antes, 20 a 50) quando se erra a ordem:** a chave é o conteúdo
+⚠️ **Consequência operacional que custa um `sdd health` a mais (50 min para 544 mutantes em 2026-10-02; ~18 min para 406 no PR #170) quando se erra a ordem:** a chave é o conteúdo
 **rastreado** de `bin/ tests/ templates/ config/` menos a catraca `tests/health-baseline.txt`
 (ADR 0014), então `./bin/sdd health` roda **depois do último commit de código**. `CLAUDE.md`,
 `CONTEXT.md`, `docs/`, `TODO.md` e a catraca não invalidam — registrar achado (princípio 5) não

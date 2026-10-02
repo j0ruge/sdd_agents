@@ -2954,6 +2954,7 @@ data: 2026-01-02
 versao:
 branch: missao/20260102-approve
 aprovacao:
+adr: docs/adr/0001-approve-fixture.md
 ddd: n/a
 ---
 
@@ -2979,9 +2980,16 @@ cat > "$AMDIR/checkpoint.md" <<'EOF'
 EOF
 # The three artifacts are left UNTRACKED on purpose, and it buys two things for free. First, the
 # real first-approval state: nothing says the planner committed, and `git commit -- <path>` refuses
-# a path git has never heard of — the command has to stage it. Second, the two siblings become the
-# control for the commit's blast radius below: they sit right next to 00-missao.md, uncommitted,
-# and a `git add -A` would swallow both.
+# a path git has never heard of — the command has to stage it. Second, the commit's blast radius
+# below has a control: the whole mission directory belongs in it, and an unrelated dirty file does
+# not, so `git add -A` and `-- 00-missao.md` both fail the same assertion from opposite sides.
+#
+# The `adr:` above names a file that is also left UNTRACKED, and that is the only shape in which
+# leaving it out of the commit is visible: committed and intact, it would add nothing to the diff.
+# The value is relative to the repo root, the way adr_check_link reads it. ADR_CHECK is off in this
+# fixture (the starter default), so a fixture ADR with no `Spec:` line does not shut gate_PLAN.
+mkdir -p "$FIX/docs/adr"
+printf '# ADR 0001 — approve fixture\n' > "$FIX/docs/adr/0001-approve-fixture.md"
 
 # --- 1. the preview, and `n` as a real no-op.
 #
@@ -3057,9 +3065,10 @@ fi
 # human in fact typed y. House rule: the text of the right branch AND the absence of the other's
 # marker.
 #
-# The unrelated dirty file is planted here and read by assertion 3 — the commit has to carry
-# 00-missao.md and nothing else, and a fixture with a clean tree cannot tell `git commit -- <path>`
-# from `git commit -a`.
+# The unrelated dirty file is planted here and read by assertion 3 — the commit has to carry the
+# mission directory and nothing else, and a fixture with a clean tree cannot tell
+# `git commit -- <dir>` from `git commit -a`. It rides along through the branch switch below: the
+# switch is `git checkout -b`, which carries a dirty tree instead of refusing it.
 echo "unrelated change" >> file.txt
 # Everything except the FIRST `aprovacao:` line — the one in the frontmatter, the only line the
 # write is allowed to touch. `grep -v '^aprovacao:'` would have been the obvious filter and is the
@@ -3093,12 +3102,39 @@ else
        "rc $APPROVE_Y_RC, phase $APPROVE_PHASE, line '$APPROVE_LINE', diff: $(diff <(printf '%s\n' "$APPROVE_FILE_BEFORE") <(approval_stripped "$AMDIR/00-missao.md") | head -4), out: $(tail -2 <<< "$APPROVE_Y_OUT")"
 fi
 
-# --- 3. the commit: one file, the conventional message, and no second one.
+# --- 2b. and it lands on the branch the plan declares (#156).
 #
-# `sdd approve` is the first thing in the runner that commits, so its blast radius is the assertion:
-# the unrelated edit planted above must still be uncommitted afterwards. And the second call has to
-# be a no-op — a human who runs it twice, or a script that retries, must not stack a second
-# `chore(missao)` commit onto a plan that was already approved.
+# The approve was the one door that commits and never read `branch:`: standing on `main`, it put
+# `chore(missao)` into the base branch with the plan left behind as `??`. It now calls the SAME
+# ensure_mission_branch the run calls, after the `y` and before the write. Three terms: HEAD is on
+# the declared branch, the tip of `main` did not move, and the line before the question ANNOUNCES
+# the switch instead of warning about the base branch — zero warnings, because an unconditional
+# warn_if_on_base_branch would satisfy the first two terms and cry wolf on every approve.
+APPROVE_Y_BRANCH="$(git branch --show-current)"
+APPROVE_Y_MAIN="$(git rev-parse main)"
+APPROVE_Y_WARN_N="$(grep -c 'you are on the base branch' <<< "$APPROVE_Y_OUT")"
+APPROVE_Y_SAY_AT="$(awk '/approving switches to the branch/ { print NR; exit }' <<< "$APPROVE_Y_OUT")"
+APPROVE_Y_ASK_AT="$(awk '/approve this plan/ { print NR; exit }' <<< "$APPROVE_Y_OUT")"
+if [ "$APPROVE_Y_BRANCH" = "missao/20260102-approve" ] \
+   && [ "$APPROVE_Y_MAIN" = "$APPROVE_HEAD_0" ] \
+   && [ "$APPROVE_Y_WARN_N" -eq 0 ] \
+   && [ -n "$APPROVE_Y_SAY_AT" ] && [ -n "$APPROVE_Y_ASK_AT" ] && [ "$APPROVE_Y_SAY_AT" -lt "$APPROVE_Y_ASK_AT" ]; then
+  pass "sdd approve with JIRA off lands on the declared branch"
+else
+  fail "sdd approve with JIRA off lands on the declared branch" \
+       "HEAD on missao/20260102-approve, main unmoved, the switch announced before the question, no base-branch warning" \
+       "branch '$APPROVE_Y_BRANCH', main moved: $([ "$APPROVE_Y_MAIN" = "$APPROVE_HEAD_0" ] && echo no || echo yes), $APPROVE_Y_WARN_N warning(s), announced at ${APPROVE_Y_SAY_AT:-<none>}, asked at ${APPROVE_Y_ASK_AT:-<none>}"
+fi
+
+# --- 3. the commit: the mission directory, the conventional message, and no second one.
+#
+# `sdd approve` is the first thing in the runner that commits, so its blast radius is the assertion,
+# from both sides (#156). It has to carry the WHOLE mission directory plus the file `adr:` names —
+# exactly four paths here — because a plan approved with 01-plano.md and checkpoint.md left as `??`
+# is a plan the next gate_REVIEW refuses as a dirty tree. And the unrelated edit planted above must
+# still be uncommitted afterwards. The second call has to be a no-op — a human who runs it twice, or
+# a script that retries, must not stack a second `chore(missao)` commit onto an approved plan; it is
+# run while still ON the mission branch, because on `main` the directory no longer exists.
 #
 # The subject is ENGLISH with the pt-BR `missao` scope kept, and that is a deliberate departure from
 # the pt-BR wording the grill wrote down in 00-missao.md (decision 2). Two reasons, both structural:
@@ -3127,19 +3163,25 @@ APPROVE_DIR_N="${#APPROVE_DIR_ENTRIES[@]}"
 APPROVE_HEAD_1="$(git rev-parse HEAD)"
 APPROVE_AGAIN_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "y" )"; APPROVE_AGAIN_RC=$?
 if [ "$APPROVE_SUBJECT" = "chore(missao): plan $AM approved by the human" ] \
-   && [ "$APPROVE_FILES" -eq 1 ] \
+   && [ "$APPROVE_FILES" -eq 4 ] \
    && [ "$APPROVE_DIR_N" -eq 3 ] \
    && grep -qx "docs/handoffs/$AM/00-missao.md" <<< "$APPROVE_TOUCHED" \
+   && grep -qx "docs/handoffs/$AM/01-plano.md" <<< "$APPROVE_TOUCHED" \
+   && grep -qx "docs/handoffs/$AM/checkpoint.md" <<< "$APPROVE_TOUCHED" \
+   && grep -qx "docs/adr/0001-approve-fixture.md" <<< "$APPROVE_TOUCHED" \
    && grep -q '^ M file.txt' <<< "$APPROVE_STATUS" \
    && [ "$APPROVE_AGAIN_RC" -eq 0 ] \
    && [ "$(git rev-parse HEAD)" = "$APPROVE_HEAD_1" ]; then
-  pass "sdd approve commits only 00-missao.md, and approving twice makes no second commit"
+  pass "sdd approve commits the mission directory and nothing else"
 else
-  fail "sdd approve commits only 00-missao.md, and approving twice makes no second commit" \
-       "one file in the commit, the unrelated edit left dirty, HEAD unmoved on the second call" \
-       "subject '$APPROVE_SUBJECT', $APPROVE_FILES file(s), rc2 $APPROVE_AGAIN_RC, status: ${APPROVE_STATUS//$'\n'/ · }, second call: $(tail -2 <<< "$APPROVE_AGAIN_OUT")"
+  fail "sdd approve commits the mission directory and nothing else" \
+       "the three artifacts and the adr: file in the commit, the unrelated edit left dirty, HEAD unmoved on the second call" \
+       "subject '$APPROVE_SUBJECT', $APPROVE_FILES file(s): ${APPROVE_TOUCHED//$'\n'/ · }, rc2 $APPROVE_AGAIN_RC, status: ${APPROVE_STATUS//$'\n'/ · }, second call: $(tail -2 <<< "$APPROVE_AGAIN_OUT")"
 fi
+# Back to `main` for every block below: the directory and the ADR leave with the branch they now
+# live on, and the dirty file goes first so the switch cannot refuse.
 git checkout -q -- file.txt
+git checkout -q main
 
 # --- 3a. and it stops sending the human to a gate that is still shut.
 #
@@ -3199,10 +3241,113 @@ assert_eq "approve with the gate still shut prints the gate's reason, not 'next:
 # measured is the arm the comment names. Read from `sdd why`, the reader that owns the question.
 assert_eq "and the reason really is one approving does not touch" \
   "versao" "$(grep -qF 'versao' <<< "$SHUT_WHY" && printf 'versao')"
-# Swept, and not left for a later `git add -A` to adopt. `cmd_approve` stages only the mission file
-# it wrote, so the plan and the checkpoint below would ride into the next fixture commit as
-# untracked strays — a fixture leaking into the state a later block measures.
-rm -rf "$SHUTDIR"
+# Back to `main`, and the directory goes with the branch. `branch:` here is real, so the approve
+# switched to missao/20260103-approve-shut and committed the directory THERE (the trigger is the
+# field, not JIRA_ENABLED). A `rm -rf` would leave tracked deletions behind, and every block below
+# would then run on this branch with a dirty tree.
+git checkout -q main
+
+# --- 3b. the declared branch already exists and carries ANOTHER plan.
+#
+# A mission of its own: the branch of $AM exists after 2b, so it cannot be the world where the
+# branch is taken. The destination carries plan A, the tree carries plan B, and the human answers
+# `y`. The approve refuses with ensure_mission_branch's own `die`, and refuses BEFORE writing: the
+# approval would otherwise sit in a 00-missao.md the branch never got, and the frontmatter must
+# still read `aprovacao:` empty. Both tips and the current branch are unmoved. The rc alone is
+# shared with every other `die` here, so the sentence the switch dies with is demanded too.
+TK="20260104-approve-taken"
+TKDIR="$FIX/docs/handoffs/$TK"
+tk_mission() {
+  mkdir -p "$TKDIR"
+  cat > "$TKDIR/00-missao.md" <<'EOF'
+---
+missao: 20260104-approve-taken
+titulo: fixture — the declared branch already carries another plan
+aprovacao:
+branch: missao/20260104-approve-taken
+---
+# Mission
+EOF
+  printf '# Plano %s\n' "$1" > "$TKDIR/01-plano.md"
+  cat > "$TKDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia de fixture | `true` → `0` | pending | — |
+EOF
+}
+git checkout -q -b missao/20260104-approve-taken
+tk_mission A
+git add -- "docs/handoffs/$TK" && git commit -qm "fixture: plan A on the declared branch" >/dev/null
+git checkout -q main
+tk_mission B
+TK_MAIN_0="$(git rev-parse main)"
+TK_BRANCH_0="$(git rev-parse missao/20260104-approve-taken)"
+TK_OUT="$( cd "$FIX" && "$SDD" approve "$TK" 2>&1 <<< "y" )"; TK_RC=$?
+TK_CURRENT="$(git branch --show-current)"
+if [ "$TK_RC" -ne 0 ] \
+   && grep -q 'differ or are missing on the destination branch' <<< "$TK_OUT" \
+   && grep -qx 'aprovacao:' "$TKDIR/00-missao.md" \
+   && [ "$TK_CURRENT" = "main" ] \
+   && [ "$(git rev-parse main)" = "$TK_MAIN_0" ] \
+   && [ "$(git rev-parse missao/20260104-approve-taken)" = "$TK_BRANCH_0" ]; then
+  pass "sdd approve refuses a declared branch that carries another plan"
+else
+  fail "sdd approve refuses a declared branch that carries another plan" \
+       "rc != 0 with 'differ or are missing on the destination branch', aprovacao: still empty, still on main, both tips unmoved" \
+       "rc $TK_RC, on '$TK_CURRENT', line '$(grep -m1 '^aprovacao:' "$TKDIR/00-missao.md")', out: $(tail -2 <<< "$TK_OUT")"
+fi
+rm -rf "$TKDIR"
+
+# --- 3c. a placeholder `branch:` keeps the old door: warn, stay, commit the directory.
+#
+# `branch: <…>` is what a mission with JIRA on carries until the TICKET phase names the branch, and
+# ensure_mission_branch reads it as "nothing declared". So the approve stays where it stands, warns
+# exactly once before the question that it is about to commit into the base branch (the decision
+# that it is NEVER a `die` holds), and the commit it makes there still carries the whole directory.
+# A mission of its own, and the commit is undone afterwards with `reset --keep`, so `main` is the
+# same for every block below.
+PH="20260105-approve-placeholder"
+PHDIR="$FIX/docs/handoffs/$PH"
+mkdir -p "$PHDIR"
+cat > "$PHDIR/00-missao.md" <<'EOF'
+---
+missao: 20260105-approve-placeholder
+titulo: fixture — the branch is not named yet
+aprovacao:
+branch: <tipo>/<chave>-<slug>
+---
+# Mission
+EOF
+printf '# Plano\n' > "$PHDIR/01-plano.md"
+cat > "$PHDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia de fixture | `true` → `0` | pending | — |
+EOF
+PH_HEAD_0="$(git rev-parse HEAD)"
+PH_OUT="$( cd "$FIX" && "$SDD" approve "$PH" 2>&1 <<< "y" )"; PH_RC=$?
+PH_CURRENT="$(git branch --show-current)"
+PH_TOUCHED="$(git show --name-only --format= HEAD)"
+PH_PARENT="$(git rev-parse HEAD~1 2>/dev/null || true)"
+PH_WARN_N="$(grep -c 'you are on the base branch' <<< "$PH_OUT")"
+PH_WARN_AT="$(awk '/you are on the base branch/ { print NR; exit }' <<< "$PH_OUT")"
+PH_ASK_AT="$(awk '/approve this plan/ { print NR; exit }' <<< "$PH_OUT")"
+if [ "$PH_RC" -eq 0 ] \
+   && [ "$PH_CURRENT" = "main" ] \
+   && [ "$PH_PARENT" = "$PH_HEAD_0" ] \
+   && [ "$(grep -c . <<< "$PH_TOUCHED")" -eq 3 ] \
+   && grep -qx "docs/handoffs/$PH/01-plano.md" <<< "$PH_TOUCHED" \
+   && grep -qx "docs/handoffs/$PH/checkpoint.md" <<< "$PH_TOUCHED" \
+   && [ "$PH_WARN_N" -eq 1 ] \
+   && [ -n "$PH_WARN_AT" ] && [ -n "$PH_ASK_AT" ] && [ "$PH_WARN_AT" -lt "$PH_ASK_AT" ]; then
+  pass "sdd approve with a placeholder branch stays, warns and commits the whole directory"
+else
+  fail "sdd approve with a placeholder branch stays, warns and commits the whole directory" \
+       "rc 0, still on main, one commit on top of it with the three artifacts, exactly one base-branch warning before the question" \
+       "rc $PH_RC, on '$PH_CURRENT', files: ${PH_TOUCHED//$'\n'/ · }, $PH_WARN_N warning(s) at ${PH_WARN_AT:-<none>}, asked at ${PH_ASK_AT:-<none>}, out: $(tail -2 <<< "$PH_OUT")"
+fi
+git reset -q --keep "$PH_HEAD_0"
+rm -rf "$PHDIR"
 
 # --- 4. the mission whose frontmatter has no `aprovacao:` key at all.
 #
@@ -4374,6 +4519,96 @@ else
        "on main: $QW_WARN_N warning(s), at line ${QW_WARN_AT:-<none>}, question at line ${QW_ASK_AT:-<none>}, $(tail -2 <<< "$QW_ON_BASE") | off base: $QW_WARN_OFF_N warning(s), $(tail -2 <<< "$QW_OFF_BASE") | no rows: $QW_NOROWS_N warning(s), $(tail -1 <<< "$QW_NOROWS")"
 fi
 
+# --- frontmatter_write: what it must not trust (#81) -----------------------
+echo "== frontmatter_write =="
+# Two worlds of their own, each with `branch: <placeholder>`, so that a change in which branch the
+# approve lands on never moves these probes: they measure the writer, not the door.
+#
+# 1. A symlinked 00-missao.md. Writing THROUGH the link would put the approval outside the commit
+# (the target lives outside the mission directory); REPLACING it — what `mv -f` over the link did,
+# measured — turns the link into a regular file, leaves the real target with an empty `aprovacao:`
+# and commits the type change. Both are wrong, so the writer refuses: the link stays a link, the
+# target stays unapproved, and HEAD does not move.
+FL="20260109-linked-mission"
+FLDIR="$FIX/docs/handoffs/$FL"
+mkdir -p "$FLDIR" "$FIX/elsewhere"
+cat > "$FIX/elsewhere/real-missao.md" <<'EOF'
+---
+missao: 20260109-linked-mission
+titulo: fixture — a mission file that is a link
+aprovacao:
+branch: <placeholder>
+---
+# Mission
+EOF
+ln -s ../../../elsewhere/real-missao.md "$FLDIR/00-missao.md"
+: > "$FLDIR/01-plano.md"
+cat > "$FLDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia de fixture | `true` → `0` | pending | — |
+EOF
+( cd "$FIX" && git add -A && git commit -qm "fixture: a linked mission file" ) >/dev/null
+FL_HEAD_0="$( cd "$FIX" && git rev-parse HEAD )"
+FL_OUT="$( cd "$FIX" && "$SDD" approve "$FL" 2>&1 <<< "y" )"; FL_RC=$?
+FL_TARGET_LINE="$(grep -m1 '^aprovacao:' "$FIX/elsewhere/real-missao.md")"
+FL_HEAD_1="$( cd "$FIX" && git rev-parse HEAD )"
+# The fixture is asserted to BE a link before anything is concluded from it: a probe whose world
+# did not get built would read "refused" off an unrelated failure.
+if [ "$FL_RC" -ne 0 ] \
+   && grep -q 'symbolic link' <<< "$FL_OUT" \
+   && grep -q "00-missao.md" <<< "$FL_OUT" \
+   && [ -L "$FLDIR/00-missao.md" ] \
+   && [ "$FL_TARGET_LINE" = "aprovacao:" ] \
+   && [ "$FL_HEAD_1" = "$FL_HEAD_0" ] \
+   && [ -z "$( cd "$FIX" && git status --porcelain -- "docs/handoffs/$FL" elsewhere )" ]; then
+  pass "sdd approve refuses a symlinked 00-missao.md and writes nothing"
+else
+  fail "sdd approve refuses a symlinked 00-missao.md and writes nothing" \
+       "rc != 0 naming the symbolic link, the link still a link, the target still 'aprovacao:', HEAD unmoved" \
+       "rc $FL_RC, link: $([ -L "$FLDIR/00-missao.md" ] && echo yes || echo no), target '$FL_TARGET_LINE', HEAD moved: $([ "$FL_HEAD_1" = "$FL_HEAD_0" ] && echo no || echo yes), out: $(tail -2 <<< "$FL_OUT")"
+fi
+
+# 2. A chmod that fails. `chmod --reference` is GNU; a userland without it (or a filesystem that
+# refuses the mode) left the approved artifact 0600 from the mktemp, and `2>/dev/null || true` said
+# nothing. The approval is still written — losing the mode is not worth losing the human's `y` —
+# but the output has to say so, naming the file. The shim is first on PATH for THIS call only (the
+# mould is the `$FIX/.bsd` of check-preflight.sh), and the floor proves the shim is armed.
+FC="20260110-chmod-fails"
+FCDIR="$FIX/docs/handoffs/$FC"
+mkdir -p "$FCDIR" "$FIX/.nochmod"
+cat > "$FCDIR/00-missao.md" <<'EOF'
+---
+missao: 20260110-chmod-fails
+titulo: fixture — a chmod that refuses
+aprovacao:
+branch: <placeholder>
+---
+# Mission
+EOF
+: > "$FCDIR/01-plano.md"
+cat > "$FCDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia de fixture | `true` → `0` | pending | — |
+EOF
+printf '#!/bin/sh\nexit 1\n' > "$FIX/.nochmod/chmod"
+/bin/chmod +x "$FIX/.nochmod/chmod"
+( cd "$FIX" && printf '.nochmod/\n' >> .git/info/exclude && git add -A && git commit -qm "fixture: a plan whose chmod fails" ) >/dev/null
+FC_ARMED=no; PATH="$FIX/.nochmod:$PATH" chmod +x "$FCDIR/01-plano.md" 2>/dev/null || FC_ARMED=yes
+FC_OUT="$( cd "$FIX" && PATH="$FIX/.nochmod:$PATH" "$SDD" approve "$FC" 2>&1 <<< "y" )"; FC_RC=$?
+FC_LINE="$(grep -m1 '^aprovacao:' "$FCDIR/00-missao.md")"
+if [ "$FC_ARMED" = yes ] \
+   && [ "$FC_RC" -eq 0 ] \
+   && [[ "$FC_LINE" == "aprovacao: humano-"* ]] \
+   && grep -q 'warn.*could not keep the mode of .*00-missao.md' <<< "$FC_OUT"; then
+  pass "frontmatter_write warns when it cannot keep the mode"
+else
+  fail "frontmatter_write warns when it cannot keep the mode" \
+       "the shim armed, rc 0, 'aprovacao: humano-…' written, and a warning naming 00-missao.md" \
+       "armed $FC_ARMED, rc $FC_RC, line '$FC_LINE', out: $(tail -3 <<< "$FC_OUT")"
+fi
+
 # --- sdd close: the artifact decides, never the exit code ------------------
 # `cmd_close` printed `ok <issue> closed` off `[ "$rc" -eq 0 ]` — the exit code of the session it
 # had just asked to close the issue. That rc is SHARED between two branches: the session that
@@ -4805,6 +5040,56 @@ C9_OUT="$( cd "$FIX" && "$SDD" close "$MISSION" 2>&1 )" || C9_RC=$?
 assert_eq "close: with JIRA off nothing is asked of anyone — no session, no acli, no verdict" \
   "rc:0 nothing:1 session-spent:0 acli-calls:0" \
   "rc:$C9_RC nothing:$(has "$C9_OUT" 'nothing to close') session-spent:$(spent) acli-calls:$(acli_calls)"
+
+# 9b. WITH JIRA OFF THE CLOSE STILL COMES HOME (#182). The early return sat ABOVE
+#     close_return_home, so a JIRA-less repo answered "nothing to close", rc 0, and stayed on the
+#     spent mission branch — the return only the JIRA arm reached. Same tree recipe as 8c: committed
+#     first, so the clean-tree arm is the one measured. The `:0` terms keep "no acli, no session".
+git -C "$FIX" add -A >/dev/null 2>&1
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q -m "fixture: clean before the JIRA-off close" >/dev/null 2>&1 || true
+git -C "$FIX" checkout -q -b LH-14_nojira-branch
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
+C9B_RC=0
+C9B_OUT="$( cd "$FIX" && "$SDD" close "$MISSION" 2>&1 )" || C9B_RC=$?
+assert_eq "close: with JIRA off the tree goes back to the default branch" \
+  "rc:0 branch:$CLOSE_HOME nothing:1 session-spent:0 acli-calls:0" \
+  "rc:$C9B_RC branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) nothing:$(has "$C9B_OUT" 'nothing to close') session-spent:$(spent) acli-calls:$(acli_calls)"
+
+# 9c. ...and the trip home is post-merge there too: a PR that is not MERGED is refused with the
+#     JIRA arm's own sentence, and the branch does not move. `gh` answers OPEN for this one regime.
+cat > "$FIX/.stub/gh" <<'STUB'
+#!/usr/bin/env bash
+[ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
+printf 'OPEN\n'
+STUB
+chmod +x "$FIX/.stub/gh"
+git -C "$FIX" checkout -q -b LH-15_nojira-open-pr
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
+C9C_RC=0
+C9C_OUT="$( cd "$FIX" && "$SDD" close "$MISSION" 2>&1 )" || C9C_RC=$?
+assert_eq "close: with JIRA off an unmerged PR is still refused" \
+  "rc:1 refused:1 branch:LH-15_nojira-open-pr session-spent:0 acli-calls:0" \
+  "rc:$C9C_RC refused:$(has "$C9C_OUT" "is 'OPEN', not MERGED") branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) session-spent:$(spent) acli-calls:$(acli_calls)"
+git -C "$FIX" checkout -q "$CLOSE_HOME"
+
+# 9d. WITHOUT A pr_url NOTHING WAS CHECKED, SO NOTHING IS CLAIMED (CodeRabbit on PR #196). The merge
+#     check above the JIRA fork runs only when 50-pr.md names a PR; with no pr_url it is skipped, and
+#     the trip home said "the mission branch is merged and spent" all the same — a merge nobody
+#     verified, handed to the human as a fact. The trip still happens (a mission that never reached
+#     a PR has a spent branch too); only the sentence changes. DIFFERENTIAL on purpose: 9b's verified
+#     close must still carry the claim, or deleting the sentence everywhere would pass. `gh` still
+#     answers OPEN from 9c, so rc 0 here also proves it was never asked.
+printf -- '---\nfase: PR\n---\n# PR\n' > "$MDIR/50-pr.md"
+git -C "$FIX" add -A >/dev/null 2>&1
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q -m "fixture: a 50-pr.md with no pr_url" >/dev/null 2>&1 || true
+git -C "$FIX" checkout -q -b LH-16_nojira-no-pr-url
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
+C9D_RC=0
+C9D_OUT="$( cd "$FIX" && "$SDD" close "$MISSION" 2>&1 )" || C9D_RC=$?
+assert_eq "close: without a pr_url the trip home claims no merge it did not check" \
+  "rc:0 branch:$CLOSE_HOME verified-claims:1 unverified-claims:0 unverified-says:1" \
+  "rc:$C9D_RC branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) verified-claims:$(has "$C9B_OUT" 'merged and spent') unverified-claims:$(has "$C9D_OUT" 'merged and spent') unverified-says:$(has "$C9D_OUT" 'merge was not verified')"
+git -C "$FIX" checkout -q "$CLOSE_HOME"
 
 # The fixture goes back the way it was found. "This block runs last" was the previous version's
 # only defence, and it is not one a sensor can hold: a future author appending below would inherit
