@@ -106,8 +106,37 @@ run() { # run <name> <command...>
     first) [ "$1" = "$SDD_MUTANT_FIRST" ] || return 0 ;;
     rest)  [ "$1" != "$SDD_MUTANT_FIRST" ] || return 0 ;;
   esac
-  printf '\n\033[1m▸ %s\033[0m\n' "$1"; shift
-  if "$@"; then :; else printf '\033[31m  ✗ failed\033[0m\n' >&2; fails=$((fails + 1)); fi
+  local name="$1" limit started rc=0
+  printf '\n\033[1m▸ %s\033[0m\n' "$name"; shift
+  # The census: a step step_timeout does not name is refused, red and by name, and never run. That
+  # is what makes `suite green` mean "every step ran under a deadline" — a step added tomorrow
+  # without a line in the table cannot slip in deadline-free.
+  if ! limit="$(step_timeout "$name")"; then
+    printf '\033[31m  ✗ %s declares no timeout in step_timeout (tests/run-all.sh) — refused, not run\033[0m\n' "$name" >&2
+    fails=$((fails + 1))
+  else
+    started=$SECONDS
+    # --foreground keeps the step in THIS process group, so the terminal's Ctrl-C still reaches it
+    # and the suite stops (asserted: `surface: an interrupt still stops the suite while a step
+    # runs`). Without it timeout(1) puts the step in a group of its own, the SIGINT never arrives,
+    # and bash holds the interrupt until the step ends by itself. The price, declared: on expiry
+    # only the step's top process is signalled, and its descendants may outlive it. The gates read
+    # this suite's output from a file (run_check_cmd in bin/sdd), so a survivor holds no pipe open.
+    if [ "$limit" = 0 ]; then
+      "$@" || rc=$?
+    else
+      timeout --foreground --kill-after=10 "$limit" "$@" || rc=$?
+    fi
+    # 124 is timeout's own verdict, 137 its --kill-after; the clock tells them apart from a sensor
+    # that exits 124 (or dies by SIGKILL) on its own, well inside its deadline.
+    if [ "$limit" != 0 ] && { [ "$rc" = 124 ] || [ "$rc" = 137 ]; } \
+       && [ $((SECONDS - started)) -ge "$limit" ]; then
+      printf '\033[31m  ✗ %s timed out after %s s\033[0m\n' "$name" "$limit" >&2
+      fails=$((fails + 1))
+    elif [ "$rc" != 0 ]; then
+      printf '\033[31m  ✗ failed\033[0m\n' >&2; fails=$((fails + 1))
+    fi
+  fi
   # Inside a mutant the first red step IS the verdict: the catalogue reads this suite's rc and
   # nothing else, so every step after it was paid for and read by no one — 389 mutants × ~250 s ÷ 8
   # jobs was 3h23 of `sdd health` (2026-09-23). A survivor has no red step and still runs them all,
@@ -118,6 +147,40 @@ run() { # run <name> <command...>
     printf '\033[31m\033[1mstopped at the first red step (SDD_MUTANT)\033[0m\n' >&2
     exit 1
   fi
+}
+
+# The deadline of every step, in seconds — ONE table, read by run() and by nothing else (issue
+# #112: before it the suite had no deadline anywhere, and a rule that recursed was a TEST_CMD that
+# never answered). The rule: 8 times the step's idle time measured on 2026-10-02, with a floor of
+# 60 s — the same `sdd health` took about 4 times longer under a load of ~28 than under ~4
+# (2026-10-01). `0` means "no deadline of its own" and belongs to the catalogue alone: each mutant
+# inside it already runs these very steps under these very deadlines. A name missing here is
+# refused by run(), which is what `surface: every step of the suite carries a timeout` measures.
+# Moving a number is a commit with an author, never a deadline someone forgot.
+step_timeout() { # step_timeout <step name> — prints the deadline in seconds; rc 1 when the step has none
+  case "$1" in
+  "runner syntax (bash -n)") echo 60 ;;
+  "coordination helper syntax") echo 60 ;;
+  "entry point cannot fall through into itself") echo 60 ;;
+  "lint: the runner and the whole suite") echo 180 ;;
+  "language: no Portuguese prose on the kit surface") echo 60 ;;
+  "no writer piped into grep -q (pipefail)") echo 60 ;;
+  "findings file holds its shape") echo 60 ;;
+  "checkpoint Checks cannot read a red assertion as green") echo 60 ;;
+  "template contract") echo 60 ;;
+  "gate state machine") echo 600 ;;
+  "dry-run projection") echo 60 ;;
+  "autonomy ledger") echo 720 ;;
+  "kaizen series and gate") echo 120 ;;
+  "sdd health discriminates") echo 180 ;;
+  "preflight and the install guard") echo 240 ;;
+  "every hat declares its boundary") echo 60 ;;
+  "adr allocator and link check") echo 90 ;;
+  "one checkout has one execution owner") echo 240 ;;
+  "catalogue anchors: every mutant still applies") echo 60 ;;
+  "mutation: the suite dies when the runner is sabotaged") echo 0 ;;
+  *) return 1 ;;
+  esac
 }
 
 # Every step of the suite, in order. A function only so it can be walked twice (see PASS above);
@@ -205,7 +268,10 @@ lint_surface() {
 # "the gate noticed", not "the linter complained".
 if [ -z "${SDD_MUTANT:-}" ]; then
   if command -v shellcheck >/dev/null 2>&1; then
-    run "lint: the runner and the whole suite" lint_surface
+    # timeout(1) executes programs, never shell functions: the function goes to a child bash, with
+    # the three globals it reads.
+    export -f lint_surface; export ROOT LINT_SEVERITY LINT_FLOOR
+    run "lint: the runner and the whole suite" bash -c lint_surface
   else
     # STDERR, and the redirect is the assertion `surface: --list prints steps only` in
     # check-health.sh. `--list` promises "the steps that WOULD run"; this notice is not a step, and

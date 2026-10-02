@@ -1324,7 +1324,7 @@ printf '#!/usr/bin/env bash\n:\n' > "$FAILFAST/bin/sdd"
 printf 'pass\n' > "$FAILFAST/bin/sdd-coordination.py"
 cp "$ROOT/tests/run-all.sh" "$FAILFAST/tests/run-all.sh"
 for f in "$ROOT"/tests/check-*.sh; do
-  printf '#!/usr/bin/env bash\necho "${0##*/}" >> "$FAILFAST_LOG"\n[ "${0##*/}" != "${FAILFAST_RED:-}" ]\n' \
+  printf '#!/usr/bin/env bash\necho "${0##*/}" >> "$FAILFAST_LOG"\n[ "${0##*/}" != "${FAILFAST_SLOW:-}" ] || exec sleep 30\n[ "${0##*/}" != "${FAILFAST_124:-}" ] || exit 124\n[ "${0##*/}" != "${FAILFAST_RED:-}" ]\n' \
     > "$FAILFAST/tests/$(basename -- "$f")"
 done
 chmod +x "$FAILFAST/bin/sdd" "$FAILFAST"/tests/*.sh
@@ -1460,6 +1460,104 @@ else
   fail 'surface: outside a mutant SDD_MUTANT_FIRST changes nothing' \
        "rc $FIRST_PLAIN_RC and exactly the order of the plain run without it" \
        "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+# ---------------------------------------------------------------------------
+# surface: every step of the suite runs under a deadline, and a step that outlives it is red BY NAME
+#
+# Before this, run() ran each step with no deadline at all: a broken rule that recursed, or a
+# fixture waiting on a lock, was a suite that hung with no message — and the suite is TEST_CMD, so
+# it was a gate that never answered (issue #112). The deadlines live in ONE table beside steps()
+# (step_timeout in run-all.sh), and run() refuses a step the table does not name: the real suite
+# going green is the census that every step carries one.
+#
+# Three worlds, each a copy of the FAILFAST world above with ONE edit, made by sed and refused
+# loudly when the sed changed nothing (a probe that sabotaged nothing concludes nothing):
+#   SLOW    the deadline of 'template contract' lowered to 1 s, and its stub sleeping 30 s;
+#   CENSUS  the table line of 'dry-run projection' deleted;
+#   the interrupt world is FAILFAST itself, its deadlines untouched, and a Ctrl-C sent to its group.
+# ---------------------------------------------------------------------------
+TIMEOUT_STEP_NAME='template contract'
+TIMEOUT_STEP_FILE=check-templates.sh
+# A sensor may exit 124 on its own, well inside its deadline: that is a red step, never a timeout,
+# and only the clock tells the two apart. The SLOW world carries one such stub too, and exactly ONE
+# `timed out after` line is demanded — run() reading the rc alone would print two.
+EARLY_124_FILE=check-gates.sh
+CENSUS_STEP_NAME='dry-run projection'
+CENSUS_STEP_FILE=check-dry-run.sh
+timeout_world() { # timeout_world <dir> <sed expression> — a FAILFAST copy whose run-all.sh the sed changed, or broken
+  rm -rf "$1"; cp -r "$FAILFAST" "$1"
+  sed -i "$2" "$1/tests/run-all.sh"
+  ! cmp -s "$ROOT/tests/run-all.sh" "$1/tests/run-all.sh" \
+    || broken "timeout probe: the sed '$2' changed nothing in run-all.sh — the step table moved and the probe sabotages nothing"
+}
+timeout_run() { # timeout_run <dir> <slow sensor or empty> [sensor exiting 124 at once] — plain mode; PUBLISHES TIMEOUT_RC / TIMEOUT_STEPS / TIMEOUT_OUT
+  local log="$1.log"
+  : > "$log"; TIMEOUT_RC=0; TIMEOUT_OUT="$log.out"
+  env -u SDD_TPL_SELFTEST_CHILD -u SDD_MUTANT -u SDD_MUTANT_FIRST FAILFAST_LOG="$log" FAILFAST_RED= FAILFAST_SLOW="$2" FAILFAST_124="${3:-}" \
+    "$1/tests/run-all.sh" > "$TIMEOUT_OUT" 2>&1 || TIMEOUT_RC=$?
+  TIMEOUT_STEPS="$(cat "$log")"
+}
+
+timeout_world "$WORK/slow" "s/^\(  \"$TIMEOUT_STEP_NAME\")\) echo [0-9][0-9]* ;;\$/\1 echo 1 ;;/"
+SLOW_T0=$SECONDS
+timeout_run "$WORK/slow" "$TIMEOUT_STEP_FILE" "$EARLY_124_FILE"
+SLOW_T=$((SECONDS - SLOW_T0))
+if [ "$TIMEOUT_RC" = 1 ] && grep -qF "  ✗ $TIMEOUT_STEP_NAME timed out after 1 s" "$TIMEOUT_OUT" \
+   && [ "$(grep -c 'timed out after' "$TIMEOUT_OUT" || true)" = 1 ] \
+   && grep -qxF "$TIMEOUT_STEP_FILE" <<< "$TIMEOUT_STEPS" && grep -qxF "$EARLY_124_FILE" <<< "$TIMEOUT_STEPS" \
+   && [ "$(tail -n 1 <<< "$TIMEOUT_STEPS")" != "$TIMEOUT_STEP_FILE" ] && [ "$SLOW_T" -lt 25 ]; then
+  pass 'surface: a step that outlives its timeout is red and named, and the suite goes on'
+else
+  fail 'surface: a step that outlives its timeout is red and named, and the suite goes on' \
+       "rc 1, ONE timeout line — '$TIMEOUT_STEP_NAME timed out after 1 s', none for $EARLY_124_FILE's own 124 —, steps run after $TIMEOUT_STEP_FILE, well under the stub's 30 s" \
+       "rc $TIMEOUT_RC in ${SLOW_T}s, steps: $(tr '\n' ' ' <<< "$TIMEOUT_STEPS"), timeout line: $(grep -c 'timed out after' "$TIMEOUT_OUT" || true)"
+fi
+
+timeout_world "$WORK/census" "/^  \"$CENSUS_STEP_NAME\")/d"
+timeout_run "$WORK/census" ""
+if [ "$TIMEOUT_RC" = 1 ] && grep -qF "  ✗ $CENSUS_STEP_NAME declares no timeout" "$TIMEOUT_OUT" \
+   && ! grep -qxF "$CENSUS_STEP_FILE" <<< "$TIMEOUT_STEPS" \
+   && grep -qxF "$TIMEOUT_STEP_FILE" <<< "$TIMEOUT_STEPS"; then
+  pass 'surface: every step of the suite carries a timeout'
+else
+  fail 'surface: every step of the suite carries a timeout' \
+       "rc 1, '$CENSUS_STEP_NAME declares no timeout' printed, its sensor never run, the other steps still run" \
+       "rc $TIMEOUT_RC, steps: $(tr '\n' ' ' <<< "$TIMEOUT_STEPS"), census line: $(grep -c 'declares no timeout' "$TIMEOUT_OUT" || true)"
+fi
+
+# The deadline must not steal the human's Ctrl-C. Without --foreground, timeout(1) moves the step
+# into a process group of its own: the terminal's SIGINT would no longer reach it, and bash, waiting
+# on the step, would hold the interrupt until the step ended on its own. The world is launched the
+# way a terminal runs a job — a group of its own (setsid) with SIGINT at its default — and the
+# interrupt goes to the whole GROUP, as the terminal sends it. `env --default-signal=INT` is not
+# ceremony: a `&` of a non-interactive shell starts with SIGINT ignored (issue #157), and a probe
+# born that way would measure nothing. The deadline is left at its real value, so only the
+# interrupt can end the slow step inside the 10 s this waits.
+: > "$WORK/intr.log"
+INTR_RC=0
+FAILFAST_LOG="$WORK/intr.log" FAILFAST_RED='' FAILFAST_SLOW="$TIMEOUT_STEP_FILE" \
+  setsid env -u SDD_MUTANT -u SDD_MUTANT_FIRST -u SDD_TPL_SELFTEST_CHILD --default-signal=INT \
+  "$FAILFAST/tests/run-all.sh" > "$WORK/intr.out" 2>&1 &
+INTR_PID=$!
+[ "$(ps -o pgid= -p "$INTR_PID" | tr -d ' ')" = "$INTR_PID" ] \
+  || broken "interrupt probe: the suite is not the leader of its own process group — the Ctrl-C would go elsewhere"
+for _ in $(seq 1 200); do grep -qxF "$TIMEOUT_STEP_FILE" "$WORK/intr.log" && break; sleep 0.1; done
+grep -qxF "$TIMEOUT_STEP_FILE" "$WORK/intr.log" \
+  || broken "interrupt probe: the slow step never started in 20 s — there is nothing to interrupt"
+sleep 0.5
+kill -INT -- "-$INTR_PID" 2>/dev/null || true
+INTR_ENDED=0
+for _ in $(seq 1 100); do kill -0 "$INTR_PID" 2>/dev/null || { INTR_ENDED=1; break; }; sleep 0.1; done
+[ "$INTR_ENDED" = 1 ] || kill -KILL -- "-$INTR_PID" 2>/dev/null || true
+wait "$INTR_PID" 2>/dev/null || INTR_RC=$?
+if [ "$INTR_ENDED" = 1 ] && [ "$INTR_RC" != 0 ] \
+   && [ "$(tail -n 1 "$WORK/intr.log")" = "$TIMEOUT_STEP_FILE" ]; then
+  pass 'surface: an interrupt still stops the suite while a step runs'
+else
+  fail 'surface: an interrupt still stops the suite while a step runs' \
+       "the suite gone within 10 s of the group's SIGINT, rc non-zero, no step run after $TIMEOUT_STEP_FILE" \
+       "ended: $INTR_ENDED, rc $INTR_RC, steps: $(tr '\n' ' ' < "$WORK/intr.log")"
 fi
 
 # ---------------------------------------------------------------------------
