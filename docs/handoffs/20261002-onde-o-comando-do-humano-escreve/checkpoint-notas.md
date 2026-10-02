@@ -50,3 +50,4 @@
 
 - 2026-10-02 14:07 · `I1` · Red medido trips:4 sob o veneno armado; a limpeza ficou dentro de `foreign_elsewhere` (subshell com `unset GIT_REFLOG_ACTION`), o que protege também o mundo `RSB`; piso usa repo descartável `reviewscope-venom` sob `$OUTSIDE`; suíte verde, anchors 532
 - 2026-10-02 14:25 · `I2` · Red medido: traceback depois de `signal recovers: 15` com o veneno armado e sem o reset; conserto por `preexec_fn=default_signals` em `start()` (SIGINT e SIGQUIT), veneno só no laço de sinais com o handler restaurado; Check 3 lançado com `&` e em primeiro plano; âncora do TODO.md 786 → 816; suíte verde, anchors 532
+- 2026-10-02 14:46 · `I3` · Red medido: 1 `sdd-ck-*` sobrando e nota ausente (1 em vez de 2) com TMPDIR inexistente; `mktemp` movido para o ramo do awk com `|| rm -f`; mutante `RUN_intervention_tmp_before_branch` pego pelos dois probes; 4 âncoras do TODO.md deslocadas atualizadas; suíte verde, anchors 533
