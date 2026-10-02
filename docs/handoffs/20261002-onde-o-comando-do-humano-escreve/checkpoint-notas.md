@@ -48,3 +48,4 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+- 2026-10-02 14:07 · `I1` · Red medido trips:4 sob o veneno armado; a limpeza ficou dentro de `foreign_elsewhere` (subshell com `unset GIT_REFLOG_ACTION`), o que protege também o mundo `RSB`; piso usa repo descartável `reviewscope-venom` sob `$OUTSIDE`; suíte verde, anchors 532

@@ -37,7 +37,7 @@ atualizado: 2026-10-02 10:38
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | #186: o mundo da ida e volta roda sob rótulo REVIEW armado pelo sensor | `o=$(GIT_REFLOG_ACTION=sdd:REVIEW:deadbeef bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    a round trip through another branch inside the window is not a crossing' -e '^  ok    the round-trip world runs under an armed session label' <<< "$o"` → `2` | pending | — |
+| I1 | #186: o mundo da ida e volta roda sob rótulo REVIEW armado pelo sensor | `o=$(GIT_REFLOG_ACTION=sdd:REVIEW:deadbeef bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    a round trip through another branch inside the window is not a crossing' -e '^  ok    the round-trip world runs under an armed session label' <<< "$o"` → `2` | done | 4815fe0 |
 | I2 | #157: o probe de sinal nasce com SIGINT ignorado e o filho o recebe em SIG_DFL | `o=$(bash -c 'tests/check-coordination.sh 2>&1 & wait $!'); grep -c -e '^  ok    signal status: 2' -e '^  ok    signal recovers: 2' -e '^  ok    the signal probes start with SIGINT ignored, as a detached launch leaves it' <<< "$o"` → `3` | pending | — |
 | I3 | #193: a nota de intervenção cria o temporário só no ramo que o usa | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    the intervention note leaves no temporary file behind' -e '^  ok    the notes-file path writes the note with an unwritable TMPDIR' <<< "$o"` → `2` | pending | — |
 | I4 | #182: o close sem JIRA confere o PR e volta à base | `o=$(bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    close: with JIRA off the tree goes back to the default branch' -e '^  ok    close: with JIRA off an unmerged PR is still refused' <<< "$o"` → `2` | pending | — |
