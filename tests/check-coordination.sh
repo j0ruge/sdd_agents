@@ -199,6 +199,14 @@ Path(os.environ["COORD_FINISHED"]).write_text("child wrote after release")
 ''')
 
 
+def default_signals():
+    # restore_signals=True only resets SIGPIPE, SIGXFZ and SIGXFSZ: an SIGINT/SIGQUIT ignored by
+    # whoever launched the sensor would cross the exec and make the owner deaf to the signal the
+    # probes send (#157). Runs in the forked child only, before exec.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGQUIT, signal.SIG_DFL)
+
+
 def start(repo, mode="ordinary", code=0, args=("run", "20260101-one"), binary=sdd):
     serial = len(owned)
     ready = work / ("ready-" + str(serial))
@@ -211,7 +219,7 @@ def start(repo, mode="ordinary", code=0, args=("run", "20260101-one"), binary=sd
                                      COORD_CHILD=mode, COORD_EXIT=str(code), COORD_SDD=str(binary),
                                      COORD_RESULTS=str(work / "nested-results"),
                                      COORD_FINISHED=str(ready) + ".finished"),
-                            stdout=log, stderr=subprocess.STDOUT)
+                            stdout=log, stderr=subprocess.STDOUT, preexec_fn=default_signals)
     item = (proc, ready, release, log)
     owned.append(item)
     deadline = time.monotonic() + 8
@@ -786,6 +794,21 @@ try:
     release(nested_health)
     env.pop("COORD_HEALTH_NESTED", None)
     # Signal delivery must not release a still-running descendant, or leak ownership forever.
+    # The probes run with SIGINT ignored in this process, which is how a detached launch
+    # (`cmd &` in a non-interactive shell) leaves the sensor: an ignored disposition survives
+    # exec, so without the reset in start() the owner never dies of SIGINT (#157). The poison is
+    # armed here on every run, not only when someone launches the wrong way, and the previous
+    # handler comes back after the loop so the human's Ctrl-C still stops the sensor.
+    previous_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    inherited = subprocess.run([sys.executable, "-c",
+                                "import sys\n"
+                                "line = [l for l in open('/proc/self/status') if l.startswith('SigIgn:')][0]\n"
+                                "sys.stdout.write(str(int(line.split()[1], 16) & 2))\n"],
+                               text=True, capture_output=True, timeout=8)
+    check("the signal probes start with SIGINT ignored, as a detached launch leaves it",
+          signal.getsignal(signal.SIGINT) == signal.SIG_IGN and inherited.stdout == "2",
+          "disposition " + repr(signal.getsignal(signal.SIGINT)) + ", plain child SigIgn&2 = "
+          + repr(inherited.stdout) + inherited.stderr)
     for number in (signal.SIGTERM, signal.SIGINT):
         interrupted = start(repo)
         interrupted[0].send_signal(number)
@@ -798,6 +821,7 @@ try:
                 break
             time.sleep(.01)
         check("signal recovers: " + str(number), result.returncode == 0, result.stdout)
+    signal.signal(signal.SIGINT, previous_sigint)
     # The direct-child control proves its explicit handler before forwarding through the owner.
     for mode, receiver in (("cooperative", "owner"), ("foreground", "child"), ("foreground", "owner"),
                            ("foreground-escaped", "owner"), ("foreground-threaded", "owner")):
