@@ -3138,7 +3138,7 @@ ledger_repo_root() {
   # `--show-toplevel` got both of those right and only worktrees wrong. The common dir gets all
   # three right, because it is the identity git itself keeps per repository.
   gitdir="$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0
-  # ⚠️ ONE ABSOLUTE LINE, or this is not an answer — and the test is load-bearing on any git older
+  # ⚠️ AN ABSOLUTE ANSWER, or this is not an answer — and the test is load-bearing on any git older
   # than 2.31, which is where `--path-format` was born. `git rev-parse` ECHOES a token it does not
   # recognize as an option straight back to stdout and still exits 0, so a pre-2.31 git answers TWO
   # lines here: the flag itself, then the common dir, still relative. `|| return 0` never fires (rc
@@ -3160,8 +3160,16 @@ ledger_repo_root() {
   # `cd`s, and only on a git that cannot do it in one. The sensor is the pre-2.31 differential pair
   # in tests/check-autonomy.sh, which asserts the two gits answer the SAME identity — not merely
   # that the new one does not leak.
+  #
+  # One arm, on the first byte. The old git's answer starts with the echoed flag, never with `/`,
+  # so a leading `/` alone separates the two gits. A newline INSIDE an absolute answer is a repo
+  # whose path holds one, and that path IS its identity: an arm that emptied it returned the
+  # "not a repo" sentinel for a repo that is one — the defect above, again (issue #72, measured:
+  # the repo's own row read "no data"). `jq --arg` carries the newline into the row and back.
+  # Declared limit: on a pre-2.31 git the fallback below still refuses such a path, because there a
+  # second line cannot be told from a leak.
   case "$gitdir" in
-    /*) [ "$gitdir" = "${gitdir%%$'\n'*}" ] || gitdir="" ;;
+    /*) ;;
     *)  gitdir="" ;;
   esac
   if [ -z "$gitdir" ]; then

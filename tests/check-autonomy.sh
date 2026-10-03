@@ -4683,6 +4683,29 @@ assert_eq "cdpath: a git older than --path-format resolves the SAME identity, ne
       else m="split:${old:-<empty>}|${new:-<empty>}"; fi
       printf '%s %s %s %s %s %s' "${new##*/}" "$s" "$g" "$m" "$i" "$f" )"
 
+# --- a repo whose PATH holds a newline is that path ---------------------------
+# Issue #72. The shape guard's first arm used to empty an absolute answer that spans two lines, and
+# the only absolute answer that does is a repository whose path contains `\n` — the pre-2.31 leak
+# starts with the echoed flag, never with `/`, and the second arm owns it. Emptied, the identity
+# became "not a repo": the sentinel of the OTHER meaning, which this file already refused once for
+# the old git. The property is the round trip: a row stamped with that path, read from inside that
+# repo, is local. The floor proves the world is armed — git really answers two lines for it — so a
+# fixture that failed to build a newline into the path cannot pass for the rule.
+NLDIR="$CDROOT/nl"$'\n'"repo"; NLSTATE="$OUTSIDE/nlstate"; mkdir -p "$NLSTATE"
+git init -q "$NLDIR" >/dev/null 2>&1
+NLID="$( CDPATH='' cd "$NLDIR" 2>/dev/null && pwd -P )"
+assert_eq "the newline world is armed: git answers that repo's common dir on two lines, absolute" \
+  "2 /" \
+  "$( o="$(git -C "$NLDIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+      printf '%s %s' "$(grep -c '' <<< "$o")" "$(head -c 1 <<< "$o")" )"
+jq -cn --arg repo "$NLID" '{"v":1,"ts":"2026-09-30T10:00:00-03:00","event":"session","run_id":"nl1","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"nl","repo":$repo,"mission":"m1","phase":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"nl1a","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"gate":"pass","gate_why":"ok"}' \
+  > "$NLSTATE/autonomy-log.jsonl"
+assert_eq "identity: a repo whose path holds a newline keeps that path, and its own row reads local" \
+  "rc:0 local:1 nodata:0" \
+  "$( out="$( cd "$NLDIR" && SDD_STATE_DIR="$NLSTATE" "$SDD" autonomy 2>&1 )"; rc=$?
+      printf 'rc:%s local:%s nodata:%s' "$rc" "$(grep -c '1 session(s) · 1 advanced' <<< "$out")" \
+        "$(grep -c 'no data' <<< "$out")" )"
+
 # --- ...and a row that cannot say where it came from is nobody's ------------
 # `ledger_row_is_local` used to answer `true` for a row with no `repo` key — local in EVERY repo.
 # The comment above it claimed the readers then classified those rows out loud, and for a bare

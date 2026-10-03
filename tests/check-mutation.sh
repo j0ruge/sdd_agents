@@ -2591,14 +2591,22 @@ mut_AUTONOMY_shape_not_asked() {
 # by the pre-2.31 differential pair of check-autonomy.sh, which reads the identity back out of the
 # runner under a shim and demands it be the repo or nothing, never the flag. The `case` and its
 # `esac` go together: removing the opener alone leaves invalid bash, which is a harness failure and
-# not a capture.
+# not a capture. Re-anchored by issue #72, which left the guard ONE arm (the first byte): the arm
+# that emptied an absolute two-line answer is gone, so this mutant now covers the only arm left.
 mut_LEDGER_repo_root_shape_blind() {
-  perl -0pi -e 's@  case "\$gitdir" in\n    /\*\) \[ "\$gitdir" = "\$\{gitdir%%\$.\\n.\*\}" \] \|\| gitdir="" ;;\n    \*\)  gitdir="" ;;\n  esac\n@@' "$1"
+  perl -0pi -e 's@  case "\$gitdir" in\n    /\*\) ;;\n    \*\)  gitdir="" ;;\n  esac\n@@' "$1"
 }
 
 # Issue #73: the runner stops consulting the git on the PATH — the only way a pre-2.31 git reaches
 # ledger_repo_root. The modern git then answers both questions and agrees with itself, so every
 # identity assertion stays green; only the shim's trace (`seen fell`) shows nobody asked it.
+# Issue #72, the other direction: the arm that emptied an absolute answer spanning two lines comes
+# back. The only such answer is a repo whose PATH holds a newline, and emptying it is the "not a
+# repo" sentinel for a repo that is one — the round-trip world of check-autonomy.sh reads its own
+# row as "no data".
+mut_LEDGER_repo_root_newline_emptied() {
+  sed -i '/^ledger_repo_root() {/,/^}/ s@^    /\*) ;;$@    /*) [ "$gitdir" = "${gitdir%%$'"'"'\\n'"'"'*}" ] || gitdir="" ;;@' "$1"
+}
 mut_LEDGER_repo_root_bypasses_shim() {
   sed -i 's@^  local start="${REPO_ROOT:-$PWD}" gitdir$@  local start="${REPO_ROOT:-$PWD}" gitdir PATH="/usr/bin:/bin:$PATH"@' "$1"
 }
@@ -5577,6 +5585,7 @@ CATALOG=(
   AUTONOMY_all_repos_ignored
   LEDGER_repo_root_shape_blind
   LEDGER_repo_root_bypasses_shim
+  LEDGER_repo_root_newline_emptied
   LEDGER_repo_root_toplevel
   LEDGER_no_repo_counted_as_local
   KAIZEN_series_default_per_repo
