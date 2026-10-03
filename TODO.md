@@ -74,21 +74,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   lista do próprio `sandbox()`, decidido o custo. — descoberto por `sdd-executor` na missão
   `20260819-fecho-...` (2026-08-19)
 
-- [ ] **O braço 1 da guarda de forma do `ledger_repo_root` não tem probe, e a mutação junta os
-  dois** — `bin/sdd:3171` (`case "$gitdir" in`) — sob o shim pré-2.31 o valor não começa com `/`, então quem dispara é
-  sempre o braço 2; o braço 1 (uma linha só, caminho absoluto) só é alcançado por um repo cujo
-  CAMINHO contém `\n`, e nenhum fixture tem um. `mut_LEDGER_repo_root_shape_blind` apaga os dois de
-  uma vez, então o catálogo não os distingue. Direção: fixture com `\n` no caminho e dividir a
-  mutação em duas. RESOLVED by c62ee1e. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **O piso do shim pré-2.31 prova que o shim é um git falso, não que o runner o consulta** —
-  `tests/check-autonomy.sh:4553` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
-  ancora no caminho de resolução do runner. Medido: trocar `git` por `/usr/bin/git` no
-  `ledger_repo_root` E apagar a guarda deixa `check-autonomy.sh` inteiro verde, porque o shim segue
-  um impostor correto que nunca é chamado. Direção: termo provando INTERCEPTAÇÃO — a resposta do
-  runner sob o shim tem de diferir da resposta sem ele. RESOLVED by 35145b0.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
 - [ ] **Nada mede se o esperado de um Check do checkpoint ainda reproduz** —
   `tests/check-checkpoint.sh:1` — o sensor mede a FORMA da célula (âncora `^  ok    `, ausência de
   `|`, cinco colunas) e nunca o VALOR. Medido nesta missão: o Check do I2 dizia `3` e responde `4`
@@ -105,28 +90,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sensor do merge-base recusa o item, este aceita). Fechar exige a re-derivação semântica posta
   fora de escopo: toda regra sintática tentada inventa 5 violações no arquivo real.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
-- [ ] **O `moved2` do `cmd_kaizen` não tem asserção que morra ao apagá-lo** —
-  `bin/sdd:10404` — a asserção `covered:` do `moved` cobre a primeira atribuição; neutralizar a
-  do retry deixa `check-kaizen.sh`, `check-autonomy.sh` e o catálogo verdes, porque o default
-  local `false` coincide com o que o regime do fixture espera. Só o hardcode para `true` morre.
-  Direção: um mundo em que o retry mexe no disco de verdade, ou estreitar o que a asserção diz. RESOLVED by 0bdfddd.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
-- [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:5707` —
-  ela só sai com `fails -eq 0`, e todo fixture offline reprova antes (o probe do `claude` e o
-  `gh auth status`). O I3 provou o ramo de falha por diferencial, mas o ramo de sucesso — a frase
-  que o operador de fato lê — segue sem sensor. Direção: um `--skip-session` no preflight, ou um
-  contador de agentes impresso fora da guarda de `fails`. RESOLVED by 32896a7.
-  — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
-
-- [ ] **Os dois ramos de diagnóstico do `differential()` não têm probe** —
-  `tests/check-entrypoint.sh:235` — a passada adversarial da r2 matou 20 de 25 degradações, e o
-  que sobra sem probe é a comparação do próprio diferencial: neutralizá-la faz o sensor ler "1 vs
-  1" e seguir verde, então o dia em que o fall-through parar de reproduzir neste bash passa
-  despercebido. Hoje o limite é o par de contagens ser IMPRESSO na linha `ok`. Direção: um gancho
-  de contagem falsa, como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo. RESOLVED by e40a022.
-  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:135`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
@@ -166,14 +129,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: Check de ausência mira o código, nunca a prosa. — descoberto por `sdd-executor` na
   missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **A asserção "dry-run não toca no disco" promete mais do que entrega** —
-  `tests/check-dry-run.sh:180` (`does not touch the disk`) — roda sobre fixture parado em EXEC, cujo gate
-  reprova antes de chegar ao `TEST_CMD`. Num fixture que alcance `gate_REVIEW`, o dry-run escreve
-  `.sdd/logs/<missão>/gate-*-test-*.log` (reconfirmado no repo real, volta 2 da QA). Não é bug —
-  é comportamento aceito e gitignored —, mas o nome garante mais que o teste. Direção: renomear
-  para "não toca nos artefatos da missão" ou exercitar também num fixture que chegue ao REVIEW. RESOLVED by 00b60cc.
-  — descoberto por `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
-
 - [ ] **O formato de achado vale para os repos-alvo, mas o sensor só guarda o arquivo do kit** —
   `tests/check-todo.sh` vs `CLAUDE.md` (princípio 5) — o esqueleto de duas seções e o ciclo
   "fechado é apagado" valem para o `TODO.md` de **qualquer** repo. Desde o marcador, o sensor roda
@@ -181,12 +136,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   espelhar), mas nada o põe na suíte do alvo: o inchaço volta sem ninguém medir a cada missão.
   Direção: o `starter.conf` sugerir o `--check` do kit no `TEST_CMD` do alvo.
   — descoberto por `humano` revisando o sensor novo (2026-08-16)
-
-- [ ] **A asserção `the retry carries its own moved` não falha pela propriedade que promete** —
-  `tests/check-autonomy.sh:435` — no fixture, `moved` sai `false` com qualquer baseline: o retry
-  só é alcançado quando `before == after`, então a asserção nunca observa um `moved:true` genuíno
-  pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
-  do que ela. RESOLVED by 087cea2. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9554`
   (`kaizen_series`) vs `docs/pipeline.md:1374`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
@@ -234,15 +183,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   logo enxerga 7 de 13 sensores e deixa 2 dos 8 comportamentais de fora prometendo "every
   behavioural sensor". Direção: unificar em quatro espaços **e** dar cobertura ao `calibrate()`.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
-
-- [ ] **A proveniência do `sdd health` lê "a mais nova em cache", não "a que roda"** —
-  `bin/sdd:6232` — o `report-template.md` da `codereview` sai de `find … | sort -V | tail -1` sobre
-  `~/.claude/plugins/cache`, e o resumo promete `fixtures match the installed skills` (`:6326`); quem
-  fixa a versão que a fase REVIEW carrega é o `installPath` de `~/.claude/plugins/installed_plugins.json`.
-  Com uma 1.19.0 em cache e a 1.18.0 fixada, o health confere o fixture contra um arquivo que a sessão
-  nunca lê — e diz que conferiu. Fail-open (D15). Direção: ler o `installPath` do registro, `find` só
-  como fallback, mutante no catálogo. RESOLVED by 94d3b6c.
-  — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
 
 - [ ] **`gate_TICKET` não confere no Jira a issue que o chapéu diz que ele confirma** — `bin/sdd:1083`
   (`gate_TICKET`) — o `agents/sdd-ticket.md:18` promete que o runner confirma a issue por `acli`,
@@ -349,14 +289,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   com ADR que supere a alternativa (A) da ADR 0006, mantida pela 0009 (contar só o bug da missão).
   — descoberto por `sdd-qa` na missão `20260927-idioma-da-spa-pelo-idp` (2026-09-27)
 
-- [ ] **O `gate_QA` não confere o enum do `status:`** — `bin/sdd:1398` (`gate_QA`) — só `skipped` e
-  `blocked` são lidos, e qualquer outro valor segue como `done`, inclusive o literal
-  `<done | blocked | skipped>` do `templates/handoff.md`. Medido na triagem da #103: o template
-  copiado intacto passava com o status literal; o `gate:` agora recusa o placeholder, o `status:` não.
-  Direção: recusar valor fora de `done|blocked|skipped`, com mundo e mutante, como o `gate_EXEC` faz.
-  RESOLVED by e00f019.
-  — descoberto pela triagem cética do lote no branch `fix/lote-sensores-sem-probe` (2026-10-03)
-
 - [ ] **O checkpoint semeado no alvo cita um sensor que só existe no kit** —
   `templates/checkpoint.md:33` (`tests/check-checkpoint.sh`) — o texto diz que ele recusa as formas
   cegas "nos checkpoints deste repo", mas no alvo o caminho relativo não existe: no `ui24_agent`,
@@ -375,12 +307,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
   estrutura e merece a sua. — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
-- [ ] **`turns` não aparece em nenhuma view humana** — `bin/sdd:4246` — o campo está na tabela de
-  campos do `docs/pipeline.md` e é lido só por `jq` ad-hoc, então quem instala o kit não descobre
-  que ele existe — e ele é metade da M2 desta missão. Direção: dizer no `§ Field reference` que é
-  instrumento cru, ou pendurá-lo na célula do `review loop` do `--by-mission`. RESOLVED by 4a67042.
-  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
-
 - [ ] **As ADRs 0001–0007 não têm `Spec:`, e por isso 14 missões deste repo não podem declarar
   `adr:`** — `docs/adr/0001-judge-split-deterministic-series-model-verdict.md:1` — nenhuma das sete
   liga-se a uma missão por artefato (`git log --diff-filter=A` de cada uma não toca
@@ -389,21 +315,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `block` mandaria as 14 de volta para PLAN. Direção: o humano mapeia as sete, `sdd adr new --spec`
   escreve os dois lados, o resto vira `adr: none`, e aí a chave volta para `block`. — descoberto
   por `codereview` na missão `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
-
-- [ ] **A prosa dos chapéus ainda cita o `sales_quote`** — `agents/sdd-docs.md:27`
-  (`KAIZEN_LOG.md`) — o exemplo `packages/x/serializer.ts` da tabela de drift é um caminho daquele repo, e o
-  `sdd-docs.md` e o `sdd-reviewer.md` mandam ler `KAIZEN_LOG.md`, `CHANGELOG.md` e `CONTEXT.md`,
-  que nenhum gate exige e que um repo novo não tem. É ruído de prompt, não falha: a sessão procura
-  e não acha. Direção: neutralizar o exemplo e condicionar a leitura à existência do arquivo. RESOLVED by 28094c7.
-  — descoberto por `sdd-planner` na missão `20260926-a-carona-antes-do-congelamento` (2026-09-26)
-
-- [ ] **O `sdd autonomy` culpa "uma linha que não é objeto" por qualquer falha do `jq`** —
-  `bin/sdd:9513` (`unreadable row`) — o `jq` do `cmd_autonomy` roda com `2>/dev/null`, e todo rc
-  diferente de 0 vira "a row is valid JSON but not an object; find the writer". Medido: uma linha que
-  É objeto, só com `"cost_usd":"4.0"` em string, recebe essa frase, e o operador sai caçando um
-  escritor de não-objeto que não existe. Direção: testar a forma da linha antes e, no rc do programa,
-  repassar o stderr do `jq` em vez de afirmar a causa. RESOLVED by 5236206.
-  — descoberto pela triagem cética do lote no branch `fix/lote-sensores-sem-probe` (2026-10-03)
 
 - [ ] **O `kaizen --series` morre com o erro cru do `jq` e contradiz o pipeline.md sobre linha não-objeto** —
   `bin/sdd:9554` (`kaizen_series`) — irmão da #206 no segundo leitor: uma linha objeto com
@@ -444,15 +355,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   evidência citada é que não existe. Imprecisão em artefato de trilha de auditoria: não se conserta
   reescrevendo o handoff de uma fase encerrada, e sim registrando aqui.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
-
-- [ ] **A linha `kit-touched` do ledger afirma uma atribuição que o runner nunca mediu** —
-  `bin/sdd:3598` — o `warn` da tela ressalva (*"if that was you working on the kit in another
-  terminal, this is that"*, `:3603`); o `KIT_TOUCHED_WHY`, que vai para o ledger e para a escalada,
-  afirma *"a session committing outside its mission's repo"*. Medido no `796e334`: a única escalada
-  da fatia foi o HUMANO commitando o kit durante a fase PR do `sales_quote`, e o juiz a lê como
-  fricção daquela versão — a mesma classe que a T1 fechou para `session-died`. Direção: a linha diz
-  o que o runner sabe (o sha do kit mudou durante a fase), ou ele mede a atribuição. RESOLVED by 9a486a2.
-  — descoberto por `claude` na leitura do juiz de 2026-09-20 (2026-09-20)
 
 ### Idioma
 
