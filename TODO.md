@@ -208,6 +208,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   squash (o fluxo do `sales_quote`). Direção: distinguir pelo blob na ponta, não pelo caminho.
   — descoberto por `revisor de contexto novo` na missão `20260928-os-achados-da-janela` (2026-09-29)
 
+- [ ] **Um `done` abaixo de um `blocked` passa, e o Check de fechamento pode medir só o rótulo** —
+  `tests/check-checkpoint.sh:359` (`none blind`) — na S8 do `ui24_agent` o I12 (docs de fechamento)
+  fechou `done` com o I11 (smoke ao vivo) `blocked`. O Check dele, `grep -c 'S8 ✅' CLAUDE.md`, cobra
+  a palavra ✅ e não a prova do smoke, e o sensor respondeu `none blind`. Só não afirmou demais porque
+  a sessão escreveu "smoke PENDENTE" na mesma linha. Direção: o sensor avisar `done` abaixo de
+  `blocked`, e o `sdd-planner` fazer o Check de fechamento cobrar o artefato do smoke.
+  — descoberto por `sessão interativa` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
+
+- [ ] **O lint do `TODO.md` não separa violação nova da herdada: alvo com dívida fica sempre vermelho** —
+  `tests/check-todo.sh:65` (`--allow-empty`) — o `TODO.md` do `ui24_agent` carrega 15 violações de
+  forma herdadas, e quem o edita não sabe se acrescentou alguma. Na S8 a prova foi copiar a `HEAD`
+  para a raiz do alvo e contar de novo (15 = 15); a cópia no scratchpad deu 21, porque a âncora
+  resolve pela raiz do repo do arquivo. Direção: `--check <file> --baseline <ref>`, que reprove só o
+  que a ref não tinha.
+  — descoberto por `sessão interativa` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
+
 ### Contrato e configuração
 
 - [ ] **Fase interrompida depois do REVIEW faz o pipeline REGREDIR para o REVIEW** —
@@ -288,6 +304,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   EXEC para sempre. Direção: uma grafia do kit para evidência fora do git que o gate aceite com o
   Check verde, ou a regra de que todo incremento deixa um commit de registro.
   — descoberto por `sessão coordenadora` na missão `20260922-email-mvp-diretores` (2026-09-27)
+
+- [ ] **Incremento que espera uma janela externa só tem `blocked`, e o `blocked` para a missão inteira** —
+  `bin/sdd:1320` (`GATE_WHY`) — no I11 da S8 do `ui24_agent`, um smoke ao vivo que exige a mesa sem
+  uso, a pré-condição falhou (master a −2,9 dBFS) e o humano mandou fazer o I12 (docs e PR) antes. O
+  `sdd status` respondeu `Jidoka: the line stops`, o template põe o smoke antes do fechamento, e a
+  inversão foi improviso (`blocked`, `intervention:`, PR em rascunho). Irmão do item acima, com outra
+  causa. Direção: um status "espera evento externo", com motivo, que não pare as fases seguintes.
+  — descoberto por `sessão interativa` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
 
 - [ ] **A Âncora 3 do `gate_QA` bloqueia a missão com bug aberto de OUTRA missão** —
   `bin/sdd:1549` (`openbugs`) — o laço conta todo bug `Status: open` do registry que não é `human`
