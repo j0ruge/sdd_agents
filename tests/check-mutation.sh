@@ -3330,6 +3330,15 @@ mut_KAIZEN_moved_never_true() {
   sed -i '/^cmd_kaizen() {/,/^}/ { s|^  \[ "$before" != "$after" \] && moved="true"$|  true| }' "$1"
 }
 
+# Issue #78: the RETRY's twin. `moved2` is ledger-only in cmd_kaizen (it steers no branch), so a
+# neutered assignment read the default `false` in every world the file had — the regime matched the
+# default. The mirror world of check-kaizen.sh makes the retry the session that writes. Range-
+# addressed for the same reason as above: the two-space line is cmd_kaizen's alone, but the
+# four-space one in cmd_run is the same text.
+mut_KAIZEN_moved2_never_true() {
+  sed -i '/^cmd_kaizen() {/,/^}/ { s|^  \[ "$after" != "$after2" \] && moved2="true"$|  true| }' "$1"
+}
+
 # The post-pipeline nudge goes silent: missions pile up on a kit sha nobody judged and `sdd run`
 # stops saying so, which is how the kaizen loop stalls without anybody noticing it stalled. Every
 # OTHER assertion about the reminder asserts its ABSENCE (empty ledger, verdict already on disk), so
@@ -5626,6 +5635,7 @@ CATALOG=(
   RUN_ghost_session_id
   RETRY_moved_never_true
   KAIZEN_moved_never_true
+  KAIZEN_moved2_never_true
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
   KAIZEN_already_judged_spends

@@ -1164,6 +1164,36 @@ assert_eq "covered: the judge's session records moved:true, and its retry moved:
 rm -rf "$FIX/docs/handoffs/"*-kaizen
 dead_stub
 
+# The mirror (issue #78): the RETRY is the session that moves the disk, the first one is not. The
+# pair above pins the first `moved`; the retry's `moved2` had no world in which it is true, so
+# neutering its assignment left this file, check-autonomy.sh and the catalogue green — the default
+# `false` is what every regime here expected. The stub counts its SESSION calls (`-p`) and writes
+# on the second only; the count is the witness that the retry ran at all, without which "false
+# false" from a run that never retried would read like the defect.
+KSTATE2="$OUTSIDE/kaizenmoved2"
+mkdir -p "$KSTATE2"
+cp "$LEDGER" "$KSTATE2/autonomy-log.jsonl"
+KCOUNT="$OUTSIDE/kaizen-session-count"
+rm -f "$KCOUNT"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+case " \$* " in *" -p "*) ;; *) exit 1 ;; esac
+n=\$(( \$(cat "$KCOUNT" 2>/dev/null || echo 0) + 1 )); echo "\$n" > "$KCOUNT"
+if [ "\$n" = 2 ]; then
+  d="$FIX/docs/handoffs/\$(date +%Y%m%d)-kaizen"
+  mkdir -p "\$d"
+  printf 'the retry left a note\n' > "\$d/notes.md"
+fi
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+( cd "$FIX" && SDD_STATE_DIR="$KSTATE2" "$KSDD" kaizen >/dev/null 2>&1 )
+assert_eq "covered: a retry that moves the disk records moved:true, after a first session that did not" \
+  "false true 2" \
+  "$(jq -rs '[.[] | select(.phase == "KAIZEN" and .event == "session")] | .[-2:] | map(.moved | tostring) | join(" ")' "$KSTATE2/autonomy-log.jsonl") $(cat "$KCOUNT" 2>/dev/null || echo 0)"
+rm -rf "$FIX/docs/handoffs/"*-kaizen
+dead_stub
+
 echo "== reminder: pipeline complete points at the judge =="
 # A COMPLETE mission in the fixture kit: every gate satisfied, so cmd_run reaches the
 # "pipeline complete" branch without opening a session. The artifact snippets are the passing
