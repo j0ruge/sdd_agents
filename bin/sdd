@@ -421,15 +421,6 @@ frontmatter_write() {
   mv -f "$tmp" "$file" || { rm -f "$tmp"; die "frontmatter_write: could not replace $file"; }
 }
 
-# Checkpoint table rows as "ID<TAB>title<TAB>check<TAB>status<TAB>commit".
-# Skips the header, the separator, and any line that does not have the 5 columns.
-#
-# The `escaped_pipe`/rejoin pair below is DUPLICATED from gate_REVIEW (same file, the `### Overall
-# Grade` reader) on purpose, and the duplication is cheaper than the extraction: the two programs
-# are anchored separately by the mutation catalogue (`mut_REVIEW_escaped_pipe*`,
-# `mut_EXEC_escaped_pipe_blind`), and a shared helper would collapse both anchors into one — the
-# class the mutation stamp caught between PRs #12 and #13. Change one, change the other, and check
-# the neighbour's comment says so too.
 # The `- intervention:` note, written by the RUNNER when it is the runner that receives the
 # human's hand: `sdd run --phase X`, `sdd retry`, `--budget-override`. Until L4 of the 2026-09-03
 # audit the template asked the HUMAN to write it, and the artefact measured what that is worth:
@@ -513,10 +504,32 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
   fi
 }
 
+# Checkpoint table rows as "ID<CK_SEP>title<CK_SEP>check<CK_SEP>status<CK_SEP>commit", one per
+# increment, every cell trimmed. Skips the header, the separator, and any line that does not have
+# the 5 columns. The kit's ONE reader of the table: every consumer splits this output on CK_SEP.
+#
+# CK_SEP is \037 (the ASCII unit separator) and NOT a tab, and the choice is the whole of issue
+# #146. A tab is IFS whitespace, so a bash `read` with a tab IFS COLLAPSES two in a row: an empty
+# Title or Check cell moved every column after it one to the left in the bash loops, while awk and
+# cut, which do not collapse, kept them in place. gate_EXEC validated one reading and counted
+# another, and passed a `done` whose Commit cell said `pending`. A separator that is not
+# whitespace splits the same way in all of them, and no markdown cell carries it. ONE definition,
+# read by the six places that touch it (this writer, checkpoint_tally, the Jidoka in cmd_run, and
+# the loops of gate_EXEC, status_increments and cmd_approve): a reader that spelled its own
+# separator would be the second reading this comment exists to refuse. The mutant
+# mut_EXEC_checkpoint_split_collapses flips this one line back to a tab.
+#
+# The `escaped_pipe`/rejoin pair below is DUPLICATED from gate_REVIEW (same file, the `### Overall
+# Grade` reader) on purpose, and the duplication is cheaper than the extraction: the two programs
+# are anchored separately by the mutation catalogue (`mut_REVIEW_escaped_pipe*`,
+# `mut_EXEC_escaped_pipe_blind`), and a shared helper would collapse both anchors into one — the
+# class the mutation stamp caught between PRs #12 and #13. Change one, change the other, and check
+# the neighbour's comment says so too.
+CK_SEP=$'\037'
 checkpoint_rows() {
   local file="$MISSION_DIR/checkpoint.md"
   [ -f "$file" ] || return 0
-  awk -F'|' '
+  awk -F'|' -v sep="$CK_SEP" '
     # PARITY, not "does this field end in a backslash": `\\` is how GFM spells a literal backslash,
     # so a cell ending in one sits against a REAL delimiter. An ODD run of trailing backslashes
     # escapes the pipe; an EVEN one does not. ASCII only — mawk is byte-oriented and a negated
@@ -552,16 +565,8 @@ checkpoint_rows() {
       # blindness lives in gate_REVIEW and gate_DOCS; all three carry this regex.
       if (f[2] == "ID" || f[2] ~ /^:?-+:?$/ || f[2] == "") next
       if (f[5] == "Status") next
-      # \037 (the ASCII unit separator) and NOT a tab, and the choice is the whole of issue #146.
-      # A tab is IFS whitespace, so a bash `read` with a tab IFS COLLAPSES two in a row: an empty
-      # Title or Check cell moved every column after it one to the left in the bash loops, while
-      # awk and cut, which do not collapse, kept them in place. gate_EXEC validated one reading
-      # and counted another, and passed a `done` whose Commit cell said `pending`. A separator
-      # that is not whitespace splits the same way in all of them, and no markdown cell carries
-      # it. Every reader of this output splits on it: checkpoint_tally, the Jidoka in cmd_run,
-      # and the three loops (gate_EXEC, status_increments, cmd_approve). No apostrophe in this
-      # comment: it sits inside the single-quoted awk program.
-      printf "%s\037%s\037%s\037%s\037%s\n", f[2], f[3], f[4], f[5], f[6]
+      # Joined by CK_SEP, never by a tab: the header above says why.
+      printf "%s%s%s%s%s%s%s%s%s\n", f[2], sep, f[3], sep, f[4], sep, f[5], sep, f[6]
     }' "$file"
 }
 
@@ -579,7 +584,7 @@ checkpoint_rows() {
 # it. `+ 0` on every field because an unmatched pattern leaves the variable unset, and mawk prints
 # an unset variable as the empty string — a row field the ledger would then read as null.
 checkpoint_tally() {
-  checkpoint_rows | awk -F'\037' '
+  checkpoint_rows | awk -F "$CK_SEP" '
     { total++ }
     $4 == "pending" || $4 == "doing" { pending++ }
     $4 == "blocked" { blocked++ }
@@ -1233,7 +1238,7 @@ gate_EXEC() {
   # `pending_after` and the gate's own "N of M" have to be the same reading or the judge is
   # comparing a number against prose that disagrees with it.
   local id status commit
-  while IFS=$'\037' read -r id _ _ status commit; do
+  while IFS="$CK_SEP" read -r id _ _ status commit; do
     case "$status" in
       done)
         if [ -z "$commit" ] || [ "$commit" = "—" ] || [ "$commit" = "-" ]; then
@@ -3356,6 +3361,10 @@ ledger_row_is_local() {
 # With no row above, `done` is 0 and the inference is M: right on the first row of a mission that
 # started under the runner, wrong when its first increments ran outside it. `.moved != false` in
 # `outcome` is what keeps that inference from crediting a session that never touched the disk.
+# DECLARED, no probe: an M that shrinks below the memory (a human deleted increments mid-mission)
+# makes `pending_before` negative. Only `outcome` reads the field, `after < negative` is never
+# true, and the row reads churn — the conservative side; no output prints the number. A clamp at 0
+# reads the same row the same way, so it would be a rule no fixture can notice, and is not written.
 # The memory is fed by rows that carry the FIELDS too, and that is load-bearing on a mixed ledger:
 # a mission whose first sessions are new-schema and whose later ones are not would otherwise read
 # its first old row against M instead of against the row above it.
@@ -6551,7 +6560,7 @@ status_increments() {
   [ -n "$rows" ] || return 0
   info "  increments:"
   local id title _c st commit mark
-  while IFS=$'\037' read -r id title _c st commit; do
+  while IFS="$CK_SEP" read -r id title _c st commit; do
     case "$st" in
       done)    mark="${C_GREEN}✓${C_RESET}" ;;
       blocked) mark="${C_RED}✗${C_RESET}" ;;
@@ -7480,7 +7489,7 @@ cmd_approve() {
   if [ -n "$rows" ]; then
     info "  increments:"
     local id title _check st _commit
-    while IFS=$'\037' read -r id title _check st _commit; do
+    while IFS="$CK_SEP" read -r id title _check st _commit; do
       printf '    %-4s %-46s %s\n' "$id" "${title:0:46}" "$st"
     done <<< "$rows"
   fi
@@ -7943,7 +7952,7 @@ cmd_run() {
     # exactly the false negative a Jidoka must never have. tests/check-gates.sh pins it with a
     # 20000-row checkpoint; the RUN_jidoka_pipefail mutation puts the pipe back and the suite
     # has to die.
-    local ckstatus; ckstatus="$(checkpoint_rows | cut -d $'\037' -f4)"
+    local ckstatus; ckstatus="$(checkpoint_rows | cut -d "$CK_SEP" -f4)"
     if [ "$phase" = "EXEC" ] && grep -qx "blocked" <<< "$ckstatus"; then
       gate_EXEC || true
       info ""

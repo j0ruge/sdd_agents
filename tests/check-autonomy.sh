@@ -3200,7 +3200,8 @@ assert_bucket_sum "the four buckets sum to the header total (historical path)" "
 #       row says `3 of 6` after 2 done. 6 - 2 = 4 pending before, 3 after: the session that did
 #       the work reads advanced. A memory that kept the PENDING count instead (2) reads 3 > 2 as
 #       churn. No passing row anywhere in this mission, deliberately, so the pass world below
-#       cannot decide it.
+#       cannot decide it. A return of the old "a changed M counts from M" rule reads this row
+#       `advanced` too (6 > 3): the world that catches THAT is m14, where M moves after a pass.
 #   m5  the phase closed at `4 increment(s) done` and a later session left `3 of 4`: 3 increments
 #       were set back to pending, and the session measured against the 0 the pass left reads
 #       churned. The two rules read it `advanced` — the cleared memory handed it M — which is the
@@ -3213,7 +3214,7 @@ assert_bucket_sum "the four buckets sum to the header total (historical path)" "
 #       opens with `N increment(s)` — 7 session rows of the real ledger carry it, one without the
 #       fields — and a rule that read any `N increment` would hand the row after it 4 - 1 = 3
 #       instead of 4 - 2 = 2: the session that left `2 of 4` where it found it reads `advanced`.
-echo "== reader: the memory rules of the historical path =="
+echo "== reader: the memory of the historical path (total done) =="
 mkdir -p "$OUTSIDE/histfix"
 localize > "$OUTSIDE/histfix/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-29T11:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
@@ -3258,7 +3259,7 @@ assert_eq "the Jidoka sentence is not a pass, and writes nothing to the memory" 
 # hashes the checkpoint, and closing an increment means editing the checkpoint, so a session whose
 # fingerprint did not move CANNOT have lowered the count. It therefore costs the field path nothing
 # (a measured pair with `moved: false` is unreachable) and it does not touch which rows the path
-# annotates — the disclosure count and the two memory rules above are deliberately left alone, so
+# annotates — the disclosure count and the memory invariant above are deliberately left alone, so
 # this assertion cannot be satisfied by the path simply failing to reach the row. Measured over the
 # real ledger on 2026-08-30: 53 recovered rows, 48 `advanced`, and the guard moves NONE of them.
 # `!= false` and not `== true`: an escalation row carries no `moved` at all, and `null != false`
@@ -3372,14 +3373,14 @@ assert_eq "the human window and the judge agree on the recovered REVIEW history"
 assert_eq "that parity is not vacuous — the recovered REVIEW table printed the three counts" "2 3 0" "$table_rounds"
 assert_bucket_sum "the four buckets sum to the header total (dated REVIEW path)" "$out_rounds"
 
-# --- the two memory rules the REVIEW path does NOT inherit ----------------------------------------
-# The EXEC sibling clears its memory on a PASSING gate, because `pending` resets to M when a closed
-# phase is reopened. REVIEW rounds do the opposite: `review_rounds_on_disk` counts FILES, the files
-# are never deleted, and `sdd run` deliberately does not reset the ceiling against them
-# (bin/sdd, the round-ceiling block of cmd_run). So the count carries ACROSS a passing gate, and
-# copying the reset over would be a fail-open in the flattering direction — this fixture is the
-# world that proves it, and it is here so that the next reader who notices the asymmetry and
-# "restores" it gets a red suite instead of a plausible commit.
+# --- the REVIEW memory carries across a passing gate --------------------------------------------
+# Both dated paths carry their memory across a PASSING gate: EXEC keeps the total DONE (since issue
+# #147 the pass writes its own total instead of clearing the memory), and REVIEW keeps the round
+# count — `review_rounds_on_disk` counts FILES, the files are never deleted, and `sdd run`
+# deliberately does not reset the ceiling against them (bin/sdd, the round-ceiling block of
+# cmd_run). A reset on a pass would be a fail-open in the flattering direction here: this fixture
+# is the world that proves it, and it is here so that the next reader who adds one gets a red
+# suite instead of a plausible commit.
 #
 #   m10  r1 lands and the gate PASSES; the phase is reopened and a session spins on the same r1.
 #        Memory carried: 1 → 1 is not progress, `churned`. Memory reset: 1 > 0 reads `advanced`

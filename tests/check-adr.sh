@@ -73,7 +73,8 @@
 #       never "points somewhere else" nor "has no 'Spec:' line" — the sentence names the defect
 #       the reader can act on (issue #50)
 #  R38  a declaration whose `chmod --reference` fails SAYS so, naming the file, in both rewrite
-#       sites — the declaration still lands, and the spec no longer goes 0600 in silence (#199)
+#       sites — the declaration still lands, and the spec no longer goes 0600 in silence (#199);
+#       and one whose chmod WORKS says nothing and keeps the mode, or "warn always" passes
 #
 # Declared limits (D15 of CLAUDE.md — debt written is a limit, debt kept quiet is the fail-open):
 #   - The pilot target keeps a LOCAL namespace at `specs/023/adr/001-…`, outside ADR_DIR. This
@@ -134,7 +135,10 @@
 #        value reads as a missing line: red, and it is the absence of "has no 'Spec:' line" in the
 #        empty-value probe that catches it, not the rc — both arms return 1.
 #  R38 → each `|| warn` of adr_declare back to `|| true`: red, each on its own probe
-#        (mut_ADR_declare_chmod_silent_frontmatter, mut_ADR_declare_chmod_silent_speckit).
+#        (mut_ADR_declare_chmod_silent_frontmatter, mut_ADR_declare_chmod_silent_speckit). → the
+#        warning fired on every declaration: red on the two "works" probes, and ONLY there
+#        (mut_ADR_declare_chmod_warns_always). → the prefix swapped for frontmatter_write's: red on
+#        the two shim probes. → the chmod dropped: red on all four.
 #  R11 → the duplicate-id arm replaced by `false`: red. → the name arm replaced by `false`: red.
 #  R12 → the whole mission branch replaced by `:`: red — and it SURVIVED the first sweep, because
 #        no probe drove a mission with a declared path through the repo scope. The probe that
@@ -216,7 +220,7 @@ fails=0
 # fail() are the only writers. Two blocks below used to bump it by hand AND then call pass/fail,
 # so two probes counted twice and the floor was pinned to a number two higher than the assertions
 # it was standing for — an instrument off by exactly the amount nobody could see.
-PROBE_FLOOR=73
+PROBE_FLOOR=79
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -755,12 +759,42 @@ if [ -n "$C" ]; then
   else fail 'the chmod shim is armed — a chmod through that PATH fails' 'a failing chmod' 'chmod succeeded'; fi
   mission "$C" 20260102-chmod '@none@'
   assert_adr 'a key inserted into a frontmatter whose mode cannot be kept says so, naming the file' "$C" 0 \
-    'warn.*could not keep the mode of .*docs/handoffs/20260102-chmod/00-missao\.md' \
+    'warn +adr_declare: could not keep the mode of .*docs/handoffs/20260102-chmod/00-missao\.md' \
     new --slug kept --spec docs/handoffs/20260102-chmod/00-missao.md
   mkdir -p "$C/specs/004-chmod"; printf '# C\n\n**Status**: Draft\n' > "$C/specs/004-chmod/spec.md"
   assert_adr 'an **ADR**: line written into a spec whose mode cannot be kept says so, naming the file' "$C" 0 \
-    'warn.*could not keep the mode of .*specs/004-chmod/spec\.md' \
+    'warn +adr_declare: could not keep the mode of .*specs/004-chmod/spec\.md' \
     new --slug keptspec --spec specs/004-chmod/spec.md
+  # ...and the declaration still LANDS: the warning is the only thing a failed chmod changes. The
+  # `adr_declare:` prefix in the two regexes above is what keeps frontmatter_write's own warning,
+  # same wording, from answering for this function.
+  if grep -qE '^adr: docs/adr/[0-9]{4}-kept\.md$' "$C/docs/handoffs/20260102-chmod/00-missao.md" \
+     && grep -qE '^\*\*ADR\*\*: docs/adr/[0-9]{4}-keptspec\.md$' "$C/specs/004-chmod/spec.md"; then
+    pass '...and both declarations still land despite the failed chmod'
+  else
+    fail '...and both declarations still land despite the failed chmod' \
+      'adr: <path> in the mission and **ADR**: <path> in the spec' \
+      "$(grep -m1 '^adr:' "$C/docs/handoffs/20260102-chmod/00-missao.md") / $(grep -m1 'ADR' "$C/specs/004-chmod/spec.md")"
+  fi
+  # The other half of the pair — the right branch AND the absence of the other's marker: the same
+  # two layouts with a chmod that WORKS say nothing about the mode, and keep it. Without this, a
+  # runner that warned on every declaration would satisfy every assertion above.
+  rm -f "$C/.stub/chmod"
+  mission "$C" 20260102-chmodok '@none@'
+  mkdir -p "$C/specs/005-chmodok"; printf '# K\n\n**Status**: Draft\n' > "$C/specs/005-chmodok/spec.md"
+  /bin/chmod 0644 "$C/docs/handoffs/20260102-chmodok/00-missao.md" "$C/specs/005-chmodok/spec.md"
+  for C_CASE in "docs/handoffs/20260102-chmodok/00-missao.md okmission" "specs/005-chmodok/spec.md okspec"; do
+    C_FILE="${C_CASE%% *}"; C_SLUG="${C_CASE##* }"
+    run_adr "$C" new --slug "$C_SLUG" --spec "$C_FILE"
+    C_MODE="$(stat -c %a "$C/$C_FILE" 2>/dev/null || echo '?')"
+    if [ "$ADR_RC" = 0 ] && grep -q 'now declares it' <<< "$ADR_OUT" \
+       && ! grep -q 'could not keep the mode' <<< "$ADR_OUT" && [ "$C_MODE" = 644 ]; then
+      pass "a chmod that works says nothing and keeps the mode ($C_FILE)"
+    else
+      fail "a chmod that works says nothing and keeps the mode ($C_FILE)" \
+        'rc 0, now declares it, no mode warning, mode 644' "rc $ADR_RC, mode $C_MODE — $ADR_OUT"
+    fi
+  done
 fi
 
 # --- the reservation primitive -----------------------------------------------------------------

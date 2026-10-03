@@ -3734,18 +3734,17 @@ mut_EXEC_tally_doing_is_done() {
   sed -i '/^checkpoint_tally()/,/^}/ s@\$4 == "pending" || \$4 == "doing"@$4 == "pending"@' "$1"
 }
 
-# checkpoint_rows goes back to a TAB between columns, and every reader with it — the state before
-# issue #146. The awk and cut readers still split one tab per column, but the three bash loops read
-# with a tab IFS, which COLLAPSES two in a row: an empty Check cell moves the Status into the Commit
-# variable, and gate_EXEC passes a `done` whose Commit cell says `pending` while checkpoint_tally
-# counts it as done. `IFS=$(printf "\t")` spells the tab without a quote the sed script would close.
-# Caught by `an empty Check cell changes nothing about which phase is due` in check-gates.sh (EXEC
-# against the QA the filled checkpoint gets), with the status and approve listings beside it.
+# CK_SEP goes back to a TAB — the state before issue #146. The awk and cut readers still split one
+# tab per column, but the three bash loops read with a tab IFS, which COLLAPSES two in a row: an
+# empty Check cell moves the Status into the Commit variable, and gate_EXEC passes a `done` whose
+# Commit cell says `pending` while checkpoint_tally counts it as done. ONE line, because the
+# separator has ONE definition: a mutant that rewrote each reader would half-apply the day a
+# reader left its anchors, and score `caught` for breaking every reader instead of for the
+# collapse. Caught by `an empty Check cell changes nothing about which phase is due` in
+# check-gates.sh (EXEC against the QA the filled checkpoint gets), with the status and approve
+# listings beside it.
 mut_EXEC_checkpoint_split_collapses() {
-  sed -i -e '/^checkpoint_rows() {/,/^}/ s@printf "%s\\037%s\\037%s\\037%s\\037%s\\n"@printf "%s\\t%s\\t%s\\t%s\\t%s\\n"@' \
-         -e '/^checkpoint_tally() {/,/^}/ s@awk -F.\\037.@awk -F"\\t"@' \
-         -e 's@IFS=\$.\\037. read -r id@IFS=$(printf "\\t") read -r id@' \
-         -e 's@cut -d \$.\\037. -f4@cut -f4@' "$1"
+  sed -i 's@^CK_SEP=.*@CK_SEP="$(printf "\\t")"@' "$1"
 }
 
 # The phase guard at cmd_run's door 1 goes, and GATE_EXEC_PENDING — which outlives its gate by
@@ -4863,6 +4862,12 @@ mut_ADR_declare_chmod_silent_frontmatter() {
 mut_ADR_declare_chmod_silent_speckit() {
   sed -i '/^adr_declare() {/,/^}/ s@^    || warn "adr_declare: could not keep the mode of .*$@    || true@' "$1"
 }
+# The other direction: the warning fires on EVERY declaration, the chmod that worked included. The
+# shim probes stay green — they only ask that the warning appear — and the two probes of a chmod
+# that WORKS are the ones that die, which is why R38 carries them.
+mut_ADR_declare_chmod_warns_always() {
+  sed -i '/^adr_declare() {/,/^}/ s@chmod --reference="\$spec" "\$tmp" 2>/dev/null \\$@{ chmod --reference="$spec" "$tmp" 2>/dev/null; false; } \\@' "$1"
+}
 
 # Gap 3 of portability: the TEST_CMD inherits the runner's stdin again. A bare `vitest` reads a
 # terminal as "interactive" and turns watch mode on, and the gate hangs with no rc from any `sdd run`
@@ -5627,6 +5632,7 @@ CATALOG=(
   ADR_link_not_path_generic
   ADR_declare_chmod_silent_frontmatter
   ADR_declare_chmod_silent_speckit
+  ADR_declare_chmod_warns_always
   RUN_check_cmd_stdin_inherited
   PLAN_adr_check_ignored
   PLAN_adr_tbd_accepted
