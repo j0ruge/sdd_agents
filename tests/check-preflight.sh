@@ -232,6 +232,39 @@ assert_lacks "the ok line is not printed at the same time" "$OK_LINE" "$out"
 assert_has "the failure says what breaks, not only what is missing" \
   "the state fingerprint is empty" "$out"
 
+# --- the git is older than 2.31: the probe says so, and only then -----------
+# The line that tells the operator the ledger takes the slow path had no assertion at all: its
+# `warn`, its `ok`, and the `= 1` that picks between them could each be sabotaged with this file
+# green (issue #75, measured on 8033a79). The shim is check-autonomy.sh's GITSHIM: rev-parse echoes
+# back the flag it does not know and exits 0, which is what git before 2.31 does. The floor proves
+# the shim is armed before anything is concluded, and the two runs are read against each other.
+echo "== git older than 2.31 (shimmed) =="
+mkdir -p "$FIX/.oldgit"
+{ printf '#!/usr/bin/env bash\n'
+  printf 'is_rp=0; for a in "$@"; do [ "$a" = rev-parse ] && is_rp=1; done\n'
+  printf 'if [ "$is_rp" = 1 ]; then\n'
+  printf '  keep=(); echoed=()\n'
+  printf '  for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a");; *) keep+=("$a");; esac; done\n'
+  printf '  if [ "${#echoed[@]}" -gt 0 ]; then\n'
+  printf '    for e in "${echoed[@]}"; do printf "%%s\\n" "$e"; done\n'
+  printf '    exec %s "${keep[@]}"\n' "$(command -v git)"
+  printf '  fi\n'
+  printf 'fi\n'
+  printf 'exec %s "$@"\n' "$(command -v git)"
+} > "$FIX/.oldgit/git"
+chmod +x "$FIX/.oldgit/git"
+assert_eq "the pre-2.31 git shim is armed: rev-parse --path-format answers two lines, a modern git one" \
+  "old:2 new:1" \
+  "old:$(PATH="$FIX/.oldgit:$PATH" git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | grep -c . || true) new:$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | grep -c . || true)"
+out_oldgit="$( PATH="$FIX/.oldgit:$PATH" "$SDD" preflight 2>&1 )"
+out_newgit="$( "$SDD" preflight 2>&1 )"
+assert_has "an old git is told the ledger takes the slow path" \
+  "this git does not know 'rev-parse --path-format'" "$out_oldgit"
+assert_lacks "...and is not told it speaks the flag" "git speaks --path-format" "$out_oldgit"
+assert_has "a modern git is told it speaks --path-format" "git speaks --path-format (2.31+)" "$out_newgit"
+assert_lacks "...and is not warned about an old git" \
+  "this git does not know 'rev-parse --path-format'" "$out_newgit"
+
 # --- the executor hat sees Bash ---------------------------------------------
 # The auth probe used to run without --agent and called itself "the same flags as run_phase"; on
 # 2026-09-06 it was green while every hat booted without a shell (Claude Code 2.1.263 reads the

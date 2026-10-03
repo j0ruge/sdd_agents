@@ -1203,6 +1203,19 @@ mut_PRE_default_branch_unchecked() {
 mut_PRE_testcmd_never_run() {
   sed -i 's@run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?@test_rc=0@' "$1"
 }
+mut_PRE_testcmd_never_run() {
+  sed -i 's@run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?@test_rc=0@' "$1"
+}
+
+# The preflight line about a git older than 2.31 (issue #75), whose three moving parts had no
+# assertion. Silenced, an old git is never told the ledger takes the slow path; inverted, a modern
+# git is warned about itself and never told it speaks the flag.
+mut_PRE_path_format_warn_silent() {
+  sed -i '/^cmd_preflight()/,/^}/ s@^    warn "this git does not know@    : "this git does not know@' "$1"
+}
+mut_PRE_path_format_probe_inverted() {
+  sed -i '/^cmd_preflight()/,/^}/ s@grep -c [.] )" = 1 \]; then@grep -c . )" = 99 ]; then@' "$1"
+}
 
 # Not a gate: `sdd approve` goes back to announcing the next step unconditionally, the way it did
 # when the gate was asked once at the top and only `missing *` could stop the command. Everything
@@ -5315,6 +5328,8 @@ CATALOG=(
   RUN_templates_ticket_short_circuit
   PRE_default_branch_unchecked
   PRE_testcmd_never_run
+  PRE_path_format_warn_silent
+  PRE_path_format_probe_inverted
   RUN_approve_next_unconditional
   RUN_e2e_dir_hardcoded
   RUN_autonomy_exclusions_undeclared
