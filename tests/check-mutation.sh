@@ -3837,22 +3837,53 @@ mut_AUTONOMY_historic_progress_dropped() {
   sed -i 's@def historic_progress: reduce .*| .out;@def historic_progress: .;@' "$1"
 }
 
-# The recovery stops noticing that the DENOMINATOR moved. QA writes fix increments after a phase
-# passed, the checkpoint grows from 4 to 6, and the next old row says `2 of 6` — measured against a
-# memory that still says 2, the fix increment that ran reads churn. Caught by `a growing total is a
-# fix increment, not churn` in check-autonomy.sh (mission m4: `1 advanced · 3 churned` against the
-# `4 advanced · 0 churned` it demands).
-mut_AUTONOMY_historic_total_change_blind() {
-  sed -i 's@(if (.seen\[$k\] != null and .seen\[$k\].m == $p.m) then@(if (.seen[$k] != null) then@' "$1"
+# The memory keeps the PENDING count instead of the total DONE — the shape the two rules of grill
+# decision 3 had before issue #147, without their two patches. `M - pending` is nonsense from the
+# second row on: `3 of 4` then `2 of 4` reads 4 - 3 = 1 before and 2 after, and the session that
+# closed an increment reads churn. Caught by `the historical path and the fields agree on one
+# history` in check-autonomy.sh, and by `a growing total is a fix increment, not churn` (m4).
+mut_AUTONOMY_historic_memory_keeps_pending() {
+  sed -i 's@\.seen\[\$k\] = (\$row\.increments_total - \$row\.pending_after)@.seen[$k] = $row.pending_after@' "$1"
 }
 
-# A PASSING gate stops clearing the memory, so a session that reopened an increment is measured
-# against the count from before the phase closed instead of against the total. `3 of 4` after a
-# `4 increment(s) done` then reads 3 → 3 and the session that did the work reads churn. The M rule
-# cannot cover this one — M did not change — which is why the two rules have two fixtures. Caught
-# by `a passing gate clears the count the next session is measured against` (mission m5).
+# The memory is ignored and every recovered row is measured against M — the inference the memory
+# exists to replace. A session that left `3 of 4` where the row above left it reads `advanced`.
+# Caught by `the historical path and the fields agree on one history` in check-autonomy.sh, and by
+# the m5 and m14 assertions of the memory block.
+mut_AUTONOMY_historic_memory_ignored() {
+  sed -i 's@(\$p\.m - (\.seen\[\$k\] // 0)) as \$before@$p.m as $before@' "$1"
+}
+
+# A PASSING gate stops writing its total to the memory, so a session after the close is measured
+# against the count from BEFORE the close: `3 of 4`, pass, `1 of 5` reads 5 - 1 = 4 before and 1
+# after, and the session that left QA's fix increment open reads `advanced`. Only the m14 world
+# catches it — m5 reopens with M unchanged, where the stale memory happens to agree. Caught by `a
+# passing gate leaves its total done in the memory, so a fix increment is counted from it`.
 mut_AUTONOMY_historic_pass_keeps_memory() {
-  sed -i 's@elif $r.gate == "pass" then .seen\[$k\] = null elif@elif false then .seen[$k] = null elif@' "$1"
+  sed -i 's@elif ((\$r\.gate_why // "") | test("^\[0-9\]+ increment@elif false and (($r.gate_why // "") | test("^[0-9]+ increment@' "$1"
+}
+
+# A PASSING gate writes 0 — the reset of grill decision 3, which handed the next session M, the
+# largest value the field can take. The flattering reading the m5 assertion used to DEMAND: a
+# session that reopened three increments after the close reads `advanced`. Caught by `a session
+# that reopens work after a passing gate is churn, not progress` (m5), and by the m14 assertion.
+mut_AUTONOMY_historic_pass_clears_memory() {
+  sed -i 's@capture("^(?<t>\[0-9\]+) increment") | \.t | tonumber)@0)@' "$1"
+}
+
+# The pair writes the memory when only `pending_after` is there: `increments_total - pending_after`
+# on a row without the total is `null - 1`, and jq kills the reader — `sdd autonomy` dies on a
+# ledger holding one row that is data. Caught by `a ledger of fix-loop rows is data (rc 0)`.
+mut_AUTONOMY_historic_memory_partial_row() {
+  sed -i 's@elif \$row\.pending_after != null and \$row\.increments_total != null then \.seen@elif $row.pending_after != null then .seen@' "$1"
+}
+
+# Any row whose prose opens with `N increment` writes N — the Jidoka refusal too, whose N counts the
+# BLOCKED increments. `2 of 4`, `1 increment(s) 'blocked'`, `2 of 4` then reads 4 - 1 = 3 before
+# and 2 after, and the session that left the checkpoint where it found it reads `advanced`. Caught
+# by `the Jidoka sentence is not a pass, and writes nothing to the memory` (m15).
+mut_AUTONOMY_historic_done_any_count() {
+  sed -i 's@test("^\[0-9\]+ increment\\\\(s\\\\) done")@test("^[0-9]+ increment")@' "$1"
 }
 
 # The guard that keeps the dated path off rows that carry the fields goes, and the path re-derives
@@ -3870,12 +3901,14 @@ mut_AUTONOMY_historic_annotates_new_rows() {
 # to outrank the one thing the runner measured directly about that session. It only bites on the
 # recovered path — a measured pair with `moved: false` cannot exist, because closing an increment
 # edits the checkpoint and `state_fingerprint` hashes it — and there it is the flattering direction
-# once more: a phase that closed at `4 increment(s) done` and then reopened an increment reads
+# once more: the first EXEC row of a mission whose earlier increments ran outside the runner reads
 # `1 of 5`, the empty memory hands it a `pending_before` of 5, and the session that never touched
 # the disk reads `advanced` at `0% waste`. Caught by `a recovered count never credits a session
-# that wrote nothing` in check-autonomy.sh (m11 reads `2 advanced · 0 idle` against the
-# `1 advanced · 1 idle` it demands), with the witness `and the row it declined to credit is one the
-# path did read` staying green beside it to prove the path still reaches that row at all.
+# that wrote nothing` in check-autonomy.sh (m11 reads `1 advanced · 0 idle` against the
+# `0 advanced · 1 idle` it demands), with the witness `and the row it declined to credit is one the
+# path did read` staying green beside it to prove the path still reaches that row at all. (The m11
+# world was a pass followed by `1 of 5` until 2026-10-02; since the pass writes the memory, that
+# world reads `pending_before` 1 and no longer reaches this guard.)
 mut_AUTONOMY_progress_outranks_moved() {
   sed -i 's@and .pending_after < .pending_before and .moved != false)@and .pending_after < .pending_before)@' "$1"
 }
@@ -5479,8 +5512,12 @@ CATALOG=(
   FRONTMATTER_chmod_silent
   AUTONOMY_progress_null_blind
   AUTONOMY_historic_progress_dropped
-  AUTONOMY_historic_total_change_blind
+  AUTONOMY_historic_memory_keeps_pending
+  AUTONOMY_historic_memory_ignored
   AUTONOMY_historic_pass_keeps_memory
+  AUTONOMY_historic_pass_clears_memory
+  AUTONOMY_historic_done_any_count
+  AUTONOMY_historic_memory_partial_row
   AUTONOMY_historic_annotates_new_rows
   AUTONOMY_progress_outranks_moved
   KAIZEN_label_reads_gate

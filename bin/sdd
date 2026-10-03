@@ -3337,17 +3337,41 @@ ledger_row_is_local() {
 # 49 historical rows carried the key, when `grep -c pending_before ~/.sdd/autonomy-log.jsonl`
 # answered 0 over all 158 of them. The choice was right; the reason recorded for it was not.
 #
-# `pending_before` is the `pending_after` of the previous EXEC row of the same (repo, mission) in
-# FILE order, which is write order, with two rules — each with a fixture of its own in
-# check-autonomy.sh, because a rule whose removal no fixture notices is a rule with no probe:
-#   · a changed M is a new denominator (QA wrote fix increments, so the phase grew): count from M;
-#   · a PASSING gate clears the memory, so a session that reopened an increment is measured against
-#     M and not against the count from before the phase closed.
+# `pending_before` is `M - done`. M is the row's OWN total; `done` is what the previous EXEC row of
+# the same (repo, mission) in FILE order, which is write order, left done: `increments_total -
+# pending_after` on a row that carries or recovered the pair, N on a row whose prose is the pass
+# sentence `N increment(s) done`. ONE invariant, adopted 2026-10-02 (issue #147) in place of the two
+# rules of grill decision 3, and it answers both of their worlds without naming them: a grown M (QA
+# wrote fix increments) is read off the row itself, and a pass leaves `done = N`, so a session after
+# the close is measured against what the close left. The two rules fell back to M — the largest
+# value the field can take — in both worlds, and read a session that reopened work as one that
+# advanced it. Measured on the real ledger when adopted: 0 of 608 rows move in `sdd autonomy
+# --all-repos` (per version and per mission) and `kaizen --series` is byte-identical. Each world
+# has its fixture in check-autonomy.sh (m4, m5, m14, m15), because a rule whose removal no fixture
+# notices is a rule with no probe.
+# Only the PASS sentence writes N: the Jidoka refusal also opens with `N increment(s)` (7 session
+# rows of the real ledger), and that N counts the blocked increments, not the done ones. The pair
+# writes only when BOTH halves are there, asked positively: a row with `pending_after` and no
+# `increments_total` is data (the fix-loop fixture carries one), and `null - 1` kills the reader.
+# With no row above, `done` is 0 and the inference is M: right on the first row of a mission that
+# started under the runner, wrong when its first increments ran outside it. `.moved != false` in
+# `outcome` is what keeps that inference from crediting a session that never touched the disk.
 # The memory is fed by rows that carry the FIELDS too, and that is load-bearing on a mixed ledger:
 # a mission whose first sessions are new-schema and whose later ones are not would otherwise read
 # its first old row against M instead of against the row above it.
 # The key is `[repo, mission] | tostring` — an ARRAY rendered as JSON, for the reason mission_key
 # states in both readers: a separator chosen here would collide with one inside a repo path.
+# The key is null for every row that is not an EXEC session, so nothing else reads or writes the
+# memory. DECLARED, no probe (issue #150): the memory is written only by facts gate_EXEC writes —
+# its `N of M` and pass sentences, and the pair with `increments_total`, which no other phase
+# carries — so dropping `$r.phase == "EXEC"` changes no answer over any row a writer produces
+# today. Measured over the 608 rows of the real ledger on 2026-10-02: no non-EXEC session row
+# carries `increments_total` or either sentence. That is the world I could not build, NOT a claim
+# that none exists, and the guard stays because it decides WHICH failure a future writer gets: a
+# QA gate that one day wrote `N of M` into its gate_why would have its rows annotated off EXEC's
+# memory, and the QA arm of `outcome` would grade an inference. Until 2026-10-02 the guard did
+# have a world — a QA `pass` reset the memory through `$r.gate == "pass"` — and the invariant
+# above removed it by keying the pass on gate_EXEC's own sentence.
 #
 # `historic_rounds` is the same second half for REVIEW, added 2026-08-31, and it exists for the
 # same reason measured over the same file: on that day the real ledger held 25 REVIEW rows and ZERO
@@ -3397,32 +3421,36 @@ ledger_row_is_local() {
 # ledger can; that is the same declared edge the EXEC sibling's empty memory has, behind the same
 # `.moved != false` guard in `outcome`.
 #
-# NEITHER of the EXEC memory rules is inherited, and that is a decision with a world behind it:
+# NEITHER of the two rules the EXEC sibling had until issue #147 was inherited, and that is a
+# decision with a world behind it:
 #   · no `M`-changed rule, because there is no M in the prose — the ceiling is config, not disk;
-#   · NO RESET ON A PASSING GATE, which is the one that looks like an oversight and is not.
-#     EXEC's memory clears on a pass because `pending` resets to M when a closed phase is reopened.
-#     REVIEW rounds do the opposite: `review_rounds_on_disk` counts FILES, files are never deleted,
+#   · NO RESET ON A PASSING GATE, which is the one that looks like an oversight and is not. (The
+#     EXEC sibling cleared its memory on a pass until 2026-10-02; it now writes the pass's own
+#     total, so the two no longer differ here, but the argument below stands on its own.)
+#     REVIEW rounds count FILES: `review_rounds_on_disk` counts them, files are never deleted,
 #     and cmd_run deliberately does not reset the ceiling against them. So the count carries ACROSS
-#     a pass, and copying the reset over would be a fail-open in the flattering direction — r1
+#     a pass, and a reset on a pass would be a fail-open in the flattering direction — r1
 #     passes, the phase is reopened, a session spins on the same r1, and a cleared memory reads
 #     `1 > 0` as the loudest progress in the ledger over a session that landed nothing. The world
 #     that proves it is the `m10` fixture of the `memory rules of the dated REVIEW path` block in
-#     check-autonomy.sh, which goes red the day somebody "restores" the symmetry.
+#     check-autonomy.sh, which goes red the day somebody adds that reset.
 # The memory is fed by rows that carry the FIELD too (`$row.rounds_after`, which is the annotation
 # on a recovered row and the written value on a new-schema one), and that is load-bearing on a
 # mixed ledger for the same reason it is one screen up.
 #
 # DECLARED LIMIT, and it is declared rather than filed because the write order forbids it: a
-# `gate_pass` row does NOT clear `historic_progress`'s memory, because it carries no `.gate` and
-# the reset arm reads `$r.gate == "pass"`. A free EXEC closure therefore leaves `.seen[$k]` stale
-# and the next dated-path row computes `pending_before` off it instead of `increments_total`.
-# Measured (r2 of 20260831-a-rodada-que-andou): the same history reads `2 advanced · 1 churned`
-# with the closure and `4 advanced · 0 churned` when the same closure is bought with a session.
+# `gate_pass` row does NOT write `historic_progress`'s memory, because it is not a session row (the
+# key is null for every other event) and carries no pass sentence. A free EXEC closure therefore
+# leaves `.seen[$k]` at the done count from before it, and the next dated-path row computes
+# `pending_before` off that instead of off the closure's total. Measured under the two rules this
+# invariant replaced (r2 of 20260831-a-rodada-que-andou): the same history read `2 advanced · 1
+# churned` with the closure and `4 advanced · 0 churned` when the same closure was bought with a
+# session.
 # It is unreachable by construction, not merely unobserved: the dated path only annotates rows
 # whose `pending_before` is null, which since 2026-08-29 means rows written BEFORE that date, and
 # `gate_pass` was born on 2026-08-31 — no writer can put a dated-path row AFTER a closure. Kept as
 # a limit here, by the D15 rule, instead of a backlog line pointing at a world nothing can build.
-# The fix if a future writer ever makes it reachable: reset the memory on `is_gate_pass` too.
+# The fix if a future writer ever makes it reachable: write the closure's total on `is_gate_pass`.
 #
 # THE FOURTH ARM, the QA sub-step (20260930-a-sub-etapa-que-andou). QA is the third loop by design:
 # `qa_substep` routes plan → exec → close and gate_QA fails on its first line (`missing
@@ -3471,7 +3499,7 @@ ledger_row_is_local() {
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
   printf '%s' 'def step_rank: if . == "QA:plan" then 0 elif . == "QA:exec" then 1 elif . == "QA:close" then 2 else null end;'
   printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced" elif ((.step_after | step_rank) != null and (.step | step_rank) != null and (.step_after | step_rank) > (.step | step_rank) and .moved != false) then "advanced" elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
-  printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else (if (.seen[$k] != null and .seen[$k].m == $p.m) then .seen[$k].p else $p.m end) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $r.gate == "pass" then .seen[$k] = null elif $row.pending_after != null then .seen[$k] = {p: $row.pending_after, m: $row.increments_total} else . end)) | .out;'
+  printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else ($p.m - (.seen[$k] // 0)) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $row.pending_after != null and $row.increments_total != null then .seen[$k] = ($row.increments_total - $row.pending_after) elif (($r.gate_why // "") | test("^[0-9]+ increment\\(s\\) done")) then .seen[$k] = (($r.gate_why // "") | capture("^(?<t>[0-9]+) increment") | .t | tonumber) else . end)) | .out;'
   printf '%s' 'def historic_rounds: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "REVIEW" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.rounds_before == null and $r.rounds_after == null then (($r.gate_why // "") | if test("^40-review-r[0-9]+\\.md") then (capture("^40-review-r(?<n>[0-9]+)\\.md") | .n | tonumber) elif test("^no 40-review-r<N>\\.md") then 0 else null end) else null end) as $n | (if $n == null then $r else $r + {rounds_before: (.seen[$k] // 0), rounds_after: $n, rounds_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $row.rounds_after != null then .seen[$k] = $row.rounds_after else . end)) | .out;'
   printf '%s' 'def historic_steps: . as $rows | reduce range(($rows | length) - 1; -1; -1) as $i ({next: {}, out: $rows}; .out[$i] as $r | (if ($r | type) == "object" and $r.event == "session" and $r.phase == "QA" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | if $k == null then . else (if ($r | has("step_after") | not) and .next[$k] != null and $r.run_id != null and .next[$k].run_id == $r.run_id then .out[$i] = ($r + {step_after: .next[$k].step, steps_source: "next_row"}) else . end) | .next[$k] = {step: $r.step, run_id: $r.run_id} end) | .out;'
   printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'

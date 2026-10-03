@@ -3185,23 +3185,34 @@ assert_eq "the human window and the judge agree on the recovered history" \
 assert_eq "that parity is not vacuous — the recovered table printed the three counts" "3 2 1" "$table_hist"
 assert_bucket_sum "the four buckets sum to the header total (historical path)" "$out_hist"
 
-# --- the two memory rules of the historical path -------------------------------------------------
-# `pending_before` of an old row is the `pending_after` of the PREVIOUS EXEC row of the same
-# mission, and two rules say when that memory does not apply. Each gets a mission of its own, built
-# so that dropping the rule flips its outcome — a rule whose removal no fixture notices is a rule
-# with no probe.
+# --- the memory of the historical path: the total DONE ---------------------------------------------
+# The memory is how many increments the mission had DONE after its previous EXEC row, and an old
+# row is measured against `pending_before := M - done` with its OWN M. One invariant, adopted on
+# 2026-10-02 (issue #147) in place of the two rules of grill decision 3 ("a changed M counts from
+# M", "a passing gate clears the memory"), which both fell back to M — the largest value the field
+# can take — and so credited a session that reopened work as one that advanced it. Measured over the
+# real ledger when it was prototyped (r1 of 20260829-o-incremento-que-andou): 0 of 158 rows move.
+# Each world gets a mission of its own, built so that breaking the invariant flips its outcome — a
+# rule whose removal no fixture notices is a rule with no probe.
 #
 #   m4  the total GREW between two FAILING sessions: the checkpoint went from 4 increments to 6
 #       (a fix increment appended to a phase still in flight, or a human amendment) and the next
-#       row says `3 of 6` after a memory of 2. Without the rule 3 is not below 2, and the session
-#       that did the work reads churn. With it, a changed M is a new denominator: count from M.
-#       No passing row anywhere in this mission, DELIBERATELY — the first shape of this fixture put
-#       a `pass` before the growth, the reset rule below cleared the memory first, and
-#       mut_AUTONOMY_historic_total_change_blind survived a probe that pointed at the right rule
-#       for the wrong reason.
-#   m5  a PASSING gate clears the memory. The phase closed at `4 increment(s) done`; a later session
-#       reopened one and left `3 of 4`. Without the reset the memory still says 3 from before the
-#       pass, M is unchanged so the M rule does not fire, and 3 → 3 reads churned.
+#       row says `3 of 6` after 2 done. 6 - 2 = 4 pending before, 3 after: the session that did
+#       the work reads advanced. A memory that kept the PENDING count instead (2) reads 3 > 2 as
+#       churn. No passing row anywhere in this mission, deliberately, so the pass world below
+#       cannot decide it.
+#   m5  the phase closed at `4 increment(s) done` and a later session left `3 of 4`: 3 increments
+#       were set back to pending, and the session measured against the 0 the pass left reads
+#       churned. The two rules read it `advanced` — the cleared memory handed it M — which is the
+#       flattering reading this assertion used to DEMAND.
+#   m14 the same close, then QA wrote a fix increment (`1 of 5`) and the next session did not close
+#       it: 5 - 4 = 1 before, 1 after, churned. This is the world that needs the PASS to write the
+#       memory: a pass that left it at the 1 done before the close hands this row 5 - 1 = 4, and a
+#       pass that cleared it hands it 5 — both `advanced`.
+#   m15 only the PASS sentence (`N increment(s) done`) writes the memory. The Jidoka refusal also
+#       opens with `N increment(s)` — 7 session rows of the real ledger carry it, one without the
+#       fields — and a rule that read any `N increment` would hand the row after it 4 - 1 = 3
+#       instead of 4 - 2 = 2: the session that left `2 of 4` where it found it reads `advanced`.
 echo "== reader: the memory rules of the historical path =="
 mkdir -p "$OUTSIDE/histfix"
 localize > "$OUTSIDE/histfix/autonomy-log.jsonl" <<'EOF'
@@ -3211,23 +3222,37 @@ localize > "$OUTSIDE/histfix/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-29T11:10:00-03:00","event":"session","run_id":"r4","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
 {"v":1,"ts":"2026-08-29T11:11:00-03:00","event":"session","run_id":"r4","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"h2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
 {"v":1,"ts":"2026-08-29T11:12:00-03:00","event":"session","run_id":"r5","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:20:00-03:00","event":"session","run_id":"r6","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m14","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"k1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:21:00-03:00","event":"session","run_id":"r6","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m14","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"k2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
+{"v":1,"ts":"2026-08-29T11:22:00-03:00","event":"session","run_id":"r7","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m14","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"k3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"1 of 5 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:23:00-03:00","event":"session","run_id":"r7","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m14","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"k4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"5 increment(s) done, suite green, handoff written"}
+{"v":1,"ts":"2026-08-29T11:30:00-03:00","event":"session","run_id":"r8","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m15","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"b1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:31:00-03:00","event":"session","run_id":"r8","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m15","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"b2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"1 increment(s) 'blocked' — Jidoka: the line stops"}
+{"v":1,"ts":"2026-08-29T11:32:00-03:00","event":"session","run_id":"r9","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m15","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"b3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
 EOF
 out_histfix="$( SDD_STATE_DIR="$OUTSIDE/histfix" "$SDD" autonomy --by-mission 2>&1 )"
 
 assert_eq "a growing total is a fix increment, not churn" "1" \
   "$(grep -c '^  m4  3 session(s) · 3 advanced · 0 churned · 0 idle · ' <<< "$out_histfix")"
-assert_eq "a passing gate clears the count the next session is measured against" "1" \
-  "$(grep -c '^  m5  3 session(s) · 3 advanced · 0 churned · 0 idle · ' <<< "$out_histfix")"
+assert_eq "a session that reopens work after a passing gate is churn, not progress" "1" \
+  "$(grep -c '^  m5  3 session(s) · 2 advanced · 1 churned · 0 idle · ' <<< "$out_histfix")"
+assert_eq "a passing gate leaves its total done in the memory, so a fix increment is counted from it" "1" \
+  "$(grep -c '^  m14  4 session(s) · 3 advanced · 1 churned · 0 idle · ' <<< "$out_histfix")"
+assert_eq "the Jidoka sentence is not a pass, and writes nothing to the memory" "1" \
+  "$(grep -c '^  m15  3 session(s) · 1 advanced · 2 churned · 0 idle · ' <<< "$out_histfix")"
 
 # --- an inference never credits a session that provably wrote nothing -----------------------------
 # The historical path RECOVERS `pending_before` from prose; it does not measure it. Where the memory
-# is empty it recovers M, the largest value the field can take, so the `advanced` arm is satisfied by
-# any prose that is not `M of M` — and the memory is empty on the first row of a mission (where M is
-# right), but ALSO on the row after a passing gate, where it is not. A phase that closed at
-# `4 increment(s) done` and then reopened an increment reads `1 of 5`, is handed a `pending_before`
-# of 5, and reads `advanced` — over a session that never touched the disk. `0% waste` on a session
-# that did nothing is the flattering direction, the same family as the null guard and the Jidoka
-# block, and it is the one place an INFERENCE outranks a MEASUREMENT.
+# is empty it recovers M (nothing done yet), the largest value the field can take, so the `advanced`
+# arm is satisfied by any prose that is not `M of M`. Since the memory keeps the total DONE (issue
+# #147) it is empty only on the first EXEC row of a mission — right when the mission started under
+# the runner, wrong when its first increments were executed OUTSIDE it (interactively, then `sdd
+# run`), or when the ledger was truncated by hand. Such a row reading `1 of 5` is handed a
+# `pending_before` of 5 and reads `advanced` — over a session that never touched the disk. `0%
+# waste` on a session that did nothing is the flattering direction, the same family as the null
+# guard and the Jidoka block, and it is the one place an INFERENCE outranks a MEASUREMENT.
+# (Until 2026-10-02 the memory was also empty after a passing gate; the fixture below used that
+# world, and moved to this one when the pass started writing the memory.)
 #
 # The guard is `.moved != false`, and it is a tautology rather than a policy: `state_fingerprint`
 # hashes the checkpoint, and closing an increment means editing the checkpoint, so a session whose
@@ -3241,12 +3266,11 @@ assert_eq "a passing gate clears the count the next session is measured against"
 echo "== reader: a recovered count never credits a session that wrote nothing =="
 mkdir -p "$OUTSIDE/histmoved"
 localize > "$OUTSIDE/histmoved/autonomy-log.jsonl" <<'EOF'
-{"v":1,"ts":"2026-08-29T13:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"j1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
 {"v":1,"ts":"2026-08-29T13:01:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"j2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"1 of 5 increment(s) still to execute"}
 EOF
 out_histmoved="$( SDD_STATE_DIR="$OUTSIDE/histmoved" "$SDD" autonomy --by-mission 2>&1 )"
 assert_eq "a recovered count never credits a session that wrote nothing" "1" \
-  "$(grep -c '^  m11  2 session(s) · 1 advanced · 0 churned · 1 idle · ' <<< "$out_histmoved")"
+  "$(grep -c '^  m11  1 session(s) · 0 advanced · 0 churned · 1 idle · ' <<< "$out_histmoved")"
 # The witness, and without it the assertion above is satisfied by a path that never reached the row
 # at all — which is the cheapest way to make it green for the wrong reason.
 assert_eq "and the row it declined to credit is one the path did read" "1" \
