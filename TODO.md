@@ -121,7 +121,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **Os dois ramos de diagnóstico do `differential()` não têm probe** —
-  `tests/check-entrypoint.sh:222` — a passada adversarial da r2 matou 20 de 25 degradações, e o
+  `tests/check-entrypoint.sh:235` — a passada adversarial da r2 matou 20 de 25 degradações, e o
   que sobra sem probe é a comparação do próprio diferencial: neutralizá-la faz o sensor ler "1 vs
   1" e seguir verde, então o dia em que o fall-through parar de reproduzir neste bash passa
   despercebido. Hoje o limite é o par de contagens ser IMPRESSO na linha `ok`. Direção: um gancho
