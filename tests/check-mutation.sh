@@ -6013,11 +6013,21 @@ if [ -n "$ONLY_SLUG" ]; then
     what="$ONLY_SENSOR"
     # only_sensor <box> <name> — the one sensor, under the SDD_MUTANT a mutant's suite runs with
     # (so it stops at its first red, as it would inside the catalogue); <name>.rc and .log in $WORK.
+    # With a DEADLINE, because a mutant can make a sensor hang and run-all.sh's per-step deadline is
+    # not in this path (CodeRabbit on PR #203). 720 s is run-all.sh's largest step deadline;
+    # SDD_ONLY_DEADLINE overrides it. A run that reaches the deadline is written as 124 whatever
+    # `timeout` returned — 137 after the KILL would otherwise read as caught — and rc_verdict reads
+    # 124 as timed-out: inconclusive, never caught, exactly as inside the catalogue.
     only_sensor() {
-      local rc=0
-      SDD_MUTANT=1 bash "$1/tests/$ONLY_SENSOR" > "$WORK/$2.log" 2>&1 || rc=$?
+      local rc=0 t0=$SECONDS
+      SDD_MUTANT=1 timeout -k 10 "$ONLY_DEADLINE" bash "$1/tests/$ONLY_SENSOR" > "$WORK/$2.log" 2>&1 || rc=$?
+      [ $((SECONDS - t0)) -lt "$ONLY_DEADLINE" ] || rc=124
       echo "$rc" > "$WORK/$2.rc"
     }
+    ONLY_DEADLINE="${SDD_ONLY_DEADLINE:-720}"
+    case "$ONLY_DEADLINE" in
+      ''|0*|*[!0-9]*) echo "check-mutation.sh: SDD_ONLY_DEADLINE must be a whole number of seconds >= 1 (got: $ONLY_DEADLINE)" >&2; exit 2 ;;
+    esac
     echo "== --only $ONLY_SLUG: control and mutant against $ONLY_SENSOR alone =="
     only_sensor "$WORK/control" control &
     sandbox "$box"
