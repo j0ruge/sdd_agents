@@ -6433,17 +6433,39 @@ health_provenance() {
   else skipped=$((skipped + 1)); fi
 
   # codereview grade table: every criterion of the skill must exist in the fixture.
-  # `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after 1.17. This was
-  # once the only version-ordered pick in the file; latest_matching() carried the lexicographic
-  # bug and this comment recorded it. It no longer does — both sort by version now.
+  #
+  # WHICH codereview is the one the REVIEW phase loads, and that is the `installPath` Claude Code's
+  # registry pins — never "the newest in the cache" (issue #114). The cache keeps every version
+  # ever fetched (ten on the machine where this was measured, nine orphaned), so with a newer one
+  # beside the pinned one the old pick compared the fixture against a file no session reads and
+  # printed `fixtures match the installed skills` about it. With the registry naming a path, there
+  # is NO fallback: a pinned install without the template is refused out loud, because quietly
+  # reading the cache instead is the defect itself. DECLARED LIMITS: only the `user`-scope entry is
+  # read — a `project`-scope pin (the registry has them, with `projectPath`) loads another version
+  # in one repo, and which repo this health speaks for is not this function's to decide; and the
+  # fallback below, for a machine with no registry or no jq, still orders the WHOLE path with
+  # `sort -V`, so a marketplace's name outranks a version there.
+  local reg="$HOME/.claude/plugins/installed_plugins.json" pinned=""
+  if [ -f "$reg" ] && command -v jq >/dev/null 2>&1; then
+    pinned="$(jq -r '[(.plugins // {}) | to_entries[] | select(.key | startswith("codereview@")) | .value[]? | select(.scope == "user") | .installPath // empty] | first // empty' "$reg" 2>/dev/null || true)"
+  fi
+  #
+  # The fallback: `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after
+  # 1.17. This was once the only version-ordered pick in the file; latest_matching() carried the
+  # lexicographic bug and this comment recorded it. It no longer does — both sort by version now.
   #
   # `|| true`: `find` on a missing directory returns 1, `set -o pipefail` carries that through
   # `sort -V | tail -1`, and `set -e` then killed the whole command on the assignment — on a
   # machine with no plugins cache, `sdd health` stopped dead HERE, three ok lines in, and neither
   # provenance nor the ratchet ever ran. A machine without the directory is not a defect, it is a
   # machine: an empty `$tpl` is the skip this branch already knows how to do.
-  tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
-         2>/dev/null | sort -V | tail -1 || true)"
+  if [ -n "$pinned" ]; then
+    tpl="$(find "$pinned" -path '*/references/report-template.md' -print -quit 2>/dev/null || true)"
+    [ -n "$tpl" ] || health_bad "the installed codereview has no references/report-template.md under $pinned (the installPath installed_plugins.json pins) — the grade table was not compared, and the newest file in the cache is not the one the REVIEW phase loads"
+  else
+    tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
+           2>/dev/null | sort -V | tail -1 || true)"
+  fi
   if [ -n "$tpl" ] && [ -f "$tpl" ]; then
     local missing="" n_crit=0
     while IFS= read -r k; do
@@ -6464,7 +6486,7 @@ health_provenance() {
     elif [ -n "$missing" ]; then
       health_bad "the skill's grade table has a criterion the fixture does not cover:$missing"
     else checked=$((checked + 1)); fi
-  else skipped=$((skipped + 1)); fi
+  elif [ -z "$pinned" ]; then skipped=$((skipped + 1)); fi
 
   # The summary reads `checked` and `skipped`, and it may not claim the third state. A DIVERGED
   # fixture increments neither counter — it went to `health_bad` — so with three skills installed

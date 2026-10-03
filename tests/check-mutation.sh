@@ -3258,6 +3258,17 @@ mut_HEALTH_provenance_find_aborts() {
   sed -i 's@ | sort -V | tail -1 || true)"@ | sort -V | tail -1)"@' "$1"
 }
 
+# Issue #114: the grade table is read from the codereview the registry pins. One mutant stops
+# reading the registry (the newest file in the cache wins again, and the PIN world reads a match);
+# the other keeps the pin but lets a pinned path without its template pass in silence (the GONE
+# world goes rc 0 — the quiet fallback that is the defect).
+mut_HEALTH_provenance_reads_cache_newest() {
+  sed -i '/^health_provenance() {/,/^}/ s@^  if \[ -f "$reg" \] && command -v jq >/dev/null 2>&1; then$@  if false; then@' "$1"
+}
+mut_HEALTH_provenance_pinned_miss_silent() {
+  sed -i '/^health_provenance() {/,/^}/ s@^    \[ -n "$tpl" \] || health_bad "the installed codereview has no @    [ -n "$tpl" ] || : "the installed codereview has no @' "$1"
+}
+
 # The ratchet goes back to dying on a baseline with no live line. An empty baseline is not an
 # error — it means nothing is known debt, so everything is new — but the bare form made it a
 # silent crash after the provenance line, saying neither `kit healthy` nor how many checks failed.
@@ -5636,6 +5647,8 @@ CATALOG=(
   HEALTH_config_parse_blind
   HEALTH_suite_without_mutation
   HEALTH_provenance_find_aborts
+  HEALTH_provenance_reads_cache_newest
+  HEALTH_provenance_pinned_miss_silent
   HEALTH_baseline_read_aborts
   HEALTH_ratchet_eats_verdict
   RETRY_branch_switch_dead
