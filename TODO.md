@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
-  `tests/check-mutation.sh:5781` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
+  `tests/check-mutation.sh:5792` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
   mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
   só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
   qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
@@ -66,7 +66,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260819-fecho-...` (2026-08-19)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2010` contra `tests/check-mutation.sh:5686` — a chave lê `bin tests templates config`,
+  `bin/sdd:2010` contra `tests/check-mutation.sh:5697` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -157,7 +157,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **A metade "nenhuma sessão foi gasta" do `assert_jidoka` é vácua** —
-  `tests/check-gates.sh:321` — ela grepa o marcador do stub (`the test invoked the real claude`)
+  `tests/check-gates.sh:333` — ela grepa o marcador do stub (`the test invoked the real claude`)
   na saída do `sdd run`, e `run_phase` manda stdout E stderr da sessão para o arquivo de log: o
   marcador nunca chega ao terminal, então a asserção fica verde tenha havido sessão ou não. É
   justamente o discriminador que o comentário acima dela chama de "o que 'no session spent'
@@ -279,7 +279,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:6028` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  `tests/check-mutation.sh:6039` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
   arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
   hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5999` e `:5972`) mandam o
   operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
@@ -318,7 +318,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **Comentário afirma que a segunda asserção é o que torna a primeira não-vácua, e não é** —
-  `tests/check-gates.sh:1646` — medido sob a sabotagem realista (`checkpoint_rows` cego a `R<n>`):
+  `tests/check-gates.sh:1660` — medido sob a sabotagem realista (`checkpoint_rows` cego a `R<n>`):
   só a primeira cai, e a segunda fica verde por um motivo diferente do alegado. É a classe
   *"comentário que afirma paridade não é paridade"* que o `CLAUDE.md` já nomeia. Direção: ou o
   comentário baixa a alegação, ou a asserção ganha o mundo que a distingue.

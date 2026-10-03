@@ -1570,6 +1570,16 @@ mut_KAIZEN_guard_ignored() {
 mut_RUN_jidoka_pipefail() {
   sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"  # sdd-pipefail-waiver: this payload IS the bug, deliberately
 }
+mut_RUN_jidoka_pipefail() {
+  sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"  # sdd-pipefail-waiver: this payload IS the bug, deliberately
+}
+
+# The Jidoka spends a session BEFORE it escalates: a `blocked` increment still exits 3 with the right
+# words, so every check of rc and message stays green — only counting the sessions the stub opened
+# tells the difference. Issue #84 measured the old marker grep green under exactly this sabotage.
+mut_RUN_jidoka_spends_session() {
+  sed -i '/^cmd_run()/,/^}/ s|^\(    if \[ "\$phase" = "EXEC" \] \&\& grep -qx "blocked" <<< "\$ckstatus"; then\)$|\1 run_phase "$phase" \|\| true;|' "$1"
+}
 
 # Not a gate, and the third Jidoka: a handoff that declares `status: blocked` goes back to being
 # an ordinary gate failure, decided by the fingerprint heuristic. The runner then charges a phase
@@ -5317,6 +5327,7 @@ CATALOG=(
   RUN_moved_never_true
   RUN_autonomy_sha_warn_repeats
   RUN_jidoka_pipefail
+  RUN_jidoka_spends_session
   RUN_blocked_not_escalated
   RUN_blocked_retry_not_escalated
   RUN_ticket_blocked_not_armed
