@@ -963,12 +963,21 @@ mut_REVIEW_escaped_pipe_parity_blind() {
 }
 
 mut_REVIEW_punctuation_only_blind() {
-  sed -i '/^gate_REVIEW()/,/^}/ s|if (u !~ /\[\[:alnum:\]\]/) return 1|if (0) return 1|' "$1"
+  sed -i '/^PLACEHOLDER_AWK=/,/^placeholder() {/ s|if (u !~ /\[\[:alnum:\]\]/) return 1|if (0) return 1|' "$1"
 }
 
 # The word stops being compared as a word, which is the equality test that `TODO:` beat.
 mut_REVIEW_punctuated_fillin_blind() {
-  sed -i '/^gate_REVIEW()/,/^}/ s|w = u; gsub(/\[^\[:alnum:\]\]/, "", w)|w = u|' "$1"
+  sed -i '/^PLACEHOLDER_AWK=/,/^placeholder() {/ s|w = u; gsub(/\[^\[:alnum:\]\]/, "", w)|w = u|' "$1"
+}
+mut_REVIEW_punctuated_fillin_blind() {
+  sed -i '/^PLACEHOLDER_AWK=/,/^placeholder() {/ s|w = u; gsub(/\[^\[:alnum:\]\]/, "", w)|w = u|' "$1"
+}
+
+# The second caller of the shared placeholder() (issue #103): gate_QA, in a project with no
+# interface, stops refusing the template's untouched `gate: <…>` as evidence of a journey.
+mut_QA_gate_placeholder_accepted() {
+  sed -i '/^gate_QA()/,/^}/ s|^    if placeholder "\$evidence"; then$|    if false; then|' "$1"
 }
 
 mut_DOCS_pending_status() {   # accepts an area with Status '✗' in the drift checklist
@@ -5317,6 +5326,7 @@ CATALOG=(
   REVIEW_escaped_pipe_parity_blind
   REVIEW_punctuation_only_blind
   REVIEW_punctuated_fillin_blind
+  QA_gate_placeholder_accepted
   DOCS_pending_status
   REVIEW_backtick_grade_kept
   DOCS_backtick_status_kept

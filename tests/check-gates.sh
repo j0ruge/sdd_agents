@@ -1506,6 +1506,20 @@ printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 assert_phase "no interface, 'done' with no evidence does not pass" "QA"
 assert_why   "QA asks for the journey evidence" "QA" "evidence of the journey|no interface"
 
+# The template's own fill-in is not evidence (issue #103). templates/handoff.md ships a `gate:` line
+# wrapped in angle brackets, and a handoff copied without touching it passed this gate with "journey
+# walked without a browser interface" — the hole I3 closed in gate_REVIEW, alive one gate earlier.
+# One placeholder() judges both gates now. The line is COPIED from the template, never retyped, so
+# this world moves when the template does; the floor proves the copy landed.
+TMPL_GATE="$(grep '^gate: <' "$ROOT/templates/handoff.md" || true)"
+[ "$(grep -c . <<< "$TMPL_GATE")" = 1 ] \
+  || fail "template gate: fixture" "exactly one 'gate: <…>' line in templates/handoff.md" "${TMPL_GATE:-none}"
+printf -- '---\nfase: QA\nstatus: done\n%s\n---\n' "$TMPL_GATE" > "$MDIR/30-handoff-qa.md"
+assert_phase "no interface, the template's untouched gate: line is not evidence" "QA"
+assert_why   "...and the reason says it is still a placeholder" "QA" "gate:. .*still a placeholder"
+printf -- '---\nfase: QA\nstatus: done\ngate: TODO\n---\n' > "$MDIR/30-handoff-qa.md"
+assert_phase "no interface, a bare fill-in word in gate: is not evidence either" "QA"
+
 printf -- '---\nfase: QA\nstatus: done\ngate: "1 journey walked in the CLI; 1 finding became F1"\n---\n' \
   > "$MDIR/30-handoff-qa.md"
 assert_phase "no interface, 'done' WITH evidence passes" "REVIEW"

@@ -1340,6 +1340,48 @@ gate_EXEC() {
   return 0
 }
 
+# placeholder() — the refused set of fill-ins, ONE definition for the two gates that judge a field
+# written by a model: gate_REVIEW (every Rationale cell and the `gate:` frontmatter, inside its awk)
+# and gate_QA (the `gate:` of a project with no interface). It lived inside gate_REVIEW's awk only,
+# and the untouched `gate: <…>` of templates/handoff.md passed gate_QA as evidence of a journey
+# (issue #103). Injected as awk text into gate_REVIEW's program, and run alone by the shell helper
+# below; the mutation catalogue anchors on the CALLS, never on this body.
+PLACEHOLDER_AWK='
+# The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
+# the whole cell wrapped in angle brackets, which is how the `### Overall Grade` table of
+# templates/review.md ships its fill-ins (named by SECTION and not by line number: the two
+# citations this comment used to carry both rotted, one of them by six lines);
+# a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
+# never the presence of a character — a real sentence containing <A> is a real sentence.
+# NOT refused: `clean`, `n/a` and `—`. Those are the codereview skill terse rationales
+# (its `### Overall Grade` section, likewise by name) and mean measured-with-nothing-to-say;
+# refusing them would make this gate contradict the skill it parses — the SQ-97 gate_DOCS bug.
+function placeholder(s,   u, w) {
+  if (s == "") return 1
+  if (s ~ /^<.*>$/) return 1
+  u = toupper(s)
+  # `—` is E2 80 94 and mawk is byte-oriented, so every rule written about punctuation sees
+  # three non-alphanumeric bytes there and not one character. This line is the ONLY reason
+  # the skill terse rationale survives the two rules below. Measured on mawk 1.3.4.
+  # The other two, `clean` and `n/a`, need no line here — they carry letters and are not in
+  # the list at the bottom, which is the mechanism, and the sensor holds a world for each.
+  if (s == "—") return 0
+  # A cell with no letter and no digit left in it says nothing at all: `-`, `?`, `.`, `--`,
+  # and the ellipsis in both its spellings, `...` and `…`.
+  if (u !~ /[[:alnum:]]/) return 1
+  # Compare the WORD, not the spelling. Equality alone let one keystroke buy the A: `TODO:`
+  # is what a model writes far more often than the bare `TODO` this list used to know, and
+  # `TBD.` is the same claim with a full stop.
+  w = u; gsub(/[^[:alnum:]]/, "", w)
+  if (w == "PREENCHER" || w == "TODO" || w == "TBD" || w == "FIXME" || w == "XXX" ||
+      w == "WIP" || w == "FILLME") return 1
+  return 0
+}
+'
+# placeholder <text> — rc 0 when <text> is a fill-in that says nothing, by the definition above.
+# Through ENVIRON and never `awk -v`, for gate_REVIEW's reason: -v runs escape sequences.
+placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit placeholder(ENVIRON["SDD_PLACEHOLDER_TEXT"]) ? 0 : 1 }'; }
+
 gate_QA() {
   GATE_HANDOFF_BLOCKED=0
   GATE_APP_DOWN=0
@@ -1370,6 +1412,10 @@ gate_QA() {
     local evidence; evidence="$(frontmatter "$h" gate)"
     if [ -z "$evidence" ]; then
       GATE_WHY="project with no interface: 30-handoff-qa.md needs 'gate:' carrying the evidence of the journey walked"
+      return 1
+    fi
+    if placeholder "$evidence"; then
+      GATE_WHY="project with no interface: the 'gate:' of 30-handoff-qa.md is still a placeholder ($evidence) — it needs the evidence of the journey walked"
       return 1
     fi
   else
@@ -1638,7 +1684,7 @@ gate_REVIEW() {
   # the operator — a refusal quoting text that is not what is on disk. ENVIRON is handed over byte
   # for byte. `gate_present` stays on `-v`: it is one digit, and it has to arrive as a NUMBER.
   offending="$(SDD_GATE_FIELD="$gate_field" SDD_PROSE_CRITERIA="$REVIEW_PROSE_CRITERIA" \
-               SDD_PROSE_MIN_GRADE="$REVIEW_PROSE_MIN_GRADE" awk -v gate_present="$gate_present" '
+               SDD_PROSE_MIN_GRADE="$REVIEW_PROSE_MIN_GRADE" awk -v gate_present="$gate_present" "$PLACEHOLDER_AWK"'
       BEGIN {
         gate_field = ENVIRON["SDD_GATE_FIELD"]
         # The tolerated set and its floor come from config through ENVIRON, like the gate field:
@@ -1651,36 +1697,6 @@ gate_REVIEW() {
         floor = ENVIRON["SDD_PROSE_MIN_GRADE"]
       }
       function rank(g) { return index("FDCBA", substr(g, 1, 1)) }
-      # The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
-      # the whole cell wrapped in angle brackets, which is how the `### Overall Grade` table of
-      # templates/review.md ships its fill-ins (named by SECTION and not by line number: the two
-      # citations this comment used to carry both rotted, one of them by six lines);
-      # a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
-      # never the presence of a character — a real sentence containing <A> is a real sentence.
-      # NOT refused: `clean`, `n/a` and `—`. Those are the codereview skill terse rationales
-      # (its `### Overall Grade` section, likewise by name) and mean measured-with-nothing-to-say;
-      # refusing them would make this gate contradict the skill it parses — the SQ-97 gate_DOCS bug.
-      function placeholder(s,   u, w) {
-        if (s == "") return 1
-        if (s ~ /^<.*>$/) return 1
-        u = toupper(s)
-        # `—` is E2 80 94 and mawk is byte-oriented, so every rule written about punctuation sees
-        # three non-alphanumeric bytes there and not one character. This line is the ONLY reason
-        # the skill terse rationale survives the two rules below. Measured on mawk 1.3.4.
-        # The other two, `clean` and `n/a`, need no line here — they carry letters and are not in
-        # the list at the bottom, which is the mechanism, and the sensor holds a world for each.
-        if (s == "—") return 0
-        # A cell with no letter and no digit left in it says nothing at all: `-`, `?`, `.`, `--`,
-        # and the ellipsis in both its spellings, `...` and `…`.
-        if (u !~ /[[:alnum:]]/) return 1
-        # Compare the WORD, not the spelling. Equality alone let one keystroke buy the A: `TODO:`
-        # is what a model writes far more often than the bare `TODO` this list used to know, and
-        # `TBD.` is the same claim with a full stop.
-        w = u; gsub(/[^[:alnum:]]/, "", w)
-        if (w == "PREENCHER" || w == "TODO" || w == "TBD" || w == "FIXME" || w == "XXX" ||
-            w == "WIP" || w == "FILLME") return 1
-        return 0
-      }
       # DUPLICATED, deliberately, in checkpoint_rows — see the comment above that function for why
       # a shared helper would cost more than it saves. The two copies must stay identical.
       #

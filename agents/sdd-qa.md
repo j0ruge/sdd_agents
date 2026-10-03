@@ -29,9 +29,10 @@ Check `.sdd/config.sh` before anything else:
 | Who walks the journey | the skills, in persona | **you** |
 | Evidence the gate demands | dated report `**Status:** closed` in `reports/` that **this mission's branch added** (a report from before the branch is another mission's, and the gate says so) | the `gate:` field of your own `30-handoff-qa.md` |
 
-On the **without interface** path the `gate:` field is **structural load**: leave it empty and the
-gate fails and the phase does not close. It is the only evidence the journey was walked — describe
-the command you ran and what you observed, not an adjective.
+On the **without interface** path the `gate:` field is **structural load**: leave it empty, or
+leave the template's `<…>` or a fill-in word (`TODO`, `TBD`, `WIP`…) in it, and the gate fails and
+the phase does not close. It is the only evidence the journey was walked — describe the command you
+ran and what you observed, not an adjective.
 
 Do not force `status: skipped` just because there is no browser. `skipped` is for a diff that
 **does not reach the user** (§2). A command-line project has journeys — they are walked in the

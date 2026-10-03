@@ -264,7 +264,9 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
     the gate never disagree about which file is the mission's — the charter stays out, because it is
     durable doc that crosses cycles ([ADR 0013](adr/0013-o-relatorio-da-missao-e-o-texto-proposto.md));
   - **without an interface** (neither `E2E_CMD` nor `APP_URL`) — the `gate:` field of
-    `30-handoff-qa.md` itself is filled in. Here the `qa-report`/`qa-execution` skills did not run
+    `30-handoff-qa.md` itself is filled in, and filled in means past the same `placeholder()` that
+    `gate_REVIEW` applies: the template's `<…>` and the fill-in words are refused, one definition for
+    both gates. Here the `qa-report`/`qa-execution` skills did not run
     as part of the phase, so demanding their dated report would require an artifact nobody
     produces, and the gate would be unsatisfiable precisely in the case where QA did the work and
     **found** something.
