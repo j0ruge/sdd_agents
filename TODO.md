@@ -552,6 +552,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `sdd-executor` e `humano` nas missões `20260815-ledger-sem-ponto-cego` e no kaizen do
   paralelismo (2026-08-16)
 
+- [ ] **Não há comando que prove um mutante contra um sensor, e cada sessão reconstrói o helper** —
+  `tests/check-mutation.sh:37` (`ANCHORS_ONLY`) — o sensor aceita só nada (o catálogo, ~50 min) ou
+  `--anchors` (aplica, não roda sensor), e o `CLAUDE.md` exige o mutante "pego numa cópia antes do
+  commit". No #200 um helper descartável (caixa, função `mut_*` extraída, `diff` não vazio, um sensor
+  com ou sem `SDD_MUTANT`) rodou 13 vezes. Direção: `--only <slug> [sensor]`, sobre o `sandbox` e o
+  `apply_mutant` que já existem, para a resposta rápida e a do catálogo não divergirem.
+  — descoberto pela sessão interativa no branch `fix/gate-exec-e-caminho-historico` (2026-10-02)
+
 ### Sem seção — chegaram depois da última classificação
 
 > ⚠️ Esta seção **chamava-se "Adiados por YAGNI"** e não guarda mais nenhum adiamento: os três que
