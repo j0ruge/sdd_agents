@@ -3630,10 +3630,15 @@ autonomy_kit_stamp() {
 # lives in the runner. The other half is the instruction, which named the DESTINATION of a kit
 # finding and never said how to get it there.
 #
-# WARN AND RECORD. It never stops the line, and that is a decision with a named cost on both
-# sides: a human editing the kit in another terminal while a mission runs is a real, legitimate
-# false positive, and a guard that halts a paid pipeline on one is a guard the next author
-# disables — after which it catches nothing at all.
+# It warned and recorded until 20260903-a-fronteira-do-chapeu; since then it STOPS the line — kind
+# `kit-touched`, through hat_crossed_escalation's four doors. The cost that kept it a warning is now
+# paid the other way: a human editing the kit in another terminal while a mission runs is a real,
+# legitimate false positive, and it costs one more `sdd run`. Both kit-touched rows of the real
+# ledger were exactly that — 2026-09-18 a human commit, 2026-09-24 an uncommitted edit with no
+# commit at all (issue #139) — so the sentence below says what the runner MEASURED, that the kit
+# moved during the phase, and never who moved it. Attributing it (the kit's reflog against the
+# session's GIT_REFLOG_ACTION label) would cover the first case and not the second: a dirty edit
+# leaves no reflog.
 #
 # DECLARED LIMITS, so nobody reads this as more than it is:
 #   - it is NOT a security boundary. A session that commits and then resets inside the same phase
@@ -3713,9 +3718,9 @@ kit_guard_check() {
   [ "$kit_root" = "$REPO_ROOT" ] && return 0
   autonomy_kit_stamp; kit_after="$AUTONOMY_KIT_STAMP"
   [ "$kit_after" = "$KIT_GUARD_BEFORE" ] && return 0
-  warn "the kit at $kit_root changed during $phase, and this mission's repo is $REPO_ROOT — a session that edits the kit is committing outside its own mission (if that was you working on the kit in another terminal, this is that)"
+  warn "the kit at $kit_root changed during $phase, and this mission's repo is $REPO_ROOT — the runner does not know who changed it: a session of this mission editing outside its repo, or someone working on the kit in another terminal"
   pipeline_log_line "$(date -Iseconds)  KIT-TOUCHED  $phase  kit_before=$KIT_GUARD_BEFORE  kit_after=$kit_after"
-  KIT_TOUCHED_WHY="the kit at $kit_root was edited while $phase ran (kit_before=$KIT_GUARD_BEFORE kit_after=$kit_after) — a session committing outside its mission's repo"
+  KIT_TOUCHED_WHY="the kit at $kit_root was edited while $phase ran (kit_before=$KIT_GUARD_BEFORE kit_after=$kit_after) — who edited it was not measured: a session of this mission, or someone working on the kit in parallel"
   # Re-armed on the new value, so one divergence is reported ONCE. Left un-rearmed, every later
   # phase of the run would compare against the original baseline and repeat the same warning to
   # the end of the pipeline.
@@ -4028,6 +4033,12 @@ hat_crossed_escalation() {   # hat_crossed_escalation <phase> — rc 0 = STOP (r
     # weakens a real guard for good to silence a race.
     dim "  Nothing may commit into this checkout while a phase runs — let the phase end, then"
     dim "  'sdd run' again. Widening writes: or HAT_WRITES_EXTRA would not fix this."
+  elif [ "$kind" = "kit-touched" ]; then
+    # The runner saw the kit move and not who moved it (issue #139), so the remedy names both
+    # readings instead of sending a human who was working on the kit to undo their own work.
+    dim "  If that was you working on the kit, nothing to undo — 'sdd run' again once it settles."
+    dim "  If it was this mission's session, move its kit edit out by hand: the kit is never a"
+    dim "  target's to edit. Then 'sdd run' again."
   else
     dim "  The hat declares what it may write (agents/<hat>.md, key writes:) and the kit is never a"
     dim "  target's to edit. Restore or move by hand what belongs elsewhere. Then 'sdd run' again."

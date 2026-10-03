@@ -1947,6 +1947,15 @@ mut_RUN_hat_extra_path_unnamed() {
 mut_RUN_kit_touched_silent() {
   sed -i '/^kit_guard_check() {/,/^}/ s|^  KIT_TOUCHED_WHY="the kit at |  : "the kit at |' "$1"
 }
+# Issue #139: the runner measures that the kit moved, never who moved it. One mutant puts the old
+# accusation back in the row; the other sends every reading to the hat remedy, which tells a human
+# who was working on the kit to undo their own work.
+mut_RUN_kit_touched_accuses_session() {
+  sed -i '/^kit_guard_check() {/,/^}/ s|— who edited it was not measured: a session of this mission, or someone working on the kit in parallel"$|— a session committing outside its mission'"'"'s repo"|' "$1"
+}
+mut_RUN_kit_touched_remedy_generic() {
+  sed -i '/^hat_crossed_escalation() {/,/^}/ s|^  elif \[ "$kind" = "kit-touched" \]; then$|  elif false; then|' "$1"
+}
 
 # The init line goes unread: mcp_seen/tools_leaked are always "" (null in the row), and a
 # session that saw the human's Jira is indistinguishable from one that saw nothing. Dies on
@@ -5438,6 +5447,8 @@ CATALOG=(
   RUN_hat_extra_pathless_admitted
   RUN_hat_extra_path_unnamed
   RUN_kit_touched_silent
+  RUN_kit_touched_accuses_session
+  RUN_kit_touched_remedy_generic
   RUN_init_blind
   RUN_harness_blind
   RUN_series_harness_blind

@@ -49,7 +49,9 @@ Two facts decided the mechanism, both measured on 2026-09-26:
    no longer found, or HEAD moved with no new entry (`core.logAllRefUpdates=false`): the guard falls
    back to today's range diff, and every path is the session's.
 5. **The kit guard does not move to the label.** `kit_guard_check` stays as it is, and the finding
-   about the `kit-touched` attribution stays open in `TODO.md`.
+   about the `kit-touched` attribution stays open in `TODO.md`. (Closed on 2026-10-03, issue #139,
+   without measuring the attribution: the guard's sentence now says the kit moved and that who moved
+   it was not measured — the reflog would explain a commit and never an uncommitted edit.)
 
 ## Implementation
 

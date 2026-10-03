@@ -5683,13 +5683,23 @@ kitguard_reset
 KGT="$OUTSIDE/kitguard-target"
 kitguard_world "$KGT"
 kitguard_stub "$FAKEKIT"
-KG1_ERR="$( cd "$KGT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"; KG1_RC=$?
+KG1_ERR="$( cd "$KGT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >"$OUTSIDE/kg1.out" )"; KG1_RC=$?
+KG1_OUT="$(cat "$OUTSIDE/kg1.out" 2>/dev/null || true)"
 KG1_LOG="$(cat "$KGT/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 KG1_BEFORE="$(grep -oE 'kit_before=[^ ]+' <<< "$KG1_LOG" | head -1)"
 KG1_AFTER="$(grep -oE 'kit_after=[^ ]+' <<< "$KG1_LOG" | head -1)"
 assert_eq "kit-guard: a session that edits the kit during another repo's mission is warned once and journalled once" \
   "sessions:1 moved:1 lines:1 warns:1 phase:EXEC differ:1 rc:3 kind:kit-touched" \
   "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG1_LOG") warns:$(grep -c 'changed during' <<< "$KG1_ERR") phase:$(grep -oE 'KIT-TOUCHED[[:space:]]+[A-Z]+' <<< "$KG1_LOG" | head -1 | awk '{print $2}') differ:$([ "${KG1_BEFORE#kit_before=}" != "${KG1_AFTER#kit_after=}" ] && echo 1 || echo 0) rc:$KG1_RC kind:$(hat_rows)"
+# Issue #139: the row says what the runner MEASURED — the kit moved during the phase — and that who
+# moved it was not measured. Both kit-touched rows of the real ledger were a human working on the
+# kit, one of them with no commit at all, and the old tail blamed "a session committing outside its
+# mission's repo"; the old remedy sent that human to undo their own work. Three terms, so a reworded
+# accusation, a dropped admission and a generic remedy each turn one of them.
+KG1_WHY="$(jq -r -s '[.[] | select(.event == "blocked" and .kind == "kit-touched") | .gate_why] | first // ""' "$LEDGER" 2>/dev/null)"
+assert_eq "kit-guard: the row admits the editor was not measured, accuses no session, and the remedy names both readings" \
+  "unmeasured:1 accuses:0 remedy:1" \
+  "unmeasured:$(kitguard_has "$KG1_WHY" 'who edited it was not measured') accuses:$(kitguard_has "$KG1_WHY" 'a session committing') remedy:$(kitguard_has "$KG1_OUT" 'If that was you working on the kit')"
 
 # 2. CONTROL. The same run, same sessions, same everything — with a session that leaves the kit
 #    alone. Without this term the guard could be a line printed unconditionally; without the

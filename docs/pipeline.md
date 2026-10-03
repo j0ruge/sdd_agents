@@ -738,7 +738,10 @@ and `hat_crossed_escalation` — the one door it shares with the hat guard below
 and a `kit-touched` ledger row after the session's own row. The cost is named on both sides: a human
 editing the kit in another terminal while a mission runs is a real false positive, and now it
 costs one more `sdd run` (the run stops, the human reads, the run resumes) — the price the spec's
-D6 accepts for a guard that was furrowed in `2d28d13`. Two things it deliberately
+D6 accepts for a guard that was furrowed in `2d28d13`. Both `kit-touched` rows of the real ledger
+were that false positive (one a human commit, one an uncommitted edit), so the row's `gate_why` says
+only what the runner measured — the kit moved during the phase — and that who moved it was not
+measured (issue #139). Two things it deliberately
 does not do: it stays quiet when the mission's own repo *is* the kit (a kit mission edits the kit
 for a living, and a warning on every phase of it teaches its only reader to scroll past), and it
 arms nothing during `--dry-run`, because a projection opens no session for a change to be
