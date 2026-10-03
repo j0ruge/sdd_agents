@@ -453,6 +453,22 @@ assert_phase "a status outside the enum fails" "EXEC"
 assert_why   "EXEC reports the invalid status" "EXEC" "invalid status"
 mv "$MDIR/checkpoint.bak" "$MDIR/checkpoint.md"
 
+# `doing` is still to execute. An increment somebody left mid-flight has not advanced, and the
+# commit cell already carries a reachable SHA — exactly the row a session that died after its
+# commit and before its last checkpoint edit leaves behind. Read as closed, the gate passes and
+# the line moves to QA over unfinished work. The rule had no probe until 2026-10-02 (TODO.md):
+# degrading checkpoint_tally to count `pending` alone left the whole suite green.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.doing.bak"
+sed -i "s/| done | $REAL_HASH |/| doing | $REAL_HASH |/" "$MDIR/checkpoint.md"
+if grep -qF "| doing | $REAL_HASH |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the only increment really reads doing"
+else
+  fail "doing fixture" "a doing row with a reachable hash" "$(grep -m1 '^| I1' "$MDIR/checkpoint.md")"
+fi
+assert_phase "an increment left doing keeps the phase in EXEC" "EXEC"
+assert_why   "an increment left doing is still to execute" "EXEC" "1 of 1 increment\(s\) still to execute"
+mv "$MDIR/checkpoint.doing.bak" "$MDIR/checkpoint.md"
+
 # A literal pipe inside a Check cell is spelled `\|` in GFM, and a raw split on "|" cuts the row
 # there — every column after it shifts one to the left, so the Status column is read out of the
 # CHECK cell. The increment is `done` and the gate answers "invalid status", naming a status the

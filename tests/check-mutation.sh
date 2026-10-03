@@ -3724,6 +3724,16 @@ mut_EXEC_tally_counts_done() {
   sed -i '/^checkpoint_tally()/,/^}/ s@\$4 == "pending" || \$4 == "doing"@$4 != ""@' "$1"
 }
 
+# `doing` stops counting as pending, and an increment somebody left mid-flight reads as closed:
+# gate_EXEC answers `1 increment(s) done, suite green` over a checkpoint whose only row says
+# `doing`, and `sdd status` moves on to QA. The rule lived in checkpoint_tally's header and in
+# gate_EXEC's own sentence, and the whole suite stayed green without it (TODO.md, 2026-08-30).
+# Caught by `an increment left doing keeps the phase in EXEC` in check-gates.sh (QA against the
+# EXEC it demands), with `...is still to execute` beside it naming the gate's own sentence.
+mut_EXEC_tally_doing_is_done() {
+  sed -i '/^checkpoint_tally()/,/^}/ s@\$4 == "pending" || \$4 == "doing"@$4 == "pending"@' "$1"
+}
+
 # The phase guard at cmd_run's door 1 goes, and GATE_EXEC_PENDING — which outlives its gate by
 # design, one screen up the same function — follows the run into the next phase: the QA session
 # opened after a PASSING EXEC gate is born claiming an increment QA never had, and `waste` falls
@@ -5440,6 +5450,7 @@ CATALOG=(
   AUTONOMY_notes_borrowed_across_repos
   LEDGER_progress_not_written
   EXEC_tally_counts_done
+  EXEC_tally_doing_is_done
   LEDGER_progress_leaks_across_phases
   EXEC_blocked_publishes_count
   RUN_retry_pending_before_null
