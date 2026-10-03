@@ -2153,6 +2153,15 @@ mut_CENSUS_boot_bill_worst_inverted() {
 mut_AUTONOMY_cache_read_dropped() {
   sed -i '/^autonomy_session_row() {/,/^}/ s@cache_read: ($cache_read@cache_readx: ($cache_read@' "$1"
 }
+mut_AUTONOMY_cache_read_dropped() {
+  sed -i '/^autonomy_session_row() {/,/^}/ s@cache_read: ($cache_read@cache_readx: ($cache_read@' "$1"
+}
+
+# The review-loop cell's zero guard (issue #110): `$whole > 0` loosened to `>= 0` divides by zero on
+# a mission whose sessions all cost null, and jq takes the whole --by-mission down with it.
+mut_AUTONOMY_review_loop_zero_guard() {
+  sed -i '/^cmd_autonomy()/,/^}/ s@(if \$whole > 0 then@(if $whole >= 0 then@' "$1"
+}
 
 # The census stops reading tool_use names — the line that turns the "before" of the 2026-09-03
 # spec into a command prints "(none)" for every phase. check-hat.sh's "the tool census names
@@ -5581,6 +5590,7 @@ CATALOG=(
   RUN_retry_pending_before_null
   AUTONOMY_progress_ignored
   AUTONOMY_cache_read_dropped
+  AUTONOMY_review_loop_zero_guard
   AUTONOMY_intervention_one_world
   RUN_intervention_ignores_notes_file
   RUN_intervention_tmp_before_branch

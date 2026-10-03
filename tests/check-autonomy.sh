@@ -4040,6 +4040,22 @@ assert_eq "the review loop counts REVIEW and the EXEC sessions after it, never t
   "1 review loop US\$ 16.00 (73%) 1 none" \
   "$(grep -cE '^  rl1  ' <<< "$out_rl") $(rl_cell "$out_rl") $(grep -cE '^  rl1  ' <<< "$out_rl0") $(rl_cell "$out_rl0")"
 
+# The zero guard of that cell, measured (issue #110). A mission whose every session cost null sums
+# to 0 — a session that died before its `result` writes `cost_usd: null` — and `$loop * 100 / $whole`
+# is then a division by zero that jq dies of, taking the whole --by-mission with it. The
+# `$whole > 0` guard was right and unmeasured: loosened to `>= 0`, every sensor stayed green. The
+# third twin is the first file with every cost nulled, DERIVED like the second, and the count of
+# nulled rows is the floor that proves the derivation landed.
+mkdir -p "$OUTSIDE/reviewloop_null"
+sed -E 's/"cost_usd":[0-9.]+/"cost_usd":null/' "$OUTSIDE/reviewloop/autonomy-log.jsonl" \
+  > "$OUTSIDE/reviewloop_null/autonomy-log.jsonl"
+rc_rlnull=0
+out_rlnull="$( SDD_STATE_DIR="$OUTSIDE/reviewloop_null" "$SDD" autonomy --by-mission 2>&1 )" || rc_rlnull=$?
+rl_cell_any() { mission_line rl1 "$1" | grep -oE 'review loop US\$ [0-9]+\.[0-9][0-9]( \([0-9]+%\))?' || echo none; }
+assert_eq "a review loop whose sessions all cost null prints the cell with no percentage, and does not abort" \
+  "rc 0 · 4 nulled · review loop US\$ 0.00" \
+  "rc $rc_rlnull · $(grep -c '"cost_usd":null' "$OUTSIDE/reviewloop_null/autonomy-log.jsonl") nulled · $(rl_cell_any "$out_rlnull")"
+
 # --- launches and reopenings: the intervention count comes from the ledger, not from prose --------
 # D16 read the D12 count off `- intervention:` notes, and the notes were never written: the
 # mission with three launches (SQ-111, 2026-08-27) had zero. `run_id` is on every row of every

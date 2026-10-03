@@ -34,13 +34,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **A regra da âncora aceita qualquer símbolo citado que reapareça perto, e uma âncora podre passa** —
   `tests/check-todo.sh:2005` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
   basta; identificador que se repete no arquivo inteiro casa em qualquer lugar. Medido em `b3b6b98`:
-  `tests/check-autonomy.sh:6486` apontava para `exit 0` e passou verde porque `GIT_REFLOG_ACTION`
+  `tests/check-autonomy.sh:6502` apontava para `exit 0` e passou verde porque `GIT_REFLOG_ACTION`
   está em 6400 — o sensor disse `every anchor on target`. Direção: exigir o símbolo na própria linha
   (ou no bloco da função), ou contar ocorrências e recusar símbolo que aparece em todo canto.
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
-  `tests/check-mutation.sh:5807` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
+  `tests/check-mutation.sh:5817` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
   mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
   só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
   qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
@@ -66,7 +66,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260819-fecho-...` (2026-08-19)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2010` contra `tests/check-mutation.sh:5712` — a chave lê `bin tests templates config`,
+  `bin/sdd:2010` contra `tests/check-mutation.sh:5722` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -104,7 +104,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mutação em duas. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O piso do shim pré-2.31 prova que o shim é um git falso, não que o runner o consulta** —
-  `tests/check-autonomy.sh:4535` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
+  `tests/check-autonomy.sh:4551` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
   ancora no caminho de resolução do runner. Medido: trocar `git` por `/usr/bin/git` no
   `ledger_repo_root` E apagar a guarda deixa `check-autonomy.sh` inteiro verde, porque o shim segue
   um impostor correto que nunca é chamado. Direção: termo provando INTERCEPTAÇÃO — a resposta do
@@ -279,7 +279,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:6054` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  `tests/check-mutation.sh:6064` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
   arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
   hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5999` e `:5972`) mandam o
   operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
