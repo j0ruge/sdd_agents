@@ -861,6 +861,43 @@ else
        "empty: rc $RC_CAT_EMPTY · $(digest "$OUT_CAT_EMPTY") // narrowed: rc $RC_CAT_NARROW · $(digest "$OUT_CAT_NARROW") // gone: rc $RC_CAT_GONE · $(digest "$OUT_CAT_GONE") // real: rc $RC_CAT_REAL · $(digest "$OUT_CAT_REAL")"
 fi
 
+# ---------------------------------------------------------------------------
+# 17 — the `score:` line is READ: its shape, and which one (issue #104)
+#
+# Two holes in the read that blocks 14 and 16 rely on, both measured on 8033a79 with this file green.
+# The SHAPE branch: a `score:` present and unparseable has to fail, and with `elif false` in its
+# place the three `[ "" -ne … ]` error out to false, the `else` credits the round and the run
+# STAMPS. The LAST line: the catalogue's verdict is the last `score:` the suite prints, and
+# `grep -m1` took the first — a green line above a red one stamped. One world each, and the green
+# leg is block 16's real-size world, which reached `kit healthy` and stamped.
+# ---------------------------------------------------------------------------
+SCORE_DESC="mutation: a 'score:' line that does not parse, or a green one above the last, is refused"
+SCORE_TWISTED="score: $CATALOG_DEFINED caught, 0 known gaps, of $CATALOG_DEFINED"
+green_world
+write_stub_suite with-count with-score 0 "$SCORE_TWISTED"
+health_run
+OUT_SCORE_TWIST="$HEALTH_OUT"; RC_SCORE_TWIST="$HEALTH_RC"
+green_world
+write_stub_suite with-count with-score 0 "$SCORE_FULL"$'\n'"$SCORE_SURVIVOR"
+[ "$(bash "$FIX/tests/run-all.sh" 2>/dev/null | grep -c '^score: ' || true)" = 2 ] \
+  || broken "the two-score stub was not armed — a verdict over it would be about one line, not two"
+health_run
+OUT_SCORE_TWO="$HEALTH_OUT"; RC_SCORE_TWO="$HEALTH_RC"
+if [ "$RC_SCORE_TWIST" -ne 0 ] \
+   && grep -qF "the 'score:' line no longer parses" <<< "$OUT_SCORE_TWIST" \
+   && ! grep -qF "$STAMPED" <<< "$OUT_SCORE_TWIST" \
+   && grep -qF "$LATER" <<< "$OUT_SCORE_TWIST" \
+   && [ "$RC_SCORE_TWO" -ne 0 ] \
+   && grep -qF "mutation: $((CATALOG_DEFINED - 1)) of $CATALOG_DEFINED caught" <<< "$OUT_SCORE_TWO" \
+   && ! grep -qF "$STAMPED" <<< "$OUT_SCORE_TWO" \
+   && grep -qF "$STAMPED" <<< "$OUT_CAT_REAL"; then
+  pass "$SCORE_DESC"
+else
+  fail "$SCORE_DESC" \
+       "the twisted line fails saying it no longer parses, the green-above-red pair fails on the LAST line's survivor, neither stamps, and the real-size world above still stamps" \
+       "twisted: rc $RC_SCORE_TWIST · $(digest "$OUT_SCORE_TWIST") // two: rc $RC_SCORE_TWO · $(digest "$OUT_SCORE_TWO")"
+fi
+
 # A kit that is not a git checkout — an install made by plain copy, which is the $SDD_HOME every
 # target repo falls back to. The stamp keys on TRACKED content (ADR 0014, increment I4), so there is
 # nothing to key on and nothing may be stamped; and no gate can ever demand a stamp there (gate_PR
@@ -1998,7 +2035,11 @@ fi
 CAPTURE_DESC='guard: every capture in the `sdd health` region is protected from set -e'
 
 # Prints one line per unguarded capture, `<line>: <text>`. Region is anchored on comment and
-# function text, never on line numbers, so it does not rot at the first refactor.
+# function text, never on line numbers, so it does not rot at the first refactor. Besides the region,
+# every `health_*()` body is censused wherever it is defined: the command runs its helpers, and
+# `health_kit_root` sat outside the region, uncensused, until issue #69. Declared limit: a multi-line
+# helper ends at the next line that STARTS with `}`, so a nested function's brace would end it early
+# (none exist; fail-open only for the lines after that brace).
 health_captures() {
   awk '
     function reset() { open = 0; acc = ""; kind = ""; safe = 0 }
@@ -2028,8 +2069,13 @@ health_captures() {
       emit(substr(line, 1, q - 1), substr(line, q + 1), ""); return 1
     }
     /^# Sensor of the KIT/ { inside = 1 }
-    inside && /^cmd_status\(\) \{/ { if (open) emit("", "", "unterminated"); exit }
-    !inside { next }
+    inside && /^cmd_status\(\) \{/ { if (open) emit("", "", "unterminated"); inside = 0; next }
+    # A health_*() body is censused wherever it is defined (issue #69): `infn` runs from the
+    # definition to the next line that starts with `}`, and a one-liner is censused on its own line.
+    { solo = 0 }
+    /^health_[A-Za-z0-9_]+\(\) \{/ { if ($0 ~ /\}[ \t]*$/) solo = 1; else infn = 1 }
+    infn && /^\}/ { infn = 0; if (!inside) next }
+    !inside && !infn && !solo { next }
     {
       line = $0
       if (open) {
@@ -2108,7 +2154,9 @@ health_captures() {
 # 36 → 37: check 2b decides whether the kit's .sdd/config.sh parses BEFORE reading TEST_CMD
 # (issue 116, 932a1ba), so the region gained the `kit_cfg_diag` capture — guarded in the tail,
 # `|| kit_cfg_rc=$?`, because rc 2 is the branch that says "does not parse", not a crash.
-CAPTURE_FLOOR=37
+# 37 → 38: the census follows every health_*() body outside the region (issue #69), so it gained
+# the `cwd_root` capture of health_kit_root — guarded inside, `|| true`, the spelling it always had.
+CAPTURE_FLOOR=38
 
 capture_report() {
   local out total safe offenders
@@ -2156,6 +2204,12 @@ cap_world '  x="$(grep foo bar)"'
 [ "$(cap_offenders)" = 1 ] || broken "capture probe 'a bare capture' was not reported — the rule reads nothing"
 cap_world '  x="$(grep foo bar || true)"'
 [ "$(cap_offenders)" = 0 ] || broken "capture probe 'a guarded capture' was reported — the rule refuses correct code"
+# The other half of the guard's `(true|:)`: removing the `:` used to leave this file green, because
+# only `|| true` had a world (measured 2026-09-25 and again 2026-10-03). The total is asserted too, so
+# a rule that stops SEEING the capture cannot pass for one that accepts it.
+cap_world '  x="$(grep foo bar || :)"'
+[ "$(cap_offenders)" = 0 ] && [ "$(cap_total)" = 1 ] \
+  || broken "capture probe 'a capture guarded by || :' was reported or not censused — the colon spelling of the guard is not recognised"
 cap_world '  x="$( cd . && ls )" || rc=$?'
 [ "$(cap_offenders)" = 0 ] || broken "capture probe '|| rc=\$?' was reported — the guard the suite capture uses is not recognised"
 # The continuation case, and the reason the join exists at all: written without it, the real
@@ -2176,6 +2230,17 @@ cap_world '  n=$((n + 1))
 cap_world '  x="$(grep foo bar || true)"'
 printf '  y="$(grep after censo)"\n' >> "$CAPPROBE/bin/sdd"
 [ "$(cap_offenders)" = 0 ] || broken "capture probe 'after cmd_status' was censused — the region has no end anchor"
+# A health_*() helper is part of what `sdd health` runs wherever it is DEFINED, and the census used
+# to stop at the region's two anchors: health_kit_root sits before `# Sensor of the KIT`, and taking
+# the `|| true` off its capture left this file green (issue #69, measured on 8033a79). The census
+# follows every health_*() body to its closing brace, before the region and after it, the one-line
+# form included — and nothing else: the other function and the loose lines below stay invisible.
+printf '%s\n' 'health_early() {' '  x="$(grep foo bar)"' '}' 'other_early() {' '  z="$(grep not health)"' \
+  '}' '# Sensor of the KIT' '  y="$(grep foo bar || true)"' 'cmd_status() {' '  w="$(grep after status)"' \
+  '}' 'health_late() {' '  v="$(grep foo bar)"' '}' '  u="$(grep after the late helper)"' \
+  'health_solo() { s="$(grep foo bar)"; }' '  t="$(grep after the one-liner)"' > "$CAPPROBE/bin/sdd"
+[ "$(cap_total)" = 4 ] && [ "$(cap_lines | cut -d: -f1 | tr '\n' ' ')" = "2 13 16 " ] \
+  || broken "capture probe 'health_*() outside the region' — expected lines 2, 13 and 16 accused and 4 censused, got [$(cap_lines | cut -d: -f1 | tr '\n' ' ')] of $(cap_total)"
 
 # --- the five spellings r2 measured passing invisibly ------------------------------------------
 # One probe per spelling, and each asserts the CENSUS too: the defect was never "no offender

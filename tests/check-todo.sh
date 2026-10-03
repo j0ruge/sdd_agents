@@ -1498,7 +1498,47 @@ EOF
   [the handoff](docs/handoffs/x.md) for the analysis. — found by `x` in mission `y` (2026-08-16)
 EOF
   assert_clean "$(with_decided "$box/notabox.md")" 8 "a markdown link opening a continuation line is not a box"
-  rule_end 5 'a box landing on the line after its marker is refused, not rendered'
+
+  # One probe per piece of the box pattern `^[ \t>]*\[[ xX]\]([ \t]|$)`, because the r2 adversarial
+  # pass loosened each and the selftest stayed green (issue #76, measured again on 8033a79). The
+  # `>`: a GFM block quote carries list items, so a split box inside one renders ticked — dropping
+  # the `>` let it through in silence, the fail-open direction.
+  cat > "$box/quotedbox.md" <<'EOF'
+# TODO
+
+> - [ref]: https://example.com
+>   [x] **a closed finding hiding behind a link reference inside a block quote**
+
+## Aberto
+<!-- sdd:open -->
+
+- [ ] **A well-formed item** — `bin/sdd:42` — why — found by `x` in mission `y` (2026-08-16)
+EOF
+  assert_says "$box/quotedbox.md" 8 'bare [ ]/[x] box' \
+    "a box that lands on the line after its marker inside a block quote"
+
+  # The final boundary: `[x]glued` is text to GitHub, not a task box. Without `([ \t]|$)` the rule
+  # invents a violation on it — the direction the next editor answers by deleting the rule.
+  cat > "$box/gluedbox.md" <<'EOF'
+## Aberto
+<!-- sdd:open -->
+
+- [ ] **A well-formed item** — `bin/sdd:42` — why it matters, and the next line opens with a
+  [x]glued token that renders as text. — found by `x` in mission `y` (2026-08-16)
+EOF
+  assert_clean "$(with_decided "$box/gluedbox.md")" 8 "a [x] glued to the next word is not a box"
+
+  # The class: only ` `, `x` and `X` tick or open a box. Widened to any character, `[a] ` — a
+  # label in prose — reads as a box too.
+  cat > "$box/labelbox.md" <<'EOF'
+## Aberto
+<!-- sdd:open -->
+
+- [ ] **A well-formed item** — `bin/sdd:42` — why it matters, and the next line opens with a
+  [a] label that is prose. — found by `x` in mission `y` (2026-08-16)
+EOF
+  assert_clean "$(with_decided "$box/labelbox.md")" 8 "a bracketed letter that is not x is not a box"
+  rule_end 9 'a box landing on the line after its marker is refused, not rendered'
 
   # Every exit path carries a probe, or the code that names it is decoration: mutating any of
   # these `exit`/`return` values used to survive the whole selftest.

@@ -12,6 +12,10 @@
 # Usage: tests/check-mutation.sh             (exit 0 = catalogue intact and every unlisted mutation caught)
 #        tests/check-mutation.sh --anchors   (seconds, no suite run: every mutant still APPLIES and
 #                                             leaves valid bash and Python — the fast suite runs this)
+#        tests/check-mutation.sh --only <slug> [sensor.sh]
+#                                            (minutes: ONE mutant against the suite, or against one
+#                                             sensor in seconds — a HINT before a commit, never the
+#                                             verdict; exit 0 = caught, 1 = not caught or no answer)
 
 set -uo pipefail
 
@@ -31,11 +35,19 @@ ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # hour, `sdd health` names no culprit, and both were anchors today's merges had broken. Applying
 # the 389 without running the suite found them in 20 seconds. So the fast suite asks this question
 # on every gate, and the expensive one stays where 4c86712 put it.
-ANCHORS_ONLY=0
+ANCHORS_ONLY=0 ONLY_SLUG="" ONLY_SENSOR=""
+USAGE="want nothing, --anchors, or --only <slug> [sensor.sh]"
 case "${1:-}" in
-  "") ;;
-  --anchors) ANCHORS_ONLY=1 ;;
-  *) echo "check-mutation.sh: unknown option '$1' (want nothing, or --anchors)" >&2; exit 2 ;;
+  "") [ "$#" -le 1 ] || { echo "check-mutation.sh: unexpected argument '$2' ($USAGE)" >&2; exit 2; } ;;
+  --anchors)
+    [ "$#" -eq 1 ] || { echo "check-mutation.sh: --anchors takes no argument, got '$2' ($USAGE)" >&2; exit 2; }
+    ANCHORS_ONLY=1 ;;
+  --only)
+    if [ "$#" -lt 2 ] || [ "$#" -gt 3 ] || [ -z "$2" ]; then
+      echo "check-mutation.sh: --only takes a catalogue slug and at most one sensor ($USAGE)" >&2; exit 2
+    fi
+    ONLY_SLUG="$2" ONLY_SENSOR="${3:-}" ;;
+  *) echo "check-mutation.sh: unknown option '$1' ($USAGE)" >&2; exit 2 ;;
 esac
 
 # ---------------------------------------------------------------------------
@@ -339,6 +351,14 @@ mut_EXEC_orphan_commit() {    # back to `cat-file -e`: a loose object passes as 
 # `mut_REVIEW_escaped_pipe*` pair sabotaging the deliberately duplicated copy in gate_REVIEW.
 mut_EXEC_escaped_pipe_blind() {
   sed -i '/^checkpoint_rows()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (0)|' "$1"
+}
+
+# The reviewer's increments vanish from the checkpoint: checkpoint_rows skips every `R<n>` row, so a
+# round that found something hands nothing to EXEC and the B review keeps the ball in REVIEW — the
+# REVIEW⇄EXEC loop of `20260901-o-revisor-so-acha` silently cut. Issue #111 measured that only two
+# of the three R1 worlds in check-gates.sh see it; this mutant keeps both from being deleted.
+mut_EXEC_rows_blind_to_review_increments() {
+  sed -i '/^checkpoint_rows()/,/^}/ s/|| f\[2\] == "") next$/|| f[2] == "" || f[2] ~ \/^R[0-9]\/) next/' "$1"
 }
 
 # The three faces of the same three-character blindness: the separator-row skip goes back to the
@@ -943,12 +963,18 @@ mut_REVIEW_escaped_pipe_parity_blind() {
 }
 
 mut_REVIEW_punctuation_only_blind() {
-  sed -i '/^gate_REVIEW()/,/^}/ s|if (u !~ /\[\[:alnum:\]\]/) return 1|if (0) return 1|' "$1"
+  sed -i '/^PLACEHOLDER_AWK=/,/^placeholder() {/ s|if (u !~ /\[\[:alnum:\]\]/) return 1|if (0) return 1|' "$1"
 }
 
 # The word stops being compared as a word, which is the equality test that `TODO:` beat.
 mut_REVIEW_punctuated_fillin_blind() {
-  sed -i '/^gate_REVIEW()/,/^}/ s|w = u; gsub(/\[^\[:alnum:\]\]/, "", w)|w = u|' "$1"
+  sed -i '/^PLACEHOLDER_AWK=/,/^placeholder() {/ s|w = u; gsub(/\[^\[:alnum:\]\]/, "", w)|w = u|' "$1"
+}
+
+# The second caller of the shared placeholder() (issue #103): gate_QA, in a project with no
+# interface, stops refusing the template's untouched `gate: <…>` as evidence of a journey.
+mut_QA_gate_placeholder_accepted() {
+  sed -i '/^gate_QA()/,/^}/ s|^    if placeholder "\$evidence"; then$|    if false; then|' "$1"
 }
 
 mut_DOCS_pending_status() {   # accepts an area with Status '✗' in the drift checklist
@@ -1182,6 +1208,16 @@ mut_PRE_default_branch_unchecked() {
 # check-preflight.sh asserts it with a witness file instead of with the wording.
 mut_PRE_testcmd_never_run() {
   sed -i 's@run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?@test_rc=0@' "$1"
+}
+
+# The preflight line about a git older than 2.31 (issue #75), whose three moving parts had no
+# assertion. Silenced, an old git is never told the ledger takes the slow path; inverted, a modern
+# git is warned about itself and never told it speaks the flag.
+mut_PRE_path_format_warn_silent() {
+  sed -i '/^cmd_preflight()/,/^}/ s@^    warn "this git does not know@    : "this git does not know@' "$1"
+}
+mut_PRE_path_format_probe_inverted() {
+  sed -i '/^cmd_preflight()/,/^}/ s@grep -c [.] )" = 1 \]; then@grep -c . )" = 99 ]; then@' "$1"
 }
 
 # Not a gate: `sdd approve` goes back to announcing the next step unconditionally, the way it did
@@ -1549,6 +1585,13 @@ mut_KAIZEN_guard_ignored() {
 # why check-gates.sh asserts it on a 20000-row checkpoint.
 mut_RUN_jidoka_pipefail() {
   sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"  # sdd-pipefail-waiver: this payload IS the bug, deliberately
+}
+
+# The Jidoka spends a session BEFORE it escalates: a `blocked` increment still exits 3 with the right
+# words, so every check of rc and message stays green — only counting the sessions the stub opened
+# tells the difference. Issue #84 measured the old marker grep green under exactly this sabotage.
+mut_RUN_jidoka_spends_session() {
+  sed -i '/^cmd_run()/,/^}/ s|^\(    if \[ "\$phase" = "EXEC" \] \&\& grep -qx "blocked" <<< "\$ckstatus"; then\)$|\1 run_phase "$phase" \|\| true;|' "$1"
 }
 
 # Not a gate, and the third Jidoka: a handoff that declares `status: blocked` goes back to being
@@ -2109,6 +2152,12 @@ mut_CENSUS_boot_bill_worst_inverted() {
 # session row carries the cache-read tokens the session burned" in check-autonomy.sh.
 mut_AUTONOMY_cache_read_dropped() {
   sed -i '/^autonomy_session_row() {/,/^}/ s@cache_read: ($cache_read@cache_readx: ($cache_read@' "$1"
+}
+
+# The review-loop cell's zero guard (issue #110): `$whole > 0` loosened to `>= 0` divides by zero on
+# a mission whose sessions all cost null, and jq takes the whole --by-mission down with it.
+mut_AUTONOMY_review_loop_zero_guard() {
+  sed -i '/^cmd_autonomy()/,/^}/ s@(if \$whole > 0 then@(if $whole >= 0 then@' "$1"
 }
 
 # The census stops reading tool_use names — the line that turns the "before" of the 2026-09-03
@@ -3039,7 +3088,17 @@ mut_HEALTH_suite_capture_aborts() {
 # so the kit's mutation score can silently stop being printed and `sdd health` reports it as a
 # crash instead of as the contract breach it is.
 mut_HEALTH_score_read_aborts() {
-  sed -i "s@grep -m1 '^score: ' <<< \"\$out\" || true@grep -m1 '^score: ' <<< \"\$out\"@" "$1"
+  sed -i "s@grep '^score: ' <<< \"\$out\" | tail -n 1 || true@grep '^score: ' <<< \"\$out\" | tail -n 1@" "$1"
+}
+
+# The two halves of issue #104. The shape branch neutered: a `score:` present and unparseable walks
+# past the three `[ "" -ne … ]` (each errors out to false) into `ok` and the stamp. The first line
+# read instead of the last: a green `score:` above the catalogue's red verdict stamps.
+mut_HEALTH_score_shape_branch_blind() {
+  sed -i '/^cmd_health()/,/^}/ s@^  elif \[ -z "\$score_nums" \]; then$@  elif false; then@' "$1"
+}
+mut_HEALTH_score_reads_first_line() {
+  sed -i "s@grep '^score: ' <<< \"\$out\" | tail -n 1 || true@grep '^score: ' <<< \"\$out\" | head -n 1 || true@" "$1"
 }
 
 # `sdd health` goes back to certifying a catalogue with a mutant ALIVE. The comparison loses its
@@ -5150,6 +5209,7 @@ CATALOG=(
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
   EXEC_escaped_pipe_blind
+  EXEC_rows_blind_to_review_increments
   EXEC_alignment_colon_blind
   EXEC_dirty_tree_as_red
   GATE_EXEC_backtick_kept
@@ -5254,6 +5314,7 @@ CATALOG=(
   REVIEW_escaped_pipe_parity_blind
   REVIEW_punctuation_only_blind
   REVIEW_punctuated_fillin_blind
+  QA_gate_placeholder_accepted
   DOCS_pending_status
   REVIEW_backtick_grade_kept
   DOCS_backtick_status_kept
@@ -5284,6 +5345,8 @@ CATALOG=(
   RUN_templates_ticket_short_circuit
   PRE_default_branch_unchecked
   PRE_testcmd_never_run
+  PRE_path_format_warn_silent
+  PRE_path_format_probe_inverted
   RUN_approve_next_unconditional
   RUN_e2e_dir_hardcoded
   RUN_autonomy_exclusions_undeclared
@@ -5296,6 +5359,7 @@ CATALOG=(
   RUN_moved_never_true
   RUN_autonomy_sha_warn_repeats
   RUN_jidoka_pipefail
+  RUN_jidoka_spends_session
   RUN_blocked_not_escalated
   RUN_blocked_retry_not_escalated
   RUN_ticket_blocked_not_armed
@@ -5466,6 +5530,8 @@ CATALOG=(
   HEALTH_todo_count_blind
   HEALTH_suite_capture_aborts
   HEALTH_score_read_aborts
+  HEALTH_score_shape_branch_blind
+  HEALTH_score_reads_first_line
   HEALTH_mutation_survivor_blind
   HEALTH_catalogue_floor_blind
   HEALTH_testcmd_list_blind
@@ -5534,6 +5600,7 @@ CATALOG=(
   RUN_retry_pending_before_null
   AUTONOMY_progress_ignored
   AUTONOMY_cache_read_dropped
+  AUTONOMY_review_loop_zero_guard
   AUTONOMY_intervention_one_world
   RUN_intervention_ignores_notes_file
   RUN_intervention_tmp_before_branch
@@ -5768,16 +5835,64 @@ killer_of() {
 KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 
 # ---------------------------------------------------------------------------
+# The catalogue's own size and membership, checked before ANY mode runs (issue #105). They lived
+# inside --anchors only, so the full mode — the one `sdd health` runs and the one this file's usage
+# line promises means "catalogue intact" — printed `score: 0 caught, 0 known gap(s), of 0` and exited
+# 0 over `CATALOG=()`, after a whole control run. cmd_health has its own floor on that line, but the
+# runner also tells the operator to run the catalogue by hand, and there nothing stood in the way.
+# Here an emptied, unparsed or partly unlisted catalogue is refused in every mode, in a second.
+# ---------------------------------------------------------------------------
+CATALOGUE_FLOOR=420
+if [ "${#CATALOG[@]}" -lt "$CATALOGUE_FLOOR" ]; then
+  fail "SENSOR-BROKEN: the catalogue lists ${#CATALOG[@]} mutant(s), below the floor of $CATALOGUE_FLOOR" \
+       "an emptied or unparsed catalogue would report every anchor intact and score nothing as caught"
+  exit 1
+fi
+# A mutant DEFINED but never LISTED is dead code that no loop here runs, and the fast suite used
+# to stay green over it: four `mut_PRE_node_*` sat outside CATALOG for a whole branch, and only
+# `sdd health` — an hour in — would have said "ran 397 of the 401 defined". The definitions are
+# read with health's own spelling (`^mut_…() {`).
+catalogue_orphans() { # catalogue_orphans <defined, one per line> <listed, one per line>
+  comm -23 <(sort -u <<< "$1") <(sort -u <<< "$2")
+}
+# The same spelling is NOT the same population: health counts every definition (`grep -c`), and
+# the orphan check above de-duplicates both sides. A mutant defined twice — four were, pasted by an
+# insert script in PR #203 — left this check green while cmd_health would have read "ran 563 of
+# the 567 defined" and refused to stamp, fifty minutes in (CodeRabbit on PR #203). A name listed
+# twice in CATALOG breaks the same equality from the other side. Both are refused here.
+catalogue_dups() { sort <<< "$1" | uniq -d; } # catalogue_dups <names, one per line>
+if [ "$(catalogue_orphans $'a\nb' 'a')" != b ] || [ -n "$(catalogue_orphans 'a' $'a\nb')" ] \
+   || [ "$(catalogue_dups $'a\nb\na')" != a ] || [ -n "$(catalogue_dups $'a\nb')" ]; then
+  fail "SENSOR-BROKEN: catalogue_orphans or catalogue_dups misread a world whose answer is known" \
+       "expected 'b' orphaned from {a, b} vs {a} and nothing the other way round, and 'a' twice in {a, b, a}"
+  exit 1
+fi
+defined_names="$(sed -nE 's/^mut_([A-Za-z0-9_]+)\(\) \{.*/\1/p' "$ROOT/tests/check-mutation.sh")"
+dups="$(catalogue_dups "$defined_names")$(catalogue_dups "$(printf '%s\n' "${CATALOG[@]}")")"
+if [ -n "$dups" ]; then
+  fail "CATALOGUE-BROKEN: mutant(s) defined or listed more than once — sdd health counts every definition and every entry, so its census would disagree with this catalogue" \
+       "$(tr '\n' ' ' <<< "$dups")"
+  exit 1
+fi
+orphans="$(catalogue_orphans "$defined_names" "$(printf '%s\n' "${CATALOG[@]}")")"
+if [ -n "$orphans" ]; then
+  fail "CATALOGUE-BROKEN: mutant(s) defined but absent from CATALOG — nothing runs them" \
+       "$(tr '\n' ' ' <<< "$orphans")"
+  exit 1
+fi
+pass "the catalogue lists ${#CATALOG[@]} mutants (floor $CATALOGUE_FLOOR), every mut_* defined in this file among them, each once"
+
+# ---------------------------------------------------------------------------
 # --anchors: apply every mutant to a copy of bin/ and stop there — no suite, no control run.
 #
 # Only bin/ is copied, because a mutant only ever edits bin/ (apply_mutant's own diff reads bin/
 # alone). Before the loop, the two failure answers are proved on a world whose answer is known —
 # a mutation that changes nothing must read 90, one that breaks the syntax must read 91 — or a
-# broken apply_mutant would certify every anchor. The floor refuses a catalogue that emptied or
-# stopped being parsed: an empty loop reports "0 broken" forever.
+# broken apply_mutant would certify every anchor. The floor and the orphan check that refuse an
+# emptied or partly unlisted catalogue run above, for every mode: an empty loop reports "0 broken"
+# here and "0 of 0" in the full mode, forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=420
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }
@@ -5830,32 +5945,6 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
     exit 1
   fi
   pass "the verdict refuses a catalogue with one broken anchor (pool, scoring and verdict exercised)"
-  if [ "${#CATALOG[@]}" -lt "$ANCHOR_FLOOR" ]; then
-    fail "SENSOR-BROKEN: the catalogue lists ${#CATALOG[@]} mutant(s), below the floor of $ANCHOR_FLOOR" \
-         "an emptied or unparsed catalogue would report every anchor intact"
-    exit 1
-  fi
-  # A mutant DEFINED but never LISTED is dead code that no loop here runs, and the fast suite used
-  # to stay green over it: four `mut_PRE_node_*` sat outside CATALOG for a whole branch, and only
-  # `sdd health` — an hour in — would have said "ran 397 of the 401 defined". The definitions are
-  # read with health's own spelling, so both programs count the same population.
-  catalogue_orphans() { # catalogue_orphans <defined, one per line> <listed, one per line>
-    comm -23 <(sort -u <<< "$1") <(sort -u <<< "$2")
-  }
-  if [ "$(catalogue_orphans $'a\nb' 'a')" != b ] || [ -n "$(catalogue_orphans 'a' $'a\nb')" ]; then
-    fail "SENSOR-BROKEN: catalogue_orphans misread a world whose answer is known" \
-         "expected exactly 'b' orphaned from {a, b} vs {a}, and nothing the other way round"
-    exit 1
-  fi
-  orphans="$(catalogue_orphans \
-    "$(sed -nE 's/^mut_([A-Za-z0-9_]+)\(\) \{.*/\1/p' "$ROOT/tests/check-mutation.sh")" \
-    "$(printf '%s\n' "${CATALOG[@]}")")"
-  if [ -n "$orphans" ]; then
-    fail "CATALOGUE-BROKEN: mutant(s) defined but absent from CATALOG — nothing runs them" \
-         "$(tr '\n' ' ' <<< "$orphans")"
-    exit 1
-  fi
-  pass "every mut_* defined in this file is listed in CATALOG"
   entries=()
   for slug in "${CATALOG[@]}"; do entries+=("$slug=mut_$slug"); done
   # ⚠️ The one line the controls above cannot assert on: `if anchor_verdict` sabotaged into `if true`
@@ -5866,6 +5955,109 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
   fi
   printf 'mutant(s) no longer apply — fix their anchors before the catalogue scores them as survivors\n' >&2
   exit 1
+fi
+
+# The control of the catalogue: the whole suite on an unsabotaged copy (see CONTROL run below).
+# Defined here because --only, the next block, runs the same control before reading its one mutant.
+run_control() {
+  local rc=0
+  SDD_MUTANT=1 "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1 || rc=$?
+  echo "$rc" > "$WORK/control.rc"
+}
+
+# ---------------------------------------------------------------------------
+# --only <slug> [sensor.sh]: ONE mutant of the catalogue, in a copy — the question a session asks
+# before it commits a gate ("does the suite catch my mutant?"), answered in minutes against the
+# whole suite, or in seconds against one sensor, instead of the catalogue's hour. Every PR that
+# added a gate rebuilt a throwaway helper for it (13 runs of one in PR #200).
+#
+# It reuses sandbox, apply_mutant, run_mutant, control_verdict and rc_verdict, so it cannot
+# disagree with the catalogue about what applies, what a rc means or what a red control is.
+# Without a sensor it IS the catalogue's run for that slug: run_mutant, beside run_control.
+#
+# It is a HINT, and the last line says so. One sensor alone runs with no step deadline (run-all.sh
+# gives each step one) and is not one of the steps run-all.sh skips inside a mutant, so it can catch
+# a mutant the suite would let through — or the reverse. Only `sdd health` runs the catalogue, and
+# only the catalogue stamps. The control is not optional: on a copy that is red with no sabotage,
+# every mutant reads caught, which is exactly the vacuity the catalogue's own control exists for.
+#
+# Not run by the suite, by choice: the only probe that would prove it end to end is a sensor run
+# per call, and run-all.sh would then invoke this file a third time (check-health.sh counts the
+# invocations). What it shares with the catalogue is measured there; its own branches are not.
+# ---------------------------------------------------------------------------
+if [ -n "$ONLY_SLUG" ]; then
+  known=0
+  for slug in "${CATALOG[@]}"; do [ "$slug" = "$ONLY_SLUG" ] && { known=1; break; }; done
+  if [ "$known" = 0 ] || ! declare -F "mut_$ONLY_SLUG" >/dev/null; then
+    echo "check-mutation.sh: '$ONLY_SLUG' is not a mutant of CATALOG (give the slug, without the mut_ prefix)" >&2
+    exit 2
+  fi
+  case "$ONLY_SENSOR" in
+    "") ;;
+    check-mutation.sh) echo "check-mutation.sh: --only cannot run the catalogue inside a mutant" >&2; exit 2 ;;
+    */*) echo "check-mutation.sh: the sensor is a file name under tests/, like check-gates.sh (got '$ONLY_SENSOR')" >&2; exit 2 ;;
+    check-*.sh) [ -f "$ROOT/tests/$ONLY_SENSOR" ] \
+                  || { echo "check-mutation.sh: tests/$ONLY_SENSOR does not exist" >&2; exit 2; } ;;
+    *) echo "check-mutation.sh: the sensor is a file name under tests/, like check-gates.sh (got '$ONLY_SENSOR')" >&2; exit 2 ;;
+  esac
+  sandbox "$WORK/control"
+  box="$WORK/$ONLY_SLUG"
+  if [ -z "$ONLY_SENSOR" ]; then
+    what="the suite"
+    load_killer_map "$KILLERS_FILE"
+    echo "== --only $ONLY_SLUG: control and mutant, each a whole suite run (minutes) =="
+    run_control &
+    run_mutant "$ONLY_SLUG"
+    wait
+  else
+    what="$ONLY_SENSOR"
+    # only_sensor <box> <name> — the one sensor, under the SDD_MUTANT a mutant's suite runs with
+    # (so it stops at its first red, as it would inside the catalogue); <name>.rc and .log in $WORK.
+    # With a DEADLINE, because a mutant can make a sensor hang and run-all.sh's per-step deadline is
+    # not in this path (CodeRabbit on PR #203). 720 s is run-all.sh's largest step deadline;
+    # SDD_ONLY_DEADLINE overrides it. A run that reaches the deadline is written as 124 whatever
+    # `timeout` returned — 137 after the KILL would otherwise read as caught — and rc_verdict reads
+    # 124 as timed-out: inconclusive, never caught, exactly as inside the catalogue.
+    only_sensor() {
+      local rc=0 t0=$SECONDS
+      SDD_MUTANT=1 timeout -k 10 "$ONLY_DEADLINE" bash "$1/tests/$ONLY_SENSOR" > "$WORK/$2.log" 2>&1 || rc=$?
+      [ $((SECONDS - t0)) -lt "$ONLY_DEADLINE" ] || rc=124
+      echo "$rc" > "$WORK/$2.rc"
+    }
+    ONLY_DEADLINE="${SDD_ONLY_DEADLINE:-720}"
+    case "$ONLY_DEADLINE" in
+      ''|0*|*[!0-9]*) echo "check-mutation.sh: SDD_ONLY_DEADLINE must be a whole number of seconds >= 1 (got: $ONLY_DEADLINE)" >&2; exit 2 ;;
+    esac
+    echo "== --only $ONLY_SLUG: control and mutant against $ONLY_SENSOR alone =="
+    only_sensor "$WORK/control" control &
+    sandbox "$box"
+    arc=0; apply_mutant "mut_$ONLY_SLUG" "$box" || arc=$?
+    if [ "$arc" -eq 0 ]; then only_sensor "$box" "$ONLY_SLUG"; else echo "$arc" > "$box.rc"; fi
+    wait
+  fi
+  if ! why="$(control_verdict "$WORK")"; then
+    fail "$why" "$what on an unsabotaged copy says nothing about the mutant — see $WORK/control.log"
+    tail -20 "$WORK/control.log" >&2
+    exit 1
+  fi
+  pass "control: $what is green on an unsabotaged copy"
+  rc="$(cat "$box.rc" 2>/dev/null || echo 99)"
+  case "$(rc_verdict "$rc")" in
+    caught)
+      killer="$(cat "$box.killer" 2>/dev/null || true)"
+      pass "$ONLY_SLUG — $what dies (rc $rc)${killer:+, first red step: $killer}" ;;
+    survived)
+      fail "$ONLY_SLUG is NOT caught by $what" "it stayed green with the runner sabotaged — an assertion is missing" ;;
+    broken)
+      fail "CATALOGUE-BROKEN: $ONLY_SLUG" "$(cat "$box.log" 2>/dev/null || echo 'no log')" ;;
+    timed-out)
+      fail "TIMED-OUT: $ONLY_SLUG — a step outlived its timeout inside the mutant; inconclusive" "$(tail -5 "$box.log")" ;;
+    missing)
+      fail "$ONLY_SLUG produced no result" "the mutant died before writing its rc" ;;
+  esac
+  echo "hint only — \`sdd health\` runs the whole catalogue, and only it writes the mutation stamp"
+  [ "$(rc_verdict "$rc")" = caught ]
+  exit $?
 fi
 
 # ---------------------------------------------------------------------------
@@ -5883,11 +6075,6 @@ fi
 # ---------------------------------------------------------------------------
 echo "== control (the first job of the pool) =="
 sandbox "$WORK/control"
-run_control() {
-  local rc=0
-  SDD_MUTANT=1 "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1 || rc=$?
-  echo "$rc" > "$WORK/control.rc"
-}
 
 load_killer_map "$KILLERS_FILE"
 echo "== killer map: ${#KILLER[@]} mutant(s) run their last killer first, ${#SECS[@]} with a recorded time =="

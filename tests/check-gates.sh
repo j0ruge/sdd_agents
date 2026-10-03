@@ -92,12 +92,24 @@ cd "$FIX" || exit 1
 # Jidoka escapes BEFORE any `run_phase`; if that order breaks, the runner would call claude for
 # real. The stub makes that impossible by construction.
 mkdir -p "$FIX/.stub"
-cat > "$FIX/.stub/claude" <<'STUB'
+# The stub also leaves one line in .stub/sessions per call, and THAT is what a "no session spent"
+# assertion reads. Its stderr goes to the session log that run_phase writes, never to the output of
+# `sdd run`, so the seven sites that grepped the output for the marker below were green whether a
+# session ran or not (issue #84: a run_phase put in front of the Jidoka escalation passed them all).
+# One writer, called here and again where the close block restores it.
+write_claude_stub() {
+  cat > "$FIX/.stub/claude" <<'STUB'
 #!/usr/bin/env bash
+printf 'session\n' >> "${0%/*}/sessions"
 echo "ERROR: the test invoked the real claude — the escalation path did not escape before the session" >&2
 exit 97
 STUB
-chmod +x "$FIX/.stub/claude"
+  chmod +x "$FIX/.stub/claude"
+  touch "$FIX/.stub/sessions"
+}
+# stub_sessions — how many sessions the stub has opened so far; read before and after a run.
+stub_sessions() { wc -l < "$FIX/.stub/sessions"; }
+write_claude_stub
 PATH="$FIX/.stub:$PATH"
 
 git init -q -b main
@@ -338,15 +350,17 @@ assert_phase "TEST_CMD green again hands the mission back to QA" "QA"
 #   - the claude stub's marker must be ABSENT — that is what "no session spent" means, and the
 #     stub planted at the top of this file was only reporting it, never asserted, until now.
 assert_jidoka() {
-  local desc="$1" out rc
+  local desc="$1" out rc s0 s1
+  s0="$(stub_sessions)"
   out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; rc=$?
+  s1="$(stub_sessions)"
   if [ "$rc" -eq 3 ] \
      && grep -q "The line stopped on purpose" <<< "$out" \
-     && ! grep -q "the test invoked the real claude" <<< "$out"; then
+     && [ "$s1" = "$s0" ]; then
     pass "$desc"
   else
     fail "$desc" "exit 3, the Jidoka branch, and no session spent" \
-         "exit $rc: $(tail -3 <<< "$out")"
+         "exit $rc, $s0 -> $s1 stub session(s): $(tail -3 <<< "$out")"
   fi
 }
 
@@ -1492,6 +1506,20 @@ printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 assert_phase "no interface, 'done' with no evidence does not pass" "QA"
 assert_why   "QA asks for the journey evidence" "QA" "evidence of the journey|no interface"
 
+# The template's own fill-in is not evidence (issue #103). templates/handoff.md ships a `gate:` line
+# wrapped in angle brackets, and a handoff copied without touching it passed this gate with "journey
+# walked without a browser interface" — the hole I3 closed in gate_REVIEW, alive one gate earlier.
+# One placeholder() judges both gates now. The line is COPIED from the template, never retyped, so
+# this world moves when the template does; the floor proves the copy landed.
+TMPL_GATE="$(grep '^gate: <' "$ROOT/templates/handoff.md" || true)"
+[ "$(grep -c . <<< "$TMPL_GATE")" = 1 ] \
+  || fail "template gate: fixture" "exactly one 'gate: <…>' line in templates/handoff.md" "${TMPL_GATE:-none}"
+printf -- '---\nfase: QA\nstatus: done\n%s\n---\n' "$TMPL_GATE" > "$MDIR/30-handoff-qa.md"
+assert_phase "no interface, the template's untouched gate: line is not evidence" "QA"
+assert_why   "...and the reason says it is still a placeholder" "QA" "gate:. .*still a placeholder"
+printf -- '---\nfase: QA\nstatus: done\ngate: TODO\n---\n' > "$MDIR/30-handoff-qa.md"
+assert_phase "no interface, a bare fill-in word in gate: is not evidence either" "QA"
+
 printf -- '---\nfase: QA\nstatus: done\ngate: "1 journey walked in the CLI; 1 finding became F1"\n---\n' \
   > "$MDIR/30-handoff-qa.md"
 assert_phase "no interface, 'done' WITH evidence passes" "REVIEW"
@@ -1643,8 +1671,14 @@ git add -A && git commit -qm "chore: back to Security at B"
 # assertions below pin it for the reviewer's rows too, because a checkpoint parser taught to
 # recognise `I`/`F` would silently strand every round of every future mission.
 #
-# Both directions, and the second is why the first is not vacuous: a runner that simply never leaves
-# EXEC satisfies the first assertion whatever it reads.
+# Three worlds, each catching a defect the others cannot (issue #111: this comment used to say the
+# second is what keeps the first from being vacuous, and the realistic sabotage measured otherwise).
+#   - a PENDING R1 must hand the ball to EXEC: the one a parser blind to `R<n>` fails;
+#   - a DONE R1 must hand it back to REVIEW: the one a runner that never leaves EXEC fails. It stays
+#     green under the blind parser — the review is at B, so REVIEW is derived whether the row is
+#     read or not;
+#   - a DONE R1 whose commit is not in the history must keep it in EXEC: the second world that fails
+#     under the blind parser, and the only one that shows a done R row is READ and not skipped.
 cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.rn.bak"
 printf '%s\n' '| R1 | finding #1 of r1 becomes an increment | `true` → 0 | pending | — |' >> "$MDIR/checkpoint.md"
 assert_phase "a review graded B with a pending R1 hands the ball to EXEC" "EXEC"
@@ -1661,6 +1695,13 @@ else
   fail "R1-done fixture" "an R1 row marked done with a real hash" "$(grep '^| R1' "$MDIR/checkpoint.md")"
 fi
 assert_phase "and once R1 is done the ball comes back to REVIEW" "REVIEW"
+sed -i "s@| done | $R1_HASH |@| done | deadbee |@" "$MDIR/checkpoint.md"
+if grep -qF '| R1 | finding #1 of r1 becomes an increment | `true` → 0 | done | deadbee |' "$MDIR/checkpoint.md"; then
+  pass "fixture: the R1 row is done with a commit that is not in the history"
+else
+  fail "R1-unreachable fixture" "an R1 row marked done with the hash deadbee" "$(grep '^| R1' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a done R1 whose commit is not in the history keeps the ball in EXEC" "EXEC"
 mv "$MDIR/checkpoint.rn.bak" "$MDIR/checkpoint.md"
 
 # The `—` with "Not analyzed" is what the skill emits on a focused review
@@ -2109,6 +2150,14 @@ f3_phase "WIP is an admission the criterion is unfinished" "REVIEW"
 
 write_r11 "FILL ME"; commit_r11
 f3_phase "FILL ME, the fill-in written as two words" "REVIEW"
+
+# The last two words of the list, and the only two that had no world: taking either out of the
+# gate left this file green (issue #106, measured on 8033a79), while taking out WIP turned it red.
+write_r11 "FIXME"; commit_r11
+f3_phase "FIXME, the marker left for a later fix" "REVIEW"
+
+write_r11 "XXX"; commit_r11
+f3_phase "XXX, the marker that says look here" "REVIEW"
 
 # A cell that is only punctuation says nothing at all. `-` is ONE keystroke from the `—` two
 # worlds below, which is why the pair has to be measured and not reasoned about. There is no
@@ -3578,7 +3627,9 @@ git branch -f missao/20260103-existing HEAD
 git checkout -q main
 BR_DRY_OUT="$( cd "$FIX" && "$SDD" run --dry-run "$BM" 2>&1 )"; BR_DRY_RC=$?
 BR_DRY_AT="$(git branch --show-current)"
+BR_RUN_S0="$(stub_sessions)"
 BR_RUN_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_RUN_RC=$?
+BR_RUN_S1="$(stub_sessions)"
 BR_RUN_AT="$(git branch --show-current)"
 # The switch has to reach the TRAIL as well as the working tree. pipeline.log is where a human (and
 # the kaizen judge) reconstructs what a run did, and a checkout is the single event most likely to
@@ -3592,7 +3643,7 @@ if [ "$BR_DRY_AT" = "main" ] \
    && [ "$BR_LOG_LINES" = "1" ] \
    && grep -qF "branch: main → missao/20260103-existing" <<< "$BR_RUN_OUT" \
    && ! grep -qE "$BRANCH_LINE" <<< "$BR_DRY_OUT" \
-   && ! grep -q "the test invoked the real claude" <<< "$BR_RUN_OUT"; then
+   && [ "$BR_RUN_S1" = "$BR_RUN_S0" ]; then
   pass "branch declared and already there: sdd run checks it out, logs it, and a dry run does neither"
 else
   fail "branch declared and already there: sdd run checks it out, logs it, and a dry run does neither" \
@@ -3780,7 +3831,9 @@ if [ "$(git hash-object --no-filters "$BMDIR/00-missao.md")" = "$(git rev-parse 
   BR_OPT_APPROVED_MATCH=yes
 fi
 printf 'an uncommitted line the human has not saved anywhere else\n' > file.txt
+BR_OPT_S0="$(stub_sessions)"
 BR_OPT_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_OPT_RC=$?
+BR_OPT_S1="$(stub_sessions)"
 BR_OPT_AT="$(git branch --show-current)"
 BR_OPT_FILE="$(cat file.txt)"
 if [ "$BR_OPT_RC" -eq 1 ] \
@@ -3791,7 +3844,7 @@ if [ "$BR_OPT_RC" -eq 1 ] \
    && grep -q "git would read it as an option" <<< "$BR_OPT_OUT" \
    && ! grep -qE "$BRANCH_LINE" <<< "$BR_OPT_OUT" \
    && ! grep -q "BLOCKED in EXEC" <<< "$BR_OPT_OUT" \
-   && ! grep -q "the test invoked the real claude" <<< "$BR_OPT_OUT"; then
+   && [ "$BR_OPT_S1" = "$BR_OPT_S0" ]; then
   pass "a declared name git would read as an option is refused, and the dirty tree survives it"
 else
   fail "a declared name git would read as an option is refused, and the dirty tree survives it" \
@@ -3874,12 +3927,14 @@ branch: missao/20260104-retry
 ---
 # Mission fixture
 EOF
+BR_RETRY_S0="$(stub_sessions)"
 BR_RETRY_OUT="$( cd "$FIX" && "$SDD" retry "$RM" 2>&1 )"; BR_RETRY_RC=$?
+BR_RETRY_S1="$(stub_sessions)"
 BR_RETRY_AT="$(git branch --show-current)"
 if [ "$BR_RETRY_AT" = "missao/20260104-retry" ] \
    && [ "$BR_RETRY_RC" -eq 1 ] \
    && grep -q "PLAN is interactive" <<< "$BR_RETRY_OUT" \
-   && ! grep -q "the test invoked the real claude" <<< "$BR_RETRY_OUT"; then
+   && [ "$BR_RETRY_S1" = "$BR_RETRY_S0" ]; then
   pass "sdd retry is the other call site: it honours the declared branch before it stops at PLAN"
 else
   fail "sdd retry is the other call site: it honours the declared branch before it stops at PLAN" \
@@ -3961,13 +4016,15 @@ sed -i 's/source progress/destination progress/' "$PMDIR/checkpoint.md"
 git commit -qam "branch fixture: independent checkpoint progress"
 git checkout -q main
 
+PI_OK_S0="$(stub_sessions)"
 PI_OK_OUT="$( cd "$FIX" && "$SDD" run "$PM" 2>&1 )"; PI_OK_RC=$?
+PI_OK_S1="$(stub_sessions)"
 PI_OK_AT="$(git branch --show-current)"
 if [ "$PI_OK_RC" -eq 3 ] \
    && [ "$PI_OK_AT" = "$PTARGET" ] \
    && grep -qF "branch: main → $PTARGET" <<< "$PI_OK_OUT" \
    && grep -q "BLOCKED in EXEC" <<< "$PI_OK_OUT" \
-   && ! grep -q "the test invoked the real claude" <<< "$PI_OK_OUT"; then
+   && [ "$PI_OK_S1" = "$PI_OK_S0" ]; then
   pass "identical mission and plan switch even when checkpoint progress differs"
 else
   fail "identical mission and plan switch even when checkpoint progress differs" \
@@ -4005,7 +4062,9 @@ git add "$PMDIR/01-plano.md"
 git commit -qm "branch fixture: newer approved plan on source"
 PI_NOTE_BEFORE="$(grep -Rhc 'intervention:' "$PMDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}')"
 PI_HEAD_BEFORE="$(git rev-parse HEAD)"
+PI_OLD_S0="$(stub_sessions)"
 PI_OLD_OUT="$( cd "$FIX" && "$SDD" run "$PM" --phase EXEC 2>&1 )"; PI_OLD_RC=$?
+PI_OLD_S1="$(stub_sessions)"
 PI_OLD_AT="$(git branch --show-current)"
 PI_NOTE_AFTER="$(grep -Rhc 'intervention:' "$PMDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}')"
 PI_HEAD_AFTER="$(git rev-parse HEAD)"
@@ -4017,7 +4076,7 @@ if [ "$PI_OLD_RC" -eq 1 ] \
    && grep -q "$PTARGET" <<< "$PI_OLD_OUT" \
    && grep -q "01-plano.md" <<< "$PI_OLD_OUT" \
    && ! grep -q "BLOCKED in EXEC" <<< "$PI_OLD_OUT" \
-   && ! grep -q "the test invoked the real claude" <<< "$PI_OLD_OUT"; then
+   && [ "$PI_OLD_S1" = "$PI_OLD_S0" ]; then
   pass "a stale destination plan is refused before checkout, intervention or session"
 else
   fail "a stale destination plan is refused before checkout, intervention or session" \
@@ -4184,7 +4243,9 @@ EOF
 # (stderr) from `dim` (stdout), and a warning nobody sees on the error stream is decoration again.
 RW_BASE_ERR="$SDD_STATE_FIX/retry-warn-main.err"
 RW_FEAT_ERR="$SDD_STATE_FIX/retry-warn-feature.err"
+RW_BASE_S0="$(stub_sessions)"
 RW_BASE_RAW="$( cd "$FIX" && "$SDD" retry "$RW" 2>"$RW_BASE_ERR" )"; RW_BASE_RC=$?
+RW_BASE_S1="$(stub_sessions)"
 RW_BASE_AT="$(git branch --show-current)"
 git checkout -q -b missao/20260105-retry-warn
 RW_FEAT_RAW="$( cd "$FIX" && "$SDD" retry "$RW" 2>"$RW_FEAT_ERR" )"; RW_FEAT_RC=$?
@@ -4209,7 +4270,7 @@ if grep -q 'you are on the base branch' "$RW_BASE_ERR" \
    && [ "$RW_BASE_RC" -eq 1 ] \
    && [ "$RW_BASE_AT" = "main" ] \
    && grep -q "PLAN is interactive" <<< "$RW_BASE_OUT" \
-   && ! grep -q "the test invoked the real claude" <<< "$RW_BASE_OUT"; then
+   && [ "$RW_BASE_S1" = "$RW_BASE_S0" ]; then
   pass "retry warns on the base branch too — on stderr, and still a warn and not a die"
 else
   fail "retry warns on the base branch too — on stderr, and still a warn and not a die" \
@@ -5192,12 +5253,7 @@ git -C "$FIX" checkout -q "$CLOSE_HOME"
 # a `gh` that answers MERGED to everything and a `claude` that returns success without doing
 # anything, and would never see why their new assertion passed. Restoring costs four lines.
 rm -f "$MDIR/10-ticket.md" "$MDIR/50-pr.md" "$FIX/.stub/gh" "$FIX/.stub/acli" "$CLOSE_JOURNAL" "$CLOSE_ARGV" "$CLOSE_ARGV.env"
-cat > "$FIX/.stub/claude" <<'STUB'
-#!/usr/bin/env bash
-echo "ERROR: the test invoked the real claude — the escalation path did not escape before the session" >&2
-exit 97
-STUB
-chmod +x "$FIX/.stub/claude"
+write_claude_stub
 
 echo "== sdd status --no-gates =="
 # The cheap answer to "where am I". `sdd status` derives the phase, and deriving the phase IS the

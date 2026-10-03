@@ -91,7 +91,9 @@
 # dropped on its own, pipe_rule always returning 0, each of the two call sites deleted, the doc
 # floor lowered to zero, and the `ok rule:` line removed. That round also found PROBE_FLOOR sitting
 # one below the real probe count — deleting a probe landed exactly on the floor and survived — so
-# the floor is tight now and a deleted probe is caught.
+# the floor is tight now and a deleted probe is caught. All eight DELETED something; the four that
+# SHORTEN a literal instead (PIPE_MECH "aw", "awk" or "a", PIPE_ESCAPE '\') survived until issue
+# #71 gave each literal a hand-written near-miss doc, and now die too.
 #
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
@@ -373,7 +375,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=28
+PROBE_FLOOR=30
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -604,6 +606,21 @@ selftest() {
   strip_lit "$escapeonly/agents/sdd-planner.md" "$PIPE_MECH"
   probe 'the escape without the mechanism is half a rule too' 1 \
     'agents/sdd-planner.md never states the pipe ban' "$escapeonly" --scan
+
+  # Near misses: a doc one character short of each literal must still be refused. The round that
+  # killed eight sabotages only DELETED things; SHORTENING a literal — PIPE_MECH="aw", "awk" or even
+  # "a", PIPE_ESCAPE='\' — left this selftest green (issue #71, measured on 8033a79), because
+  # strip_lit removes lines BY the variable and so follows any shorter literal. These two docs are
+  # edited by hand, never derived from the variables: awk with no -F'|', a backslash with no pipe.
+  local mechnear="$box/mechnear" escnear="$box/escnear"
+  build_tree "$mechnear"
+  sed -i "s/with a raw awk -F'|' that/with a raw awk that/" "$mechnear/agents/sdd-planner.md"
+  probe "awk without its -F'|' is a near miss, not the mechanism" 1 \
+    'agents/sdd-planner.md never states the pipe ban' "$mechnear" --scan
+  build_tree "$escnear"
+  sed -i 's/not even escaped as `\\|`/not even escaped with a backslash `\\`/' "$escnear/agents/sdd-planner.md"
+  probe 'a backslash without the pipe is a near miss, not the escape' 1 \
+    'agents/sdd-planner.md never states the pipe ban' "$escnear" --scan
 
   # And the ok line itself, which is what the mission Check counts: a pipe_rule that returned 0
   # without printing would leave the scan green and one assertion short, in silence.
