@@ -329,11 +329,12 @@ printf '#!/bin/sh\nexit 1\n' > "$FIX/.stub/claude"
 chmod +x "$FIX/.stub/claude"
 
 # --- an agent copy that drifted from the kit source -------------------------
-# DIFFERENTIAL on purpose, and it has to be. The obvious assertion — "the `N kit agent(s) checked`
-# line is absent" — is VACUOUS in this fixture: that line only prints under `fails -eq 0`, and here
-# claude and gh are stubbed to fail, so it never prints in ANY run, defect fully in place included.
-# What discriminates is the two runs compared against EACH OTHER: same fixture, one byte of
+# DIFFERENTIAL on purpose: the two runs compared against EACH OTHER — same fixture, one byte of
 # difference, exactly one more failed check. No fixture regime satisfies that by accident.
+# The `N kit agent(s) checked` line is asserted too, both ways. It used to print only under a
+# preflight-wide `fails -eq 0`, which claude and gh stubbed to fail never reach, so "absent" was
+# vacuous here; since issue #83 it counts the AGENT block's failures alone, and the intact run is
+# the witness that it can print at all.
 echo "== an agent copy drifted from the kit source =="
 
 AGENT=".claude/agents/sdd-executor.md"
@@ -364,6 +365,19 @@ assert_has "preflight got past the agent block" "current branch:" "$out"
 # arm, which changes no rc and no failure count, so nothing else in this file sees it.
 assert_lacks "no stale complaint when every copy matches the source" "stale" "$out"
 n_intact="$(failed_count "$out")"
+# The operator's line, with the kit's own agent count. Owns three sabotages: the line dropped, the
+# count off, and the guard back on the preflight-wide `fails` (gh is stubbed red above this block).
+# The SANITY guard below it keeps the claim honest: with no other red the line would print under
+# the old guard too, and the assertion would prove nothing about the counter.
+n_kit_agents="$(find "$ROOT/agents" -maxdepth 1 -name 'sdd-*.md' | wc -l | tr -d ' ')"
+assert_has "every copy matches: the agent line says how many were checked" \
+  "$n_kit_agents kit agent(s) checked" "$out"
+if [ -n "$n_intact" ] && [ "$n_intact" -ge 1 ]; then
+  pass "SANITY: the intact run carries another red, so the agent line is counted per block"
+else
+  fail "SANITY: the intact run carries another red, so the agent line is counted per block" \
+       ">= 1 failed check" "'$n_intact'"
+fi
 
 printf '\n<!-- drift: one byte the source does not have -->\n' >> "$AGENT"
 out="$( "$SDD" preflight 2>&1 )"
@@ -377,6 +391,8 @@ assert_has "a drifted agent copy fails the preflight" "agent sdd-executor.md sta
 # a file that is right there on disk. Owns the sabotage that keeps the stale branch but reuses the
 # missing branch's wording inside it; rc, count and the "stale" needle all survive that one.
 assert_lacks "a drifted copy is not reported as missing" "sdd-executor.md not installed" "$out"
+# Owns the guard dropped altogether: "checked" printed right under the failure it just booked.
+assert_lacks "a drifted copy silences the 'checked' line" "kit agent(s) checked" "$out"
 # THE differential half, and the only one that survives a `warn` that does not count: the text can
 # be perfect while the check silently passes. Compares the two readings of one fixture.
 if [ -n "$n_intact" ] && [ -n "$n_drift" ] && [ "$n_drift" -eq $((n_intact + 1)) ]; then

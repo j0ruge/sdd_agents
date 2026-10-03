@@ -564,6 +564,58 @@ else
        "rc $RC_CR_EMPTY · $(digest "$OUT_CR_EMPTY")"
 fi
 
+# The registry decides WHICH codereview is compared, never "the newest in the cache" (issue #114).
+# Claude Code loads the plugin from the `installPath` installed_plugins.json pins; the cache keeps
+# every version ever fetched beside it (ten on the machine where this was measured, nine orphaned).
+# The old pick — `find … | sort -V | tail -1` — compared the fixture against a file the session
+# never reads, and `sort -V` over the WHOLE path let a marketplace's name outrank a version.
+# Three worlds over one cache: the pinned 1.13.0 carries a criterion the fixture does not cover,
+# and a newer 1.19.0 beside it matches.
+#   PIN  — the registry pins 1.13.0: the drift is found, though a newer matching file is there;
+#   FREE — no registry: the fallback still reads the newest, 1.19.0, and matches — the differential
+#          half, which proves the registry is what moved the verdict and not the cache;
+#   GONE — the registry pins a version whose template is not on disk: refused out loud, never a
+#          silent fallback to whatever the cache holds (that fallback IS the defect).
+install_codereview_newer_match() {
+  local dir="$FIX/home/.claude/plugins/cache/fixture-marketplace/codereview/1.19.0/skills/codereview/references"
+  mkdir -p "$dir"
+  { printf '%s\n' "$GRADE_TABLE"; printf '\n## Grading Scale\n'; } > "$dir/report-template.md"
+}
+install_codereview_registry() { # install_codereview_registry <version the registry pins>
+  mkdir -p "$FIX/home/.claude/plugins"
+  jq -n --arg ip "$FIX/home/.claude/plugins/cache/fixture-marketplace/codereview/$1" --arg v "$1" \
+    '{version: 2, plugins: {"codereview@fixture-marketplace": [{scope: "user", installPath: $ip, version: $v}]}}' \
+    > "$FIX/home/.claude/plugins/installed_plugins.json"
+}
+clear_skills
+install_codereview_skill "| $UNKNOWN_CRITERION | A | fixture |"
+install_codereview_newer_match
+install_codereview_registry 1.13.0
+health_run
+OUT_CR_PIN="$HEALTH_OUT"; RC_CR_PIN="$HEALTH_RC"
+clear_skills
+install_codereview_skill "| $UNKNOWN_CRITERION | A | fixture |"
+install_codereview_newer_match
+health_run
+OUT_CR_FREE="$HEALTH_OUT"; RC_CR_FREE="$HEALTH_RC"
+clear_skills
+install_codereview_newer_match
+install_codereview_registry 1.14.0
+health_run
+OUT_CR_GONE="$HEALTH_OUT"; RC_CR_GONE="$HEALTH_RC"
+
+if [ "$RC_CR_PIN" -ne 0 ] \
+   && grep -qF "grade table has a criterion the fixture does not cover: '$UNKNOWN_CRITERION'" <<< "$OUT_CR_PIN" \
+   && [ "$RC_CR_FREE" -eq 0 ] && ! grep -q 'grade table has a criterion' <<< "$OUT_CR_FREE" \
+   && [ "$RC_CR_GONE" -ne 0 ] && grep -q 'the installed codereview has no references/report-template.md' <<< "$OUT_CR_GONE" \
+   && ! grep -q 'all 3 fixtures match' <<< "$OUT_CR_GONE"; then
+  pass "covered: the grade table is read from the codereview the registry pins, not the newest in the cache"
+else
+  fail "covered: the grade table is read from the codereview the registry pins, not the newest in the cache" \
+       "pinned drift found (rc != 0); no registry → the newest matches (rc 0, silent); a pinned path with no template refused out loud" \
+       "pin: rc $RC_CR_PIN · $(digest "$OUT_CR_PIN") // free: rc $RC_CR_FREE · $(digest "$OUT_CR_FREE") // gone: rc $RC_CR_GONE · $(digest "$OUT_CR_GONE")"
+fi
+
 
 # ---------------------------------------------------------------------------
 # 5 — the floor: a kit with nothing wrong reaches `kit healthy`
@@ -2156,7 +2208,11 @@ health_captures() {
 # `|| kit_cfg_rc=$?`, because rc 2 is the branch that says "does not parse", not a crash.
 # 37 → 38: the census follows every health_*() body outside the region (issue #69), so it gained
 # the `cwd_root` capture of health_kit_root — guarded inside, `|| true`, the spelling it always had.
-CAPTURE_FLOOR=38
+# 38 → 40: health_provenance reads the codereview the registry pins (issue #114) — the `pinned`
+# capture (jq over installed_plugins.json) and the pinned branch's `tpl` (find -quit under it),
+# both guarded inside with `|| true`: a registry jq cannot read is a machine with no pin, and a
+# pin with no template is refused by the line after, out loud, never by set -e.
+CAPTURE_FLOOR=40
 
 capture_report() {
   local out total safe offenders

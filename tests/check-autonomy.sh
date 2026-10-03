@@ -429,7 +429,9 @@ assert_eq "the second row is the retry" "true" "$(jq -r -s '.[1].auto_retry' "$L
 assert_eq "the two session rows share one session id (the retry has no fork id of its own)" \
   "true" "$(jq -s '.[1].session == .[0].session' "$LEDGER")"
 # The whole point of the metric: a session that changed nothing on disk is waste, and until now
-# the retry ran with no measurement at all.
+# the retry ran with no measurement at all. On THIS fixture the retry can only read false (it is
+# reached after a first pass that did not move, and moves nothing) — the field is observed TRUE in
+# the ceiling world, "the retry row carries its own moved" (issue #97).
 assert_eq "the retry carries its own moved" "false" "$(jq -r -s '.[1].moved' "$LEDGER")"
 assert_eq "the gate result rides with the session" "fail" "$(jq -r -s '.[0].gate' "$LEDGER")"
 assert_eq "claude's rc is recorded" "1" "$(jq -r -s '.[0].rc' "$LEDGER")"
@@ -4609,8 +4611,12 @@ assert_eq "cdpath: CDPATH=. yields the repo on ONE line, not the path echoed by 
 # ledger that is never migrated. Same shape as the CDPATH pair above and a strictly worse
 # consequence, which is why it sits beside it: there the identity moved, here it is not a path.
 GITSHIM="$CDROOT/oldgit"; mkdir -p "$GITSHIM"
+# Every rev-parse the shim answers is appended to $GITSHIM_TRACE when the caller sets it — the
+# INTERCEPTION witness of the agreement assertion below (issue #73).
+GITSHIM_TRACE_FILE="$CDROOT/oldgit.trace"
 { printf '#!/usr/bin/env bash\n'
   printf 'is_rp=0; for a in "$@"; do [ "$a" = rev-parse ] && is_rp=1; done\n'
+  printf 'if [ "$is_rp" = 1 ] && [ -n "${GITSHIM_TRACE:-}" ]; then printf "%%s\\n" "$*" >> "$GITSHIM_TRACE"; fi\n'
   printf 'if [ "$is_rp" = 1 ]; then\n'
   printf '  keep=(); echoed=()\n'
   printf '  for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a");; *) keep+=("$a");; esac; done\n'
@@ -4641,7 +4647,7 @@ assert_eq "the pre-2.31 git shim is armed: rev-parse echoes the flag it does not
 # string in BOTH worlds, reporting `clean 0` whether the guard was there or not. Measured: with
 # `mut_LEDGER_repo_root_shape_blind` applied — guard gone, `bash -n` clean — the whole of
 # check-autonomy.sh stayed green. A sensor written to protect a CRITICAL, blind to that CRITICAL.
-raw_oldgit() { ( cd "$1" && PATH="$GITSHIM:$PATH" SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 ); }
+raw_oldgit() { ( cd "$1" && PATH="$GITSHIM:$PATH" GITSHIM_TRACE="$GITSHIM_TRACE_FILE" SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 ); }
 
 # ⚠️ REFUSING the shape was only half the contract, and asserting the refusal alone is what let the
 # second defect live: the r2 of 20260818-lote-facil made the old git yield NOTHING and this
@@ -4658,15 +4664,52 @@ raw_oldgit() { ( cd "$1" && PATH="$GITSHIM:$PATH" SDD_STATE_DIR="$IDSTATE" "$SDD
 # property, and it is DIFFERENTIAL — the two gits compared to each other, so no fixture regime
 # satisfies it by accident and either side moving reproves it. Requiring `old` non-empty is what
 # stops "resolved nothing" from buying the green a third time.
+#
+# `seen` and `fell` are INTERCEPTION, and without them the four above could all be satisfied by a
+# runner that never met the shim (issue #73, measured: git resolved by an absolute path in
+# ledger_repo_root AND the shape guard deleted left the whole file green — the modern git answered,
+# and agreed with itself). The shim writes every rev-parse it answers to a trace: `seen` is the
+# flagged question reaching it, `fell` is the plain `--git-common-dir` the guard sent the runner to
+# afterwards. A response cannot carry this — the AGREEMENT above says the old git must answer the
+# same as the new one — so the witness is the trace, never the answer.
 assert_eq "cdpath: a git older than --path-format resolves the SAME identity, never the echoed flag" \
-  "one said clean same" \
-  "$( new="$(id_cd '' "$CDROOT/one")"; raw="$(raw_oldgit "$CDROOT/one")"
+  "one said clean same seen fell" \
+  "$( new="$(id_cd '' "$CDROOT/one")"; : > "$GITSHIM_TRACE_FILE"; raw="$(raw_oldgit "$CDROOT/one")"
+      tr="$(cat "$GITSHIM_TRACE_FILE" 2>/dev/null)"
+      if grep -q -- 'rev-parse --path-format=absolute --git-common-dir' <<< "$tr"; then i=seen; else i=unseen; fi
+      if grep -qE -- 'rev-parse --git-common-dir$' <<< "$tr"; then f=fell; else f=nofall; fi
       old="$(sed -n 's/.*no data for \([^:]*\):.*/\1/p' <<< "$raw")"
       case "$raw" in *"no data"*) s=said ;; *) s="mute:$(head -c 40 <<< "$raw")" ;; esac
       case "$raw" in *--path-format*) g=leaked ;; *) g=clean ;; esac
       if [ -n "$old" ] && [ "$old" = "$new" ]; then m=same
       else m="split:${old:-<empty>}|${new:-<empty>}"; fi
-      printf '%s %s %s %s' "${new##*/}" "$s" "$g" "$m" )"
+      printf '%s %s %s %s %s %s' "${new##*/}" "$s" "$g" "$m" "$i" "$f" )"
+
+# --- a repo whose PATH holds a newline is that path ---------------------------
+# Issue #72. The shape guard's first arm used to empty an absolute answer that spans two lines, and
+# the only absolute answer that does is a repository whose path contains `\n` — the pre-2.31 leak
+# starts with the echoed flag, never with `/`, and the second arm owns it. Emptied, the identity
+# became "not a repo": the sentinel of the OTHER meaning, which this file already refused once for
+# the old git. The property is the round trip: a row stamped with that path, read from inside that
+# repo, is local. The floor proves the world is armed — git really answers two lines for it — so a
+# fixture that failed to build a newline into the path cannot pass for the rule.
+NLDIR="$CDROOT/nl"$'\n'"repo"; NLSTATE="$OUTSIDE/nlstate"; mkdir -p "$NLSTATE"
+git init -q "$NLDIR" >/dev/null 2>&1
+# The ROOT, not the common dir: ledger_repo_root resolves `<root>/.git` and strips the `/.git` for
+# the human (the cosmetic strip), so the root is what the writer stamps and the reader compares — a
+# row carrying `<root>/.git` reads as another repo's (measured on the PR #208 review).
+NLID="$( CDPATH='' cd "$NLDIR" 2>/dev/null && pwd -P )"
+assert_eq "the newline world is armed: git answers that repo's common dir on two lines, absolute" \
+  "2 /" \
+  "$( o="$(git -C "$NLDIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+      printf '%s %s' "$(grep -c '' <<< "$o")" "$(head -c 1 <<< "$o")" )"
+jq -cn --arg repo "$NLID" '{"v":1,"ts":"2026-09-30T10:00:00-03:00","event":"session","run_id":"nl1","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"nl","repo":$repo,"mission":"m1","phase":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"nl1a","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"gate":"pass","gate_why":"ok"}' \
+  > "$NLSTATE/autonomy-log.jsonl"
+assert_eq "identity: a repo whose path holds a newline keeps that path, and its own row reads local" \
+  "rc:0 local:1 nodata:0" \
+  "$( out="$( cd "$NLDIR" && SDD_STATE_DIR="$NLSTATE" "$SDD" autonomy 2>&1 )"; rc=$?
+      printf 'rc:%s local:%s nodata:%s' "$rc" "$(grep -c '1 session(s) · 1 advanced' <<< "$out")" \
+        "$(grep -c 'no data' <<< "$out")" )"
 
 # --- ...and a row that cannot say where it came from is nobody's ------------
 # `ledger_row_is_local` used to answer `true` for a row with no `repo` key — local in EVERY repo.
@@ -4813,6 +4856,23 @@ out="$( SDD_STATE_DIR="$OUTSIDE/shape" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "a shape error dies with rc 1, not jq's own exit code" "1" "$rc"
 assert_eq "and the die message names the file" "1" \
   "$(grep -c "error:.*$OUTSIDE/shape/autonomy-log.jsonl" <<< "$out")"
+assert_eq "and the shape refusal says the row is not an object" "1" "$(grep -c 'not an object' <<< "$out")"
+
+# The other half of that sentence (issue #206): a row that IS an object but carries a field the
+# program cannot read. `"cost_usd":"4.0"` — a number written as a string — failed the same jq, and
+# the shape sentence above went out for it, sending the operator after a writer of non-objects that
+# does not exist. Two rows, one healthy, so the sum `+` meets the string; run with --all-repos so
+# the row's repo field does not depend on where the sensor stands.
+echo "== reader: an object row with a field jq cannot read =="
+mkdir -p "$OUTSIDE/field"
+FIELD_ROW='{"v":1,"ts":"2026-09-30T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"gate":"pass","gate_why":"ok"}'
+printf '%s\n%s\n' "$FIELD_ROW" "${FIELD_ROW/\"cost_usd\":1.5/\"cost_usd\":\"4.0\"}" > "$OUTSIDE/field/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/field" "$SDD" autonomy --all-repos 2>&1 )"; rc=$?
+assert_eq "a field jq cannot read dies with rc 1" "1" "$rc"
+assert_eq "and the die message names the file" "1" \
+  "$(grep -c "error: unreadable row in $OUTSIDE/field/autonomy-log.jsonl" <<< "$out")"
+assert_eq "and it does NOT blame a row that is not an object" "0" "$(grep -c 'not an object' <<< "$out")"
+assert_eq "and it hands over jq's own diagnosis" "1" "$(grep -c 'cannot be added' <<< "$out")"
 
 # An empty ledger is NOT 0% waste. Zeros that look like excellence are the vacuity the whole kit
 # exists to kill.
@@ -5031,6 +5091,13 @@ assert_eq "the ceiling stops the phase by sessions spent, not by laps of the loo
 assert_eq "...and on this fixture the two units really do disagree" "fewer" \
   "$( if [ "${ceil_laps:-0}" -lt "${ceil_sessions:-0}" ]; then echo fewer
       else echo "same:${ceil_laps:-0}/${ceil_sessions:-0}"; fi )"
+# Issue #97: the retry row's own `moved`, observed TRUE through the real path. Everywhere else the
+# retry is reached only after a first pass that moved nothing, and then moves nothing itself, so a
+# retry row that wrote a literal `false` read exactly like the truth — run-all stayed green with
+# it. Here every first pass fails without moving and every retry closes an increment: grouped by
+# `auto_retry`, the first passes read false and the retries true, and a pinned row reads "false false".
+assert_eq "the retry row carries its own moved: true where the retry committed" "false true" \
+  "$(jq -rs '[.[] | select(.event == "session")] | group_by(.auto_retry) | map(map(.moved | tostring) | unique | join(",")) | join(" ")' "$CEILLEDGER" 2>/dev/null)"
 
 echo "== reader: the human-facing output =="
 
@@ -5666,13 +5733,23 @@ kitguard_reset
 KGT="$OUTSIDE/kitguard-target"
 kitguard_world "$KGT"
 kitguard_stub "$FAKEKIT"
-KG1_ERR="$( cd "$KGT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"; KG1_RC=$?
+KG1_ERR="$( cd "$KGT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >"$OUTSIDE/kg1.out" )"; KG1_RC=$?
+KG1_OUT="$(cat "$OUTSIDE/kg1.out" 2>/dev/null || true)"
 KG1_LOG="$(cat "$KGT/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 KG1_BEFORE="$(grep -oE 'kit_before=[^ ]+' <<< "$KG1_LOG" | head -1)"
 KG1_AFTER="$(grep -oE 'kit_after=[^ ]+' <<< "$KG1_LOG" | head -1)"
 assert_eq "kit-guard: a session that edits the kit during another repo's mission is warned once and journalled once" \
   "sessions:1 moved:1 lines:1 warns:1 phase:EXEC differ:1 rc:3 kind:kit-touched" \
   "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG1_LOG") warns:$(grep -c 'changed during' <<< "$KG1_ERR") phase:$(grep -oE 'KIT-TOUCHED[[:space:]]+[A-Z]+' <<< "$KG1_LOG" | head -1 | awk '{print $2}') differ:$([ "${KG1_BEFORE#kit_before=}" != "${KG1_AFTER#kit_after=}" ] && echo 1 || echo 0) rc:$KG1_RC kind:$(hat_rows)"
+# Issue #139: the row says what the runner MEASURED — the kit moved during the phase — and that who
+# moved it was not measured. Both kit-touched rows of the real ledger were a human working on the
+# kit, one of them with no commit at all, and the old tail blamed "a session committing outside its
+# mission's repo"; the old remedy sent that human to undo their own work. Three terms, so a reworded
+# accusation, a dropped admission and a generic remedy each turn one of them.
+KG1_WHY="$(jq -r -s '[.[] | select(.event == "blocked" and .kind == "kit-touched") | .gate_why] | first // ""' "$LEDGER" 2>/dev/null)"
+assert_eq "kit-guard: the row admits the editor was not measured, accuses no session, and the remedy names both readings" \
+  "unmeasured:1 accuses:0 remedy:1" \
+  "unmeasured:$(kitguard_has "$KG1_WHY" 'who edited it was not measured') accuses:$(kitguard_has "$KG1_WHY" 'a session committing') remedy:$(kitguard_has "$KG1_OUT" 'If that was you working on the kit')"
 
 # 2. CONTROL. The same run, same sessions, same everything — with a session that leaves the kit
 #    alone. Without this term the guard could be a line printed unconditionally; without the

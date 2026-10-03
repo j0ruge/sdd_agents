@@ -67,8 +67,8 @@ not a failure.
 This is the heart of the phase. Every **confirmed** finding that goes through a browser journey
 becomes a permanent sensor in CI:
 
-- a file in `<E2E_DIR>/` following the repo's convention (in `sales_quote`:
-  `sq<NN>-<slug>.spec.ts`, where `<NN>` is the issue number);
+- a file in `<E2E_DIR>/` named after the convention of the specs already there (read it off them,
+  e.g. `<prefix><NN>-<slug>.spec.ts`, where `<NN>` is the issue number);
 - the spec reproduces the user path that exposed the finding — it comes in through the same entry
   point, acts through the same verbs, checks the same observable;
 - run `E2E_CMD` and **watch the spec fail** while the bug is present. A spec that passes with the
@@ -177,7 +177,8 @@ bottom of this file is unchanged: this one field is a complement, not a rewrite.
 boot prompt names — a bare `templates/` resolves to nothing in a target repo, because the kit
 installs the agents and the config there but never the templates:
 
-- frontmatter: `fase: QA`, `status: done|skipped|blocked`, `sessao`, `gate:` with real evidence —
+- frontmatter: `fase: QA`, `status: done|skipped|blocked` (exactly one of the three, lower case — any
+  other value, or no `status:` line, is refused by the gate), `sessao`, `gate:` with real evidence —
   **with interface**: the report name, the count of sessions walked, the `E2E_CMD` output;
   **without interface**: the command of each journey you walked and what you observed, plus the
   `TEST_CMD` output. In this second case the `gate:` is what the runner measures (§0) — empty, and
