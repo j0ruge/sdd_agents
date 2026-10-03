@@ -2552,6 +2552,15 @@ mut_AUTONOMY_all_repos_ignored() {
   sed -i 's@LEDGER_ALL_REPOS=1@LEDGER_ALL_REPOS=0@g' "$1"
 }
 
+# Issue #206: two refusals, two remedies. The shape question asked on its own, and jq's own words
+# when a FIELD fails — before, any failure of the program was blamed on a row that is not an object.
+mut_AUTONOMY_jq_stderr_swallowed() {
+  sed -i "s|^  ' \"\$file\" 2>\"\$jq_err\")\" \|\| jq_rc=\$?$|  ' \"\$file\" 2>/dev/null)\" \|\| jq_rc=\$?|" "$1"  # sdd-pipefail-waiver: sed s|…|…| delimiter, not a pipe
+}
+mut_AUTONOMY_shape_not_asked() {
+  sed -i "s|^  jq -e -s 'all(type == \"object\")' \"\$file\" >/dev/null 2>&1 \\\\$|  true \\\\|" "$1"
+}
+
 # Not a gate: the ledger's repo identity goes back to `git rev-parse --show-toplevel`, which
 # answers per WORKTREE. Nothing fails, nothing is malformed — a mission run from `git worktree add`
 # simply stamps a path no other checkout of the same repo recognizes, and every reader files those
@@ -5233,6 +5242,8 @@ CATALOG=(
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
   AUTONOMY_version_drops_close_money
+  AUTONOMY_jq_stderr_swallowed
+  AUTONOMY_shape_not_asked
   AUTONOMY_close_remainder_silent
   AUTONOMY_close_key_subsequence
   PLAN_empty_approval

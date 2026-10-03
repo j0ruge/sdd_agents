@@ -4813,6 +4813,23 @@ out="$( SDD_STATE_DIR="$OUTSIDE/shape" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "a shape error dies with rc 1, not jq's own exit code" "1" "$rc"
 assert_eq "and the die message names the file" "1" \
   "$(grep -c "error:.*$OUTSIDE/shape/autonomy-log.jsonl" <<< "$out")"
+assert_eq "and the shape refusal says the row is not an object" "1" "$(grep -c 'not an object' <<< "$out")"
+
+# The other half of that sentence (issue #206): a row that IS an object but carries a field the
+# program cannot read. `"cost_usd":"4.0"` — a number written as a string — failed the same jq, and
+# the shape sentence above went out for it, sending the operator after a writer of non-objects that
+# does not exist. Two rows, one healthy, so the sum `+` meets the string; run with --all-repos so
+# the row's repo field does not depend on where the sensor stands.
+echo "== reader: an object row with a field jq cannot read =="
+mkdir -p "$OUTSIDE/field"
+FIELD_ROW='{"v":1,"ts":"2026-09-30T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"gate":"pass","gate_why":"ok"}'
+printf '%s\n%s\n' "$FIELD_ROW" "${FIELD_ROW/\"cost_usd\":1.5/\"cost_usd\":\"4.0\"}" > "$OUTSIDE/field/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/field" "$SDD" autonomy --all-repos 2>&1 )"; rc=$?
+assert_eq "a field jq cannot read dies with rc 1" "1" "$rc"
+assert_eq "and the die message names the file" "1" \
+  "$(grep -c "error: unreadable row in $OUTSIDE/field/autonomy-log.jsonl" <<< "$out")"
+assert_eq "and it does NOT blame a row that is not an object" "0" "$(grep -c 'not an object' <<< "$out")"
+assert_eq "and it hands over jq's own diagnosis" "1" "$(grep -c 'cannot be added' <<< "$out")"
 
 # An empty ledger is NOT 0% waste. Zeros that look like excellence are the vacuity the whole kit
 # exists to kill.

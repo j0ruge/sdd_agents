@@ -8875,6 +8875,12 @@ cmd_autonomy() {
   # A malformed row dies loudly. Skipping it quietly is how a judge ends up reading a subset and
   # calling it the whole history.
   ledger_parses "$file" || die "malformed row in $file — the ledger is not readable"
+  # The SHAPE, asked on its own (issue #206): a row that parses but is not an object is one defect
+  # with one remedy — find the writer — and it used to be inferred from ANY failure of the program
+  # below, so an object row carrying `"cost_usd":"4.0"` was told to go hunting for a writer of
+  # non-objects that does not exist.
+  jq -e -s 'all(type == "object")' "$file" >/dev/null 2>&1 \
+    || die "unreadable row in $file — a row is valid JSON but not an object; find the writer that produced it"
 
   # A REAL row count, not a line count. `grep -c .` counted LINES: a single pretty-printed JSON
   # row made the header say "9 row(s)" while the table correctly said "1 session(s)" — two
@@ -9015,7 +9021,8 @@ cmd_autonomy() {
   # classified at all — indexing it with .event is a jq runtime error, not a false comparison — so
   # that failure is caught below and re-raised through die(), same rc 1 as every other refusal in
   # this command instead of leaking jq's own exit code.
-  local out jq_rc=0
+  local out jq_rc=0 jq_err
+  jq_err="$(mktemp "${TMPDIR:-/tmp}/sdd-autonomy-jq-XXXXXX")" || die "autonomy: could not create a temporary file"
   out="$(jq -rs --arg repo "$repo" --argjson interventions "$interventions" \
                 --argjson by_mission "$by_mission" --arg allrepos "$LEDGER_ALL_REPOS" \
                 --arg phases "$PHASES" "$def""$odefs"'
@@ -9454,17 +9461,17 @@ cmd_autonomy() {
              then ["  never part of the \($local_total) counted above — these left before the header:"] + $outside
              else [] end))
        | select(length > 0) | "\n" + join("\n"))
-  ' "$file" 2>/dev/null)" || jq_rc=$?
+  ' "$file" 2>"$jq_err")" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then
-    # A DIFFERENT sentence from the `ledger_parses` refusal above, because they are different
-    # defects with different remedies: there a line is not JSON and somebody edits the line; here
-    # every line parses and one of them is not an object, so somebody has to find the writer that
-    # produced it. One sentence for both said "malformed row" to a reader who then could not tell
-    # which had happened. The other half of the pair keeps ITS wording on purpose — `kaizen_series`
-    # refuses the same unparseable ledger with the same words, and renaming one of those two would
-    # move the collision instead of removing it.
-    die "unreadable row in $file — a row is valid JSON but not an object; find the writer that produced it"
+    # Every row is a JSON object by now (the shape check above), so what failed is a FIELD the
+    # program could not read — a number written as a string, an object where a scalar goes. The
+    # runner does not know which row or why, and says so by handing over jq's own words instead of
+    # guessing a cause (issue #206: the guess sent the operator after the wrong writer). Same
+    # `unreadable row in <file>` head as the shape refusal, a different tail.
+    local why; why="$(head -c 400 "$jq_err" | tr '\n' ' ')"; rm -f "$jq_err"
+    die "unreadable row in $file — a row has a field jq could not read: ${why:-jq said nothing (rc $jq_rc)}"
   fi
+  rm -f "$jq_err"
   printf '%s\n' "$out"
 }
 
