@@ -2596,6 +2596,13 @@ mut_LEDGER_repo_root_shape_blind() {
   perl -0pi -e 's@  case "\$gitdir" in\n    /\*\) \[ "\$gitdir" = "\$\{gitdir%%\$.\\n.\*\}" \] \|\| gitdir="" ;;\n    \*\)  gitdir="" ;;\n  esac\n@@' "$1"
 }
 
+# Issue #73: the runner stops consulting the git on the PATH — the only way a pre-2.31 git reaches
+# ledger_repo_root. The modern git then answers both questions and agrees with itself, so every
+# identity assertion stays green; only the shim's trace (`seen fell`) shows nobody asked it.
+mut_LEDGER_repo_root_bypasses_shim() {
+  sed -i 's@^  local start="${REPO_ROOT:-$PWD}" gitdir$@  local start="${REPO_ROOT:-$PWD}" gitdir PATH="/usr/bin:/bin:$PATH"@' "$1"
+}
+
 mut_LEDGER_repo_root_toplevel() {
   sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
 }
@@ -5569,6 +5576,7 @@ CATALOG=(
   KAIZEN_degenerate_axis_blind
   AUTONOMY_all_repos_ignored
   LEDGER_repo_root_shape_blind
+  LEDGER_repo_root_bypasses_shim
   LEDGER_repo_root_toplevel
   LEDGER_no_repo_counted_as_local
   KAIZEN_series_default_per_repo

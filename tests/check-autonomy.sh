@@ -4609,8 +4609,12 @@ assert_eq "cdpath: CDPATH=. yields the repo on ONE line, not the path echoed by 
 # ledger that is never migrated. Same shape as the CDPATH pair above and a strictly worse
 # consequence, which is why it sits beside it: there the identity moved, here it is not a path.
 GITSHIM="$CDROOT/oldgit"; mkdir -p "$GITSHIM"
+# Every rev-parse the shim answers is appended to $GITSHIM_TRACE when the caller sets it — the
+# INTERCEPTION witness of the agreement assertion below (issue #73).
+GITSHIM_TRACE_FILE="$CDROOT/oldgit.trace"
 { printf '#!/usr/bin/env bash\n'
   printf 'is_rp=0; for a in "$@"; do [ "$a" = rev-parse ] && is_rp=1; done\n'
+  printf 'if [ "$is_rp" = 1 ] && [ -n "${GITSHIM_TRACE:-}" ]; then printf "%%s\\n" "$*" >> "$GITSHIM_TRACE"; fi\n'
   printf 'if [ "$is_rp" = 1 ]; then\n'
   printf '  keep=(); echoed=()\n'
   printf '  for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a");; *) keep+=("$a");; esac; done\n'
@@ -4641,7 +4645,7 @@ assert_eq "the pre-2.31 git shim is armed: rev-parse echoes the flag it does not
 # string in BOTH worlds, reporting `clean 0` whether the guard was there or not. Measured: with
 # `mut_LEDGER_repo_root_shape_blind` applied — guard gone, `bash -n` clean — the whole of
 # check-autonomy.sh stayed green. A sensor written to protect a CRITICAL, blind to that CRITICAL.
-raw_oldgit() { ( cd "$1" && PATH="$GITSHIM:$PATH" SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 ); }
+raw_oldgit() { ( cd "$1" && PATH="$GITSHIM:$PATH" GITSHIM_TRACE="$GITSHIM_TRACE_FILE" SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 ); }
 
 # ⚠️ REFUSING the shape was only half the contract, and asserting the refusal alone is what let the
 # second defect live: the r2 of 20260818-lote-facil made the old git yield NOTHING and this
@@ -4658,15 +4662,26 @@ raw_oldgit() { ( cd "$1" && PATH="$GITSHIM:$PATH" SDD_STATE_DIR="$IDSTATE" "$SDD
 # property, and it is DIFFERENTIAL — the two gits compared to each other, so no fixture regime
 # satisfies it by accident and either side moving reproves it. Requiring `old` non-empty is what
 # stops "resolved nothing" from buying the green a third time.
+#
+# `seen` and `fell` are INTERCEPTION, and without them the four above could all be satisfied by a
+# runner that never met the shim (issue #73, measured: git resolved by an absolute path in
+# ledger_repo_root AND the shape guard deleted left the whole file green — the modern git answered,
+# and agreed with itself). The shim writes every rev-parse it answers to a trace: `seen` is the
+# flagged question reaching it, `fell` is the plain `--git-common-dir` the guard sent the runner to
+# afterwards. A response cannot carry this — the AGREEMENT above says the old git must answer the
+# same as the new one — so the witness is the trace, never the answer.
 assert_eq "cdpath: a git older than --path-format resolves the SAME identity, never the echoed flag" \
-  "one said clean same" \
-  "$( new="$(id_cd '' "$CDROOT/one")"; raw="$(raw_oldgit "$CDROOT/one")"
+  "one said clean same seen fell" \
+  "$( new="$(id_cd '' "$CDROOT/one")"; : > "$GITSHIM_TRACE_FILE"; raw="$(raw_oldgit "$CDROOT/one")"
+      tr="$(cat "$GITSHIM_TRACE_FILE" 2>/dev/null)"
+      if grep -q -- 'rev-parse --path-format=absolute --git-common-dir' <<< "$tr"; then i=seen; else i=unseen; fi
+      if grep -qE -- 'rev-parse --git-common-dir$' <<< "$tr"; then f=fell; else f=nofall; fi
       old="$(sed -n 's/.*no data for \([^:]*\):.*/\1/p' <<< "$raw")"
       case "$raw" in *"no data"*) s=said ;; *) s="mute:$(head -c 40 <<< "$raw")" ;; esac
       case "$raw" in *--path-format*) g=leaked ;; *) g=clean ;; esac
       if [ -n "$old" ] && [ "$old" = "$new" ]; then m=same
       else m="split:${old:-<empty>}|${new:-<empty>}"; fi
-      printf '%s %s %s %s' "${new##*/}" "$s" "$g" "$m" )"
+      printf '%s %s %s %s %s %s' "${new##*/}" "$s" "$g" "$m" "$i" "$f" )"
 
 # --- ...and a row that cannot say where it came from is nobody's ------------
 # `ledger_row_is_local` used to answer `true` for a row with no `repo` key — local in EVERY repo.
