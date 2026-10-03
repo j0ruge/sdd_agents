@@ -970,9 +970,6 @@ mut_REVIEW_punctuation_only_blind() {
 mut_REVIEW_punctuated_fillin_blind() {
   sed -i '/^PLACEHOLDER_AWK=/,/^placeholder() {/ s|w = u; gsub(/\[^\[:alnum:\]\]/, "", w)|w = u|' "$1"
 }
-mut_REVIEW_punctuated_fillin_blind() {
-  sed -i '/^PLACEHOLDER_AWK=/,/^placeholder() {/ s|w = u; gsub(/\[^\[:alnum:\]\]/, "", w)|w = u|' "$1"
-}
 
 # The second caller of the shared placeholder() (issue #103): gate_QA, in a project with no
 # interface, stops refusing the template's untouched `gate: <…>` as evidence of a journey.
@@ -1209,9 +1206,6 @@ mut_PRE_default_branch_unchecked() {
 # and then gate_EXEC, running the same command for real, refuses for ever at one EXEC session per
 # lap. The sabotage leaves the verdict printed and only removes the EXECUTION, which is why
 # check-preflight.sh asserts it with a witness file instead of with the wording.
-mut_PRE_testcmd_never_run() {
-  sed -i 's@run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?@test_rc=0@' "$1"
-}
 mut_PRE_testcmd_never_run() {
   sed -i 's@run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?@test_rc=0@' "$1"
 }
@@ -1589,9 +1583,6 @@ mut_KAIZEN_guard_ignored() {
 # runner burns the whole phase budget against the wall it already knew was there. Note this is the
 # sabotage that a SMALL fixture cannot see: the race is decided by the size of the text, which is
 # why check-gates.sh asserts it on a 20000-row checkpoint.
-mut_RUN_jidoka_pipefail() {
-  sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"  # sdd-pipefail-waiver: this payload IS the bug, deliberately
-}
 mut_RUN_jidoka_pipefail() {
   sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"  # sdd-pipefail-waiver: this payload IS the bug, deliberately
 }
@@ -2159,9 +2150,6 @@ mut_CENSUS_boot_bill_worst_inverted() {
 # is the single thing the context diet is asking the judge to verify. Renamed rather than deleted
 # so the jq stays valid and the failure is the missing FACT, never a syntax error. Caught by "a
 # session row carries the cache-read tokens the session burned" in check-autonomy.sh.
-mut_AUTONOMY_cache_read_dropped() {
-  sed -i '/^autonomy_session_row() {/,/^}/ s@cache_read: ($cache_read@cache_readx: ($cache_read@' "$1"
-}
 mut_AUTONOMY_cache_read_dropped() {
   sed -i '/^autonomy_session_row() {/,/^}/ s@cache_read: ($cache_read@cache_readx: ($cache_read@' "$1"
 }
@@ -5863,24 +5851,36 @@ fi
 # A mutant DEFINED but never LISTED is dead code that no loop here runs, and the fast suite used
 # to stay green over it: four `mut_PRE_node_*` sat outside CATALOG for a whole branch, and only
 # `sdd health` — an hour in — would have said "ran 397 of the 401 defined". The definitions are
-# read with health's own spelling, so both programs count the same population.
+# read with health's own spelling (`^mut_…() {`).
 catalogue_orphans() { # catalogue_orphans <defined, one per line> <listed, one per line>
   comm -23 <(sort -u <<< "$1") <(sort -u <<< "$2")
 }
-if [ "$(catalogue_orphans $'a\nb' 'a')" != b ] || [ -n "$(catalogue_orphans 'a' $'a\nb')" ]; then
-  fail "SENSOR-BROKEN: catalogue_orphans misread a world whose answer is known" \
-       "expected exactly 'b' orphaned from {a, b} vs {a}, and nothing the other way round"
+# The same spelling is NOT the same population: health counts every definition (`grep -c`), and
+# the orphan check above de-duplicates both sides. A mutant defined twice — four were, pasted by an
+# insert script in PR #203 — left this check green while cmd_health would have read "ran 563 of
+# the 567 defined" and refused to stamp, fifty minutes in (CodeRabbit on PR #203). A name listed
+# twice in CATALOG breaks the same equality from the other side. Both are refused here.
+catalogue_dups() { sort <<< "$1" | uniq -d; } # catalogue_dups <names, one per line>
+if [ "$(catalogue_orphans $'a\nb' 'a')" != b ] || [ -n "$(catalogue_orphans 'a' $'a\nb')" ] \
+   || [ "$(catalogue_dups $'a\nb\na')" != a ] || [ -n "$(catalogue_dups $'a\nb')" ]; then
+  fail "SENSOR-BROKEN: catalogue_orphans or catalogue_dups misread a world whose answer is known" \
+       "expected 'b' orphaned from {a, b} vs {a} and nothing the other way round, and 'a' twice in {a, b, a}"
   exit 1
 fi
-orphans="$(catalogue_orphans \
-  "$(sed -nE 's/^mut_([A-Za-z0-9_]+)\(\) \{.*/\1/p' "$ROOT/tests/check-mutation.sh")" \
-  "$(printf '%s\n' "${CATALOG[@]}")")"
+defined_names="$(sed -nE 's/^mut_([A-Za-z0-9_]+)\(\) \{.*/\1/p' "$ROOT/tests/check-mutation.sh")"
+dups="$(catalogue_dups "$defined_names")$(catalogue_dups "$(printf '%s\n' "${CATALOG[@]}")")"
+if [ -n "$dups" ]; then
+  fail "CATALOGUE-BROKEN: mutant(s) defined or listed more than once — sdd health counts every definition and every entry, so its census would disagree with this catalogue" \
+       "$(tr '\n' ' ' <<< "$dups")"
+  exit 1
+fi
+orphans="$(catalogue_orphans "$defined_names" "$(printf '%s\n' "${CATALOG[@]}")")"
 if [ -n "$orphans" ]; then
   fail "CATALOGUE-BROKEN: mutant(s) defined but absent from CATALOG — nothing runs them" \
        "$(tr '\n' ' ' <<< "$orphans")"
   exit 1
 fi
-pass "the catalogue lists ${#CATALOG[@]} mutants (floor $CATALOGUE_FLOOR), every mut_* defined in this file among them"
+pass "the catalogue lists ${#CATALOG[@]} mutants (floor $CATALOGUE_FLOOR), every mut_* defined in this file among them, each once"
 
 # ---------------------------------------------------------------------------
 # --anchors: apply every mutant to a copy of bin/ and stop there — no suite, no control run.
