@@ -289,6 +289,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   com ADR que supere a alternativa (A) da ADR 0006, mantida pela 0009 (contar só o bug da missão).
   — descoberto por `sdd-qa` na missão `20260927-idioma-da-spa-pelo-idp` (2026-09-27)
 
+- [ ] **O checkpoint semeado no alvo cita um sensor que só existe no kit** —
+  `templates/checkpoint.md:33` (`tests/check-checkpoint.sh`) — o texto diz que ele recusa as formas
+  cegas "nos checkpoints deste repo", mas no alvo o caminho relativo não existe: no `ui24_agent`,
+  `bash tests/check-checkpoint.sh` deu `No such file or directory`. Quem segue o banner para ali ou
+  crê validada uma tabela que guarda nenhum leu. O modo certo já existe e serve: `--check` pelo
+  caminho do kit deu `rc=0` no checkpoint da S8. Direção: o template citá-lo assim, como o
+  `templates/todo.pt-BR.md` já faz ("do kit"). Parente do item do formato de achado nos alvos.
+  — descoberto por `retrofit-watch` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
+
 ### Saída humana e cosmética
 
 - [ ] **35% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
