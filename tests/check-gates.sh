@@ -2110,6 +2110,14 @@ f3_phase "WIP is an admission the criterion is unfinished" "REVIEW"
 write_r11 "FILL ME"; commit_r11
 f3_phase "FILL ME, the fill-in written as two words" "REVIEW"
 
+# The last two words of the list, and the only two that had no world: taking either out of the
+# gate left this file green (issue #106, measured on 8033a79), while taking out WIP turned it red.
+write_r11 "FIXME"; commit_r11
+f3_phase "FIXME, the marker left for a later fix" "REVIEW"
+
+write_r11 "XXX"; commit_r11
+f3_phase "XXX, the marker that says look here" "REVIEW"
+
 # A cell that is only punctuation says nothing at all. `-` is ONE keystroke from the `—` two
 # worlds below, which is why the pair has to be measured and not reasoned about. There is no
 # second world for `?` or `.`: they die to the very same sabotage as this one, and a probe that
