@@ -4695,6 +4695,9 @@ assert_eq "cdpath: a git older than --path-format resolves the SAME identity, ne
 # fixture that failed to build a newline into the path cannot pass for the rule.
 NLDIR="$CDROOT/nl"$'\n'"repo"; NLSTATE="$OUTSIDE/nlstate"; mkdir -p "$NLSTATE"
 git init -q "$NLDIR" >/dev/null 2>&1
+# The ROOT, not the common dir: ledger_repo_root resolves `<root>/.git` and strips the `/.git` for
+# the human (the cosmetic strip), so the root is what the writer stamps and the reader compares — a
+# row carrying `<root>/.git` reads as another repo's (measured on the PR #208 review).
 NLID="$( CDPATH='' cd "$NLDIR" 2>/dev/null && pwd -P )"
 assert_eq "the newline world is armed: git answers that repo's common dir on two lines, absolute" \
   "2 /" \
