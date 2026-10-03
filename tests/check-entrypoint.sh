@@ -379,10 +379,13 @@ probe_composition() {
 # and NOT the other branch's: both branches share the rc, so the rc alone tells them apart from
 # the ok line and from nothing else.
 probe_differential() {
-  local u="$1" g="$2" want="$3" unwanted="$4" out rc
+  local u="$1" g="$2" want="$3" unwanted="$4" out rc right=1
   DIFF_SEEN="$DIFF_SEEN $u:$g"
   out="$(differential "$u" "$g" 2>&1)"; rc=$?
-  if [ "$rc" -ne 90 ] || ! grep -qF -- "$want" <<< "$out" || grep -qF -- "$unwanted" <<< "$out"; then
+  [ "$rc" -eq 90 ] || right=0
+  grep -qF -- "$want" <<< "$out" || right=0
+  if grep -qF -- "$unwanted" <<< "$out"; then right=0; fi
+  if [ "$right" -ne 1 ]; then
     printf 'SENSOR-BROKEN: the differential judged %s vs %s with rc %s and said:\n%s\n' \
       "$u" "$g" "$rc" "$out" >&2
     printf '  wanted rc 90, "%s", and no "%s"\n' "$want" "$unwanted" >&2

@@ -2564,7 +2564,7 @@ mut_AUTONOMY_all_repos_ignored() {
 # Issue #206: two refusals, two remedies. The shape question asked on its own, and jq's own words
 # when a FIELD fails — before, any failure of the program was blamed on a row that is not an object.
 mut_AUTONOMY_jq_stderr_swallowed() {
-  sed -i "s|^  ' \"\$file\" 2>\"\$jq_err\")\" \|\| jq_rc=\$?$|  ' \"\$file\" 2>/dev/null)\" \|\| jq_rc=\$?|" "$1"  # sdd-pipefail-waiver: sed s|…|…| delimiter, not a pipe
+  sed -i "s|^  ' \"\$file\" 2>\"\$jq_err\")\" \|\| jq_rc=\$?$|  ' \"\$file\" 2>/dev/null)\" \|\| jq_rc=\$?|" "$1"
 }
 mut_AUTONOMY_shape_not_asked() {
   sed -i "s|^  jq -e -s 'all(type == \"object\")' \"\$file\" >/dev/null 2>&1 \\\\$|  true \\\\|" "$1"
