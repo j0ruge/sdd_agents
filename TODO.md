@@ -89,7 +89,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Os dois literais "ESTRUTURAIS" da regra 3 do `check-checkpoint.sh` afrouxam em verde** —
-  `tests/check-checkpoint.sh:227` — `PIPE_MECH="awk"` vira `"aw"` e `PIPE_ESCAPE='\|'` vira `'\'`
+  `tests/check-checkpoint.sh:229` — `PIPE_MECH="awk"` vira `"aw"` e `PIPE_ESCAPE='\|'` vira `'\'`
   com o selftest verde; só `"a"` mata, e por acidente do fixture. O cabeçalho lista oito sabotagens
   mortas, todas de APAGAR — afrouxar, que é a regra do `CLAUDE.md`, não está coberto. Degradado
   assim, qualquer doc com "raw" e uma barra satisfaz a regra. Direção: um probe por literal, contra
@@ -326,7 +326,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **A âncora `^  ok    ` do Check não alcança 82 das 866 asserções da suíte** —
   `tests/check-templates.sh:64` — as primitivas `check()`/`refute()` imprimem `ok` com **três**
-  espaços enquanto `tests/check-checkpoint.sh:111` cobra quatro em todo repo adotante, e o
+  espaços enquanto `tests/check-checkpoint.sh:113` cobra quatro em todo repo adotante, e o
   `calibrate()` que existe para casar as duas pontas é cego a elas: lê só linhas com `pass() {`,
   logo enxerga 7 de 13 sensores e deixa 2 dos 8 comportamentais de fora prometendo "every
   behavioural sensor". Direção: unificar em quatro espaços **e** dar cobertura ao `calibrate()`.
