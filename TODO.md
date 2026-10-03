@@ -47,15 +47,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   assassino é um sensor tocado pelo diff, para o EXEC rodar antes do commit.
   — descoberto por `sdd health` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
-- [ ] **A ida e volta de branch do `check-autonomy.sh` herda o rótulo da sessão REVIEW** —
-  `tests/check-autonomy.sh:6502` (`foreign_elsewhere`) — os `git checkout` do fixture herdam o
-  `GIT_REFLOG_ACTION` de quem chama; dentro de sessão REVIEW o `trips:2` lê `trips:4` e a suíte
-  reprova (rc 1), na `main` também. O gate passa: o runner não carrega o rótulo, só o `claude -p`.
-  Direção: `env -u GIT_REFLOG_ACTION` no `foreign_run`/fixtures, ou o sensor inteiro sem o rótulo.
-  RESOLVED by 4815fe0.
-  Fonte: `docs/handoffs/20260930-a-sub-etapa-que-andou/40-review-r1.md` — achado por `sdd-reviewer`
-  na missão `20260930-a-sub-etapa-que-andou` (2026-10-01)
-
 - [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:1372` — o
   extrator da Âncora 3 pula blocos cercados e pega a primeira linha com forma de campo fora de um,
   então prosa nua abrindo com `- **Closable by:** human` acima do campo real ainda é lida como o
@@ -157,14 +148,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   local `false` coincide com o que o regime do fixture espera. Só o hardcode para `true` morre.
   Direção: um mundo em que o retry mexe no disco de verdade, ou estreitar o que a asserção diz.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
-- [ ] **`frontmatter_write` confia em três coisas que não valem sempre** — `bin/sdd:371` — o
-  `chmod --reference … || true` engole a falha e deixa o artefato 0600 para sempre em userland não
-  GNU; o `mv` troca um `00-missao.md` que seja SYMLINK por arquivo comum (o alvo real fica com o
-  valor velho, e o commit leva a troca de tipo); e `awk -v v="$valor"` interpreta escape de barra
-  invertida — inócuo no único chamador de hoje, armadilha para o segundo. Direção: `warn` no chmod,
-  `readlink -f` (ou `die`) no alvo, e valor por `ENVIRON` no awk. RESOLVED by ce1d2ed.
-  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
 
 - [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:5603` —
   ela só sai com `fails -eq 0`, e todo fixture offline reprova antes (o probe do `claude` e o
@@ -341,13 +324,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   comentário baixa a alegação, ou a asserção ganha o mundo que a distingue.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
-- [ ] **A suíte não tem `timeout` em lugar nenhum** — `tests/run-all.sh:101` (`run()`) — regra quebrada que
-  recursa sai como **travamento sem mensagem**, e não como vermelho; medido em `rc=124` sob
-  `timeout 20` na r2 desta missão. É a classe que já custou três sessões de REVIEW deste repo
-  (`4c86712`), e o probe de ponta a ponta do `check-templates.sh` está a uma edição dela.
-  Direção: barato, mas o número tem de ser escolhido a dedo por passo. RESOLVED by 8449ab8.
-  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
-
 - [ ] **A âncora `^  ok    ` do Check não alcança 82 das 866 asserções da suíte** —
   `tests/check-templates.sh:64` — as primitivas `check()`/`refute()` imprimem `ok` com **três**
   espaços enquanto `tests/check-checkpoint.sh:111` cobra quatro em todo repo adotante, e o
@@ -452,14 +428,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: o `sdd run` avisar quando `bin/sdd` ou config mudou sob ele (ou reler o config por gate).
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01); config por
   `claude` na missão `20260924-transacao-honra-o-timeout` (2026-09-24)
-
-- [ ] **Com os chapéus ligados por symlink, o `sdd install --force` de outro kit escreve no kit
-  ligado** — `bin/sdd:5101` (`updated (--force)`) — o `sdd-link-agents` troca as cópias de
-  `.claude/agents/` por symlinks para o kit, e um `cp` sobre symlink escreve no **destino** (medido
-  num scratch). Um `install --force` rodado de outra worktree do kit, ou de uma versão instalada,
-  reescreve os chapéus do kit ligado; o install não é sessão e não passa pela guarda de kit.
-  Direção: `cp --remove-destination`, ou recusar quando o alvo é symlink. RESOLVED by e303e4f.
-  — descoberto por `sdd-planner` na missão `20260926-a-carona-antes-do-congelamento` (2026-09-26)
 
 - [ ] **O checkpoint não tem grafia para incremento cujo produto não é commit** — `bin/sdd:1153`
   (`GATE_EXEC_CELL`) — o `gate_EXEC` exige 7 a 64 dígitos hex na célula Commit, e o
@@ -593,14 +561,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
 
-- [ ] **`checkpoint_note_intervention` vaza um arquivo vazio em `/tmp` a cada nota** —
-  `bin/sdd:483` (`mktemp`) — o `tmp` nasce antes do `if`, e o caminho de append no
-  `checkpoint-notas.md` (o de toda missão nova) nunca o usa nem o apaga. Medido em 2026-10-01: 13 340
-  arquivos `/tmp/sdd-ck-*` vazios desde 2026-09-08, 926 só nesse dia (a suíte força fase muitas
-  vezes); em repo-alvo, um por `--phase`/`retry`/`--budget-override`. Direção: criar o `tmp` só no
-  ramo do `awk`, com probe que conta `sdd-ck-*` antes e depois de uma nota. RESOLVED by 813f808.
-  — descoberto por `sessão coordenadora` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
-
 - [ ] **`gate_EXEC` valida por uma leitura e conta por outra, e uma célula vazia as separa** —
   `bin/sdd:1134` — o laço lê com `IFS=$'\t' read`, que COLAPSA tabs por serem whitespace de IFS; o
   `checkpoint_tally` lê com `awk -F'\t' $4`, que não colapsa. Uma célula vazia e os dois caem em
@@ -675,22 +635,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sabotagem provou cada nota — hoje narra em prosa, e prosa não é verificável.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
 
-- [ ] **`sdd approve` commita na branch corrente, mesmo a padrão, e só o `00-missao.md`** —
-  `bin/sdd:7367` — medido aqui: o commit da aprovação caiu na `main` local, com o `01-plano.md`, o
-  `checkpoint.md` e o ADR citado fora do git, ou seja, uma missão aprovada sem plano no histórico.
-  Em repo-alvo, alguém que dê `push` na `main` publica isso. Direção: recusar ou avisar quando a
-  branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro. RESOLVED by a64a69c.
-  Reincidiu no `sales_quote` em 2026-09-30: o gate REVIEW recusou `working tree dirty` até comitar o plano à mão.
-  — descoberto por `sessão coordenadora` na missão `20260922-o-motivo-da-fase` (2026-09-22)
-
-- [ ] **`check-coordination.sh` reprova quando herda SIGINT ignorado** — `tests/check-coordination.sh:816`
-  — o probe `signal status` (sinal 2) manda SIGINT ao `sdd run` e espera a morte; lançada com `&` de shell
-  não interativo (o `setsid nohup … &` que se usa para `sdd run`), a suíte nasce com `SigIgn 0x7`, o
-  bash não desfaz sinal ignorado na entrada, e o probe estoura 8 s: vermelho 3 de 3, verde 3 de 3 em
-  primeiro plano. O `TEST_CMD` de um gate num `sdd run` destacado herdaria a máscara (não medido).
-  Direção: SIG_DFL no filho do probe, ou declarar a pré-condição no cabeçalho. RESOLVED by d0a6aa4.
-  — descoberto por `sessão coordenadora` no PR #58 `fix/ancoras-do-catalogo` (2026-09-23)
-
 - [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:10284` — o
   worker relê o `bin/sdd` e sobe um 2º Python (`check`) só para provar a reentrada. Medido: sem ele
   o `sdd install` cai de ~160 para ~130 ms, e o #48 levou a suíte comportamental de 117 para 251 s.
@@ -707,13 +651,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   também uma vez por assassino distinto do mapa, com ele na frente, e exige verde.
   — descoberto por `revisão final` no PR #168 `perf/catalogo-assassino-primeiro` (2026-09-25)
 
-- [ ] **`sdd close` sem JIRA não volta à base** — `bin/sdd:10629` (`nothing to close`) — com
-  `JIRA_ENABLED=false` o `cmd_close` sai antes do `close_return_home`, e o fetch + `--ff-only` do
-  achado 7 não alcança repo sem JIRA, o próprio kit incluído: no fechamento do PR #176 a volta à
-  `main` foi feita à mão. Direção: chamar o `close_return_home` também nesse ramo, com probe e mutante.
-  RESOLVED by 46919f6.
-  — descoberto por `sdd close` (sessão interativa) na missão `20260928-os-achados-da-janela` (2026-09-29)
-
 - [ ] **`sdd status` travou mais de 2 min segurando a trava do checkout** — `bin/sdd:6404`
   (`cmd_status`) — no `sales_quote`, em 2026-10-01 às 00:30Z, um `sdd status` sem nenhum `sdd run`
   vivo ficou parado dentro do `sdd-coordination.py enter … auxiliary`, e o próprio processo
@@ -729,14 +666,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: `warn` quando o `chmod` falha, como o I5 fez, com probe por shim de `chmod`.
   Fonte: `docs/handoffs/20261002-onde-o-comando-do-humano-escreve/00-missao.md` (§ Fora de escopo).
   — descoberto por `sdd-planner` na missão `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
-
-- [ ] **`sdd close` sem `50-pr.md` sai da branch da missão e diz que ela foi mergeada** — `bin/sdd:10698`
-  (`prurl`) — sem `pr_url:` a conferência do merge é pulada, e o `close_return_home` imprime `the
-  mission branch is merged and spent` sem nada que o prove. Desde o I4 isso alcança também o ramo sem
-  JIRA, que antes não fazia nada. Medido num rascunho: `feat/x` sem PR, `sdd close` → rc 0 e HEAD na
-  `main`. Direção: o humano escolheu deixar de afirmar o merge. RESOLVED by c8778b7.
-  Fonte: `docs/handoffs/20261002-onde-o-comando-do-humano-escreve/30-handoff-qa.md`.
-  — descoberto por `sdd-qa` na missão `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
