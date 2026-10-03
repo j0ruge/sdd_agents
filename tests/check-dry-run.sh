@@ -7,7 +7,10 @@
 #
 # This test builds a fixture repo stalled at EXEC and asserts that the dry-run projects the whole
 # sequence of pending phases, in order, each with the right agent (or <none>, when the session is
-# driven by a third-party skill through the literal slash) — and that nothing on disk changes.
+# driven by a third-party skill through the literal slash) — and that it spends no session and
+# touches no mission artifact and no tracked path. Not "nothing on disk": past EXEC's `pending`
+# every gate that runs TEST_CMD writes its log under the gitignored .sdd/logs/, which is the
+# contract docs/pipeline.md states for the dry-run — measured by the world "past EXEC's pending".
 #
 # Usage: tests/check-dry-run.sh   (exit 0 = projection correct)
 
@@ -176,8 +179,8 @@ else
   pass "a phase with a satisfied gate (TICKET) does not appear in the projection"
 fi
 
-# --- nothing is executed, nothing changes on disk --------------------------
-echo "== the dry-run does not touch the disk =="
+# --- nothing is executed, no mission artifact and no tracked path changes ----
+echo "== the dry-run touches no artifact (fixture stalled before any TEST_CMD) =="
 assert_eq "file tree identical before and after" "$before" "$after"
 assert_eq "working tree still clean" "" "$(git status --porcelain)"
 echo "== the projection does not accuse the human's dirty tree =="
@@ -653,6 +656,33 @@ md5_after="$(md5sum "$PIPELINE_LOG" | cut -d' ' -f1)"
 assert_eq "the projection does not MODIFY a pre-existing pipeline.log" "$md5_before" "$md5_after"
 
 sed -i 's/| blocked |/| pending |/' "$MDIR/checkpoint.md"
+
+# --- past EXEC's pending: the gates run TEST_CMD for real ----------------------
+# Every world above stalls at gate_EXEC's `pending > 0`, which returns BEFORE the gate reaches
+# TEST_CMD — so none of them saw the regime where a projection writes something. Past it, each gate
+# that runs TEST_CMD leaves .sdd/logs/<mission>/gate-*-test-*.log: accepted and gitignored, and the
+# contract docs/pipeline.md states (no session, no mission artifact, no branch switch — the gates
+# run for real). This world measures THAT contract, which the old name ("does not touch the disk")
+# promised more than; a fixture past EXEC refutes the old promise.
+echo "== past EXEC's pending, the projection still touches no mission artifact =="
+mdir_md5() { ( cd "$MDIR" && find . -type f -exec md5sum {} + | LC_ALL=C sort ); }
+sed -i "s/| pending | — |/| done | $(git rev-parse --short HEAD) |/" "$MDIR/checkpoint.md"
+git commit -qam "fixture: I1 done"
+art_before="$(mdir_md5)"; snap_before="$(tree_snapshot)"
+"$SDD" run "$MISSION" --dry-run >/dev/null 2>&1; rcp=$?
+art_after="$(mdir_md5)"; snap_after="$(tree_snapshot)"
+new_paths="$(LC_ALL=C comm -13 <(printf '%s\n' "$snap_before") <(printf '%s\n' "$snap_after"))"
+gate_log_re="^\./\.sdd/logs/$MISSION/gate-[a-z]+-test-[0-9]{8}-[0-9]{6}-[A-Za-z0-9]+\.log$"
+assert_eq "past EXEC: the dry-run still exits 0" "0" "$rcp"
+# The witness that this IS the regime the world is named after: with no gate log, the dry-run
+# stopped before any TEST_CMD again and the three assertions below would be the ones above.
+n_logs="$(grep -cE "$gate_log_re" <<< "$new_paths")"
+if [ "${n_logs:-0}" -ge 1 ]; then pass "past EXEC: a gate ran TEST_CMD ($n_logs gate log(s) written)"
+else fail "past EXEC: a gate ran TEST_CMD (the world reaches the regime it names)" ">= 1 gate log" "${n_logs:-0}"; fi
+assert_eq "past EXEC: every new path is a gate log under .sdd/logs/" "" "$(grep -vE "$gate_log_re" <<< "$new_paths")"
+assert_eq "past EXEC: the mission's artifacts are byte-identical" "$art_before" "$art_after"
+assert_eq "past EXEC: no tracked path changed" "" "$(git status --porcelain)"
+git reset -q --hard HEAD~1
 
 # --- scope hygiene: no function reads the caller's local --------------------
 # `pstep` is `local` to `run_phase`. Bash dynamic scoping means EVERY function it calls can see

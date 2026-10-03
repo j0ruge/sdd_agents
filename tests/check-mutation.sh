@@ -2243,6 +2243,13 @@ mut_RUN_escalation_hook_silent() {
 mut_RUN_escalation_hook_on_dry_run() {
   sed -i '/^escalation_hook() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
 }
+# Issue #94: a projection past EXEC's `pending` runs TEST_CMD for real, and its log is the one write
+# the dry-run contract allows — under the gitignored .sdd/logs/. Sending it to the repo root leaves
+# an untracked file in the target's tree from a command that promised to touch none; only the
+# "past EXEC's pending" world of check-dry-run.sh reaches the regime where a gate logs at all.
+mut_RUN_gate_log_in_tree() {
+  sed -i '/^run_check_cmd() {/,/^}/ s|logfile="$(mktemp "$(log_dir)/${label}-|logfile="$(mktemp "$REPO_ROOT/${label}-|' "$1"
+}
 mut_RUN_escalation_hook_before_ledger() {
   sed -i 's|^autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; escalation_hook "$1" "$2" "$3"; }$|autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked" "$1" "$2" "$3"; }|' "$1"
 }
@@ -5432,6 +5439,7 @@ CATALOG=(
   RUN_intervention_written_on_dry_run
   RUN_escalation_hook_silent
   RUN_escalation_hook_on_dry_run
+  RUN_gate_log_in_tree
   RUN_escalation_hook_before_ledger
   RUN_escalation_hook_timeout_short
   RUN_escalation_hook_without_timeout_guard

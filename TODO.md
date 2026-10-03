@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
-  `tests/check-mutation.sh:5827` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
+  `tests/check-mutation.sh:5835` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
   mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
   só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
   qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
@@ -66,7 +66,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260819-fecho-...` (2026-08-19)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2026` contra `tests/check-mutation.sh:5732` — a chave lê `bin tests templates config`,
+  `bin/sdd:2026` contra `tests/check-mutation.sh:5740` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -379,8 +379,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   escreve os dois lados, o resto vira `adr: none`, e aí a chave volta para `block`. — descoberto
   por `codereview` na missão `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
 
-- [ ] **A prosa dos chapéus ainda cita o `sales_quote`** — `agents/sdd-docs.md:78`
-  (`packages/x/serializer.ts`) — o exemplo da tabela de drift é um caminho daquele repo, e o
+- [ ] **A prosa dos chapéus ainda cita o `sales_quote`** — `agents/sdd-docs.md:27`
+  (`KAIZEN_LOG.md`) — o exemplo `packages/x/serializer.ts` da tabela de drift é um caminho daquele repo, e o
   `sdd-docs.md` e o `sdd-reviewer.md` mandam ler `KAIZEN_LOG.md`, `CHANGELOG.md` e `CONTEXT.md`,
   que nenhum gate exige e que um repo novo não tem. É ruído de prompt, não falha: a sessão procura
   e não acha. Direção: neutralizar o exemplo e condicionar a leitura à existência do arquivo.
