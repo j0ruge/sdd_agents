@@ -1101,6 +1101,12 @@ gate_TICKET() {
     GATE_HANDOFF_BLOCKED=1
     GATE_WHY="10-ticket.md has status: blocked"; return 1
   fi
+  # Same enum rule as gate_QA (issue #205), with TICKET's two values: the ticket hat writes `done`
+  # or `blocked`, and the issue/sprint checks below are no stand-in — `BLOCKED` over a filled
+  # issue and sprint used to pass as `done`.
+  if [ "$st" != "done" ]; then
+    GATE_WHY="10-ticket.md has invalid status '$st' (use done|blocked)"; return 1
+  fi
   local issue; issue="$(frontmatter "$t" issue)"
   [ -n "$issue" ] || { GATE_WHY="10-ticket.md has no 'issue:' in the frontmatter"; return 1; }
   if ! grep -qiE '^sprint:[[:space:]]*\S' "$t"; then
@@ -1340,6 +1346,48 @@ gate_EXEC() {
   return 0
 }
 
+# placeholder() — the refused set of fill-ins, ONE definition for the two gates that judge a field
+# written by a model: gate_REVIEW (every Rationale cell and the `gate:` frontmatter, inside its awk)
+# and gate_QA (the `gate:` of a project with no interface). It lived inside gate_REVIEW's awk only,
+# and the untouched `gate: <…>` of templates/handoff.md passed gate_QA as evidence of a journey
+# (issue #103). Injected as awk text into gate_REVIEW's program, and run alone by the shell helper
+# below; the mutation catalogue anchors on the CALLS, never on this body.
+PLACEHOLDER_AWK='
+# The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
+# the whole cell wrapped in angle brackets, which is how the `### Overall Grade` table of
+# templates/review.md ships its fill-ins (named by SECTION and not by line number: the two
+# citations this comment used to carry both rotted, one of them by six lines);
+# a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
+# never the presence of a character — a real sentence containing <A> is a real sentence.
+# NOT refused: `clean`, `n/a` and `—`. Those are the codereview skill terse rationales
+# (its `### Overall Grade` section, likewise by name) and mean measured-with-nothing-to-say;
+# refusing them would make this gate contradict the skill it parses — the SQ-97 gate_DOCS bug.
+function placeholder(s,   u, w) {
+  if (s == "") return 1
+  if (s ~ /^<.*>$/) return 1
+  u = toupper(s)
+  # `—` is E2 80 94 and mawk is byte-oriented, so every rule written about punctuation sees
+  # three non-alphanumeric bytes there and not one character. This line is the ONLY reason
+  # the skill terse rationale survives the two rules below. Measured on mawk 1.3.4.
+  # The other two, `clean` and `n/a`, need no line here — they carry letters and are not in
+  # the list at the bottom, which is the mechanism, and the sensor holds a world for each.
+  if (s == "—") return 0
+  # A cell with no letter and no digit left in it says nothing at all: `-`, `?`, `.`, `--`,
+  # and the ellipsis in both its spellings, `...` and `…`.
+  if (u !~ /[[:alnum:]]/) return 1
+  # Compare the WORD, not the spelling. Equality alone let one keystroke buy the A: `TODO:`
+  # is what a model writes far more often than the bare `TODO` this list used to know, and
+  # `TBD.` is the same claim with a full stop.
+  w = u; gsub(/[^[:alnum:]]/, "", w)
+  if (w == "PREENCHER" || w == "TODO" || w == "TBD" || w == "FIXME" || w == "XXX" ||
+      w == "WIP" || w == "FILLME") return 1
+  return 0
+}
+'
+# placeholder <text> — rc 0 when <text> is a fill-in that says nothing, by the definition above.
+# Through ENVIRON and never `awk -v`, for gate_REVIEW's reason: -v runs escape sequences.
+placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit placeholder(ENVIRON["SDD_PLACEHOLDER_TEXT"]) ? 0 : 1 }'; }
+
 gate_QA() {
   GATE_HANDOFF_BLOCKED=0
   GATE_APP_DOWN=0
@@ -1358,6 +1406,15 @@ gate_QA() {
     GATE_HANDOFF_BLOCKED=1
     GATE_WHY="30-handoff-qa.md has status: blocked"; return 1
   fi
+  # The enum, written POSITIVELY (issue #205): past the two arms above, `done` is the only value
+  # that may read as success. Before this line every other spelling fell through as `done` — the
+  # template's literal `<done | blocked | skipped>`, `BLOCKED`, `blocked # waiting`, an empty value
+  # and a missing line among them, so a handoff that MEANT to stop the line passed the gate. The
+  # artifact has an owner (sdd-qa writes it), so the refusal is satisfiable; a value repeated lap
+  # after lap is the same reason on the same step, which no_work_check stops.
+  if [ "$st" != "done" ]; then
+    GATE_WHY="30-handoff-qa.md has invalid status '$st' (use done|blocked|skipped)"; return 1
+  fi
 
   # Project with no interface: the qa-report/qa-execution skills never ran (qa_substep sends it
   # straight to sdd-qa), so the docs/qa/ tree does not exist. Demanding their dated report would
@@ -1370,6 +1427,10 @@ gate_QA() {
     local evidence; evidence="$(frontmatter "$h" gate)"
     if [ -z "$evidence" ]; then
       GATE_WHY="project with no interface: 30-handoff-qa.md needs 'gate:' carrying the evidence of the journey walked"
+      return 1
+    fi
+    if placeholder "$evidence"; then
+      GATE_WHY="project with no interface: the 'gate:' of 30-handoff-qa.md is still a placeholder ($evidence) — it needs the evidence of the journey walked"
       return 1
     fi
   else
@@ -1638,7 +1699,7 @@ gate_REVIEW() {
   # the operator — a refusal quoting text that is not what is on disk. ENVIRON is handed over byte
   # for byte. `gate_present` stays on `-v`: it is one digit, and it has to arrive as a NUMBER.
   offending="$(SDD_GATE_FIELD="$gate_field" SDD_PROSE_CRITERIA="$REVIEW_PROSE_CRITERIA" \
-               SDD_PROSE_MIN_GRADE="$REVIEW_PROSE_MIN_GRADE" awk -v gate_present="$gate_present" '
+               SDD_PROSE_MIN_GRADE="$REVIEW_PROSE_MIN_GRADE" awk -v gate_present="$gate_present" "$PLACEHOLDER_AWK"'
       BEGIN {
         gate_field = ENVIRON["SDD_GATE_FIELD"]
         # The tolerated set and its floor come from config through ENVIRON, like the gate field:
@@ -1651,36 +1712,6 @@ gate_REVIEW() {
         floor = ENVIRON["SDD_PROSE_MIN_GRADE"]
       }
       function rank(g) { return index("FDCBA", substr(g, 1, 1)) }
-      # The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
-      # the whole cell wrapped in angle brackets, which is how the `### Overall Grade` table of
-      # templates/review.md ships its fill-ins (named by SECTION and not by line number: the two
-      # citations this comment used to carry both rotted, one of them by six lines);
-      # a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
-      # never the presence of a character — a real sentence containing <A> is a real sentence.
-      # NOT refused: `clean`, `n/a` and `—`. Those are the codereview skill terse rationales
-      # (its `### Overall Grade` section, likewise by name) and mean measured-with-nothing-to-say;
-      # refusing them would make this gate contradict the skill it parses — the SQ-97 gate_DOCS bug.
-      function placeholder(s,   u, w) {
-        if (s == "") return 1
-        if (s ~ /^<.*>$/) return 1
-        u = toupper(s)
-        # `—` is E2 80 94 and mawk is byte-oriented, so every rule written about punctuation sees
-        # three non-alphanumeric bytes there and not one character. This line is the ONLY reason
-        # the skill terse rationale survives the two rules below. Measured on mawk 1.3.4.
-        # The other two, `clean` and `n/a`, need no line here — they carry letters and are not in
-        # the list at the bottom, which is the mechanism, and the sensor holds a world for each.
-        if (s == "—") return 0
-        # A cell with no letter and no digit left in it says nothing at all: `-`, `?`, `.`, `--`,
-        # and the ellipsis in both its spellings, `...` and `…`.
-        if (u !~ /[[:alnum:]]/) return 1
-        # Compare the WORD, not the spelling. Equality alone let one keystroke buy the A: `TODO:`
-        # is what a model writes far more often than the bare `TODO` this list used to know, and
-        # `TBD.` is the same claim with a full stop.
-        w = u; gsub(/[^[:alnum:]]/, "", w)
-        if (w == "PREENCHER" || w == "TODO" || w == "TBD" || w == "FIXME" || w == "XXX" ||
-            w == "WIP" || w == "FILLME") return 1
-        return 0
-      }
       # DUPLICATED, deliberately, in checkpoint_rows — see the comment above that function for why
       # a shared helper would cost more than it saves. The two copies must stay identical.
       #
@@ -3107,7 +3138,7 @@ ledger_repo_root() {
   # `--show-toplevel` got both of those right and only worktrees wrong. The common dir gets all
   # three right, because it is the identity git itself keeps per repository.
   gitdir="$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0
-  # ⚠️ ONE ABSOLUTE LINE, or this is not an answer — and the test is load-bearing on any git older
+  # ⚠️ AN ABSOLUTE ANSWER, or this is not an answer — and the test is load-bearing on any git older
   # than 2.31, which is where `--path-format` was born. `git rev-parse` ECHOES a token it does not
   # recognize as an option straight back to stdout and still exits 0, so a pre-2.31 git answers TWO
   # lines here: the flag itself, then the common dir, still relative. `|| return 0` never fires (rc
@@ -3129,8 +3160,16 @@ ledger_repo_root() {
   # `cd`s, and only on a git that cannot do it in one. The sensor is the pre-2.31 differential pair
   # in tests/check-autonomy.sh, which asserts the two gits answer the SAME identity — not merely
   # that the new one does not leak.
+  #
+  # One arm, on the first byte. The old git's answer starts with the echoed flag, never with `/`,
+  # so a leading `/` alone separates the two gits. A newline INSIDE an absolute answer is a repo
+  # whose path holds one, and that path IS its identity: an arm that emptied it returned the
+  # "not a repo" sentinel for a repo that is one — the defect above, again (issue #72, measured:
+  # the repo's own row read "no data"). `jq --arg` carries the newline into the row and back.
+  # Declared limit: on a pre-2.31 git the fallback below still refuses such a path, because there a
+  # second line cannot be told from a leak.
   case "$gitdir" in
-    /*) [ "$gitdir" = "${gitdir%%$'\n'*}" ] || gitdir="" ;;
+    /*) ;;
     *)  gitdir="" ;;
   esac
   if [ -z "$gitdir" ]; then
@@ -3599,10 +3638,15 @@ autonomy_kit_stamp() {
 # lives in the runner. The other half is the instruction, which named the DESTINATION of a kit
 # finding and never said how to get it there.
 #
-# WARN AND RECORD. It never stops the line, and that is a decision with a named cost on both
-# sides: a human editing the kit in another terminal while a mission runs is a real, legitimate
-# false positive, and a guard that halts a paid pipeline on one is a guard the next author
-# disables — after which it catches nothing at all.
+# It warned and recorded until 20260903-a-fronteira-do-chapeu; since then it STOPS the line — kind
+# `kit-touched`, through hat_crossed_escalation's four doors. The cost that kept it a warning is now
+# paid the other way: a human editing the kit in another terminal while a mission runs is a real,
+# legitimate false positive, and it costs one more `sdd run`. Both kit-touched rows of the real
+# ledger were exactly that — 2026-09-18 a human commit, 2026-09-24 an uncommitted edit with no
+# commit at all (issue #139) — so the sentence below says what the runner MEASURED, that the kit
+# moved during the phase, and never who moved it. Attributing it (the kit's reflog against the
+# session's GIT_REFLOG_ACTION label) would cover the first case and not the second: a dirty edit
+# leaves no reflog.
 #
 # DECLARED LIMITS, so nobody reads this as more than it is:
 #   - it is NOT a security boundary. A session that commits and then resets inside the same phase
@@ -3682,9 +3726,9 @@ kit_guard_check() {
   [ "$kit_root" = "$REPO_ROOT" ] && return 0
   autonomy_kit_stamp; kit_after="$AUTONOMY_KIT_STAMP"
   [ "$kit_after" = "$KIT_GUARD_BEFORE" ] && return 0
-  warn "the kit at $kit_root changed during $phase, and this mission's repo is $REPO_ROOT — a session that edits the kit is committing outside its own mission (if that was you working on the kit in another terminal, this is that)"
+  warn "the kit at $kit_root changed during $phase, and this mission's repo is $REPO_ROOT — the runner does not know who changed it: a session of this mission editing outside its repo, or someone working on the kit in another terminal"
   pipeline_log_line "$(date -Iseconds)  KIT-TOUCHED  $phase  kit_before=$KIT_GUARD_BEFORE  kit_after=$kit_after"
-  KIT_TOUCHED_WHY="the kit at $kit_root was edited while $phase ran (kit_before=$KIT_GUARD_BEFORE kit_after=$kit_after) — a session committing outside its mission's repo"
+  KIT_TOUCHED_WHY="the kit at $kit_root was edited while $phase ran (kit_before=$KIT_GUARD_BEFORE kit_after=$kit_after) — who edited it was not measured: a session of this mission, or someone working on the kit in parallel"
   # Re-armed on the new value, so one divergence is reported ONCE. Left un-rearmed, every later
   # phase of the run would compare against the original baseline and repeat the same warning to
   # the end of the pipeline.
@@ -3997,6 +4041,12 @@ hat_crossed_escalation() {   # hat_crossed_escalation <phase> — rc 0 = STOP (r
     # weakens a real guard for good to silence a race.
     dim "  Nothing may commit into this checkout while a phase runs — let the phase end, then"
     dim "  'sdd run' again. Widening writes: or HAT_WRITES_EXTRA would not fix this."
+  elif [ "$kind" = "kit-touched" ]; then
+    # The runner saw the kit move and not who moved it (issue #139), so the remedy names both
+    # readings instead of sending a human who was working on the kit to undo their own work.
+    dim "  If that was you working on the kit, nothing to undo — 'sdd run' again once it settles."
+    dim "  If it was this mission's session, move its kit edit out by hand: the kit is never a"
+    dim "  target's to edit. Then 'sdd run' again."
   else
     dim "  The hat declares what it may write (agents/<hat>.md, key writes:) and the kit is never a"
     dim "  target's to edit. Restore or move by hand what belongs elsewhere. Then 'sdd run' again."
@@ -5672,7 +5722,7 @@ cmd_preflight() {
   # bit for real — 2132cf5 edited agents/sdd-kaizen.md, the copy stayed behind, green in
   # everything. Two failures and not one: absent and stale are different repairs, and telling an
   # operator to install a file that is right there on disk sends them the wrong way.
-  local a name copy n=0
+  local a name copy n=0 fails_before_agents="$fails"
   for a in "$SDD_HOME"/agents/sdd-*.md; do
     [ -e "$a" ] || continue
     n=$((n + 1))
@@ -5686,9 +5736,12 @@ cmd_preflight() {
         looks corrected. Run 'sdd install --force' (or 'sdd install' to see the diff first)."
     fi
   done
-  # Only claims "checked" when no agent failed — saying it right after six failure lines is the
-  # output contradicting itself, which is the kind of lie the kit forbids in the gates.
-  if [ "$n" -gt 0 ] && [ "$fails" -eq 0 ]; then ok "$n kit agent(s) checked"; fi
+  # Only claims "checked" when no AGENT failed — saying it right after six failure lines is the
+  # output contradicting itself, which is the kind of lie the kit forbids in the gates. Counted
+  # across this block and not across the whole preflight: `fails -eq 0` let a red `gh auth` above
+  # silence the line over eight copies that all matched, and made it unobservable in every offline
+  # fixture (issue #83).
+  if [ "$n" -gt 0 ] && [ "$fails" -eq "$fails_before_agents" ]; then ok "$n kit agent(s) checked"; fi
 
   # --- the qa bug template carries the genre field ----------------------------
   # Anchor 3 of gate_QA blocks on an ABSENT `Closable by:`, and nothing but `sdd install` ever
@@ -6050,7 +6103,10 @@ cmd_health() {
   local score_line score_nums caught gaps total defined
   defined="$(grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' "$kit/tests/check-mutation.sh" 2>/dev/null || true)"
   if [ -z "$defined" ]; then defined=0; fi
-  score_line="$(grep -m1 '^score: ' <<< "$out" || true)"
+  # The LAST `score:` line, never the first: the catalogue prints its verdict once, at the end, and a
+  # green line anywhere above it must not stand in for that verdict (issue #104 — `grep -m1` stamped
+  # a run whose last line carried a survivor).
+  score_line="$(grep '^score: ' <<< "$out" | tail -n 1 || true)"
   score_nums="$(sed -nE 's/^score: ([0-9]+) caught, ([0-9]+) known gap\(s\), of ([0-9]+)$/\1 \2 \3/p' <<< "$score_line" || true)"
   if [ -z "$score_line" ]; then
     health_bad "the suite did not print the 'score:' line — health went blind to the mutation"
@@ -6377,17 +6433,39 @@ health_provenance() {
   else skipped=$((skipped + 1)); fi
 
   # codereview grade table: every criterion of the skill must exist in the fixture.
-  # `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after 1.17. This was
-  # once the only version-ordered pick in the file; latest_matching() carried the lexicographic
-  # bug and this comment recorded it. It no longer does — both sort by version now.
+  #
+  # WHICH codereview is the one the REVIEW phase loads, and that is the `installPath` Claude Code's
+  # registry pins — never "the newest in the cache" (issue #114). The cache keeps every version
+  # ever fetched (ten on the machine where this was measured, nine orphaned), so with a newer one
+  # beside the pinned one the old pick compared the fixture against a file no session reads and
+  # printed `fixtures match the installed skills` about it. With the registry naming a path, there
+  # is NO fallback: a pinned install without the template is refused out loud, because quietly
+  # reading the cache instead is the defect itself. DECLARED LIMITS: only the `user`-scope entry is
+  # read — a `project`-scope pin (the registry has them, with `projectPath`) loads another version
+  # in one repo, and which repo this health speaks for is not this function's to decide; and the
+  # fallback below, for a machine with no registry or no jq, still orders the WHOLE path with
+  # `sort -V`, so a marketplace's name outranks a version there.
+  local reg="$HOME/.claude/plugins/installed_plugins.json" pinned=""
+  if [ -f "$reg" ] && command -v jq >/dev/null 2>&1; then
+    pinned="$(jq -r '[(.plugins // {}) | to_entries[] | select(.key | startswith("codereview@")) | .value[]? | select(.scope == "user") | .installPath // empty] | first // empty' "$reg" 2>/dev/null || true)"
+  fi
+  #
+  # The fallback: `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after
+  # 1.17. This was once the only version-ordered pick in the file; latest_matching() carried the
+  # lexicographic bug and this comment recorded it. It no longer does — both sort by version now.
   #
   # `|| true`: `find` on a missing directory returns 1, `set -o pipefail` carries that through
   # `sort -V | tail -1`, and `set -e` then killed the whole command on the assignment — on a
   # machine with no plugins cache, `sdd health` stopped dead HERE, three ok lines in, and neither
   # provenance nor the ratchet ever ran. A machine without the directory is not a defect, it is a
   # machine: an empty `$tpl` is the skip this branch already knows how to do.
-  tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
-         2>/dev/null | sort -V | tail -1 || true)"
+  if [ -n "$pinned" ]; then
+    tpl="$(find "$pinned" -path '*/references/report-template.md' -print -quit 2>/dev/null || true)"
+    [ -n "$tpl" ] || health_bad "the installed codereview has no references/report-template.md under $pinned (the installPath installed_plugins.json pins) — the grade table was not compared, and the newest file in the cache is not the one the REVIEW phase loads"
+  else
+    tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
+           2>/dev/null | sort -V | tail -1 || true)"
+  fi
   if [ -n "$tpl" ] && [ -f "$tpl" ]; then
     local missing="" n_crit=0
     while IFS= read -r k; do
@@ -6408,7 +6486,7 @@ health_provenance() {
     elif [ -n "$missing" ]; then
       health_bad "the skill's grade table has a criterion the fixture does not cover:$missing"
     else checked=$((checked + 1)); fi
-  else skipped=$((skipped + 1)); fi
+  elif [ -z "$pinned" ]; then skipped=$((skipped + 1)); fi
 
   # The summary reads `checked` and `skipped`, and it may not claim the third state. A DIVERGED
   # fixture increments neither counter — it went to `health_bad` — so with three skills installed
@@ -8838,6 +8916,12 @@ cmd_autonomy() {
   # A malformed row dies loudly. Skipping it quietly is how a judge ends up reading a subset and
   # calling it the whole history.
   ledger_parses "$file" || die "malformed row in $file — the ledger is not readable"
+  # The SHAPE, asked on its own (issue #206): a row that parses but is not an object is one defect
+  # with one remedy — find the writer — and it used to be inferred from ANY failure of the program
+  # below, so an object row carrying `"cost_usd":"4.0"` was told to go hunting for a writer of
+  # non-objects that does not exist.
+  jq -e -s 'all(type == "object")' "$file" >/dev/null 2>&1 \
+    || die "unreadable row in $file — a row is valid JSON but not an object; find the writer that produced it"
 
   # A REAL row count, not a line count. `grep -c .` counted LINES: a single pretty-printed JSON
   # row made the header say "9 row(s)" while the table correctly said "1 session(s)" — two
@@ -8978,7 +9062,8 @@ cmd_autonomy() {
   # classified at all — indexing it with .event is a jq runtime error, not a false comparison — so
   # that failure is caught below and re-raised through die(), same rc 1 as every other refusal in
   # this command instead of leaking jq's own exit code.
-  local out jq_rc=0
+  local out jq_rc=0 jq_err
+  jq_err="$(mktemp "${TMPDIR:-/tmp}/sdd-autonomy-jq-XXXXXX")" || die "autonomy: could not create a temporary file"
   out="$(jq -rs --arg repo "$repo" --argjson interventions "$interventions" \
                 --argjson by_mission "$by_mission" --arg allrepos "$LEDGER_ALL_REPOS" \
                 --arg phases "$PHASES" "$def""$odefs"'
@@ -9417,17 +9502,17 @@ cmd_autonomy() {
              then ["  never part of the \($local_total) counted above — these left before the header:"] + $outside
              else [] end))
        | select(length > 0) | "\n" + join("\n"))
-  ' "$file" 2>/dev/null)" || jq_rc=$?
+  ' "$file" 2>"$jq_err")" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then
-    # A DIFFERENT sentence from the `ledger_parses` refusal above, because they are different
-    # defects with different remedies: there a line is not JSON and somebody edits the line; here
-    # every line parses and one of them is not an object, so somebody has to find the writer that
-    # produced it. One sentence for both said "malformed row" to a reader who then could not tell
-    # which had happened. The other half of the pair keeps ITS wording on purpose — `kaizen_series`
-    # refuses the same unparseable ledger with the same words, and renaming one of those two would
-    # move the collision instead of removing it.
-    die "unreadable row in $file — a row is valid JSON but not an object; find the writer that produced it"
+    # Every row is a JSON object by now (the shape check above), so what failed is a FIELD the
+    # program could not read — a number written as a string, an object where a scalar goes. The
+    # runner does not know which row or why, and says so by handing over jq's own words instead of
+    # guessing a cause (issue #206: the guess sent the operator after the wrong writer). Same
+    # `unreadable row in <file>` head as the shape refusal, a different tail.
+    local why; why="$(head -c 400 "$jq_err" | tr '\n' ' ')"; rm -f "$jq_err"
+    die "unreadable row in $file — a row has a field jq could not read: ${why:-jq said nothing (rc $jq_rc)}"
   fi
+  rm -f "$jq_err"
   printf '%s\n' "$out"
 }
 

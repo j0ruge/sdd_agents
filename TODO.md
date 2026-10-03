@@ -32,7 +32,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão interativa ao avaliar o `/insights`, sem missão (2026-10-01)
 
 - [ ] **A regra da âncora aceita qualquer símbolo citado que reapareça perto, e uma âncora podre passa** —
-  `tests/check-todo.sh:1965` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
+  `tests/check-todo.sh:2005` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
   basta; identificador que se repete no arquivo inteiro casa em qualquer lugar. Medido em `b3b6b98`:
   `tests/check-autonomy.sh:6486` apontava para `exit 0` e passou verde porque `GIT_REFLOG_ACTION`
   está em 6400 — o sensor disse `every anchor on target`. Direção: exigir o símbolo na própria linha
@@ -40,14 +40,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
-  `tests/check-mutation.sh:5760` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
+  `tests/check-mutation.sh:5940` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
   mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
   só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
   qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
   assassino é um sensor tocado pelo diff, para o EXEC rodar antes do commit.
   — descoberto por `sdd health` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
-- [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:1392` — o
+- [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:1453` — o
   extrator da Âncora 3 pula blocos cercados e pega a primeira linha com forma de campo fora de um,
   então prosa nua abrindo com `- **Closable by:** human` acima do campo real ainda é lida como o
   campo. É fail-open (o gate responde `registry clean` com bug sanável aberto), na direção que a
@@ -66,7 +66,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260819-fecho-...` (2026-08-19)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2010` contra `tests/check-mutation.sh:5634` — a chave lê `bin tests templates config`,
+  `bin/sdd:2041` contra `tests/check-mutation.sh:5845` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -74,41 +74,19 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   lista do próprio `sandbox()`, decidido o custo. — descoberto por `sdd-executor` na missão
   `20260819-fecho-...` (2026-08-19)
 
-- [ ] **A alternativa `|| :` da guarda do `guard:` não tem probe** —
-  `tests/check-health.sh:1956` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
-  Medido em 2026-09-25: tirar o `:` da alternância deixa o `check-health.sh` inteiro verde. Das quatro
-  sobreviventes da r2, três fecharam em `a948f68` (piso exato de capturas, probe aritmético, lista
-  `RULE_REPORTS`). Direção: um `cap_world` com `|| :` e o censo afirmado, como os vizinhos.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **O `guard:` é cego a helper `health_*()` definido fora da região** —
-  `tests/check-health.sh:1975` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
-  `health_*()` definido depois dela não é censurado. A outra metade do achado (`if x=`, `local x=` e
-  here-doc lidos como offender) fechou: as três formas são isentas e declaradas no cabeçalho da regra.
-  Direção: censurar todo `health_*()` onde ele estiver.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **Os dois literais "ESTRUTURAIS" da regra 3 do `check-checkpoint.sh` afrouxam em verde** —
-  `tests/check-checkpoint.sh:227` — `PIPE_MECH="awk"` vira `"aw"` e `PIPE_ESCAPE='\|'` vira `'\'`
-  com o selftest verde; só `"a"` mata, e por acidente do fixture. O cabeçalho lista oito sabotagens
-  mortas, todas de APAGAR — afrouxar, que é a regra do `CLAUDE.md`, não está coberto. Degradado
-  assim, qualquer doc com "raw" e uma barra satisfaz a regra. Direção: um probe por literal, contra
-  um doc de quase-acerto (`awk` sem `-F'|'`).
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
 - [ ] **O braço 1 da guarda de forma do `ledger_repo_root` não tem probe, e a mutação junta os
-  dois** — `bin/sdd:3129` (`case "$gitdir" in`) — sob o shim pré-2.31 o valor não começa com `/`, então quem dispara é
+  dois** — `bin/sdd:3171` (`case "$gitdir" in`) — sob o shim pré-2.31 o valor não começa com `/`, então quem dispara é
   sempre o braço 2; o braço 1 (uma linha só, caminho absoluto) só é alcançado por um repo cujo
   CAMINHO contém `\n`, e nenhum fixture tem um. `mut_LEDGER_repo_root_shape_blind` apaga os dois de
   uma vez, então o catálogo não os distingue. Direção: fixture com `\n` no caminho e dividir a
-  mutação em duas. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+  mutação em duas. RESOLVED by c62ee1e. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O piso do shim pré-2.31 prova que o shim é um git falso, não que o runner o consulta** —
-  `tests/check-autonomy.sh:4535` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
+  `tests/check-autonomy.sh:4553` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
   ancora no caminho de resolução do runner. Medido: trocar `git` por `/usr/bin/git` no
   `ledger_repo_root` E apagar a guarda deixa `check-autonomy.sh` inteiro verde, porque o shim segue
   um impostor correto que nunca é chamado. Direção: termo provando INTERCEPTAÇÃO — a resposta do
-  runner sob o shim tem de diferir da resposta sem ele.
+  runner sob o shim tem de diferir da resposta sem ele. RESOLVED by 35145b0.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Nada mede se o esperado de um Check do checkpoint ainda reproduz** —
@@ -118,20 +96,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   passou ao lado. Direção: não é rodar os Checks (custa a suíte por célula); é a fase que move uma
   contagem re-rodar os Checks do mesmo predicado.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **A sonda de `--path-format` do preflight não tem asserção nenhuma** —
-  `bin/sdd:5412` — a guarda que ela anuncia (`ledger_repo_root` recusando a resposta de duas
-  linhas) tem par diferencial e mutação; a linha que **fala** com o operador não tem. O
-  `check-preflight.sh` já carrega a receita pronta — o shim `$FIX/.bsd` faz exatamente isto para
-  a userland GNU. Direção: um shim `.oldgit` e o par (fala com git velho, cala com git novo).
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
-- [ ] **Três frouxidões da regra da caixa pelada passam pelo selftest** —
-  `tests/check-todo.sh:406` — tirar o limite final `([ \t]|$)`, alargar `[ xX]` para `.` e tirar
-  o `>` do ancoramento deixam os 86 probes verdes. A terceira estreita a regra: caixa dentro de
-  bloco de citação deixaria de ser pega e nada diria. Regra sem probe é o que a passada
-  adversarial existe para achar. Direção: um probe por frouxidão, como `inlinebox.md` já faz.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O `tail_of` aceita qualquer par de crases como se fosse a atribuição** —
   `tests/check-todo.sh:293` — a regra pergunta "o rabo tem um code span", não "o rabo nomeia um
@@ -143,38 +107,30 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O `moved2` do `cmd_kaizen` não tem asserção que morra ao apagá-lo** —
-  `bin/sdd:8161` — a asserção `covered:` do `moved` cobre a primeira atribuição; neutralizar a
+  `bin/sdd:10404` — a asserção `covered:` do `moved` cobre a primeira atribuição; neutralizar a
   do retry deixa `check-kaizen.sh`, `check-autonomy.sh` e o catálogo verdes, porque o default
   local `false` coincide com o que o regime do fixture espera. Só o hardcode para `true` morre.
-  Direção: um mundo em que o retry mexe no disco de verdade, ou estreitar o que a asserção diz.
+  Direção: um mundo em que o retry mexe no disco de verdade, ou estreitar o que a asserção diz. RESOLVED by 0bdfddd.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
-- [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:5657` —
+- [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:5707` —
   ela só sai com `fails -eq 0`, e todo fixture offline reprova antes (o probe do `claude` e o
   `gh auth status`). O I3 provou o ramo de falha por diferencial, mas o ramo de sucesso — a frase
   que o operador de fato lê — segue sem sensor. Direção: um `--skip-session` no preflight, ou um
-  contador de agentes impresso fora da guarda de `fails`.
+  contador de agentes impresso fora da guarda de `fails`. RESOLVED by 32896a7.
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **A metade "nenhuma sessão foi gasta" do `assert_jidoka` é vácua** —
-  `tests/check-gates.sh:321` — ela grepa o marcador do stub (`the test invoked the real claude`)
-  na saída do `sdd run`, e `run_phase` manda stdout E stderr da sessão para o arquivo de log: o
-  marcador nunca chega ao terminal, então a asserção fica verde tenha havido sessão ou não. É
-  justamente o discriminador que o comentário acima dela chama de "o que 'no session spent'
-  significa". Direção: contar o `pipeline.log`, como as duas asserções novas desta missão fazem
-  (`phase_sessions_spent`). — descoberto por `humano` na missão `20260820-missao-porteira` (2026-08-21)
-
 - [ ] **Os dois ramos de diagnóstico do `differential()` não têm probe** —
-  `tests/check-entrypoint.sh:222` — a passada adversarial da r2 matou 20 de 25 degradações, e o
+  `tests/check-entrypoint.sh:235` — a passada adversarial da r2 matou 20 de 25 degradações, e o
   que sobra sem probe é a comparação do próprio diferencial: neutralizá-la faz o sensor ler "1 vs
   1" e seguir verde, então o dia em que o fall-through parar de reproduzir neste bash passa
   despercebido. Hoje o limite é o par de contagens ser IMPRESSO na linha `ok`. Direção: um gancho
-  de contagem falsa, como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo.
+  de contagem falsa, como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo. RESOLVED by e40a022.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:135`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
-  registra o comando, mas `health_provenance` (`bin/sdd:1569`) só confere as 3 fixtures de skill
+  registra o comando, mas `health_provenance` (`bin/sdd:6376`) só confere as 3 fixtures de skill
   contra arquivo instalado. Se o CLI renomear `type`/`total_cost_usd`, o stub segue verde e o
   runner quebra só em missão real — o modo de falha que a regra de proveniência existe para matar.
   Direção: probe que rode o CLI de verdade, ou capturar o schema num arquivo versionado.
@@ -215,7 +171,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   reprova antes de chegar ao `TEST_CMD`. Num fixture que alcance `gate_REVIEW`, o dry-run escreve
   `.sdd/logs/<missão>/gate-*-test-*.log` (reconfirmado no repo real, volta 2 da QA). Não é bug —
   é comportamento aceito e gitignored —, mas o nome garante mais que o teste. Direção: renomear
-  para "não toca nos artefatos da missão" ou exercitar também num fixture que chegue ao REVIEW.
+  para "não toca nos artefatos da missão" ou exercitar também num fixture que chegue ao REVIEW. RESOLVED by 00b60cc.
   — descoberto por `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
 
 - [ ] **O formato de achado vale para os repos-alvo, mas o sensor só guarda o arquivo do kit** —
@@ -227,13 +183,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `humano` revisando o sensor novo (2026-08-16)
 
 - [ ] **A asserção `the retry carries its own moved` não falha pela propriedade que promete** —
-  `tests/check-autonomy.sh:433` — no fixture, `moved` sai `false` com qualquer baseline: o retry
+  `tests/check-autonomy.sh:435` — no fixture, `moved` sai `false` com qualquer baseline: o retry
   só é alcançado quando `before == after`, então a asserção nunca observa um `moved:true` genuíno
   pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
-  do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+  do que ela. RESOLVED by 087cea2. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9423`
-  (`kaizen_series`) vs `docs/pipeline.md:531`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9554`
+  (`kaizen_series`) vs `docs/pipeline.md:1374`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:9350`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
   `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
@@ -241,16 +197,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   IMPRIME. Direção: extrair os campos do `jq` e cobrá-los na doc.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **O conjunto de fronteira do `MAXC_RE` não tem probe, e o comentário jura paridade com o
-  `PIPE_RE`** — `tests/check-pipefail.sh:219` — o `PIPE_RE` ganha quatro probes de falso-positivo
-  para essa mesma classe; o `MAXC_RE` copia a grafia e não ganha nenhuma. Trocado por `.+`, o
-  selftest fica verde e a regra passa a INVENTAR violação nas quatro formas que os probes do
-  vizinho existem para recusar. É a classe "comentário afirmando paridade não é paridade" que o
-  `CLAUDE.md` já nomeia duas vezes. Direção: derivar o miolo comum de UMA variável, ou dar ao
-  `MAXC_RE` os mesmos quatro probes. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
 - [ ] **O `gate:` do frontmatter só é cobrado quando existe, e 6 das 14 rodadas não o têm** —
-  `bin/sdd:1624` — a recusa de placeholder no `gate:` deixa AUSENTE em paz de propósito, para não
+  `bin/sdd:1685` — a recusa de placeholder no `gate:` deixa AUSENTE em paz de propósito, para não
   reprovar rodadas anteriores ao campo; mas ausente e placeholder afirmam o mesmo nada, e o
   `check-templates.sh` cobra a chave no template sem que gate nenhum a cobre no artefato. Direção:
   exigir o campo a partir de uma data/versão, ou cobrá-lo no `sdd health` como dívida congelada.
@@ -261,37 +209,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   um slug hifenizado: citar `20260819-fecho-que-nao-mente` num comentário de `tests/` reprova o
   sensor. A proveniência degrada para uma data, que é o dado mais fraco — o slug é o que liga o
   comentário ao handoff. Direção: isentar o casamento `^[0-9]{8}-` do escaneamento de stopwords.
-  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
-
-- [ ] **O `gate_QA` compra o placeholder do próprio template como evidência de jornada** —
-  `bin/sdd:1340` — em projeto sem interface a única âncora é `frontmatter gate`, testada só por
-  `-z "$evidence"`. O `templates/handoff.md:7` entrega `gate: <a evidência...>`: um handoff copiado sem tocar
-  a linha passa o gate com `journey walked without a browser interface`. É o defeito que o I3
-  fechou no `gate_REVIEW`, vivo um gate adiante, e a `placeholder()` está presa dentro do awk.
-  Direção: extrair a regra para uma função e cobrá-la nos dois gates.
-  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
-
-- [ ] **O ramo de forma do `score:` no `cmd_health` não tem asserção nem mutante** —
-  `bin/sdd:5995` — é ele que impede que um `score:` presente e ilegível caminhe até `ok` e carimbe:
-  sem ele os três `[ "" -ne … ]` devolvem rc 2, o `if` lê falso e o `else` credita a rodada.
-  Nenhum `write_stub_suite` usa score malformado. Mesma linha: `grep -m1` pega a PRIMEIRA linha
-  `^score: ` e a autoritativa é a última. Direção: fixture com score torto + mutante, e `tail -1`.
-  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
-
-- [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:5919` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
-  arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
-  hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5999` e `:5972`) mandam o
-  operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
-  Direção: comparar `${#CATALOG[@]}` com as definições `mut_*()` no próprio catálogo.
-  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
-
-- [ ] **`FIXME` e `XXX` são recusados pelo `gate_REVIEW` sem nenhum mundo que prove** —
-  `bin/sdd:1677` — a lista de palavras de preenchimento tem sete entradas e só cinco têm mundo no
-  `check-gates.sh`. Medido na passada de sabotagem do F3: tirar `WIP` ou `FILLME` deixa a asserção
-  vermelha, tirar `FIXME` ou `XXX` a deixa **verde**. As duas nasceram assim no I3 e a lista cresceu
-  por cima. Regra sem probe é decoração e some calada no dia em que alguém a reescreve.
-  Direção: um mundo para cada, ou tirá-las da lista.
   — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **Piso anti-vacuidade que fica para trás continua PASSANDO, e nada avisa** —
@@ -310,35 +227,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: um `refute()` sobre a superfície de docs, ou ligar a tabela de agentes ao frontmatter.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
-- [ ] **O braço `else ""` da célula do laço de revisão não tem fixture** — `bin/sdd:9298` — a
-  guarda contra a divisão por zero do `jq` (`$whole > 0`) está correta e **não é medida**: uma
-  frouxidão futura (`$whole >= 0`) abortaria o `--by-mission` inteiro sobre um ledger real com
-  missão de custo nulo, e nada nesta suíte avisaria. Direção: fixture diferencial de missão de
-  custo todo nulo **com** rodada REVIEW.
-  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
-
-- [ ] **Comentário afirma que a segunda asserção é o que torna a primeira não-vácua, e não é** —
-  `tests/check-gates.sh:1646` — medido sob a sabotagem realista (`checkpoint_rows` cego a `R<n>`):
-  só a primeira cai, e a segunda fica verde por um motivo diferente do alegado. É a classe
-  *"comentário que afirma paridade não é paridade"* que o `CLAUDE.md` já nomeia. Direção: ou o
-  comentário baixa a alegação, ou a asserção ganha o mundo que a distingue.
-  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
-
 - [ ] **A âncora `^  ok    ` do Check não alcança 82 das 866 asserções da suíte** —
   `tests/check-templates.sh:64` — as primitivas `check()`/`refute()` imprimem `ok` com **três**
-  espaços enquanto `tests/check-checkpoint.sh:111` cobra quatro em todo repo adotante, e o
+  espaços enquanto `tests/check-checkpoint.sh:113` cobra quatro em todo repo adotante, e o
   `calibrate()` que existe para casar as duas pontas é cego a elas: lê só linhas com `pass() {`,
   logo enxerga 7 de 13 sensores e deixa 2 dos 8 comportamentais de fora prometendo "every
   behavioural sensor". Direção: unificar em quatro espaços **e** dar cobertura ao `calibrate()`.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **A proveniência do `sdd health` lê "a mais nova em cache", não "a que roda"** —
-  `bin/sdd:6176` — o `report-template.md` da `codereview` sai de `find … | sort -V | tail -1` sobre
+  `bin/sdd:6232` — o `report-template.md` da `codereview` sai de `find … | sort -V | tail -1` sobre
   `~/.claude/plugins/cache`, e o resumo promete `fixtures match the installed skills` (`:6326`); quem
   fixa a versão que a fase REVIEW carrega é o `installPath` de `~/.claude/plugins/installed_plugins.json`.
   Com uma 1.19.0 em cache e a 1.18.0 fixada, o health confere o fixture contra um arquivo que a sessão
   nunca lê — e diz que conferiu. Fail-open (D15). Direção: ler o `installPath` do registro, `find` só
-  como fallback, mutante no catálogo. — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
+  como fallback, mutante no catálogo. RESOLVED by 94d3b6c.
+  — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
 
 - [ ] **`gate_TICKET` não confere no Jira a issue que o chapéu diz que ele confirma** — `bin/sdd:1083`
   (`gate_TICKET`) — o `agents/sdd-ticket.md:18` promete que o runner confirma a issue por `acli`,
@@ -359,14 +263,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **Fase interrompida depois do REVIEW faz o pipeline REGREDIR para o REVIEW** —
-  `bin/sdd:1777` (`git status --porcelain`) — o `gate_REVIEW` reprova com árvore suja e não distingue "o revisor deixou
+  `bin/sdd:1808` (`git status --porcelain`) — o `gate_REVIEW` reprova com árvore suja e não distingue "o revisor deixou
   sujeira" de "uma fase POSTERIOR está no meio do voo". Sessão de DOCS morta deixa arquivo não
   commitado, `current_phase()` volta a responder REVIEW, e o `sdd run` seguinte abre sessão nova
   da fase mais cara do kit — US$ 37,30 medidos nesta missão. Morte de sessão é o caso normal que
   o princípio 4 promete resolver de graça. Direção: escopar a checagem ao que o REVIEW pode sujar.
   — descoberto por `operador` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
 
-- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:10187` — a porta
+- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:10272` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
   e o toplevel é por worktree: com o `sdd` do checkout principal e o cwd num worktree os dois
   divergem e o `die` da `:10086` mata. ⚠️ **`--series` NÃO passa por ela** — sai na `:10073`, medido
@@ -399,7 +303,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
 - [ ] **A regra `cdpath:` certifica como limpo o `cd` de operando VARIÁVEL** —
-  `tests/check-pipefail.sh:283` (o comentário do `CD_RE` declara o limite) — a regra só mede
+  `tests/check-pipefail.sh:289` (o comentário do `CD_RE` declara o limite) — a regra só mede
   operando que é substituição de comando, porque `cd "$FIX"` é indecidível no scanner e os ~150
   sítios de `tests/` têm variável absoluta. Só que a única instância histórica da classe era
   exatamente essa forma (`cd "$common"` do `ledger_repo_root`, uma CRITICAL), então a forma que
@@ -407,13 +311,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **Nenhuma chave de caminho do `.sdd/config.sh` é normalizada antes de virar padrão de `case`**
-  — `bin/sdd:2474` — `hat_expand` troca `$TODO_FILE` **literalmente** no `writes:` do chapéu, lido contra
+  — `bin/sdd:2505` — `hat_expand` troca `$TODO_FILE` **literalmente** no `writes:` do chapéu, lido contra
   `git diff --name-only`; um repo-alvo com `TODO_FILE="./TODO.md"` — ou `HANDOFF_DIR="./docs/handoffs"`,
   que a normalização do `F4` também não pega — reproduz o defeito que o `F4` acabou de consertar,
   com raio menor. Direção: normalização **única** na leitura do config, com um probe por chave.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
-- [ ] **`run_phase` cria o diretório de log da sessão sem guarda nenhuma** — `bin/sdd:4617` (`mkdir -p`) — é a
+- [ ] **`run_phase` cria o diretório de log da sessão sem guarda nenhuma** — `bin/sdd:4667` (`mkdir -p`) — é a
   irmã, um nível acima, da escrita que o `R8` guardou: com `.sdd/logs` em modo 500 o `sdd run`
   morre com um `mkdir: Permissão negada` cru, **rc 1, zero linha de ledger e zero `warn` do kit**.
   Não é remendo de escopo: o log da sessão **é** a evidência da fase, então talvez a resposta certa
@@ -421,7 +325,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **Uma sessão escreve o ledger com o `bin/sdd` que tinha em MEMÓRIA ao ser lançada** —
-  `bin/sdd:4211` — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4 rodadas
+  `bin/sdd:4261` — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4 rodadas
   com `turns` nulo), e o ledger não distingue "medido nulo" de "não medido": fail-open de leitura.
   O `.sdd/config.sh` tem o mesmo defeito (`bin/sdd:147`, `source` único): o `TEST_CMD` consertado
   a meio do run não vale, e o EXEC da SQ-141 queimou 4 retries (~US$ 5,90) num gate insatisfazível.
@@ -429,7 +333,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01); config por
   `claude` na missão `20260924-transacao-honra-o-timeout` (2026-09-24)
 
-- [ ] **O checkpoint não tem grafia para incremento cujo produto não é commit** — `bin/sdd:1173`
+- [ ] **O checkpoint não tem grafia para incremento cujo produto não é commit** — `bin/sdd:1179`
   (`GATE_EXEC_CELL`) — o `gate_EXEC` exige 7 a 64 dígitos hex na célula Commit, e o
   `templates/checkpoint.md` não diz o que escrever quando o incremento é e-mail enviado, config no
   IdP ou issue adotada. Na LH-3 o I5 foi o e-mail aos diretores, e o `sdd status` da missão aponta
@@ -438,12 +342,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sessão coordenadora` na missão `20260922-email-mvp-diretores` (2026-09-27)
 
 - [ ] **A Âncora 3 do `gate_QA` bloqueia a missão com bug aberto de OUTRA missão** —
-  `bin/sdd:1488` (`openbugs`) — o laço conta todo bug `Status: open` do registry que não é `human`
+  `bin/sdd:1549` (`openbugs`) — o laço conta todo bug `Status: open` do registry que não é `human`
   nem `deferred`, sem perguntar de qual missão ele é. Na LH-4 o `BUG-20260922-area-sem-edicao-de-nome`
   segurou a âncora: o `sdd-qa` não podia consertá-lo (fora do escopo) nem adiá-lo (`deferred` é
   decisão humana), e a linha parou até o humano adiar (`b816069` no alvo). Direção: missão própria,
   com ADR que supere a alternativa (A) da ADR 0006, mantida pela 0009 (contar só o bug da missão).
   — descoberto por `sdd-qa` na missão `20260927-idioma-da-spa-pelo-idp` (2026-09-27)
+
+- [ ] **O `gate_QA` não confere o enum do `status:`** — `bin/sdd:1398` (`gate_QA`) — só `skipped` e
+  `blocked` são lidos, e qualquer outro valor segue como `done`, inclusive o literal
+  `<done | blocked | skipped>` do `templates/handoff.md`. Medido na triagem da #103: o template
+  copiado intacto passava com o status literal; o `gate:` agora recusa o placeholder, o `status:` não.
+  Direção: recusar valor fora de `done|blocked|skipped`, com mundo e mutante, como o `gate_EXEC` faz.
+  RESOLVED by e00f019.
+  — descoberto pela triagem cética do lote no branch `fix/lote-sensores-sem-probe` (2026-10-03)
 
 - [ ] **O checkpoint semeado no alvo cita um sensor que só existe no kit** —
   `templates/checkpoint.md:33` (`tests/check-checkpoint.sh`) — o texto diz que ele recusa as formas
@@ -457,16 +369,16 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Saída humana e cosmética
 
 - [ ] **35% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
-  `docs/pipeline.md:1012` — as seções `The autonomy ledger` (323 linhas) e `The kaizen loop` (174)
+  `docs/pipeline.md:1022` — as seções `The autonomy ledger` (323 linhas) e `The kaizen loop` (174)
   somam **497 de 1419** (eram 245 de 570 em 2026-08-17) num arquivo que é o índice do pipeline.
   Índice que carrega profundidade é o doc que a próxima sessão não lê inteiro. Direção: `references/` para
   o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
   estrutura e merece a sua. — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
-- [ ] **`turns` não aparece em nenhuma view humana** — `bin/sdd:4196` — o campo está na tabela de
+- [ ] **`turns` não aparece em nenhuma view humana** — `bin/sdd:4246` — o campo está na tabela de
   campos do `docs/pipeline.md` e é lido só por `jq` ad-hoc, então quem instala o kit não descobre
   que ele existe — e ele é metade da M2 desta missão. Direção: dizer no `§ Field reference` que é
-  instrumento cru, ou pendurá-lo na célula do `review loop` do `--by-mission`.
+  instrumento cru, ou pendurá-lo na célula do `review loop` do `--by-mission`. RESOLVED by 4a67042.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **As ADRs 0001–0007 não têm `Spec:`, e por isso 14 missões deste repo não podem declarar
@@ -478,14 +390,38 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   escreve os dois lados, o resto vira `adr: none`, e aí a chave volta para `block`. — descoberto
   por `codereview` na missão `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
 
-- [ ] **A prosa dos chapéus ainda cita o `sales_quote`** — `agents/sdd-docs.md:78`
-  (`packages/x/serializer.ts`) — o exemplo da tabela de drift é um caminho daquele repo, e o
+- [ ] **A prosa dos chapéus ainda cita o `sales_quote`** — `agents/sdd-docs.md:27`
+  (`KAIZEN_LOG.md`) — o exemplo `packages/x/serializer.ts` da tabela de drift é um caminho daquele repo, e o
   `sdd-docs.md` e o `sdd-reviewer.md` mandam ler `KAIZEN_LOG.md`, `CHANGELOG.md` e `CONTEXT.md`,
   que nenhum gate exige e que um repo novo não tem. É ruído de prompt, não falha: a sessão procura
-  e não acha. Direção: neutralizar o exemplo e condicionar a leitura à existência do arquivo.
+  e não acha. Direção: neutralizar o exemplo e condicionar a leitura à existência do arquivo. RESOLVED by 28094c7.
   — descoberto por `sdd-planner` na missão `20260926-a-carona-antes-do-congelamento` (2026-09-26)
 
+- [ ] **O `sdd autonomy` culpa "uma linha que não é objeto" por qualquer falha do `jq`** —
+  `bin/sdd:9513` (`unreadable row`) — o `jq` do `cmd_autonomy` roda com `2>/dev/null`, e todo rc
+  diferente de 0 vira "a row is valid JSON but not an object; find the writer". Medido: uma linha que
+  É objeto, só com `"cost_usd":"4.0"` em string, recebe essa frase, e o operador sai caçando um
+  escritor de não-objeto que não existe. Direção: testar a forma da linha antes e, no rc do programa,
+  repassar o stderr do `jq` em vez de afirmar a causa. RESOLVED by 5236206.
+  — descoberto pela triagem cética do lote no branch `fix/lote-sensores-sem-probe` (2026-10-03)
+
+- [ ] **O `kaizen --series` morre com o erro cru do `jq` e contradiz o pipeline.md sobre linha não-objeto** —
+  `bin/sdd:9554` (`kaizen_series`) — irmão da #206 no segundo leitor: uma linha objeto com
+  `"cost_usd":"4.0"` sai com rc 5 e `jq: error (at <stdin>:2)`, sem nomear o arquivo nem passar pelo
+  `die`; uma linha array sai rc 0, contada em `excluded.unrecognized`, e o `docs/pipeline.md:1062`
+  diz que ela "still dies loudly naming the file". Direção: o mesmo par de recusas do `cmd_autonomy`
+  (forma primeiro, stderr do `jq` no `die`), ou a doc dizer o que a série faz.
+  — descoberto pela triagem cética do lote 2 no branch `fix/lote-2-sensores` (2026-10-03)
+
 ### Comentário e registro
+
+- [ ] **O `cmd_kaizen` escala `no-progress` depois de um retry que moveu o disco** — `bin/sdd:10422`
+  (`autonomy_blocked_row`) — o `cmd_run` só escala `no-progress` com `moved2=false`; o juiz tem dois
+  tiros e escala depois do segundo de qualquer jeito. Medido no mundo espelho da #78
+  (`check-kaizen.sh`): sessões `moved:false` e `moved:true`, e a linha `blocked` sai
+  `kind: no-progress`, que o `docs/pipeline.md` define como duas sessões que não moveram o disco —
+  fricção pura no rubric. Direção: uma kind que diga o que houve, ou condicionar ao `moved2`.
+  — descoberto pela triagem cética do lote 2 no branch `fix/lote-2-sensores` (2026-10-03)
 
 - [ ] **Drift de comentário em código não tem dono: nem a DOCS nem a EXEC** — `agents/sdd-docs.md:9`
   — comentário de código É documentação viva, mas o `writes:` da DOCS não lista `bin/sdd` e o
@@ -510,12 +446,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **A linha `kit-touched` do ledger afirma uma atribuição que o runner nunca mediu** —
-  `bin/sdd:3559` — o `warn` da tela ressalva (*"if that was you working on the kit in another
+  `bin/sdd:3598` — o `warn` da tela ressalva (*"if that was you working on the kit in another
   terminal, this is that"*, `:3603`); o `KIT_TOUCHED_WHY`, que vai para o ledger e para a escalada,
   afirma *"a session committing outside its mission's repo"*. Medido no `796e334`: a única escalada
   da fatia foi o HUMANO commitando o kit durante a fase PR do `sales_quote`, e o juiz a lê como
   fricção daquela versão — a mesma classe que a T1 fechou para `session-died`. Direção: a linha diz
-  o que o runner sabe (o sha do kit mudou durante a fase), ou ele mede a atribuição.
+  o que o runner sabe (o sha do kit mudou durante a fase), ou ele mede a atribuição. RESOLVED by 9a486a2.
   — descoberto por `claude` na leitura do juiz de 2026-09-20 (2026-09-20)
 
 ### Idioma
@@ -561,14 +497,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `sdd-executor` e `humano` nas missões `20260815-ledger-sem-ponto-cego` e no kaizen do
   paralelismo (2026-08-16)
 
-- [ ] **Não há comando que prove um mutante contra um sensor, e cada sessão reconstrói o helper** —
-  `tests/check-mutation.sh:37` (`ANCHORS_ONLY`) — o sensor aceita só nada (o catálogo, ~50 min) ou
-  `--anchors` (aplica, não roda sensor), e o `CLAUDE.md` exige o mutante "pego numa cópia antes do
-  commit". No #200 um helper descartável (caixa, função `mut_*` extraída, `diff` não vazio, um sensor
-  com ou sem `SDD_MUTANT`) rodou 13 vezes. Direção: `--only <slug> [sensor]`, sobre o `sandbox` e o
-  `apply_mutant` que já existem, para a resposta rápida e a do catálogo não divergirem.
-  — descoberto pela sessão interativa no branch `fix/gate-exec-e-caminho-historico` (2026-10-02)
-
 ### Sem seção — chegaram depois da última classificação
 
 > ⚠️ Esta seção **chamava-se "Adiados por YAGNI"** e não guarda mais nenhum adiamento: os três que
@@ -579,7 +507,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > quem mexer num deles o move para a seção a que ele pertence.
 
 - [ ] **Nenhuma das skills `qa-report`/`qa-execution` conhece o campo `Closable by:`** —
-  `agents/sdd-qa.md:118` — `grep -rn Closable ~/.claude/skills/qa-*` responde **zero**, então o
+  `agents/sdd-qa.md:119` — `grep -rn Closable ~/.claude/skills/qa-*` responde **zero**, então o
   campo só chega ao disco pelo template local do repo ou pelo `sdd-qa` marcando arquivo por arquivo.
   Em repo-alvo novo a Âncora 3 inteira roda em regime "ausente ⇒ bloqueia". `f7bcf10` ESTREITOU o
   raio — semeia o campo no template de que elas copiam e o `sdd preflight` cobra —, mas NÃO fechou
@@ -610,7 +538,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sabotagem provou cada nota — hoje narra em prosa, e prosa não é verificável.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
 
-- [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:10345` — o
+- [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:10430` — o
   worker relê o `bin/sdd` e sobe um 2º Python (`check`) só para provar a reentrada. Medido: sem ele
   o `sdd install` cai de ~160 para ~130 ms, e o #48 levou a suíte comportamental de 117 para 251 s.
   A parte barata já saiu no branch `perf/catalogo-para-no-primeiro-vermelho` (`-I -S` e acordar pelo
@@ -626,7 +554,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   também uma vez por assassino distinto do mapa, com ele na frente, e exige verde.
   — descoberto por `revisão final` no PR #168 `perf/catalogo-assassino-primeiro` (2026-09-25)
 
-- [ ] **`sdd status` travou mais de 2 min segurando a trava do checkout** — `bin/sdd:6458`
+- [ ] **`sdd status` travou mais de 2 min segurando a trava do checkout** — `bin/sdd:6536`
   (`cmd_status`) — no `sales_quote`, em 2026-10-01 às 00:30Z, um `sdd status` sem nenhum `sdd run`
   vivo ficou parado dentro do `sdd-coordination.py enter … auxiliary`, e o próprio processo
   aparecia como dono no `CHECKOUT-BUSY`. Um segundo `sdd status` enfileirou atrás dele. Só um

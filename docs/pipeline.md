@@ -194,7 +194,9 @@ The `ticket` skill creates it straight into the active sprint and confirms it le
 the ticket hat saying no issue could be opened (no sprint, no `acli`, no shell) is a human's
 decision to take, and re-reading the same refusal at one session per lap until `no-progress` is
 what it cost before 2026-09-06 (three sessions, US$ 3,39). The check runs before the `issue:` and
-`sprint:` ones, because a blocked ticket has neither.
+`sprint:` ones, because a blocked ticket has neither. Past it the enum is read **positively**: only
+`done` passes, and any other value — `BLOCKED`, a missing `status:` line — is refused by name
+(issue #205; it used to pass as `done` on a filled issue and sprint).
 
 The `branch:` check exists because the runner honours `branch:` from `00-missao.md` and from
 nowhere else. The session writes the name back and commits both files; a `10-ticket.md` that
@@ -244,7 +246,10 @@ The two skills **own** `docs/qa/`; `sdd-qa` does not rewrite what they produced.
 no interface** (no `E2E_CMD` and no `APP_URL`) goes straight to `QA:close`: bootstrapping browser
 journeys in a project with no browser is the paperwork `skipped` exists to avoid.
 
-**Passes when:** `30-handoff-qa.md` exists and (`status: skipped` **or** all of the conditions):
+**Passes when:** `30-handoff-qa.md` exists and (`status: skipped` **or** `status: done` and all of the
+conditions). `status: blocked` stops the line (`handoff-blocked`); any other value — the template's
+literal `<done | blocked | skipped>`, `BLOCKED`, a missing line — is refused by name, where until
+issue #205 it passed as `done`. The conditions:
 
 - **the evidence of the journey walked**, which takes two forms depending on the project:
   - **with an interface** (`E2E_CMD` or `APP_URL` set) — the most recent report **the mission
@@ -264,7 +269,9 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
     the gate never disagree about which file is the mission's — the charter stays out, because it is
     durable doc that crosses cycles ([ADR 0013](adr/0013-o-relatorio-da-missao-e-o-texto-proposto.md));
   - **without an interface** (neither `E2E_CMD` nor `APP_URL`) — the `gate:` field of
-    `30-handoff-qa.md` itself is filled in. Here the `qa-report`/`qa-execution` skills did not run
+    `30-handoff-qa.md` itself is filled in, and filled in means past the same `placeholder()` that
+    `gate_REVIEW` applies: the template's `<…>` and the fill-in words are refused, one definition for
+    both gates. Here the `qa-report`/`qa-execution` skills did not run
     as part of the phase, so demanding their dated report would require an artifact nobody
     produces, and the gate would be unsatisfiable precisely in the case where QA did the work and
     **found** something.
@@ -731,7 +738,10 @@ and `hat_crossed_escalation` — the one door it shares with the hat guard below
 and a `kit-touched` ledger row after the session's own row. The cost is named on both sides: a human
 editing the kit in another terminal while a mission runs is a real false positive, and now it
 costs one more `sdd run` (the run stops, the human reads, the run resumes) — the price the spec's
-D6 accepts for a guard that was furrowed in `2d28d13`. Two things it deliberately
+D6 accepts for a guard that was furrowed in `2d28d13`. Both `kit-touched` rows of the real ledger
+were that false positive (one a human commit, one an uncommitted edit), so the row's `gate_why` says
+only what the runner measured — the kit moved during the phase — and that who moved it was not
+measured (issue #139). Two things it deliberately
 does not do: it stays quiet when the mission's own repo *is* the kit (a kit mission edits the kit
 for a living, and a warning on every phase of it teaches its only reader to scroll past), and it
 arms nothing during `--dry-run`, because a projection opens no session for a change to be
@@ -1191,7 +1201,7 @@ prose.
 | `verified` | boolean | on every shape but `close` | Whether JIRA itself reported the issue Done **after** the session ran — the artifact, queried a second time, and never the session's `rc`. `false` means the session ran and the issue is still open (or `acli` stopped answering), which is exactly the fact a human reading this file is looking for. |
 | `dur_s` | integer \| `null` | on escalation rows | Wall-clock seconds the session took. Present on `close` rows too (see below). |
 | `cost_usd` | number \| `null` | on escalation rows | The session's cost in USD, `null` (never the string `"?"`) when the session's JSON log carried no cost field. ⚠️ Present on `event:"close"` rows since 2026-09-11, together with `dur_s`, `turns`, `cache_read` and `harness`: `sdd close` buys a real paid session, and until r1 finding #7 of the 2026-09-11 judge mission the close row said which session was spent and nothing about the money — so D12 (US$ per merged PR) counted every close in the kit's history as free. They arrive as arguments and not through the `LAST_PHASE_*` globals, because `cmd_close` does not go through `run_phase`; empty maps to `null` through `tonumber?` and never to `0`, since unmeasured is not free. |
-| `turns` | integer \| `null` | on escalation rows and on `event:"gate_pass"` rows; `null` when the session's JSON log carried no `num_turns` | How many turns the session spent, from the same distilled `result` object `cost_usd` comes out of. The other half of what a session cost, and the half money alone cannot separate: a phase that got cheaper by spending **fewer turns** and one that got cheaper by luck read the same in dollars, and they ask for opposite next moves. Cache-read grows with turns² (corr 0.94 over the 28 real REVIEW rounds measured on 2026-09-01) and is about 30% of the bill, so the turn count is the lever the money is a shadow of. Added by `20260901-o-revisor-so-acha` to size the sessions of a REVIEW phase that no longer fixes in place; `null` on every row written before it, and no reader guesses it back from prose — unlike `pending_before` and `rounds_before`, the fact was never written anywhere else. |
+| `turns` | integer \| `null` | on escalation rows and on `event:"gate_pass"` rows; `null` when the session's JSON log carried no `num_turns` | How many turns the session spent, from the same distilled `result` object `cost_usd` comes out of. The other half of what a session cost, and the half money alone cannot separate: a phase that got cheaper by spending **fewer turns** and one that got cheaper by luck read the same in dollars, and they ask for opposite next moves. Cache-read grows with turns² (corr 0.94 over the 28 real REVIEW rounds measured on 2026-09-01) and is about 30% of the bill, so the turn count is the lever the money is a shadow of. Added by `20260901-o-revisor-so-acha` to size the sessions of a REVIEW phase that no longer fixes in place; `null` on every row written before it, and no reader guesses it back from prose — unlike `pending_before` and `rounds_before`, the fact was never written anywhere else. No view reads this column — `sdd autonomy` and `sdd kaizen --series` aggregate money and outcome, never turns — so here it is a raw instrument for `jq`. The per-phase turn count a human reads is `sdd census <mission>`, which sums the same `num_turns` straight from the session logs in `.sdd/logs/` (gitignored, one checkout); this column, in `autonomy_log_path`, is the copy that outlives them. |
 | `mcp_seen` | number \| null | on `event:"session"` rows | MCP servers the session could see that its hat did not declare (`mcp:`), read off the stream's `init` line. `null` = no init line (the session died before one). Any value above 0 stops the line (`hat-crossed`). |
 | `tools_leaked` | number \| null | idem | tools from the deny list still listed in `init` — the harness did not honour `--disallowedTools`. Above 0 stops the line. |
 | `denials` | number \| null | idem | `permission_denials` of the result: how often the session asked for what its hat denies. Not an escalation — a fact about the hat's fit. |

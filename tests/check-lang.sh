@@ -195,9 +195,11 @@ files="$(surface)"
 # and docs/adr/0008 makes it 47 in the same mission — two hops, two commits, on purpose.
 # Checkout coordination adds its sensor, linker and Python helper to the previous 48 paths.
 # ADRs 0010 to 0012 made it 54, and ADR 0013 made it 55 in 20260928-os-achados-da-janela.
+# ADR 0014 made it 56 and joined the glob WITHOUT moving this line — the third time this floor lagged
+# (found by the triage of 2026-10-03, the class is TODO.md "Piso anti-vacuidade que fica para trás").
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 55 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 55 — did something move?\n' \
+if [ "$n_surface" -lt 56 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 56 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi
