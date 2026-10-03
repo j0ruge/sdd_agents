@@ -429,7 +429,9 @@ assert_eq "the second row is the retry" "true" "$(jq -r -s '.[1].auto_retry' "$L
 assert_eq "the two session rows share one session id (the retry has no fork id of its own)" \
   "true" "$(jq -s '.[1].session == .[0].session' "$LEDGER")"
 # The whole point of the metric: a session that changed nothing on disk is waste, and until now
-# the retry ran with no measurement at all.
+# the retry ran with no measurement at all. On THIS fixture the retry can only read false (it is
+# reached after a first pass that did not move, and moves nothing) — the field is observed TRUE in
+# the ceiling world, "the retry row carries its own moved" (issue #97).
 assert_eq "the retry carries its own moved" "false" "$(jq -r -s '.[1].moved' "$LEDGER")"
 assert_eq "the gate result rides with the session" "fail" "$(jq -r -s '.[0].gate' "$LEDGER")"
 assert_eq "claude's rc is recorded" "1" "$(jq -r -s '.[0].rc' "$LEDGER")"
@@ -5086,6 +5088,13 @@ assert_eq "the ceiling stops the phase by sessions spent, not by laps of the loo
 assert_eq "...and on this fixture the two units really do disagree" "fewer" \
   "$( if [ "${ceil_laps:-0}" -lt "${ceil_sessions:-0}" ]; then echo fewer
       else echo "same:${ceil_laps:-0}/${ceil_sessions:-0}"; fi )"
+# Issue #97: the retry row's own `moved`, observed TRUE through the real path. Everywhere else the
+# retry is reached only after a first pass that moved nothing, and then moves nothing itself, so a
+# retry row that wrote a literal `false` read exactly like the truth — run-all stayed green with
+# it. Here every first pass fails without moving and every retry closes an increment: grouped by
+# `auto_retry`, the first passes read false and the retries true, and a pinned row reads "false false".
+assert_eq "the retry row carries its own moved: true where the retry committed" "false true" \
+  "$(jq -rs '[.[] | select(.event == "session")] | group_by(.auto_retry) | map(map(.moved | tostring) | unique | join(",")) | join(" ")' "$CEILLEDGER" 2>/dev/null)"
 
 echo "== reader: the human-facing output =="
 

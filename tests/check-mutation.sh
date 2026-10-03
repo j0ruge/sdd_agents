@@ -3339,6 +3339,13 @@ mut_KAIZEN_moved2_never_true() {
   sed -i '/^cmd_kaizen() {/,/^}/ { s|^  \[ "$after" != "$after2" \] && moved2="true"$|  true| }' "$1"
 }
 
+# Issue #97: cmd_run's retry ROW. Its `moved2` steers the loop and is guarded there; the field the
+# row carries had no world where it is true, so a literal `false` left run-all green. The ceiling
+# world of check-autonomy.sh is the one where the retry commits.
+mut_RUN_retry_row_moved_false() {
+  sed -i '/^cmd_run() {/,/^}/ s|^    autonomy_session_row "$phase" "${attempts\[$phase\]}" "true" "$moved2" \\$|    autonomy_session_row "$phase" "${attempts[$phase]}" "true" "false" \\|' "$1"
+}
+
 # The post-pipeline nudge goes silent: missions pile up on a kit sha nobody judged and `sdd run`
 # stops saying so, which is how the kaizen loop stalls without anybody noticing it stalled. Every
 # OTHER assertion about the reminder asserts its ABSENCE (empty ledger, verdict already on disk), so
@@ -5636,6 +5643,7 @@ CATALOG=(
   RETRY_moved_never_true
   KAIZEN_moved_never_true
   KAIZEN_moved2_never_true
+  RUN_retry_row_moved_false
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
   KAIZEN_already_judged_spends
