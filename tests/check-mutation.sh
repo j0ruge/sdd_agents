@@ -3091,7 +3091,17 @@ mut_HEALTH_suite_capture_aborts() {
 # so the kit's mutation score can silently stop being printed and `sdd health` reports it as a
 # crash instead of as the contract breach it is.
 mut_HEALTH_score_read_aborts() {
-  sed -i "s@grep -m1 '^score: ' <<< \"\$out\" || true@grep -m1 '^score: ' <<< \"\$out\"@" "$1"
+  sed -i "s@grep '^score: ' <<< \"\$out\" | tail -n 1 || true@grep '^score: ' <<< \"\$out\" | tail -n 1@" "$1"
+}
+
+# The two halves of issue #104. The shape branch neutered: a `score:` present and unparseable walks
+# past the three `[ "" -ne … ]` (each errors out to false) into `ok` and the stamp. The first line
+# read instead of the last: a green `score:` above the catalogue's red verdict stamps.
+mut_HEALTH_score_shape_branch_blind() {
+  sed -i '/^cmd_health()/,/^}/ s@^  elif \[ -z "\$score_nums" \]; then$@  elif false; then@' "$1"
+}
+mut_HEALTH_score_reads_first_line() {
+  sed -i "s@grep '^score: ' <<< \"\$out\" | tail -n 1 || true@grep '^score: ' <<< \"\$out\" | head -n 1 || true@" "$1"
 }
 
 # `sdd health` goes back to certifying a catalogue with a mutant ALIVE. The comparison loses its
@@ -5522,6 +5532,8 @@ CATALOG=(
   HEALTH_todo_count_blind
   HEALTH_suite_capture_aborts
   HEALTH_score_read_aborts
+  HEALTH_score_shape_branch_blind
+  HEALTH_score_reads_first_line
   HEALTH_mutation_survivor_blind
   HEALTH_catalogue_floor_blind
   HEALTH_testcmd_list_blind

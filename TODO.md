@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
-  `tests/check-mutation.sh:5817` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
+  `tests/check-mutation.sh:5829` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
   mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
   só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
   qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
@@ -75,14 +75,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260819-fecho-...` (2026-08-19)
 
 - [ ] **A alternativa `|| :` da guarda do `guard:` não tem probe** —
-  `tests/check-health.sh:1956` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
+  `tests/check-health.sh:1993` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
   Medido em 2026-09-25: tirar o `:` da alternância deixa o `check-health.sh` inteiro verde. Das quatro
   sobreviventes da r2, três fecharam em `a948f68` (piso exato de capturas, probe aritmético, lista
   `RULE_REPORTS`). Direção: um `cap_world` com `|| :` e o censo afirmado, como os vizinhos.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O `guard:` é cego a helper `health_*()` definido fora da região** —
-  `tests/check-health.sh:1975` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
+  `tests/check-health.sh:2012` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
   `health_*()` definido depois dela não é censurado. A outra metade do achado (`if x=`, `local x=` e
   here-doc lidos como offender) fechou: as três formas são isentas e declaradas no cabeçalho da regra.
   Direção: censurar todo `health_*()` onde ele estiver.
@@ -143,7 +143,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O `moved2` do `cmd_kaizen` não tem asserção que morra ao apagá-lo** —
-  `bin/sdd:8161` — a asserção `covered:` do `moved` cobre a primeira atribuição; neutralizar a
+  `bin/sdd:8164` — a asserção `covered:` do `moved` cobre a primeira atribuição; neutralizar a
   do retry deixa `check-kaizen.sh`, `check-autonomy.sh` e o catálogo verdes, porque o default
   local `false` coincide com o que o regime do fixture espera. Só o hardcode para `true` morre.
   Direção: um mundo em que o retry mexe no disco de verdade, ou estreitar o que a asserção diz.
@@ -232,7 +232,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
   do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9423`
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9426`
   (`kaizen_series`) vs `docs/pipeline.md:531`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:9350`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
@@ -279,7 +279,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:6064` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  `tests/check-mutation.sh:6076` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
   arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
   hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5999` e `:5972`) mandam o
   operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
@@ -310,7 +310,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: um `refute()` sobre a superfície de docs, ou ligar a tabela de agentes ao frontmatter.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
-- [ ] **O braço `else ""` da célula do laço de revisão não tem fixture** — `bin/sdd:9298` — a
+- [ ] **O braço `else ""` da célula do laço de revisão não tem fixture** — `bin/sdd:9301` — a
   guarda contra a divisão por zero do `jq` (`$whole > 0`) está correta e **não é medida**: uma
   frouxidão futura (`$whole >= 0`) abortaria o `--by-mission` inteiro sobre um ledger real com
   missão de custo nulo, e nada nesta suíte avisaria. Direção: fixture diferencial de missão de
@@ -333,7 +333,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **A proveniência do `sdd health` lê "a mais nova em cache", não "a que roda"** —
-  `bin/sdd:6176` — o `report-template.md` da `codereview` sai de `find … | sort -V | tail -1` sobre
+  `bin/sdd:6179` — o `report-template.md` da `codereview` sai de `find … | sort -V | tail -1` sobre
   `~/.claude/plugins/cache`, e o resumo promete `fixtures match the installed skills` (`:6326`); quem
   fixa a versão que a fase REVIEW carrega é o `installPath` de `~/.claude/plugins/installed_plugins.json`.
   Com uma 1.19.0 em cache e a 1.18.0 fixada, o health confere o fixture contra um arquivo que a sessão
@@ -366,7 +366,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o princípio 4 promete resolver de graça. Direção: escopar a checagem ao que o REVIEW pode sujar.
   — descoberto por `operador` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
 
-- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:10187` — a porta
+- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:10190` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
   e o toplevel é por worktree: com o `sdd` do checkout principal e o cwd num worktree os dois
   divergem e o `die` da `:10086` mata. ⚠️ **`--series` NÃO passa por ela** — sai na `:10073`, medido
@@ -601,7 +601,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sabotagem provou cada nota — hoje narra em prosa, e prosa não é verificável.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
 
-- [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:10345` — o
+- [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:10348` — o
   worker relê o `bin/sdd` e sobe um 2º Python (`check`) só para provar a reentrada. Medido: sem ele
   o `sdd install` cai de ~160 para ~130 ms, e o #48 levou a suíte comportamental de 117 para 251 s.
   A parte barata já saiu no branch `perf/catalogo-para-no-primeiro-vermelho` (`-I -S` e acordar pelo
@@ -617,7 +617,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   também uma vez por assassino distinto do mapa, com ele na frente, e exige verde.
   — descoberto por `revisão final` no PR #168 `perf/catalogo-assassino-primeiro` (2026-09-25)
 
-- [ ] **`sdd status` travou mais de 2 min segurando a trava do checkout** — `bin/sdd:6458`
+- [ ] **`sdd status` travou mais de 2 min segurando a trava do checkout** — `bin/sdd:6461`
   (`cmd_status`) — no `sales_quote`, em 2026-10-01 às 00:30Z, um `sdd status` sem nenhum `sdd run`
   vivo ficou parado dentro do `sdd-coordination.py enter … auxiliary`, e o próprio processo
   aparecia como dono no `CHECKOUT-BUSY`. Um segundo `sdd status` enfileirou atrás dele. Só um

@@ -6050,7 +6050,10 @@ cmd_health() {
   local score_line score_nums caught gaps total defined
   defined="$(grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' "$kit/tests/check-mutation.sh" 2>/dev/null || true)"
   if [ -z "$defined" ]; then defined=0; fi
-  score_line="$(grep -m1 '^score: ' <<< "$out" || true)"
+  # The LAST `score:` line, never the first: the catalogue prints its verdict once, at the end, and a
+  # green line anywhere above it must not stand in for that verdict (issue #104 — `grep -m1` stamped
+  # a run whose last line carried a survivor).
+  score_line="$(grep '^score: ' <<< "$out" | tail -n 1 || true)"
   score_nums="$(sed -nE 's/^score: ([0-9]+) caught, ([0-9]+) known gap\(s\), of ([0-9]+)$/\1 \2 \3/p' <<< "$score_line" || true)"
   if [ -z "$score_line" ]; then
     health_bad "the suite did not print the 'score:' line — health went blind to the mutation"
