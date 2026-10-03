@@ -569,49 +569,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
 
-- [ ] **`gate_EXEC` valida por uma leitura e conta por outra, e uma célula vazia as separa** —
-  `bin/sdd:1154` — o laço lê com `IFS=$'\t' read`, que COLAPSA tabs por serem whitespace de IFS; o
-  `checkpoint_tally` lê com `awk -F'\t' $4`, que não colapsa. Uma célula vazia e os dois caem em
-  colunas diferentes — o que desmente o cabeçalho da própria função ("the runner's ONE count").
-  Fail-open pela D15: diferencial sobre `| I1 | a |  | done | pending |` dá `MAIN rc=1` contra
-  `HEAD rc=0`, o gate passa onde recusava. Direção: o laço para de depender de IFS, e os dois
-  leitores são provados iguais por asserção DIFERENCIAL, nunca pelo comentário. RESOLVED by ecab6c5.
-  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-
-- [ ] **O caminho histórico infere `M` quando a memória está vazia, e M é o maior valor possível** —
-  `bin/sdd:3408` — sem memória o braço `advanced` passa a ser satisfeito por qualquer prosa que não
-  seja `M of M`: certo na primeira linha de uma missão (14 linhas reais), fabricação depois de um
-  `pass` (4) ou com `M` mudado (2). A guarda `.moved != false` (`f00c2dc`) fechou o buraco
-  alcançável; a inferência segue para quem mexeu no disco. Direção prototipada e medida: memória
-  guarda o total FEITO, `pending_before := M - done_before` — um invariante que muda **0 de 158**
-  linhas do ledger real. Não aplicado: reescreve a decisão 3 do grill — julgamento humano. Adotado. RESOLVED by 455d05a.
-  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-
-- [ ] **A regra `doing` conta como pendente não tem probe, e sem ela o `gate_EXEC` fecha a fase por
-  cima de um incremento em voo** — `bin/sdd:587` — degradar `$4 == "pending" || $4 == "doing"` para
-  só `pending` deixa a suíte inteira VERDE, e o `sdd status` passa de `1 of 1 increment(s) still to
-  execute` para `1 increment(s) done, suite green` com `next phase: QA`. É herdada da `main`, mas
-  esta missão MOVEU a regra para uma função nova e a reafirmou no cabeçalho dela — que é
-  exatamente quando "gate novo entra com mutação" morde. Direção: fixture com uma linha `doing` e
-  `mut_EXEC_tally_doing_is_done`. RESOLVED by 3e3de68.
-  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-
-- [ ] **A metade `repo` da chave de memória do caminho histórico não tem probe** — `bin/sdd:3331` —
-  trocar `([$r.repo, $r.mission] | tostring)` por `($r.mission // "")` deixa a suíte verde, e sob
-  `--all-repos` duas missões de mesmo slug em repos diferentes colapsam numa identidade só:
-  `2 advanced · 0% waste` vira `1 advanced · 1 churned · 50% waste`. É a mesma classe do
-  `ledger_repo_root`/`CDPATH` que já custou uma CRITICAL — contaminação silenciosa entre repos.
-  Direção: um par de linhas de mesmo slug em dois repos na família de fixtures `--all-repos`. RESOLVED by 195b3f2.
-  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-
-- [ ] **A guarda `$r.phase == "EXEC"` do `historic_progress` não tem probe e falha na direção da
-  lisonja** — `bin/sdd:3305` — removida, a suíte fica verde e uma linha NÃO-EXEC que passou o gate
-  passa a zerar a memória do EXEC, de modo que a próxima linha antiga é medida contra `M` em vez de
-  contra a linha acima dela: `EXEC(3 of 4) → QA(pass) → EXEC(3 of 4)` lê `2 advanced · 1 churned ·
-  33% waste` íntegro e `3 advanced · 0 churned · 0% waste` sabotado. Direção: uma linha QA `pass`
-  entre duas linhas EXEC de prosa no fixture `histfix` que já existe.
-  O mundo saiu com o invariante do total feito (#147); a guarda ficou declarada no cabeçalho. RESOLVED by 455d05a.
-  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 - [ ] **Nenhuma das skills `qa-report`/`qa-execution` conhece o campo `Closable by:`** —
   `agents/sdd-qa.md:118` — `grep -rn Closable ~/.claude/skills/qa-*` responde **zero**, então o
   campo só chega ao disco pelo template local do repo ou pelo `sdd-qa` marcando arquivo por arquivo.
@@ -667,15 +624,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `kill` liberou. Causa não diagnosticada. Comando de leitura não deveria prender o checkout sem
   prazo. Direção: medir onde ele para e dar prazo à espera do auxiliar, que deve dizer quem segura.
   — descoberto por `sessão coordenadora` na missão `20260930-e2e-local-diz-por-que-caiu` (2026-10-01)
-
-- [ ] **O `adr_declare` engole a falha do `chmod --reference`, como o `frontmatter_write` engolia** —
-  `bin/sdd:7071` (`ADR_DECLARE_WHY`) — os dois ramos (`:7003` e `:7022`) fazem `chmod … || true`, e
-  num userland sem `--reference` o spec ou o `00-missao.md` reescrito fica 0600 sem aviso. É o yokoten
-  da #81 fora do `frontmatter_write`; o symlink não o alcança, porque o caminho chega por `readlink -f`.
-  Direção: `warn` quando o `chmod` falha, como o I5 fez, com probe por shim de `chmod`.
-  Fonte: `docs/handoffs/20261002-onde-o-comando-do-humano-escreve/00-missao.md` (§ Fora de escopo).
-  RESOLVED by 7da4ddd.
-  — descoberto por `sdd-planner` na missão `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
