@@ -67,8 +67,8 @@ not a failure.
 This is the heart of the phase. Every **confirmed** finding that goes through a browser journey
 becomes a permanent sensor in CI:
 
-- a file in `<E2E_DIR>/` following the repo's convention (in `sales_quote`:
-  `sq<NN>-<slug>.spec.ts`, where `<NN>` is the issue number);
+- a file in `<E2E_DIR>/` named after the convention of the specs already there (read it off them,
+  e.g. `<prefix><NN>-<slug>.spec.ts`, where `<NN>` is the issue number);
 - the spec reproduces the user path that exposed the finding — it comes in through the same entry
   point, acts through the same verbs, checks the same observable;
 - run `E2E_CMD` and **watch the spec fail** while the bug is present. A spec that passes with the

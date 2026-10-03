@@ -23,9 +23,10 @@ trust every time somebody follows it and gets burned.
 
 1. The mission's full diff — it is what defines where drift can have happened.
 2. `docs/handoffs/<mission>/*` — the mission, the plan, the EXEC, QA and REVIEW handoffs.
-3. The repo's candidate documents: `README.md`, `CLAUDE.md`, `.claude/rules/*`, `CONTEXT.md`
-   (glossary), `CHANGELOG.md`, `KAIZEN_LOG.md`, `$ADR_DIR/*`, and any docs specific to the areas
-   touched.
+3. The repo's candidate documents **that exist**: `README.md`, `CLAUDE.md`, `.claude/rules/*`,
+   `CONTEXT.md` (glossary), `CHANGELOG.md`, `KAIZEN_LOG.md`, `$ADR_DIR/*`, and any docs specific to
+   the areas touched. No gate requires any of them, and a new repo has few: one the repo does not
+   have is skipped, never reported as drift.
 
 ## 2. Progressive disclosure — mandatory
 
@@ -76,9 +77,9 @@ row per area the diff touched:
 
 | Area touched by the diff | Corresponding document | Status | Evidence |
 |---|---|---|---|
-| `packages/x/serializer.ts` | `docs/contracts.md` | ✅ | updated in commit `abc1234` |
+| `src/<module>/serializer.ts` | `docs/contracts.md` | ✅ | updated in commit `abc1234` |
 | `bin/sdd` | `README.md` | ✅ | "Usage" section rewritten, commit `def5678` |
-| `packages/y/utils.ts` | — | n/a | internal refactor, no doc describes these functions |
+| `src/<module>/utils.ts` | — | n/a | internal refactor, no doc describes these functions |
 ```
 
 Checklist rules:

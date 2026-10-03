@@ -42,12 +42,12 @@ Runs **before** execution, when `JIRA_ENABLED=true`.
 missao: <slug>
 fase: TICKET
 status: done
-issue: SQ-123
+issue: <KEY>-123
 sprint: <name or id of the active sprint>
 versao: <from 00-missao.md>
 branch: <branch created>
 data: <YYYY-MM-DD HH:MM>
-gate: "acli confirms issue SQ-123 in sprint <id>"
+gate: "acli confirms issue <KEY>-123 in sprint <id>"
 ---
 ```
 
