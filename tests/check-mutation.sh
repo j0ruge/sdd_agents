@@ -353,6 +353,14 @@ mut_EXEC_escaped_pipe_blind() {
   sed -i '/^checkpoint_rows()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (0)|' "$1"
 }
 
+# The reviewer's increments vanish from the checkpoint: checkpoint_rows skips every `R<n>` row, so a
+# round that found something hands nothing to EXEC and the B review keeps the ball in REVIEW — the
+# REVIEW⇄EXEC loop of `20260901-o-revisor-so-acha` silently cut. Issue #111 measured that only two
+# of the three R1 worlds in check-gates.sh see it; this mutant keeps both from being deleted.
+mut_EXEC_rows_blind_to_review_increments() {
+  sed -i '/^checkpoint_rows()/,/^}/ s/|| f\[2\] == "") next$/|| f[2] == "" || f[2] ~ \/^R[0-9]\/) next/' "$1"
+}
+
 # The three faces of the same three-character blindness: the separator-row skip goes back to the
 # bare dashes, so a GFM alignment row (`|:---|:---:|`, what prettier and markdownlint write) stops
 # being skipped and becomes DATA. One mutant per gate, because each one fails differently and a
@@ -5162,6 +5170,7 @@ CATALOG=(
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
   EXEC_escaped_pipe_blind
+  EXEC_rows_blind_to_review_increments
   EXEC_alignment_colon_blind
   EXEC_dirty_tree_as_red
   GATE_EXEC_backtick_kept

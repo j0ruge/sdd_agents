@@ -1643,8 +1643,14 @@ git add -A && git commit -qm "chore: back to Security at B"
 # assertions below pin it for the reviewer's rows too, because a checkpoint parser taught to
 # recognise `I`/`F` would silently strand every round of every future mission.
 #
-# Both directions, and the second is why the first is not vacuous: a runner that simply never leaves
-# EXEC satisfies the first assertion whatever it reads.
+# Three worlds, each catching a defect the others cannot (issue #111: this comment used to say the
+# second is what keeps the first from being vacuous, and the realistic sabotage measured otherwise).
+#   - a PENDING R1 must hand the ball to EXEC: the one a parser blind to `R<n>` fails;
+#   - a DONE R1 must hand it back to REVIEW: the one a runner that never leaves EXEC fails. It stays
+#     green under the blind parser — the review is at B, so REVIEW is derived whether the row is
+#     read or not;
+#   - a DONE R1 whose commit is not in the history must keep it in EXEC: the second world that fails
+#     under the blind parser, and the only one that shows a done R row is READ and not skipped.
 cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.rn.bak"
 printf '%s\n' '| R1 | finding #1 of r1 becomes an increment | `true` → 0 | pending | — |' >> "$MDIR/checkpoint.md"
 assert_phase "a review graded B with a pending R1 hands the ball to EXEC" "EXEC"
@@ -1661,6 +1667,13 @@ else
   fail "R1-done fixture" "an R1 row marked done with a real hash" "$(grep '^| R1' "$MDIR/checkpoint.md")"
 fi
 assert_phase "and once R1 is done the ball comes back to REVIEW" "REVIEW"
+sed -i "s@| done | $R1_HASH |@| done | deadbee |@" "$MDIR/checkpoint.md"
+if grep -qF '| R1 | finding #1 of r1 becomes an increment | `true` → 0 | done | deadbee |' "$MDIR/checkpoint.md"; then
+  pass "fixture: the R1 row is done with a commit that is not in the history"
+else
+  fail "R1-unreachable fixture" "an R1 row marked done with the hash deadbee" "$(grep '^| R1' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a done R1 whose commit is not in the history keeps the ball in EXEC" "EXEC"
 mv "$MDIR/checkpoint.rn.bak" "$MDIR/checkpoint.md"
 
 # The `—` with "Not analyzed" is what the skill emits on a focused review
