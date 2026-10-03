@@ -136,9 +136,10 @@
 #        empty-value probe that catches it, not the rc — both arms return 1.
 #  R38 → each `|| warn` of adr_declare back to `|| true`: red, each on its own probe
 #        (mut_ADR_declare_chmod_silent_frontmatter, mut_ADR_declare_chmod_silent_speckit). → the
-#        warning fired on every declaration: red on the two "works" probes, and ONLY there
-#        (mut_ADR_declare_chmod_warns_always). → the prefix swapped for frontmatter_write's: red on
-#        the two shim probes. → the chmod dropped: red on all four.
+#        warning fired on every declaration: red on the "works" probe of that site's layout, and
+#        ONLY there (mut_ADR_declare_chmod_warns_always_frontmatter, ..._speckit). → the prefix
+#        swapped for frontmatter_write's: red on the two shim probes. → the chmod dropped: red on
+#        all four.
 #  R11 → the duplicate-id arm replaced by `false`: red. → the name arm replaced by `false`: red.
 #  R12 → the whole mission branch replaced by `:`: red — and it SURVIVED the first sweep, because
 #        no probe drove a mission with a declared path through the repo scope. The probe that
@@ -766,8 +767,9 @@ if [ -n "$C" ]; then
     'warn +adr_declare: could not keep the mode of .*specs/004-chmod/spec\.md' \
     new --slug keptspec --spec specs/004-chmod/spec.md
   # ...and the declaration still LANDS: the warning is the only thing a failed chmod changes. The
-  # `adr_declare:` prefix in the two regexes above is what keeps frontmatter_write's own warning,
-  # same wording, from answering for this function.
+  # `adr_declare:` prefix in the two regexes above pins WHICH function spoke: both fixtures reach
+  # adr_declare's own rewrites (no `adr:` key, no frontmatter), never frontmatter_write, so the
+  # prefix guards against a message swapped for frontmatter_write's wording — red on both.
   if grep -qE '^adr: docs/adr/[0-9]{4}-kept\.md$' "$C/docs/handoffs/20260102-chmod/00-missao.md" \
      && grep -qE '^\*\*ADR\*\*: docs/adr/[0-9]{4}-keptspec\.md$' "$C/specs/004-chmod/spec.md"; then
     pass '...and both declarations still land despite the failed chmod'

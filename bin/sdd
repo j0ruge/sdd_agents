@@ -513,11 +513,16 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
 # Title or Check cell moved every column after it one to the left in the bash loops, while awk and
 # cut, which do not collapse, kept them in place. gate_EXEC validated one reading and counted
 # another, and passed a `done` whose Commit cell said `pending`. A separator that is not
-# whitespace splits the same way in all of them, and no markdown cell carries it. ONE definition,
-# read by the six places that touch it (this writer, checkpoint_tally, the Jidoka in cmd_run, and
-# the loops of gate_EXEC, status_increments and cmd_approve): a reader that spelled its own
-# separator would be the second reading this comment exists to refuse. The mutant
-# mut_EXEC_checkpoint_split_collapses flips this one line back to a tab.
+# whitespace splits the same way in all of them. ONE definition, read by the six places that touch
+# it — this writer, checkpoint_tally, the Jidoka in cmd_run, and the loops of gate_EXEC,
+# status_increments and cmd_approve; census: `grep -cE '^[^#]*\$CK_SEP' bin/sdd` → 6 — and a
+# reader that spelled its own separator would be the second reading this comment exists to refuse.
+# The mutant mut_EXEC_checkpoint_split_collapses flips this one line back to a tab.
+# DECLARED, no probe: a cell that already carries the byte \037 (a pasted control character) moves
+# every column after it, the way an unescaped `|` would. gate_EXEC then refuses with `invalid
+# status`, loudly, but the Jidoka `cut` could read another cell as the Status until the gate runs.
+# Not stripped: no writer of the kit or of the hats puts that byte in a markdown table, so the
+# world is one a fixture could build and no real checkpoint has.
 #
 # The `escaped_pipe`/rejoin pair below is DUPLICATED from gate_REVIEW (same file, the `### Overall
 # Grade` reader) on purpose, and the duplication is cheaper than the extraction: the two programs

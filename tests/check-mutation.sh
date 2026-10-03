@@ -4220,9 +4220,9 @@ mut_LEDGER_historic_rounds_no_file_is_a_round() {
 }
 
 # The memory dies and every recovered row is measured against a seed of 0, so any round file at all
-# reads as a round that advanced. It kills the two rules the REVIEW path deliberately does NOT
-# inherit from EXEC at once — the count carrying across a passing gate, and the memory being fed by
-# rows that carry the fields. The reset-restoring edit a future reader is likelier to actually make
+# reads as a round that advanced. It kills both REVIEW memory properties at once — the count carrying
+# across a passing gate (since issue #147 the EXEC sibling carries its memory across a pass too),
+# and the memory being fed by rows that carry the fields. The reset edit a future reader is likelier to make
 # (`elif $r.gate == "pass" then .seen[$k] = null`) was measured separately on 2026-08-31 and dies on
 # the same first assertion, so it is not a second entry here. Caught by `a passing REVIEW gate does
 # NOT clear the round the next session is measured against` and `the round memory is fed by the rows
@@ -4862,11 +4862,15 @@ mut_ADR_declare_chmod_silent_frontmatter() {
 mut_ADR_declare_chmod_silent_speckit() {
   sed -i '/^adr_declare() {/,/^}/ s@^    || warn "adr_declare: could not keep the mode of .*$@    || true@' "$1"
 }
-# The other direction: the warning fires on EVERY declaration, the chmod that worked included. The
-# shim probes stay green — they only ask that the warning appear — and the two probes of a chmod
-# that WORKS are the ones that die, which is why R38 carries them.
-mut_ADR_declare_chmod_warns_always() {
-  sed -i '/^adr_declare() {/,/^}/ s@chmod --reference="\$spec" "\$tmp" 2>/dev/null \\$@{ chmod --reference="$spec" "$tmp" 2>/dev/null; false; } \\@' "$1"
+# The other direction: the warning fires on EVERY declaration, the chmod that worked included — one
+# mutant per rewrite site, like the pair above, so each site's "works" probe proves it is load-
+# bearing on its own. The shim probes stay green (they only ask that the warning appear); the
+# probe of a chmod that WORKS on that site's layout is the one that dies, which is why R38 has them.
+mut_ADR_declare_chmod_warns_always_frontmatter() {
+  sed -i '/^adr_declare() {/,/^}/ s@^    chmod --reference="\$spec" "\$tmp" 2>/dev/null \\$@    { chmod --reference="$spec" "$tmp" 2>/dev/null; false; } \\@' "$1"
+}
+mut_ADR_declare_chmod_warns_always_speckit() {
+  sed -i '/^adr_declare() {/,/^}/ s@^  chmod --reference="\$spec" "\$tmp" 2>/dev/null \\$@  { chmod --reference="$spec" "$tmp" 2>/dev/null; false; } \\@' "$1"
 }
 
 # Gap 3 of portability: the TEST_CMD inherits the runner's stdin again. A bare `vitest` reads a
@@ -5632,7 +5636,8 @@ CATALOG=(
   ADR_link_not_path_generic
   ADR_declare_chmod_silent_frontmatter
   ADR_declare_chmod_silent_speckit
-  ADR_declare_chmod_warns_always
+  ADR_declare_chmod_warns_always_frontmatter
+  ADR_declare_chmod_warns_always_speckit
   RUN_check_cmd_stdin_inherited
   PLAN_adr_check_ignored
   PLAN_adr_tbd_accepted
