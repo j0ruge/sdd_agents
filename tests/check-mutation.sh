@@ -12,6 +12,10 @@
 # Usage: tests/check-mutation.sh             (exit 0 = catalogue intact and every unlisted mutation caught)
 #        tests/check-mutation.sh --anchors   (seconds, no suite run: every mutant still APPLIES and
 #                                             leaves valid bash and Python — the fast suite runs this)
+#        tests/check-mutation.sh --only <slug> [sensor.sh]
+#                                            (minutes: ONE mutant against the suite, or against one
+#                                             sensor in seconds — a HINT before a commit, never the
+#                                             verdict; exit 0 = caught, 1 = not caught or no answer)
 
 set -uo pipefail
 
@@ -31,11 +35,19 @@ ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # hour, `sdd health` names no culprit, and both were anchors today's merges had broken. Applying
 # the 389 without running the suite found them in 20 seconds. So the fast suite asks this question
 # on every gate, and the expensive one stays where 4c86712 put it.
-ANCHORS_ONLY=0
+ANCHORS_ONLY=0 ONLY_SLUG="" ONLY_SENSOR=""
+USAGE="want nothing, --anchors, or --only <slug> [sensor.sh]"
 case "${1:-}" in
-  "") ;;
-  --anchors) ANCHORS_ONLY=1 ;;
-  *) echo "check-mutation.sh: unknown option '$1' (want nothing, or --anchors)" >&2; exit 2 ;;
+  "") [ "$#" -le 1 ] || { echo "check-mutation.sh: unexpected argument '$2' ($USAGE)" >&2; exit 2; } ;;
+  --anchors)
+    [ "$#" -eq 1 ] || { echo "check-mutation.sh: --anchors takes no argument, got '$2' ($USAGE)" >&2; exit 2; }
+    ANCHORS_ONLY=1 ;;
+  --only)
+    if [ "$#" -lt 2 ] || [ "$#" -gt 3 ] || [ -z "$2" ]; then
+      echo "check-mutation.sh: --only takes a catalogue slug and at most one sensor ($USAGE)" >&2; exit 2
+    fi
+    ONLY_SLUG="$2" ONLY_SENSOR="${3:-}" ;;
+  *) echo "check-mutation.sh: unknown option '$1' ($USAGE)" >&2; exit 2 ;;
 esac
 
 # ---------------------------------------------------------------------------
@@ -5868,6 +5880,99 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
   exit 1
 fi
 
+# The control of the catalogue: the whole suite on an unsabotaged copy (see CONTROL run below).
+# Defined here because --only, the next block, runs the same control before reading its one mutant.
+run_control() {
+  local rc=0
+  SDD_MUTANT=1 "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1 || rc=$?
+  echo "$rc" > "$WORK/control.rc"
+}
+
+# ---------------------------------------------------------------------------
+# --only <slug> [sensor.sh]: ONE mutant of the catalogue, in a copy — the question a session asks
+# before it commits a gate ("does the suite catch my mutant?"), answered in minutes against the
+# whole suite, or in seconds against one sensor, instead of the catalogue's hour. Every PR that
+# added a gate rebuilt a throwaway helper for it (13 runs of one in PR #200).
+#
+# It reuses sandbox, apply_mutant, run_mutant, control_verdict and rc_verdict, so it cannot
+# disagree with the catalogue about what applies, what a rc means or what a red control is.
+# Without a sensor it IS the catalogue's run for that slug: run_mutant, beside run_control.
+#
+# It is a HINT, and the last line says so. One sensor alone runs with no step deadline (run-all.sh
+# gives each step one) and is not one of the steps run-all.sh skips inside a mutant, so it can catch
+# a mutant the suite would let through — or the reverse. Only `sdd health` runs the catalogue, and
+# only the catalogue stamps. The control is not optional: on a copy that is red with no sabotage,
+# every mutant reads caught, which is exactly the vacuity the catalogue's own control exists for.
+#
+# Not run by the suite, by choice: the only probe that would prove it end to end is a sensor run
+# per call, and run-all.sh would then invoke this file a third time (check-health.sh counts the
+# invocations). What it shares with the catalogue is measured there; its own branches are not.
+# ---------------------------------------------------------------------------
+if [ -n "$ONLY_SLUG" ]; then
+  known=0
+  for slug in "${CATALOG[@]}"; do [ "$slug" = "$ONLY_SLUG" ] && { known=1; break; }; done
+  if [ "$known" = 0 ] || ! declare -F "mut_$ONLY_SLUG" >/dev/null; then
+    echo "check-mutation.sh: '$ONLY_SLUG' is not a mutant of CATALOG (give the slug, without the mut_ prefix)" >&2
+    exit 2
+  fi
+  case "$ONLY_SENSOR" in
+    "") ;;
+    check-mutation.sh) echo "check-mutation.sh: --only cannot run the catalogue inside a mutant" >&2; exit 2 ;;
+    */*) echo "check-mutation.sh: the sensor is a file name under tests/, like check-gates.sh (got '$ONLY_SENSOR')" >&2; exit 2 ;;
+    check-*.sh) [ -f "$ROOT/tests/$ONLY_SENSOR" ] \
+                  || { echo "check-mutation.sh: tests/$ONLY_SENSOR does not exist" >&2; exit 2; } ;;
+    *) echo "check-mutation.sh: the sensor is a file name under tests/, like check-gates.sh (got '$ONLY_SENSOR')" >&2; exit 2 ;;
+  esac
+  sandbox "$WORK/control"
+  box="$WORK/$ONLY_SLUG"
+  if [ -z "$ONLY_SENSOR" ]; then
+    what="the suite"
+    load_killer_map "$KILLERS_FILE"
+    echo "== --only $ONLY_SLUG: control and mutant, each a whole suite run (minutes) =="
+    run_control &
+    run_mutant "$ONLY_SLUG"
+    wait
+  else
+    what="$ONLY_SENSOR"
+    # only_sensor <box> <name> — the one sensor, under the SDD_MUTANT a mutant's suite runs with
+    # (so it stops at its first red, as it would inside the catalogue); <name>.rc and .log in $WORK.
+    only_sensor() {
+      local rc=0
+      SDD_MUTANT=1 bash "$1/tests/$ONLY_SENSOR" > "$WORK/$2.log" 2>&1 || rc=$?
+      echo "$rc" > "$WORK/$2.rc"
+    }
+    echo "== --only $ONLY_SLUG: control and mutant against $ONLY_SENSOR alone =="
+    only_sensor "$WORK/control" control &
+    sandbox "$box"
+    arc=0; apply_mutant "mut_$ONLY_SLUG" "$box" || arc=$?
+    if [ "$arc" -eq 0 ]; then only_sensor "$box" "$ONLY_SLUG"; else echo "$arc" > "$box.rc"; fi
+    wait
+  fi
+  if ! why="$(control_verdict "$WORK")"; then
+    fail "$why" "$what on an unsabotaged copy says nothing about the mutant — see $WORK/control.log"
+    tail -20 "$WORK/control.log" >&2
+    exit 1
+  fi
+  pass "control: $what is green on an unsabotaged copy"
+  rc="$(cat "$box.rc" 2>/dev/null || echo 99)"
+  case "$(rc_verdict "$rc")" in
+    caught)
+      killer="$(cat "$box.killer" 2>/dev/null || true)"
+      pass "$ONLY_SLUG — $what dies (rc $rc)${killer:+, first red step: $killer}" ;;
+    survived)
+      fail "$ONLY_SLUG is NOT caught by $what" "it stayed green with the runner sabotaged — an assertion is missing" ;;
+    broken)
+      fail "CATALOGUE-BROKEN: $ONLY_SLUG" "$(cat "$box.log" 2>/dev/null || echo 'no log')" ;;
+    timed-out)
+      fail "TIMED-OUT: $ONLY_SLUG — a step outlived its timeout inside the mutant; inconclusive" "$(tail -5 "$box.log")" ;;
+    missing)
+      fail "$ONLY_SLUG produced no result" "the mutant died before writing its rc" ;;
+  esac
+  echo "hint only — \`sdd health\` runs the whole catalogue, and only it writes the mutation stamp"
+  [ "$(rc_verdict "$rc")" = caught ]
+  exit $?
+fi
+
 # ---------------------------------------------------------------------------
 # CONTROL run — the copy has to be green with NO sabotage at all.
 #
@@ -5883,11 +5988,6 @@ fi
 # ---------------------------------------------------------------------------
 echo "== control (the first job of the pool) =="
 sandbox "$WORK/control"
-run_control() {
-  local rc=0
-  SDD_MUTANT=1 "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1 || rc=$?
-  echo "$rc" > "$WORK/control.rc"
-}
 
 load_killer_map "$KILLERS_FILE"
 echo "== killer map: ${#KILLER[@]} mutant(s) run their last killer first, ${#SECS[@]} with a recorded time =="
