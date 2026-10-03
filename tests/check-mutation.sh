@@ -4220,13 +4220,13 @@ mut_LEDGER_historic_rounds_no_file_is_a_round() {
 }
 
 # The memory dies and every recovered row is measured against a seed of 0, so any round file at all
-# reads as a round that advanced. It kills both REVIEW memory properties at once — the count carrying
-# across a passing gate (since issue #147 the EXEC sibling carries its memory across a pass too),
-# and the memory being fed by rows that carry the fields. The reset edit a future reader is likelier to make
-# (`elif $r.gate == "pass" then .seen[$k] = null`) was measured separately on 2026-08-31 and dies on
-# the same first assertion, so it is not a second entry here. Caught by `a passing REVIEW gate does
-# NOT clear the round the next session is measured against` and `the round memory is fed by the rows
-# that carry the fields too`.
+# reads as a round that advanced. It kills both REVIEW memory properties at once — the count
+# carrying across a passing gate (since issue #147 the EXEC sibling carries its memory across a pass
+# too), and the memory being fed by rows that carry the fields. The reset edit a future reader is
+# likelier to make (`elif $r.gate == "pass" then .seen[$k] = null`) was measured separately on
+# 2026-08-31 and dies on the same first assertion, so it is not a second entry here. Caught by `a
+# passing REVIEW gate does NOT clear the round the next session is measured against` and `the round
+# memory is fed by the rows that carry the fields too`.
 mut_LEDGER_historic_rounds_memory_blind() {
   sed -i 's@{rounds_before: (.seen\[$k\] // 0)@{rounds_before: (0)@' "$1"
 }
