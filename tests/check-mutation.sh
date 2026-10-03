@@ -3724,6 +3724,29 @@ mut_EXEC_tally_counts_done() {
   sed -i '/^checkpoint_tally()/,/^}/ s@\$4 == "pending" || \$4 == "doing"@$4 != ""@' "$1"
 }
 
+# `doing` stops counting as pending, and an increment somebody left mid-flight reads as closed:
+# gate_EXEC answers `1 increment(s) done, suite green` over a checkpoint whose only row says
+# `doing`, and `sdd status` moves on to QA. The rule lived in checkpoint_tally's header and in
+# gate_EXEC's own sentence, and the whole suite stayed green without it (TODO.md, 2026-08-30).
+# Caught by `an increment left doing keeps the phase in EXEC` in check-gates.sh (QA against the
+# EXEC it demands), with `...is still to execute` beside it naming the gate's own sentence.
+mut_EXEC_tally_doing_is_done() {
+  sed -i '/^checkpoint_tally()/,/^}/ s@\$4 == "pending" || \$4 == "doing"@$4 == "pending"@' "$1"
+}
+
+# CK_SEP goes back to a TAB — the state before issue #146. The awk and cut readers still split one
+# tab per column, but the three bash loops read with a tab IFS, which COLLAPSES two in a row: an
+# empty Check cell moves the Status into the Commit variable, and gate_EXEC passes a `done` whose
+# Commit cell says `pending` while checkpoint_tally counts it as done. ONE line, because the
+# separator has ONE definition: a mutant that rewrote each reader would half-apply the day a
+# reader left its anchors, and score `caught` for breaking every reader instead of for the
+# collapse. Caught by `an empty Check cell changes nothing about which phase is due` in
+# check-gates.sh (EXEC against the QA the filled checkpoint gets), with the status and approve
+# listings beside it.
+mut_EXEC_checkpoint_split_collapses() {
+  sed -i 's@^CK_SEP=.*@CK_SEP="$(printf "\\t")"@' "$1"
+}
+
 # The phase guard at cmd_run's door 1 goes, and GATE_EXEC_PENDING — which outlives its gate by
 # design, one screen up the same function — follows the run into the next phase: the QA session
 # opened after a PASSING EXEC gate is born claiming an increment QA never had, and `waste` falls
@@ -3813,22 +3836,53 @@ mut_AUTONOMY_historic_progress_dropped() {
   sed -i 's@def historic_progress: reduce .*| .out;@def historic_progress: .;@' "$1"
 }
 
-# The recovery stops noticing that the DENOMINATOR moved. QA writes fix increments after a phase
-# passed, the checkpoint grows from 4 to 6, and the next old row says `2 of 6` — measured against a
-# memory that still says 2, the fix increment that ran reads churn. Caught by `a growing total is a
-# fix increment, not churn` in check-autonomy.sh (mission m4: `1 advanced · 3 churned` against the
-# `4 advanced · 0 churned` it demands).
-mut_AUTONOMY_historic_total_change_blind() {
-  sed -i 's@(if (.seen\[$k\] != null and .seen\[$k\].m == $p.m) then@(if (.seen[$k] != null) then@' "$1"
+# The memory keeps the PENDING count instead of the total DONE — the shape the two rules of grill
+# decision 3 had before issue #147, without their two patches. `M - pending` is nonsense from the
+# second row on: `3 of 4` then `2 of 4` reads 4 - 3 = 1 before and 2 after, and the session that
+# closed an increment reads churn. Caught by `the historical path and the fields agree on one
+# history` in check-autonomy.sh, and by `a growing total is a fix increment, not churn` (m4).
+mut_AUTONOMY_historic_memory_keeps_pending() {
+  sed -i 's@\.seen\[\$k\] = (\$row\.increments_total - \$row\.pending_after)@.seen[$k] = $row.pending_after@' "$1"
 }
 
-# A PASSING gate stops clearing the memory, so a session that reopened an increment is measured
-# against the count from before the phase closed instead of against the total. `3 of 4` after a
-# `4 increment(s) done` then reads 3 → 3 and the session that did the work reads churn. The M rule
-# cannot cover this one — M did not change — which is why the two rules have two fixtures. Caught
-# by `a passing gate clears the count the next session is measured against` (mission m5).
+# The memory is ignored and every recovered row is measured against M — the inference the memory
+# exists to replace. A session that left `3 of 4` where the row above left it reads `advanced`.
+# Caught by `the historical path and the fields agree on one history` in check-autonomy.sh, and by
+# the m5 and m14 assertions of the memory block.
+mut_AUTONOMY_historic_memory_ignored() {
+  sed -i 's@(\$p\.m - (\.seen\[\$k\] // 0)) as \$before@$p.m as $before@' "$1"
+}
+
+# A PASSING gate stops writing its total to the memory, so a session after the close is measured
+# against the count from BEFORE the close: `3 of 4`, pass, `1 of 5` reads 5 - 1 = 4 before and 1
+# after, and the session that left QA's fix increment open reads `advanced`. Only the m14 world
+# catches it — m5 reopens with M unchanged, where the stale memory happens to agree. Caught by `a
+# passing gate leaves its total done in the memory, so a fix increment is counted from it`.
 mut_AUTONOMY_historic_pass_keeps_memory() {
-  sed -i 's@elif $r.gate == "pass" then .seen\[$k\] = null elif@elif false then .seen[$k] = null elif@' "$1"
+  sed -i 's@elif ((\$r\.gate_why // "") | test("^\[0-9\]+ increment@elif false and (($r.gate_why // "") | test("^[0-9]+ increment@' "$1"
+}
+
+# A PASSING gate writes 0 — the reset of grill decision 3, which handed the next session M, the
+# largest value the field can take. The flattering reading the m5 assertion used to DEMAND: a
+# session that reopened three increments after the close reads `advanced`. Caught by `a session
+# that reopens work after a passing gate is churn, not progress` (m5), and by the m14 assertion.
+mut_AUTONOMY_historic_pass_clears_memory() {
+  sed -i 's@capture("^(?<t>\[0-9\]+) increment") | \.t | tonumber)@0)@' "$1"
+}
+
+# The pair writes the memory when only `pending_after` is there: `increments_total - pending_after`
+# on a row without the total is `null - 1`, and jq kills the reader — `sdd autonomy` dies on a
+# ledger holding one row that is data. Caught by `a ledger of fix-loop rows is data (rc 0)`.
+mut_AUTONOMY_historic_memory_partial_row() {
+  sed -i 's@elif \$row\.pending_after != null and \$row\.increments_total != null then \.seen@elif $row.pending_after != null then .seen@' "$1"
+}
+
+# Any row whose prose opens with `N increment` writes N — the Jidoka refusal too, whose N counts the
+# BLOCKED increments. `2 of 4`, `1 increment(s) 'blocked'`, `2 of 4` then reads 4 - 1 = 3 before
+# and 2 after, and the session that left the checkpoint where it found it reads `advanced`. Caught
+# by `the Jidoka sentence is not a pass, and writes nothing to the memory` (m15).
+mut_AUTONOMY_historic_done_any_count() {
+  sed -i 's@test("^\[0-9\]+ increment\\\\(s\\\\) done")@test("^[0-9]+ increment")@' "$1"
 }
 
 # The guard that keeps the dated path off rows that carry the fields goes, and the path re-derives
@@ -3846,12 +3900,14 @@ mut_AUTONOMY_historic_annotates_new_rows() {
 # to outrank the one thing the runner measured directly about that session. It only bites on the
 # recovered path — a measured pair with `moved: false` cannot exist, because closing an increment
 # edits the checkpoint and `state_fingerprint` hashes it — and there it is the flattering direction
-# once more: a phase that closed at `4 increment(s) done` and then reopened an increment reads
+# once more: the first EXEC row of a mission whose earlier increments ran outside the runner reads
 # `1 of 5`, the empty memory hands it a `pending_before` of 5, and the session that never touched
 # the disk reads `advanced` at `0% waste`. Caught by `a recovered count never credits a session
-# that wrote nothing` in check-autonomy.sh (m11 reads `2 advanced · 0 idle` against the
-# `1 advanced · 1 idle` it demands), with the witness `and the row it declined to credit is one the
-# path did read` staying green beside it to prove the path still reaches that row at all.
+# that wrote nothing` in check-autonomy.sh (m11 reads `1 advanced · 0 idle` against the
+# `0 advanced · 1 idle` it demands), with the witness `and the row it declined to credit is one the
+# path did read` staying green beside it to prove the path still reaches that row at all. (The m11
+# world was a pass followed by `1 of 5` until 2026-10-02; since the pass writes the memory, that
+# world reads `pending_before` 1 and no longer reaches this guard.)
 mut_AUTONOMY_progress_outranks_moved() {
   sed -i 's@and .pending_after < .pending_before and .moved != false)@and .pending_after < .pending_before)@' "$1"
 }
@@ -4031,10 +4087,20 @@ mut_KAIZEN_qa_fix_loop_unscoped() {
   sed -i 's@elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before@elif (.pending_before != null and .pending_after != null and .pending_after > .pending_before@' "$1"
 }
 
+# The key of the EXEC dated path loses its repo half, and under --all-repos two missions of the same
+# slug in two repos share one memory of the total done: the second repo's first row, `3 of 4`, is
+# measured against the first repo's `3 of 4` — 4 - 1 = 3 before, 3 after — and a session that
+# advanced reads churn. The `ledger_repo_root`/CDPATH class: contamination between repos, silently.
+# Caught by `the historical memory of one repo never measures a row of another` in
+# check-autonomy.sh (issue #149).
+mut_AUTONOMY_historic_key_slug_only() {
+  sed -i 's@$r.phase == "EXEC" then (\[($r.repo // ""), ($r.mission // "")\] | tostring)@$r.phase == "EXEC" then ([($r.mission // "")] | tostring)@' "$1"
+}
+
 # The key of the QA dated path loses its repo half, and two missions of the same slug in two repos
 # start sharing a "next row": this repo's last QA:exec reads the QA:close of ANOTHER repo and turns
-# `advanced`. It is the class the EXEC sibling's key carries without a probe (TODO.md); here it is
-# born with one. Caught by `the next QA row of the same slug in ANOTHER repo is not this row's next
+# `advanced`. The class the EXEC sibling's key carried without a probe until issue #149; here it
+# was born with one. Caught by `the next QA row of the same slug in ANOTHER repo is not this row's next
 # row` in check-kaizen.sh.
 mut_KAIZEN_historic_steps_key_slug_only() {
   sed -i 's@$r.phase == "QA" then (\[($r.repo // ""), ($r.mission // "")\] | tostring)@$r.phase == "QA" then ([($r.mission // "")] | tostring)@' "$1"
@@ -4154,13 +4220,13 @@ mut_LEDGER_historic_rounds_no_file_is_a_round() {
 }
 
 # The memory dies and every recovered row is measured against a seed of 0, so any round file at all
-# reads as a round that advanced. It kills the two rules the REVIEW path deliberately does NOT
-# inherit from EXEC at once — the count carrying across a passing gate, and the memory being fed by
-# rows that carry the fields. The reset-restoring edit a future reader is likelier to actually make
-# (`elif $r.gate == "pass" then .seen[$k] = null`) was measured separately on 2026-08-31 and dies on
-# the same first assertion, so it is not a second entry here. Caught by `a passing REVIEW gate does
-# NOT clear the round the next session is measured against` and `the round memory is fed by the rows
-# that carry the fields too`.
+# reads as a round that advanced. It kills both REVIEW memory properties at once — the count
+# carrying across a passing gate (since issue #147 the EXEC sibling carries its memory across a pass
+# too), and the memory being fed by rows that carry the fields. The reset edit a future reader is
+# likelier to make (`elif $r.gate == "pass" then .seen[$k] = null`) was measured separately on
+# 2026-08-31 and dies on the same first assertion, so it is not a second entry here. Caught by `a
+# passing REVIEW gate does NOT clear the round the next session is measured against` and `the round
+# memory is fed by the rows that carry the fields too`.
 mut_LEDGER_historic_rounds_memory_blind() {
   sed -i 's@{rounds_before: (.seen\[$k\] // 0)@{rounds_before: (0)@' "$1"
 }
@@ -4784,6 +4850,27 @@ mut_ADR_link_backtick_kept() {
 # through to "points somewhere else … fix whichever side is wrong", when only one side is a claim.
 mut_ADR_link_not_path_generic() {
   sed -i '/^adr_check_link() {/,/^}/ s@^    \*/\*) ;;$@    *) ;;@' "$1"
+}
+
+# The chmod of adr_declare goes back to `|| true`, one mutant per rewrite site: a userland without
+# `chmod --reference` leaves the spec 0600 behind the temporary and the declaration says nothing
+# (issue #199). Caught by R38 of check-adr.sh — the frontmatter probe for the first, the `**ADR**:`
+# probe for the second.
+mut_ADR_declare_chmod_silent_frontmatter() {
+  sed -i '/^adr_declare() {/,/^}/ s@^      || warn "adr_declare: could not keep the mode of .*$@      || true@' "$1"
+}
+mut_ADR_declare_chmod_silent_speckit() {
+  sed -i '/^adr_declare() {/,/^}/ s@^    || warn "adr_declare: could not keep the mode of .*$@    || true@' "$1"
+}
+# The other direction: the warning fires on EVERY declaration, the chmod that worked included — one
+# mutant per rewrite site, like the pair above, so each site's "works" probe proves it is load-
+# bearing on its own. The shim probes stay green (they only ask that the warning appear); the
+# probe of a chmod that WORKS on that site's layout is the one that dies, which is why R38 has them.
+mut_ADR_declare_chmod_warns_always_frontmatter() {
+  sed -i '/^adr_declare() {/,/^}/ s@^    chmod --reference="\$spec" "\$tmp" 2>/dev/null \\$@    { chmod --reference="$spec" "$tmp" 2>/dev/null; false; } \\@' "$1"
+}
+mut_ADR_declare_chmod_warns_always_speckit() {
+  sed -i '/^adr_declare() {/,/^}/ s@^  chmod --reference="\$spec" "\$tmp" 2>/dev/null \\$@  { chmod --reference="$spec" "$tmp" 2>/dev/null; false; } \\@' "$1"
 }
 
 # Gap 3 of portability: the TEST_CMD inherits the runner's stdin again. A bare `vitest` reads a
@@ -5440,6 +5527,8 @@ CATALOG=(
   AUTONOMY_notes_borrowed_across_repos
   LEDGER_progress_not_written
   EXEC_tally_counts_done
+  EXEC_tally_doing_is_done
+  EXEC_checkpoint_split_collapses
   LEDGER_progress_leaks_across_phases
   EXEC_blocked_publishes_count
   RUN_retry_pending_before_null
@@ -5453,8 +5542,13 @@ CATALOG=(
   FRONTMATTER_chmod_silent
   AUTONOMY_progress_null_blind
   AUTONOMY_historic_progress_dropped
-  AUTONOMY_historic_total_change_blind
+  AUTONOMY_historic_memory_keeps_pending
+  AUTONOMY_historic_memory_ignored
   AUTONOMY_historic_pass_keeps_memory
+  AUTONOMY_historic_pass_clears_memory
+  AUTONOMY_historic_done_any_count
+  AUTONOMY_historic_memory_partial_row
+  AUTONOMY_historic_key_slug_only
   AUTONOMY_historic_annotates_new_rows
   AUTONOMY_progress_outranks_moved
   KAIZEN_label_reads_gate
@@ -5540,6 +5634,10 @@ CATALOG=(
   ADR_link_bold_colon_blind
   ADR_link_backtick_kept
   ADR_link_not_path_generic
+  ADR_declare_chmod_silent_frontmatter
+  ADR_declare_chmod_silent_speckit
+  ADR_declare_chmod_warns_always_frontmatter
+  ADR_declare_chmod_warns_always_speckit
   RUN_check_cmd_stdin_inherited
   PLAN_adr_check_ignored
   PLAN_adr_tbd_accepted

@@ -453,6 +453,22 @@ assert_phase "a status outside the enum fails" "EXEC"
 assert_why   "EXEC reports the invalid status" "EXEC" "invalid status"
 mv "$MDIR/checkpoint.bak" "$MDIR/checkpoint.md"
 
+# `doing` is still to execute. An increment somebody left mid-flight has not advanced, and the
+# commit cell already carries a reachable SHA — exactly the row a session that died after its
+# commit and before its last checkpoint edit leaves behind. Read as closed, the gate passes and
+# the line moves to QA over unfinished work. The rule had no probe until 2026-10-02 (TODO.md):
+# degrading checkpoint_tally to count `pending` alone left the whole suite green.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.doing.bak"
+sed -i "s/| done | $REAL_HASH |/| doing | $REAL_HASH |/" "$MDIR/checkpoint.md"
+if grep -qF "| doing | $REAL_HASH |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the only increment really reads doing"
+else
+  fail "doing fixture" "a doing row with a reachable hash" "$(grep -m1 '^| I1' "$MDIR/checkpoint.md")"
+fi
+assert_phase "an increment left doing keeps the phase in EXEC" "EXEC"
+assert_why   "an increment left doing is still to execute" "EXEC" "1 of 1 increment\(s\) still to execute"
+mv "$MDIR/checkpoint.doing.bak" "$MDIR/checkpoint.md"
+
 # A literal pipe inside a Check cell is spelled `\|` in GFM, and a raw split on "|" cuts the row
 # there — every column after it shifts one to the left, so the Status column is read out of the
 # CHECK cell. The increment is `done` and the gate answers "invalid status", naming a status the
@@ -550,6 +566,59 @@ assert_phase "a commit cell that is not a SHA fails the EXEC gate" "EXEC"
 assert_why   "a commit cell that is not a SHA gets its own reason" "EXEC" "is not a SHA"
 assert_why_absent "the not-a-SHA reason is not the does-not-exist reason" "EXEC" "does not exist"
 mv "$MDIR/checkpoint.notsha.bak" "$MDIR/checkpoint.md"
+
+# An EMPTY cell must not move the columns after it. gate_EXEC's loop read checkpoint_rows with
+# `IFS=$'\t' read`, and a tab is IFS whitespace: two in a row COLLAPSE, so an empty Check cell put
+# the Status in the Commit variable. checkpoint_tally splits with awk, which does not collapse —
+# two readings of one file, one count. Measured both ways (issue #146): an empty Check over a
+# `done` row with a real SHA read "invalid status '<sha>'" (a refusal the author never earned), and
+# over a `done` row whose Commit cell said `pending` the loop saw a valid `pending`, the tally saw
+# `done`, and the gate PASSED a label with no artifact.
+#
+# DIFFERENTIAL first: the same increment with and without its Check cell must get the same answer.
+filled_answer="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.empty.bak"
+sed -i "s@| \`true\` → 0 | done | $REAL_HASH |@|  | done | $REAL_HASH |@" "$MDIR/checkpoint.md"
+if grep -qF "| slice one |  | done | $REAL_HASH |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the Check cell really is empty"
+else
+  fail "empty Check fixture" "a done row with an empty Check cell" "$(grep -m1 '^| I1' "$MDIR/checkpoint.md")"
+fi
+empty_answer="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "an empty Check cell changes nothing about which phase is due" \
+  "$filled_answer" "$empty_answer"
+assert_eq "...and that agreement is not vacuous — the filled checkpoint is past EXEC" "QA" "$filled_answer"
+assert_why_absent "an empty Check cell does not shift the Status into the Commit column" "EXEC" "invalid status"
+# The other direction, the one that fails OPEN: the loop must still see the `done` and judge the
+# Commit cell, or a word in it passes as an artifact.
+sed -i "s@|  | done | $REAL_HASH |@|  | done | pending |@" "$MDIR/checkpoint.md"
+if grep -qF "| slice one |  | done | pending |" "$MDIR/checkpoint.md"; then
+  pass "fixture: an empty Check cell before a done row whose Commit says pending"
+else
+  fail "empty Check, bad commit fixture" "| slice one |  | done | pending |" "$(grep -m1 '^| I1' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a done row with an empty Check cell still has its Commit cell judged" "EXEC"
+assert_why   "...and the Commit cell is refused for what it is" "EXEC" "Commit cell 'pending' is not a SHA"
+mv "$MDIR/checkpoint.empty.bak" "$MDIR/checkpoint.md"
+
+# The same collapse lived in the two other loops over checkpoint_rows: `sdd status`'s increment
+# table and `sdd approve`'s listing. An empty Title cell (the column before Check) shifted the
+# Check into the title, the Status into the Check and the SHA into the Status, so the table drew
+# a `done` increment with the pending mark and no commit. Asserted through --no-gates, which
+# prints the table without deriving a phase — this is about the reader, not the gate.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.notitle.bak"
+sed -i "s@| I1 | slice one | @| I1 |  | @" "$MDIR/checkpoint.md"
+if grep -qF "| I1 |  | \`true\` → 0 | done | $REAL_HASH |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the Title cell really is empty"
+else
+  fail "empty Title fixture" "a done row with an empty Title cell" "$(grep -m1 '^| I1' "$MDIR/checkpoint.md")"
+fi
+NT_OUT="$( cd "$FIX" && "$SDD" status "$MISSION" --no-gates 2>&1 )"
+assert_eq "an empty Title cell leaves the status table reading done, with its commit" "1" \
+  "$(grep -cE "^    ✓ I1 +${REAL_HASH:0:8}\$" <<< "$NT_OUT")"
+assert_eq "...and an empty Title cell changes nothing about which phase is due" \
+  "$filled_answer" "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+mv "$MDIR/checkpoint.notitle.bak" "$MDIR/checkpoint.md"
 
 # --- QA --------------------------------------------------------------------
 # The QA gate has TWO contracts, because there are two kinds of project.
@@ -4608,6 +4677,33 @@ else
        "the shim armed, rc 0, 'aprovacao: humano-…' written, and a warning naming 00-missao.md" \
        "armed $FC_ARMED, rc $FC_RC, line '$FC_LINE', out: $(tail -3 <<< "$FC_OUT")"
 fi
+
+# 3. The listing the human approves from. It reads checkpoint_rows like gate_EXEC and `sdd status`,
+# and an empty Title cell used to shift every column after it (issue #146): the Check landed in
+# the title and the Commit placeholder in the status, so the human was asked to approve an
+# increment listed as `—`. Answered `n`, so nothing is written — what is under test is the listing.
+FT="20260111-empty-title"
+FTDIR="$FIX/docs/handoffs/$FT"
+mkdir -p "$FTDIR"
+cat > "$FTDIR/00-missao.md" <<'EOF'
+---
+missao: 20260111-empty-title
+titulo: fixture — an increment with an empty Title cell
+aprovacao:
+branch: <placeholder>
+---
+# Mission
+EOF
+: > "$FTDIR/01-plano.md"
+cat > "$FTDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 |  | `true` → `0` | pending | — |
+EOF
+( cd "$FIX" && git add -A && git commit -qm "fixture: a plan with an empty Title cell" ) >/dev/null
+FT_OUT="$( cd "$FIX" && "$SDD" approve "$FT" 2>&1 <<< "n" )"
+assert_eq "an empty Title cell leaves the approve listing reading the increment's own status" "1" \
+  "$(grep -cE '^    I1 +pending$' <<< "$FT_OUT")"
 
 # --- sdd close: the artifact decides, never the exit code ------------------
 # `cmd_close` printed `ok <issue> closed` off `[ "$rc" -eq 0 ]` — the exit code of the session it
