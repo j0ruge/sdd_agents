@@ -7029,6 +7029,11 @@ adr_reserve() {
 # documented at its own definition. So the absent case is inserted here, by awk with index(), never
 # sed: a path carrying `&` or `/` would go through sed's own syntax and land corrupted in an
 # artifact that is already committed.
+#
+# Both rewrites go through a mktemp beside the spec, born 0600, and `chmod --reference` puts the
+# original mode back. That is GNU only, and a failure is SAID, the way frontmatter_write says it:
+# the declaration still lands — losing the mode is not worth losing the link — but a silent `||
+# true` left the spec 0600 with no word (issue #199). R38 of tests/check-adr.sh, one probe per site.
 ADR_DECLARE_WHY=""
 adr_declare() {
   local spec="$1" path="$2" tmp
@@ -7048,7 +7053,8 @@ adr_declare() {
       { print }
       END { if (!done) exit 1 }' "$spec" > "$tmp" \
       || { rm -f "$tmp"; ADR_DECLARE_WHY="$spec opens a frontmatter block that is never closed, so there is nowhere to write 'adr:'"; return 1; }
-    chmod --reference="$spec" "$tmp" 2>/dev/null || true
+    chmod --reference="$spec" "$tmp" 2>/dev/null \
+      || warn "adr_declare: could not keep the mode of $spec — it now carries the temporary's (0600); restore it with chmod"
     mv -f "$tmp" "$spec" || { rm -f "$tmp"; ADR_DECLARE_WHY="could not replace $spec"; return 1; }
     return 0
   fi
@@ -7067,7 +7073,8 @@ adr_declare() {
     { print }
     END { if (!done) print "\n**ADR**: " v }' "$spec" > "$tmp" \
     || { rm -f "$tmp"; ADR_DECLARE_WHY="awk failed on $spec"; return 1; }
-  chmod --reference="$spec" "$tmp" 2>/dev/null || true
+  chmod --reference="$spec" "$tmp" 2>/dev/null \
+    || warn "adr_declare: could not keep the mode of $spec — it now carries the temporary's (0600); restore it with chmod"
   mv -f "$tmp" "$spec" || { rm -f "$tmp"; ADR_DECLARE_WHY="could not replace $spec"; return 1; }
 }
 

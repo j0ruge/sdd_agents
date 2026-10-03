@@ -4853,6 +4853,17 @@ mut_ADR_link_not_path_generic() {
   sed -i '/^adr_check_link() {/,/^}/ s@^    \*/\*) ;;$@    *) ;;@' "$1"
 }
 
+# The chmod of adr_declare goes back to `|| true`, one mutant per rewrite site: a userland without
+# `chmod --reference` leaves the spec 0600 behind the temporary and the declaration says nothing
+# (issue #199). Caught by R38 of check-adr.sh — the frontmatter probe for the first, the `**ADR**:`
+# probe for the second.
+mut_ADR_declare_chmod_silent_frontmatter() {
+  sed -i '/^adr_declare() {/,/^}/ s@^      || warn "adr_declare: could not keep the mode of .*$@      || true@' "$1"
+}
+mut_ADR_declare_chmod_silent_speckit() {
+  sed -i '/^adr_declare() {/,/^}/ s@^    || warn "adr_declare: could not keep the mode of .*$@    || true@' "$1"
+}
+
 # Gap 3 of portability: the TEST_CMD inherits the runner's stdin again. A bare `vitest` reads a
 # terminal as "interactive" and turns watch mode on, and the gate hangs with no rc from any `sdd run`
 # typed at a terminal. Caught by the preflight probe that FEEDS a line and demands it never arrive.
@@ -5614,6 +5625,8 @@ CATALOG=(
   ADR_link_bold_colon_blind
   ADR_link_backtick_kept
   ADR_link_not_path_generic
+  ADR_declare_chmod_silent_frontmatter
+  ADR_declare_chmod_silent_speckit
   RUN_check_cmd_stdin_inherited
   PLAN_adr_check_ignored
   PLAN_adr_tbd_accepted

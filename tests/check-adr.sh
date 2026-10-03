@@ -72,6 +72,8 @@
 #  R37  a value that is not a path (no `/`, or nothing after the colon) says "not a path", and
 #       never "points somewhere else" nor "has no 'Spec:' line" — the sentence names the defect
 #       the reader can act on (issue #50)
+#  R38  a declaration whose `chmod --reference` fails SAYS so, naming the file, in both rewrite
+#       sites — the declaration still lands, and the spec no longer goes 0600 in silence (#199)
 #
 # Declared limits (D15 of CLAUDE.md — debt written is a limit, debt kept quiet is the fail-open):
 #   - The pilot target keeps a LOCAL namespace at `specs/023/adr/001-…`, outside ADR_DIR. This
@@ -131,6 +133,8 @@
 #        (mut_ADR_link_not_path_generic). → `&& [ "$ADR_LINK_NO" -eq 0 ]` dropped, so an empty
 #        value reads as a missing line: red, and it is the absence of "has no 'Spec:' line" in the
 #        empty-value probe that catches it, not the rc — both arms return 1.
+#  R38 → each `|| warn` of adr_declare back to `|| true`: red, each on its own probe
+#        (mut_ADR_declare_chmod_silent_frontmatter, mut_ADR_declare_chmod_silent_speckit).
 #  R11 → the duplicate-id arm replaced by `false`: red. → the name arm replaced by `false`: red.
 #  R12 → the whole mission branch replaced by `:`: red — and it SURVIVED the first sweep, because
 #        no probe drove a mission with a declared path through the repo scope. The probe that
@@ -735,6 +739,29 @@ fi
 mkdir -p "$N/specs/001-x"; printf '# X\n\n**Status**: Draft\n' > "$N/specs/001-x/spec.md"
 assert_adr '--spec writes a **ADR**: line into a spec with no frontmatter' "$N" 0 \
   'specs/001-x/spec\.md now declares it' new --slug speckit --spec specs/001-x/spec.md
+
+# R38: a chmod that fails is SAID. Both layouts rewrite the spec through a mktemp beside it, which
+# is born 0600, and `chmod --reference` puts the original mode back — GNU only, so a userland
+# without it (or a filesystem that refuses the mode) left the spec or the 00-missao.md 0600 behind
+# `2>/dev/null || true`, without a word (issue #199). The declaration still lands — losing the mode
+# is not worth losing the link — but the output names the file, as frontmatter_write already does.
+# The shim is the fixture's own `.stub/chmod`, first on run_adr's PATH, and the floor proves it is
+# armed. One probe per rewrite site: the key inserted into a frontmatter, and the `**ADR**:` line.
+C="$(fixture chmodfail ADR_CHECK=\"off\")" || { fail 'chmod fixture' 'a fixture dir' 'none'; C=""; }
+if [ -n "$C" ]; then
+  printf '#!/bin/sh\nexit 1\n' > "$C/.stub/chmod"; /bin/chmod +x "$C/.stub/chmod"
+  C_ARMED=no; PATH="$C/.stub:$PATH" chmod +x "$C/file.txt" 2>/dev/null || C_ARMED=yes
+  if [ "$C_ARMED" = yes ]; then pass 'the chmod shim is armed — a chmod through that PATH fails'
+  else fail 'the chmod shim is armed — a chmod through that PATH fails' 'a failing chmod' 'chmod succeeded'; fi
+  mission "$C" 20260102-chmod '@none@'
+  assert_adr 'a key inserted into a frontmatter whose mode cannot be kept says so, naming the file' "$C" 0 \
+    'warn.*could not keep the mode of .*docs/handoffs/20260102-chmod/00-missao\.md' \
+    new --slug kept --spec docs/handoffs/20260102-chmod/00-missao.md
+  mkdir -p "$C/specs/004-chmod"; printf '# C\n\n**Status**: Draft\n' > "$C/specs/004-chmod/spec.md"
+  assert_adr 'an **ADR**: line written into a spec whose mode cannot be kept says so, naming the file' "$C" 0 \
+    'warn.*could not keep the mode of .*specs/004-chmod/spec\.md' \
+    new --slug keptspec --spec specs/004-chmod/spec.md
+fi
 
 # --- the reservation primitive -----------------------------------------------------------------
 # DETERMINISTIC, and not a race. Two processes fighting for the same number would assert a
