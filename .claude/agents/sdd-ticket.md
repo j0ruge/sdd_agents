@@ -51,6 +51,10 @@ gate: "acli confirms issue <KEY>-123 in sprint <id>"
 ---
 ```
 
+`status:` is `done`, or `blocked` when no issue could be opened (no active sprint, no `acli`, no
+shell): `blocked` stops the line for a human on the first session, so say why in the body. Any
+other value — a different case, a comment after it, no `status:` line — is refused by the gate.
+
 The gate requires `issue:` **and** `sprint:` — an issue created in the backlog does not pass. A
 card in the backlog is invisible work for the team. When you fill `branch:` in, it also requires
 `00-missao.md` to declare the **same** branch.

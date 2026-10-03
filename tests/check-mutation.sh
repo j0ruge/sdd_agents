@@ -332,6 +332,11 @@ mut_TICKET_branch_writeback_blind() {
 mut_TICKET_no_sprint() {      # stops requiring `sprint:` — a card in the backlog is invisible work
   sed -i "s|.*if ! grep -qiE '\^sprint:.*|  if false; then|" "$1"
 }
+# Issue #205, TICKET's half: past the `blocked` arm only `done` may read as success. Neutered, a
+# `BLOCKED` ticket (or one with no status line) passes on its filled issue and sprint.
+mut_TICKET_status_enum_open() {
+  sed -i '/^gate_TICKET() {/,/^}/ s|^  if \[ "$st" != "done" \]; then$|  if false; then|' "$1"
+}
 
 mut_EXEC_done_without_commit() {  # accepts a 'done' increment with commit '—' — label becomes artifact
   sed -i 's|.*\[ "\$commit" = "—" \].*|        if false; then|' "$1"
@@ -554,6 +559,13 @@ mut_QA_status_line_start() {
 # legend (`<!-- in-progress | closed -->`) matches, and a report still IN PROGRESS passes.
 mut_QA_status_enum_loose() {
   sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '\\\\*\\\\*Status:\\\\*\\\\*.*closed' \"\$report\"|" "$1"  # sdd-pipefail-waiver: sed s|…|…| delimiter, not a pipe
+}
+
+# Issue #205: the handoff's `status:` enum, which is not the report's `**Status:**` above. Past the
+# `skipped` and `blocked` arms only `done` may read as success; neutered, the template's literal
+# `<done | blocked | skipped>`, `BLOCKED` and a missing line all pass gate_QA as `done`.
+mut_QA_handoff_status_enum_open() {
+  sed -i '/^gate_QA() {/,/^}/ s|^  if \[ "$st" != "done" \]; then$|  if false; then|' "$1"
 }
 
 # Same family, in the bug registry: with `.*open` the legend
@@ -5229,6 +5241,7 @@ CATALOG=(
   PLAN_branch_unasked
   TICKET_no_sprint
   TICKET_branch_writeback_blind
+  TICKET_status_enum_open
   EXEC_done_without_commit
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
@@ -5275,6 +5288,7 @@ CATALOG=(
   QA_status_line_start
   QA_status_enum_loose
   QA_bug_enum_loose
+  QA_handoff_status_enum_open
   QA_matrix_pending
   QA_bug_open
   QA_report_not_mission_bound

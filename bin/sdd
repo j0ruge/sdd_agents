@@ -1101,6 +1101,12 @@ gate_TICKET() {
     GATE_HANDOFF_BLOCKED=1
     GATE_WHY="10-ticket.md has status: blocked"; return 1
   fi
+  # Same enum rule as gate_QA (issue #205), with TICKET's two values: the ticket hat writes `done`
+  # or `blocked`, and the issue/sprint checks below are no stand-in — `BLOCKED` over a filled
+  # issue and sprint used to pass as `done`.
+  if [ "$st" != "done" ]; then
+    GATE_WHY="10-ticket.md has invalid status '$st' (use done|blocked)"; return 1
+  fi
   local issue; issue="$(frontmatter "$t" issue)"
   [ -n "$issue" ] || { GATE_WHY="10-ticket.md has no 'issue:' in the frontmatter"; return 1; }
   if ! grep -qiE '^sprint:[[:space:]]*\S' "$t"; then
@@ -1399,6 +1405,15 @@ gate_QA() {
   if [ "$st" = "blocked" ]; then
     GATE_HANDOFF_BLOCKED=1
     GATE_WHY="30-handoff-qa.md has status: blocked"; return 1
+  fi
+  # The enum, written POSITIVELY (issue #205): past the two arms above, `done` is the only value
+  # that may read as success. Before this line every other spelling fell through as `done` — the
+  # template's literal `<done | blocked | skipped>`, `BLOCKED`, `blocked # waiting`, an empty value
+  # and a missing line among them, so a handoff that MEANT to stop the line passed the gate. The
+  # artifact has an owner (sdd-qa writes it), so the refusal is satisfiable; a value repeated lap
+  # after lap is the same reason on the same step, which no_work_check stops.
+  if [ "$st" != "done" ]; then
+    GATE_WHY="30-handoff-qa.md has invalid status '$st' (use done|blocked|skipped)"; return 1
   fi
 
   # Project with no interface: the qa-report/qa-execution skills never ran (qa_substep sends it

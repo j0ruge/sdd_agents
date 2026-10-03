@@ -231,6 +231,15 @@ assert_why   "TICKET reports the missing sprint" "TICKET" "ACTIVE SPRINT|sprint"
 printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\nsprint: Sprint 1\n---\n' > "$MDIR/10-ticket.md"
 assert_phase "an issue in the active sprint passes" "EXEC"
 
+# The status enum, positively (issue #205): with issue and sprint both filled, only `done` passes.
+# `BLOCKED` is the hat MEANING to stop the line in the wrong case; a missing line is a handoff
+# nobody finished. Both read as `done` while the gate only looked for the literal `blocked`.
+printf -- '---\nfase: TICKET\nstatus: BLOCKED\nissue: FX-1\nsprint: Sprint 1\n---\n' > "$MDIR/10-ticket.md"
+assert_phase "TICKET: a status outside done|blocked does not pass" "TICKET"
+assert_why   "...and the reason names the invalid status" "TICKET" "invalid status 'BLOCKED'"
+printf -- '---\nfase: TICKET\nissue: FX-1\nsprint: Sprint 1\n---\n' > "$MDIR/10-ticket.md"
+assert_phase "TICKET: a missing status line does not pass" "TICKET"
+
 # With JIRA on, the branch is BORN in the TICKET phase (the `ticket` skill creates it) and used to
 # stay in 10-ticket.md alone. `ensure_mission_branch` reads only 00-missao.md, so every later phase
 # ran on whatever branch the human happened to be standing on, guarding a name that was never
@@ -1523,6 +1532,27 @@ assert_phase "no interface, a bare fill-in word in gate: is not evidence either"
 printf -- '---\nfase: QA\nstatus: done\ngate: "1 journey walked in the CLI; 1 finding became F1"\n---\n' \
   > "$MDIR/30-handoff-qa.md"
 assert_phase "no interface, 'done' WITH evidence passes" "REVIEW"
+
+# The status enum, positively (issue #205): the gate read `skipped` and `blocked` and let every
+# other value through as `done`. Three worlds over the evidence that just passed, one per way a
+# loosening could come back: the template's literal (COPIED, like TMPL_GATE above — a "contains
+# done" match accepts it), `BLOCKED` (a case-blind match reads it as the stop and a done-by-default
+# reads it as success), and no status line at all (an `''` arm). The read happens before the
+# interface split, so one branch measures both.
+TMPL_STATUS="$(grep '^status: <' "$ROOT/templates/handoff.md" || true)"
+[ "$(grep -c . <<< "$TMPL_STATUS")" = 1 ] \
+  || fail "template status: fixture" "exactly one 'status: <…>' line in templates/handoff.md" "${TMPL_STATUS:-none}"
+QA_EVIDENCE='gate: "1 journey walked in the CLI; 1 finding became F1"'
+printf -- '---\nfase: QA\n%s\n%s\n---\n' "$TMPL_STATUS" "$QA_EVIDENCE" > "$MDIR/30-handoff-qa.md"
+assert_phase "QA: the template's untouched status: line does not pass" "QA"
+assert_why   "...and the reason names the invalid status" "QA" "30-handoff-qa.md has invalid status '<done"
+printf -- '---\nfase: QA\nstatus: BLOCKED\n%s\n---\n' "$QA_EVIDENCE" > "$MDIR/30-handoff-qa.md"
+assert_phase "QA: a status outside done|blocked|skipped does not pass" "QA"
+printf -- '---\nfase: QA\n%s\n---\n' "$QA_EVIDENCE" > "$MDIR/30-handoff-qa.md"
+assert_phase "QA: a missing status line does not pass" "QA"
+assert_why   "...and the reason names the empty status" "QA" "invalid status ''"
+printf -- '---\nfase: QA\nstatus: done\n%s\n---\n' "$QA_EVIDENCE" > "$MDIR/30-handoff-qa.md"
+assert_phase "QA: back to 'done' with evidence, the world passes again" "REVIEW"
 
 # ...and the deferred debt is named HERE too. The registry loop in gate_QA runs on both branches —
 # it reads $QA_DOCS_PATH/bugs/ without asking whether the repo has an interface — but the sentence

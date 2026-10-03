@@ -177,7 +177,8 @@ bottom of this file is unchanged: this one field is a complement, not a rewrite.
 boot prompt names — a bare `templates/` resolves to nothing in a target repo, because the kit
 installs the agents and the config there but never the templates:
 
-- frontmatter: `fase: QA`, `status: done|skipped|blocked`, `sessao`, `gate:` with real evidence —
+- frontmatter: `fase: QA`, `status: done|skipped|blocked` (exactly one of the three, lower case — any
+  other value, or no `status:` line, is refused by the gate), `sessao`, `gate:` with real evidence —
   **with interface**: the report name, the count of sessions walked, the `E2E_CMD` output;
   **without interface**: the command of each journey you walked and what you observed, plus the
   `TEST_CMD` output. In this second case the `gate:` is what the runner measures (§0) — empty, and

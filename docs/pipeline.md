@@ -194,7 +194,9 @@ The `ticket` skill creates it straight into the active sprint and confirms it le
 the ticket hat saying no issue could be opened (no sprint, no `acli`, no shell) is a human's
 decision to take, and re-reading the same refusal at one session per lap until `no-progress` is
 what it cost before 2026-09-06 (three sessions, US$ 3,39). The check runs before the `issue:` and
-`sprint:` ones, because a blocked ticket has neither.
+`sprint:` ones, because a blocked ticket has neither. Past it the enum is read **positively**: only
+`done` passes, and any other value — `BLOCKED`, a missing `status:` line — is refused by name
+(issue #205; it used to pass as `done` on a filled issue and sprint).
 
 The `branch:` check exists because the runner honours `branch:` from `00-missao.md` and from
 nowhere else. The session writes the name back and commits both files; a `10-ticket.md` that
@@ -244,7 +246,10 @@ The two skills **own** `docs/qa/`; `sdd-qa` does not rewrite what they produced.
 no interface** (no `E2E_CMD` and no `APP_URL`) goes straight to `QA:close`: bootstrapping browser
 journeys in a project with no browser is the paperwork `skipped` exists to avoid.
 
-**Passes when:** `30-handoff-qa.md` exists and (`status: skipped` **or** all of the conditions):
+**Passes when:** `30-handoff-qa.md` exists and (`status: skipped` **or** `status: done` and all of the
+conditions). `status: blocked` stops the line (`handoff-blocked`); any other value — the template's
+literal `<done | blocked | skipped>`, `BLOCKED`, a missing line — is refused by name, where until
+issue #205 it passed as `done`. The conditions:
 
 - **the evidence of the journey walked**, which takes two forms depending on the project:
   - **with an interface** (`E2E_CMD` or `APP_URL` set) — the most recent report **the mission
