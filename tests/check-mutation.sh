@@ -5837,16 +5837,52 @@ killer_of() {
 KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 
 # ---------------------------------------------------------------------------
+# The catalogue's own size and membership, checked before ANY mode runs (issue #105). They lived
+# inside --anchors only, so the full mode — the one `sdd health` runs and the one this file's usage
+# line promises means "catalogue intact" — printed `score: 0 caught, 0 known gap(s), of 0` and exited
+# 0 over `CATALOG=()`, after a whole control run. cmd_health has its own floor on that line, but the
+# runner also tells the operator to run the catalogue by hand, and there nothing stood in the way.
+# Here an emptied, unparsed or partly unlisted catalogue is refused in every mode, in a second.
+# ---------------------------------------------------------------------------
+CATALOGUE_FLOOR=420
+if [ "${#CATALOG[@]}" -lt "$CATALOGUE_FLOOR" ]; then
+  fail "SENSOR-BROKEN: the catalogue lists ${#CATALOG[@]} mutant(s), below the floor of $CATALOGUE_FLOOR" \
+       "an emptied or unparsed catalogue would report every anchor intact and score nothing as caught"
+  exit 1
+fi
+# A mutant DEFINED but never LISTED is dead code that no loop here runs, and the fast suite used
+# to stay green over it: four `mut_PRE_node_*` sat outside CATALOG for a whole branch, and only
+# `sdd health` — an hour in — would have said "ran 397 of the 401 defined". The definitions are
+# read with health's own spelling, so both programs count the same population.
+catalogue_orphans() { # catalogue_orphans <defined, one per line> <listed, one per line>
+  comm -23 <(sort -u <<< "$1") <(sort -u <<< "$2")
+}
+if [ "$(catalogue_orphans $'a\nb' 'a')" != b ] || [ -n "$(catalogue_orphans 'a' $'a\nb')" ]; then
+  fail "SENSOR-BROKEN: catalogue_orphans misread a world whose answer is known" \
+       "expected exactly 'b' orphaned from {a, b} vs {a}, and nothing the other way round"
+  exit 1
+fi
+orphans="$(catalogue_orphans \
+  "$(sed -nE 's/^mut_([A-Za-z0-9_]+)\(\) \{.*/\1/p' "$ROOT/tests/check-mutation.sh")" \
+  "$(printf '%s\n' "${CATALOG[@]}")")"
+if [ -n "$orphans" ]; then
+  fail "CATALOGUE-BROKEN: mutant(s) defined but absent from CATALOG — nothing runs them" \
+       "$(tr '\n' ' ' <<< "$orphans")"
+  exit 1
+fi
+pass "the catalogue lists ${#CATALOG[@]} mutants (floor $CATALOGUE_FLOOR), every mut_* defined in this file among them"
+
+# ---------------------------------------------------------------------------
 # --anchors: apply every mutant to a copy of bin/ and stop there — no suite, no control run.
 #
 # Only bin/ is copied, because a mutant only ever edits bin/ (apply_mutant's own diff reads bin/
 # alone). Before the loop, the two failure answers are proved on a world whose answer is known —
 # a mutation that changes nothing must read 90, one that breaks the syntax must read 91 — or a
-# broken apply_mutant would certify every anchor. The floor refuses a catalogue that emptied or
-# stopped being parsed: an empty loop reports "0 broken" forever.
+# broken apply_mutant would certify every anchor. The floor and the orphan check that refuse an
+# emptied or partly unlisted catalogue run above, for every mode: an empty loop reports "0 broken"
+# here and "0 of 0" in the full mode, forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=420
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }
@@ -5899,32 +5935,6 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
     exit 1
   fi
   pass "the verdict refuses a catalogue with one broken anchor (pool, scoring and verdict exercised)"
-  if [ "${#CATALOG[@]}" -lt "$ANCHOR_FLOOR" ]; then
-    fail "SENSOR-BROKEN: the catalogue lists ${#CATALOG[@]} mutant(s), below the floor of $ANCHOR_FLOOR" \
-         "an emptied or unparsed catalogue would report every anchor intact"
-    exit 1
-  fi
-  # A mutant DEFINED but never LISTED is dead code that no loop here runs, and the fast suite used
-  # to stay green over it: four `mut_PRE_node_*` sat outside CATALOG for a whole branch, and only
-  # `sdd health` — an hour in — would have said "ran 397 of the 401 defined". The definitions are
-  # read with health's own spelling, so both programs count the same population.
-  catalogue_orphans() { # catalogue_orphans <defined, one per line> <listed, one per line>
-    comm -23 <(sort -u <<< "$1") <(sort -u <<< "$2")
-  }
-  if [ "$(catalogue_orphans $'a\nb' 'a')" != b ] || [ -n "$(catalogue_orphans 'a' $'a\nb')" ]; then
-    fail "SENSOR-BROKEN: catalogue_orphans misread a world whose answer is known" \
-         "expected exactly 'b' orphaned from {a, b} vs {a}, and nothing the other way round"
-    exit 1
-  fi
-  orphans="$(catalogue_orphans \
-    "$(sed -nE 's/^mut_([A-Za-z0-9_]+)\(\) \{.*/\1/p' "$ROOT/tests/check-mutation.sh")" \
-    "$(printf '%s\n' "${CATALOG[@]}")")"
-  if [ -n "$orphans" ]; then
-    fail "CATALOGUE-BROKEN: mutant(s) defined but absent from CATALOG — nothing runs them" \
-         "$(tr '\n' ' ' <<< "$orphans")"
-    exit 1
-  fi
-  pass "every mut_* defined in this file is listed in CATALOG"
   entries=()
   for slug in "${CATALOG[@]}"; do entries+=("$slug=mut_$slug"); done
   # ⚠️ The one line the controls above cannot assert on: `if anchor_verdict` sabotaged into `if true`
