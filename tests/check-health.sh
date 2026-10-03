@@ -2156,6 +2156,12 @@ cap_world '  x="$(grep foo bar)"'
 [ "$(cap_offenders)" = 1 ] || broken "capture probe 'a bare capture' was not reported — the rule reads nothing"
 cap_world '  x="$(grep foo bar || true)"'
 [ "$(cap_offenders)" = 0 ] || broken "capture probe 'a guarded capture' was reported — the rule refuses correct code"
+# The other half of the guard's `(true|:)`: removing the `:` used to leave this file green, because
+# only `|| true` had a world (measured 2026-09-25 and again 2026-10-03). The total is asserted too, so
+# a rule that stops SEEING the capture cannot pass for one that accepts it.
+cap_world '  x="$(grep foo bar || :)"'
+[ "$(cap_offenders)" = 0 ] && [ "$(cap_total)" = 1 ] \
+  || broken "capture probe 'a capture guarded by || :' was reported or not censused — the colon spelling of the guard is not recognised"
 cap_world '  x="$( cd . && ls )" || rc=$?'
 [ "$(cap_offenders)" = 0 ] || broken "capture probe '|| rc=\$?' was reported — the guard the suite capture uses is not recognised"
 # The continuation case, and the reason the join exists at all: written without it, the real
