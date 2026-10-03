@@ -23,6 +23,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **Check com `test -f` passa num arquivo que o `.gitignore` do alvo ignora** —
+  `tests/check-checkpoint.sh:174` (`scan_file`) — o I10 da S8 do `ui24_agent` mandava `test -f` num
+  `docs/qa/reports/…-review.md`, e o alvo ignora `*-review.md`: o Check daria verde com um artefato
+  que nunca chega ao git (só o `git add` pegou: `paths are ignored … .gitignore:20`). O incremento
+  fecharia `done` e o clone novo reprovaria. Direção: o sensor roda `git check-ignore -q` em cada path
+  do repo citado num Check e reprova o ignorado; o `sdd-planner` confere ao nomear o artefato.
+  — descoberto por `sessão interativa` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
+
 - [ ] **O Red do `R<n>` prova o achado, não o conserto: nenhum passo sabota a linha nova** —
   `agents/sdd-executor.md:76` (`Watch it fail`) — o conserto tira o sintoma e pode abrir um fail-open
   ao lado com o probe verde. Medido só no laço interativo (PR #45, #46; `coderabbit-pr` 2.4.0 já
