@@ -71,6 +71,13 @@
 #     file exited 0 having never run the differential at all. probe_composition drives the whole
 #     file with one stage forced to fail and demands rc 93 — once per stage
 #
+# The differential's own comparison was a fourth, written here for a while as unreachable by any
+# probe. It was reachable: each diagnostic branch neutered alone stayed green (measured on
+# 2026-10-03, issue #85), because on a bash that re-reads the toys only ever answer "2 vs 1".
+# differential now takes the two counts as arguments for probe_differential — one probe per branch,
+# each demanding its own text and NOT the other's — and harness_selfcheck's third arm demands that
+# a diverging probe_differential is booked, not just printed.
+#
 # The pass that closed those three ran 25 degradations, 20 of which die here. What SURVIVES is
 # listed in full, because a survivor nobody wrote down is indistinguishable from one nobody looked
 # for. In three groups, by what actually bounds each:
@@ -81,6 +88,9 @@
 #   - dropping the `FAILS -ne 0 → SELFTEST_RC=92` line. That is the deliberate redundancy described
 #     at its own site: `fail_rc 91` still carries the failure out. Removing BOTH is what
 #     harness_selfcheck catches
+#   - dropping the `DIFF_SEEN` restore in harness_selfcheck's third arm. The ok line then counts
+#     three differential probes, but the floor asks for the two branch pairs by name, so no
+#     deleted branch probe hides behind the extra pair
 #
 #   Floors and cross-checks, which hide nothing while the bodies they backstop are intact:
 #   - lowering either probe floor, dropping the stage floor, disabling the witness cross-check
@@ -92,9 +102,6 @@
 #     closes it from outside: with bin/sdd sabotaged AND this composition neutered, the suite stays
 #     green, which is exactly the rc the mutation driver reports as "NOT caught". Measured, both
 #     ways round
-#   - neutering the differential's own comparison, which no probe can reach. What bounds it is
-#     that the two counts are PRINTED in the ok line ("2 vs 1"), so a neutered comparison reads
-#     as "1 vs 1" in the suite output rather than as silence
 #
 # Neutering probe()'s body used to be a one-edit sabotage that made every assertion pass at once.
 # It now needs to beat two independent things: the witness cross-check (no child was ever spawned)
@@ -218,18 +225,28 @@ run_toy() {
   grep -c . < "$c"
 }
 
-# differential — rc 0 reproduced, 90 it did not, 92 no temp dir.
+# differential [<unguarded> <guarded>] — rc 0 reproduced, 90 it did not, 92 no temp dir.
+#
+# With two counts it runs no toy and judges THOSE: the selftest's door to the two diagnostic
+# branches below. On a bash that re-reads — this one — the toys only ever answer "2 vs 1", so no
+# run of the toys reaches either branch, and neutering the comparison used to stay green (measured
+# on 2026-10-03: each branch neutered alone, rc 0). stage() calls it bare; only probe_differential
+# passes counts.
 differential() {
   local box unguarded guarded rc=0
-  box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-entrypoint-XXXXXX")" || {
-    printf 'SENSOR-BROKEN: no temp dir — the differential never ran\n' >&2; return 92; }
-  BOXES+=("$box")
+  if [ "$#" -eq 2 ]; then
+    unguarded="$1" guarded="$2"
+  else
+    box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-entrypoint-XXXXXX")" || {
+      printf 'SENSOR-BROKEN: no temp dir — the differential never ran\n' >&2; return 92; }
+    BOXES+=("$box")
 
-  write_toy "$box/unguarded.sh" 'main "$@"'
-  write_toy "$box/guarded.sh" "$GUARDED_FORM"
-  unguarded="$(run_toy "$box" unguarded)"
-  guarded="$(run_toy "$box" guarded)"
-  rm -rf "$box"
+    write_toy "$box/unguarded.sh" 'main "$@"'
+    write_toy "$box/guarded.sh" "$GUARDED_FORM"
+    unguarded="$(run_toy "$box" unguarded)"
+    guarded="$(run_toy "$box" guarded)"
+    rm -rf "$box"
+  fi
 
   if [ "$guarded" -ne 1 ]; then
     printf 'SENSOR-BROKEN: the GUARDED toy entered its entry point %s time(s), expected exactly 1\n' \
@@ -280,6 +297,7 @@ probe() {
 }
 
 COMPOSITION_PROBES=0
+DIFF_SEEN=""   # the "<unguarded>:<guarded>" pairs probe_differential judged, in call order
 
 # harness_selfcheck <scratch-file> <scratch-err> — measures the PROBE, not the parser.
 #
@@ -319,6 +337,21 @@ harness_selfcheck() {
     broke=1
   fi
 
+  # Arm 3 — probe_differential's one accounting site. "2 vs 1" is the healthy answer (rc 0), so
+  # asking it for a diagnostic branch's rc 90 is a divergence it must book. The pair it adds is put
+  # back for the ok line's count only; the floor asks for the two branch pairs BY NAME, so this arm
+  # cannot stand in for a deleted branch probe whether or not it is put back.
+  local saved_diff="$DIFF_SEEN"
+  FAILS=0; SELFTEST_RC=0
+  probe_differential 2 1 'a phrase this sensor never prints' '-' 2>"$err"
+  if [ "$FAILS" -ne 1 ] || [ "$SELFTEST_RC" -ne 91 ]; then
+    printf 'SENSOR-BROKEN: probe_differential met a healthy answer it did not want and booked\n' >&2
+    printf '  FAILS=%s SELFTEST_RC=%s, wanted 1 and 91 — a dead branch would be printed and forgotten\n' \
+      "$FAILS" "$SELFTEST_RC" >&2
+    broke=1
+  fi
+  DIFF_SEEN="$saved_diff"
+
   FAILS="$saved_fails"; SELFTEST_RC="$saved_rc"
   if [ "$broke" -ne 0 ]; then FAILS=$((FAILS + 1)); fail_rc 92; fi
 }
@@ -338,6 +371,25 @@ probe_composition() {
       "$st" "$rc" >&2
     printf '  composition either never runs that stage or swallows its rc\n%s\n' "$out" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+}
+
+# probe_differential <unguarded> <guarded> <want> <unwanted> — one diagnostic branch of the
+# differential, driven by counts no run of the toys produces here. rc 90, the branch's own text,
+# and NOT the other branch's: both branches share the rc, so the rc alone tells them apart from
+# the ok line and from nothing else.
+probe_differential() {
+  local u="$1" g="$2" want="$3" unwanted="$4" out rc right=1
+  DIFF_SEEN="$DIFF_SEEN $u:$g"
+  out="$(differential "$u" "$g" 2>&1)"; rc=$?
+  [ "$rc" -eq 90 ] || right=0
+  grep -qF -- "$want" <<< "$out" || right=0
+  if grep -qF -- "$unwanted" <<< "$out"; then right=0; fi
+  if [ "$right" -ne 1 ]; then
+    printf 'SENSOR-BROKEN: the differential judged %s vs %s with rc %s and said:\n%s\n' \
+      "$u" "$g" "$rc" "$out" >&2
+    printf '  wanted rc 90, "%s", and no "%s"\n' "$want" "$unwanted" >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
   fi
 }
 
@@ -415,6 +467,13 @@ selftest() {
   probe_composition differential
   probe_composition check_runner
 
+  # The differential's two diagnostic branches. "1 vs 1" is a bash that stopped re-reading;
+  # "2 vs 0" is a guard that stopped guarding — the toys reach neither on this bash.
+  probe_differential 1 1 'the UNGUARDED toy entered 1 time(s) and the guarded one 1' \
+    'GUARDED toy entered its entry point'
+  probe_differential 2 0 'the GUARDED toy entered its entry point 0 time(s)' \
+    'are no longer distinguishable'
+
   # Cross-check on the HARNESS itself. Replacing probe()'s body with `out="$want_txt";
   # rc="$want_rc"` makes EVERY probe above pass at once and none of them can notice — in the
   # adversarial pass it was the one sabotage that survived, and it cost a single edit.
@@ -448,6 +507,17 @@ selftest() {
     printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 14\n' "$PROBES" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
+  # Per branch and not a count: "1:1" is the bash that stopped re-reading, "2:0" the guard that
+  # stopped guarding. A count would let any other pair stand in for a deleted one.
+  local pair
+  for pair in 1:1 2:0; do
+    case " $DIFF_SEEN " in
+      *" $pair "*) ;;
+      *) printf 'SENSOR-BROKEN: no differential probe judged %s — that branch has no probe\n' \
+           "$pair" >&2
+         FAILS=$((FAILS + 1)); fail_rc 92 ;;
+    esac
+  done
   if [ "$COMPOSITION_PROBES" -lt 3 ]; then
     printf 'SENSOR-BROKEN: only %d composition probe(s) ran, expected one per stage (3)\n' \
       "$COMPOSITION_PROBES" >&2
@@ -459,8 +529,8 @@ selftest() {
   # comment used to paper over — is what harness_selfcheck exists to catch.
   if [ "$FAILS" -ne 0 ] && [ "$SELFTEST_RC" -eq 0 ]; then SELFTEST_RC=92; fi
   [ "$SELFTEST_RC" -eq 0 ] && \
-    printf '  ok    selftest: %d probe(s) + %d composition probe(s), the entry-point parser and the\n        two paths that report on it measure what they claim\n' \
-      "$PROBES" "$COMPOSITION_PROBES"
+    printf '  ok    selftest: %d probe(s) + %d composition probe(s) + %d differential probe(s), the\n        entry-point parser and the paths that report on it measure what they claim\n' \
+      "$PROBES" "$COMPOSITION_PROBES" "$(wc -w <<< "$DIFF_SEEN")"
   return "$SELFTEST_RC"
 }
 

@@ -42,14 +42,18 @@ Runs **before** execution, when `JIRA_ENABLED=true`.
 missao: <slug>
 fase: TICKET
 status: done
-issue: SQ-123
+issue: <KEY>-123
 sprint: <name or id of the active sprint>
 versao: <from 00-missao.md>
 branch: <branch created>
 data: <YYYY-MM-DD HH:MM>
-gate: "acli confirms issue SQ-123 in sprint <id>"
+gate: "acli confirms issue <KEY>-123 in sprint <id>"
 ---
 ```
+
+`status:` is `done`, or `blocked` when no issue could be opened (no active sprint, no `acli`, no
+shell): `blocked` stops the line for a human on the first session, so say why in the body. Any
+other value — a different case, a comment after it, no `status:` line — is refused by the gate.
 
 The gate requires `issue:` **and** `sprint:` — an issue created in the backlog does not pass. A
 card in the backlog is invisible work for the team. When you fill `branch:` in, it also requires

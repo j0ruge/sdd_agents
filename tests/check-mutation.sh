@@ -332,6 +332,11 @@ mut_TICKET_branch_writeback_blind() {
 mut_TICKET_no_sprint() {      # stops requiring `sprint:` — a card in the backlog is invisible work
   sed -i "s|.*if ! grep -qiE '\^sprint:.*|  if false; then|" "$1"
 }
+# Issue #205, TICKET's half: past the `blocked` arm only `done` may read as success. Neutered, a
+# `BLOCKED` ticket (or one with no status line) passes on its filled issue and sprint.
+mut_TICKET_status_enum_open() {
+  sed -i '/^gate_TICKET() {/,/^}/ s|^  if \[ "$st" != "done" \]; then$|  if false; then|' "$1"
+}
 
 mut_EXEC_done_without_commit() {  # accepts a 'done' increment with commit '—' — label becomes artifact
   sed -i 's|.*\[ "\$commit" = "—" \].*|        if false; then|' "$1"
@@ -554,6 +559,13 @@ mut_QA_status_line_start() {
 # legend (`<!-- in-progress | closed -->`) matches, and a report still IN PROGRESS passes.
 mut_QA_status_enum_loose() {
   sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '\\\\*\\\\*Status:\\\\*\\\\*.*closed' \"\$report\"|" "$1"  # sdd-pipefail-waiver: sed s|…|…| delimiter, not a pipe
+}
+
+# Issue #205: the handoff's `status:` enum, which is not the report's `**Status:**` above. Past the
+# `skipped` and `blocked` arms only `done` may read as success; neutered, the template's literal
+# `<done | blocked | skipped>`, `BLOCKED` and a missing line all pass gate_QA as `done`.
+mut_QA_handoff_status_enum_open() {
+  sed -i '/^gate_QA() {/,/^}/ s|^  if \[ "$st" != "done" \]; then$|  if false; then|' "$1"
 }
 
 # Same family, in the bug registry: with `.*open` the legend
@@ -1935,6 +1947,15 @@ mut_RUN_hat_extra_path_unnamed() {
 mut_RUN_kit_touched_silent() {
   sed -i '/^kit_guard_check() {/,/^}/ s|^  KIT_TOUCHED_WHY="the kit at |  : "the kit at |' "$1"
 }
+# Issue #139: the runner measures that the kit moved, never who moved it. One mutant puts the old
+# accusation back in the row; the other sends every reading to the hat remedy, which tells a human
+# who was working on the kit to undo their own work.
+mut_RUN_kit_touched_accuses_session() {
+  sed -i '/^kit_guard_check() {/,/^}/ s|— who edited it was not measured: a session of this mission, or someone working on the kit in parallel"$|— a session committing outside its mission'"'"'s repo"|' "$1"
+}
+mut_RUN_kit_touched_remedy_generic() {
+  sed -i '/^hat_crossed_escalation() {/,/^}/ s|^  elif \[ "$kind" = "kit-touched" \]; then$|  elif false; then|' "$1"
+}
 
 # The init line goes unread: mcp_seen/tools_leaked are always "" (null in the row), and a
 # session that saw the human's Jira is indistinguishable from one that saw nothing. Dies on
@@ -2243,6 +2264,13 @@ mut_RUN_escalation_hook_silent() {
 mut_RUN_escalation_hook_on_dry_run() {
   sed -i '/^escalation_hook() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
 }
+# Issue #94: a projection past EXEC's `pending` runs TEST_CMD for real, and its log is the one write
+# the dry-run contract allows — under the gitignored .sdd/logs/. Sending it to the repo root leaves
+# an untracked file in the target's tree from a command that promised to touch none; only the
+# "past EXEC's pending" world of check-dry-run.sh reaches the regime where a gate logs at all.
+mut_RUN_gate_log_in_tree() {
+  sed -i '/^run_check_cmd() {/,/^}/ s|logfile="$(mktemp "$(log_dir)/${label}-|logfile="$(mktemp "$REPO_ROOT/${label}-|' "$1"
+}
 mut_RUN_escalation_hook_before_ledger() {
   sed -i 's|^autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; escalation_hook "$1" "$2" "$3"; }$|autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked" "$1" "$2" "$3"; }|' "$1"
 }
@@ -2533,6 +2561,15 @@ mut_AUTONOMY_all_repos_ignored() {
   sed -i 's@LEDGER_ALL_REPOS=1@LEDGER_ALL_REPOS=0@g' "$1"
 }
 
+# Issue #206: two refusals, two remedies. The shape question asked on its own, and jq's own words
+# when a FIELD fails — before, any failure of the program was blamed on a row that is not an object.
+mut_AUTONOMY_jq_stderr_swallowed() {
+  sed -i "s|^  ' \"\$file\" 2>\"\$jq_err\")\" \|\| jq_rc=\$?$|  ' \"\$file\" 2>/dev/null)\" \|\| jq_rc=\$?|" "$1"
+}
+mut_AUTONOMY_shape_not_asked() {
+  sed -i "s|^  jq -e -s 'all(type == \"object\")' \"\$file\" >/dev/null 2>&1 \\\\$|  true \\\\|" "$1"
+}
+
 # Not a gate: the ledger's repo identity goes back to `git rev-parse --show-toplevel`, which
 # answers per WORKTREE. Nothing fails, nothing is malformed — a mission run from `git worktree add`
 # simply stamps a path no other checkout of the same repo recognizes, and every reader files those
@@ -2554,9 +2591,24 @@ mut_AUTONOMY_all_repos_ignored() {
 # by the pre-2.31 differential pair of check-autonomy.sh, which reads the identity back out of the
 # runner under a shim and demands it be the repo or nothing, never the flag. The `case` and its
 # `esac` go together: removing the opener alone leaves invalid bash, which is a harness failure and
-# not a capture.
+# not a capture. Re-anchored by issue #72, which left the guard ONE arm (the first byte): the arm
+# that emptied an absolute two-line answer is gone, so this mutant now covers the only arm left.
 mut_LEDGER_repo_root_shape_blind() {
-  perl -0pi -e 's@  case "\$gitdir" in\n    /\*\) \[ "\$gitdir" = "\$\{gitdir%%\$.\\n.\*\}" \] \|\| gitdir="" ;;\n    \*\)  gitdir="" ;;\n  esac\n@@' "$1"
+  perl -0pi -e 's@  case "\$gitdir" in\n    /\*\) ;;\n    \*\)  gitdir="" ;;\n  esac\n@@' "$1"
+}
+
+# Issue #73: the runner stops consulting the git on the PATH — the only way a pre-2.31 git reaches
+# ledger_repo_root. The modern git then answers both questions and agrees with itself, so every
+# identity assertion stays green; only the shim's trace (`seen fell`) shows nobody asked it.
+# Issue #72, the other direction: the arm that emptied an absolute answer spanning two lines comes
+# back. The only such answer is a repo whose PATH holds a newline, and emptying it is the "not a
+# repo" sentinel for a repo that is one — the round-trip world of check-autonomy.sh reads its own
+# row as "no data".
+mut_LEDGER_repo_root_newline_emptied() {
+  sed -i '/^ledger_repo_root() {/,/^}/ s@^    /\*) ;;$@    /*) [ "$gitdir" = "${gitdir%%$'"'"'\\n'"'"'*}" ] || gitdir="" ;;@' "$1"
+}
+mut_LEDGER_repo_root_bypasses_shim() {
+  sed -i 's@^  local start="${REPO_ROOT:-$PWD}" gitdir$@  local start="${REPO_ROOT:-$PWD}" gitdir PATH="/usr/bin:/bin:$PATH"@' "$1"
 }
 
 mut_LEDGER_repo_root_toplevel() {
@@ -2575,6 +2627,23 @@ mut_LEDGER_repo_root_toplevel() {
 # mutant is valid bash and the sabotage is precisely the comparison, nothing else.
 mut_PRE_agent_presence_only() {
   sed -i 's@elif ! cmp -s "$a" "$copy"; then@elif false \&\& ! cmp -s "$a" "$copy"; then@' "$1"
+}
+
+# Issue #83: the "N kit agent(s) checked" line is the one the operator reads, and no fixture saw it
+# — it printed under a preflight-wide `fails -eq 0` that every offline fixture misses. Now counted
+# per block; one mutant per way the line can lie: silent, miscounted, printed under a failure, and
+# back on the preflight-wide counter (silent again whenever anything ELSE is red).
+mut_PRE_agents_checked_silent() {
+  sed -i 's@then ok "$n kit agent(s) checked"; fi$@then :; fi@' "$1"
+}
+mut_PRE_agents_checked_miscounted() {
+  sed -i '/^  local a name copy n=0 fails_before_agents=/,/kit agent(s) checked/ s@^    n=$((n + 1))$@    n=$((n + 2))@' "$1"
+}
+mut_PRE_agents_checked_despite_fail() {
+  sed -i 's@if \[ "$n" -gt 0 \] && \[ "$fails" -eq "$fails_before_agents" \]; then ok@if [ "$n" -gt 0 ]; then ok@' "$1"
+}
+mut_PRE_agents_checked_preflight_wide() {
+  sed -i 's@\[ "$fails" -eq "$fails_before_agents" \]; then ok "$n kit agent@[ "$fails" -eq 0 ]; then ok "$n kit agent@' "$1"
 }
 
 # The preflight stops asking whether TEST_CMD would run anything at all. A `true` left behind while
@@ -3189,6 +3258,17 @@ mut_HEALTH_provenance_find_aborts() {
   sed -i 's@ | sort -V | tail -1 || true)"@ | sort -V | tail -1)"@' "$1"
 }
 
+# Issue #114: the grade table is read from the codereview the registry pins. One mutant stops
+# reading the registry (the newest file in the cache wins again, and the PIN world reads a match);
+# the other keeps the pin but lets a pinned path without its template pass in silence (the GONE
+# world goes rc 0 — the quiet fallback that is the defect).
+mut_HEALTH_provenance_reads_cache_newest() {
+  sed -i '/^health_provenance() {/,/^}/ s@^  if \[ -f "$reg" \] && command -v jq >/dev/null 2>&1; then$@  if false; then@' "$1"
+}
+mut_HEALTH_provenance_pinned_miss_silent() {
+  sed -i '/^health_provenance() {/,/^}/ s@^    \[ -n "$tpl" \] || health_bad "the installed codereview has no @    [ -n "$tpl" ] || : "the installed codereview has no @' "$1"
+}
+
 # The ratchet goes back to dying on a baseline with no live line. An empty baseline is not an
 # error — it means nothing is known debt, so everything is new — but the bare form made it a
 # silent crash after the provenance line, saying neither `kit healthy` nor how many checks failed.
@@ -3259,6 +3339,22 @@ mut_RETRY_moved_never_true() {
 # unaddressed sed would sabotage both doors and credit this entry for the other's coverage.
 mut_KAIZEN_moved_never_true() {
   sed -i '/^cmd_kaizen() {/,/^}/ { s|^  \[ "$before" != "$after" \] && moved="true"$|  true| }' "$1"
+}
+
+# Issue #78: the RETRY's twin. `moved2` is ledger-only in cmd_kaizen (it steers no branch), so a
+# neutered assignment read the default `false` in every world the file had — the regime matched the
+# default. The mirror world of check-kaizen.sh makes the retry the session that writes. Range-
+# addressed for the same reason as above: the two-space line is cmd_kaizen's alone, but the
+# four-space one in cmd_run is the same text.
+mut_KAIZEN_moved2_never_true() {
+  sed -i '/^cmd_kaizen() {/,/^}/ { s|^  \[ "$after" != "$after2" \] && moved2="true"$|  true| }' "$1"
+}
+
+# Issue #97: cmd_run's retry ROW. Its `moved2` steers the loop and is guarded there; the field the
+# row carries had no world where it is true, so a literal `false` left run-all green. The ceiling
+# world of check-autonomy.sh is the one where the retry commits.
+mut_RUN_retry_row_moved_false() {
+  sed -i '/^cmd_run() {/,/^}/ s|^    autonomy_session_row "$phase" "${attempts\[$phase\]}" "true" "$moved2" \\$|    autonomy_session_row "$phase" "${attempts[$phase]}" "true" "false" \\|' "$1"
 }
 
 # The post-pipeline nudge goes silent: missions pile up on a kit sha nobody judged and `sdd run`
@@ -5197,6 +5293,8 @@ CATALOG=(
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
   AUTONOMY_version_drops_close_money
+  AUTONOMY_jq_stderr_swallowed
+  AUTONOMY_shape_not_asked
   AUTONOMY_close_remainder_silent
   AUTONOMY_close_key_subsequence
   PLAN_empty_approval
@@ -5205,6 +5303,7 @@ CATALOG=(
   PLAN_branch_unasked
   TICKET_no_sprint
   TICKET_branch_writeback_blind
+  TICKET_status_enum_open
   EXEC_done_without_commit
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
@@ -5251,6 +5350,7 @@ CATALOG=(
   QA_status_line_start
   QA_status_enum_loose
   QA_bug_enum_loose
+  QA_handoff_status_enum_open
   QA_matrix_pending
   QA_bug_open
   QA_report_not_mission_bound
@@ -5389,6 +5489,8 @@ CATALOG=(
   RUN_hat_extra_pathless_admitted
   RUN_hat_extra_path_unnamed
   RUN_kit_touched_silent
+  RUN_kit_touched_accuses_session
+  RUN_kit_touched_remedy_generic
   RUN_init_blind
   RUN_harness_blind
   RUN_series_harness_blind
@@ -5432,6 +5534,7 @@ CATALOG=(
   RUN_intervention_written_on_dry_run
   RUN_escalation_hook_silent
   RUN_escalation_hook_on_dry_run
+  RUN_gate_log_in_tree
   RUN_escalation_hook_before_ledger
   RUN_escalation_hook_timeout_short
   RUN_escalation_hook_without_timeout_guard
@@ -5467,6 +5570,10 @@ CATALOG=(
   RUN_entrypoint_unguarded
   RUN_ledger_no_repo_filter
   PRE_agent_presence_only
+  PRE_agents_checked_silent
+  PRE_agents_checked_miscounted
+  PRE_agents_checked_despite_fail
+  PRE_agents_checked_preflight_wide
   PRE_testcmd_noop_blind
   PRE_testcmd_noop_runs_anyway
   PRE_testcmd_list_unnormalised
@@ -5504,6 +5611,8 @@ CATALOG=(
   KAIZEN_degenerate_axis_blind
   AUTONOMY_all_repos_ignored
   LEDGER_repo_root_shape_blind
+  LEDGER_repo_root_bypasses_shim
+  LEDGER_repo_root_newline_emptied
   LEDGER_repo_root_toplevel
   LEDGER_no_repo_counted_as_local
   KAIZEN_series_default_per_repo
@@ -5538,12 +5647,16 @@ CATALOG=(
   HEALTH_config_parse_blind
   HEALTH_suite_without_mutation
   HEALTH_provenance_find_aborts
+  HEALTH_provenance_reads_cache_newest
+  HEALTH_provenance_pinned_miss_silent
   HEALTH_baseline_read_aborts
   HEALTH_ratchet_eats_verdict
   RETRY_branch_switch_dead
   RUN_ghost_session_id
   RETRY_moved_never_true
   KAIZEN_moved_never_true
+  KAIZEN_moved2_never_true
+  RUN_retry_row_moved_false
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
   KAIZEN_already_judged_spends
