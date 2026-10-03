@@ -2584,6 +2584,23 @@ mut_PRE_agent_presence_only() {
   sed -i 's@elif ! cmp -s "$a" "$copy"; then@elif false \&\& ! cmp -s "$a" "$copy"; then@' "$1"
 }
 
+# Issue #83: the "N kit agent(s) checked" line is the one the operator reads, and no fixture saw it
+# — it printed under a preflight-wide `fails -eq 0` that every offline fixture misses. Now counted
+# per block; one mutant per way the line can lie: silent, miscounted, printed under a failure, and
+# back on the preflight-wide counter (silent again whenever anything ELSE is red).
+mut_PRE_agents_checked_silent() {
+  sed -i 's@then ok "$n kit agent(s) checked"; fi$@then :; fi@' "$1"
+}
+mut_PRE_agents_checked_miscounted() {
+  sed -i '/^  local a name copy n=0 fails_before_agents=/,/kit agent(s) checked/ s@^    n=$((n + 1))$@    n=$((n + 2))@' "$1"
+}
+mut_PRE_agents_checked_despite_fail() {
+  sed -i 's@if \[ "$n" -gt 0 \] && \[ "$fails" -eq "$fails_before_agents" \]; then ok@if [ "$n" -gt 0 ]; then ok@' "$1"
+}
+mut_PRE_agents_checked_preflight_wide() {
+  sed -i 's@\[ "$fails" -eq "$fails_before_agents" \]; then ok "$n kit agent@[ "$fails" -eq 0 ]; then ok "$n kit agent@' "$1"
+}
+
 # The preflight stops asking whether TEST_CMD would run anything at all. A `true` left behind while
 # the config was being wired up then passes preflight, and after it gate_EXEC, gate_QA and
 # gate_REVIEW pass instantly, in every mission, for ever — each phase certifying itself against a
@@ -5475,6 +5492,10 @@ CATALOG=(
   RUN_entrypoint_unguarded
   RUN_ledger_no_repo_filter
   PRE_agent_presence_only
+  PRE_agents_checked_silent
+  PRE_agents_checked_miscounted
+  PRE_agents_checked_despite_fail
+  PRE_agents_checked_preflight_wide
   PRE_testcmd_noop_blind
   PRE_testcmd_noop_runs_anyway
   PRE_testcmd_list_unnormalised

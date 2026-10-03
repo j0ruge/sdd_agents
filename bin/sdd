@@ -5688,7 +5688,7 @@ cmd_preflight() {
   # bit for real — 2132cf5 edited agents/sdd-kaizen.md, the copy stayed behind, green in
   # everything. Two failures and not one: absent and stale are different repairs, and telling an
   # operator to install a file that is right there on disk sends them the wrong way.
-  local a name copy n=0
+  local a name copy n=0 fails_before_agents="$fails"
   for a in "$SDD_HOME"/agents/sdd-*.md; do
     [ -e "$a" ] || continue
     n=$((n + 1))
@@ -5702,9 +5702,12 @@ cmd_preflight() {
         looks corrected. Run 'sdd install --force' (or 'sdd install' to see the diff first)."
     fi
   done
-  # Only claims "checked" when no agent failed — saying it right after six failure lines is the
-  # output contradicting itself, which is the kind of lie the kit forbids in the gates.
-  if [ "$n" -gt 0 ] && [ "$fails" -eq 0 ]; then ok "$n kit agent(s) checked"; fi
+  # Only claims "checked" when no AGENT failed — saying it right after six failure lines is the
+  # output contradicting itself, which is the kind of lie the kit forbids in the gates. Counted
+  # across this block and not across the whole preflight: `fails -eq 0` let a red `gh auth` above
+  # silence the line over eight copies that all matched, and made it unobservable in every offline
+  # fixture (issue #83).
+  if [ "$n" -gt 0 ] && [ "$fails" -eq "$fails_before_agents" ]; then ok "$n kit agent(s) checked"; fi
 
   # --- the qa bug template carries the genre field ----------------------------
   # Anchor 3 of gate_QA blocks on an ABSENT `Closable by:`, and nothing but `sdd install` ever
