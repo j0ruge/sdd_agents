@@ -79,14 +79,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sempre o braço 2; o braço 1 (uma linha só, caminho absoluto) só é alcançado por um repo cujo
   CAMINHO contém `\n`, e nenhum fixture tem um. `mut_LEDGER_repo_root_shape_blind` apaga os dois de
   uma vez, então o catálogo não os distingue. Direção: fixture com `\n` no caminho e dividir a
-  mutação em duas. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+  mutação em duas. RESOLVED by c62ee1e. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O piso do shim pré-2.31 prova que o shim é um git falso, não que o runner o consulta** —
   `tests/check-autonomy.sh:4553` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
   ancora no caminho de resolução do runner. Medido: trocar `git` por `/usr/bin/git` no
   `ledger_repo_root` E apagar a guarda deixa `check-autonomy.sh` inteiro verde, porque o shim segue
   um impostor correto que nunca é chamado. Direção: termo provando INTERCEPTAÇÃO — a resposta do
-  runner sob o shim tem de diferir da resposta sem ele.
+  runner sob o shim tem de diferir da resposta sem ele. RESOLVED by 35145b0.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Nada mede se o esperado de um Check do checkpoint ainda reproduz** —
@@ -110,14 +110,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:10404` — a asserção `covered:` do `moved` cobre a primeira atribuição; neutralizar a
   do retry deixa `check-kaizen.sh`, `check-autonomy.sh` e o catálogo verdes, porque o default
   local `false` coincide com o que o regime do fixture espera. Só o hardcode para `true` morre.
-  Direção: um mundo em que o retry mexe no disco de verdade, ou estreitar o que a asserção diz.
+  Direção: um mundo em que o retry mexe no disco de verdade, ou estreitar o que a asserção diz. RESOLVED by 0bdfddd.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:5707` —
   ela só sai com `fails -eq 0`, e todo fixture offline reprova antes (o probe do `claude` e o
   `gh auth status`). O I3 provou o ramo de falha por diferencial, mas o ramo de sucesso — a frase
   que o operador de fato lê — segue sem sensor. Direção: um `--skip-session` no preflight, ou um
-  contador de agentes impresso fora da guarda de `fails`.
+  contador de agentes impresso fora da guarda de `fails`. RESOLVED by 32896a7.
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **Os dois ramos de diagnóstico do `differential()` não têm probe** —
@@ -125,7 +125,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que sobra sem probe é a comparação do próprio diferencial: neutralizá-la faz o sensor ler "1 vs
   1" e seguir verde, então o dia em que o fall-through parar de reproduzir neste bash passa
   despercebido. Hoje o limite é o par de contagens ser IMPRESSO na linha `ok`. Direção: um gancho
-  de contagem falsa, como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo.
+  de contagem falsa, como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo. RESOLVED by e40a022.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:135`
@@ -171,7 +171,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   reprova antes de chegar ao `TEST_CMD`. Num fixture que alcance `gate_REVIEW`, o dry-run escreve
   `.sdd/logs/<missão>/gate-*-test-*.log` (reconfirmado no repo real, volta 2 da QA). Não é bug —
   é comportamento aceito e gitignored —, mas o nome garante mais que o teste. Direção: renomear
-  para "não toca nos artefatos da missão" ou exercitar também num fixture que chegue ao REVIEW.
+  para "não toca nos artefatos da missão" ou exercitar também num fixture que chegue ao REVIEW. RESOLVED by 00b60cc.
   — descoberto por `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
 
 - [ ] **O formato de achado vale para os repos-alvo, mas o sensor só guarda o arquivo do kit** —
@@ -186,7 +186,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `tests/check-autonomy.sh:435` — no fixture, `moved` sai `false` com qualquer baseline: o retry
   só é alcançado quando `before == after`, então a asserção nunca observa um `moved:true` genuíno
   pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
-  do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+  do que ela. RESOLVED by 087cea2. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9554`
   (`kaizen_series`) vs `docs/pipeline.md:1374`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
@@ -241,7 +241,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   fixa a versão que a fase REVIEW carrega é o `installPath` de `~/.claude/plugins/installed_plugins.json`.
   Com uma 1.19.0 em cache e a 1.18.0 fixada, o health confere o fixture contra um arquivo que a sessão
   nunca lê — e diz que conferiu. Fail-open (D15). Direção: ler o `installPath` do registro, `find` só
-  como fallback, mutante no catálogo. — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
+  como fallback, mutante no catálogo. RESOLVED by 94d3b6c.
+  — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
 
 - [ ] **`gate_TICKET` não confere no Jira a issue que o chapéu diz que ele confirma** — `bin/sdd:1083`
   (`gate_TICKET`) — o `agents/sdd-ticket.md:18` promete que o runner confirma a issue por `acli`,
@@ -353,6 +354,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `<done | blocked | skipped>` do `templates/handoff.md`. Medido na triagem da #103: o template
   copiado intacto passava com o status literal; o `gate:` agora recusa o placeholder, o `status:` não.
   Direção: recusar valor fora de `done|blocked|skipped`, com mundo e mutante, como o `gate_EXEC` faz.
+  RESOLVED by e00f019.
   — descoberto pela triagem cética do lote no branch `fix/lote-sensores-sem-probe` (2026-10-03)
 
 ### Saída humana e cosmética
@@ -367,7 +369,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **`turns` não aparece em nenhuma view humana** — `bin/sdd:4246` — o campo está na tabela de
   campos do `docs/pipeline.md` e é lido só por `jq` ad-hoc, então quem instala o kit não descobre
   que ele existe — e ele é metade da M2 desta missão. Direção: dizer no `§ Field reference` que é
-  instrumento cru, ou pendurá-lo na célula do `review loop` do `--by-mission`.
+  instrumento cru, ou pendurá-lo na célula do `review loop` do `--by-mission`. RESOLVED by 4a67042.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **As ADRs 0001–0007 não têm `Spec:`, e por isso 14 missões deste repo não podem declarar
@@ -383,7 +385,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`KAIZEN_LOG.md`) — o exemplo `packages/x/serializer.ts` da tabela de drift é um caminho daquele repo, e o
   `sdd-docs.md` e o `sdd-reviewer.md` mandam ler `KAIZEN_LOG.md`, `CHANGELOG.md` e `CONTEXT.md`,
   que nenhum gate exige e que um repo novo não tem. É ruído de prompt, não falha: a sessão procura
-  e não acha. Direção: neutralizar o exemplo e condicionar a leitura à existência do arquivo.
+  e não acha. Direção: neutralizar o exemplo e condicionar a leitura à existência do arquivo. RESOLVED by 28094c7.
   — descoberto por `sdd-planner` na missão `20260926-a-carona-antes-do-congelamento` (2026-09-26)
 
 - [ ] **O `sdd autonomy` culpa "uma linha que não é objeto" por qualquer falha do `jq`** —
@@ -391,7 +393,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   diferente de 0 vira "a row is valid JSON but not an object; find the writer". Medido: uma linha que
   É objeto, só com `"cost_usd":"4.0"` em string, recebe essa frase, e o operador sai caçando um
   escritor de não-objeto que não existe. Direção: testar a forma da linha antes e, no rc do programa,
-  repassar o stderr do `jq` em vez de afirmar a causa.
+  repassar o stderr do `jq` em vez de afirmar a causa. RESOLVED by 5236206.
   — descoberto pela triagem cética do lote no branch `fix/lote-sensores-sem-probe` (2026-10-03)
 
 - [ ] **O `kaizen --series` morre com o erro cru do `jq` e contradiz o pipeline.md sobre linha não-objeto** —
@@ -440,7 +442,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   afirma *"a session committing outside its mission's repo"*. Medido no `796e334`: a única escalada
   da fatia foi o HUMANO commitando o kit durante a fase PR do `sales_quote`, e o juiz a lê como
   fricção daquela versão — a mesma classe que a T1 fechou para `session-died`. Direção: a linha diz
-  o que o runner sabe (o sha do kit mudou durante a fase), ou ele mede a atribuição.
+  o que o runner sabe (o sha do kit mudou durante a fase), ou ele mede a atribuição. RESOLVED by 9a486a2.
   — descoberto por `claude` na leitura do juiz de 2026-09-20 (2026-09-20)
 
 ### Idioma
