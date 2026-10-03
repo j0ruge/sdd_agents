@@ -177,7 +177,11 @@ WAIVER='sdd-pipefail-waiver'
 # and the space-only anchor let that shape through too. The `$` half stays load-bearing: `| grep
 # -q` is legal at the end of a `\`-continued line. Excluding alnum is what keeps `--quietish` from
 # reading as `--quiet`.
-PIPE_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[:alnum:]]*q[[:alnum:]]*|--quiet|--silent)([^[:alnum:]-]|$)'
+# The head and the tail are ONE definition each, read by PIPE_RE and by rule 3's MAXC_RE: the
+# boundary set used to be copied into both, and widening only the copy went unmeasured (#100).
+GREP_HEAD_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+'
+GREP_FLAG_END_RE='([^[:alnum:]-]|$)'
+PIPE_RE="${GREP_HEAD_RE}(-[[:alnum:]]*q[[:alnum:]]*|--quiet|--silent)${GREP_FLAG_END_RE}"
 
 # ── RULE 2: `cd` into a command substitution, with no emptied CDPATH ───────────────────────────
 #
@@ -219,8 +223,10 @@ PIPE_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[
 # are about the report rather than the detection: rule 1's message names `grep -q` and would be
 # wrong here, and the existing probes assert that message. Same fix in both cases — a herestring.
 #
-# The middle and the trailing anchor are PIPE_RE's, verbatim in shape and for the same reasons
-# (see the long comment above it — the boundary set, GNU permutation, the separated argument).
+# The middle and the trailing anchor are PIPE_RE's — the SAME two variables, GREP_HEAD_RE and
+# GREP_FLAG_END_RE, for the same reasons (see the long comment above PIPE_RE — the boundary set, GNU
+# permutation, the separated argument). This comment used to say "verbatim in shape" over two
+# copies, and nothing measured it; rule 3 now has its own boundary probes in the selftest.
 # What differs is the flag itself:
 #
 #   * the short form is a flag CLUSTER ENDING in `m`, optionally followed by the attached count:
@@ -231,7 +237,7 @@ PIPE_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[
 #   * the long form is exact, and `--max-count` is the ONLY long spelling grep gives this flag —
 #     unlike `-q`, which has three names. `--max-count=1` and `--max-count 1` both work because
 #     the trailing anchor excludes alnum and `-`, which leaves `=` and whitespace.
-MAXC_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[:alnum:]]*m[0-9]*|--max-count)([^[:alnum:]-]|$)'
+MAXC_RE="${GREP_HEAD_RE}(-[[:alnum:]]*m[0-9]*|--max-count)${GREP_FLAG_END_RE}"
 
 # Rule 2's operand shape, and the two the header promises are named here. Both are OPERAND
 # shapes; the flag-level and lexical gaps (`cd --`, an operand across a `\` continuation) are a
@@ -806,6 +812,26 @@ hits="$(printf '%s\n' "$out" | grep -F -- -mtime)"
 EOF
   probe 'a dashed word merely containing an m is not -m either' 0 '-' "$t"
 
+  # The boundary set, one probe per reason, as rule 1 has. The comment above MAXC_RE swore its
+  # middle was PIPE_RE's "verbatim in shape" and nothing measured it: widening only MAXC_RE's middle
+  # to `.+` left this selftest green while the rule invented a violation on each line below (issue
+  # #100, measured on 8033a79). Both regexes now read GREP_HEAD_RE; these keep MAXC_RE on it.
+  cat > "$t" <<'EOF'
+foo | grep bar && baz -m1
+foo | grep bar; baz -m 1
+EOF
+  probe "a -m on the NEXT command (';' and '&&') is not this grep's" 0 '-' "$t"
+
+  cat > "$t" <<'EOF'
+foo | grep bar | xargs tool -m1
+EOF
+  probe 'a -m on the next PIPELINE stage is not this grep either' 0 '-' "$t"
+
+  cat > "$t" <<'EOF'
+foo | grep bar   # prefer -m1 here one day
+EOF
+  probe 'a TRAILING comment naming -m1 does not invent a violation' 0 '-' "$t"
+
   # No writer, no SIGPIPE: grep reading a FILE has nothing upstream to kill.
   cat > "$t" <<'EOF'
 line="$(grep -m1 'x' "$f")"
@@ -905,8 +931,8 @@ EOF
 
   # Floor on the probe COUNT: neutering every assertion body leaves a selftest that ran nothing,
   # and a selftest that ran nothing reads exactly like one that passed. Moves only on purpose.
-  if [ "$PROBES" -lt 57 ]; then
-    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 57\n' "$PROBES" >&2
+  if [ "$PROBES" -lt 60 ]; then
+    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 60\n' "$PROBES" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   # Direct assignment, deliberately NOT through fail_rc: two independent paths from "a probe

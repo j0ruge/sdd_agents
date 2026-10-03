@@ -242,7 +242,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O conjunto de fronteira do `MAXC_RE` não tem probe, e o comentário jura paridade com o
-  `PIPE_RE`** — `tests/check-pipefail.sh:219` — o `PIPE_RE` ganha quatro probes de falso-positivo
+  `PIPE_RE`** — `tests/check-pipefail.sh:223` — o `PIPE_RE` ganha quatro probes de falso-positivo
   para essa mesma classe; o `MAXC_RE` copia a grafia e não ganha nenhuma. Trocado por `.+`, o
   selftest fica verde e a regra passa a INVENTAR violação nas quatro formas que os probes do
   vizinho existem para recusar. É a classe "comentário afirmando paridade não é paridade" que o
@@ -399,7 +399,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
 - [ ] **A regra `cdpath:` certifica como limpo o `cd` de operando VARIÁVEL** —
-  `tests/check-pipefail.sh:283` (o comentário do `CD_RE` declara o limite) — a regra só mede
+  `tests/check-pipefail.sh:289` (o comentário do `CD_RE` declara o limite) — a regra só mede
   operando que é substituição de comando, porque `cd "$FIX"` é indecidível no scanner e os ~150
   sítios de `tests/` têm variável absoluta. Só que a única instância histórica da classe era
   exatamente essa forma (`cd "$common"` do `ledger_repo_root`, uma CRITICAL), então a forma que
