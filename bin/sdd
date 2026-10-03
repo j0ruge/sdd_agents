@@ -552,7 +552,16 @@ checkpoint_rows() {
       # blindness lives in gate_REVIEW and gate_DOCS; all three carry this regex.
       if (f[2] == "ID" || f[2] ~ /^:?-+:?$/ || f[2] == "") next
       if (f[5] == "Status") next
-      printf "%s\t%s\t%s\t%s\t%s\n", f[2], f[3], f[4], f[5], f[6]
+      # \037 (the ASCII unit separator) and NOT a tab, and the choice is the whole of issue #146.
+      # A tab is IFS whitespace, so a bash `read` with a tab IFS COLLAPSES two in a row: an empty
+      # Title or Check cell moved every column after it one to the left in the bash loops, while
+      # awk and cut, which do not collapse, kept them in place. gate_EXEC validated one reading
+      # and counted another, and passed a `done` whose Commit cell said `pending`. A separator
+      # that is not whitespace splits the same way in all of them, and no markdown cell carries
+      # it. Every reader of this output splits on it: checkpoint_tally, the Jidoka in cmd_run,
+      # and the three loops (gate_EXEC, status_increments, cmd_approve). No apostrophe in this
+      # comment: it sits inside the single-quoted awk program.
+      printf "%s\037%s\037%s\037%s\037%s\n", f[2], f[3], f[4], f[5], f[6]
     }' "$file"
 }
 
@@ -570,7 +579,7 @@ checkpoint_rows() {
 # it. `+ 0` on every field because an unmatched pattern leaves the variable unset, and mawk prints
 # an unset variable as the empty string — a row field the ledger would then read as null.
 checkpoint_tally() {
-  checkpoint_rows | awk -F'\t' '
+  checkpoint_rows | awk -F'\037' '
     { total++ }
     $4 == "pending" || $4 == "doing" { pending++ }
     $4 == "blocked" { blocked++ }
@@ -1224,7 +1233,7 @@ gate_EXEC() {
   # `pending_after` and the gate's own "N of M" have to be the same reading or the judge is
   # comparing a number against prose that disagrees with it.
   local id status commit
-  while IFS=$'\t' read -r id _ _ status commit; do
+  while IFS=$'\037' read -r id _ _ status commit; do
     case "$status" in
       done)
         if [ -z "$commit" ] || [ "$commit" = "—" ] || [ "$commit" = "-" ]; then
@@ -6512,7 +6521,7 @@ status_increments() {
   [ -n "$rows" ] || return 0
   info "  increments:"
   local id title _c st commit mark
-  while IFS=$'\t' read -r id title _c st commit; do
+  while IFS=$'\037' read -r id title _c st commit; do
     case "$st" in
       done)    mark="${C_GREEN}✓${C_RESET}" ;;
       blocked) mark="${C_RED}✗${C_RESET}" ;;
@@ -7434,7 +7443,7 @@ cmd_approve() {
   if [ -n "$rows" ]; then
     info "  increments:"
     local id title _check st _commit
-    while IFS=$'\t' read -r id title _check st _commit; do
+    while IFS=$'\037' read -r id title _check st _commit; do
       printf '    %-4s %-46s %s\n' "$id" "${title:0:46}" "$st"
     done <<< "$rows"
   fi
@@ -7897,7 +7906,7 @@ cmd_run() {
     # exactly the false negative a Jidoka must never have. tests/check-gates.sh pins it with a
     # 20000-row checkpoint; the RUN_jidoka_pipefail mutation puts the pipe back and the suite
     # has to die.
-    local ckstatus; ckstatus="$(checkpoint_rows | cut -f4)"
+    local ckstatus; ckstatus="$(checkpoint_rows | cut -d $'\037' -f4)"
     if [ "$phase" = "EXEC" ] && grep -qx "blocked" <<< "$ckstatus"; then
       gate_EXEC || true
       info ""

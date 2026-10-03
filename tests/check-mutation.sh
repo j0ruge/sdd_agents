@@ -3734,6 +3734,20 @@ mut_EXEC_tally_doing_is_done() {
   sed -i '/^checkpoint_tally()/,/^}/ s@\$4 == "pending" || \$4 == "doing"@$4 == "pending"@' "$1"
 }
 
+# checkpoint_rows goes back to a TAB between columns, and every reader with it — the state before
+# issue #146. The awk and cut readers still split one tab per column, but the three bash loops read
+# with a tab IFS, which COLLAPSES two in a row: an empty Check cell moves the Status into the Commit
+# variable, and gate_EXEC passes a `done` whose Commit cell says `pending` while checkpoint_tally
+# counts it as done. `IFS=$(printf "\t")` spells the tab without a quote the sed script would close.
+# Caught by `an empty Check cell changes nothing about which phase is due` in check-gates.sh (EXEC
+# against the QA the filled checkpoint gets), with the status and approve listings beside it.
+mut_EXEC_checkpoint_split_collapses() {
+  sed -i -e '/^checkpoint_rows() {/,/^}/ s@printf "%s\\037%s\\037%s\\037%s\\037%s\\n"@printf "%s\\t%s\\t%s\\t%s\\t%s\\n"@' \
+         -e '/^checkpoint_tally() {/,/^}/ s@awk -F.\\037.@awk -F"\\t"@' \
+         -e 's@IFS=\$.\\037. read -r id@IFS=$(printf "\\t") read -r id@' \
+         -e 's@cut -d \$.\\037. -f4@cut -f4@' "$1"
+}
+
 # The phase guard at cmd_run's door 1 goes, and GATE_EXEC_PENDING — which outlives its gate by
 # design, one screen up the same function — follows the run into the next phase: the QA session
 # opened after a PASSING EXEC gate is born claiming an increment QA never had, and `waste` falls
@@ -5451,6 +5465,7 @@ CATALOG=(
   LEDGER_progress_not_written
   EXEC_tally_counts_done
   EXEC_tally_doing_is_done
+  EXEC_checkpoint_split_collapses
   LEDGER_progress_leaks_across_phases
   EXEC_blocked_publishes_count
   RUN_retry_pending_before_null
