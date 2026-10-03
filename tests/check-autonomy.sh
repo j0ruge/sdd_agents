@@ -4301,6 +4301,30 @@ assert_eq "mission identity: two projects sharing one dated slug are two mission
               | jq -r '.latest.missions' )"
       printf '%s %s' "${h:-<empty>}" "${j:-<empty>}" )"
 
+# --- ...and the historical path's memory is per repo too -----------------------------------------
+# historic_progress keys its memory of the total done on `[repo, mission]` for the same collision:
+# without the repo half, under --all-repos the second repo's FIRST row is measured against the
+# first repo's memory — `3 of 4` there, `3 of 4` here reads 4 - 1 = 3 before and 3 after — and a
+# session that advanced reads churn (issue #149). Both readers, since they splice one definition,
+# plus the disclosure sentence as the witness that the dated path reached both rows at all.
+hist_row() {   # hist_row <repo> <session> — an EXEC row older than the pending fields, `3 of 4`
+  jq -cn --arg repo "$1" --arg s "$2" \
+    '{v:1, ts:"2026-08-29T14:00:00-03:00", event:"session", run_id:"r", invocation:"run",
+      kit_sha:"ddd1616", kit_dirty:false, project:"p", repo:$repo, mission:"m16",
+      phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+      auto_retry:false, session:$s, rc:0, dur_s:10, cost_usd:1.0, moved:true,
+      gate:"fail", gate_why:"3 of 4 increment(s) still to execute"}'
+}
+mkdir -p "$OUTSIDE/histrepos"
+{ hist_row "$FIXROOT" q1; hist_row "$OTHER" q2; } > "$OUTSIDE/histrepos/autonomy-log.jsonl"
+assert_eq "the historical memory of one repo never measures a row of another" "2 2 1" \
+  "$( h="$( SDD_STATE_DIR="$OUTSIDE/histrepos" "$SDD" autonomy --all-repos 2>&1 )"
+      n="$( sed -n 's/^  ddd1616  .* · \([0-9][0-9]*\) advanced · .*/\1/p' <<< "$h" )"
+      j="$( SDD_STATE_DIR="$OUTSIDE/histrepos" "$SDD" kaizen --series --all-repos 2>/dev/null \
+              | jq -r '.latest.outcomes.advanced' )"
+      printf '%s %s %s' "${n:-<empty>}" "${j:-<empty>}" \
+        "$(grep -c '(2 EXEC row(s) older than the pending fields read their progress from gate_why)' <<< "$h")" )"
+
 # --- ...and a worktree of one repo is still that repo ------------------------
 # `git rev-parse --show-toplevel` answers per WORKTREE, so a mission run from `git worktree add`
 # stamped a `repo` path the main checkout had never heard of. The row was born in the same repo

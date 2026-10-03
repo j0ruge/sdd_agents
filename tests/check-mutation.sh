@@ -4088,10 +4088,20 @@ mut_KAIZEN_qa_fix_loop_unscoped() {
   sed -i 's@elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before@elif (.pending_before != null and .pending_after != null and .pending_after > .pending_before@' "$1"
 }
 
+# The key of the EXEC dated path loses its repo half, and under --all-repos two missions of the same
+# slug in two repos share one memory of the total done: the second repo's first row, `3 of 4`, is
+# measured against the first repo's `3 of 4` — 4 - 1 = 3 before, 3 after — and a session that
+# advanced reads churn. The `ledger_repo_root`/CDPATH class: contamination between repos, silently.
+# Caught by `the historical memory of one repo never measures a row of another` in
+# check-autonomy.sh (issue #149).
+mut_AUTONOMY_historic_key_slug_only() {
+  sed -i 's@$r.phase == "EXEC" then (\[($r.repo // ""), ($r.mission // "")\] | tostring)@$r.phase == "EXEC" then ([($r.mission // "")] | tostring)@' "$1"
+}
+
 # The key of the QA dated path loses its repo half, and two missions of the same slug in two repos
 # start sharing a "next row": this repo's last QA:exec reads the QA:close of ANOTHER repo and turns
-# `advanced`. It is the class the EXEC sibling's key carries without a probe (TODO.md); here it is
-# born with one. Caught by `the next QA row of the same slug in ANOTHER repo is not this row's next
+# `advanced`. The class the EXEC sibling's key carried without a probe until issue #149; here it
+# was born with one. Caught by `the next QA row of the same slug in ANOTHER repo is not this row's next
 # row` in check-kaizen.sh.
 mut_KAIZEN_historic_steps_key_slug_only() {
   sed -i 's@$r.phase == "QA" then (\[($r.repo // ""), ($r.mission // "")\] | tostring)@$r.phase == "QA" then ([($r.mission // "")] | tostring)@' "$1"
@@ -5518,6 +5528,7 @@ CATALOG=(
   AUTONOMY_historic_pass_clears_memory
   AUTONOMY_historic_done_any_count
   AUTONOMY_historic_memory_partial_row
+  AUTONOMY_historic_key_slug_only
   AUTONOMY_historic_annotates_new_rows
   AUTONOMY_progress_outranks_moved
   KAIZEN_label_reads_gate

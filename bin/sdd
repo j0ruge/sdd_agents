@@ -3360,7 +3360,9 @@ ledger_row_is_local() {
 # a mission whose first sessions are new-schema and whose later ones are not would otherwise read
 # its first old row against M instead of against the row above it.
 # The key is `[repo, mission] | tostring` — an ARRAY rendered as JSON, for the reason mission_key
-# states in both readers: a separator chosen here would collide with one inside a repo path.
+# states in both readers: a separator chosen here would collide with one inside a repo path. The
+# repo half carries a probe since issue #149 (`mut_AUTONOMY_historic_key_slug_only`): without it,
+# two missions of one slug in two repos share one memory under --all-repos.
 # The key is null for every row that is not an EXEC session, so nothing else reads or writes the
 # memory. DECLARED, no probe (issue #150): the memory is written only by facts gate_EXEC writes —
 # its `N of M` and pass sentences, and the pair with `increments_total`, which no other phase
