@@ -32,7 +32,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão interativa ao avaliar o `/insights`, sem missão (2026-10-01)
 
 - [ ] **A regra da âncora aceita qualquer símbolo citado que reapareça perto, e uma âncora podre passa** —
-  `tests/check-todo.sh:1965` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
+  `tests/check-todo.sh:2005` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
   basta; identificador que se repete no arquivo inteiro casa em qualquer lugar. Medido em `b3b6b98`:
   `tests/check-autonomy.sh:6486` apontava para `exit 0` e passou verde porque `GIT_REFLOG_ACTION`
   está em 6400 — o sensor disse `every anchor on target`. Direção: exigir o símbolo na própria linha
