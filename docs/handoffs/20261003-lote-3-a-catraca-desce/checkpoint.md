@@ -1,6 +1,6 @@
 ---
 missao: 20261003-lote-3-a-catraca-desce
-atualizado: 2026-10-04 09:07
+atualizado: 2026-10-04 09:11
 ---
 
 # Checkpoint — Lote 3: a catraca desce
@@ -45,7 +45,7 @@ atualizado: 2026-10-04 09:07
 | I6 | #211: Check com test -f num caminho ignorado reprova | `bash tests/check-checkpoint.sh --selftest && grep -c 'a Check that tests an ignored path is caught' tests/check-checkpoint.sh` → `1` | done | 41ac7a1 |
 | I7 | #216: done abaixo de blocked reprova | `bash tests/check-checkpoint.sh --selftest && grep -c 'a done below a blocked row is caught' tests/check-checkpoint.sh` → `1` | done | 9e521d1 |
 | I8 | #212: template cita o --check do kit + linha do planner | `o=$(bash tests/check-templates.sh 2>&1); a=$(grep -c '^  ok    checkpoint.md: the checkpoint sensor cited in its --check form' <<< "$o"); b=$(awk '/check-checkpoint.sh --check/{c++} END{print c+0}' agents/sdd-planner.md); cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md && m=same; echo "$a $b ${m:-diff}"` → `1 1 same` | done | bf660f8 |
-| I9 | #217a: check-todo --baseline, diff chaveado | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: a --baseline run fails only on what the ref did not have (6 probe(s))' <<< "$o"` → `1` | pending | — |
+| I9 | #217a: check-todo --baseline, diff chaveado | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: a --baseline run fails only on what the ref did not have (6 probe(s))' <<< "$o"` → `1` | done | e7d1e2d |
 | I10 | #217b: a ref resolve as âncoras contra o repo real | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: a --baseline run fails only on what the ref did not have (7 probe(s))' <<< "$o"` → `1` | pending | — |
 | I11 | #127: chaves de caminho normalizadas e validadas no load_config | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    path key [A-Z0-9_]*: ' <<< "$o"` → `8` | pending | — |
 | I12 | #115: gate_REVIEW escopado + gate_DOCS recusa 45-docs.md sujo | `o=$(bash tests/check-gates.sh 2>&1); a=$(grep -c '^  ok    a dirty tree a later phase left does not send the mission back to REVIEW → DOCS$' <<< "$o"); b=$(grep -c '^  ok    an uncommitted 45-docs.md holds DOCS, it does not ride to PR → DOCS$' <<< "$o"); echo "$a $b"` → `1 1` | pending | — |
