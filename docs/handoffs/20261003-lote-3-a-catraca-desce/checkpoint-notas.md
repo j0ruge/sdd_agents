@@ -49,3 +49,4 @@
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
 - 2026-10-04 08:48 · `EXEC` · I1 (8577df6) · Red medido `0 5 0`, depois `1 18 1`. 13 itens fora da seção aberta, 13 registros decididos verbatim do plano, catraca 57 → 44. Medido de novo antes de escrever o "6 of the 30": 30 rodadas `40-review-r*.md`, 6 sem `gate:`. check-todo, check-lang e check-pipefail verdes; nenhuma âncora deslocou (edições no lugar).
+- 2026-10-04 08:50 · `EXEC` · I2 (db2eee1) · Red `0 0 1 1`, depois `1 2 0 0`. D7 emendada, 🚩 do D7 e do contrato PT-BR apagados, Y5/Y6 na tabela YAGNI, CLAUDE.md § Idioma, anatomia §6 e gaveta P1 sem "está no TODO.md". Contagens do Y5 re-medidas (232 + 364) e 10 alvos pt-BR. Desvio: o `|` dentro do code span do Y5 foi escrito `\|`, porque célula de tabela GFM parte no pipe cru mesmo dentro de crase.
