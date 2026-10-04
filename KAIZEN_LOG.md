@@ -19,13 +19,13 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 | Catraca `todo-findings` | 57 | 36 na branch (35 + N, N = 1: o `kaizen_reminder`) → 23 depois do chore pós-merge |
 | Saídas sem código | — | 22: 15 decididos, 2 YAGNI (`CONTEXT.md` Y5, Y6), 5 limites declarados em cabeçalho |
 | Consertos com `RESOLVED by` | — | 13, os 5 fail-open entre eles |
-| Catálogo de mutação | 580 | **592** (12 novos, 1 re-ancorado) |
+| Catálogo de mutação | 580 | **593** (13 novos, o último da revisão final; 1 re-ancorado) |
 | Sensores que o `calibrate()` enxerga | 9 de 16 | 16 de 16 |
 | `check-todo --check ~/repos/ui24-agent/TODO.md` | 10 violações, vermelho para sempre | `--baseline HEAD`: `0 new … (10 inherited)` |
 | Controles do catálogo | 1, na ordem usual | 1 + 1 por assassino distinto do mapa (10 locais, 10/10 verdes, 300 s em paralelo) |
 | Mexer num sensor e saber o que ele mata | o catálogo inteiro (~40 min) | `--touched`: 6ad41f7 → 14 mutantes; o fixture, 2 de 2 em 4 s |
 | Chaves de caminho do config | cruas (`TODO_FILE='*'` alargava todo chapéu) | normalizadas e validadas no `load_config`, recusa pelo nome |
-| Suíte (`tests/run-all.sh`) | 285 s, 1755 asserções `ok` | 293 s, 1788 |
+| Suíte (`tests/run-all.sh`) | 285 s, 1755 asserções `ok` | 293 s, 1788 em `60d4287`; 1790 no topo, depois da revisão final |
 
 **Contramedida:** cada conserto entrou com Red medido, sabotagem (mutante provado por `--only`, ou
 passada de sabotagem do selftest onde a mutação não alcança) e re-âncora do `TODO.md`. As saídas sem
@@ -37,7 +37,7 @@ YAGNI. O `/sdd-plan` ganhou o protocolo de repasse e o aviso de trabalho longo.
 `gate_why` sob um `TMPDIR` longo — falha fechada); 1 defeito da própria leva consertado nela (o SC1010
 do I7, `3cf0d0a`, que só a suíte inteira viu).
 
-**Ainda não medido:** o carimbo do `sdd health` com 592 mutantes, que roda depois dos bots — e a linha
+**Ainda não medido:** o carimbo do `sdd health` com 593 mutantes, que roda depois dos bots — e a linha
 `with each of the N killer(s) of the map first`, que só ele imprime.
 
 ---
