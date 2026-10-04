@@ -1,6 +1,6 @@
 ---
 missao: 20261003-lote-3-a-catraca-desce
-atualizado: 2026-10-04 10:00
+atualizado: 2026-10-04 10:09
 ---
 
 # Checkpoint — Lote 3: a catraca desce
@@ -52,7 +52,7 @@ atualizado: 2026-10-04 10:00
 | I13 | #63: gênero do bug lido do bloco do Status | `o=$(bash tests/check-gates.sh 2>&1); a=$(grep -c '^  ok    the genre is read from the Status block: ' <<< "$o"); b=$(grep -c '^  ok    a whole header quoted inside a fence above the real one does not become the genre' <<< "$o"); echo "$a $b"` → `2 1` | done | ece5895 |
 | I14 | #121: porta do kaizen aceita worktree do kit; kaizen_reminder vira achado (catraca 35 → 36) | `o=$(bash tests/check-kaizen.sh 2>&1); a=$(grep -c '^  ok    kit-repo guard: ' <<< "$o"); b=$(awk '/<!-- sdd:open -->/{o=1} /<!-- sdd:decided -->/{o=0} o && index($0,"- [ ] ")==1 && /kaizen_reminder/{c++} END{print c+0}' TODO.md); t=$(bash tests/check-todo.sh 2>&1); e=$(grep -c '^  ok    36 finding(s)' <<< "$t"); f=$(awk '/^todo-findings 36$/{c++} END{print c+0}' tests/health-baseline.txt); echo "$a $b $e $f"` → `2 1 1 1` | done | 188ca87 |
 | I15 | #213: kaizen --series recusa com frase e arquivo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    series: .* is refused with rc 1, naming the file' <<< "$o"` → `2` | done | 9edd800 |
-| I16 | #87: preflight cobra total_cost_usd e num_turns numéricos | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    a result line ' <<< "$o"` → `3` | pending | — |
+| I16 | #87: preflight cobra total_cost_usd e num_turns numéricos | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    a result line ' <<< "$o"` → `3` | done | 4f4a9b3 |
 | I17 | #169: um controle por assassino do mapa, ele na frente | `o=$(tests/check-mutation.sh --anchors 2>&1); grep -c '^  ok    controls: one control per distinct killer of the map' <<< "$o"` → `1` | pending | — |
 | I18 | #192a: --touched seleciona os mutantes dos sensores tocados | `o=$(tests/check-mutation.sh --anchors 2>&1); grep -c '^  ok    touched: the diff selects the mutants its sensors killed' <<< "$o"` → `1` | pending | — |
 | I19 | #192b: --touched roda o assassino, dá veredito e dica | `o=$(SDD_KILLERS_FILE=tests/fixtures/killers-touched.tsv tests/check-mutation.sh --touched 6ad41f7~1..6ad41f7 2>&1); grep -c '^  ok    touched: 2 of 2 selected mutant(s) still caught by their killer' <<< "$o"` → `1` | pending | — |
