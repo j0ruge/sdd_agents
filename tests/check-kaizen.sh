@@ -2094,6 +2094,32 @@ assert_eq "corrupt ledger: and the same ledger without the broken line still rea
         "$( [ "$r" = 0 ] && echo reaches-gate || echo "refused:$r" )" \
         "$(grep -q 'could not be read' <<< "$o" && echo unreadable-claim || echo no-unreadable-claim)" )"
 
+# The two ledgers that PARSE and still cannot be read (issue 213, the sibling of 206 in
+# cmd_autonomy). A row that is an object with a field jq cannot use leaked jq's own rc 5 and an
+# error that cites <stdin>, naming no file; a row that is not an object at all was counted as
+# `unrecognized`, rc 0, where docs/pipeline.md promises it "still dies loudly naming the file".
+# Four terms each, so a fix that names the file but swallows jq's diagnosis — or that tells a field
+# defect to go hunting for a writer of non-objects — is red. The row is the one check-autonomy.sh
+# uses for its own pair.
+echo "== the series refuses a row that parses and cannot be read =="
+KZ_FIELD_ROW='{"v":1,"ts":"2026-09-30T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"gate":"pass","gate_why":"ok"}'
+mkdir -p "$OUTSIDE/kzfield" "$OUTSIDE/kzshape"
+printf '%s\n%s\n' "$KZ_FIELD_ROW" "${KZ_FIELD_ROW/\"cost_usd\":1.5/\"cost_usd\":\"4.0\"}" \
+  > "$OUTSIDE/kzfield/autonomy-log.jsonl"
+printf '%s\n%s\n' "$KZ_FIELD_ROW" '["not", "an", "object"]' > "$OUTSIDE/kzshape/autonomy-log.jsonl"
+kz_refusal() { # kz_refusal <state dir> — "<rc> <named|unnamed> <shape|no-shape> <jq-words|no-jq-words>"
+  local o r
+  o="$( cd "$FIX" && SDD_STATE_DIR="$1" "$KSDD" kaizen --series 2>&1 >/dev/null )"; r=$?
+  printf '%s %s %s %s' "$r" \
+    "$(grep -qF "$1/autonomy-log.jsonl" <<< "$o" && echo named || echo unnamed)" \
+    "$(grep -q 'not an object' <<< "$o" && echo shape || echo no-shape)" \
+    "$(grep -q 'jq: error' <<< "$o" && echo jq-words || echo no-jq-words)"
+}
+assert_eq "series: a field jq cannot read is refused with rc 1, naming the file, quoting jq" \
+  "1 named no-shape jq-words" "$(kz_refusal "$OUTSIDE/kzfield")"
+assert_eq "series: a row that is not an object is refused with rc 1, naming the file, as a shape refusal" \
+  "1 named shape no-jq-words" "$(kz_refusal "$OUTSIDE/kzshape")"
+
 # =============================================================================
 # the two windows over one file — DIFFERENTIAL, never a comment claiming parity
 # =============================================================================

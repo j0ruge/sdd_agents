@@ -1499,6 +1499,20 @@ mut_KAIZEN_series_rc_dropped() {
   sed -i 's@  series="$(kaizen_series)" || series_rc=$?@  series="$(kaizen_series 2>/dev/null)"; series_rc=0; series="${series:-{\\}}"@' "$1"
 }
 
+# Issue 213, the two halves of the series' refusal of a row that parses and cannot be read, one
+# mutant each because they fail open independently (the AUTONOMY_* pair is the same split in
+# cmd_autonomy, and each pair matches only its own site). SHAPE_NOT_ASKED: a row that is not an
+# object is counted as `unrecognized` again and the series answers rc 0 — caught by `series: a row
+# that is not an object is refused with rc 1` in check-kaizen.sh. JQ_STDERR_SWALLOWED: the refusal
+# of a field jq cannot read names the file but no longer quotes jq — caught by `series: a field jq
+# cannot read is refused with rc 1, naming the file, quoting jq`.
+mut_KAIZEN_series_shape_not_asked() {
+  sed -i "s@^  if \[ -s \"\$file\" \] && ! jq -e -s 'all(type == \"object\")' \"\$file\" >/dev/null 2>&1; then\$@  if false; then@" "$1"
+}
+mut_KAIZEN_series_jq_stderr_swallowed() {
+  sed -i "s@^  ' < \"\$file\" 2>\"\$jq_err\" @  ' < \"\$file\" 2>/dev/null @" "$1"
+}
+
 # The mission identity loses the repo and goes back to the bare slug. A no-op until --all-repos
 # existed; with it, two projects that ran the same dated slug on the same kit_sha collapse into one
 # group — missions_with_session drops, guard.sufficient can flip, and one project `refez` swallows
@@ -5692,6 +5706,8 @@ CATALOG=(
   KAIZEN_degenerate_axis_session_unit
   KAIZEN_degenerate_axis_window_sorted
   KAIZEN_series_rc_dropped
+  KAIZEN_series_shape_not_asked
+  KAIZEN_series_jq_stderr_swallowed
   KAIZEN_composition_session_unit
   KAIZEN_composition_unprinted
   HEALTH_gates_capture_aborts

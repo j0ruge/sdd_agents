@@ -9605,6 +9605,12 @@ kaizen_series() {
     warn "malformed row in $file — the ledger is not readable"
     return 1
   fi
+  # The SHAPE, asked on its own (issue 213, the sibling of 206 in cmd_autonomy): a row that parses
+  # and is not an object is one defect with one remedy — find the writer. It used to be counted as
+  # `unrecognized` and the series answered rc 0 over it, where docs/pipeline.md promises it dies
+  # loudly naming the file. `if` and not a `jq … ||` line, so this site keeps its own anchor.
+  if [ -s "$file" ] && ! jq -e -s 'all(type == "object")' "$file" >/dev/null 2>&1; then
+    warn "unreadable row in $file — a row is valid JSON but not an object; find the writer that produced it"; return 1; fi
   # Read PER REPO, from the repo this process is standing in. Standing in none, nothing in the
   # ledger is yours: the series comes back empty, which is the SAFE direction (guard.sufficient
   # false supports only `indeterminado`) and never another repo's numbers read as a verdict about
@@ -9623,6 +9629,12 @@ kaizen_series() {
     printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"why":["floor"],"harness":[],"window_missions_stranded":0,"window_broken":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
     return 0
   fi
+  # jq's stderr goes to a temp file, never to the terminal raw: a row that IS an object with a field
+  # the program below cannot use (`"cost_usd":"4.0"`) leaked jq's rc 5 and an error citing <stdin>,
+  # naming no file. The runner does not know which field, so the refusal names the file and quotes
+  # jq — the same two halves cmd_autonomy says since 206.
+  local jq_rc=0 jq_err why
+  jq_err="$(mktemp "${TMPDIR:-/tmp}/sdd-kaizen-jq-XXXXXX")" || { warn "kaizen: could not create a temporary file"; return 1; }
   jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" --arg phases "$PHASES" "$(ledger_row_is_local)""$(ledger_outcome_defs)""$(ledger_kit_version_defs)"'
     # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
     # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
@@ -10064,7 +10076,14 @@ kaizen_series() {
                degenerate_axis: $degenerate},
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
                   meta: ($meta | length), other_repo: $other_repo, no_repo: $no_repo}}
-  ' < "$file"
+  ' < "$file" 2>"$jq_err" || jq_rc=$?
+  if [ "$jq_rc" -ne 0 ]; then
+    why="$(head -c 400 "$jq_err" | tr '\n' ' ')"
+    rm -f "$jq_err"
+    warn "unreadable row in $file — a row has a field jq could not read: ${why:-jq said nothing (rc $jq_rc)}"
+    return 1
+  fi
+  rm -f "$jq_err"
 }
 
 # One dim line after "pipeline complete": how many missions the CURRENT kit version accumulated

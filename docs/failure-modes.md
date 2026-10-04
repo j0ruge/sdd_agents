@@ -310,10 +310,15 @@ target — the instrument that covers that gap is the `composition` field of `sd
 **Symptom:** `sdd kaizen` (or `--dry-run`) prints `malformed row in <path> — the ledger is not
 readable` and then `error: the ledger could not be read (the series reader exited 1) — this is NOT
 'not judged yet'`, rc 1, with **no session opened**. `sdd kaizen --series` alone warns the same and
-exits 1 with no JSON on stdout.
+exits 1 with no JSON on stdout. Two other sentences take the same road, for a ledger that parses
+and still cannot be read: `unreadable row in <path> — a row is valid JSON but not an object; find
+the writer that produced it`, and `unreadable row in <path> — a row has a field jq could not read:
+<jq's own error>`, the second quoting jq because the runner does not know which field failed.
 
 **Cause:** one row of `~/.sdd/autonomy-log.jsonl` is not valid JSON — a truncated write, a hand
-edit, a file appended to by two processes at once. Before this was checked, the reader's empty
+edit, a file appended to by two processes at once — or, for the two other sentences, a row that is
+valid JSON but not an object (find the writer), or an object with a field of the wrong type, such
+as a cost written as a string (fix that row). Before this was checked, the reader's empty
 output was assigned into `series=$(kaizen_series)` with the return code dropped, and `errexit` is
 **off** inside every gate (each caller runs `gate_KAIZEN || rc=$?`), so an unreadable ledger read
 back as "no verdict for the kit yet" — a doubled space in that message was the only tell — and the
