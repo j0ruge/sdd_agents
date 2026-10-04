@@ -154,10 +154,11 @@ open across the whole registry. A value
 parked after the comment reads as absent, which blocks: safe, but it costs the lap you were
 trying to save. Same trap as the `**Status:**` anchor that cost US$ 15 a round in the SQ-97 pilot.
 
-It reads that anchor from the file's own **header** — the first field-shaped line that is not
-inside a fenced block — so quoting the line in a repro, a diff or an example does not change the
-bug's genre, on either side of the real field. What it cannot see through is an **unfenced** quote
-sitting above the field: fence your examples, which is what the block above already does.
+It reads that anchor from the file's own **header** — the block of `- **X:**` lines that opens
+with `**Status:**`, outside any fenced block — so quoting the line in a repro, a diff or an
+example, fenced or not, does not change the bug's genre. Write the field **inside** that block,
+right after `**Status:**`, as the template does: a `Closable by:` above the `Status:` line, or
+below the first line of the block that is not a field, reads as absent and blocks.
 
 The value is **lowercase**, and the match is case-sensitive: `Human`, `HUMAN` and `Deferred` read
 as absent and block. It is also the **whole word**: `humano` — the pt-BR spelling — and

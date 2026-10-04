@@ -730,8 +730,10 @@ mut_QA_bug_genre_anywhere() {
 # line merely SHAPED like the field wins again — and a bug whose repro is pasted above its own
 # metadata reads its genre out of the quote. Third half of the same line, and it fails open
 # independently of the other two, which is why it gets its own mutant rather than riding theirs:
-# with the fence tracking gone, both regimes above still block (their real field comes first) and
-# only the quote-ABOVE assertion dies.
+# with the fence tracking gone, both regimes above still block (their real field comes first). Since
+# issue 63 the genre is read from the Status block, and the quote-ABOVE regime blocks with or
+# without the fence (its blank line closes the block); what dies now is `a whole header quoted
+# inside a fence above the real one`, whose quoted Status line would open the block.
 #
 # `fenced = !fenced` occurs on the CODE line only — the prose beside it says "SKIPS fenced blocks"
 # and "the fence is STATE", neither of which contains the assignment. Same anchoring discipline as
@@ -739,6 +741,20 @@ mut_QA_bug_genre_anywhere() {
 # applies, clears the rc-90 `cmp -s` guard, and certifies a protection nobody measured.
 mut_QA_bug_genre_fenced() {
   sed -i 's|{ fenced = !fenced; next }|{ next }|' "$1"
+}
+
+# Issue 63, the two halves of "the genre is read from the Status block", one mutant each because
+# they fail open independently. OUTSIDE_HEADER drops the condition that a Closable line counts only
+# after the Status opened the block: bare prose quoting the human line above the header becomes the
+# genre again. Caught by `an unfenced quote above the header does not become the genre` in
+# check-gates.sh. HEADER_UNBOUNDED drops the end of the block: a legacy header with no genre reads
+# a field-shaped line from a later paragraph. Caught by `a field-shaped line in a later block does
+# not become the genre`. Each anchor matches the code line only.
+mut_QA_bug_genre_outside_header() {
+  sed -i 's|^      inheader \&\& /^-|      /^-|' "$1"
+}
+mut_QA_bug_genre_header_unbounded() {
+  sed -i 's|{ if (inheader) exit }|{ }|' "$1"
 }
 
 # The THIRD genre, and TWO mutants because its two halves fail open independently of each other
@@ -5418,6 +5434,8 @@ CATALOG=(
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
   QA_bug_genre_fenced
+  QA_bug_genre_outside_header
+  QA_bug_genre_header_unbounded
   QA_bug_genre_deferred_blocks
   QA_bug_genre_deferred_prefix
   QA_bug_genre_deferred_unseen_no_interface

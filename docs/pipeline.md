@@ -286,7 +286,8 @@ issue #205 it passed as `done`. The conditions:
   `- **Closable by:**`: `agent` blocks, `human` and `deferred` do not, and **absent blocks**. Absent
   is the fail-safe and not an oversight — every bug file written before the field existed lacks it,
   so a permissive default would switch this anchor off for a whole legacy registry in one step. The
-  genre is read from the FIELD, not from wherever the words happen to appear in the body, and
+  genre is read from the FIELD, not from wherever the words happen to appear in the body — the
+  first `Closable by:` in the header block that opens with `Status:`, outside any fence — and
   matched as a whole lowercase word: `humano`, `humans`, `Human` and `deferredly` all read as
   absent, and block;
 - `TEST_CMD` exits 0 and `E2E_CMD` exits 0 (when set). When the e2e is red the runner asks the app

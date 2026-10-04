@@ -833,6 +833,46 @@ genre_quoted_above="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "the genre is the file's OWN field: a quote ABOVE it does not become the genre" \
   "REVIEW|QA" "$genre_exact|$genre_quoted_above"
 
+# The residue the two regimes above left declared (issue 63): a quote parked above the header and
+# NOT fenced — bare prose opening with `- **Closable by:** human` — still read as the field, because
+# the extractor took the first field-shaped line outside a fence. The genre is now read from the
+# HEADER: the first `Closable by:` after the first unfenced `Status:`, inside the same contiguous
+# block of `- **X:**` lines. A field before the Status, or below the block, is absent — and absent
+# blocks, the safe side. Differential against `genre_exact`, as above.
+{ printf '# BUG-20260102-genre: bare prose quoting the human line above the header\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+  printf '\nThat line is what this bug is about. The header:\n\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_prose_above="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the genre is read from the Status block: an unfenced quote above the header does not become the genre" \
+  "REVIEW|QA" "$genre_exact|$genre_prose_above"
+{ printf '# BUG-20260102-genre: a legacy header with no genre field\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Severity:** Medium\n'
+  printf '\nA later paragraph quotes the template line, unfenced:\n\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_later_block="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the genre is read from the Status block: a field-shaped line in a later block does not become the genre" \
+  "REVIEW|QA" "$genre_exact|$genre_later_block"
+# A WHOLE header quoted inside a fence above the real one. Green before the fix too — and it is the
+# regime that keeps the fence rule measured once the genre is read from the Status block: without
+# it, dropping the fence handling leaves every other regime above blocking, since the quoted
+# `Status:` line is what opens the block.
+{ printf '# BUG-20260102-genre: the repro quotes a whole header\n'
+  printf '\nThe header that triggers it:\n\n```md\n'
+  printf -- '- **Status:** open\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+  printf '```\n\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_fenced_header="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a whole header quoted inside a fence above the real one does not become the genre" \
+  "REVIEW|QA" "$genre_exact|$genre_fenced_header"
+
 # Four more rules of the same anchor, one regime each. All four were found by an adversarial
 # sabotage pass in the REVIEW round of 20260826-o-laco-da-qa: each was degraded in turn and
 # `./tests/run-all.sh` stayed GREEN, which by the house rule makes them rules without a probe. In

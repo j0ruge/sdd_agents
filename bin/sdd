@@ -1526,14 +1526,16 @@ gate_QA() {
   #      `Closable by: agent` field, same fenced `human` line, only the ORDER moved, and the gate
   #      went from blocking to answering `registry clean`. It shipped as a declared limit; a
   #      declared limit is still a fail-open, and this anchor's every looseness is permissive.
-  #      So the extraction SKIPS fenced blocks and takes the first field-shaped line outside one.
+  #      So the extraction SKIPS fenced blocks — and since issue 63 it reads the HEADER: the first
+  #      `Closable by:` after the first unfenced `Status:`, inside the same contiguous block of
+  #      `- **X:**` lines. The fence skip alone left bare prose opening with `- **Closable by:**
+  #      human` above the header reading as the field (the residue that used to be declared here),
+  #      and a field-shaped line in a LATER block reading as the genre of a legacy header that has
+  #      none. A field before the `Status:`, or below the block, is ABSENT — and absent blocks. The
+  #      33 bug files of the local targets carry the field on the line right after `Status:`.
   #
   # Both of the first two measured in the QA phase of 20260826-o-laco-da-qa, both reported
-  # `registry clean`. Declared limit that remains: a quote parked above the header and NOT fenced
-  # — bare prose opening with `- **Closable by:** human` — still reads as the field. It is the
-  # residue of the same class and it is named here rather than in a comment that claims the class
-  # is closed; the fenced form is the one agents/sdd-qa.md § 5.1 actually prints, and the one that
-  # reproduced.
+  # `registry clean`.
   #
   # AWK and not a second `grep`: the fence is STATE, and a line-at-a-time matcher cannot hold it —
   # the lesson check-todo.sh paid for when its parser did not know it was inside an item's code
@@ -1543,9 +1545,11 @@ gate_QA() {
   while IFS= read -r bugfile; do
     [ -n "$bugfile" ] || continue
     genre_line="$(awk '
+      !/^-[[:space:]]+[*][*][^*]+:[*][*]/ { if (inheader) exit }
       /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
       fenced { next }
-      /^-[[:space:]]+[*][*]Closable by:[*][*]/ { print; exit }
+      /^-[[:space:]]+[*][*]Status:[*][*]/ { inheader = 1 }
+      inheader && /^-[[:space:]]+[*][*]Closable by:[*][*]/ { print; exit }
     ' "$bugfile" || true)"
     # `deferred` is tested FIRST and by a grep of its own rather than by widening the line below to
     # `(human|deferred)`, and both halves of that are deliberate. Its own grep, because this branch
