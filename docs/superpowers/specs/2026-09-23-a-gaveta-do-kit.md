@@ -67,7 +67,8 @@ trabalho de fato.
   Pede **ADR**, porque mexe na autorização de reentrada ("ambiente sozinho não autoriza"). Check
   antes: `copied owner environment is not authorization` e `forged environment is not
   authorization` continuam recusando o impostor, e um probe novo recusa o descendente sem o FD no
-  caso `pipeline`. Já está no `TODO.md` ("O 2º Python do worker custa ~30 ms").
+  caso `pipeline`. Saiu do `TODO.md` como decidido em 2026-10-03
+  (`20261003-lote-3-a-catraca-desce`): o plano mora aqui.
 - **P2. Catálogo mais barato por estrutura**, a maior alavanca que resta sem trocar linguagem.
   - **(a) Mutante → sensor alvo. FEITO em 2026-09-25**, derivado dos logs e não dos comentários
     (274 dos 406 mutantes não nomeiam sensor): o catálogo grava em `.sdd/cache/mutation-killers.tsv`

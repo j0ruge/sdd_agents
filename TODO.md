@@ -212,24 +212,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   nas duas formas de invocação, saída idêntica. Direção: `ledger_repo_root` dos dois lados, com par
   diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
-- [ ] **O contrato de artefato ainda é PT-BR em cinco pontos** — chamadas de `frontmatter` em
-  `bin/sdd`, `templates/missao.md`, `agents/*.md`, `tests/` — sobraram 3 chaves (`aprovacao`,
-  `versao`, `titulo` — 45 refs) e 2 nomes de artefato (`00-missao.md`, `01-plano.md` — 72 refs).
-  É o único português **obrigatório** para um repo-alvo anglófono, e `OUTPUT_LANG` não resolve
-  contrato. Não há missão em voo que a renomeação quebre (PR #105 mergeado): o custo é tamanho,
-  não risco. Direção: `approval`/`version`/`title` + `00-mission.md`/`01-plan.md`, com o runner
-  aceitando os dois nomes por uma janela. — descoberto por `humano` na missão
-  `20260815-i13.5-kit-em-ingles` (2026-08-15)
-
-- [ ] **`templates/` é single-language** — `templates/handoff.md:2` (`missao:`) — são conteúdo em `OUTPUT_LANG` mas
-  moram no kit em cópia única PT-BR, e o `sdd install` nem os copia (o `sdd-planner` lê direto de
-  `$SDD_HOME`). Um alvo com `OUTPUT_LANG="en"` recebe prompt certo e template em português. Não
-  morde hoje porque todo alvo é PT-BR. Direção: `templates/<lang>/` com fallback, ou estrutura
-  inglesa com prosa-guia que o agente reescreve — a segunda mexe no contrato que
-  `check-templates.sh` mede. Precedente: o `todo.md` já tem uma variante por idioma (`todo.<lang>.md`,
-  paridade cobrada). — descoberto por `humano` na
-  missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
-
 - [ ] **A regra `cdpath:` certifica como limpo o `cd` de operando VARIÁVEL** —
   `tests/check-pipefail.sh:289` (o comentário do `CD_RE` declara o limite) — a regra só mede
   operando que é substituição de comando, porque `cd "$FIX"` é indecidível no scanner e os ~150
@@ -349,14 +331,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   luz do ADR 0004: abrir o PR, esperar a rodada dos bots e só então carimbar.
   — descoberto pela sessão interativa que monitorava `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
 
-- [ ] **A suíte segue acima do alvo "<30 s" da D7, mesmo depois do paralelismo** —
-  `tests/run-all.sh:101` (`run()`) — a saída "subir o default" foi tomada e executada (pool + `min(núcleos, 8)`,
-  ver KAIZEN_LOG de 2026-08-16): mediana 54,13 s → **32,87 s** na mesma sessão, score 30/30
-  intacto. Restam as duas saídas de régua, ambas do humano: subir o alvo da D7 (o "≤15 s" do
-  I13.1 já é história) ou aceitar o estouro — hoje ~300 s (2026-09-25). — medido por
-  `sdd-executor` e `humano` nas missões `20260815-ledger-sem-ponto-cego` e no kaizen do
-  paralelismo (2026-08-16)
-
 ### Sem seção — chegaram depois da última classificação
 
 > ⚠️ Esta seção **chamava-se "Adiados por YAGNI"** e não guarda mais nenhum adiamento: os três que
@@ -380,14 +354,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   era obrigado a cair. O `@codex review` o achou no PR #167. Direção: o revisor enumera qual
   sabotagem provou cada nota — hoje narra em prosa, e prosa não é verificável.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
-
-- [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:10430` — o
-  worker relê o `bin/sdd` e sobe um 2º Python (`check`) só para provar a reentrada. Medido: sem ele
-  o `sdd install` cai de ~160 para ~130 ms, e o #48 levou a suíte comportamental de 117 para 251 s.
-  A parte barata já saiu no branch `perf/catalogo-para-no-primeiro-vermelho` (`-I -S` e acordar pelo
-  pidfd, 158 → 147 ms). Direção: provar o worker direto por um FD do flock herdado, fechado antes do
-  1º fork, sem afrouxar "ambiente sozinho não autoriza" — pede ADR.
-  — descoberto por `sessão coordenadora` no branch `perf/catalogo-para-no-primeiro-vermelho` (2026-09-23)
 
 - [ ] **O mapa de assassinos reordena a suíte e confia que nenhum sensor muda de resposta por rodar primeiro** —
   `tests/run-all.sh:374` — sob `SDD_MUTANT_FIRST` o CONJUNTO de passos de um mutante é o mesmo (as probes
@@ -417,3 +383,5 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - **O gate: do frontmatter da revisão só é cobrado quando existe** — decidido, sem conserto: as 6 rodadas sem o campo (de 30) são de 2026-08-16/17, anteriores a ele, e as 24 seguintes o trazem — `bin/sdd:1773` (2026-10-03)
 - **run_phase cria o diretório de log da sessão sem guarda** — decidido, sem conserto: a falha é alta e fechada (rc 1 antes de abrir sessão, zero gasto) e nunca foi observada — `bin/sdd:4670` (2026-10-03)
 - **Check de ausência reprovaria o conserto que precisa citar o defeito** — decidido: falha fechada, um caso em 2026-08-16; a regra de redação de Check do planner vem com o achado do Check que nasce verde, na leva 4 — `docs/handoffs/20260816-runner-sem-dividas/checkpoint.md:20` (2026-10-03)
+- **A suíte segue acima do alvo "<30 s" da D7** — decidido: o critério (4) da D7 passa a ser o prazo por passo do step_timeout (8× o tempo ocioso, piso 60 s), que já é o orçamento medido e cobrado; o 🚩 do CONTEXT.md fecha — `tests/run-all.sh:168` (2026-10-03)
+- **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — decidido: 30 ms por chamada não chega ao humano; provar o worker por FD herdado pede ADR e fica na gaveta, F1 P1 — `docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md:63` (2026-10-03)

@@ -55,7 +55,7 @@
 | D5 | `indeterminado` para a linha? | **Não (A)** — hierarquia: `melhorou`/`indeterminado` → registra o veredito e segue para triagem + plano; só `piorou` → Jidoka. | O gate humano (`aprovacao:` vazio + merge) já é o freio real; o Jidoka é para sinal vermelho, não para ausência de sinal. `indeterminado` é o estado normal do começo da série. | — |
 | D6 | Gatilho do `sdd kaizen`? | **Manual + lembrete (B)** — o disparo é sempre humano (pull, não push: enquanto a aprovação é humana, disparo automático só move o custo para mais cedo sem mover o laço). `sdd close` imprime uma linha calculada da série ("N missões desde a última mudança julgada") — texto, zero sessão. Disparo automático volta à mesa no I13.4. | O humano é o kanban. O modo de morte do laço manual (desuso) já está catalogado no TODO.md; a mitigação custa ~5 linhas sem sessão paga. | — |
 | D8 | Forma de implementação? | **KAIZEN como fase de verdade (1)** — entra nas tabelas `phase_*` (`MODEL_KAIZEN`, agente `sdd-kaizen`); `cmd_kaizen` = guarda kit-repo → série → `run_phase KAIZEN` → `gate_KAIZEN`. A parte determinística vira `sdd kaizen --series` (JSON), que a sessão do agente roda como fonte da verdade — a fronteira do ADR 0001 vira mecânica. Pseudo-missão `<data>-kaizen` para logs; o agente cria o diretório real da missão nascida. ⚠️ Gemba: o lembrete da D6 vai no ramo "pipeline complete" do `cmd_run` (`bin/sdd:1427`), não só no `close` — `cmd_close` retorna cedo com `JIRA_ENABLED=false`, o caso do kit. | Respeita a regra do `run_phase()` do CLAUDE.md; logs/teto/ledger de graça; `--series` testável puro na suíte. Alternativa "duas sessões" fica como evolução se a sessão única estourar teto. | — |
-| D7 | Métrica de sucesso do I13.3? | **Sensores sintéticos + rodada real como Check de fecho (C)** — (1) rodada real produz veredito + plano nascido passando `gate_KAIZEN`; (2) mutação 20 → ≥23 (gate_KAIZEN, Jidoka "piorou", derivação de rótulo), score 100%; (3) `sdd health` cobrando as novas; (4) suíte < 30s no default. | Padrão consagrado no repo (preflight `fc2fa50`, dry-run): sensor durável na suíte + prova no caminho real. A sessão paga do fecho é a primeira volta produtiva do laço — dela saem o veredito real do I13.1 e o plano candidato da missão seguinte. | — |
+| D7 | Métrica de sucesso do I13.3? | **Sensores sintéticos + rodada real como Check de fecho (C)** — (1) rodada real produz veredito + plano nascido passando `gate_KAIZEN`; (2) mutação 20 → ≥23 (gate_KAIZEN, Jidoka "piorou", derivação de rótulo), score 100%; (3) `sdd health` cobrando as novas; (4) ~~suíte < 30s no default~~ → cada passo da suíte dentro do prazo do `step_timeout` (`tests/run-all.sh`; 8× o tempo ocioso medido, piso 60 s) — emendado em 2026-10-03 por `20261003-lote-3-a-catraca-desce` (decisão 4): o alvo de 30 s ficou ~10× para trás, e o prazo por passo é o orçamento que a suíte de fato cobra. | Padrão consagrado no repo (preflight `fc2fa50`, dry-run): sensor durável na suíte + prova no caminho real. A sessão paga do fecho é a primeira volta produtiva do laço — dela saem o veredito real do I13.1 e o plano candidato da missão seguinte. | — |
 | D9 | `docs/adr/` entra na `surface()` do `check-lang`? | **Sim, no I13.3.5** — glob `docs/adr/*.md` na lista enumerada; piso recontado 26 → 31 (sensor novo + 2 cópias do agente + 2 ADRs), com o histórico no comentário do piso. | ADR é superfície do kit (inglês), não artefato de missão; deixar fora abriria a porta que a catraca existe para fechar. | — |
 | D10 | A sessão kaizen ganha linha no ledger? Com qual `mission`? | **Sim, uma linha por sessão**, com a pseudo-missão `<YYYYMMDD>-kaizen` (`cmd_kaizen` a seta só para logs/prompt; o diretório nunca é criado pelo runner). A série exclui `phase == "KAIZEN"` dos grupos e a conta em `excluded.meta` — asserção própria no `check-kaizen.sh`. | O custo/fricção do próprio laço fica medido sem deslocar o eixo que ele julga: o juiz nunca vê a própria sessão inflar a guarda do próprio veredito. | — |
 | D12 | Como se mede se o kit vale a pena em trabalho real? | **Custo (US$) por PR mergeada + número de intervenções humanas** (retry, conserto manual, `BLOCKED`), medidos no repo-alvo. O custo sai do ledger (`sdd autonomy`, por fase); as intervenções são anotadas nas notas do `checkpoint.md` da missão, uma linha por evento (`- intervenção: <o quê> — <fase> — <custo se houver>`). | É a evidência que o **I13.4** (graduação de autonomia) vai pedir, e ela não existe hoje: no repo do kit o eixo do juiz degenera por construção (ADR 0003), então dogfooding não alimenta a rubrica. Custo sozinho não distingue "rodou barato" de "rodou barato porque um humano fez metade"; a contagem de intervenções é a metade que falta. Decidido no grill de `20260820-missao-porteira` (2026-08-20), a valer a partir do piloto. | — |
@@ -90,32 +90,10 @@
 | Y2 | **Multi-missão concorrente por `git worktree`** — hoje é uma missão por branch por vez, e o runner não tem nada que impeça duas. | Aparecer **demanda real** de duas missões em voo. ⚠️ Não é só `git worktree add` no laço: o ledger carimba caminho e um worktree já confundiu a identidade do repo (comentários `WORKTREE` do `bin/sdd`), então reabrir pede desenho próprio. | YAGNI declarado no plano original (`humano`, 2026-08-14) |
 | Y3 | **`sdd digest`** — destilar handoffs e `KAIZEN_LOG.md` para o vault Obsidian continua manual. | Alguém destilar **à mão pela terceira vez** e a forma do rascunho já estar estável. | YAGNI declarado no plano original (`humano`, 2026-08-14) |
 | Y4 | **`sdd adr check --format json`** — hoje o comando fala texto + rc, e quem quisesse mais que "passou/não passou" parsearia a saída humana, que não é contrato. | Aparecer o **primeiro consumidor real** — um job que anota o PR, um painel de migração contando o que falta num repo em `warn`. Sem ele é superprodução. | decisão 8 do grill de `20260917-o-numero-do-adr-nao-e-prosa`; saiu do `TODO.md` pela régua D15 em `20260930-a-sub-etapa-que-andou` (2026-10-01) |
+| Y5 | **O contrato de artefato em PT-BR** — três chaves de frontmatter (`aprovacao`, `versao`, `titulo`) e dois nomes de artefato (`00-missao.md`, `01-plano.md`) são o único português obrigatório para um alvo anglófono; em 2026-10-03, 232 + 364 ocorrências em `bin templates agents tests config` (`grep -rFo <termo> … \| wc -l`). | Aparecer o **primeiro repo-alvo com `OUTPUT_LANG` diferente de `pt-BR`** (os 10 alvos locais são pt-BR em 2026-10-03). Renomear pede uma janela que aceite os dois nomes: missão em voo quebra. | decisão 4 do grill de `20261003-lote-3-a-catraca-desce`; saiu do `TODO.md` pela régua D15 (2026-10-03) |
+| Y6 | **`templates/` em um idioma só** — os templates moram em cópia única PT-BR e o `sdd-planner` os lê de `$SDD_HOME`; um alvo com `OUTPUT_LANG="en"` recebe prompt certo e template em português. Precedente: `templates/todo.<lang>.md`. | O mesmo evento do Y5. | idem Y5 |
 
 ## 🚩 Perguntas abertas
-
-- **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido, e o estouro deixou de
-  ser marginal.** A saída "subir o default" foi tomada em 2026-08-16: `SDD_MUTATION_JOBS` deriva
-  de `min(núcleos, 8)` e o escalonador virou pool — mediana 54,13 s → **32,87 s**, score intacto
-  (KAIZEN_LOG). Desde então a previsão escrita nesta linha se confirmou **três vezes**, porque o
-  estouro **cresce com o catálogo** e cada mutante é uma suíte inteira: `20260816-runner-sem-dividas`
-  mediu 33,95 s → 44,55 s (30 → 38 mutantes), `20260816-kit-como-alvo` mediu **1:17,62 → 1:45,17**
-  (40 → 44 mutantes) e `20260816-portas-do-humano` mediu **1:45,74 → 2:27,10** (44 → 55 mutantes) —
-  as três na mesma máquina, worktree da base contra o HEAD. ⚠️ A terceira só vale porque foi
-  **refeita em sequência, sem outra suíte rodando**: sob carga concorrente os mesmos commits deram
-  3:12,87 e 4:18,70, e uma terceira passada do mesmo HEAD deu 2:25,87 — mais rápida que o "antes".
-  ⚠️ **Quarta medição, `20260818-lote-facil` (2026-08-19), e a ordem de grandeza mudou:** o par foi
-  refeito no protocolo (mesma máquina, em sequência, nada mais rodando) e deu **1268,31 s (21m08s)
-  na base `9207b4d`, 81 mutantes, verde** contra **1051,60 s (17m32s) no HEAD, 101 mutantes**. Duas
-  leituras que importam mais que o delta: (a) o HEAD ficou **mais rápido** com 20 mutantes a mais,
-  o que é a mesma volatilidade que a nota acima já documenta — **um par não é tendência**; (b) o
-  **absoluto** é sólido nos dois lados, e o alvo não está mais a 4,9× e sim a **~35×**. O
-  "~3m30s" que o `01-plano.md` desta missão registrou como contexto verificado estava **6× errado**;
-  todo gate rodava a suíte, então `sdd phase` e `sdd why` bloqueavam por ~20 minutos, não por 3.
-  ⚠️ **Esta frase deixou de valer em `4c86712`**, e foi ela que motivou a mudança: o catálogo saiu
-  do `TEST_CMD` para o `sdd health --with-mutation`, e o `TEST_CMD` passou a 44,3 s medidos. O
-  número de mutantes deixou de ser escrito em prosa em qualquer lugar — sai da linha `score:`.
-  Cortar mutação para ganhar relógio violaria o princípio que motivou o I13.2, então o que resta é
-  **subir o alvo ou aposentá-lo por escrito** — decisão do humano; o item vivo mora no `TODO.md`.
 
 - **O `TODO.md` de um repo-alvo pode não falar o formato do princípio 5, e isso precisa de decisão
   ANTES do piloto.** Medido em 2026-08-21 no `sales_quote`: **2854 linhas e zero itens `- [ ]`** —
@@ -123,9 +101,6 @@
   de 6 linhas do kit, então a fase EXEC produz a segunda convenção **no mesmo arquivo** na primeira
   vez que achar algo. O `TODO.md` do kit registra isto mais fraco do que é ("falta sensor no alvo");
   a pergunta real é qual convenção manda. Não vale adiar: é a primeira coisa que a EXEC faz.
-- **O contrato PT-BR em cinco pontos e o `templates/` single-language ficam adiados até existir um
-  alvo anglófono** — não por dificuldade, por ausência de consumidor. O piloto é `pt-BR`, então ele
-  não diz nada sobre os dois; decidir antes seria decidir no escuro, que é o mesmo argumento da D13.
 - **O custo do kit sobre si mesmo sobe a cada missão, e a série já não é ruído.** Parcela do laço
   de revisão nas missões de kit, lida pelo `sdd autonomy --by-mission`: as oito primeiras oscilam
   entre 13% e 52% (mediana 26,5%); as **quatro últimas sobem monotonicamente — 39%, 39%, 50%,

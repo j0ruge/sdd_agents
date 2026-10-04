@@ -36,8 +36,8 @@ conteúdo no idioma declarado.
 **O contrato é sempre inglês:** chaves de config, tokens de status (`pending`, `doing`, `done`,
 `blocked`, `auto`, `skipped`), os enums das skills de terceiro e identificadores de código.
 ⚠️ Três chaves de frontmatter (`aprovacao`, `versao`, `titulo`) e dois nomes de artefato
-(`00-missao.md`, `01-plano.md`) ainda são PT-BR por herança — estão no `TODO.md`, e renomeá-los
-quebra missão em voo.
+(`00-missao.md`, `01-plano.md`) ainda são PT-BR por herança — estão adiados por YAGNI no `CONTEXT.md` (Y5)
+até o primeiro alvo não-pt-BR, e renomeá-los quebra missão em voo.
 
 ## Princípios não-negociáveis
 
