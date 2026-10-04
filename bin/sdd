@@ -5538,14 +5538,15 @@ cmd_preflight() {
   # `disallowedTools:` and strips `Bash` for a rule written there (see hat_disallowed). A comment
   # that asserts parity is not parity, so the probe now fires the executor hat under the flags
   # run_phase composes for it — the mirror in .claude/agents/ when installed, because that is the
-  # copy the harness loads — and reads TWO artifacts: `Bash` on the stream's init line (the tool
-  # list the session actually got) and the marker in the result (the permission to run it). No
+  # copy the harness loads — and reads two artifacts here: `Bash` on the stream's init line (the tool
+  # list the session actually got) and the marker in the result (the permission to run it), plus a
+  # third below it, the money keys of the result line (issue 87). No
   # init line and no answer is the old "did not answer"; an init line without Bash names the hat.
   # ONE hat, the executor's, by cost: eight sessions per preflight is not a preflight. The other
   # seven declare the same key shape, and tests/check-hat.sh R3 refuses the mix-up in every file;
   # what this probe adds is the harness's reading of it, which no sensor on the declaration can see.
   if command -v claude >/dev/null 2>&1; then
-    local hat probe_stream probe_init probe_answer probe_tools
+    local hat probe_stream probe_init probe_answer probe_tools probe_result
     local -a probe_agent=()
     hat="$(phase_hat EXEC)"
     if [ -n "$hat" ] && [ -f "$REPO_ROOT/.claude/agents/$hat.md" ]; then probe_agent=(--agent "$hat"); fi
@@ -5574,6 +5575,20 @@ cmd_preflight() {
       _fail "the headless session CANNOT execute commands — the phases will not run the suite
         nor commit. Answer received: $(printf '%s' "$probe_answer" | head -c 120)
         Adjust ALLOWED_TOOLS in .sdd/config.sh (default: Bash)."
+    fi
+    # A THIRD artifact of the same session, and it costs nothing (issue 87): the money keys of the
+    # result line. run_phase reads `.total_cost_usd` and `.num_turns`, and so do sdd census, sdd close
+    # and mission_cost_usd — the sum BUDGET_MISSION_USD caps. A CLI that renamed either would blind
+    # all four in silence, so the probe asks for both, as numbers. No result line at all is the
+    # "did not answer" above, already a failure; a dead stub gives none, so it is never counted twice.
+    probe_result="$( jq -c 'select(.type == "result")' <<< "$probe_stream" 2>/dev/null | tail -1 )" || probe_result=""
+    if [ -n "$probe_result" ]; then
+      if jq -e '(.total_cost_usd | type) == "number" and (.num_turns | type) == "number"' <<< "$probe_result" >/dev/null 2>&1; then
+        ok "the session's result line carries a numeric total_cost_usd and num_turns"
+      else
+        _fail "the session's result line has no numeric total_cost_usd or num_turns — run_phase, sdd census,
+        sdd close and the mission budget read them, and would go blind. Keys it got: $(jq -r 'keys | join(" ")' <<< "$probe_result" 2>/dev/null | head -c 300)"
+      fi
     fi
   fi
   if gh auth status >/dev/null 2>&1; then ok "gh authenticated"

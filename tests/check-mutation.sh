@@ -2058,6 +2058,19 @@ mut_PREFLIGHT_bash_in_init_unchecked() {
   sed -i 's|^    elif \[ -n "\$probe_init" \] && ! jq -e '"'"'.tools // \[\] \| index("Bash") != null'"'"' <<< "\$probe_init" >/dev/null 2>&1; then$|    elif false; then|' "$1"
 }
 
+# Issue 87, the money keys of the probe's result line, one mutant per half. MONEY_KEYS_UNCHECKED: the
+# probe stops asking, and a CLI that renamed `total_cost_usd` would blind the mission budget with
+# preflight green — caught by `a result line with the cost key renamed is named by preflight` in
+# check-preflight.sh. NUM_TURNS_UNCHECKED: only the cost is asked, and the rename of `num_turns`
+# goes unseen — caught only by `a result line without num_turns is named by preflight`, which is why
+# it has a mutant of its own rather than riding the first.
+mut_PREFLIGHT_money_keys_unchecked() {
+  sed -i 's/^      if jq -e '"'"'(\.total_cost_usd | type) == "number" and (\.num_turns | type) == "number"'"'"' <<< "\$probe_result" >\/dev\/null 2>&1; then$/      if true; then/' "$1"
+}
+mut_PREFLIGHT_num_turns_unchecked() {
+  sed -i 's/^\(      if jq -e '"'"'(\.total_cost_usd | type) == "number"\) and (\.num_turns | type) == "number"\('"'"' <<< "\$probe_result"\)/\1\2/' "$1"
+}
+
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
 # session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
 # undone and the boot bill goes on reporting the cut, because the fallback arm it lands in is the
@@ -5584,6 +5597,8 @@ CATALOG=(
   PREFLIGHT_context_bill_unguarded
   PREFLIGHT_hat_probe_without_agent
   PREFLIGHT_bash_in_init_unchecked
+  PREFLIGHT_money_keys_unchecked
+  PREFLIGHT_num_turns_unchecked
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA

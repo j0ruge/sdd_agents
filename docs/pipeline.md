@@ -940,8 +940,10 @@ harness reads; `hat_disallowed` joins both onto the flag, where a rule is a perm
 `Bash`. `tests/check-hat.sh` R3/R4 refuse the two mix-ups.
 
 `sdd preflight` proves this by firing a real headless session **as the executor hat**, under the
-flags `run_phase` composes for it, and reading two artifacts: `Bash` on the stream's `init` line
-and the marker in the answer. "claude answers" does not cover this failure mode, and neither did
+flags `run_phase` composes for it, and reading three artifacts: `Bash` on the stream's `init` line,
+the marker in the answer, and a numeric `total_cost_usd` and `num_turns` on the `result` line — the
+keys `run_phase`, `sdd census`, `sdd close` and the mission budget read, so a CLI that renamed one
+is caught before a session is paid for blind. "claude answers" does not cover this failure mode, and neither did
 a probe without `--agent` — it was green on the day every hat had no shell.
 
 ## Costs and logs
