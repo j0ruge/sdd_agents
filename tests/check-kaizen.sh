@@ -1846,6 +1846,23 @@ assert_eq "sdd kaizen refuses to run outside the kit repo (rc 1)" "1" "$rc"
 assert_eq "and points at the kit repo" "yes" \
   "$(grep -q 'run it in the kit repo' <<< "$out" && echo yes || echo no)"
 
+# A linked WORKTREE of the kit is the kit (issue 121). The door compared the `--show-toplevel` of
+# $SDD_HOME with the cwd's, and a worktree has a toplevel of its own, so the kit's `sdd` run from a
+# worktree of the kit refused as if it stood in a target. The identity is the common dir, the one
+# ledger_repo_root already reads. DIFFERENTIAL: the main checkout and its worktree, one `sdd`.
+KWT="$OUTSIDE/kit-worktree"
+git -C "$FIX" worktree add -q -b kaizen/worktree-fixture "$KWT"
+kz_door() { # kz_door <cwd> — "<rc> <refused|admitted>" for a kaizen projection from <cwd>
+  local o r
+  o="$( cd "$1" && "$KSDD" kaizen --dry-run 2>&1 )"; r=$?
+  if grep -q 'run it in the kit repo' <<< "$o"; then printf '%s refused\n' "$r"; else printf '%s admitted\n' "$r"; fi
+}
+kz_main="$(kz_door "$FIX")"; kz_wt="$(kz_door "$KWT")"
+assert_eq "kit-repo guard: a linked worktree of the kit answers like the main checkout" "$kz_main" "$kz_wt"
+assert_eq "kit-repo guard: and the worktree is admitted, not refused" "admitted" "${kz_wt#* }"
+git -C "$FIX" worktree remove --force "$KWT"
+git -C "$FIX" branch -q -D kaizen/worktree-fixture
+
 echo "== the base branch warning reaches the kaizen door =="
 # The kaizen door is the WORSE of the two that open a committing session: it validates the kit repo
 # and warns about a dirty tree, and then writes a verdict plus three artifacts wherever you happen
@@ -2076,6 +2093,32 @@ assert_eq "corrupt ledger: and the same ledger without the broken line still rea
       printf '%s %s' \
         "$( [ "$r" = 0 ] && echo reaches-gate || echo "refused:$r" )" \
         "$(grep -q 'could not be read' <<< "$o" && echo unreadable-claim || echo no-unreadable-claim)" )"
+
+# The two ledgers that PARSE and still cannot be read (issue 213, the sibling of 206 in
+# cmd_autonomy). A row that is an object with a field jq cannot use leaked jq's own rc 5 and an
+# error that cites <stdin>, naming no file; a row that is not an object at all was counted as
+# `unrecognized`, rc 0, where docs/pipeline.md promises it "still dies loudly naming the file".
+# Four terms each, so a fix that names the file but swallows jq's diagnosis — or that tells a field
+# defect to go hunting for a writer of non-objects — is red. The row is the one check-autonomy.sh
+# uses for its own pair.
+echo "== the series refuses a row that parses and cannot be read =="
+KZ_FIELD_ROW='{"v":1,"ts":"2026-09-30T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"gate":"pass","gate_why":"ok"}'
+mkdir -p "$OUTSIDE/kzfield" "$OUTSIDE/kzshape"
+printf '%s\n%s\n' "$KZ_FIELD_ROW" "${KZ_FIELD_ROW/\"cost_usd\":1.5/\"cost_usd\":\"4.0\"}" \
+  > "$OUTSIDE/kzfield/autonomy-log.jsonl"
+printf '%s\n%s\n' "$KZ_FIELD_ROW" '["not", "an", "object"]' > "$OUTSIDE/kzshape/autonomy-log.jsonl"
+kz_refusal() { # kz_refusal <state dir> — "<rc> <named|unnamed> <shape|no-shape> <jq-words|no-jq-words>"
+  local o r
+  o="$( cd "$FIX" && SDD_STATE_DIR="$1" "$KSDD" kaizen --series 2>&1 >/dev/null )"; r=$?
+  printf '%s %s %s %s' "$r" \
+    "$(grep -qF "$1/autonomy-log.jsonl" <<< "$o" && echo named || echo unnamed)" \
+    "$(grep -q 'not an object' <<< "$o" && echo shape || echo no-shape)" \
+    "$(grep -q 'jq: error' <<< "$o" && echo jq-words || echo no-jq-words)"
+}
+assert_eq "series: a field jq cannot read is refused with rc 1, naming the file, quoting jq" \
+  "1 named no-shape jq-words" "$(kz_refusal "$OUTSIDE/kzfield")"
+assert_eq "series: a row that is not an object is refused with rc 1, naming the file, as a shape refusal" \
+  "1 named shape no-jq-words" "$(kz_refusal "$OUTSIDE/kzshape")"
 
 # =============================================================================
 # the two windows over one file — DIFFERENTIAL, never a comment claiming parity

@@ -270,6 +270,25 @@ load_config() {
       || die "HAT_WRITES_EXTRA path '$_hwx_path' (hat $_hwx_hat) is not a literal path inside the repo — relative, no '..', and no metacharacter except a trailing '/**' on a named directory"
   done < <(hat_writes_extra_each)
 
+  # The PATH keys become `writes:` globs (hat_expand), and hat_path_allowed matches those as shell
+  # GLOBS, so a raw value fails both ways (issue 127): `./TODO.md` matches no path git reports — a
+  # false hat-crossed that stops the target's line — and `TODO_FILE='*'` matches bin/sdd, widening
+  # EVERY hat's frontier, since HAT_WRITES_BASE carries $TODO_FILE. Normalised and validated HERE,
+  # never at the point of use: hat_writes is read through `$( )`, and a die there would die in the
+  # subshell and hand back the empty list — the spelling of "this hat writes anywhere". The grammar
+  # is adr_dir_ok's, the guard ADR_DIR already passes through. Not here, and declared: ADR_DIR
+  # (adr_mode guards it), SPEC_DIR (may be empty), and the readers through config_read_key
+  # (cmd_install, autonomy), which use a key as a filesystem path and never as a glob.
+  local _pk _pv
+  for _pk in TODO_FILE HANDOFF_DIR QA_DOCS_PATH E2E_DIR; do
+    _pv="${!_pk}"
+    while [ "${_pv#./}" != "$_pv" ]; do _pv="${_pv#./}"; done
+    while [ "${_pv%/}" != "$_pv" ]; do _pv="${_pv%/}"; done
+    adr_dir_ok "$_pv" \
+      || die "$_pk='${!_pk}' in $CONFIG_FILE is not a literal path inside the repo — relative, no '.' or '..' component, and only letters, digits, '.', '_' and '-' in each name"
+    printf -v "$_pk" '%s' "$_pv"
+  done
+
   [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME is empty in $CONFIG_FILE"
   [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH is empty in $CONFIG_FILE"
   [ -n "$TEST_CMD" ]       || die "TEST_CMD is empty in $CONFIG_FILE (it is the EXEC gate)"
@@ -1507,14 +1526,16 @@ gate_QA() {
   #      `Closable by: agent` field, same fenced `human` line, only the ORDER moved, and the gate
   #      went from blocking to answering `registry clean`. It shipped as a declared limit; a
   #      declared limit is still a fail-open, and this anchor's every looseness is permissive.
-  #      So the extraction SKIPS fenced blocks and takes the first field-shaped line outside one.
+  #      So the extraction SKIPS fenced blocks — and since issue 63 it reads the HEADER: the first
+  #      `Closable by:` after the first unfenced `Status:`, inside the same contiguous block of
+  #      `- **X:**` lines. The fence skip alone left bare prose opening with `- **Closable by:**
+  #      human` above the header reading as the field (the residue that used to be declared here),
+  #      and a field-shaped line in a LATER block reading as the genre of a legacy header that has
+  #      none. A field before the `Status:`, or below the block, is ABSENT — and absent blocks. The
+  #      33 bug files of the local targets carry the field on the line right after `Status:`.
   #
   # Both of the first two measured in the QA phase of 20260826-o-laco-da-qa, both reported
-  # `registry clean`. Declared limit that remains: a quote parked above the header and NOT fenced
-  # — bare prose opening with `- **Closable by:** human` — still reads as the field. It is the
-  # residue of the same class and it is named here rather than in a comment that claims the class
-  # is closed; the fenced form is the one agents/sdd-qa.md § 5.1 actually prints, and the one that
-  # reproduced.
+  # `registry clean`.
   #
   # AWK and not a second `grep`: the fence is STATE, and a line-at-a-time matcher cannot hold it —
   # the lesson check-todo.sh paid for when its parser did not know it was inside an item's code
@@ -1524,9 +1545,11 @@ gate_QA() {
   while IFS= read -r bugfile; do
     [ -n "$bugfile" ] || continue
     genre_line="$(awk '
+      !/^-[[:space:]]+[*][*][^*]+:[*][*]/ { if (inheader) exit }
       /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
       fenced { next }
-      /^-[[:space:]]+[*][*]Closable by:[*][*]/ { print; exit }
+      /^-[[:space:]]+[*][*]Status:[*][*]/ { inheader = 1 }
+      inheader && /^-[[:space:]]+[*][*]Closable by:[*][*]/ { print; exit }
     ' "$bugfile" || true)"
     # `deferred` is tested FIRST and by a grep of its own rather than by widening the line below to
     # `(human|deferred)`, and both halves of that are deliberate. Its own grep, because this branch
@@ -1770,7 +1793,7 @@ gate_REVIEW() {
         if (verdict != "") { print verdict; exit }
         if (rows == 0)     { print "NO-TABLE"; exit }
         # The other half of the seal. ABSENT is left alone on purpose, and the scope is measured,
-        # not assumed: 6 of the 14 rounds on disk in this repo predate the field, and a gate that
+        # not assumed: 6 of the 30 rounds on disk in this repo predate the field, and a gate that
         # refused them would be rewriting history instead of measuring the round that just ran.
         # Present-but-unfilled is the case that lies, and it is the one refused — which is why
         # this reads PRESENCE and not the value: `gate:` with nothing after it is present and
@@ -1808,16 +1831,34 @@ gate_REVIEW() {
   if ! run_check_cmd "$TEST_CMD" "gate-review-test"; then
     GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
-  if [ -n "$(cd "$REPO_ROOT" && git status --porcelain)" ]; then
-    # The CHECK is unchanged and so is the behaviour — only the sentence moved, because since
-    # `20260901-o-revisor-so-acha` this phase does not fix: what a REVIEW session leaves behind is
-    # its round report and the `R<n>` rows it wrote into the checkpoint. ⚠️ The words BEFORE the
-    # dash are load-bearing and stay verbatim: `historic_rounds` declares this refusal as one of the
-    # two that name no round file, and the prose is quoted as that declared limit in three places
-    # (the def's own comment above, `docs/pipeline.md § Field reference`, `tests/check-autonomy.sh`).
-    # For the same reason the tail must NOT name `40-review-r<N>.md`: the recovery's regexes are
-    # anchored at `^`, and the world its comment says it could not build is precisely a `gate_why`
-    # carrying that name somewhere other than the first character.
+  # The scope's second half is HAT_WRITES_BASE, read through the same hat_expand every hat's
+  # frontier is, so the two cannot drift: the reviewer's hat declares it writes the backlog
+  # (principle 5), and a round that registered a finding and died before committing it left ITS
+  # OWN dirt — the decision of 2026-10-04 that amends decision 8 of 20261003-lote-3-a-catraca-desce.
+  local -a review_base review_scope=("$MISSION_DIR/40-review-r*.md" "$MISSION_DIR/checkpoint.md"
+                                     "$MISSION_DIR/checkpoint-notas.md")
+  local p
+  IFS=',' read -r -a review_base <<< "$(hat_expand "$HAT_WRITES_BASE")"
+  for p in "${review_base[@]}"; do
+    p="${p#"${p%%[![:space:]]*}"}"; p="${p%"${p##*[![:space:]]}"}"
+    [ -n "$p" ] || continue
+    review_scope+=("$REPO_ROOT/$p")
+  done
+  if [ -n "$(cd "$REPO_ROOT" && git status --porcelain --untracked-files=all -- "${review_scope[@]}")" ]; then
+    # SCOPED to what a REVIEW session writes (issue 115): since `20260901-o-revisor-so-acha` this
+    # phase does not fix, so what it leaves behind is its round report, the `R<n>` rows it wrote
+    # into the checkpoint, the note it appended and the finding it sent to the backlog. Unscoped, a
+    # dirty tree a LATER phase left — a DOCS session that died with a new doc on disk — failed this
+    # gate, derive_phase walked back to REVIEW, and the mission bought a whole new round for a file
+    # the round never wrote. That half is now gate_DOCS's, which refuses its own uncommitted
+    # 45-docs.md. `--untracked-files=all` because the pathspec must reach a file inside an untracked
+    # directory. ⚠️ The words BEFORE the dash are load-bearing and stay verbatim: `historic_rounds`
+    # declares this refusal as one of the two that name no round file, and the prose is quoted as
+    # that declared limit in three places (the def's own comment above, `docs/pipeline.md § Field
+    # reference`, `tests/check-autonomy.sh`). For the same reason the tail must NOT name
+    # `40-review-r<N>.md`: the recovery's regexes are anchored at `^`, and the world its comment
+    # says it could not build is precisely a `gate_why` carrying that name somewhere other than the
+    # first character.
     GATE_WHY="working tree dirty after the review — the round and its R<n> rows must be committed"; return 1
   fi
   GATE_WHY="$(basename "$last") Grade A on every criterion, at least $REVIEW_PROSE_MIN_GRADE on the prose ones, suite green, tree clean"
@@ -1890,6 +1931,16 @@ docs_checklist_rows() {
 gate_DOCS() {
   local d="$MISSION_DIR/45-docs.md"
   [ -f "$d" ] || { GATE_WHY="missing 45-docs.md"; return 1; }
+  # Committed, or the phase is not done (issue 115, decision 8 of 20261003-lote-3-a-catraca-desce).
+  # gate_REVIEW stopped looking past its own files, so a DOCS session that died after writing a
+  # complete 45-docs.md would otherwise ride to PR over a dirty tree. The owner of the artifact is
+  # the DOCS hat, whose instructions end in "Commit everything", so the refusal is satisfiable: the
+  # DOCS phase runs again and commits it with the docs it describes.
+  # ⚠️ DECLARED LIMIT: a DOCS session that committed 45-docs.md but left ANOTHER document dirty still
+  # reaches PR with the tree dirty — the gate reads its own artifact, not the documents it lists.
+  if [ -n "$(cd "$REPO_ROOT" && git status --porcelain --untracked-files=all -- "$d")" ]; then
+    GATE_WHY="45-docs.md is not committed — a DOCS session that died leaves it on disk; the DOCS phase runs again and commits it with the docs it describes"; return 1
+  fi
   if ! grep -qiE 'drift' "$d"; then
     GATE_WHY="45-docs.md has no drift checklist"; return 1
   fi
@@ -2499,15 +2550,17 @@ hat_mcp() {   # hat_mcp <step> — the MCP servers the hat may see; "" ⇒ --str
 }
 
 hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_DOCS_PATH $E2E_DIR $ADR_DIR
-  local s="$1" hd="$HANDOFF_DIR"
-  while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
+  local s="$1"
+  # The four path keys arrive normalised by load_config (no leading `./`, no trailing `/`, a literal
+  # path inside the repo), so they are substituted as they are; trimming them again here would hide
+  # a load_config that stopped normalising.
   # Replacements QUOTED: under bash 5.2's patsub_replacement an unquoted `&` in the value
   # re-inserts the matched placeholder (measured: TODO_FILE='R&D/TODO.md' → R$TODO_FILED/TODO.md).
-  s="${s//\$HANDOFF_DIR/"$hd"}"
+  s="${s//\$HANDOFF_DIR/"$HANDOFF_DIR"}"
   s="${s//\$MISSION/"$MISSION"}"
   s="${s//\$TODO_FILE/"$TODO_FILE"}"
-  s="${s//\$QA_DOCS_PATH/"${QA_DOCS_PATH%/}"}"
-  s="${s//\$E2E_DIR/"${E2E_DIR%/}"}"
+  s="${s//\$QA_DOCS_PATH/"$QA_DOCS_PATH"}"
+  s="${s//\$E2E_DIR/"$E2E_DIR"}"
   # ADR_DIR can never be empty here: adr_mode() refuses that value, and `$ADR_DIR/**` expanded
   # from an empty one would read as `/**` — a hat declaring it may write the whole filesystem.
   s="${s//\$ADR_DIR/"${ADR_DIR%/}"}"
@@ -2997,8 +3050,9 @@ pipeline_log_line() {
   # session is spent and no mission artifact is touched. Recording here an event that was only
   # PROJECTED lies in the audit trail, and in a freshly installed target repo (where `sdd
   # install` only ignores `.sdd/logs/`) the `pipeline.log` stays untracked and dirties the
-  # working tree — a dirty tree fails `gate_REVIEW` and `sdd preflight`, meaning a projection
-  # would knock down another phase's gate. The guard lives here, not in the callers, so it holds
+  # working tree — an untracked `pipeline.log` fails `sdd preflight` (gate_REVIEW reads only the
+  # round's own files since issue 115), meaning a projection would knock down the next phase's
+  # door. The guard lives here, not in the callers, so it holds
   # for ALL of them: the escalation paths (checkpoint `blocked`, budget blown, two sessions with
   # no progress) are three, and a fourth added tomorrow would be born with the same defect.
   # Found by the QA phase of mission 20260814-dry-run-completo (F1).
@@ -5498,14 +5552,15 @@ cmd_preflight() {
   # `disallowedTools:` and strips `Bash` for a rule written there (see hat_disallowed). A comment
   # that asserts parity is not parity, so the probe now fires the executor hat under the flags
   # run_phase composes for it — the mirror in .claude/agents/ when installed, because that is the
-  # copy the harness loads — and reads TWO artifacts: `Bash` on the stream's init line (the tool
-  # list the session actually got) and the marker in the result (the permission to run it). No
+  # copy the harness loads — and reads two artifacts here: `Bash` on the stream's init line (the tool
+  # list the session actually got) and the marker in the result (the permission to run it), plus a
+  # third below it, the money keys of the result line (issue 87). No
   # init line and no answer is the old "did not answer"; an init line without Bash names the hat.
   # ONE hat, the executor's, by cost: eight sessions per preflight is not a preflight. The other
   # seven declare the same key shape, and tests/check-hat.sh R3 refuses the mix-up in every file;
   # what this probe adds is the harness's reading of it, which no sensor on the declaration can see.
   if command -v claude >/dev/null 2>&1; then
-    local hat probe_stream probe_init probe_answer probe_tools
+    local hat probe_stream probe_init probe_answer probe_tools probe_result
     local -a probe_agent=()
     hat="$(phase_hat EXEC)"
     if [ -n "$hat" ] && [ -f "$REPO_ROOT/.claude/agents/$hat.md" ]; then probe_agent=(--agent "$hat"); fi
@@ -5534,6 +5589,20 @@ cmd_preflight() {
       _fail "the headless session CANNOT execute commands — the phases will not run the suite
         nor commit. Answer received: $(printf '%s' "$probe_answer" | head -c 120)
         Adjust ALLOWED_TOOLS in .sdd/config.sh (default: Bash)."
+    fi
+    # A THIRD artifact of the same session, and it costs nothing (issue 87): the money keys of the
+    # result line. run_phase reads `.total_cost_usd` and `.num_turns`, and so do sdd census, sdd close
+    # and mission_cost_usd — the sum BUDGET_MISSION_USD caps. A CLI that renamed either would blind
+    # all four in silence, so the probe asks for both, as numbers. No result line at all is the
+    # "did not answer" above, already a failure; a dead stub gives none, so it is never counted twice.
+    probe_result="$( jq -c 'select(.type == "result")' <<< "$probe_stream" 2>/dev/null | tail -1 )" || probe_result=""
+    if [ -n "$probe_result" ]; then
+      if jq -e '(.total_cost_usd | type) == "number" and (.num_turns | type) == "number"' <<< "$probe_result" >/dev/null 2>&1; then
+        ok "the session's result line carries a numeric total_cost_usd and num_turns"
+      else
+        _fail "the session's result line has no numeric total_cost_usd or num_turns — run_phase, sdd census,
+        sdd close and the mission budget read them, and would go blind. Keys it got: $(jq -r 'keys | join(" ")' <<< "$probe_result" 2>/dev/null | head -c 300)"
+      fi
     fi
   fi
   if gh auth status >/dev/null 2>&1; then ok "gh authenticated"
@@ -9565,6 +9634,12 @@ kaizen_series() {
     warn "malformed row in $file — the ledger is not readable"
     return 1
   fi
+  # The SHAPE, asked on its own (issue 213, the sibling of 206 in cmd_autonomy): a row that parses
+  # and is not an object is one defect with one remedy — find the writer. It used to be counted as
+  # `unrecognized` and the series answered rc 0 over it, where docs/pipeline.md promises it dies
+  # loudly naming the file. `if` and not a `jq … ||` line, so this site keeps its own anchor.
+  if [ -s "$file" ] && ! jq -e -s 'all(type == "object")' "$file" >/dev/null 2>&1; then
+    warn "unreadable row in $file — a row is valid JSON but not an object; find the writer that produced it"; return 1; fi
   # Read PER REPO, from the repo this process is standing in. Standing in none, nothing in the
   # ledger is yours: the series comes back empty, which is the SAFE direction (guard.sufficient
   # false supports only `indeterminado`) and never another repo's numbers read as a verdict about
@@ -9583,6 +9658,12 @@ kaizen_series() {
     printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"why":["floor"],"harness":[],"window_missions_stranded":0,"window_broken":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
     return 0
   fi
+  # jq's stderr goes to a temp file, never to the terminal raw: a row that IS an object with a field
+  # the program below cannot use (`"cost_usd":"4.0"`) leaked jq's rc 5 and an error citing <stdin>,
+  # naming no file. The runner does not know which field, so the refusal names the file and quotes
+  # jq — the same two halves cmd_autonomy says since 206.
+  local jq_rc=0 jq_err why
+  jq_err="$(mktemp "${TMPDIR:-/tmp}/sdd-kaizen-jq-XXXXXX")" || { warn "kaizen: could not create a temporary file"; return 1; }
   jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" --arg phases "$PHASES" "$(ledger_row_is_local)""$(ledger_outcome_defs)""$(ledger_kit_version_defs)"'
     # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
     # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
@@ -10024,7 +10105,14 @@ kaizen_series() {
                degenerate_axis: $degenerate},
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
                   meta: ($meta | length), other_repo: $other_repo, no_repo: $no_repo}}
-  ' < "$file"
+  ' < "$file" 2>"$jq_err" || jq_rc=$?
+  if [ "$jq_rc" -ne 0 ]; then
+    why="$(head -c 400 "$jq_err" | tr '\n' ' ')"
+    rm -f "$jq_err"
+    warn "unreadable row in $file — a row has a field jq could not read: ${why:-jq said nothing (rc $jq_rc)}"
+    return 1
+  fi
+  rm -f "$jq_err"
 }
 
 # One dim line after "pipeline complete": how many missions the CURRENT kit version accumulated
@@ -10315,7 +10403,13 @@ cmd_kaizen() {
   # the same misattribution autonomy_kit_stamp already warns about for ledger rows.
   [ -n "$kit_root" ] \
     || die "$SDD_HOME is not a git checkout — the kaizen loop judges kit versions and needs the kit's git history"
-  [ "$kit_root" = "$REPO_ROOT" ] \
+  # The kit is compared by IDENTITY, never by toplevel (issue 121): a linked worktree of the kit has
+  # a toplevel of its own, so the kit's own `sdd`, run from one, refused as if it stood in a target.
+  # The identity is the common dir, the one ledger_repo_root reads for the ledger — the same call,
+  # with the same REPO_ROOT override health_release makes for the kit.
+  local kit_id here_id
+  kit_id="$( REPO_ROOT="$SDD_HOME" ledger_repo_root )"; here_id="$( ledger_repo_root )"
+  [ -n "$kit_id" ] && [ "$kit_id" = "$here_id" ] \
     || die "sdd kaizen plans the KIT's next mission — run it in the kit repo ($SDD_HOME)"
   # A dirty tree does not block (the judge may be invoked mid-work on purpose), but the rows born
   # now carry kit_dirty:true and stay out of the comparable series forever — worth hearing once.

@@ -218,7 +218,8 @@ o `PYTHONPATH` de quem chama não troca os módulos do processo que decide a pos
 servem à sonda do remédio do `CHECKOUT-UNAVAILABLE`: `/usr/bin/python3` (ou `SDD_SYSTEM_PYTHON`) só
 é oferecido depois de passar no próprio `capable` do helper, nunca por ser executável. O supervisor
 acorda pelo pidfd do worker, não pelo tique de 10 ms. O custo que sobra, ~30 ms do 2º Python do
-worker em toda chamada coordenada, está no `TODO.md`.
+worker em toda chamada coordenada, é limite declarado: não chega ao humano, e o conserto (provar o worker
+por FD herdado, com ADR) mora na gaveta, F1 P1.
 
 **Limite da posse.** Coordena entradas do kit, não edição externa nem daemon preexistente.
 Matar o supervisor, adulterar arquivos/namespace do lock ou intervenção privilegiada derrota

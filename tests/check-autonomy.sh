@@ -5747,6 +5747,13 @@ assert_eq "kit-guard: a session that edits the kit during another repo's mission
 # mission's repo"; the old remedy sent that human to undo their own work. Three terms, so a reworded
 # accusation, a dropped admission and a generic remedy each turn one of them.
 KG1_WHY="$(jq -r -s '[.[] | select(.event == "blocked" and .kind == "kit-touched") | .gate_why] | first // ""' "$LEDGER" 2>/dev/null)"
+# ⚠️ DECLARED LIMIT (D15), measured in 20261003-lote-3-a-catraca-desce: the ledger caps gate_why at
+# 200 characters and KIT_TOUCHED_WHY opens with the kit's PATH, so the `unmeasured` term below reads
+# a sentence that sits past the path. The fixture kit lives under $TMPDIR: with /tmp the sentence
+# ends near character 140; with a TMPDIR of 98 characters it fell past the cap and this assertion
+# went red in all ten controls of a catalogue run. It fails CLOSED and the kit at its real path
+# keeps ~60 characters of slack, so it is a limit, not a backlog item — run the suite with a short
+# TMPDIR, or unset it.
 assert_eq "kit-guard: the row admits the editor was not measured, accuses no session, and the remedy names both readings" \
   "unmeasured:1 accuses:0 remedy:1" \
   "unmeasured:$(kitguard_has "$KG1_WHY" 'who edited it was not measured') accuses:$(kitguard_has "$KG1_WHY" 'a session committing') remedy:$(kitguard_has "$KG1_OUT" 'If that was you working on the kit')"

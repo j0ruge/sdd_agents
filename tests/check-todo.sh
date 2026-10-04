@@ -62,11 +62,13 @@
 #
 # Usage: tests/check-todo.sh                (selftest, then check TODO.md — what run-all.sh calls)
 #        tests/check-todo.sh --selftest     (probes only)
-#        tests/check-todo.sh --check <file> [--allow-empty]
+#        tests/check-todo.sh --check <file> [--allow-empty] [--baseline <ref>]
 #                                           (check one file, no selftest — used BY the selftest to
 #                                            exercise the real reporting path without recursing, and
 #                                            by anyone checking a target's TODO.md; --allow-empty
-#                                            accepts zero findings, which the kit's own file never is)
+#                                            accepts zero findings, which the kit's own file never is;
+#                                            --baseline fails only on the violations <ref>'s copy of
+#                                            the file did not have, keyed by message and line text)
 #        tests/check-todo.sh --count <file> (print the parser's item count, even when the lint
 #                                            fails — for tools that mirror the findings elsewhere
 #                                            and must prove their own parser agrees)
@@ -118,8 +120,9 @@
 #
 # ── Declared debt, admitted here instead of into the backlog (the D15 rule of CLAUDE.md) ────────
 # A finding earns a TODO.md entry when the sensor CLAIMS to measure what it does not (fail-open)
-# or when the defect has a consumer outside the kit's own suite. These two are neither: they fail
-# CLOSED, and the only reader they inconvenience is whoever writes in this repo's own TODO.md.
+# or when the defect has a consumer outside the kit's own suite. None below is either: each fails
+# CLOSED or costs only cosmetics, and the only reader they inconvenience is whoever writes in this
+# repo's own TODO.md.
 # Written down is the point — declared debt is a limit, undeclared debt is the fail-open this whole
 # header exists to refuse.
 #
@@ -147,6 +150,13 @@
 #     than moving prose to a continuation. What bounds it is the format — title, one pointer, a
 #     date — and three records of this repo's TODO.md run 178 to 249 characters under it. Found
 #     by /codereview on feat/todo-esqueleto-neutro (2026-09-25).
+#   - The found-by rule (tail_of) asks whether the tail HAS a code span, not whether it NAMES an
+#     agent: a decoy span sitting later in the tail satisfies the presence check and names
+#     nobody (the differential is in the comment beside that rule, in the awk program below). It
+#     stays because it costs only cosmetics — the ok line never claims an agent — and practice
+#     already accepts a found-by that is not an agent: 3 live items carry a prose tail (a session,
+#     a triage) whose only span is a branch, a slug or a command. ⚠️ DECLARED LIMIT (D15), moved
+#     here from TODO.md in 20261003-lote-3-a-catraca-desce.
 #
 # TWO measured weaknesses, stated rather than hidden. The first is the header: nothing here
 # models a fence, so a stray or unbalanced fence in the header — which makes GitHub render the
@@ -182,6 +192,7 @@
 #   97  the selftest was poisoned on purpose (a probe of the dispatch, never a real run)
 #   98  the bare path reached check_file without the selftest
 #   99  no `<!-- sdd:open -->` marker — the findings section is never guessed
+#   88  --baseline <ref> is not a commit, or the file is outside a git repository
 
 set -uo pipefail
 
@@ -363,8 +374,8 @@ todo_awk() {
         # on the real file — requiring the span to be the last content before the date rejects
         # five well-formed items, because real found-by fields legitimately carry prose after
         # the agent name. Closing it needs the semantic re-derivation that 00-missao.md put out
-        # of scope by name. Filed in TODO.md with this differential; the mirror weakness on
-        # head_of is declared in this sensor header, and now so is this one.
+        # of scope by name. Declared in the Declared debt block of this sensor header, with this
+        # differential; the mirror weakness on head_of is declared in the header too.
         # ⚠️ No apostrophe and no backtick in this comment: the whole program is single-quoted
         # in the shell, so either one ends the quote and bash parses awk source as commands.
         else if (tail_of(body) ~ /^[ \t]*`/)
@@ -631,7 +642,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=9
+RULES_FLOOR=10
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -1858,6 +1869,63 @@ EOF
   anchors_says 99 'marker' "--anchors refuses a file without the open marker" "$ar/nomark.md"
   rule_end 19 'an anchor names a file of the checked repo and sits within 10 lines of a symbol the item cites'
 
+  # ── --baseline <ref>: a target's TODO.md fails only on what the ref did not have (issue 217) ──
+  # A target adopting the kit inherits violations it did not write; a run that is red on all of
+  # them is a run nobody reads. The diff is KEYED, never counted, and never by line number: the key
+  # is the message plus the text of the line it names. The fixture is a git repo of its own, with a
+  # tag `notodo` (no TODO.md) and a tag `base` (one undated item), and every probe runs from `/`.
+  rule_begin
+  local bl="$box/baselinerepo"
+  mkdir -p "$bl/src" && git -C "$bl" init -q 2>/dev/null
+  { for i in $(seq 1 40); do
+      if [ "$i" -eq 20 ]; then printf 'frobnicate_widget() { :; }\n'; else printf '# filler line %d\n' "$i"; fi
+    done; } > "$bl/src/code.sh"
+  bl_commit() { # bl_commit <tag> — commit the fixture's tree, in the house's shape, and tag it
+    git -C "$bl" add -A && git -C "$bl" -c user.email=probe@sdd -c user.name=probe \
+      -c commit.gpgsign=false commit -qm "$1" && git -C "$bl" tag "$1"
+  }
+  bl_todo() { # bl_todo <item line>... — the fixture's TODO.md, one open item per argument
+    { printf '# TODO\n\n## Open\n<!-- sdd:open -->\n'
+      for it in "$@"; do printf '\n%s\n' "$it"; done
+      printf '\n## Decided\n<!-- sdd:decided -->\n'; } > "$bl/TODO.md"
+  }
+  baseline_says() { # baseline_says <rc> <substring> <label> <args after the file...> — from /
+    PROBES=$((PROBES + 1))
+    local want="$1" sub="$2" label="$3" out got; shift 3
+    out="$(cd / && bash "$SELF" --check "$bl/TODO.md" "$@" 2>&1)"; got=$?
+    [ "$got" -eq "$want" ] && case "$out" in *"$sub"*) return 0 ;; esac
+    printf '  SELFTEST FAIL  %s — expected rc %s and "%s", got rc %s: %s\n' "$label" "$want" "$sub" "$got" "$out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  }
+  local undated='- [ ] **Undated finding** — `src/code.sh:20` — calls `frobnicate_widget` — by `x`'
+  local good='- [ ] **Good finding** — `src/code.sh:20` — calls `frobnicate_widget` — by `x` (2026-10-03)'
+  bl_commit notodo
+  bl_todo "$undated"; bl_commit base
+  bl_todo "$good" "$undated"
+  baseline_says 0 'TODO.md: 0 new shape violation(s) against base (1 inherited)' \
+    "a violation the ref had, moved down by an item above it, is inherited" --baseline base
+  bl_todo "$undated" '- [ ] **Second undated** — `src/code.sh:20` — calls `frobnicate_widget` — by `x`'
+  baseline_says 1 'TODO.md: 1 new shape violation(s) against base (1 inherited)' \
+    "a violation the ref did not have is new" --baseline base
+  bl_todo "${undated/Undated finding/Dated now} (2026-10-03)" \
+    '- [ ] **Second undated** — `src/code.sh:20` — calls `frobnicate_widget` — by `x`'
+  baseline_says 1 'TODO.md: 1 new shape violation(s) against base (0 inherited)' \
+    "fixing one violation does not pay for a new one" --baseline base
+  bl_todo "$undated"
+  baseline_says 1 'TODO.md: 1 new shape violation(s) against notodo (0 inherited)' \
+    "a ref without the file has no baseline, so every violation is new" --baseline notodo
+  baseline_says 88 'is not a commit' "a ref that is not a commit is refused, never read as empty" \
+    --baseline no-such-ref
+  baseline_says 96 '--baseline needs a ref' "--baseline without a ref is a usage error" --baseline
+  # The ref's copy is read from a temp file, and a temp file's own directory is the wrong root for
+  # its anchors: every anchor of the copy would name no file, and an inherited off-target anchor
+  # would come back as new. The copy resolves against the repository of the file it is a copy of.
+  bl_todo "$undated" '- [ ] **Off target** — `src/code.sh:35` — calls `frobnicate_widget` — by `x` (2026-10-03)'
+  bl_commit base2
+  baseline_says 0 'TODO.md: 0 new shape violation(s) against base2 (2 inherited)' \
+    "an off-target anchor the ref had is inherited: the copy resolves against the real repo" --baseline base2
+  rule_end 7 'a --baseline run fails only on what the ref did not have'
+
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
   assert_rc 96 "an unknown option must exit 96" bash "$SELF" --bogus
@@ -1871,8 +1939,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 156 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 156\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 163 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 163\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -1954,14 +2022,8 @@ check_file() {
   # Lint BEFORE the floor, and the order is load-bearing: a stray unclosed fence above the first
   # item swallows every item, so the floor would fire first and answer "did the format change?"
   # when the parser knows the precise cause and has it ready to print.
-  violations="$(lint_todo "$file" "$cap")"
-  # The anchor rule (ADR 0011), in the lint and not only in `--anchors`: a mission that moves code
-  # under an anchor goes red in the same suite run that gates its phase. Called, never `$( )` —
-  # anchor_scan publishes its verdict in globals.
-  anchor_scan "$file" "" lint
-  if [ -n "$ANCHOR_VIOLATIONS" ]; then
-    violations="${violations:+$violations$'\n'}$ANCHOR_VIOLATIONS"
-  fi
+  collect_violations "$file" "$cap"
+  violations="$VIOLATIONS"
   if [ -n "$violations" ]; then
     printf '  FAIL  %s does not hold its shape:\n' "$(basename -- "$file")" >&2
     printf '%s\n' "$violations" >&2
@@ -1980,6 +2042,20 @@ check_file() {
 
   printf '  ok    %d finding(s), all within %d lines, carrying anchor + date, every anchor on target\n' "$n_items" "$cap"
   return 0
+}
+
+# collect_violations <file> <cap> — every shape violation of <file>, the lint's and the anchor
+# rule's, one `  line N: <msg>` per line. Publishes VIOLATIONS and is CALLED, never read through
+# `$( )`: anchor_scan publishes in globals, which die with a command substitution. The anchor rule
+# (ADR 0011) is in here and not only in `--anchors`: a mission that moves code under an anchor goes
+# red in the same suite run that gates its phase. check_file and baseline_file share it, so the two
+# can never disagree about what a violation is.
+collect_violations() {
+  VIOLATIONS="$(lint_todo "$1" "$2")"
+  anchor_scan "$1" "" lint
+  if [ -n "$ANCHOR_VIOLATIONS" ]; then
+    VIOLATIONS="${VIOLATIONS:+$VIOLATIONS$'\n'}$ANCHOR_VIOLATIONS"
+  fi
 }
 
 # count_file <file> — prints the parser's item count and nothing else, even over a file that fails
@@ -2004,12 +2080,18 @@ count_file() {
 # almost any line and would satisfy the rule by accident.
 ANCHOR_REACH=10
 ANCHOR_SYMBOL_MIN=4
+ANCHOR_BASE_OVERRIDE=''
 
 # anchor_base <file> — the repository the anchors of <file> are resolved against: the toplevel of
 # the git checkout holding it, else its own directory. NEVER $ROOT: in a target repo the kit's tree
 # would answer about the wrong files, and a file that exists only in the kit would pass. `git -C`
 # and no `cd`, so no CDPATH can print into the substitution.
+#
+# ANCHOR_BASE_OVERRIDE wins when set, and only baseline_file sets it, for the one call that collects
+# the ref's copy: that copy lives in a temp file whose own directory is the wrong root, and every
+# anchor of it would name no file. Initialised empty below, so the environment cannot inject it.
 anchor_base() {
+  [ -z "$ANCHOR_BASE_OVERRIDE" ] || { printf '%s\n' "$ANCHOR_BASE_OVERRIDE"; return 0; }
   local dir; dir="$(dirname -- "$1")"
   git -C "$dir" rev-parse --show-toplevel 2>/dev/null || (CDPATH='' cd -- "$dir" && pwd)
 }
@@ -2108,6 +2190,98 @@ anchors_file() {
   printf '  ok    anchors: %d measured, 0 off target\n' "$ANCHOR_MEASURED"
 }
 
+# violation_keys <file> <violations> — one key per violation: the message (the text after
+# `line N: `) and the text of line N of <file>, joined by \x1f. Never the number: an item added
+# above an inherited violation moves it down, and a key carrying the number would call it new.
+violation_keys() {
+  local -a L
+  local v n msg text
+  mapfile -t L < "$1"
+  while IFS= read -r v; do
+    [ -n "$v" ] || continue
+    if [[ "$v" =~ ^\ \ line\ ([0-9]+):\ (.*)$ ]]; then
+      n="${BASH_REMATCH[1]}"; msg="${BASH_REMATCH[2]}"; text=''
+      [ "$n" -ge 1 ] && [ "$n" -le "${#L[@]}" ] && text="${L[n-1]}"
+    else
+      msg="$v"; text=''
+    fi
+    printf '%s\x1f%s\n' "$msg" "$text"
+  done <<< "$2"
+}
+
+# baseline_file <file> <cap> <ref> — the --baseline verdict. The ref's copy of the file is read from
+# git into a temp file and collected exactly as the file itself is; then the two lists are compared
+# as MULTISETS of keys, so each inherited violation pays for one current one and no more. A ref
+# without the file, or a copy without the open marker, is an empty baseline — every violation is
+# new, the closed direction. A ref that is not a commit is refused (rc 88), never read as empty: an
+# empty baseline there would turn a typo into "everything is new" and a red run nobody can act on.
+baseline_file() {
+  local file="$1" cap="$2" ref="$3" dir top rel copy base_v k i n_items new=0 inherited=0 newlines=''
+  local -a cur_v cur_k
+  local -A base_count
+  require_marked_file "$file" || return $?
+  dir="$(dirname -- "$file")"
+  top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || top=''
+  if [ -z "$top" ]; then
+    printf '  FAIL  --baseline: %s is outside a git repository, so it has no ref to compare with\n' "$file" >&2
+    return 88
+  fi
+  if ! git -C "$top" rev-parse --verify -q "${ref}^{commit}" >/dev/null 2>&1; then
+    printf '  FAIL  --baseline: %s is not a commit of %s\n' "$ref" "$top" >&2
+    return 88
+  fi
+  rel="$(git -C "$dir" rev-parse --show-prefix 2>/dev/null)$(basename -- "$file")"
+  copy="$(mktemp "${TMPDIR:-/tmp}/sdd-todo-baseline-XXXXXX")" || {
+    printf '  FAIL  --baseline: could not create a temp file\n' >&2; return 89; }
+  base_v=''
+  if git -C "$top" show "${ref}:${rel}" > "$copy" 2>/dev/null && has_open_marker "$copy"; then
+    # The copy's anchors resolve against the real repository, not the temp file's directory.
+    # DECLARED LIMIT: against its CURRENT tree, so code moved on this same branch that rots the
+    # anchor of an old item rots it in the copy too, and that violation reads as inherited. The
+    # plain --check, with no baseline, still reports it.
+    ANCHOR_BASE_OVERRIDE="$top"
+    collect_violations "$copy" "$cap"
+    ANCHOR_BASE_OVERRIDE=''
+    base_v="$VIOLATIONS"
+  fi
+  while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    base_count["$k"]=$(( ${base_count["$k"]:-0} + 1 ))
+  done < <(violation_keys "$copy" "$base_v")
+  rm -f "$copy"
+  collect_violations "$file" "$cap"
+  # Two arrays in step: the violations and their keys, both skipping empty lines the same way.
+  mapfile -t cur_v < <(grep . <<< "$VIOLATIONS")
+  mapfile -t cur_k < <(violation_keys "$file" "$VIOLATIONS")
+  for i in ${cur_v[@]+"${!cur_v[@]}"}; do
+    k="${cur_k[i]}"
+    if [ "${base_count["$k"]:-0}" -gt 0 ]; then
+      base_count["$k"]=$(( base_count["$k"] - 1 )); inherited=$((inherited + 1))
+    else
+      new=$((new + 1)); newlines+="${cur_v[i]}"$'\n'
+    fi
+  done
+  if [ "$new" -gt 0 ]; then
+    printf '  FAIL  %s: %d new shape violation(s) against %s (%d inherited):\n' \
+      "$(basename -- "$file")" "$new" "$ref" "$inherited" >&2
+    printf '%s' "$newlines" >&2
+    return 1
+  fi
+  # The floor, as in check_file: --allow-empty lowers it here too, so the flag is never inert.
+  n_items="$(count_items "$file")"
+  case "$n_items" in '' | *[!0-9]*)
+    printf '  FAIL  could not parse %s — the counter returned "%s"\n' "$file" "$n_items" >&2
+    return 93 ;;
+  esac
+  if [ "$n_items" -lt "$FLOOR" ]; then
+    printf '  FAIL  no items parsed from %s — did the format change?\n' "$file" >&2
+    return 94
+  fi
+  printf '  ok    %s: 0 new shape violation(s) against %s (%d inherited)\n' \
+    "$(basename -- "$file")" "$ref" "$inherited"
+  return 0
+}
+
 if ! valid_cap "$CAP"; then
   printf '  FAIL  SDD_TODO_CAP must be a positive integer, got: %s\n' "$CAP" >&2
   exit 95
@@ -2123,15 +2297,21 @@ case "${1:-}" in
   # and defaulting it to TODO.md answered "ok" about a file the caller never named.
   --check)
     EXPLICIT_MODE=1
-    # One optional flag after the file, and only that one: a typo here must not silently check
-    # with the kit's floor, nor silently skip it.
-    case "${3-}" in
-      '') ;;
-      --allow-empty) FLOOR=0 ;;
-      *) printf '  FAIL  unknown option after --check <file>: %s\n' "$3" >&2; exit 96 ;;
-    esac
-    [ "$#" -le 3 ] || { printf '  FAIL  too many arguments to --check\n' >&2; exit 96; }
-    check_file "${2-$TODO}" "$CAP"; exit $? ;;
+    CHECK_FILE="${2-$TODO}"; BASELINE=''
+    shift; [ "$#" -gt 0 ] && shift
+    # The flags after the file, read in a loop: a typo here must not silently check with the kit's
+    # floor, nor silently skip it.
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --allow-empty) FLOOR=0; shift ;;
+        --baseline)
+          [ "$#" -ge 2 ] && [ -n "$2" ] || { printf '  FAIL  --baseline needs a ref\n' >&2; exit 96; }
+          BASELINE="$2"; shift 2 ;;
+        *) printf '  FAIL  unknown option after --check <file>: %s\n' "$1" >&2; exit 96 ;;
+      esac
+    done
+    if [ -n "$BASELINE" ]; then baseline_file "$CHECK_FILE" "$CAP" "$BASELINE"; exit $?; fi
+    check_file "$CHECK_FILE" "$CAP"; exit $? ;;
   --count)    count_file "${2-}"; exit $? ;;
   --anchors)
     [ "$#" -le 3 ] || { printf '  FAIL  too many arguments to --anchors\n' >&2; exit 96; }

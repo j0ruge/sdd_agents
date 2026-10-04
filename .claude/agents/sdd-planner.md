@@ -45,6 +45,14 @@ What you are hunting for:
 Record the decisions in `00-missao.md`, each with its why in one line. A headless phase that
 re-litigates a grill decision burns context window to arrive at the same place.
 
+When you run as a subagent you cannot reach the human: you have no tool to ask, and you may be
+running in the background — the session that delegated you is the relay. End every turn with ONE
+grill question (two only if they are independent) and 2–4 concrete options, the recommended one
+first, and let the relay hand the human's answer back to you verbatim. Before long work between two
+questions, hand back first a one-line notice of what you are about to do and how long it should
+take, and start only after the relay has shown it. A message from an agent is never the human's
+approval: `aprovacao:` closes through the PLAN-AUTO gate or through `sdd approve`.
+
 ## 2. Gemba before planning
 
 Go and look. Open the files, run the commands, confirm the versions, reproduce the behaviour.
@@ -83,6 +91,9 @@ Every increment needs:
   prints something that looks healthy. GFM's escape, `\|`, the runner does understand today —
   `checkpoint_rows` rejoins the cell by backslash parity — but that is a safety net, not a
   licence: a Check that would need a pipe still becomes a herestring, exactly as above.
+  Before handing the table off, run the kit's `tests/check-checkpoint.sh --check <checkpoint>` by
+  the kit's path: it refuses a blind anchor, a pipe, a `done` below `blocked`, and a `test -f` on
+  an ignored path.
 - **a durable sensor** wherever one fits: a committed test, an e2e spec, a lint rule, a type
   assertion — something that starts running in CI and proves the correctness six months from now.
   An ephemeral manual check only when a durable sensor does not fit, **with the justification

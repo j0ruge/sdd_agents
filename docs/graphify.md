@@ -47,8 +47,9 @@ than the graph, and it is the experiment (§ 4).
 ## 3. Maintenance
 
 - **`graphify-out/` is generated and gitignored whole.** The pilot versioned 11.5 MB and its
-  `post-commit` hook rewrote tracked files after every commit — a dirty tree fails `gate_REVIEW`
-  and `sdd preflight`. `.graphifyignore` stays **versioned**: it defines the scope, and the scope
+  `post-commit` hook rewrote tracked files after every commit — a dirty tree fails `sdd preflight`
+  (and failed `gate_REVIEW` until issue 115 scoped it to the round's files). `.graphifyignore`
+  stays **versioned**: it defines the scope, and the scope
   must be the same on every machine.
 - **Rebuild:** `graphify update .` — 0.6 s, incremental, honours `.graphifyignore` whole (markdown
   enters). The scope is deliberate: `bin/sdd`, `agents/`, `tests/*.sh`, `templates/`, `config/`,

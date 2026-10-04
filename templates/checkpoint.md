@@ -15,8 +15,8 @@ atualizado: <YYYY-MM-DD HH:MM>
 > custou uma missão inteira até alguém olhar. O escape do GFM, `\|`, o runner **hoje entende**:
 > `checkpoint_rows` remonta a célula por paridade de `\`, como o `gate_REVIEW` já fazia. Isso é
 > rede de segurança, não licença — Check que precisaria de pipe continua virando herestring:
-> `` o=$(cmd 2>&1); grep -c 'x' <<< "$o" ``, e o `tests/check-checkpoint.sh` recusa as duas formas
-> nos checkpoints deste repo.
+> `` o=$(cmd 2>&1); grep -c 'x' <<< "$o" ``, e o `tests/check-checkpoint.sh --check <checkpoint>` do
+> kit recusa as duas formas em qualquer checkpoint.
 >
 > ⚠️ **A célula Commit leva o hash curto NU, sem crase.** `` `abc1234` `` renderiza igual ao hash
 > nu, mas é a célula que o runner lê: o `checkpoint_rows` hoje tira a crase dessa coluna, e uma
@@ -30,7 +30,7 @@ atualizado: <YYYY-MM-DD HH:MM>
 > mesmo número com a asserção verde e com ela vermelha: ele responde "a asserção existe", nunca
 > "a asserção passou". Custou uma missão inteira, achado só na fase QA. A forma certa:
 > `` o=$(bash tests/check-x.sh 2>&1); grep -c '^  ok    <asserção>' <<< "$o" `` → `1`.
-> O sensor é `tests/check-checkpoint.sh`.
+> O sensor é o `tests/check-checkpoint.sh --check <este checkpoint>` do kit (pelo caminho do kit).
 >
 > Atualizar o checkpoint é o **último ato** de cada incremento — depois do commit, nunca antes.
 > Status válidos: `pending` · `doing` · `done` · `blocked`.

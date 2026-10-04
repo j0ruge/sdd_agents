@@ -256,10 +256,14 @@ MAXC_RE="${GREP_HEAD_RE}(-[[:alnum:]]*m[0-9]*|--max-count)${GREP_FLAG_END_RE}"
 # — and a syntactic rule over that population invents ~170 violations, which gets a rule deleted
 # rather than fixed. ⚠️ This is NOT a benign gap: the only instance of the class that ever cost
 # this kit anything had exactly this shape (`cd "$common"` in ledger_repo_root, the CRITICAL of
-# 20260817-eixo-do-juiz). It is not a fail-open because it is measured OUT OF BAND and at runtime,
-# where the question is decidable: the differential pair in tests/check-autonomy.sh runs the real
-# runner under an ARMED $CDPATH poison and asserts the identity comes back on one line. A line
-# scanner and a runtime probe answer different questions; this file owns the first only.
+# 20260817-eixo-do-juiz). ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in 20261003-lote-3-a-catraca-desce:
+# it is safe by POPULATION today, not by measurement — every `$( cd "$VAR"` capture in bin/sdd
+# names an absolute variable ($REPO_ROOT, $kit, $SDD_HOME), 22 of them by
+#     grep -cE '\$\( *cd "\$' bin/sdd
+# and the runtime half covers less than it reads: the differential pair in
+# tests/check-autonomy.sh runs the real runner under an ARMED $CDPATH poison, but only through
+# ledger_repo_root. A line scanner and a runtime probe answer different questions; this file
+# owns the first only.
 #
 # NOT MEASURED (2) — a LITERAL relative operand: `cd bin`. Decidable from the text, and left out
 # on purpose: the echoed path only becomes a SILENT corruption when the `cd` sits inside a

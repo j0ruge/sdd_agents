@@ -110,9 +110,11 @@ is the system working.
   the file, so a bug that merely QUOTED the human line stopped blocking), matched as a WHOLE
   lowercase word (`humano`, the pt-BR spelling in a repo declaring `OUTPUT_LANG=pt-BR`, read as
   `human`), and taken from the first field-shaped line **outside a fenced block**.
-  ⚠️ One residue is declared rather than hidden: an **unfenced** quote parked above the real field
-  still reads as the genre. It is in `TODO.md` with its direction, because a declared fail-open is
-  still a fail-open.
+  The residue that was declared here — an **unfenced** quote parked above the real field still
+  reading as the genre — closed in `20261003-lote-3-a-catraca-desce` (issue 63): the genre is the
+  first `Closable by:` after the first unfenced `Status:`, inside the same contiguous block of
+  field lines, so a quote above the header, or a field-shaped line in a later block, reads as
+  absent and blocks.
 - **The escalation has ONE definition and TWO doors** in `cmd_run`'s loop — the first pass and the
   inline retry — the shape `kit_guard_check` already has, for the same reason: the body must not
   drift between call sites, but where the doors sit is a property of the loop. The second door is

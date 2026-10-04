@@ -324,6 +324,33 @@ assert_has "...and the repair" "rules belong in permissionsDeny:" "$out_hat_bare
 assert_lacks "and the marker in the answer does not buy a green over a missing tool" \
   "executes commands" "$out_hat_bare"
 
+# The money half of the same session (issue 87). run_phase, sdd census, sdd close and the mission
+# budget read `total_cost_usd` and `num_turns` off the result line, and a CLI that renamed either
+# would blind BUDGET_MISSION_USD in silence. The probe reads them from the stream it already pays
+# for, so the check costs nothing. The variants are DERIVED with jq from the verbatim capture,
+# never typed.
+assert_has "a result line with a numeric total_cost_usd and num_turns passes the money probe" \
+  "the session's result line carries a numeric total_cost_usd and num_turns" "$out_hat_ok"
+jq -c '.cost_total_usd = .total_cost_usd | del(.total_cost_usd)' "$FIX/.stub/result-ok.jsonl" \
+  > "$FIX/.stub/result-renamed.jsonl"
+jq -c 'del(.num_turns)' "$FIX/.stub/result-ok.jsonl" > "$FIX/.stub/result-noturns.jsonl"
+cat > "$FIX/.stub/claude" <<STUB
+#!/bin/sh
+cat "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/result-renamed.jsonl"
+STUB
+out_money_renamed="$( "$SDD" preflight 2>&1 )"
+assert_has "a result line with the cost key renamed is named by preflight" \
+  "has no numeric total_cost_usd or num_turns" "$out_money_renamed"
+assert_lacks "...and the healthy money line is not printed over it" \
+  "carries a numeric total_cost_usd and num_turns" "$out_money_renamed"
+cat > "$FIX/.stub/claude" <<STUB
+#!/bin/sh
+cat "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/result-noturns.jsonl"
+STUB
+out_money_noturns="$( "$SDD" preflight 2>&1 )"
+assert_has "a result line without num_turns is named by preflight" \
+  "has no numeric total_cost_usd or num_turns" "$out_money_noturns"
+
 # Back to the dead stub every later section assumes ("claude and gh are stubbed to fail").
 printf '#!/bin/sh\nexit 1\n' > "$FIX/.stub/claude"
 chmod +x "$FIX/.stub/claude"

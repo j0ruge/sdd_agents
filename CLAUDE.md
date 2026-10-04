@@ -36,8 +36,8 @@ conteúdo no idioma declarado.
 **O contrato é sempre inglês:** chaves de config, tokens de status (`pending`, `doing`, `done`,
 `blocked`, `auto`, `skipped`), os enums das skills de terceiro e identificadores de código.
 ⚠️ Três chaves de frontmatter (`aprovacao`, `versao`, `titulo`) e dois nomes de artefato
-(`00-missao.md`, `01-plano.md`) ainda são PT-BR por herança — estão no `TODO.md`, e renomeá-los
-quebra missão em voo.
+(`00-missao.md`, `01-plano.md`) ainda são PT-BR por herança — estão adiados por YAGNI no `CONTEXT.md` (Y5)
+até o primeiro alvo não-pt-BR, e renomeá-los quebra missão em voo.
 
 ## Princípios não-negociáveis
 
@@ -329,6 +329,9 @@ desconfiança. Fluxo completo no verbete
 `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do
 `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
 dois SC2318 reais em `check-mutation.sh` por três missões.
+⚠️ Mas o lint só roda na suíte **inteira**: antes de cada commit em `bin/` ou `tests/`, rode
+`shellcheck -S warning` nos arquivos tocados. Medido em `20261003-lote-3-a-catraca-desce`: o SC1010
+do I7 (`[ "$st" = done ]`) só apareceu na suíte inteira depois do I10, e custou `3cf0d0a`.
 
 ⚠️ **"Entra lá" são quatro lugares, não um — e o quarto arrasta um quinto.** Medido ao acrescentar
 o `check-health.sh`: a linha `run` do `tests/run-all.sh`, o `LINT_FLOOR` do mesmo arquivo, o piso
@@ -440,7 +443,10 @@ mutação no catálogo. Sabotar o gate e exigir que a suíte morra é o que prov
 mede alguma coisa; sem isso não há como distinguir asserção viva de decoração.
 Antes do commit, prove o mutante novo com `tests/check-mutation.sh --only <slug> [sensor.sh]`:
 segundos contra um sensor, ~4 min contra a suíte inteira. É **dica**, e a saída diz isso; o
-veredito e o carimbo continuam sendo do catálogo no `sdd health`.
+veredito e o carimbo continuam sendo do catálogo no `sdd health`. Mexeu num **sensor**?
+`tests/check-mutation.sh --touched <rev>` roda os mutantes que os sensores tocados desde `<rev>`
+mataram na última rodada, cada um só contra o seu assassino (`--list` só lista) — também dica, e
+nenhum gate nem chapéu a cobra.
 
 **Red observado não basta: tem de ser vermelho pelo motivo certo.** A missão
 `20260815-ledger-sem-ponto-cego` achou **cinco** asserções que passavam pelo regime do fixture e

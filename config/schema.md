@@ -35,7 +35,7 @@ from any `sdd run` typed at a terminal.
 |---|---|---|---|
 | `TEST_CMD` | yes | — | Unit/integration suite. It is the EXEC gate and part of the REVIEW gate. It must be fast enough to run on every increment. |
 | `E2E_CMD` | no | empty | End-to-end suite. Empty ⇒ the QA gate ignores e2e (a project with no UI). |
-| `E2E_DIR` | no | `e2e` | Where `sdd-qa` commits new specs. Reaches the boot prompt of every phase, beside `E2E_CMD` and only when that key is set: a repo with no interface writes no specs. |
+| `E2E_DIR` | no | `e2e` | Where `sdd-qa` commits new specs. Reaches the boot prompt of every phase, beside `E2E_CMD` and only when that key is set: a repo with no interface writes no specs. A path key: the grammar is under `HANDOFF_DIR` below. |
 
 The runner has exactly these three. A separate lint or build command belongs **inside** `TEST_CMD`:
 a key the runner never reads is a promise the user cannot collect on, and this schema carried five
@@ -83,6 +83,14 @@ connect that times out instead of answering. Only a connection actively **refuse
 | `HANDOFF_DIR` | no | `docs/handoffs` | Root of the durable state. Each mission becomes `<HANDOFF_DIR>/<YYYYMMDD>-<slug>/`. **Committed.** |
 | `QA_DOCS_PATH` | no | `docs/qa` | Where the `qa-report`/`qa-execution` skills write. The runner does not write here — the skills own it. |
 | `TODO_FILE` | no | `TODO.md` | Destination for out-of-scope findings. Shape: `templates/todo.md` — two sections found by their markers (`<!-- sdd:open -->`, `<!-- sdd:decided -->`), measured by `tests/check-todo.sh --check <file> --allow-empty`. |
+
+The four path keys — `HANDOFF_DIR`, `QA_DOCS_PATH`, `TODO_FILE` and `E2E_DIR` — become the hats'
+`writes:` globs, which the runner matches as shell globs, so `load_config` normalises and validates
+them before any phase runs: a leading `./` and a trailing `/` are dropped, and what is left must be
+a literal path inside the repo — relative, no `.` or `..` component, and only letters, digits, `.`,
+`_` and `-` in each name. Anything else (`*`, `../handoffs`, `/srv/e2e`, `R&D/TODO.md`) refuses
+the run, naming the key. Raw, `./TODO.md` matched no path git reports and stopped a healthy phase
+as `hat-crossed`, and `TODO_FILE='*'` let every hat write anywhere.
 
 ## The hat's frontier, and this project's exception
 

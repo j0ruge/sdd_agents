@@ -39,8 +39,17 @@
 #   3. the rule is written where the next mission will meet it — templates/checkpoint.md and
 #      agents/sdd-planner.md — so a checkpoint born tomorrow does not have to rediscover it.
 #      Contract in three places, the house rule from CLAUDE.md.
-#   4. the anchor it enforces IS the prefix the suite's sensors print, derived from their `pass()`
-#      lines rather than restated. See calibrate() for why that is not decoration.
+#   4. the anchor it enforces IS the prefix the suite's sensors print, derived from every line of
+#      theirs that opens a quoted ok prefix (a `pass()`, an inline `printf`, an `echo`, a Python
+#      `print(`), counted per sensor file, rather than restated. See calibrate() for why that is
+#      not decoration.
+#   5. a path the Check tests with `test -e|-f|-s` (or the `[`/`[[` forms) is one its repository keeps:
+#      `git check-ignore`, asked of the repo the checkpoint lives in, never of the cwd. An ignored
+#      path is green on the machine that wrote it and red on a fresh clone (issue 211, measured in
+#      a target repo; the kit's own checkpoints test no path today).
+#   6. no row is `done` below a `blocked` one. The runner stops the line at the first blocked row,
+#      so a done below it was closed outside the runner, past the stop (issue 216; no case in any
+#      checkpoint when the rule was born, so it entered green).
 #
 # What it deliberately does NOT measure: whether the expected value beside the arrow is the right
 # one, whether the Check actually exercises the increment, or whether a Check with no grep at all
@@ -77,6 +86,18 @@
 # NOT measured either: whether the anchor's assertion text matches an assertion that exists. A
 # Check anchored on `^  ok    ` for a sentence no sensor ever prints returns 0 instead of 1 and
 # fails honestly — wrong answer, not a silent green — which is the direction that costs nothing.
+#
+# DECLARED LIMITS of rule 5 (decision 9 of 20261003-lote-3-a-catraca-desce, and the final review
+# of that branch for the last two). A Check that asserts the ABSENCE of an ignored path
+# (`test -f x; echo $?` -> `1`) is refused all the same: a false positive, with no case in any
+# checkpoint today. `git check-ignore` also reads the user's global ignore file
+# (~/.config/git/ignore exists on the machine this rule was written on), so the verdict depends on
+# the machine — exactly as the verdict of `git add` does, which is the step this rule stands in
+# for. A Check that GENERATES an ignored artifact and then tests it (`<cmd> && test -f
+# .sdd/cache/x`) is refused too, although it is green on every machine: the rule reads the test,
+# not what ran before it. And a path is resolved against the repo's top level, so
+# `cd app && test -f x` asks about `x`, not `app/x`. The four fail CLOSED or not at all; none
+# certifies an ignored artifact. (`[[ -f x ]]` was the fifth, and it failed OPEN — read since.)
 #
 # This file MEASURES MARKDOWN, so tests/check-mutation.sh cannot reach it: that catalogue sabotages
 # bin/sdd, and no sabotage of the runner would make this sensor die. Its guard is selftest(),
@@ -146,7 +167,7 @@ surface() {
   ( cd "$1" && ls -1 docs/handoffs/*/checkpoint.md templates/checkpoint.md 2>/dev/null )
 }
 
-# rows_of <path> — one line per table row: "NF<TAB>ID<TAB>Check cell".
+# rows_of <path> — one line per table row: "NF<TAB>ID<TAB>Status<TAB>Check cell".
 #
 # The row recognition is the raw `awk -F'|'` split, with NO rejoin of GFM's `\|` — deliberately
 # stricter than checkpoint_rows() in bin/sdd, which does rejoin it. See rule 1 in the header for
@@ -162,22 +183,30 @@ rows_of() {
       status = $5; gsub(/^[ \t]+|[ \t]+$/, "", status)
       if (status == "Status") next
       chk = $4; gsub(/^[ \t]+|[ \t]+$/, "", chk)
-      printf "%d\t%s\t%s\n", NF, id, chk
+      # An empty Status prints as "-": a tab is IFS whitespace to the reader, so an empty field
+      # would collapse and hand the Check cell over as the status.
+      printf "%d\t%s\t%s\t%s\n", NF, id, (status == "" ? "-" : status), chk
     }' "$1"
 }
 
 # Counters published as globals and never through a command substitution: a function read as
 # `x="$(f)"` runs in a subshell and every assignment it makes dies with it (CLAUDE.md).
-N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0
+N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0; V_ORDER=0
 
-reset_counters() { N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; }
+reset_counters() {
+  N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0; V_ORDER=0
+}
 
 # scan_file <path> <label> — accumulates into the globals, prints one FAIL per violation.
 scan_file() {
-  local path="$1" label="$2" rows nf id chk g a
+  local path="$1" label="$2" rows nf id st chk g a top p src bid=''
   rows="$(rows_of "$path")"
   N_FILES=$((N_FILES + 1))
-  while IFS=$'\t' read -r nf id chk; do
+  # The repo the checkpoint belongs to, resolved from ITS directory and never from the cwd: a
+  # target repo ignores what the kit does not. `git -C`, never `cd` (CDPATH). Empty outside a repo,
+  # and then rule 5 has nothing to ask.
+  top="$(git -C "$(dirname -- "$path")" rev-parse --show-toplevel 2>/dev/null)" || top=''
+  while IFS=$'\t' read -r nf id st chk; do
     [ -n "$nf" ] || continue
     N_ROWS=$((N_ROWS + 1))
 
@@ -186,6 +215,31 @@ scan_file() {
       fail "$label: row $id hands the runner $((nf - 2)) column(s) instead of 5 — a '|' inside a cell splits it. A raw pipe breaks gate_EXEC; the escape '\\|' the runner rejoins, but this repo's checkpoints use the herestring form instead"
       V_COLS=$((V_COLS + 1))
       continue
+    fi
+
+    # Rule 6 — no row closes below a blocked one; after rule 1, since a shifted row has no Status to
+    # read. The runner stops the line at the first blocked row (increment-blocked, rc 3), so a done
+    # below it was closed past the stop, outside the runner, and its Check may certify what the
+    # blocked row never proved (issue 216).
+    if [ "$st" = blocked ] && [ -z "$bid" ]; then
+      bid="$id"
+    elif [ "$st" = 'done' ] && [ -n "$bid" ]; then
+      fail "$label: $id is done below $bid, which is blocked — the runner stops the line at a blocked row, so $id was closed past the stop and its Check may certify what $bid never proved"
+      V_ORDER=$((V_ORDER + 1))
+    fi
+
+    # Rule 5 — a path the Check tests with `test -e|-f|-s` must be one git keeps. An ignored one is
+    # green on the machine that wrote it and red on a fresh clone, and the increment closes `done`
+    # over an artifact that never reaches the repo (issue 211).
+    if [ -n "$top" ]; then
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        N_PATHS=$((N_PATHS + 1))
+        if src="$(git -C "$top" check-ignore -v -- "$p" 2>/dev/null)"; then
+          fail "$label: the Check of $id tests '$p', which the repository ignores (${src%%$'\t'*}) — green over a file git never receives, red on a fresh clone"
+          V_IGNORED=$((V_IGNORED + 1))
+        fi
+      done <<< "$(tested_paths "$chk")"
     fi
 
     # Rule 2 — precondition: the cell merges stderr AND greps. Either half missing and there is
@@ -200,6 +254,28 @@ scan_file() {
       V_ANCHOR=$((V_ANCHOR + 1))
     fi
   done <<< "$rows"
+}
+
+# tested_paths <check cell> — the repo paths a `test -e|-f|-s <p>`, `[ … ]` or `[[ … ]]` names,
+# one per line. Only a literal relative path is read: an absolute one or one under `~` is outside
+# the repo, and anything carrying `$ * ? [ { < >` or a backtick is decided at run time, not here.
+tested_paths() {
+  local -a w
+  local i t
+  read -ra w <<< "$1"
+  for ((i = 0; i + 2 < ${#w[@]}; i++)); do
+    t="${w[i]}"; t="${t#\`}"; t="${t#(}"
+    case "$t" in test|'['|'[[') ;; *) continue ;; esac
+    case "${w[i+1]}" in -e|-f|-s) ;; *) continue ;; esac
+    t="${w[i+2]}"
+    while :; do
+      case "$t" in *'`'|*';'|*')'|*'"'|*"'") t="${t%?}" ;; *) break ;; esac
+    done
+    t="${t#[\"\']}"
+    case "$t" in ''|']'|/*|'~'*) continue ;; esac
+    case "$t" in *[\$\*\?\[\{\<\>\`]*) continue ;; esac
+    printf '%s\n' "$t"
+  done
 }
 
 # doc_rule <path> <label> <assertion> — the rule has to be written where the next planner meets
@@ -285,6 +361,16 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
   else
     rc=1
   fi
+  if [ "$V_IGNORED" -eq 0 ]; then
+    pass "no checkpoint Check tests a path its repository ignores ($N_PATHS tested path(s))"
+  else
+    rc=1
+  fi
+  if [ "$V_ORDER" -eq 0 ]; then
+    pass "no checkpoint row is done below a blocked one ($N_ROWS row(s))"
+  else
+    rc=1
+  fi
 
   doc_rule "$root/templates/checkpoint.md" "templates/checkpoint.md" \
     "the checkpoint template teaches the ok-anchor rule" || rc=1
@@ -302,7 +388,7 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
     rc=1
   fi
 
-  [ "$rc" -eq 0 ] || fail "$((V_ANCHOR + V_COLS)) checkpoint violation(s)"
+  [ "$rc" -eq 0 ] || fail "$((V_ANCHOR + V_COLS + V_IGNORED + V_ORDER)) checkpoint violation(s)"
   return "$rc"
 }
 
@@ -316,24 +402,33 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
 # of every behavioural sensor — so a widened anchor no longer matches the thing it is an anchor
 # FOR. It also catches the mirror failure, which is the one that will actually happen some day:
 # the house changes the ok prefix and this file goes on enforcing the old one.
-CALIBRATE_FLOOR=9
+#
+# It reads EVERY line that opens a quoted ok prefix — a `pass()`, an inline `printf`, an `echo`, a
+# Python `print(` — and counts FILES, not lines. Reading only `pass()` lines saw 9 of the 16
+# sensors (issue 113): the other seven print from those other shapes, and a sensor printing three
+# spaces from one of them went unseen. The needles are built from variables: a literal quote-ok
+# pattern in the `case` below would match its own line and report this very file.
+CALIBRATE_FLOOR=16
 calibrate() {
-  local root="$1" f line p seen='' n=0
+  local root="$1" f line rest sp p seen='' seenf='' n=0 hit
+  local sq="'" dq='"' ok='  ok'
   for f in "$root"/tests/*.sh; do
     [ -f "$f" ] || continue
+    hit=0
     while IFS= read -r line; do
-      case "$line" in "pass() { printf '"*) ;; *) continue ;; esac
-      p="${line#*printf \'}"
-      case "$p" in *'%s'*) ;; *) continue ;; esac
-      p="${p%%"%s"*}"
-      n=$((n + 1))
+      case "$line" in *"$sq$ok "*|*"$dq$ok "*) ;; *) continue ;; esac
+      rest="${line#*["$sq$dq"]"$ok"}"
+      sp="${rest%%[! ]*}"
+      p="$ok$sp"
+      hit=1
       if [ -z "$seen" ]; then
-        seen="$p"
+        seen="$p"; seenf="$(basename -- "$f")"
       elif [ "$seen" != "$p" ]; then
-        fail "the suite's sensors disagree about the ok prefix ('$seen' in one file, '$p' in $(basename -- "$f")) — no single anchor can be right for both"
+        fail "the suite's sensors disagree about the ok prefix ('$seen' in $seenf, '$p' in $(basename -- "$f")) — no single anchor can be right for both"
         return 1
       fi
     done < "$f"
+    n=$((n + hit))
   done
   if [ "$n" -lt "$CALIBRATE_FLOOR" ]; then
     fail "only $n sensor(s) declare an ok prefix, expected at least $CALIBRATE_FLOOR — the anchor was calibrated against almost nothing"
@@ -355,7 +450,7 @@ check_one() { # check_one <path> — one checkpoint, no floors, no doc assertion
   fi
   reset_counters
   scan_file "$path" "$(basename -- "$path")"
-  if [ $((V_ANCHOR + V_COLS)) -eq 0 ]; then
+  if [ $((V_ANCHOR + V_COLS + V_IGNORED + V_ORDER)) -eq 0 ]; then
     pass "$(basename -- "$path"): $N_ROWS row(s), $N_RULED under the anchor rule, none blind"
     return 0
   fi
@@ -375,7 +470,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=30
+PROBE_FLOOR=40
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -406,8 +501,8 @@ cp_head() {
   } > "$1"
 }
 
-cp_row() { # cp_row <file> <id> <check cell>
-  printf '| %s | slice | %s | done | abc1234 |\n' "$2" "$3" >> "$1"
+cp_row() { # cp_row <file> <id> <check cell> [status, default done]
+  printf '| %s | slice | %s | %s | abc1234 |\n' "$2" "$3" "${4-done}" >> "$1"
 }
 
 # pipe_banner — the `|` ban in the shape both real documents write it: the mechanism that cannot
@@ -642,8 +737,12 @@ selftest() {
     printf 'pass() { printf %s  ok    %%s\\n%s "$1"; }\n' "'" "'" > "$caldis/tests/check-$i.sh"
   done
   printf 'pass() { printf %s  ok  %%s\\n%s "$1"; }\n' "'" "'" > "$caldis/tests/check-4.sh"
+  # Two FILES, each carrying as many ok lines as the floor asks for: a count of lines would reach
+  # the floor here, and only a count of sensors refuses it.
   for i in 1 2; do
-    printf 'pass() { printf %s  ok    %%s\\n%s "$1"; }\n' "'" "'" > "$calthin/tests/check-$i.sh"
+    for _ in $(seq 1 "$CALIBRATE_FLOOR"); do
+      printf 'pass() { printf %s  ok    %%s\\n%s "$1"; }\n' "'" "'"
+    done > "$calthin/tests/check-$i.sh"
   done
   probe 'the anchor matches what the sensors print' 0 \
     'the prefix the suite' "$cal" --calibrate
@@ -651,6 +750,21 @@ selftest() {
     'disagree about the ok prefix' "$caldis" --calibrate
   probe 'calibrating against almost nothing is caught' 1 \
     'calibrated against almost nothing' "$calthin" --calibrate
+
+  # The two shapes calibrate() was blind to while it read only `pass()` lines (issue 113): an ok
+  # line printed by an `echo`, and one printed by an inline `printf` with no `pass()` at all. The
+  # quote is passed as an argument, as above, so this file's own source carries no needle.
+  local calecho="$box/calecho" calinline="$box/calinline"
+  mkdir -p "$calecho/tests" "$calinline/tests"
+  for i in $(seq 1 "$CALIBRATE_FLOOR"); do
+    printf 'pass() { printf %s  ok    %%s\\n%s "$1"; }\n' "'" "'" > "$calecho/tests/check-$i.sh"
+    printf 'printf %s  ok    inline\\n%s\n' "'" "'" > "$calinline/tests/check-$i.sh"
+  done
+  printf 'echo %s  ok   inline%s\n' '"' '"' > "$calecho/tests/check-echo.sh"
+  probe 'an echo printing three spaces is caught as a disagreement' 1 \
+    'disagree about the ok prefix' "$calecho" --calibrate
+  probe 'sensors that print inline, with no pass(), are calibrated' 0 \
+    'the prefix the suite' "$calinline" --calibrate
 
   # The comparison itself. Without this the other three calibration probes pass with the
   # anchor-versus-house test deleted: they only exercise disagreement and the floor, and the
@@ -681,6 +795,51 @@ selftest() {
     >> "$scanpiped/docs/handoffs/m4/checkpoint.md"
   probe 'a piped cell makes the whole scan red' 1 \
     'instead of 5' "$scanpiped" --scan
+
+  # ── a Check that tests a path the repository ignores (issue 211) ──
+  # The checkpoint lives in its own git repo, which ignores `*-review.md` — a pattern the kit does
+  # not ignore, so a sensor that resolved the repo from its cwd instead of from the checkpoint's
+  # directory would answer differently here than it does for a target repo.
+  local ign="$box/ign" f
+  mkdir -p "$ign/docs/handoffs/m"
+  git -C "$ign" init -q
+  printf '*-review.md\n' > "$ign/.gitignore"
+  f="$ign/docs/handoffs/m/checkpoint.md"
+  cp_head "$f"; cp_row "$f" I1 '`test -f docs/qa/reports/s8-review.md && echo yes` → `yes`'
+  probe 'a Check that tests an ignored path is caught' 1 'which the repository ignores' "$f"
+  cp_head "$f"; cp_row "$f" I1 '`test -f docs/qa/r1-report.md && echo yes` → `yes`'
+  probe 'a Check that tests a path the repository keeps passes' 0 'none blind' "$f"
+  cp_head "$f"; cp_row "$f" I1 '`[ -f docs/b-review.md ] && echo yes` → `yes`'
+  probe 'the bracket form of test is read too' 1 'which the repository ignores' "$f"
+  cp_head "$f"; cp_row "$f" I1 '`[[ -f docs/c-review.md ]] && echo yes` → `yes`'
+  probe 'the double-bracket form of test is read too' 1 'which the repository ignores' "$f"
+
+  # And the wiring to scan()'s verdict, over a full tree that is a repo of its own.
+  local scanign="$box/scanign"
+  build_tree "$scanign"
+  git -C "$scanign" init -q
+  printf '*-review.md\n' > "$scanign/.gitignore"
+  cp_row "$scanign/docs/handoffs/m4/checkpoint.md" I6 '`test -f docs/x-review.md && echo yes` → `yes`'
+  probe 'an ignored path makes the whole scan red' 1 \
+    'which the repository ignores' "$scanign" --scan
+
+  # ── a done row below a blocked one (issue 216) ──
+  # The runner stops the line at the first blocked row, so a done below it was closed past the
+  # stop, by hand. The Check is a plain one on purpose: the order is the only thing wrong here.
+  local order="$box/order.md" orderok="$box/orderok.md" scanorder="$box/scanorder"
+  cp_head "$order"
+  cp_row "$order" I1 '`bash tests/run-all.sh` → verde' blocked
+  cp_row "$order" I2 '`bash tests/run-all.sh` → verde'
+  probe 'a done below a blocked row is caught' 1 'is done below I1, which is blocked' "$order"
+  cp_head "$orderok"
+  cp_row "$orderok" I1 '`bash tests/run-all.sh` → verde'
+  cp_row "$orderok" I2 '`bash tests/run-all.sh` → verde' blocked
+  probe 'a done above a blocked row passes' 0 'none blind' "$orderok"
+  build_tree "$scanorder"
+  cp_row "$scanorder/docs/handoffs/m4/checkpoint.md" I6 '`bash tests/run-all.sh` → verde' blocked
+  cp_row "$scanorder/docs/handoffs/m4/checkpoint.md" I7 '`bash tests/run-all.sh` → verde'
+  probe 'a done below a blocked row makes the whole scan red' 1 \
+    'which is blocked' "$scanorder" --scan
 
   rm -rf "$box"
 

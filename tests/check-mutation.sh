@@ -16,6 +16,14 @@
 #                                            (minutes: ONE mutant against the suite, or against one
 #                                             sensor in seconds — a HINT before a commit, never the
 #                                             verdict; exit 0 = caught, 1 = not caught or no answer)
+#        tests/check-mutation.sh --touched <rev> [--list]
+#                                            (seconds to minutes: the mutants whose last killer, in
+#                                             the map `sdd health` writes, is a sensor the diff of
+#                                             tests/ against <rev> touched, each run against that
+#                                             killer alone — a HINT before committing a sensor change,
+#                                             never the verdict; --list prints the selection only;
+#                                             exit 0 = every one still caught, 1 = one lost, 2 = no
+#                                             map or no such revision)
 
 set -uo pipefail
 
@@ -35,8 +43,8 @@ ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # hour, `sdd health` names no culprit, and both were anchors today's merges had broken. Applying
 # the 389 without running the suite found them in 20 seconds. So the fast suite asks this question
 # on every gate, and the expensive one stays where 4c86712 put it.
-ANCHORS_ONLY=0 ONLY_SLUG="" ONLY_SENSOR=""
-USAGE="want nothing, --anchors, or --only <slug> [sensor.sh]"
+ANCHORS_ONLY=0 ONLY_SLUG="" ONLY_SENSOR="" TOUCHED_REV="" TOUCHED_LIST=0
+USAGE="want nothing, --anchors, --only <slug> [sensor.sh], or --touched <rev> [--list]"
 case "${1:-}" in
   "") [ "$#" -le 1 ] || { echo "check-mutation.sh: unexpected argument '$2' ($USAGE)" >&2; exit 2; } ;;
   --anchors)
@@ -47,6 +55,16 @@ case "${1:-}" in
       echo "check-mutation.sh: --only takes a catalogue slug and at most one sensor ($USAGE)" >&2; exit 2
     fi
     ONLY_SLUG="$2" ONLY_SENSOR="${3:-}" ;;
+  --touched)
+    if [ "$#" -lt 2 ] || [ "$#" -gt 3 ] || [ -z "$2" ]; then
+      echo "check-mutation.sh: --touched takes a revision or a range, and at most --list ($USAGE)" >&2; exit 2
+    fi
+    TOUCHED_REV="$2"
+    case "${3:-}" in
+      "") ;;
+      --list) TOUCHED_LIST=1 ;;
+      *) echo "check-mutation.sh: unknown option '$3' after --touched <rev> ($USAGE)" >&2; exit 2 ;;
+    esac ;;
   *) echo "check-mutation.sh: unknown option '$1' ($USAGE)" >&2; exit 2 ;;
 esac
 
@@ -145,11 +163,17 @@ launch_order() {
     | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2n | cut -f3
 }
 
-# control_red <dir> — true once the control run has written a rc that is not 0.
+# control_red <dir> — true once ANY control has written a rc that is not 0: the control run in the
+# usual order (control.rc) or one of the controls by killer (control-first-<k>.rc, issue 169). No
+# slug of CATALOG starts with `control`, so the glob never reads a mutant's rc.
 control_red() {
-  local rc
-  rc="$(cat "$1/control.rc" 2>/dev/null || true)"
-  [ -n "$rc" ] && [ "$rc" != 0 ]
+  local f rc
+  for f in "$1"/control*.rc; do
+    [ -e "$f" ] || continue
+    rc="$(cat "$f" 2>/dev/null || true)"
+    if [ -n "$rc" ] && [ "$rc" != 0 ]; then return 0; fi
+  done
+  return 1
 }
 
 # control_verdict <dir> — 0 when the control came back green; otherwise prints why and returns 1.
@@ -160,6 +184,24 @@ control_verdict() {
   [ "$rc" = 0 ] && return 0
   printf 'HARNESS-BROKEN: the copy is not green even without sabotage (control rc %s)\n' "${rc:-none}"
   return 1
+}
+
+# controls_verdict <dir> — control_verdict, and then one control per distinct killer of the map
+# (FIRSTS, issue 169): each has to be green with ITS killer run first. The map reorders every
+# mutant's suite so its last killer runs first; a step that went red only for running first would
+# read a survivor as caught, and the usual-order control cannot see that. A control that wrote no rc
+# is not green. control_verdict stays as it is, because --only and pool_selftest read it alone.
+controls_verdict() {
+  local k rc
+  control_verdict "$1" || return 1
+  for ((k = 1; k <= ${#FIRSTS[@]}; k++)); do
+    rc="$(cat "$1/control-first-$k.rc" 2>/dev/null || true)"
+    [ "$rc" = 0 ] && continue
+    printf "HARNESS-BROKEN: the copy is not green with '%s' run first (control-first-%s rc %s)\n" \
+      "${FIRSTS[k-1]}" "$k" "${rc:-none}"
+    return 1
+  done
+  return 0
 }
 
 # control_run <dir> <control-fn> — runs the control in a subshell of its own and, if it came back
@@ -252,6 +294,114 @@ pool_selftest() {
   JOBS=1 run_pool "$d" st_control_slow st_mutant_alone m1 m2 m3
   [ ! -e "$d/overlap" ] || { echo "  SELFTEST FAIL  JOBS=1 ran two suites at once" >&2; return 1; }
   [ "$POOL_LAUNCHED" = 3 ] || { echo "  SELFTEST FAIL  JOBS=1: $POOL_LAUNCHED of 3 mutants launched" >&2; return 1; }
+  return 0
+}
+
+# controls_selftest — the controls by killer (issue 169), over stub boxes and stub mutants. Four
+# worlds: (a) every control green, each run with ITS killer first; (b) the box of the second killer
+# red, which the verdict refuses naming that killer and which stops the pool's launches; (c) a
+# control that wrote no rc, which is not green; (d) the distinct killers of a map, each once, in a
+# stable order. Defined here beside the other harness selftests and CALLED after the membership
+# pass further down, because it prints through pass(), which is defined there; it runs in every
+# mode, --anchors included. Locals shadow the globals for the functions it calls (bash scopes
+# dynamically), so nothing it sets outlives it.
+controls_selftest() {
+  local WORK="$WORK/controls-selftest" JOBS=2 why k
+  local -a FIRSTS=(stepA stepB)
+  local -A KILLER=() SECS=()
+  mkdir -p "$WORK"
+  for k in 1 2; do
+    mkdir -p "$WORK/control-first-$k/tests"
+    { printf '#!/usr/bin/env bash
+'
+      printf 'printf %%s "${SDD_MUTANT_FIRST-unset}" > %q
+' "$WORK/env-$k"
+      printf 'exit "$(cat %q 2>/dev/null || echo 0)"
+' "$WORK/exit-$k"
+    } > "$WORK/control-first-$k/tests/run-all.sh"
+    chmod +x "$WORK/control-first-$k/tests/run-all.sh"
+  done
+  cs_control_green() { echo 0 > "$WORK/control.rc"; }
+  cs_mutant()        { sleep 0.3; }
+  # (a)
+  cs_control_green; run_job @first:1; run_job @first:2
+  controls_verdict "$WORK" >/dev/null || { echo "  SELFTEST FAIL  controls: every control green, and the verdict refused" >&2; return 1; }
+  [ "$(cat "$WORK/env-1" 2>/dev/null)|$(cat "$WORK/env-2" 2>/dev/null)" = 'stepA|stepB' ] \
+    || { echo "  SELFTEST FAIL  controls: each box did not run with its own killer first (got '$(cat "$WORK/env-1" 2>/dev/null)|$(cat "$WORK/env-2" 2>/dev/null)')" >&2; return 1; }
+  # (b)
+  echo 1 > "$WORK/exit-2"; run_first_control 2
+  why="$(controls_verdict "$WORK")" && { echo "  SELFTEST FAIL  controls: a red control with stepB first was read as green" >&2; return 1; }
+  case "$why" in *"'stepB' run first"*) : ;; *) echo "  SELFTEST FAIL  controls: the refusal did not name the killer: $why" >&2; return 1 ;; esac
+  run_pool "$WORK" cs_control_green cs_mutant m1 m2 m3 m4 m5 m6 m7 m8
+  [ "$POOL_LAUNCHED" -le "$JOBS" ] \
+    || { echo "  SELFTEST FAIL  controls: a red control by killer still let $POOL_LAUNCHED of 8 mutants launch, expected at most $JOBS" >&2; return 1; }
+  # (c)
+  echo 0 > "$WORK/exit-2"; run_first_control 2; rm -f "$WORK/control-first-1.rc"
+  controls_verdict "$WORK" >/dev/null && { echo "  SELFTEST FAIL  controls: a control with no rc was read as green" >&2; return 1; }
+  # (d)
+  KILLER=([x]=stepB [y]=stepA [z]=stepB)
+  [ "$(distinct_killers | tr '\n' ' ')" = 'stepA stepB ' ] \
+    || { echo "  SELFTEST FAIL  controls: distinct killers of {stepB, stepA, stepB} read '$(distinct_killers | tr '\n' ' ')', expected 'stepA stepB '" >&2; return 1; }
+  return 0
+}
+
+# touched_selftest — the selection of --touched (issue 192), over a fixture git repo, a fixture map
+# and the REAL run-all.sh, whose step titles are what a killer names. A commit range that touches
+# check-hat.sh and run-all.sh selects the two hat mutants and not the gates one, names run-all.sh as
+# a path the catalogue answers for, and counts the killer that joins nothing and the slug outside the
+# map; a single revision reads the working tree too; an empty map and a revision that does not
+# resolve are refused (rc 2), never "0 selected". Called beside controls_selftest, in every mode.
+touched_selftest() {
+  local d="$WORK/touched-selftest" repo rc=0
+  local -A KILLER=([HAT_A]='every hat declares its boundary' [HAT_B]='every hat declares its boundary' \
+                   [GATES_A]='gate state machine' [GONE_X]='a step that is gone') SECS=()
+  local -a CATALOG=(HAT_A HAT_B GATES_A GONE_X UNMAPPED_Y)
+  local RUNALL_JOINED; RUNALL_JOINED="$(census_join "$ROOT/tests/run-all.sh")"
+  repo="$d/repo"; mkdir -p "$repo/tests"
+  git -C "$repo" init -q 2>/dev/null
+  printf 'a\n' > "$repo/tests/check-hat.sh"; printf 'a\n' > "$repo/tests/check-gates.sh"; printf 'a\n' > "$repo/tests/run-all.sh"
+  git -C "$repo" add -A && git -C "$repo" -c user.email=probe@sdd -c user.name=probe -c commit.gpgsign=false commit -qm base \
+    && git -C "$repo" tag base || { echo "  SELFTEST FAIL  touched: the fixture repo could not be built" >&2; return 1; }
+  printf 'b\n' >> "$repo/tests/check-hat.sh"; printf 'b\n' >> "$repo/tests/run-all.sh"
+  git -C "$repo" -c user.email=probe@sdd -c user.name=probe -c commit.gpgsign=false commit -qam hat && git -C "$repo" tag hat
+  touched_select "$repo" base..hat >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 0 ] && [ "${TOUCHED_SLUGS[*]-}" = 'HAT_A HAT_B' ] \
+    || { echo "  SELFTEST FAIL  touched: a diff of check-hat.sh selected '${TOUCHED_SLUGS[*]-}' (rc $rc), expected 'HAT_A HAT_B'" >&2; return 1; }
+  [ "${TOUCHED_OTHER[*]-}" = 'tests/run-all.sh' ] \
+    || { echo "  SELFTEST FAIL  touched: run-all.sh, which no mutant names as killer, was not named for the catalogue: '${TOUCHED_OTHER[*]-}'" >&2; return 1; }
+  [ "$TOUCHED_NOJOIN|$TOUCHED_UNMAPPED" = '1|1' ] \
+    || { echo "  SELFTEST FAIL  touched: killers that join nothing and slugs outside the map were counted '$TOUCHED_NOJOIN|$TOUCHED_UNMAPPED', expected '1|1'" >&2; return 1; }
+  printf 'c\n' >> "$repo/tests/check-gates.sh"
+  touched_select "$repo" hat >/dev/null 2>&1
+  [ "${TOUCHED_SLUGS[*]-}" = 'GATES_A' ] \
+    || { echo "  SELFTEST FAIL  touched: a single revision did not read the working tree: selected '${TOUCHED_SLUGS[*]-}', expected 'GATES_A'" >&2; return 1; }
+  # A killer sensor the diff touched and the tree no longer has (deleted or renamed): its mutants
+  # cannot run against it, so they are not selected and the path is named — never a control run
+  # that dies on the missing file and blames the copy (final review of the branch).
+  rm -f "$repo/tests/check-hat.sh"
+  touched_select "$repo" base..hat >/dev/null 2>&1
+  [ "${TOUCHED_SLUGS[*]-}|${TOUCHED_GONE[*]-}" = '|tests/check-hat.sh' ] \
+    || { echo "  SELFTEST FAIL  touched: a deleted killer sensor selected '${TOUCHED_SLUGS[*]-}' and named gone '${TOUCHED_GONE[*]-}', expected nothing and 'tests/check-hat.sh'" >&2; return 1; }
+  rc=0; touched_select "$repo" no-such-rev >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] || { echo "  SELFTEST FAIL  touched: a revision that does not resolve answered rc $rc, expected 2" >&2; return 1; }
+  # A revision that looks like an OPTION is a revision, never an option to git (final review of the
+  # branch): `--output=<file>` used to create the file and answer "0 selected", rc 0.
+  rc=0; touched_select "$repo" "--output=$d/injected" >/dev/null 2>&1 || rc=$?
+  { [ "$rc" = 2 ] && [ ! -e "$d/injected" ]; } \
+    || { echo "  SELFTEST FAIL  touched: a revision spelled like an option answered rc $rc$([ -e "$d/injected" ] && echo ', and git wrote the file it named')" >&2; return 1; }
+  KILLER=(); rc=0; touched_select "$repo" base..hat >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] || { echo "  SELFTEST FAIL  touched: an empty map answered rc $rc, expected 2 — never '0 selected'" >&2; return 1; }
+  # The verdict, over rc files whose answer is known: a mutant its killer no longer catches is LOST,
+  # named with the --only command that escalates it, and the run is red; every one caught is green.
+  # The output is captured, never printed: its ok line is the one the real run prints.
+  local out
+  echo 1 > "$d/S1.rc"; echo 0 > "$d/S2.rc"; echo 2 > "$d/S3.rc"
+  rc=0; out="$(touched_verdict "$d" S1 S2 2>&1)" || rc=$?
+  { [ "$rc" = 1 ] && grep -qF -- '--only S2' <<< "$out" && grep -qF '1 of 2 selected' <<< "$out"; } \
+    || { echo "  SELFTEST FAIL  touched: a lost mutant was not refused and named for --only (rc $rc): $out" >&2; return 1; }
+  rc=0; out="$(touched_verdict "$d" S1 S3 2>&1)" || rc=$?
+  { [ "$rc" = 0 ] && grep -qF 'touched: 2 of 2 selected mutant(s) still caught by their killer' <<< "$out"; } \
+    || { echo "  SELFTEST FAIL  touched: two caught mutants did not read as 2 of 2 (rc $rc): $out" >&2; return 1; }
   return 0
 }
 
@@ -730,8 +880,10 @@ mut_QA_bug_genre_anywhere() {
 # line merely SHAPED like the field wins again — and a bug whose repro is pasted above its own
 # metadata reads its genre out of the quote. Third half of the same line, and it fails open
 # independently of the other two, which is why it gets its own mutant rather than riding theirs:
-# with the fence tracking gone, both regimes above still block (their real field comes first) and
-# only the quote-ABOVE assertion dies.
+# with the fence tracking gone, both regimes above still block (their real field comes first). Since
+# issue 63 the genre is read from the Status block, and the quote-ABOVE regime blocks with or
+# without the fence (its blank line closes the block); what dies now is `a whole header quoted
+# inside a fence above the real one`, whose quoted Status line would open the block.
 #
 # `fenced = !fenced` occurs on the CODE line only — the prose beside it says "SKIPS fenced blocks"
 # and "the fence is STATE", neither of which contains the assignment. Same anchoring discipline as
@@ -739,6 +891,20 @@ mut_QA_bug_genre_anywhere() {
 # applies, clears the rc-90 `cmp -s` guard, and certifies a protection nobody measured.
 mut_QA_bug_genre_fenced() {
   sed -i 's|{ fenced = !fenced; next }|{ next }|' "$1"
+}
+
+# Issue 63, the two halves of "the genre is read from the Status block", one mutant each because
+# they fail open independently. OUTSIDE_HEADER drops the condition that a Closable line counts only
+# after the Status opened the block: bare prose quoting the human line above the header becomes the
+# genre again. Caught by `an unfenced quote above the header does not become the genre` in
+# check-gates.sh. HEADER_UNBOUNDED drops the end of the block: a legacy header with no genre reads
+# a field-shaped line from a later paragraph. Caught by `a field-shaped line in a later block does
+# not become the genre`. Each anchor matches the code line only.
+mut_QA_bug_genre_outside_header() {
+  sed -i 's|^      inheader \&\& /^-|      /^-|' "$1"
+}
+mut_QA_bug_genre_header_unbounded() {
+  sed -i 's|{ if (inheader) exit }|{ }|' "$1"
 }
 
 # The THIRD genre, and TWO mutants because its two halves fail open independently of each other
@@ -1008,6 +1174,29 @@ mut_DOCS_backtick_status_kept() {
 # as an empty cell — the row passes the gate as if it were not there. It used to be pending.
 mut_DOCS_markup_only_status_skipped() {
   sed -i '/^docs_checklist_rows()/,/^}/ s@^        if (cell == "" \&\& raw != "") { print "P|" raw; next }$@        raw = raw@' "$1"
+}
+
+# Issue 115, decision 8 of 20261003-lote-3-a-catraca-desce. The dirty-tree refusal of gate_REVIEW
+# goes back to the WHOLE tree: a new doc a dead DOCS session left on disk sends the mission back to
+# REVIEW for a round it never needed. Caught by `a dirty tree a later phase left does not send the
+# mission back to REVIEW` in check-gates.sh — and the world beside it, a dirty checkpoint.md that
+# still holds REVIEW, is what refuses the opposite sabotage, an empty scope.
+mut_REVIEW_dirty_unscoped() {
+  sed -i '/^gate_REVIEW() {/,/^}/ s|git status --porcelain --untracked-files=all -- .*)" \]; then$|git status --porcelain)" ]; then|' "$1"
+}
+
+# The scope forgets HAT_WRITES_BASE (decision of 2026-10-04): the backlog finding a round wrote and
+# died before committing stops holding REVIEW, and the next phase inherits a dirty TODO_FILE no one
+# owns. Caught by `a dirty TODO_FILE the review wrote still holds REVIEW` in check-gates.sh.
+mut_REVIEW_dirty_scope_misses_base() {
+  sed -i '/^gate_REVIEW() {/,/^}/ s|^    review_scope+=("\$REPO_ROOT/\$p")$|    :|' "$1"
+}
+
+# The other half: gate_DOCS stops refusing its own uncommitted 45-docs.md, and a DOCS session that
+# died before its commit rides to PR over a dirty tree. Caught by `an uncommitted 45-docs.md holds
+# DOCS, it does not ride to PR` in check-gates.sh.
+mut_DOCS_uncommitted_passes() {
+  sed -i '/^gate_DOCS() {/,/^}/ s|^  if \[ -n "\$(cd "\$REPO_ROOT" \&\& git status --porcelain --untracked-files=all -- "\$d")" \]; then$|  if false; then|' "$1"
 }
 
 mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete" mission with no PR
@@ -1465,6 +1654,20 @@ mut_KAIZEN_composition_unprinted() {
 
 mut_KAIZEN_series_rc_dropped() {
   sed -i 's@  series="$(kaizen_series)" || series_rc=$?@  series="$(kaizen_series 2>/dev/null)"; series_rc=0; series="${series:-{\\}}"@' "$1"
+}
+
+# Issue 213, the two halves of the series' refusal of a row that parses and cannot be read, one
+# mutant each because they fail open independently (the AUTONOMY_* pair is the same split in
+# cmd_autonomy, and each pair matches only its own site). SHAPE_NOT_ASKED: a row that is not an
+# object is counted as `unrecognized` again and the series answers rc 0 — caught by `series: a row
+# that is not an object is refused with rc 1` in check-kaizen.sh. JQ_STDERR_SWALLOWED: the refusal
+# of a field jq cannot read names the file but no longer quotes jq — caught by `series: a field jq
+# cannot read is refused with rc 1, naming the file, quoting jq`.
+mut_KAIZEN_series_shape_not_asked() {
+  sed -i "s@^  if \[ -s \"\$file\" \] && ! jq -e -s 'all(type == \"object\")' \"\$file\" >/dev/null 2>&1; then\$@  if false; then@" "$1"
+}
+mut_KAIZEN_series_jq_stderr_swallowed() {
+  sed -i "s@^  ' < \"\$file\" 2>\"\$jq_err\" @  ' < \"\$file\" 2>/dev/null @" "$1"
 }
 
 # The mission identity loses the repo and goes back to the bare slug. A no-op until --all-repos
@@ -2010,6 +2213,19 @@ mut_PREFLIGHT_hat_probe_without_agent() {
 # not buy a green over a missing tool" dies.
 mut_PREFLIGHT_bash_in_init_unchecked() {
   sed -i 's|^    elif \[ -n "\$probe_init" \] && ! jq -e '"'"'.tools // \[\] \| index("Bash") != null'"'"' <<< "\$probe_init" >/dev/null 2>&1; then$|    elif false; then|' "$1"
+}
+
+# Issue 87, the money keys of the probe's result line, one mutant per half. MONEY_KEYS_UNCHECKED: the
+# probe stops asking, and a CLI that renamed `total_cost_usd` would blind the mission budget with
+# preflight green — caught by `a result line with the cost key renamed is named by preflight` in
+# check-preflight.sh. NUM_TURNS_UNCHECKED: only the cost is asked, and the rename of `num_turns`
+# goes unseen — caught only by `a result line without num_turns is named by preflight`, which is why
+# it has a mutant of its own rather than riding the first.
+mut_PREFLIGHT_money_keys_unchecked() {
+  sed -i 's/^      if jq -e '"'"'(\.total_cost_usd | type) == "number" and (\.num_turns | type) == "number"'"'"' <<< "\$probe_result" >\/dev\/null 2>&1; then$/      if true; then/' "$1"
+}
+mut_PREFLIGHT_num_turns_unchecked() {
+  sed -i 's/^\(      if jq -e '"'"'(\.total_cost_usd | type) == "number"\) and (\.num_turns | type) == "number"\('"'"' <<< "\$probe_result"\)/\1\2/' "$1"
 }
 
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
@@ -3376,6 +3592,19 @@ mut_KAIZEN_reminder_wrong_repo() {
   sed -i '/^kaizen_reminder()/,/^}/ s@if \[ -n "\$kit_root" \] && \[ "\$kit_root" = "\$REPO_ROOT" \]; then@if true; then@' "$1"
 }
 
+# The kaizen door goes back to comparing TOPLEVELS (issue 121): a linked worktree of the kit has its
+# own, and the kit's `sdd` run from one refuses as if it stood in a target. Caught by `kit-repo
+# guard: a linked worktree of the kit answers like the main checkout` in check-kaizen.sh.
+mut_KAIZEN_kit_door_per_worktree() {
+  sed -i 's@^  \[ -n "\$kit_id" \] && \[ "\$kit_id" = "\$here_id" \] \\$@  [ "$kit_root" = "$REPO_ROOT" ] \\@' "$1"
+}
+# The door opens for anyone: run from a target project, kaizen judges the kit and gives birth to the
+# plan in the wrong repo. The door had no mutant before issue 121. Caught by `sdd kaizen refuses to
+# run outside the kit repo (rc 1)` in check-kaizen.sh.
+mut_KAIZEN_kit_door_open() {
+  sed -i 's@^  \[ -n "\$kit_id" \] && \[ "\$kit_id" = "\$here_id" \] \\$@  true \\@' "$1"
+}
+
 # `sdd kaizen` stops being idempotent: with the verdict already on disk the gate passes, the outcome
 # is repeated — and then the command falls THROUGH and opens a session anyway. Re-running it to
 # re-read a verdict is the ordinary human move, and it would quietly cost an opus session every
@@ -4740,11 +4969,28 @@ mut_RUN_review_scope_blind() {   # since the hat's boundary: every path reads as
 # the one time something is. Caught by `a trailing slash in HANDOFF_DIR does not turn a healthy
 # round into a warning` in check-autonomy.sh — the regime whose config carries the slash.
 #
-# Anchored on the FUNCTION range, like its siblings: `$MISSION` and `$HANDOFF_DIR` appear together
-# elsewhere in this runner, and a pattern that drifted would sabotage a path expression somewhere
-# else while still looking applied.
-mut_RUN_review_scope_handoff_dir_verbatim() {   # since the hat's boundary: hat_expand keeps the slash
-  sed -i '/^hat_expand() {/,/^}/ s@^  while \[ "\${hd%/}" != "\$hd" \]; do hd="\${hd%/}"; done$@  :@' "$1"
+# Anchored on the FUNCTION range, like its siblings: the same trim is spelled elsewhere in this
+# runner, and a pattern that drifted would sabotage a path expression somewhere else while still
+# looking applied. Re-anchored in 20261003-lote-3-a-catraca-desce (issue 127): the slash is trimmed
+# ONCE, where load_config normalises the path keys, and hat_expand substitutes the value as it is —
+# with the trim still in hat_expand this mutant was not caught.
+mut_RUN_review_scope_handoff_dir_verbatim() {   # since issue 127: load_config keeps the slash
+  sed -i '/^load_config() {/,/^}/ s@^    while \[ "\${_pv%/}" != "\$_pv" \]; do _pv="\${_pv%/}"; done$@    :@' "$1"
+}
+
+# The path keys go back to raw (issue 127): load_config validates them and then hands the CALLER's
+# spelling to the rest of the runner, so `./TODO.md` becomes the writes: glob `./TODO.md`, which
+# matches no path git reports — a false hat-crossed on the target's line. Caught by the `path key
+# <KEY>: ./<x> is normalized` assertions of check-gates.sh.
+mut_RUN_config_path_keys_raw() {
+  sed -i '/^load_config() {/,/^}/ s|^    printf -v "\$_pk" .%s. "\$_pv"$|    :|' "$1"
+}
+
+# The path keys go unvalidated: `TODO_FILE='*'` builds the glob `*` in HAT_WRITES_BASE and every hat
+# may write bin/sdd — the fail-open of issue 127. Caught by the four `path key <KEY>: ... is refused
+# by name` assertions of check-gates.sh.
+mut_RUN_config_path_keys_unvalidated() {
+  sed -i '/^load_config() {/,/^}/ s|^    adr_dir_ok "\$_pv" \\$|    true \\|' "$1"
 }
 
 # The same noise, reached from the OTHER side of the same match — and this time it is git writing
@@ -5385,6 +5631,8 @@ CATALOG=(
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
   QA_bug_genre_fenced
+  QA_bug_genre_outside_header
+  QA_bug_genre_header_unbounded
   QA_bug_genre_deferred_blocks
   QA_bug_genre_deferred_prefix
   QA_bug_genre_deferred_unseen_no_interface
@@ -5419,6 +5667,9 @@ CATALOG=(
   REVIEW_backtick_grade_kept
   DOCS_backtick_status_kept
   DOCS_markup_only_status_skipped
+  REVIEW_dirty_unscoped
+  REVIEW_dirty_scope_misses_base
+  DOCS_uncommitted_passes
   PR_no_artifact
   PR_stamp_blind
   PR_blocked_docs_not_carried
@@ -5504,6 +5755,8 @@ CATALOG=(
   PREFLIGHT_context_bill_unguarded
   PREFLIGHT_hat_probe_without_agent
   PREFLIGHT_bash_in_init_unchecked
+  PREFLIGHT_money_keys_unchecked
+  PREFLIGHT_num_turns_unchecked
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA
@@ -5626,6 +5879,8 @@ CATALOG=(
   KAIZEN_degenerate_axis_session_unit
   KAIZEN_degenerate_axis_window_sorted
   KAIZEN_series_rc_dropped
+  KAIZEN_series_shape_not_asked
+  KAIZEN_series_jq_stderr_swallowed
   KAIZEN_composition_session_unit
   KAIZEN_composition_unprinted
   HEALTH_gates_capture_aborts
@@ -5659,6 +5914,8 @@ CATALOG=(
   RUN_retry_row_moved_false
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
+  KAIZEN_kit_door_per_worktree
+  KAIZEN_kit_door_open
   KAIZEN_already_judged_spends
   RUN_degraded_journal_dropped
   AUTONOMY_is_escalation_blind
@@ -5794,6 +6051,8 @@ CATALOG=(
   RUN_review_fixes_inline
   RUN_review_scope_blind
   RUN_review_scope_handoff_dir_verbatim
+  RUN_config_path_keys_raw
+  RUN_config_path_keys_unvalidated
   RUN_review_scope_quotepath_default
   RUN_journal_write_stops_the_line
   RUN_journal_raw_redirection_error
@@ -5917,6 +6176,116 @@ run_mutant() {
   [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ] || killer_of "$box.log" > "$box.killer"
 }
 
+# The controls by killer (issue 169). FIRSTS holds the distinct killers of the map, one control
+# each, run in a sandbox of its own with that killer first — the order the map hands the mutants it
+# killed. They ride the pool as pseudo-jobs named `@first:<k>`, ahead of the mutants; a red one stops
+# the launches as a red control does (control_red reads every control*.rc), and controls_verdict
+# refuses the score. They never score: the scoring loop reads CATALOG, never ORDER.
+FIRSTS=()
+run_first_control() { # run_first_control <k> — writes $WORK/control-first-<k>.rc and .log
+  local box="$WORK/control-first-$1" rc=0
+  [ -d "$box" ] || sandbox "$box"
+  SDD_MUTANT=1 SDD_MUTANT_FIRST="${FIRSTS[$1-1]}" "$box/tests/run-all.sh" > "$WORK/control-first-$1.log" 2>&1 || rc=$?
+  echo "$rc" > "$WORK/control-first-$1.rc"
+}
+run_job() { # run_job <slug | @first:<k>> — the pool's one job function
+  case "$1" in @first:*) run_first_control "${1#@first:}" ;; *) run_mutant "$1" ;; esac
+}
+distinct_killers() { # the distinct steps of KILLER, one per line, sorted — a function so a selftest measures it
+  printf '%s\n' ${KILLER[@]+"${KILLER[@]}"} | LC_ALL=C sort -u | sed '/^$/d'
+}
+
+# The join from a step title to the tests/check-*.sh its `run` line executes. check-health.sh sources
+# these two for its census of the suite (issue 192 moved them here, where --touched needs them too);
+# keep each one short and closed, the guard it reads them with.
+census_join() { # census_join <run-all.sh> — the file with every `\`-continued line joined onto one
+  sed -e ':a' -e '/\\$/N; s/[[:space:]]*\\\n[[:space:]]*/ /; ta' "$1"
+}
+census_file_of() { # census_file_of <step title> <joined run-all> — the tests/check-*.sh it runs
+  local hits
+  hits="$(grep -F -- "run \"$1\" \"\$ROOT/tests/check-" <<< "$2" \
+          | sed -n 's|.*"\$ROOT/tests/\(check-[a-z-]*\.sh\)".*|\1|p')" || true
+  printf '%s' "${hits%%$'\n'*}"
+}
+
+# touched_select <repo> <rev> — the slice of the catalogue a diff of tests/ calls for (issue 192).
+# CALLED, never read through $( ), because it publishes:
+#   TOUCHED_SLUGS     the slugs, in CATALOG order, whose killer step runs a touched sensor file
+#   TOUCHED_SENSORS   the touched files some mutant names as killer
+#   TOUCHED_OTHER     the touched tests/ paths no mutant names as killer — the catalogue answers for them
+#   TOUCHED_GONE      touched killer sensors the tree no longer has — their mutants are not selected
+#   TOUCHED_NOJOIN    killer steps of the map that join to no tests/check-*.sh
+#   TOUCHED_UNMAPPED  slugs of CATALOG with no line in the map
+#   TOUCHED_FILE_OF   slug → the sensor file its killer runs, for every selected slug
+# <rev> goes to `git diff` verbatim: one revision is compared with the working tree, a range with
+# its other end. Reads KILLER (load_killer_map) and RUNALL_JOINED (census_join of run-all.sh). An
+# empty map and a revision that does not resolve are refused with rc 2, said — "0 selected, rc 0"
+# would read as "nothing of yours to check" when the truth is "nothing to check WITH".
+touched_select() {
+  local repo="$1" rev="$2" paths p step f slug
+  local -A step_file=() sensor_set=() hit=()
+  TOUCHED_SLUGS=(); TOUCHED_SENSORS=(); TOUCHED_OTHER=(); TOUCHED_GONE=(); TOUCHED_NOJOIN=0; TOUCHED_UNMAPPED=0
+  TOUCHED_FILE_OF=()
+  if [ "${#KILLER[@]}" -eq 0 ]; then
+    echo "check-mutation.sh: --touched has no killer map to read (${TOUCHED_MAP:-$KILLERS_FILE}) — \`sdd health\` writes it; until then --only <slug> [sensor.sh] runs one mutant" >&2
+    return 2
+  fi
+  # `--end-of-options`: a revision spelled like an option stays a revision (final review of the
+  # branch measured `--output=<file>` writing the file and answering "0 selected").
+  if ! paths="$(git -C "$repo" diff --name-only --end-of-options "$rev" -- tests/ 2>/dev/null)"; then
+    echo "check-mutation.sh: --touched '$rev' resolves to no revision or range of $repo" >&2
+    return 2
+  fi
+  while IFS= read -r step; do
+    [ -n "$step" ] || continue
+    f="$(census_file_of "$step" "$RUNALL_JOINED")"
+    if [ -n "$f" ]; then step_file["$step"]="$f"; sensor_set["$f"]=1; else TOUCHED_NOJOIN=$((TOUCHED_NOJOIN + 1)); fi
+  done < <(distinct_killers)
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    f="${p#tests/}"
+    if [ -z "${sensor_set[$f]:-}" ]; then TOUCHED_OTHER+=("$p")
+    elif [ ! -f "$repo/$p" ]; then TOUCHED_GONE+=("$p")
+    else TOUCHED_SENSORS+=("$f"); hit["$f"]=1; fi
+  done <<< "$paths"
+  for slug in "${CATALOG[@]}"; do
+    step="${KILLER[$slug]:-}"
+    if [ -z "$step" ]; then TOUCHED_UNMAPPED=$((TOUCHED_UNMAPPED + 1)); continue; fi
+    f="${step_file[$step]:-}"
+    if [ -n "$f" ] && [ -n "${hit[$f]:-}" ]; then TOUCHED_SLUGS+=("$slug"); TOUCHED_FILE_OF["$slug"]="$f"; fi
+  done
+  return 0
+}
+declare -A TOUCHED_FILE_OF=()
+
+# touched_verdict <dir> <slug...> — reads <dir>/<slug>.rc of each selected mutant through rc_verdict,
+# the catalogue's own reading. A mutant its killer no longer catches is LOST: named, with the --only
+# command that escalates it to the whole suite. rc 0 only when every one is still caught. It does not
+# rewrite the killer map and prints no `score:` — that is the catalogue's, and only sdd health's.
+touched_verdict() {
+  local dir="$1" slug rc k=0 n=0
+  shift
+  for slug in "$@"; do
+    n=$((n + 1))
+    rc="$(cat "$dir/$slug.rc" 2>/dev/null || echo 99)"
+    case "$(rc_verdict "$rc")" in
+      caught) k=$((k + 1)) ;;
+      survived)  fail "touched: $slug is NOT caught by ${TOUCHED_FILE_OF[$slug]:-its killer} any more" \
+                      "escalate: tests/check-mutation.sh --only $slug" ;;
+      broken)    fail "CATALOGUE-BROKEN: $slug — its anchor no longer applies" \
+                      "fix the anchor; tests/check-mutation.sh --anchors names every one" ;;
+      timed-out) fail "TIMED-OUT: $slug — inconclusive, never caught" "escalate: tests/check-mutation.sh --only $slug" ;;
+      missing)   fail "touched: $slug produced no result" "escalate: tests/check-mutation.sh --only $slug" ;;
+    esac
+  done
+  if [ "$k" -eq "$n" ]; then
+    pass "touched: $k of $n selected mutant(s) still caught by their killer"
+    return 0
+  fi
+  printf '  FAIL  touched: %d of %d selected mutant(s) still caught by their killer\n' "$k" "$n" >&2
+  return 1
+}
+
 # rc_verdict <suite rc> → how the catalogue reads a mutant's rc: broken (90/91, the mutant never
 # applied), survived (0), missing (99, no rc written), timed-out (124, a step outlived its deadline
 # inside the mutant — run-all.sh's own number, issue #112) or caught. Its own function so that
@@ -5941,7 +6310,8 @@ killer_of() {
 # above PASS in run-all.sh: over 40 mutants of 583b3c3 the suite summed 4796/4828 s before, 1959 s
 # after). It is an ORDER hint and nothing else — a stale or garbled line costs time and changes no
 # step a mutant runs, because run-all.sh still runs every step of a mutant the named one did not kill.
-# That the ORDER moves no verdict either is measured, not asserted (the same note). It lives in
+# That the ORDER moves no verdict is asserted since issue 169: one control per distinct killer of
+# the map, that killer first, has to come back green or the score is refused. It lives in
 # .sdd/cache/, gitignored and OUTSIDE the four directories of mutation_stamp_key, so learning it
 # never invalidates a stamp.
 # The seconds are the mutant's own suite time; the pool reads them to launch the longest first.
@@ -5994,6 +6364,18 @@ if [ -n "$orphans" ]; then
   exit 1
 fi
 pass "the catalogue lists ${#CATALOG[@]} mutants (floor $CATALOGUE_FLOOR), every mut_* defined in this file among them, each once"
+if controls_selftest; then
+  pass "controls: one control per distinct killer of the map, that killer first — a red or missing one refuses the score (selftest)"
+else
+  echo "the controls by killer do not measure what they claim — refusing to score mutants with them" >&2
+  exit 1
+fi
+if touched_selftest; then
+  pass "touched: the diff selects the mutants its sensors killed (selftest)"
+else
+  echo "the --touched selection does not measure what it claims — refusing to run with it" >&2
+  exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # --anchors: apply every mutant to a copy of bin/ and stop there — no suite, no control run.
@@ -6072,9 +6454,12 @@ fi
 
 # The control of the catalogue: the whole suite on an unsabotaged copy (see CONTROL run below).
 # Defined here because --only, the next block, runs the same control before reading its one mutant.
+# CONTROL_FIRST is the step it runs first: empty — the usual order, said explicitly and never
+# inherited from the environment — except under --only, whose control runs in its mutant's order.
+CONTROL_FIRST=''
 run_control() {
   local rc=0
-  SDD_MUTANT=1 "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1 || rc=$?
+  SDD_MUTANT=1 SDD_MUTANT_FIRST="${CONTROL_FIRST:-}" "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1 || rc=$?
   echo "$rc" > "$WORK/control.rc"
 }
 
@@ -6098,6 +6483,27 @@ run_control() {
 # per call, and run-all.sh would then invoke this file a third time (check-health.sh counts the
 # invocations). What it shares with the catalogue is measured there; its own branches are not.
 # ---------------------------------------------------------------------------
+# only_sensor <box> <name> [sensor] — one sensor, under the SDD_MUTANT a mutant's suite runs with
+# (so it stops at its first red, as it would inside the catalogue); <name>.rc and .log in $WORK. The
+# sensor defaults to --only's. With a DEADLINE, because a mutant can make a sensor hang and
+# run-all.sh's per-step deadline is not in this path (CodeRabbit on PR #203). 720 s is run-all.sh's
+# largest step deadline; SDD_ONLY_DEADLINE overrides it. A run that reaches the deadline is written
+# as 124 whatever `timeout` returned — 137 after the KILL would otherwise read as caught — and
+# rc_verdict reads 124 as timed-out: inconclusive, never caught, exactly as inside the catalogue.
+# Shared by --only <slug> <sensor> and --touched since issue 192.
+only_sensor() {
+  local rc=0 t0=$SECONDS
+  SDD_MUTANT=1 timeout -k 10 "$ONLY_DEADLINE" bash "$1/tests/${3:-$ONLY_SENSOR}" > "$WORK/$2.log" 2>&1 || rc=$?
+  [ $((SECONDS - t0)) -lt "$ONLY_DEADLINE" ] || rc=124
+  echo "$rc" > "$WORK/$2.rc"
+}
+only_deadline() { # sets ONLY_DEADLINE, or exits 2 naming the bad value
+  ONLY_DEADLINE="${SDD_ONLY_DEADLINE:-720}"
+  case "$ONLY_DEADLINE" in
+    ''|0*|*[!0-9]*) echo "check-mutation.sh: SDD_ONLY_DEADLINE must be a whole number of seconds >= 1 (got: $ONLY_DEADLINE)" >&2; exit 2 ;;
+  esac
+}
+
 if [ -n "$ONLY_SLUG" ]; then
   known=0
   for slug in "${CATALOG[@]}"; do [ "$slug" = "$ONLY_SLUG" ] && { known=1; break; }; done
@@ -6119,28 +6525,13 @@ if [ -n "$ONLY_SLUG" ]; then
     what="the suite"
     load_killer_map "$KILLERS_FILE"
     echo "== --only $ONLY_SLUG: control and mutant, each a whole suite run (minutes) =="
+    CONTROL_FIRST="${KILLER[$ONLY_SLUG]:-}"
     run_control &
     run_mutant "$ONLY_SLUG"
     wait
   else
     what="$ONLY_SENSOR"
-    # only_sensor <box> <name> — the one sensor, under the SDD_MUTANT a mutant's suite runs with
-    # (so it stops at its first red, as it would inside the catalogue); <name>.rc and .log in $WORK.
-    # With a DEADLINE, because a mutant can make a sensor hang and run-all.sh's per-step deadline is
-    # not in this path (CodeRabbit on PR #203). 720 s is run-all.sh's largest step deadline;
-    # SDD_ONLY_DEADLINE overrides it. A run that reaches the deadline is written as 124 whatever
-    # `timeout` returned — 137 after the KILL would otherwise read as caught — and rc_verdict reads
-    # 124 as timed-out: inconclusive, never caught, exactly as inside the catalogue.
-    only_sensor() {
-      local rc=0 t0=$SECONDS
-      SDD_MUTANT=1 timeout -k 10 "$ONLY_DEADLINE" bash "$1/tests/$ONLY_SENSOR" > "$WORK/$2.log" 2>&1 || rc=$?
-      [ $((SECONDS - t0)) -lt "$ONLY_DEADLINE" ] || rc=124
-      echo "$rc" > "$WORK/$2.rc"
-    }
-    ONLY_DEADLINE="${SDD_ONLY_DEADLINE:-720}"
-    case "$ONLY_DEADLINE" in
-      ''|0*|*[!0-9]*) echo "check-mutation.sh: SDD_ONLY_DEADLINE must be a whole number of seconds >= 1 (got: $ONLY_DEADLINE)" >&2; exit 2 ;;
-    esac
+    only_deadline
     echo "== --only $ONLY_SLUG: control and mutant against $ONLY_SENSOR alone =="
     only_sensor "$WORK/control" control &
     sandbox "$box"
@@ -6174,6 +6565,91 @@ if [ -n "$ONLY_SLUG" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# --touched <rev> [--list]: the mutants whose last killer is a sensor the diff touched (issue 192).
+# The map is the one `sdd health` writes; SDD_KILLERS_FILE overrides it HERE and nowhere else,
+# because the full catalogue WRITES the map and an override there would overwrite a fixture.
+# ---------------------------------------------------------------------------
+if [ -n "$TOUCHED_REV" ]; then
+  TOUCHED_MAP="${SDD_KILLERS_FILE:-$KILLERS_FILE}"
+  load_killer_map "$TOUCHED_MAP"
+  RUNALL_JOINED="$(census_join "$ROOT/tests/run-all.sh")"
+  touched_select "$ROOT" "$TOUCHED_REV" || exit $?
+  {
+    echo "== touched $TOUCHED_REV: ${#TOUCHED_SENSORS[@]} sensor file(s) of the diff killed ${#TOUCHED_SLUGS[@]} mutant(s) of the map =="
+    for p in ${TOUCHED_OTHER[@]+"${TOUCHED_OTHER[@]}"}; do
+      printf '  note  %s: no mutant of the map names it as killer — the catalogue answers for it (sdd health)\n' "$p"
+    done
+    for p in ${TOUCHED_GONE[@]+"${TOUCHED_GONE[@]}"}; do
+      printf '  note  %s: a killer sensor the tree no longer has — its mutants cannot run against it; the catalogue answers for them\n' "$p"
+    done
+    [ "$TOUCHED_NOJOIN" -eq 0 ] \
+      || printf '  note  %d killer step(s) of the map join to no tests/check-*.sh — --only <slug> runs one of theirs\n' "$TOUCHED_NOJOIN"
+    [ "$TOUCHED_UNMAPPED" -eq 0 ] \
+      || printf '  note  %d mutant(s) of CATALOG have no line in the map — --only <slug> runs one, and sdd health maps them\n' "$TOUCHED_UNMAPPED"
+  } >&2
+  if [ "$TOUCHED_LIST" = 1 ]; then
+    printf '%s\n' ${TOUCHED_SLUGS[@]+"${TOUCHED_SLUGS[@]}"}
+    exit 0
+  fi
+  if [ "${#TOUCHED_SLUGS[@]}" -eq 0 ]; then
+    echo "  note  the diff selects no mutant of the map — nothing for --touched to run; the catalogue answers for the rest"
+    exit 0
+  fi
+  # Each selected mutant against its KILLER alone, in the pool; the control of every touched sensor
+  # runs first, on the copy with no sabotage, and a red one stops the launches (control_red reads
+  # every control*.rc). The estimate is the map's seconds — each a whole killer-first suite, so an
+  # upper bound for one sensor — over JOBS.
+  only_deadline
+  est=0
+  for slug in "${TOUCHED_SLUGS[@]}"; do est=$((est + ${SECS[$slug]:-0})); done
+  echo "== touched: ${#TOUCHED_SLUGS[@]} mutant(s) against their killer, at most ~$(( (est + JOBS - 1) / JOBS )) s at $JOBS job(s) (the map's seconds over JOBS) =="
+  sandbox "$WORK/control"
+  touched_control() {
+    local f rc max=0
+    for f in "${TOUCHED_SENSORS[@]}"; do
+      only_sensor "$WORK/control" "control-$f" "$f"
+      rc="$(cat "$WORK/control-$f.rc")"
+      [ "$rc" = 0 ] || max="$rc"
+    done
+    echo "$max" > "$WORK/control.rc"
+  }
+  touched_mutant() {
+    local box="$WORK/$1" arc=0
+    sandbox "$box"
+    apply_mutant "mut_$1" "$box" || arc=$?
+    if [ "$arc" -eq 0 ]; then only_sensor "$box" "$1" "${TOUCHED_FILE_OF[$1]}"; else echo "$arc" > "$box.rc"; fi
+  }
+  if (: & wait -n) 2>/dev/null; then
+    run_pool "$WORK" touched_control touched_mutant "${TOUCHED_SLUGS[@]}"
+  else
+    control_run "$WORK" touched_control; POOL_LAUNCHED=0
+    if ! control_red "$WORK"; then
+      for slug in "${TOUCHED_SLUGS[@]}"; do touched_mutant "$slug"; POOL_LAUNCHED=$((POOL_LAUNCHED + 1)); done
+    fi
+  fi
+  for f in "${TOUCHED_SENSORS[@]}"; do
+    rc="$(cat "$WORK/control-$f.rc" 2>/dev/null || true)"
+    if [ "$rc" != 0 ]; then
+      fail "HARNESS-BROKEN: $f is not green on the copy with no sabotage (rc ${rc:-none})" \
+           "it says nothing about the mutants it killed — see $WORK/control-$f.log"
+      exit 1
+    fi
+  done
+  pass "control: each of the ${#TOUCHED_SENSORS[@]} touched sensor(s) is green on an unsabotaged copy"
+  # Exactly the selection, never more: the verdict reads only the selected rcs, so a run that went
+  # back to the whole catalogue would still answer right — at the catalogue's cost, an hour, for a
+  # mode that exists to take seconds.
+  if [ "$POOL_LAUNCHED" != "${#TOUCHED_SLUGS[@]}" ]; then
+    fail "HARNESS-BROKEN: --touched launched $POOL_LAUNCHED mutant(s) for a selection of ${#TOUCHED_SLUGS[@]}" \
+         "the run and the selection disagree"
+    exit 1
+  fi
+  touched_verdict "$WORK" "${TOUCHED_SLUGS[@]}"; trc=$?
+  echo "hint only — \`sdd health\` runs the whole catalogue, and only it writes the mutation stamp"
+  exit "$trc"
+fi
+
+# ---------------------------------------------------------------------------
 # CONTROL run — the copy has to be green with NO sabotage at all.
 #
 # Without it, a broken copy (a future test reading agents/ or docs/, for instance) would leave
@@ -6192,6 +6668,16 @@ sandbox "$WORK/control"
 load_killer_map "$KILLERS_FILE"
 echo "== killer map: ${#KILLER[@]} mutant(s) run their last killer first, ${#SECS[@]} with a recorded time =="
 mapfile -t ORDER < <(for slug in "${CATALOG[@]}"; do printf '%s\t%s\n' "$slug" "${SECS[$slug]:-}"; done | launch_order)
+# One control per distinct killer of the map, that killer first, ahead of every mutant (issue 169).
+# An empty map is zero of them. NOT probed here, and declared: these lines and the verdict call
+# below — the selftest drives the functions, and the proof of the wiring is the line the next
+# `sdd health` prints, `the kit copy is green with no sabotage, in the usual order and with each of
+# the N killer(s) of the map first`.
+mapfile -t FIRSTS < <(distinct_killers)
+first_jobs=()
+for k in ${FIRSTS[@]+"${!FIRSTS[@]}"}; do first_jobs+=("@first:$((k + 1))"); done
+ORDER=(${first_jobs[@]+"${first_jobs[@]}"} "${ORDER[@]}")
+echo "== controls by killer: ${#FIRSTS[@]} distinct killer(s) of the map, each run first once =="
 
 # ---------------------------------------------------------------------------
 # A pool, not batches: the old `[ i % JOBS -eq 0 ] && wait` was a barrier every JOBS mutants, so
@@ -6201,14 +6687,14 @@ mapfile -t ORDER < <(for slug in "${CATALOG[@]}"; do printf '%s\t%s\n' "$slug" "
 # The launch order is launch_order's: no recorded time first, then the longest first.
 if (: & wait -n) 2>/dev/null; then
   echo "== mutants (pool of $JOBS, longest first) =="
-  run_pool "$WORK" run_control run_mutant "${ORDER[@]}"
+  run_pool "$WORK" run_control run_job "${ORDER[@]}"
 else
   echo "== mutants (batches of $JOBS — this bash has no 'wait -n': the control runs first) =="
   control_run "$WORK" run_control
   if ! control_red "$WORK"; then
     i=0
     for slug in "${ORDER[@]}"; do
-      run_mutant "$slug" &
+      run_job "$slug" &
       i=$((i + 1))
       [ $((i % JOBS)) -eq 0 ] && wait
     done
@@ -6216,8 +6702,8 @@ else
   fi
 fi
 
-if why="$(control_verdict "$WORK")"; then
-  pass "the kit copy is green with no sabotage"
+if why="$(controls_verdict "$WORK")"; then
+  pass "the kit copy is green with no sabotage, in the usual order and with each of the ${#FIRSTS[@]} killer(s) of the map first"
 else
   fail "$why" "the score would read 100% by vacuity — see $WORK/control.log"
   tail -20 "$WORK/control.log" >&2

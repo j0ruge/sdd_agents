@@ -310,18 +310,28 @@ target — the instrument that covers that gap is the `composition` field of `sd
 **Symptom:** `sdd kaizen` (or `--dry-run`) prints `malformed row in <path> — the ledger is not
 readable` and then `error: the ledger could not be read (the series reader exited 1) — this is NOT
 'not judged yet'`, rc 1, with **no session opened**. `sdd kaizen --series` alone warns the same and
-exits 1 with no JSON on stdout.
+exits 1 with no JSON on stdout. Two other sentences take the same road, for a ledger that parses
+and still cannot be read: `unreadable row in <path> — a row is valid JSON but not an object; find
+the writer that produced it`, and `unreadable row in <path> — a row has a field jq could not read:
+<jq's own error>`, the second quoting jq because the runner does not know which field failed.
 
 **Cause:** one row of `~/.sdd/autonomy-log.jsonl` is not valid JSON — a truncated write, a hand
-edit, a file appended to by two processes at once. Before this was checked, the reader's empty
+edit, a file appended to by two processes at once — or, for the two other sentences, a row that is
+valid JSON but not an object (find the writer), or an object with a field of the wrong type, such
+as a cost written as a string (fix that row). Before this was checked, the reader's empty
 output was assigned into `series=$(kaizen_series)` with the return code dropped, and `errexit` is
 **off** inside every gate (each caller runs `gate_KAIZEN || rc=$?`), so an unreadable ledger read
 back as "no verdict for the kit yet" — a doubled space in that message was the only tell — and the
 runner went on to spend an opus session judging a series nobody could read.
 
-**What you do:** run `sdd autonomy`, which names the file and dies on the same row, then find it
-with `jq -c . ~/.sdd/autonomy-log.jsonl` — the last line it prints before failing is the one before
-the break. The ledger is append-only *facts*, so the repair is to fix or delete that one row; a row
+**What you do:** run `sdd autonomy`, which names the file and dies on the same row. A row that is
+not valid JSON you find with `jq -c . ~/.sdd/autonomy-log.jsonl` — the last line it prints before
+failing is the one before the break. The two rows that parse go through that command without a
+failure, so each has its own locator: a row that is not an object comes out of
+`jq -c 'select(type != "object") | [input_line_number, .]' ~/.sdd/autonomy-log.jsonl` with its line
+number, and for a field of the wrong type you `grep -n` the value jq quotes in the refusal
+(`string ("4.0")` → `grep -n '"4.0"' ~/.sdd/autonomy-log.jsonl`). Do not use the `<stdin>:N` in
+that quote: it counts the stream the series built, not the lines of the file. The ledger is append-only *facts*, so the repair is to fix or delete that one row; a row
 that was never valid JSON never carried a fact.
 
 **Do not:** re-run hoping a fresh session fixes it, and do not point a session at it. The file

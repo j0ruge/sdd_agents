@@ -286,7 +286,8 @@ issue #205 it passed as `done`. The conditions:
   `- **Closable by:**`: `agent` blocks, `human` and `deferred` do not, and **absent blocks**. Absent
   is the fail-safe and not an oversight — every bug file written before the field existed lacks it,
   so a permissive default would switch this anchor off for a whole legacy registry in one step. The
-  genre is read from the FIELD, not from wherever the words happen to appear in the body, and
+  genre is read from the FIELD, not from wherever the words happen to appear in the body — the
+  first `Closable by:` in the header block that opens with `Status:`, outside any fence — and
   matched as a whole lowercase word: `humano`, `humans`, `Human` and `deferredly` all read as
   absent, and block;
 - `TEST_CMD` exits 0 and `E2E_CMD` exits 0 (when set). When the e2e is red the runner asks the app
@@ -405,7 +406,7 @@ real sentence. The skill's terse rationales `clean`, `n/a` and `—` are not pla
 
 The same rule covers the `gate:` frontmatter field — the other half of the seal — when the key is
 **present**, whatever its value: written and left blank fails exactly like `<…>` does, and absent is
-left alone (6 of the 14 rounds on disk here predate the field, and refusing them would rewrite
+left alone (6 of the 30 rounds on disk here predate the field, and refusing them would rewrite
 history instead of measuring this round). Present-and-blank was itself a hole for two commits,
 because the reader that fetches the value cannot tell it from a key that was never written.
 
@@ -939,8 +940,10 @@ harness reads; `hat_disallowed` joins both onto the flag, where a rule is a perm
 `Bash`. `tests/check-hat.sh` R3/R4 refuse the two mix-ups.
 
 `sdd preflight` proves this by firing a real headless session **as the executor hat**, under the
-flags `run_phase` composes for it, and reading two artifacts: `Bash` on the stream's `init` line
-and the marker in the answer. "claude answers" does not cover this failure mode, and neither did
+flags `run_phase` composes for it, and reading three artifacts: `Bash` on the stream's `init` line,
+the marker in the answer, and a numeric `total_cost_usd` and `num_turns` on the `result` line — the
+keys `run_phase`, `sdd census`, `sdd close` and the mission budget read, so a CLI that renamed one
+is caught before a session is paid for blind. "claude answers" does not cover this failure mode, and neither did
 a probe without `--agent` — it was green on the day every hat had no shell.
 
 ## Costs and logs
@@ -977,8 +980,11 @@ the mission before it cost US$ 174 against a ceiling of US$ 150 that lived only 
 Plus `<PHASE>-<ts>.err` for the session's stderr. The journal is **ephemeral by contract**: `.sdd/logs/` is in the
 `.gitignore` that `sdd install` writes, and the durable record of what happened is the committed
 handoffs. If it moved back into the committed tree it would dirty `git status` — and a dirty tree
-fails `gate_REVIEW` and `sdd preflight`. `--max-budget-usd` per session is a damage cap, not a
-budget.
+fails `sdd preflight`. (`gate_REVIEW` refuses only a dirty round report, `checkpoint.md`,
+`checkpoint-notas.md` or backlog — `TODO_FILE` and `tests/health-baseline.txt`, the
+`HAT_WRITES_BASE` every hat declares —, and `gate_DOCS` an uncommitted `45-docs.md`, since issue 115
+scoped them.)
+`--max-budget-usd` per session is a damage cap, not a budget.
 
 `sdd census <mission>` reads those logs back: per phase, sessions, turns, cost, cache-read tokens,
 MCP servers the sessions saw, permission denials, bytes re-read under `HANDOFF_DIR`, and every tool
@@ -1039,8 +1045,9 @@ the kit improve autonomy or hurt it?".
 
 It is global, not per-repo, for two reasons. Maturity across projects cannot be measured in a
 file that lives inside one project. And a file the runner writes BETWEEN phases inside the target
-repo would sit untracked and fail `gate_REVIEW` and `sdd preflight` — the `pipeline.log` defect,
-which was fixed by making that journal ephemeral, a way out this ledger does not have.
+repo would sit untracked and fail `sdd preflight` — and `gate_REVIEW` too, until issue 115 scoped
+it to the round's own files — the `pipeline.log` defect, which was fixed by making that journal
+ephemeral, a way out this ledger does not have.
 
 **The file is global; the READING is per repo.** Every reader — `sdd autonomy`, `sdd kaizen
 --series`, and the reminder printed after a pipeline completes — admits only the rows whose `repo`
@@ -1365,7 +1372,8 @@ then "11 row(s) excluded: born in another repo" underneath.
 
 ## The kaizen loop
 
-The ledger records; `sdd kaizen` closes. Run **in the kit repo** (it refuses anywhere else), it
+The ledger records; `sdd kaizen` closes. Run **in the kit repo** (it refuses anywhere else; a
+linked worktree of the kit is the kit, compared by the same common-dir identity the ledger uses), it
 judges the previous kit change and gives birth to the kit's next mission plan — detection without
 closure is inventory, not improvement.
 
