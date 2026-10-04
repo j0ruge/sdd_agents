@@ -375,8 +375,20 @@ touched_selftest() {
   touched_select "$repo" hat >/dev/null 2>&1
   [ "${TOUCHED_SLUGS[*]-}" = 'GATES_A' ] \
     || { echo "  SELFTEST FAIL  touched: a single revision did not read the working tree: selected '${TOUCHED_SLUGS[*]-}', expected 'GATES_A'" >&2; return 1; }
+  # A killer sensor the diff touched and the tree no longer has (deleted or renamed): its mutants
+  # cannot run against it, so they are not selected and the path is named — never a control run
+  # that dies on the missing file and blames the copy (final review of the branch).
+  rm -f "$repo/tests/check-hat.sh"
+  touched_select "$repo" base..hat >/dev/null 2>&1
+  [ "${TOUCHED_SLUGS[*]-}|${TOUCHED_GONE[*]-}" = '|tests/check-hat.sh' ] \
+    || { echo "  SELFTEST FAIL  touched: a deleted killer sensor selected '${TOUCHED_SLUGS[*]-}' and named gone '${TOUCHED_GONE[*]-}', expected nothing and 'tests/check-hat.sh'" >&2; return 1; }
   rc=0; touched_select "$repo" no-such-rev >/dev/null 2>&1 || rc=$?
   [ "$rc" = 2 ] || { echo "  SELFTEST FAIL  touched: a revision that does not resolve answered rc $rc, expected 2" >&2; return 1; }
+  # A revision that looks like an OPTION is a revision, never an option to git (final review of the
+  # branch): `--output=<file>` used to create the file and answer "0 selected", rc 0.
+  rc=0; touched_select "$repo" "--output=$d/injected" >/dev/null 2>&1 || rc=$?
+  { [ "$rc" = 2 ] && [ ! -e "$d/injected" ]; } \
+    || { echo "  SELFTEST FAIL  touched: a revision spelled like an option answered rc $rc$([ -e "$d/injected" ] && echo ', and git wrote the file it named')" >&2; return 1; }
   KILLER=(); rc=0; touched_select "$repo" base..hat >/dev/null 2>&1 || rc=$?
   [ "$rc" = 2 ] || { echo "  SELFTEST FAIL  touched: an empty map answered rc $rc, expected 2 — never '0 selected'" >&2; return 1; }
   # The verdict, over rc files whose answer is known: a mutant its killer no longer catches is LOST,
@@ -6193,6 +6205,7 @@ census_file_of() { # census_file_of <step title> <joined run-all> — the tests/
 #   TOUCHED_SLUGS     the slugs, in CATALOG order, whose killer step runs a touched sensor file
 #   TOUCHED_SENSORS   the touched files some mutant names as killer
 #   TOUCHED_OTHER     the touched tests/ paths no mutant names as killer — the catalogue answers for them
+#   TOUCHED_GONE      touched killer sensors the tree no longer has — their mutants are not selected
 #   TOUCHED_NOJOIN    killer steps of the map that join to no tests/check-*.sh
 #   TOUCHED_UNMAPPED  slugs of CATALOG with no line in the map
 #   TOUCHED_FILE_OF   slug → the sensor file its killer runs, for every selected slug
@@ -6203,13 +6216,15 @@ census_file_of() { # census_file_of <step title> <joined run-all> — the tests/
 touched_select() {
   local repo="$1" rev="$2" paths p step f slug
   local -A step_file=() sensor_set=() hit=()
-  TOUCHED_SLUGS=(); TOUCHED_SENSORS=(); TOUCHED_OTHER=(); TOUCHED_NOJOIN=0; TOUCHED_UNMAPPED=0
+  TOUCHED_SLUGS=(); TOUCHED_SENSORS=(); TOUCHED_OTHER=(); TOUCHED_GONE=(); TOUCHED_NOJOIN=0; TOUCHED_UNMAPPED=0
   TOUCHED_FILE_OF=()
   if [ "${#KILLER[@]}" -eq 0 ]; then
     echo "check-mutation.sh: --touched has no killer map to read (${TOUCHED_MAP:-$KILLERS_FILE}) — \`sdd health\` writes it; until then --only <slug> [sensor.sh] runs one mutant" >&2
     return 2
   fi
-  if ! paths="$(git -C "$repo" diff --name-only "$rev" -- tests/ 2>/dev/null)"; then
+  # `--end-of-options`: a revision spelled like an option stays a revision (final review of the
+  # branch measured `--output=<file>` writing the file and answering "0 selected").
+  if ! paths="$(git -C "$repo" diff --name-only --end-of-options "$rev" -- tests/ 2>/dev/null)"; then
     echo "check-mutation.sh: --touched '$rev' resolves to no revision or range of $repo" >&2
     return 2
   fi
@@ -6221,7 +6236,9 @@ touched_select() {
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     f="${p#tests/}"
-    if [ -n "${sensor_set[$f]:-}" ]; then TOUCHED_SENSORS+=("$f"); hit["$f"]=1; else TOUCHED_OTHER+=("$p"); fi
+    if [ -z "${sensor_set[$f]:-}" ]; then TOUCHED_OTHER+=("$p")
+    elif [ ! -f "$repo/$p" ]; then TOUCHED_GONE+=("$p")
+    else TOUCHED_SENSORS+=("$f"); hit["$f"]=1; fi
   done <<< "$paths"
   for slug in "${CATALOG[@]}"; do
     step="${KILLER[$slug]:-}"
@@ -6553,6 +6570,9 @@ if [ -n "$TOUCHED_REV" ]; then
     echo "== touched $TOUCHED_REV: ${#TOUCHED_SENSORS[@]} sensor file(s) of the diff killed ${#TOUCHED_SLUGS[@]} mutant(s) of the map =="
     for p in ${TOUCHED_OTHER[@]+"${TOUCHED_OTHER[@]}"}; do
       printf '  note  %s: no mutant of the map names it as killer — the catalogue answers for it (sdd health)\n' "$p"
+    done
+    for p in ${TOUCHED_GONE[@]+"${TOUCHED_GONE[@]}"}; do
+      printf '  note  %s: a killer sensor the tree no longer has — its mutants cannot run against it; the catalogue answers for them\n' "$p"
     done
     [ "$TOUCHED_NOJOIN" -eq 0 ] \
       || printf '  note  %d killer step(s) of the map join to no tests/check-*.sh — --only <slug> runs one of theirs\n' "$TOUCHED_NOJOIN"
