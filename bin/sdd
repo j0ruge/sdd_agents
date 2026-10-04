@@ -1770,7 +1770,7 @@ gate_REVIEW() {
         if (verdict != "") { print verdict; exit }
         if (rows == 0)     { print "NO-TABLE"; exit }
         # The other half of the seal. ABSENT is left alone on purpose, and the scope is measured,
-        # not assumed: 6 of the 14 rounds on disk in this repo predate the field, and a gate that
+        # not assumed: 6 of the 30 rounds on disk in this repo predate the field, and a gate that
         # refused them would be rewriting history instead of measuring the round that just ran.
         # Present-but-unfilled is the case that lies, and it is the one refused — which is why
         # this reads PRESENCE and not the value: `gate:` with nothing after it is present and

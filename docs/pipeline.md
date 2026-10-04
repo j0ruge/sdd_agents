@@ -405,7 +405,7 @@ real sentence. The skill's terse rationales `clean`, `n/a` and `—` are not pla
 
 The same rule covers the `gate:` frontmatter field — the other half of the seal — when the key is
 **present**, whatever its value: written and left blank fails exactly like `<…>` does, and absent is
-left alone (6 of the 14 rounds on disk here predate the field, and refusing them would rewrite
+left alone (6 of the 30 rounds on disk here predate the field, and refusing them would rewrite
 history instead of measuring this round). Present-and-blank was itself a hole for two commits,
 because the reader that fetches the value cannot tell it from a key that was never written.
 

@@ -2050,7 +2050,7 @@ i3_phase "clean, n/a and — are the skill's terse rationales, not placeholders"
 
 # 7-9. the other half of the seal: the `gate:` frontmatter, which templates/review.md ships as an
 #      unfilled `<…>`. Same rule, one implementation — the field is fed INTO the same awk. The
-#      ABSENT world is the one that keeps this from rewriting history: 6 of the 14 rounds on disk
+#      ABSENT world is the one that keeps this from rewriting history: 6 of the 30 rounds on disk
 #      in this repo carry no `gate:` at all, and every world above already exercises it.
 write_r11 "measured, nothing open" "<the evidence this round closed>"; commit_r11
 i3_phase "the gate: frontmatter left as the template shipped it" "REVIEW"
