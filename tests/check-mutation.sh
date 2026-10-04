@@ -16,6 +16,10 @@
 #                                            (minutes: ONE mutant against the suite, or against one
 #                                             sensor in seconds — a HINT before a commit, never the
 #                                             verdict; exit 0 = caught, 1 = not caught or no answer)
+#        tests/check-mutation.sh --touched <rev> [--list]
+#                                            (the mutants whose last killer, in the map `sdd health`
+#                                             writes, is a sensor the diff of tests/ against <rev>
+#                                             touched; --list prints that selection)
 
 set -uo pipefail
 
@@ -35,8 +39,8 @@ ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # hour, `sdd health` names no culprit, and both were anchors today's merges had broken. Applying
 # the 389 without running the suite found them in 20 seconds. So the fast suite asks this question
 # on every gate, and the expensive one stays where 4c86712 put it.
-ANCHORS_ONLY=0 ONLY_SLUG="" ONLY_SENSOR=""
-USAGE="want nothing, --anchors, or --only <slug> [sensor.sh]"
+ANCHORS_ONLY=0 ONLY_SLUG="" ONLY_SENSOR="" TOUCHED_REV="" TOUCHED_LIST=0
+USAGE="want nothing, --anchors, --only <slug> [sensor.sh], or --touched <rev> [--list]"
 case "${1:-}" in
   "") [ "$#" -le 1 ] || { echo "check-mutation.sh: unexpected argument '$2' ($USAGE)" >&2; exit 2; } ;;
   --anchors)
@@ -47,6 +51,16 @@ case "${1:-}" in
       echo "check-mutation.sh: --only takes a catalogue slug and at most one sensor ($USAGE)" >&2; exit 2
     fi
     ONLY_SLUG="$2" ONLY_SENSOR="${3:-}" ;;
+  --touched)
+    if [ "$#" -lt 2 ] || [ "$#" -gt 3 ] || [ -z "$2" ]; then
+      echo "check-mutation.sh: --touched takes a revision or a range, and at most --list ($USAGE)" >&2; exit 2
+    fi
+    TOUCHED_REV="$2"
+    case "${3:-}" in
+      "") ;;
+      --list) TOUCHED_LIST=1 ;;
+      *) echo "check-mutation.sh: unknown option '$3' after --touched <rev> ($USAGE)" >&2; exit 2 ;;
+    esac ;;
   *) echo "check-mutation.sh: unknown option '$1' ($USAGE)" >&2; exit 2 ;;
 esac
 
@@ -324,6 +338,43 @@ controls_selftest() {
   KILLER=([x]=stepB [y]=stepA [z]=stepB)
   [ "$(distinct_killers | tr '\n' ' ')" = 'stepA stepB ' ] \
     || { echo "  SELFTEST FAIL  controls: distinct killers of {stepB, stepA, stepB} read '$(distinct_killers | tr '\n' ' ')', expected 'stepA stepB '" >&2; return 1; }
+  return 0
+}
+
+# touched_selftest — the selection of --touched (issue 192), over a fixture git repo, a fixture map
+# and the REAL run-all.sh, whose step titles are what a killer names. A commit range that touches
+# check-hat.sh and run-all.sh selects the two hat mutants and not the gates one, names run-all.sh as
+# a path the catalogue answers for, and counts the killer that joins nothing and the slug outside the
+# map; a single revision reads the working tree too; an empty map and a revision that does not
+# resolve are refused (rc 2), never "0 selected". Called beside controls_selftest, in every mode.
+touched_selftest() {
+  local d="$WORK/touched-selftest" repo rc=0
+  local -A KILLER=([HAT_A]='every hat declares its boundary' [HAT_B]='every hat declares its boundary' \
+                   [GATES_A]='gate state machine' [GONE_X]='a step that is gone') SECS=()
+  local -a CATALOG=(HAT_A HAT_B GATES_A GONE_X UNMAPPED_Y)
+  local RUNALL_JOINED; RUNALL_JOINED="$(census_join "$ROOT/tests/run-all.sh")"
+  repo="$d/repo"; mkdir -p "$repo/tests"
+  git -C "$repo" init -q 2>/dev/null
+  printf 'a\n' > "$repo/tests/check-hat.sh"; printf 'a\n' > "$repo/tests/check-gates.sh"; printf 'a\n' > "$repo/tests/run-all.sh"
+  git -C "$repo" add -A && git -C "$repo" -c user.email=probe@sdd -c user.name=probe -c commit.gpgsign=false commit -qm base \
+    && git -C "$repo" tag base || { echo "  SELFTEST FAIL  touched: the fixture repo could not be built" >&2; return 1; }
+  printf 'b\n' >> "$repo/tests/check-hat.sh"; printf 'b\n' >> "$repo/tests/run-all.sh"
+  git -C "$repo" -c user.email=probe@sdd -c user.name=probe -c commit.gpgsign=false commit -qam hat && git -C "$repo" tag hat
+  touched_select "$repo" base..hat >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 0 ] && [ "${TOUCHED_SLUGS[*]-}" = 'HAT_A HAT_B' ] \
+    || { echo "  SELFTEST FAIL  touched: a diff of check-hat.sh selected '${TOUCHED_SLUGS[*]-}' (rc $rc), expected 'HAT_A HAT_B'" >&2; return 1; }
+  [ "${TOUCHED_OTHER[*]-}" = 'tests/run-all.sh' ] \
+    || { echo "  SELFTEST FAIL  touched: run-all.sh, which no mutant names as killer, was not named for the catalogue: '${TOUCHED_OTHER[*]-}'" >&2; return 1; }
+  [ "$TOUCHED_NOJOIN|$TOUCHED_UNMAPPED" = '1|1' ] \
+    || { echo "  SELFTEST FAIL  touched: killers that join nothing and slugs outside the map were counted '$TOUCHED_NOJOIN|$TOUCHED_UNMAPPED', expected '1|1'" >&2; return 1; }
+  printf 'c\n' >> "$repo/tests/check-gates.sh"
+  touched_select "$repo" hat >/dev/null 2>&1
+  [ "${TOUCHED_SLUGS[*]-}" = 'GATES_A' ] \
+    || { echo "  SELFTEST FAIL  touched: a single revision did not read the working tree: selected '${TOUCHED_SLUGS[*]-}', expected 'GATES_A'" >&2; return 1; }
+  rc=0; touched_select "$repo" no-such-rev >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] || { echo "  SELFTEST FAIL  touched: a revision that does not resolve answered rc $rc, expected 2" >&2; return 1; }
+  KILLER=(); rc=0; touched_select "$repo" base..hat >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] || { echo "  SELFTEST FAIL  touched: an empty map answered rc $rc, expected 2 — never '0 selected'" >&2; return 1; }
   return 0
 }
 
@@ -6109,6 +6160,61 @@ distinct_killers() { # the distinct steps of KILLER, one per line, sorted — a 
   printf '%s\n' ${KILLER[@]+"${KILLER[@]}"} | LC_ALL=C sort -u | sed '/^$/d'
 }
 
+# The join from a step title to the tests/check-*.sh its `run` line executes. check-health.sh sources
+# these two for its census of the suite (issue 192 moved them here, where --touched needs them too);
+# keep each one short and closed, the guard it reads them with.
+census_join() { # census_join <run-all.sh> — the file with every `\`-continued line joined onto one
+  sed -e ':a' -e '/\\$/N; s/[[:space:]]*\\\n[[:space:]]*/ /; ta' "$1"
+}
+census_file_of() { # census_file_of <step title> <joined run-all> — the tests/check-*.sh it runs
+  local hits
+  hits="$(grep -F -- "run \"$1\" \"\$ROOT/tests/check-" <<< "$2" \
+          | sed -n 's|.*"\$ROOT/tests/\(check-[a-z-]*\.sh\)".*|\1|p')" || true
+  printf '%s' "${hits%%$'\n'*}"
+}
+
+# touched_select <repo> <rev> — the slice of the catalogue a diff of tests/ calls for (issue 192).
+# CALLED, never read through $( ), because it publishes:
+#   TOUCHED_SLUGS     the slugs, in CATALOG order, whose killer step runs a touched sensor file
+#   TOUCHED_SENSORS   the touched files some mutant names as killer
+#   TOUCHED_OTHER     the touched tests/ paths no mutant names as killer — the catalogue answers for them
+#   TOUCHED_NOJOIN    killer steps of the map that join to no tests/check-*.sh
+#   TOUCHED_UNMAPPED  slugs of CATALOG with no line in the map
+# <rev> goes to `git diff` verbatim: one revision is compared with the working tree, a range with
+# its other end. Reads KILLER (load_killer_map) and RUNALL_JOINED (census_join of run-all.sh). An
+# empty map and a revision that does not resolve are refused with rc 2, said — "0 selected, rc 0"
+# would read as "nothing of yours to check" when the truth is "nothing to check WITH".
+touched_select() {
+  local repo="$1" rev="$2" paths p step f slug
+  local -A step_file=() sensor_set=() hit=()
+  TOUCHED_SLUGS=(); TOUCHED_SENSORS=(); TOUCHED_OTHER=(); TOUCHED_NOJOIN=0; TOUCHED_UNMAPPED=0
+  if [ "${#KILLER[@]}" -eq 0 ]; then
+    echo "check-mutation.sh: --touched has no killer map to read (${TOUCHED_MAP:-$KILLERS_FILE}) — \`sdd health\` writes it; until then --only <slug> [sensor.sh] runs one mutant" >&2
+    return 2
+  fi
+  if ! paths="$(git -C "$repo" diff --name-only "$rev" -- tests/ 2>/dev/null)"; then
+    echo "check-mutation.sh: --touched '$rev' resolves to no revision or range of $repo" >&2
+    return 2
+  fi
+  while IFS= read -r step; do
+    [ -n "$step" ] || continue
+    f="$(census_file_of "$step" "$RUNALL_JOINED")"
+    if [ -n "$f" ]; then step_file["$step"]="$f"; sensor_set["$f"]=1; else TOUCHED_NOJOIN=$((TOUCHED_NOJOIN + 1)); fi
+  done < <(distinct_killers)
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    f="${p#tests/}"
+    if [ -n "${sensor_set[$f]:-}" ]; then TOUCHED_SENSORS+=("$f"); hit["$f"]=1; else TOUCHED_OTHER+=("$p"); fi
+  done <<< "$paths"
+  for slug in "${CATALOG[@]}"; do
+    step="${KILLER[$slug]:-}"
+    if [ -z "$step" ]; then TOUCHED_UNMAPPED=$((TOUCHED_UNMAPPED + 1)); continue; fi
+    f="${step_file[$step]:-}"
+    if [ -n "$f" ] && [ -n "${hit[$f]:-}" ]; then TOUCHED_SLUGS+=("$slug"); fi
+  done
+  return 0
+}
+
 # rc_verdict <suite rc> → how the catalogue reads a mutant's rc: broken (90/91, the mutant never
 # applied), survived (0), missing (99, no rc written), timed-out (124, a step outlived its deadline
 # inside the mutant — run-all.sh's own number, issue #112) or caught. Its own function so that
@@ -6191,6 +6297,12 @@ if controls_selftest; then
   pass "controls: one control per distinct killer of the map, that killer first — a red or missing one refuses the score (selftest)"
 else
   echo "the controls by killer do not measure what they claim — refusing to score mutants with them" >&2
+  exit 1
+fi
+if touched_selftest; then
+  pass "touched: the diff selects the mutants its sensors killed (selftest)"
+else
+  echo "the --touched selection does not measure what it claims — refusing to run with it" >&2
   exit 1
 fi
 
@@ -6374,6 +6486,34 @@ if [ -n "$ONLY_SLUG" ]; then
   echo "hint only — \`sdd health\` runs the whole catalogue, and only it writes the mutation stamp"
   [ "$(rc_verdict "$rc")" = caught ]
   exit $?
+fi
+
+# ---------------------------------------------------------------------------
+# --touched <rev> [--list]: the mutants whose last killer is a sensor the diff touched (issue 192).
+# The map is the one `sdd health` writes; SDD_KILLERS_FILE overrides it HERE and nowhere else,
+# because the full catalogue WRITES the map and an override there would overwrite a fixture.
+# ---------------------------------------------------------------------------
+if [ -n "$TOUCHED_REV" ]; then
+  TOUCHED_MAP="${SDD_KILLERS_FILE:-$KILLERS_FILE}"
+  load_killer_map "$TOUCHED_MAP"
+  RUNALL_JOINED="$(census_join "$ROOT/tests/run-all.sh")"
+  touched_select "$ROOT" "$TOUCHED_REV" || exit $?
+  {
+    echo "== touched $TOUCHED_REV: ${#TOUCHED_SENSORS[@]} sensor file(s) of the diff killed ${#TOUCHED_SLUGS[@]} mutant(s) of the map =="
+    for p in ${TOUCHED_OTHER[@]+"${TOUCHED_OTHER[@]}"}; do
+      printf '  note  %s: no mutant of the map names it as killer — the catalogue answers for it (sdd health)\n' "$p"
+    done
+    [ "$TOUCHED_NOJOIN" -eq 0 ] \
+      || printf '  note  %d killer step(s) of the map join to no tests/check-*.sh — --only <slug> runs one of theirs\n' "$TOUCHED_NOJOIN"
+    [ "$TOUCHED_UNMAPPED" -eq 0 ] \
+      || printf '  note  %d mutant(s) of CATALOG have no line in the map — --only <slug> runs one, and sdd health maps them\n' "$TOUCHED_UNMAPPED"
+  } >&2
+  if [ "$TOUCHED_LIST" = 1 ]; then
+    printf '%s\n' ${TOUCHED_SLUGS[@]+"${TOUCHED_SLUGS[@]}"}
+    exit 0
+  fi
+  echo "check-mutation.sh: --touched without --list would run the selection, and that path is not here yet — use --list" >&2
+  exit 2
 fi
 
 # ---------------------------------------------------------------------------

@@ -1735,15 +1735,16 @@ CENSUS_FLOOR=9
 # skipped — the promise above is kept by refusing what the walk cannot classify.
 CENSUS_NOT_SENSORS=$'runner syntax (bash -n)\ncoordination helper syntax'
 CENSUS_EXEMPT=$'check-entrypoint.sh\ncheck-templates.sh'
-census_join() { # census_join <run-all.sh> — the file with every `\`-continued line joined onto one
-  sed -e ':a' -e '/\\$/N; s/[[:space:]]*\\\n[[:space:]]*/ /; ta' "$1"
-}
-census_file_of() { # census_file_of <step title> <joined run-all> — the tests/check-*.sh it runs
-  local hits
-  hits="$(grep -F -- "run \"$1\" \"\$ROOT/tests/check-" <<< "$2" \
-          | sed -n 's|.*"\$ROOT/tests/\(check-[a-z-]*\.sh\)".*|\1|p')" || true
-  printf '%s' "${hits%%$'\n'*}"
-}
+# census_join and census_file_of live in check-mutation.sh since issue 192 — its --touched mode joins
+# a killer step to its sensor file by the same title the census reads — and are SOURCED from there,
+# never copied: the killer_of guard, one short closed block or SENSOR-BROKEN, since an unterminated
+# range would source the rest of the catalogue.
+CENSUS_SRC="$(sed -n '/^census_join() {/,/^}$/p; /^census_file_of() {/,/^}$/p' "$ROOT/tests/check-mutation.sh")"
+{ [ "$(tail -n 1 <<< "$CENSUS_SRC")" = '}' ] && [ "$(grep -c . <<< "$CENSUS_SRC")" -le 10 ]; } \
+  || broken "census probe: tests/check-mutation.sh has no short census_join() and census_file_of() to join the suite with"
+eval "$CENSUS_SRC"
+declare -F census_join census_file_of >/dev/null \
+  || broken "census probe: sourcing tests/check-mutation.sh defined no census_join or census_file_of"
 census_kind_of() { # census_kind_of <step> <joined run-all> <tests dir> — skip | exempt <f> | bash <f> | py <f> | unknown <why>
   local f
   if grep -qxF -- "$1" <<< "$CENSUS_NOT_SENSORS"; then echo skip; return; fi
