@@ -4,6 +4,44 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-04 — Lote 3: a catraca desce
+
+**Problema (Gemba):** o `TODO.md` do kit tinha **57 achados abertos** (`todo-findings 57` em
+`5d55571`), 24 deles de agosto — o núcleo que sobreviveu a todos os lotes. A triagem cética de
+`20261003-lote-3-a-catraca-desce` separou 13 consertos mecânicos (5 fail-open: #63, #87, #113, #127,
+#169), 22 decisões de desenho (ficam para a leva 4), 20 saídas pela régua D15 e 2 refutados. E o
+`/sdd-plan` mandava delegar o grill a um subagente que não alcança o humano.
+
+**Medição** (antes: `5d55571`, e a suíte depois do I3, que só mexeu em prosa; depois: topo da branch):
+
+| Fato | Antes | Depois |
+|---|---|---|
+| Catraca `todo-findings` | 57 | 36 na branch (35 + N, N = 1: o `kaizen_reminder`) → 23 depois do chore pós-merge |
+| Saídas sem código | — | 22: 15 decididos, 2 YAGNI (`CONTEXT.md` Y5, Y6), 5 limites declarados em cabeçalho |
+| Consertos com `RESOLVED by` | — | 13, os 5 fail-open entre eles |
+| Catálogo de mutação | 580 | **592** (12 novos, 1 re-ancorado) |
+| Sensores que o `calibrate()` enxerga | 9 de 16 | 16 de 16 |
+| `check-todo --check ~/repos/ui24-agent/TODO.md` | 10 violações, vermelho para sempre | `--baseline HEAD`: `0 new … (10 inherited)` |
+| Controles do catálogo | 1, na ordem usual | 1 + 1 por assassino distinto do mapa (10 locais, 10/10 verdes, 300 s em paralelo) |
+| Mexer num sensor e saber o que ele mata | o catálogo inteiro (~40 min) | `--touched`: 6ad41f7 → 14 mutantes; o fixture, 2 de 2 em 4 s |
+| Chaves de caminho do config | cruas (`TODO_FILE='*'` alargava todo chapéu) | normalizadas e validadas no `load_config`, recusa pelo nome |
+| Suíte (`tests/run-all.sh`) | 285 s, 1755 asserções `ok` | 293 s, 1788 |
+
+**Contramedida:** cada conserto entrou com Red medido, sabotagem (mutante provado por `--only`, ou
+passada de sabotagem do selftest onde a mutação não alcança) e re-âncora do `TODO.md`. As saídas sem
+código foram para onde a próxima sessão as encontra: seção decidida, cabeçalho do sensor, tabela
+YAGNI. O `/sdd-plan` ganhou o protocolo de repasse e o aviso de trabalho longo.
+
+**Achados nascidos na leva (régua D15 na hora):** 1 item no `TODO.md` (o `kaizen_reminder`, irmão do
+#121); 1 limite declarado no `check-autonomy.sh` (a frase do kit-guard cai além do corte de 200 do
+`gate_why` sob um `TMPDIR` longo — falha fechada); 1 defeito da própria leva consertado nela (o SC1010
+do I7, `3cf0d0a`, que só a suíte inteira viu).
+
+**Ainda não medido:** o carimbo do `sdd health` com 592 mutantes, que roda depois dos bots — e a linha
+`with each of the N killer(s) of the map first`, que só ele imprime.
+
+---
+
 ## 2026-10-02 — Onde o comando do humano escreve
 
 **Problema (Gemba):** os comandos do começo e do fim da missão escreviam no lugar errado, e a suíte
