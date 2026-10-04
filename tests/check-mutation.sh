@@ -145,11 +145,17 @@ launch_order() {
     | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2n | cut -f3
 }
 
-# control_red <dir> — true once the control run has written a rc that is not 0.
+# control_red <dir> — true once ANY control has written a rc that is not 0: the control run in the
+# usual order (control.rc) or one of the controls by killer (control-first-<k>.rc, issue 169). No
+# slug of CATALOG starts with `control`, so the glob never reads a mutant's rc.
 control_red() {
-  local rc
-  rc="$(cat "$1/control.rc" 2>/dev/null || true)"
-  [ -n "$rc" ] && [ "$rc" != 0 ]
+  local f rc
+  for f in "$1"/control*.rc; do
+    [ -e "$f" ] || continue
+    rc="$(cat "$f" 2>/dev/null || true)"
+    if [ -n "$rc" ] && [ "$rc" != 0 ]; then return 0; fi
+  done
+  return 1
 }
 
 # control_verdict <dir> — 0 when the control came back green; otherwise prints why and returns 1.
@@ -160,6 +166,24 @@ control_verdict() {
   [ "$rc" = 0 ] && return 0
   printf 'HARNESS-BROKEN: the copy is not green even without sabotage (control rc %s)\n' "${rc:-none}"
   return 1
+}
+
+# controls_verdict <dir> — control_verdict, and then one control per distinct killer of the map
+# (FIRSTS, issue 169): each has to be green with ITS killer run first. The map reorders every
+# mutant's suite so its last killer runs first; a step that went red only for running first would
+# read a survivor as caught, and the usual-order control cannot see that. A control that wrote no rc
+# is not green. control_verdict stays as it is, because --only and pool_selftest read it alone.
+controls_verdict() {
+  local k rc
+  control_verdict "$1" || return 1
+  for ((k = 1; k <= ${#FIRSTS[@]}; k++)); do
+    rc="$(cat "$1/control-first-$k.rc" 2>/dev/null || true)"
+    [ "$rc" = 0 ] && continue
+    printf "HARNESS-BROKEN: the copy is not green with '%s' run first (control-first-%s rc %s)\n" \
+      "${FIRSTS[k-1]}" "$k" "${rc:-none}"
+    return 1
+  done
+  return 0
 }
 
 # control_run <dir> <control-fn> — runs the control in a subshell of its own and, if it came back
@@ -252,6 +276,54 @@ pool_selftest() {
   JOBS=1 run_pool "$d" st_control_slow st_mutant_alone m1 m2 m3
   [ ! -e "$d/overlap" ] || { echo "  SELFTEST FAIL  JOBS=1 ran two suites at once" >&2; return 1; }
   [ "$POOL_LAUNCHED" = 3 ] || { echo "  SELFTEST FAIL  JOBS=1: $POOL_LAUNCHED of 3 mutants launched" >&2; return 1; }
+  return 0
+}
+
+# controls_selftest — the controls by killer (issue 169), over stub boxes and stub mutants. Four
+# worlds: (a) every control green, each run with ITS killer first; (b) the box of the second killer
+# red, which the verdict refuses naming that killer and which stops the pool's launches; (c) a
+# control that wrote no rc, which is not green; (d) the distinct killers of a map, each once, in a
+# stable order. Defined here beside the other harness selftests and CALLED after the membership
+# pass further down, because it prints through pass(), which is defined there; it runs in every
+# mode, --anchors included. Locals shadow the globals for the functions it calls (bash scopes
+# dynamically), so nothing it sets outlives it.
+controls_selftest() {
+  local WORK="$WORK/controls-selftest" JOBS=2 why k
+  local -a FIRSTS=(stepA stepB)
+  local -A KILLER=() SECS=()
+  mkdir -p "$WORK"
+  for k in 1 2; do
+    mkdir -p "$WORK/control-first-$k/tests"
+    { printf '#!/usr/bin/env bash
+'
+      printf 'printf %%s "${SDD_MUTANT_FIRST-unset}" > %q
+' "$WORK/env-$k"
+      printf 'exit "$(cat %q 2>/dev/null || echo 0)"
+' "$WORK/exit-$k"
+    } > "$WORK/control-first-$k/tests/run-all.sh"
+    chmod +x "$WORK/control-first-$k/tests/run-all.sh"
+  done
+  cs_control_green() { echo 0 > "$WORK/control.rc"; }
+  cs_mutant()        { sleep 0.3; }
+  # (a)
+  cs_control_green; run_job @first:1; run_job @first:2
+  controls_verdict "$WORK" >/dev/null || { echo "  SELFTEST FAIL  controls: every control green, and the verdict refused" >&2; return 1; }
+  [ "$(cat "$WORK/env-1" 2>/dev/null)|$(cat "$WORK/env-2" 2>/dev/null)" = 'stepA|stepB' ] \
+    || { echo "  SELFTEST FAIL  controls: each box did not run with its own killer first (got '$(cat "$WORK/env-1" 2>/dev/null)|$(cat "$WORK/env-2" 2>/dev/null)')" >&2; return 1; }
+  # (b)
+  echo 1 > "$WORK/exit-2"; run_first_control 2
+  why="$(controls_verdict "$WORK")" && { echo "  SELFTEST FAIL  controls: a red control with stepB first was read as green" >&2; return 1; }
+  case "$why" in *"'stepB' run first"*) : ;; *) echo "  SELFTEST FAIL  controls: the refusal did not name the killer: $why" >&2; return 1 ;; esac
+  run_pool "$WORK" cs_control_green cs_mutant m1 m2 m3 m4 m5 m6 m7 m8
+  [ "$POOL_LAUNCHED" -le "$JOBS" ] \
+    || { echo "  SELFTEST FAIL  controls: a red control by killer still let $POOL_LAUNCHED of 8 mutants launch, expected at most $JOBS" >&2; return 1; }
+  # (c)
+  echo 0 > "$WORK/exit-2"; run_first_control 2; rm -f "$WORK/control-first-1.rc"
+  controls_verdict "$WORK" >/dev/null && { echo "  SELFTEST FAIL  controls: a control with no rc was read as green" >&2; return 1; }
+  # (d)
+  KILLER=([x]=stepB [y]=stepA [z]=stepB)
+  [ "$(distinct_killers | tr '\n' ' ')" = 'stepA stepB ' ] \
+    || { echo "  SELFTEST FAIL  controls: distinct killers of {stepB, stepA, stepB} read '$(distinct_killers | tr '\n' ' ')', expected 'stepA stepB '" >&2; return 1; }
   return 0
 }
 
@@ -6018,6 +6090,25 @@ run_mutant() {
   [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ] || killer_of "$box.log" > "$box.killer"
 }
 
+# The controls by killer (issue 169). FIRSTS holds the distinct killers of the map, one control
+# each, run in a sandbox of its own with that killer first — the order the map hands the mutants it
+# killed. They ride the pool as pseudo-jobs named `@first:<k>`, ahead of the mutants; a red one stops
+# the launches as a red control does (control_red reads every control*.rc), and controls_verdict
+# refuses the score. They never score: the scoring loop reads CATALOG, never ORDER.
+FIRSTS=()
+run_first_control() { # run_first_control <k> — writes $WORK/control-first-<k>.rc and .log
+  local box="$WORK/control-first-$1" rc=0
+  [ -d "$box" ] || sandbox "$box"
+  SDD_MUTANT=1 SDD_MUTANT_FIRST="${FIRSTS[$1-1]}" "$box/tests/run-all.sh" > "$WORK/control-first-$1.log" 2>&1 || rc=$?
+  echo "$rc" > "$WORK/control-first-$1.rc"
+}
+run_job() { # run_job <slug | @first:<k>> — the pool's one job function
+  case "$1" in @first:*) run_first_control "${1#@first:}" ;; *) run_mutant "$1" ;; esac
+}
+distinct_killers() { # the distinct steps of KILLER, one per line, sorted — a function so a selftest measures it
+  printf '%s\n' ${KILLER[@]+"${KILLER[@]}"} | LC_ALL=C sort -u | sed '/^$/d'
+}
+
 # rc_verdict <suite rc> → how the catalogue reads a mutant's rc: broken (90/91, the mutant never
 # applied), survived (0), missing (99, no rc written), timed-out (124, a step outlived its deadline
 # inside the mutant — run-all.sh's own number, issue #112) or caught. Its own function so that
@@ -6042,7 +6133,8 @@ killer_of() {
 # above PASS in run-all.sh: over 40 mutants of 583b3c3 the suite summed 4796/4828 s before, 1959 s
 # after). It is an ORDER hint and nothing else — a stale or garbled line costs time and changes no
 # step a mutant runs, because run-all.sh still runs every step of a mutant the named one did not kill.
-# That the ORDER moves no verdict either is measured, not asserted (the same note). It lives in
+# That the ORDER moves no verdict is asserted since issue 169: one control per distinct killer of
+# the map, that killer first, has to come back green or the score is refused. It lives in
 # .sdd/cache/, gitignored and OUTSIDE the four directories of mutation_stamp_key, so learning it
 # never invalidates a stamp.
 # The seconds are the mutant's own suite time; the pool reads them to launch the longest first.
@@ -6095,6 +6187,12 @@ if [ -n "$orphans" ]; then
   exit 1
 fi
 pass "the catalogue lists ${#CATALOG[@]} mutants (floor $CATALOGUE_FLOOR), every mut_* defined in this file among them, each once"
+if controls_selftest; then
+  pass "controls: one control per distinct killer of the map, that killer first — a red or missing one refuses the score (selftest)"
+else
+  echo "the controls by killer do not measure what they claim — refusing to score mutants with them" >&2
+  exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # --anchors: apply every mutant to a copy of bin/ and stop there — no suite, no control run.
@@ -6173,9 +6271,12 @@ fi
 
 # The control of the catalogue: the whole suite on an unsabotaged copy (see CONTROL run below).
 # Defined here because --only, the next block, runs the same control before reading its one mutant.
+# CONTROL_FIRST is the step it runs first: empty — the usual order, said explicitly and never
+# inherited from the environment — except under --only, whose control runs in its mutant's order.
+CONTROL_FIRST=''
 run_control() {
   local rc=0
-  SDD_MUTANT=1 "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1 || rc=$?
+  SDD_MUTANT=1 SDD_MUTANT_FIRST="${CONTROL_FIRST:-}" "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1 || rc=$?
   echo "$rc" > "$WORK/control.rc"
 }
 
@@ -6220,6 +6321,7 @@ if [ -n "$ONLY_SLUG" ]; then
     what="the suite"
     load_killer_map "$KILLERS_FILE"
     echo "== --only $ONLY_SLUG: control and mutant, each a whole suite run (minutes) =="
+    CONTROL_FIRST="${KILLER[$ONLY_SLUG]:-}"
     run_control &
     run_mutant "$ONLY_SLUG"
     wait
@@ -6293,6 +6395,16 @@ sandbox "$WORK/control"
 load_killer_map "$KILLERS_FILE"
 echo "== killer map: ${#KILLER[@]} mutant(s) run their last killer first, ${#SECS[@]} with a recorded time =="
 mapfile -t ORDER < <(for slug in "${CATALOG[@]}"; do printf '%s\t%s\n' "$slug" "${SECS[$slug]:-}"; done | launch_order)
+# One control per distinct killer of the map, that killer first, ahead of every mutant (issue 169).
+# An empty map is zero of them. NOT probed here, and declared: these lines and the verdict call
+# below — the selftest drives the functions, and the proof of the wiring is the line the next
+# `sdd health` prints, `the kit copy is green with no sabotage, in the usual order and with each of
+# the N killer(s) of the map first`.
+mapfile -t FIRSTS < <(distinct_killers)
+first_jobs=()
+for k in ${FIRSTS[@]+"${!FIRSTS[@]}"}; do first_jobs+=("@first:$((k + 1))"); done
+ORDER=(${first_jobs[@]+"${first_jobs[@]}"} "${ORDER[@]}")
+echo "== controls by killer: ${#FIRSTS[@]} distinct killer(s) of the map, each run first once =="
 
 # ---------------------------------------------------------------------------
 # A pool, not batches: the old `[ i % JOBS -eq 0 ] && wait` was a barrier every JOBS mutants, so
@@ -6302,14 +6414,14 @@ mapfile -t ORDER < <(for slug in "${CATALOG[@]}"; do printf '%s\t%s\n' "$slug" "
 # The launch order is launch_order's: no recorded time first, then the longest first.
 if (: & wait -n) 2>/dev/null; then
   echo "== mutants (pool of $JOBS, longest first) =="
-  run_pool "$WORK" run_control run_mutant "${ORDER[@]}"
+  run_pool "$WORK" run_control run_job "${ORDER[@]}"
 else
   echo "== mutants (batches of $JOBS — this bash has no 'wait -n': the control runs first) =="
   control_run "$WORK" run_control
   if ! control_red "$WORK"; then
     i=0
     for slug in "${ORDER[@]}"; do
-      run_mutant "$slug" &
+      run_job "$slug" &
       i=$((i + 1))
       [ $((i % JOBS)) -eq 0 ] && wait
     done
@@ -6317,8 +6429,8 @@ else
   fi
 fi
 
-if why="$(control_verdict "$WORK")"; then
-  pass "the kit copy is green with no sabotage"
+if why="$(controls_verdict "$WORK")"; then
+  pass "the kit copy is green with no sabotage, in the usual order and with each of the ${#FIRSTS[@]} killer(s) of the map first"
 else
   fail "$why" "the score would read 100% by vacuity — see $WORK/control.log"
   tail -20 "$WORK/control.log" >&2

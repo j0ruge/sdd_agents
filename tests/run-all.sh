@@ -91,7 +91,9 @@ done
 # of check-health.sh assert all three). What the set does not settle is the ORDER: a sensor that
 # went red only for running first would read a survivor as caught. That no step does was MEASURED
 # — the kit with no sabotage, under SDD_MUTANT, each of its 13 steps named first: 13 of 13 green
-# (2026-09-25) — and no sensor asserts it (TODO.md). Outside a mutant the variable is ignored.
+# (2026-09-25) — and since issue 169 the catalogue asserts it on every run: one control per distinct
+# killer of the map, that killer first, must be green or the score is refused (controls_verdict in
+# check-mutation.sh). Outside a mutant the variable is ignored.
 # (A FIRST_RAN flag guarding the skip was tried and removed with no probe to turn it red: no world
 # was BUILT where the name matches in one pass and not the other, because every condition in
 # steps() reads state set before both passes. A condition reading state that a step WRITES would be
