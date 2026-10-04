@@ -5473,6 +5473,47 @@ assert_eq "an entry for a hat that already writes anywhere neither refuses nor n
 hwx_set ''
 
 # ---------------------------------------------------------------------------
+# The PATH keys — TODO_FILE, HANDOFF_DIR, QA_DOCS_PATH, E2E_DIR — become `writes:` globs through
+# hat_expand, and hat_path_allowed matches those as shell GLOBS (issue 127). Raw, a value fails both
+# ways: `./TODO.md` matches no path git reports, a false hat-crossed that stops a target's line, and
+# `TODO_FILE='*'` matches bin/sdd — and HAT_WRITES_BASE hands $TODO_FILE to EVERY hat. load_config
+# normalises a leading `./` and a trailing `/`, and refuses what is not a literal path inside the
+# repo, naming the key: `HANDOFF_DIR=../handoffs` already died before, for another reason
+# (resolve_mission), so the needle is the key's name and not the death alone.
+pk_set() { # pk_set <KEY> <value> — one path key, over a pristine config
+  cp "$HWX_CFG_BASE" .sdd/config.sh
+  printf '%s=%s\n' "$1" "$2" >> .sdd/config.sh
+}
+pk_probe() { # pk_probe <KEY> <value> — "died|<n>": the run died, and <n> lines name `KEY=`
+  local out rc=0
+  pk_set "$1" "$2"
+  out="$( "$SDD" status "$MISSION" --no-gates 2>&1 )" || rc=$?
+  printf '%s|%s\n' "$( [ "$rc" -ne 0 ] && echo died || echo lived )" \
+                   "$( grep -cF -- "$1=" <<< "$out" | head -1 )"
+}
+pk_norm() { # pk_norm <KEY> <bare value> <phase> — "bare:<n> dotted:<n>" in the projected writes=
+  local w
+  pk_set "$1" "./$2/"
+  w="$(hwx_writes "$3")"
+  printf 'bare:%s dotted:%s\n' "$( grep -cE "(^|, )$2(/|,|$)" <<< "$w" )" "$( grep -cF "./$2" <<< "$w" )"
+}
+assert_eq "path key TODO_FILE: ./<x> is normalized before it becomes a writes: glob" "bare:1 dotted:0" \
+  "$( pk_norm TODO_FILE TODO.md REVIEW )"
+assert_eq "path key HANDOFF_DIR: ./<x> is normalized before it becomes a writes: glob" "bare:1 dotted:0" \
+  "$( pk_norm HANDOFF_DIR docs/handoffs REVIEW )"
+assert_eq "path key QA_DOCS_PATH: ./<x> is normalized before it becomes a writes: glob" "bare:1 dotted:0" \
+  "$( pk_norm QA_DOCS_PATH docs/qa QA )"
+assert_eq "path key E2E_DIR: ./<x> is normalized before it becomes a writes: glob" "bare:1 dotted:0" \
+  "$( pk_norm E2E_DIR e2e QA )"
+assert_eq "path key TODO_FILE: a glob is refused by name" "died|1" "$( pk_probe TODO_FILE "'*'" )"
+assert_eq "path key HANDOFF_DIR: a climb out with .. is refused by name" "died|1" \
+  "$( pk_probe HANDOFF_DIR '../handoffs' )"
+assert_eq "path key QA_DOCS_PATH: a metacharacter is refused by name" "died|1" \
+  "$( pk_probe QA_DOCS_PATH "'docs/q?a'" )"
+assert_eq "path key E2E_DIR: an absolute path is refused by name" "died|1" "$( pk_probe E2E_DIR /srv/e2e )"
+hwx_set ''
+
+# ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then
   echo "state machine correct"

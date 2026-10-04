@@ -196,11 +196,21 @@ rm -f "$FIX/src-wip.txt"
 echo "== a & in a config path survives hat_expand =="
 # bash 5.2 patsub_replacement: an unquoted replacement re-inserts the match on `&`, and every hat's
 # writes: begins with $TODO_FILE (HAT_WRITES_BASE) — measured by the review of this branch.
-sed -i '/^TODO_FILE=/d' .sdd/config.sh; printf 'TODO_FILE="R&D/TODO.md"\n' >> .sdd/config.sh
-outamp="$( "$SDD" run "$MISSION" --dry-run --phase REVIEW 2>&1 )"
-assert_eq "hat: an & in TODO_FILE is expanded literally, not as the matched placeholder" "1" \
-  "$(printf '%s\n' "$outamp" | boundary_of REVIEW | grep -cF 'writes=R&D/TODO.md, ')"
-sed -i '/^TODO_FILE=/d' .sdd/config.sh
+# Since issue 127 load_config refuses an `&` in a path key, so a config can no longer carry one to
+# here; the quoting is held to account by calling hat_expand DIRECTLY instead — sourced minus the
+# last line, the way check-adr.sh probes it — for a value that reaches it by any other road.
+cat > "$SDD_STATE_FIX/amp-probe.sh" <<'AMP'
+set -uo pipefail
+# shellcheck disable=SC1090
+source <(sed '$d' "$1") >/dev/null 2>&1
+set +e
+declare -F hat_expand >/dev/null || { echo NOFUNC; exit 3; }
+HANDOFF_DIR="docs/handoffs"; MISSION="m"; TODO_FILE="R&D/TODO.md"
+QA_DOCS_PATH="docs/qa"; E2E_DIR="e2e"; ADR_DIR="docs/adr"
+hat_expand "$HAT_WRITES_BASE"
+AMP
+assert_eq "hat: an & in TODO_FILE is expanded literally, not as the matched placeholder" \
+  "R&D/TODO.md, tests/health-baseline.txt" "$(bash "$SDD_STATE_FIX/amp-probe.sh" "$SDD" 2>/dev/null)"
 
 # --- the phase session is projected as a STREAM ----------------------------
 # `--output-format stream-json` and `--verbose` are ONE flag, not two. Without the second, the

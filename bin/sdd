@@ -270,6 +270,25 @@ load_config() {
       || die "HAT_WRITES_EXTRA path '$_hwx_path' (hat $_hwx_hat) is not a literal path inside the repo — relative, no '..', and no metacharacter except a trailing '/**' on a named directory"
   done < <(hat_writes_extra_each)
 
+  # The PATH keys become `writes:` globs (hat_expand), and hat_path_allowed matches those as shell
+  # GLOBS, so a raw value fails both ways (issue 127): `./TODO.md` matches no path git reports — a
+  # false hat-crossed that stops the target's line — and `TODO_FILE='*'` matches bin/sdd, widening
+  # EVERY hat's frontier, since HAT_WRITES_BASE carries $TODO_FILE. Normalised and validated HERE,
+  # never at the point of use: hat_writes is read through `$( )`, and a die there would die in the
+  # subshell and hand back the empty list — the spelling of "this hat writes anywhere". The grammar
+  # is adr_dir_ok's, the guard ADR_DIR already passes through. Not here, and declared: ADR_DIR
+  # (adr_mode guards it), SPEC_DIR (may be empty), and the readers through config_read_key
+  # (cmd_install, autonomy), which use a key as a filesystem path and never as a glob.
+  local _pk _pv
+  for _pk in TODO_FILE HANDOFF_DIR QA_DOCS_PATH E2E_DIR; do
+    _pv="${!_pk}"
+    while [ "${_pv#./}" != "$_pv" ]; do _pv="${_pv#./}"; done
+    while [ "${_pv%/}" != "$_pv" ]; do _pv="${_pv%/}"; done
+    adr_dir_ok "$_pv" \
+      || die "$_pk='${!_pk}' in $CONFIG_FILE is not a literal path inside the repo — relative, no '.' or '..' component, and only letters, digits, '.', '_' and '-' in each name"
+    printf -v "$_pk" '%s' "$_pv"
+  done
+
   [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME is empty in $CONFIG_FILE"
   [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH is empty in $CONFIG_FILE"
   [ -n "$TEST_CMD" ]       || die "TEST_CMD is empty in $CONFIG_FILE (it is the EXEC gate)"
@@ -2499,15 +2518,17 @@ hat_mcp() {   # hat_mcp <step> — the MCP servers the hat may see; "" ⇒ --str
 }
 
 hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_DOCS_PATH $E2E_DIR $ADR_DIR
-  local s="$1" hd="$HANDOFF_DIR"
-  while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
+  local s="$1"
+  # The four path keys arrive normalised by load_config (no leading `./`, no trailing `/`, a literal
+  # path inside the repo), so they are substituted as they are; trimming them again here would hide
+  # a load_config that stopped normalising.
   # Replacements QUOTED: under bash 5.2's patsub_replacement an unquoted `&` in the value
   # re-inserts the matched placeholder (measured: TODO_FILE='R&D/TODO.md' → R$TODO_FILED/TODO.md).
-  s="${s//\$HANDOFF_DIR/"$hd"}"
+  s="${s//\$HANDOFF_DIR/"$HANDOFF_DIR"}"
   s="${s//\$MISSION/"$MISSION"}"
   s="${s//\$TODO_FILE/"$TODO_FILE"}"
-  s="${s//\$QA_DOCS_PATH/"${QA_DOCS_PATH%/}"}"
-  s="${s//\$E2E_DIR/"${E2E_DIR%/}"}"
+  s="${s//\$QA_DOCS_PATH/"$QA_DOCS_PATH"}"
+  s="${s//\$E2E_DIR/"$E2E_DIR"}"
   # ADR_DIR can never be empty here: adr_mode() refuses that value, and `$ADR_DIR/**` expanded
   # from an empty one would read as `/**` — a hat declaring it may write the whole filesystem.
   s="${s//\$ADR_DIR/"${ADR_DIR%/}"}"

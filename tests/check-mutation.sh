@@ -4740,11 +4740,28 @@ mut_RUN_review_scope_blind() {   # since the hat's boundary: every path reads as
 # the one time something is. Caught by `a trailing slash in HANDOFF_DIR does not turn a healthy
 # round into a warning` in check-autonomy.sh — the regime whose config carries the slash.
 #
-# Anchored on the FUNCTION range, like its siblings: `$MISSION` and `$HANDOFF_DIR` appear together
-# elsewhere in this runner, and a pattern that drifted would sabotage a path expression somewhere
-# else while still looking applied.
-mut_RUN_review_scope_handoff_dir_verbatim() {   # since the hat's boundary: hat_expand keeps the slash
-  sed -i '/^hat_expand() {/,/^}/ s@^  while \[ "\${hd%/}" != "\$hd" \]; do hd="\${hd%/}"; done$@  :@' "$1"
+# Anchored on the FUNCTION range, like its siblings: the same trim is spelled elsewhere in this
+# runner, and a pattern that drifted would sabotage a path expression somewhere else while still
+# looking applied. Re-anchored in 20261003-lote-3-a-catraca-desce (issue 127): the slash is trimmed
+# ONCE, where load_config normalises the path keys, and hat_expand substitutes the value as it is —
+# with the trim still in hat_expand this mutant was not caught.
+mut_RUN_review_scope_handoff_dir_verbatim() {   # since issue 127: load_config keeps the slash
+  sed -i '/^load_config() {/,/^}/ s@^    while \[ "\${_pv%/}" != "\$_pv" \]; do _pv="\${_pv%/}"; done$@    :@' "$1"
+}
+
+# The path keys go back to raw (issue 127): load_config validates them and then hands the CALLER's
+# spelling to the rest of the runner, so `./TODO.md` becomes the writes: glob `./TODO.md`, which
+# matches no path git reports — a false hat-crossed on the target's line. Caught by the `path key
+# <KEY>: ./<x> is normalized` assertions of check-gates.sh.
+mut_RUN_config_path_keys_raw() {
+  sed -i '/^load_config() {/,/^}/ s|^    printf -v "\$_pk" .%s. "\$_pv"$|    :|' "$1"
+}
+
+# The path keys go unvalidated: `TODO_FILE='*'` builds the glob `*` in HAT_WRITES_BASE and every hat
+# may write bin/sdd — the fail-open of issue 127. Caught by the four `path key <KEY>: ... is refused
+# by name` assertions of check-gates.sh.
+mut_RUN_config_path_keys_unvalidated() {
+  sed -i '/^load_config() {/,/^}/ s|^    adr_dir_ok "\$_pv" \\$|    true \\|' "$1"
 }
 
 # The same noise, reached from the OTHER side of the same match — and this time it is git writing
@@ -5794,6 +5811,8 @@ CATALOG=(
   RUN_review_fixes_inline
   RUN_review_scope_blind
   RUN_review_scope_handoff_dir_verbatim
+  RUN_config_path_keys_raw
+  RUN_config_path_keys_unvalidated
   RUN_review_scope_quotepath_default
   RUN_journal_write_stops_the_line
   RUN_journal_raw_redirection_error
