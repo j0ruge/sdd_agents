@@ -46,7 +46,9 @@ trap 'rm -rf "$WORK"' EXIT
 #
 # The cost is real and worth naming: Portuguese PROSE could creep into those two files unseen. The
 # fix that would restore coverage is to move the template contract out into a data file, leaving
-# the script pure English logic — recorded in TODO.md, not done here.
+# the script pure English logic. ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in
+# 20261003-lote-3-a-catraca-desce: neither file fails open — the exclusion is explicit, listed here
+# and in CLAUDE.md § Idioma, and no consumer outside the kit reads the prose of either.
 surface() {
   ( cd "$ROOT" && ls -1 bin/sdd bin/sdd-link-agents bin/sdd-coordination.py agents/sdd-*.md .claude/agents/sdd-*.md \
       docs/pipeline.md docs/failure-modes.md docs/graphify.md docs/adr/*.md README.md \

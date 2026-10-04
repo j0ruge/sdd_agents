@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão interativa ao avaliar o `/insights`, sem missão (2026-10-01)
 
 - [ ] **A regra da âncora aceita qualquer símbolo citado que reapareça perto, e uma âncora podre passa** —
-  `tests/check-todo.sh:2005` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
+  `tests/check-todo.sh:2013` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
   basta; identificador que se repete no arquivo inteiro casa em qualquer lugar. Medido em `b3b6b98`:
   `tests/check-autonomy.sh:6486` apontava para `exit 0` e passou verde porque `GIT_REFLOG_ACTION`
   está em 6400 — o sensor disse `every anchor on target`. Direção: exigir o símbolo na própria linha
@@ -64,15 +64,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: ancorar o gênero no MESMO bloco contíguo de `- **…:**` que traz a linha `Status:`.
   — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
 
-- [ ] **Nada impede a próxima invocação de `sdd health` sem `cd`, e ela mede a árvore de quem
-  chamou** — `tests/check-health.sh:324` — desde o F2 o `health_kit_root` deixa o diretório
-  corrente escolher a árvore medida, então um chamador que não fixa o `cd` mede o que estiver em
-  volta. Medido, não temido: o fixture do sensor passou a medir ESTE repo (catálogo real, 20 a 50
-  min) e, dentro de uma sandbox do `check-mutation.sh`, recursaria num segundo catálogo por
-  mutante. O sítio foi fixado; nenhum sensor recusa o próximo. Direção: regra que enumere as
-  invocações de `bin/sdd` dos fixtures e exija `cd` fixado. — descoberto por `sdd-executor` na
-  missão `20260819-fecho-...` (2026-08-19)
-
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
   `bin/sdd:2041` contra `tests/check-mutation.sh:5845` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
@@ -81,15 +72,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `CLAUDE.md`, e chavear nele custaria uma segunda rodada de ~20 min por missão). Direção: ler a
   lista do próprio `sandbox()`, decidido o custo. — descoberto por `sdd-executor` na missão
   `20260819-fecho-...` (2026-08-19)
-
-- [ ] **O `tail_of` aceita qualquer par de crases como se fosse a atribuição** —
-  `tests/check-todo.sh:293` — a regra pergunta "o rabo tem um code span", não "o rabo nomeia um
-  agente", então um título com código inline satisfaz a metade da atribuição do mesmo jeito que
-  já satisfaz a da âncora (fraqueza espelhada, e só a da âncora está declarada no cabeçalho).
-  A forma aguda virou conserto; a que sobra é REGRESSÃO desta missão, medida em diferencial (o
-  sensor do merge-base recusa o item, este aceita). Fechar exige a re-derivação semântica posta
-  fora de escopo: toda regra sintática tentada inventa 5 violações no arquivo real.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:135`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
@@ -105,14 +87,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   por missão para sempre, e é justamente o que o humano vai querer abrir. Não é urgente — é
   gitignored e local. Direção: reter as N sessões mais recentes por missão, ou comprimir o stream
   ao fim da fase. — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
-- [ ] **Sensor pulado por `SDD_MUTANT` vira ponto cego sem aviso** — `tests/run-all.sh:290` —
-  sensores são pulados dentro do mutante (hoje o lint e os quatro de `:224-248`). É aposta que vence
-  sozinha: no I3 o `check-preflight.sh`
-  ganhou asserção de comportamento do runner, e a linha que o pulava virou a escondedora da única
-  sensora de `RUN_install_no_guard`. O sintoma chega como "mutação não capturada", e o conserto
-  tentador é `KNOWN_GAPS`. Direção: reprovar guarda de `SDD_MUTANT` em arquivo que invoca `bin/sdd`.
-  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O gate PLAN-AUTO aceita Check que já nasce verde** — `templates/missao.md:45` — o critério
   `d` cobra `Check executável (comando → esperado)`, não "Check que
@@ -140,7 +114,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **Piso anti-vacuidade que fica para trás continua PASSANDO, e nada avisa** —
-  `tests/check-lang.sh:178` — o piso dizia 37 caminhos contra 40 reais: as ADRs 0004–0006 entraram
+  `tests/check-lang.sh:180` — o piso dizia 37 caminhos contra 40 reais: as ADRs 0004–0006 entraram
   pelo glob `docs/adr/*.md` sem tocar o número, e piso menor que a superfície certifica menos do
   que lê. Corrigido para 41 no I4, mas a **classe** segue viva — todo piso que convive com um glob
   (`REVIEW_FLOOR`, `LINT_FLOOR`, os de `check-pipefail.sh`) falha igual, e é a segunda vez que este
@@ -211,14 +185,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   divergem e o `die` da `:10086` mata. ⚠️ **`--series` NÃO passa por ela** — sai na `:10073`, medido
   nas duas formas de invocação, saída idêntica. Direção: `ledger_repo_root` dos dois lados, com par
   diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
-
-- [ ] **A regra `cdpath:` certifica como limpo o `cd` de operando VARIÁVEL** —
-  `tests/check-pipefail.sh:289` (o comentário do `CD_RE` declara o limite) — a regra só mede
-  operando que é substituição de comando, porque `cd "$FIX"` é indecidível no scanner e os ~150
-  sítios de `tests/` têm variável absoluta. Só que a única instância histórica da classe era
-  exatamente essa forma (`cd "$common"` do `ledger_repo_root`, uma CRITICAL), então a forma que
-  mais custou é a que o sensor não vê. Direção: medir em runtime, não por linha.
-  — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **Nenhuma chave de caminho do `.sdd/config.sh` é normalizada antes de virar padrão de `case`**
   — `bin/sdd:2505` — `hat_expand` troca `$TODO_FILE` **literalmente** no `writes:` do chapéu, lido contra
@@ -298,16 +264,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Idioma
 
-- [ ] **Dois arquivos ficam fora do sensor de idioma** — `tests/check-lang.sh` (função
-  `surface()`) — as exclusões são corretas e documentadas (em `check-templates.sh` as regexes
-  PT-BR **são** o contrato dos templates; em `check-lang.sh` o dicionário precisa conter o que
-  detecta), mas nesses dois arquivos prosa portuguesa passa despercebida. Direção: mover o
-  contrato dos templates para `tests/template-contract.txt` (dados), deixando a lógica inglesa;
-  sobra o `check-lang.sh`, irredutível e por isso com `selftest()`. — descoberto por
-  `sdd health`/`check-lang` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
-
 - [ ] **`surface()` do `check-lang.sh` ENUMERA arquivos em vez de casar `docs/*.md`** —
-  `tests/check-lang.sh:50` — um doc novo em `docs/` nasce **fora** da régua de idioma enquanto o
+  `tests/check-lang.sh:52` — um doc novo em `docs/` nasce **fora** da régua de idioma enquanto o
   `CLAUDE.md § Idioma` promete `docs/` inteiro; o I4 cobriu `docs/graphify.md` **um arquivo por
   vez**, que é o remendo e não o conserto. Direção: glob, com o piso derivado junto — é decisão,
   porque glob e piso enumerado são a mesma discussão do item do piso acima.
@@ -356,7 +314,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
 
 - [ ] **O mapa de assassinos reordena a suíte e confia que nenhum sensor muda de resposta por rodar primeiro** —
-  `tests/run-all.sh:374` — sob `SDD_MUTANT_FIRST` o CONJUNTO de passos de um mutante é o mesmo (as probes
+  `tests/run-all.sh:386` — sob `SDD_MUTANT_FIRST` o CONJUNTO de passos de um mutante é o mesmo (as probes
   `surface:` do `check-health.sh` o provam), mas a ORDEM muda, e um passo que ficasse vermelho só por rodar
   primeiro faria um sobrevivente ler como pego: fail-open. Medido 13 de 13 verde em 2026-09-25 (kit sem
   sabotagem, cada passo nomeado primeiro), sem sensor que o repita. Direção: o controle do catálogo roda

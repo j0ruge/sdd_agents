@@ -69,6 +69,14 @@
 #   19. a kit that is not a git checkout is warned about and never stamped, and health stays green:
 #      the stamp keys on tracked content and no gate can demand one there (ADR 0014, increment I4).
 #      Prefixed `stamp:`.
+#   ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in 20261003-lote-3-a-catraca-desce: no rule refuses
+#      the NEXT `sdd health` invocation of a fixture that forgets to pin its `cd`, and the
+#      caller's cwd picks the measured tree (the comment above health_run says why that is
+#      load-bearing). Measured not to fail open today: every invocation pins it — 10 sites by
+#      `grep -n 'sdd" health' tests/*.sh`, this line left out, each inside `( cd "$X" && … )` —
+#      and since #112 a run that wanders into the real catalogue dies at its step deadline
+#      (run-all.sh, step_timeout), red and named; inside a mutant that is rc 124, read as
+#      TIMED-OUT (inconclusive), never as caught.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #

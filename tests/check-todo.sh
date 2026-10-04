@@ -118,8 +118,9 @@
 #
 # ── Declared debt, admitted here instead of into the backlog (the D15 rule of CLAUDE.md) ────────
 # A finding earns a TODO.md entry when the sensor CLAIMS to measure what it does not (fail-open)
-# or when the defect has a consumer outside the kit's own suite. These two are neither: they fail
-# CLOSED, and the only reader they inconvenience is whoever writes in this repo's own TODO.md.
+# or when the defect has a consumer outside the kit's own suite. None below is either: each fails
+# CLOSED or costs only cosmetics, and the only reader they inconvenience is whoever writes in this
+# repo's own TODO.md.
 # Written down is the point — declared debt is a limit, undeclared debt is the fail-open this whole
 # header exists to refuse.
 #
@@ -147,6 +148,13 @@
 #     than moving prose to a continuation. What bounds it is the format — title, one pointer, a
 #     date — and three records of this repo's TODO.md run 178 to 249 characters under it. Found
 #     by /codereview on feat/todo-esqueleto-neutro (2026-09-25).
+#   - The found-by rule (tail_of) asks whether the tail HAS a code span, not whether it NAMES an
+#     agent: a decoy span sitting later in the tail satisfies the presence check and names
+#     nobody (the differential is in the comment beside that rule, in the awk program below). It
+#     stays because it costs only cosmetics — the ok line never claims an agent — and practice
+#     already accepts a found-by that is not an agent: 3 live items carry a prose tail (a session,
+#     a triage) whose only span is a branch, a slug or a command. ⚠️ DECLARED LIMIT (D15), moved
+#     here from TODO.md in 20261003-lote-3-a-catraca-desce.
 #
 # TWO measured weaknesses, stated rather than hidden. The first is the header: nothing here
 # models a fence, so a stray or unbalanced fence in the header — which makes GitHub render the
@@ -363,8 +371,8 @@ todo_awk() {
         # on the real file — requiring the span to be the last content before the date rejects
         # five well-formed items, because real found-by fields legitimately carry prose after
         # the agent name. Closing it needs the semantic re-derivation that 00-missao.md put out
-        # of scope by name. Filed in TODO.md with this differential; the mirror weakness on
-        # head_of is declared in this sensor header, and now so is this one.
+        # of scope by name. Declared in the Declared debt block of this sensor header, with this
+        # differential; the mirror weakness on head_of is declared in the header too.
         # ⚠️ No apostrophe and no backtick in this comment: the whole program is single-quoted
         # in the shell, so either one ends the quote and bash parses awk source as commands.
         else if (tail_of(body) ~ /^[ \t]*`/)

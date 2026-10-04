@@ -307,10 +307,12 @@ fi
 [ -n "${SDD_MUTANT:-}" ] || run "no writer piped into grep -q (pipefail)" \
   "$ROOT/tests/check-pipefail.sh"
 
-# Same guard and same reason as check-lang above: the mutation sandbox copies bin/ tests/
-# templates/ config/, never TODO.md — inside a mutant this would fail for a missing file, not for
-# shape, and the mutant would score a point for the wrong reason. It also tests no gate, so it
-# could never score a legitimate one.
+# Same guard and same reason as check-lang above: the mutation sandbox copies TODO.md (and
+# CLAUDE.md), but of docs/ only docs/adr, and never README.md — and TODO.md anchors into both
+# README.md and docs/pipeline.md. Inside a mutant the anchor rule would fail for a missing file,
+# not for shape, and the mutant would score a point for the wrong reason (measured on a copy of
+# that shape: `anchor README.md names no file of this repository`). It also tests no gate, so
+# it could never score a legitimate one.
 [ -n "${SDD_MUTANT:-}" ] || run "findings file holds its shape" "$ROOT/tests/check-todo.sh"
 
 # Same guard and same two reasons as check-todo above: it reads docs/handoffs/, which the mutation
@@ -320,6 +322,16 @@ fi
 # "the assertion passed".
 [ -n "${SDD_MUTANT:-}" ] || run "checkpoint Checks cannot read a red assertion as green" \
   "$ROOT/tests/check-checkpoint.sh"
+
+# ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in 20261003-lote-3-a-catraca-desce: a step guarded
+# out of the mutant is a blind spot of the catalogue for whatever only it would catch. The bet
+# has lost once already: check-preflight.sh grew an assertion on runner behaviour, and the line
+# that skipped it hid the only sensor of RUN_install_no_guard. Measured not to fail open today:
+# none of the four guarded sensors (check-lang, check-pipefail, check-todo, check-checkpoint)
+# runs bin/sdd as a runner — the one invocation, in check-pipefail.sh, is probe text inside a
+# heredoc — the linter only reads it, and a mutant that only they would kill comes out as a
+# NAMED survivor, never as a pass (KNOWN_GAPS=() is empty, and the catalogue ratchets both
+# ways). Guarding a step that runs bin/sdd reopens it.
 
 run "template contract" "$ROOT/tests/check-templates.sh"
 run "gate state machine" "$ROOT/tests/check-gates.sh"
