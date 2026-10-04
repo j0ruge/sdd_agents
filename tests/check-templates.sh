@@ -58,8 +58,9 @@ fails=0
 CHECKS_RUN=0
 # The one writer of an ok line, with the prefix every other sensor of the suite prints: two spaces,
 # `ok`, FOUR spaces. This file printed three for two missions — the only sensor that did — and
-# the calibrate() of check-checkpoint.sh never saw it, because it reads `pass()` lines and this
-# file had none (issue 151). Kept on ONE line in exactly that shape, so calibrate() counts it.
+# the calibrate() of check-checkpoint.sh never saw it, because it read only `pass()` lines and this
+# file had none (issue 151). Since issue 113 calibrate() reads every line that opens a quoted ok
+# prefix, whatever prints it, and counts this file among the sixteen sensors either way.
 pass() { printf '  ok    %s\n' "$*"; }
 check() { # check <file> <regex> <description>
   local rc=0

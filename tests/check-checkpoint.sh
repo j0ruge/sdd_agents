@@ -39,8 +39,10 @@
 #   3. the rule is written where the next mission will meet it — templates/checkpoint.md and
 #      agents/sdd-planner.md — so a checkpoint born tomorrow does not have to rediscover it.
 #      Contract in three places, the house rule from CLAUDE.md.
-#   4. the anchor it enforces IS the prefix the suite's sensors print, derived from their `pass()`
-#      lines rather than restated. See calibrate() for why that is not decoration.
+#   4. the anchor it enforces IS the prefix the suite's sensors print, derived from every line of
+#      theirs that opens a quoted ok prefix (a `pass()`, an inline `printf`, an `echo`, a Python
+#      `print(`), counted per sensor file, rather than restated. See calibrate() for why that is
+#      not decoration.
 #
 # What it deliberately does NOT measure: whether the expected value beside the arrow is the right
 # one, whether the Check actually exercises the increment, or whether a Check with no grep at all
@@ -316,24 +318,33 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
 # of every behavioural sensor — so a widened anchor no longer matches the thing it is an anchor
 # FOR. It also catches the mirror failure, which is the one that will actually happen some day:
 # the house changes the ok prefix and this file goes on enforcing the old one.
-CALIBRATE_FLOOR=9
+#
+# It reads EVERY line that opens a quoted ok prefix — a `pass()`, an inline `printf`, an `echo`, a
+# Python `print(` — and counts FILES, not lines. Reading only `pass()` lines saw 9 of the 16
+# sensors (issue 113): the other seven print from those other shapes, and a sensor printing three
+# spaces from one of them went unseen. The needles are built from variables: a literal quote-ok
+# pattern in the `case` below would match its own line and report this very file.
+CALIBRATE_FLOOR=16
 calibrate() {
-  local root="$1" f line p seen='' n=0
+  local root="$1" f line rest sp p seen='' seenf='' n=0 hit
+  local sq="'" dq='"' ok='  ok'
   for f in "$root"/tests/*.sh; do
     [ -f "$f" ] || continue
+    hit=0
     while IFS= read -r line; do
-      case "$line" in "pass() { printf '"*) ;; *) continue ;; esac
-      p="${line#*printf \'}"
-      case "$p" in *'%s'*) ;; *) continue ;; esac
-      p="${p%%"%s"*}"
-      n=$((n + 1))
+      case "$line" in *"$sq$ok "*|*"$dq$ok "*) ;; *) continue ;; esac
+      rest="${line#*["$sq$dq"]"$ok"}"
+      sp="${rest%%[! ]*}"
+      p="$ok$sp"
+      hit=1
       if [ -z "$seen" ]; then
-        seen="$p"
+        seen="$p"; seenf="$(basename -- "$f")"
       elif [ "$seen" != "$p" ]; then
-        fail "the suite's sensors disagree about the ok prefix ('$seen' in one file, '$p' in $(basename -- "$f")) — no single anchor can be right for both"
+        fail "the suite's sensors disagree about the ok prefix ('$seen' in $seenf, '$p' in $(basename -- "$f")) — no single anchor can be right for both"
         return 1
       fi
     done < "$f"
+    n=$((n + hit))
   done
   if [ "$n" -lt "$CALIBRATE_FLOOR" ]; then
     fail "only $n sensor(s) declare an ok prefix, expected at least $CALIBRATE_FLOOR — the anchor was calibrated against almost nothing"
@@ -375,7 +386,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=30
+PROBE_FLOOR=32
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -642,8 +653,12 @@ selftest() {
     printf 'pass() { printf %s  ok    %%s\\n%s "$1"; }\n' "'" "'" > "$caldis/tests/check-$i.sh"
   done
   printf 'pass() { printf %s  ok  %%s\\n%s "$1"; }\n' "'" "'" > "$caldis/tests/check-4.sh"
+  # Two FILES, each carrying as many ok lines as the floor asks for: a count of lines would reach
+  # the floor here, and only a count of sensors refuses it.
   for i in 1 2; do
-    printf 'pass() { printf %s  ok    %%s\\n%s "$1"; }\n' "'" "'" > "$calthin/tests/check-$i.sh"
+    for _ in $(seq 1 "$CALIBRATE_FLOOR"); do
+      printf 'pass() { printf %s  ok    %%s\\n%s "$1"; }\n' "'" "'"
+    done > "$calthin/tests/check-$i.sh"
   done
   probe 'the anchor matches what the sensors print' 0 \
     'the prefix the suite' "$cal" --calibrate
@@ -651,6 +666,21 @@ selftest() {
     'disagree about the ok prefix' "$caldis" --calibrate
   probe 'calibrating against almost nothing is caught' 1 \
     'calibrated against almost nothing' "$calthin" --calibrate
+
+  # The two shapes calibrate() was blind to while it read only `pass()` lines (issue 113): an ok
+  # line printed by an `echo`, and one printed by an inline `printf` with no `pass()` at all. The
+  # quote is passed as an argument, as above, so this file's own source carries no needle.
+  local calecho="$box/calecho" calinline="$box/calinline"
+  mkdir -p "$calecho/tests" "$calinline/tests"
+  for i in $(seq 1 "$CALIBRATE_FLOOR"); do
+    printf 'pass() { printf %s  ok    %%s\\n%s "$1"; }\n' "'" "'" > "$calecho/tests/check-$i.sh"
+    printf 'printf %s  ok    inline\\n%s\n' "'" "'" > "$calinline/tests/check-$i.sh"
+  done
+  printf 'echo %s  ok   inline%s\n' '"' '"' > "$calecho/tests/check-echo.sh"
+  probe 'an echo printing three spaces is caught as a disagreement' 1 \
+    'disagree about the ok prefix' "$calecho" --calibrate
+  probe 'sensors that print inline, with no pass(), are calibrated' 0 \
+    'the prefix the suite' "$calinline" --calibrate
 
   # The comparison itself. Without this the other three calibration probes pass with the
   # anchor-versus-house test deleted: they only exercise disagreement and the floor, and the
