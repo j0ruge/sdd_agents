@@ -24,7 +24,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Sensores que faltam
 
 - [ ] **Check com `test -f` passa num arquivo que o `.gitignore` do alvo ignora** —
-  `tests/check-checkpoint.sh:176` (`scan_file`) — o I10 da S8 do `ui24_agent` mandava `test -f` num
+  `tests/check-checkpoint.sh:187` (`scan_file`) — o I10 da S8 do `ui24_agent` mandava `test -f` num
   `docs/qa/reports/…-review.md`, e o alvo ignora `*-review.md`: o Check daria verde com um artefato
   que nunca chega ao git (só o `git add` pegou: `paths are ignored … .gitignore:20`). O incremento
   fecharia `done` e o clone novo reprovaria. Direção: o sensor roda `git check-ignore -q` em cada path
@@ -131,7 +131,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **A âncora `^  ok    ` do Check não alcança 82 das 866 asserções da suíte** —
   `tests/check-templates.sh:65` — as primitivas `check()`/`refute()` imprimem `ok` com **três**
-  espaços enquanto `tests/check-checkpoint.sh:115` cobra quatro em todo repo adotante, e o
+  espaços enquanto `tests/check-checkpoint.sh:126` cobra quatro em todo repo adotante, e o
   `calibrate()` que existe para casar as duas pontas é cego a elas: lê só linhas com `pass() {`,
   logo enxerga 7 de 13 sensores e deixa 2 dos 8 comportamentais de fora prometendo "every
   behavioural sensor". Direção: unificar em quatro espaços **e** dar cobertura ao `calibrate()`.
@@ -154,7 +154,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de contexto novo` na missão `20260928-os-achados-da-janela` (2026-09-29)
 
 - [ ] **Um `done` abaixo de um `blocked` passa, e o Check de fechamento pode medir só o rótulo** —
-  `tests/check-checkpoint.sh:370` (`none blind`) — na S8 do `ui24_agent` o I12 (docs de fechamento)
+  `tests/check-checkpoint.sh:426` (`none blind`) — na S8 do `ui24_agent` o I12 (docs de fechamento)
   fechou `done` com o I11 (smoke ao vivo) `blocked`. O Check dele, `grep -c 'S8 ✅' CLAUDE.md`, cobra
   a palavra ✅ e não a prova do smoke, e o sensor respondeu `none blind`. Só não afirmou demais porque
   a sessão escreveu "smoke PENDENTE" na mesma linha. Direção: o sensor avisar `done` abaixo de

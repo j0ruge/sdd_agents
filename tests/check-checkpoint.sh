@@ -43,6 +43,10 @@
 #      theirs that opens a quoted ok prefix (a `pass()`, an inline `printf`, an `echo`, a Python
 #      `print(`), counted per sensor file, rather than restated. See calibrate() for why that is
 #      not decoration.
+#   5. a path the Check tests with `test -e|-f|-s` (or the `[` form) is one its repository keeps:
+#      `git check-ignore`, asked of the repo the checkpoint lives in, never of the cwd. An ignored
+#      path is green on the machine that wrote it and red on a fresh clone (issue 211, measured in
+#      a target repo; the kit's own checkpoints test no path today).
 #
 # What it deliberately does NOT measure: whether the expected value beside the arrow is the right
 # one, whether the Check actually exercises the increment, or whether a Check with no grep at all
@@ -79,6 +83,13 @@
 # NOT measured either: whether the anchor's assertion text matches an assertion that exists. A
 # Check anchored on `^  ok    ` for a sentence no sensor ever prints returns 0 instead of 1 and
 # fails honestly — wrong answer, not a silent green — which is the direction that costs nothing.
+#
+# Two DECLARED LIMITS of rule 5 (decision 9 of 20261003-lote-3-a-catraca-desce). A Check that
+# asserts the ABSENCE of an ignored path (`test -f x; echo $?` -> `1`) is refused all the same: a
+# false positive, with no case in any checkpoint today. And `git check-ignore` also reads the
+# user's global ignore file (~/.config/git/ignore exists on the machine this rule was written on),
+# so the verdict depends on the machine — exactly as the verdict of `git add` does, which is the
+# step this rule stands in for.
 #
 # This file MEASURES MARKDOWN, so tests/check-mutation.sh cannot reach it: that catalogue sabotages
 # bin/sdd, and no sabotage of the runner would make this sensor die. Its guard is selftest(),
@@ -170,15 +181,19 @@ rows_of() {
 
 # Counters published as globals and never through a command substitution: a function read as
 # `x="$(f)"` runs in a subshell and every assignment it makes dies with it (CLAUDE.md).
-N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0
+N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0
 
-reset_counters() { N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; }
+reset_counters() { N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0; }
 
 # scan_file <path> <label> — accumulates into the globals, prints one FAIL per violation.
 scan_file() {
-  local path="$1" label="$2" rows nf id chk g a
+  local path="$1" label="$2" rows nf id chk g a top p src
   rows="$(rows_of "$path")"
   N_FILES=$((N_FILES + 1))
+  # The repo the checkpoint belongs to, resolved from ITS directory and never from the cwd: a
+  # target repo ignores what the kit does not. `git -C`, never `cd` (CDPATH). Empty outside a repo,
+  # and then rule 3 has nothing to ask.
+  top="$(git -C "$(dirname -- "$path")" rev-parse --show-toplevel 2>/dev/null)" || top=''
   while IFS=$'\t' read -r nf id chk; do
     [ -n "$nf" ] || continue
     N_ROWS=$((N_ROWS + 1))
@@ -188,6 +203,20 @@ scan_file() {
       fail "$label: row $id hands the runner $((nf - 2)) column(s) instead of 5 — a '|' inside a cell splits it. A raw pipe breaks gate_EXEC; the escape '\\|' the runner rejoins, but this repo's checkpoints use the herestring form instead"
       V_COLS=$((V_COLS + 1))
       continue
+    fi
+
+    # Rule 5 — a path the Check tests with `test -e|-f|-s` must be one git keeps. An ignored one is
+    # green on the machine that wrote it and red on a fresh clone, and the increment closes `done`
+    # over an artifact that never reaches the repo (issue 211).
+    if [ -n "$top" ]; then
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        N_PATHS=$((N_PATHS + 1))
+        if src="$(git -C "$top" check-ignore -v -- "$p" 2>/dev/null)"; then
+          fail "$label: the Check of $id tests '$p', which the repository ignores (${src%%$'\t'*}) — green over a file git never receives, red on a fresh clone"
+          V_IGNORED=$((V_IGNORED + 1))
+        fi
+      done <<< "$(tested_paths "$chk")"
     fi
 
     # Rule 2 — precondition: the cell merges stderr AND greps. Either half missing and there is
@@ -202,6 +231,28 @@ scan_file() {
       V_ANCHOR=$((V_ANCHOR + 1))
     fi
   done <<< "$rows"
+}
+
+# tested_paths <check cell> — the repo paths a `test -e|-f|-s <p>` or `[ -e|-f|-s <p> ]` names,
+# one per line. Only a literal relative path is read: an absolute one or one under `~` is outside
+# the repo, and anything carrying `$ * ? [ { < >` or a backtick is decided at run time, not here.
+tested_paths() {
+  local -a w
+  local i t
+  read -ra w <<< "$1"
+  for ((i = 0; i + 2 < ${#w[@]}; i++)); do
+    t="${w[i]}"; t="${t#\`}"; t="${t#(}"
+    case "$t" in test|'[') ;; *) continue ;; esac
+    case "${w[i+1]}" in -e|-f|-s) ;; *) continue ;; esac
+    t="${w[i+2]}"
+    while :; do
+      case "$t" in *'`'|*';'|*')'|*'"'|*"'") t="${t%?}" ;; *) break ;; esac
+    done
+    t="${t#[\"\']}"
+    case "$t" in ''|']'|/*|'~'*) continue ;; esac
+    case "$t" in *[\$\*\?\[\{\<\>\`]*) continue ;; esac
+    printf '%s\n' "$t"
+  done
 }
 
 # doc_rule <path> <label> <assertion> — the rule has to be written where the next planner meets
@@ -287,6 +338,11 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
   else
     rc=1
   fi
+  if [ "$V_IGNORED" -eq 0 ]; then
+    pass "no checkpoint Check tests a path its repository ignores ($N_PATHS tested path(s))"
+  else
+    rc=1
+  fi
 
   doc_rule "$root/templates/checkpoint.md" "templates/checkpoint.md" \
     "the checkpoint template teaches the ok-anchor rule" || rc=1
@@ -304,7 +360,7 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
     rc=1
   fi
 
-  [ "$rc" -eq 0 ] || fail "$((V_ANCHOR + V_COLS)) checkpoint violation(s)"
+  [ "$rc" -eq 0 ] || fail "$((V_ANCHOR + V_COLS + V_IGNORED)) checkpoint violation(s)"
   return "$rc"
 }
 
@@ -366,7 +422,7 @@ check_one() { # check_one <path> — one checkpoint, no floors, no doc assertion
   fi
   reset_counters
   scan_file "$path" "$(basename -- "$path")"
-  if [ $((V_ANCHOR + V_COLS)) -eq 0 ]; then
+  if [ $((V_ANCHOR + V_COLS + V_IGNORED)) -eq 0 ]; then
     pass "$(basename -- "$path"): $N_ROWS row(s), $N_RULED under the anchor rule, none blind"
     return 0
   fi
@@ -386,7 +442,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=32
+PROBE_FLOOR=36
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -711,6 +767,31 @@ selftest() {
     >> "$scanpiped/docs/handoffs/m4/checkpoint.md"
   probe 'a piped cell makes the whole scan red' 1 \
     'instead of 5' "$scanpiped" --scan
+
+  # ── a Check that tests a path the repository ignores (issue 211) ──
+  # The checkpoint lives in its own git repo, which ignores `*-review.md` — a pattern the kit does
+  # not ignore, so a sensor that resolved the repo from its cwd instead of from the checkpoint's
+  # directory would answer differently here than it does for a target repo.
+  local ign="$box/ign" f
+  mkdir -p "$ign/docs/handoffs/m"
+  git -C "$ign" init -q
+  printf '*-review.md\n' > "$ign/.gitignore"
+  f="$ign/docs/handoffs/m/checkpoint.md"
+  cp_head "$f"; cp_row "$f" I1 '`test -f docs/qa/reports/s8-review.md && echo yes` → `yes`'
+  probe 'a Check that tests an ignored path is caught' 1 'which the repository ignores' "$f"
+  cp_head "$f"; cp_row "$f" I1 '`test -f docs/qa/r1-report.md && echo yes` → `yes`'
+  probe 'a Check that tests a path the repository keeps passes' 0 'none blind' "$f"
+  cp_head "$f"; cp_row "$f" I1 '`[ -f docs/b-review.md ] && echo yes` → `yes`'
+  probe 'the bracket form of test is read too' 1 'which the repository ignores' "$f"
+
+  # And the wiring to scan()'s verdict, over a full tree that is a repo of its own.
+  local scanign="$box/scanign"
+  build_tree "$scanign"
+  git -C "$scanign" init -q
+  printf '*-review.md\n' > "$scanign/.gitignore"
+  cp_row "$scanign/docs/handoffs/m4/checkpoint.md" I6 '`test -f docs/x-review.md && echo yes` → `yes`'
+  probe 'an ignored path makes the whole scan red' 1 \
+    'which the repository ignores' "$scanign" --scan
 
   rm -rf "$box"
 
