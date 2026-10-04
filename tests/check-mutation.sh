@@ -1185,6 +1185,13 @@ mut_REVIEW_dirty_unscoped() {
   sed -i '/^gate_REVIEW() {/,/^}/ s|git status --porcelain --untracked-files=all -- .*)" \]; then$|git status --porcelain)" ]; then|' "$1"
 }
 
+# The scope forgets HAT_WRITES_BASE (decision of 2026-10-04): the backlog finding a round wrote and
+# died before committing stops holding REVIEW, and the next phase inherits a dirty TODO_FILE no one
+# owns. Caught by `a dirty TODO_FILE the review wrote still holds REVIEW` in check-gates.sh.
+mut_REVIEW_dirty_scope_misses_base() {
+  sed -i '/^gate_REVIEW() {/,/^}/ s|^    review_scope+=("\$REPO_ROOT/\$p")$|    :|' "$1"
+}
+
 # The other half: gate_DOCS stops refusing its own uncommitted 45-docs.md, and a DOCS session that
 # died before its commit rides to PR over a dirty tree. Caught by `an uncommitted 45-docs.md holds
 # DOCS, it does not ride to PR` in check-gates.sh.
@@ -5661,6 +5668,7 @@ CATALOG=(
   DOCS_backtick_status_kept
   DOCS_markup_only_status_skipped
   REVIEW_dirty_unscoped
+  REVIEW_dirty_scope_misses_base
   DOCS_uncommitted_passes
   PR_no_artifact
   PR_stamp_blind

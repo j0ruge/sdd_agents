@@ -1890,6 +1890,14 @@ git checkout -- "$MDIR/checkpoint.md"
 printf -- '- nota\n' > "$MDIR/checkpoint-notas.md"
 assert_phase "a dirty checkpoint-notas.md the review appended still holds REVIEW" "REVIEW"
 rm -f "$MDIR/checkpoint-notas.md"
+# World 4: the scope also carries HAT_WRITES_BASE, which the reviewer's hat declares it writes
+# (principle 5 sends its out-of-scope finding to TODO_FILE). A round that registered a finding and
+# died before committing it is the round's own dirt, and it holds REVIEW like the three above.
+printf 'x\n' >> TODO.md
+assert_phase "a dirty TODO_FILE the review wrote still holds REVIEW" "REVIEW"
+assert_why "and the reason REVIEW gives for TODO_FILE is the dirty-tree refusal" "REVIEW" \
+  "working tree dirty after the review"
+git checkout -- TODO.md
 assert_phase "last review all Grade A, suite green, clean tree" "DOCS"
 
 # The separator row prettier and markdownlint actually write. GFM spells column alignment with

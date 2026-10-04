@@ -980,8 +980,10 @@ the mission before it cost US$ 174 against a ceiling of US$ 150 that lived only 
 Plus `<PHASE>-<ts>.err` for the session's stderr. The journal is **ephemeral by contract**: `.sdd/logs/` is in the
 `.gitignore` that `sdd install` writes, and the durable record of what happened is the committed
 handoffs. If it moved back into the committed tree it would dirty `git status` — and a dirty tree
-fails `sdd preflight`. (`gate_REVIEW` refuses only a dirty round report, `checkpoint.md` or
-`checkpoint-notas.md`, and `gate_DOCS` an uncommitted `45-docs.md`, since issue 115 scoped them.)
+fails `sdd preflight`. (`gate_REVIEW` refuses only a dirty round report, `checkpoint.md`,
+`checkpoint-notas.md` or backlog — `TODO_FILE` and `tests/health-baseline.txt`, the
+`HAT_WRITES_BASE` every hat declares —, and `gate_DOCS` an uncommitted `45-docs.md`, since issue 115
+scoped them.)
 `--max-budget-usd` per session is a damage cap, not a budget.
 
 `sdd census <mission>` reads those logs back: per phase, sessions, turns, cost, cache-read tokens,

@@ -242,7 +242,8 @@ translated.
 - The loop stops on a plateau or a regression against the previous round's table — never on a
   round count, and never while the letters are still rising.
 - The report and the checkpoint committed together, before the turn ends — the gate requires the
-  round's own files committed: `40-review-r<N>.md`, `checkpoint.md`, `checkpoint-notas.md`; and the
-  next phase pays for the commit you did not make.
+  round's own files committed: `40-review-r<N>.md`, `checkpoint.md`, `checkpoint-notas.md`, and the
+  `TODO_FILE` finding (with its baseline line) if you registered one; and the next phase pays for
+  the commit you did not make.
 - A refused finding needs written evidence, not an opinion. Reproduce before you conclude.
 - You do not push, do not open a PR, do not merge.
