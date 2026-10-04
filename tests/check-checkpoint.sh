@@ -43,7 +43,7 @@
 #      theirs that opens a quoted ok prefix (a `pass()`, an inline `printf`, an `echo`, a Python
 #      `print(`), counted per sensor file, rather than restated. See calibrate() for why that is
 #      not decoration.
-#   5. a path the Check tests with `test -e|-f|-s` (or the `[` form) is one its repository keeps:
+#   5. a path the Check tests with `test -e|-f|-s` (or the `[`/`[[` forms) is one its repository keeps:
 #      `git check-ignore`, asked of the repo the checkpoint lives in, never of the cwd. An ignored
 #      path is green on the machine that wrote it and red on a fresh clone (issue 211, measured in
 #      a target repo; the kit's own checkpoints test no path today).
@@ -87,12 +87,17 @@
 # Check anchored on `^  ok    ` for a sentence no sensor ever prints returns 0 instead of 1 and
 # fails honestly — wrong answer, not a silent green — which is the direction that costs nothing.
 #
-# Two DECLARED LIMITS of rule 5 (decision 9 of 20261003-lote-3-a-catraca-desce). A Check that
-# asserts the ABSENCE of an ignored path (`test -f x; echo $?` -> `1`) is refused all the same: a
-# false positive, with no case in any checkpoint today. And `git check-ignore` also reads the
-# user's global ignore file (~/.config/git/ignore exists on the machine this rule was written on),
-# so the verdict depends on the machine — exactly as the verdict of `git add` does, which is the
-# step this rule stands in for.
+# DECLARED LIMITS of rule 5 (decision 9 of 20261003-lote-3-a-catraca-desce, and the final review
+# of that branch for the last two). A Check that asserts the ABSENCE of an ignored path
+# (`test -f x; echo $?` -> `1`) is refused all the same: a false positive, with no case in any
+# checkpoint today. `git check-ignore` also reads the user's global ignore file
+# (~/.config/git/ignore exists on the machine this rule was written on), so the verdict depends on
+# the machine — exactly as the verdict of `git add` does, which is the step this rule stands in
+# for. A Check that GENERATES an ignored artifact and then tests it (`<cmd> && test -f
+# .sdd/cache/x`) is refused too, although it is green on every machine: the rule reads the test,
+# not what ran before it. And a path is resolved against the repo's top level, so
+# `cd app && test -f x` asks about `x`, not `app/x`. The four fail CLOSED or not at all; none
+# certifies an ignored artifact. (`[[ -f x ]]` was the fifth, and it failed OPEN — read since.)
 #
 # This file MEASURES MARKDOWN, so tests/check-mutation.sh cannot reach it: that catalogue sabotages
 # bin/sdd, and no sabotage of the runner would make this sensor die. Its guard is selftest(),
@@ -251,7 +256,7 @@ scan_file() {
   done <<< "$rows"
 }
 
-# tested_paths <check cell> — the repo paths a `test -e|-f|-s <p>` or `[ -e|-f|-s <p> ]` names,
+# tested_paths <check cell> — the repo paths a `test -e|-f|-s <p>`, `[ … ]` or `[[ … ]]` names,
 # one per line. Only a literal relative path is read: an absolute one or one under `~` is outside
 # the repo, and anything carrying `$ * ? [ { < >` or a backtick is decided at run time, not here.
 tested_paths() {
@@ -260,7 +265,7 @@ tested_paths() {
   read -ra w <<< "$1"
   for ((i = 0; i + 2 < ${#w[@]}; i++)); do
     t="${w[i]}"; t="${t#\`}"; t="${t#(}"
-    case "$t" in test|'[') ;; *) continue ;; esac
+    case "$t" in test|'['|'[[') ;; *) continue ;; esac
     case "${w[i+1]}" in -e|-f|-s) ;; *) continue ;; esac
     t="${w[i+2]}"
     while :; do
@@ -465,7 +470,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=39
+PROBE_FLOOR=40
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -806,6 +811,8 @@ selftest() {
   probe 'a Check that tests a path the repository keeps passes' 0 'none blind' "$f"
   cp_head "$f"; cp_row "$f" I1 '`[ -f docs/b-review.md ] && echo yes` → `yes`'
   probe 'the bracket form of test is read too' 1 'which the repository ignores' "$f"
+  cp_head "$f"; cp_row "$f" I1 '`[[ -f docs/c-review.md ]] && echo yes` → `yes`'
+  probe 'the double-bracket form of test is read too' 1 'which the repository ignores' "$f"
 
   # And the wiring to scan()'s verdict, over a full tree that is a repo of its own.
   local scanign="$box/scanign"

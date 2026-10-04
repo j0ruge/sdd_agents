@@ -24,7 +24,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Sensores que faltam
 
 - [ ] **Check com `test -f` passa num arquivo que o `.gitignore` do alvo ignora** —
-  `tests/check-checkpoint.sh:194` (`scan_file`) — o I10 da S8 do `ui24_agent` mandava `test -f` num
+  `tests/check-checkpoint.sh:199` (`scan_file`) — o I10 da S8 do `ui24_agent` mandava `test -f` num
   `docs/qa/reports/…-review.md`, e o alvo ignora `*-review.md`: o Check daria verde com um artefato
   que nunca chega ao git (só o `git add` pegou: `paths are ignored … .gitignore:20`). O incremento
   fecharia `done` e o clone novo reprovaria. Direção: o sensor roda `git check-ignore -q` em cada path
@@ -48,7 +48,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
-  `tests/check-mutation.sh:6284` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
+  `tests/check-mutation.sh:6301` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
   mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
   só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
   qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
@@ -65,7 +65,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2078` contra `tests/check-mutation.sh:6084` — a chave lê `bin tests templates config`,
+  `bin/sdd:2078` contra `tests/check-mutation.sh:6096` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -131,7 +131,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **A âncora `^  ok    ` do Check não alcança 82 das 866 asserções da suíte** —
   `tests/check-templates.sh:65` — as primitivas `check()`/`refute()` imprimem `ok` com **três**
-  espaços enquanto `tests/check-checkpoint.sh:129` cobra quatro em todo repo adotante, e o
+  espaços enquanto `tests/check-checkpoint.sh:134` cobra quatro em todo repo adotante, e o
   `calibrate()` que existe para casar as duas pontas é cego a elas: lê só linhas com `pass() {`,
   logo enxerga 7 de 13 sensores e deixa 2 dos 8 comportamentais de fora prometendo "every
   behavioural sensor". Direção: unificar em quatro espaços **e** dar cobertura ao `calibrate()`.
@@ -154,7 +154,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de contexto novo` na missão `20260928-os-achados-da-janela` (2026-09-29)
 
 - [ ] **Um `done` abaixo de um `blocked` passa, e o Check de fechamento pode medir só o rótulo** —
-  `tests/check-checkpoint.sh:449` (`none blind`) — na S8 do `ui24_agent` o I12 (docs de fechamento)
+  `tests/check-checkpoint.sh:454` (`none blind`) — na S8 do `ui24_agent` o I12 (docs de fechamento)
   fechou `done` com o I11 (smoke ao vivo) `blocked`. O Check dele, `grep -c 'S8 ✅' CLAUDE.md`, cobra
   a palavra ✅ e não a prova do smoke, e o sensor respondeu `none blind`. Só não afirmou demais porque
   a sessão escreveu "smoke PENDENTE" na mesma linha. Direção: o sensor avisar `done` abaixo de
