@@ -1917,7 +1917,14 @@ EOF
   baseline_says 88 'is not a commit' "a ref that is not a commit is refused, never read as empty" \
     --baseline no-such-ref
   baseline_says 96 '--baseline needs a ref' "--baseline without a ref is a usage error" --baseline
-  rule_end 6 'a --baseline run fails only on what the ref did not have'
+  # The ref's copy is read from a temp file, and a temp file's own directory is the wrong root for
+  # its anchors: every anchor of the copy would name no file, and an inherited off-target anchor
+  # would come back as new. The copy resolves against the repository of the file it is a copy of.
+  bl_todo "$undated" '- [ ] **Off target** — `src/code.sh:35` — calls `frobnicate_widget` — by `x` (2026-10-03)'
+  bl_commit base2
+  baseline_says 0 'TODO.md: 0 new shape violation(s) against base2 (2 inherited)' \
+    "an off-target anchor the ref had is inherited: the copy resolves against the real repo" --baseline base2
+  rule_end 7 'a --baseline run fails only on what the ref did not have'
 
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
@@ -1932,8 +1939,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 162 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 162\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 163 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 163\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -2073,12 +2080,18 @@ count_file() {
 # almost any line and would satisfy the rule by accident.
 ANCHOR_REACH=10
 ANCHOR_SYMBOL_MIN=4
+ANCHOR_BASE_OVERRIDE=''
 
 # anchor_base <file> — the repository the anchors of <file> are resolved against: the toplevel of
 # the git checkout holding it, else its own directory. NEVER $ROOT: in a target repo the kit's tree
 # would answer about the wrong files, and a file that exists only in the kit would pass. `git -C`
 # and no `cd`, so no CDPATH can print into the substitution.
+#
+# ANCHOR_BASE_OVERRIDE wins when set, and only baseline_file sets it, for the one call that collects
+# the ref's copy: that copy lives in a temp file whose own directory is the wrong root, and every
+# anchor of it would name no file. Initialised empty below, so the environment cannot inject it.
 anchor_base() {
+  [ -z "$ANCHOR_BASE_OVERRIDE" ] || { printf '%s\n' "$ANCHOR_BASE_OVERRIDE"; return 0; }
   local dir; dir="$(dirname -- "$1")"
   git -C "$dir" rev-parse --show-toplevel 2>/dev/null || (CDPATH='' cd -- "$dir" && pwd)
 }
@@ -2222,7 +2235,13 @@ baseline_file() {
     printf '  FAIL  --baseline: could not create a temp file\n' >&2; return 89; }
   base_v=''
   if git -C "$top" show "${ref}:${rel}" > "$copy" 2>/dev/null && has_open_marker "$copy"; then
+    # The copy's anchors resolve against the real repository, not the temp file's directory.
+    # DECLARED LIMIT: against its CURRENT tree, so code moved on this same branch that rots the
+    # anchor of an old item rots it in the copy too, and that violation reads as inherited. The
+    # plain --check, with no baseline, still reports it.
+    ANCHOR_BASE_OVERRIDE="$top"
     collect_violations "$copy" "$cap"
+    ANCHOR_BASE_OVERRIDE=''
     base_v="$VIOLATIONS"
   fi
   while IFS= read -r k; do
