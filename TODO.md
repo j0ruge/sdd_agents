@@ -23,14 +23,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
-- [ ] **Check com `test -f` passa num arquivo que o `.gitignore` do alvo ignora** —
-  `tests/check-checkpoint.sh:199` (`scan_file`) — o I10 da S8 do `ui24_agent` mandava `test -f` num
-  `docs/qa/reports/…-review.md`, e o alvo ignora `*-review.md`: o Check daria verde com um artefato
-  que nunca chega ao git (só o `git add` pegou: `paths are ignored … .gitignore:20`). O incremento
-  fecharia `done` e o clone novo reprovaria. Direção: o sensor roda `git check-ignore -q` em cada path
-  do repo citado num Check e reprova o ignorado; o `sdd-planner` confere ao nomear o artefato. RESOLVED by 41ac7a1.
-  — descoberto por `sessão interativa` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
-
 - [ ] **O Red do `R<n>` prova o achado, não o conserto: nenhum passo sabota a linha nova** —
   `agents/sdd-executor.md:76` (`Watch it fail`) — o conserto tira o sintoma e pode abrir um fail-open
   ao lado com o probe verde. Medido só no laço interativo (PR #45, #46; `coderabbit-pr` 2.4.0 já
@@ -47,23 +39,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (ou no bloco da função), ou contar ocorrências e recusar símbolo que aparece em todo canto.
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
-- [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
-  `tests/check-mutation.sh:6309` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
-  mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
-  só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
-  qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
-  assassino é um sensor tocado pelo diff, para o EXEC rodar antes do commit. RESOLVED by d658dca e ebad097.
-  — descoberto por `sdd health` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
-
-- [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:1472` — o
-  extrator da Âncora 3 pula blocos cercados e pega a primeira linha com forma de campo fora de um,
-  então prosa nua abrindo com `- **Closable by:** human` acima do campo real ainda é lida como o
-  campo. É fail-open (o gate responde `registry clean` com bug sanável aberto), na direção que a
-  decisão 3 do grill recusa. Alcance baixo: exige arquivo que viole a ordem do template. Declarado
-  no comentário do `bin/sdd`; entra aqui porque fail-open declarado continua entrando (régua D15).
-  Direção: ancorar o gênero no MESMO bloco contíguo de `- **…:**` que traz a linha `Status:`. RESOLVED by ece5895.
-  — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
-
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
   `bin/sdd:2092` contra `tests/check-mutation.sh:6104` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
@@ -72,14 +47,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `CLAUDE.md`, e chavear nele custaria uma segunda rodada de ~20 min por missão). Direção: ler a
   lista do próprio `sandbox()`, decidido o custo. — descoberto por `sdd-executor` na missão
   `20260819-fecho-...` (2026-08-19)
-
-- [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:135`
-  — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
-  registra o comando, mas `health_provenance` (`bin/sdd:6445`) só confere as 3 fixtures de skill
-  contra arquivo instalado. Se o CLI renomear `type`/`total_cost_usd`, o stub segue verde e o
-  runner quebra só em missão real — o modo de falha que a regra de proveniência existe para matar.
-  Direção: probe que rode o CLI de verdade, ou capturar o schema num arquivo versionado. RESOLVED by 4f4a9b3.
-  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **`.sdd/logs/` não tem poda e agora guarda o stream inteiro** — `bin/sdd:835` — desde o I10
   cada sessão deixa três arquivos, e o `.stream.jsonl` é a sessão toda (a de teste, trivial, deu
@@ -129,14 +96,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: um `refute()` sobre a superfície de docs, ou ligar a tabela de agentes ao frontmatter.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
-- [ ] **A âncora `^  ok    ` do Check não alcança 82 das 866 asserções da suíte** —
-  `tests/check-templates.sh:65` — as primitivas `check()`/`refute()` imprimem `ok` com **três**
-  espaços enquanto `tests/check-checkpoint.sh:134` cobra quatro em todo repo adotante, e o
-  `calibrate()` que existe para casar as duas pontas é cego a elas: lê só linhas com `pass() {`,
-  logo enxerga 7 de 13 sensores e deixa 2 dos 8 comportamentais de fora prometendo "every
-  behavioural sensor". Direção: unificar em quatro espaços **e** dar cobertura ao `calibrate()`.
-  RESOLVED by 0521972 (e eb0ee9e). — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
-
 - [ ] **`gate_TICKET` não confere no Jira a issue que o chapéu diz que ele confirma** — `bin/sdd:1102`
   (`gate_TICKET`) — o `agents/sdd-ticket.md:18` promete que o runner confirma a issue por `acli`,
   mas o gate só lê `issue:` e `sprint:` do frontmatter do `10-ticket.md`. Uma issue duplicada (LH-5
@@ -153,38 +112,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   squash (o fluxo do `sales_quote`). Direção: distinguir pelo blob na ponta, não pelo caminho.
   — descoberto por `revisor de contexto novo` na missão `20260928-os-achados-da-janela` (2026-09-29)
 
-- [ ] **Um `done` abaixo de um `blocked` passa, e o Check de fechamento pode medir só o rótulo** —
-  `tests/check-checkpoint.sh:454` (`none blind`) — na S8 do `ui24_agent` o I12 (docs de fechamento)
-  fechou `done` com o I11 (smoke ao vivo) `blocked`. O Check dele, `grep -c 'S8 ✅' CLAUDE.md`, cobra
-  a palavra ✅ e não a prova do smoke, e o sensor respondeu `none blind`. Só não afirmou demais porque
-  a sessão escreveu "smoke PENDENTE" na mesma linha. Direção: o sensor avisar `done` abaixo de
-  `blocked`, e o `sdd-planner` fazer o Check de fechamento cobrar o artefato do smoke. RESOLVED by 9e521d1 (e 3cf0d0a).
-  — descoberto por `sessão interativa` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
-
-- [ ] **O lint do `TODO.md` não separa violação nova da herdada: alvo com dívida fica sempre vermelho** —
-  `tests/check-todo.sh:65` (`--allow-empty`) — o `TODO.md` do `ui24_agent` carrega 15 violações de
-  forma herdadas, e quem o edita não sabe se acrescentou alguma. Na S8 a prova foi copiar a `HEAD`
-  para a raiz do alvo e contar de novo (15 = 15); a cópia no scratchpad deu 21, porque a âncora
-  resolve pela raiz do repo do arquivo. Direção: `--check <file> --baseline <ref>`, que reprove só o
-  que a ref não tinha. RESOLVED by e7d1e2d e 8870bab.
-  — descoberto por `sessão interativa` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
-
 ### Contrato e configuração
-
-- [ ] **Fase interrompida depois do REVIEW faz o pipeline REGREDIR para o REVIEW** —
-  `bin/sdd:1847` (`git status --porcelain`) — o `gate_REVIEW` reprova com árvore suja e não distingue "o revisor deixou
-  sujeira" de "uma fase POSTERIOR está no meio do voo". Sessão de DOCS morta deixa arquivo não commitado,
-  `current_phase()` volta a responder REVIEW, e o `sdd run` seguinte abre sessão nova da fase mais cara do kit —
-  US$ 37,30 medidos nesta missão. Morte de sessão é o caso normal que o princípio 4 promete resolver de graça. Direção:
-  escopar a checagem ao que o REVIEW pode sujar. RESOLVED by 0ed9218 e 713126a.
-  — descoberto por `operador` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
-
-- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:10360` — a porta
-  "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
-  e o toplevel é por worktree: com o `sdd` do checkout principal e o cwd num worktree os dois
-  divergem e o `die` da `:10086` mata. ⚠️ **`--series` NÃO passa por ela** — sai na `:10073`, medido
-  nas duas formas de invocação, saída idêntica. Direção: `ledger_repo_root` dos dois lados, com par
-  diferencial. RESOLVED by 188ca87. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **O `kaizen_reminder` diz a frase de repo-alvo quando roda de um worktree do kit** —
   `bin/sdd:10156` (`kaizen_reminder`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
@@ -193,13 +121,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   counts them" no lugar da frase do kit. Direção: o mesmo `ledger_repo_root` dos dois lados, e
   re-ancorar o `mut_KAIZEN_reminder_wrong_repo`. O `kit_guard_check` usa a grafia e não é defeito.
   — descoberto por `sdd-planner` na missão `20261003-lote-3-a-catraca-desce` (2026-10-03)
-
-- [ ] **Nenhuma chave de caminho do `.sdd/config.sh` é normalizada antes de virar padrão de `case`**
-  — `bin/sdd:2558` — `hat_expand` troca `$TODO_FILE` **literalmente** no `writes:` do chapéu, lido contra
-  `git diff --name-only`; um repo-alvo com `TODO_FILE="./TODO.md"` — ou `HANDOFF_DIR="./docs/handoffs"`,
-  que a normalização do `F4` também não pega — reproduz o defeito que o `F4` acabou de consertar,
-  com raio menor. Direção: normalização **única** na leitura do config, com um probe por chave. RESOLVED by 52de46e.
-  — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **Uma sessão escreve o ledger com o `bin/sdd` que tinha em MEMÓRIA ao ser lançada** —
   `bin/sdd:4315` — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4 rodadas
@@ -226,15 +147,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   causa. Direção: um status "espera evento externo", com motivo, que não pare as fases seguintes.
   — descoberto por `sessão interativa` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
 
-- [ ] **O checkpoint semeado no alvo cita um sensor que só existe no kit** —
-  `templates/checkpoint.md:33` (`tests/check-checkpoint.sh`) — o texto diz que ele recusa as formas
-  cegas "nos checkpoints deste repo", mas no alvo o caminho relativo não existe: no `ui24_agent`,
-  `bash tests/check-checkpoint.sh` deu `No such file or directory`. Quem segue o banner para ali ou
-  crê validada uma tabela que guarda nenhum leu. O modo certo já existe e serve: `--check` pelo
-  caminho do kit deu `rc=0` no checkpoint da S8. Direção: o template citá-lo assim, como o
-  `templates/todo.pt-BR.md` já faz ("do kit"). Parente do item do formato de achado nos alvos. RESOLVED by bf660f8.
-  — descoberto por `retrofit-watch` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
-
 ### Saída humana e cosmética
 
 - [ ] **35% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
@@ -252,14 +164,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `block` mandaria as 14 de volta para PLAN. Direção: o humano mapeia as sete, `sdd adr new --spec`
   escreve os dois lados, o resto vira `adr: none`, e aí a chave volta para `block`. — descoberto
   por `codereview` na missão `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
-
-- [ ] **O `kaizen --series` morre com o erro cru do `jq` e contradiz o pipeline.md sobre linha não-objeto** —
-  `bin/sdd:9623` (`kaizen_series`) — irmão da #206 no segundo leitor: uma linha objeto com
-  `"cost_usd":"4.0"` sai com rc 5 e `jq: error (at <stdin>:2)`, sem nomear o arquivo nem passar pelo
-  `die`; uma linha array sai rc 0, contada em `excluded.unrecognized`, e o `docs/pipeline.md:1069`
-  diz que ela "still dies loudly naming the file". Direção: o mesmo par de recusas do `cmd_autonomy`
-  (forma primeiro, stderr do `jq` no `die`), ou a doc dizer o que a série faz. RESOLVED by 9edd800.
-  — descoberto pela triagem cética do lote 2 no branch `fix/lote-2-sensores` (2026-10-03)
 
 ### Comentário e registro
 
@@ -320,14 +224,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   era obrigado a cair. O `@codex review` o achou no PR #167. Direção: o revisor enumera qual
   sabotagem provou cada nota — hoje narra em prosa, e prosa não é verificável.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
-
-- [ ] **O mapa de assassinos reordena a suíte e confia que nenhum sensor muda de resposta por rodar primeiro** —
-  `tests/run-all.sh:388` — sob `SDD_MUTANT_FIRST` o CONJUNTO de passos de um mutante é o mesmo (as probes
-  `surface:` do `check-health.sh` o provam), mas a ORDEM muda, e um passo que ficasse vermelho só por rodar
-  primeiro faria um sobrevivente ler como pego: fail-open. Medido 13 de 13 verde em 2026-09-25 (kit sem
-  sabotagem, cada passo nomeado primeiro), sem sensor que o repita. Direção: o controle do catálogo roda
-  também uma vez por assassino distinto do mapa, com ele na frente, e exige verde. RESOLVED by 0be5e8d.
-  — descoberto por `revisão final` no PR #168 `perf/catalogo-assassino-primeiro` (2026-09-25)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
