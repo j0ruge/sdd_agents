@@ -1,6 +1,6 @@
 ---
 missao: 20261003-lote-3-a-catraca-desce
-atualizado: 2026-10-04 10:24
+atualizado: 2026-10-04 10:29
 ---
 
 # Checkpoint — Lote 3: a catraca desce
@@ -54,7 +54,7 @@ atualizado: 2026-10-04 10:24
 | I15 | #213: kaizen --series recusa com frase e arquivo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    series: .* is refused with rc 1, naming the file' <<< "$o"` → `2` | done | 9edd800 |
 | I16 | #87: preflight cobra total_cost_usd e num_turns numéricos | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    a result line ' <<< "$o"` → `3` | done | 4f4a9b3 |
 | I17 | #169: um controle por assassino do mapa, ele na frente | `o=$(tests/check-mutation.sh --anchors 2>&1); grep -c '^  ok    controls: one control per distinct killer of the map' <<< "$o"` → `1` | done | 0be5e8d |
-| I18 | #192a: --touched seleciona os mutantes dos sensores tocados | `o=$(tests/check-mutation.sh --anchors 2>&1); grep -c '^  ok    touched: the diff selects the mutants its sensors killed' <<< "$o"` → `1` | pending | — |
+| I18 | #192a: --touched seleciona os mutantes dos sensores tocados | `o=$(tests/check-mutation.sh --anchors 2>&1); grep -c '^  ok    touched: the diff selects the mutants its sensors killed' <<< "$o"` → `1` | done | d658dca |
 | I19 | #192b: --touched roda o assassino, dá veredito e dica | `o=$(SDD_KILLERS_FILE=tests/fixtures/killers-touched.tsv tests/check-mutation.sh --touched 6ad41f7~1..6ad41f7 2>&1); grep -c '^  ok    touched: 2 of 2 selected mutant(s) still caught by their killer' <<< "$o"` → `1` | pending | — |
 | I20 | Fecho: RESOLVED by nos 13, KAIZEN_LOG, 20-handoff-exec.md, suíte inteira | `bash tests/run-all.sh >/dev/null 2>&1; r=$?; o=$(bash tests/check-todo.sh 2>&1); k=$(awk '/^todo-findings /{print $2}' tests/health-baseline.txt); a=$(grep -c "^  ok    $k finding(s)" <<< "$o"); n=$(awk '/<!-- sdd:open -->/{o=1} /<!-- sdd:decided -->/{o=0} o && /RESOLVED by [0-9a-f]{7}/{c++} END{print c+0}' TODO.md); d=$(awk '/<!-- sdd:decided -->/{d=1;next} d && /^- [*][*]/{c++} END{print c+0}' TODO.md); g=$(awk '/20261003-lote-3-a-catraca-desce/{c++} END{print (c>0)}' KAIZEN_LOG.md); echo "$r $a $n $d $g"` → `0 1 13 20 1` | pending | — |
 
