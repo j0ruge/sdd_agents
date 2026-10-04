@@ -1,6 +1,6 @@
 ---
 missao: 20261003-lote-3-a-catraca-desce
-atualizado: 2026-10-04 09:02
+atualizado: 2026-10-04 09:05
 ---
 
 # Checkpoint — Lote 3: a catraca desce
@@ -42,7 +42,7 @@ atualizado: 2026-10-04 09:02
 | I3 | 5 limites declarados nos cabeçalhos (#66, #77, #90, #125, #140); catraca 40 → 35 | `o=$(bash tests/check-todo.sh 2>&1); n=0; for f in tests/check-health.sh tests/check-todo.sh tests/run-all.sh tests/check-pipefail.sh tests/check-lang.sh; do s=$(awk '/20261003-lote-3-a-catraca-desce/{c++} END{print c+0}' "$f"); [ "$s" -gt 0 ] && n=$((n+1)); done; echo "$(grep -c '^  ok    35 finding(s)' <<< "$o") $n"` → `1 5` | done | 4af9d0c |
 | I4 | /sdd-plan: protocolo de repasse + aviso de trabalho longo (decisões 3 e 10) | `a=$(awk '/^## Relaying the grill to the human/{c++} END{print c+0}' commands/sdd-plan.md); b=$(awk '/^- [*][*]Long work between two questions:[*][*]/{c++} END{print c+0}' commands/sdd-plan.md); c=$(awk '/the session that delegated you is the relay/{c++} END{print c+0}' agents/sdd-planner.md); o=$(bash tests/check-checkpoint.sh 2>&1); d=$(grep -c '^  ok    the planner agent teaches the ok-anchor rule' <<< "$o"); cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md && m=same; echo "$a $b $c $d ${m:-diff}"` → `1 1 1 1 same` | done | 921e95e |
 | I5 | #113 resíduo: calibrate() enxerga os 16 sensores | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    the ok anchor is the prefix the suite.s sensors actually print (16 sensor(s))' <<< "$o"` → `1` | done | 0521972 |
-| I6 | #211: Check com test -f num caminho ignorado reprova | `bash tests/check-checkpoint.sh --selftest && grep -c 'a Check that tests an ignored path is caught' tests/check-checkpoint.sh` → `1` | pending | — |
+| I6 | #211: Check com test -f num caminho ignorado reprova | `bash tests/check-checkpoint.sh --selftest && grep -c 'a Check that tests an ignored path is caught' tests/check-checkpoint.sh` → `1` | done | 41ac7a1 |
 | I7 | #216: done abaixo de blocked reprova | `bash tests/check-checkpoint.sh --selftest && grep -c 'a done below a blocked row is caught' tests/check-checkpoint.sh` → `1` | pending | — |
 | I8 | #212: template cita o --check do kit + linha do planner | `o=$(bash tests/check-templates.sh 2>&1); a=$(grep -c '^  ok    checkpoint.md: the checkpoint sensor cited in its --check form' <<< "$o"); b=$(awk '/check-checkpoint.sh --check/{c++} END{print c+0}' agents/sdd-planner.md); cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md && m=same; echo "$a $b ${m:-diff}"` → `1 1 same` | pending | — |
 | I9 | #217a: check-todo --baseline, diff chaveado | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: a --baseline run fails only on what the ref did not have (6 probe(s))' <<< "$o"` → `1` | pending | — |
