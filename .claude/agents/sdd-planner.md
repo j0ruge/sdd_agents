@@ -91,6 +91,9 @@ Every increment needs:
   prints something that looks healthy. GFM's escape, `\|`, the runner does understand today —
   `checkpoint_rows` rejoins the cell by backslash parity — but that is a safety net, not a
   licence: a Check that would need a pipe still becomes a herestring, exactly as above.
+  Before handing the table off, run the kit's `tests/check-checkpoint.sh --check <checkpoint>` by
+  the kit's path: it refuses a blind anchor, a pipe, a `done` below `blocked`, and a `test -f` on
+  an ignored path.
 - **a durable sensor** wherever one fits: a committed test, an e2e spec, a lint rule, a type
   assertion — something that starts running in CI and proves the correctness six months from now.
   An ephemeral manual check only when a durable sensor does not fit, **with the justification

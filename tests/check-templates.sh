@@ -358,6 +358,14 @@ check checkpoint.md '`blocked`'               "status token 'blocked'"
 # checkpoint template that silently stopped naming the sibling would send the next planner back to
 # one file — the whole 67 KB, re-read on every session that updates the table.
 check checkpoint.md 'checkpoint-notas\.md'    "pointer to the sibling notes file"
+# The sensor is cited in the form a TARGET repo can run (issue 212). `tests/check-checkpoint.sh`
+# lives only in the kit, so a template that names it bare, and says it reads "this repo's"
+# checkpoints, sends every adopting repo to a path it does not have: 13 checkpoints of sales_quote
+# carried that text, and that repo has no such file.
+check checkpoint.md 'tests/check-checkpoint\.sh --check' \
+  "the checkpoint sensor cited in its --check form, the one a target repo can run"
+refute checkpoint.md 'checkpoints deste repo' \
+  "the claim that the sensor reads only this repo's checkpoints"
 # The qualifier is IN the regex, and it is the whole assertion. `20260901-o-revisor-so-acha` widened
 # this section from `(QA)` to `(QA e REVIEW)` — the R<n> increments the review round now writes live
 # beside the QA's F<n> — and a regex that stopped at `de fix` served the heading it replaced exactly
