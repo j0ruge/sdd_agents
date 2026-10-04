@@ -47,6 +47,9 @@
 #      `git check-ignore`, asked of the repo the checkpoint lives in, never of the cwd. An ignored
 #      path is green on the machine that wrote it and red on a fresh clone (issue 211, measured in
 #      a target repo; the kit's own checkpoints test no path today).
+#   6. no row is `done` below a `blocked` one. The runner stops the line at the first blocked row,
+#      so a done below it was closed outside the runner, past the stop (issue 216; no case in any
+#      checkpoint when the rule was born, so it entered green).
 #
 # What it deliberately does NOT measure: whether the expected value beside the arrow is the right
 # one, whether the Check actually exercises the increment, or whether a Check with no grep at all
@@ -159,7 +162,7 @@ surface() {
   ( cd "$1" && ls -1 docs/handoffs/*/checkpoint.md templates/checkpoint.md 2>/dev/null )
 }
 
-# rows_of <path> — one line per table row: "NF<TAB>ID<TAB>Check cell".
+# rows_of <path> — one line per table row: "NF<TAB>ID<TAB>Status<TAB>Check cell".
 #
 # The row recognition is the raw `awk -F'|'` split, with NO rejoin of GFM's `\|` — deliberately
 # stricter than checkpoint_rows() in bin/sdd, which does rejoin it. See rule 1 in the header for
@@ -175,26 +178,30 @@ rows_of() {
       status = $5; gsub(/^[ \t]+|[ \t]+$/, "", status)
       if (status == "Status") next
       chk = $4; gsub(/^[ \t]+|[ \t]+$/, "", chk)
-      printf "%d\t%s\t%s\n", NF, id, chk
+      # An empty Status prints as "-": a tab is IFS whitespace to the reader, so an empty field
+      # would collapse and hand the Check cell over as the status.
+      printf "%d\t%s\t%s\t%s\n", NF, id, (status == "" ? "-" : status), chk
     }' "$1"
 }
 
 # Counters published as globals and never through a command substitution: a function read as
 # `x="$(f)"` runs in a subshell and every assignment it makes dies with it (CLAUDE.md).
-N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0
+N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0; V_ORDER=0
 
-reset_counters() { N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0; }
+reset_counters() {
+  N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0; V_ORDER=0
+}
 
 # scan_file <path> <label> — accumulates into the globals, prints one FAIL per violation.
 scan_file() {
-  local path="$1" label="$2" rows nf id chk g a top p src
+  local path="$1" label="$2" rows nf id st chk g a top p src bid=''
   rows="$(rows_of "$path")"
   N_FILES=$((N_FILES + 1))
   # The repo the checkpoint belongs to, resolved from ITS directory and never from the cwd: a
   # target repo ignores what the kit does not. `git -C`, never `cd` (CDPATH). Empty outside a repo,
-  # and then rule 3 has nothing to ask.
+  # and then rule 5 has nothing to ask.
   top="$(git -C "$(dirname -- "$path")" rev-parse --show-toplevel 2>/dev/null)" || top=''
-  while IFS=$'\t' read -r nf id chk; do
+  while IFS=$'\t' read -r nf id st chk; do
     [ -n "$nf" ] || continue
     N_ROWS=$((N_ROWS + 1))
 
@@ -203,6 +210,17 @@ scan_file() {
       fail "$label: row $id hands the runner $((nf - 2)) column(s) instead of 5 — a '|' inside a cell splits it. A raw pipe breaks gate_EXEC; the escape '\\|' the runner rejoins, but this repo's checkpoints use the herestring form instead"
       V_COLS=$((V_COLS + 1))
       continue
+    fi
+
+    # Rule 6 — no row closes below a blocked one; after rule 1, since a shifted row has no Status to
+    # read. The runner stops the line at the first blocked row (increment-blocked, rc 3), so a done
+    # below it was closed past the stop, outside the runner, and its Check may certify what the
+    # blocked row never proved (issue 216).
+    if [ "$st" = blocked ] && [ -z "$bid" ]; then
+      bid="$id"
+    elif [ "$st" = done ] && [ -n "$bid" ]; then
+      fail "$label: $id is done below $bid, which is blocked — the runner stops the line at a blocked row, so $id was closed past the stop and its Check may certify what $bid never proved"
+      V_ORDER=$((V_ORDER + 1))
     fi
 
     # Rule 5 — a path the Check tests with `test -e|-f|-s` must be one git keeps. An ignored one is
@@ -343,6 +361,11 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
   else
     rc=1
   fi
+  if [ "$V_ORDER" -eq 0 ]; then
+    pass "no checkpoint row is done below a blocked one ($N_ROWS row(s))"
+  else
+    rc=1
+  fi
 
   doc_rule "$root/templates/checkpoint.md" "templates/checkpoint.md" \
     "the checkpoint template teaches the ok-anchor rule" || rc=1
@@ -360,7 +383,7 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
     rc=1
   fi
 
-  [ "$rc" -eq 0 ] || fail "$((V_ANCHOR + V_COLS + V_IGNORED)) checkpoint violation(s)"
+  [ "$rc" -eq 0 ] || fail "$((V_ANCHOR + V_COLS + V_IGNORED + V_ORDER)) checkpoint violation(s)"
   return "$rc"
 }
 
@@ -422,7 +445,7 @@ check_one() { # check_one <path> — one checkpoint, no floors, no doc assertion
   fi
   reset_counters
   scan_file "$path" "$(basename -- "$path")"
-  if [ $((V_ANCHOR + V_COLS + V_IGNORED)) -eq 0 ]; then
+  if [ $((V_ANCHOR + V_COLS + V_IGNORED + V_ORDER)) -eq 0 ]; then
     pass "$(basename -- "$path"): $N_ROWS row(s), $N_RULED under the anchor rule, none blind"
     return 0
   fi
@@ -442,7 +465,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=36
+PROBE_FLOOR=39
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -473,8 +496,8 @@ cp_head() {
   } > "$1"
 }
 
-cp_row() { # cp_row <file> <id> <check cell>
-  printf '| %s | slice | %s | done | abc1234 |\n' "$2" "$3" >> "$1"
+cp_row() { # cp_row <file> <id> <check cell> [status, default done]
+  printf '| %s | slice | %s | %s | abc1234 |\n' "$2" "$3" "${4-done}" >> "$1"
 }
 
 # pipe_banner — the `|` ban in the shape both real documents write it: the mechanism that cannot
@@ -792,6 +815,24 @@ selftest() {
   cp_row "$scanign/docs/handoffs/m4/checkpoint.md" I6 '`test -f docs/x-review.md && echo yes` → `yes`'
   probe 'an ignored path makes the whole scan red' 1 \
     'which the repository ignores' "$scanign" --scan
+
+  # ── a done row below a blocked one (issue 216) ──
+  # The runner stops the line at the first blocked row, so a done below it was closed past the
+  # stop, by hand. The Check is a plain one on purpose: the order is the only thing wrong here.
+  local order="$box/order.md" orderok="$box/orderok.md" scanorder="$box/scanorder"
+  cp_head "$order"
+  cp_row "$order" I1 '`bash tests/run-all.sh` → verde' blocked
+  cp_row "$order" I2 '`bash tests/run-all.sh` → verde'
+  probe 'a done below a blocked row is caught' 1 'is done below I1, which is blocked' "$order"
+  cp_head "$orderok"
+  cp_row "$orderok" I1 '`bash tests/run-all.sh` → verde'
+  cp_row "$orderok" I2 '`bash tests/run-all.sh` → verde' blocked
+  probe 'a done above a blocked row passes' 0 'none blind' "$orderok"
+  build_tree "$scanorder"
+  cp_row "$scanorder/docs/handoffs/m4/checkpoint.md" I6 '`bash tests/run-all.sh` → verde' blocked
+  cp_row "$scanorder/docs/handoffs/m4/checkpoint.md" I7 '`bash tests/run-all.sh` → verde'
+  probe 'a done below a blocked row makes the whole scan red' 1 \
+    'which is blocked' "$scanorder" --scan
 
   rm -rf "$box"
 
