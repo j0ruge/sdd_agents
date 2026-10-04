@@ -1827,10 +1827,14 @@ gate_REVIEW() {
   if ! run_check_cmd "$TEST_CMD" "gate-review-test"; then
     GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
-  if [ -n "$(cd "$REPO_ROOT" && git status --porcelain)" ]; then
-    # The CHECK is unchanged and so is the behaviour — only the sentence moved, because since
-    # `20260901-o-revisor-so-acha` this phase does not fix: what a REVIEW session leaves behind is
-    # its round report and the `R<n>` rows it wrote into the checkpoint. ⚠️ The words BEFORE the
+  if [ -n "$(cd "$REPO_ROOT" && git status --porcelain --untracked-files=all -- "$MISSION_DIR/40-review-r*.md" "$MISSION_DIR/checkpoint.md" "$MISSION_DIR/checkpoint-notas.md")" ]; then
+    # SCOPED to what a REVIEW session writes (issue 115): since `20260901-o-revisor-so-acha` this
+    # phase does not fix, so what it leaves behind is its round report, the `R<n>` rows it wrote
+    # into the checkpoint and the note it appended. Unscoped, a dirty tree a LATER phase left — a
+    # DOCS session that died with a new doc on disk — failed this gate, derive_phase walked back to
+    # REVIEW, and the mission bought a whole new round for a file the round never wrote. That half
+    # is now gate_DOCS's, which refuses its own uncommitted 45-docs.md. `--untracked-files=all`
+    # because the pathspec must reach a file inside an untracked directory. ⚠️ The words BEFORE the
     # dash are load-bearing and stay verbatim: `historic_rounds` declares this refusal as one of the
     # two that name no round file, and the prose is quoted as that declared limit in three places
     # (the def's own comment above, `docs/pipeline.md § Field reference`, `tests/check-autonomy.sh`).
@@ -1909,6 +1913,16 @@ docs_checklist_rows() {
 gate_DOCS() {
   local d="$MISSION_DIR/45-docs.md"
   [ -f "$d" ] || { GATE_WHY="missing 45-docs.md"; return 1; }
+  # Committed, or the phase is not done (issue 115, decision 8 of 20261003-lote-3-a-catraca-desce).
+  # gate_REVIEW stopped looking past its own files, so a DOCS session that died after writing a
+  # complete 45-docs.md would otherwise ride to PR over a dirty tree. The owner of the artifact is
+  # the DOCS hat, whose instructions end in "Commit everything", so the refusal is satisfiable: the
+  # DOCS phase runs again and commits it with the docs it describes.
+  # ⚠️ DECLARED LIMIT: a DOCS session that committed 45-docs.md but left ANOTHER document dirty still
+  # reaches PR with the tree dirty — the gate reads its own artifact, not the documents it lists.
+  if [ -n "$(cd "$REPO_ROOT" && git status --porcelain --untracked-files=all -- "$d")" ]; then
+    GATE_WHY="45-docs.md is not committed — a DOCS session that died leaves it on disk; the DOCS phase runs again and commits it with the docs it describes"; return 1
+  fi
   if ! grep -qiE 'drift' "$d"; then
     GATE_WHY="45-docs.md has no drift checklist"; return 1
   fi
@@ -3018,8 +3032,9 @@ pipeline_log_line() {
   # session is spent and no mission artifact is touched. Recording here an event that was only
   # PROJECTED lies in the audit trail, and in a freshly installed target repo (where `sdd
   # install` only ignores `.sdd/logs/`) the `pipeline.log` stays untracked and dirties the
-  # working tree — a dirty tree fails `gate_REVIEW` and `sdd preflight`, meaning a projection
-  # would knock down another phase's gate. The guard lives here, not in the callers, so it holds
+  # working tree — an untracked `pipeline.log` fails `sdd preflight` (gate_REVIEW reads only the
+  # round's own files since issue 115), meaning a projection would knock down the next phase's
+  # door. The guard lives here, not in the callers, so it holds
   # for ALL of them: the escalation paths (checkpoint `blocked`, budget blown, two sessions with
   # no progress) are three, and a fourth added tomorrow would be born with the same defect.
   # Found by the QA phase of mission 20260814-dry-run-completo (F1).

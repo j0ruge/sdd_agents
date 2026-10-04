@@ -1830,6 +1830,26 @@ assert_why_absent "the lexicographic pick (r3) is not the file the gate read" "R
 sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* .*/| **Overall** | **A** | nothing left open |/' \
   "$MDIR/40-review-r10.md"
 git add -A && git commit -qm "chore: review"
+
+# The dirty-tree refusal of gate_REVIEW is SCOPED to what the round writes (issue 115): its report,
+# checkpoint.md and checkpoint-notas.md. Unscoped, a dirty tree a LATER phase left — a DOCS session
+# that died with a new doc on disk — sent the mission back to REVIEW and bought a whole new round.
+# Three worlds, each undone before the next; the original assertion below is the control that the
+# fixture came back clean.
+mkdir -p docs/guide && : > docs/guide/new.md; printf '# Docs\n' > "$MDIR/45-docs.md"
+assert_phase "a dirty tree a later phase left does not send the mission back to REVIEW" "DOCS"
+assert_why_absent "and the reason REVIEW gives is not the dirty-tree refusal" "REVIEW" \
+  "working tree dirty after the review"
+rm -rf docs/guide "$MDIR/45-docs.md"
+# World 2 is the one that kills an EMPTY scope from the right side: without it, a gate that looked
+# at nothing at all would pass world 1 too.
+printf '\n' >> "$MDIR/checkpoint.md"
+assert_phase "a dirty checkpoint.md the review left still holds REVIEW" "REVIEW"
+assert_why "and the reason REVIEW gives is the dirty-tree refusal" "REVIEW" "working tree dirty after the review"
+git checkout -- "$MDIR/checkpoint.md"
+printf -- '- nota\n' > "$MDIR/checkpoint-notas.md"
+assert_phase "a dirty checkpoint-notas.md the review appended still holds REVIEW" "REVIEW"
+rm -f "$MDIR/checkpoint-notas.md"
 assert_phase "last review all Grade A, suite green, clean tree" "DOCS"
 
 # The separator row prettier and markdownlint actually write. GFM spells column alignment with
@@ -2254,6 +2274,11 @@ assert_why   "...and still quotes the FIRST pending Status" "DOCS" "the first wi
 
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
   > "$MDIR/45-docs.md"
+# A COMPLETE 45-docs.md left uncommitted — the DOCS session that died before its commit. gate_DOCS
+# refuses it (issue 115, decision 8): with only the REVIEW half of the fix this would read PR, and
+# the mission would ride to the PR over a dirty tree.
+assert_phase "an uncommitted 45-docs.md holds DOCS, it does not ride to PR" "DOCS"
+assert_why "DOCS names the uncommitted 45-docs.md" "DOCS" "45-docs.md is not committed"
 git add -A && git commit -qm "chore: docs"
 assert_phase "drift checklist complete" "PR"
 assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
@@ -2793,7 +2818,8 @@ assert_eq "stamp-key: a commit touching only the backlog ratchet and TODO.md lea
 # 11. IGNORED — junk git ignores, inside a measured directory (#119). `find` used to hash it, so a
 #     `tests/debug.log` left by a run moved the key; a tracked-only listing never sees it. The
 #     witness that git really ignores it is half the answer: an untracked file it does NOT ignore
-#     would make the tree dirty and send the mission back to REVIEW, a refusal of another kind.
+#     no longer sends the mission back to REVIEW — since issue 115 gate_REVIEW reads only the
+#     round's own files — so what the witness guards today is that the file really is ignored.
 #     Stamped again first and read back as DONE, so the answer never inherits world 10's.
 i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
 ignored_before="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
@@ -3279,7 +3305,9 @@ fi
 # `sdd approve` is the first thing in the runner that commits, so its blast radius is the assertion,
 # from both sides (#156). It has to carry the WHOLE mission directory plus the file `adr:` names —
 # exactly four paths here — because a plan approved with 01-plano.md and checkpoint.md left as `??`
-# is a plan the next gate_REVIEW refuses as a dirty tree. And the unrelated edit planted above must
+# is a plan no commit carries, and its checkpoint.md half is one the next gate_REVIEW refuses as a
+# dirty tree (since issue 115 that gate reads the round's files, checkpoint.md among them, and no
+# longer 01-plano.md). And the unrelated edit planted above must
 # still be uncommitted afterwards. The second call has to be a no-op — a human who runs it twice, or
 # a script that retries, must not stack a second `chore(missao)` commit onto an approved plan; it is
 # run while still ON the mission branch, because on `main` the directory no longer exists.

@@ -48,7 +48,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
-  `tests/check-mutation.sh:5959` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
+  `tests/check-mutation.sh:5977` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
   mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
   só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
   qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
@@ -65,7 +65,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2060` contra `tests/check-mutation.sh:5864` — a chave lê `bin tests templates config`,
+  `bin/sdd:2074` contra `tests/check-mutation.sh:5882` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -75,7 +75,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:135`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
-  registra o comando, mas `health_provenance` (`bin/sdd:6397`) só confere as 3 fixtures de skill
+  registra o comando, mas `health_provenance` (`bin/sdd:6412`) só confere as 3 fixtures de skill
   contra arquivo instalado. Se o CLI renomear `type`/`total_cost_usd`, o stub segue verde e o
   runner quebra só em missão real — o modo de falha que a regra de proveniência existe para matar.
   Direção: probe que rode o CLI de verdade, ou capturar o schema num arquivo versionado.
@@ -104,8 +104,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: o `starter.conf` sugerir o `--check` do kit no `TEST_CMD` do alvo.
   — descoberto por `humano` revisando o sensor novo (2026-08-16)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9575`
-  (`kaizen_series`) vs `docs/pipeline.md:1374`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9590`
+  (`kaizen_series`) vs `docs/pipeline.md:1376`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:9350`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
   `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
@@ -179,7 +179,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o princípio 4 promete resolver de graça. Direção: escopar a checagem ao que o REVIEW pode sujar.
   — descoberto por `operador` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
 
-- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:10293` — a porta
+- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:10308` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
   e o toplevel é por worktree: com o `sdd` do checkout principal e o cwd num worktree os dois
   divergem e o `die` da `:10086` mata. ⚠️ **`--series` NÃO passa por ela** — sai na `:10073`, medido
@@ -187,14 +187,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **Nenhuma chave de caminho do `.sdd/config.sh` é normalizada antes de virar padrão de `case`**
-  — `bin/sdd:2526` — `hat_expand` troca `$TODO_FILE` **literalmente** no `writes:` do chapéu, lido contra
+  — `bin/sdd:2540` — `hat_expand` troca `$TODO_FILE` **literalmente** no `writes:` do chapéu, lido contra
   `git diff --name-only`; um repo-alvo com `TODO_FILE="./TODO.md"` — ou `HANDOFF_DIR="./docs/handoffs"`,
   que a normalização do `F4` também não pega — reproduz o defeito que o `F4` acabou de consertar,
   com raio menor. Direção: normalização **única** na leitura do config, com um probe por chave.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **Uma sessão escreve o ledger com o `bin/sdd` que tinha em MEMÓRIA ao ser lançada** —
-  `bin/sdd:4282` — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4 rodadas
+  `bin/sdd:4297` — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4 rodadas
   com `turns` nulo), e o ledger não distingue "medido nulo" de "não medido": fail-open de leitura.
   O `.sdd/config.sh` tem o mesmo defeito (`bin/sdd:147`, `source` único): o `TEST_CMD` consertado
   a meio do run não vale, e o EXEC da SQ-141 queimou 4 retries (~US$ 5,90) num gate insatisfazível.
@@ -230,7 +230,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Saída humana e cosmética
 
 - [ ] **35% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
-  `docs/pipeline.md:1022` — as seções `The autonomy ledger` (323 linhas) e `The kaizen loop` (174)
+  `docs/pipeline.md:1023` — as seções `The autonomy ledger` (323 linhas) e `The kaizen loop` (174)
   somam **497 de 1419** (eram 245 de 570 em 2026-08-17) num arquivo que é o índice do pipeline.
   Índice que carrega profundidade é o doc que a próxima sessão não lê inteiro. Direção: `references/` para
   o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
@@ -246,9 +246,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   por `codereview` na missão `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
 
 - [ ] **O `kaizen --series` morre com o erro cru do `jq` e contradiz o pipeline.md sobre linha não-objeto** —
-  `bin/sdd:9575` (`kaizen_series`) — irmão da #206 no segundo leitor: uma linha objeto com
+  `bin/sdd:9590` (`kaizen_series`) — irmão da #206 no segundo leitor: uma linha objeto com
   `"cost_usd":"4.0"` sai com rc 5 e `jq: error (at <stdin>:2)`, sem nomear o arquivo nem passar pelo
-  `die`; uma linha array sai rc 0, contada em `excluded.unrecognized`, e o `docs/pipeline.md:1062`
+  `die`; uma linha array sai rc 0, contada em `excluded.unrecognized`, e o `docs/pipeline.md:1064`
   diz que ela "still dies loudly naming the file". Direção: o mesmo par de recusas do `cmd_autonomy`
   (forma primeiro, stderr do `jq` no `die`), ou a doc dizer o que a série faz.
   — descoberto pela triagem cética do lote 2 no branch `fix/lote-2-sensores` (2026-10-03)

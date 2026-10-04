@@ -1010,6 +1010,22 @@ mut_DOCS_markup_only_status_skipped() {
   sed -i '/^docs_checklist_rows()/,/^}/ s@^        if (cell == "" \&\& raw != "") { print "P|" raw; next }$@        raw = raw@' "$1"
 }
 
+# Issue 115, decision 8 of 20261003-lote-3-a-catraca-desce. The dirty-tree refusal of gate_REVIEW
+# goes back to the WHOLE tree: a new doc a dead DOCS session left on disk sends the mission back to
+# REVIEW for a round it never needed. Caught by `a dirty tree a later phase left does not send the
+# mission back to REVIEW` in check-gates.sh — and the world beside it, a dirty checkpoint.md that
+# still holds REVIEW, is what refuses the opposite sabotage, an empty scope.
+mut_REVIEW_dirty_unscoped() {
+  sed -i '/^gate_REVIEW() {/,/^}/ s|git status --porcelain --untracked-files=all -- .*)" \]; then$|git status --porcelain)" ]; then|' "$1"
+}
+
+# The other half: gate_DOCS stops refusing its own uncommitted 45-docs.md, and a DOCS session that
+# died before its commit rides to PR over a dirty tree. Caught by `an uncommitted 45-docs.md holds
+# DOCS, it does not ride to PR` in check-gates.sh.
+mut_DOCS_uncommitted_passes() {
+  sed -i '/^gate_DOCS() {/,/^}/ s|^  if \[ -n "\$(cd "\$REPO_ROOT" \&\& git status --porcelain --untracked-files=all -- "\$d")" \]; then$|  if false; then|' "$1"
+}
+
 mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete" mission with no PR
   sed -i 's|GATE_WHY="missing 50-pr.md"; return 1|GATE_WHY="missing 50-pr.md"; return 0|' "$1"
 }
@@ -5436,6 +5452,8 @@ CATALOG=(
   REVIEW_backtick_grade_kept
   DOCS_backtick_status_kept
   DOCS_markup_only_status_skipped
+  REVIEW_dirty_unscoped
+  DOCS_uncommitted_passes
   PR_no_artifact
   PR_stamp_blind
   PR_blocked_docs_not_carried

@@ -592,7 +592,8 @@ assert_eq "the fixture comes back clean after the TICKET test" "" "$(git status 
 # precisely so as NOT to change anything — records a BLOCKED event that never happened in the
 # mission's `pipeline.log`, lying in the audit trail. Worse in a freshly installed target repo:
 # `sdd install` only puts `.sdd/logs/` in `.gitignore`, so the `pipeline.log` lands as untracked
-# and dirties the working tree — and a dirty tree fails `gate_REVIEW` and `sdd preflight`.
+# and dirties the working tree — and an untracked `pipeline.log` fails `sdd preflight` (not
+# `gate_REVIEW` any more: since issue 115 it reads only the round's own files).
 # A projection command must not be able to knock down another phase's gate.
 echo "== the projection does not write to the mission journal (blocked increment) =="
 sed -i 's/| pending |/| blocked |/' "$MDIR/checkpoint.md"

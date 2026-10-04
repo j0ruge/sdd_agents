@@ -977,8 +977,9 @@ the mission before it cost US$ 174 against a ceiling of US$ 150 that lived only 
 Plus `<PHASE>-<ts>.err` for the session's stderr. The journal is **ephemeral by contract**: `.sdd/logs/` is in the
 `.gitignore` that `sdd install` writes, and the durable record of what happened is the committed
 handoffs. If it moved back into the committed tree it would dirty `git status` — and a dirty tree
-fails `gate_REVIEW` and `sdd preflight`. `--max-budget-usd` per session is a damage cap, not a
-budget.
+fails `sdd preflight`. (`gate_REVIEW` refuses only a dirty round report, `checkpoint.md` or
+`checkpoint-notas.md`, and `gate_DOCS` an uncommitted `45-docs.md`, since issue 115 scoped them.)
+`--max-budget-usd` per session is a damage cap, not a budget.
 
 `sdd census <mission>` reads those logs back: per phase, sessions, turns, cost, cache-read tokens,
 MCP servers the sessions saw, permission denials, bytes re-read under `HANDOFF_DIR`, and every tool
@@ -1039,8 +1040,9 @@ the kit improve autonomy or hurt it?".
 
 It is global, not per-repo, for two reasons. Maturity across projects cannot be measured in a
 file that lives inside one project. And a file the runner writes BETWEEN phases inside the target
-repo would sit untracked and fail `gate_REVIEW` and `sdd preflight` — the `pipeline.log` defect,
-which was fixed by making that journal ephemeral, a way out this ledger does not have.
+repo would sit untracked and fail `sdd preflight` — and `gate_REVIEW` too, until issue 115 scoped
+it to the round's own files — the `pipeline.log` defect, which was fixed by making that journal
+ephemeral, a way out this ledger does not have.
 
 **The file is global; the READING is per repo.** Every reader — `sdd autonomy`, `sdd kaizen
 --series`, and the reminder printed after a pipeline completes — admits only the rows whose `repo`
