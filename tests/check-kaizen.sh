@@ -1846,6 +1846,23 @@ assert_eq "sdd kaizen refuses to run outside the kit repo (rc 1)" "1" "$rc"
 assert_eq "and points at the kit repo" "yes" \
   "$(grep -q 'run it in the kit repo' <<< "$out" && echo yes || echo no)"
 
+# A linked WORKTREE of the kit is the kit (issue 121). The door compared the `--show-toplevel` of
+# $SDD_HOME with the cwd's, and a worktree has a toplevel of its own, so the kit's `sdd` run from a
+# worktree of the kit refused as if it stood in a target. The identity is the common dir, the one
+# ledger_repo_root already reads. DIFFERENTIAL: the main checkout and its worktree, one `sdd`.
+KWT="$OUTSIDE/kit-worktree"
+git -C "$FIX" worktree add -q -b kaizen/worktree-fixture "$KWT"
+kz_door() { # kz_door <cwd> — "<rc> <refused|admitted>" for a kaizen projection from <cwd>
+  local o r
+  o="$( cd "$1" && "$KSDD" kaizen --dry-run 2>&1 )"; r=$?
+  if grep -q 'run it in the kit repo' <<< "$o"; then printf '%s refused\n' "$r"; else printf '%s admitted\n' "$r"; fi
+}
+kz_main="$(kz_door "$FIX")"; kz_wt="$(kz_door "$KWT")"
+assert_eq "kit-repo guard: a linked worktree of the kit answers like the main checkout" "$kz_main" "$kz_wt"
+assert_eq "kit-repo guard: and the worktree is admitted, not refused" "admitted" "${kz_wt#* }"
+git -C "$FIX" worktree remove --force "$KWT"
+git -C "$FIX" branch -q -D kaizen/worktree-fixture
+
 echo "== the base branch warning reaches the kaizen door =="
 # The kaizen door is the WORSE of the two that open a committing session: it validates the kit repo
 # and warns about a dirty tree, and then writes a verdict plus three artifacts wherever you happen

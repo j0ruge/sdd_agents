@@ -48,7 +48,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
-  `tests/check-mutation.sh:5995` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
+  `tests/check-mutation.sh:6010` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
   mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
   só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
   qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
@@ -65,7 +65,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2078` contra `tests/check-mutation.sh:5900` — a chave lê `bin tests templates config`,
+  `bin/sdd:2078` contra `tests/check-mutation.sh:5915` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -185,6 +185,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   divergem e o `die` da `:10086` mata. ⚠️ **`--series` NÃO passa por ela** — sai na `:10073`, medido
   nas duas formas de invocação, saída idêntica. Direção: `ledger_repo_root` dos dois lados, com par
   diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
+
+- [ ] **O `kaizen_reminder` diz a frase de repo-alvo quando roda de um worktree do kit** —
+  `bin/sdd:10108` (`kaizen_reminder`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
+  compara o `--show-toplevel` de `$SDD_HOME` com o `$REPO_ROOT`, e o toplevel é por worktree. Do
+  worktree, o `sdd` do checkout principal imprime "N mission(s) of this repo … The kaizen judge
+  counts them" no lugar da frase do kit. Direção: o mesmo `ledger_repo_root` dos dois lados, e
+  re-ancorar o `mut_KAIZEN_reminder_wrong_repo`. O `kit_guard_check` usa a grafia e não é defeito.
+  — descoberto por `sdd-planner` na missão `20261003-lote-3-a-catraca-desce` (2026-10-03)
 
 - [ ] **Nenhuma chave de caminho do `.sdd/config.sh` é normalizada antes de virar padrão de `case`**
   — `bin/sdd:2544` — `hat_expand` troca `$TODO_FILE` **literalmente** no `writes:` do chapéu, lido contra

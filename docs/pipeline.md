@@ -1368,7 +1368,8 @@ then "11 row(s) excluded: born in another repo" underneath.
 
 ## The kaizen loop
 
-The ledger records; `sdd kaizen` closes. Run **in the kit repo** (it refuses anywhere else), it
+The ledger records; `sdd kaizen` closes. Run **in the kit repo** (it refuses anywhere else; a
+linked worktree of the kit is the kit, compared by the same common-dir identity the ledger uses), it
 judges the previous kit change and gives birth to the kit's next mission plan — detection without
 closure is inventory, not improvement.
 

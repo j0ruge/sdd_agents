@@ -10355,7 +10355,13 @@ cmd_kaizen() {
   # the same misattribution autonomy_kit_stamp already warns about for ledger rows.
   [ -n "$kit_root" ] \
     || die "$SDD_HOME is not a git checkout — the kaizen loop judges kit versions and needs the kit's git history"
-  [ "$kit_root" = "$REPO_ROOT" ] \
+  # The kit is compared by IDENTITY, never by toplevel (issue 121): a linked worktree of the kit has
+  # a toplevel of its own, so the kit's own `sdd`, run from one, refused as if it stood in a target.
+  # The identity is the common dir, the one ledger_repo_root reads for the ledger — the same call,
+  # with the same REPO_ROOT override health_release makes for the kit.
+  local kit_id here_id
+  kit_id="$( REPO_ROOT="$SDD_HOME" ledger_repo_root )"; here_id="$( ledger_repo_root )"
+  [ -n "$kit_id" ] && [ "$kit_id" = "$here_id" ] \
     || die "sdd kaizen plans the KIT's next mission — run it in the kit repo ($SDD_HOME)"
   # A dirty tree does not block (the judge may be invoked mid-work on purpose), but the rows born
   # now carry kit_dirty:true and stay out of the comparable series forever — worth hearing once.

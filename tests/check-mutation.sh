@@ -3408,6 +3408,19 @@ mut_KAIZEN_reminder_wrong_repo() {
   sed -i '/^kaizen_reminder()/,/^}/ s@if \[ -n "\$kit_root" \] && \[ "\$kit_root" = "\$REPO_ROOT" \]; then@if true; then@' "$1"
 }
 
+# The kaizen door goes back to comparing TOPLEVELS (issue 121): a linked worktree of the kit has its
+# own, and the kit's `sdd` run from one refuses as if it stood in a target. Caught by `kit-repo
+# guard: a linked worktree of the kit answers like the main checkout` in check-kaizen.sh.
+mut_KAIZEN_kit_door_per_worktree() {
+  sed -i 's@^  \[ -n "\$kit_id" \] && \[ "\$kit_id" = "\$here_id" \] \\$@  [ "$kit_root" = "$REPO_ROOT" ] \\@' "$1"
+}
+# The door opens for anyone: run from a target project, kaizen judges the kit and gives birth to the
+# plan in the wrong repo. The door had no mutant before issue 121. Caught by `sdd kaizen refuses to
+# run outside the kit repo (rc 1)` in check-kaizen.sh.
+mut_KAIZEN_kit_door_open() {
+  sed -i 's@^  \[ -n "\$kit_id" \] && \[ "\$kit_id" = "\$here_id" \] \\$@  true \\@' "$1"
+}
+
 # `sdd kaizen` stops being idempotent: with the verdict already on disk the gate passes, the outcome
 # is repeated — and then the command falls THROUGH and opens a session anyway. Re-running it to
 # re-read a verdict is the ordinary human move, and it would quietly cost an opus session every
@@ -5712,6 +5725,8 @@ CATALOG=(
   RUN_retry_row_moved_false
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
+  KAIZEN_kit_door_per_worktree
+  KAIZEN_kit_door_open
   KAIZEN_already_judged_spends
   RUN_degraded_journal_dropped
   AUTONOMY_is_escalation_blind
