@@ -17,9 +17,13 @@
 #                                             sensor in seconds — a HINT before a commit, never the
 #                                             verdict; exit 0 = caught, 1 = not caught or no answer)
 #        tests/check-mutation.sh --touched <rev> [--list]
-#                                            (the mutants whose last killer, in the map `sdd health`
-#                                             writes, is a sensor the diff of tests/ against <rev>
-#                                             touched; --list prints that selection)
+#                                            (seconds to minutes: the mutants whose last killer, in
+#                                             the map `sdd health` writes, is a sensor the diff of
+#                                             tests/ against <rev> touched, each run against that
+#                                             killer alone — a HINT before committing a sensor change,
+#                                             never the verdict; --list prints the selection only;
+#                                             exit 0 = every one still caught, 1 = one lost, 2 = no
+#                                             map or no such revision)
 
 set -uo pipefail
 
@@ -375,6 +379,17 @@ touched_selftest() {
   [ "$rc" = 2 ] || { echo "  SELFTEST FAIL  touched: a revision that does not resolve answered rc $rc, expected 2" >&2; return 1; }
   KILLER=(); rc=0; touched_select "$repo" base..hat >/dev/null 2>&1 || rc=$?
   [ "$rc" = 2 ] || { echo "  SELFTEST FAIL  touched: an empty map answered rc $rc, expected 2 — never '0 selected'" >&2; return 1; }
+  # The verdict, over rc files whose answer is known: a mutant its killer no longer catches is LOST,
+  # named with the --only command that escalates it, and the run is red; every one caught is green.
+  # The output is captured, never printed: its ok line is the one the real run prints.
+  local out
+  echo 1 > "$d/S1.rc"; echo 0 > "$d/S2.rc"; echo 2 > "$d/S3.rc"
+  rc=0; out="$(touched_verdict "$d" S1 S2 2>&1)" || rc=$?
+  { [ "$rc" = 1 ] && grep -qF -- '--only S2' <<< "$out" && grep -qF '1 of 2 selected' <<< "$out"; } \
+    || { echo "  SELFTEST FAIL  touched: a lost mutant was not refused and named for --only (rc $rc): $out" >&2; return 1; }
+  rc=0; out="$(touched_verdict "$d" S1 S3 2>&1)" || rc=$?
+  { [ "$rc" = 0 ] && grep -qF 'touched: 2 of 2 selected mutant(s) still caught by their killer' <<< "$out"; } \
+    || { echo "  SELFTEST FAIL  touched: two caught mutants did not read as 2 of 2 (rc $rc): $out" >&2; return 1; }
   return 0
 }
 
@@ -6180,6 +6195,7 @@ census_file_of() { # census_file_of <step title> <joined run-all> — the tests/
 #   TOUCHED_OTHER     the touched tests/ paths no mutant names as killer — the catalogue answers for them
 #   TOUCHED_NOJOIN    killer steps of the map that join to no tests/check-*.sh
 #   TOUCHED_UNMAPPED  slugs of CATALOG with no line in the map
+#   TOUCHED_FILE_OF   slug → the sensor file its killer runs, for every selected slug
 # <rev> goes to `git diff` verbatim: one revision is compared with the working tree, a range with
 # its other end. Reads KILLER (load_killer_map) and RUNALL_JOINED (census_join of run-all.sh). An
 # empty map and a revision that does not resolve are refused with rc 2, said — "0 selected, rc 0"
@@ -6188,6 +6204,7 @@ touched_select() {
   local repo="$1" rev="$2" paths p step f slug
   local -A step_file=() sensor_set=() hit=()
   TOUCHED_SLUGS=(); TOUCHED_SENSORS=(); TOUCHED_OTHER=(); TOUCHED_NOJOIN=0; TOUCHED_UNMAPPED=0
+  TOUCHED_FILE_OF=()
   if [ "${#KILLER[@]}" -eq 0 ]; then
     echo "check-mutation.sh: --touched has no killer map to read (${TOUCHED_MAP:-$KILLERS_FILE}) — \`sdd health\` writes it; until then --only <slug> [sensor.sh] runs one mutant" >&2
     return 2
@@ -6210,9 +6227,38 @@ touched_select() {
     step="${KILLER[$slug]:-}"
     if [ -z "$step" ]; then TOUCHED_UNMAPPED=$((TOUCHED_UNMAPPED + 1)); continue; fi
     f="${step_file[$step]:-}"
-    if [ -n "$f" ] && [ -n "${hit[$f]:-}" ]; then TOUCHED_SLUGS+=("$slug"); fi
+    if [ -n "$f" ] && [ -n "${hit[$f]:-}" ]; then TOUCHED_SLUGS+=("$slug"); TOUCHED_FILE_OF["$slug"]="$f"; fi
   done
   return 0
+}
+declare -A TOUCHED_FILE_OF=()
+
+# touched_verdict <dir> <slug...> — reads <dir>/<slug>.rc of each selected mutant through rc_verdict,
+# the catalogue's own reading. A mutant its killer no longer catches is LOST: named, with the --only
+# command that escalates it to the whole suite. rc 0 only when every one is still caught. It does not
+# rewrite the killer map and prints no `score:` — that is the catalogue's, and only sdd health's.
+touched_verdict() {
+  local dir="$1" slug rc k=0 n=0
+  shift
+  for slug in "$@"; do
+    n=$((n + 1))
+    rc="$(cat "$dir/$slug.rc" 2>/dev/null || echo 99)"
+    case "$(rc_verdict "$rc")" in
+      caught) k=$((k + 1)) ;;
+      survived)  fail "touched: $slug is NOT caught by ${TOUCHED_FILE_OF[$slug]:-its killer} any more" \
+                      "escalate: tests/check-mutation.sh --only $slug" ;;
+      broken)    fail "CATALOGUE-BROKEN: $slug — its anchor no longer applies" \
+                      "fix the anchor; tests/check-mutation.sh --anchors names every one" ;;
+      timed-out) fail "TIMED-OUT: $slug — inconclusive, never caught" "escalate: tests/check-mutation.sh --only $slug" ;;
+      missing)   fail "touched: $slug produced no result" "escalate: tests/check-mutation.sh --only $slug" ;;
+    esac
+  done
+  if [ "$k" -eq "$n" ]; then
+    pass "touched: $k of $n selected mutant(s) still caught by their killer"
+    return 0
+  fi
+  printf '  FAIL  touched: %d of %d selected mutant(s) still caught by their killer\n' "$k" "$n" >&2
+  return 1
 }
 
 # rc_verdict <suite rc> → how the catalogue reads a mutant's rc: broken (90/91, the mutant never
@@ -6412,6 +6458,27 @@ run_control() {
 # per call, and run-all.sh would then invoke this file a third time (check-health.sh counts the
 # invocations). What it shares with the catalogue is measured there; its own branches are not.
 # ---------------------------------------------------------------------------
+# only_sensor <box> <name> [sensor] — one sensor, under the SDD_MUTANT a mutant's suite runs with
+# (so it stops at its first red, as it would inside the catalogue); <name>.rc and .log in $WORK. The
+# sensor defaults to --only's. With a DEADLINE, because a mutant can make a sensor hang and
+# run-all.sh's per-step deadline is not in this path (CodeRabbit on PR #203). 720 s is run-all.sh's
+# largest step deadline; SDD_ONLY_DEADLINE overrides it. A run that reaches the deadline is written
+# as 124 whatever `timeout` returned — 137 after the KILL would otherwise read as caught — and
+# rc_verdict reads 124 as timed-out: inconclusive, never caught, exactly as inside the catalogue.
+# Shared by --only <slug> <sensor> and --touched since issue 192.
+only_sensor() {
+  local rc=0 t0=$SECONDS
+  SDD_MUTANT=1 timeout -k 10 "$ONLY_DEADLINE" bash "$1/tests/${3:-$ONLY_SENSOR}" > "$WORK/$2.log" 2>&1 || rc=$?
+  [ $((SECONDS - t0)) -lt "$ONLY_DEADLINE" ] || rc=124
+  echo "$rc" > "$WORK/$2.rc"
+}
+only_deadline() { # sets ONLY_DEADLINE, or exits 2 naming the bad value
+  ONLY_DEADLINE="${SDD_ONLY_DEADLINE:-720}"
+  case "$ONLY_DEADLINE" in
+    ''|0*|*[!0-9]*) echo "check-mutation.sh: SDD_ONLY_DEADLINE must be a whole number of seconds >= 1 (got: $ONLY_DEADLINE)" >&2; exit 2 ;;
+  esac
+}
+
 if [ -n "$ONLY_SLUG" ]; then
   known=0
   for slug in "${CATALOG[@]}"; do [ "$slug" = "$ONLY_SLUG" ] && { known=1; break; }; done
@@ -6439,23 +6506,7 @@ if [ -n "$ONLY_SLUG" ]; then
     wait
   else
     what="$ONLY_SENSOR"
-    # only_sensor <box> <name> — the one sensor, under the SDD_MUTANT a mutant's suite runs with
-    # (so it stops at its first red, as it would inside the catalogue); <name>.rc and .log in $WORK.
-    # With a DEADLINE, because a mutant can make a sensor hang and run-all.sh's per-step deadline is
-    # not in this path (CodeRabbit on PR #203). 720 s is run-all.sh's largest step deadline;
-    # SDD_ONLY_DEADLINE overrides it. A run that reaches the deadline is written as 124 whatever
-    # `timeout` returned — 137 after the KILL would otherwise read as caught — and rc_verdict reads
-    # 124 as timed-out: inconclusive, never caught, exactly as inside the catalogue.
-    only_sensor() {
-      local rc=0 t0=$SECONDS
-      SDD_MUTANT=1 timeout -k 10 "$ONLY_DEADLINE" bash "$1/tests/$ONLY_SENSOR" > "$WORK/$2.log" 2>&1 || rc=$?
-      [ $((SECONDS - t0)) -lt "$ONLY_DEADLINE" ] || rc=124
-      echo "$rc" > "$WORK/$2.rc"
-    }
-    ONLY_DEADLINE="${SDD_ONLY_DEADLINE:-720}"
-    case "$ONLY_DEADLINE" in
-      ''|0*|*[!0-9]*) echo "check-mutation.sh: SDD_ONLY_DEADLINE must be a whole number of seconds >= 1 (got: $ONLY_DEADLINE)" >&2; exit 2 ;;
-    esac
+    only_deadline
     echo "== --only $ONLY_SLUG: control and mutant against $ONLY_SENSOR alone =="
     only_sensor "$WORK/control" control &
     sandbox "$box"
@@ -6512,8 +6563,62 @@ if [ -n "$TOUCHED_REV" ]; then
     printf '%s\n' ${TOUCHED_SLUGS[@]+"${TOUCHED_SLUGS[@]}"}
     exit 0
   fi
-  echo "check-mutation.sh: --touched without --list would run the selection, and that path is not here yet — use --list" >&2
-  exit 2
+  if [ "${#TOUCHED_SLUGS[@]}" -eq 0 ]; then
+    echo "  note  the diff selects no mutant of the map — nothing for --touched to run; the catalogue answers for the rest"
+    exit 0
+  fi
+  # Each selected mutant against its KILLER alone, in the pool; the control of every touched sensor
+  # runs first, on the copy with no sabotage, and a red one stops the launches (control_red reads
+  # every control*.rc). The estimate is the map's seconds — each a whole killer-first suite, so an
+  # upper bound for one sensor — over JOBS.
+  only_deadline
+  est=0
+  for slug in "${TOUCHED_SLUGS[@]}"; do est=$((est + ${SECS[$slug]:-0})); done
+  echo "== touched: ${#TOUCHED_SLUGS[@]} mutant(s) against their killer, at most ~$(( (est + JOBS - 1) / JOBS )) s at $JOBS job(s) (the map's seconds over JOBS) =="
+  sandbox "$WORK/control"
+  touched_control() {
+    local f rc max=0
+    for f in "${TOUCHED_SENSORS[@]}"; do
+      only_sensor "$WORK/control" "control-$f" "$f"
+      rc="$(cat "$WORK/control-$f.rc")"
+      [ "$rc" = 0 ] || max="$rc"
+    done
+    echo "$max" > "$WORK/control.rc"
+  }
+  touched_mutant() {
+    local box="$WORK/$1" arc=0
+    sandbox "$box"
+    apply_mutant "mut_$1" "$box" || arc=$?
+    if [ "$arc" -eq 0 ]; then only_sensor "$box" "$1" "${TOUCHED_FILE_OF[$1]}"; else echo "$arc" > "$box.rc"; fi
+  }
+  if (: & wait -n) 2>/dev/null; then
+    run_pool "$WORK" touched_control touched_mutant "${TOUCHED_SLUGS[@]}"
+  else
+    control_run "$WORK" touched_control; POOL_LAUNCHED=0
+    if ! control_red "$WORK"; then
+      for slug in "${TOUCHED_SLUGS[@]}"; do touched_mutant "$slug"; POOL_LAUNCHED=$((POOL_LAUNCHED + 1)); done
+    fi
+  fi
+  for f in "${TOUCHED_SENSORS[@]}"; do
+    rc="$(cat "$WORK/control-$f.rc" 2>/dev/null || true)"
+    if [ "$rc" != 0 ]; then
+      fail "HARNESS-BROKEN: $f is not green on the copy with no sabotage (rc ${rc:-none})" \
+           "it says nothing about the mutants it killed — see $WORK/control-$f.log"
+      exit 1
+    fi
+  done
+  pass "control: each of the ${#TOUCHED_SENSORS[@]} touched sensor(s) is green on an unsabotaged copy"
+  # Exactly the selection, never more: the verdict reads only the selected rcs, so a run that went
+  # back to the whole catalogue would still answer right — at the catalogue's cost, an hour, for a
+  # mode that exists to take seconds.
+  if [ "$POOL_LAUNCHED" != "${#TOUCHED_SLUGS[@]}" ]; then
+    fail "HARNESS-BROKEN: --touched launched $POOL_LAUNCHED mutant(s) for a selection of ${#TOUCHED_SLUGS[@]}" \
+         "the run and the selection disagree"
+    exit 1
+  fi
+  touched_verdict "$WORK" "${TOUCHED_SLUGS[@]}"; trc=$?
+  echo "hint only — \`sdd health\` runs the whole catalogue, and only it writes the mutation stamp"
+  exit "$trc"
 fi
 
 # ---------------------------------------------------------------------------

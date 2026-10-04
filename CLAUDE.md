@@ -440,7 +440,10 @@ mutação no catálogo. Sabotar o gate e exigir que a suíte morra é o que prov
 mede alguma coisa; sem isso não há como distinguir asserção viva de decoração.
 Antes do commit, prove o mutante novo com `tests/check-mutation.sh --only <slug> [sensor.sh]`:
 segundos contra um sensor, ~4 min contra a suíte inteira. É **dica**, e a saída diz isso; o
-veredito e o carimbo continuam sendo do catálogo no `sdd health`.
+veredito e o carimbo continuam sendo do catálogo no `sdd health`. Mexeu num **sensor**?
+`tests/check-mutation.sh --touched <rev>` roda os mutantes que os sensores tocados desde `<rev>`
+mataram na última rodada, cada um só contra o seu assassino (`--list` só lista) — também dica, e
+nenhum gate nem chapéu a cobra.
 
 **Red observado não basta: tem de ser vermelho pelo motivo certo.** A missão
 `20260815-ledger-sem-ponto-cego` achou **cinco** asserções que passavam pelo regime do fixture e
