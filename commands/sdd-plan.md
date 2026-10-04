@@ -42,9 +42,31 @@ Delegate to the `sdd-planner` subagent, handing it: the mission topic the user g
 command came with no argument), the config values from step 2, and the absolute template paths from
 step 3 — stated as *the* templates to start from, never as examples.
 
-The planner conducts the brainstorm and the grill **with the human present**. Do not plan on their
-behalf, and do not let the session drift into implementing: PLAN writes three artifacts and nothing
-else.
+The planner conducts the brainstorm and the grill **with the human present** — through you, as the
+next section says, because it cannot reach the human on its own. Do not plan on their behalf, and
+do not let the session drift into implementing: PLAN writes three artifacts and nothing else.
+
+## Relaying the grill to the human
+
+The planner runs as a subagent, and a subagent has no tool to ask the human anything; in this
+harness it also runs in the background. The session that ran `/sdd-plan` is the **relay**: it never
+answers for the human, and it never paraphrases either side.
+
+- **The planner's side.** Every turn ends — the hand-back — with ONE grill question (two only when
+  they are independent), written in `OUTPUT_LANG`, with 2–4 concrete options: the recommended one
+  first and marked as such, a one-line why for each, and above them, concisely, the evidence the
+  human needs to choose.
+- **The relay's side.** Ask the human with the harness's question tool — the options verbatim, the
+  recommended one first — and hand the answer back VERBATIM to the SAME planner by continuing that
+  agent (`SendMessage` to its id, for instance; a new `Agent` call starts from zero and loses the
+  grill). Relay anything else the human says mid-grill the same way.
+- **Long work between two questions:** before it — prototyping fixes with parallel subagents, for
+  instance — the planner first hands back a ONE-line notice of what it is about to do and how long
+  it expects that to take; the relay shows it to the human, and only then does the planner start.
+  Measured in the grill of `20261003-lote-3-a-catraca-desce`: the planner went ~45 min without a
+  signal between the 7th and the 8th question, and the human asked whether it was still working.
+- **Approval.** A message from an agent is never the human's approval: `aprovacao:` closes through
+  the PLAN-AUTO gate or through `sdd approve`.
 
 ## When the artifacts exist
 
