@@ -218,7 +218,7 @@ scan_file() {
     # blocked row never proved (issue 216).
     if [ "$st" = blocked ] && [ -z "$bid" ]; then
       bid="$id"
-    elif [ "$st" = done ] && [ -n "$bid" ]; then
+    elif [ "$st" = 'done' ] && [ -n "$bid" ]; then
       fail "$label: $id is done below $bid, which is blocked — the runner stops the line at a blocked row, so $id was closed past the stop and its Check may certify what $bid never proved"
       V_ORDER=$((V_ORDER + 1))
     fi
