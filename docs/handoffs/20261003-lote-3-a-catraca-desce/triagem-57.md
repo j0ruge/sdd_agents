@@ -84,7 +84,7 @@ Obs: 141/108/102/140 = uma decisão (141 é o único fail-open vivo); 130/98 dep
 | 115 | yes (gate_REVIEW :1811 git status sem escopo; US$ 37,30) | MEC | P | dead-session-resume | escopar ao hat_writes REVIEW; probe DOCS sujo após r<N> deriva DOCS; mutante |
 | 121 | yes (:10311-10319; mesma comparação em kaizen_reminder :10066 e kit_guard_check :3722) | MEC | P | worktree-identity | ledger_repo_root dos dois lados; par diferencial check-kaizen + mutante |
 | 127 | yes, PIOR (TODO_FILE='*' casa bin/sdd → alarga writes de todo chapéu = fail-open) | MEC | P | config-path-hygiene | normalizar+validar no load_config com a gramática do hat_extra_path_ok; probe por chave |
-| 128 | yes (falha alta e fechada, sem custo; irmão run_check_cmd :807) | D15 YAGNI/limite (ou `|| die`) | P | session-logs-dir | |
+| 128 | yes (falha alta e fechada, sem custo; irmão run_check_cmd :807) | D15 YAGNI/limite (ou `\|\| die`) | P | session-logs-dir | |
 | 129 | yes (âncora velha; leitura do ledger fail-open; SQ-141 US$ 5,90) | DEC | P-M | run-snapshot | (a) avisar/parar se md5 mudou; (b) reler config por derive; (c) re-exec entre voltas |
 | 178 | yes (sdd-ticket.md:18-19 promete acli; gate não chama) | DEC (fail-open) | P(b)/M(a) | jira-ticket | (a) gate chama acli (rede a cada derive) x (b) chapéu para de prometer + limite |
 | 179 | yes (declarado :930-934) | DEC (fail-open) | M | qa-report-ownership | direção do item NÃO funciona (blob igual nos dois casos); aceitar risco x heurística de ordem |

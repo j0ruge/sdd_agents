@@ -25,7 +25,8 @@ Próximo, pela decisão 6: push, PR, esperar TODOS os bots, consertar numa leva,
 ## Estado do repo
 
 - **Branch:** `fix/lote-3-a-catraca-desce`, só local (nunca empurrada)
-- **Último commit:** o commit deste handoff e do `KAIZEN_LOG.md`, sobre `efd001c` `chore(todo): RESOLVED by…`
+- **Último commit:** `60d4287`, o commit deste handoff e do `KAIZEN_LOG.md`, sobre `efd001c` `chore(todo): RESOLVED by…`
+- **Depois do EXEC:** a revisão final da branch (`81bf339`, `283468b`, `713126a`) levou o catálogo a 593; os números da suíte abaixo são os do fechamento do EXEC
 - **Working tree:** limpo depois do commit deste handoff
 - **Suíte:** `tests/run-all.sh` → verde (rc 0, 293 s; 1788 asserções `ok`, 592 mutantes com âncora válida)
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
@@ -74,7 +75,7 @@ Ler o `01-plano.md` § "Depois do checkpoint" e seguir na ordem:
 2. Esperar TODOS os bots (CodeRabbit, Copilot, Codex) e consertar numa leva só; achado de bot é
    hipótese até medir.
 3. `./bin/sdd health` uma vez, depois do último commit de código, disparado pelo humano (~40–50 min,
-   592 mutantes; lançador desanexado). Ele tem de imprimir `the kit copy is green with no sabotage,
+   593 mutantes depois da revisão final; lançador desanexado). Ele tem de imprimir `the kit copy is green with no sabotage,
    in the usual order and with each of the N killer(s) of the map first`.
 4. Merge pelo humano; depois o chore pós-merge (catraca 36 → 23) e o re-sync do espelho de issues.
 

@@ -324,9 +324,14 @@ output was assigned into `series=$(kaizen_series)` with the return code dropped,
 back as "no verdict for the kit yet" — a doubled space in that message was the only tell — and the
 runner went on to spend an opus session judging a series nobody could read.
 
-**What you do:** run `sdd autonomy`, which names the file and dies on the same row, then find it
-with `jq -c . ~/.sdd/autonomy-log.jsonl` — the last line it prints before failing is the one before
-the break. The ledger is append-only *facts*, so the repair is to fix or delete that one row; a row
+**What you do:** run `sdd autonomy`, which names the file and dies on the same row. A row that is
+not valid JSON you find with `jq -c . ~/.sdd/autonomy-log.jsonl` — the last line it prints before
+failing is the one before the break. The two rows that parse go through that command without a
+failure, so each has its own locator: a row that is not an object comes out of
+`jq -c 'select(type != "object") | [input_line_number, .]' ~/.sdd/autonomy-log.jsonl` with its line
+number, and for a field of the wrong type you `grep -n` the value jq quotes in the refusal
+(`string ("4.0")` → `grep -n '"4.0"' ~/.sdd/autonomy-log.jsonl`). Do not use the `<stdin>:N` in
+that quote: it counts the stream the series built, not the lines of the file. The ledger is append-only *facts*, so the repair is to fix or delete that one row; a row
 that was never valid JSON never carried a fact.
 
 **Do not:** re-run hoping a fresh session fixes it, and do not point a session at it. The file
