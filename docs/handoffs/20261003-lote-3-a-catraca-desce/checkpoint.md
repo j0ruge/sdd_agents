@@ -1,6 +1,6 @@
 ---
 missao: 20261003-lote-3-a-catraca-desce
-atualizado: 2026-10-04 09:43
+atualizado: 2026-10-04 09:52
 ---
 
 # Checkpoint — Lote 3: a catraca desce
@@ -49,7 +49,7 @@ atualizado: 2026-10-04 09:43
 | I10 | #217b: a ref resolve as âncoras contra o repo real | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: a --baseline run fails only on what the ref did not have (7 probe(s))' <<< "$o"` → `1` | done | 8870bab |
 | I11 | #127: chaves de caminho normalizadas e validadas no load_config | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    path key [A-Z0-9_]*: ' <<< "$o"` → `8` | done | 52de46e |
 | I12 | #115: gate_REVIEW escopado + gate_DOCS recusa 45-docs.md sujo | `o=$(bash tests/check-gates.sh 2>&1); a=$(grep -c '^  ok    a dirty tree a later phase left does not send the mission back to REVIEW → DOCS$' <<< "$o"); b=$(grep -c '^  ok    an uncommitted 45-docs.md holds DOCS, it does not ride to PR → DOCS$' <<< "$o"); echo "$a $b"` → `1 1` | done | 0ed9218 |
-| I13 | #63: gênero do bug lido do bloco do Status | `o=$(bash tests/check-gates.sh 2>&1); a=$(grep -c '^  ok    the genre is read from the Status block: ' <<< "$o"); b=$(grep -c '^  ok    a whole header quoted inside a fence above the real one does not become the genre' <<< "$o"); echo "$a $b"` → `2 1` | pending | — |
+| I13 | #63: gênero do bug lido do bloco do Status | `o=$(bash tests/check-gates.sh 2>&1); a=$(grep -c '^  ok    the genre is read from the Status block: ' <<< "$o"); b=$(grep -c '^  ok    a whole header quoted inside a fence above the real one does not become the genre' <<< "$o"); echo "$a $b"` → `2 1` | done | ece5895 |
 | I14 | #121: porta do kaizen aceita worktree do kit; kaizen_reminder vira achado (catraca 35 → 36) | `o=$(bash tests/check-kaizen.sh 2>&1); a=$(grep -c '^  ok    kit-repo guard: ' <<< "$o"); b=$(awk '/<!-- sdd:open -->/{o=1} /<!-- sdd:decided -->/{o=0} o && index($0,"- [ ] ")==1 && /kaizen_reminder/{c++} END{print c+0}' TODO.md); t=$(bash tests/check-todo.sh 2>&1); e=$(grep -c '^  ok    36 finding(s)' <<< "$t"); f=$(awk '/^todo-findings 36$/{c++} END{print c+0}' tests/health-baseline.txt); echo "$a $b $e $f"` → `2 1 1 1` | pending | — |
 | I15 | #213: kaizen --series recusa com frase e arquivo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    series: .* is refused with rc 1, naming the file' <<< "$o"` → `2` | pending | — |
 | I16 | #87: preflight cobra total_cost_usd e num_turns numéricos | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    a result line ' <<< "$o"` → `3` | pending | — |
