@@ -48,3 +48,4 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+- 2026-10-04 08:48 · `EXEC` · I1 (8577df6) · Red medido `0 5 0`, depois `1 18 1`. 13 itens fora da seção aberta, 13 registros decididos verbatim do plano, catraca 57 → 44. Medido de novo antes de escrever o "6 of the 30": 30 rodadas `40-review-r*.md`, 6 sem `gate:`. check-todo, check-lang e check-pipefail verdes; nenhuma âncora deslocou (edições no lugar).

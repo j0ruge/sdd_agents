@@ -1,6 +1,6 @@
 ---
 missao: 20261003-lote-3-a-catraca-desce
-atualizado: 2026-10-03 23:59
+atualizado: 2026-10-04 08:48
 ---
 
 # Checkpoint — Lote 3: a catraca desce
@@ -37,7 +37,7 @@ atualizado: 2026-10-03 23:59
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | 13 saídas decididas sem doc acoplado; catraca 57 → 44 | `o=$(bash tests/check-todo.sh 2>&1); a=$(grep -c '^  ok    44 finding(s)' <<< "$o"); n=$(awk '/<!-- sdd:decided -->/{d=1;next} d && /^- [*][*]/{c++} END{print c+0}' TODO.md); b=$(awk '/^todo-findings 44$/{c++} END{print c+0}' tests/health-baseline.txt); echo "$a $n $b"` → `1 18 1` | pending | — |
+| I1 | 13 saídas decididas sem doc acoplado; catraca 57 → 44 | `o=$(bash tests/check-todo.sh 2>&1); a=$(grep -c '^  ok    44 finding(s)' <<< "$o"); n=$(awk '/<!-- sdd:decided -->/{d=1;next} d && /^- [*][*]/{c++} END{print c+0}' TODO.md); b=$(awk '/^todo-findings 44$/{c++} END{print c+0}' tests/health-baseline.txt); echo "$a $n $b"` → `1 18 1` | done | 8577df6 |
 | I2 | 4 saídas com doc acoplado (#143, #123, #124, #158); catraca 44 → 40 | `o=$(bash tests/check-todo.sh 2>&1); a=$(grep -c '^  ok    40 finding(s)' <<< "$o"); b=$(awk '/^. Y[56] /{c++} END{print c+0}' CONTEXT.md); c=$(awk '/O critério [(]4[)] da D7/{c++} END{print c+0}' CONTEXT.md); d=$(awk '/coordenada, está no/{c++} END{print c+0}' .claude/rules/anatomia-do-agente.md); echo "$a $b $c $d"` → `1 2 0 0` | pending | — |
 | I3 | 5 limites declarados nos cabeçalhos (#66, #77, #90, #125, #140); catraca 40 → 35 | `o=$(bash tests/check-todo.sh 2>&1); n=0; for f in tests/check-health.sh tests/check-todo.sh tests/run-all.sh tests/check-pipefail.sh tests/check-lang.sh; do s=$(awk '/20261003-lote-3-a-catraca-desce/{c++} END{print c+0}' "$f"); [ "$s" -gt 0 ] && n=$((n+1)); done; echo "$(grep -c '^  ok    35 finding(s)' <<< "$o") $n"` → `1 5` | pending | — |
 | I4 | /sdd-plan: protocolo de repasse + aviso de trabalho longo (decisões 3 e 10) | `a=$(awk '/^## Relaying the grill to the human/{c++} END{print c+0}' commands/sdd-plan.md); b=$(awk '/^- [*][*]Long work between two questions:[*][*]/{c++} END{print c+0}' commands/sdd-plan.md); c=$(awk '/the session that delegated you is the relay/{c++} END{print c+0}' agents/sdd-planner.md); o=$(bash tests/check-checkpoint.sh 2>&1); d=$(grep -c '^  ok    the planner agent teaches the ok-anchor rule' <<< "$o"); cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md && m=same; echo "$a $b $c $d ${m:-diff}"` → `1 1 1 1 same` | pending | — |
