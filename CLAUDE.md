@@ -329,6 +329,9 @@ desconfiança. Fluxo completo no verbete
 `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do
 `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
 dois SC2318 reais em `check-mutation.sh` por três missões.
+⚠️ Mas o lint só roda na suíte **inteira**: antes de cada commit em `bin/` ou `tests/`, rode
+`shellcheck -S warning` nos arquivos tocados. Medido em `20261003-lote-3-a-catraca-desce`: o SC1010
+do I7 (`[ "$st" = done ]`) só apareceu na suíte inteira depois do I10, e custou `3cf0d0a`.
 
 ⚠️ **"Entra lá" são quatro lugares, não um — e o quarto arrasta um quinto.** Medido ao acrescentar
 o `check-health.sh`: a linha `run` do `tests/run-all.sh`, o `LINT_FLOOR` do mesmo arquivo, o piso
