@@ -472,8 +472,8 @@ the two gates cannot disagree about which documents are `⛔`.
 
 **In a repo that owns a mutation catalogue there is one more requirement, and it is checked last:**
 a stamp in `.sdd/logs/mutation-stamp` matching the current **tracked** content of `bin/ tests/
-templates/ config/` minus the ratchet `tests/health-baseline.txt` (ADR 0014), so registering a
-finding no longer invalidates it; a root missing one of the four paths, or not a git checkout, has
+templates/ config/ agents/` minus the ratchet `tests/health-baseline.txt` (ADR 0014), so registering a
+finding no longer invalidates it; a root missing one of the five paths, or not a git checkout, has
 no key (`no mutation stamp is possible for this tree: <reason>`). `sdd health` writes it when the
 catalogue comes back green; nothing else writes it; a red catalogue, or a tree that moved while it ran, **removes** it. The refusal names its own remedy —
 `no green mutation catalogue for this content — run 'sdd health'` — because a gate that stops the

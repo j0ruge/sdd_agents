@@ -99,7 +99,8 @@ julgam prosa (`Documentation`, `Overall`), nomeados positivamente; achado de pro
 **Onde mora hoje.** O componente mais forte do kit: `gate_<FASE>` por artefato (`TEST_CMD`, grep
 no checkpoint, `git log`, `gh pr view`); Check por incremento; **dezesseis** sensores em
 `tests/run-all.sh` (o décimo sexto é `check-coordination.sh`); catálogo de mutação com carimbo no
-`sdd health`; guarda de kit em quatro portas. Desde `20260917-o-numero-do-adr-nao-e-prosa` o
+`sdd health` (a chave lê `bin/ tests/ templates/ config/ agents/` — `agents/` desde a ADR 0015 §1,
+porque o runner lê cada chapéu dali); guarda de kit em quatro portas. Desde `20260917-o-numero-do-adr-nao-e-prosa` o
 `gate_PLAN` também cobra o `adr:` sob `ADR_CHECK=block`, e o comentário do gate **nomeia o dono do
 artefato** — `sdd-planner`, com o humano na sala —, que é a segunda metade da régua do princípio 1.
 É por isso que a recusa mora no PLAN e não no EXEC: nenhum agente do kit decide trade-off

@@ -189,12 +189,13 @@ reset_home() {
 }
 
 build_fixture() {
-  # templates/ too, holding a file: the mutation stamp's key refuses a root missing any of its four
-  # measured paths (ADR 0014, increment I3), so without it no world here could ever be stamped and
-  # the stamp assertions would be measuring that refusal. A file and not an empty directory, because
-  # git does not track an empty directory.
-  mkdir -p "$FIX/bin" "$FIX/tests" "$FIX/config" "$FIX/templates"
+  # templates/ and agents/ too, each holding a file: the mutation stamp's key refuses a root missing
+  # any of its five measured paths (ADR 0014, increment I3; agents/ since ADR 0015 §1), so without
+  # them no world here could ever be stamped and the stamp assertions would be measuring that
+  # refusal. A file and not an empty directory, because git does not track an empty directory.
+  mkdir -p "$FIX/bin" "$FIX/tests" "$FIX/config" "$FIX/templates" "$FIX/agents"
   printf 'fixture template\n' > "$FIX/templates/fixture.md"
+  printf 'fixture hat\n' > "$FIX/agents/fixture-hat.md"
   reset_home
 
   # LIVE copy — see the header. This is the file mut_HEALTH_* sabotages.
@@ -224,7 +225,7 @@ build_fixture() {
   write_stub_suite with-count
 
   # A git checkout, committed HERE and before any health run: the stamp keys on the TRACKED content
-  # of the four measured paths and refuses a root that is not a git checkout (ADR 0014, increment
+  # of the five measured paths and refuses a root that is not a git checkout (ADR 0014, increment
   # I4), so a plain directory would never be stamped. What the stub suite writes DURING a run
   # (tests/stub-argv.txt) and the baseline set_baseline writes are left untracked — the first is
   # outside the key because it is untracked, the second because the key excludes the ratchet — so

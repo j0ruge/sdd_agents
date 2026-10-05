@@ -310,7 +310,7 @@ quando o catálogo volta verde, e o `gate_PR` **exige o carimbo**; o gate nunca 
 é exatamente o que `4c86712` desfez. Verbete "Carimbo de mutação" no `CONTEXT.md`, desenho e
 alternativas descartadas em [`docs/adr/0004`](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
 ⚠️ **Consequência operacional que custa um `sdd health` a mais (50 min para 544 mutantes em 2026-10-02; ~18 min para 406 no PR #170) quando se erra a ordem:** a chave é o conteúdo
-**rastreado** de `bin/ tests/ templates/ config/` menos a catraca `tests/health-baseline.txt`
+**rastreado** de `bin/ tests/ templates/ config/ agents/` menos a catraca `tests/health-baseline.txt`
 (ADR 0014), então `./bin/sdd health` roda **depois do último commit de código**. `CLAUDE.md`,
 `CONTEXT.md`, `docs/`, `TODO.md` e a catraca não invalidam — registrar achado (princípio 5) não
 custa mais carimbo —, e arquivo ignorado também não. Arquivo novo fica fora da chave até ser

@@ -2081,14 +2081,14 @@ gate_DOCS() {
 # The directories the catalogue's verdict is a function of, named in ONE place and read at both
 # ends: cmd_health writes the key, gate_PR demands it.
 #
-# FOUR, and the boundary is declared rather than assumed. sandbox() in tests/check-mutation.sh also
-# copies agents/, CLAUDE.md, TODO.md and docs/adr, so a change confined to THOSE is not covered by
-# this key. The narrowing is deliberate and its reason is operational: the DOCS phase edits
-# CLAUDE.md and TODO.md on its way to the PR, so keying on them would throw the stamp away between
-# the last code commit and the gate that reads it — a second twenty-minute run per mission, bought
-# for documents no mutant edits. What the mutants DO edit is bin/sdd, and what decides their fate
-# is the assertions in tests/ plus the templates/ and config/ those assertions read. The residual
-# gap is in TODO.md with its direction, not hidden in a sentence here.
+# FIVE, and the boundary is declared rather than assumed. The mutants edit bin/sdd; their fate is
+# decided by the assertions in tests/ and what those read: templates/, config/ and agents/ (the
+# runner reads each hat out of agents/<hat>.md, and three sensors copy the real agents/ into their
+# fixtures; agents/ joined in ADR 0015 §1, #67, at 0 extra `sdd health` runs in the last 30 merges).
+# sandbox() in tests/check-mutation.sh also copies CLAUDE.md, TODO.md, docs/adr, docs/pipeline.md:
+# OUT on purpose. Their readers work apart from any behaviour mutant (the ADR 0003 shape, the policy
+# rule of check-health.sh, the series-key block of check-kaizen.sh), and the DOCS phase edits them
+# on the way to the PR, so keying on them would throw the stamp away 14 more times in 30 merges.
 #
 # Only what git TRACKS under them, and minus MUTATION_STAMP_EXCLUDE (ADR 0014, increment I4). The
 # key used to hash every file `find` saw, which charged a stamp for two things no mutant reads:
@@ -2099,7 +2099,7 @@ gate_DOCS() {
 # outside the suite. A NEW file is outside the key until it is tracked — `git ls-files -c` reads the
 # index, so `git add` is enough, no commit needed; once tracked it enters the key and gate_PR refuses
 # until `sdd health` runs again — the safe direction.
-readonly MUTATION_STAMP_PATHS=(bin tests templates config)
+readonly MUTATION_STAMP_PATHS=(bin tests templates config agents)
 readonly MUTATION_STAMP_EXCLUDE=(tests/health-baseline.txt)
 # The git pathspec both readers of the listing hand to `git ls-files` — the key and the reason it
 # could not be computed — built ONCE from the two arrays above, so they cannot disagree about which
@@ -2171,7 +2171,7 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 # a file that merely MOVED changes the key.
 #
 # Empty is the whole guard, and it refuses these roots once, instead of at each call site:
-#   - a root where ANY ONE of the four paths is absent (ADR 0014, increment I3). The listing would
+#   - a root where ANY ONE of the paths is absent (ADR 0014, increment I3). The listing would
 #     otherwise be taken over whichever paths remain, `sdd health` would stamp that partial
 #     listing, and gate_PR would accept it. Checked per path (mutation_stamp_missing), before
 #     anything is listed.
@@ -2193,7 +2193,7 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 # turns ':(exclude)…' into a literal path, which puts the ratchet back in the key.
 #
 # Which of MUTATION_STAMP_PATHS are absent at <root>, PUBLISHED in MUTATION_STAMP_MISSING as a
-# space-separated list spelled `bin/ config/` (empty ⇒ all four are there). The ONE definition of
+# space-separated list spelled `bin/ config/` (empty ⇒ all of them are there). The ONE definition of
 # "which paths are missing": the key's guard below reads it, and so does mutation_stamp_why. Called,
 # never `$( )`-captured: the result is a global, and a capture would run it in a subshell and lose it.
 mutation_stamp_missing() { # mutation_stamp_missing <root>

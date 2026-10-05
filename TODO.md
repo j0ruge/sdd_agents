@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2102` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6112` — a chave lê
+  `bin/sdd:2102` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6121` — a chave lê
   `bin tests templates config`, mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança
   confinada a esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a regra 12 do
   `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita `CLAUDE.md`, e chavear nele custaria

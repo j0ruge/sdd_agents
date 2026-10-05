@@ -163,14 +163,14 @@ that stopped being a finding. It spends no paid session and does not need `.sdd/
 **In the kit repo it is also a gate, not only a report.** Since the catalogue became opt-in it had
 no automatic owner, and the base branch once carried a live survivor for days because nobody typed
 the command. So a green run now **stamps** `.sdd/logs/mutation-stamp` with the tracked content of
-`bin/ tests/ templates/ config/` (minus the backlog ratchet), and the `PR` gate refuses while no
+`bin/ tests/ templates/ config/ agents/` (minus the backlog ratchet), and the `PR` gate refuses while no
 stamp matches that content:
 `no green mutation catalogue for this content — run 'sdd health'`. The gate never runs the
 catalogue itself — asking a gate to hold the tree for twenty minutes is what made a phase
 unsatisfiable once. The requirement exists only where `tests/check-mutation.sh` does, so a target
 repo sees none of it. Run it **after the last code commit**: editing docs or registering a finding
 (`TODO.md` + `tests/health-baseline.txt`) does not invalidate the stamp, editing tracked files under
-`bin/ tests/ templates/ config/` does ([ADR 0014](docs/adr/0014-a-identidade-do-kit-e-o-que-ele-executa.md)). Design and discarded alternatives in
+`bin/ tests/ templates/ config/ agents/` does ([ADR 0014](docs/adr/0014-a-identidade-do-kit-e-o-que-ele-executa.md)). Design and discarded alternatives in
 [ADR 0004](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md); the way out of a refusal in
 [`docs/failure-modes.md`](docs/failure-modes.md).
 

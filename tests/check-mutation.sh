@@ -1238,9 +1238,9 @@ mut_PR_stamp_key_follows_head() {
   sed -i '/^mutation_stamp_key() {/,/^}/ s@md5sum <<< "$listing"@md5sum <<< "$listing$(git -C "$1" rev-parse HEAD 2>/dev/null)"@' "$1"
 }
 
-# The per-path guard of the key becomes a no-op: a root missing one of the four measured paths is
-# hashed over the three that remain, `sdd health` stamps that partial listing and gate_PR accepts it.
-# Only the all-four-absent case stays refused (by the empty-listing guard below it), which is
+# The per-path guard of the key becomes a no-op: a root missing one of the five measured paths is
+# hashed over the four that remain, `sdd health` stamps that partial listing and gate_PR accepts it.
+# Only the all-absent case stays refused (by the empty-listing guard below it), which is
 # exactly the guard the key had before ADR 0014, increment I3. World 9 of check-gates.sh catches it.
 mut_PR_stamp_key_partial_listing() {
   sed -i '/^mutation_stamp_key() {/,/^}/ s@\[ -z "\$MUTATION_STAMP_MISSING" \] || return 1@:@' "$1"
@@ -1256,6 +1256,14 @@ mut_PR_partial_root_blind_remedy() {
 # so the remedy gate_PR names answers nothing. World 9 of check-gates.sh reads the health output.
 mut_HEALTH_unstampable_silent() {
   sed -i '/^cmd_health() {/,/^}/ s@health_bad "nothing was stamped: \$MUTATION_STAMP_WHY@: "nothing was stamped: $MUTATION_STAMP_WHY@' "$1"
+}
+
+# agents/ falls out of the key again (#67; ADR 0015 §1): a commit that edits only a hat leaves the
+# stamp valid over content the catalogue never ran against, though the runner reads every hat out of
+# agents/<hat>.md. Caught by `stamp-key: a commit touching only agents/ moves the key` (world 11b of
+# check-gates.sh), the only world that edits agents/ alone.
+mut_PR_stamp_key_ignores_agents() {
+  sed -i 's@^readonly MUTATION_STAMP_PATHS=(bin tests templates config agents)$@readonly MUTATION_STAMP_PATHS=(bin tests templates config)@' "$1"
 }
 
 # The ratchet's exclusion vanishes from the pathspec: tests/health-baseline.txt is hashed again, and
@@ -5688,6 +5696,7 @@ CATALOG=(
   PR_partial_root_blind_remedy
   HEALTH_unstampable_silent
   PR_stamp_key_keeps_baseline
+  PR_stamp_key_ignores_agents
   PR_stamp_key_reads_ignored
   PR_stamp_key_partial_on_deleted
   PR_stamp_why_deleted_blind
@@ -6320,7 +6329,7 @@ killer_of() {
 # step a mutant runs, because run-all.sh still runs every step of a mutant the named one did not kill.
 # That the ORDER moves no verdict is asserted since issue 169: one control per distinct killer of
 # the map, that killer first, has to come back green or the score is refused. It lives in
-# .sdd/cache/, gitignored and OUTSIDE the four directories of mutation_stamp_key, so learning it
+# .sdd/cache/, gitignored and OUTSIDE the directories of mutation_stamp_key, so learning it
 # never invalidates a stamp.
 # The seconds are the mutant's own suite time; the pool reads them to launch the longest first.
 KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
