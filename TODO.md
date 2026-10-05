@@ -139,7 +139,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Custo e escala
 
 - [ ] **O `sdd-publisher` não consegue esperar o `sdd health` dentro de uma sessão headless** —
-  `agents/sdd-publisher.md:41` (`./bin/sdd health`) — o agente iniciou o health "em background" e encerrou o turno
+  `agents/sdd-publisher.md:38` (`sdd health`) — o agente iniciou o health "em background" e encerrou o turno
   "esperando a notificação": em `claude -p` encerrar o turno encerra a sessão, e o health morreu
   com ela (US$ 1,46 por nada); a sessão seguinte rodou em primeiro plano e levou 82 min (US$ 2,73).
   É a classe do *"waiting for the suite"* de `4c86712`, agora na fase PR. Direção: o **runner** roda
@@ -147,7 +147,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   julgamento. — descoberto por `humano` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **O carimbo da fase PR é medido antes da revisão dos bots, e o primeiro achado de código o descarta** —
-  `agents/sdd-publisher.md:42` (`./bin/sdd health`) — o `CLAUDE.md` manda esperar os revisores,
+  `agents/sdd-publisher.md:71` (`./bin/sdd health`) — o `CLAUDE.md` manda esperar os revisores,
   consertar numa leva e carimbar uma vez; a fase PR carimba logo depois de abrir o PR. Medido no #196:
   health às 18:13, CodeRabbit às 18:27 com um achado em `bin/sdd`, run interrompido com 123 de 542
   mutantes. A direção do item acima (o runner carimbar antes da sessão de PR) agrava isto. Direção, à

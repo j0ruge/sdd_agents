@@ -316,6 +316,29 @@ command_approval_probes() {
   fi
 }
 
+# --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
+# The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
+# run it inside its session, started it in the background and ended its turn waiting (a headless
+# session that ends its turn has ended: US$ 1,46 for nothing), and when it did wait it stamped
+# before the review bots had spoken (#196: health at 18:13, CodeRabbit at 18:27 with a finding in
+# bin/sdd, the next run cut at 123 of 542 mutants). Since ADR 0015 the runner stops with rc 2 once
+# the PR is open and the stamp is all its gate misses, so the publisher only opens the PR. Three
+# probes, because each failure is its own: the order to run it is back; a stamp item is back in the
+# pre-push list, which makes the publisher stop BEFORE the PR exists and the runner's stop is never
+# reached; the PR body no longer carries the order the human follows. The catalogue reaches none of
+# them — it sabotages bin/sdd and this lives in agents/*.md — so these probes are the whole sensor.
+publisher_stamp_probes() {
+  local pub="$ROOT/agents/sdd-publisher.md" pre
+  if grep -qE 'run `\./bin/sdd health`' "$pub"; then fail "hat: the publisher is told to run ./bin/sdd health — the stamp is not headless"
+  else pass "hat: the publisher never runs the stamp — it is not headless"; fi
+  pre="$(awk '/^### 2\. /{on=1; next} /^### /{on=0} on' "$pub")"
+  if [ -z "$pre" ]; then fail "hat: the publisher's pre-push section (### 2.) was not found — the probe would read nothing"
+  elif grep -qiE '^- .*(stamp|check-mutation)' <<< "$pre"; then fail "hat: a stamp item is back in the publisher's pre-push list — it would stop before the PR exists"
+  else pass "hat: and the stamp is no reason for the publisher to stop before the PR is open"; fi
+  if grep -qE 'review bot.*one batch.*\./bin/sdd health.*sdd run' "$pub"; then pass "hat: and the PR body carries the order: bots, one batch of fixes, the stamp, sdd run"
+  else fail "hat: the publisher's PR body lost the order before the merge"; fi
+}
+
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
 # PROVENANCE: the three lines below were captured on 2026-09-04 on Claude Code 2.1.260 with
 #     claude -p 'Read docs/handoffs/x/00-missao.md with the Read tool, then reply with exactly: OK' \
@@ -484,6 +507,7 @@ census_probes
 executor_agent_probes
 hat_promise_probes
 command_approval_probes
+publisher_stamp_probes
 boot_probes
 release_probes
 selftest || exit $?
