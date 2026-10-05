@@ -42,7 +42,7 @@ sozinho. Qualquer ✗ → `aprovacao` fica vazio e o runner para pedindo aprova�
 | a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | <✅/✗> | <onde ver> |
 | b | Checklist kaizen 100% ✅ e checklist DDD 100% ✅ ou `n/a` justificado | <✅/✗> | <seção abaixo> |
 | c | Plano passa no teste de autocontenção (sessão nova só com 00/01/checkpoint executa) | <✅/✗> | <como foi testado> |
-| d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado) | <✅/✗> | <contagem> |
+| d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado), vermelho no HEAD pelo `tests/check-checkpoint.sh --red` do kit | <✅/✗> | <contagem; o rc do `--red`> |
 | e | `versao:` confirmada pelo humano (ou `JIRA_ENABLED=false`) | <✅/✗> | <valor / n/a> |
 | f | `adr:` é uma decisão — um caminho, ou o literal `none` (alocado por `sdd adr new`) | <✅/✗> | <qual ADR, ou por que `none`> |
 

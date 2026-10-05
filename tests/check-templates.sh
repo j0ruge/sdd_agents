@@ -347,6 +347,10 @@ check missao.md '^## Pendências para o humano' "open questions for the human"
 for c in a b c d e f; do
   check missao.md "^\| ${c} \|" "PLAN-AUTO criterion '${c}'"
 done
+# Criterion d is asserted twice on purpose: the loop above proves the row exists, this proves it
+# names the run that measures it (issue 92). "Executable" alone let a Check born green close
+# PLAN-AUTO; the row now asks for the red, and cites the kit's --red by name.
+check missao.md '^\| d \|.*tests/check-checkpoint\.sh --red' "PLAN-AUTO criterion d cites the --red run"
 
 echo "== templates/plano.md =="
 check plano.md '^## Contexto verificado'      "section 'Contexto verificado'"

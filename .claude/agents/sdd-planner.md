@@ -94,6 +94,21 @@ Every increment needs:
   Before handing the table off, run the kit's `tests/check-checkpoint.sh --check <checkpoint>` by
   the kit's path: it refuses a blind anchor, a pipe, a `done` below `blocked`, and a `test -f` on
   an ignored path.
+  ⚠️ **Then measure the red: `tests/check-checkpoint.sh --red <checkpoint>`, by the kit's path,
+  before closing PLAN-AUTO.** It runs the Check of every `pending` row from the root of the repo
+  and refuses one that is **already green at HEAD** — a Check that passes before its increment
+  exists cannot tell done from not done. It also refuses a cell outside the strict form
+  `` `command` → `expected` `` (one pair per cell: join several values with `echo "$a $b"`) and a
+  Check that prints nothing (`test -f x && echo yes` has no before; write `test -f x; echo $?`).
+  The expected is the Check's **whole** stdout: send the rest to `/dev/null`, or `--red` reads red
+  a Check a person would read green.
+  Its line `<ID> is red at HEAD (prints '…', wants '…')` is the before the plan writes beside each
+  Check. It executes what you wrote, so read the cells first; it is your tool, never a gate. And it
+  costs what the Checks cost: a Check that runs the whole suite runs it here too.
+  ⚠️ **Write a Check by the PRESENCE of what the increment adds.** A Check of absence
+  (`grep -c X` → `0`) is born green when X never matched the way you thought, and it fails the fix
+  that has to cite the defect in a comment or a changelog line. When the increment removes
+  something, anchor on what only the fix adds, or on context only the defect has.
 - **a durable sensor** wherever one fits: a committed test, an e2e spec, a lint rule, a type
   assertion — something that starts running in CI and proves the correctness six months from now.
   An ephemeral manual check only when a durable sensor does not fit, **with the justification
@@ -133,7 +148,7 @@ Fill the `00-missao.md` table **with evidence**, not with optimism:
 | a | grill with no unaddressed open questions (🚩 empty, or items deferred with an owner) |
 | b | kaizen checklist 100% ✅ and DDD 100% ✅ or a justified `n/a` |
 | c | the plan passes the self-containment test |
-| d | every increment has an executable Check |
+| d | every increment has an executable Check, red at HEAD (`--red` above) |
 | e | `versao:` confirmed by the human (or `JIRA_ENABLED=false`) |
 | f | `adr:` is a decision — a path, or the literal `none` (see § 6.1) |
 

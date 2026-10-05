@@ -154,9 +154,13 @@ turned 7 of 12 QA sessions of one mission into US$ 73,32 of laps. Under `warn` t
 usual and the run leaves one `degraded` row of kind `adr-check` in the ledger; under `off` nothing
 is asked at all. See [ADR 0008](adr/0008-adr-ids-are-allocated-and-links-are-checked.md).
 
-**PLAN-AUTO:** `aprovacao: auto` means `sdd-planner` closed the five criteria (grill with nothing
-open, checklists, self-containment, a Check per increment, the version) **with evidence**. A
-well-run grill is the approval — the human was present. Any criterion left open and the planner
+**PLAN-AUTO:** `aprovacao: auto` means `sdd-planner` closed the six criteria (grill with nothing
+open, checklists, self-containment, a Check per increment that is red at HEAD, the version, the
+`adr:` decision) **with evidence**. The red is measured by the kit's
+`tests/check-checkpoint.sh --red <checkpoint>`, which the planner runs and no gate does: it executes
+each pending Check from the repo root and refuses one already green, one outside the strict form
+`` `command` → `expected` ``, and one that prints nothing. A well-run grill is the approval — the
+human was present. Any criterion left open and the planner
 leaves `aprovacao` empty, and the runner stops asking for explicit approval.
 
 **And that explicit approval is a command, not a hand edit.** `sdd approve <mission>` prints what is

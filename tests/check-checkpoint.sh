@@ -340,6 +340,9 @@ PIPE_ESCAPE='\|'
 # One document per place the next planner meets the rule. A floor, not a headcount: it is what
 # turns "both calls returned 0" into "both calls RAN", so deleting a call site cannot buy silence.
 PIPE_DOC_FLOOR=2
+# The third thing the next planner has to be born knowing (issue 92): the scan never runs a Check,
+# so the only hand that measures the red is the planner's, and only if its hat names the run.
+RED_DOC='check-checkpoint.sh --red'
 
 pipe_rule() {
   local path="$1" label="$2"
@@ -410,6 +413,13 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
   if [ "$taught" -ge "$PIPE_DOC_FLOOR" ]; then
     pass "rule: the ban on '|' inside a Check cell is taught where the next planner meets it ($taught doc(s))"
   else
+    rc=1
+  fi
+
+  if grep -qF -- "$RED_DOC" "$root/agents/sdd-planner.md" 2>/dev/null; then
+    pass "the planner agent teaches the --red run before PLAN-AUTO"
+  else
+    fail "agents/sdd-planner.md never states the --red run (wanted the literal '$RED_DOC') — the next plan closes PLAN-AUTO over Checks nobody ran at HEAD"
     rc=1
   fi
 
@@ -581,7 +591,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=54
+PROBE_FLOOR=57
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -658,6 +668,8 @@ build_tree() { # build_tree <root>
   printf 'A Check reading a sensor merges `2>&1` and anchors on `%s`.\n' \
     "$OK_ANCHOR" > "$root/agents/sdd-planner.md"
   pipe_banner >> "$root/agents/sdd-planner.md"
+  printf 'Before PLAN-AUTO, run the kit'"'"'s tests/check-checkpoint.sh --red <checkpoint>.\n' \
+    >> "$root/agents/sdd-planner.md"
 }
 
 selftest() {
@@ -834,6 +846,23 @@ selftest() {
   build_tree "$pipeok"
   probe 'a clean tree SAYS the pipe ban was found in both docs' 0 \
     'ok    rule:' "$pipeok" --scan
+
+  # The --red run, taught where the next planner meets it (issue 92). The near miss is written by
+  # hand, never derived from RED_DOC: a planner naming only the --check run must still be refused,
+  # or a RED_DOC shortened to the script's name would pass on the --check sentence alone (#71).
+  local nored="$box/nored" rednear="$box/rednear"
+  build_tree "$nored"
+  strip_lit "$nored/agents/sdd-planner.md" "$RED_DOC"
+  probe 'a planner that forgot the --red run is caught' 1 \
+    'agents/sdd-planner.md never states the --red run' "$nored" --scan
+  build_tree "$rednear"
+  sed -i 's/check-checkpoint[.]sh --red /check-checkpoint.sh --check /' "$rednear/agents/sdd-planner.md"
+  probe 'a planner naming only the --check run is a near miss' 1 \
+    'agents/sdd-planner.md never states the --red run' "$rednear" --scan
+  build_tree "$rednear"
+  sed -i 's/tests[/]check-checkpoint[.]sh --red /the --red mode on /' "$rednear/agents/sdd-planner.md"
+  probe 'a planner naming --red without the script is a near miss' 1 \
+    'agents/sdd-planner.md never states the --red run' "$rednear" --scan
 
   # ── the calibration, over trees of fake sensors ──
   # These probes do NOT derive their `pass()` lines from OK_ANCHOR: that independence is the whole
