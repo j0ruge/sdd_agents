@@ -5912,6 +5912,40 @@ assert_eq "config: the next lap runs the edited TEST_CMD, drops a key deleted fr
   "launch:yes edited:yes deleted-hook:no env-hook:yes" \
   "launch:$(cfg_has "$CFG_FILE_MARKS" launch) edited:$(cfg_has "$CFG_FILE_MARKS" edited) deleted-hook:$(cfg_has "$CFG_FILE_MARKS" file-hook) env-hook:$(cfg_has "$CFG_ENV_MARKS" env-hook)"
 
+# The record is written AFTER the fact, often after the merge (the PR of the motivating case was
+# published by hand), so the human runs it from the base. Found by the final review of the lot,
+# reproduced: the command moved the checkout to the spent mission branch, committed the note there
+# and LEFT the human on it. Two worlds, one apart: the mission branch merged into main, and the
+# same branch one commit ahead of it. Both end where the human stood, both record the note on the
+# mission branch and the row in the ledger, and only the merged one says the base will not see it.
+# It sits HERE, beside the kit-guard regimes, because its worlds are built by kitguard_world.
+echo "== sdd note-manual leaves the human where they stood =="
+nm_world() {   # nm_world <dir> <merged|ahead> — mission on branch feat/x, the human on main
+  kitguard_world "$1" "$ROOT"
+  ( cd "$1" || exit 1
+    sed -i 's/^branch: main$/branch: feat\/x/' "docs/handoffs/$MISSION/00-missao.md"
+    git commit -qam "chore: the mission declares feat/x"
+    git checkout -q -b feat/x
+    echo work >> file.txt && git commit -qam "feat: the mission's work"
+    git checkout -q main
+    if [ "$2" = merged ]; then git merge -q --no-ff -m "merge feat/x" feat/x; fi ) >/dev/null 2>&1
+}
+nm_says() {    # nm_says <dir> — rc, branch after, warning, note on feat/x, the row
+  local rc=0 err
+  err="$( cd "$1" && "$SDD" note-manual "$MISSION" PR 2>&1 >/dev/null )" || rc=$?
+  printf 'rc:%s branch:%s warn:%s note:%s row:%s' "$rc" \
+    "$(git -C "$1" symbolic-ref -q --short HEAD)" \
+    "$(grep -c 'will not see' <<< "$err")" \
+    "$(git -C "$1" show "feat/x:docs/handoffs/$MISSION/checkpoint.md" | grep -c '^- intervention: sdd note-manual')" \
+    "$(rows 'select(.event == "manual") | .phase' | tr -d '\n')"
+  : > "$LEDGER"
+}
+nm_world "$OUTSIDE/nm-merged" merged
+nm_world "$OUTSIDE/nm-ahead" ahead
+assert_eq "note-manual returns the human to the branch they stood on, and only a merged mission is told the base will not see the note" \
+  "rc:0 branch:main warn:1 note:1 row:PR|rc:0 branch:main warn:0 note:1 row:PR" \
+  "$(nm_says "$OUTSIDE/nm-merged")|$(nm_says "$OUTSIDE/nm-ahead")"
+
 # 4. THE INLINE RETRY has a guard of its own. When the first session leaves the kit alone and the
 #    RETRY is the one that writes into it, only the check on the retry path can see it — measured:
 #    with that call site deleted, regimes 1-3 stay green and this one goes to lines:0. The stub

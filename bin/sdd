@@ -11050,18 +11050,46 @@ close_query() {
 # grades nothing (autonomy_manual_row). It asks no gate — it runs no TEST_CMD and claims no
 # verdict; the note says what the runner knows, "recorded from the CLI", never who typed it.
 # PLAN is refused: it is planned with the human by design, so there is no session to miss.
+# It WRITES on the mission branch and LEAVES the human where they stood (found by the final review
+# of 20261004-lote-4-a-catraca-zera, reproduced): the record is often written after the merge, from
+# the base, and ensure_mission_branch alone moved the checkout to the spent branch and left it there
+# — the footgun close_return_home exists to avoid. A mission branch that is already an ancestor of
+# the local DEFAULT_BRANCH is told so: its note lands where the base will never look, and the ledger
+# row is the record the readers get. DECLARED LIMIT: a squash merge is not an ancestor, so that case
+# is not told — it still goes home. A tree left dirty (a checkpoint that was already dirty gets the
+# note and not the commit) stays put, as close_return_home does.
 cmd_note_manual() {
   [ $# -eq 2 ] || die "usage: sdd note-manual <mission> <PHASE>"
   load_config
   resolve_mission "$1"
-  local phase="$2" p known=0
+  local phase="$2" p known=0 home branch merged=0 now out
   for p in $PHASES; do [ "$p" = PLAN ] || [ "$p" != "$phase" ] || known=1; done
   [ "$known" = 1 ] || die "note-manual: '$phase' is not a phase a session runs — one of: ${PHASES#PLAN }"
   AUTONOMY_RUN_ID="$(uuidgen)"
   AUTONOMY_INVOCATION="note-manual"
+  home="$(git -C "$REPO_ROOT" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+  branch="$(mission_branch_declared)"
+  if [ -n "$branch" ] && [ -n "${DEFAULT_BRANCH:-}" ] && [ "$branch" != "$DEFAULT_BRANCH" ] \
+     && git -C "$REPO_ROOT" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1 \
+     && git -C "$REPO_ROOT" merge-base --is-ancestor "refs/heads/$branch" "$DEFAULT_BRANCH" 2>/dev/null; then
+    merged=1
+  fi
   ensure_mission_branch
   checkpoint_note_intervention "sdd note-manual (the phase was recorded from the CLI as done by hand)" "$phase"
   autonomy_manual_row "$phase"
+  if [ "$merged" = 1 ]; then
+    warn "'$branch' is already merged into '$DEFAULT_BRANCH': the note was committed on '$branch', which '$DEFAULT_BRANCH' will not see — the ledger row is the record its readers get"
+  fi
+  now="$(git -C "$REPO_ROOT" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+  if [ -n "$home" ] && [ "$now" != "$home" ]; then
+    if [ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]; then
+      warn "staying on '$now': the tree has uncommitted changes, and '$home' is one 'git checkout' away once you have dealt with them"
+    elif out="$(git -C "$REPO_ROOT" checkout -q "$home" 2>&1)"; then
+      ok "back on '$home', where you were"
+    else
+      warn "could not return to '$home' — still on '$now'. git said: $out"
+    fi
+  fi
   ok "phase $phase of $MISSION recorded as done by hand: the note in the checkpoint, a manual row in the ledger"
 }
 

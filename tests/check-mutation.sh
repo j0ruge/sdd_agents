@@ -4905,6 +4905,17 @@ mut_KAIZEN_manual_counts_mission() {
 mut_RUN_manual_row_missing() {
   sed -i '/^cmd_note_manual() {/,/^}/ s@^  autonomy_manual_row "\$phase"$@  :@' "$1"
 }
+# The final review of the lot, reproduced: the writer moves the checkout to the mission branch and
+# LEAVES the human there — on a merged mission, the spent branch. Caught by `note-manual returns
+# the human to the branch they stood on, …` in check-autonomy.sh, its two `branch:` terms.
+mut_RUN_manual_stays_on_mission_branch() {
+  sed -i '/^cmd_note_manual() {/,/^}/ s@if \[ -n "\$home" \] && \[ "\$now" != "\$home" \]; then@if false; then@' "$1"
+}
+# A merged mission is not told that its note lands where the base never looks. Same assertion, its
+# first `warn:` term — the second world, one commit ahead, is the one that must stay silent.
+mut_RUN_manual_merged_silent() {
+  sed -i '/^cmd_note_manual() {/,/^}/ s@if \[ "\$merged" = 1 \]; then@if false; then@' "$1"
+}
 # The command leaves the admission list and falls to the unlocked arm: it commits under a run.
 mut_COORD_note_manual_unlocked() {
   sed -i 's@    boot|note-manual|install|@    boot|install|@' "$1"
@@ -6166,6 +6177,8 @@ CATALOG=(
   KAIZEN_manual_mints_version
   KAIZEN_manual_counts_mission
   RUN_manual_row_missing
+  RUN_manual_stays_on_mission_branch
+  RUN_manual_merged_silent
   COORD_note_manual_unlocked
   STATUS_manual_row_ignored
   LEDGER_gate_pass_mints_a_cell
