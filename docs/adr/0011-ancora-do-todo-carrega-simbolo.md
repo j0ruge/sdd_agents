@@ -2,6 +2,7 @@
 
 - **Status**: accepted (—, 2026-09-26)
 - **Spec**: docs/handoffs/20260925-o-sensor-le-o-que-a-ancora-diz/00-missao.md
+- **Amended by**: 0015 (§2: the anchor measures the symbol the item designates, not any cited symbol nearby — decisions 1 and 2)
 
 ## Context
 

@@ -4,6 +4,8 @@ Date: 2026-08-19 · Status: accepted
 
 Spec: docs/handoffs/20260819-fecho-que-nao-mente/00-missao.md
 
+Amended by: 0015 (§1: the stamp is not headless — the operator stamps after the bots; `agents/` joins the key)
+
 ## Context
 
 `4c86712` made the mutation catalogue **opt-in**: `TEST_CMD` stopped running it, and `sdd health`

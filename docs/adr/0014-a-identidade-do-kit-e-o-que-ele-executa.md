@@ -2,6 +2,7 @@
 
 - **Status**: accepted (—, 2026-10-01)
 - **Spec**: docs/handoffs/20261001-a-janela-nao-se-parte/00-missao.md
+- **Amended by**: 0015 (§1: the stamp key reads five directories where this record says four — `agents/` joins it)
 
 ## Context
 

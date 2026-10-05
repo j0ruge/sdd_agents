@@ -1,6 +1,6 @@
 # ADR 0015 — The stamp is not headless; and three amendments that close sensors claiming more than they measure
 
-- **Status**: proposed (—, 2026-10-04)
+- **Status**: accepted (—, 2026-10-05)
 - **Spec**: docs/handoffs/20261004-lote-4-a-catraca-zera/00-missao.md
 - **Amends**: 0004 (who runs the stamp, and when; `agents/` joins the key), 0014 (the key is five
   directories, not four), 0011 (decisions 1 and 2: the anchor measures the symbol the item

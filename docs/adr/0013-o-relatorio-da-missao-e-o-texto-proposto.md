@@ -2,6 +2,7 @@
 
 - **Status**: accepted (—, 2026-09-28)
 - **Spec**: docs/handoffs/20260928-os-achados-da-janela/00-missao.md
+- **Amended by**: 0015 (§3: a report at the base tip counts only when the base commit that added it carries this mission's directory)
 
 ## Context
 
