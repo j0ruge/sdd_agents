@@ -5462,6 +5462,28 @@ NG_TYPO_RC=0
 assert_eq "a misspelt status option is refused, never read as a mission name" "1" \
   "$( [ "$NG_TYPO_RC" -ne 0 ] && echo 1 || echo 0 )"
 
+# #153: a green phase this machine's ledger holds no session of is the shape a phase done BY HAND
+# leaves, and the full page names the command that records it. The fixture is already that world:
+# its EXEC and REVIEW ran sessions in the blocks above, its QA and DOCS closed with none, PLAN is
+# the human's by design and TICKET is skipped by JIRA_ENABLED=false — so the hint names QA and DOCS
+# and nothing else. Then the DIFFERENTIAL: one `manual` row for QA (the shape autonomy_manual_row
+# writes, the repo copied off a session row of this ledger) takes QA off the page and leaves DOCS.
+hint_of() { grep -c "sdd note-manual $MISSION $2\$" <<< "$1"; }
+UNREC_LEDGER="$SDD_STATE_FIX/autonomy-log.jsonl"
+unrec_repo="$(jq -rn --arg m "$MISSION" 'first(inputs | select(.event == "session" and .mission == $m) | .repo)' "$UNREC_LEDGER")"
+assert_eq "the full page names the green phases with no session of the mission, and no other" \
+  "QA:1 DOCS:1 EXEC:0 REVIEW:0 PLAN:0 TICKET:0 PR:0 no-gates:0" \
+  "QA:$(hint_of "$FULL_OUT" QA) DOCS:$(hint_of "$FULL_OUT" DOCS) EXEC:$(hint_of "$FULL_OUT" EXEC) REVIEW:$(hint_of "$FULL_OUT" REVIEW) PLAN:$(hint_of "$FULL_OUT" PLAN) TICKET:$(hint_of "$FULL_OUT" TICKET) PR:$(hint_of "$FULL_OUT" PR) no-gates:$(grep -c 'sdd note-manual' <<< "$NG_OUT")"
+cp "$UNREC_LEDGER" "$SDD_STATE_FIX/unrec-ledger.bak"
+jq -cn --arg repo "$unrec_repo" --arg m "$MISSION" \
+  '{v: 1, ts: "2026-01-01T10:00:00-03:00", event: "manual", run_id: "u1", invocation: "note-manual",
+    kit_sha: null, kit_dirty: null, kit_rev: null, kit_rev_dirty: null, project: "fixture",
+    repo: $repo, mission: $m, phase: "QA"}' >> "$UNREC_LEDGER"
+UNREC_OUT="$( "$SDD" status "$MISSION" 2>&1 )"
+cp "$SDD_STATE_FIX/unrec-ledger.bak" "$UNREC_LEDGER"
+assert_eq "a manual row of the phase takes it off the page, and only it" "repo:1 QA:1>0 DOCS:1>1" \
+  "repo:$( [ -n "$unrec_repo" ] && echo 1 || echo 0 ) QA:$(hint_of "$FULL_OUT" QA)>$(hint_of "$UNREC_OUT" QA) DOCS:$(hint_of "$FULL_OUT" DOCS)>$(hint_of "$UNREC_OUT" DOCS)"
+
 # ---------------------------------------------------------------------------
 # HAT_WRITES_EXTRA — the project's exception to the hat's writes:, and its guard.
 #

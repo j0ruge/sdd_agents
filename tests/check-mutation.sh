@@ -4889,6 +4889,11 @@ mut_COORD_note_manual_unlocked() {
   sed -i 's@    boot|note-manual|install|@    boot|install|@' "$1"
 }
 
+# #153, the page: it reads sessions only, and a phase already recorded by hand is suggested forever.
+mut_STATUS_manual_row_ignored() {
+  sed -i '/^status_unrecorded() {/,/^}/ s@and (.event == "session" or .event == "manual"))@and (.event == "session"))@' "$1"
+}
+
 # The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
 # of one. A group holding nothing but the closure falls through every arm of `phase_label` — no
 # escalation, no retry, and `last | .gate` over an empty list is null, so the second conjunct of the
@@ -6138,6 +6143,7 @@ CATALOG=(
   KAIZEN_manual_counts_mission
   RUN_manual_row_missing
   COORD_note_manual_unlocked
+  STATUS_manual_row_ignored
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_counted_as_session
   LEDGER_gate_pass_mints_a_version

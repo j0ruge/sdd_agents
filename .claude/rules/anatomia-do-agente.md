@@ -139,6 +139,10 @@ Memória sem rota é prosa que a próxima sessão paga para reler e não usa.
 Desde `20261004-lote-4-a-catraca-zera` toda linha do ledger carrega `runner_sha`, o HEAD do kit no
 lançamento do processo, ao lado do `kit_sha` lido do disco: numa missão cujos commits movem o
 próprio kit, o segundo nomeia uma versão que o processo nunca rodou (22 de 35 `sdd run` do kit).
+Na mesma missão a fase feita à mão ganhou rota (#153): a página completa do `sdd status`
+(`status_unrecorded`) lista as fases de gate verde sem linha `session` nem `manual` desta missão no
+ledger **desta máquina**, cada uma com o `sdd note-manual` que a grava — pergunta, não acusação, e
+fora do `--no-gates`, que não sabe qual fase está feita.
 O `docs/adr/` deixou de ser memória **sem rota**: `sdd adr new` aloca o número com O_EXCL e escreve
 os dois lados do vínculo; `sdd adr check` lê de volta, em dois escopos. A rota do ADR é o
 `sdd-planner` com o humano, e o gate de PLAN é quem cobra. Desde `20261004-lote-4-a-catraca-zera`

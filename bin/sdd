@@ -6742,14 +6742,16 @@ cmd_status() {
   fi
 
   local ph state why
+  local -a green=()
   for ph in $PHASES; do
-    if "gate_$ph"; then state="${C_GREEN}✓${C_RESET}"; else state="${C_YELLOW}·${C_RESET}"; fi
+    if "gate_$ph"; then state="${C_GREEN}✓${C_RESET}"; green+=("$ph"); else state="${C_YELLOW}·${C_RESET}"; fi
     why="$GATE_WHY"
     printf '  %b %-7s %s%s%s\n' "$state" "$ph" "$C_DIM" "$why" "$C_RESET"
   done
 
   info ""
   status_increments
+  status_unrecorded ${green[@]+"${green[@]}"}
 
   info ""
   local next; next="$(current_phase)"
@@ -6785,6 +6787,34 @@ status_increments() {
     esac
     printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
   done <<< "$rows"
+}
+
+# status_unrecorded <phase>... — the green phases (#153) that THIS machine's ledger holds no
+# session and no `manual` row of for this mission: the shape a phase done by hand leaves, and the
+# command that records it. Below cmd_status for the reason status_increments gives. PLAN never
+# asks (it is the human's by design) and neither does TICKET with JIRA off (the gate skips it).
+# Cost: one jq pass over the ledger — 9 ms over the 608 rows of 2026-10-04 — inside a page that
+# already ran every gate, which is why the cheap `--no-gates` page does not carry it: it knows no
+# phase is done. `fromjson?` so one malformed row costs the hint nothing but that row.
+status_unrecorded() {
+  local file seen ph out=""
+  autonomy_have_jq || return 0
+  file="$(autonomy_log_path)"
+  [ -f "$file" ] || return 0
+  seen="$(jq -rR --arg repo "$(ledger_repo_root)" --arg m "$MISSION" \
+            'fromjson? | select(type == "object" and .repo == $repo and .mission == $m
+                                and (.event == "session" or .event == "manual")) | .phase // empty' \
+            "$file" 2>/dev/null)" || seen=""
+  for ph in "$@"; do
+    [ "$ph" != PLAN ] || continue
+    [ "$ph" != TICKET ] || [ "$JIRA_ENABLED" = "true" ] || continue
+    grep -qxF "$ph" <<< "$seen" && continue
+    out+="$(printf '    %-7s %ssdd note-manual %s %s%s' "$ph" "$C_DIM" "$MISSION" "$ph" "$C_RESET")"$'\n'
+  done
+  [ -n "$out" ] || return 0
+  info ""
+  info "  green with no session and no manual row in this machine's ledger — done by hand?"
+  printf '%s' "$out"
 }
 
 # Prints only the name of the current phase (or DONE). It exists for scripts and for the kit's
