@@ -839,7 +839,13 @@ mut_QA_report_no_fallback() {
 # carries THIS mission's handoff dir. Widened to ANY mission's dir, another mission's squash — which
 # carries its own — passes for this one's, and the fail-open of ADR 0013 is back.
 mut_QA_report_tip_any_mission() {
-  sed -i '/^tip_add_carries_mission() {/,/^}/ s@-- "\$HANDOFF_DIR/\$MISSION/" 2>/dev/null@-- "$HANDOFF_DIR/" 2>/dev/null@' "$1"
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s@-- "\$HANDOFF_DIR/\$MISSION/checkpoint.md" "\$HANDOFF_DIR/\$MISSION/checkpoint-notas.md" 2>/dev/null@-- "$HANDOFF_DIR/" 2>/dev/null@' "$1"
+}
+# Widened back to ANY file of this mission's dir (Codex review of PR #222): another mission's squash
+# that edits this one's 00-missao.md — lote 4 backfilled fourteen — passes for this mission's own.
+# Caught by `another mission's report whose squash also edited this mission's 00-missao.md …`.
+mut_QA_report_tip_any_file_of_mission() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s@-- "\$HANDOFF_DIR/\$MISSION/checkpoint.md" "\$HANDOFF_DIR/\$MISSION/checkpoint-notas.md" 2>/dev/null@-- "$HANDOFF_DIR/$MISSION/" 2>/dev/null@' "$1"
 }
 # The other direction: refusing every report the base tip holds, without asking who added it, is
 # the shape ADR 0013 refused — it takes from a squash-merged mission its own report.
@@ -5763,6 +5769,7 @@ CATALOG=(
   QA_report_log_quoted
   QA_report_no_fallback
   QA_report_tip_any_mission
+  QA_report_tip_any_file_of_mission
   QA_report_tip_refused_outright
   QA_bug_genre_ignored
   QA_bug_genre_prefix

@@ -904,12 +904,17 @@ path_in_commits() {
 }
 
 # tip_add_carries_mission <path> [<tip>...] — rc 0 unless a <tip> holds <path> and the newest
-# commit of that tip which ADDED it touches nothing under $HANDOFF_DIR/$MISSION/ (ADR 0015 §3).
+# commit of that tip which ADDED it touches neither progress file of $HANDOFF_DIR/$MISSION/ —
+# checkpoint.md, checkpoint-notas.md (ADR 0015 §3).
 # A report new to the merge-base but already at a base tip is one of two things, and the base
 # commit that added it tells them apart without a clock: THIS mission's own report, squash-merged
-# and read from its branch after a fetch — the squash carries the mission's handoff dir, whose
-# checkpoint moves with every increment — or another mission's, brought from the base's later
-# history (`git checkout origin/<b> -- f`, a cherry-pick): that commit carries another dir or none.
+# and read from its branch after a fetch — the squash carries the mission's progress, which moves
+# with every increment — or another mission's, brought from the base's later history (`git checkout
+# origin/<b> -- f`, a cherry-pick): that commit carries another mission's progress or none.
+# The PROGRESS files and not the whole dir (Codex review of PR #222, reproduced): another mission's
+# squash can edit this one's approved intent — lote 4 backfilled `adr:` into fourteen 00-missao.md
+# in one commit — and "touches the dir" read its report as this mission's. DECLARED, fail open: a
+# commit of another mission that edits THIS mission's checkpoint as well; none is known.
 # PLUMBING, for the reason mission_qa_report gives (log.showSignature); `--root` so an add in a
 # root commit is seen at all. DECLARED, fail closed: the mission's own report cherry-picked to the
 # base without its dir, a rebase-merge (each commit replayed alone; 0 of 110 PR merges on
@@ -923,7 +928,7 @@ tip_add_carries_mission() {
     IFS= read -r -d '' add < <(git -C "$REPO_ROOT" rev-list --topo-order "$c" -- "$path" 2>/dev/null \
         | git -C "$REPO_ROOT" diff-tree --stdin --root -r -z --diff-filter=A --name-only -- "$path" 2>/dev/null) || true
     [ -n "$add" ] || return 1
-    [ -n "$(git -C "$REPO_ROOT" diff-tree --root --no-commit-id -r --name-only "$add" -- "$HANDOFF_DIR/$MISSION/" 2>/dev/null)" ] || return 1
+    [ -n "$(git -C "$REPO_ROOT" diff-tree --root --no-commit-id -r --name-only "$add" -- "$HANDOFF_DIR/$MISSION/checkpoint.md" "$HANDOFF_DIR/$MISSION/checkpoint-notas.md" 2>/dev/null)" ] || return 1
   done
   return 0
 }
@@ -976,7 +981,8 @@ tip_add_carries_mission() {
 # another mission added upstream AFTER the fork and brought in by `git checkout origin/<b> -- f`, a
 # squash or a cherry-pick, or this mission's own, squash-merged and read after a fetch — the base
 # commit that ADDED it decides (tip_add_carries_mission, ADR 0015 §3): it counts only when that
-# commit carries this mission's handoff dir. Refusing every report at the tip would take from a
+# commit moves this mission's checkpoint (checkpoint.md or checkpoint-notas.md), never merely some
+# file of its dir. Refusing every report at the tip would take from a
 # squash-merged mission its own report; asking nothing let another mission's count (review r5).
 #
 # The charter stays out on purpose (decision 3 of the grill): it is durable doc that crosses cycles

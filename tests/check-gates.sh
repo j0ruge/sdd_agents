@@ -1296,6 +1296,34 @@ assert_eq "both reports sit at the base tip and are new to the merge-base, so th
 # half and fails the second; asking nothing passes the second and fails the first.
 assert_eq "a report from the base tip counts only when the commit that added it carries this mission dir" \
   "QA|REVIEW" "$qa_tip_other|$qa_tip_own"
+# (i) Another mission's squash that ALSO touches this mission's directory (Codex review of PR #222):
+#     lote 4 backfilled `adr:` into fourteen missions' 00-missao.md in one commit, and a commit of
+#     that shape carrying its own report passed "touches <HANDOFF_DIR>/<mission>/". What moves with
+#     the mission's own squash is its PROGRESS — checkpoint.md and checkpoint-notas.md —, never its
+#     approved intent, which is what another mission's edit reaches. The control is the (h) world
+#     right above, whose own squash moves checkpoint-notas.md.
+git checkout -q main
+mkdir -p "$FIX/docs/handoffs/20260102-other"
+printf 'other mission\n' > "$FIX/docs/handoffs/20260102-other/checkpoint-notas.md"
+printf '<!-- adr: backfilled by another mission -->\n' >> "$MDIR/00-missao.md"
+cat > "$FIX/docs/qa/reports/2026-01-15-fixture-backfill.md" <<'EOF'
+# QA Run Report — 2026-01-15 — another mission, whose squash also edits this mission's intent
+- **Started:** 2026-01-15T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "another mission (squash) that backfills this mission's 00-missao.md" >/dev/null
+# FLOOR: the commit that added the report touches this mission's dir, and not its progress files.
+qa_tip_backfill_floor="$(git diff-tree --no-commit-id -r --name-only HEAD -- "docs/handoffs/$MISSION/" | sed "s@^docs/handoffs/$MISSION/@@" | tr '\n' ' ')"
+git checkout -q missao/qa-report-owner
+git checkout main -- docs/qa/reports/2026-01-15-fixture-backfill.md
+git commit -qm "chore: the mission brings that report from the base tip" >/dev/null
+assert_eq "the backfill commit touches this mission's 00-missao.md and none of its progress files" \
+  "00-missao.md " "$qa_tip_backfill_floor"
+qa_refused "another mission's report whose squash also edited this mission's 00-missao.md is not the mission's"
+git reset -q --hard HEAD~1
+git branch -q -f main "$qa_tip_main"
 
 # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, as the fixture above.
 # First UNCOMMITTED — the skill may leave the report in the tree when the gate reads it — then

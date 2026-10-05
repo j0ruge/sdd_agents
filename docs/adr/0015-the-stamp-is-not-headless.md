@@ -148,11 +148,20 @@ another's. Since 2026-08-01 that repo merged 85 PRs by squash, 25 by merge commi
 **Decision.** A report new to every merge-base still counts, **unless** two things hold together:
 
 - a tip of `mission_base_refs` also has the path;
-- the newest commit of that tip that added it does not touch `<HANDOFF_DIR>/<mission>/`.
+- the newest commit of that tip that added it touches neither `<HANDOFF_DIR>/<mission>/checkpoint.md`
+  nor `<HANDOFF_DIR>/<mission>/checkpoint-notas.md`.
 
 The question is asked by plumbing (`cat-file -e` per base ref, and `rev-list` plus `diff-tree` only
-when the path is on a tip), never by clock. The mission's own squash merge does carry its directory,
+when the path is on a tip), never by clock. The mission's own squash merge does move its checkpoint,
 so its report counts; another mission's report does not.
+
+The two progress files, and not the whole directory: the first version of this rule asked for any
+path under `<HANDOFF_DIR>/<mission>/`, and the Codex review of PR #222 showed it open. Another
+mission's commit can edit this mission's approved intent — this ADR's own mission backfilled `adr:`
+into fourteen `00-missao.md` files in one commit — and a report carried by that commit counted. The
+progress files move with every increment of the mission itself and nobody else writes them. It
+**fails open** in one declared world: a commit of another mission that also edits this mission's
+checkpoint. No such writer is known.
 
 It **fails closed** in three declared worlds:
 
