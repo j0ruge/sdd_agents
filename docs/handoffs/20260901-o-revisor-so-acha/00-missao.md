@@ -6,6 +6,7 @@ versao:
 branch: feat/o-revisor-so-acha
 aprovacao: auto
 ddd: n/a
+adr: none
 ---
 
 # Missão — O revisor só acha

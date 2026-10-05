@@ -103,7 +103,8 @@ no checkpoint, `git log`, `gh pr view`); Check por incremento; **dezesseis** sen
 `gate_PLAN` também cobra o `adr:` sob `ADR_CHECK=block`, e o comentário do gate **nomeia o dono do
 artefato** — `sdd-planner`, com o humano na sala —, que é a segunda metade da régua do princípio 1.
 É por isso que a recusa mora no PLAN e não no EXEC: nenhum agente do kit decide trade-off
-arquitetural, então cobrar a decisão de uma fase sem humano seria o gate insatisfazível.
+arquitetural, então cobrar a decisão de uma fase sem humano seria o gate insatisfazível. O
+próprio kit roda sob `block` desde `20261004-lote-4-a-catraca-zera` (§5).
 Desde `20260925-o-sensor-le-o-que-a-ancora-diz` o `TEST_CMD` deixa de ser certificado por grafia:
 `config_read_key` é a única leitura de chave fora do `load_config` e diz por que o arquivo não
 carrega ("does not parse" ou "does not evaluate", o mesmo rc 2);
@@ -136,9 +137,14 @@ Memória sem rota é prosa que a próxima sessão paga para reler e não usa.
 `docs/adr/`, ledger de autonomia (`autonomy_log_path`), logs JSON por sessão em `.sdd/logs/`.
 O `docs/adr/` deixou de ser memória **sem rota**: `sdd adr new` aloca o número com O_EXCL e escreve
 os dois lados do vínculo; `sdd adr check` lê de volta, em dois escopos. A rota do ADR é o
-`sdd-planner` com o humano, e o gate de PLAN é quem cobra.
+`sdd-planner` com o humano, e o gate de PLAN é quem cobra. Desde `20261004-lote-4-a-catraca-zera`
+o próprio kit roda sob `ADR_CHECK=block`: as 14 missões anteriores ao mecanismo declaram `adr:`
+(três apontam para a ADR de que nasceram — 0003, 0004 e 0006, que ganharam `Spec:` —, onze dizem
+`none`), e o `sdd adr check` responde rc 0 sem nenhuma missão indecisa.
 
-**Dívida declarada.** O namespace local `specs/*/adr/` do repo-alvo não é alcançado por nenhum dos
+**Dívida declarada.** As ADRs 0001, 0002, 0005 e 0007 do kit seguem sem `Spec:` — nenhuma
+nasceu de uma pasta de missão, e escrever a origem seria inventá-la; o limite está no comentário do
+`ADR_CHECK` em `.sdd/config.sh`. O namespace local `specs/*/adr/` do repo-alvo não é alcançado por nenhum dos
 dois escopos do `sdd adr check` — unificar ou declarar é decisão daquele repo, e o limite está
 escrito no cabeçalho do `tests/check-adr.sh` e no `config/schema.md`. Árvore que não tem o formato
 `<SPEC_DIR>/<dir>/spec.md` também não é varrida (o `docs/superpowers/` deste repo).

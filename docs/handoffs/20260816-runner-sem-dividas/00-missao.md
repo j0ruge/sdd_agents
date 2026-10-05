@@ -6,6 +6,7 @@ versao:
 branch: missao/20260816-runner-sem-dividas
 aprovacao: humano-2026-08-16
 ddd: n/a
+adr: none
 ---
 
 # Missão — a seção "Runner — defeitos e dívidas" do TODO.md é eliminada

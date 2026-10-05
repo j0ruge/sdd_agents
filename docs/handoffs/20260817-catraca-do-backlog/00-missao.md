@@ -6,6 +6,7 @@ versao:
 branch: missao/20260817-catraca-do-backlog
 aprovacao: humano-2026-08-17
 ddd: n/a
+adr: none
 ---
 
 # Missão — a catraca do backlog

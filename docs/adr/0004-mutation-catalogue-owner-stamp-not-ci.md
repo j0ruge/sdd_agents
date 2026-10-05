@@ -2,6 +2,8 @@
 
 Date: 2026-08-19 · Status: accepted
 
+Spec: docs/handoffs/20260819-fecho-que-nao-mente/00-missao.md
+
 ## Context
 
 `4c86712` made the mutation catalogue **opt-in**: `TEST_CMD` stopped running it, and `sdd health`

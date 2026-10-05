@@ -6,6 +6,7 @@ versao:
 branch: missao/20260814-dry-run-completo
 aprovacao: humano-2026-08-14
 ddd: n/a
+adr: none
 ---
 
 # Missão — dry-run mostra o pipeline inteiro

@@ -6,6 +6,7 @@ versao:
 branch: feat/a-rodada-que-andou
 aprovacao: humano-2026-08-31
 ddd: n/a
+adr: none
 ---
 
 # Missão — A rodada que andou

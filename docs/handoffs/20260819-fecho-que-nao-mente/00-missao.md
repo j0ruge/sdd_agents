@@ -6,6 +6,7 @@ versao: n/a — JIRA_ENABLED=false neste repo
 branch: fix/fecho-que-nao-mente
 aprovacao: humano-2026-08-19
 ddd: n/a
+adr: docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md
 ---
 
 # Missão — O caminho que certifica o fecho de uma missão para de afirmar o que não mediu

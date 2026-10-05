@@ -6,6 +6,7 @@ versao: n/a — JIRA_ENABLED=false
 branch: feat/o-incremento-que-andou
 aprovacao: auto
 ddd: n/a
+adr: none
 ---
 
 # Missão — o incremento que andou
