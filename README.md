@@ -82,6 +82,8 @@ sdd retry <mission>          # retry the current phase with a fresh session
 sdd close <mission>          # post-merge: close the JIRA issue (a real paid session — since 2026-09-11
                              #   it writes its own ledger row, `event:"close"`, cost included), then
                              #   returns to the base branch — with or without JIRA
+sdd note-manual <mission> <PHASE>  # record a phase done BY HAND: an intervention note in the checkpoint
+                             #   and a `manual` row in the ledger, which grades nothing (PLAN is refused)
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
 sdd autonomy                 # what the sessions did per kit version (advanced · churned · idle, waste), for THIS repo,
                              #   from the global ledger (~/.sdd/autonomy-log.jsonl)

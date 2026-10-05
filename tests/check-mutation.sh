@@ -4879,6 +4879,16 @@ mut_KAIZEN_manual_counts_mission() {
   sed -i 's@def graded_row: .event == "session" or is_escalation;@def graded_row: .event == "session" or is_escalation or is_manual;@' "$1"
 }
 
+# #153, the writer: `sdd note-manual` writes the note and NOT the row, and the phase done by hand is
+# back to "never happened" for every reader of the ledger.
+mut_RUN_manual_row_missing() {
+  sed -i '/^cmd_note_manual() {/,/^}/ s@^  autonomy_manual_row "\$phase"$@  :@' "$1"
+}
+# The command leaves the admission list and falls to the unlocked arm: it commits under a run.
+mut_COORD_note_manual_unlocked() {
+  sed -i 's@    boot|note-manual|install|@    boot|install|@' "$1"
+}
+
 # The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
 # of one. A group holding nothing but the closure falls through every arm of `phase_label` — no
 # escalation, no retry, and `last | .gate` over an empty list is null, so the second conjunct of the
@@ -6126,6 +6136,8 @@ CATALOG=(
   KAIZEN_manual_not_admitted
   KAIZEN_manual_mints_version
   KAIZEN_manual_counts_mission
+  RUN_manual_row_missing
+  COORD_note_manual_unlocked
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_counted_as_session
   LEDGER_gate_pass_mints_a_version

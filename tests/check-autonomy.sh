@@ -581,6 +581,32 @@ assert_eq "sdd run --phase --dry-run writes none and leaves the tree clean" "2 c
   "$(notes) $( [ -z "$(git -C "$FIX" status --porcelain)" ] && echo clean || echo dirty)"
 : > "$LEDGER"
 
+# --- a phase done BY HAND gets the record a session would have left (#153) ---------------------
+# Measured before the command existed: 0 ledger rows for the PR of 20260916-destino-frete-cif,
+# published by hand after three deaths, and 0 of 4 missions with the `- intervention:` note
+# checkpoint_note_intervention reserves for "a phase done by hand". The command writes BOTH, read
+# as one group so "a note and no row" (or the reverse) fails by name: the note through the one
+# writer, committed alone like every other door above; the row with the closure's shape — mission,
+# run, kit stamp, the phase — and no session field, because none ran.
+echo "== sdd note-manual records a phase done by hand =="
+nm_notes_before="$(notes)"
+NM_RC=0; "$SDD" note-manual "$MISSION" PR >/dev/null 2>&1 || NM_RC=$?
+assert_eq "sdd note-manual writes one note committed alone and one manual row for the phase" \
+  "rc:0 notes:+1 clean rows:1 manual:PR" \
+  "rc:$NM_RC notes:+$(( $(notes) - nm_notes_before )) $(ck_clean) rows:$(nrows) manual:$(rows 'select(.event == "manual") | .phase')"
+assert_eq "the manual note names the command, the phase and the date, in the form the template shows" "1" \
+  "$(grep -cE '^- intervention: sdd note-manual .* — PR — [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} · written by the runner$' "$MDIR/checkpoint.md" || true)"
+assert_eq "the manual row carries the mission, its own run and the kit stamp, and no session field" \
+  "$MISSION note-manual true true false" \
+  "$(rows 'select(.event == "manual") | "\(.mission) \(.invocation) \((.run_id | length) > 0) \(has("kit_sha")) \(has("rc") or has("cost_usd") or has("moved") or has("kind") or has("gate_why"))"')"
+# PLAN is the human's by design and an unknown name is a typo: both refused BEFORE anything is
+# written — the floor is the row and the note the call above left, unchanged.
+NM_PLAN_RC=0; "$SDD" note-manual "$MISSION" PLAN >/dev/null 2>&1 || NM_PLAN_RC=$?
+NM_BAD_RC=0; "$SDD" note-manual "$MISSION" PUBLISH >/dev/null 2>&1 || NM_BAD_RC=$?
+assert_eq "note-manual refuses PLAN and an unknown phase and writes nothing" "1 1 rows:1 notes:+1" \
+  "$NM_PLAN_RC $NM_BAD_RC rows:$(nrows) notes:+$(( $(notes) - nm_notes_before ))"
+: > "$LEDGER"
+
 echo "== the mission ceiling stops the line before a phase opens =="
 # L2 of the 2026-09-03 audit. Measured: 20260902-o-rascunho-legado-fala-cru cost US$ 174.11 against
 # a ceiling of US$ 150 that lived in the plan's prose — the runner had a cap per SESSION

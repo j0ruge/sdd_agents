@@ -34,13 +34,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **A regra da âncora aceita qualquer símbolo citado que reapareça perto, e uma âncora podre passa** —
   `tests/check-todo.sh:2122` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
   basta; identificador que se repete no arquivo inteiro casa em qualquer lugar. Medido em `b3b6b98`:
-  `tests/check-autonomy.sh:6594` apontava para `exit 0` e passou verde porque `GIT_REFLOG_ACTION`
+  `tests/check-autonomy.sh:6620` apontava para `exit 0` e passou verde porque `GIT_REFLOG_ACTION`
   está em 6400 — o sensor disse `every anchor on target`. Direção: exigir o símbolo na própria linha
   (ou no bloco da função), ou contar ocorrências e recusar símbolo que aparece em todo canto.
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2102` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6193` — a chave lê
+  `bin/sdd:2102` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6205` — a chave lê
   `bin tests templates config`, mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança
   confinada a esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a regra 12 do
   `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita `CLAUDE.md`, e chavear nele custaria
@@ -63,8 +63,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: o `starter.conf` sugerir o `--check` do kit no `TEST_CMD` do alvo.
   — descoberto por `humano` revisando o sensor novo (2026-08-16)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9746`
-  (`kaizen_series`) vs `docs/pipeline.md:1397`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9759`
+  (`kaizen_series`) vs `docs/pipeline.md:1398`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:9350`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
   `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
@@ -99,7 +99,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **O `kaizen_reminder` diz a frase de repo-alvo quando roda de um worktree do kit** —
-  `bin/sdd:10284` (`kit_id`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
+  `bin/sdd:10297` (`kit_id`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
   compara o `--show-toplevel` de `$SDD_HOME` com o `$REPO_ROOT`, e o toplevel é por worktree. Do
   worktree, o `sdd` do checkout principal imprime "N mission(s) of this repo … The kaizen judge
   counts them" no lugar da frase do kit. Direção: o mesmo `ledger_repo_root` dos dois lados, e
@@ -107,7 +107,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-planner` na missão `20261003-lote-3-a-catraca-desce` (2026-10-03)
 
 - [ ] **Uma sessão escreve o ledger com o `bin/sdd` que tinha em MEMÓRIA ao ser lançada** —
-  `bin/sdd:4473` (`autonomy_session_row`) — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4
+  `bin/sdd:4486` (`autonomy_session_row`) — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4
   rodadas com `turns` nulo), e o ledger não distingue "medido nulo" de "não medido": fail-open de leitura. O
   `.sdd/config.sh` tem o mesmo defeito (`bin/sdd:147`, `source` único): o `TEST_CMD` consertado a meio do run não vale,
   e o EXEC da SQ-141 queimou 4 retries (~US$ 5,90) num gate insatisfazível. Direção: o `sdd run` avisar quando `bin/sdd`

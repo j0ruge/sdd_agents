@@ -278,7 +278,10 @@ fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
 `ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos
 mais um de encerramento forçado, e a linha `- intervention:` escrita pelo
-runner (L2, L6 e L4).
+runner (L2, L6 e L4). Desde `20261004-lote-4-a-catraca-zera` (#153) a fase feita **à mão** também
+tem porta: `sdd note-manual <missão> <FASE>` escreve a `- intervention:` pelo mesmo escritor e a
+linha `event:"manual"` do ledger, que não gradua nada — antes dela, o PR publicado à mão de
+`20260916-destino-frete-cif` não deixou linha nenhuma, e 0 de 4 missões escreveram a nota.
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
 anterior desta seção dizia que não existia, e estava errada (foi o comando do incidente das 18:45).
