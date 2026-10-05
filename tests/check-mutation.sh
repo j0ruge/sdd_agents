@@ -6311,6 +6311,12 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # went red on "one series-fields block" — measured, the first --only of that mutant. Like docs/adr
   # it is read whatever the mutant is, never mutated, so it stays out of the stamp key.
   cp "$ROOT/docs/pipeline.md" "$1/docs/"
+  # `commands/`, the fifth entry born the same way: check-hat.sh asserts that /sdd-plan shows the
+  # plan and asks YES or NO before `sdd approve`, reading commands/sdd-plan.md from its own kit root.
+  # Absent here, the control run went red on that probe (`awk: cannot open`) and `sdd health` read
+  # HARNESS-BROKEN before a single mutant ran — measured on the first health of PR #222, which no
+  # fast step could have seen: `--anchors` copies only bin/. Read, never mutated: out of the stamp key.
+  cp -r "$ROOT/commands" "$1/"
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log
