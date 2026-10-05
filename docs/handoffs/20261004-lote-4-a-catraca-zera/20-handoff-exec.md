@@ -21,7 +21,7 @@ e I16–I24), cada um com o Check do plano medido vermelho antes e verde depois.
 mais o health (I14); o ledger carrega `runner_sha` (I15); o config é relido por volta (I16);
 `sdd note-manual` grava a fase feita à mão (I17–I19); o relatório na ponta da base pergunta quem o
 trouxe (I20); a régua de idioma lê `docs/` por censo (I21). ADR 0015 aceita, com as emendas em
-0004, 0011, 0013 e 0014. Catraca 23 → 16 na branch (N = 0 nascidos) → 0 depois do chore.
+0004, 0011, 0013 e 0014. Catraca 23 → 21 na branch (16 resolvidos + N = 5 nascidos na revisão final) → 5 depois do chore.
 Catálogo 593 → 612, todos aplicam. Próximo, pela decisão 6: push, PR, esperar TODOS os bots,
 consertar numa leva, `./bin/sdd health` uma vez (o humano dispara), merge pelo humano.
 
@@ -67,12 +67,13 @@ bem construído; **1 Important e 5 Minor**. Consertados numa leva, cada um com v
 - `16a0d64` — **Minor, mas regressão da leva (I16):** chave `readonly` no config matava a volta 1 com
   o erro cru do `unset`; agora para com a frase do runner. 1 mutante.
 
-Minors deferidos (decisão do humano): `red_norm` do `--red` com array vazio sob `set -u` em bash
-4.0–4.3 (não reproduz no bash 5.2 daqui); as linhas de remédio da parada no carimbo são genéricas
-quando o carimbo é impossível (cópia não-git do kit); `sdd run --phase PR` com só o carimbo faltando
-commita uma nota `intervention:` e para sem sessão (mesma forma da porta do PLAN); a dica do
-`sdd status` é por máquina (já declarado); o `ok` do `note-manual` afirma "a nota" mesmo sem
-`checkpoint.md`. Depois da leva: suíte verde, 1839 `ok`, 377 s; 615 mutantes aplicam.
+Os 5 minors restantes viraram itens do `TODO.md` por decisão do humano (catraca 16 → 21, N = 5):
+`red_norm` do `--red` com array vazio sob `set -u` em bash 4.0–4.3 (não reproduz no bash 5.2 daqui);
+as linhas de remédio da parada no carimbo são genéricas quando o carimbo é impossível;
+`sdd run --phase PR` com só o carimbo faltando commita uma nota `intervention:` e para sem sessão; a
+dica do `sdd status` pergunta de toda fase verde de missão rodada noutra máquina; o `ok` do
+`note-manual` afirma "a nota" mesmo sem `checkpoint.md`. Depois da leva: suíte verde, 1839 `ok`,
+377 s; 615 mutantes aplicam.
 
 ## Artefatos
 
@@ -88,7 +89,7 @@ commita uma nota `intervention:` e para sem sessão (mesma forma da porta do PLA
 Ler o `01-plano.md` § "Depois do checkpoint" e seguir na ordem:
 
 1. `git push -u origin fix/lote-4-a-catraca-zera` e o PR contra a `main` (o repo é público, mas o
-   Actions não entra: a verificação é local). O corpo leva: o saldo "23 → 0 + N nascidos" (N = 0);
+   Actions não entra: a verificação é local). O corpo leva: o saldo "23 → 0 + N nascidos" (N = 5, da revisão final);
    a lista dos 16 `RESOLVED by` e das 7 saídas; a ADR 0015 e as quatro emendas; o catálogo
    593 → 612; as mudanças de comportamento — o `sdd run` para no carimbo com rc 2 (I13), a volta 1
    lê o config da branch da missão (I16), o `/sdd-plan` pergunta YES/NO (I6), o slot de símbolo é
@@ -96,11 +97,11 @@ Ler o `01-plano.md` § "Depois do checkpoint" e seguir na ordem:
 2. Esperar TODOS os bots (CodeRabbit, Copilot, Codex) e consertar numa leva só; achado de bot é
    hipótese até medir.
 3. `./bin/sdd health` uma vez, depois do último commit de código, disparado pelo humano (~45–55 min
-   com 612 mutantes; lançador desanexado). Desde o I12 a chave inclui `agents/`.
+   com 615 mutantes; lançador desanexado). Desde o I12 a chave inclui `agents/`.
 4. Merge pelo humano; depois o chore pós-merge numa branch `chore/todo-pos-merge-lote-4` (apaga os
-   16, catraca 16 → 0, `todo_rm.py` provando cada hash contra `origin/main`) e o re-sync do espelho
+   16, catraca 21 → 5, `todo_rm.py` provando cada hash contra `origin/main`) e o re-sync do espelho
    de issues — os 16 fecham como `fixed by <hash>`, as 7 saídas (#88, #218, #130, #155, #109, #180,
-   #135) à mão como `not planned`.
+   #135) à mão como `not planned`; os 5 nascidos viram issues novas.
 
 ## Pendências / Decisions for a Human
 
@@ -132,5 +133,8 @@ Ler o `01-plano.md` § "Depois do checkpoint" e seguir na ordem:
 
 ## Achados fora de escopo
 
-- Nenhum item novo no `TODO.md` (N = 0). A lição de planejamento F8 foi para a gaveta
+- 5 itens novos no `TODO.md` (N = 5), os minors da revisão final, por decisão do humano: o
+  `--red` sob bash 4.0–4.3, o remédio genérico da parada no carimbo, a intervenção do `--phase PR`
+  sem sessão, a dica do `sdd status` em missão de outra máquina e o `ok` do `note-manual`. A lição
+  de planejamento F8 foi para a gaveta
   (`docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md`, `2dd7683`).

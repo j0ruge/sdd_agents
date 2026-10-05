@@ -99,6 +99,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   squash (o fluxo do `sales_quote`). Direção: distinguir pelo blob na ponta, não pelo caminho. RESOLVED by 48e7870.
   — descoberto por `revisor de contexto novo` na missão `20260928-os-achados-da-janela` (2026-09-29)
 
+- [ ] **O `--red` aborta sob `set -u` em bash 4.0–4.3 quando o Check não imprime nada** —
+  `tests/check-checkpoint.sh:519` (`red_norm`) — `read -ra w` de uma saída vazia deixa o array vazio, e
+  `"${w[*]}"` é "unbound variable" antes do bash 4.4: o caso que o `--red` existe para recusar (o Check
+  mudo) vira aborto do sensor. Não reproduz no bash 5.2 daqui; o kit promete bash 4+. Direção:
+  `${w[@]+"${w[*]}"}`, o idioma que o `check-todo.sh` já usa.
+  — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
+
 ### Contrato e configuração
 
 - [ ] **O `kaizen_reminder` diz a frase de repo-alvo quando roda de um worktree do kit** —
@@ -118,6 +125,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01); config por `claude` na missão
   `20260924-transacao-honra-o-timeout` (2026-09-24)
 
+- [ ] **`sdd run --phase PR` com só o carimbo faltando grava uma intervenção e não abre sessão** —
+  `bin/sdd:8181` (`checkpoint_note_intervention`) — a nota "forced from the CLI" é commitada antes de a
+  volta chegar à parada no carimbo (rc 2), e o `sdd autonomy --by-mission` conta uma intervenção numa
+  corrida que não fez nada. Mesma forma da porta do PLAN, anterior ao lote. Direção: escrever a nota só
+  quando a volta forçada abre sessão, ou declarar o limite nas duas portas.
+  — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
+
 ### Saída humana e cosmética
 
 - [ ] **As ADRs 0001–0007 não têm `Spec:`, e por isso 14 missões deste repo não podem declarar
@@ -128,6 +142,27 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `block` mandaria as 14 de volta para PLAN. Direção: o humano mapeia as sete, `sdd adr new --spec`
   escreve os dois lados, o resto vira `adr: none`, e aí a chave volta para `block`. RESOLVED by 7cb9328.
   — descoberto por `codereview` na missão `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
+
+- [ ] **A parada no carimbo manda rodar o `sdd health` mesmo quando o carimbo é impossível** —
+  `bin/sdd:8283` (`GATE_PR_STAMP_WHY`) — numa cópia do kit fora do git, ou com um caminho medido
+  ausente, nenhum `sdd health` carimba aquela árvore; o remédio certo só vem dentro do motivo, na linha
+  de cima, e as linhas `dim` repetem a ordem genérica. Parar está certo; a prosa engana. Lido do
+  código, não reproduzido. Direção: quando o motivo é "impossível", trocar as linhas de remédio.
+  — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
+
+- [ ] **A dica do `sdd status` pergunta "feita à mão?" de toda fase verde de missão rodada noutra máquina** —
+  `bin/sdd:6827` (`status_unrecorded`) — o ledger é por máquina, então missão executada noutro
+  computador não tem linha `session` aqui e toda fase verde recebe o `sdd note-manual`; quem seguir a
+  dica grava como feita à mão uma fase que não foi. A frase diz "this machine's ledger" (declarado no
+  plano do I19). Direção: calar quando o ledger local não tem nenhuma linha da missão.
+  — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
+
+- [ ] **O `ok` do `sdd note-manual` diz que gravou a nota mesmo sem `checkpoint.md`** —
+  `bin/sdd:11084` (`checkpoint_note_intervention`) — sem o arquivo o escritor volta 0 em silêncio, a
+  linha `manual` vai para o ledger e a mensagem final afirma "the note in the checkpoint": rótulo sem
+  artefato, na saída humana. Direção: o escritor publicar se escreveu, e o `ok` dizer só o que
+  aconteceu.
+  — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
 ### Comentário e registro
 

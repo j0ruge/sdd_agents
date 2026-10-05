@@ -19,7 +19,7 @@ runner; e a fase feita à mão invisível para o ledger (0 linhas para o PR de
 
 | Fato | Antes | Depois |
 |---|---|---|
-| Catraca `todo-findings` | 23 | 16 na branch, todos com `RESOLVED by` (N = 0 nascidos) → 0 depois do chore pós-merge |
+| Catraca `todo-findings` | 23 | 21 na branch: 16 com `RESOLVED by` + N = 5 nascidos (os minors da revisão final) → 5 depois do chore pós-merge |
 | Saídas sem código | — | 7: Y7 (#88) e Y8 (#218) no `CONTEXT.md`, 5 decididos (#130, #155, #109, #180, #135) |
 | Consertos com `RESOLVED by` | — | 16, em 20 commits de incremento (I3–I23 menos o I6, que não fecha item) |
 | Catálogo de mutação | 593 | **615** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`): 612 no fecho do EXEC, +3 dos consertos da revisão final; 3 re-ancorados no I17 |
@@ -44,7 +44,8 @@ asserção que cai. Os protótipos dos designers entraram hunk a hunk, comparado
 onde divergiram, o plano mandou e a decisão ficou como `Ruling:` na nota do checkpoint. Re-âncora do
 `TODO.md` (`remap.py`, `xref.py`, `--anchors`) em todo commit que deslocou linha.
 
-**Achados nascidos na leva (régua D15 na hora):** nenhum item novo no `TODO.md`. Limites declarados
+**Achados nascidos na leva (régua D15 na hora):** 5 itens novos no `TODO.md`, os minors da revisão
+final (catraca 16 → 21, ver abaixo). Limites declarados
 no lugar em que valem: o reset do `GATE_PR_STAMP_WHY` sem probe e o `sdd retry PR` que não para no
 carimbo (I13); config quebrado no meio do run morre pelo mesmo `die` do lançamento, sem probe
 próprio (I16); o ledger da dica do `sdd status` é por máquina (I19); três casos que falham
@@ -57,7 +58,7 @@ deslocou cinco.
 **Revisão final da branch:** um revisor de contexto novo achou 1 Important (o `sdd note-manual`
 deixava o humano na branch gasta de uma missão mergeada) e uma regressão do I16 (chave `readonly`
 matando o run com o erro cru do bash), os dois reproduzidos e consertados com vermelho medido
-(`091012c`, `16a0d64`); 4 minors ficaram para o humano. Depois deles a suíte deu 1839 `ok` em 377 s.
+(`091012c`, `16a0d64`); os 5 minors restantes viraram itens do `TODO.md` por decisão do humano. Depois deles a suíte deu 1839 `ok` em 377 s.
 
 **Ainda não medido:** o carimbo do `sdd health` com 615 mutantes, que roda depois dos bots; e os
 efeitos de uso real — a primeira linha `runner_sha` divergente, a primeira `manual`, o primeiro
