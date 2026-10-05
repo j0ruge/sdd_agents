@@ -47,3 +47,4 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+- 2026-10-04 22:31 · `EXEC` · I1 (b120607) · Red medido em 6c628be antes de qualquer edição: Check → `0 0 0 20 0 0`, igual ao plano; verde → `1 1 1 23 1 2`. Os textos do plano entraram verbatim (Y7, três decididos, limite na linha 39 do check-templates.sh, § F3 + índice + item 4 da ordem); o `todo_rm.py` apagou 51-57, 152-158, 221-227 e 91-98, as faixas medidas no plano. Conferido antes de escrever no § F3: o #7 está na seção decidida com data 2026-10-03. Sem mutante (só texto), como o plano prevê. Sensores: `check-todo.sh` → 19 finding(s), `--anchors` 19 medidos e 0 fora; `check-templates.sh` rc 0; `check-lang.sh` 0 de 57; `shellcheck -S warning` limpo; suíte rápida verde em 295 s (catálogo 593, âncoras aplicam). Nenhum desvio do plano.
