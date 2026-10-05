@@ -50,6 +50,26 @@ three out (a warn, since leaving a slow build out can be deliberate), and warns 
 could not read the scripts at all — `jq` missing or a `package.json` that is not JSON — so a silence
 there is never mistaken for an ok.
 
+**Opt-in: the `TODO.md` lint inside `TEST_CMD`.** The findings file has a shape
+(`templates/todo.md`) and the kit's sensor measures it, but nothing runs that sensor in a target's
+suite, so an item with no anchor or no date goes unnoticed for missions. `config/starter.conf`
+suggests appending
+`bash "$SDD_HOME/tests/check-todo.sh" --check "$TODO_FILE" --allow-empty --baseline "origin/$DEFAULT_BRANCH"`
+to the suite, inside **single** quotes, so the runner expands the three variables when it runs the
+command (`$SDD_HOME` is the runner's own variable, visible to the command it evaluates). `--baseline`
+fails only on what the base branch did not already have: on 2026-10-05, under the designated-symbol
+rule, `sales_quote` and `lighthouse_project` carried 209 and 127 inherited violations and both
+answered `0 new`. `--allow-empty` keeps a freshly installed repo, whose `TODO.md` has no finding
+yet, from failing on the empty file. Declared limits:
+
+- the line works where the runner runs `TEST_CMD` — `gate_EXEC`, `gate_QA`, `gate_REVIEW` and
+  `sdd preflight`. Typed outside the runner, `$SDD_HOME` is empty and the line fails loudly (rc 127,
+  no such file), never silently green;
+- the DOCS and PR phases do not run `TEST_CMD`, so a finding written there is measured by the next
+  gate that does, or by nobody if none follows;
+- `origin/<base>` is read as last fetched: a stale ref can read as new a violation the base gained
+  after the fetch — red, the closed direction — and a ref the repo does not have is refused (rc 88).
+
 ## Running application (QA phase)
 
 | Key | Required | Default | What it is |
