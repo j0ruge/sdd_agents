@@ -210,11 +210,16 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 # correct only by the coincidence that the loop variable shares the name. Rename the loop variable
 # and every mutant silently shares one sandbox. A sensor that never opens the file cannot see that.
 #
-# The floor is the anti-vacuity guard, same reason as the ones in check-lang.sh and
-# check-pipefail.sh: a glob that stops matching, or a list someone narrows back to bin/sdd, leaves
-# the linter reporting "clean" over files it never read — the failure mode where the sensor claims
-# to have measured what it did not. 14 paths today; the floor moves only on purpose, in a commit
-# that says why.
+# The floor is the anti-vacuity guard, same reason as the one in check-pipefail.sh: a glob that
+# stops matching, or a list someone narrows back to bin/sdd, leaves the linter reporting "clean"
+# over files it never read — the failure mode where the sensor claims to have measured what it did
+# not. The floor moves only on purpose, in a commit that says why.
+#
+# DECLARED LIMIT (ADR 0015 §4): this floor is anti-vacuity, not a tracker of the surface. It equals
+# the real count only because the house moves it with every new sensor (CLAUDE.md, the four places
+# a sensor enters); nothing measures that it did, so a sensor that lands without moving it leaves
+# slack, and the floor goes on passing one file short. Measured: no lag in 105 commits. Its sibling
+# in check-lang.sh lagged in 57 of 124 and was derived instead (census() there).
 #
 # Mind the wording of any comment here: a line whose first word after `#` is the linter's own name
 # is parsed as a DIRECTIVE, and an unparseable one is an ERROR (SC1073/SC1072) — this very block
@@ -235,9 +240,9 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 #
 # The floor moved 12 → 13 when tests/check-entrypoint.sh landed, 13 → 14 for
 # tests/check-checkpoint.sh, 14 → 15 for tests/check-health.sh, 15 → 16 for tests/check-hat.sh
-# and 16 → 17 for tests/check-adr.sh. It tracks the real count on purpose: left behind it would
+# and 16 → 17 for tests/check-adr.sh. It is kept AT the real count on purpose: left behind it would
 # still pass, and would go on describing a surface one file smaller than the one it reads — the
-# label-instead-of-artifact shape this whole mission is about.
+# label-instead-of-artifact shape this whole mission is about, and the limit declared above.
 # Checkout coordination adds its sensor and the alternate linker: 17 -> 19 Bash paths.
 LINT_SEVERITY=warning
 LINT_FLOOR=19

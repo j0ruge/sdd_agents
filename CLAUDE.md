@@ -338,13 +338,17 @@ dois SC2318 reais em `check-mutation.sh` por três missões.
 do I7 (`[ "$st" = done ]`) só apareceu na suíte inteira depois do I10, e custou `3cf0d0a`.
 
 ⚠️ **"Entra lá" são quatro lugares, não um — e o quarto arrasta um quinto.** Medido ao acrescentar
-o `check-health.sh`: a linha `run` do `tests/run-all.sh`, o `LINT_FLOOR` do mesmo arquivo, o piso
-de superfície do `tests/check-pipefail.sh` e o do `tests/check-lang.sh`. Os três pisos existem
-contra vacuidade — glob que para de casar deixa o laço sem nada para ler e o sensor reporta "0
-violações" —, então piso que ficou para trás continua **passando** enquanto descreve uma superfície
-menor do que a que lê. O quinto lugar é o **fixture do selftest** do `check-pipefail.sh`, construído
-exatamente no piso: deixá-lo um curto fez três probes falharem com `surface shrank` em vez de
-medirem o que nomeiam.
+o `check-health.sh`, e refeito pela ADR 0015 §4: a linha `run` do `tests/run-all.sh`, o
+`LINT_FLOOR` do mesmo arquivo, o piso de superfície do `tests/check-pipefail.sh` e o
+`CALIBRATE_FLOOR` do `tests/check-checkpoint.sh` (os sensores que imprimem o prefixo ok). Os três
+pisos existem contra vacuidade — glob que para de casar deixa o laço sem nada para ler e o sensor
+reporta "0 violações" — e **não rastreiam a superfície**: piso que ficou para trás continua
+**passando** enquanto descreve uma superfície menor do que a que lê, e nada o mede; é limite
+declarado no comentário de cada um (nenhum atrasou em 105 commits). O do `tests/check-lang.sh` saiu
+da lista: atrasou em 57 de 124 commits e virou derivado (`census()` — cada padrão casa um arquivo,
+todo `docs/**/*.md` rastreado tem dono). O quinto lugar é o **fixture do selftest** do
+`check-pipefail.sh`, construído exatamente no piso: deixá-lo um curto fez três probes falharem com
+`surface shrank` em vez de medirem o que nomeiam.
 
 **Sensor que o catálogo de mutação não alcança carrega um auto-teste.** São duas situações, e
 hoje há **seis** sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o

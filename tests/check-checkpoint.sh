@@ -443,6 +443,11 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
 # sensors (issue 113): the other seven print from those other shapes, and a sensor printing three
 # spaces from one of them went unseen. The needles are built from variables: a literal quote-ok
 # pattern in the `case` below would match its own line and report this very file.
+#
+# DECLARED LIMIT (ADR 0015 §4): this floor is anti-vacuity, not a tracker of the surface. It is 16
+# because 16 sensors print the ok prefix today, and a seventeenth that lands without moving it
+# leaves one of slack; nothing measures that, so it is one of the places CLAUDE.md says every new
+# sensor moves. No lag in 105 commits.
 CALIBRATE_FLOOR=16
 calibrate() {
   local root="$1" f line rest sp p seen='' seenf='' n=0 hit
