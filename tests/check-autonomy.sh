@@ -78,8 +78,9 @@ sum_escalations() {
 }
 
 # assert_bucket_sum <description> <reader output>
-# Every row lands in exactly one of SEVEN buckets: comparable session, non-comparable session,
-# escalation, recorded gate closure, recorded ticket closure, judge row, unrecognized. If the filter drops a row (finding 3) or
+# Every row lands in exactly one of EIGHT buckets: comparable session, non-comparable session,
+# escalation, recorded gate closure, recorded ticket closure, phase done by hand, judge row,
+# unrecognized. If the filter drops a row (finding 3) or
 # double-counts one, this sum drifts from the header total — an anti-vacuity check a broken filter
 # cannot pass by accident, unlike any single count in isolation.
 #
@@ -97,17 +98,21 @@ sum_escalations() {
 # drops every KAIZEN row before the buckets, but those rows are LOCAL, so the shell `total=` had
 # already counted them. Same header 2 against buckets 1, and the comment beside the split asserted
 # the opposite — which is why the property lives here and not in prose.
+#
+# The EIGHTH landed with #153 on purpose, not by finding: `sdd note-manual` writes `event:"manual"`,
+# and the bucket was named in the same commit that admitted the event, before any writer existed.
 assert_bucket_sum() {
-  local desc="$1" out="$2" total comparable noncomp escal closed closes meta stray sum
+  local desc="$1" out="$2" total comparable noncomp escal closed closes manuals meta stray sum
   total="$(num_before "$out" 'row\(s\)')"; total="${total:-0}"
   comparable="$(sum_sessions "$out")"
   noncomp="$(num_before "$out" 'non-comparable')"; noncomp="${noncomp:-0}"
   escal="$(sum_escalations "$out")"
   closed="$(num_before "$out" 'gate\(s\) closed without a session')"; closed="${closed:-0}"
   closes="$(num_before "$out" 'ticket closure\(s\) recorded')"; closes="${closes:-0}"
+  manuals="$(num_before "$out" 'phase\(s\) recorded as done by hand')"; manuals="${manuals:-0}"
   meta="$(num_before "$out" 'row\(s\) written by the judge')"; meta="${meta:-0}"
   stray="$(num_before "$out" 'unrecognized')"; stray="${stray:-0}"
-  sum=$((comparable + noncomp + escal + closed + closes + meta + stray))
+  sum=$((comparable + noncomp + escal + closed + closes + manuals + meta + stray))
   assert_eq "$desc" "$total" "$sum"
 }
 
@@ -3506,6 +3511,38 @@ assert_eq "the human reader does not call the recorded closure unrecognized" "0"
 assert_eq "it names the closure instead, so nothing leaves the accounting in silence" "1" \
   "$(num_before "$out_close" 'ticket closure\(s\) recorded')"
 assert_bucket_sum "the buckets still sum to the header total (a close row)" "$out_close"
+
+# --- a phase done by hand is NAMED, and grades nothing (#153) -----------------------------------
+# The sixth event, on the terms the closure above was admitted on, and asked DIFFERENTIALLY: the
+# same ledger with and without the `manual` row. Everything the reader grades — sessions, the
+# outcomes, the US$ — reads the same; only the header total and the line of its own bucket move.
+# The row is copied from the shape autonomy_manual_row builds (the closure's shape, `phase` set).
+echo "== reader: a phase done by hand lands in a bucket of its own =="
+mkdir -p "$OUTSIDE/manualoff" "$OUTSIDE/manualon"
+manual_base() { cat <<'EOF'
+{"v":1,"ts":"2026-09-12T10:00:00-03:00","event":"session","run_id":"m1","invocation":"run","kit_sha":"mmm1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m22","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"m1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":""}
+EOF
+}
+manual_base | localize > "$OUTSIDE/manualoff/autonomy-log.jsonl"
+{ manual_base
+  printf '{"v":1,"ts":"2026-09-12T10:05:00-03:00","event":"manual","run_id":"m2","invocation":"note-manual","kit_sha":"mmm1111","kit_dirty":false,"kit_rev":null,"kit_rev_dirty":null,"project":"p1","repo":"/p1","mission":"m22","phase":"PR"}\n'
+} | localize > "$OUTSIDE/manualon/autonomy-log.jsonl"
+out_moff="$( SDD_STATE_DIR="$OUTSIDE/manualoff" "$SDD" autonomy 2>&1 )"
+out_mon="$( SDD_STATE_DIR="$OUTSIDE/manualon" "$SDD" autonomy 2>&1 )"
+out_moff_bm="$( SDD_STATE_DIR="$OUTSIDE/manualoff" "$SDD" autonomy --by-mission 2>&1 )"
+out_mon_bm="$( SDD_STATE_DIR="$OUTSIDE/manualon" "$SDD" autonomy --by-mission 2>&1 )"
+# THE FLOOR: the row really is in the header total, or the bucket sum closes by vacuity.
+assert_eq "the fixture really does put a manual row in the header total" "1 2" \
+  "$(num_before "$out_moff" 'row\(s\)') $(num_before "$out_mon" 'row\(s\)')"
+assert_eq "the human reader names the manual row and never calls it unrecognized" "1 0" \
+  "$(num_before "$out_mon" 'phase\(s\) recorded as done by hand') $(grep -c 'unrecognized' <<< "$out_mon")"
+# ⭐ DIFFERENTIAL, over both views: drop the header (it names the ledger file and counts the row)
+# and the manual line, and the page with the row is the page without it — the substitution eats
+# the blank line the paragraph opened. A reader that graded the row moves a number on the table.
+assert_eq "a manual row moves no graded number: each page with it is the page without it" \
+  "$(grep -v -e 'row(s)' <<< "$out_moff")|$(grep -v -e 'row(s)' <<< "$out_moff_bm")" \
+  "$(grep -v -e 'row(s)' -e 'recorded as done by hand' <<< "$out_mon")|$(grep -v -e 'row(s)' -e 'recorded as done by hand' <<< "$out_mon_bm")"
+assert_bucket_sum "the buckets still sum to the header total (a manual row)" "$out_mon"
 
 # --- a judge row leaves the AXIS, never the header ------------------------------------------------
 # r1 finding #2 of the 2026-09-11 judge mission, and it is finding #1 collected one filter over: the

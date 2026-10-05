@@ -9287,7 +9287,11 @@ cmd_autonomy() {
     # own ($closes, below): admitting a row without naming it anywhere the arithmetic closes over
     # is `unrecognized` with the alarm switched off, which is what r1 finding #1 measured.
     def is_close: .event == "close";
-    def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close) | not;
+    # ONE definition of the SIXTH event for this program (#153): a phase recorded as done by hand
+    # by `sdd note-manual`. Admitted so it never reads as a stray, given a bucket of its own
+    # ($manuals) so the arithmetic closes over it, and kept out of every grade: no session ran.
+    def is_manual: .event == "manual";
+    def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual) | not;
     # ONE definition of "this row is the judge observing, not a row to grade" — read in TWO places
     # below (the count and the removal), which is exactly the shape CLAUDE.md demands of a predicate
     # with more than one reader: spelled twice, the two drift and the row leaves the list without
@@ -9459,18 +9463,21 @@ cmd_autonomy() {
     # The fifth bucket, and it exists because RECOGNISING a row is not the same as accounting for
     # it: without a count of its own the recorded closures would leave the header total without
     # leaving any line, which is `unrecognized` with the alarm switched off. tests/check-autonomy.sh
-    # closes the sum over ALL SEVEN terms, and seven is the number to read off the code and never
+    # closes the sum over ALL EIGHT terms, and eight is the number to read off the code and never
     # off this comment: comparable sessions (the table), $skipped, the escalations, $closed,
-    # $closes, $stray and $meta. It said "six" until r3 finding #6 of the 2026-09-11 judge mission —
+    # $closes, $manuals, $stray and $meta. It said "six" until r3 finding #6 of the 2026-09-11 judge mission —
     # the $meta bucket that R2 of that same mission added to the sum never reached the sentence, and
     # a count written by hand beside a sum that grows is the third rotten anchor of one phrase.
     | (map(select(is_gate_pass)) | length) as $closed
-    # The SIXTH bucket BY BIRTH — the sum it joins has seven terms since $meta, and the two numbers
+    # The SIXTH bucket BY BIRTH — the sum it joins has eight terms since $manuals, and the two numbers
     # are different questions — and it exists for exactly the reason the fifth does, one event later: the
     # header total is the shell `total=` above, computed over ledger_row_is_local, which knows
     # nothing about any filter inside this program. A close row therefore ENTERED that total and,
     # until r1 finding #1, left no line — measured on a two-row fixture: header 2, buckets 1.
     | (map(select(is_close)) | length) as $closes
+    # The EIGHTH bucket, for the sixth event, on the terms of the two above: local, counted in the
+    # header, and no graded phase — a phase done by hand left no session to grade.
+    | (map(select(is_manual)) | length) as $manuals
     # The MONEY a recorded closure cost, which until r? of this review the ledger recorded and no
     # view ever spent. `sdd close` buys a real paid session, and `cost_usd` was put on the close row
     # in this very mission so D12 (US$ per merged PR) could include it — but both groupings drew
@@ -9659,7 +9666,8 @@ cmd_autonomy() {
        # with the alarm switched off, in dollars. Exactly ONE US$ figure on this line, never the
        # close total beside it: the money already on the printed lines would be counted twice.
        , (if $closes > 0 then "  (\($closes) ticket closure(s) recorded: `sdd close` wrote the row — a closure grades no phase\(if $close_unattributed > 0 then ", US$ \($close_unattributed | usd) of it on no line above" else "" end))" else empty end)
-       , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass/close)" else empty end)
+       , (if $manuals > 0 then "  (\($manuals) phase(s) recorded as done by hand: `sdd note-manual` wrote the row — a manual phase grades nothing)" else empty end)
+       , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass/close/manual)" else empty end)
        , (if $history_extra > 0 then "  (launches, reopened and the review loop are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
        # NOT an exclusion — nothing left a bucket — which is why it rides at the end of the first
        # paragraph rather than among the four. It is the disclosure that half this ledger was read
@@ -9804,6 +9812,11 @@ kaizen_series() {
     # neither names it, so a close can never mint a version nor count as a mission, which is the
     # failure mode the comment at graded_row predicted for the day a fourth event arrived.
     def is_close: .event == "close";
+    # ONE definition of the SIXTH event for this program too (#153), admitted by the `$all` binding
+    # for the reason the two above give, and graded by nothing: graded_row and shas_in_file_order
+    # are written positively and do not name it, so a phase done by hand mints no version and no
+    # mission. tests/check-kaizen.sh asks it differentially, with and without the row.
+    def is_manual: .event == "manual";
 
     # ONE definition of the kit_sha axis for this program too — the third hand-written copy of the
     # same question lived here, as the complementary pair `.kit_dirty == true or .kit_sha == null`
@@ -10135,7 +10148,7 @@ kaizen_series() {
     # one. The two counts partition what the filter removed, so the arithmetic still closes.
     | (($file_rows | length) - ($raw | length) - $no_repo) as $other_repo
     | ($raw | map(select(type == "object" and .v == 1
-                         and (.event == "session" or is_escalation or is_gate_pass or is_close)))) as $all
+                         and (.event == "session" or is_escalation or is_gate_pass or is_close or is_manual)))) as $all
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
     | (($raw | length) - ($all | length)) as $unrec

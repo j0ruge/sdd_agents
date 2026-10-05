@@ -4754,7 +4754,7 @@ mut_RUN_gate_pass_off_the_derived_branch() {
 # leaves the header total through a bucket whose name is a lie about it. Caught by `the human reader
 # does not call the recorded closure unrecognized` in check-autonomy.sh, and by nothing else.
 mut_LEDGER_gate_pass_unrecognized() {
-  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
+  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
 }
 
 # The close row goes back to being ADMITTED but never NAMED: it enters the header total (the shell
@@ -4821,7 +4821,7 @@ mut_LEDGER_meta_off_the_local_total() {
 # stale phrases of that finding were. The exclusivity it wanted belongs to the narrow mutants
 # below, which strip ONE event and were measured one sabotage at a time.
 mut_LEDGER_gate_pass_not_admitted() {
-  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close)@and (.event == "session" or is_escalation)@' "$1"
+  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close or is_manual)@and (.event == "session" or is_escalation)@' "$1"
 }
 
 # --- the three NARROW close mutants -----------------------------------------
@@ -4838,7 +4838,7 @@ mut_LEDGER_gate_pass_not_admitted() {
 # counted as unrecognized` and `guard: a close row mints no version and no mission` in
 # check-kaizen.sh, and by nothing else.
 mut_KAIZEN_close_not_admitted() {
-  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close)@and (.event == "session" or is_escalation or is_gate_pass)@' "$1"
+  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close or is_manual)@and (.event == "session" or is_escalation or is_gate_pass or is_manual)@' "$1"
 }
 
 # `graded_row` admits the closure, so a mission whose ONLY row in the graded slice is its `sdd close`
@@ -4859,6 +4859,24 @@ mut_KAIZEN_close_mints_a_mission() {
 # no mission` in check-kaizen.sh, and by nothing else.
 mut_KAIZEN_close_mints_a_version() {
   sed -i 's@def shas_in_file_order: map(select(.event == "session" or is_escalation))@def shas_in_file_order: map(select(.event == "session" or is_escalation or is_close))@' "$1"
+}
+
+# #153, the sixth event, in its two readers. Reader one forgets it: the row the runner wrote on
+# purpose reads as a stray.
+mut_AUTONOMY_manual_unrecognized() {
+  sed -i 's@ or is_close or is_manual) | not;@ or is_close) | not;@' "$1"
+}
+# Reader two forgets it: `excluded.unrecognized` goes to 1, the field the judge reads as a kit bug.
+mut_KAIZEN_manual_not_admitted() {
+  sed -i 's@or is_gate_pass or is_close or is_manual)))) as \$all@or is_gate_pass or is_close)))) as $all@' "$1"
+}
+# The two ways a non-session row mints, each owned by one regime of the check-kaizen differential:
+# a version (`latest` slides onto a sha no session touched) and a mission (counted in `missions`).
+mut_KAIZEN_manual_mints_version() {
+  sed -i 's@def shas_in_file_order: map(select(.event == "session" or is_escalation))@def shas_in_file_order: map(select(.event == "session" or is_escalation or is_manual))@' "$1"
+}
+mut_KAIZEN_manual_counts_mission() {
+  sed -i 's@def graded_row: .event == "session" or is_escalation;@def graded_row: .event == "session" or is_escalation or is_manual;@' "$1"
 }
 
 # The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
@@ -6104,6 +6122,10 @@ CATALOG=(
   KAIZEN_close_not_admitted
   KAIZEN_close_mints_a_mission
   KAIZEN_close_mints_a_version
+  AUTONOMY_manual_unrecognized
+  KAIZEN_manual_not_admitted
+  KAIZEN_manual_mints_version
+  KAIZEN_manual_counts_mission
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_counted_as_session
   LEDGER_gate_pass_mints_a_version

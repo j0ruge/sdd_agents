@@ -2456,6 +2456,37 @@ assert_eq "floor: that close differential is not vacuous — one version, one mi
 assert_eq "guard: a close row is recognized, never counted as unrecognized" "0 0 0 0" \
   "$(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$CLOSEIN_OUT") $(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$CLOSEAWAY_OUT")"
 
+# --- a manual row, in the judge's program (#153) --------------------------------
+# The SIXTH event: `sdd note-manual` records a phase done by hand. The two properties of the close
+# block above, asked the same way and over the same regimes, because the minting definitions are
+# the same two: (a) it mints nothing — the whole series with the row equals the series without it,
+# with the row on the graded sha and ALONE in its mission (`graded_row`, regime manualin) and on a
+# sha no session touched (`shas_in_file_order`, regime manualaway); (b) it is not thrown away —
+# `excluded.unrecognized` stays 0, the field the judge is told to read as a kit bug. Unlike a
+# closure it carries a `phase`, so regime manualin also puts one on the phase a session ran, where
+# a `phase_label` that learnt it would move the cell. The row is copied from the shape
+# autonomy_manual_row builds in bin/sdd, never written from memory.
+echo "== series: a manual row is recognized and mints nothing =="
+mkdir -p "$OUTSIDE/manualin" "$OUTSIDE/manualaway"
+manual_row() { printf '{"v":1,"ts":"2026-09-11T12:02:00-03:00","event":"manual","run_id":"c4","invocation":"note-manual","kit_sha":"%s","kit_dirty":false,"kit_rev":null,"kit_rev_dirty":null,"project":"p1","repo":"/p1","mission":"%s","phase":"%s"}\n' "$1" "$2" "$3"; }
+{ close_base; manual_row ccc0001 m61 PR; manual_row ccc0001 m60 REVIEW; } | localize > "$OUTSIDE/manualin/autonomy-log.jsonl"
+{ close_base; manual_row ccc0002 m61 PR; } | localize > "$OUTSIDE/manualaway/autonomy-log.jsonl"
+MANUALIN_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/manualin" "$SDD" kaizen --series 2>/dev/null )"
+MANUALAWAY_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/manualaway" "$SDD" kaizen --series 2>/dev/null )"
+# Numbers compared by VALUE: the row on (m60, REVIEW) joins that cell's group and its absent
+# `cost_usd` adds a 0, which jq prints `4` where the input said `4.0` — measured, the one byte the
+# text comparison saw. `+ 0` on both sides prints them alike; any value that moved still differs.
+numeric() { jq -S 'walk(if type == "number" then . + 0 else . end)' <<< "$1"; }
+assert_eq "guard: a manual row mints no version, no mission and no cell" \
+  "$(numeric "$CLOSEOFF_OUT")$(numeric "$CLOSEOFF_OUT")" \
+  "$(numeric "$MANUALIN_OUT")$(numeric "$MANUALAWAY_OUT")"
+# The floor of the close block, re-read on THIS output: one version, one mission, two cells.
+assert_eq "floor: that manual differential is not vacuous — one version, one mission, two cells" \
+  "ccc0001 1 2 6" \
+  "$(jq -r '"\(.latest.kit_sha) \(.latest.missions) \(.latest.detail | length) \(.latest.cost_usd)"' <<< "$MANUALIN_OUT")"
+assert_eq "guard: a manual row is recognized, never counted as unrecognized" "0 0 0 0" \
+  "$(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$MANUALIN_OUT") $(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$MANUALAWAY_OUT")"
+
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"
 assert_eq "the ledger is never tracked by the fixture kit" "0" \
