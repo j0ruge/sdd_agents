@@ -241,7 +241,9 @@ boot_probes() {
 # "the reviewer allows Agent" alone would stay green if the executor's line rotted away. Only the
 # pair says what the design actually is. The catalogue cannot reach either half — it sabotages
 # bin/sdd and this lives in agents/*.md — so this probe is the whole sensor, and that limit is
-# declared here rather than left silent.
+# declared here rather than left silent. It covers every probe of this function, the two text
+# probes of the executor added in 20261004-lote-4-a-catraca-zera included: each was proved by a
+# sabotage pass over agents/sdd-executor.md, recorded in that mission's plan, not by the catalogue.
 executor_agent_probes() {
   local ex="$ROOT/agents/sdd-executor.md" rv="$ROOT/agents/sdd-reviewer.md"
   if grep -qE '^disallowedTools:.*(^|[ ,"])Agent([,"]|$)' "$ex"; then pass "hat: the executor denies Agent — the census measured 0 uses in 27 EXEC sessions"
@@ -257,6 +259,20 @@ executor_agent_probes() {
   if grep -qF 'record-<ID>.md' "$ex" && grep -qF 'open questions for the human' "$ex"; then
     pass "hat: the executor commits a record for an act outside git, and hands a step it cannot close to the human"
   else fail "hat: sdd-executor no longer says how an act outside git reaches the Commit cell, or where a step it cannot close goes"; fi
+  # Issue 194: the Red of an R<n> proves the finding, not the fix, and at least eight findings of
+  # four missions were opened by the fix of the round before (3 code in this kit, 5 prose in
+  # sales_quote). The step is read as a BLOCK, from its numbered heading to the next one, and each
+  # of its three parts has to be inside it: the R<n> scope ON THE HEADING (the block names R<n>
+  # again in its prose sentence, so a block-wide grep answered for a step that lost its scope —
+  # sabotage measured), the sabotage note in checkpoint-notas.md (a name the file also uses in its
+  # section 5, so a whole-file grep would answer for a step that lost it), and the re-read of the
+  # whole paragraph for an R<n> of prose.
+  local sab
+  sab="$(awk '/^[0-9]+\. \*\*Sabotage/ { on = 1; print; next } on && /^[0-9]+\. \*\*/ { on = 0 } on' "$ex")"
+  if grep -qF 'only in an `R<n>`' <<< "${sab%%$'\n'*}" && grep -qF 'checkpoint-notas.md' <<< "$sab" \
+     && grep -qF 'whole paragraph' <<< "$sab"; then
+    pass "hat: the executor sabotages the new line of an R<n>, notes it, and re-reads the paragraph of a prose fix"
+  else fail "hat: sdd-executor lost the sabotage step of an R<n> (its scope, its note in checkpoint-notas.md, or the prose re-read)"; fi
 }
 
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
