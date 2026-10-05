@@ -1702,6 +1702,15 @@ mut_KAIZEN_composition_unprinted() {
   sed -i '/^  kaizen_composition_note$/d' "$1"
 }
 
+# Issue 98: a key of the series renamed in the jq and nowhere else. The key of a detail entry's cost
+# has no other reader in the suite — check-kaizen.sh and check-autonomy.sh both answered rc 0 over
+# this rename before the key sensor existed — so the judge would read `null` for a phase's cost while
+# docs/pipeline.md went on naming `cost_usd`. What dies is the sensor that reads the
+# sdd:series-fields block of docs/pipeline.md against the keys the series prints.
+mut_KAIZEN_series_key_renamed() {
+  sed -i '/^kaizen_series() {/,/^}/ s/^                      cost_usd: (map(.cost_usd \/\/ 0) | add)})) as \$detail$/                      cost: (map(.cost_usd \/\/ 0) | add)})) as $detail/' "$1"
+}
+
 mut_KAIZEN_series_rc_dropped() {
   sed -i 's@  series="$(kaizen_series)" || series_rc=$?@  series="$(kaizen_series 2>/dev/null)"; series_rc=0; series="${series:-{\\}}"@' "$1"
 }
@@ -5994,6 +6003,7 @@ CATALOG=(
   KAIZEN_series_jq_stderr_swallowed
   KAIZEN_composition_session_unit
   KAIZEN_composition_unprinted
+  KAIZEN_series_key_renamed
   HEALTH_gates_capture_aborts
   HEALTH_provenance_line_aborts
   HEALTH_ratchet_one_way
@@ -6246,6 +6256,12 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # more.
   mkdir -p "$1/docs"
   cp -r "$ROOT/docs/adr" "$1/docs/"
+  # `docs/pipeline.md`, one file and not the tree, for the same reason: check-kaizen.sh compares the
+  # sdd:series-fields block of it with the keys the series prints (issue 98), and the mutant that
+  # renames a key in kaizen_series has to die INSIDE a sandbox. Without the file the control run
+  # went red on "one series-fields block" — measured, the first --only of that mutant. Like docs/adr
+  # it is read whatever the mutant is, never mutated, so it stays out of the stamp key.
+  cp "$ROOT/docs/pipeline.md" "$1/docs/"
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log

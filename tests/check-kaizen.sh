@@ -17,6 +17,11 @@
 # skill output). Row shapes mirror the real constructors — autonomy_session_row and
 # autonomy_blocked_row in bin/sdd — field for field.
 #
+# DECLARED LIMIT (issue 98): the key sensor near the end holds the NAMES the series prints against
+# the sdd:series-fields block of docs/pipeline.md, both ways. A key that keeps its name and changes
+# its unit (sessions -> missions, the drift that opened the issue) or moves to another object of
+# the series is not caught: names are measured here, meanings are not.
+#
 # Usage: tests/check-kaizen.sh   (exit 0 = the series tells the truth and the gate holds)
 
 set -uo pipefail
@@ -159,6 +164,8 @@ EOF
 # input to the wrong cwd.
 mkdir -p "$OUTSIDE/anywhere"
 SERIES_OUT="$( cd "$FIX" && "$SDD" kaizen --series 2>/dev/null )"; rc=$?
+# Kept for the key sensor near the end of this file: the richest series the fixtures produce.
+SERIES_RICH="$SERIES_OUT"
 
 assert_eq "the series exits 0" "0" "$rc"
 assert_eq "and is valid JSON" "0" "$(jq -e . >/dev/null 2>&1 <<< "$SERIES_OUT"; echo $?)"
@@ -2486,6 +2493,40 @@ assert_eq "floor: that manual differential is not vacuous — one version, one m
   "$(jq -r '"\(.latest.kit_sha) \(.latest.missions) \(.latest.detail | length) \(.latest.cost_usd)"' <<< "$MANUALIN_OUT")"
 assert_eq "guard: a manual row is recognized, never counted as unrecognized" "0 0 0 0" \
   "$(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$MANUALIN_OUT") $(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$MANUALAWAY_OUT")"
+
+echo "== series: every key is named in docs/pipeline.md, and the doc names no other =="
+# Issue 98. The series is produced in two places (the jq of kaizen_series and its empty-ledger
+# literal) and was described in ten, and the prose drifted: in 20260817-eixo-do-juiz eight of the
+# ten still said the unit a fix had changed hours before. The key NAMES now live in ONE block of
+# docs/pipeline.md, between `<!-- sdd:series-fields -->` and `<!-- /sdd:series-fields -->`, and this
+# reads that block and never the whole file, so a split of pipeline.md moves the block and keeps
+# the sensor. It compares the block with the keys two series print — the richest fixture above
+# (both slices, a detail, a composition, an escalation) and the empty-ledger literal — in BOTH
+# directions: a key printed and not named, and a name the series never prints. The children of
+# `escalations` are escalation kinds, data and not schema, so they are skipped.
+# DECLARED LIMIT: names only. A key that keeps its name and changes its unit (sessions -> missions,
+# the drift that opened issue 98) or moves to another object of the series passes; the block says
+# so too. Owner of the block: whoever changes the jq of kaizen_series, in the same commit.
+PIPELINE_DOC="$ROOT/docs/pipeline.md"
+SERIES_EMPTY="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/keys-empty" "$SDD" kaizen --series 2>/dev/null )"
+series_key_names() { # <series json> — every key name it prints, at every level, one per line
+  jq -r '[paths | select(.[-1] | type == "string") | select(length < 2 or .[-2] != "escalations")
+          | .[-1]] | unique | .[]' <<< "$1"
+}
+# The witness first: a fixture that lost a level would make the comparison below vacuous for it.
+assert_eq "the key sensor reads a series with both slices, a detail, a composition and an escalation" "true" \
+  "$(jq -r '(.latest | type) == "object" and (.previous.detail | length) > 0
+            and (.previous.composition | length) > 0 and (.previous.escalations | length) > 0' <<< "$SERIES_RICH")"
+assert_eq "docs/pipeline.md carries one series-fields block, opened and closed" "1 1" \
+  "$(grep -c '^<!-- sdd:series-fields -->$' "$PIPELINE_DOC") $(grep -c '^<!-- /sdd:series-fields -->$' "$PIPELINE_DOC")"
+keys_printed="$( { series_key_names "$SERIES_RICH"; series_key_names "$SERIES_EMPTY"; } | LC_ALL=C sort -u )"
+keys_named="$(awk '/^<!-- sdd:series-fields -->$/ { on = 1; next } /^<!-- \/sdd:series-fields -->$/ { on = 0 } on' \
+  "$PIPELINE_DOC" | grep -o '`[^`]*`' | tr -d '`' | LC_ALL=C sort -u)"
+assert_eq "every series key is named in docs/pipeline.md" "" \
+  "$(LC_ALL=C comm -23 <(grep . <<< "$keys_printed") <(grep . <<< "$keys_named") | tr '\n' ' ')"
+assert_eq "and every name in that block is a key the series prints" "" \
+  "$(LC_ALL=C comm -13 <(grep . <<< "$keys_printed") <(grep . <<< "$keys_named") | tr '\n' ' ')"
+
 
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"

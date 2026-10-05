@@ -1526,6 +1526,28 @@ dated slug on the same `kit_sha` from collapsing into one group — mission slug
 The empty-ledger branch prints the same key set with
 zeros: a consumer must never read `null` on one branch where the other gives a number.
 
+**Every key, in one place.** The block below names each key the series prints, at every level, and
+nothing else. `tests/check-kaizen.sh` reads this block — never the whole file, so it survives the
+section moving elsewhere — and compares it with the keys of a fixture series in both directions: a
+key renamed or added in the `jq` of `kaizen_series` without a word here, or a name here the series
+no longer prints, turns the suite red. It measures names only: a key that keeps its name and
+changes its unit or its meaning is not caught, and the sensor's comment says so.
+
+<!-- sdd:series-fields -->
+- top level: `v`, `latest`, `previous`, `guard`, `excluded`
+- `latest` and `previous`, each a slice or null: `kit_sha`, `kit_shas_raw`, `missions`,
+  `missions_with_session`, `composition`, `sessions`, `harness`, `outcomes`, `advance_rate`,
+  `moved_rate`, `labels`, `escalations`, `cost_usd`, `detail`
+- a `composition` entry: `repo`, `missions`, `missions_with_session`
+- a `detail` entry: `repo`, `mission`, `phase`, `label`, `sessions`, `outcomes`, `cost_usd`
+- `outcomes`, in a slice and in a `detail` entry: `advanced`, `churned`, `idle`
+- `labels`: `ok`, `leve`, `refez`
+- `escalations`: one key per escalation kind, holding its count — data, never a fixed name
+- `guard`: `missions_after_change`, `missions_with_session`, `sessions`, `floor`, `sufficient`,
+  `why`, `harness`, `window_missions_stranded`, `window_broken`, `degenerate_axis`
+- `excluded`: `non_comparable`, `unrecognized`, `meta`, `other_repo`, `no_repo`
+<!-- /sdd:series-fields -->
+
 `degenerate_axis` exists because `sufficient: false` alone says two different things. In a target
 repo it means "not enough missions yet", and waiting works. In the repo that **builds** the kit
 every session commits, so the next one lands on a fresh `kit_sha`, each version holds exactly one
