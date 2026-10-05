@@ -377,6 +377,17 @@ check checkpoint.md 'tests/check-checkpoint\.sh --check' \
   "the checkpoint sensor cited in its --check form, the one a target repo can run"
 refute checkpoint.md 'checkpoints deste repo' \
   "the claim that the sensor reads only this repo's checkpoints"
+# The Commit cell is 7–64 hex digits and nothing else (gate_EXEC), so the act that happens OUTSIDE
+# git still needs a commit to point at — the record of it (issue 180). Measured before the rule:
+# the I5 of lighthouse_project's 20260922-email-mvp-diretores wrote `KB (sem commit de código)` in
+# the cell, and its `sdd status` points at EXEC for good. The step after the merge or inside an
+# external window has no row at all (issue 218): 20260918-a-excecao-do-chapeu-e-o-genero-diferido
+# kept its yokoten `pending` forever. Both assertions pin the rule in full, with the routing — a
+# template that kept the bold title and lost where the step goes would teach half of it.
+check checkpoint.md '\*\*Ato fora do git deixa um commit de registro\.\*\*' \
+  "an act outside git commits a record"
+check checkpoint.md 'O passo vai para `## Pendências para o humano` do `00-missao\.md`' \
+  "a step after the merge or in an external window leaves the table"
 # The qualifier is IN the regex, and it is the whole assertion. `20260901-o-revisor-so-acha` widened
 # this section from `(QA)` to `(QA e REVIEW)` — the R<n> increments the review round now writes live
 # beside the QA's F<n> — and a regex that stopped at `de fix` served the heading it replaced exactly

@@ -32,6 +32,17 @@ atualizado: <YYYY-MM-DD HH:MM>
 > `` o=$(bash tests/check-x.sh 2>&1); grep -c '^  ok    <asserção>' <<< "$o" `` → `1`.
 > O sensor é o `tests/check-checkpoint.sh --check <este checkpoint>` do kit (pelo caminho do kit).
 >
+> ⚠️ **Ato fora do git deixa um commit de registro.** O `gate_EXEC` lê 7 a 64 dígitos hex na
+> célula Commit e nada mais. Quando o produto do incremento não é código — e-mail enviado, página da
+> KB publicada, config no IdP, issue adotada —, o executor grava a evidência num arquivo da pasta da
+> missão (`record-<ID>.md`: o que foi feito, a URL ou o ID que o prova, a data) e commita esse
+> arquivo; o hash dele vai na célula. Palavra na célula é rótulo, e o gate a recusa.
+>
+> ⚠️ **Passo depois do merge ou numa janela externa não é incremento.** O merge do humano, um
+> yokoten nos repos-alvo, um smoke que exige a mesa livre: na tabela, cada um vira um `pending` que
+> nunca fecha ou um `blocked` que para a linha inteira.
+> O passo vai para `## Pendências para o humano` do `00-missao.md`, ou para a missão seguinte.
+>
 > Atualizar o checkpoint é o **último ato** de cada incremento — depois do commit, nunca antes.
 > Status válidos: `pending` · `doing` · `done` · `blocked`.
 

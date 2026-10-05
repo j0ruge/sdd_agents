@@ -24,7 +24,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Sensores que faltam
 
 - [ ] **O Red do `R<n>` prova o achado, não o conserto: nenhum passo sabota a linha nova** —
-  `agents/sdd-executor.md:76` (`Watch it fail`) — o conserto tira o sintoma e pode abrir um fail-open
+  `agents/sdd-executor.md:83` (`Watch it fail`) — o conserto tira o sintoma e pode abrir um fail-open
   ao lado com o probe verde. Medido só no laço interativo (PR #45, #46; `coderabbit-pr` 2.4.0 já
   sabota); no headless, nunca. Direção: medir antes. O `40-review-r*.md` não grava o commit que
   gerou o achado, então um achado da rodada N+1 só conta se o `git blame` da âncora dele cair num
@@ -116,22 +116,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01); config por
   `claude` na missão `20260924-transacao-honra-o-timeout` (2026-09-24)
 
-- [ ] **O checkpoint não tem grafia para incremento cujo produto não é commit** — `bin/sdd:1198`
-  (`GATE_EXEC_CELL`) — o `gate_EXEC` exige 7 a 64 dígitos hex na célula Commit, e o
-  `templates/checkpoint.md` não diz o que escrever quando o incremento é e-mail enviado, config no
-  IdP ou issue adotada. Na LH-3 o I5 foi o e-mail aos diretores, e o `sdd status` da missão aponta
-  EXEC para sempre. Direção: uma grafia do kit para evidência fora do git que o gate aceite com o
-  Check verde, ou a regra de que todo incremento deixa um commit de registro.
-  — descoberto por `sessão coordenadora` na missão `20260922-email-mvp-diretores` (2026-09-27)
-
-- [ ] **Incremento que espera uma janela externa só tem `blocked`, e o `blocked` para a missão inteira** —
-  `bin/sdd:1339` (`GATE_WHY`) — no I11 da S8 do `ui24_agent`, um smoke ao vivo que exige a mesa sem
-  uso, a pré-condição falhou (master a −2,9 dBFS) e o humano mandou fazer o I12 (docs e PR) antes. O
-  `sdd status` respondeu `Jidoka: the line stops`, o template põe o smoke antes do fechamento, e a
-  inversão foi improviso (`blocked`, `intervention:`, PR em rascunho). Irmão do item acima, com outra
-  causa. Direção: um status "espera evento externo", com motivo, que não pare as fases seguintes.
-  — descoberto por `sessão interativa` na missão `20261003-fase8-s8-dinamica-eq-restantes` (2026-10-03)
-
 ### Saída humana e cosmética
 
 - [ ] **As ADRs 0001–0007 não têm `Spec:`, e por isso 14 missões deste repo não podem declarar
@@ -221,3 +205,4 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - **35% do docs/pipeline.md seria um subsistema só, e cresceria a cada missão do ledger** — decidido, sem refator: as seções do ledger e do juiz são 525 de 1562 linhas (33,6%), estáveis em 33–34% desde 2026-09-29 depois do pico de 48% em 2026-08-31, e nenhum boot_prompt lê o pipeline.md, então nenhuma fase paga o índice inteiro; reabre se a fatia passar de 40% ou se um boot passar a ler o arquivo — `docs/pipeline.md:1038` (2026-10-04)
 - **Test Coverage = A do revisor implicaria que os casos negativos existem** — decidido como limite: a nota de revisão é rótulo que o próprio modelo escreve, e a anatomia §4 o declara; a parte barata e real, o executor sabotar a linha nova de um R<n>, é o I3 de 20261004-lote-4-a-catraca-zera; reabre quando um segundo P1 escapar de um Test Coverage = A numa missão headless — `.claude/rules/anatomia-do-agente.md:94` (2026-10-04)
 - **Nenhum instrumento mediria prosa de CONTRATO fora de templates/** — decidido: a fase DOCS é a dona dessa prosa (a checklist de drift do 45-docs.md percorre o diff inteiro da missão), o config/schema.md já é medido contra o load_config pelo sdd health, a tabela de agentes do README bate 8 = 8, e os drifts registrados foram pegos antes do merge; o limite está no cabeçalho do sensor; reabre quando um drift de contrato escapar para a main — `tests/check-templates.sh:39` (2026-10-04)
+- **O checkpoint não teria grafia para incremento cujo produto não é commit** — decidido: a grafia é o commit de registro — o ato fora do git (e-mail, página da KB, config no IdP) deixa na pasta da missão um record-<ID>.md com o que foi feito, a URL ou o ID e a data, e o hash dele vai na célula Commit que o gate_EXEC já lê; passo pós-merge ou de janela externa sai da tabela para as Pendências para o humano do 00-missao.md ou para a missão seguinte (o token de espera é o Y8 do CONTEXT.md); os casos medidos (o I5 da LH-3, KB sem commit; o I6 de 20260918-a-excecao-do-chapeu-e-o-genero-diferido, pending eterno; os I1–I3 de 20260825-cif-forma-pagamento no sales_quote, blocked eterno) não são migrados, porque handoff fechado não se reescreve — `templates/checkpoint.md:35` (2026-10-04)

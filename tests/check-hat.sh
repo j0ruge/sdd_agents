@@ -250,6 +250,13 @@ executor_agent_probes() {
   else pass "hat: and the reviewer still may use it, which is why Agent is not in HAT_DENY_BASE"; fi
   if grep -qi 'subagent' "$ex"; then fail "hat: the executor prompt still asks for subagents while the tool is denied"
   else pass "hat: and the executor prompt no longer asks for what it cannot do"; fi
+  # Issue 180: gate_EXEC reads 7–64 hex digits in the Commit cell, so an act outside git (an e-mail,
+  # a KB page) needs a RECORD commit to point at; issue 218: a step after the merge or inside an
+  # external window is not a row the executor can close. Both halves, because the planner is told
+  # the same and the executor is who meets the legacy row the planner wrote before the rule.
+  if grep -qF 'record-<ID>.md' "$ex" && grep -qF 'open questions for the human' "$ex"; then
+    pass "hat: the executor commits a record for an act outside git, and hands a step it cannot close to the human"
+  else fail "hat: sdd-executor no longer says how an act outside git reaches the Commit cell, or where a step it cannot close goes"; fi
 }
 
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------

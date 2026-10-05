@@ -101,6 +101,15 @@ Every increment needs:
 - **the size of one session.** The increment is the anti-overflow unit: one headless session
   executes it whole, from Red to commit. If you cannot describe the Red in one sentence, the slice
   is too big.
+- **a commit as its product.** `gate_EXEC` reads 7–64 hex digits in the Commit cell and nothing
+  else. An increment whose act happens outside git — an e-mail sent, a KB page published, an IdP
+  setting — still commits a RECORD: an evidence file in the mission folder (`record-<ID>.md`: what
+  was done, the URL or ID that proves it, the date), and its hash goes in the cell. A step that can
+  only happen **after the merge** or **inside an external window** — the human's merge, a yokoten in
+  the target repos, a live smoke that needs the desk idle — is not an increment: it goes to the
+  open questions for the human in `00-missao.md` (the last section of its template), or to the next
+  mission. In the table it would be a `pending` that never closes, or a `blocked` that stops the
+  whole line.
 
 The table goes to `checkpoint.md`; the why of each slice stays in `01-plano.md`.
 
