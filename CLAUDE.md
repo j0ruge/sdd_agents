@@ -18,20 +18,24 @@ mesmo commit.
 Duas audiências, duas regras. A regra antiga ("PT-BR em tudo que é lido por humano") misturava as
 duas e por isso trancava o kit num idioma só — quem não fala português não conseguia usar nada.
 
-**A superfície do kit é inglês:** `bin/sdd`, `agents/`, `docs/`, `README.md`, `config/schema.md`,
-`config/starter.conf`, `tests/`. Vale para prosa, comentários, mensagens ao usuário, nomes de
-teste e identificadores locais. O sensor é `tests/check-lang.sh`, com catraca bidirecional em
+**A superfície do kit é inglês:** `bin/sdd`, `agents/`, `commands/`, `docs/` (fora as três
+subárvores de conteúdo do parágrafo seguinte), `README.md`, `config/schema.md`,
+`config/starter.conf`, `tests/`. Vale para prosa, comentários, mensagens ao usuário, nomes de teste
+e identificadores locais. O sensor é `tests/check-lang.sh`, com catraca bidirecional em
 `tests/lang-allowlist.txt`: arquivo sujo fora da lista reprova, arquivo já limpo dentro dela
-também. Duas exceções, ambas documentadas no cabeçalho do sensor, porque nelas o português é
-**dado** e não prosa — `check-templates.sh` (as regexes são os headings dos templates) e
+também. Desde a ADR 0015 §4 a parte de `docs/` é **censo**, não lista: `docs/*.md` entra por glob,
+todo `docs/**/*.md` rastreado tem de estar na superfície ou numa subárvore declarada (doc fora das
+duas reprova com rc 97), e o piso deixou de ser número escrito à mão. Duas exceções, ambas
+documentadas no cabeçalho do sensor, porque nelas o português é **dado** e não prosa — `check-templates.sh` (as regexes são os headings dos templates) e
 `check-lang.sh` (o dicionário e os probes).
 
 **O artefato de missão fala `OUTPUT_LANG`:** handoffs, checkpoint, mensagens de commit e corpo do
 PR seguem a chave do `.sdd/config.sh` do repo-alvo, que o runner injeta no prompt de boot de toda
 fase. Vazio ⇒ o runner não diz nada e a sessão segue o idioma dos artefatos que já existem.
 Aqui a chave é `pt-BR`, e é por isso que `TODO.md`, `KAIZEN_LOG.md`, este arquivo,
-`docs/handoffs/`, `templates/` e `config/examples/` continuam em português — não são exceção, são
-conteúdo no idioma declarado.
+`docs/handoffs/`, `docs/qa/`, `docs/superpowers/`, `templates/` e `config/examples/` continuam em
+português — não são exceção, são conteúdo no idioma declarado. As três subárvores de `docs/` são o
+`LANG_DECLARED` do sensor, as mesmas que o `health --release` deixa fora da sua linha 5.
 
 **O contrato é sempre inglês:** chaves de config, tokens de status (`pending`, `doing`, `done`,
 `blocked`, `auto`, `skipped`), os enums das skills de terceiro e identificadores de código.

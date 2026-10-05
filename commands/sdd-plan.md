@@ -15,9 +15,9 @@ writes the artifacts from memory, and their headings are the contract the gates 
 1. Resolve the repository root (`git rev-parse --show-toplevel`) and read `.sdd/config.sh` there.
    **If it does not exist, stop** and tell the user, verbatim:
 
-   > Este repositório não tem `.sdd/config.sh` — o kit `sdd` não foi instalado aqui.
-   > Rode `sdd install && sdd-link-agents` e edite o config antes de planejar.
-   > Receita: `~/repos/sdd_agents/docs/plan-only.md`
+   > This repository has no `.sdd/config.sh` — the `sdd` kit is not installed here.
+   > Run `sdd install && sdd-link-agents` and edit the config before planning.
+   > Recipe: `~/repos/sdd_agents/docs/plan-only.md`
 
    Do not invent a `HANDOFF_DIR`, and do not create the config yourself: `sdd install` derives
    `DEFAULT_BRANCH` and `TEST_CMD` from the repo, and a hand-written stub would carry neither.

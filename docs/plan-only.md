@@ -12,7 +12,7 @@ to execute it:
 > `# the planner.`
 
 So the planning half was already detached. What this document adds is the other half of the
-observation, **measured on `sales_quote`, mission `20260908-cliente-fala-com-o-erp-e-o-pdf-diz-de-onde`**:
+observation, **measured on `sales_quote`, in its mission of 2026-09-08 (`docs/handoffs/20260908-…` there)**:
 a plain interactive session read `checkpoint.md` and executed all seven increments by hand —
 TDD, sabotage per sensor, checkpoint updated as the last act of each one — without `sdd run` ever
 being called. The artifacts carry enough contract to drive a human-present session on their own.
@@ -120,21 +120,23 @@ shape. Recreating them is one command, named in the target's `CLAUDE.md`.
 
 ## The `CLAUDE.md` block for a target repository
 
-Pointer, not recipe — the recipe is this file:
+Pointer, not recipe — the recipe is this file. Write it in the target's `OUTPUT_LANG`; the
+English version is below, and the file names and the `aprovacao:` key stay as they are, because
+they are contract:
 
 ```markdown
-## Planejamento de missão (kit `sdd`)
+## Mission planning (the `sdd` kit)
 
-Missões grandes são planejadas antes de codar, e o plano vira três artefatos em
-`docs/handoffs/<AAAAMMDD-slug>/`: `00-missao.md` (a intenção), `01-plano.md` (o como,
-autocontido) e `checkpoint.md` (a tabela de incrementos, **lida por máquina**).
+Large missions are planned before any code is written, and the plan becomes three artifacts in
+`docs/handoffs/<YYYYMMDD-slug>/`: `00-missao.md` (the intent), `01-plano.md` (the how,
+self-contained) and `checkpoint.md` (the increment table, **read by a machine**).
 
-- Começar uma missão: `/sdd-plan` — sessão interativa, com brainstorm e grill.
-- Validar o plano sem gastar sessão: `sdd why <missao> PLAN`.
-- Aprovar: `sdd approve <missao>` — **nunca** editar `aprovacao:` à mão.
+- Start a mission: `/sdd-plan` — an interactive session, with brainstorm and grill.
+- Validate the plan without spending a session: `sdd why <mission> PLAN`.
+- Approve: `sdd approve <mission>` — **never** edit `aprovacao:` by hand.
 
-O kit vive em `~/repos/sdd_agents` e a receita completa está em
-[`docs/plan-only.md`](file:///home/joruge/repos/sdd_agents/docs/plan-only.md) de lá. Os agentes em
-`.claude/agents/sdd-*.md` são symlinks para o kit e **não** são versionados: num clone novo,
-rode `sdd install && sdd-link-agents`.
+The kit lives in `~/repos/sdd_agents`, and the full recipe is its
+[`docs/plan-only.md`](file:///home/joruge/repos/sdd_agents/docs/plan-only.md). The agents in
+`.claude/agents/sdd-*.md` are symlinks into the kit and are **not** versioned: in a fresh clone,
+run `sdd install && sdd-link-agents`.
 ```
