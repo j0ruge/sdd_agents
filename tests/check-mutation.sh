@@ -4917,6 +4917,12 @@ mut_RUN_manual_row_missing() {
 mut_RUN_manual_stays_on_mission_branch() {
   sed -i '/^cmd_note_manual() {/,/^}/ s@if \[ -n "\$home" \] && \[ "\$now" != "\$home" \]; then@if false; then@' "$1"
 }
+# The same footgun from a DETACHED HEAD (Codex review of PR #222): no branch name to go back to, so
+# the commit is the way home. Caught by `note-manual from a detached HEAD returns the human to that
+# commit, …` in check-autonomy.sh, its `branch:` and sha terms.
+mut_RUN_manual_stays_when_detached() {
+  sed -i '/^cmd_note_manual() {/,/^}/ s@elif \[ -z "\$home" \] && \[ -n "\$home_sha" \] && \[ -n "\$now" \]; then@elif false; then@' "$1"
+}
 # A merged mission is not told that its note lands where the base never looks. Same assertion, its
 # first `warn:` term — the second world, one commit ahead, is the one that must stay silent.
 mut_RUN_manual_merged_silent() {
@@ -6185,6 +6191,7 @@ CATALOG=(
   KAIZEN_manual_counts_mission
   RUN_manual_row_missing
   RUN_manual_stays_on_mission_branch
+  RUN_manual_stays_when_detached
   RUN_manual_merged_silent
   COORD_note_manual_unlocked
   STATUS_manual_row_ignored

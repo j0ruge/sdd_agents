@@ -11064,16 +11064,20 @@ close_query() {
 # row is the record the readers get. DECLARED LIMIT: a squash merge is not an ancestor, so that case
 # is not told — it still goes home. A tree left dirty (a checkpoint that was already dirty gets the
 # note and not the commit) stays put, as close_return_home does.
+# A DETACHED HEAD is a place to stand too (Codex review of PR #222, reproduced): it has no name for
+# symbolic-ref to give, so the commit is kept instead and the way home checks it out detached again.
 cmd_note_manual() {
   [ $# -eq 2 ] || die "usage: sdd note-manual <mission> <PHASE>"
   load_config
   resolve_mission "$1"
-  local phase="$2" p known=0 home branch merged=0 now out
+  local phase="$2" p known=0 home home_sha="" where="" branch merged=0 now out
+  local -a back=()
   for p in $PHASES; do [ "$p" = PLAN ] || [ "$p" != "$phase" ] || known=1; done
   [ "$known" = 1 ] || die "note-manual: '$phase' is not a phase a session runs — one of: ${PHASES#PLAN }"
   AUTONOMY_RUN_ID="$(uuidgen)"
   AUTONOMY_INVOCATION="note-manual"
   home="$(git -C "$REPO_ROOT" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+  [ -n "$home" ] || home_sha="$(git -C "$REPO_ROOT" rev-parse -q --verify HEAD 2>/dev/null || true)"
   branch="$(mission_branch_declared)"
   if [ -n "$branch" ] && [ -n "${DEFAULT_BRANCH:-}" ] && [ "$branch" != "$DEFAULT_BRANCH" ] \
      && git -C "$REPO_ROOT" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1 \
@@ -11088,12 +11092,17 @@ cmd_note_manual() {
   fi
   now="$(git -C "$REPO_ROOT" symbolic-ref -q --short HEAD 2>/dev/null || true)"
   if [ -n "$home" ] && [ "$now" != "$home" ]; then
+    back=("$home"); where="'$home'"
+  elif [ -z "$home" ] && [ -n "$home_sha" ] && [ -n "$now" ]; then
+    back=(--detach "$home_sha"); where="the detached commit ${home_sha:0:12}"
+  fi
+  if [ "${#back[@]}" -gt 0 ]; then
     if [ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]; then
-      warn "staying on '$now': the tree has uncommitted changes, and '$home' is one 'git checkout' away once you have dealt with them"
-    elif out="$(git -C "$REPO_ROOT" checkout -q "$home" 2>&1)"; then
-      ok "back on '$home', where you were"
+      warn "staying on '$now': the tree has uncommitted changes, and $where is one 'git checkout' away once you have dealt with them"
+    elif out="$(git -C "$REPO_ROOT" checkout -q "${back[@]}" 2>&1)"; then
+      ok "back on $where, where you were"
     else
-      warn "could not return to '$home' — still on '$now'. git said: $out"
+      warn "could not return to $where — still on '$now'. git said: $out"
     fi
   fi
   ok "phase $phase of $MISSION recorded as done by hand: the note in the checkpoint, a manual row in the ledger"

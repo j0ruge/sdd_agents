@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2130` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6255` — a chave lê
+  `bin/sdd:2130` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6262` — a chave lê
   `bin tests templates config`, mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança
   confinada a esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a regra 12 do
   `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita `CLAUDE.md`, e chavear nele custaria
@@ -158,7 +158,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
 - [ ] **O `ok` do `sdd note-manual` diz que gravou a nota mesmo sem `checkpoint.md`** —
-  `bin/sdd:11084` (`checkpoint_note_intervention`) — sem o arquivo o escritor volta 0 em silêncio, a
+  `bin/sdd:11088` (`checkpoint_note_intervention`) — sem o arquivo o escritor volta 0 em silêncio, a
   linha `manual` vai para o ledger e a mensagem final afirma "the note in the checkpoint": rótulo sem
   artefato, na saída humana. Direção: o escritor publicar se escreveu, e o `ok` dizer só o que
   aconteceu.

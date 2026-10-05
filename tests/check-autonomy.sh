@@ -5965,6 +5965,17 @@ nm_world "$OUTSIDE/nm-ahead" ahead
 assert_eq "note-manual returns the human to the branch they stood on, and only a merged mission is told the base will not see the note" \
   "rc:0 branch:main warn:1 note:1 row:PR|rc:0 branch:main warn:0 note:1 row:PR" \
   "$(nm_says "$OUTSIDE/nm-merged")|$(nm_says "$OUTSIDE/nm-ahead")"
+# A DETACHED HEAD is a place to stand too (Codex review of PR #222, reproduced): `symbolic-ref`
+# answers empty there, ensure_mission_branch still switches, and the way home was guarded by a
+# non-empty branch name — the human was left on the spent mission branch. Back to the same commit,
+# still detached: `branch:` empty and HEAD on the sha they stood on.
+nm_world "$OUTSIDE/nm-detached" merged
+git -C "$OUTSIDE/nm-detached" checkout -q --detach main
+NM_DET_SHA="$(git -C "$OUTSIDE/nm-detached" rev-parse HEAD)"
+NM_DET="$(nm_says "$OUTSIDE/nm-detached")"
+assert_eq "note-manual from a detached HEAD returns the human to that commit, still detached" \
+  "rc:0 branch: warn:1 note:1 row:PR|$NM_DET_SHA" \
+  "$NM_DET|$(git -C "$OUTSIDE/nm-detached" rev-parse HEAD)"
 
 # 4. THE INLINE RETRY has a guard of its own. When the first session leaves the kit alone and the
 #    RETRY is the one that writes into it, only the check on the retry path can see it — measured:
