@@ -3589,7 +3589,14 @@ mut_KAIZEN_reminder_dead() {
 # do with the run that just finished. The pair of assertions it dies on is differential, so a
 # mutant that forced the OTHER branch instead would be caught by the same fixture.
 mut_KAIZEN_reminder_wrong_repo() {
-  sed -i '/^kaizen_reminder()/,/^}/ s@if \[ -n "\$kit_root" \] && \[ "\$kit_root" = "\$REPO_ROOT" \]; then@if true; then@' "$1"
+  sed -i '/^kaizen_reminder()/,/^}/ s@if \[ -n "\$kit_id" \] && \[ "\$kit_id" = "\$here_id" \]; then@if true; then@' "$1"
+}
+# The reminder goes back to comparing TOPLEVELS, the spelling 188ca87 removed from the kaizen door
+# and left here: a linked worktree of the kit has a toplevel of its own, so a run finished in one is
+# told it stands in a target repo. Caught by the differential pair `reminder: a linked worktree of
+# the kit answers with the kit sentence` / `and not with the target-repo sentence` in check-kaizen.sh.
+mut_KAIZEN_reminder_per_worktree() {
+  sed -i '/^kaizen_reminder()/,/^}/ s@kit_id="\$( REPO_ROOT="\$SDD_HOME" ledger_repo_root )"; here_id="\$( ledger_repo_root )"@kit_id="$( git -C "$SDD_HOME" rev-parse --show-toplevel )"; here_id="$REPO_ROOT"@' "$1"
 }
 
 # The kaizen door goes back to comparing TOPLEVELS (issue 121): a linked worktree of the kit has its
@@ -5914,6 +5921,7 @@ CATALOG=(
   RUN_retry_row_moved_false
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
+  KAIZEN_reminder_per_worktree
   KAIZEN_kit_door_per_worktree
   KAIZEN_kit_door_open
   KAIZEN_already_judged_spends

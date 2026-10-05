@@ -2707,8 +2707,8 @@ mkdir -p "$FIX/tests"
   cat <<'CAT'
 #!/usr/bin/env bash
 # Stand-in for the kit's mutation catalogue. Its EXISTENCE is what gate_PR scopes on — the artifact,
-# chosen over the identity of the repository because the identity door the kit already has
-# (cmd_kaizen) carries a live worktree bug recorded in TODO.md.
+# chosen over the identity of the repository because the stamp describes a catalogue, wherever one
+# is.
 #
 # The mut_*() lines below are the second thing read of this file, and by the OTHER end of the
 # mechanism: cmd_health counts them to decide whether the score line it was handed describes a

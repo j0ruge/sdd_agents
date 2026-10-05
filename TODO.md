@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2102` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6104` — a chave lê
+  `bin/sdd:2102` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6112` — a chave lê
   `bin tests templates config`, mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança
   confinada a esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a regra 12 do
   `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita `CLAUDE.md`, e chavear nele custaria
@@ -99,7 +99,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **O `kaizen_reminder` diz a frase de repo-alvo quando roda de um worktree do kit** —
-  `bin/sdd:10163` (`kit_root`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
+  `bin/sdd:10163` (`kit_id`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
   compara o `--show-toplevel` de `$SDD_HOME` com o `$REPO_ROOT`, e o toplevel é por worktree. Do
   worktree, o `sdd` do checkout principal imprime "N mission(s) of this repo … The kaizen judge
   counts them" no lugar da frase do kit. Direção: o mesmo `ledger_repo_root` dos dois lados, e

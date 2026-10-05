@@ -1234,6 +1234,27 @@ assert_eq "and reminds: missions accumulated on the current kit without a verdic
 assert_eq "pointing at sdd kaizen" "yes" \
   "$(grep -q "run 'sdd kaizen' in the kit repo" <<< "$out" && echo yes || echo no)"
 
+# A linked WORKTREE of the kit is still the kit, and has to get the kit's sentence (TODO.md, the
+# kaizen_reminder item). kaizen_reminder compared `git rev-parse --show-toplevel` of $SDD_HOME with
+# $REPO_ROOT — two toplevels, which differ by construction in a worktree — so a run finished in a
+# worktree of the kit was told it was a target repo. The sibling door (cmd_kaizen, issue 121) was
+# fixed in 188ca87 by asking ledger_repo_root on both sides; this pins the reminder to the same
+# question. Differential pair: the kit sentence present AND the target-repo sentence absent, so a
+# mutant that forced either branch is caught by the same fixture. main moves into the worktree so
+# ensure_mission_branch has nothing to switch; the ledger is a copy, so the run below it is unmoved.
+cp -r "$SDD_STATE_DIR" "$OUTSIDE/state-wt"
+git -C "$FIX" checkout -q -b reminder/park
+RWT="$OUTSIDE/kit-worktree-reminder"
+git -C "$FIX" worktree add -q "$RWT" main
+out_wt="$( cd "$RWT" && SDD_STATE_DIR="$OUTSIDE/state-wt" "$KSDD" run 20260102-donemission 2>&1 )" || true
+assert_eq "reminder: a linked worktree of the kit answers with the kit sentence" "yes" \
+  "$(grep -q 'for the next kit mission plan' <<< "$out_wt" && echo yes || echo no)"
+assert_eq "reminder: and not with the target-repo sentence" "no" \
+  "$(grep -q 'The kaizen judge counts them' <<< "$out_wt" && echo yes || echo no)"
+git -C "$FIX" worktree remove --force "$RWT"
+git -C "$FIX" checkout -q main
+git -C "$FIX" branch -q -D reminder/park
+
 # An empty ledger has nothing to judge: the reminder must stay silent — a nudge computed over
 # no data is the vacuity the whole kit exists to kill.
 out="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/empty" "$KSDD" run 20260102-donemission 2>&1 )"; rc=$?

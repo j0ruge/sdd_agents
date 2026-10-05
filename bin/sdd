@@ -2125,7 +2125,7 @@ readonly MUTATION_STAMP_REL='.sdd/logs/mutation-stamp'
 # answered about $SDD_HOME and the reader asked about $REPO_ROOT.
 #
 # Scoped by ARTIFACT and never by the identity of the repository, for the reason gate_PR records
-# below: the identity door the kit already has (cmd_kaizen) carries a live worktree bug.
+# below: the stamp describes a catalogue, so the question is whether one is HERE.
 has_mutation_catalogue() { [ -f "$1/tests/check-mutation.sh" ]; }
 
 # The kit tree `sdd health` measures — and therefore the tree it stamps.
@@ -2313,8 +2313,8 @@ gate_PR() {
   #
   # Scoped by ARTIFACT — "is there a catalogue here?" — and never by the identity of the
   # repository. A target repo has no tests/check-mutation.sh, so nothing about it changes; and the
-  # identity door the kit already owns (cmd_kaizen) carries a live worktree bug, recorded in
-  # TODO.md, which inheriting would simply buy.
+  # stamp describes a catalogue, so a second clone or a worktree that carries one is a tree it is
+  # about (the identity door, cmd_kaizen, stopped misreading a worktree in 188ca87, issue 121).
   if has_mutation_catalogue "$REPO_ROOT"; then
     local key stamp
     key="$(mutation_stamp_key "$REPO_ROOT" || true)"
@@ -10158,9 +10158,9 @@ kaizen_reminder() {
   # a judge that reads a DIFFERENT set of numbers. In a target repo the human would open the kit,
   # run the command, and be told something about the kit's own missions that has nothing to do with
   # the run that just finished. Same question cmd_kaizen asks to decide where it may run at all.
-  local kit_root
-  kit_root="$( cd "$SDD_HOME" && git rev-parse --show-toplevel 2>/dev/null || true )"
-  if [ -n "$kit_root" ] && [ "$kit_root" = "$REPO_ROOT" ]; then
+  local kit_id here_id
+  kit_id="$( REPO_ROOT="$SDD_HOME" ledger_repo_root )"; here_id="$( ledger_repo_root )"
+  if [ -n "$kit_id" ] && [ "$kit_id" = "$here_id" ]; then
     dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo ($SDD_HOME) for the next kit mission plan"
     return 0
   fi
