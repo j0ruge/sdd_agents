@@ -5801,6 +5801,54 @@ assert_eq "ledger: every row carries the launch-time runner, beside a kit_sha re
   "runner:$KG3_LAUNCH moved:yes journal:1 rows:yes" \
   "runner:$KG3_RUNNERS moved:$([ "${KG3_MOVED:-0}" -ge 1 ] && echo yes || echo no) journal:$(grep -c '  RUNNER  ' <<< "$KG3_LOG") rows:$([ "$(nrows)" -ge 1 ] && echo yes || echo no)"
 
+# 3c. THE CONFIG IS RE-READ AT THE TOP OF EVERY LAP (#129; SQ-141: four EXEC sessions, US$ 5,93,
+#     against a TEST_CMD already fixed on disk — the run had sourced .sdd/config.sh once, before its
+#     loop). The first session closes I1 and, meanwhile, the human edits the config and commits it;
+#     nothing after that moves the disk, so the run ends on an escalation (rc 3) and the pager runs
+#     — AFTER a reload. Three properties, three terms: the next lap's gate runs
+#     the EDITED TEST_CMD (the gate right after the edit still runs the lap's own, `launch` — also
+#     the floor that the gate was reached at all); a key DELETED from the file goes back to its
+#     default instead of surviving from the last read (the file's ON_ESCALATION_CMD is gone, so its
+#     hook must not run); and a key the ENVIRONMENT supplied survives the reload (an exported
+#     ON_ESCALATION_CMD the file never sets still pages). Each command appends its own word to a file
+#     outside the repo, so the answer is what RAN, never what the config says.
+echo "== config: the run re-reads .sdd/config.sh at the top of every lap =="
+CFG_MARKS="$OUTSIDE/config-reload-marks"
+cfg_world() {   # cfg_world <dir> <extra config line or ""> — a target at EXEC, I1 pending
+  kitguard_reset
+  kitguard_world "$1" "$ROOT"
+  sed -i "s|^TEST_CMD=.*|TEST_CMD='echo launch >> $CFG_MARKS'|" "$1/.sdd/config.sh"
+  [ -z "$2" ] || printf '%s\n' "$2" >> "$1/.sdd/config.sh"
+  git -C "$1" commit -qam "chore: the config the run is launched with"
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  sed -i -e "s|^TEST_CMD=.*|TEST_CMD='echo edited >> $CFG_MARKS'|" -e '/^ON_ESCALATION_CMD=/d' "$1/.sdd/config.sh"
+  h=\$(git -C "$1" rev-parse --short HEAD)
+  sed -i "/^| I1 /s/| pending | — |/| done | \$h |/" "$1/docs/handoffs/$MISSION/checkpoint.md"
+  git -C "$1" add -A
+  git -C "$1" commit -qm "feat: I1 — and the human edits the config meanwhile"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+: > "$CFG_MARKS"
+cfg_world "$OUTSIDE/config-reload-file" "ON_ESCALATION_CMD='echo file-hook >> $CFG_MARKS'"
+( cd "$OUTSIDE/config-reload-file" && "$SDD" run "$MISSION" >/dev/null 2>&1 ) || true
+CFG_FILE_MARKS="$(cat "$CFG_MARKS")"
+: > "$CFG_MARKS"
+cfg_world "$OUTSIDE/config-reload-env" ""
+( cd "$OUTSIDE/config-reload-env" && ON_ESCALATION_CMD="echo env-hook >> $CFG_MARKS" "$SDD" run "$MISSION" >/dev/null 2>&1 ) || true
+CFG_ENV_MARKS="$(cat "$CFG_MARKS")"
+cfg_has() { if grep -qx "$2" <<< "$1"; then printf yes; else printf no; fi; }
+assert_eq "config: the next lap runs the edited TEST_CMD, drops a key deleted from the file, keeps one the environment set" \
+  "launch:yes edited:yes deleted-hook:no env-hook:yes" \
+  "launch:$(cfg_has "$CFG_FILE_MARKS" launch) edited:$(cfg_has "$CFG_FILE_MARKS" edited) deleted-hook:$(cfg_has "$CFG_FILE_MARKS" file-hook) env-hook:$(cfg_has "$CFG_ENV_MARKS" env-hook)"
+
 # 4. THE INLINE RETRY has a guard of its own. When the first session leaves the kit alone and the
 #    RETRY is the one that writes into it, only the check on the retry path can see it — measured:
 #    with that call site deleted, regimes 1-3 stay green and this one goes to lines:0. The stub

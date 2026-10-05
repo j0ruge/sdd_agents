@@ -3,6 +3,15 @@
 The file is **pure bash** — the runner sources it. No logic: assignments only.
 Created by `sdd install` from [`examples/sales_quote.conf`](examples/sales_quote.conf).
 
+`sdd run` reads it again **at the top of every lap**, before the lap derives its phase: a value
+fixed on disk mid-run (a `TEST_CMD` that was wrong) is the one the next lap's gate runs, a key
+deleted from the file goes back to its default, and a key exported in the environment of the
+`sdd run` keeps that value. A file that no longer loads stops the run before the lap opens a
+session, with the message it would give at launch. An edit made during a session reaches the gate
+of the **next** lap, not the gate right after that session; what the run derived before its first
+lap (the mission branch, the mission directory) keeps the launch value; `sdd retry`, `sdd close` and
+`sdd kaizen` read the file once.
+
 Rule: if a required key is empty, `sdd preflight` fails **before** spending a session. For two keys
 it goes further than "not empty", because for those two an unusable value is only discovered by a
 phase that has already been paid for:

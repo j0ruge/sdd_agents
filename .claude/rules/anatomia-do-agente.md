@@ -184,6 +184,15 @@ contornou pelo Bash com o caminho dentro do `writes:`. O contorno agora para a l
 `hat-crossed`, e a regra que muda vira linha `⛔` com texto proposto, que o `gate_DOCS` lê por linha
 e o PR leva ao humano — o `gate_PR` confere que o corpo do PR nomeia cada documento `⛔` numa linha
 com `⛔`, pelo mesmo leitor da tabela (`docs_checklist_rows`).
+Desde `20261004-lote-4-a-catraca-zera` o `cmd_run` relê o `.sdd/config.sh` no topo de cada volta
+(`config_reload`): antes de re-sourçar, toda chave de `health_default_keys` volta à **foto do
+ambiente** que `config_env_snapshot` tirou no lançamento — `unset` quando o ambiente não dizia nada —,
+então chave apagada do arquivo volta ao default e chave exportada (`ON_ESCALATION_CMD=… sdd run`)
+sobrevive à volta 2. Config que não carrega para a linha antes de a volta abrir sessão, com o `die`
+do `load_config`. Re-exec do `bin/sdd` entre voltas foi recusado: o runner não revisado da missão
+julgaria a própria REVIEW. Limites no comentário do `config_reload`: o que o `cmd_run` derivou antes
+do laço (branch da missão, `MISSION_DIR`) fica com o valor do lançamento; edição feita durante a
+sessão chega ao gate da volta **seguinte**; `sdd retry`, `sdd close` e `sdd kaizen` leem uma vez só.
 
 **Dívida declarada.** O `HAT_WRITES_EXTRA` **alarga** permissão e seu valor vira glob de shell no
 `case` do `hat_path_allowed`, então toda frouxidão da guarda falha **aberta** — por isso ela é

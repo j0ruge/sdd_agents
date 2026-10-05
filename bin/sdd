@@ -8018,6 +8018,46 @@ gate_pass_rows() {   # gate_pass_rows <derived-phase, empty when the pipeline is
   done
 }
 
+# The keys load_config defaults, and the subset the ENVIRONMENT supplied when the command started —
+# both taken once by config_env_snapshot, read by config_reload at the top of every lap (#129).
+CONFIG_RELOAD_KEYS=()
+declare -A CONFIG_ENV_VALUES=()
+
+# config_env_snapshot — CALLED, never substituted, before the first load_config of a command that
+# will reload. No config key is assigned before load_config, so a key that is set here was exported
+# by the caller (`BUDGET_MISSION_USD=0 sdd run …`); its value is kept for config_reload. The key list
+# is health_default_keys, the same reader `sdd health` checks the schema with — one definition of
+# "the keys load_config defaults". It reads bin/sdd on disk, which here is the launched file.
+config_env_snapshot() {
+  local k
+  mapfile -t CONFIG_RELOAD_KEYS < <(health_default_keys)
+  for k in "${CONFIG_RELOAD_KEYS[@]}"; do
+    if [ -n "${!k+x}" ]; then CONFIG_ENV_VALUES[$k]="${!k}"; fi
+  done
+  return 0
+}
+
+# config_reload — .sdd/config.sh re-read at the top of every lap of cmd_run (#129). It used to be
+# sourced once, before the loop: measured on SQ-141, four EXEC sessions (US$ 5,93) against a gate
+# whose TEST_CMD had already been fixed on disk. Every key load_config defaults goes back to what the
+# environment said at launch — unset when it said nothing — before the file is sourced again, so a
+# key deleted from the file does not survive from the last read, and one the caller exported is not
+# lost on lap two. It fails CLOSED, before the lap opens a session: a config that no longer parses,
+# evaluates or validates is load_config's own `die`, the sentence the human gets at launch.
+# Re-executing bin/sdd between laps was refused: the mission's own unreviewed runner would judge its
+# own REVIEW. ⚠️ DECLARED LIMITS: what cmd_run derived from the config BEFORE its loop keeps the
+# launch value (the mission branch off DEFAULT_BRANCH, MISSION_DIR off HANDOFF_DIR); an edit made
+# DURING a session reaches the gate of the NEXT lap, not the gate right after that session nor its
+# inline retry; `sdd retry`, `sdd close` and `sdd kaizen` read the config once, as before.
+config_reload() {
+  local k
+  for k in "${CONFIG_RELOAD_KEYS[@]}"; do
+    if [ -n "${CONFIG_ENV_VALUES[$k]+x}" ]; then printf -v "$k" '%s' "${CONFIG_ENV_VALUES[$k]}"
+    else unset "$k"; fi
+  done
+  load_config
+}
+
 cmd_run() {
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
@@ -8032,6 +8072,7 @@ cmd_run() {
     shift
   done
 
+  config_env_snapshot
   load_config
   resolve_mission "$mission_arg"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
@@ -8093,6 +8134,8 @@ cmd_run() {
   local prev_step="" prev_why=""
 
   while :; do
+    # The config is re-read on every lap, before anything of the lap reads it (#129, config_reload).
+    config_reload
     # The two branches that do not derive also clear the derivation: a reason left over from an
     # earlier lap must not reach the boot of a phase the runner is now FORCING.
     derived=0

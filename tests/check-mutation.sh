@@ -1258,6 +1258,23 @@ mut_HEALTH_unstampable_silent() {
   sed -i '/^cmd_health() {/,/^}/ s@health_bad "nothing was stamped: \$MUTATION_STAMP_WHY@: "nothing was stamped: $MUTATION_STAMP_WHY@' "$1"
 }
 
+# The config is read once again, before the loop (#129): a TEST_CMD fixed on disk mid-run is never
+# the one the next lap's gate runs, which is SQ-141's four EXEC sessions. Caught by `config: the next
+# lap runs the edited TEST_CMD, …` (block 3c of the kit-guard regimes in check-autonomy.sh).
+mut_RUN_config_not_reloaded() {
+  sed -i '/^cmd_run() {/,/^}/ s@^    config_reload$@    :@' "$1"
+}
+# The reload forgets to unset: a key deleted from the file survives from the previous read. Same
+# assertion, its `deleted-hook` term — the file's ON_ESCALATION_CMD pages after it was deleted.
+mut_RUN_config_reload_keeps_deleted() {
+  sed -i '/^config_reload() {/,/^}/ s@^    else unset "\$k"; fi$@    fi@' "$1"
+}
+# The reload forgets the environment: a key the caller exported is unset on lap two. Same assertion,
+# its `env-hook` term — the exported ON_ESCALATION_CMD no longer pages.
+mut_RUN_config_reload_drops_env() {
+  sed -i '/^config_reload() {/,/^}/ s@if \[ -n "\${CONFIG_ENV_VALUES\[\$k\]+x}" \]; then@if false; then@' "$1"
+}
+
 # The stamp stop goes away (#142, #198; ADR 0015 §1): with the PR open and only the stamp missing,
 # `sdd run` buys a publisher session that cannot write the stamp. Caught by `run stops at the stamp:
 # rc 2, no session, the stop names './bin/sdd health'` (world 4b of check-gates.sh).
@@ -5725,6 +5742,9 @@ CATALOG=(
   PR_stamp_key_ignores_agents
   RUN_stamp_stop_missing
   PR_stamp_marker_always
+  RUN_config_not_reloaded
+  RUN_config_reload_keeps_deleted
+  RUN_config_reload_drops_env
   PR_stamp_key_reads_ignored
   PR_stamp_key_partial_on_deleted
   PR_stamp_why_deleted_blind
