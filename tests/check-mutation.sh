@@ -4127,6 +4127,19 @@ mut_LEDGER_progress_not_written() {
   sed -i '\%pending_before: ($pbefore%d; \%pending_after: ($pafter%d; \%increments_total: ($itotal%d' "$1"
 }
 
+# runner_sha reads the DISK again (#129): the field says the HEAD the row was written at, which is
+# kit_sha under another name — the run that moved the kit under itself is back to naming a version
+# it never ran. Caught by `ledger: every row carries the launch-time runner, beside a kit_sha read off
+# the moved disk` (kit-guard regime 3b of check-autonomy.sh), whose runner term then lists two shas.
+mut_LEDGER_runner_sha_reads_disk() {
+  sed -i '/^autonomy_append() {/,/^}/ s@--arg r "\$AUTONOMY_RUNNER_SHA"@--arg r "$(git -C "$SDD_HOME" rev-parse --short HEAD 2>/dev/null)"@' "$1"
+}
+# The kit moved under the run and the journal says nothing: the rows carry both shas, and the human
+# watching `tail -F` is not told. Same assertion, its journal term.
+mut_LEDGER_runner_moved_silent() {
+  sed -i '/^autonomy_append() {/,/^}/ s@^    pipeline_log_line "\$(date -Iseconds)  RUNNER  @    : "$(date -Iseconds)  RUNNER  @' "$1"
+}
+
 # The one count of increment status stops distinguishing `done`: every row is pending, so the
 # session that closed an increment reports the same number before and after itself. It is the
 # quiet half of the defect — the fields are all there, all populated, and all saying nothing moved
@@ -5994,6 +6007,8 @@ CATALOG=(
   RETRY_gate_red_silent
   AUTONOMY_notes_borrowed_across_repos
   LEDGER_progress_not_written
+  LEDGER_runner_sha_reads_disk
+  LEDGER_runner_moved_silent
   EXEC_tally_counts_done
   EXEC_tally_doing_is_done
   EXEC_checkpoint_split_collapses

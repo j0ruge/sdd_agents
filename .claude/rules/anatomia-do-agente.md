@@ -136,6 +136,9 @@ Memória sem rota é prosa que a próxima sessão paga para reler e não usa.
 
 **Onde mora hoje.** Handoffs por missão, checkpoint, `TODO.md`, `KAIZEN_LOG.md`, `CONTEXT.md`,
 `docs/adr/`, ledger de autonomia (`autonomy_log_path`), logs JSON por sessão em `.sdd/logs/`.
+Desde `20261004-lote-4-a-catraca-zera` toda linha do ledger carrega `runner_sha`, o HEAD do kit no
+lançamento do processo, ao lado do `kit_sha` lido do disco: numa missão cujos commits movem o
+próprio kit, o segundo nomeia uma versão que o processo nunca rodou (22 de 35 `sdd run` do kit).
 O `docs/adr/` deixou de ser memória **sem rota**: `sdd adr new` aloca o número com O_EXCL e escreve
 os dois lados do vínculo; `sdd adr check` lê de volta, em dois escopos. A rota do ADR é o
 `sdd-planner` com o humano, e o gate de PLAN é quem cobra. Desde `20261004-lote-4-a-catraca-zera`

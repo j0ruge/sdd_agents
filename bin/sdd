@@ -3172,6 +3172,15 @@ AUTONOMY_WARNED=0
 # unrelated, and one warning must not suppress the other — a repo with jq installed but the kit
 # copied without .git still needs to hear about kit_sha:null, and vice versa.
 AUTONOMY_SHA_WARNED=0
+# One-shot per process: the first row whose kit_sha differs from AUTONOMY_RUNNER_SHA says so, once.
+AUTONOMY_RUNNER_NOTED=0
+# The kit HEAD this PROCESS was launched from (#129), taken once, at top level — bash runs this line
+# while it reads the file, before main — and `{ main "$@"; exit $?; }` keeps it from reading the
+# file again, so whatever a session commits into the kit later, this is the runner executing. Every
+# ledger row carries it as `runner_sha` beside the `kit_sha` autonomy_kit_stamp reads off the disk
+# (autonomy_append). Empty when the kit is not a git checkout.
+AUTONOMY_RUNNER_SHA="$( git -C "$SDD_HOME" rev-parse --short HEAD 2>/dev/null || true )"
+readonly AUTONOMY_RUNNER_SHA
 
 autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
 
@@ -4189,6 +4198,22 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   # ledger that JSONL gives no way to detect afterwards — the mission goes on, same as the
   # unwritable-file guard right below, so it gets the same warn.
   [ -n "${1:-}" ] || { warn "autonomy ledger row came out empty (jq failed to build it?) — the mission goes on, the row is lost"; return 0; }
+  # `runner_sha` (#129) is added HERE, at the door every row goes through, and not in the four
+  # builders: a writer added tomorrow is born carrying it. It is the HEAD the process was LAUNCHED
+  # from, while `kit_sha` is read off the disk when the row is built — the two differ exactly when
+  # the run's own commits moved the kit (22 of 35 `sdd run` of the kit, measured), and the first
+  # such row says so on the terminal and in the journal, once. A jq failure keeps the row as built:
+  # without the field it reads as "not measured" (`has("runner_sha")`), never as a wrong value.
+  local row disk=""
+  row="$( jq -c --arg r "$AUTONOMY_RUNNER_SHA" '. + {runner_sha: (if $r == "" then null else $r end)}' <<< "$1" 2>/dev/null )" || row=""
+  [ -n "$row" ] || row="$1"
+  disk="$( jq -r '.kit_sha // empty' <<< "$row" 2>/dev/null )" || disk=""
+  if [ "$AUTONOMY_RUNNER_NOTED" = 0 ] && [ -n "$AUTONOMY_RUNNER_SHA" ] && [ -n "$disk" ] \
+     && [ "$disk" != "$AUTONOMY_RUNNER_SHA" ]; then
+    AUTONOMY_RUNNER_NOTED=1
+    warn "the kit's HEAD moved under this run: launched from $AUTONOMY_RUNNER_SHA, now $disk — ledger rows carry both (runner_sha, kit_sha)"
+    pipeline_log_line "$(date -Iseconds)  RUNNER  launched from kit $AUTONOMY_RUNNER_SHA, the kit's HEAD is now $disk — rows carry runner_sha"
+  fi
   # ADR 0005, part 3 — the real ledger is refused to a checkout that lives under a temp root.
   # HERE and not in the callers, for the reason the header of this function already gives: every
   # row goes through this door, so a writer added tomorrow is born guarded.
@@ -4221,7 +4246,7 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   # complaint about the failed `open` escapes to an un-redirected stderr and rides along beside the
   # curated warning below. Both writers were aligned on purpose (R8), and are corrected together
   # (r3 finding #1) so they do not drift apart a third time.
-  printf '%s\n' "$1" 2>/dev/null >> "$file" || {
+  printf '%s\n' "$row" 2>/dev/null >> "$file" || {
     warn "could not write the autonomy ledger at $file — the mission goes on, the row is lost"
     return 0
   }

@@ -5779,11 +5779,27 @@ assert_eq "kit-guard: a session that leaves the kit alone is not accused of anyt
 kitguard_reset
 kitguard_world "$FAKEKIT"
 kitguard_stub "$FAKEKIT"
+# The kit HEAD this run is LAUNCHED from — read before the run, for the runner_sha probe below.
+KG3_LAUNCH="$(git -C "$FAKEKIT" rev-parse --short HEAD)"
 KG3_ERR="$( cd "$FAKEKIT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
 KG3_LOG="$(cat "$FAKEKIT/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "kit-guard: a mission whose own repo IS the kit is left alone — the guard must not cry wolf" \
   "moved:1 lines:0 warns:0" \
   "moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG3_LOG") warns:$(grep -c 'changed during' <<< "$KG3_ERR")"
+# 3b. THE RUNNER THAT WROTE THE ROW (#129; the item "a session writes the ledger with the bin/sdd it
+#     had in MEMORY"). This is the kit's own mission, and its session commits into the kit: every
+#     row born after that commit reads kit_sha off the disk and names a version this process never
+#     ran — measured, 22 of 35 `sdd run` of the kit stamped more than one kit_sha. Each row carries
+#     runner_sha, the HEAD the process was launched from, beside it. Four terms, so no fixture
+#     regime satisfies it by accident: every row names the launch (runner), at least one row names
+#     the moved disk (moved — the witness that the kit really changed under the run, without which
+#     "runner == launch" is a constant), the rows say so where a human reads (journal: one RUNNER
+#     line, not one per row), and a row count floor (rows).
+KG3_RUNNERS="$(jq -r -s 'map(.runner_sha // "absent") | unique | join(",")' "$LEDGER" 2>/dev/null)"
+KG3_MOVED="$(jq -r -s --arg l "$KG3_LAUNCH" 'map(select(.kit_sha != null and .kit_sha != $l)) | length' "$LEDGER" 2>/dev/null)"
+assert_eq "ledger: every row carries the launch-time runner, beside a kit_sha read off the moved disk" \
+  "runner:$KG3_LAUNCH moved:yes journal:1 rows:yes" \
+  "runner:$KG3_RUNNERS moved:$([ "${KG3_MOVED:-0}" -ge 1 ] && echo yes || echo no) journal:$(grep -c '  RUNNER  ' <<< "$KG3_LOG") rows:$([ "$(nrows)" -ge 1 ] && echo yes || echo no)"
 
 # 4. THE INLINE RETRY has a guard of its own. When the first session leaves the kit alone and the
 #    RETRY is the one that writes into it, only the check on the retry path can see it — measured:
