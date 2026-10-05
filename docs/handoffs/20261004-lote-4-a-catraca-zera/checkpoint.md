@@ -1,6 +1,6 @@
 ---
 missao: 20261004-lote-4-a-catraca-zera
-atualizado: 2026-10-05 03:48
+atualizado: 2026-10-05 04:03
 ---
 
 # Checkpoint — Lote 4: a catraca zera
@@ -55,7 +55,7 @@ atualizado: 2026-10-05 03:48
 | I16 | #129b: o config relido no topo de cada volta | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    config: the next lap runs the edited TEST_CMD' <<< "$o"` → `1` | done | 44de239 |
 | I17 | os dois leitores aprendem o evento `manual` | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-kaizen.sh 2>&1; env -u CLAUDECODE TMPDIR=/tmp bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    guard: a manual row mints no version' -e '^  ok    the human reader names the manual row' <<< "$o"` → `2` | done | 6eca40a |
 | I18 | `sdd note-manual` escreve a nota e a linha `manual` | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-autonomy.sh 2>&1; env -u CLAUDECODE TMPDIR=/tmp bash tests/check-coordination.sh 2>&1); grep -c -e '^  ok    sdd note-manual writes one note committed alone' -e '^  ok    busy: note-manual' <<< "$o"` → `2` | done | e03ca8b |
-| I19 | o `sdd status` sugere o `note-manual` | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    the full page names the green phases with no session' -e '^  ok    a manual row of the phase takes it off the page' <<< "$o"` → `2` | pending | — |
+| I19 | o `sdd status` sugere o `note-manual` | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    the full page names the green phases with no session' -e '^  ok    a manual row of the phase takes it off the page' <<< "$o"` → `2` | done | 82c2986 |
 | I20 | relatório na ponta da base pergunta quem o adicionou | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-gates.sh 2>&1); grep -c '^  ok    a report from the base tip counts only when the commit that added it carries this mission dir' <<< "$o"` → `1` | pending | — |
 | I21 | #141+#108a+decisão 8: check-lang lê docs/ por censo, piso derivado, commands/*.md na régua | `o=$(bash tests/check-lang.sh 2>&1); r=$?; a=$(grep -c '^  ok    census: every tracked docs/' <<< "$o"); b=$(grep -c '^  ok    self-test: the census refuses' <<< "$o"); c=$(grep -c '^  ok    0 of ' <<< "$o"); s=$(awk '/^SURFACE_SPECS=/,/[)]$/' tests/check-lang.sh); d=$(awk 'index($0, "commands/*.md"){n++} END{print n+0}' <<< "$s"); e=$(awk '/Este reposit/{n++} END{print n+0}' commands/sdd-plan.md); f=$(awk '/n_surface" -lt [0-9]/{n++} END{print n+0}' tests/check-lang.sh); echo "$r $a $b $c $d $e $f"` → `0 1 1 1 1 0 0` | pending | — |
 | I22 | #108b: LINT/pipefail/CALIBRATE declaram o limite | `n=0; for f in tests/run-all.sh tests/check-pipefail.sh tests/check-checkpoint.sh; do s=$(awk '/anti-vacuity, not a tracker of the surface/{c++} END{print c+0}' "$f"); [ "$s" -gt 0 ] && n=$((n+1)); done; c=$(awk '/Entra lá. são quatro lugares/{p=1} p && /CALIBRATE_FLOOR/{c++} /quinto lugar é o/{p=0} END{print c+0}' CLAUDE.md); echo "$n $c"` → `3 1` | pending | — |
