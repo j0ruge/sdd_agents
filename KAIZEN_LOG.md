@@ -22,7 +22,7 @@ runner; e a fase feita à mão invisível para o ledger (0 linhas para o PR de
 | Catraca `todo-findings` | 23 | 16 na branch, todos com `RESOLVED by` (N = 0 nascidos) → 0 depois do chore pós-merge |
 | Saídas sem código | — | 7: Y7 (#88) e Y8 (#218) no `CONTEXT.md`, 5 decididos (#130, #155, #109, #180, #135) |
 | Consertos com `RESOLVED by` | — | 16, em 20 commits de incremento (I3–I23 menos o I6, que não fecha item) |
-| Catálogo de mutação | 593 | **612** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`; 19 novos, 3 re-ancorados no I17) |
+| Catálogo de mutação | 593 | **615** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`): 612 no fecho do EXEC, +3 dos consertos da revisão final; 3 re-ancorados no I17 |
 | Âncora podre que passa (modelo do I5, `coverage*.py`) | 26,1% (qualquer crase, itens de `fe9441d`) | 12,7% (símbolo designado, mesmos itens); sobre os 16 de hoje: 27,2% → 14,3% |
 | `sdd run` do kit com mais de um `kit_sha` | 22 de 35, sem campo que nomeie o runner | toda linha carrega `runner_sha`; 0 linhas reais ainda (nenhum `sdd run` desde o I15) |
 | Linhas do ledger para fase feita à mão | 0, sem porta | `sdd note-manual` (nota + linha `manual`); 0 linhas reais ainda |
@@ -54,7 +54,12 @@ E uma lição de planejamento, na gaveta (F8, `2dd7683`): o plano mediu deslocam
 contra `fe9441d`, não contra os incrementos anteriores — o I17 dizia "nenhuma âncora desloca" e
 deslocou cinco.
 
-**Ainda não medido:** o carimbo do `sdd health` com 612 mutantes, que roda depois dos bots; e os
+**Revisão final da branch:** um revisor de contexto novo achou 1 Important (o `sdd note-manual`
+deixava o humano na branch gasta de uma missão mergeada) e uma regressão do I16 (chave `readonly`
+matando o run com o erro cru do bash), os dois reproduzidos e consertados com vermelho medido
+(`091012c`, `16a0d64`); 4 minors ficaram para o humano. Depois deles a suíte deu 1839 `ok` em 377 s.
+
+**Ainda não medido:** o carimbo do `sdd health` com 615 mutantes, que roda depois dos bots; e os
 efeitos de uso real — a primeira linha `runner_sha` divergente, a primeira `manual`, o primeiro
 `sdd run` parado no carimbo.
 

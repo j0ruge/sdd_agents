@@ -56,6 +56,24 @@ consertar numa leva, `./bin/sdd health` uma vez (o humano dispara), merge pelo h
 - este commit — I24: `RESOLVED by` nos 16, emendas das ADRs, glossário, drift, `KAIZEN_LOG.md` e este handoff
 - `2dd7683` — fora da missão: nota F8 na gaveta (o plano mede contra a base, não contra os incrementos anteriores)
 
+## Revisão final da branch (depois do I24)
+
+Um revisor de contexto novo leu `fe9441d..409f5f5` (código e contrato), só leitura. Veredito: lote
+bem construído; **1 Important e 5 Minor**. Consertados numa leva, cada um com vermelho medido antes:
+
+- `091012c` — **Important:** `sdd note-manual` numa missão já mergeada movia o checkout para a
+  branch gasta e o deixava lá. Agora volta para a branch em que o humano estava e avisa quando a
+  branch da missão já é ancestral da base (squash não é visto, declarado). 2 mutantes.
+- `16a0d64` — **Minor, mas regressão da leva (I16):** chave `readonly` no config matava a volta 1 com
+  o erro cru do `unset`; agora para com a frase do runner. 1 mutante.
+
+Minors deferidos (decisão do humano): `red_norm` do `--red` com array vazio sob `set -u` em bash
+4.0–4.3 (não reproduz no bash 5.2 daqui); as linhas de remédio da parada no carimbo são genéricas
+quando o carimbo é impossível (cópia não-git do kit); `sdd run --phase PR` com só o carimbo faltando
+commita uma nota `intervention:` e para sem sessão (mesma forma da porta do PLAN); a dica do
+`sdd status` é por máquina (já declarado); o `ok` do `note-manual` afirma "a nota" mesmo sem
+`checkpoint.md`. Depois da leva: suíte verde, 1839 `ok`, 377 s; 615 mutantes aplicam.
+
 ## Artefatos
 
 | Arquivo | O que contém |
