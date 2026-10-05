@@ -275,6 +275,28 @@ executor_agent_probes() {
   else fail "hat: sdd-executor lost the sabotage step of an R<n> (its scope, its note in checkpoint-notas.md, or the prose re-read)"; fi
 }
 
+# One hat promised a measurement nobody makes, and another was silent where its boundary needed a
+# sentence; the next session reads a hat's promise as a fact and its silence as permission. Asserted
+# HERE because neither half lives in bin/sdd, so the catalogue cannot reach it — the same limit as
+# executor_agent_probes, declared the same way; the sabotage pass that proves each probe is in the
+# plan of 20261004-lote-4-a-catraca-zera.
+#   - issue 178: sdd-ticket said the runner confirms the issue "through acli"; gate_TICKET reads
+#     10-ticket.md and never asks Jira (its own comment says why). Refuted on the sentence that
+#     makes the runner or the gate the subject of acli — the hat legitimately names `acli
+#     --from-json`, the skill's tool, and the `gate:` evidence key of 10-ticket.md carries the
+#     skill's own read-back — and asserted on what the gate does, so dropping both passes nothing.
+#   - issue 135: a drifted code comment has an owner — R<n>, a proposed-text row, or the TODO file —
+#     and it is never the DOCS phase's own edit, which hat_guard_check would stop as hat-crossed.
+hat_promise_probes() {
+  local tk="$ROOT/agents/sdd-ticket.md" dc="$ROOT/agents/sdd-docs.md"
+  if grep -qiE '(the runner|the gate|gate_TICKET)[^.]*acli' "$tk" || ! grep -qF 'never asks Jira' "$tk"; then
+    fail "hat: sdd-ticket promises a Jira check the gate does not make, or no longer says that gate_TICKET reads only 10-ticket.md"
+  else pass "hat: the ticket hat promises no Jira check the gate does not make"; fi
+  if grep -qF 'A comment in the code belongs to the code' "$dc" && grep -qE 'R<n>.*batch' "$dc"; then
+    pass "hat: the docs hat leaves a code comment to the code's own phase (R<n>, a proposed-text row, or the TODO file)"
+  else fail "hat: sdd-docs no longer says who owns a drifted code comment"; fi
+}
+
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
 # PROVENANCE: the three lines below were captured on 2026-09-04 on Claude Code 2.1.260 with
 #     claude -p 'Read docs/handoffs/x/00-missao.md with the Read tool, then reply with exactly: OK' \
@@ -441,6 +463,7 @@ if [ "$n" -lt "$HAT_FLOOR" ]; then
 fi
 census_probes
 executor_agent_probes
+hat_promise_probes
 boot_probes
 release_probes
 selftest || exit $?

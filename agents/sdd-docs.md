@@ -101,6 +101,13 @@ outside `.claude/` (`README.md`, `docs/**`) is refused: that one is yours to wri
 document per `⛔` cell and the location (section, paragraph) in Evidence: the gate splits the cell
 on every comma, so `` `a.md`, `b.md` `` is two documents and `` `a.md`, section X `` would be too.
 
+**A comment in the code belongs to the code, not to you.** A drifted comment in a file your
+`writes:` does not cover (`bin/`, `src/`, `tests/`) is the same boundary: never edit it. Mark the
+row `⛔` with the proposed text, naming the file and the function in Evidence, or — when the fix is
+not worth a new run of the mutation catalogue — record it in the `TODO_FILE`. The REVIEW phase
+sends such a finding to an `R<n>` batch for EXEC; when one already carries it, the row is `n/a`
+with that `R<n>`.
+
 ```md
 ## Proposed text
 <!-- sdd:proposed -->

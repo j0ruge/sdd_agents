@@ -1126,6 +1126,13 @@ gate_TICKET() {
   if [ "$st" != "done" ]; then
     GATE_WHY="10-ticket.md has invalid status '$st' (use done|blocked)"; return 1
   fi
+  # ⚠️ DECLARED LIMIT (D15), since 20261004-lote-4-a-catraca-zera: this gate never asks Jira. It
+  # reads `issue:` and `sprint:` from 10-ticket.md, the ticket skill's read-back written down by
+  # sdd-ticket, and proves the record exists and is whole. The hat used to promise a confirmation
+  # "through acli" that nothing made (issue 178). Making it would cost a Jira round trip on every
+  # evaluation of this gate — one per `sdd phase`, two per `sdd status` — and would NOT have caught
+  # the case that raised the finding: the TICKET of LH-4 recorded LH-5, a duplicate that WAS in the
+  # active sprint, so acli answers yes for it too.
   local issue; issue="$(frontmatter "$t" issue)"
   [ -n "$issue" ] || { GATE_WHY="10-ticket.md has no 'issue:' in the frontmatter"; return 1; }
   if ! grep -qiE '^sprint:[[:space:]]*\S' "$t"; then
