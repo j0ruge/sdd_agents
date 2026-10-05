@@ -317,10 +317,12 @@ todo_awk() {
     function tail_of(text,   last) { last = last_sep(text); return last == 0 ? "" : substr(text, last + length(" — ")) }
     # Every backticked span of text, each prefixed by a TAB. index()/substr() and never a negated
     # class, the mawk rule above. An unclosed backtick ends the walk: what follows is not a span.
-    # A span whose only separation from the span before it is blanks and an opening parenthesis is
-    # tagged with an \035 byte: that is the slot of the format, the symbol the anchor designates.
-    # Which span it must follow is decided by the caller, which knows the anchor; here only the
-    # adjacency is read, the one fact the list of spans loses.
+    # A span whose only separation from the span before it is blanks and an opening parenthesis,
+    # and which the closing parenthesis follows at once, is tagged with an \035 byte: that is the
+    # slot of the format, the symbol the anchor designates. Both sides, because the left alone took
+    # `(`sym` with no `)` and `(`sym` and more)` for a slot (PR #222). Which span it must follow is
+    # decided by the caller, which knows the anchor; here only the adjacency is read, the one fact
+    # the list of spans loses.
     function spans(text,   out, rest, p, q, gap, sp) {
       out = ""; rest = text
       while ((p = index(rest, "`")) > 0) {
@@ -328,7 +330,7 @@ todo_awk() {
         rest = substr(rest, p + 1)
         if ((q = index(rest, "`")) == 0) break
         sp = substr(rest, 1, q - 1)
-        if (gap ~ /^[ \t]*\($/) sp = "\035" sp
+        if (gap ~ /^[ \t]*\($/ && substr(rest, q + 1, 1) == ")") sp = "\035" sp
         out = out "\t" sp
         rest = substr(rest, q + 1)
       }
@@ -1901,7 +1903,15 @@ EOF
   anchor_item short.md '`src/code.sh:20` (`fro`) — calls it'
   anchors_says 1 'anchor `src/code.sh:20` designates `fro`, shorter than 4 characters' \
     "a 3-character designated symbol does not count" "$ar/short.md"
-  rule_end 6 'an anchor designates one symbol, and only that symbol is measured'
+  # The slot CLOSES: `)` right after the symbol, as `(` sits right before it. Read from the left
+  # alone, a slot that never closed and one holding prose after the symbol both passed (PR #222).
+  anchor_item noclose.md '`src/code.sh:20` (`frobnicate_widget` — calls it'
+  anchors_says 1 'anchor `src/code.sh:20` designates no symbol' \
+    "a slot that never closes designates nothing" "$ar/noclose.md"
+  anchor_item trailing.md '`src/code.sh:20` (`frobnicate_widget` and more) — calls it'
+  anchors_says 1 'anchor `src/code.sh:20` designates no symbol' \
+    "a slot holds the symbol and nothing after it" "$ar/trailing.md"
+  rule_end 8 'an anchor designates one symbol, and only that symbol is measured'
 
   # ── --baseline <ref>: a target's TODO.md fails only on what the ref did not have (issue 217) ──
   # A target adopting the kit inherits violations it did not write; a run that is red on all of
