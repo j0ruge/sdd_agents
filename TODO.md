@@ -106,6 +106,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `${w[@]+"${w[*]}"}`, o idioma que o `check-todo.sh` já usa.
   — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
+- [ ] **Linha `|`-led com menos de cinco células some dos dois leitores do checkpoint** —
+  `bin/sdd:587` (`if (n < 6) next`) — `| I2 | slice | pending |` é linha da tabela no GFM, mas o
+  `checkpoint_rows` a descarta em silêncio: o `pending` sai do `checkpoint_tally` e o `gate_EXEC` pode
+  passar — a falha aberta da linha sem `|` inicial (c71913c), por outra forma. O `rows_of` do
+  `check-checkpoint.sh` pula igual (`if (NF < 6) next`), e nem `--check` nem `--red` a acusam. Direção:
+  dentro da tabela, linha que não dá cinco colunas é recusada pelo nome, como a sem `|` inicial.
+  — descoberto por `claude` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
+
+- [ ] **Relatório na ponta da base ainda conta se outra missão editar o checkpoint desta** —
+  `bin/sdd:933` (`tip_add_carries_mission`) — desde 79b6f93 o commit da base que adicionou o relatório
+  tem de mover `checkpoint.md` ou `checkpoint-notas.md` da missão; um commit de outra missão que traga o
+  próprio relatório e edite também o checkpoint desta ainda passa, e o `gate_QA` fecha com a evidência
+  alheia. Declarado na ADR 0015 §3, sem escritor conhecido. Direção: exigir que o checkpoint deixado
+  por esse commit seja um blob que a branch da missão já teve.
+  — descoberto por `claude` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
+
 ### Contrato e configuração
 
 - [ ] **O `kaizen_reminder` diz a frase de repo-alvo quando roda de um worktree do kit** —

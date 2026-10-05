@@ -19,7 +19,7 @@ runner; e a fase feita à mão invisível para o ledger (0 linhas para o PR de
 
 | Fato | Antes | Depois |
 |---|---|---|
-| Catraca `todo-findings` | 23 | 21 na branch: 16 com `RESOLVED by` + N = 5 nascidos (os minors da revisão final) → 5 depois do chore pós-merge |
+| Catraca `todo-findings` | 23 | 23 na branch: 16 com `RESOLVED by` + N = 7 nascidos (5 minors da revisão final, 2 da rodada dos bots do PR #222) → 7 depois do chore pós-merge |
 | Saídas sem código | — | 7: Y7 (#88) e Y8 (#218) no `CONTEXT.md`, 5 decididos (#130, #155, #109, #180, #135) |
 | Consertos com `RESOLVED by` | — | 16, em 20 commits de incremento (I3–I23 menos o I6, que não fecha item) |
 | Catálogo de mutação | 593 | **615** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`): 612 no fecho do EXEC, +3 dos consertos da revisão final; 3 re-ancorados no I17 |
@@ -44,8 +44,8 @@ asserção que cai. Os protótipos dos designers entraram hunk a hunk, comparado
 onde divergiram, o plano mandou e a decisão ficou como `Ruling:` na nota do checkpoint. Re-âncora do
 `TODO.md` (`remap.py`, `xref.py`, `--anchors`) em todo commit que deslocou linha.
 
-**Achados nascidos na leva (régua D15 na hora):** 5 itens novos no `TODO.md`, os minors da revisão
-final (catraca 16 → 21, ver abaixo). Limites declarados
+**Achados nascidos na leva (régua D15 na hora):** 7 itens novos no `TODO.md`: os 5 minors da revisão
+final (catraca 16 → 21, ver abaixo) e 2 da rodada dos bots do PR #222 (21 → 23). Limites declarados
 no lugar em que valem: o reset do `GATE_PR_STAMP_WHY` sem probe e o `sdd retry PR` que não para no
 carimbo (I13); config quebrado no meio do run morre pelo mesmo `die` do lançamento, sem probe
 próprio (I16); o ledger da dica do `sdd status` é por máquina (I19); três casos que falham
