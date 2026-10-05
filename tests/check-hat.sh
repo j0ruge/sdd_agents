@@ -297,6 +297,25 @@ hat_promise_probes() {
   else fail "hat: sdd-docs no longer says who owns a drifted code comment"; fi
 }
 
+# --- /sdd-plan: the approval is the human's answer to a YES/NO question -------------------------
+# The human asked for it in the grill of 20261004-lote-4-a-catraca-zera: approving a plan used to
+# mean reading "sdd approve <mission>" off the screen and typing it. `sdd approve` reads its `y`
+# from stdin and cannot tell who typed it, so the guarantee lives in the command's prose, and this
+# probe is the whole sensor for it: the catalogue sabotages bin/sdd, never commands/*.md. It reads
+# the section, not the file, so a rule moved out of "When the artifacts exist" is a rule lost.
+command_approval_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" sec
+  sec="$(awk '/^## When the artifacts exist/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  if grep -q 'AskUserQuestion' <<< "$sec" \
+     && grep -qE '^ *- \*\*YES\*\* .*sdd approve <mission>' <<< "$sec" \
+     && grep -qE '^ *- \*\*NO\*\*' <<< "$sec" \
+     && grep -qF "Only the human's answer to that question approves" <<< "$sec"; then
+    pass "command: /sdd-plan asks the human YES or NO before it runs sdd approve"
+  else
+    fail "command: /sdd-plan no longer asks YES or NO before sdd approve, or lost the rule that only the human's answer approves"
+  fi
+}
+
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
 # PROVENANCE: the three lines below were captured on 2026-09-04 on Claude Code 2.1.260 with
 #     claude -p 'Read docs/handoffs/x/00-missao.md with the Read tool, then reply with exactly: OK' \
@@ -464,6 +483,7 @@ fi
 census_probes
 executor_agent_probes
 hat_promise_probes
+command_approval_probes
 boot_probes
 release_probes
 selftest || exit $?
