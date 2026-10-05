@@ -36,6 +36,17 @@
 # SDD_MUTANT — and the refusal carries its own probe in the selftest below. What is left is a
 # reader OUTSIDE this kit doing the same thing, which no sensor here can reach.
 #
+# ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in 20261004-lote-4-a-catraca-zera: nothing in
+# the suite reads CONTRACT prose outside templates/. refute() reads templates/ only, and
+# check-lang.sh reads README.md and the docs/ surface for LANGUAGE and nothing else. The owner of
+# that prose is the DOCS phase: its drift checklist (45-docs.md) walks the whole mission diff, and
+# gate_DOCS refuses a row still pending. Measured not to fail open on 2026-10-04: the agent table
+# of README.md names the 8 hats agents/ carries; config/schema.md is held against load_config()
+# by `sdd health` (check 5, key-without-doc and doc-without-key); and the drifts on record were
+# caught before the merge — 20260901-o-revisor-so-acha changed the reviewer contract in seven
+# places, a QA journey caught the sixth and only the DOCS phase the seventh. Reopens when a
+# contract drift reaches main.
+#
 # Usage: tests/check-templates.sh   (exit 0 = contract intact)
 
 set -uo pipefail
