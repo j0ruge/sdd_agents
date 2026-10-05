@@ -2766,6 +2766,34 @@ git add -A && git commit -qm "chore: the catalogue changes after the stamp" >/de
 i4_phase "a stamped repo whose tests/ moved is unstamped again" "PR"
 i4_why   "stale stamp" "sdd health" "50-pr\.md|does not confirm"
 
+# 4b. THE STAMP IS NOT HEADLESS (#142, #198; ADR 0015 §1). The PR is open, every other requirement
+#     is met and only the stamp is stale: `sdd run` stops with rc 2 and opens NO session — the
+#     claude stub counts them —, naming the command and the order. Differential, so neither half
+#     can pass by accident: with 50-pr.md carrying no pr_url the stamp is NOT the only refusal, and
+#     the same run must buy the publisher's session and say nothing about the stamp. Own assertions,
+#     outside the i4 tally, which is named for the scope of the demand.
+stamp_s0="$(stub_sessions)"
+stamp_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; stamp_rc=$?
+stamp_s1="$(stub_sessions)"
+assert_eq "run stops at the stamp: rc 2, no session, the stop names './bin/sdd health'" "2|0|1|1" \
+  "$stamp_rc|$(( stamp_s1 - stamp_s0 ))|$(grep -c 'the stamp is not headless' <<< "$stamp_out")|$(grep -c "run './bin/sdd health' once" <<< "$stamp_out")"
+# The projection stops where the run would — the stop sits above the dry-run branch, like PLAN's.
+stamp_s0="$(stub_sessions)"
+stamp_out="$( cd "$FIX" && "$SDD" run --dry-run "$MISSION" 2>&1 )"; stamp_rc=$?
+stamp_s1="$(stub_sessions)"
+assert_eq "run stops at the stamp under --dry-run too: rc 2, no session" "2|0|1" \
+  "$stamp_rc|$(( stamp_s1 - stamp_s0 ))|$(grep -c 'the stamp is not headless' <<< "$stamp_out")"
+cp "$MDIR/50-pr.md" "$SDD_STATE_FIX/50-pr-before-stamp-stop.md"
+printf -- '---\nfase: PR\n---\n# PR\n' > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md loses its pr_url" >/dev/null
+stamp_s0="$(stub_sessions)"
+stamp_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; stamp_rc=$?
+stamp_s1="$(stub_sessions)"
+assert_eq "run stops at the stamp only when the stamp is the only refusal" "yes|0" \
+  "$( [ "$stamp_s1" -gt "$stamp_s0" ] && echo yes || echo no )|$(grep -c 'the stamp is not headless' <<< "$stamp_out")"
+cp "$SDD_STATE_FIX/50-pr-before-stamp-stop.md" "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md gets its pr_url back" >/dev/null
+
 # 5. MEANING — stamp the new content, so worlds 6 and 7 have something to take away.
 i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
 i4_phase "health over the new content stamps it in turn" "DONE"

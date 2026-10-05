@@ -1258,6 +1258,19 @@ mut_HEALTH_unstampable_silent() {
   sed -i '/^cmd_health() {/,/^}/ s@health_bad "nothing was stamped: \$MUTATION_STAMP_WHY@: "nothing was stamped: $MUTATION_STAMP_WHY@' "$1"
 }
 
+# The stamp stop goes away (#142, #198; ADR 0015 §1): with the PR open and only the stamp missing,
+# `sdd run` buys a publisher session that cannot write the stamp. Caught by `run stops at the stamp:
+# rc 2, no session, the stop names './bin/sdd health'` (world 4b of check-gates.sh).
+mut_RUN_stamp_stop_missing() {
+  sed -i '/^cmd_run() {/,/^}/ s@if \[ -n "\$GATE_PR_STAMP_WHY" \]; then@if false; then@' "$1"
+}
+# gate_PR arms the stamp marker on ENTRY instead of beside the stamp refusals, so `sdd run` stops "at
+# the stamp" over a PR that is not even open — the half of world 4b that a missing stop cannot reach.
+# Caught by `run stops at the stamp only when the stamp is the only refusal` in check-gates.sh.
+mut_PR_stamp_marker_always() {
+  sed -i '/^gate_PR() {/,/^}/ s@^  GATE_PR_STAMP_WHY=""$@  GATE_PR_STAMP_WHY="armed on entry"@' "$1"
+}
+
 # agents/ falls out of the key again (#67; ADR 0015 §1): a commit that edits only a hat leaves the
 # stamp valid over content the catalogue never ran against, though the runner reads every hat out of
 # agents/<hat>.md. Caught by `stamp-key: a commit touching only agents/ moves the key` (world 11b of
@@ -5697,6 +5710,8 @@ CATALOG=(
   HEALTH_unstampable_silent
   PR_stamp_key_keeps_baseline
   PR_stamp_key_ignores_agents
+  RUN_stamp_stop_missing
+  PR_stamp_marker_always
   PR_stamp_key_reads_ignored
   PR_stamp_key_partial_on_deleted
   PR_stamp_why_deleted_blind

@@ -488,6 +488,14 @@ gate is what made the REVIEW phase unsatisfiable headless, which is why the cata
 the first place. It asks for the receipt instead. Why a stamp rather than CI, and what was
 discarded, is [ADR 0004](adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
 
+**The stamp is not headless** (ADR 0015 §1). When the PR is open and the stamp is the only thing
+`gate_PR` misses, `sdd run` stops with **rc 2** and opens no session — PLAN's stop, not an
+escalation: no ledger row, no pager. No session can write the stamp, and the order that makes one
+`sdd health` enough is the human's: every review bot on the PR, their fixes in one batch,
+`./bin/sdd health` once, then `sdd run <mission>` again. The publisher no longer runs it; the PR
+body carries that order. `gate_PR` publishes the case as a marker (`GATE_PR_STAMP_WHY`) so the
+runner never reads it out of the prose. `sdd retry PR` has no such stop — it is the human's hand.
+
 ## The mission's branch
 
 `branch:` in `00-missao.md` was decorative until `ensure_mission_branch()`. The runner now reads it

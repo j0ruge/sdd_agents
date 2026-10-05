@@ -253,7 +253,10 @@ O prazo do hook vale para toda a árvore: um subreaper local cancela também fil
 sessão, com os mesmos 5 s + 1 s; o lock externo só sai depois do reap. Background do hook
 não pode sobreviver indefinidamente. A semântica geral de órfãos da execução é preservada.
 
-**Onde mora hoje.** `aprovacao:` + `sdd approve` (gate PLAN); rc 3 em
+**Onde mora hoje.** `aprovacao:` + `sdd approve` (gate PLAN); rc 2 sem sessão, que é passo humano
+desenhado e não escalada (sem linha de ledger, sem hook): o PLAN e, desde
+`20261004-lote-4-a-catraca-zera`, o carimbo de mutação quando o PR está aberto e só ele falta
+(`GATE_PR_STAMP_WHY`, ADR 0015 §1) — o `sdd run` nomeia a ordem e o `./bin/sdd health`; rc 3 em
 `handoff_blocked_escalation`, `app_down_escalation`, `increment-blocked`, `dirty-tree`,
 `no-progress`, `budget-exhausted`, e desde `20260922-o-motivo-da-fase` `no_work_escalation`
 (`kind: "no-work"`) — a única que para a linha **antes** da sessão, quando a célula do checkpoint
