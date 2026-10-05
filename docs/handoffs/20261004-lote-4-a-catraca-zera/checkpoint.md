@@ -1,6 +1,6 @@
 ---
 missao: 20261004-lote-4-a-catraca-zera
-atualizado: 2026-10-05 04:40
+atualizado: 2026-10-05 04:53
 ---
 
 # Checkpoint — Lote 4: a catraca zera
@@ -59,7 +59,7 @@ atualizado: 2026-10-05 04:40
 | I20 | relatório na ponta da base pergunta quem o adicionou | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-gates.sh 2>&1); grep -c '^  ok    a report from the base tip counts only when the commit that added it carries this mission dir' <<< "$o"` → `1` | done | 48e7870 |
 | I21 | #141+#108a+decisão 8: check-lang lê docs/ por censo, piso derivado, commands/*.md na régua | `o=$(bash tests/check-lang.sh 2>&1); r=$?; a=$(grep -c '^  ok    census: every tracked docs/' <<< "$o"); b=$(grep -c '^  ok    self-test: the census refuses' <<< "$o"); c=$(grep -c '^  ok    0 of ' <<< "$o"); s=$(awk '/^SURFACE_SPECS=/,/[)]$/' tests/check-lang.sh); d=$(awk 'index($0, "commands/*.md"){n++} END{print n+0}' <<< "$s"); e=$(awk '/Este reposit/{n++} END{print n+0}' commands/sdd-plan.md); f=$(awk '/n_surface" -lt [0-9]/{n++} END{print n+0}' tests/check-lang.sh); echo "$r $a $b $c $d $e $f"` → `0 1 1 1 1 0 0` | done | 76a2a06 |
 | I22 | #108b: LINT/pipefail/CALIBRATE declaram o limite | `n=0; for f in tests/run-all.sh tests/check-pipefail.sh tests/check-checkpoint.sh; do s=$(awk '/anti-vacuity, not a tracker of the surface/{c++} END{print c+0}' "$f"); [ "$s" -gt 0 ] && n=$((n+1)); done; c=$(awk '/Entra lá. são quatro lugares/{p=1} p && /CALIBRATE_FLOOR/{c++} /quinto lugar é o/{p=0} END{print c+0}' CLAUDE.md); echo "$n $c"` → `3 1` | done | 83d9258 |
-| I23 | Toda chave da série nomeada no pipeline.md (#98) | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c -e '^  ok    every series key is named in docs/pipeline.md' -e '^  ok    and every name in that block is a key the series prints' <<< "$o"` → `2` | pending | — |
+| I23 | Toda chave da série nomeada no pipeline.md (#98) | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c -e '^  ok    every series key is named in docs/pipeline.md' -e '^  ok    and every name in that block is a key the series prints' <<< "$o"` → `2` | done | dcfb072 |
 | I24 | Fecho: RESOLVED by, emendas da ADR, glossário, drift, KAIZEN_LOG, handoff, suíte | `a=$(awk '/<!-- sdd:open -->/{o=1} /<!-- sdd:decided -->/{o=0} o && /RESOLVED by/{n++} END{print n+0}' TODO.md); b=$(awk '/^## .* — Lote 4: a catraca zera/{c++} END{print c+0}' KAIZEN_LOG.md); c=$(cat docs/adr/0004-*.md docs/adr/0011-*.md docs/adr/0013-*.md docs/adr/0014-*.md); d=$(awk '/Amended by.*0015/{n++} END{print n+0}' <<< "$c"); e=$(awk '/^- [*][*]Status[*][*]: accepted/{n++} END{print n+0}' docs/adr/0015-the-stamp-is-not-headless.md); f=$(awk 'END{print (NR>0)}' docs/handoffs/20261004-lote-4-a-catraca-zera/20-handoff-exec.md 2>/dev/null); echo "$a $b $d $e ${f:-0}"` → `16 1 4 1 1` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
