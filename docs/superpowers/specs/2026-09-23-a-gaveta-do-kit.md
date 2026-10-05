@@ -20,6 +20,7 @@
 | F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
+| F8 | O plano mede contra a base, não contra os incrementos anteriores | nota de 2026-10-05, da execução do lote 4; sem missão | uma frase no `sdd-planner` (§ F8) | a próxima missão de kit depois do lote 4 |
 
 Fechados, para ninguém reabrir: o laço do fingerprint (#54–#56 → missão
 `20260922-o-motivo-da-fase`, PR #57, merge `2258e53`); o fluxo `develop → staging → main` com o
@@ -267,6 +268,29 @@ fases 2–4 e 6 ficam **depois** do worker; a 5 é o W5–W6.
   `154f58f`, `477cb9a`); conferir e atualizar a nota.
 - Sem número na nota: "hook de skills e retrospectiva pós-tarefa" e a validação pedida ao Fable em
   2026-09-09, sem parecer encontrado.
+
+---
+
+## F8 — O plano mede contra a base, não contra os incrementos anteriores
+
+Nota da execução de `20261004-lote-4-a-catraca-zera` (2026-10-05), guardada aqui por decisão humana
+e **fora** do `TODO.md`: o lint do `TODO.md` já reprova o caso caro, então pela régua D15 não é
+fail-open. O plano mediu cada incremento contra o commit base (`fe9441d`), e três incrementos
+encontraram o disco que os anteriores deixaram:
+- **I14:** o plano dizia que a âncora `agents/sdd-publisher.md:41` "continua no alvo (medido)"; o
+  `check-todo.sh` reprovou (`off target — nearest ./bin/sdd health is at line 71`), porque o I5
+  tinha designado `./bin/sdd health` nesse item e o I14 tirou o símbolo do parágrafo;
+- **I11:** o conserto apaga `kit_root`, o símbolo que o I5 designou no item do `kaizen_reminder`, e o
+  plano dizia "nenhuma âncora em `bin/sdd`";
+- **I9:** a prosa do `config/schema.md` citava "110 herdadas", medidas antes de o I5 mudar a regra
+  (o número real passou a 209 e 127).
+
+A seção "Âncoras do TODO.md que o incremento desloca" conta só **deslocamento de linha**. Desde o
+símbolo designado (ADR 0015 §2), editar o símbolo derruba a âncora tanto quanto deslocá-la. Direção:
+uma frase no § 4 do `sdd-planner` — para cada incremento, `grep` dos símbolos designados do
+`TODO.md` contra o diff previsto, e número escrito em prosa que um incremento anterior muda é
+re-medido no estado depois dele. Nas três vezes, a execução decidiu na hora e registrou nas notas do
+checkpoint daquela missão.
 
 ---
 
