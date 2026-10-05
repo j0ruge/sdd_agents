@@ -1,6 +1,6 @@
 ---
 missao: 20261004-lote-4-a-catraca-zera
-atualizado: 2026-10-05 00:08
+atualizado: 2026-10-05 00:15
 ---
 
 # Checkpoint — Lote 4: a catraca zera
@@ -42,7 +42,7 @@ atualizado: 2026-10-05 00:08
 | I3 | #194: o executor sabota a linha nova de um R<n> | `o=$(bash tests/check-hat.sh 2>&1); a=$(grep -c '^  ok    hat: the executor sabotages the new line of an R<n>' <<< "$o"); b=$(awk '/^[0-9][.] [*][*]Sabotage/{c++} END{print c+0}' agents/sdd-executor.md); cmp -s agents/sdd-executor.md .claude/agents/sdd-executor.md && m=same; echo "$a $b ${m:-diff}"` → `1 1 same` | done | 9c9c5e1 |
 | I4 | #178 + #135: o ticket para de prometer o acli; comentário de código tem dono; catraca 17 → 16 | `o=$(bash tests/check-hat.sh 2>&1); a=$(grep -c '^  ok    hat: the ticket hat promises no Jira check the gate does not make' <<< "$o"); b=$(grep -c '^  ok    hat: the docs hat leaves a code comment to the code' <<< "$o"); c=$(awk '/DECLARED LIMIT [(]D15[)].*this gate never asks Jira/{c++} END{print c+0}' bin/sdd); t=$(bash tests/check-todo.sh 2>&1); d=$(grep -c '^  ok    16 finding(s)' <<< "$t"); e=$(awk '/^todo-findings 16$/{c++} END{print c+0}' tests/health-baseline.txt); cmp -s agents/sdd-ticket.md .claude/agents/sdd-ticket.md && cmp -s agents/sdd-docs.md .claude/agents/sdd-docs.md && m=same; echo "$a $b $c $d $e ${m:-diff}"` → `1 1 1 1 1 same` | done | ae81ed3 |
 | I5 | A âncora mede só o símbolo designado (#191) | `o=$(bash tests/check-todo.sh 2>&1); grep -c -e '^  ok    rule: an anchor designates one symbol, and only that symbol is measured' -e '^  ok    [0-9]* finding(s), all within 8 lines, carrying anchor + date, every anchor on target' <<< "$o"` → `2` | done | c2e508a |
-| I6 | decisão 7: o /sdd-plan pergunta YES/NO e roda o sdd approve | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan asks the human YES or NO before it runs sdd approve' <<< "$o"` → `1` | pending | — |
+| I6 | decisão 7: o /sdd-plan pergunta YES/NO e roda o sdd approve | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan asks the human YES or NO before it runs sdd approve' <<< "$o"` → `1` | done | fde1b19 |
 | I7 | #92a: check-checkpoint --red recusa Check que nasce verde | `o=$(bash tests/check-checkpoint.sh 2>&1); r=$?; a=$(grep -c '^  ok    rule: a Check already green at HEAD is refused by --red' <<< "$o"); echo "$r $a"` → `0 1` | pending | — |
 | I8 | #92b+#93: o planner mede o vermelho; critério d e regra de redação | `o=$(bash tests/check-checkpoint.sh 2>&1); a=$(grep -c '^  ok    the planner agent teaches the --red run before PLAN-AUTO' <<< "$o"); t=$(bash tests/check-templates.sh 2>&1); b=$(grep -c '^  ok    missao.md: PLAN-AUTO criterion d cites the --red run' <<< "$t"); cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md && m=same; echo "$a $b ${m:-diff}"` → `1 1 same` | pending | — |
 | I9 | #95: o starter.conf sugere o lint do TODO.md no TEST_CMD | `o=$(bash tests/check-preflight.sh 2>&1); a=$(grep -c '^  ok    the TODO.md lint the starter suggests runs as a TEST_CMD' <<< "$o"); b=$(awk '/check-todo[.]sh. --check/{c++} END{print c+0}' config/starter.conf); c=$(awk '/Opt-in: the .TODO[.]md. lint inside .TEST_CMD./{c++} END{print c+0}' config/schema.md); echo "$a $b $c"` → `1 1 1` | pending | — |
