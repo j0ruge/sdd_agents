@@ -508,6 +508,19 @@ mut_EXEC_escaped_pipe_blind() {
   sed -i '/^checkpoint_rows()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (0)|' "$1"
 }
 
+# GFM's optional leading pipe (CodeRabbit review of PR #222): the row written without it is skipped
+# again, and a pending increment vanishes from checkpoint_tally — gate_EXEC passes over it. Caught by
+# `a pending row with no leading pipe keeps the phase in EXEC` in check-gates.sh.
+mut_EXEC_pipeless_row_skipped() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@{ \$0 = "|" \$0 }@{ }@' "$1"
+}
+# The other direction: the blank line no longer ends the table, so a paragraph below it with five
+# cells is read as an increment. Caught by the control beside it, `the same line below a blank line
+# is a paragraph, not an increment`.
+mut_EXEC_pipeless_reads_past_the_table() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@/\^\[ \\t\]\*\$/ { tbl = 0 }@/^[ \\t]*$/ { }@' "$1"
+}
+
 # The reviewer's increments vanish from the checkpoint: checkpoint_rows skips every `R<n>` row, so a
 # round that found something hands nothing to EXEC and the B review keeps the ball in REVIEW — the
 # REVIEW⇄EXEC loop of `20260901-o-revisor-so-acha` silently cut. Issue #111 measured that only two
@@ -5695,6 +5708,8 @@ CATALOG=(
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
   EXEC_escaped_pipe_blind
+  EXEC_pipeless_row_skipped
+  EXEC_pipeless_reads_past_the_table
   EXEC_rows_blind_to_review_increments
   EXEC_alignment_colon_blind
   EXEC_dirty_tree_as_red

@@ -492,6 +492,27 @@ assert_phase "an increment left doing keeps the phase in EXEC" "EXEC"
 assert_why   "an increment left doing is still to execute" "EXEC" "1 of 1 increment\(s\) still to execute"
 mv "$MDIR/checkpoint.doing.bak" "$MDIR/checkpoint.md"
 
+# GFM makes the leading pipe OPTIONAL (CodeRabbit review of PR #222): a row written
+# `I2 | … | pending | —` right below a row renders as one more row of the same table, and
+# checkpoint_rows read only the `|`-led lines — the pending increment vanished from
+# checkpoint_tally and the gate passed over it to QA. The control is the same line below a BLANK
+# line, which ends the table: a paragraph, and no increment of anything.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.pipeless.bak"
+pipeless_row='I2 | slice two, no leading pipe | `true` → 0 | pending | —'
+awk -v row="$pipeless_row" -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print row }' \
+  "$MDIR/checkpoint.pipeless.bak" > "$MDIR/checkpoint.md"
+if [ "$(awk -v h="| done | $REAL_HASH |" 'seen { print; exit } index($0, h) { seen = 1 }' "$MDIR/checkpoint.md")" = "$pipeless_row" ]; then
+  pass "fixture: a pending row with no leading pipe sits right below the done row"
+else
+  fail "pipe-less fixture" "$pipeless_row" "$(cat "$MDIR/checkpoint.md")"
+fi
+assert_phase "a pending row with no leading pipe keeps the phase in EXEC" "EXEC"
+assert_why   "the pipe-less pending row is counted as still to execute" "EXEC" "1 of 2 increment\(s\) still to execute"
+awk -v row="$pipeless_row" -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print ""; print row }' \
+  "$MDIR/checkpoint.pipeless.bak" > "$MDIR/checkpoint.md"
+assert_phase "the same line below a blank line is a paragraph, not an increment" "QA"
+mv "$MDIR/checkpoint.pipeless.bak" "$MDIR/checkpoint.md"
+
 # A literal pipe inside a Check cell is spelled `\|` in GFM, and a raw split on "|" cuts the row
 # there — every column after it shifts one to the left, so the Status column is read out of the
 # CHECK cell. The increment is `done` and the gate answers "invalid status", naming a status the

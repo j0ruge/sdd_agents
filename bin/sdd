@@ -560,7 +560,18 @@ checkpoint_rows() {
     # escapes the pipe; an EVEN one does not. ASCII only — mawk is byte-oriented and a negated
     # class with a multibyte character would negate its BYTES.
     function escaped_pipe(s,   t) { t = s; sub(/\\+$/, "", t); return (length(s) - length(t)) % 2 }
+    # GFM makes the leading pipe OPTIONAL: `I2 | … | pending | —` right below a row renders as one
+    # more row of the same table. Read as `|`-led lines only, that row vanished from
+    # checkpoint_tally and gate_EXEC passed over a pending increment (CodeRabbit review of PR
+    # #222, reproduced). Inside a table — no blank line since its last row — a line with a `|` is
+    # read as the row it renders, by giving it back the pipe it left out. Below a blank line it is
+    # a paragraph, as GFM renders it, and stays out. A heading or list item glued to the table
+    # without a blank line is read too: over-reading fails CLOSED — a line that is no increment
+    # reads as an invalid status or one more pending, never as a pass.
+    /^[ \t]*$/ { tbl = 0 }
+    tbl && /\|/ && !/^[ \t]*\|/ { $0 = "|" $0 }
     /^[ \t]*\|/ {
+      tbl = 1
       # A raw split on "|" cuts a Check cell at its `\|` and shifts every column after it one to
       # the left, so Status is read out of the CHECK cell: an increment written `done` was reported
       # as `invalid status`, naming a status the author never wrote, and gate_EXEC refused the

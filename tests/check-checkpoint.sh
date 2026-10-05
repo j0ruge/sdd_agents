@@ -22,7 +22,9 @@
 # side can satisfy. That is the rule this file enforces.
 #
 # What it measures, per row of every checkpoint table under docs/handoffs/ plus the template:
-#   1. the row hands the runner exactly five columns when split on a raw `|`. A RAW pipe inside a
+#   1. the row opens with its `|` and hands the runner exactly five columns when split on a raw
+#      `|`. GFM makes the leading pipe optional and the runner reads such a row since PR #222, but
+#      a reader of `|`-led lines skipped it whole, so it is refused here by name. A RAW pipe inside a
 #      cell shifts Status and Commit one place and gate_EXEC starts reading a fragment of the
 #      command as a status token. It is also what keeps rule 2 from failing open: with the columns
 #      shifted, the Check cell this file reads is a truncation and the anchor rule would stop
@@ -199,9 +201,18 @@ surface() {
 # why: any pipe in a Check cell is refused in this repo's checkpoints, escaped or not. NF is
 # emitted rather than checked here so the caller can tell "pipe inside a cell" from "not a table
 # row at all".
+#
+# A row with no leading pipe, inside the table, is emitted with NF 0 so the callers refuse it by
+# name: GFM makes that pipe optional, the runner reads the row since PR #222, and a reader of
+# `|`-led lines alone skipped it whole — --check never saw it, --red answered 0 over a pending Check
+# it never ran (CodeRabbit review). Below a blank line the same line is a paragraph and stays out.
 rows_of() {
   awk -F'|' '
+    /^[ \t]*$/ { tbl = 0 }
+    { bare = (tbl && /\|/ && !/^[ \t]*\|/) }
+    bare { $0 = "|" $0 }
     /^[ \t]*\|/ {
+      tbl = 1
       if (NF < 6) next
       id = $2; gsub(/^[ \t]+|[ \t]+$/, "", id)
       if (id == "ID" || id ~ /^-+$/ || id == "") next
@@ -210,7 +221,7 @@ rows_of() {
       chk = $4; gsub(/^[ \t]+|[ \t]+$/, "", chk)
       # An empty Status prints as "-": a tab is IFS whitespace to the reader, so an empty field
       # would collapse and hand the Check cell over as the status.
-      printf "%d\t%s\t%s\t%s\n", NF, id, (status == "" ? "-" : status), chk
+      printf "%d\t%s\t%s\t%s\n", (bare ? 0 : NF), id, (status == "" ? "-" : status), chk
     }' "$1"
 }
 
@@ -235,7 +246,13 @@ scan_file() {
     [ -n "$nf" ] || continue
     N_ROWS=$((N_ROWS + 1))
 
-    # Rule 1 — five columns, or the cell below is a truncation and rule 2 fails open.
+    # Rule 1 — the row opens with its pipe, and hands the runner five columns, or the cell below is
+    # a truncation and rule 2 fails open. NF 0 is rows_of's mark for the missing leading pipe.
+    if [ "$nf" -eq 0 ]; then
+      fail "$label: row $id has no leading '|' — GFM renders it as a row and the runner counts it, but this repo's checkpoints open every row with the pipe"
+      V_COLS=$((V_COLS + 1))
+      continue
+    fi
     if [ "$nf" -ne 7 ]; then
       fail "$label: row $id hands the runner $((nf - 2)) column(s) instead of 5 — a '|' inside a cell splits it. A raw pipe breaks gate_EXEC; the escape '\\|' the runner rejoins, but this repo's checkpoints use the herestring form instead"
       V_COLS=$((V_COLS + 1))
@@ -552,6 +569,10 @@ red_one() { # red_one <checkpoint> — 0 every pending Check is red at HEAD; 1 o
   rows="$(rows_of "$path")"
   while IFS=$'\t' read -r nf id st chk; do
     [ -n "$nf" ] || continue
+    if [ "$nf" -eq 0 ]; then
+      fail "$label: row $id has no leading '|' — --red refuses the row a reader of '|'-led lines would skip; run --check first"
+      bad=$((bad + 1)); continue
+    fi
     if [ "$nf" -ne 7 ]; then
       fail "$label: row $id splits into $((nf - 2)) column(s) — --red cannot tell its Status from its Check; run --check first"
       bad=$((bad + 1)); continue
@@ -596,7 +617,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=57
+PROBE_FLOOR=60
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -728,6 +749,16 @@ selftest() {
   probe 'two anchored greps pass'             0 '1 under the anchor rule' "$two"
   probe 'one of two greps unanchored is caught' 1 '1 of 2 pattern(s) anchored' "$onlyone"
   probe 'a checkpoint that does not exist'   94 'not readable' "$box/nowhere.md"
+  # GFM makes the leading pipe optional, so a row written without it renders like the rest of the
+  # table — and a reader of `|`-led lines skipped it whole (CodeRabbit review of PR #222). The
+  # control is the same line below a blank line: a paragraph, which is no row and stays out.
+  local bare="$box/bare.md" barepara="$box/barepara.md"
+  cp_head "$bare"; cp_row "$bare" I1 '`bash tests/run-all.sh` → verde'
+  printf 'I2 | slice | `bash tests/run-all.sh` → verde | pending | — |\n' >> "$bare"
+  cp_head "$barepara"; cp_row "$barepara" I1 '`bash tests/run-all.sh` → verde'
+  printf '\nI2 | slice | `bash tests/run-all.sh` → verde | pending | — |\n' >> "$barepara"
+  probe 'a row with no leading pipe is caught, not skipped' 1 "row I2 has no leading '|'" "$bare"
+  probe 'the same line below a blank line is a paragraph, not a row' 0 'barepara.md: 1 row(s)' "$barepara"
 
   # ── the floors and the doc assertions, over real trees ──
   local full="$box/full" small="$box/small" fewrows="$box/fewrows" novoid="$box/novoid"
@@ -1027,6 +1058,12 @@ selftest() {
   probe 'stderr is not part of what a Check prints' 1 'I1 is already green at HEAD' "$rf" --red
   cp_head "$rf"; cp_row "$rf" I1 '`echo 1` → `1`' 'done'
   probe 'a checkpoint with no pending row measured nothing' 93 'has no pending row' "$rf" --red
+  # A pending row with no leading pipe, whose Check is already green, below a red one: skipped, it
+  # left --red answering 0 over a Check it never ran (CodeRabbit review of PR #222).
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 0` → `1`' pending
+  printf 'I2 | slice | `echo 1` → `1` | pending | abc1234 |\n' >> "$rf"
+  probe 'a pending row with no leading pipe is refused by --red, never skipped' 1 \
+    "row I2 has no leading '|'" "$rf" --red
   cp_head "$nogit/docs/handoffs/m/checkpoint.md"
   cp_row "$nogit/docs/handoffs/m/checkpoint.md" I1 '`echo 0` → `1`' pending
   GIT_CEILING_DIRECTORIES="$box" probe 'a checkpoint outside any repository has no root to run from' \

@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2136` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6269` — a chave lê
+  `bin/sdd:2147` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6284` — a chave lê
   `bin tests templates config`, mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança
   confinada a esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a regra 12 do
   `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita `CLAUDE.md`, e chavear nele custaria
@@ -65,7 +65,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: o `starter.conf` sugerir o `--check` do kit no `TEST_CMD` do alvo. RESOLVED by ef1bc82.
   — descoberto por `humano` revisando o sensor novo (2026-08-16)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9829`
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9840`
   (`kaizen_series`) vs `docs/pipeline.md:1400`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:9350`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
@@ -83,7 +83,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   RESOLVED by 76a2a06 e 83d9258.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
-- [ ] **`gate_TICKET` não confere no Jira a issue que o chapéu diz que ele confirma** — `bin/sdd:1136`
+- [ ] **`gate_TICKET` não confere no Jira a issue que o chapéu diz que ele confirma** — `bin/sdd:1147`
   (`gate_TICKET`) — o `agents/sdd-ticket.md:18` promete que o runner confirma a issue por `acli`,
   mas o gate só lê `issue:` e `sprint:` do frontmatter do `10-ticket.md`. Uma issue duplicada (LH-5
   no lugar da LH-4) passa verde, e a LH-4 só se defendeu com um Check próprio no I1. Fail-open: o
@@ -92,7 +92,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-planner` na missão `20260927-idioma-da-spa-pelo-idp` (2026-09-27)
 
 - [ ] **Relatório trazido do histórico POSTERIOR da base conta como da missão** —
-  `bin/sdd:894` (`path_in_commits`) — a posse exige caminho ausente da árvore do merge-base; um
+  `bin/sdd:905` (`path_in_commits`) — a posse exige caminho ausente da árvore do merge-base; um
   relatório que outra missão mergeou em `origin/<base>` DEPOIS do corte, trazido por `git checkout
   origin/<base> -- f`, `merge --squash` ou `cherry-pick`, é novo para o merge-base e conta: a SQ-146
   por outra porta. Checar a ponta da base recusaria o próprio relatório de missão mergeada por
@@ -100,7 +100,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de contexto novo` na missão `20260928-os-achados-da-janela` (2026-09-29)
 
 - [ ] **O `--red` aborta sob `set -u` em bash 4.0–4.3 quando o Check não imprime nada** —
-  `tests/check-checkpoint.sh:519` (`red_norm`) — `read -ra w` de uma saída vazia deixa o array vazio, e
+  `tests/check-checkpoint.sh:536` (`red_norm`) — `read -ra w` de uma saída vazia deixa o array vazio, e
   `"${w[*]}"` é "unbound variable" antes do bash 4.4: o caso que o `--red` existe para recusar (o Check
   mudo) vira aborto do sensor. Não reproduz no bash 5.2 daqui; o kit promete bash 4+. Direção:
   `${w[@]+"${w[*]}"}`, o idioma que o `check-todo.sh` já usa.
@@ -109,7 +109,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **O `kaizen_reminder` diz a frase de repo-alvo quando roda de um worktree do kit** —
-  `bin/sdd:10367` (`kit_id`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
+  `bin/sdd:10378` (`kit_id`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
   compara o `--show-toplevel` de `$SDD_HOME` com o `$REPO_ROOT`, e o toplevel é por worktree. Do
   worktree, o `sdd` do checkout principal imprime "N mission(s) of this repo … The kaizen judge
   counts them" no lugar da frase do kit. Direção: o mesmo `ledger_repo_root` dos dois lados, e
@@ -117,7 +117,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-planner` na missão `20261003-lote-3-a-catraca-desce` (2026-10-03)
 
 - [ ] **Uma sessão escreve o ledger com o `bin/sdd` que tinha em MEMÓRIA ao ser lançada** —
-  `bin/sdd:4520` (`autonomy_session_row`) — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4
+  `bin/sdd:4531` (`autonomy_session_row`) — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4
   rodadas com `turns` nulo), e o ledger não distingue "medido nulo" de "não medido": fail-open de leitura. O
   `.sdd/config.sh` tem o mesmo defeito (`bin/sdd:147`, `source` único): o `TEST_CMD` consertado a meio do run não vale,
   e o EXEC da SQ-141 queimou 4 retries (~US$ 5,90) num gate insatisfazível. Direção: o `sdd run` avisar quando `bin/sdd`
@@ -126,7 +126,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260924-transacao-honra-o-timeout` (2026-09-24)
 
 - [ ] **`sdd run --phase PR` com só o carimbo faltando grava uma intervenção e não abre sessão** —
-  `bin/sdd:8187` (`checkpoint_note_intervention`) — a nota "forced from the CLI" é commitada antes de a
+  `bin/sdd:8198` (`checkpoint_note_intervention`) — a nota "forced from the CLI" é commitada antes de a
   volta chegar à parada no carimbo (rc 2), e o `sdd autonomy --by-mission` conta uma intervenção numa
   corrida que não fez nada. Mesma forma da porta do PLAN, anterior ao lote. Direção: escrever a nota só
   quando a volta forçada abre sessão, ou declarar o limite nas duas portas.
@@ -144,21 +144,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `codereview` na missão `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
 
 - [ ] **A parada no carimbo manda rodar o `sdd health` mesmo quando o carimbo é impossível** —
-  `bin/sdd:8289` (`GATE_PR_STAMP_WHY`) — numa cópia do kit fora do git, ou com um caminho medido
+  `bin/sdd:8300` (`GATE_PR_STAMP_WHY`) — numa cópia do kit fora do git, ou com um caminho medido
   ausente, nenhum `sdd health` carimba aquela árvore; o remédio certo só vem dentro do motivo, na linha
   de cima, e as linhas `dim` repetem a ordem genérica. Parar está certo; a prosa engana. Lido do
   código, não reproduzido. Direção: quando o motivo é "impossível", trocar as linhas de remédio.
   — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
 - [ ] **A dica do `sdd status` pergunta "feita à mão?" de toda fase verde de missão rodada noutra máquina** —
-  `bin/sdd:6833` (`status_unrecorded`) — o ledger é por máquina, então missão executada noutro
+  `bin/sdd:6844` (`status_unrecorded`) — o ledger é por máquina, então missão executada noutro
   computador não tem linha `session` aqui e toda fase verde recebe o `sdd note-manual`; quem seguir a
   dica grava como feita à mão uma fase que não foi. A frase diz "this machine's ledger" (declarado no
   plano do I19). Direção: calar quando o ledger local não tem nenhuma linha da missão.
   — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
 - [ ] **O `ok` do `sdd note-manual` diz que gravou a nota mesmo sem `checkpoint.md`** —
-  `bin/sdd:11094` (`checkpoint_note_intervention`) — sem o arquivo o escritor volta 0 em silêncio, a
+  `bin/sdd:11105` (`checkpoint_note_intervention`) — sem o arquivo o escritor volta 0 em silêncio, a
   linha `manual` vai para o ledger e a mensagem final afirma "the note in the checkpoint": rótulo sem
   artefato, na saída humana. Direção: o escritor publicar se escreveu, e o `ok` dizer só o que
   aconteceu.
