@@ -1,6 +1,6 @@
 ---
 missao: 20261004-lote-4-a-catraca-zera
-atualizado: 2026-10-05 03:09
+atualizado: 2026-10-05 03:28
 ---
 
 # Checkpoint — Lote 4: a catraca zera
@@ -53,7 +53,7 @@ atualizado: 2026-10-05 03:09
 | I14 | #142+#198b: o publisher não roda o health | `o=$(bash tests/check-hat.sh 2>&1); grep -c -e '^  ok    hat: the publisher never runs the stamp' -e '^  ok    hat: and the stamp is no reason for the publisher' -e '^  ok    hat: and the PR body carries the order' <<< "$o"` → `3` | done | fd05345 |
 | I15 | #129a: runner_sha em toda linha do ledger | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    ledger: every row carries the launch-time runner' <<< "$o"` → `1` | done | ed252ce |
 | I16 | #129b: o config relido no topo de cada volta | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    config: the next lap runs the edited TEST_CMD' <<< "$o"` → `1` | done | 44de239 |
-| I17 | os dois leitores aprendem o evento `manual` | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-kaizen.sh 2>&1; env -u CLAUDECODE TMPDIR=/tmp bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    guard: a manual row mints no version' -e '^  ok    the human reader names the manual row' <<< "$o"` → `2` | pending | — |
+| I17 | os dois leitores aprendem o evento `manual` | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-kaizen.sh 2>&1; env -u CLAUDECODE TMPDIR=/tmp bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    guard: a manual row mints no version' -e '^  ok    the human reader names the manual row' <<< "$o"` → `2` | done | 6eca40a |
 | I18 | `sdd note-manual` escreve a nota e a linha `manual` | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-autonomy.sh 2>&1; env -u CLAUDECODE TMPDIR=/tmp bash tests/check-coordination.sh 2>&1); grep -c -e '^  ok    sdd note-manual writes one note committed alone' -e '^  ok    busy: note-manual' <<< "$o"` → `2` | pending | — |
 | I19 | o `sdd status` sugere o `note-manual` | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    the full page names the green phases with no session' -e '^  ok    a manual row of the phase takes it off the page' <<< "$o"` → `2` | pending | — |
 | I20 | relatório na ponta da base pergunta quem o adicionou | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-gates.sh 2>&1); grep -c '^  ok    a report from the base tip counts only when the commit that added it carries this mission dir' <<< "$o"` → `1` | pending | — |
