@@ -111,6 +111,12 @@ carrega ("does not parse" ou "does not evaluate", o mesmo rc 2);
 do `TEST_CMD` no preflight chama `_fail`, e só emite `warn` no lugar dele quando o runner **diz**
 que falta o manifesto na raiz (`test_cmd_missing_manifest`). A âncora do `TODO.md` também virou
 sensor (ADR 0011).
+Desde `20261004-lote-4-a-catraca-zera` o `tests/check-checkpoint.sh --red <checkpoint>` roda o Check
+de cada linha `pending` a partir da raiz do repo e recusa o que já nasce verde, o mudo e o que
+foge da forma `` `comando` → `esperado` ``. Ele **executa** texto escrito por modelo, então é
+ferramenta do planner com o humano na sala, **nunca gate**: o runner não o chama, o `run-all.sh`
+também não, e o `gate_PLAN` não poderia — ele é reavaliado a cada derivação, e o Check do I1
+fica verde no instante em que o I1 fecha. Prova "não verde", não "vermelho pelo motivo certo".
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
