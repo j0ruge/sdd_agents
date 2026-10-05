@@ -903,6 +903,31 @@ path_in_commits() {
   return 1
 }
 
+# tip_add_carries_mission <path> [<tip>...] — rc 0 unless a <tip> holds <path> and the newest
+# commit of that tip which ADDED it touches nothing under $HANDOFF_DIR/$MISSION/ (ADR 0015 §3).
+# A report new to the merge-base but already at a base tip is one of two things, and the base
+# commit that added it tells them apart without a clock: THIS mission's own report, squash-merged
+# and read from its branch after a fetch — the squash carries the mission's handoff dir, whose
+# checkpoint moves with every increment — or another mission's, brought from the base's later
+# history (`git checkout origin/<b> -- f`, a cherry-pick): that commit carries another dir or none.
+# PLUMBING, for the reason mission_qa_report gives (log.showSignature); `--root` so an add in a
+# root commit is seen at all. DECLARED, fail closed: the mission's own report cherry-picked to the
+# base without its dir, a rebase-merge (each commit replayed alone; 0 of 110 PR merges on
+# sales_quote's develop since 2026-08-01), and a report whose NAME another mission merged first.
+tip_add_carries_mission() {
+  local path="$1" c add
+  shift
+  for c in "$@"; do
+    git -C "$REPO_ROOT" cat-file -e "$c:$path" 2>/dev/null || continue
+    add=""
+    IFS= read -r -d '' add < <(git -C "$REPO_ROOT" rev-list --topo-order "$c" -- "$path" 2>/dev/null \
+        | git -C "$REPO_ROOT" diff-tree --stdin --root -r -z --diff-filter=A --name-only -- "$path" 2>/dev/null) || true
+    [ -n "$add" ] || return 1
+    [ -n "$(git -C "$REPO_ROOT" diff-tree --root --no-commit-id -r --name-only "$add" -- "$HANDOFF_DIR/$MISSION/" 2>/dev/null)" ] || return 1
+  done
+  return 0
+}
+
 # mission_qa_report — the absolute path of the newest QA report that belongs to THIS mission, or
 # empty. One definition, two readers: qa_substep and Anchor 1 of gate_QA answer about the SAME file.
 # Measured in the judge's window: both used to pick `latest_matching reports/*.md`, and in SQ-146
@@ -947,10 +972,12 @@ path_in_commits() {
 # mission counts that mission's reports as its own (the fail-open survives there). A COPY of another
 # mission's report under a new name is a new path and counts. A mission that deletes a report and
 # adds a similar one may be paired as a rename and refused — fail closed, and the refusal names the
-# file it read. And the check is against the MERGE-BASE tree, not the base's tip: a report another
-# mission added upstream AFTER the fork, brought in by `git checkout origin/<b> -- f`, a squash or a
-# cherry-pick, is new to the merge-base and counts (review r5; TODO.md). Checking the tip too would
-# refuse a squash-merged mission its own report, seen from its branch after a fetch.
+# file it read. A new path is new to the MERGE-BASE tree; when a base TIP holds it too — a report
+# another mission added upstream AFTER the fork and brought in by `git checkout origin/<b> -- f`, a
+# squash or a cherry-pick, or this mission's own, squash-merged and read after a fetch — the base
+# commit that ADDED it decides (tip_add_carries_mission, ADR 0015 §3): it counts only when that
+# commit carries this mission's handoff dir. Refusing every report at the tip would take from a
+# squash-merged mission its own report; asking nothing let another mission's count (review r5).
 #
 # The charter stays out on purpose (decision 3 of the grill): it is durable doc that crosses cycles
 # and the qa-execution skill writes the one missing, so demanding the mission's would make QA:plan
@@ -1005,6 +1032,7 @@ mission_qa_report() {
   for p in ${owned[@]+"${!owned[@]}"}; do
     case "$p" in *.md) ;; *) continue ;; esac
     [ "$REPO_ROOT/$p" -ef "$dir/${p##*/}" ] || continue
+    tip_add_carries_mission "$p" "${nots[@]}" || continue
     printf '%s\n' "$dir/${p##*/}"
   done | sort -V | tail -1 || true
 }

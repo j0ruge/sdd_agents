@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2102` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6211` — a chave lê
+  `bin/sdd:2130` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6225` — a chave lê
   `bin tests templates config`, mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança
   confinada a esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a regra 12 do
   `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita `CLAUDE.md`, e chavear nele custaria
@@ -63,7 +63,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: o `starter.conf` sugerir o `--check` do kit no `TEST_CMD` do alvo.
   — descoberto por `humano` revisando o sensor novo (2026-08-16)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9789`
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9817`
   (`kaizen_series`) vs `docs/pipeline.md:1398`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:9350`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
@@ -80,7 +80,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mesmo piso paga. Direção: derivar o piso, ou um sensor que compare piso × superfície real.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
-- [ ] **`gate_TICKET` não confere no Jira a issue que o chapéu diz que ele confirma** — `bin/sdd:1102`
+- [ ] **`gate_TICKET` não confere no Jira a issue que o chapéu diz que ele confirma** — `bin/sdd:1130`
   (`gate_TICKET`) — o `agents/sdd-ticket.md:18` promete que o runner confirma a issue por `acli`,
   mas o gate só lê `issue:` e `sprint:` do frontmatter do `10-ticket.md`. Uma issue duplicada (LH-5
   no lugar da LH-4) passa verde, e a LH-4 só se defendeu com um Check próprio no I1. Fail-open: o
@@ -99,7 +99,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **O `kaizen_reminder` diz a frase de repo-alvo quando roda de um worktree do kit** —
-  `bin/sdd:10327` (`kit_id`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
+  `bin/sdd:10355` (`kit_id`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
   compara o `--show-toplevel` de `$SDD_HOME` com o `$REPO_ROOT`, e o toplevel é por worktree. Do
   worktree, o `sdd` do checkout principal imprime "N mission(s) of this repo … The kaizen judge
   counts them" no lugar da frase do kit. Direção: o mesmo `ledger_repo_root` dos dois lados, e
@@ -107,7 +107,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-planner` na missão `20261003-lote-3-a-catraca-desce` (2026-10-03)
 
 - [ ] **Uma sessão escreve o ledger com o `bin/sdd` que tinha em MEMÓRIA ao ser lançada** —
-  `bin/sdd:4486` (`autonomy_session_row`) — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4
+  `bin/sdd:4514` (`autonomy_session_row`) — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4
   rodadas com `turns` nulo), e o ledger não distingue "medido nulo" de "não medido": fail-open de leitura. O
   `.sdd/config.sh` tem o mesmo defeito (`bin/sdd:147`, `source` único): o `TEST_CMD` consertado a meio do run não vale,
   e o EXEC da SQ-141 queimou 4 retries (~US$ 5,90) num gate insatisfazível. Direção: o `sdd run` avisar quando `bin/sdd`

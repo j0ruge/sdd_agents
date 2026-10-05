@@ -835,6 +835,18 @@ mut_QA_report_no_fallback() {
   sed -i '/^mission_qa_report() {/,/^}/ s@|| \[ -z "\$(git -C "\$REPO_ROOT" rev-list -n 1 HEAD --not@|| [ -z "x$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not@' "$1"
 }
 
+# #179, ADR 0015 §3: a report at the base tip counts only when the base commit that ADDED it
+# carries THIS mission's handoff dir. Widened to ANY mission's dir, another mission's squash — which
+# carries its own — passes for this one's, and the fail-open of ADR 0013 is back.
+mut_QA_report_tip_any_mission() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s@-- "\$HANDOFF_DIR/\$MISSION/" 2>/dev/null@-- "$HANDOFF_DIR/" 2>/dev/null@' "$1"
+}
+# The other direction: refusing every report the base tip holds, without asking who added it, is
+# the shape ADR 0013 refused — it takes from a squash-merged mission its own report.
+mut_QA_report_tip_refused_outright() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s@^    add=""$@    return 1@' "$1"
+}
+
 # Anchor 3 goes back to counting EVERY open bug, whatever its genre. That is the state the kit was
 # in until 20260826-o-laco-da-qa: a bug whose fix is a product decision blocked the QA phase, and
 # no agent in the pipeline was allowed to write the `Status:` line that would unblock it — 7 of
@@ -5718,6 +5730,8 @@ CATALOG=(
   QA_report_status_quoted
   QA_report_log_quoted
   QA_report_no_fallback
+  QA_report_tip_any_mission
+  QA_report_tip_refused_outright
   QA_bug_genre_ignored
   QA_bug_genre_prefix
   QA_bug_genre_anywhere

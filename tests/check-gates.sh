@@ -1242,6 +1242,60 @@ cp "$SDD_STATE_FIX/qa-nobase-config.sh" .sdd/config.sh
 git branch -q -D qa-orphan-base
 rm -f "$FIX/docs/qa/reports/2026-01-12-fixture-ignored.md"
 sed -i '/2026-01-12-fixture-ignored/d' "$FIX/.git/info/exclude"
+# (h) A report that landed on the base AFTER the fork, brought from the base tip: new to the
+#     merge-base, so it counted (the residue ADR 0013 declared; reproduced in a scratch repo by the
+#     lote-4 gemba). The question is structural since ADR 0015 §3: the base commit that ADDED the
+#     path carries THIS mission's handoff dir? Another mission's squash carries ITS own dir, and
+#     the mission's own squash, read from its branch after a fetch, carries this one — the world
+#     right below is the control, and the two differ in nothing else.
+qa_tip_main="$(git rev-parse main)"
+git checkout -q main
+mkdir -p "$FIX/docs/handoffs/20260102-other"
+printf 'other mission\n' > "$FIX/docs/handoffs/20260102-other/checkpoint-notas.md"
+cat > "$FIX/docs/qa/reports/2026-01-13-fixture-other.md" <<'EOF'
+# QA Run Report — 2026-01-13 — another mission, squash-merged after the fork
+- **Started:** 2026-01-13T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "another mission (squash)" >/dev/null
+git checkout -q missao/qa-report-owner
+git checkout main -- docs/qa/reports/2026-01-13-fixture-other.md
+qa_refused "another mission's report staged from the base tip is not the mission's"
+git commit -qm "chore: the mission brings another mission's report from the base tip" >/dev/null
+qa_tip_other_floor="$(git cat-file -e main:docs/qa/reports/2026-01-13-fixture-other.md && echo tip)/$(git cat-file -e "$(git merge-base HEAD main):docs/qa/reports/2026-01-13-fixture-other.md" 2>/dev/null && echo base || echo new)"
+qa_tip_other="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+git reset -q --hard HEAD~1
+git branch -q -f main "$qa_tip_main"
+# The control: THIS mission's own report, squash-merged into the base and read from the branch.
+# The squash carries the mission's handoff dir, as every squash of a mission does (its checkpoint
+# moves with every increment; 9 of 9 sdd-mission reports on sales_quote's develop, 2026-10-04).
+printf 'own squash\n' >> "$MDIR/checkpoint-notas.md"
+cat > "$FIX/docs/qa/reports/2026-01-14-fixture-own.md" <<'EOF'
+# QA Run Report — 2026-01-14 — the mission's own, squash-merged
+- **Started:** 2026-01-14T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "chore: the mission's own report" >/dev/null
+git checkout -q main
+git merge -q --squash missao/qa-report-owner >/dev/null
+git commit -qm "the mission (squash)" >/dev/null
+git checkout -q missao/qa-report-owner
+qa_tip_own_floor="$(git cat-file -e main:docs/qa/reports/2026-01-14-fixture-own.md && echo tip)/$(git cat-file -e "$(git merge-base HEAD main):docs/qa/reports/2026-01-14-fixture-own.md" 2>/dev/null && echo base || echo new)"
+qa_tip_own="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+git reset -q --hard HEAD~1
+git branch -q -f main "$qa_tip_main"
+# FLOOR: both reports sit at the base tip AND are new to the merge-base, or neither world asks the
+# question the rule is about.
+assert_eq "both reports sit at the base tip and are new to the merge-base, so the worlds ask the tip question" \
+  "tip/new tip/new" "$qa_tip_other_floor $qa_tip_own_floor"
+# ⭐ DIFFERENTIAL: one shape, one question apart. Refusing every report at the tip passes the first
+# half and fails the second; asking nothing passes the second and fails the first.
+assert_eq "a report from the base tip counts only when the commit that added it carries this mission dir" \
+  "QA|REVIEW" "$qa_tip_other|$qa_tip_own"
 
 # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, as the fixture above.
 # First UNCOMMITTED — the skill may leave the report in the tree when the gate reads it — then
