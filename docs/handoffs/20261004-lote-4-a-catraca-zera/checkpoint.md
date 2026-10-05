@@ -1,6 +1,6 @@
 ---
 missao: 20261004-lote-4-a-catraca-zera
-atualizado: 2026-10-05 01:45
+atualizado: 2026-10-05 01:55
 ---
 
 # Checkpoint — Lote 4: a catraca zera
@@ -50,7 +50,7 @@ atualizado: 2026-10-05 01:45
 | I11 | MEC: kaizen_reminder num worktree do kit | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    reminder: a linked worktree of the kit answers with the kit sentence' <<< "$o"` → `1` | done | efb5db1 |
 | I12 | #67: agents/ na chave do carimbo | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    stamp-key: a commit touching only agents/ moves the key' <<< "$o"` → `1` | done | f05aa7a |
 | I13 | #142+#198a: o sdd run para no carimbo | `o=$(bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    run stops at the stamp' -e '^  ok    gate_PR: the mutation stamp is demanded only where the catalogue lives' <<< "$o"` → `4` | done | bee7a63 |
-| I14 | #142+#198b: o publisher não roda o health | `o=$(bash tests/check-hat.sh 2>&1); grep -c -e '^  ok    hat: the publisher never runs the stamp' -e '^  ok    hat: and the stamp is no reason for the publisher' -e '^  ok    hat: and the PR body carries the order' <<< "$o"` → `3` | pending | — |
+| I14 | #142+#198b: o publisher não roda o health | `o=$(bash tests/check-hat.sh 2>&1); grep -c -e '^  ok    hat: the publisher never runs the stamp' -e '^  ok    hat: and the stamp is no reason for the publisher' -e '^  ok    hat: and the PR body carries the order' <<< "$o"` → `3` | done | fd05345 |
 | I15 | #129a: runner_sha em toda linha do ledger | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    ledger: every row carries the launch-time runner' <<< "$o"` → `1` | pending | — |
 | I16 | #129b: o config relido no topo de cada volta | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    config: the next lap runs the edited TEST_CMD' <<< "$o"` → `1` | pending | — |
 | I17 | os dois leitores aprendem o evento `manual` | `o=$(env -u CLAUDECODE TMPDIR=/tmp bash tests/check-kaizen.sh 2>&1; env -u CLAUDECODE TMPDIR=/tmp bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    guard: a manual row mints no version' -e '^  ok    the human reader names the manual row' <<< "$o"` → `2` | pending | — |
