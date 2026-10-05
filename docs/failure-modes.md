@@ -862,7 +862,8 @@ answers `suite green`, which makes the refusal look like a lie. It is not.
 **Cause:** the catalogue is opt-in — `TEST_CMD` does not run it — so no gate before this one has
 measured whether the suite's assertions still bite. The `PR` gate therefore demands the **artifact**
 `sdd health` leaves behind: a stamp keyed on the **tracked** content of `bin/ tests/ templates/
-config/`, minus the backlog ratchet `tests/health-baseline.txt` (ADR 0014). Three states produce
+config/ agents/` (`agents/` since ADR 0015 §1), minus the backlog ratchet
+`tests/health-baseline.txt` (ADR 0014). Three states produce
 this message and only the first is common:
 
 - **nothing was ever stamped** on this tree, or the last stamp was for other content — the ordinary
@@ -937,7 +938,7 @@ them, not what ends the work.
 3. wait for all of them to post — a bot that is silent has not necessarily finished, and one that
    reports a quota limit has not reviewed at all, which is a coverage gap rather than an approval;
 4. verify and fix everything in **one** pass;
-5. run `./bin/sdd health` **once**, after the last commit that touches the four stamped directories;
+5. run `./bin/sdd health` **once**, after the last commit that touches the five stamped directories;
 6. resolve the threads and merge.
 
 Two things that keep the rule from becoming folklore:

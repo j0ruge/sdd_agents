@@ -306,13 +306,16 @@ hat_promise_probes() {
 command_approval_probes() {
   local cmd="$ROOT/commands/sdd-plan.md" sec
   sec="$(awk '/^## When the artifacts exist/{s=1; next} s && /^## /{s=0} s' "$cmd")"
-  if grep -q 'AskUserQuestion' <<< "$sec" \
+  # The plan is SHOWN before the question (CodeRabbit review of PR #222): a YES to a plan nobody put
+  # in front of the human approves what the relay summarised, not what the gates will run.
+  if grep -qF 'first show the human what they are approving' <<< "$sec" \
+     && grep -q 'AskUserQuestion' <<< "$sec" \
      && grep -qE '^ *- \*\*YES\*\* .*sdd approve <mission>' <<< "$sec" \
      && grep -qE '^ *- \*\*NO\*\*' <<< "$sec" \
      && grep -qF "Only the human's answer to that question approves" <<< "$sec"; then
     pass "command: /sdd-plan asks the human YES or NO before it runs sdd approve"
   else
-    fail "command: /sdd-plan no longer asks YES or NO before sdd approve, or lost the rule that only the human's answer approves"
+    fail "command: /sdd-plan no longer shows the plan and asks YES or NO before sdd approve, or lost the rule that only the human's answer approves"
   fi
 }
 

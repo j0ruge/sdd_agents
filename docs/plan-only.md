@@ -120,9 +120,9 @@ shape. Recreating them is one command, named in the target's `CLAUDE.md`.
 
 ## The `CLAUDE.md` block for a target repository
 
-Pointer, not recipe — the recipe is this file. Write it in the target's `OUTPUT_LANG`; the
-English version is below, and the file names and the `aprovacao:` key stay as they are, because
-they are contract:
+Pointer, not recipe — the recipe is this file. Write it in the target's `OUTPUT_LANG`, with the
+kit's path on that machine in place of `~/repos/sdd_agents`; the English version is below, and the
+file names and the `aprovacao:` key stay as they are, because they are contract:
 
 ```markdown
 ## Mission planning (the `sdd` kit)
@@ -135,8 +135,8 @@ self-contained) and `checkpoint.md` (the increment table, **read by a machine**)
 - Validate the plan without spending a session: `sdd why <mission> PLAN`.
 - Approve: `sdd approve <mission>` — **never** edit `aprovacao:` by hand.
 
-The kit lives in `~/repos/sdd_agents`, and the full recipe is its
-[`docs/plan-only.md`](file:///home/joruge/repos/sdd_agents/docs/plan-only.md). The agents in
+The kit lives in `~/repos/sdd_agents`, and the full recipe is its `docs/plan-only.md`
+(`~/repos/sdd_agents/docs/plan-only.md`). The agents in
 `.claude/agents/sdd-*.md` are symlinks into the kit and are **not** versioned: in a fresh clone,
 run `sdd install && sdd-link-agents`.
 ```
