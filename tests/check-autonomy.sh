@@ -5912,6 +5912,26 @@ assert_eq "config: the next lap runs the edited TEST_CMD, drops a key deleted fr
   "launch:yes edited:yes deleted-hook:no env-hook:yes" \
   "launch:$(cfg_has "$CFG_FILE_MARKS" launch) edited:$(cfg_has "$CFG_FILE_MARKS" edited) deleted-hook:$(cfg_has "$CFG_FILE_MARKS" file-hook) env-hook:$(cfg_has "$CFG_ENV_MARKS" env-hook)"
 
+# A key the file declares `readonly` cannot be put back by the reload. Found by the final review of
+# the lot, reproduced: lap 1 died on bash's own `unset: …: readonly variable`, rc 1, where the first
+# and only load_config used to take the file. The run still stops — the schema says assignments
+# only — but with the runner's sentence naming the key, never bash's. The control is the same world
+# without `readonly`, whose dry-run passes: the refusal is about the word, not about the key.
+echo "== config: a key declared readonly stops the run with the runner's sentence =="
+ro_says() {    # ro_says <dir> <config line> — rc, the runner's sentence, bash's own
+  local rc=0 out
+  kitguard_world "$1" "$ROOT"
+  printf '%s\n' "$2" >> "$1/.sdd/config.sh"
+  git -C "$1" commit -qam "chore: one more key" >/dev/null 2>&1
+  out="$( cd "$1" && "$SDD" run "$MISSION" --dry-run 2>&1 )" || rc=$?
+  printf 'rc:%s named:%s raw:%s' "$rc" "$(grep -c 'MODEL_EXEC is declared readonly' <<< "$out")" \
+    "$(grep -c 'unset: MODEL_EXEC' <<< "$out")"
+}
+assert_eq "config: a readonly key stops the run with a sentence that names it, and a plain one passes" \
+  "rc:1 named:1 raw:0|rc:0 named:0 raw:0" \
+  "$(ro_says "$OUTSIDE/config-readonly" 'readonly MODEL_EXEC="opus"')|$(ro_says "$OUTSIDE/config-plain" 'MODEL_EXEC="opus"')"
+: > "$LEDGER"
+
 # The record is written AFTER the fact, often after the merge (the PR of the motivating case was
 # published by hand), so the human runs it from the base. Found by the final review of the lot,
 # reproduced: the command moved the checkout to the spent mission branch, committed the note there

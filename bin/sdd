@@ -8120,9 +8120,15 @@ config_env_snapshot() {
 # launch value (the mission branch off DEFAULT_BRANCH, MISSION_DIR off HANDOFF_DIR); an edit made
 # DURING a session reaches the gate of the NEXT lap, not the gate right after that session nor its
 # inline retry; `sdd retry`, `sdd close` and `sdd kaizen` read the config once, as before.
+# A key the file declared `readonly` cannot be put back, so it stops the run here with a sentence
+# that names it (found by the final review of 20261004-lote-4-a-catraca-zera: lap 1 died on bash's
+# own `unset: …: readonly variable`). The probe is a subshell, so the real unset below never fails.
 config_reload() {
   local k
   for k in "${CONFIG_RELOAD_KEYS[@]}"; do
+    if [ -n "${!k+x}" ] && ! ( unset "$k" ) 2>/dev/null; then
+      die "config: $k is declared readonly in .sdd/config.sh, and sdd run puts every key back before it re-reads the file on each lap — drop the readonly (the file holds assignments only, config/schema.md)"
+    fi
     if [ -n "${CONFIG_ENV_VALUES[$k]+x}" ]; then printf -v "$k" '%s' "${CONFIG_ENV_VALUES[$k]}"
     else unset "$k"; fi
   done

@@ -1286,6 +1286,12 @@ mut_RUN_config_reload_keeps_deleted() {
 mut_RUN_config_reload_drops_env() {
   sed -i '/^config_reload() {/,/^}/ s@if \[ -n "\${CONFIG_ENV_VALUES\[\$k\]+x}" \]; then@if false; then@' "$1"
 }
+# The reload forgets that a key can be readonly: the run dies on bash's own `unset` error instead of
+# a sentence naming the key. Caught by `config: a readonly key stops the run with a sentence that
+# names it, …` in check-autonomy.sh, its `named:`/`raw:` terms.
+mut_RUN_config_reload_readonly_raw() {
+  sed -i '/^config_reload() {/,/^}/ s@if \[ -n "\${!k+x}" \] && ! ( unset "\$k" ) 2>/dev/null; then@if false; then@' "$1"
+}
 
 # The stamp stop goes away (#142, #198; ADR 0015 §1): with the PR open and only the stamp missing,
 # `sdd run` buys a publisher session that cannot write the stamp. Caught by `run stops at the stamp:
@@ -5812,6 +5818,7 @@ CATALOG=(
   RUN_config_not_reloaded
   RUN_config_reload_keeps_deleted
   RUN_config_reload_drops_env
+  RUN_config_reload_readonly_raw
   PR_stamp_key_reads_ignored
   PR_stamp_key_partial_on_deleted
   PR_stamp_why_deleted_blind
