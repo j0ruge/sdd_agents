@@ -18,9 +18,10 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > ```
 >
 > **A âncora é medida.** O primeiro caminho depois do título nomeia um arquivo deste repositório, e
-> uma crase da cabeça (4+ caracteres, o `<símbolo>`) ocorre nesse arquivo a até 10 linhas da linha —
-> em qualquer ponto dele para `:1` ou sem linha. Nenhuma linha física da seção aberta passa de 120
-> caracteres. ([ADR 0011 do kit sdd](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
+> o `<símbolo>` entre parênteses logo depois dele é **obrigatório**: uma crase de 4+ caracteres que
+> ocorre nesse arquivo a até 10 linhas da linha — em qualquer ponto dele para `:1` ou sem linha. É a
+> única crase medida, e a que o relatório de âncora fora do alvo nomeia. Nenhuma linha física da
+> seção aberta passa de 120 caracteres. ([ADR 0011 do kit sdd](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
 > **Registro decidido** — uma linha física, sem caixa, apontando a evidência:
 >
