@@ -1,6 +1,6 @@
 ---
 missao: 20261004-lote-4-a-catraca-zera
-atualizado: 2026-10-05 00:59
+atualizado: 2026-10-05 01:11
 ---
 
 # Checkpoint — Lote 4: a catraca zera
@@ -47,7 +47,7 @@ atualizado: 2026-10-05 00:59
 | I8 | #92b+#93: o planner mede o vermelho; critério d e regra de redação | `o=$(bash tests/check-checkpoint.sh 2>&1); a=$(grep -c '^  ok    the planner agent teaches the --red run before PLAN-AUTO' <<< "$o"); t=$(bash tests/check-templates.sh 2>&1); b=$(grep -c '^  ok    missao.md: PLAN-AUTO criterion d cites the --red run' <<< "$t"); cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md && m=same; echo "$a $b ${m:-diff}"` → `1 1 same` | done | ee5c550 |
 | I9 | #95: o starter.conf sugere o lint do TODO.md no TEST_CMD | `o=$(bash tests/check-preflight.sh 2>&1); a=$(grep -c '^  ok    the TODO.md lint the starter suggests runs as a TEST_CMD' <<< "$o"); b=$(awk '/check-todo[.]sh. --check/{c++} END{print c+0}' config/starter.conf); c=$(awk '/Opt-in: the .TODO[.]md. lint inside .TEST_CMD./{c++} END{print c+0}' config/schema.md); echo "$a $b $c"` → `1 1 1` | done | ef1bc82 |
 | I10 | #134: ADRs 0003/0004/0006 ganham Spec:, 11 missões adr: none, ADR_CHECK=block | `o=$(env -u CLAUDECODE ./bin/sdd adr check 2>/dev/null); a=$(grep -c 'have no decided' <<< "$o"); b=$(grep -c '^  ok    ADR_CHECK=block, ' <<< "$o"); c=$(awk '/^Spec: docs[/]handoffs[/]/{c++} END{print c+0}' docs/adr/0003-judge-axis-evidence-from-target-repos.md docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md docs/adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md); echo "$a $b $c"` → `0 1 3` | done | 7cb9328 |
-| I11 | MEC: kaizen_reminder num worktree do kit | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    reminder: a linked worktree of the kit answers with the kit sentence' <<< "$o"` → `1` | pending | — |
+| I11 | MEC: kaizen_reminder num worktree do kit | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    reminder: a linked worktree of the kit answers with the kit sentence' <<< "$o"` → `1` | done | efb5db1 |
 | I12 | #67: agents/ na chave do carimbo | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    stamp-key: a commit touching only agents/ moves the key' <<< "$o"` → `1` | pending | — |
 | I13 | #142+#198a: o sdd run para no carimbo | `o=$(bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    run stops at the stamp' -e '^  ok    gate_PR: the mutation stamp is demanded only where the catalogue lives' <<< "$o"` → `4` | pending | — |
 | I14 | #142+#198b: o publisher não roda o health | `o=$(bash tests/check-hat.sh 2>&1); grep -c -e '^  ok    hat: the publisher never runs the stamp' -e '^  ok    hat: and the stamp is no reason for the publisher' -e '^  ok    hat: and the PR body carries the order' <<< "$o"` → `3` | pending | — |
