@@ -1041,7 +1041,14 @@ mut_QA_bug_deferred_decision_fenced() {
 # PLURAL: `## Decisions for a Human` — the qa-execution skill's heading for questions still open —
 # reads as the decision again, through the shared eight-byte prefix.
 mut_QA_bug_deferred_decision_plural() {
-  sed -i '/^bug_decision_recorded() {/,/^}/ s|/^## Decis/ \&\& !/^## Decisions/|/^## Decis/|' "$1"
+  sed -i '/^bug_decision_recorded() {/,/^}/ s@/^## Decis/ \&\& !/^## Decis(ions|oes|\\303\\265es)/@/^## Decis/@' "$1"
+}
+# The pt-BR half of the plural refusal (final review of the lote 5): only the English plural is
+# refused again, so `## Decis\303\265es pendentes` and `## Decisoes pendentes` read as the decision
+# and a deferred bug with only an open question passes. Dies on `the pt-BR plural decision headings
+# are pending questions too` in check-gates.sh.
+mut_QA_bug_deferred_decision_plural_english_only() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s@!/^## Decis(ions|oes|\\303\\265es)/@!/^## Decisions/@' "$1"
 }
 # ENGLISH_ONLY, the fail-closed direction: the whole English word instead of the ASCII prefix, and
 # every pt-BR heading the targets wrote (tilde or `## Decisao`) stops counting. Dies on `the pt-BR
@@ -6030,6 +6037,7 @@ CATALOG=(
   QA_bug_deferred_undecided_unnamed
   QA_bug_deferred_decision_fenced
   QA_bug_deferred_decision_plural
+  QA_bug_deferred_decision_plural_english_only
   QA_bug_deferred_decision_english_only
   QA_e2e_red_never_probed
   QA_app_down_on_unknown

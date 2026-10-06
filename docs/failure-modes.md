@@ -503,7 +503,8 @@ not block, and — unlike `human` — the gate's passing reason **names it on ev
 (`N deferred (visible, not blocking): BUG-a`), so the debt stays in front of whoever runs
 `sdd status`. Marking it requires the decision to be written in the bug's own body; *"not now"* with
 nothing recorded is `agent`, and since #232 the gate reads it that way: with no `## Decis…` heading
-outside a fence (`## Decisions for a Human` is an open question and does not count), the bug blocks
+outside a fence (the plurals — `## Decisions for a Human`, and the pt-BR `## Decisoes …` with or without its
+tilde — are open questions and do not count), the bug blocks
 and the reason names it (`… with no '## Decision' section in the body count as agent: BUG-…`). Using `human` for this is what SQ-129 did, and the swap back became a
 manual increment of the next mission.
 

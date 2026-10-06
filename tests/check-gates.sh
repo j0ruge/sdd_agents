@@ -1118,6 +1118,18 @@ write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' 
 genre_decision_pending="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "a '## Decisions for a Human' heading is a pending question, not the decision: the bug blocks" \
   "REVIEW|QA" "$genre_decided|$genre_decision_pending"
+# The same question in pt-BR (final review of 20261006-lote-5-o-que-o-lote-4-deixou): a pt-BR session
+# translates that heading, and `## Decis\303\265es pendentes` or `## Decisoes pendentes` open
+# with the same eight bytes. Without them in the refusal the plural read as decided and `deferred`
+# passed — the fail-open #232 closed, by another spelling. Octal bytes, as in the tilde world above.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decis\303\265es pendentes\n\n- Does another mission pay for it?')"
+genre_decision_pending_tilde="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decisoes pendentes\n\n- Does another mission pay for it?')"
+genre_decision_pending_ascii="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the pt-BR plural decision headings are pending questions too: with or without the tilde, the bug blocks" \
+  "REVIEW|QA|QA" "$genre_decided|$genre_decision_pending_tilde|$genre_decision_pending_ascii"
 
 # TWO deferred bugs at once, which is the only regime that exercises the JOIN. Every probe above
 # holds exactly one, and `deferred_names="${deferred_names:+$deferred_names, }${bugname%.md}"` is

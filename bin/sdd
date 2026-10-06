@@ -1534,7 +1534,9 @@ placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit p
 # heading with a tilde (`## Decis\303\243o`, octal bytes, alone or followed by a date or a name) as
 # well as `## Decisao` and `## Decision` — eight ASCII bytes are what every one of them shares. The
 # plural is refused BY NAME: `## Decisions for a Human` is the qa-execution skill's heading for
-# questions still open, the opposite of a decision, and it opens with the same eight bytes.
+# questions still open, the opposite of a decision, and it opens with the same eight bytes — and so
+# do the pt-BR plurals a pt-BR session translates it into, `## Decis\303\265es` and `## Decisoes`
+# (final review of the lote 5: refusing the English one alone left them reading as decided).
 # Fence state for the genre extractor's reason: a bug filed about this rule quotes the heading. The
 # variable is `infence` and not `fenced` so QA_bug_genre_fenced, whose sed has no function range,
 # keeps sabotaging the extractor alone.
@@ -1546,7 +1548,7 @@ bug_decision_recorded() {
   awk '
     /^[[:space:]]*(```|~~~)/ { infence = !infence; next }
     infence { next }
-    /^## Decis/ && !/^## Decisions/ { found = 1; exit }
+    /^## Decis/ && !/^## Decis(ions|oes|\303\265es)/ { found = 1; exit }
     END { exit !found }
   ' "$1"
 }
