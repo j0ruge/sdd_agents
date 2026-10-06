@@ -50,3 +50,4 @@
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
 - 2026-10-06 03:15 · `PLAN` · `--red` sobre este checkpoint: 11 pending Check(s), every one red at HEAD (03:00–03:15); teste de autocontenção "sim, com ressalvas", ressalvas fechadas no plano
+- 2026-10-06 09:25 · `PLAN` · decisão humana pós-aprovação ("Investiga E melhore", retro do planejamento): I12 entra fora dos 12 achados — o `/sdd-plan` commita o que o `sdd approve` deixa e o relay segura mensagem que não é resposta; feito em `5df5176` pela sessão do relay antes do I1, suíte verde (351 s)

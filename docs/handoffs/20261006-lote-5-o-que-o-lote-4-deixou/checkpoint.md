@@ -1,6 +1,6 @@
 ---
 missao: 20261006-lote-5-o-que-o-lote-4-deixou
-atualizado: 2026-10-06 03:00
+atualizado: 2026-10-06 09:24
 ---
 
 # Checkpoint — Lote 5: o que o lote 4 deixou
@@ -59,6 +59,7 @@ atualizado: 2026-10-06 03:00
 | I9 | #234: o supervisor nomeia quem segura o checkout; turn_rule de toda fase | `a=$(bash tests/check-dry-run.sh 2>&1); b=$(bash tests/check-coordination.sh 2>&1); grep -c -e '^  ok    every projected phase is told a background process holds the run' -e '^  ok    a process the worker leaves behind is named once' -e '^  ok    a hook.s straggler is waited for in silence' <<< "$a"$'\n'"$b"` → `3` | pending | — |
 | I10 | #235: o /sdd-plan no próprio kit usa worktree ligado (ADR 0016 §2) | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan moves a mission of the kit sdd runs from into a linked worktree before writing it' <<< "$o"` → `1` | pending | — |
 | I11 | Fecho: RESOLVED by nos 12, ADR 0016 aceita, glossário, drift, KAIZEN_LOG, handoff, suíte | `a=$(awk '/<!-- sdd:open -->/{o=1} /<!-- sdd:decided -->/{o=0} o && /RESOLVED by/{n++} END{print n+0}' TODO.md); b=$(awk '/^## .* — Lote 5: o que o lote 4 deixou/{c++} END{print c+0}' KAIZEN_LOG.md); c=$(awk '/Amended by.*0016/{n++} END{print n+0}' docs/adr/0015-the-stamp-is-not-headless.md); d=$(awk '/^- [*][*]Status[*][*]: accepted/{n++} END{print n+0}' docs/adr/0016-the-mission-checkpoint-and-the-kit-worktree.md); f=$(awk 'END{print (NR>0)}' docs/handoffs/20261006-lote-5-o-que-o-lote-4-deixou/20-handoff-exec.md 2>/dev/null); echo "$a $b $c $d ${f:-0}"` → `12 1 1 1 1` | pending | — |
+| I12 | /sdd-plan: commit do que o sdd approve deixa; o relay segura mensagem que não é resposta | `o=$(bash tests/check-hat.sh 2>&1); grep -c -e '^  ok    command: /sdd-plan commits what sdd approve leaves behind' -e '^  ok    command: /sdd-plan holds a relay message until the next answer' <<< "$o"` → `2` | done | 5df5176 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele

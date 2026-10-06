@@ -1570,6 +1570,61 @@ Mede 0 antes e 1 depois.
 
 **Reversível por:** reverter os commits do fecho.
 
+### I12 — o `/sdd-plan` commita o que o `sdd approve` deixa, e o relay segura a mensagem que não é resposta
+
+**Origem:** entrou depois da aprovação, por pedido do humano na retro da sessão de planejamento
+("Investiga E melhore", 2026-10-06). Já está **feito**: `5df5176`, executado pela sessão do relay antes
+do I1. Não tem item no `TODO.md`, porque foi consertado antes de ser registrado, então o I11 não lhe
+deve `RESOLVED by`.
+
+**Medido:**
+- O `cmd_approve` commita `paths=( "$mission_rel" )` mais o arquivo do `adr:`, e mais nada. O
+  `HAT_WRITES_BASE` (`bin/sdd`, `'$TODO_FILE, tests/health-baseline.txt'`) abre esses dois caminhos a
+  todo chapéu, o planner incluído. Depois do `sdd approve` deste lote, `git status --short` deu
+  ` M TODO.md` (#235 e #236), com a catraca ainda em 11. Foi commitado à mão em `9e7400b`. Os lotes 3
+  e 4, que saíram `auto`, commitaram o plano à mão (`0e5a208`, `6c628be`).
+- O planner termina todo turno com uma pergunta (`agents/sdd-planner.md`, parágrafo do relay). Uma
+  mensagem do relay só com o número da #235 o retomou, e ele reenviou as perguntas 4 e 5 com a
+  recomendada da 5 trocada (de "§1 + §2" para "só §1"), depois de o humano já ter respondido à
+  primeira versão.
+
+**O quê** (`commands/sdd-plan.md`, inglês):
+- "## Relaying the grill to the human": a resposta nomeia a opção pelo texto, nunca pela posição.
+  Bullet novo, "Nothing else resumes the planner while a question is pending": a mensagem que não
+  responde nada espera e vai junto com a próxima resposta.
+- "## When the artifacts exist": o passo 2 e o YES do passo 3 seguem para o passo 4 novo, "What
+  `sdd approve` does not commit":
+  - `git status --porcelain -- <HANDOFF_DIR>/<mission> <TODO_FILE> tests/health-baseline.txt`;
+  - na branch da missão, commit por caminho (nunca `-a`), com os achados num commit próprio que move
+    a linha `todo-findings` da catraca no mesmo diff;
+  - fora dela, nenhum commit, e os caminhos são nomeados ao humano.
+- `tests/check-hat.sh`: `command_relay_probes`, depois de `command_approval_probes`, chamada na lista
+  de topo. Lê as duas seções, não o arquivo inteiro.
+
+**Passada de sabotagem:** 6 de 6 vermelhos:
+1. o título do passo 4;
+2. os dois caminhos dentro do `git status`;
+3. `todo-findings`;
+4. "commit nothing";
+5. "by the option's text, never by its position";
+6. "Nothing else resumes the planner…".
+
+A 1ª versão do probe aceitava `tests/health-baseline.txt` em qualquer lugar da seção, onde ele
+aparece três vezes, e sobreviveu à remoção do caminho de dentro do `git status`. O probe passou a
+exigir os dois caminhos no próprio comando.
+
+**Check:**
+`` `o=$(bash tests/check-hat.sh 2>&1); grep -c -e '^  ok    command: /sdd-plan commits what sdd approve leaves behind' -e '^  ok    command: /sdd-plan holds a relay message until the next answer' <<< "$o"` → `2` ``.
+Mede 0 antes (os dois `FAIL`) e 2 depois. A suíte inteira ficou verde no commit: 351 s, e as âncoras
+dos 619 mutantes aplicam.
+
+**Interação com o I10:** o I10 acrescenta `command_worktree_probes` no mesmo ponto do
+`check-hat.sh` e na mesma lista de topo. Os números de linha que ele cita (`:306`, `:512`) andaram com
+o I12, então ancore pelos nomes das funções. O I10 renumera "## Before anything else", e o I12 não
+toca essa seção. A anatomia e o `CONTEXT.md` não mudam: é prosa do comando e o probe dela.
+
+**Reversível por:** reverter `5df5176`.
+
 ## Depois do checkpoint (sem incremento; decisão 9)
 
 1. **Push e PR** contra `main`, a partir do worktree. O corpo do PR leva:
