@@ -525,6 +525,30 @@ mut_EXEC_pipeless_reads_past_the_table() {
   sed -i '/^checkpoint_rows()/,/^}/ s@/\^\[ \\t\]\*\$/ { tbl = 0 }@/^[ \\t]*$/ { }@' "$1"
 }
 
+# Issue #224: a `|`-led row with fewer than five cells is dropped again, and the pending increment it
+# carries vanishes from checkpoint_tally — gate_EXEC passes over it to QA. Caught by `a pending row
+# with fewer than five cells keeps the phase in EXEC` in check-gates.sh.
+mut_EXEC_short_row_skipped() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@if (n < 6) { if (!wide || bare) next; @if (n < 6) { next; @' "$1"
+}
+# The other direction: every block counts as the checkpoint table, so a narrow table elsewhere in
+# the file is padded into increments with no Status and gate_EXEC refuses a finished checkpoint.
+# Caught by the control beside it, `a narrow table below the checkpoint's is no increment`.
+mut_EXEC_short_row_reads_narrow_table() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@if (first) wide = (n >= 6)@if (first) wide = 1@' "$1"
+}
+# A short line with no leading pipe is padded too, so prose glued to the table that only quotes a
+# pipe becomes an increment with no Status and gate_EXEC refuses a finished checkpoint. Caught by
+# `prose glued to the table that quotes a pipe is no increment`.
+mut_EXEC_short_row_reads_glued_prose() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@if (!wide || bare) next;@if (!wide) next;@' "$1"
+}
+# The padded row is refused, but as `invalid status ''` — a status nobody wrote — instead of by the
+# missing cell. Caught by `the row with fewer than five cells is refused by name`.
+mut_GATE_EXEC_empty_status_unnamed() {
+  sed -i "/^gate_EXEC() {/,/^}/ s@^      '') GATE_EXEC_CELL=1\$@      __never__) GATE_EXEC_CELL=1@" "$1"
+}
+
 # The reviewer's increments vanish from the checkpoint: checkpoint_rows skips every `R<n>` row, so a
 # round that found something hands nothing to EXEC and the B review keeps the ball in REVIEW — the
 # REVIEW⇄EXEC loop of `20260901-o-revisor-so-acha` silently cut. Issue #111 measured that only two
@@ -5714,6 +5738,10 @@ CATALOG=(
   EXEC_escaped_pipe_blind
   EXEC_pipeless_row_skipped
   EXEC_pipeless_reads_past_the_table
+  EXEC_short_row_skipped
+  EXEC_short_row_reads_narrow_table
+  EXEC_short_row_reads_glued_prose
+  GATE_EXEC_empty_status_unnamed
   EXEC_rows_blind_to_review_increments
   EXEC_alignment_colon_blind
   EXEC_dirty_tree_as_red

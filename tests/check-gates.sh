@@ -514,6 +514,33 @@ awk -v row="$pipeless_row" -v h="| done | $REAL_HASH |" '{ print } index($0, h) 
 assert_phase "the same line below a blank line is a paragraph, not an increment" "QA"
 mv "$MDIR/checkpoint.pipeless.bak" "$MDIR/checkpoint.md"
 
+# A `|`-led row with FEWER than five cells (issue #224) is a row of the table too: GFM renders the
+# missing cells empty. checkpoint_rows dropped every line under six fields, so `| I2 | … | pending |`
+# vanished from checkpoint_tally and the gate passed over it to QA — the failure c71913c closed
+# for the row with no leading pipe, by another shape. Read as it renders, its Status is empty and
+# the gate refuses it by name. The control is a NARROW table below the checkpoint's own, past a
+# blank line: GFM counts a table's columns by its header, so its rows are no increments — and
+# target checkpoints carry such tables (35 lines in four of them, measured 2026-10-06).
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.short.bak"
+short_row='| I2 | slice two, three cells | pending |'
+awk -v row="$short_row" -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print row }' \
+  "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
+if [ "$(awk -v h="| done | $REAL_HASH |" 'seen { print; exit } index($0, h) { seen = 1 }' "$MDIR/checkpoint.md")" = "$short_row" ]; then
+  pass "fixture: a pending row with three cells sits right below the done row"
+else
+  fail "short-row fixture" "$short_row" "$(cat "$MDIR/checkpoint.md")"
+fi
+assert_phase "a pending row with fewer than five cells keeps the phase in EXEC" "EXEC"
+assert_why   "the row with fewer than five cells is refused by name" "EXEC" "increment I2 has no Status"
+awk -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print ""; print "| File | sha256 |"; print "|---|---|"; print "| db.sql.gz | abc123 |" }' \
+  "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
+assert_phase "a narrow table below the checkpoint's is no increment" "QA"
+# And a short line with no leading pipe stays out: prose glued to the table that only quotes a pipe.
+awk -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print "Never a `|` in the Check cell." }' \
+  "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
+assert_phase "prose glued to the table that quotes a pipe is no increment" "QA"
+mv "$MDIR/checkpoint.short.bak" "$MDIR/checkpoint.md"
+
 # A literal pipe inside a Check cell is spelled `\|` in GFM, and a raw split on "|" cuts the row
 # there — every column after it shifts one to the left, so the Status column is read out of the
 # CHECK cell. The increment is `done` and the gate answers "invalid status", naming a status the

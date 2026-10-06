@@ -207,14 +207,23 @@ surface() {
 # name: GFM makes that pipe optional, the runner reads the row since PR #222, and a reader of
 # `|`-led lines alone skipped it whole — --check never saw it, --red answered 0 over a pending Check
 # it never ran (CodeRabbit review). Below a blank line the same line is a paragraph and stays out.
+#
+# A row with FEWER than five cells is emitted too, with its NF under 6, so the callers refuse it by
+# name (issue #224): GFM renders the missing cells empty, and dropped here it vanished from --check
+# and --red alike. Only inside a table whose HEADER — the first line of the block — has the five:
+# GFM counts a table's columns by its header, and a narrow table elsewhere is no checkpoint table.
+# A short line with no leading pipe stays out: prose glued to the table that quotes a pipe reads as
+# one (build_tree's own template does), and the runner skips it too — DECLARED, no reader refuses
+# a short row written without its leading pipe.
 rows_of() {
   awk -F'|' '
     /^[ \t]*$/ { tbl = 0 }
     { bare = (tbl && /\|/ && !/^[ \t]*\|/) }
     bare { $0 = "|" $0 }
     /^[ \t]*\|/ {
+      if (!tbl) wide = (NF >= 6)
       tbl = 1
-      if (NF < 6) next
+      if (NF < 6 && (!wide || bare)) next
       id = $2; gsub(/^[ \t]+|[ \t]+$/, "", id)
       if (id == "ID" || id ~ /^-+$/ || id == "") next
       status = $5; gsub(/^[ \t]+|[ \t]+$/, "", status)
@@ -251,6 +260,11 @@ scan_file() {
     # a truncation and rule 2 fails open. NF 0 is rows_of's mark for the missing leading pipe.
     if [ "$nf" -eq 0 ]; then
       fail "$label: row $id has no leading '|' — GFM renders it as a row and the runner counts it, but this repo's checkpoints open every row with the pipe"
+      V_COLS=$((V_COLS + 1))
+      continue
+    fi
+    if [ "$nf" -lt 6 ]; then
+      fail "$label: row $id has fewer than five cells — GFM renders the missing ones empty, so the runner reads no Status in it; write all five"
       V_COLS=$((V_COLS + 1))
       continue
     fi
@@ -574,6 +588,10 @@ red_one() { # red_one <checkpoint> — 0 every pending Check is red at HEAD; 1 o
       fail "$label: row $id has no leading '|' — --red refuses the row a reader of '|'-led lines would skip; run --check first"
       bad=$((bad + 1)); continue
     fi
+    if [ "$nf" -lt 6 ]; then
+      fail "$label: row $id has fewer than five cells — --red refuses the row a reader of six fields would skip; run --check first"
+      bad=$((bad + 1)); continue
+    fi
     if [ "$nf" -ne 7 ]; then
       fail "$label: row $id splits into $((nf - 2)) column(s) — --red cannot tell its Status from its Check; run --check first"
       bad=$((bad + 1)); continue
@@ -618,7 +636,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=60
+PROBE_FLOOR=63
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -760,6 +778,19 @@ selftest() {
   printf '\nI2 | slice | `bash tests/run-all.sh` → verde | pending | — |\n' >> "$barepara"
   probe 'a row with no leading pipe is caught, not skipped' 1 "row I2 has no leading '|'" "$bare"
   probe 'the same line below a blank line is a paragraph, not a row' 0 'barepara.md: 1 row(s)' "$barepara"
+  # A `|`-led row with FEWER than five cells is a row too — GFM renders the missing cells empty —
+  # and rows_of dropped every line under six fields, so --check never saw it (issue #224). The
+  # control is a NARROW table below the checkpoint's, past a blank line: GFM counts a table's
+  # columns by its header, and target checkpoints carry such tables, whose rows are no increments.
+  local short="$box/short.md" narrow="$box/narrow.md" short_f0="$FAILS"
+  cp_head "$short"; cp_row "$short" I1 '`bash tests/run-all.sh` → verde'
+  printf '| I2 | slice | pending |\n' >> "$short"
+  cp_head "$narrow"; cp_row "$narrow" I1 '`bash tests/run-all.sh` → verde'
+  printf '\n| File | sha256 |\n|---|---|\n| db.sql.gz | abc123 |\n' >> "$narrow"
+  probe 'a row with fewer than five cells is caught, not skipped' 1 'row I2 has fewer than five cells' "$short"
+  probe 'a narrow table below the checkpoint is no row of it' 0 'narrow.md: 1 row(s)' "$narrow"
+  [ "$FAILS" -eq "$short_f0" ] && \
+    pass 'rule: a row with fewer than five cells is refused by name, a narrow table is not'
 
   # ── the floors and the doc assertions, over real trees ──
   local full="$box/full" small="$box/small" fewrows="$box/fewrows" novoid="$box/novoid"
@@ -1065,6 +1096,11 @@ selftest() {
   printf 'I2 | slice | `echo 1` → `1` | pending | abc1234 |\n' >> "$rf"
   probe 'a pending row with no leading pipe is refused by --red, never skipped' 1 \
     "row I2 has no leading '|'" "$rf" --red
+  # The same for a row with fewer than five cells (issue #224): skipped, --red answered 0.
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 0` → `1`' pending
+  printf '| I2 | slice | `echo 1` → `1` | pending\n' >> "$rf"
+  probe 'a pending row with fewer than five cells is refused by --red, never skipped' 1 \
+    'row I2 has fewer than five cells' "$rf" --red
   cp_head "$nogit/docs/handoffs/m/checkpoint.md"
   cp_row "$nogit/docs/handoffs/m/checkpoint.md" I1 '`echo 0` → `1`' pending
   GIT_CEILING_DIRECTORIES="$box" probe 'a checkpoint outside any repository has no root to run from' \

@@ -569,8 +569,10 @@ checkpoint_rows() {
     # without a blank line is read too: over-reading fails CLOSED — a line that is no increment
     # reads as an invalid status or one more pending, never as a pass.
     /^[ \t]*$/ { tbl = 0 }
-    tbl && /\|/ && !/^[ \t]*\|/ { $0 = "|" $0 }
+    { bare = (tbl && /\|/ && !/^[ \t]*\|/) }
+    bare { $0 = "|" $0 }
     /^[ \t]*\|/ {
+      first = !tbl
       tbl = 1
       # A raw split on "|" cuts a Check cell at its `\|` and shifts every column after it one to
       # the left, so Status is read out of the CHECK cell: an increment written `done` was reported
@@ -584,7 +586,18 @@ checkpoint_rows() {
         if (n > 0 && escaped_pipe(f[n])) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
         else { f[++n] = raw[i] }
       }
-      if (n < 6) next
+      # FEWER than five cells is a row of the table too: GFM renders the missing cells empty
+      # (issue #224). Dropped here, `| I2 | slice | pending |` vanished from checkpoint_tally and
+      # gate_EXEC passed over a pending increment, the failure above by another shape. Read as it
+      # renders, its Status is empty and gate_EXEC refuses it by name. GFM counts the columns of a
+      # table by its HEADER, the first line of the block, so only a table whose header has the
+      # five is read this way: a narrow table elsewhere in the file is no increment, and target
+      # checkpoints carry such tables (35 lines in four of them, measured 2026-10-06). A line
+      # with no leading pipe stays out when short: prose glued to the table that merely quotes a
+      # pipe reads as one (DECLARED: such a line that IS a short row is still skipped). No
+      # apostrophe in this comment: it sits inside the single-quoted awk program.
+      if (first) wide = (n >= 6)
+      if (n < 6) { if (!wide || bare) next; for (i = n + 1; i <= 6; i++) f[i] = "" }
       for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", f[i]) }
       # The Commit cell only: a hash fenced in backticks renders exactly like the bare one, so the
       # human reading the table sees a SHA and the gate saw "`abc1234`", which does not exist —
@@ -1356,6 +1369,10 @@ gate_EXEC() {
       # Valid and nothing to check — the arm exists so the enum stays exhaustive and the `*)` below
       # keeps meaning "not one of the four". Counting them is checkpoint_tally's job, below.
       pending|doing|blocked) ;;
+      # Empty is what a row with fewer than five cells hands over (checkpoint_rows pads it the way
+      # GFM renders it, issue #224): `invalid status ''` would name a status nobody wrote.
+      '') GATE_EXEC_CELL=1
+          GATE_WHY="increment $id has no Status — an empty cell, or a row with fewer than five cells (GFM renders the missing ones empty): write all five, ID | Title | Check | Status | Commit"; return 1 ;;
       *) GATE_EXEC_CELL=1
          GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
     esac
