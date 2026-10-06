@@ -175,7 +175,9 @@ PR no `gh`).
 **Onde mora hoje.** `ensure_mission_branch`, com hashes crus `--no-filters` (sem normalização
 de EOL ou clean filters) e igualdade byte a byte de `00-missao.md` e
 `01-plano.md` antes e depois do checkout (progresso fica fora); `kit_guard_arm`/`kit_guard_check` em quatro portas
-(`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada); `hat_guard_check` nos três sítios onde
+(`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada; desde #233 a amostra compara também a
+árvore suja do kit por caminho e conteúdo — `kit_guard_tree`, com `GIT_OPTIONAL_LOCKS=0` —, e o
+motivo diz o que mudou: commits e caminhos); `hat_guard_check` nos três sítios onde
 o `review_scope_check` só avisava, lendo commits **e** árvore contra `writes:`; o catálogo de
 mutação sabota **uma cópia** em `mktemp -d`. Desde #226 a suíte, o catálogo e todo
 `tests/check-*.sh` carregam `tests/isolate-git.sh` — uma definição, lista de

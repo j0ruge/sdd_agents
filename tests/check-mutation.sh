@@ -4018,6 +4018,32 @@ mut_RUN_kit_guard_arms_projection() {
   sed -i '/^  if \[ "$DRY_RUN" = "1" \]; then KIT_GUARD_BEFORE=""; return 0; fi$/d' "$1"
 }
 
+# #233 back: the guard compares the stamp alone, and `<sha>|true` -> `<sha>|true` is equal — a kit
+# already dirty when the phase opened is edited again in silence. The tree term is neutralised, the
+# stamp term left whole, so what dies is the half #233 added. Caught by `kit-guard: a kit already
+# dirty and edited again stops the line …` in check-autonomy.sh (its edit half goes silent).
+mut_RUN_kit_guard_tree_blind() {
+  sed -i '/^kit_guard_check() {/,/^}/ s|^  \[ "$tree_after" = "$KIT_GUARD_TREE_BEFORE" \] \&\& |  [ true ] \&\& |' "$1"
+}
+# The tree keeps the porcelain and drops the content: a NEW dirty path is still seen, the SAME path
+# edited again gives the identical ` M TODO.md` line and is not. Caught by the same assertion, whose
+# session edits the file that was already dirty.
+mut_RUN_kit_guard_tree_no_content() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|print $0 "\\t" ((p in h) ? h\[p\] : "-")|print $0 "\\t-"|' "$1"
+}
+# The arm forgets the tree it sampled: the human's own dirt, there before the phase, reads as the
+# session's and every phase over a dirty kit stops. Caught by the benign half of the same assertion
+# (`kind:no-progress` becomes `kind:kit-touched`).
+mut_RUN_kit_guard_tree_unarmed() {
+  sed -i '/^kit_guard_arm() {/,/^}/ s|^  KIT_GUARD_TREE_BEFORE="$KIT_GUARD_TREE"$|  KIT_GUARD_TREE_BEFORE=""|' "$1"
+}
+# The reason stops saying what moved: back to the two stamps alone, and the human goes looking in the
+# kit (#233, sales_quote). Caught by `kit-guard: the BLOCKED line names the commit the kit gained …`
+# and the `named` term of the already-dirty assertion.
+mut_RUN_kit_touched_says_nothing_changed() {
+  sed -i '/^kit_guard_check() {/,/^}/ { /^  KIT_TOUCHED_WHY="${KIT_TOUCHED_WHY:+/d; }' "$1"
+}
+
 # ---------------------------------------------------------------------------
 # ADR 0014 — the behaviour version the ledger row carries.
 # ---------------------------------------------------------------------------
@@ -6199,6 +6225,10 @@ CATALOG=(
   RUN_kit_touched_blind
   RUN_kit_guard_cries_wolf
   RUN_kit_guard_arms_projection
+  RUN_kit_guard_tree_blind
+  RUN_kit_guard_tree_no_content
+  RUN_kit_guard_tree_unarmed
+  RUN_kit_touched_says_nothing_changed
   RUN_kit_rev_is_head
   RUN_kit_rev_dirty_whole_tree
   RUN_kit_guard_reads_rev

@@ -3892,6 +3892,65 @@ autonomy_kit_stamp() {
 # (tests/check-autonomy.sh, kit-guard regimes 1, 4, 5 and 7), so a site added without one is a site
 # whose deletion no assertion notices.
 KIT_GUARD_BEFORE=""
+# The stamp alone is `<sha>|<dirty>`, and dirty -> dirty on the same sha compares EQUAL: a kit that
+# was already dirty when the phase opened could be edited again — a new file, the same file once
+# more — and the guard said nothing (#233, measured on the sales_quote: a /sdd-plan writing into a
+# kit someone was already editing). So the arm also keeps the kit's dirty TREE, one line per dirty
+# path with the digest of its content (kit_guard_tree), and the check compares both. Per path and
+# with the content, because porcelain alone gives the SAME line for a file already ` M` that is
+# edited again — the case "editado de novo" names.
+KIT_GUARD_TREE_BEFORE=""
+KIT_GUARD_TREE=""
+KIT_GUARD_CHANGES=""
+
+# The kit's dirty tree, PUBLISHED in KIT_GUARD_TREE: one `XY path<TAB><md5 of the content>` line per
+# entry of hat_status_lines over SDD_HOME (`-` for an entry with no regular file behind it: a
+# deletion, a broken symlink, an untracked nested repository). Empty for a clean kit and for a kit
+# that is not a git checkout — `git status` fails there and both samples are empty, so the plain
+# copy stays silent exactly as the stamp makes it. ONE md5sum for every path, never one per path.
+# Called, never `$( )`-captured: the result is a global.
+# ⚠️ DECLARED LIMITS: the content of every dirty path is READ at each arm and each check, so a large
+# untracked file in the kit costs its read twice per phase (ignored paths are never read); a path
+# md5sum escapes (a backslash or a newline in the name) gets no digest and reads as `-`.
+kit_guard_tree() {
+  local status sums
+  KIT_GUARD_TREE=""
+  # GIT_OPTIONAL_LOCKS=0: a read, never a write — `git status` would otherwise refresh and rewrite
+  # the index of a kit someone may be committing in at that very moment (measured on git 2.43: the
+  # default rewrote a scratch repo's index after a `touch`, this did not). No probe reads the kit's
+  # index, so dropping the variable is a mutant nothing would catch — DECLARED.
+  status="$( GIT_OPTIONAL_LOCKS=0 hat_status_lines "$SDD_HOME" )"
+  [ -n "$status" ] || return 0
+  sums="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
+           && while IFS= read -r e; do [ -f "${e:3}" ] && printf '%s\0' "${e:3}"; done <<< "$status" \
+              | xargs -0 -r md5sum 2>/dev/null )" || true
+  # ENVIRON and not `-v`: awk expands backslash escapes in a -v value, which would rewrite a name.
+  # index/substr only — mawk is byte-oriented, and a path is arbitrary bytes.
+  KIT_GUARD_TREE="$( KG_SUMS="$sums" awk '
+    BEGIN { n = split(ENVIRON["KG_SUMS"], a, "\n")
+            for (i = 1; i <= n; i++) if (length(a[i]) > 34) h[substr(a[i], 35)] = substr(a[i], 1, 32) }
+    { p = substr($0, 4); print $0 "\t" ((p in h) ? h[p] : "-") }' <<< "$status" )"
+}
+
+# What moved between two kit trees, PUBLISHED in KIT_GUARD_CHANGES as one comma-separated clause:
+# a path dirty now and not before (`XY path`), a path whose status or content changed (`XY path
+# (content changed)` when only the content did), and a path dirty before and clean now (`path (no
+# longer dirty)`). Empty when the two trees agree. Called, never `$( )`-captured.
+kit_guard_changes() {   # kit_guard_changes <tree before> <tree after>
+  KIT_GUARD_CHANGES="$( KG_BEFORE="$1" awk '
+    function key(l,  t) { t = index(l, "\t"); return substr(l, 4, t - 4) }
+    function head(l) { return substr(l, 1, index(l, "\t") - 1) }
+    BEGIN { n = split(ENVIRON["KG_BEFORE"], b, "\n")
+            for (i = 1; i <= n; i++) if (b[i] != "") was[key(b[i])] = b[i] }
+    $0 != "" { p = key($0); seen[p] = 1
+      if (!(p in was)) item = head($0)
+      else if (was[p] == $0) next
+      else if (substr(was[p], 1, 2) == substr($0, 1, 2)) item = head($0) " (content changed)"
+      else item = head($0)
+      out = out sep item; sep = ", " }
+    END { for (p in was) if (!(p in seen)) { out = out sep p " (no longer dirty)"; sep = ", " }
+          print out }' <<< "$2" )"
+}
 
 # Called, never substituted. `$(kit_guard_arm)` would run the body in a subshell where the
 # assignment to KIT_GUARD_BEFORE dies with the substitution, leaving the baseline empty forever —
@@ -3919,11 +3978,13 @@ kit_guard_arm() {
   if [ "$DRY_RUN" = "1" ]; then KIT_GUARD_BEFORE=""; return 0; fi
   autonomy_kit_stamp
   KIT_GUARD_BEFORE="$AUTONOMY_KIT_STAMP"
+  kit_guard_tree
+  KIT_GUARD_TREE_BEFORE="$KIT_GUARD_TREE"
 }
 
 # kit_guard_check <phase> — one warn and one journal line per DIVERGENCE, never per session.
 kit_guard_check() {
-  local phase="${1:-}" kit_root kit_after
+  local phase="${1:-}" kit_root kit_after tree_after sha_before sha_after commits="" what=""
   KIT_TOUCHED_WHY=""
   # DISARMED, and it is the projection that gets here that way — kit_guard_arm clears the baseline
   # under DRY_RUN and this is the line that reads the clearing. It is also the honest answer for an
@@ -3947,14 +4008,34 @@ kit_guard_check() {
   # finally fires on the run that matters, nobody is reading.
   [ "$kit_root" = "$REPO_ROOT" ] && return 0
   autonomy_kit_stamp; kit_after="$AUTONOMY_KIT_STAMP"
-  [ "$kit_after" = "$KIT_GUARD_BEFORE" ] && return 0
+  kit_guard_tree; tree_after="$KIT_GUARD_TREE"
+  # The TREE first and the stamp last, one line: the stamp alone is blind to a kit that was dirty
+  # before and was edited again (#233) — see KIT_GUARD_TREE_BEFORE.
+  [ "$tree_after" = "$KIT_GUARD_TREE_BEFORE" ] && [ "$kit_after" = "$KIT_GUARD_BEFORE" ] && return 0
+  # WHAT moved, said in the reason (#233): the stamps alone told the sales_quote's human only that
+  # the kit was dirty, and finding the writer took a `git status` in the kit. The commits the kit
+  # gained (`log before..after`, five at most) and the paths whose dirt moved. Guarded captures:
+  # an unreachable `before` (a reset, a gc) answers nothing, never kills the run.
+  sha_before="${KIT_GUARD_BEFORE%%|*}"; sha_after="${kit_after%%|*}"
+  if [ -n "$sha_before" ] && [ "$sha_before" != "$sha_after" ]; then
+    commits="$( git -C "$SDD_HOME" log --format='%h %s' --max-count=5 "$sha_before..$sha_after" 2>/dev/null )" || commits=""
+    commits="${commits//$'\n'/; }"
+  fi
+  kit_guard_changes "$KIT_GUARD_TREE_BEFORE" "$tree_after"
+  [ -n "$commits" ] && what="commits: $commits"
+  [ -n "$KIT_GUARD_CHANGES" ] && what="${what:+$what; }paths: $KIT_GUARD_CHANGES"
   warn "the kit at $kit_root changed during $phase, and this mission's repo is $REPO_ROOT — the runner does not know who changed it: a session of this mission editing outside its repo, or someone working on the kit in another terminal"
   pipeline_log_line "$(date -Iseconds)  KIT-TOUCHED  $phase  kit_before=$KIT_GUARD_BEFORE  kit_after=$kit_after"
   KIT_TOUCHED_WHY="the kit at $kit_root was edited while $phase ran (kit_before=$KIT_GUARD_BEFORE kit_after=$kit_after) — who edited it was not measured: a session of this mission, or someone working on the kit in parallel"
+  # AFTER the sentence and only onto a sentence that exists: the ledger caps gate_why at 200
+  # characters, and what the human acts on (the admission, regime 1's `unmeasured` term) has to stay
+  # inside the cap; the terminal and the journal's BLOCKED line carry the whole clause.
+  KIT_TOUCHED_WHY="${KIT_TOUCHED_WHY:+$KIT_TOUCHED_WHY${what:+ — what changed: $what}}"
   # Re-armed on the new value, so one divergence is reported ONCE. Left un-rearmed, every later
   # phase of the run would compare against the original baseline and repeat the same warning to
   # the end of the pipeline.
   KIT_GUARD_BEFORE="$kit_after"
+  KIT_GUARD_TREE_BEFORE="$tree_after"
 }
 
 # --- the hat crossed its boundary --------------------------------------------------------------
@@ -4160,13 +4241,15 @@ hat_reflog_window() {
 # diff --name-only` prints it bare, and the two halves of the guard disagreed on one name. The
 # ORIG_PATH entry that follows a rename/copy is folded away. A newline inside a name is the one
 # residue left (declared in the header above).
-hat_status_lines() {
+# The kit guard reads the KIT's tree through the same parser (kit_guard_tree), so the optional
+# argument is the root; the hat's callers pass none and read REPO_ROOT as always.
+hat_status_lines() {   # hat_status_lines [root] — default REPO_ROOT
   local entry skip=0
   while IFS= read -r -d '' entry; do
     if [ "$skip" = 1 ]; then skip=0; continue; fi
     case "${entry:0:2}" in R?|C?|?R|?C) skip=1 ;; esac
     printf '%s\n' "$entry"
-  done < <( git -C "$REPO_ROOT" status --porcelain -z --untracked-files=all 2>/dev/null || true )
+  done < <( git -C "${1:-$REPO_ROOT}" status --porcelain -z --untracked-files=all 2>/dev/null || true )
 }
 
 hat_path_allowed() {   # hat_path_allowed <path> <expanded globs, comma-separated> — rc 0 = inside

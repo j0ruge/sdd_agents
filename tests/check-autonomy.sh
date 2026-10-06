@@ -5836,6 +5836,53 @@ assert_eq "kit-guard: a session that leaves the kit alone is not accused of anyt
   "sessions:2 moved:0 lines:0 warns:0" \
   "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG2_LOG") warns:$(grep -c 'changed during' <<< "$KG2_ERR")"
 
+# 1b. WHAT MOVED (#233). The BLOCKED line names the commit the kit gained, so the human reading it
+#     does not have to open the kit to find out what happened under the run. Read off stderr, where
+#     `bad` writes the whole reason: the ledger caps gate_why at 200 characters.
+assert_eq "kit-guard: the BLOCKED line names the commit the kit gained during the phase" "1" \
+  "$(grep -c 'what changed: commits: [0-9a-f]* chore: the session wrote into the kit' <<< "$KG1_ERR")"
+
+# 2b. THE KIT WAS ALREADY DIRTY (#233). The stamp is `<sha>|<dirty>`, so dirty -> dirty on the same
+#     sha compared equal and a kit someone was already editing could be edited again in silence —
+#     measured on the sales_quote. DIFFERENTIAL, one pre-dirty kit and two sessions: the one that
+#     edits the SAME already-modified file again (porcelain gives the identical ` M TODO.md` line
+#     before and after, so only the content can tell) has to stop the line and name the path; the
+#     one that leaves the kit alone has to say nothing, or the human editing the kit pays a stop on
+#     every phase. `same:1` is the witness that the stamps agree, so the regime really is the one
+#     the stamp cannot see. TODO.md is tracked in the fake kit since regime 1 committed it. The
+#     benign run ends on no-progress (rc 3 too, its session moved nothing) — `kind` tells them apart.
+kitguard_dirty_stub() {   # kitguard_dirty_stub <file to append to, or "" for benign>
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ -n "$1" ] && [ "\$n" -eq 1 ]; then
+  printf 'the session edits the already-dirty file once more\n' >> "$1"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_dirty_run() {   # kitguard_dirty_run <target dir> <file or ""> — sessions, lines, rc, stamps, named
+  local err log rc=0 before after
+  kitguard_reset
+  kitguard_world "$1"
+  printf 'the human is editing the kit\n' >> "$FAKEKIT/TODO.md"
+  kitguard_dirty_stub "$2"
+  err="$( cd "$1" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || rc=$?
+  log="$(cat "$1/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+  before="$(grep -oE 'kit_before=[^ ]+' <<< "$log" | head -1)"; after="$(grep -oE 'kit_after=[^ ]+' <<< "$log" | head -1)"
+  printf 'sessions:%s lines:%s rc:%s kind:%s same:%s named:%s' "$(kitguard_sessions)" "$(grep -c 'KIT-TOUCHED' <<< "$log")" "$rc" "$(hat_rows)" \
+    "$([ -n "$before" ] && [ "${before#kit_before=}" = "${after#kit_after=}" ] && echo 1 || echo 0)" \
+    "$(grep -c 'what changed: paths: .M TODO.md (content changed)' <<< "$err")"
+  git -C "$FAKEKIT" checkout -q -- TODO.md
+}
+assert_eq "kit-guard: a kit already dirty and edited again stops the line and names the path, and left alone it is silent" \
+  "sessions:1 lines:1 rc:3 kind:kit-touched same:1 named:1|sessions:2 lines:0 rc:3 kind:no-progress same:0 named:0" \
+  "$(kitguard_dirty_run "$OUTSIDE/kitguard-dirty-edit" "$FAKEKIT/TODO.md")|$(kitguard_dirty_run "$OUTSIDE/kitguard-dirty-alone" "")"
+
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the
 #    run it finally mattered on would scroll past unread. This regime is why the guard compares
