@@ -119,6 +119,7 @@ ADR_CHECK=off
 ON_ESCALATION_CMD="${COORD_HOOK:-}"
 if [ -n "${COORD_PROBE:-}" ]; then printf touched >> "$COORD_PROBE"; fi
 if [ -n "${COORD_FDCOUNT:-}" ]; then ls /proc/$$/fd | wc -l > "$COORD_FDCOUNT"; fi
+if [ -n "${COORD_LEAVE:-}" ]; then sleep "$COORD_LEAVE" </dev/null >/dev/null 2>&1 & echo "$!" >> "$COORD_LEAVE_PID"; fi
 if [ -n "${COORD_HOLD:-}" ]; then
   if [ "${COORD_CHILD:-}" = cooperative ]; then
     exec 3<> "$COORD_RELEASE"
@@ -912,6 +913,35 @@ try:
     failing = start(repo, code=7)
     check("error preserves worker status", release(failing) == 7)
     check("error recovers", run(repo, "install").returncode == 0)
+    # #234: a process the worker leaves running holds the supervisor until ECHILD — by design, the
+    # lock is released by the kernel's answer and never by a snapshot — and the call used to wait
+    # MUTE. Measured on sales_quote: a QA session relaunched the human's backend with `nohup … &`,
+    # and `sdd run` printed BLOCKED and stayed alive until that server died. The supervisor now
+    # names the family ONCE (not once per 10 ms tick), a second after the worker exits on its own.
+    # DIFFERENTIAL: the same call with nothing left behind names nothing.
+    leave_pid = work / "leave-pid"
+    left = run(repo, "phase", "20260101-one",
+               extra={"COORD_LEAVE": "2.31", "COORD_LEAVE_PID": str(leave_pid)})
+    pids = leave_pid.read_text().split() if leave_pid.exists() else []
+    quiet = run(repo, "phase", "20260101-one")
+    check("a process the worker leaves behind is named once, with its pid and command line",
+          len(pids) == 1 and left.stdout.count("this command waits for") == 1
+          and ("  pid %s: sleep 2.31" % pids[0] if pids else "?") in left.stdout
+          and "this command waits for" not in quiet.stdout,
+          "pids=%s left=%r quiet=%r" % (pids, left.stdout[-400:], quiet.stdout[-200:]))
+    # The hook names nothing: its family is bounded by the deadline (5 s + 1 s), so nothing waits on
+    # it long enough to need a name. A hook whose shell exits at once leaves its straggler to the
+    # hook's own subreaper, which waits for it in silence.
+    hook_quiet = subprocess.run(
+        [sys.executable, "-B", "-c",
+         "import importlib.util, sys\n"
+         "spec = importlib.util.spec_from_file_location('coord', sys.argv[1])\n"
+         "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+         "sys.exit(m.bounded_hook(5, 1, 'sleep 1.37 </dev/null >/dev/null 2>&1 &'))\n",
+         str(root / "bin/sdd-coordination.py")], capture_output=True, text=True, timeout=10)
+    check("a hook's straggler is waited for in silence: the hook names nothing",
+          hook_quiet.returncode == 0 and hook_quiet.stderr == "",
+          "rc=%s stderr=%r" % (hook_quiet.returncode, hook_quiet.stderr[-300:]))
     for victim, mode in [("owner", "ordinary"), ("worker", "ordinary"), ("owner", "escaped")]:
         orphan = start(repo, mode=mode)
         identity = json.loads(orphan[1].read_text())

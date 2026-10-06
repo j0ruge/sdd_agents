@@ -55,7 +55,11 @@ Linux child-subreaper facility before starting the Bash worker. The original CLI
 the public owner. Killing that PID or the worker does not release the supervisor's lock.
 Orphans are adopted even when they close descriptors, change process group/session or
 double-fork. The supervisor waits for the kernel's `ECHILD` result, meaning every descendant
-has exited and been reaped. Normal completion and errors keep waiting for surviving children.
+has exited and been reaped. Normal completion and errors keep waiting for surviving children, and
+since #234 the wait is no longer silent: when the worker exits on its own and descendants are still
+alive, the supervisor prints once, a second later, the pid and command line of each, and says the
+command waits for them and the checkout stays held (`name_stragglers`, a read of `/proc` only). The
+escalation hook names nothing — its 5 + 1 s deadline already bounds its family.
 TERM/INT/HUP are forwarded through the launcher to the active descendant tree, including
 foreground children and children created by other threads or sessions. Each selected process
 is pinned with a pidfd after rechecking its start time and ancestry; no numeric-PID fallback is

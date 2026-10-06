@@ -3105,10 +3105,17 @@ append-only, and rewriting it is exactly the cost this pipeline removed.
   # hand. In `claude -p` ending the turn ends the session, so nothing resumes. The sentence lived in
   # agents/sdd-reviewer.md alone; a rule that every phase needs is written here, once, never copied
   # into seven agents (the enum rule of CLAUDE.md). tests/check-dry-run.sh reads it per phase.
+  # The second paragraph is #234, measured on sales_quote (20261005-mascaras-ncm-e-painel): a QA
+  # session killed the human's backend and relaunched it with `nohup … &`, and `sdd run` printed
+  # BLOCKED and stayed alive until that server died — the supervisor waits for ECHILD by design.
   local turn_rule
   turn_rule="Never end the turn with a command or a task still running in the background: in a headless
 session ending the turn ends the session, and \"I will resume when it finishes\" resumes nothing.
-Wait for it, read its result, then write the artifacts and commit."
+Wait for it, read its result, then write the artifacts and commit.
+A process you start in the background (\`nohup … &\`) joins the pipeline's family: \`sdd run\` does
+not finish, and the checkout stays held, until it dies. Never stop or restart a process you did not
+start — the app under test is the human's; a restart, or another environment, goes to the handoff.
+What you started for your own check, stop before you end the turn."
   slash="$(phase_slash "$step")"
   agent="$(phase_agent "$step")"
   # Why the session was opened — decision 1 of 20260922-o-motivo-da-fase, ONE line for every phase.

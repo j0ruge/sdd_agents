@@ -26,7 +26,11 @@ acrescenta restrição só para REVIEW e QA.
 **Dívida declarada.** "O revisor não toca código" e "o publisher não mergeia" são frases; o
 runner avisava (`REVIEW-EDITED-CODE`); desde `20260903-a-fronteira-do-chapeu` ele **para** (`hat-crossed`). A regra "nunca encerre o turno com trabalho em
 background" vivia só no `sdd-reviewer.md` e custou duas sessões do publisher em 2026-09-02 —
-fechada movendo-a para `boot_prompt()` (L3 da auditoria).
+fechada movendo-a para `boot_prompt()` (L3 da auditoria). Desde #234 o `turn_rule` diz também, a
+toda fase, que o processo posto em background (`nohup … &`) entra na família do pipeline — o `sdd
+run` não termina e o checkout segue preso até ele morrer — e que a sessão nunca para nem reinicia
+processo que não começou (o app sob teste é do humano): medido no `sales_quote`, uma sessão de QA
+matou o backend do humano e o relançou com `nohup`, e o `sdd run` ficou vivo até o servidor morrer.
 
 ## 2. Ferramentas — capacidades, não todas as possíveis
 
@@ -262,14 +266,17 @@ O helper sobe com `python3 -I -S` (`COORDINATION_PYTHON`, uma definição para o
 o `PYTHONPATH` de quem chama não troca os módulos do processo que decide a posse. As mesmas flags
 servem à sonda do remédio do `CHECKOUT-UNAVAILABLE`: `/usr/bin/python3` (ou `SDD_SYSTEM_PYTHON`) só
 é oferecido depois de passar no próprio `capable` do helper, nunca por ser executável. O supervisor
-acorda pelo pidfd do worker, não pelo tique de 10 ms. O custo que sobra, ~30 ms do 2º Python do
+acorda pelo pidfd do worker, não pelo tique de 10 ms. Desde #234 ele diz por quem espera: quando o
+worker sai sozinho e sobra descendente vivo, imprime uma vez, 1 s depois, o pid e a cmdline de cada
+um (`name_stragglers`, só leitura de `/proc`; quem libera o lock continua sendo o `ECHILD`). O hook
+não nomeia: o prazo de 5 + 1 s já limita a família dele. O custo que sobra, ~30 ms do 2º Python do
 worker em toda chamada coordenada, é limite declarado: não chega ao humano, e o conserto (provar o worker
 por FD herdado, com ADR) mora na gaveta, F1 P1.
 
 **Limite da posse.** Coordena entradas do kit, não edição externa nem daemon preexistente.
 Matar o supervisor, adulterar arquivos/namespace do lock ou intervenção privilegiada derrota
-essa coordenação. Descendente de longa duração conserva o lock até terminar; timeout não
-libera outro escritor. Não é isolamento de filesystem nem mudança do estado derivado da missão.
+essa coordenação. Descendente de longa duração conserva o lock até terminar — desde #234 nomeado no
+stderr do supervisor, não mais em silêncio —; timeout não libera outro escritor. Não é isolamento de filesystem nem mudança do estado derivado da missão.
 
 ## 7. Hooks — pontos de intervenção humana
 

@@ -2606,6 +2606,13 @@ mut_HEALTH_with_mutation_refused() {
 mut_RUN_turn_rule_dropped() {
   perl -0pi -e 's/\$turn_rule\n\n(Write the artifacts to disk and commit\. The runner re-evaluates the gate from outside — it runs)/$1/' "$1"
 }
+# #234: the turn rule loses its background paragraph — a session no longer told that what it starts
+# with `nohup … &` holds `sdd run` and the checkout, nor that the human's app is not its to restart.
+# The closing quote stays, so the runner still parses. Caught by "every projected phase is told a
+# background process holds the run, …" (check-dry-run.sh), at "5 0 0".
+mut_RUN_turn_rule_background_dropped() {
+  sed -i '/^boot_prompt() {/,/^}/ { /^A process you start in the background/,/^start — the app under test is the human/d; s@^What you started for your own check, stop before you end the turn\."$@"@ }' "$1"
+}
 
 # L5 of the 2026-09-03 audit: the phase session is opened through `env -u <harness vars>`, one
 # definition (HARNESS_ENV_UNSET) read by run_phase. Opening `claude` directly is the runner of
@@ -5839,6 +5846,22 @@ mut_COORD_select_pidfd() {
   sed -i 's@^                worker_poll.poll(10)$@                select.select([worker_fd], [], [], .01)@' "${1%/*}/sdd-coordination.py"
 }
 
+# #234: the supervisor goes back to waiting MUTE for the family a worker left behind — `sdd run`
+# alive after its verdict, and nothing saying why. Caught by "a process the worker leaves behind is
+# named once, with its pid and command line" (check-coordination.sh).
+mut_COORD_stragglers_unnamed() {
+  sed -i "s@^    result = wait_family(child, signals, announce=value\['command'\])\$@    result = wait_family(child, signals)@" "${1%/*}/sdd-coordination.py"
+}
+# The name is said on every 10 ms tick instead of once. Same assertion, its `count == 1` term.
+mut_COORD_stragglers_named_every_tick() {
+  sed -i '/^def wait_family(/,/^def / { /^                named_at = None$/d }' "${1%/*}/sdd-coordination.py"
+}
+# The hook names its stragglers too, over a family its deadline already bounds. Caught by "a hook's
+# straggler is waited for in silence: the hook names nothing" (check-coordination.sh).
+mut_COORD_hook_names_stragglers() {
+  sed -i "s@^    return wait_family(child, signals, deadline, grace, relay=child)\$@    return wait_family(child, signals, deadline, grace, relay=child, announce='hook')@" "${1%/*}/sdd-coordination.py"
+}
+
 CATALOG=(
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
@@ -5868,6 +5891,9 @@ CATALOG=(
   CLOSE_claims_unverified_merge
   CLOSE_never_records_the_merge
   COORD_select_pidfd
+  COORD_stragglers_unnamed
+  COORD_stragglers_named_every_tick
+  COORD_hook_names_stragglers
   RUN_branch_double_slash
   COORD_admission_missing
   COORD_linker_unlocked
@@ -6156,6 +6182,7 @@ CATALOG=(
   RUN_window_not_netted
   RUN_rebase_read_as_foreign
   RUN_turn_rule_dropped
+  RUN_turn_rule_background_dropped
   RUN_harness_env_inherited
   RUN_git_label_unexported
   RUN_close_git_label_unexported
