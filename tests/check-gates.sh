@@ -1491,6 +1491,15 @@ assert_phase "QA gate accepts the mission's report renamed in the index" "REVIEW
 #    `--diff-filter=A` drops it; the add it came from names a path that is gone.
 git commit -qm "chore: the mission renames its report" >/dev/null
 assert_phase "QA gate accepts the mission's report renamed in a commit" "REVIEW"
+#    3b. renamed again, to a name that sorts FIRST. Every name the report ever had stays owned, and
+#    `-ef` is what drops the ones gone from disk: string equality kept them, and the newest by
+#    version was a path that no longer exists. Every rename above sorts later, which is why
+#    QA_report_path_spelled_literally survived the first catalogue of PR #222 — since 52de46e the
+#    `./docs/qa/` world of (f) reaches the reader canonical, so only this one tells the two apart.
+git mv "$FIX/docs/qa/reports/2026-01-04-fixture-moved.md" "$FIX/docs/qa/reports/2026-01-01-fixture-moved-back.md"
+git commit -qm "chore: the mission renames its report to an earlier name" >/dev/null
+assert_phase "QA gate accepts the mission's report renamed to a name that sorts first" "REVIEW"
+git reset -q --hard HEAD~1
 # 4. a COMMITTED name git quotes (a `"`): `git log` prints `"…\"…"`, which is no path on disk, and
 #    the branch's own report was refused as "not one this branch added". `-z` quotes nothing. Newer
 #    and still `in-progress`, so the gate says which file it read, as in 1.
@@ -4326,6 +4335,22 @@ if [ "$PI_SL_RC" -eq 3 ] && [ "$PI_SL_AT" = "$PTARGET" ] \
 else
   fail "a trailing slash in HANDOFF_DIR does not make the approved plan look missing" \
        "rc 3 on $PTARGET after the switch" "rc $PI_SL_RC at $PI_SL_AT: $(tail -3 <<< "$PI_SL_OUT")"
+fi
+git checkout -q main
+
+# The slash above no longer reaches ensure_mission_branch: since 52de46e load_config strips it from
+# HANDOFF_DIR, so that probe measures the normalization. The `//` still arrives through the MISSION
+# argument, which resolve_mission takes verbatim when it names a directory: `/<mission>` makes
+# MISSION_DIR `<base>//<mission>`. Without this world RUN_branch_double_slash survived the first
+# catalogue of PR #222.
+PI_LS_OUT="$( cd "$FIX" && "$SDD" run "/$PM" 2>&1 )"; PI_LS_RC=$?
+PI_LS_AT="$(git branch --show-current)"
+if [ "$PI_LS_RC" -eq 3 ] && [ "$PI_LS_AT" = "$PTARGET" ] \
+   && grep -qF "branch: main → $PTARGET" <<< "$PI_LS_OUT"; then
+  pass "a leading slash in the mission argument does not make the approved plan look missing"
+else
+  fail "a leading slash in the mission argument does not make the approved plan look missing" \
+       "rc 3 on $PTARGET after the switch" "rc $PI_LS_RC at $PI_LS_AT: $(tail -3 <<< "$PI_LS_OUT")"
 fi
 git checkout -q main
 
