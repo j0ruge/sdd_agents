@@ -8371,10 +8371,14 @@ cmd_run() {
   # in a dry run too: the projection is where you look BEFORE spending sessions, which makes it the
   # cheapest moment to learn you are about to commit into the base branch.
   warn_if_on_base_branch
-  # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The note is written
-  # HERE, off the CLI value and before the loop — inside it, force_phase is also set by the runner
-  # itself (PUBLISH_ON_REVIEW_BLOCKED=draft), and that is the runner's hand, not the human's.
-  [ -n "$force_phase" ] && checkpoint_note_intervention "sdd run --phase $force_phase (the starting phase was forced from the CLI)" "$force_phase"
+  # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The CLI value is kept
+  # HERE, before the loop — inside it, force_phase is also set by the runner itself
+  # (PUBLISH_ON_REVIEW_BLOCKED=draft), and that is the runner's hand, not the human's. It is consumed
+  # at the top of the FIRST lap (cli_lap), and the note is written only where that lap opens a
+  # session, right above `before=` (#227): written here, it was committed ahead of laps that stop
+  # without one — the stamp stop and PLAN return 2 — and `sdd autonomy --by-mission` counted an
+  # intervention in a run that did nothing.
+  local cli_phase="$force_phase" cli_lap=""
 
   local -A attempts=()
   # SESSIONS, which is not the same grandeza as `attempts` and was being printed as if it were.
@@ -8409,6 +8413,9 @@ cmd_run() {
   while :; do
     # The config is re-read on every lap, before anything of the lap reads it (#129, config_reload).
     config_reload
+    # Single use: the first lap takes the CLI's --phase, every later lap — the draft jump included,
+    # whose force_phase is the runner's — finds it empty.
+    cli_lap="$cli_phase"; cli_phase=""
     # The two branches that do not derive also clear the derivation: a reason left over from an
     # earlier lap must not reach the boot of a phase the runner is now FORCING.
     derived=0
@@ -8687,6 +8694,14 @@ cmd_run() {
       prev_why="$CURRENT_PHASE_WHY"
     fi
 
+    # The CLI's intervention, on the lap it forced and only once that lap is about to buy a session
+    # (#227). ABOVE `before=` and the two arms, never below: the note is a commit, and inside the
+    # window it would read as the session's progress (state_fingerprint reads HEAD) and as a commit
+    # with no session label (hat_guard_arm records the reflog's top). The inline retry is the same
+    # lap and writes nothing more; `sdd retry` is its own door and keeps its own note.
+    if [ -n "$cli_lap" ]; then
+      checkpoint_note_intervention "sdd run --phase $cli_lap (the starting phase was forced from the CLI)" "$cli_lap"
+    fi
     before="$(state_fingerprint)"
     # The photograph, and it has to be taken HERE: once run_phase returns, the checkpoint the
     # session just edited is the only one left on disk and "how many were pending before" is

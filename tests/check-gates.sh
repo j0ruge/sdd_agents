@@ -3077,6 +3077,15 @@ assert_eq "run stops at the stamp: rc 2, no session, the stop names './bin/sdd h
   "$stamp_rc|$(( stamp_s1 - stamp_s0 ))|$(grep -c 'the stamp is not headless' <<< "$stamp_out")|$(grep -c "run './bin/sdd health' once" <<< "$stamp_out")"
 # Kept for world 9b, which compares the remedy of an impossible stamp against THIS stale one.
 stale_stop_out="$stamp_out"
+# #227: forced from the CLI, the same stop writes no `- intervention:` note — the lap opens no
+# session, and a note there was an intervention `sdd autonomy --by-mission` counted in a run that did
+# nothing. Counts: rc · sessions bought · the stop · notes gained in the mission directory.
+pr_notes() { grep -Rhc '^- intervention:' "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}'; }
+stamp_n0="$(pr_notes)"; stamp_s0="$(stub_sessions)"
+stamp_out="$( cd "$FIX" && "$SDD" run --phase PR "$MISSION" 2>&1 )"; stamp_rc=$?
+stamp_s1="$(stub_sessions)"
+assert_eq "run --phase PR stops at the stamp and writes no intervention note" "2|0|1|+0" \
+  "$stamp_rc|$(( stamp_s1 - stamp_s0 ))|$(grep -c 'the stamp is not headless' <<< "$stamp_out")|+$(( $(pr_notes) - stamp_n0 ))"
 # The projection stops where the run would — the stop sits above the dry-run branch, like PLAN's.
 stamp_s0="$(stub_sessions)"
 stamp_out="$( cd "$FIX" && "$SDD" run --dry-run "$MISSION" 2>&1 )"; stamp_rc=$?

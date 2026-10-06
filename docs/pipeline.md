@@ -1397,8 +1397,11 @@ A mission whose sessions are all non-comparable does not appear — as before.
 
 The `- intervention:` notes of `checkpoint.md` are **narrative**, not the count. Since 2026-09-03
 the runner writes one itself, and commits it alone at once, whenever it is the runner that
-receives the human's hand — `sdd run --phase X`, `sdd retry`, `--budget-override`; the hand-written
-note stays for what the runner cannot see (a fix by hand, a phase done by hand). They print as
+receives the human's hand — `sdd run --phase X`, `sdd retry`, `--budget-override`; since #227 the
+`--phase` note is written on the forced lap only once that lap is about to open a session, right
+above it (a `--phase PLAN`, or a `--phase PR` stopped at the stamp, writes none, and the draft jump's
+forced PR lap is the runner's hand, not the human's). The hand-written note stays for what the
+runner cannot see (a fix by hand, a phase done by hand). They print as
 `N intervention note(s)` between `reopened` and `US$` when the mission belongs to this repo and its
 checkpoint is on disk, and not at all otherwise — no `?`, no zero: `?` existed so that no false
 zero reached the official number, and the official number no longer comes from the file. Measured

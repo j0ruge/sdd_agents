@@ -580,6 +580,14 @@ assert_eq "sdd run --phase writes a second note, committed alone" "2 clean" "$(n
 "$SDD" run "$MISSION" --phase EXEC --dry-run >/dev/null 2>&1 || true
 assert_eq "sdd run --phase --dry-run writes none and leaves the tree clean" "2 clean" \
   "$(notes) $( [ -z "$(git -C "$FIX" status --porcelain)" ] && echo clean || echo dirty)"
+# #227: the note is the CLI's hand on a lap that BUYS a session. `--phase PLAN` stops before any
+# session (rc 2: the planner is interactive), and so does `--phase PR` with only the stamp missing
+# (check-gates.sh, world 4b) — a note written there was counted by `sdd autonomy --by-mission` as an
+# intervention in a run that did nothing. DIFFERENTIAL against the `--phase EXEC` run above: same
+# writer, same flag, and only whether the lap opened a session differs.
+plan_rc=0; "$SDD" run "$MISSION" --phase PLAN >/dev/null 2>&1 || plan_rc=$?
+assert_eq "sdd run --phase PLAN stops before any session and writes no note" "rc:2 notes:2 clean" \
+  "rc:$plan_rc notes:$(notes) $(ck_clean)"
 : > "$LEDGER"
 
 # --- a phase done BY HAND gets the record a session would have left (#153) ---------------------
@@ -1958,8 +1966,14 @@ chmod +x "$OUTSIDE/stub/claude"
 # the runner announcing out loud that it entered the branch, and counting it is what proves the
 # regime. It is deliberately OUTSIDE the one-shot guard in bin/sdd — the runner really is jumping
 # to PR on this lap, and an assertion over the writers must not be its own witness.
+draft_notes0="$(grep -RhcE '^[[:space:]]*-[[:space:]]*intervention:' "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}')"
 err="$( "$SDD" run "$MISSION" 2>&1 >/dev/null )"; rc=$?
 assert_eq "the run still ends in an escalation, whichever path took it there" "3" "$rc"
+# #227: the jump writes force_phase too, and that hand is the runner's — the PR lap it forces opens
+# a session and must still write no `- intervention:` note. The CLI value is consumed by the first
+# lap; read off the whole mission directory, so a note in either notes file counts.
+assert_eq "the draft jump is the runner's hand: its forced PR lap writes no intervention note" "+0" \
+  "+$(( $(grep -RhcE '^[[:space:]]*-[[:space:]]*intervention:' "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}') - draft_notes0 ))"
 # I9 — THE LOOP HALF. `force_phase="PR"` never ended the run: PR ran, its own gate failed, and
 # `current_phase` handed REVIEW straight back with the budget still blown, so the runner re-entered
 # the branch lap after lap (measured before the fix: warn 3×, PR sessions 3). F1 closed the RECORD

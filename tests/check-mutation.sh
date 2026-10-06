@@ -2637,7 +2637,21 @@ mut_RUN_close_git_label_unexported() {
 # tree it promised not to touch. The probes are in tests/check-autonomy.sh (retry block and the
 # `--phase` block right after it), each reading count AND cleanliness as a pair.
 mut_RUN_intervention_unwritten_on_phase() {
-  sed -i 's|^  \[ -n "$force_phase" \] && checkpoint_note_intervention "sdd run --phase $force_phase (the starting phase was forced from the CLI)" "$force_phase"$|  :|' "$1"
+  sed -i '/^cmd_run() {/,/^}/ s|^      checkpoint_note_intervention "sdd run --phase $cli_lap (the starting phase was forced from the CLI)" "$cli_lap"$|      :|' "$1"
+}
+# #227 back: the CLI's note goes to the top of the lap it forced, ahead of the stops that open no
+# session — PLAN and the stamp return 2 — so `sdd autonomy --by-mission` counts an intervention in a
+# run that did nothing. Caught by `sdd run --phase PLAN stops before any session and writes no note`
+# in check-autonomy.sh and `run --phase PR stops at the stamp and writes no intervention note` in
+# check-gates.sh; the `--phase EXEC` note stays exactly one.
+mut_RUN_intervention_before_the_stop() {
+  sed -i '/^cmd_run() {/,/^}/ s|^    cli_lap="$cli_phase"; cli_phase=""$|    cli_lap="$cli_phase"; cli_phase=""; [ -n "$cli_lap" ] \&\& checkpoint_note_intervention "sdd run --phase $cli_lap (the starting phase was forced from the CLI)" "$cli_lap"; cli_lap=""|' "$1"
+}
+# The runner's own forced lap (PUBLISH_ON_REVIEW_BLOCKED=draft) is read as the CLI's: every forced
+# lap that opens a session writes the note. Caught by `the draft jump is the runner's hand: its
+# forced PR lap writes no intervention note` in check-autonomy.sh.
+mut_RUN_intervention_on_runner_forced_lap() {
+  sed -i '/^cmd_run() {/,/^}/ s|^    cli_lap="$cli_phase"; cli_phase=""$|    cli_lap="$force_phase"; cli_phase=""|' "$1"
 }
 mut_RUN_intervention_unwritten_on_retry() {
   sed -i 's|^  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"$|  :|' "$1"
@@ -6080,6 +6094,8 @@ CATALOG=(
   RUN_git_label_unexported
   RUN_close_git_label_unexported
   RUN_intervention_unwritten_on_phase
+  RUN_intervention_before_the_stop
+  RUN_intervention_on_runner_forced_lap
   RUN_intervention_unwritten_on_retry
   RUN_intervention_written_on_dry_run
   RUN_escalation_hook_silent
