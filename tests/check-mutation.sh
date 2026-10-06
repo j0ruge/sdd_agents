@@ -893,6 +893,26 @@ mut_QA_report_tip_any_file_of_mission() {
 mut_QA_report_tip_refused_outright() {
   sed -i '/^tip_add_carries_mission() {/,/^}/ s@^    add=""$@    return 1@' "$1"
 }
+# #225, ADR 0016 §1: every progress file the adding commit moved must be left as a blob one of the
+# MISSION's commits wrote. UNCHECKED drops the comparison: another mission's commit that also edits
+# this checkpoint passes for this mission's own again — the fail-open ADR 0015 §3 declared. Dies on
+# `another mission's report whose squash also edited this mission's checkpoint is not the mission's`.
+mut_QA_report_tip_blob_unchecked() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s@\[ -n "\${mine\["\$blob \$p"\]+x}" \] || return 1@:@' "$1"
+}
+# NEWEST_ONLY: only the newest commit of the mission that moved the checkpoint vouches — HEAD's
+# blob, in effect. A note written after the squash then takes from a merged mission its own
+# report. Dies on `the mission's own squash still counts after the branch moved its checkpoint again`.
+mut_QA_report_tip_blob_newest_only() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s|rev-list HEAD --not "\$@" --|rev-list -n 1 HEAD --not "$@" --|' "$1"
+}
+# `|` and not `@` as the delimiter in these two: the text being matched carries `"$@"`.
+# WHOLE_HISTORY: every commit of HEAD vouches, the base's before the fork included, so another
+# mission that writes this checkpoint back to the fork's version passes. Dies on `a checkpoint blob
+# from before the fork does not vouch for another mission's report`.
+mut_QA_report_tip_blob_whole_history() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s|rev-list HEAD --not "\$@" --|rev-list HEAD --|' "$1"
+}
 
 # Anchor 3 goes back to counting EVERY open bug, whatever its genre. That is the state the kit was
 # in until 20260826-o-laco-da-qa: a bug whose fix is a product decision blocked the QA phase, and
@@ -5850,6 +5870,9 @@ CATALOG=(
   QA_report_tip_any_mission
   QA_report_tip_any_file_of_mission
   QA_report_tip_refused_outright
+  QA_report_tip_blob_unchecked
+  QA_report_tip_blob_newest_only
+  QA_report_tip_blob_whole_history
   QA_bug_genre_ignored
   QA_bug_genre_prefix
   QA_bug_genre_anywhere

@@ -1451,6 +1451,85 @@ assert_eq "the backfill commit touches this mission's 00-missao.md and none of i
 qa_refused "another mission's report whose squash also edited this mission's 00-missao.md is not the mission's"
 git reset -q --hard HEAD~1
 git branch -q -f main "$qa_tip_main"
+# (j) #225, ADR 0016 §1: another mission's commit that adds ITS report and ALSO edits THIS mission's
+#     checkpoint — the fail-open ADR 0015 §3 declared. "Touches the progress files" is a question
+#     about which paths the commit moved, and this commit moves the right one. What it cannot do is
+#     leave the checkpoint as a version the mission itself wrote: the mission's own squash leaves the
+#     blob of the branch tip it squashed, and another mission's edit leaves a blob no commit of this
+#     branch ever had. The controls are (h) above and (k) below.
+git checkout -q main
+mkdir -p "$FIX/docs/handoffs/20260102-other"
+printf 'other mission\n' > "$FIX/docs/handoffs/20260102-other/checkpoint-notas.md"
+printf '<!-- edited by another mission -->\n' >> "$MDIR/checkpoint.md"
+cat > "$FIX/docs/qa/reports/2026-01-16-fixture-intruder.md" <<'EOF'
+# QA Run Report — 2026-01-16 — another mission, whose squash also edits this mission's checkpoint
+- **Started:** 2026-01-16T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "another mission (squash) that also edits this mission's checkpoint" >/dev/null
+# FLOOR: the commit that added the report moves this mission's checkpoint, so the old question
+# ("does it touch the progress files?") answers yes and only the new one can refuse it.
+qa_tip_intruder_floor="$(git diff-tree --no-commit-id -r --name-only HEAD -- "docs/handoffs/$MISSION/" | sed "s@^docs/handoffs/$MISSION/@@" | tr '\n' ' ')"
+git checkout -q missao/qa-report-owner
+git checkout main -- docs/qa/reports/2026-01-16-fixture-intruder.md
+git commit -qm "chore: the mission brings that report from the base tip" >/dev/null
+assert_eq "the intruder commit adds its report and moves this mission's checkpoint.md" \
+  "checkpoint.md " "$qa_tip_intruder_floor"
+qa_refused "another mission's report whose squash also edited this mission's checkpoint is not the mission's"
+git reset -q --hard HEAD~1
+git branch -q -f main "$qa_tip_main"
+# (k) The control that pins WHICH of the branch's blobs count: the mission's own squash, read after
+#     the branch moved its checkpoint once more (a note written after the merge). The squash left
+#     the blob of the tip it squashed, which is no longer HEAD's — any commit of the branch counts,
+#     not only the newest. Asking HEAD alone would take from a merged mission its own report.
+printf 'own squash, then a later note\n' >> "$MDIR/checkpoint-notas.md"
+cat > "$FIX/docs/qa/reports/2026-01-17-fixture-own-later.md" <<'EOF'
+# QA Run Report — 2026-01-17 — the mission's own, squash-merged, read after a later note
+- **Started:** 2026-01-17T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "chore: the mission's own report" >/dev/null
+git checkout -q main
+git merge -q --squash missao/qa-report-owner >/dev/null
+git commit -qm "the mission (squash)" >/dev/null
+git checkout -q missao/qa-report-owner
+printf 'a note written after the squash\n' >> "$MDIR/checkpoint-notas.md"
+git add -A && git commit -qm "chore: the mission writes a note after its squash" >/dev/null
+qa_tip_own_later="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+git reset -q --hard HEAD~2
+git branch -q -f main "$qa_tip_main"
+assert_eq "the mission's own squash still counts after the branch moved its checkpoint again" \
+  "REVIEW" "$qa_tip_own_later"
+# (l) Which commits may vouch for a blob: the MISSION's (`HEAD --not <base refs>`), never HEAD's
+#     whole history. Another mission edits this checkpoint, then writes it back to the version the
+#     base had before the fork while adding its own report: that blob IS in HEAD's history (the fork
+#     point holds it) and in no commit of the mission. FLOOR: the fork point really holds the blob
+#     the intruder left, or the world measures nothing.
+git checkout -q main
+printf '<!-- edited by another mission -->\n' >> "$MDIR/checkpoint.md"
+git add -A && git commit -qm "another mission edits this mission's checkpoint" >/dev/null
+git checkout "$(git merge-base main missao/qa-report-owner)" -- "docs/handoffs/$MISSION/checkpoint.md"
+cat > "$FIX/docs/qa/reports/2026-01-18-fixture-restorer.md" <<'EOF'
+# QA Run Report — 2026-01-18 — another mission, whose squash restores this mission's checkpoint
+- **Started:** 2026-01-18T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "another mission (squash) that writes this checkpoint back to the fork's version" >/dev/null
+qa_tip_restorer_floor="$( [ "$(git rev-parse "HEAD:docs/handoffs/$MISSION/checkpoint.md")" = "$(git rev-parse "$(git merge-base HEAD missao/qa-report-owner):docs/handoffs/$MISSION/checkpoint.md")" ] && echo fork-blob )/$(git diff-tree --no-commit-id -r --name-only HEAD -- "docs/handoffs/$MISSION/" | sed "s@^docs/handoffs/$MISSION/@@" | tr '\n' ' ')"
+git checkout -q missao/qa-report-owner
+git checkout main -- docs/qa/reports/2026-01-18-fixture-restorer.md
+git commit -qm "chore: the mission brings that report from the base tip" >/dev/null
+assert_eq "the restoring commit leaves the fork point's blob of this mission's checkpoint.md" \
+  "fork-blob/checkpoint.md " "$qa_tip_restorer_floor"
+qa_refused "a checkpoint blob from before the fork does not vouch for another mission's report"
+git reset -q --hard HEAD~1
+git branch -q -f main "$qa_tip_main"
 
 # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, as the fixture above.
 # First UNCOMMITTED — the skill may leave the report in the tree when the gate reads it — then

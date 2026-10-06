@@ -937,14 +937,21 @@ path_in_commits() {
 # origin/<b> -- f`, a cherry-pick): that commit carries another mission's progress or none.
 # The PROGRESS files and not the whole dir (Codex review of PR #222, reproduced): another mission's
 # squash can edit this one's approved intent — lote 4 backfilled `adr:` into fourteen 00-missao.md
-# in one commit — and "touches the dir" read its report as this mission's. DECLARED, fail open: a
-# commit of another mission that edits THIS mission's checkpoint as well; none is known.
+# in one commit — and "touches the dir" read its report as this mission's. And every progress file
+# that commit moved must be left as a BLOB one of the mission's own commits wrote (#225, ADR 0016
+# §1): a commit of another mission that also edits THIS mission's checkpoint moves the right path
+# and leaves a blob no commit of the branch ever had. DECLARED, fail open: another mission's commit
+# that writes this checkpoint byte for byte as a version the branch already committed. DECLARED,
+# fail closed: a squash whose checkpoint no non-merge commit of the branch left — a conflict
+# resolved in a merge commit, or an edit made on the forge and never fetched.
 # PLUMBING, for the reason mission_qa_report gives (log.showSignature); `--root` so an add in a
 # root commit is seen at all. DECLARED, fail closed: the mission's own report cherry-picked to the
 # base without its dir, a rebase-merge (each commit replayed alone; 0 of 110 PR merges on
 # sales_quote's develop since 2026-08-01), and a report whose NAME another mission merged first.
 tip_add_carries_mission() {
-  local path="$1" c add
+  local path="$1" c add meta p blob ranged=""
+  local cp="$HANDOFF_DIR/$MISSION/checkpoint.md" cn="$HANDOFF_DIR/$MISSION/checkpoint-notas.md"
+  local -A mine=()
   shift
   for c in "$@"; do
     git -C "$REPO_ROOT" cat-file -e "$c:$path" 2>/dev/null || continue
@@ -953,6 +960,30 @@ tip_add_carries_mission() {
         | git -C "$REPO_ROOT" diff-tree --stdin --root -r -z --diff-filter=A --name-only -- "$path" 2>/dev/null) || true
     [ -n "$add" ] || return 1
     [ -n "$(git -C "$REPO_ROOT" diff-tree --root --no-commit-id -r --name-only "$add" -- "$HANDOFF_DIR/$MISSION/checkpoint.md" "$HANDOFF_DIR/$MISSION/checkpoint-notas.md" 2>/dev/null)" ] || return 1
+    # #225, ADR 0016 §1: and every progress file that commit moved is left as a BLOB this branch
+    # already had. The mission's own squash leaves the blob of the tip it squashed; another
+    # mission's commit that also edits this checkpoint leaves one no commit of the branch ever
+    # wrote. The branch's blobs are read once, lazily — only a report already on a base tip pays —
+    # from EVERY commit of `HEAD --not <base refs>` that moved the two files, never HEAD's alone: a
+    # note written after the squash moves HEAD's checkpoint and not the squash's. `--raw` carries
+    # the full blob id (the field before the status letter, whatever the hash length), and the key
+    # is "<blob> <path>" as git prints both sides alike (quoted or not), so no -z is needed. The two
+    # paths go through `cp`/`cn` and are not spelt out again: QA_report_tip_any_mission and
+    # _any_file_of_mission rewrite the literal pair on the line above, unranged, and a second
+    # literal copy here would widen this read with them and blind both (measured).
+    if [ -z "$ranged" ]; then
+      ranged=1
+      while IFS=$'\t' read -r meta p; do
+        meta="${meta% *}"; blob="${meta##* }"
+        if [ -n "$p" ]; then mine["$blob $p"]=1; fi
+      done < <(git -C "$REPO_ROOT" rev-list HEAD --not "$@" -- "$cp" "$cn" 2>/dev/null \
+                 | git -C "$REPO_ROOT" diff-tree --stdin --root --no-commit-id -r --raw -- "$cp" "$cn" 2>/dev/null || true)
+    fi
+    while IFS=$'\t' read -r meta p; do
+      [ -n "$p" ] || continue
+      meta="${meta% *}"; blob="${meta##* }"
+      [ -n "${mine["$blob $p"]+x}" ] || return 1
+    done < <(git -C "$REPO_ROOT" diff-tree --root --no-commit-id -r --raw "$add" -- "$cp" "$cn" 2>/dev/null || true)
   done
   return 0
 }
@@ -1006,7 +1037,8 @@ tip_add_carries_mission() {
 # squash or a cherry-pick, or this mission's own, squash-merged and read after a fetch — the base
 # commit that ADDED it decides (tip_add_carries_mission, ADR 0015 §3): it counts only when that
 # commit moves this mission's checkpoint (checkpoint.md or checkpoint-notas.md), never merely some
-# file of its dir. Refusing every report at the tip would take from a
+# file of its dir, and leaves it as a blob a commit of the mission wrote (ADR 0016 §1). Refusing
+# every report at the tip would take from a
 # squash-merged mission its own report; asking nothing let another mission's count (review r5).
 #
 # The charter stays out on purpose (decision 3 of the grill): it is durable doc that crosses cycles

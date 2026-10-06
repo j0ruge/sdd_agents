@@ -268,8 +268,15 @@ issue #205 it passed as `done`. The conditions:
     config does not reach, and both reads pin the rename limit. With **nothing to measure against**
     (no base ref, no merge-base, or HEAD has nothing the base lacks: a mission on the base branch, or
     one already merged, upstream included) the gate reads the most recent report in the tree, as
-    before. Declared residue (`TODO.md`): a report another mission added upstream after the fork,
-    brought in by checkout, squash or cherry-pick, is new to the merge-base and counts. One
+    before. A report another mission added upstream after the fork, brought in by checkout, squash
+    or cherry-pick, is new to the merge-base; it counts only when the newest commit of the base tip
+    that added it moves this mission's `checkpoint.md` or `checkpoint-notas.md`
+    ([ADR 0015 §3](adr/0015-the-stamp-is-not-headless.md)) **and** leaves each of those files as a
+    blob one of the mission's own commits wrote (`rev-list HEAD --not <base refs>`;
+    [ADR 0016 §1](adr/0016-the-mission-checkpoint-and-the-kit-worktree.md), #225). Declared residue:
+    it fails open when another mission writes this checkpoint byte for byte as a version the branch
+    committed, and fails closed — visibly — when the squash's blob came from a merge commit of the
+    branch or a forge edit never fetched. One
     function (`mission_qa_report`) answers for this anchor and for `qa_substep`, so the sub-step and
     the gate never disagree about which file is the mission's — the charter stays out, because it is
     durable doc that crosses cycles ([ADR 0013](adr/0013-o-relatorio-da-missao-e-o-texto-proposto.md));

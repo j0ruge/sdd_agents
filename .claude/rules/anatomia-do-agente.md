@@ -127,7 +127,10 @@ sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE
 de `REVIEW_PROSE_CRITERIA` (prosa) e exige A em todo o resto, nome desconhecido incluído. As
 Âncoras 1 e 2 do `gate_QA` satisfeitas por relatório de **outra** missão: fechada em
 `20260928-os-achados-da-janela` (ADR 0013) — o relatório é o que a branch da missão adicionou
-(`mission_qa_report`), com recuo para a resposta de antes quando o range é vazio.
+(`mission_qa_report`), com recuo para a resposta de antes quando o range é vazio. O relatório que
+outra missão pôs na ponta da base só conta com o checkpoint desta missão movido pelo commit que o
+adicionou (ADR 0015 §3) e deixado num blob que a própria missão escreveu (ADR 0016 §1, #225).
+Resíduo: outra missão que reescreve o checkpoint byte a byte igual a uma versão da branch passa.
 
 ## 5. Memória — o que persiste entre sessões
 
