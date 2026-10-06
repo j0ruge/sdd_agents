@@ -1,6 +1,6 @@
 ---
 missao: 20261006-lote-5-o-que-o-lote-4-deixou
-atualizado: 2026-10-06 09:24
+atualizado: 2026-10-06 11:05
 ---
 
 # Checkpoint — Lote 5: o que o lote 4 deixou
@@ -48,7 +48,7 @@ atualizado: 2026-10-06 09:24
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | #226: tests/isolate-git.sh carregado pela suíte, pelo catálogo e por todo sensor | `o=$(bash tests/check-health.sh 2>&1); grep -c -e '^  ok    surface: .* clears the repository a git-driven caller hands it' -e '^  ok    surface: every sensor sources tests/isolate-git.sh before its first git' <<< "$o"` → `4` | pending | — |
+| I1 | #226: tests/isolate-git.sh carregado pela suíte, pelo catálogo e por todo sensor | `o=$(bash tests/check-health.sh 2>&1); grep -c -e '^  ok    surface: .* clears the repository a git-driven caller hands it' -e '^  ok    surface: every sensor sources tests/isolate-git.sh before its first git' <<< "$o"` → `4` | done | fc763ef |
 | I2 | #224: linha com menos de cinco células recusada pelo nome nos dois leitores | `o=$(bash tests/check-checkpoint.sh --selftest 2>&1; bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    rule: a row with fewer than five cells is refused by name' -e '^  ok    the row with fewer than five cells is refused by name' <<< "$o"` → `2` | pending | — |
 | I3 | #223: red_norm guarda o array vazio | `o=$(bash tests/check-checkpoint.sh --selftest 2>&1); grep -c '^  ok    red_norm guards its empty array' <<< "$o"` → `1` | pending | — |
 | I4 | #232: deferred só vale com a decisão escrita no bug | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    .*## Decision' <<< "$o"` → `3` | pending | — |
