@@ -1404,6 +1404,17 @@ mut_RUN_stamp_stop_missing() {
 mut_PR_stamp_marker_always() {
   sed -i '/^gate_PR() {/,/^}/ s@^  GATE_PR_STAMP_WHY=""$@  GATE_PR_STAMP_WHY="armed on entry"@' "$1"
 }
+# #228 back, from both sides. The impossible-stamp marker is never armed, so a tree no `sdd health`
+# can stamp is sent to the review-bot order and to './bin/sdd health' all the same; or the stop
+# always takes the impossible branch, so a merely stale stamp loses the order that makes one run
+# enough. Caught by `run stops at an impossible stamp with the remedy that can work, and a stale stamp
+# keeps the review-bot order` (world 9b of check-gates.sh) — its impossible half and its stale half.
+mut_PR_stamp_impossible_unmarked() {
+  sed -i '/^gate_PR() {/,/^}/ { /^        GATE_PR_STAMP_IMPOSSIBLE="\$MUTATION_STAMP_WHY_KIND"$/d; }' "$1"
+}
+mut_RUN_stamp_remedy_always_impossible() {
+  sed -i '/^cmd_run() {/,/^}/ s@if \[ -n "\$GATE_PR_STAMP_IMPOSSIBLE" \]; then@if true; then@' "$1"
+}
 
 # agents/ falls out of the key again (#67; ADR 0015 §1): a commit that edits only a hat leaves the
 # stamp valid over content the catalogue never ran against, though the runner reads every hat out of
@@ -5961,6 +5972,8 @@ CATALOG=(
   PR_stamp_key_ignores_agents
   RUN_stamp_stop_missing
   PR_stamp_marker_always
+  PR_stamp_impossible_unmarked
+  RUN_stamp_remedy_always_impossible
   RUN_config_not_reloaded
   RUN_config_reload_keeps_deleted
   RUN_config_reload_drops_env

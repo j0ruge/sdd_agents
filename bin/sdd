@@ -2406,9 +2406,15 @@ mutation_stamp_key() { # mutation_stamp_key <root>
 # ⚠️ NO PROBE for the reset, declared: every lap that finds the marker armed returns 2 and every
 # `sdd run` is a new process, so no world reaches a gate_PR call over a marker left armed.
 GATE_PR_STAMP_WHY=""
+# Its sibling, on the same contract (#228): the KIND of an empty key (mutation_stamp_why's
+# MUTATION_STAMP_WHY_KIND — `missing`, `not-git`, `deleted`, `untracked`, `unreadable`) when no
+# `sdd health` can stamp this tree as it stands, empty when the stamp is merely absent or stale.
+# cmd_run branches on it to name the remedy, never on the prose of GATE_PR_STAMP_WHY.
+GATE_PR_STAMP_IMPOSSIBLE=""
 
 gate_PR() {
   GATE_PR_STAMP_WHY=""
+  GATE_PR_STAMP_IMPOSSIBLE=""
   local p="$MISSION_DIR/50-pr.md"
   [ -f "$p" ] || { GATE_WHY="missing 50-pr.md"; return 1; }
   local url; url="$(frontmatter "$p" pr_url)"
@@ -2490,6 +2496,7 @@ gate_PR() {
       if [ -n "$MUTATION_STAMP_WHY" ]; then
         GATE_WHY="no mutation stamp is possible for this tree: $MUTATION_STAMP_WHY, then run 'sdd health'"
         GATE_PR_STAMP_WHY="$GATE_WHY"
+        GATE_PR_STAMP_IMPOSSIBLE="$MUTATION_STAMP_WHY_KIND"
         return 1
       fi
     fi
@@ -8468,8 +8475,17 @@ cmd_run() {
         info ""
         warn "the PR phase is waiting for the mutation stamp, and the stamp is not headless: $GATE_PR_STAMP_WHY"
         dim "  The PR is open and every other requirement of its gate is met. No session can write"
-        dim "  the stamp. The order: wait for every review bot on the PR, fix their findings in one"
-        dim "  batch, run './bin/sdd health' once, then 'sdd run $MISSION' again."
+        # Two remedies, on the marker and never on the sentence (#228). When the key itself is
+        # refused, './bin/sdd health' over this tree refuses to stamp too: sending the human to it
+        # first costs a run that answers what the line above already says.
+        if [ -n "$GATE_PR_STAMP_IMPOSSIBLE" ]; then
+          dim "  the stamp, and no './bin/sdd health' can stamp this tree as it stands ($GATE_PR_STAMP_IMPOSSIBLE):"
+          dim "  fix what the reason above names first, then run './bin/sdd health' once, then"
+          dim "  'sdd run $MISSION' again."
+        else
+          dim "  the stamp. The order: wait for every review bot on the PR, fix their findings in one"
+          dim "  batch, run './bin/sdd health' once, then 'sdd run $MISSION' again."
+        fi
         return 2
       fi
     fi

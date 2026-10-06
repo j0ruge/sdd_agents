@@ -886,7 +886,9 @@ there.
 likelier failures still speak first. Nothing is pushed, nothing is merged. In a repo without
 `tests/check-mutation.sh` this requirement does not exist at all. With the PR open and the stamp
 the only thing missing, `sdd run` itself stops with rc 2 and opens no session (`the stamp is not
-headless`): the publisher never runs `sdd health` (ADR 0015 §1).
+headless`): the publisher never runs `sdd health` (ADR 0015 §1). In the fourth state the stop says
+so (`no './bin/sdd health' can stamp this tree as it stands (<kind>)`) and asks for the fix first;
+for a stamp that is merely absent or stale it keeps the review-bot order (#228).
 
 **What you do:** run `./bin/sdd health` from the checkout the mission is in, and run it **after the
 last commit that touches a tracked file under `bin/ tests/ templates/ config/ agents/`**. About eighteen minutes on a laptop since PR #170 (twenty to fifty before it); a

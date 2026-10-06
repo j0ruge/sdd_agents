@@ -3075,6 +3075,8 @@ stamp_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; stamp_rc=$?
 stamp_s1="$(stub_sessions)"
 assert_eq "run stops at the stamp: rc 2, no session, the stop names './bin/sdd health'" "2|0|1|1" \
   "$stamp_rc|$(( stamp_s1 - stamp_s0 ))|$(grep -c 'the stamp is not headless' <<< "$stamp_out")|$(grep -c "run './bin/sdd health' once" <<< "$stamp_out")"
+# Kept for world 9b, which compares the remedy of an impossible stamp against THIS stale one.
+stale_stop_out="$stamp_out"
 # The projection stops where the run would — the stop sits above the dry-run branch, like PLAN's.
 stamp_s0="$(stub_sessions)"
 stamp_out="$( cd "$FIX" && "$SDD" run --dry-run "$MISSION" 2>&1 )"; stamp_rc=$?
@@ -3168,6 +3170,18 @@ assert_eq "stamp-key: a root missing one of the measured paths is never stamped"
 partial_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
 assert_eq "gate_PR and sdd health both name the measured path a partial root is missing" "1|0|1" \
   "$(grep -c 'no mutation stamp is possible for this tree: config/ missing at ' <<< "$partial_why")|$(grep -c 'no green mutation catalogue' <<< "$partial_why")|$(grep -c 'nothing was stamped: config/ missing at' <<< "$partial_health")"
+# 9b. AN IMPOSSIBLE STAMP STOPS WITH ITS OWN REMEDY (#228). The stop above the session is the same
+#     rc 2, but the order it printed — every review bot, one batch, then './bin/sdd health' — sent the
+#     human to a command that refuses this tree in other words. DIFFERENTIAL against the stale world
+#     of 4b, on the marker gate_PR publishes and never on its prose: the stale stop keeps the order
+#     and does not say "fix first"; the impossible one says "fix first" and drops the order. Counts:
+#     rc · sessions bought · order · fix-first, stale world then impossible world.
+imp_s0="$(stub_sessions)"
+imp_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; imp_rc=$?
+imp_s1="$(stub_sessions)"
+assert_eq "run stops at an impossible stamp with the remedy that can work, and a stale stamp keeps the review-bot order" \
+  "stale:1:0|impossible:2|0|0|1" \
+  "stale:$(grep -c 'wait for every review bot' <<< "$stale_stop_out"):$(grep -c 'fix what the reason above names first' <<< "$stale_stop_out")|impossible:$imp_rc|$(( imp_s1 - imp_s0 ))|$(grep -c 'wait for every review bot' <<< "$imp_out")|$(grep -c 'fix what the reason above names first' <<< "$imp_out")"
 mkdir -p "$FIX/config"
 printf 'fixture config\n' > "$FIX/config/fixture.conf"
 git add -A && git commit -qm "chore: the measured path comes back" >/dev/null

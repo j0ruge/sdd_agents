@@ -284,7 +284,9 @@ não pode sobreviver indefinidamente. A semântica geral de órfãos da execuç�
 **Onde mora hoje.** `aprovacao:` + `sdd approve` (gate PLAN); rc 2 sem sessão, que é passo humano
 desenhado e não escalada (sem linha de ledger, sem hook): o PLAN e, desde
 `20261004-lote-4-a-catraca-zera`, o carimbo de mutação quando o PR está aberto e só ele falta
-(`GATE_PR_STAMP_WHY`, ADR 0015 §1) — o `sdd run` nomeia a ordem e o `./bin/sdd health`; rc 3 em
+(`GATE_PR_STAMP_WHY`, ADR 0015 §1) — o `sdd run` nomeia a ordem e o `./bin/sdd health`, e desde
+#228 o carimbo **impossível** (`GATE_PR_STAMP_IMPOSSIBLE`) troca a ordem por "conserte o que o
+motivo nomeia primeiro"; rc 3 em
 `handoff_blocked_escalation`, `app_down_escalation`, `increment-blocked`, `dirty-tree`,
 `no-progress`, `budget-exhausted`, e desde `20260922-o-motivo-da-fase` `no_work_escalation`
 (`kind: "no-work"`) — a única que para a linha **antes** da sessão, quando a célula do checkpoint

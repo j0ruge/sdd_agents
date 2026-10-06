@@ -506,7 +506,11 @@ escalation: no ledger row, no pager. No session can write the stamp, and the ord
 `sdd health` enough is the human's: every review bot on the PR, their fixes in one batch,
 `./bin/sdd health` once, then `sdd run <mission>` again. The publisher no longer runs it; the PR
 body carries that order. `gate_PR` publishes the case as a marker (`GATE_PR_STAMP_WHY`) so the
-runner never reads it out of the prose. `sdd retry PR` has no such stop — it is the human's hand.
+runner never reads it out of the prose. When the stamp is not merely absent but **impossible** — the
+key itself is refused (`no mutation stamp is possible for this tree: …`) — a second marker
+(`GATE_PR_STAMP_IMPOSSIBLE`, the kind: `missing`, `deleted`, `untracked`, `unreadable`) changes the
+remedy: fix what the reason names first, then `./bin/sdd health` once, then `sdd run` again. The
+review-bot order would send the human to a `sdd health` that refuses this tree in other words (#228). `sdd retry PR` has no such stop — it is the human's hand.
 
 ## The mission's branch
 
