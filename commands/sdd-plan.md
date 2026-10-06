@@ -22,11 +22,35 @@ writes the artifacts from memory, and their headings are the contract the gates 
    Do not invent a `HANDOFF_DIR`, and do not create the config yourself: `sdd install` derives
    `DEFAULT_BRANCH` and `TEST_CMD` from the repo, and a hand-written stub would carry neither.
 
-2. From that config, read `HANDOFF_DIR`, `OUTPUT_LANG`, `DEFAULT_BRANCH`, `TODO_FILE` and
+2. **If this checkout is the kit that `sdd` runs from, move to a linked worktree before writing
+   anything.** Resolve `sdd="$(readlink -f "$(command -v sdd)")"` and compare it with the root from
+   step 1: when it lies under that root (`case "$sdd" in "$root"/*)` — the slash keeps a sibling
+   such as `<root>-lote-5` out), every `sdd run` of every other repository on this machine executes
+   this checkout, and its kit guard compares this checkout's `HEAD` and `git status --porcelain`
+   before and after each phase. One untracked `00-missao.md` written here while a target's EXEC
+   runs stops that run with `KIT-TOUCHED` (rc 3); a linked worktree, dirty or with commits, moves
+   neither. So, before writing any artifact:
+   - create the worktree beside this checkout, on the branch the mission will declare in
+     `branch:`, cut from the remote's `DEFAULT_BRANCH` — `git fetch`, then
+     `git worktree add ../<repo>-<slug> -b <branch> origin/<DEFAULT_BRANCH>` — or reuse it, when
+     it already exists on that branch. Never `git pull` here to freshen the base: a fetch moves no
+     `HEAD`, a pull moves the very one the kit guard compares;
+   - take the worktree as the repository root for every step below: the config, `HANDOFF_DIR`,
+     the artifacts, `sdd why` and `sdd approve` all run from there, and this checkout stays on
+     `DEFAULT_BRANCH`, clean. Inside it, `health`, `preflight` and `install` run as `./bin/sdd`:
+     the `sdd` on the PATH keeps its `SDD_HOME` in this checkout, and would install this
+     checkout's `agents/` over the worktree's;
+   - tell the human, in one line, the worktree's path and branch, and that the mission is
+     executed there too — interactively, never by a `sdd run` from this checkout.
+
+   When `sdd` is not on the PATH, or resolves outside this root, skip this step: no run of another
+   repository executes this checkout.
+
+3. From that config, read `HANDOFF_DIR`, `OUTPUT_LANG`, `DEFAULT_BRANCH`, `TODO_FILE` and
    `JIRA_ENABLED`. Report them back in one line, so the user sees what the session is about to
    honour.
 
-3. List the four templates you will write from, by absolute path, and confirm each one exists:
+4. List the four templates you will write from, by absolute path, and confirm each one exists:
 
    - `~/repos/sdd_agents/templates/missao.md` → `00-missao.md`
    - `~/repos/sdd_agents/templates/plano.md` → `01-plano.md`
@@ -39,8 +63,9 @@ writes the artifacts from memory, and their headings are the contract the gates 
 ## Then
 
 Delegate to the `sdd-planner` subagent, handing it: the mission topic the user gave (ask, if the
-command came with no argument), the config values from step 2, and the absolute template paths from
-step 3 — stated as *the* templates to start from, never as examples.
+command came with no argument), the repository root it writes under (the worktree, when step 2 moved
+you), the config values from step 3, and the absolute template paths from step 4 — stated as *the*
+templates to start from, never as examples.
 
 The planner conducts the brainstorm and the grill **with the human present** — through you, as the
 next section says, because it cannot reach the human on its own. Do not plan on their behalf, and

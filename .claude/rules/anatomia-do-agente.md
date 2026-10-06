@@ -234,9 +234,21 @@ chapéu que escreve fora de `writes:` também (`hat-crossed`) — as duas pela m
 que explique o movimento, o diff do intervalo de antes; a atribuição nunca alarga o diff líquido da
 fase. Limites: um git que gravasse mensagem própria no lugar do rótulo trocaria o `kind`, nunca a
 parada (nenhum comando medido no git 2.43 faz isso; o `rebase` grava `<rótulo> (pick): …`); sujeira **não commitada** de um escritor
-concorrente continua atribuída ao chapéu; a guarda de kit não lê o rótulo. Sem worktree nem container: o ledger
-carimba caminho e um worktree já confundiu a identidade do repo (comentários `WORKTREE` do
-`bin/sdd`). Fechar pede desenho próprio, não um `git worktree add` no laço.
+concorrente continua atribuída ao chapéu; a guarda de kit não lê o rótulo. Sem container, e sem worktree
+**no laço**: o `sdd run` roda no checkout do humano, e isolar a fase num `git worktree add` dentro do
+`cmd_run` pede desenho próprio (Y2 do `CONTEXT.md`). A identidade do repo deixou de ser o obstáculo —
+o ledger lê o `.git` comum desde `c514e36`, e worktree do mesmo repo é o mesmo repo. A exceção é a
+**missão do próprio kit**, desde o lote 5 (#235, ADR 0016 §2): o `sdd` do PATH é o checkout
+principal do kit, e o `kit_guard_check` de todo `sdd run` de alvo compara o `HEAD` e o
+`status --porcelain` dele, então um `00-missao.md` não rastreado gravado ali durante o EXEC de um
+alvo para aquela corrida com `KIT-TOUCHED`. Por isso o `/sdd-plan` (passo 2 de *Before anything
+else*) escreve a missão do kit num worktree ligado, e a sessão **interativa** a executa lá — nunca
+um `sdd run` a partir do checkout principal; dentro dele `health`, `preflight` e `install` rodam
+por `./bin/sdd`. Medido: worktree sujo e com commit deixa o carimbo do principal em
+`89df2e5|false`; o mesmo arquivo no principal, `|true`. É posse do checkout, não isolamento de
+filesystem. ⚠️ Dentro de um worktree ligado, `git bisect run`, `git rebase --exec`, os hooks
+`pre-commit`/`pre-push` e um alias `!` exportam `GIT_DIR` absoluto; a suíte, o catálogo e cada
+sensor o limpam desde #226 (`tests/isolate-git.sh`).
 ⚠️ **Medido em 2026-09-03 18:45, vinte minutos depois de o L4 pousar:** uma segunda sessão
 interativa do Claude Code, aberta em outro repo, rodou `sdd run --phase REVIEW --budget-override`
 sobre a missão já mergeada do próprio kit — trocou a branch da árvore de trabalho **debaixo de um

@@ -356,6 +356,35 @@ command_relay_probes() {
   fi
 }
 
+# --- /sdd-plan: a mission of the kit `sdd` runs from is written in a linked worktree (#235) -------
+# The `sdd` on the PATH is the kit's main checkout, and kit_guard_check (bin/sdd) compares that
+# checkout's HEAD and `git status --porcelain` around every phase of every target's run: an untracked
+# 00-missao.md written there during a target's EXEC stopped the run with KIT-TOUCHED (rc 3),
+# reproduced on a copy. A linked worktree, dirty or with commits, leaves the stamp as it was
+# (measured: `89df2e5|false` before and after; the same file in the main checkout, `|true`). The
+# rule lives in the command's prose and the catalogue never mutates commands/*.md, so this probe is
+# its whole sensor — the shape of command_approval_probes above. It reads "Before anything else",
+# not the file: a step moved below the delegation would create the worktree after the planner wrote.
+# It also demands that `health`, `preflight` and `install` run as ./bin/sdd inside the worktree: the
+# `sdd` on the PATH has its SDD_HOME in the main checkout and would install THAT checkout's agents/.
+command_worktree_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" sec
+  sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  if grep -qF 'readlink -f "$(command -v sdd)"' <<< "$sec" \
+     && grep -qF 'case "$sdd" in "$root"/*)' <<< "$sec" \
+     && grep -qF 'before writing any artifact' <<< "$sec" \
+     && grep -qF 'git worktree add ../<repo>-<slug>' <<< "$sec" \
+     && grep -qF 'take the worktree as the repository root for every step below' <<< "$sec" \
+     && grep -qF 'run as `./bin/sdd`' <<< "$sec" \
+     && grep -qF 'tell the human' <<< "$sec" \
+     && grep -qF 'resolves outside this root, skip this step' <<< "$sec"; then
+    pass "command: /sdd-plan moves a mission of the kit sdd runs from into a linked worktree before writing it"
+  else
+    fail "command: /sdd-plan no longer moves a mission of the kit sdd runs from into a linked worktree before writing it (the PATH check, the worktree, the root switch, ./bin/sdd inside it, or the line to the human)"
+  fi
+}
+
+
 # --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
 # The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
 # run it inside its session, started it in the background and ended its turn waiting (a headless
@@ -548,6 +577,7 @@ executor_agent_probes
 hat_promise_probes
 command_approval_probes
 command_relay_probes
+command_worktree_probes
 publisher_stamp_probes
 boot_probes
 release_probes
