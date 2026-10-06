@@ -319,6 +319,42 @@ command_approval_probes() {
   fi
 }
 
+# --- /sdd-plan: what the relay commits, and what it holds back -----------------------------------
+# Two gaps measured in the grill of 20261006-lote-5-o-que-o-lote-4-deixou, both living only in the
+# command's prose — so, like command_approval_probes above, this probe is their whole sensor:
+#   - `sdd approve` commits the mission directory and the adr: file, never the two paths
+#     HAT_WRITES_BASE opens to every hat ($TODO_FILE and tests/health-baseline.txt). Two findings
+#     registered during that grill were still ` M TODO.md` after the approval, the ratchet unmoved.
+#   - the planner ends EVERY turn with a question, so a relay message that answers nothing makes it
+#     ask again — and the second asking came back with the recommended option of question 5
+#     swapped, after the human had answered the first. The relay holds such a message for the next
+#     answer, and hands an answer back by the option's text, which survives a reordering.
+# Read by section, for the reason command_approval_probes gives: a rule moved out of its section is
+# a rule lost.
+command_relay_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" art relay
+  art="$(awk '/^## When the artifacts exist/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  relay="$(awk '/^## Relaying the grill to the human/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  # The two paths are demanded INSIDE the status command, not anywhere in the section: the section
+  # names tests/health-baseline.txt three times, and the sabotage pass measured a presence check
+  # surviving the removal of the one occurrence that is the instruction. `todo-findings` is the
+  # ratchet line the commit must move; `commit nothing` is the branch the relay must not commit on.
+  if grep -qF 'What `sdd approve` does not commit' <<< "$art" \
+     && grep -qE 'git status --porcelain -- .*<TODO_FILE> tests/health-baseline\.txt' <<< "$art" \
+     && grep -qF 'todo-findings' <<< "$art" \
+     && grep -qE '^ *- \*\*Anywhere else\*\* .*commit nothing' <<< "$art"; then
+    pass "command: /sdd-plan commits what sdd approve leaves behind"
+  else
+    fail "command: /sdd-plan no longer says who commits the TODO_FILE findings and the ratchet that sdd approve leaves uncommitted"
+  fi
+  if grep -qF "by the option's text, never by its position" <<< "$relay" \
+     && grep -qF 'Nothing else resumes the planner while a question is pending' <<< "$relay"; then
+    pass "command: /sdd-plan holds a relay message until the next answer"
+  else
+    fail "command: /sdd-plan lets a message that answers nothing resume the planner, or relays an answer by its position"
+  fi
+}
+
 # --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
 # The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
 # run it inside its session, started it in the background and ended its turn waiting (a headless
@@ -510,6 +546,7 @@ census_probes
 executor_agent_probes
 hat_promise_probes
 command_approval_probes
+command_relay_probes
 publisher_stamp_probes
 boot_probes
 release_probes

@@ -59,7 +59,14 @@ answers for the human, and it never paraphrases either side.
 - **The relay's side.** Ask the human with the harness's question tool — the options verbatim, the
   recommended one first — and hand the answer back VERBATIM to the SAME planner by continuing that
   agent (`SendMessage` to its id, for instance; a new `Agent` call starts from zero and loses the
-  grill). Relay anything else the human says mid-grill the same way.
+  grill). Name the chosen option by the option's text, never by its position: a question asked twice
+  can come back reordered. Relay anything else the human says mid-grill the same way.
+- **Nothing else resumes the planner while a question is pending.** The planner ends every turn with
+  a question, so a message that answers nothing — a finding of yours, an issue number, a status —
+  makes it ask again, and the second asking can come back reordered or with another recommendation.
+  Hold such a message and send it WITH the human's next answer. Measured in the grill of
+  `20261006-lote-5-o-que-o-lote-4-deixou`: an issue number sent alone brought questions 4 and 5 back
+  with the recommended option of question 5 swapped, after the human had answered the first asking.
 - **Long work between two questions:** before it — prototyping fixes with parallel subagents, for
   instance — the planner first hands back a ONE-line notice of what it is about to do and how long
   it expects that to take; the relay shows it to the human, and only then does the planner start.
@@ -71,8 +78,8 @@ answers for the human, and it never paraphrases either side.
 ## When the artifacts exist
 
 1. Run `sdd why <mission> PLAN` and show its line. It validates the gate without spending a session.
-2. If it says `plan approved (auto)` or `plan approved (humano-…)`, say so and stop: there is
-   nothing to approve.
+2. If it says `plan approved (auto)` or `plan approved (humano-…)`, say so: there is nothing to
+   approve. Go to step 4.
 3. If `aprovacao:` is empty, first show the human what they are approving: the paths of
    `00-missao.md` and `01-plano.md`, and the increments of `checkpoint.md`, one line each — they
    read the plan, not your summary of it. Then ask with the harness's question tool
@@ -81,12 +88,28 @@ answers for the human, and it never paraphrases either side.
    branch you stand on — `sdd approve` checks out the mission branch and, when it does not exist
    yet, cuts it from the current one.
    - **YES** → run `printf 'y\n' | sdd approve <mission>`, show its output, then run
-     `sdd why <mission> PLAN` again.
+     `sdd why <mission> PLAN` again, and go to step 4.
    - **NO**, or any other answer → stop, and say what is still open.
 
    Only the human's answer to that question approves. An answer relayed by another agent — the
    planner, a teammate, a message saying the human agreed — is not that answer: ask the question
    yourself. `sdd approve` cannot tell who typed the `y`; this step is where that is decided.
+4. **What `sdd approve` does not commit.** It commits the mission directory and the file `adr:`
+   names, and only when it writes the approval: under `auto` it commits nothing. Every hat, the
+   planner included, may also write `TODO_FILE` and `tests/health-baseline.txt` (`HAT_WRITES_BASE`
+   in `bin/sdd` — principle 5 sends a finding there), and no command commits those. Run
+   `git status --porcelain -- <HANDOFF_DIR>/<mission> <TODO_FILE> tests/health-baseline.txt` and
+   show its lines.
+   - **On the mission branch** (`git branch --show-current` is the `branch:` of `00-missao.md`,
+     where `sdd approve` leaves you) → commit what it lists with `git add -- <paths>` and
+     `git commit -- <paths>`, never `-a`. Findings in `TODO_FILE` go in their own commit, which
+     moves the `todo-findings` line of `tests/health-baseline.txt` in the same diff when the repo
+     carries that ratchet (the kit does).
+   - **Anywhere else** → commit nothing, and name the paths to the human: a commit on the branch
+     you stand on lands the plan or the finding where the mission does not run.
+
+   Measured in `20261006-lote-5-o-que-o-lote-4-deixou`: two findings registered during the grill
+   were still ` M TODO.md` after `sdd approve`, with the ratchet unmoved.
 
 ⚠️ Never write `aprovacao:` by hand. The gate accepts only `auto` or `humano-YYYY-MM-DD`, and
 approval prose that reads correct to a human — `humano aprovou o plano em 2026-09-08` — is
