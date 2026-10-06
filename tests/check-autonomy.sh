@@ -5936,6 +5936,45 @@ assert_eq "kit-guard: an editor's swap file rewritten in a dirty kit is not the 
   "$kg_swap_out swap:$(grep -qF 'the session edits the already-dirty file once more' "$kg_swap" 2>/dev/null && echo written || echo missing)"
 rm -f "$kg_swap"
 
+# 2d. A PATH DIRTY BEFORE THE PHASE AND CLEAN AFTER IS NAMED (final review of
+#     20261006-lote-5-o-que-o-lote-4-deixou, findings 6 and 8). The kit is dirty in three places —
+#     TODO.md modified, `zz.md` and `notes<TAB>draft.md` untracked — and the session puts all three
+#     back. The stamp moves (dirty -> clean), so the line stops in every version of the guard; what
+#     this regime measures is the REASON. Three rules, one mutant each: the `(no longer dirty)`
+#     clause exists at all; it follows git's order, which is the tree before, and not awk's hash
+#     order (mawk walks these three keys as notes, zz, TODO — measured); and the key runs to the
+#     LAST tab, the separator kit_guard_tree writes, so a tab inside a name does not cut it to
+#     `notes`. `clean:1` is the witness that the session really put the kit back.
+kitguard_clean_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  git -C "$FAKEKIT" checkout -q -- TODO.md
+  rm -f "$FAKEKIT/zz.md" "$FAKEKIT/notes"\$'\t'"draft.md"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kg_tabbed="$FAKEKIT/notes"$'\t'"draft.md"
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-clean"
+printf 'the human is editing the kit\n' >> "$FAKEKIT/TODO.md"
+printf 'scratch\n' > "$FAKEKIT/zz.md"
+printf 'scratch\n' > "$kg_tabbed"
+kitguard_clean_stub
+kg_clean_rc=0
+kg_clean_err="$( cd "$OUTSIDE/kitguard-dirty-clean" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_clean_rc=$?
+assert_eq "kit-guard: a kit path dirty before the phase and clean after is named whole, in git's order" \
+  "sessions:1 rc:3 kind:kit-touched named:1 clean:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_clean_rc kind:$(hat_rows) named:$(grep -cF "paths: TODO.md (no longer dirty), notes"$'\t'"draft.md (no longer dirty), zz.md (no longer dirty)" <<< "$kg_clean_err") clean:$([ -z "$(git -C "$FAKEKIT" status --porcelain)" ] && echo 1 || echo 0)"
+rm -f "$FAKEKIT/zz.md" "$kg_tabbed"
+git -C "$FAKEKIT" checkout -q -- TODO.md
+
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the
 #    run it finally mattered on would scroll past unread. This regime is why the guard compares

@@ -3977,19 +3977,26 @@ kit_guard_tree() {
 # a path dirty now and not before (`XY path`), a path whose status or content changed (`XY path
 # (content changed)` when only the content did), and a path dirty before and clean now (`path (no
 # longer dirty)`). Empty when the two trees agree. Called, never `$( )`-captured.
+# The `(no longer dirty)` items come in the order of the tree before — git's — and never in awk's
+# hash order, which walked `TODO.md, notes, zz.md` as notes, zz, TODO (final review of
+# 20261006-lote-5-o-que-o-lote-4-deixou, finding 8). The key runs to the LAST tab, the separator
+# kit_guard_tree writes before the digest: `git status -z` hands a tab inside a name over as is,
+# and cut at the first one the reason named `notes` for `notes<TAB>draft.md`. Both only ever
+# garbled the reason — the stop itself compares the whole trees (kit_guard_check).
 kit_guard_changes() {   # kit_guard_changes <tree before> <tree after>
   KIT_GUARD_CHANGES="$( KG_BEFORE="$1" awk '
-    function key(l,  t) { t = index(l, "\t"); return substr(l, 4, t - 4) }
-    function head(l) { return substr(l, 1, index(l, "\t") - 1) }
+    function cut(l) { return match(l, /\t[^\t]*$/) ? RSTART : length(l) + 1 }
+    function key(l) { return substr(l, 4, cut(l) - 4) }
+    function head(l) { return substr(l, 1, cut(l) - 1) }
     BEGIN { n = split(ENVIRON["KG_BEFORE"], b, "\n")
-            for (i = 1; i <= n; i++) if (b[i] != "") was[key(b[i])] = b[i] }
+            for (i = 1; i <= n; i++) if (b[i] != "") { k = key(b[i]); if (!(k in was)) ord[++m] = k; was[k] = b[i] } }
     $0 != "" { p = key($0); seen[p] = 1
       if (!(p in was)) item = head($0)
       else if (was[p] == $0) next
       else if (substr(was[p], 1, 2) == substr($0, 1, 2)) item = head($0) " (content changed)"
       else item = head($0)
       out = out sep item; sep = ", " }
-    END { for (p in was) if (!(p in seen)) { out = out sep p " (no longer dirty)"; sep = ", " }
+    END { for (i = 1; i <= m; i++) if (!(ord[i] in seen)) { out = out sep ord[i] " (no longer dirty)"; sep = ", " }
           print out }' <<< "$2" )"
 }
 

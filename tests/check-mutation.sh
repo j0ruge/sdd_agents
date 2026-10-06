@@ -4120,6 +4120,21 @@ mut_RUN_kit_guard_tree_unarmed() {
 mut_RUN_kit_touched_says_nothing_changed() {
   sed -i '/^kit_guard_check() {/,/^}/ { /^  KIT_TOUCHED_WHY="${KIT_TOUCHED_WHY:+/d; }' "$1"
 }
+# The three rules of kit_guard_changes that only the reason shows (final review of
+# 20261006-lote-5-o-que-o-lote-4-deixou, findings 6 and 8): a path dirty before the phase and clean
+# after drops out of the clause; it comes back in awk's hash order; the key stops at the FIRST tab
+# and `notes<TAB>draft.md` reads as `notes`. The stop survives all three — the trees still differ —
+# so each is caught by the `named` term of `kit-guard: a kit path dirty before the phase and clean
+# after is named whole, in git's order` in check-autonomy.sh, never by its rc or kind.
+mut_RUN_kit_guard_no_longer_dirty_silent() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s|for (i = 1; i <= m; i++) if (!(ord\[i\] in seen)) { out = out sep ord\[i\] " (no longer dirty)"; sep = ", " }||' "$1"
+}
+mut_RUN_kit_guard_no_longer_dirty_hash_order() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s|for (i = 1; i <= m; i++) if (!(ord\[i\] in seen)) { out = out sep ord\[i\] |for (p in was) if (!(p in seen)) { out = out sep p |' "$1"
+}
+mut_RUN_kit_guard_key_first_tab() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s#match(l, /\\t\[^\\t\]\*\$/) ? RSTART : length(l) + 1#index(l, "\\t")#' "$1"
+}
 
 # ---------------------------------------------------------------------------
 # ADR 0014 — the behaviour version the ledger row carries.
@@ -6366,6 +6381,9 @@ CATALOG=(
   RUN_kit_guard_tree_no_content
   RUN_kit_guard_tree_unarmed
   RUN_kit_touched_says_nothing_changed
+  RUN_kit_guard_no_longer_dirty_silent
+  RUN_kit_guard_no_longer_dirty_hash_order
+  RUN_kit_guard_key_first_tab
   RUN_kit_rev_is_head
   RUN_kit_rev_dirty_whole_tree
   RUN_kit_guard_reads_rev
