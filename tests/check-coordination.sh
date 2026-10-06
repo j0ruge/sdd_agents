@@ -924,9 +924,12 @@ try:
                extra={"COORD_LEAVE": "2.31", "COORD_LEAVE_PID": str(leave_pid)})
     pids = leave_pid.read_text().split() if leave_pid.exists() else []
     quiet = run(repo, "phase", "20260101-one")
-    check("a process the worker leaves behind is named once, with its pid and command line",
+    # The executable and never its arguments (CodeRabbit review of PR #237): a background command
+    # may carry a credential on its command line. `2.31` is the argument the witness was started with.
+    check("a process the worker leaves behind is named once, with its pid and executable, never its arguments",
           len(pids) == 1 and left.stdout.count("this command waits for") == 1
-          and ("  pid %s: sleep 2.31" % pids[0] if pids else "?") in left.stdout
+          and ("  pid %s: sleep\n" % pids[0] if pids else "?") in left.stdout
+          and "2.31" not in left.stdout
           and "this command waits for" not in quiet.stdout,
           "pids=%s left=%r quiet=%r" % (pids, left.stdout[-400:], quiet.stdout[-200:]))
     # The hook names nothing: its family is bounded by the deadline (5 s + 1 s), so nothing waits on
@@ -942,6 +945,27 @@ try:
     check("a hook's straggler is waited for in silence: the hook names nothing",
           hook_quiet.returncode == 0 and hook_quiet.stderr == "",
           "rc=%s stderr=%r" % (hook_quiet.returncode, hook_quiet.stderr[-300:]))
+    # A closed stderr does not end the supervision (CodeRabbit review of PR #237): the report raised
+    # BrokenPipeError out of wait_family, the supervisor exited before ECHILD, and the checkout lock
+    # went with it while the family ran. name_stragglers is called alone, over a stderr whose every
+    # write raises and a family of one, and must return; `survived` is printed only if it did.
+    pipe_closed = subprocess.run(
+        [sys.executable, "-B", "-c",
+         "import importlib.util, sys\n"
+         "spec = importlib.util.spec_from_file_location('coord', sys.argv[1])\n"
+         "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+         "class Closed:\n"
+         "    def write(self, text): raise BrokenPipeError(32, 'Broken pipe')\n"
+         "    def flush(self): raise BrokenPipeError(32, 'Broken pipe')\n"
+         "m.descendants = lambda: [(4242, 'sleep')]\n"
+         "sys.stderr = Closed()\n"
+         "m.name_stragglers('phase')\n"
+         "sys.stderr = sys.__stderr__\n"
+         "print('survived')\n",
+         str(root / "bin/sdd-coordination.py")], capture_output=True, text=True, timeout=10)
+    check("a closed stderr does not end the supervision: naming the stragglers is best effort",
+          pipe_closed.returncode == 0 and pipe_closed.stdout == "survived\n",
+          "rc=%s stdout=%r" % (pipe_closed.returncode, pipe_closed.stdout[-300:]))
     for victim, mode in [("owner", "ordinary"), ("worker", "ordinary"), ("owner", "escaped")]:
         orphan = start(repo, mode=mode)
         identity = json.loads(orphan[1].read_text())

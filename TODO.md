@@ -99,7 +99,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Saída humana e cosmética
 
 - [ ] **Servidor deixado por uma fase segura o `sdd run` vivo e mudo depois do veredito** —
-  `bin/sdd-coordination.py:390` (`waitpid`) — o supervisor é subreaper e espera até ECHILD (desenho,
+  `bin/sdd-coordination.py:400` (`waitpid`) — o supervisor é subreaper e espera até ECHILD (desenho,
   `docs/pipeline.md:53`), mas não diz por quem espera. Medido no sales_quote: o QA:exec reiniciou o
   backend com `nohup … &`, o runner imprimiu BLOCKED e ficou em `do_wait` até o `npm run dev` morrer.
   Nem agente nem `turn_rule` proíbem subir processo longo. Direção: worker colhido com filhos vivos

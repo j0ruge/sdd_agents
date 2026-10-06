@@ -312,7 +312,7 @@ STRAGGLER_GRACE = 1
 
 
 def descendants():
-    """(pid, cmdline) of every live descendant, read from /proc. It only READS: it selects no
+    """(pid, executable) of every live descendant, read from /proc. It only READS: it selects no
     recipient and decides nothing about the lock, which only ECHILD releases."""
     found, pending = [], [os.getpid()]
     while pending:
@@ -334,8 +334,12 @@ def descendants():
                     command = Path('/proc/%s/cmdline' % pid).read_bytes()
                 except OSError:
                     command = b''
-                command = command.replace(b'\0', b' ').strip().decode('utf-8', 'replace')
-                found.append((identity['pid'], command[:200] or '?'))
+                # The executable alone, never its arguments (CodeRabbit review of PR #237): a command
+                # left in the background may carry a credential on its command line, and this report
+                # lands on stderr, which a log or a captured run keeps. The pid beside it is enough
+                # for `ps -o args= -p <pid>`, on the operator's own terminal.
+                command = os.path.basename(command.split(b'\0', 1)[0]).decode('utf-8', 'replace')
+                found.append((identity['pid'], command or '?'))
                 pending.append(identity['pid'])
     return found
 
@@ -346,12 +350,18 @@ def name_stragglers(command):
     if not family:
         return
     one = len(family) == 1
-    print('sdd %s: done, but %d %s it left running %s the checkout; this command waits for %s, '
-          'and the checkout stays held, until %s:'
-          % (command, len(family), 'process' if one else 'processes', 'holds' if one else 'hold',
-             'it' if one else 'them', 'it exits' if one else 'they exit'), file=sys.stderr, flush=True)
-    for pid, line in family:
-        print('  pid %d: %s' % (pid, line), file=sys.stderr, flush=True)
+    # Best effort (CodeRabbit review of PR #237): with stderr closed, the BrokenPipeError left
+    # wait_family, the supervisor exited before ECHILD, and the checkout lock went with it while the
+    # family still ran. A report nobody can read is dropped; the wait it describes goes on.
+    try:
+        print('sdd %s: done, but %d %s it left running %s the checkout; this command waits for %s, '
+              'and the checkout stays held, until %s (`ps -o args= -p <pid>` shows the arguments):'
+              % (command, len(family), 'process' if one else 'processes', 'holds' if one else 'hold',
+                 'it' if one else 'them', 'it exits' if one else 'they exit'), file=sys.stderr, flush=True)
+        for pid, line in family:
+            print('  pid %d: %s' % (pid, line), file=sys.stderr, flush=True)
+    except OSError:
+        pass
 
 
 def wait_family(child, signals, deadline=None, grace=2, relay=None, announce=None):

@@ -5881,7 +5881,7 @@ mut_COORD_select_pidfd() {
 
 # #234: the supervisor goes back to waiting MUTE for the family a worker left behind — `sdd run`
 # alive after its verdict, and nothing saying why. Caught by "a process the worker leaves behind is
-# named once, with its pid and command line" (check-coordination.sh).
+# named once, with its pid and executable, never its arguments" (check-coordination.sh).
 mut_COORD_stragglers_unnamed() {
   sed -i "s@^    result = wait_family(child, signals, announce=value\['command'\])\$@    result = wait_family(child, signals)@" "${1%/*}/sdd-coordination.py"
 }
@@ -5893,6 +5893,17 @@ mut_COORD_stragglers_named_every_tick() {
 # straggler is waited for in silence: the hook names nothing" (check-coordination.sh).
 mut_COORD_hook_names_stragglers() {
   sed -i "s@^    return wait_family(child, signals, deadline, grace, relay=child)\$@    return wait_family(child, signals, deadline, grace, relay=child, announce='hook')@" "${1%/*}/sdd-coordination.py"
+}
+# The report prints the whole command line again, arguments and any credential in them (CodeRabbit
+# review of PR #237). Caught by the `2.31` term of "a process the worker leaves behind is named once,
+# with its pid and executable, never its arguments" (check-coordination.sh).
+mut_COORD_stragglers_print_arguments() {
+  sed -i "s@^                command = os.path.basename(command.split(b'\\\\0', 1)\[0\]).decode('utf-8', 'replace')\$@                command = command.replace(b'\\\\0', b' ').strip().decode('utf-8', 'replace')@" "${1%/*}/sdd-coordination.py"
+}
+# A closed stderr is fatal again: the BrokenPipeError leaves wait_family and the lock goes before
+# ECHILD. Caught by "a closed stderr does not end the supervision" (check-coordination.sh).
+mut_COORD_stragglers_pipe_fatal() {
+  sed -i '/^def name_stragglers(/,/^def / s/^    except OSError:$/    except ZeroDivisionError:/' "${1%/*}/sdd-coordination.py"
 }
 
 CATALOG=(
@@ -5927,6 +5938,8 @@ CATALOG=(
   COORD_stragglers_unnamed
   COORD_stragglers_named_every_tick
   COORD_hook_names_stragglers
+  COORD_stragglers_print_arguments
+  COORD_stragglers_pipe_fatal
   RUN_branch_double_slash
   COORD_admission_missing
   COORD_linker_unlocked
