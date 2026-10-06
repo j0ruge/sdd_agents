@@ -605,8 +605,10 @@ checkpoint_rows() {
       # (issue #224). Dropped here, `| I2 | slice | pending |` vanished from checkpoint_tally and
       # gate_EXEC passed over a pending increment, the failure above by another shape. Read as it
       # renders, its Status is empty and gate_EXEC refuses it by name. GFM counts the columns of a
-      # table by its HEADER, the first line of the block, so only a table whose header has the
-      # five is read this way: a narrow table elsewhere in the file is no increment, and target
+      # table by its HEADER, the first line of the block, so only a table whose header splits into
+      # six fields or more is read this way — five cells, or four closed by the trailing pipe
+      # (DECLARED: that four-cell header is read as wide, and GFM would give its table four
+      # columns). A narrow table elsewhere in the file is no increment, and target
       # checkpoints carry such tables (35 lines in four of them, measured 2026-10-06). A line
       # with no leading pipe stays out when short: prose glued to the table that merely quotes a
       # pipe reads as one (DECLARED: such a line that IS a short row is still skipped). No

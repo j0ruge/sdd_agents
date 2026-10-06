@@ -210,8 +210,11 @@ surface() {
 #
 # A row with FEWER than five cells is emitted too, with its NF under 6, so the callers refuse it by
 # name (issue #224): GFM renders the missing cells empty, and dropped here it vanished from --check
-# and --red alike. Only inside a table whose HEADER — the first line of the block — has the five:
-# GFM counts a table's columns by its header, and a narrow table elsewhere is no checkpoint table.
+# and --red alike. Only inside a table whose HEADER — the first line of the block — splits into six
+# fields or more: GFM counts a table's columns by its header, and a narrow table elsewhere is no
+# checkpoint table. Six fields is five cells, or four closed by the trailing pipe — DECLARED: that
+# four-cell header reads as wide. A four-cell row closed the same way is refused all the same, by
+# rule 1's column count (4 instead of 5) and not by the fewer-than-five message.
 # A short line with no leading pipe stays out: prose glued to the table that quotes a pipe reads as
 # one (build_tree's own template does), and the runner skips it too — DECLARED, no reader refuses
 # a short row written without its leading pipe.
