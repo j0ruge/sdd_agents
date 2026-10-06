@@ -294,15 +294,19 @@ issue #205 it passed as `done`. The conditions:
   genre is read from the FIELD, not from wherever the words happen to appear in the body — the
   first `Closable by:` in the header block that opens with `Status:`, outside any fence — and
   matched as a whole lowercase word: `humano`, `humans`, `Human` and `deferredly` all read as
-  absent, and block;
+  absent, and block. `deferred` counts only with the human's decision written in the bug's body
+  (#232): a level-2 heading opening with the ASCII prefix `## Decis` — `## Decision`, `## Decisao`
+  and the tilde spelling, with or without a date — outside any fence. `## Decisions for a Human` is
+  a question still open and does not count. Without the section the bug counts as `agent`: it
+  blocks, and the reason names it (`… with no '## Decision' section in the body count as agent`);
 - `TEST_CMD` exits 0 and `E2E_CMD` exits 0 (when set). When the e2e is red the runner asks the app
   (`app_probe`): nothing listening at `APP_URL`, or a 2xx page that does not carry `APP_EXPECT` — another
   product on the same port — stops the line as `app-down` (see the `kind` column), because no session
   may start or stop an environment. `sdd preflight` asks the same question before a mission starts.
 
 `wont-fix` and `invalid` do **not** block: they are a recorded human decision, not a pending
-defect. Neither does an `open` bug marked `Closable by: human` or `Closable by: deferred`, and
-those are the only two ways an `open` bug passes. The reason is one level up: no agent in this pipeline may write the `Status:` line —
+defect. Neither does an `open` bug marked `Closable by: human`, or `Closable by: deferred` with the
+decision written in its body, and those are the only two ways an `open` bug passes. The reason is one level up: no agent in this pipeline may write the `Status:` line —
 the `docs/qa/` tree belongs to the `qa-report`/`qa-execution` skills — so a bug waiting on a
 product decision had no path out of `open` at all while this anchor blocked the phase for it
 anyway, and every honest finding bought another lap. Measured in `20260825-frete-cif-fob`: 7 of the

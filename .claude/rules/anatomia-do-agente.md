@@ -112,7 +112,9 @@ carrega ("does not parse" ou "does not evaluate", o mesmo rc 2);
 `test_cmd_lists_only` é o predicado único do `--list` (health 2b e preflight); e o ramo vermelho
 do `TEST_CMD` no preflight chama `_fail`, e só emite `warn` no lugar dele quando o runner **diz**
 que falta o manifesto na raiz (`test_cmd_missing_manifest`). A âncora do `TODO.md` também virou
-sensor (ADR 0011).
+sensor (ADR 0011). Desde #232 a Âncora 3 do `gate_QA` lê a decisão **escrita** do bug `deferred`
+(`bug_decision_recorded`: `## Decis…` fora de cerca, o plural `## Decisions` recusado): sem ela o
+bug conta como `agent`, barra e é nomeado no motivo — o campo sozinho era rótulo.
 Desde `20261004-lote-4-a-catraca-zera` o `tests/check-checkpoint.sh --red <checkpoint>` roda o Check
 de cada linha `pending` a partir da raiz do repo e recusa o que já nasce verde, o mudo e o que
 foge da forma `` `comando` → `esperado` ``. Ele **executa** texto escrito por modelo, então é

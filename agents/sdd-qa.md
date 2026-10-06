@@ -133,7 +133,10 @@ where the gate can read it. Marking it is a duty, not an option.
 - **`deferred`** — a bug an agent CAN close that a human has DECIDED another mission will pay
   for. Only with the decision written in the bug's own body (a `## Decision` / `## Decisao`
   section carrying the date and who decided) and cited in your handoff. *"We are not doing this
-  now"* without a recorded decision is `agent`, not this. It does not block, and unlike `human` it
+  now"* without a recorded decision is `agent`, not this — and the gate reads it that way: Anchor 3
+  looks for a level-2 heading opening with `## Decis…` outside any fence (`## Decisions for a
+  Human` is an open question and does not count), and without one the bug counts as `agent`,
+  blocks, and is named in the gate's reason (#232). With it, it does not block, and unlike `human` it
   is **named in the gate's reason on every evaluation** — that visibility is the whole reason the
   value exists, and it is what keeps deferred debt from ageing out of sight.
 - **absent** — blocks, by design: every bug file written before the field existed lacks it, and a

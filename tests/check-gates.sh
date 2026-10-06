@@ -773,12 +773,16 @@ assert_phase "wont-fix is a human decision and does not block" "REVIEW"
 # off for the whole registry — the same trap bin/sdd:587-588 already records for `closed`. With
 # the legend in the fixture, that loosening turns the differential red.
 GENRE_BUG="$FIX/docs/qa/bugs/BUG-20260102-genre.md"
-write_genre_bug() { # write_genre_bug <the `Closable by:` line, or '' for a bug older than the field>
+write_genre_bug() { # write_genre_bug <the `Closable by:` line, or '' for a bug older than the field> [<body>]
   { printf '# BUG-20260102-genre: needs a call nobody in the pipeline can make\n'
     printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
     if [ -n "$1" ]; then printf -- '%s\n' "$1"; fi
+    if [ -n "${2:-}" ]; then printf -- '%s\n' "$2"; fi
   } > "$GENRE_BUG"
 }
+# The human's decision, in the bug's own body: what agents/sdd-qa.md § 5.1 and ADR 0009 demand
+# before `deferred` may be written, and what gate_QA reads since #232 (bug_decision_recorded).
+GENRE_DECIDED=$'\n## Decision\n\n2026-01-02, the repo owner: mission 20260201-other pays for this fix.'
 
 write_genre_bug '- **Closable by:** human <!-- agent | human -->'
 genre_phase_human="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
@@ -1015,7 +1019,7 @@ assert_eq "the field starts at column zero: an indented quote does not become th
 # The objection 0006 raised against narrowing this anchor was that debt "ages out of sight". The
 # answer here is VISIBILITY, not silence: `deferred` skips the count exactly as `human` does, and
 # the reason NAMES every deferred bug on every evaluation.
-write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->'
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' "$GENRE_DECIDED"
 genre_phase_deferred="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 genre_why_deferred="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 
@@ -1037,8 +1041,10 @@ assert_eq "the deferred reason is the passing one, not the blocking one reworded
 # gained one alternative. Inherited is a claim, though, and this file's rule is that a claim about
 # behaviour is written as an assertion. Each of the three fail-opens the anchor already paid for,
 # re-run with the NEW value; `$genre_exact` stays the passing control so a gate that blocked
-# everything takes it red instead of passing these quietly.
-write_genre_bug '- **Closable by:** deferredly <!-- agent | human | deferred -->'
+# everything takes it red instead of passing these quietly. Each carries the human's DECISION
+# (#232): without it the deferred arm blocks on its own and these worlds would stop measuring the
+# genre — measured, QA_bug_genre_deferred_prefix went uncaught until they carried it.
+write_genre_bug '- **Closable by:** deferredly <!-- agent | human | deferred -->' "$GENRE_DECIDED"
 genre_deferred_prefix="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "deferred is the whole word too: the near-miss 'deferredly' still blocks" \
   "REVIEW|QA" "$genre_exact|$genre_deferred_prefix"
@@ -1048,6 +1054,7 @@ assert_eq "deferred is the whole word too: the near-miss 'deferredly' still bloc
   printf '\nThe line this bug is about reads:\n\n```md\n'
   printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
   printf '```\n'
+  printf -- '%s\n' "$GENRE_DECIDED"
 } > "$GENRE_BUG"
 genre_deferred_fenced="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "a fenced 'deferred' quote does not become the genre either" \
@@ -1058,10 +1065,59 @@ assert_eq "a fenced 'deferred' quote does not become the genre either" \
   printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
   printf '```\n\n'
   printf -- '- **Closable by:** agent <!-- agent | human | deferred -->\n'
+  printf -- '%s\n' "$GENRE_DECIDED"
 } > "$GENRE_BUG"
 genre_deferred_above="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "a 'deferred' quote ABOVE the field does not become the genre either" \
   "REVIEW|QA" "$genre_exact|$genre_deferred_above"
+
+# #232: `deferred` is the human's decision, and the decision has to be WRITTEN in the bug's body —
+# a `## Decision` / `## Decisao` section, which agents/sdd-qa.md § 5.1 and ADR 0009 demanded and
+# nothing read. Measured on sales_quote (20261005-mascaras-ncm-e-painel): a qa-execution session
+# deferred a bug "because the fix lives in the TODO", with no decision, and the gate passed it. The
+# field alone is a label; the section is the artifact. Without it the bug counts as `agent`.
+#
+# DIFFERENTIAL on one paragraph: the same bug, the same `deferred` field, with and without the
+# section. "undecided blocks" alone is satisfied by a gate that blocks every deferred bug — the
+# over-broad fix the passing half takes red — and the third term demands the BLOCKING reason name
+# the bug as undecided, or the operator reads "an agent could close it" and nothing about why the
+# deferral did not count.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' "$GENRE_DECIDED"
+genre_decided="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->'
+genre_undecided="$(     cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+genre_why_undecided="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+assert_eq "deferred with no '## Decision' section counts as agent: it blocks, and the reason names it" \
+  "REVIEW|QA|named:1" \
+  "$genre_decided|$genre_undecided|named:$( grep -cF "with no '## Decision' section in the body count as agent: BUG-20260102-genre" <<< "$genre_why_undecided" )"
+# The pt-BR headings the targets write, measured on 2026-10-06: sales_quote spells it with a tilde
+# (`## Decis\303\243o`, octal bytes, 17 headings in 4 shapes: alone, `— <date>`, `(<date>, <who>)`,
+# and a qualifier before the date); lighthouse_project writes `## Decisao`. The tilde is written as
+# octal bytes: mawk reads bytes, and the match is the ASCII PREFIX `## Decis` for exactly that reason.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decis\303\243o \342\200\224 2026-08-26\n\nThe repo owner: another mission pays.')"
+genre_decided_tilde="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decisao\n\n2026-09-22, the repo owner.')"
+genre_decided_ascii="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the pt-BR decision headings count: the tilde spelling with a date, and '## Decisao', both pass" \
+  "REVIEW|REVIEW" "$genre_decided_tilde|$genre_decided_ascii"
+# A heading QUOTED inside a fence is not the decision, the same rule the genre field already obeys:
+# a bug filed about this very rule pastes the heading in its repro. `$genre_decided` is the passing
+# control, so a gate that blocked every deferred bug turns this red instead of passing it.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\nThe template reads:\n\n```md\n## Decision\n\n<date, who decided>\n```')"
+genre_decision_fenced="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a '## Decision' heading inside a fence is not the decision: the bug blocks" \
+  "REVIEW|QA" "$genre_decided|$genre_decision_fenced"
+# `## Decisions for a Human` is the qa-execution skill's heading for questions still OPEN
+# (~/.claude/skills/qa-execution/assets/report-template.md) — the opposite of a decision, and it
+# starts with the same eight bytes. The plural is refused by name.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decisions for a Human\n\n- Should the fix wait for the next mission?')"
+genre_decision_pending="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a '## Decisions for a Human' heading is a pending question, not the decision: the bug blocks" \
+  "REVIEW|QA" "$genre_decided|$genre_decision_pending"
 
 # TWO deferred bugs at once, which is the only regime that exercises the JOIN. Every probe above
 # holds exactly one, and `deferred_names="${deferred_names:+$deferred_names, }${bugname%.md}"` is
@@ -1074,10 +1130,11 @@ assert_eq "a 'deferred' quote ABOVE the field does not become the genre either" 
 # name the property — two names, one separator, nothing between them — and neither is satisfied
 # by a reason that merely contains both names somewhere.
 GENRE_BUG2="$FIX/docs/qa/bugs/BUG-20260103-genre-two.md"
-write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->'
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' "$GENRE_DECIDED"
 { printf '# BUG-20260103-genre-two: a second bug the same human decided\n'
   printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
   printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
+  printf -- '%s\n' "$GENRE_DECIDED"
 } > "$GENRE_BUG2"
 genre_why_two="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 assert_eq "two deferred bugs are counted as two and joined by ', ' — the N>1 regime" \
@@ -1771,6 +1828,7 @@ NOIF_BUG="$FIX/docs/qa/bugs/BUG-20260104-noif.md"
 { printf '# BUG-20260104-noif: decided by a human, another mission pays\n'
   printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
   printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
+  printf -- '%s\n' "$GENRE_DECIDED"
 } > "$NOIF_BUG"
 noif_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 noif_why="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"

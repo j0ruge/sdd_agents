@@ -998,6 +998,38 @@ mut_QA_bug_genre_deferred_join() {
   sed -i 's|{deferred_names:+$deferred_names, }|{deferred_names:+$deferred_names }|' "$1"
 }
 
+# #232: `deferred` counts only with the human's decision written in the bug's body — a `## Decis…`
+# section outside any fence (bug_decision_recorded). Five mutants, because the rule fails open in
+# four independent ways and closed in one. UNDECIDED drops the check: the label alone passes again,
+# the state the sales_quote finding measured. Dies on `deferred with no '## Decision' section counts
+# as agent` in check-gates.sh.
+mut_QA_bug_deferred_undecided() {
+  sed -i '/^gate_QA() {/,/^}/ s|^      if ! bug_decision_recorded "\$bugfile"; then$|      if false; then|' "$1"
+}
+# UNNAMED: the undecided bug still blocks, but the reason stops saying why the deferral did not
+# count — the operator reads "an agent could close it" about a bug whose field says deferred. Dies
+# on the `named:` term of the same assertion.
+mut_QA_bug_deferred_undecided_unnamed() {
+  sed -i '/^gate_QA() {/,/^}/ s|^    if \[ "\$undecided" -gt 0 \]; then$|    if false; then|' "$1"
+}
+# FENCED: the decision reader stops tracking fences, so a bug that QUOTES the heading in a repro
+# reads as decided. `infence` is this function's own variable, so QA_bug_genre_fenced (unranged)
+# and this one sabotage one reader each.
+mut_QA_bug_deferred_decision_fenced() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s|{ infence = !infence; next }|{ next }|' "$1"
+}
+# PLURAL: `## Decisions for a Human` — the qa-execution skill's heading for questions still open —
+# reads as the decision again, through the shared eight-byte prefix.
+mut_QA_bug_deferred_decision_plural() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s|/^## Decis/ \&\& !/^## Decisions/|/^## Decis/|' "$1"
+}
+# ENGLISH_ONLY, the fail-closed direction: the whole English word instead of the ASCII prefix, and
+# every pt-BR heading the targets wrote (tilde or `## Decisao`) stops counting. Dies on `the pt-BR
+# decision headings count`.
+mut_QA_bug_deferred_decision_english_only() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s|/^## Decis/ \&\& |/^## Decision/ \&\& |' "$1"
+}
+
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
 # report's following tables and failed an all-Grade-A review for finding a `Commit` column.
 # The probe is never called: the gate falls back to the ONE sentence every red e2e used to get,
@@ -5828,6 +5860,11 @@ CATALOG=(
   QA_bug_genre_deferred_prefix
   QA_bug_genre_deferred_unseen_no_interface
   QA_bug_genre_deferred_join
+  QA_bug_deferred_undecided
+  QA_bug_deferred_undecided_unnamed
+  QA_bug_deferred_decision_fenced
+  QA_bug_deferred_decision_plural
+  QA_bug_deferred_decision_english_only
   QA_e2e_red_never_probed
   QA_app_down_on_unknown
   APP_expect_ignored

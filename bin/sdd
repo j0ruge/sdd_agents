@@ -1476,6 +1476,34 @@ function placeholder(s,   u, w) {
 # Through ENVIRON and never `awk -v`, for gate_REVIEW's reason: -v runs escape sequences.
 placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit placeholder(ENVIRON["SDD_PLACEHOLDER_TEXT"]) ? 0 : 1 }'; }
 
+# bug_decision_recorded <bug file> — rc 0 when the bug's body carries the human's decision: a
+# level-2 heading opening with `## Decis`, outside any fenced block. It is what makes `Closable by:
+# deferred` an artifact and not a label (#232): agents/sdd-qa.md § 5.1 and ADR 0009 demand the
+# section before the value may be written, and until this function nothing read it — a qa-execution
+# session on sales_quote deferred a bug "because the fix lives in the TODO" and the gate passed it.
+#
+# The ASCII PREFIX and never the whole word, for the reason checkpoint_note_intervention gives for
+# `## Notas de execu`: this awk is mawk, byte-oriented in every locale, and the targets spell the
+# heading with a tilde (`## Decis\303\243o`, octal bytes, alone or followed by a date or a name) as
+# well as `## Decisao` and `## Decision` — eight ASCII bytes are what every one of them shares. The
+# plural is refused BY NAME: `## Decisions for a Human` is the qa-execution skill's heading for
+# questions still open, the opposite of a decision, and it opens with the same eight bytes.
+# Fence state for the genre extractor's reason: a bug filed about this rule quotes the heading. The
+# variable is `infence` and not `fenced` so QA_bug_genre_fenced, whose sed has no function range,
+# keeps sabotaging the extractor alone.
+# Who writes the artifact: the human, or the session recording the human's call — never sdd-qa on
+# its own (§ 5.1); without it the bug counts as `agent`, whose F<n> cycle the pipeline can close.
+# DECLARED, fail closed: a `###` heading, or an indented one, reads as no decision and blocks —
+# visibly, since the blocking reason names the bug.
+bug_decision_recorded() {
+  awk '
+    /^[[:space:]]*(```|~~~)/ { infence = !infence; next }
+    infence { next }
+    /^## Decis/ && !/^## Decisions/ { found = 1; exit }
+    END { exit !found }
+  ' "$1"
+}
+
 gate_QA() {
   GATE_HANDOFF_BLOCKED=0
   GATE_APP_DOWN=0
@@ -1610,7 +1638,7 @@ gate_QA() {
   # the lesson check-todo.sh paid for when its parser did not know it was inside an item's code
   # block. `[*][*]` and not `\*\*`: mawk's handling of an escaped literal inside a regex is not
   # worth relying on when a bracket expression says the same thing unambiguously.
-  local openbugs=0 deferred=0 deferred_names="" bugfile genre_line bugname
+  local openbugs=0 deferred=0 deferred_names="" undecided=0 undecided_names="" bugfile genre_line bugname
   while IFS= read -r bugfile; do
     [ -n "$bugfile" ] || continue
     genre_line="$(awk '
@@ -1633,8 +1661,17 @@ gate_QA() {
     # human arm has a mutant (QA_bug_genre_prefix); the deferred arm got one of its own
     # (QA_bug_genre_deferred_prefix) rather than riding it, because they fail open independently.
     if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+deferred([[:space:]]|$)' <<< "$genre_line"; then
-      deferred=$((deferred + 1))
       bugname="${bugfile##*/}"
+      # #232: the value without the written decision is `agent` (§ 5.1), and it is NAMED in the
+      # blocking reason — otherwise the operator reads "an agent could close it" about a bug whose
+      # field says deferred, and nothing says why the deferral did not count.
+      if ! bug_decision_recorded "$bugfile"; then
+        openbugs=$((openbugs + 1))
+        undecided=$((undecided + 1))
+        undecided_names="${undecided_names:+$undecided_names, }${bugname%.md}"
+        continue
+      fi
+      deferred=$((deferred + 1))
       # Parameter expansion and never `$(basename …)`: this runs once per open bug, and the loop is
       # read by `sdd status` on every evaluation of the phase.
       deferred_names="${deferred_names:+$deferred_names, }${bugname%.md}"
@@ -1654,6 +1691,9 @@ gate_QA() {
     # door. The substring `with Status: open in the registry` is load-bearing: two assertions in
     # check-gates.sh read it (:486 and the genre differential at :535).
     GATE_WHY="$openbugs bug(s) with Status: open in the registry that an agent could close (an unmarked genre counts) — they become fix increments (QA⇄EXEC loop); one that needs a human decision is marked 'Closable by: human' instead, and one a human has already decided and another mission will pay for is 'Closable by: deferred' (agents/sdd-qa.md § 5.1)"
+    if [ "$undecided" -gt 0 ]; then
+      GATE_WHY="$GATE_WHY; $undecided of them marked 'Closable by: deferred' with no '## Decision' section in the body count as agent: $undecided_names"
+    fi
     return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
