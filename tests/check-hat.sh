@@ -241,7 +241,9 @@ boot_probes() {
 # "the reviewer allows Agent" alone would stay green if the executor's line rotted away. Only the
 # pair says what the design actually is. The catalogue cannot reach either half — it sabotages
 # bin/sdd and this lives in agents/*.md — so this probe is the whole sensor, and that limit is
-# declared here rather than left silent.
+# declared here rather than left silent. It covers every probe of this function, the two text
+# probes of the executor added in 20261004-lote-4-a-catraca-zera included: each was proved by a
+# sabotage pass over agents/sdd-executor.md, recorded in that mission's plan, not by the catalogue.
 executor_agent_probes() {
   local ex="$ROOT/agents/sdd-executor.md" rv="$ROOT/agents/sdd-reviewer.md"
   if grep -qE '^disallowedTools:.*(^|[ ,"])Agent([,"]|$)' "$ex"; then pass "hat: the executor denies Agent — the census measured 0 uses in 27 EXEC sessions"
@@ -250,6 +252,94 @@ executor_agent_probes() {
   else pass "hat: and the reviewer still may use it, which is why Agent is not in HAT_DENY_BASE"; fi
   if grep -qi 'subagent' "$ex"; then fail "hat: the executor prompt still asks for subagents while the tool is denied"
   else pass "hat: and the executor prompt no longer asks for what it cannot do"; fi
+  # Issue 180: gate_EXEC reads 7–64 hex digits in the Commit cell, so an act outside git (an e-mail,
+  # a KB page) needs a RECORD commit to point at; issue 218: a step after the merge or inside an
+  # external window is not a row the executor can close. Both halves, because the planner is told
+  # the same and the executor is who meets the legacy row the planner wrote before the rule.
+  if grep -qF 'record-<ID>.md' "$ex" && grep -qF 'open questions for the human' "$ex"; then
+    pass "hat: the executor commits a record for an act outside git, and hands a step it cannot close to the human"
+  else fail "hat: sdd-executor no longer says how an act outside git reaches the Commit cell, or where a step it cannot close goes"; fi
+  # Issue 194: the Red of an R<n> proves the finding, not the fix, and at least eight findings of
+  # four missions were opened by the fix of the round before (3 code in this kit, 5 prose in
+  # sales_quote). The step is read as a BLOCK, from its numbered heading to the next one, and each
+  # of its three parts has to be inside it: the R<n> scope ON THE HEADING (the block names R<n>
+  # again in its prose sentence, so a block-wide grep answered for a step that lost its scope —
+  # sabotage measured), the sabotage note in checkpoint-notas.md (a name the file also uses in its
+  # section 5, so a whole-file grep would answer for a step that lost it), and the re-read of the
+  # whole paragraph for an R<n> of prose.
+  local sab
+  sab="$(awk '/^[0-9]+\. \*\*Sabotage/ { on = 1; print; next } on && /^[0-9]+\. \*\*/ { on = 0 } on' "$ex")"
+  if grep -qF 'only in an `R<n>`' <<< "${sab%%$'\n'*}" && grep -qF 'checkpoint-notas.md' <<< "$sab" \
+     && grep -qF 'whole paragraph' <<< "$sab"; then
+    pass "hat: the executor sabotages the new line of an R<n>, notes it, and re-reads the paragraph of a prose fix"
+  else fail "hat: sdd-executor lost the sabotage step of an R<n> (its scope, its note in checkpoint-notas.md, or the prose re-read)"; fi
+}
+
+# One hat promised a measurement nobody makes, and another was silent where its boundary needed a
+# sentence; the next session reads a hat's promise as a fact and its silence as permission. Asserted
+# HERE because neither half lives in bin/sdd, so the catalogue cannot reach it — the same limit as
+# executor_agent_probes, declared the same way; the sabotage pass that proves each probe is in the
+# plan of 20261004-lote-4-a-catraca-zera.
+#   - issue 178: sdd-ticket said the runner confirms the issue "through acli"; gate_TICKET reads
+#     10-ticket.md and never asks Jira (its own comment says why). Refuted on the sentence that
+#     makes the runner or the gate the subject of acli — the hat legitimately names `acli
+#     --from-json`, the skill's tool, and the `gate:` evidence key of 10-ticket.md carries the
+#     skill's own read-back — and asserted on what the gate does, so dropping both passes nothing.
+#   - issue 135: a drifted code comment has an owner — R<n>, a proposed-text row, or the TODO file —
+#     and it is never the DOCS phase's own edit, which hat_guard_check would stop as hat-crossed.
+hat_promise_probes() {
+  local tk="$ROOT/agents/sdd-ticket.md" dc="$ROOT/agents/sdd-docs.md"
+  if grep -qiE '(the runner|the gate|gate_TICKET)[^.]*acli' "$tk" || ! grep -qF 'never asks Jira' "$tk"; then
+    fail "hat: sdd-ticket promises a Jira check the gate does not make, or no longer says that gate_TICKET reads only 10-ticket.md"
+  else pass "hat: the ticket hat promises no Jira check the gate does not make"; fi
+  if grep -qF 'A comment in the code belongs to the code' "$dc" && grep -qE 'R<n>.*batch' "$dc"; then
+    pass "hat: the docs hat leaves a code comment to the code's own phase (R<n>, a proposed-text row, or the TODO file)"
+  else fail "hat: sdd-docs no longer says who owns a drifted code comment"; fi
+}
+
+# --- /sdd-plan: the approval is the human's answer to a YES/NO question -------------------------
+# The human asked for it in the grill of 20261004-lote-4-a-catraca-zera: approving a plan used to
+# mean reading "sdd approve <mission>" off the screen and typing it. `sdd approve` reads its `y`
+# from stdin and cannot tell who typed it, so the guarantee lives in the command's prose, and this
+# probe is the whole sensor for it: the catalogue sabotages bin/sdd, never commands/*.md. It reads
+# the section, not the file, so a rule moved out of "When the artifacts exist" is a rule lost.
+command_approval_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" sec
+  sec="$(awk '/^## When the artifacts exist/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  # The plan is SHOWN before the question (CodeRabbit review of PR #222): a YES to a plan nobody put
+  # in front of the human approves what the relay summarised, not what the gates will run.
+  if grep -qF 'first show the human what they are approving' <<< "$sec" \
+     && grep -q 'AskUserQuestion' <<< "$sec" \
+     && grep -qE '^ *- \*\*YES\*\* .*sdd approve <mission>' <<< "$sec" \
+     && grep -qE '^ *- \*\*NO\*\*' <<< "$sec" \
+     && grep -qF "Only the human's answer to that question approves" <<< "$sec"; then
+    pass "command: /sdd-plan asks the human YES or NO before it runs sdd approve"
+  else
+    fail "command: /sdd-plan no longer shows the plan and asks YES or NO before sdd approve, or lost the rule that only the human's answer approves"
+  fi
+}
+
+# --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
+# The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
+# run it inside its session, started it in the background and ended its turn waiting (a headless
+# session that ends its turn has ended: US$ 1,46 for nothing), and when it did wait it stamped
+# before the review bots had spoken (#196: health at 18:13, CodeRabbit at 18:27 with a finding in
+# bin/sdd, the next run cut at 123 of 542 mutants). Since ADR 0015 the runner stops with rc 2 once
+# the PR is open and the stamp is all its gate misses, so the publisher only opens the PR. Three
+# probes, because each failure is its own: the order to run it is back; a stamp item is back in the
+# pre-push list, which makes the publisher stop BEFORE the PR exists and the runner's stop is never
+# reached; the PR body no longer carries the order the human follows. The catalogue reaches none of
+# them — it sabotages bin/sdd and this lives in agents/*.md — so these probes are the whole sensor.
+publisher_stamp_probes() {
+  local pub="$ROOT/agents/sdd-publisher.md" pre
+  if grep -qE 'run `\./bin/sdd health`' "$pub"; then fail "hat: the publisher is told to run ./bin/sdd health — the stamp is not headless"
+  else pass "hat: the publisher never runs the stamp — it is not headless"; fi
+  pre="$(awk '/^### 2\. /{on=1; next} /^### /{on=0} on' "$pub")"
+  if [ -z "$pre" ]; then fail "hat: the publisher's pre-push section (### 2.) was not found — the probe would read nothing"
+  elif grep -qiE '^- .*(stamp|check-mutation)' <<< "$pre"; then fail "hat: a stamp item is back in the publisher's pre-push list — it would stop before the PR exists"
+  else pass "hat: and the stamp is no reason for the publisher to stop before the PR is open"; fi
+  if grep -qE 'review bot.*one batch.*\./bin/sdd health.*sdd run' "$pub"; then pass "hat: and the PR body carries the order: bots, one batch of fixes, the stamp, sdd run"
+  else fail "hat: the publisher's PR body lost the order before the merge"; fi
 }
 
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
@@ -418,6 +508,9 @@ if [ "$n" -lt "$HAT_FLOOR" ]; then
 fi
 census_probes
 executor_agent_probes
+hat_promise_probes
+command_approval_probes
+publisher_stamp_probes
 boot_probes
 release_probes
 selftest || exit $?

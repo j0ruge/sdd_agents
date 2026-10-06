@@ -75,13 +75,16 @@ runner says nothing about language, and each session follows whatever the existi
 ```bash
 sdd approve <mission>        # show the plan and, on an explicit y, switch to the declared branch, write the approval and commit the mission directory
 sdd run <mission>            # run from the first unsatisfied gate through to the PR
-sdd status <mission>         # where it stands, what is missing, why it stalled
+sdd status <mission>         # where it stands, what is missing, why it stalled — and each green phase
+                             #   this machine's ledger holds no session of, with the `sdd note-manual` that records it
 sdd why <mission> [PHASE]    # why that phase's gate did not pass — start any diagnosis here
 sdd phase <mission>          # print only the current phase (or DONE) — for scripts
 sdd retry <mission>          # retry the current phase with a fresh session
 sdd close <mission>          # post-merge: close the JIRA issue (a real paid session — since 2026-09-11
                              #   it writes its own ledger row, `event:"close"`, cost included), then
                              #   returns to the base branch — with or without JIRA
+sdd note-manual <mission> <PHASE>  # record a phase done BY HAND: an intervention note in the checkpoint
+                             #   and a `manual` row in the ledger, which grades nothing (PLAN is refused)
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
 sdd autonomy                 # what the sessions did per kit version (advanced · churned · idle, waste), for THIS repo,
                              #   from the global ledger (~/.sdd/autonomy-log.jsonl)
@@ -163,14 +166,14 @@ that stopped being a finding. It spends no paid session and does not need `.sdd/
 **In the kit repo it is also a gate, not only a report.** Since the catalogue became opt-in it had
 no automatic owner, and the base branch once carried a live survivor for days because nobody typed
 the command. So a green run now **stamps** `.sdd/logs/mutation-stamp` with the tracked content of
-`bin/ tests/ templates/ config/` (minus the backlog ratchet), and the `PR` gate refuses while no
+`bin/ tests/ templates/ config/ agents/` (minus the backlog ratchet), and the `PR` gate refuses while no
 stamp matches that content:
 `no green mutation catalogue for this content — run 'sdd health'`. The gate never runs the
 catalogue itself — asking a gate to hold the tree for twenty minutes is what made a phase
 unsatisfiable once. The requirement exists only where `tests/check-mutation.sh` does, so a target
 repo sees none of it. Run it **after the last code commit**: editing docs or registering a finding
 (`TODO.md` + `tests/health-baseline.txt`) does not invalidate the stamp, editing tracked files under
-`bin/ tests/ templates/ config/` does ([ADR 0014](docs/adr/0014-a-identidade-do-kit-e-o-que-ele-executa.md)). Design and discarded alternatives in
+`bin/ tests/ templates/ config/ agents/` does ([ADR 0014](docs/adr/0014-a-identidade-do-kit-e-o-que-ele-executa.md)). Design and discarded alternatives in
 [ADR 0004](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md); the way out of a refusal in
 [`docs/failure-modes.md`](docs/failure-modes.md).
 

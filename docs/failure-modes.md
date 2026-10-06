@@ -862,7 +862,8 @@ answers `suite green`, which makes the refusal look like a lie. It is not.
 **Cause:** the catalogue is opt-in — `TEST_CMD` does not run it — so no gate before this one has
 measured whether the suite's assertions still bite. The `PR` gate therefore demands the **artifact**
 `sdd health` leaves behind: a stamp keyed on the **tracked** content of `bin/ tests/ templates/
-config/`, minus the backlog ratchet `tests/health-baseline.txt` (ADR 0014). Three states produce
+config/ agents/` (`agents/` since ADR 0015 §1), minus the backlog ratchet
+`tests/health-baseline.txt` (ADR 0014). Three states produce
 this message and only the first is common:
 
 - **nothing was ever stamped** on this tree, or the last stamp was for other content — the ordinary
@@ -874,8 +875,8 @@ this message and only the first is common:
   it just reported is about content that is no longer there.
 
 A fourth state has a message of its own: `no mutation stamp is possible for this tree: <reason>,
-then run 'sdd health'`. The key cannot be computed at all — one of the four paths is missing, the
-root is not a git checkout, a tracked file was deleted from the working tree, nothing under the four
+then run 'sdd health'`. The key cannot be computed at all — one of the five paths is missing, the
+root is not a git checkout, a tracked file was deleted from the working tree, nothing under the five
 paths is tracked, or a tracked entry cannot be read (a submodule, a sparse entry, a broken symlink).
 The reason names its own fix; `sdd health` refuses to stamp with the same sentence, and on a kit
 installed as a plain copy (not a git checkout) it only warns, because no gate can demand a stamp
@@ -883,10 +884,12 @@ there.
 
 **How the kit reacts:** it stops, and it stops **last** — after `50-pr.md` and `gh pr view`, so the
 likelier failures still speak first. Nothing is pushed, nothing is merged. In a repo without
-`tests/check-mutation.sh` this requirement does not exist at all.
+`tests/check-mutation.sh` this requirement does not exist at all. With the PR open and the stamp
+the only thing missing, `sdd run` itself stops with rc 2 and opens no session (`the stamp is not
+headless`): the publisher never runs `sdd health` (ADR 0015 §1).
 
 **What you do:** run `./bin/sdd health` from the checkout the mission is in, and run it **after the
-last commit that touches a tracked file under `bin/ tests/ templates/ config/`**. About eighteen minutes on a laptop since PR #170 (twenty to fifty before it); a
+last commit that touches a tracked file under `bin/ tests/ templates/ config/ agents/`**. About eighteen minutes on a laptop since PR #170 (twenty to fifty before it); a
 green round ends with `mutation stamp written` and the gate opens. Two things worth knowing before
 you start it:
 
@@ -894,7 +897,7 @@ you start it:
   DOCS phase can work freely — and since ADR 0014 neither does `tests/health-baseline.txt`, where
   the backlog ratchet lives, nor a file git ignores (a `tests/debug.log`). Recording an
   out-of-scope finding used to cost the stamp (#117); it no longer does. A **new** file under the
-  four paths stays outside the key until it is tracked (`git add` is enough), and from then on the
+  five paths stays outside the key until it is tracked (`git add` is enough), and from then on the
   gate refuses until `sdd health` runs again. The route the kit used while the collision stood is
   still the right way to carry findings — the one `20260901-o-revisor-so-acha` walked six times: EXEC, QA and each REVIEW round write the finding
   into their own handoff, under `## Achados fora de escopo`, and the DOCS phase transports the lot
@@ -922,7 +925,7 @@ review fixes; Codex then posted four findings, all valid, and the fixes killed t
 then posted ten, eight valid, and two of those touched `bin/sdd` and killed it again. One round
 would have covered all three, for the same final content.
 
-**Cause:** the stamp is keyed on the **tracked content** of `bin/ tests/ templates/ config/`, so it is worth
+**Cause:** the stamp is keyed on the **tracked content** of `bin/ tests/ templates/ config/ agents/`, so it is worth
 exactly as much as the promise that the code will not change again. Stamping while review is still
 in flight is stamping a draft. And the reviewers cannot be consulted earlier — the PR bots (Codex,
 CodeRabbit, Copilot) only run **after** the pull request exists, so opening the PR is what starts
@@ -935,7 +938,7 @@ them, not what ends the work.
 3. wait for all of them to post — a bot that is silent has not necessarily finished, and one that
    reports a quota limit has not reviewed at all, which is a coverage gap rather than an approval;
 4. verify and fix everything in **one** pass;
-5. run `./bin/sdd health` **once**, after the last commit that touches the four stamped directories;
+5. run `./bin/sdd health` **once**, after the last commit that touches the five stamped directories;
 6. resolve the threads and merge.
 
 Two things that keep the rule from becoming folklore:
@@ -945,7 +948,7 @@ Two things that keep the rule from becoming folklore:
   reach for the command, rather than re-running it on suspicion:
 
   ```bash
-  git ls-files -z -c -- bin tests templates config ':(exclude)tests/health-baseline.txt' \
+  git ls-files -z -c -- bin tests templates config agents ':(exclude)tests/health-baseline.txt' \
     | LC_ALL=C sort -zu | xargs -0 -r md5sum | md5sum | cut -d' ' -f1   # compare with .sdd/logs/mutation-stamp
   ```
 

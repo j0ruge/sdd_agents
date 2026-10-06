@@ -4,6 +4,69 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-05 — Lote 4: a catraca zera
+
+**Problema (Gemba):** o `TODO.md` do kit fechou o lote 3 com **23 achados abertos** (`todo-findings 23`
+em `fe9441d`), quase todos decisões de desenho que a leva 3 deixou para trás. Quatro verificadores
+reproduziram os 23 e refutaram três premissas antes do plano; cinco designers prototiparam cada
+incremento num clone, com o vermelho medido. Três custos tinham número: o carimbo de mutação rodado
+**dentro** da sessão de PR (US$ 39,13 e 4,6 h em 19 sessões, e um carimbo descartado pelo primeiro
+achado de bot); 22 de 35 `sdd run` do kit carimbando mais de um `kit_sha` sem nada que nomeasse o
+runner; e a fase feita à mão invisível para o ledger (0 linhas para o PR de
+`20260916-destino-frete-cif`).
+
+**Medição** (antes: `fe9441d`; depois: topo da branch, comando rodado em 2026-10-05):
+
+| Fato | Antes | Depois |
+|---|---|---|
+| Catraca `todo-findings` | 23 | 24 na branch: 16 com `RESOLVED by` + N = 8 nascidos (5 minors da revisão final, 2 da rodada dos bots do PR #222, 1 do carimbo) → 8 depois do chore pós-merge |
+| Saídas sem código | — | 7: Y7 (#88) e Y8 (#218) no `CONTEXT.md`, 5 decididos (#130, #155, #109, #180, #135) |
+| Consertos com `RESOLVED by` | — | 16, em 20 commits de incremento (I3–I23 menos o I6, que não fecha item) |
+| Catálogo de mutação | 593 | **615** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`): 612 no fecho do EXEC, +3 dos consertos da revisão final; 3 re-ancorados no I17 |
+| Âncora podre que passa (modelo do I5, `coverage*.py`) | 26,1% (qualquer crase, itens de `fe9441d`) | 12,7% (símbolo designado, mesmos itens); sobre os 16 de hoje: 27,2% → 14,3% |
+| `sdd run` do kit com mais de um `kit_sha` | 22 de 35, sem campo que nomeie o runner | toda linha carrega `runner_sha`; 0 linhas reais ainda (nenhum `sdd run` desde o I15) |
+| Linhas do ledger para fase feita à mão | 0, sem porta | `sdd note-manual` (nota + linha `manual`); 0 linhas reais ainda |
+| Sessão de PR esperando o health | US$ 39,13 e 4,6 h em 19 sessões | o `sdd run` para com rc 2 sem sessão (probe do `check-gates.sh`); custo real não medido |
+| Leitura do `.sdd/config.sh` por run | 1, antes do laço (SQ-141: 4 sessões, US$ 5,93) | 1 por volta, com a foto do ambiente; 3 mutantes |
+| Régua de idioma em `docs/` | enumerada; `docs/plan-only.md` com bloco pt-BR e `0 of 56` | censo: 19 docs na superfície, 310 declarados, `0 of 59` |
+| ADRs com `ADR_CHECK` | `warn`, 14 missões indecisas | `block`, rc 0; ADR 0015 aceita, 4 emendas (0004, 0011, 0013, 0014) |
+| Suíte (`tests/run-all.sh`) | 306 s, 1790 linhas `ok` | 485 s, 1837 `ok` (veja abaixo) |
+
+O tempo da suíte variou de 312 a 488 s entre os incrementos desta sessão, e o handoff já registrava
+340–460 s nos I1–I15; isolados no topo, os sensores mais pesados medem o mesmo de antes
+(`check-autonomy.sh` 156 s contra 151 s no I16, `check-gates.sh` 120 s). Não há regressão atribuível
+a um incremento; a carga da máquina não foi controlada.
+
+**Contramedida:** um incremento por sessão de trabalho, cada um com o Check do plano rodado antes
+(vermelho pelo motivo que o plano mediu), probe ou sensor antes do código, mutante provado por
+`--only` e, onde a dúvida era o motivo da morte, aplicado numa cópia sob `SDD_MUTANT` para ver a
+asserção que cai. Os protótipos dos designers entraram hunk a hunk, comparados com o texto do plano;
+onde divergiram, o plano mandou e a decisão ficou como `Ruling:` na nota do checkpoint. Re-âncora do
+`TODO.md` (`remap.py`, `xref.py`, `--anchors`) em todo commit que deslocou linha.
+
+**Achados nascidos na leva (régua D15 na hora):** 8 itens novos no `TODO.md`: os 5 minors da revisão
+final (catraca 16 → 21, ver abaixo), 2 da rodada dos bots do PR #222 (21 → 23) e 1 do carimbo (23 → 24:
+a suíte herda `GIT_DIR` de quem a chama). Limites declarados
+no lugar em que valem: o reset do `GATE_PR_STAMP_WHY` sem probe e o `sdd retry PR` que não para no
+carimbo (I13); config quebrado no meio do run morre pelo mesmo `die` do lançamento, sem probe
+próprio (I16); o ledger da dica do `sdd status` é por máquina (I19); três casos que falham
+fechado no `tip_add_carries_mission` (I20); apagar um padrão não-docs do `SURFACE_SPECS` e o
+controle negativo do censo sozinho (I21); o sensor de chave da série mede nomes, não unidade (I23).
+E uma lição de planejamento, na gaveta (F8, `2dd7683`): o plano mediu deslocamentos de âncora
+contra `fe9441d`, não contra os incrementos anteriores — o I17 dizia "nenhuma âncora desloca" e
+deslocou cinco.
+
+**Revisão final da branch:** um revisor de contexto novo achou 1 Important (o `sdd note-manual`
+deixava o humano na branch gasta de uma missão mergeada) e uma regressão do I16 (chave `readonly`
+matando o run com o erro cru do bash), os dois reproduzidos e consertados com vermelho medido
+(`091012c`, `16a0d64`); os 5 minors restantes viraram itens do `TODO.md` por decisão do humano. Depois deles a suíte deu 1839 `ok` em 377 s.
+
+**Ainda não medido:** o carimbo do `sdd health` com 615 mutantes, que roda depois dos bots; e os
+efeitos de uso real — a primeira linha `runner_sha` divergente, a primeira `manual`, o primeiro
+`sdd run` parado no carimbo.
+
+---
+
 ## 2026-10-04 — Lote 3: a catraca desce
 
 **Problema (Gemba):** o `TODO.md` do kit tinha **57 achados abertos** (`todo-findings 57` em

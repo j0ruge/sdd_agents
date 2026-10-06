@@ -6,6 +6,7 @@ versao:
 branch: fix/o-laco-da-qa
 aprovacao: humano-2026-08-26
 ddd: n/a — sem toque de domínio: o kit é bash + markdown, e a mudança é em gate e contrato de agente
+adr: docs/adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md
 ---
 
 # Missão — a fase QA para de girar em bug que ninguém pode fechar

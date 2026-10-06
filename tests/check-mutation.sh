@@ -508,6 +508,19 @@ mut_EXEC_escaped_pipe_blind() {
   sed -i '/^checkpoint_rows()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (0)|' "$1"
 }
 
+# GFM's optional leading pipe (CodeRabbit review of PR #222): the row written without it is skipped
+# again, and a pending increment vanishes from checkpoint_tally — gate_EXEC passes over it. Caught by
+# `a pending row with no leading pipe keeps the phase in EXEC` in check-gates.sh.
+mut_EXEC_pipeless_row_skipped() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@{ \$0 = "|" \$0 }@{ }@' "$1"
+}
+# The other direction: the blank line no longer ends the table, so a paragraph below it with five
+# cells is read as an increment. Caught by the control beside it, `the same line below a blank line
+# is a paragraph, not an increment`.
+mut_EXEC_pipeless_reads_past_the_table() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@/\^\[ \\t\]\*\$/ { tbl = 0 }@/^[ \\t]*$/ { }@' "$1"
+}
+
 # The reviewer's increments vanish from the checkpoint: checkpoint_rows skips every `R<n>` row, so a
 # round that found something hands nothing to EXEC and the B review keeps the ball in REVIEW — the
 # REVIEW⇄EXEC loop of `20260901-o-revisor-so-acha` silently cut. Issue #111 measured that only two
@@ -833,6 +846,24 @@ mut_QA_report_log_quoted() {                  # without -z the commit replay col
 # Without it a clean base has no candidate at all, and the QA block ON the base turns red.
 mut_QA_report_no_fallback() {
   sed -i '/^mission_qa_report() {/,/^}/ s@|| \[ -z "\$(git -C "\$REPO_ROOT" rev-list -n 1 HEAD --not@|| [ -z "x$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not@' "$1"
+}
+
+# #179, ADR 0015 §3: a report at the base tip counts only when the base commit that ADDED it
+# carries THIS mission's handoff dir. Widened to ANY mission's dir, another mission's squash — which
+# carries its own — passes for this one's, and the fail-open of ADR 0013 is back.
+mut_QA_report_tip_any_mission() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s@-- "\$HANDOFF_DIR/\$MISSION/checkpoint.md" "\$HANDOFF_DIR/\$MISSION/checkpoint-notas.md" 2>/dev/null@-- "$HANDOFF_DIR/" 2>/dev/null@' "$1"
+}
+# Widened back to ANY file of this mission's dir (Codex review of PR #222): another mission's squash
+# that edits this one's 00-missao.md — lote 4 backfilled fourteen — passes for this mission's own.
+# Caught by `another mission's report whose squash also edited this mission's 00-missao.md …`.
+mut_QA_report_tip_any_file_of_mission() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s@-- "\$HANDOFF_DIR/\$MISSION/checkpoint.md" "\$HANDOFF_DIR/\$MISSION/checkpoint-notas.md" 2>/dev/null@-- "$HANDOFF_DIR/$MISSION/" 2>/dev/null@' "$1"
+}
+# The other direction: refusing every report the base tip holds, without asking who added it, is
+# the shape ADR 0013 refused — it takes from a squash-merged mission its own report.
+mut_QA_report_tip_refused_outright() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s@^    add=""$@    return 1@' "$1"
 }
 
 # Anchor 3 goes back to counting EVERY open bug, whatever its genre. That is the state the kit was
@@ -1238,9 +1269,9 @@ mut_PR_stamp_key_follows_head() {
   sed -i '/^mutation_stamp_key() {/,/^}/ s@md5sum <<< "$listing"@md5sum <<< "$listing$(git -C "$1" rev-parse HEAD 2>/dev/null)"@' "$1"
 }
 
-# The per-path guard of the key becomes a no-op: a root missing one of the four measured paths is
-# hashed over the three that remain, `sdd health` stamps that partial listing and gate_PR accepts it.
-# Only the all-four-absent case stays refused (by the empty-listing guard below it), which is
+# The per-path guard of the key becomes a no-op: a root missing one of the five measured paths is
+# hashed over the four that remain, `sdd health` stamps that partial listing and gate_PR accepts it.
+# Only the all-absent case stays refused (by the empty-listing guard below it), which is
 # exactly the guard the key had before ADR 0014, increment I3. World 9 of check-gates.sh catches it.
 mut_PR_stamp_key_partial_listing() {
   sed -i '/^mutation_stamp_key() {/,/^}/ s@\[ -z "\$MUTATION_STAMP_MISSING" \] || return 1@:@' "$1"
@@ -1256,6 +1287,50 @@ mut_PR_partial_root_blind_remedy() {
 # so the remedy gate_PR names answers nothing. World 9 of check-gates.sh reads the health output.
 mut_HEALTH_unstampable_silent() {
   sed -i '/^cmd_health() {/,/^}/ s@health_bad "nothing was stamped: \$MUTATION_STAMP_WHY@: "nothing was stamped: $MUTATION_STAMP_WHY@' "$1"
+}
+
+# The config is read once again, before the loop (#129): a TEST_CMD fixed on disk mid-run is never
+# the one the next lap's gate runs, which is SQ-141's four EXEC sessions. Caught by `config: the next
+# lap runs the edited TEST_CMD, …` (block 3c of the kit-guard regimes in check-autonomy.sh).
+mut_RUN_config_not_reloaded() {
+  sed -i '/^cmd_run() {/,/^}/ s@^    config_reload$@    :@' "$1"
+}
+# The reload forgets to unset: a key deleted from the file survives from the previous read. Same
+# assertion, its `deleted-hook` term — the file's ON_ESCALATION_CMD pages after it was deleted.
+mut_RUN_config_reload_keeps_deleted() {
+  sed -i '/^config_reload() {/,/^}/ s@^    else unset "\$k"; fi$@    fi@' "$1"
+}
+# The reload forgets the environment: a key the caller exported is unset on lap two. Same assertion,
+# its `env-hook` term — the exported ON_ESCALATION_CMD no longer pages.
+mut_RUN_config_reload_drops_env() {
+  sed -i '/^config_reload() {/,/^}/ s@if \[ -n "\${CONFIG_ENV_VALUES\[\$k\]+x}" \]; then@if false; then@' "$1"
+}
+# The reload forgets that a key can be readonly: the run dies on bash's own `unset` error instead of
+# a sentence naming the key. Caught by `config: a readonly key stops the run with a sentence that
+# names it, …` in check-autonomy.sh, its `named:`/`raw:` terms.
+mut_RUN_config_reload_readonly_raw() {
+  sed -i '/^config_reload() {/,/^}/ s@if \[ -n "\${!k+x}" \] && ! ( unset "\$k" ) 2>/dev/null; then@if false; then@' "$1"
+}
+
+# The stamp stop goes away (#142, #198; ADR 0015 §1): with the PR open and only the stamp missing,
+# `sdd run` buys a publisher session that cannot write the stamp. Caught by `run stops at the stamp:
+# rc 2, no session, the stop names './bin/sdd health'` (world 4b of check-gates.sh).
+mut_RUN_stamp_stop_missing() {
+  sed -i '/^cmd_run() {/,/^}/ s@if \[ -n "\$GATE_PR_STAMP_WHY" \]; then@if false; then@' "$1"
+}
+# gate_PR arms the stamp marker on ENTRY instead of beside the stamp refusals, so `sdd run` stops "at
+# the stamp" over a PR that is not even open — the half of world 4b that a missing stop cannot reach.
+# Caught by `run stops at the stamp only when the stamp is the only refusal` in check-gates.sh.
+mut_PR_stamp_marker_always() {
+  sed -i '/^gate_PR() {/,/^}/ s@^  GATE_PR_STAMP_WHY=""$@  GATE_PR_STAMP_WHY="armed on entry"@' "$1"
+}
+
+# agents/ falls out of the key again (#67; ADR 0015 §1): a commit that edits only a hat leaves the
+# stamp valid over content the catalogue never ran against, though the runner reads every hat out of
+# agents/<hat>.md. Caught by `stamp-key: a commit touching only agents/ moves the key` (world 11b of
+# check-gates.sh), the only world that edits agents/ alone.
+mut_PR_stamp_key_ignores_agents() {
+  sed -i 's@^readonly MUTATION_STAMP_PATHS=(bin tests templates config agents)$@readonly MUTATION_STAMP_PATHS=(bin tests templates config)@' "$1"
 }
 
 # The ratchet's exclusion vanishes from the pathspec: tests/health-baseline.txt is hashed again, and
@@ -1650,6 +1725,15 @@ mut_KAIZEN_composition_session_unit() {
 # part 1 rests on. A composition nobody reads is the silent filter it replaced, wearing a schema.
 mut_KAIZEN_composition_unprinted() {
   sed -i '/^  kaizen_composition_note$/d' "$1"
+}
+
+# Issue 98: a key of the series renamed in the jq and nowhere else. The key of a detail entry's cost
+# has no other reader in the suite — check-kaizen.sh and check-autonomy.sh both answered rc 0 over
+# this rename before the key sensor existed — so the judge would read `null` for a phase's cost while
+# docs/pipeline.md went on naming `cost_usd`. What dies is the sensor that reads the
+# sdd:series-fields block of docs/pipeline.md against the keys the series prints.
+mut_KAIZEN_series_key_renamed() {
+  sed -i '/^kaizen_series() {/,/^}/ s/^                      cost_usd: (map(.cost_usd \/\/ 0) | add)})) as \$detail$/                      cost: (map(.cost_usd \/\/ 0) | add)})) as $detail/' "$1"
 }
 
 mut_KAIZEN_series_rc_dropped() {
@@ -3589,7 +3673,14 @@ mut_KAIZEN_reminder_dead() {
 # do with the run that just finished. The pair of assertions it dies on is differential, so a
 # mutant that forced the OTHER branch instead would be caught by the same fixture.
 mut_KAIZEN_reminder_wrong_repo() {
-  sed -i '/^kaizen_reminder()/,/^}/ s@if \[ -n "\$kit_root" \] && \[ "\$kit_root" = "\$REPO_ROOT" \]; then@if true; then@' "$1"
+  sed -i '/^kaizen_reminder()/,/^}/ s@if \[ -n "\$kit_id" \] && \[ "\$kit_id" = "\$here_id" \]; then@if true; then@' "$1"
+}
+# The reminder goes back to comparing TOPLEVELS, the spelling 188ca87 removed from the kaizen door
+# and left here: a linked worktree of the kit has a toplevel of its own, so a run finished in one is
+# told it stands in a target repo. Caught by the differential pair `reminder: a linked worktree of
+# the kit answers with the kit sentence` / `and not with the target-repo sentence` in check-kaizen.sh.
+mut_KAIZEN_reminder_per_worktree() {
+  sed -i '/^kaizen_reminder()/,/^}/ s@kit_id="\$( REPO_ROOT="\$SDD_HOME" ledger_repo_root )"; here_id="\$( ledger_repo_root )"@kit_id="$( git -C "$SDD_HOME" rev-parse --show-toplevel )"; here_id="$REPO_ROOT"@' "$1"
 }
 
 # The kaizen door goes back to comparing TOPLEVELS (issue 121): a linked worktree of the kit has its
@@ -4097,6 +4188,19 @@ mut_AUTONOMY_notes_borrowed_across_repos() {
 # "null null null" against the "2 1 2" it demands.
 mut_LEDGER_progress_not_written() {
   sed -i '\%pending_before: ($pbefore%d; \%pending_after: ($pafter%d; \%increments_total: ($itotal%d' "$1"
+}
+
+# runner_sha reads the DISK again (#129): the field says the HEAD the row was written at, which is
+# kit_sha under another name — the run that moved the kit under itself is back to naming a version
+# it never ran. Caught by `ledger: every row carries the launch-time runner, beside a kit_sha read off
+# the moved disk` (kit-guard regime 3b of check-autonomy.sh), whose runner term then lists two shas.
+mut_LEDGER_runner_sha_reads_disk() {
+  sed -i '/^autonomy_append() {/,/^}/ s@--arg r "\$AUTONOMY_RUNNER_SHA"@--arg r "$(git -C "$SDD_HOME" rev-parse --short HEAD 2>/dev/null)"@' "$1"
+}
+# The kit moved under the run and the journal says nothing: the rows carry both shas, and the human
+# watching `tail -F` is not told. Same assertion, its journal term.
+mut_LEDGER_runner_moved_silent() {
+  sed -i '/^autonomy_append() {/,/^}/ s@^    pipeline_log_line "\$(date -Iseconds)  RUNNER  @    : "$(date -Iseconds)  RUNNER  @' "$1"
 }
 
 # The one count of increment status stops distinguishing `done`: every row is pending, so the
@@ -4696,7 +4800,7 @@ mut_RUN_gate_pass_off_the_derived_branch() {
 # leaves the header total through a bucket whose name is a lie about it. Caught by `the human reader
 # does not call the recorded closure unrecognized` in check-autonomy.sh, and by nothing else.
 mut_LEDGER_gate_pass_unrecognized() {
-  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
+  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
 }
 
 # The close row goes back to being ADMITTED but never NAMED: it enters the header total (the shell
@@ -4763,7 +4867,7 @@ mut_LEDGER_meta_off_the_local_total() {
 # stale phrases of that finding were. The exclusivity it wanted belongs to the narrow mutants
 # below, which strip ONE event and were measured one sabotage at a time.
 mut_LEDGER_gate_pass_not_admitted() {
-  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close)@and (.event == "session" or is_escalation)@' "$1"
+  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close or is_manual)@and (.event == "session" or is_escalation)@' "$1"
 }
 
 # --- the three NARROW close mutants -----------------------------------------
@@ -4780,7 +4884,7 @@ mut_LEDGER_gate_pass_not_admitted() {
 # counted as unrecognized` and `guard: a close row mints no version and no mission` in
 # check-kaizen.sh, and by nothing else.
 mut_KAIZEN_close_not_admitted() {
-  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close)@and (.event == "session" or is_escalation or is_gate_pass)@' "$1"
+  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close or is_manual)@and (.event == "session" or is_escalation or is_gate_pass or is_manual)@' "$1"
 }
 
 # `graded_row` admits the closure, so a mission whose ONLY row in the graded slice is its `sdd close`
@@ -4801,6 +4905,56 @@ mut_KAIZEN_close_mints_a_mission() {
 # no mission` in check-kaizen.sh, and by nothing else.
 mut_KAIZEN_close_mints_a_version() {
   sed -i 's@def shas_in_file_order: map(select(.event == "session" or is_escalation))@def shas_in_file_order: map(select(.event == "session" or is_escalation or is_close))@' "$1"
+}
+
+# #153, the sixth event, in its two readers. Reader one forgets it: the row the runner wrote on
+# purpose reads as a stray.
+mut_AUTONOMY_manual_unrecognized() {
+  sed -i 's@ or is_close or is_manual) | not;@ or is_close) | not;@' "$1"
+}
+# Reader two forgets it: `excluded.unrecognized` goes to 1, the field the judge reads as a kit bug.
+mut_KAIZEN_manual_not_admitted() {
+  sed -i 's@or is_gate_pass or is_close or is_manual)))) as \$all@or is_gate_pass or is_close)))) as $all@' "$1"
+}
+# The two ways a non-session row mints, each owned by one regime of the check-kaizen differential:
+# a version (`latest` slides onto a sha no session touched) and a mission (counted in `missions`).
+mut_KAIZEN_manual_mints_version() {
+  sed -i 's@def shas_in_file_order: map(select(.event == "session" or is_escalation))@def shas_in_file_order: map(select(.event == "session" or is_escalation or is_manual))@' "$1"
+}
+mut_KAIZEN_manual_counts_mission() {
+  sed -i 's@def graded_row: .event == "session" or is_escalation;@def graded_row: .event == "session" or is_escalation or is_manual;@' "$1"
+}
+
+# #153, the writer: `sdd note-manual` writes the note and NOT the row, and the phase done by hand is
+# back to "never happened" for every reader of the ledger.
+mut_RUN_manual_row_missing() {
+  sed -i '/^cmd_note_manual() {/,/^}/ s@^  autonomy_manual_row "\$phase"$@  :@' "$1"
+}
+# The final review of the lot, reproduced: the writer moves the checkout to the mission branch and
+# LEAVES the human there — on a merged mission, the spent branch. Caught by `note-manual returns
+# the human to the branch they stood on, …` in check-autonomy.sh, its two `branch:` terms.
+mut_RUN_manual_stays_on_mission_branch() {
+  sed -i '/^cmd_note_manual() {/,/^}/ s@if \[ -n "\$home" \] && \[ "\$now" != "\$home" \]; then@if false; then@' "$1"
+}
+# The same footgun from a DETACHED HEAD (Codex review of PR #222): no branch name to go back to, so
+# the commit is the way home. Caught by `note-manual from a detached HEAD returns the human to that
+# commit, …` in check-autonomy.sh, its `branch:` and sha terms.
+mut_RUN_manual_stays_when_detached() {
+  sed -i '/^cmd_note_manual() {/,/^}/ s@elif \[ -z "\$home" \] && \[ -n "\$home_sha" \] && \[ -n "\$now" \]; then@elif false; then@' "$1"
+}
+# A merged mission is not told that its note lands where the base never looks. Same assertion, its
+# first `warn:` term — the second world, one commit ahead, is the one that must stay silent.
+mut_RUN_manual_merged_silent() {
+  sed -i '/^cmd_note_manual() {/,/^}/ s@if \[ "\$merged" = 1 \]; then@if false; then@' "$1"
+}
+# The command leaves the admission list and falls to the unlocked arm: it commits under a run.
+mut_COORD_note_manual_unlocked() {
+  sed -i 's@    boot|note-manual|install|@    boot|install|@' "$1"
+}
+
+# #153, the page: it reads sessions only, and a phase already recorded by hand is suggested forever.
+mut_STATUS_manual_row_ignored() {
+  sed -i '/^status_unrecorded() {/,/^}/ s@and (.event == "session" or .event == "manual"))@and (.event == "session"))@' "$1"
 }
 
 # The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
@@ -5554,6 +5708,8 @@ CATALOG=(
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
   EXEC_escaped_pipe_blind
+  EXEC_pipeless_row_skipped
+  EXEC_pipeless_reads_past_the_table
   EXEC_rows_blind_to_review_increments
   EXEC_alignment_colon_blind
   EXEC_dirty_tree_as_red
@@ -5627,6 +5783,9 @@ CATALOG=(
   QA_report_status_quoted
   QA_report_log_quoted
   QA_report_no_fallback
+  QA_report_tip_any_mission
+  QA_report_tip_any_file_of_mission
+  QA_report_tip_refused_outright
   QA_bug_genre_ignored
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
@@ -5681,6 +5840,13 @@ CATALOG=(
   PR_partial_root_blind_remedy
   HEALTH_unstampable_silent
   PR_stamp_key_keeps_baseline
+  PR_stamp_key_ignores_agents
+  RUN_stamp_stop_missing
+  PR_stamp_marker_always
+  RUN_config_not_reloaded
+  RUN_config_reload_keeps_deleted
+  RUN_config_reload_drops_env
+  RUN_config_reload_readonly_raw
   PR_stamp_key_reads_ignored
   PR_stamp_key_partial_on_deleted
   PR_stamp_why_deleted_blind
@@ -5883,6 +6049,7 @@ CATALOG=(
   KAIZEN_series_jq_stderr_swallowed
   KAIZEN_composition_session_unit
   KAIZEN_composition_unprinted
+  KAIZEN_series_key_renamed
   HEALTH_gates_capture_aborts
   HEALTH_provenance_line_aborts
   HEALTH_ratchet_one_way
@@ -5914,6 +6081,7 @@ CATALOG=(
   RUN_retry_row_moved_false
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
+  KAIZEN_reminder_per_worktree
   KAIZEN_kit_door_per_worktree
   KAIZEN_kit_door_open
   KAIZEN_already_judged_spends
@@ -5962,6 +6130,8 @@ CATALOG=(
   RETRY_gate_red_silent
   AUTONOMY_notes_borrowed_across_repos
   LEDGER_progress_not_written
+  LEDGER_runner_sha_reads_disk
+  LEDGER_runner_moved_silent
   EXEC_tally_counts_done
   EXEC_tally_doing_is_done
   EXEC_checkpoint_split_collapses
@@ -6037,6 +6207,16 @@ CATALOG=(
   KAIZEN_close_not_admitted
   KAIZEN_close_mints_a_mission
   KAIZEN_close_mints_a_version
+  AUTONOMY_manual_unrecognized
+  KAIZEN_manual_not_admitted
+  KAIZEN_manual_mints_version
+  KAIZEN_manual_counts_mission
+  RUN_manual_row_missing
+  RUN_manual_stays_on_mission_branch
+  RUN_manual_stays_when_detached
+  RUN_manual_merged_silent
+  COORD_note_manual_unlocked
+  STATUS_manual_row_ignored
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_counted_as_session
   LEDGER_gate_pass_mints_a_version
@@ -6125,6 +6305,18 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # more.
   mkdir -p "$1/docs"
   cp -r "$ROOT/docs/adr" "$1/docs/"
+  # `docs/pipeline.md`, one file and not the tree, for the same reason: check-kaizen.sh compares the
+  # sdd:series-fields block of it with the keys the series prints (issue 98), and the mutant that
+  # renames a key in kaizen_series has to die INSIDE a sandbox. Without the file the control run
+  # went red on "one series-fields block" — measured, the first --only of that mutant. Like docs/adr
+  # it is read whatever the mutant is, never mutated, so it stays out of the stamp key.
+  cp "$ROOT/docs/pipeline.md" "$1/docs/"
+  # `commands/`, the fifth entry born the same way: check-hat.sh asserts that /sdd-plan shows the
+  # plan and asks YES or NO before `sdd approve`, reading commands/sdd-plan.md from its own kit root.
+  # Absent here, the control run went red on that probe (`awk: cannot open`) and `sdd health` read
+  # HARNESS-BROKEN before a single mutant ran — measured on the first health of PR #222, which no
+  # fast step could have seen: `--anchors` copies only bin/. Read, never mutated: out of the stamp key.
+  cp -r "$ROOT/commands" "$1/"
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log
@@ -6312,7 +6504,7 @@ killer_of() {
 # step a mutant runs, because run-all.sh still runs every step of a mutant the named one did not kill.
 # That the ORDER moves no verdict is asserted since issue 169: one control per distinct killer of
 # the map, that killer first, has to come back green or the score is refused. It lives in
-# .sdd/cache/, gitignored and OUTSIDE the four directories of mutation_stamp_key, so learning it
+# .sdd/cache/, gitignored and OUTSIDE the directories of mutation_stamp_key, so learning it
 # never invalidates a stamp.
 # The seconds are the mutant's own suite time; the pool reads them to launch the longest first.
 KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"

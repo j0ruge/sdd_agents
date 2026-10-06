@@ -33,9 +33,11 @@
 # diff. Whether the anchor still points at real code USED to sit in this sentence too, and 63 of 85
 # anchors of this kit's own TODO.md rotted under it. It is measured now (ADR 0011), in the lint:
 # the first path-shaped span AFTER the bold title must name a regular file of the CHECKED file's
-# repository, and another span of the head (4+ characters, the title's included) must occur in that
-# file within 10 lines of the anchored line — anywhere in it for a whole-file anchor (no line, or
-# `:1`). "Of the repository" is judged on the RESOLVED file (`realpath -e` under the resolved
+# repository, and the span right after it, in parentheses — `path:N` (`symbol`), the DESIGNATED
+# symbol, 4+ characters — must occur in that file within 10 lines of the anchored line — anywhere
+# in it for a whole-file anchor (no line, or `:1`). It is the only span measured (ADR 0015 §2): any
+# span of the head used to count, and one that occurs all over the file answered for a rotten
+# anchor. "Of the repository" is judged on the RESOLVED file (`realpath -e` under the resolved
 # base), so a `..` that climbs out and a symlink pointing out are refused like a missing file; a
 # title with no closing `**` has no end, so its item has no anchor at all.
 # `--anchors <file> [<prefix>]` reports the same rule alone, for re-anchoring in bulk.
@@ -113,10 +115,13 @@
 # Both are human judgement on the diff. The anchor is measured (ADR 0011, lint and `--anchors`), and its
 # limits are declared rather than hidden: only the FIRST anchor of an item is read, so a secondary
 # `(+ other/path:N)` stays unmeasured; a whole-file anchor (`:1`) is weaker than a line anchor by
-# design; and a symbol that occurs everywhere (`local`, `printf`) satisfies the distance near
-# almost any line — the 4-character minimum narrows that, it does not close it. A glob can never
-# anchor: the refusal is spelled out although the quoted `-f` would refuse it anyway, because a
-# sabotage that EXPANDS the glob is the one that would let it pass.
+# design; and the designated symbol is the AUTHOR's choice — designate one that occurs everywhere
+# (`local`, `printf`) and the distance is satisfied near almost any line. Designating moved that
+# choice from the sensor's guess to a span a reviewer reads; the 4-character minimum narrows it,
+# nothing here closes it. A target's items written before the slot are each one violation, which
+# `--baseline <ref>` reads as inherited — only an item written without it after <ref> is new.
+# A glob can never anchor: the refusal is spelled out although the quoted `-f` would refuse it
+# anyway, because a sabotage that EXPANDS the glob is the one that would let it pass.
 #
 # ── Declared debt, admitted here instead of into the backlog (the D15 rule of CLAUDE.md) ────────
 # A finding earns a TODO.md entry when the sensor CLAIMS to measure what it does not (fail-open)
@@ -312,12 +317,21 @@ todo_awk() {
     function tail_of(text,   last) { last = last_sep(text); return last == 0 ? "" : substr(text, last + length(" — ")) }
     # Every backticked span of text, each prefixed by a TAB. index()/substr() and never a negated
     # class, the mawk rule above. An unclosed backtick ends the walk: what follows is not a span.
-    function spans(text,   out, rest, p, q) {
+    # A span whose only separation from the span before it is blanks and an opening parenthesis,
+    # and which the closing parenthesis follows at once, is tagged with an \035 byte: that is the
+    # slot of the format, the symbol the anchor designates. Both sides, because the left alone took
+    # `(`sym` with no `)` and `(`sym` and more)` for a slot (PR #222). Which span it must follow is
+    # decided by the caller, which knows the anchor; here only the adjacency is read, the one fact
+    # the list of spans loses.
+    function spans(text,   out, rest, p, q, gap, sp) {
       out = ""; rest = text
       while ((p = index(rest, "`")) > 0) {
+        gap = substr(rest, 1, p - 1)
         rest = substr(rest, p + 1)
         if ((q = index(rest, "`")) == 0) break
-        out = out "\t" substr(rest, 1, q - 1)
+        sp = substr(rest, 1, q - 1)
+        if (gap ~ /^[ \t]*\($/ && substr(rest, q + 1, 1) == ")") sp = "\035" sp
+        out = out "\t" sp
         rest = substr(rest, q + 1)
       }
       return out
@@ -642,7 +656,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=10
+RULES_FLOOR=11
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -710,7 +724,7 @@ EOF
 ## Aberto
 <!-- sdd:open -->
 
-- [ ] **A finding with every field in place** — `bin/sdd:42` — `bsym` matters, in one clause.
+- [ ] **A finding with every field in place** — `bin/sdd:42` (`bsym`) — matters, in one clause.
   Direction: what to do about it. — found by `sdd-qa` in mission `20260816-probe` (2026-08-16)
 
 ## Decidido
@@ -789,7 +803,7 @@ selftest() {
 ## Aberto
 <!-- sdd:open -->
 
-- [ ] **A finding with every field in place** — `bin/sdd:42` — `bsym` matters, in one clause.
+- [ ] **A finding with every field in place** — `bin/sdd:42` (`bsym`) — matters, in one clause.
   Direction: what to do about it. — found by `sdd-qa` in mission `20260816-probe` (2026-08-16)
 EOF
   assert_clean "$(with_decided "$box/good.md")" 8 "a well-formed item"
@@ -971,7 +985,7 @@ EOF
   # The violation COUNT in the failure report is asserted, not just the messages: setting it to a
   # constant used to survive the whole selftest.
   { printf '## Aberto\n<!-- sdd:open -->\n\n'
-    printf -- '- [ ] **Good** — `f.sh:1` — `fsym`. — by `x` (2026-08-16)\n'
+    printf -- '- [ ] **Good** — `f.sh:1` (`fsym`) — fine. — by `x` (2026-08-16)\n'
     printf -- '1. [ ] one\n-  [ ] two\n> - [ ] three\n'; } > "$box/countable.md"
   # Herestring, never `| grep -q`: under `pipefail` a matching `grep -q` closes the pipe, the
   # upstream stage dies of SIGPIPE and the pipeline returns 141 — so the probe would report a
@@ -1267,7 +1281,7 @@ EOF
   # core.fileMode=false) does not turn into a bogus "the count is wrong" diagnosis.
   { printf 'Format:\n\n```md\n- [ ] <what> — `f:1` — <why> — by `<a>` (YYYY-MM-DD)\n```\n\n## Aberto\n<!-- sdd:open -->\n\n'
     for i in $(seq 1 21); do
-      printf -- '- [ ] **Item %s** — `bin/sdd:%s` — `bsym` matters. — found by `x` (2026-08-16)\n' "$i" "$i"
+      printf -- '- [ ] **Item %s** — `bin/sdd:%s` (`bsym`) — matters. — found by `x` (2026-08-16)\n' "$i" "$i"
     done; } > "$box/counted.md"
   PROBES=$((PROBES + 1))
   local reported
@@ -1643,7 +1657,7 @@ EOF
     printf -- '- [ ] **A** — `f:1` — why. — found by `x` (2026-09-24)\n'; } > "$box/quotedonly.md"
   assert_rc 99 "a marker quoted in prose does not section the file" \
     bash "$SELF" --check "$box/quotedonly.md"
-  printf '## Open\r\n<!-- sdd:open --> \r\n\r\n- [ ] **A** — `f.sh:1` — `fsym`. — found by `x` (2026-09-24)\r\n' \
+  printf '## Open\r\n<!-- sdd:open --> \r\n\r\n- [ ] **A** — `f.sh:1` (`fsym`) — fine. — found by `x` (2026-09-24)\r\n' \
     > "$box/crlfmarker.md"
   assert_rc 0 "a CRLF file with trailing space after the marker is sectioned" \
     bash "$SELF" --check "$(with_decided "$box/crlfmarker.md")"
@@ -1703,7 +1717,7 @@ EOF
   rule_begin
   rep() { local s='' i; for ((i = 0; i < $2; i++)); do s+="$1"; done; printf '%s' "$s"; }
   long_item() { # <fill> <count> — one well-formed item on one physical line, 72 + <count> chars
-    printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Accented `xsym`** — `x.sh:1` — %s — found by `sdd-qa` (2026-08-16)\n' \
+    printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Accent** — `x.sh:1` (`xsym`) — %s — found by `sdd-qa` (2026-08-16)\n' \
       "$(rep "$1" "$2")"
   }
   long_item 'e' 49 > "$box/line121.md"
@@ -1748,7 +1762,7 @@ EOF
   #       trailed marker then counted as the section, rc 0 where rc 99 is the honest answer.
   rule_begin
   { printf '## Open\n<!-- sdd:open -->\n\n'
-    printf -- '- [ ] **Good** — `f.sh:1` — `fsym`. — by `x` (2026-08-16)\n'
+    printf -- '- [ ] **Good** — `f.sh:1` (`fsym`) — fine. — by `x` (2026-08-16)\n'
     printf -- '1. [ ] one\n-  [ ] two\n'; } > "$box/countable2.md"
   PROBES=$((PROBES + 1))
   if ! grep -q '^2 shape violation(s)' <<< "$(bash "$SELF" --check "$(with_decided "$box/countable2.md")" 2>&1)"; then
@@ -1782,7 +1796,7 @@ EOF
   done
   rule_end 11 'the selftest goes red under every sabotage issue 70 listed'
 
-  # ── The anchor names a file of the CHECKED repo, and a cited symbol sits near its line ────────
+  # ── The anchor names a file of the CHECKED repo, and its designated symbol sits near its line ──
   # ADR 0011. The fixture is a git repo of its own, and every probe runs from `/`: the base of
   # resolution is the checked file's repository, never the cwd and never this kit's $ROOT — probe 7
   # plants a path that exists ONLY in the kit, which is the one world that tells the two apart.
@@ -1803,39 +1817,34 @@ EOF
     printf '  SELFTEST FAIL  %s — expected rc %s and "%s", got rc %s: %s\n' "$label" "$want" "$sub" "$got" "$out" >&2
     FAILS=$((FAILS + 1)); fail_rc 91
   }
-  anchor_item ok.md '`src/code.sh:20` — calls `frobnicate_widget`, cites `docs/none.md`'
+  anchor_item ok.md '`src/code.sh:20` (`frobnicate_widget`) — calls it, cites `docs/none.md`'
   anchors_says 0 '  ok    anchors: 1 measured, 0 off target' "an anchor on target passes" "$ar/ok.md"
   anchors_says 0 '  ok    anchors: 0 measured, 0 off target' "a prefix that matches nothing measures nothing" "$ar/ok.md" other/
-  anchor_item off.md '`src/code.sh:31` — calls `frobnicate_widget`'
+  anchor_item off.md '`src/code.sh:31` (`frobnicate_widget`) — calls it'
   anchors_says 1 'anchor `src/code.sh:31` is off target — nearest `frobnicate_widget` is at line 20' \
     "eleven lines off is off target" "$ar/off.md"
   anchors_says 1 '  FAIL  anchors: 1 measured, 1 off target' "an off-target anchor is counted" "$ar/off.md"
-  anchor_item nofile.md '`src/missing.sh:5` — calls `frobnicate_widget`'
+  anchor_item nofile.md '`src/missing.sh:5` (`frobnicate_widget`) — calls it'
   anchors_says 1 'anchor `src/missing.sh` names no file of this repository' "a missing file is refused" "$ar/nofile.md"
-  anchor_item nosym.md '`src/code.sh:20` — calls `unheard_of_symbol`'
-  anchors_says 1 'anchor `src/code.sh:20` — no backticked symbol of the item occurs in src/code.sh' \
+  anchor_item nosym.md '`src/code.sh:20` (`unheard_of_symbol`) — calls it'
+  anchors_says 1 'anchor `src/code.sh:20` — the designated symbol `unheard_of_symbol` does not occur in src/code.sh' \
     "a symbol the file does not carry is refused" "$ar/nosym.md"
-  anchor_item whole.md '`src/code.sh:1` — calls `frobnicate_widget`'
+  anchor_item whole.md '`src/code.sh:1` (`frobnicate_widget`) — calls it'
   anchors_says 0 '0 off target' "a whole-file anchor passes with the symbol anywhere" "$ar/whole.md"
-  anchor_item glob.md '`src/*.sh:20` — calls `frobnicate_widget`'
+  anchor_item glob.md '`src/*.sh:20` (`frobnicate_widget`) — calls it'
   anchors_says 1 'anchor `src/*.sh` names no file of this repository' "a glob is not an anchor" "$ar/glob.md"
   # The kit's own file, cited from a repo that does not have it. Witness first: a path that did not
   # exist under $ROOT either would make this probe vacuous.
   PROBES=$((PROBES + 1))
   [ -f "$ROOT/tests/check-todo.sh" ] || { FAILS=$((FAILS + 1)); fail_rc 92
     printf '  SELFTEST FAIL  the kit-only witness tests/check-todo.sh is not under $ROOT\n' >&2; }
-  anchor_item kitonly.md '`tests/check-todo.sh:1` — calls `selftest`'
+  anchor_item kitonly.md '`tests/check-todo.sh:1` (`selftest`) — calls it'
   anchors_says 1 'anchor `tests/check-todo.sh` names no file of this repository' \
     "a file that exists only in the kit is not a file of the checked repo" "$ar/kitonly.md"
-  anchor_item short.md '`src/code.sh:20` — calls `fro`'
-  anchors_says 1 'no backticked symbol of the item occurs in src/code.sh' "a 3-character symbol does not count" "$ar/short.md"
   # The title is not where the anchor lives: a path-shaped span in it (`src/code.sh` here, a real file)
-  # used to become the whole-file anchor and let the off-target one right after it go unmeasured. It
-  # still counts as a SYMBOL — only the anchor search starts after the title.
-  printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Title citing `src/code.sh` and `frobnicate_widget`** — `src/code.sh:35` — why. — by `x` (2026-08-16)\n' > "$ar/titlepath.md"
+  # used to become the whole-file anchor and let the off-target one right after it go unmeasured.
+  printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Title citing `src/code.sh` and `frobnicate_widget`** — `src/code.sh:35` (`frobnicate_widget`) — why. — by `x` (2026-08-16)\n' > "$ar/titlepath.md"
   anchors_says 1 'anchor `src/code.sh:35` is off target' "a path in the title does not stand in for the anchor" "$ar/titlepath.md"
-  printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Title citing `frobnicate_widget`** — `src/code.sh:25` — why. — by `x` (2026-08-16)\n' > "$ar/titlesym.md"
-  anchors_says 0 '1 measured, 0 off target' "a symbol cited in the title still counts" "$ar/titlesym.md"
   # The LINT path, not only the report mode: `--check` (and the bare run over TODO.md) applies the
   # same rule, so an off-target anchor fails the suite that gates the phase. Probed through the CLI,
   # because a rule the report mode knows and check_file does not call is the shape this file forbids.
@@ -1856,18 +1865,53 @@ EOF
   # `-f` accepts. Planted beside the fixture repo, carrying the symbol, so only the escape is wrong.
   mkdir -p "$box/outside" && printf 'escaped_symbol\n' > "$box/outside/x.sh"
   ln -sf "$box/outside/x.sh" "$ar/src/link.sh"
-  anchor_item climb.md '`../outside/x.sh:1` — cites `escaped_symbol`'
+  anchor_item climb.md '`../outside/x.sh:1` (`escaped_symbol`) — cites it'
   anchors_says 1 'anchor `../outside/x.sh` names no file of this repository' "a .. that leaves the repo is refused" "$ar/climb.md"
-  anchor_item symlink.md '`src/link.sh:1` — cites `escaped_symbol`'
+  anchor_item symlink.md '`src/link.sh:1` (`escaped_symbol`) — cites it'
   anchors_says 1 'anchor `src/link.sh` names no file of this repository' "a symlink out of the repo is refused" "$ar/symlink.md"
   # A title that never closes has no end, so nothing after it can be told apart from it: every span
   # is the title's, and the item has no anchor. The fallback to "the whole head" put a title path
   # back in the anchor's seat — the hole the title tag exists to close.
   printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Open `src/code.sh` — `src/missing.sh:3` — `frobnicate_widget` — by `x` (2026-08-16)\n' > "$ar/unclosed.md"
   anchors_says 1 'anchor `<none>` names no file of this repository' "a title with no closing ** has no anchor" "$ar/unclosed.md"
-  printf '## Open\n\n- [ ] **No marker** — `src/code.sh:20` — `frobnicate_widget`. — by `x` (2026-08-16)\n' > "$ar/nomark.md"
+  printf '## Open\n\n- [ ] **No marker** — `src/code.sh:20` (`frobnicate_widget`) — w. — by `x` (2026-08-16)\n' > "$ar/nomark.md"
   anchors_says 99 'marker' "--anchors refuses a file without the open marker" "$ar/nomark.md"
-  rule_end 19 'an anchor names a file of the checked repo and sits within 10 lines of a symbol the item cites'
+  rule_end 17 'an anchor names a file of the checked repo and its designated symbol sits within 10 lines'
+
+  # ── The anchor DESIGNATES one symbol, and only that symbol is measured (ADR 0015 §2) ──────────
+  # `path:N` (`symbol`): the span right after the anchor, wrapped in parentheses. Any other span of
+  # the item used to answer for the anchor, and one that occurs all over the file answered for a
+  # rotten one — bin/sdd:1198 passed through a `gate_EXEC` in a comment, with the symbol the item
+  # meant 53 lines away, and the `nearest` hint then carried the rot into the next re-anchoring.
+  # Same fixture repo as above: `frobnicate_widget` at line 20, `# filler line N` everywhere else.
+  rule_begin
+  anchor_item noslot.md '`src/code.sh:20` — calls `frobnicate_widget`'
+  anchors_says 1 'anchor `src/code.sh:20` designates no symbol' \
+    "an anchor without the (symbol) slot is refused, even with the symbol right on its line" "$ar/noslot.md"
+  # The witness first: the decoy must sit ON the anchored line, or the probe below proves nothing.
+  PROBES=$((PROBES + 1))
+  [ "$(sed -n 31p "$ar/src/code.sh")" = '# filler line 31' ] || { FAILS=$((FAILS + 1)); fail_rc 92
+    printf '  SELFTEST FAIL  the decoy `filler line` is not on line 31 of the fixture\n' >&2; }
+  anchor_item decoy.md '`src/code.sh:31` (`frobnicate_widget`) — cites `filler line`'
+  anchors_says 1 'anchor `src/code.sh:31` is off target — nearest `frobnicate_widget` is at line 20' \
+    "a span that occurs near the line no longer answers for the designated one, and the hint names it" "$ar/decoy.md"
+  anchor_item later.md '`src/code.sh:20` — calls it (`frobnicate_widget`)'
+  anchors_says 1 'anchor `src/code.sh:20` designates no symbol' \
+    "a parenthesised span is the slot only right after the anchor" "$ar/later.md"
+  printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Slot on the next line** — `src/code.sh:20`\n  (`frobnicate_widget`) — why. — by `x` (2026-08-16)\n' > "$ar/wrapped.md"
+  anchors_says 0 '1 measured, 0 off target' "the slot may wrap to the continuation line" "$ar/wrapped.md"
+  anchor_item short.md '`src/code.sh:20` (`fro`) — calls it'
+  anchors_says 1 'anchor `src/code.sh:20` designates `fro`, shorter than 4 characters' \
+    "a 3-character designated symbol does not count" "$ar/short.md"
+  # The slot CLOSES: `)` right after the symbol, as `(` sits right before it. Read from the left
+  # alone, a slot that never closed and one holding prose after the symbol both passed (PR #222).
+  anchor_item noclose.md '`src/code.sh:20` (`frobnicate_widget` — calls it'
+  anchors_says 1 'anchor `src/code.sh:20` designates no symbol' \
+    "a slot that never closes designates nothing" "$ar/noclose.md"
+  anchor_item trailing.md '`src/code.sh:20` (`frobnicate_widget` and more) — calls it'
+  anchors_says 1 'anchor `src/code.sh:20` designates no symbol' \
+    "a slot holds the symbol and nothing after it" "$ar/trailing.md"
+  rule_end 8 'an anchor designates one symbol, and only that symbol is measured'
 
   # ── --baseline <ref>: a target's TODO.md fails only on what the ref did not have (issue 217) ──
   # A target adopting the kit inherits violations it did not write; a run that is red on all of
@@ -1897,18 +1941,18 @@ EOF
     printf '  SELFTEST FAIL  %s — expected rc %s and "%s", got rc %s: %s\n' "$label" "$want" "$sub" "$got" "$out" >&2
     FAILS=$((FAILS + 1)); fail_rc 91
   }
-  local undated='- [ ] **Undated finding** — `src/code.sh:20` — calls `frobnicate_widget` — by `x`'
-  local good='- [ ] **Good finding** — `src/code.sh:20` — calls `frobnicate_widget` — by `x` (2026-10-03)'
+  local undated='- [ ] **Undated finding** — `src/code.sh:20` (`frobnicate_widget`) — calls it — by `x`'
+  local good='- [ ] **Good finding** — `src/code.sh:20` (`frobnicate_widget`) — calls it — by `x` (2026-10-03)'
   bl_commit notodo
   bl_todo "$undated"; bl_commit base
   bl_todo "$good" "$undated"
   baseline_says 0 'TODO.md: 0 new shape violation(s) against base (1 inherited)' \
     "a violation the ref had, moved down by an item above it, is inherited" --baseline base
-  bl_todo "$undated" '- [ ] **Second undated** — `src/code.sh:20` — calls `frobnicate_widget` — by `x`'
+  bl_todo "$undated" '- [ ] **Second undated** — `src/code.sh:20` (`frobnicate_widget`) — calls it — by `x`'
   baseline_says 1 'TODO.md: 1 new shape violation(s) against base (1 inherited)' \
     "a violation the ref did not have is new" --baseline base
   bl_todo "${undated/Undated finding/Dated now} (2026-10-03)" \
-    '- [ ] **Second undated** — `src/code.sh:20` — calls `frobnicate_widget` — by `x`'
+    '- [ ] **Second undated** — `src/code.sh:20` (`frobnicate_widget`) — calls it — by `x`'
   baseline_says 1 'TODO.md: 1 new shape violation(s) against base (0 inherited)' \
     "fixing one violation does not pay for a new one" --baseline base
   bl_todo "$undated"
@@ -1920,11 +1964,18 @@ EOF
   # The ref's copy is read from a temp file, and a temp file's own directory is the wrong root for
   # its anchors: every anchor of the copy would name no file, and an inherited off-target anchor
   # would come back as new. The copy resolves against the repository of the file it is a copy of.
-  bl_todo "$undated" '- [ ] **Off target** — `src/code.sh:35` — calls `frobnicate_widget` — by `x` (2026-10-03)'
+  bl_todo "$undated" '- [ ] **Off target** — `src/code.sh:35` (`frobnicate_widget`) — calls it — by `x` (2026-10-03)'
   bl_commit base2
   baseline_says 0 'TODO.md: 0 new shape violation(s) against base2 (2 inherited)' \
     "an off-target anchor the ref had is inherited: the copy resolves against the real repo" --baseline base2
-  rule_end 7 'a --baseline run fails only on what the ref did not have'
+  # A target adopting the designated symbol: its old items carry no slot. Each one is a violation the
+  # ref had too, so it is inherited — even moved down by the new item above it, which is new.
+  local legacy='- [ ] **Legacy finding** — `src/code.sh:20` — calls `frobnicate_widget` — by `x` (2026-10-03)'
+  bl_todo "$legacy"; bl_commit legacy
+  bl_todo '- [ ] **New finding** — `src/code.sh:20` — calls `frobnicate_widget` — by `x` (2026-10-04)' "$legacy"
+  baseline_says 1 'TODO.md: 1 new shape violation(s) against legacy (1 inherited)' \
+    "an old item without the slot is inherited, a new one is not" --baseline legacy
+  rule_end 8 'a --baseline run fails only on what the ref did not have'
 
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
@@ -1939,8 +1990,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 163 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 163\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 168 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 168\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -2075,9 +2126,9 @@ count_file() {
 }
 
 # ── The anchor rule (ADR 0011) ────────────────────────────────────────────────────────────────
-# ANCHOR_REACH is the distance, in lines, a cited symbol may sit from the anchored line;
-# ANCHOR_SYMBOL_MIN the shortest span that counts as a symbol — a two-letter span occurs near
-# almost any line and would satisfy the rule by accident.
+# ANCHOR_REACH is the distance, in lines, the designated symbol may sit from the anchored line;
+# ANCHOR_SYMBOL_MIN the shortest span that may be designated — a two-letter span occurs near almost
+# any line and would satisfy the rule by accident.
 ANCHOR_REACH=10
 ANCHOR_SYMBOL_MIN=4
 ANCHOR_BASE_OVERRIDE=''
@@ -2105,11 +2156,11 @@ anchor_base() {
 #   ANCHOR_VIOLATIONS  one `  line <L>: anchor `…` …` per violation, the lint's own shape
 # The caller has already refused an unreadable or unmarked file.
 anchor_scan() {
-  local file="$1" prefix="${2-}" lint="${3-}" base breal real line start anchor path n sp sym hits hit best bestsym dist
+  local file="$1" prefix="${2-}" lint="${3-}" base breal real line start anchor ai i path n sp sym hits hit best dist
   # Every loop over these reads `${a[@]+"${a[@]}"}`: under `set -u`, bash 4.0-4.3 calls an EMPTY
   # array unbound and aborts, and the kit promises bash 4+ (bin/sdd reads its probe_agent the same
-  # way). An item with an anchor and no other span is exactly an empty `syms` (PR #167 review).
-  local -a sp_list syms
+  # way). An item whose head carries no span at all is exactly an empty `sp_list` (PR #167 review).
+  local -a sp_list
   ANCHOR_MEASURED=0; ANCHOR_VIOLATIONS=''
   base="$(anchor_base "$file")"
   breal="$(realpath -e -- "$base" 2>/dev/null)" || breal="$base"
@@ -2121,11 +2172,13 @@ anchor_scan() {
       [ -n "$anchor" ] || continue
     fi
     # The anchor: the first span shaped like a path — a `/` or a `.`, no space. A span that is not
-    # (`frontmatter`, `sdd health`) is prose, skipped and never an anchor.
-    anchor=''
-    for sp in ${sp_list[@]+"${sp_list[@]}"}; do
+    # (`frontmatter`, `sdd health`) is prose, skipped and never an anchor. Read by INDEX, because
+    # the designated symbol is the span right after it.
+    anchor=''; ai=-1
+    for i in ${sp_list[@]+"${!sp_list[@]}"}; do
+      sp="${sp_list[i]#$'\035'}"
       [ -n "$sp" ] || continue
-      case "$sp" in $'\036'* | *' '*) continue ;; */* | *.*) anchor="$sp"; break ;; esac
+      case "$sp" in $'\036'* | *' '*) continue ;; */* | *.*) anchor="$sp"; ai="$i"; break ;; esac
     done
     case "$anchor" in "$prefix"*) ;; *) [ -z "$prefix" ] || continue ;; esac
     ANCHOR_MEASURED=$((ANCHOR_MEASURED + 1))
@@ -2150,26 +2203,32 @@ anchor_scan() {
       ANCHOR_VIOLATIONS+="  line $start: anchor \`$path\` names no file of this repository"$'\n'
       continue
     fi
-    syms=()
-    for sp in ${sp_list[@]+"${sp_list[@]}"}; do
-      sp="${sp#$'\036'}"
-      [ "${#sp}" -ge "$ANCHOR_SYMBOL_MIN" ] || continue
-      [ "$sp" != "$anchor" ] && [ "$sp" != "$path" ] || continue
-      syms+=("$sp")
+    # The designated symbol (ADR 0015 §2): the span right after the anchor, opened by a parenthesis
+    # — `path:N` (`symbol`). It is the ONLY span measured, and the only one the hint names. Any
+    # other span of the item used to count, and a span that occurs all over the file answered for a
+    # rotten anchor: bin/sdd:1198 passed through a `gate_EXEC` in a comment while the symbol the
+    # item meant sat 53 lines away, and a re-anchoring that followed the hint carried the rot on.
+    sym=''
+    case "${sp_list[ai + 1]-}" in $'\035'?*) sym="${sp_list[ai + 1]#$'\035'}" ;; esac
+    if [ -z "$sym" ]; then
+      ANCHOR_VIOLATIONS+="  line $start: anchor \`$anchor\` designates no symbol — write \`$anchor\` (\`<symbol>\`), the span the line holds"$'\n'
+      continue
+    fi
+    if [ "${#sym}" -lt "$ANCHOR_SYMBOL_MIN" ]; then
+      ANCHOR_VIOLATIONS+="  line $start: anchor \`$anchor\` designates \`$sym\`, shorter than $ANCHOR_SYMBOL_MIN characters — it occurs near any line"$'\n'
+      continue
+    fi
+    best=''
+    hits="$(grep -nF -- "$sym" "$base/$path" 2>/dev/null | cut -d: -f1)" || hits=''
+    for hit in $hits; do
+      if [ "$n" -le 1 ]; then best=0; break; fi
+      dist=$((hit > n ? hit - n : n - hit))
+      if [ -z "$best" ] || [ "$dist" -lt "$(( best > n ? best - n : n - best ))" ]; then best="$hit"; fi
     done
-    best=''; bestsym=''
-    for sym in ${syms[@]+"${syms[@]}"}; do
-      hits="$(grep -nF -- "$sym" "$base/$path" 2>/dev/null | cut -d: -f1)" || hits=''
-      for hit in $hits; do
-        if [ "$n" -le 1 ]; then best=0; bestsym="$sym"; break 2; fi
-        dist=$((hit > n ? hit - n : n - hit))
-        if [ -z "$best" ] || [ "$dist" -lt "$(( best > n ? best - n : n - best ))" ]; then best="$hit"; bestsym="$sym"; fi
-      done
-    done
-    if [ -z "$bestsym" ]; then
-      ANCHOR_VIOLATIONS+="  line $start: anchor \`$anchor\` — no backticked symbol of the item occurs in $path"$'\n'
+    if [ -z "$best" ]; then
+      ANCHOR_VIOLATIONS+="  line $start: anchor \`$anchor\` — the designated symbol \`$sym\` does not occur in $path"$'\n'
     elif [ "$n" -gt 1 ] && [ $(( best > n ? best - n : n - best )) -gt "$ANCHOR_REACH" ]; then
-      ANCHOR_VIOLATIONS+="  line $start: anchor \`$anchor\` is off target — nearest \`$bestsym\` is at line $best"$'\n'
+      ANCHOR_VIOLATIONS+="  line $start: anchor \`$anchor\` is off target — nearest \`$sym\` is at line $best"$'\n'
     fi
   done < <(todo_awk "$file" 1 anchors)
   ANCHOR_VIOLATIONS="${ANCHOR_VIOLATIONS%$'\n'}"

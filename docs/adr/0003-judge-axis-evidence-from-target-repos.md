@@ -2,6 +2,8 @@
 
 Date: 2026-08-17 · Status: accepted
 
+Spec: docs/handoffs/20260817-eixo-do-juiz/00-missao.md
+
 Amended by: 0014 (part 1 superseded: the axis groups by the last behaviour commit, `kit_rev`)
 
 ## Context

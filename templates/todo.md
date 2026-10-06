@@ -18,9 +18,10 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > ```
 >
 > **The anchor is measured.** The first path after the title names a file of this repository, and
-> a code span of the head (4+ characters, the `<symbol>`) occurs in that file within 10 lines of the
-> line — anywhere in it for `:1` or no line. No physical line of the open section passes 120
-> characters. ([ADR 0011 of the sdd kit](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
+> the `<symbol>` in parentheses right after it is **mandatory**: a code span of 4+ characters that
+> occurs in that file within 10 lines of the line — anywhere in it for `:1` or no line. It is the
+> only span measured, and the one an off-target report names. No physical line of the open section
+> passes 120 characters. ([ADR 0011 of the sdd kit](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
 > **Decided record** — one physical line, no box, pointing at the evidence:
 >

@@ -6,6 +6,7 @@ versao:
 branch: feat/o-juiz-nao-mente-sobre-a-janela
 aprovacao: humano-2026-09-11
 ddd: n/a
+adr: none
 ---
 
 # Missão — o juiz não mente sobre a janela

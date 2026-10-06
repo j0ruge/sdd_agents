@@ -663,6 +663,7 @@ try:
     for args in [("run", "20260101-one"), ("run", "20260101-two"),
                  ("run", "20260101-one", "--dry-run"), ("retry", "20260101-one"),
                  ("close", "20260101-one"), ("kaizen",), ("approve", "20260101-one"),
+                 ("note-manual", "20260101-one", "PR"),
                  ("install", "--force"), ("adr", "new", "--slug", "new"),
                  ("preflight",), ("status", "20260101-one"),
                  ("phase", "20260101-one"), ("why", "20260101-one", "EXEC"),

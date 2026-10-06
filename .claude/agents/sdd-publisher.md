@@ -30,21 +30,16 @@ Every handoff in `docs/handoffs/<mission>/`: `00-missao.md`, `01-plano.md`, `che
 
 - clean working tree (`git status --porcelain` empty);
 - suite green (`TEST_CMD`), and `E2E_CMD` green if there is one;
-- the current branch is **not** `DEFAULT_BRANCH`;
-- **in a repo that owns `tests/check-mutation.sh`** — the mutation stamp. Ask the runner
-  (`sdd why <mission> PR`) rather than guessing: `no green mutation catalogue for this content`
-  means the gate will refuse your PR even after `gh` confirms it exists, because `TEST_CMD` does
-  not run the catalogue and nothing before this gate measured it.
+- the current branch is **not** `DEFAULT_BRANCH`.
 
 Any of them failing: **stop** and write down the reason. Do not fix it — it is not your phase.
 
-The stamp is the one exception to that last line, and only because the remedy is a command rather
-than a change: run `./bin/sdd health` (twenty to fifty minutes) and let it finish. It has to run
-**after** the last commit that touches `bin/ tests/ templates/ config/`, so if you are about to
-commit anything under those four, commit first and measure after. Docs and `TODO.md` do not
-invalidate it; `tests/health-baseline.txt` does. Never end your turn waiting on it — a headless
-session that ends its turn is a session that ended. Details in
-[`docs/failure-modes.md`](../docs/failure-modes.md).
+**The mutation stamp is not on that list, and it is not yours** (ADR 0015 §1). In a repo that owns
+`tests/check-mutation.sh` the PR gate also demands a stamp that only `sdd health` writes, and you
+never start it: it takes twenty to fifty minutes, a headless session that ends its turn waiting on
+it is a session that ended, and a stamp taken before the review bots have spoken is thrown away by
+their first fix to the code. Push and open the PR whatever the stamp says: once the PR is open and
+the stamp is all its gate misses, the runner stops on its own with rc 2 and hands it to the human.
 
 ### 3. Push
 
@@ -72,6 +67,8 @@ target repo. Fill it **from what is in the handoffs**, inventing nothing and sof
   `⛔` and the document's name on the same line (`- [ ] ⛔ \`<document>\` — …`): the runner reads
   the body back, and a `⛔` document not named on a `⛔` line fails `gate_PR`;
 - **out-of-scope findings** — what went to `TODO_FILE`;
+- **the order before the merge** — only in a repo that owns `tests/check-mutation.sh`, as this line:
+  `> Before the merge: every review bot → their fixes in one batch → ./bin/sdd health → sdd run <mission>`
 - **risks and not-dones** — honest. If QA was `skipped`, say so and why. If the review closed as
   `draft` because iterations ran out, state the real grade.
 

@@ -17,6 +17,11 @@
 # skill output). Row shapes mirror the real constructors — autonomy_session_row and
 # autonomy_blocked_row in bin/sdd — field for field.
 #
+# DECLARED LIMIT (issue 98): the key sensor near the end holds the NAMES the series prints against
+# the sdd:series-fields block of docs/pipeline.md, both ways. A key that keeps its name and changes
+# its unit (sessions -> missions, the drift that opened the issue) or moves to another object of
+# the series is not caught: names are measured here, meanings are not.
+#
 # Usage: tests/check-kaizen.sh   (exit 0 = the series tells the truth and the gate holds)
 
 set -uo pipefail
@@ -159,6 +164,8 @@ EOF
 # input to the wrong cwd.
 mkdir -p "$OUTSIDE/anywhere"
 SERIES_OUT="$( cd "$FIX" && "$SDD" kaizen --series 2>/dev/null )"; rc=$?
+# Kept for the key sensor near the end of this file: the richest series the fixtures produce.
+SERIES_RICH="$SERIES_OUT"
 
 assert_eq "the series exits 0" "0" "$rc"
 assert_eq "and is valid JSON" "0" "$(jq -e . >/dev/null 2>&1 <<< "$SERIES_OUT"; echo $?)"
@@ -1233,6 +1240,27 @@ assert_eq "and reminds: missions accumulated on the current kit without a verdic
   "$(grep -q "autonomy series: 3 mission(s) on kit aaa1111 without a verdict" <<< "$out" && echo yes || echo no)"
 assert_eq "pointing at sdd kaizen" "yes" \
   "$(grep -q "run 'sdd kaizen' in the kit repo" <<< "$out" && echo yes || echo no)"
+
+# A linked WORKTREE of the kit is still the kit, and has to get the kit's sentence (TODO.md, the
+# kaizen_reminder item). kaizen_reminder compared `git rev-parse --show-toplevel` of $SDD_HOME with
+# $REPO_ROOT — two toplevels, which differ by construction in a worktree — so a run finished in a
+# worktree of the kit was told it was a target repo. The sibling door (cmd_kaizen, issue 121) was
+# fixed in 188ca87 by asking ledger_repo_root on both sides; this pins the reminder to the same
+# question. Differential pair: the kit sentence present AND the target-repo sentence absent, so a
+# mutant that forced either branch is caught by the same fixture. main moves into the worktree so
+# ensure_mission_branch has nothing to switch; the ledger is a copy, so the run below it is unmoved.
+cp -r "$SDD_STATE_DIR" "$OUTSIDE/state-wt"
+git -C "$FIX" checkout -q -b reminder/park
+RWT="$OUTSIDE/kit-worktree-reminder"
+git -C "$FIX" worktree add -q "$RWT" main
+out_wt="$( cd "$RWT" && SDD_STATE_DIR="$OUTSIDE/state-wt" "$KSDD" run 20260102-donemission 2>&1 )" || true
+assert_eq "reminder: a linked worktree of the kit answers with the kit sentence" "yes" \
+  "$(grep -q 'for the next kit mission plan' <<< "$out_wt" && echo yes || echo no)"
+assert_eq "reminder: and not with the target-repo sentence" "no" \
+  "$(grep -q 'The kaizen judge counts them' <<< "$out_wt" && echo yes || echo no)"
+git -C "$FIX" worktree remove --force "$RWT"
+git -C "$FIX" checkout -q main
+git -C "$FIX" branch -q -D reminder/park
 
 # An empty ledger has nothing to judge: the reminder must stay silent — a nudge computed over
 # no data is the vacuity the whole kit exists to kill.
@@ -2434,6 +2462,71 @@ assert_eq "floor: that close differential is not vacuous — one version, one mi
 # among many. This is the witness that dies when `is_close` alone leaves the admission list.
 assert_eq "guard: a close row is recognized, never counted as unrecognized" "0 0 0 0" \
   "$(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$CLOSEIN_OUT") $(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$CLOSEAWAY_OUT")"
+
+# --- a manual row, in the judge's program (#153) --------------------------------
+# The SIXTH event: `sdd note-manual` records a phase done by hand. The two properties of the close
+# block above, asked the same way and over the same regimes, because the minting definitions are
+# the same two: (a) it mints nothing — the whole series with the row equals the series without it,
+# with the row on the graded sha and ALONE in its mission (`graded_row`, regime manualin) and on a
+# sha no session touched (`shas_in_file_order`, regime manualaway); (b) it is not thrown away —
+# `excluded.unrecognized` stays 0, the field the judge is told to read as a kit bug. Unlike a
+# closure it carries a `phase`, so regime manualin also puts one on the phase a session ran, where
+# a `phase_label` that learnt it would move the cell. The row is copied from the shape
+# autonomy_manual_row builds in bin/sdd, never written from memory.
+echo "== series: a manual row is recognized and mints nothing =="
+mkdir -p "$OUTSIDE/manualin" "$OUTSIDE/manualaway"
+manual_row() { printf '{"v":1,"ts":"2026-09-11T12:02:00-03:00","event":"manual","run_id":"c4","invocation":"note-manual","kit_sha":"%s","kit_dirty":false,"kit_rev":null,"kit_rev_dirty":null,"project":"p1","repo":"/p1","mission":"%s","phase":"%s"}\n' "$1" "$2" "$3"; }
+{ close_base; manual_row ccc0001 m61 PR; manual_row ccc0001 m60 REVIEW; } | localize > "$OUTSIDE/manualin/autonomy-log.jsonl"
+{ close_base; manual_row ccc0002 m61 PR; } | localize > "$OUTSIDE/manualaway/autonomy-log.jsonl"
+MANUALIN_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/manualin" "$SDD" kaizen --series 2>/dev/null )"
+MANUALAWAY_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/manualaway" "$SDD" kaizen --series 2>/dev/null )"
+# Numbers compared by VALUE: the row on (m60, REVIEW) joins that cell's group and its absent
+# `cost_usd` adds a 0, which jq prints `4` where the input said `4.0` — measured, the one byte the
+# text comparison saw. `+ 0` on both sides prints them alike; any value that moved still differs.
+numeric() { jq -S 'walk(if type == "number" then . + 0 else . end)' <<< "$1"; }
+assert_eq "guard: a manual row mints no version, no mission and no cell" \
+  "$(numeric "$CLOSEOFF_OUT")$(numeric "$CLOSEOFF_OUT")" \
+  "$(numeric "$MANUALIN_OUT")$(numeric "$MANUALAWAY_OUT")"
+# The floor of the close block, re-read on THIS output: one version, one mission, two cells.
+assert_eq "floor: that manual differential is not vacuous — one version, one mission, two cells" \
+  "ccc0001 1 2 6" \
+  "$(jq -r '"\(.latest.kit_sha) \(.latest.missions) \(.latest.detail | length) \(.latest.cost_usd)"' <<< "$MANUALIN_OUT")"
+assert_eq "guard: a manual row is recognized, never counted as unrecognized" "0 0 0 0" \
+  "$(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$MANUALIN_OUT") $(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$MANUALAWAY_OUT")"
+
+echo "== series: every key is named in docs/pipeline.md, and the doc names no other =="
+# Issue 98. The series is produced in two places (the jq of kaizen_series and its empty-ledger
+# literal) and was described in ten, and the prose drifted: in 20260817-eixo-do-juiz eight of the
+# ten still said the unit a fix had changed hours before. The key NAMES now live in ONE block of
+# docs/pipeline.md, between `<!-- sdd:series-fields -->` and `<!-- /sdd:series-fields -->`, and this
+# reads that block and never the whole file, so a split of pipeline.md moves the block and keeps
+# the sensor. It compares the block with the keys two series print — the richest fixture above
+# (both slices, a detail, a composition, an escalation) and the empty-ledger literal — in BOTH
+# directions: a key printed and not named, and a name the series never prints. The children of
+# `escalations` are escalation kinds, data and not schema, so they are skipped.
+# DECLARED LIMIT: names only. A key that keeps its name and changes its unit (sessions -> missions,
+# the drift that opened issue 98) or moves to another object of the series passes; the block says
+# so too. Owner of the block: whoever changes the jq of kaizen_series, in the same commit.
+PIPELINE_DOC="$ROOT/docs/pipeline.md"
+SERIES_EMPTY="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/keys-empty" "$SDD" kaizen --series 2>/dev/null )"
+series_key_names() { # <series json> — every key name it prints, at every level, one per line
+  jq -r '[paths | select(.[-1] | type == "string") | select(length < 2 or .[-2] != "escalations")
+          | .[-1]] | unique | .[]' <<< "$1"
+}
+# The witness first: a fixture that lost a level would make the comparison below vacuous for it.
+assert_eq "the key sensor reads a series with both slices, a detail, a composition and an escalation" "true" \
+  "$(jq -r '(.latest | type) == "object" and (.previous.detail | length) > 0
+            and (.previous.composition | length) > 0 and (.previous.escalations | length) > 0' <<< "$SERIES_RICH")"
+assert_eq "docs/pipeline.md carries one series-fields block, opened and closed" "1 1" \
+  "$(grep -c '^<!-- sdd:series-fields -->$' "$PIPELINE_DOC") $(grep -c '^<!-- /sdd:series-fields -->$' "$PIPELINE_DOC")"
+keys_printed="$( { series_key_names "$SERIES_RICH"; series_key_names "$SERIES_EMPTY"; } | LC_ALL=C sort -u )"
+keys_named="$(awk '/^<!-- sdd:series-fields -->$/ { on = 1; next } /^<!-- \/sdd:series-fields -->$/ { on = 0 } on' \
+  "$PIPELINE_DOC" | grep -o '`[^`]*`' | tr -d '`' | LC_ALL=C sort -u)"
+assert_eq "every series key is named in docs/pipeline.md" "" \
+  "$(LC_ALL=C comm -23 <(grep . <<< "$keys_printed") <(grep . <<< "$keys_named") | tr '\n' ' ')"
+assert_eq "and every name in that block is a key the series prints" "" \
+  "$(LC_ALL=C comm -13 <(grep . <<< "$keys_printed") <(grep . <<< "$keys_named") | tr '\n' ' ')"
+
 
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"

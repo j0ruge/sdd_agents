@@ -35,7 +35,9 @@
 > Desde 2026-09-03 o **runner escreve a linha sozinho** quando é ele quem recebe a mão do humano —
 > `sdd run --phase X`, `sdd retry`, `--budget-override` — e a commita sozinha, na hora, para a
 > árvore chegar limpa ao gate da fase seguinte. A linha escrita à mão continua valendo para o que
-> o runner não vê: conserto manual, fase feita à mão, `BLOCKED` assumido. `sdd approve` não
+> o runner não vê: conserto manual, `BLOCKED` assumido. Fase feita à mão tem comando:
+> `sdd note-manual <missão> <FASE>` escreve a nota e a linha `manual` do ledger, que não gradua
+> nada — escrita só aqui, a fase não existe para o ledger. `sdd approve` não
 > escreve nenhuma: aprovar o plano é o gate humano desenhado, não uma entrada na linha. A nota
 > diz o que o runner **sabe** ("forçada pela CLI"), nunca quem estava na CLI: outro agente com
 > shell entra pela mesma porta, e o runner não distingue — medido em 2026-09-03.

@@ -12,17 +12,26 @@
 # Portuguese fails; a file INSIDE the allowlist that is already clean ALSO fails — a list that
 # only grows is folklore, not a ratchet.
 #
-# Usage: tests/check-lang.sh   (exit 0 = surface clean and allowlist honest)
+# Usage: tests/check-lang.sh                 (exit 0 = surface whole, clean, and allowlist honest)
+#        tests/check-lang.sh --census <root>  (the surface patterns and the docs/ census alone, over
+#                                              one tree, no selftest — what the selftest drives)
+#
+# Exit codes: 0 clean · 1 Portuguese outside the allowlist, or a stale entry · 90/91/92/95/98 a
+# selftest probe failed · 93 a surface pattern matches nothing, or the census read nothing · 94 the
+# allowlist is missing · 96 unknown option · 97 a tracked docs/ file is on no surface and under no
+# declared subtree.
 
 set -uo pipefail
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SELF_PATH="$ROOT/tests/$(basename "${BASH_SOURCE[0]}")"
 ALLOWLIST="$ROOT/tests/lang-allowlist.txt"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/sdd-lang-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 # The English surface. templates/ and config/examples/ are absent on purpose: they are content
-# in OUTPUT_LANG, not kit surface. So are TODO.md, KAIZEN_LOG.md, CLAUDE.md and docs/handoffs/.
+# in OUTPUT_LANG, not kit surface. So are TODO.md, KAIZEN_LOG.md, CLAUDE.md and the three docs/
+# subtrees of LANG_DECLARED below — docs/handoffs/, docs/qa/ and docs/superpowers/.
 #
 # tests/fixtures/ is absent for a third reason, and the glob below says so by scanning `tests/*.sh`
 # and nothing deeper: it holds stdout CAPTURED VERBATIM from third-party tools, and a Jira status
@@ -49,12 +58,68 @@ trap 'rm -rf "$WORK"' EXIT
 # the script pure English logic. ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in
 # 20261003-lote-3-a-catraca-desce: neither file fails open — the exclusion is explicit, listed here
 # and in CLAUDE.md § Idioma, and no consumer outside the kit reads the prose of either.
-surface() {
-  ( cd "$ROOT" && ls -1 bin/sdd bin/sdd-link-agents bin/sdd-coordination.py agents/sdd-*.md .claude/agents/sdd-*.md \
-      docs/pipeline.md docs/failure-modes.md docs/graphify.md docs/adr/*.md README.md \
-      config/schema.md config/starter.conf \
-      tests/*.sh tests/health-baseline.txt tests/lang-allowlist.txt 2>/dev/null ) \
+#
+# The surface is ONE list of patterns, read by surface() and by the floor in census(). `docs/*.md` is
+# a glob since ADR 0015 §4: the list used to ENUMERATE the docs, and docs/plan-only.md was born
+# outside it, carrying a pt-BR block while this file printed `0 of 56`. `commands/*.md` joined in the
+# same commit: commands/sdd-plan.md is the kit's /sdd-plan, and its "verbatim" message was pt-BR.
+SURFACE_SPECS=(bin/sdd bin/sdd-link-agents bin/sdd-coordination.py 'agents/sdd-*.md'
+  '.claude/agents/sdd-*.md' 'commands/*.md' 'docs/*.md' 'docs/adr/*.md' README.md config/schema.md
+  config/starter.conf 'tests/*.sh' tests/health-baseline.txt tests/lang-allowlist.txt)
+# The docs/ subtrees that are content in OUTPUT_LANG, not kit surface (CLAUDE.md § Idioma) — the
+# same three `health --release` in bin/sdd leaves out of its line 5. The two lists answer different
+# questions (language here, client identifiers there) and nothing asserts their parity: declared.
+LANG_DECLARED=(docs/handoffs/ docs/qa/ docs/superpowers/)
+
+surface() { # surface <root> — one path per line, relative to root
+  local root="$1"
+  ( CDPATH='' cd -- "$root" 2>/dev/null || exit 0
+    local spec
+    for spec in "${SURFACE_SPECS[@]}"; do compgen -G "$spec" || true; done ) \
     | grep -vxF -e 'tests/check-lang.sh' -e 'tests/check-templates.sh'
+}
+
+# census <root> — the surface is WHOLE, which a count cannot say. Two halves, both derived:
+#   - the floor: every pattern of SURFACE_SPECS matches at least one file. A renamed directory or a
+#     moved file empties its pattern, which is the vacuity the old hand-written floor guarded —
+#     without a number to fall behind (it lagged in 57 of 124 commits, 9 of 11 steps a new ADR);
+#   - the census: every docs/**/*.md that git TRACKS is on the surface or under LANG_DECLARED. A new
+#     subtree, or a pattern narrowed back to a list of names, leaves a tracked doc belonging nowhere.
+# DECLARED LIMIT: deleting a non-docs pattern from SURFACE_SPECS is a diff on the definition and
+# nothing here refuses it; the old floor refused it only while it had no slack. An untracked doc is
+# not counted either — it is not the kit until it is committed.
+# It PUBLISHES the surface it checked in SURFACE_FILES (a global, so it is called and never read
+# through $(…)), and the scan below reads that and nothing else: deleting the call leaves the scan
+# reading an unset variable under `set -u`, which is a loud red, not a scan without a census.
+census() { # 0 whole; 93 a pattern matches nothing, or the census read nothing; 97 a doc belongs nowhere
+  local root="$1" spec files tracked f d n_on=0 n_decl=0 bad=0
+  for spec in "${SURFACE_SPECS[@]}"; do
+    if ! ( CDPATH='' cd -- "$root" 2>/dev/null && compgen -G "$spec" >/dev/null ); then
+      printf '  FAIL  surface pattern %s matches nothing — did something move?\n' "$spec" >&2
+      return 93
+    fi
+  done
+  files="$(surface "$root")"
+  # A git pathspec `*` crosses `/`, so this is every tracked .md under docs/, at any depth.
+  tracked="$(git -C "$root" ls-files -- 'docs/*.md' 2>/dev/null)" || tracked=''
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    for d in "${LANG_DECLARED[@]}"; do
+      case "$f" in "$d"*) n_decl=$((n_decl + 1)); continue 2 ;; esac
+    done
+    if grep -qxF -- "$f" <<< "$files"; then n_on=$((n_on + 1)); continue; fi
+    printf '  FAIL  census: %s is tracked but on no surface and under no declared subtree (%s)\n' \
+      "$f" "${LANG_DECLARED[*]}" >&2
+    bad=$((bad + 1))
+  done <<< "$tracked"
+  if [ "$n_on" -eq 0 ]; then
+    printf '  FAIL  census: no tracked docs/*.md on the surface — is %s a git checkout?\n' "$root" >&2
+    return 93
+  fi
+  [ "$bad" -eq 0 ] || return 97
+  SURFACE_FILES="$files"
+  printf '  ok    census: every tracked docs/**/*.md is on the surface or under a declared subtree (%d on the surface, %d declared)\n' \
+    "$n_on" "$n_decl"
 }
 
 # Accent-free Portuguese function words. `todo`/`toda` are deliberately absent: they would match
@@ -151,10 +216,72 @@ selftest() {
   if has_portuguese "$t" >/dev/null; then
     echo "SENSOR-BROKEN: 'Spec: TBD' read as Portuguese" >&2; exit 92
   fi
+  census_selftest
 }
+
+# census_says <want_rc> <want_text> <tree> <label> — the real --census path, in a CHILD, over a tree
+# that is its own git checkout. GIT_CEILING_DIRECTORIES keeps git from climbing out of the work dir
+# into whatever repository TMPDIR happens to sit in.
+CENSUS_PROBES=0
+census_says() {
+  local out rc
+  CENSUS_PROBES=$((CENSUS_PROBES + 1))
+  out="$(GIT_CEILING_DIRECTORIES="$WORK" bash "$SELF_PATH" --census "$3" 2>&1)"; rc=$?
+  if [ "$rc" -ne "$1" ] || ! grep -qF -- "$2" <<< "$out"; then
+    printf 'SENSOR-BROKEN: census probe "%s" wanted rc %s and "%s", got rc %s:\n%s\n' \
+      "$4" "$1" "$2" "$rc" "$out" >&2
+    exit 98
+  fi
+}
+
+# census_tree <root> — a checkout every SURFACE_SPECS pattern matches once, DERIVED from the list so a
+# new pattern needs no fixture edit; plus docs/a.md, written BY HAND: the witness that a docs/ file
+# is on the surface by the glob, which a fixture derived from the list would agree with in lockstep.
+census_tree() {
+  local root="$1" spec f
+  for spec in "${SURFACE_SPECS[@]}"; do
+    f="$root/${spec//\*/x}"; mkdir -p "$(dirname "$f")"; : > "$f"
+  done
+  : > "$root/docs/a.md"
+  git -C "$root" init -q && git -C "$root" add -A
+}
+
+census_selftest() {
+  local c="$WORK/census"
+  census_tree "$c/whole"
+  census_says 0 'census: every tracked docs/**/*.md is on the surface' "$c/whole" 'a whole tree passes'
+  census_tree "$c/stray"; mkdir -p "$c/stray/docs/newtree"; : > "$c/stray/docs/newtree/y.md"
+  git -C "$c/stray" add -A
+  census_says 97 'docs/newtree/y.md is tracked but on no surface' "$c/stray" 'a doc in a new subtree is refused'
+  census_tree "$c/decl"
+  mkdir -p "$c/decl/docs/handoffs/m" "$c/decl/docs/qa" "$c/decl/docs/superpowers"
+  : > "$c/decl/docs/handoffs/m/n.md"; : > "$c/decl/docs/qa/z.md"; : > "$c/decl/docs/superpowers/s.md"
+  git -C "$c/decl" add -A
+  census_says 0 '3 declared)' "$c/decl" 'each declared subtree is honoured'
+  census_tree "$c/empty"; rm -rf "$c/empty/docs/adr"
+  census_says 93 'surface pattern docs/adr/*.md matches nothing' "$c/empty" 'an emptied pattern bites'
+  census_tree "$c/nogit"; rm -rf "$c/nogit/.git"
+  census_says 93 'no tracked docs/*.md on the surface' "$c/nogit" 'a tree git does not track measured nothing'
+  [ "$CENSUS_PROBES" -ge 5 ] || { echo "SENSOR-BROKEN: only $CENSUS_PROBES census probe(s) ran" >&2; exit 98; }
+  # The negative control: the primitive itself, asked something false about a known world, has to
+  # say so. Without it, census_says neutered to "always agree" leaves every probe above green.
+  if ( census_says 0 'census: every tracked' "$c/stray" 'control' ) 2>/dev/null; then
+    echo "SENSOR-BROKEN: census_says agreed with a wrong expectation — the census probes measure nothing" >&2
+    exit 98
+  fi
+}
+
+case "${1:-}" in
+  # `${2-}` and a directory test: an empty root would `cd ""` into the cwd and certify whatever is there.
+  --census) [ -n "${2-}" ] && [ -d "$2" ] || { printf '  FAIL  --census needs a directory\n' >&2; exit 96; }
+            census "$2"; exit $? ;;
+  '') ;;
+  *) printf '  FAIL  unknown option: %s (see the usage header)\n' "$1" >&2; exit 96 ;;
+esac
 
 selftest
 echo "  ok    self-test: the sensor detects Portuguese, clears English, and reads a traceability line as data"
+echo "  ok    self-test: the census refuses a tracked doc outside the surface and every declared subtree ($CENSUS_PROBES probe(s))"
 
 # Checked before the surface floor below, and not after: the allowlist is itself a surface path,
 # so a missing file trips the floor first and reports "did something move?" — loud, but the wrong
@@ -173,38 +300,12 @@ if [ ! -f "$ALLOWLIST" ]; then
   exit 94
 fi
 
-files="$(surface)"
-
-# Explicit floor, same reason as the "exactly 8 gates" floor in cmd_health: a glob that stops
-# matching (a renamed directory, a moved file) would leave the loop with nothing to read and the
-# check would report "0 new" — clean by vacuity. 41 paths today; the floor moves only on purpose,
-# and it moved seven times already: tests/check-preflight.sh took it from 24 to 25,
-# tests/check-autonomy.sh from 25 to 26, I13.3 from 26 to 31 (check-kaizen.sh, the two
-# sdd-kaizen.md copies, and the docs/adr/*.md glob with its ADRs), check-todo.sh to 32,
-# check-pipefail.sh to 33, then check-entrypoint.sh and check-checkpoint.sh to 35, ADR 0003
-# to 36, tests/check-health.sh to 37, and docs/graphify.md to 41.
-# ⚠️ Three of those arrived without moving the floor, so it sat at 33 against a real 36 and
-# carried three paths of slack — a vacuity guard with slack is a vacuity guard that does not
-# guard. Re-counted against the real surface in the r1 review of 20260817-eixo-do-juiz.
-# ⚠️ And it happened AGAIN, which is why the last hop is 37 → 41 and not 37 → 38: ADRs 0004, 0005
-# and 0006 each joined the docs/adr/*.md glob without touching this number, so the floor described
-# 37 paths while the surface was already 40. A floor that lags keeps PASSING while measuring a
-# smaller surface than the one it reads — the same failure this comment already names once.
-# Re-counted against the real surface in I4 of 20260901-o-revisor-so-acha (40 + docs/graphify.md).
-# Re-counted on 2026-09-03 (20260903-a-fronteira-do-chapeu): 41 + tests/check-hat.sh +
-# agents/sdd-ticket.md + its .claude/agents copy = 44; docs/adr/0007 makes it 45 in the same mission.
-# Re-counted on 2026-09-17 (20260917-o-numero-do-adr-nao-e-prosa): tests/check-adr.sh makes it 46,
-# and docs/adr/0008 makes it 47 in the same mission — two hops, two commits, on purpose.
-# Checkout coordination adds its sensor, linker and Python helper to the previous 48 paths.
-# ADRs 0010 to 0012 made it 54, and ADR 0013 made it 55 in 20260928-os-achados-da-janela.
-# ADR 0014 made it 56 and joined the glob WITHOUT moving this line — the third time this floor lagged
-# (found by the triage of 2026-10-03, the class is TODO.md "Piso anti-vacuidade que fica para trás").
+# The floor is DERIVED (ADR 0015 §4): census() above demands that every surface pattern match a
+# file and that every tracked doc belong somewhere, so there is no number here to move — and none
+# to fall behind, which the hand-written one did in 57 of 124 commits.
+census "$ROOT" || exit $?
+files="$SURFACE_FILES"
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 56 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 56 — did something move?\n' \
-    "$n_surface" >&2
-  exit 93
-fi
 
 known="$(grep -vE '^[[:space:]]*(#|$)' "$ALLOWLIST" || true)"
 new=0 stale=0 listed=0

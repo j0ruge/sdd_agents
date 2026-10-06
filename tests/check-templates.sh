@@ -36,6 +36,17 @@
 # SDD_MUTANT — and the refusal carries its own probe in the selftest below. What is left is a
 # reader OUTSIDE this kit doing the same thing, which no sensor here can reach.
 #
+# ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in 20261004-lote-4-a-catraca-zera: nothing in
+# the suite reads CONTRACT prose outside templates/. refute() reads templates/ only, and
+# check-lang.sh reads README.md and the docs/ surface for LANGUAGE and nothing else. The owner of
+# that prose is the DOCS phase: its drift checklist (45-docs.md) walks the whole mission diff, and
+# gate_DOCS refuses a row still pending. Measured not to fail open on 2026-10-04: the agent table
+# of README.md names the 8 hats agents/ carries; config/schema.md is held against load_config()
+# by `sdd health` (check 5, key-without-doc and doc-without-key); and the drifts on record were
+# caught before the merge — 20260901-o-revisor-so-acha changed the reviewer contract in seven
+# places, a QA journey caught the sixth and only the DOCS phase the seventh. Reopens when a
+# contract drift reaches main.
+#
 # Usage: tests/check-templates.sh   (exit 0 = contract intact)
 
 set -uo pipefail
@@ -336,6 +347,10 @@ check missao.md '^## Pendências para o humano' "open questions for the human"
 for c in a b c d e f; do
   check missao.md "^\| ${c} \|" "PLAN-AUTO criterion '${c}'"
 done
+# Criterion d is asserted twice on purpose: the loop above proves the row exists, this proves it
+# names the run that measures it (issue 92). "Executable" alone let a Check born green close
+# PLAN-AUTO; the row now asks for the red, and cites the kit's --red by name.
+check missao.md '^\| d \|.*tests/check-checkpoint\.sh --red' "PLAN-AUTO criterion d cites the --red run"
 
 echo "== templates/plano.md =="
 check plano.md '^## Contexto verificado'      "section 'Contexto verificado'"
@@ -366,6 +381,17 @@ check checkpoint.md 'tests/check-checkpoint\.sh --check' \
   "the checkpoint sensor cited in its --check form, the one a target repo can run"
 refute checkpoint.md 'checkpoints deste repo' \
   "the claim that the sensor reads only this repo's checkpoints"
+# The Commit cell is 7–64 hex digits and nothing else (gate_EXEC), so the act that happens OUTSIDE
+# git still needs a commit to point at — the record of it (issue 180). Measured before the rule:
+# the I5 of lighthouse_project's 20260922-email-mvp-diretores wrote `KB (sem commit de código)` in
+# the cell, and its `sdd status` points at EXEC for good. The step after the merge or inside an
+# external window has no row at all (issue 218): 20260918-a-excecao-do-chapeu-e-o-genero-diferido
+# kept its yokoten `pending` forever. Both assertions pin the rule in full, with the routing — a
+# template that kept the bold title and lost where the step goes would teach half of it.
+check checkpoint.md '\*\*Ato fora do git deixa um commit de registro\.\*\*' \
+  "an act outside git commits a record"
+check checkpoint.md 'O passo vai para `## Pendências para o humano` do `00-missao\.md`' \
+  "a step after the merge or in an external window leaves the table"
 # The qualifier is IN the regex, and it is the whole assertion. `20260901-o-revisor-so-acha` widened
 # this section from `(QA)` to `(QA e REVIEW)` — the R<n> increments the review round now writes live
 # beside the QA's F<n> — and a regex that stopped at `de fix` served the heading it replaced exactly

@@ -59,6 +59,13 @@ A batch `R<n>` (`"achados #4–#7 da r1"`) carries several Checks in one cell �
 green. If the batch is genuinely too large for one session, split the row in two and mark the second
 `blocked` with the reason in the notes: Jidoka, not a heroic session.
 
+**A row you cannot close by yourself** — a step that only happens after the merge, or inside an
+external window (a live smoke that needs the desk idle, a yokoten in the target repos) — is not an
+increment, and the plan should not have one. If it does, mark it `blocked`, write in the notes that
+it belongs in the open questions for the human of `00-missao.md` (the last section of its
+template) or in the next mission, and stop: left `pending`, it keeps EXEC open forever, and a word
+in its Commit cell is a label the gate refuses.
+
 Before touching anything, run `TEST_CMD`.
 
 - **Red because of an earlier increment** → you do not fix it and you do not carry on. Mark that
@@ -77,8 +84,17 @@ In this order, no shortcuts:
    that passes before the implementation is not testing what you think it is.
 2. **Green** — the simplest implementation that makes it pass. Not the most elegant, not the most
    general: the simplest. YAGNI.
-3. **Refactor** — only when there is real duplication, and with the suite green throughout.
-4. **Commit** — message `<type>(<scope>): <what>` with the **why** in the body. One increment =
+3. **Sabotage — only in an `R<n>`.** The Red of a review increment proves the finding, not the
+   fix: the fix can remove the symptom and open a fail-open beside it while the probe stays green.
+   So after the Green, degrade **each line the fix added**, one at a time — keep a copy of the
+   file and put it back after each run — and watch a probe go red for every one. A line whose
+   degradation leaves every probe green is a fix with no sensor: write the probe, or say in the
+   notes why none can exist. Append one line per sabotage to `checkpoint-notas.md`
+   (`R<n> sabotage: <what was degraded> → <which probe went red>`). An `R<n>` of **prose** has no
+   line to degrade: re-read the whole paragraph around the corrected sentence, and every place that
+   repeats the claim, before the commit — five of the eight repeats measured were prose.
+4. **Refactor** — only when there is real duplication, and with the suite green throughout.
+5. **Commit** — message `<type>(<scope>): <what>` with the **why** in the body. One increment =
    one commit (or a few, cohesive ones).
 
 The test is the increment's **sensor**: it is what proves the thing works, today and six months
@@ -139,6 +155,9 @@ After the commit, never before. On the increment's row:
 - `Status` → `done`
 - `Commit` → the bare short hash of the commit, no backticks: the runner reads the cell, and
   fencing it renders identically for a human while making the SHA unreadable to the gate
+- an act **outside git** — an e-mail sent, a KB page published, an IdP setting — still ends in a
+  commit: write the evidence to `docs/handoffs/<mission>/record-<ID>.md` (what was done, the URL or
+  ID that proves it, the date), commit it, and that hash goes in the cell
 
 Plus a line in the execution notes if something deserved recording (a decision taken, a justified
 departure from the plan, a surprise). They live in `docs/handoffs/<mission>/checkpoint-notas.md` (APPEND one line with `>>` — never rewrite the file, never read it whole) — the boot prompt inlined the last ten of

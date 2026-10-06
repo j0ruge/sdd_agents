@@ -3,6 +3,16 @@
 The file is **pure bash** — the runner sources it. No logic: assignments only.
 Created by `sdd install` from [`examples/sales_quote.conf`](examples/sales_quote.conf).
 
+`sdd run` reads it again **at the top of every lap**, before the lap derives its phase: a value
+fixed on disk mid-run (a `TEST_CMD` that was wrong) is the one the next lap's gate runs, a key
+deleted from the file goes back to its default, and a key exported in the environment of the
+`sdd run` keeps that value. A file that no longer loads stops the run before the lap opens a
+session, with the message it would give at launch. An edit made during a session reaches the gate
+of the **next** lap, not the gate right after that session; what the run derived before its first
+lap (the mission branch, the mission directory) keeps the launch value; `sdd retry`, `sdd close` and
+`sdd kaizen` read the file once. Because every key is put back before the re-read, a key the file declares
+`readonly` stops the run with a sentence that names it — the file holds assignments only.
+
 Rule: if a required key is empty, `sdd preflight` fails **before** spending a session. For two keys
 it goes further than "not empty", because for those two an unusable value is only discovered by a
 phase that has already been paid for:
@@ -49,6 +59,26 @@ chained in on a guess. `sdd preflight` warns when a `TEST_CMD` written by hand l
 three out (a warn, since leaving a slow build out can be deliberate), and warns separately when it
 could not read the scripts at all — `jq` missing or a `package.json` that is not JSON — so a silence
 there is never mistaken for an ok.
+
+**Opt-in: the `TODO.md` lint inside `TEST_CMD`.** The findings file has a shape
+(`templates/todo.md`) and the kit's sensor measures it, but nothing runs that sensor in a target's
+suite, so an item with no anchor or no date goes unnoticed for missions. `config/starter.conf`
+suggests appending
+`bash "$SDD_HOME/tests/check-todo.sh" --check "$TODO_FILE" --allow-empty --baseline "origin/$DEFAULT_BRANCH"`
+to the suite, inside **single** quotes, so the runner expands the three variables when it runs the
+command (`$SDD_HOME` is the runner's own variable, visible to the command it evaluates). `--baseline`
+fails only on what the base branch did not already have: on 2026-10-05, under the designated-symbol
+rule, `sales_quote` and `lighthouse_project` carried 209 and 127 inherited violations and both
+answered `0 new`. `--allow-empty` keeps a freshly installed repo, whose `TODO.md` has no finding
+yet, from failing on the empty file. Declared limits:
+
+- the line works where the runner runs `TEST_CMD` — `gate_EXEC`, `gate_QA`, `gate_REVIEW` and
+  `sdd preflight`. Typed outside the runner, `$SDD_HOME` is empty and the line fails loudly (rc 127,
+  no such file), never silently green;
+- the DOCS and PR phases do not run `TEST_CMD`, so a finding written there is measured by the next
+  gate that does, or by nobody if none follows;
+- `origin/<base>` is read as last fetched: a stale ref can read as new a violation the base gained
+  after the fetch — red, the closed direction — and a ref the repo does not have is refused (rc 88).
 
 ## Running application (QA phase)
 

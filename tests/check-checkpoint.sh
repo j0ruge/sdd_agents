@@ -22,7 +22,9 @@
 # side can satisfy. That is the rule this file enforces.
 #
 # What it measures, per row of every checkpoint table under docs/handoffs/ plus the template:
-#   1. the row hands the runner exactly five columns when split on a raw `|`. A RAW pipe inside a
+#   1. the row opens with its `|` and hands the runner exactly five columns when split on a raw
+#      `|`. GFM makes the leading pipe optional and the runner reads such a row since PR #222, but
+#      a reader of `|`-led lines skipped it whole, so it is refused here by name. A RAW pipe inside a
 #      cell shifts Status and Commit one place and gate_EXEC starts reading a fragment of the
 #      command as a status token. It is also what keeps rule 2 from failing open: with the columns
 #      shifted, the Check cell this file reads is a truncation and the anchor rule would stop
@@ -56,6 +58,25 @@
 # is strong. All three are human judgement on the diff. Rule 2 stops the one regression that rots
 # in silence, which is the half prose already lost twice.
 #
+# One narrower question about the expected value IS answered, but never by the scan and never by
+# run-all.sh: `--red <checkpoint>` runs the Check of every `pending` row and refuses the one that
+# is already green at HEAD (issue 92). It executes text a model wrote, so it is a tool the planner
+# runs with the human present before closing PLAN-AUTO — never a gate, and the runner never calls
+# it. gate_PLAN cannot run it either: derive_phase calls gate_PLAN on every derivation, so with
+# I1 done its Check turns green and the mission would fall back to PLAN — an unsatisfiable gate.
+# What --red proves is "not green", never "red for the right reason": `cmd; echo $?` printing 127
+# for a command that does not exist yet is red to it. The planner writes that before into the plan,
+# where a person reads it. A Check that prints NOTHING is refused, whatever its rc: the form
+# `test -f x && echo yes` has no before to write down, and a command that was never found (rc 127)
+# looks exactly like one that ran and said no. Only the strict form `command` → `expected` runs —
+# one pair per cell; two pairs, or prose after the arrow, are refused as unmeasurable.
+# DECLARED LIMITS of --red, both measured on I0 and I6 of 20260918-a-excecao-do-chapeu-e-o-genero-
+# diferido at its plan commit (79dd4df). The expected is compared with the WHOLE stdout, blanks
+# folded: a Check whose expected is only the tail of what it prints (`sdd adr check …; echo rc=$?`
+# → `rc=0`, over an ok line) reads red here and green to a person — the planner writes the noise to
+# /dev/null. And a Check that reads OUTSIDE its repository (`~/repos/<other>/…`) is measured against
+# today's world, not HEAD's: I6 read green in 2026-10 and red on the day it was planned.
+#
 # Every rule is STRUCTURAL — a pipe count, a shell token, an anchor literal — never a Portuguese
 # word, for the same reason as check-todo.sh: the files it reads are mission content in the target
 # repo's OUTPUT_LANG, so a rule keyed on prose would break in an English repo and would measure
@@ -71,6 +92,11 @@
 #        tests/check-checkpoint.sh --calibrate <dir>
 #                                               (derive the ok prefix from a tree of sensors and
 #                                                compare it to the anchor — likewise)
+#        tests/check-checkpoint.sh --red <checkpoint>
+#                                               (run the Check of every pending row from the root of
+#                                                the checkpoint's repository; refuse one already green,
+#                                                one outside the strict form, one that prints nothing.
+#                                                Run by the planner, never by run-all.sh)
 #
 # ── Known limits, stated so nobody re-discovers them as surprises ──────────────────────────────
 # NOT measured: a Check that reads a sensor WITHOUT merging stderr and greps for the assertion
@@ -119,8 +145,9 @@
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
 #   89  no temp dir (probes never ran)      90/91/92  a selftest probe failed
-#   93  a floor was breached (the scan was vacuous)
+#   93  a floor was breached (the scan was vacuous; for --red, no pending row)
 #   94  a checkpoint named on the command line is missing or unreadable
+#   95  --red: the checkpoint is not inside a git work tree, so there is no root to run from
 #   96  unknown option
 
 set -uo pipefail
@@ -174,9 +201,18 @@ surface() {
 # why: any pipe in a Check cell is refused in this repo's checkpoints, escaped or not. NF is
 # emitted rather than checked here so the caller can tell "pipe inside a cell" from "not a table
 # row at all".
+#
+# A row with no leading pipe, inside the table, is emitted with NF 0 so the callers refuse it by
+# name: GFM makes that pipe optional, the runner reads the row since PR #222, and a reader of
+# `|`-led lines alone skipped it whole — --check never saw it, --red answered 0 over a pending Check
+# it never ran (CodeRabbit review). Below a blank line the same line is a paragraph and stays out.
 rows_of() {
   awk -F'|' '
+    /^[ \t]*$/ { tbl = 0 }
+    { bare = (tbl && /\|/ && !/^[ \t]*\|/) }
+    bare { $0 = "|" $0 }
     /^[ \t]*\|/ {
+      tbl = 1
       if (NF < 6) next
       id = $2; gsub(/^[ \t]+|[ \t]+$/, "", id)
       if (id == "ID" || id ~ /^-+$/ || id == "") next
@@ -185,7 +221,7 @@ rows_of() {
       chk = $4; gsub(/^[ \t]+|[ \t]+$/, "", chk)
       # An empty Status prints as "-": a tab is IFS whitespace to the reader, so an empty field
       # would collapse and hand the Check cell over as the status.
-      printf "%d\t%s\t%s\t%s\n", NF, id, (status == "" ? "-" : status), chk
+      printf "%d\t%s\t%s\t%s\n", (bare ? 0 : NF), id, (status == "" ? "-" : status), chk
     }' "$1"
 }
 
@@ -210,7 +246,13 @@ scan_file() {
     [ -n "$nf" ] || continue
     N_ROWS=$((N_ROWS + 1))
 
-    # Rule 1 — five columns, or the cell below is a truncation and rule 2 fails open.
+    # Rule 1 — the row opens with its pipe, and hands the runner five columns, or the cell below is
+    # a truncation and rule 2 fails open. NF 0 is rows_of's mark for the missing leading pipe.
+    if [ "$nf" -eq 0 ]; then
+      fail "$label: row $id has no leading '|' — GFM renders it as a row and the runner counts it, but this repo's checkpoints open every row with the pipe"
+      V_COLS=$((V_COLS + 1))
+      continue
+    fi
     if [ "$nf" -ne 7 ]; then
       fail "$label: row $id hands the runner $((nf - 2)) column(s) instead of 5 — a '|' inside a cell splits it. A raw pipe breaks gate_EXEC; the escape '\\|' the runner rejoins, but this repo's checkpoints use the herestring form instead"
       V_COLS=$((V_COLS + 1))
@@ -315,6 +357,9 @@ PIPE_ESCAPE='\|'
 # One document per place the next planner meets the rule. A floor, not a headcount: it is what
 # turns "both calls returned 0" into "both calls RAN", so deleting a call site cannot buy silence.
 PIPE_DOC_FLOOR=2
+# The third thing the next planner has to be born knowing (issue 92): the scan never runs a Check,
+# so the only hand that measures the red is the planner's, and only if its hat names the run.
+RED_DOC='check-checkpoint.sh --red'
 
 pipe_rule() {
   local path="$1" label="$2"
@@ -388,6 +433,13 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
     rc=1
   fi
 
+  if grep -qF -- "$RED_DOC" "$root/agents/sdd-planner.md" 2>/dev/null; then
+    pass "the planner agent teaches the --red run before PLAN-AUTO"
+  else
+    fail "agents/sdd-planner.md never states the --red run (wanted the literal '$RED_DOC') — the next plan closes PLAN-AUTO over Checks nobody ran at HEAD"
+    rc=1
+  fi
+
   [ "$rc" -eq 0 ] || fail "$((V_ANCHOR + V_COLS + V_IGNORED + V_ORDER)) checkpoint violation(s)"
   return "$rc"
 }
@@ -408,6 +460,11 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
 # sensors (issue 113): the other seven print from those other shapes, and a sensor printing three
 # spaces from one of them went unseen. The needles are built from variables: a literal quote-ok
 # pattern in the `case` below would match its own line and report this very file.
+#
+# DECLARED LIMIT (ADR 0015 §4): this floor is anti-vacuity, not a tracker of the surface. It is 16
+# because 16 sensors print the ok prefix today, and a seventeenth that lands without moving it
+# leaves one of slack; nothing measures that, so it is one of the places CLAUDE.md says every new
+# sensor moves. No lag in 105 commits.
 CALIBRATE_FLOOR=16
 calibrate() {
   local root="$1" f line rest sp p seen='' seenf='' n=0 hit
@@ -457,6 +514,96 @@ check_one() { # check_one <path> — one checkpoint, no floors, no doc assertion
   return 1
 }
 
+# --- --red: is each pending Check red at HEAD? (issue 92) --------------------------------------
+#
+# The scan above never runs a Check, on purpose (see the header). This mode does, and only when a
+# person asks: the planner, before closing PLAN-AUTO, with the human in the room. A Check that is
+# already green before its increment exists cannot tell done from not done — measured once in the
+# kit, I7 of 20260918-a-excecao-do-chapeu-e-o-genero-diferido, whose `105 finding(s)` was already
+# printed at the plan commit because a RESOLVED item stays in TODO.md until the merge.
+#
+# It EXECUTES the cell, which a model wrote. That is why it is a tool and never a gate: nothing in
+# the runner calls it, and run-all.sh does not either. Each cell runs in a FRESH `bash -c`, from
+# the root of the repository the checkpoint lives in, with stdin closed — never `eval`: even inside
+# $(…) an eval'd cell inherits this file's `set -uo pipefail` and functions, and `printf … | grep -q`
+# answers differently under pipefail than in the shell the executor runs the Check in.
+
+# red_norm <text> — every run of blanks, newlines included, folds into one space; ends trimmed.
+# Applied to both sides, so `echo 1; echo 2` compares equal to `1 2`, the way a person reads it.
+red_norm() {
+  local s="${1//$'\n'/ }" w
+  s="${s//$'\t'/ }"
+  read -ra w <<< "$s"
+  printf '%s' "${w[*]}"
+}
+
+# red_cell <cell> — splits the strict form `command` → `expected` into RED_CMD and RED_EXP. Globals,
+# never a $(…) read: a function run in a substitution loses its assignments (CLAUDE.md). rc 1 for any
+# other shape, one guard per way out, each with its probe: a cell that is not backtick, arrow,
+# backtick (prose with no code span); a backtick left inside either half (two pairs in one cell, or
+# prose after the arrow); an empty expected value. An empty COMMAND needs no guard of its own — it
+# prints nothing, and the silent rule in red_one refuses it.
+red_cell() {
+  local c="$1" bt='`' sep='` → `'
+  RED_CMD=''; RED_EXP=''
+  case "$c" in "$bt"*"$sep"*"$bt") ;; *) return 1 ;; esac
+  RED_CMD="${c#"$bt"}"; RED_CMD="${RED_CMD%%"$sep"*}"
+  RED_EXP="${c#*"$sep"}"; RED_EXP="${RED_EXP%"$bt"}"
+  case "$RED_CMD$RED_EXP" in *"$bt"*) return 1 ;; esac
+  [ -n "$RED_EXP" ]
+}
+
+red_one() { # red_one <checkpoint> — 0 every pending Check is red at HEAD; 1 one is not; 93/94/95
+  local path="${1-}" label top rows nf id st chk out rc got want n=0 bad=0
+  if [ -z "$path" ] || [ ! -r "$path" ]; then
+    fail "checkpoint not readable: ${path:-<none>}"
+    return 94
+  fi
+  label="$(basename -- "$path")"
+  # The root is the checkpoint's repository, never the cwd — the same resolution as rule 5.
+  top="$(git -C "$(dirname -- "$path")" rev-parse --show-toplevel 2>/dev/null)" || top=''
+  if [ -z "$top" ]; then
+    fail "$label is not inside a git work tree — --red runs each Check from the root of the checkpoint's repository, and there is none"
+    return 95
+  fi
+  rows="$(rows_of "$path")"
+  while IFS=$'\t' read -r nf id st chk; do
+    [ -n "$nf" ] || continue
+    if [ "$nf" -eq 0 ]; then
+      fail "$label: row $id has no leading '|' — --red refuses the row a reader of '|'-led lines would skip; run --check first"
+      bad=$((bad + 1)); continue
+    fi
+    if [ "$nf" -ne 7 ]; then
+      fail "$label: row $id splits into $((nf - 2)) column(s) — --red cannot tell its Status from its Check; run --check first"
+      bad=$((bad + 1)); continue
+    fi
+    [ "$st" = pending ] || continue
+    n=$((n + 1))
+    if ! red_cell "$chk"; then
+      fail "$label: $id has a Check outside the strict form \`command\` → \`expected\` — --red cannot run it, so nothing says it is red"
+      bad=$((bad + 1)); continue
+    fi
+    out="$(CDPATH='' cd -- "$top" && bash -c "$RED_CMD" 2>/dev/null < /dev/null)"; rc=$?
+    got="$(red_norm "$out")"; want="$(red_norm "$RED_EXP")"
+    if [ -z "$got" ]; then
+      fail "$label: $id printed nothing (rc $rc) — a Check has to print a value before the work exists, or its red cannot be written down as the before"
+      bad=$((bad + 1))
+    elif [ "$got" = "$want" ]; then
+      fail "$label: $id is already green at HEAD — its Check prints '$got' before the increment exists, so it cannot tell done from not done"
+      bad=$((bad + 1))
+    else
+      pass "$label: $id is red at HEAD (prints '$got', wants '$want')"
+    fi
+  done <<< "$rows"
+  if [ "$n" -eq 0 ]; then
+    fail "$label has no pending row — --red measured nothing"
+    return 93
+  fi
+  [ "$bad" -eq 0 ] || return 1
+  pass "$label: $n pending Check(s), every one red at HEAD"
+  return 0
+}
+
 # --- selftest ----------------------------------------------------------------------------------
 #
 # Anti-vacuity for the sensor itself. Nothing outside covers this file: check-mutation.sh only
@@ -470,7 +617,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=40
+PROBE_FLOOR=60
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -547,6 +694,8 @@ build_tree() { # build_tree <root>
   printf 'A Check reading a sensor merges `2>&1` and anchors on `%s`.\n' \
     "$OK_ANCHOR" > "$root/agents/sdd-planner.md"
   pipe_banner >> "$root/agents/sdd-planner.md"
+  printf 'Before PLAN-AUTO, run the kit'"'"'s tests/check-checkpoint.sh --red <checkpoint>.\n' \
+    >> "$root/agents/sdd-planner.md"
 }
 
 selftest() {
@@ -600,6 +749,16 @@ selftest() {
   probe 'two anchored greps pass'             0 '1 under the anchor rule' "$two"
   probe 'one of two greps unanchored is caught' 1 '1 of 2 pattern(s) anchored' "$onlyone"
   probe 'a checkpoint that does not exist'   94 'not readable' "$box/nowhere.md"
+  # GFM makes the leading pipe optional, so a row written without it renders like the rest of the
+  # table — and a reader of `|`-led lines skipped it whole (CodeRabbit review of PR #222). The
+  # control is the same line below a blank line: a paragraph, which is no row and stays out.
+  local bare="$box/bare.md" barepara="$box/barepara.md"
+  cp_head "$bare"; cp_row "$bare" I1 '`bash tests/run-all.sh` → verde'
+  printf 'I2 | slice | `bash tests/run-all.sh` → verde | pending | — |\n' >> "$bare"
+  cp_head "$barepara"; cp_row "$barepara" I1 '`bash tests/run-all.sh` → verde'
+  printf '\nI2 | slice | `bash tests/run-all.sh` → verde | pending | — |\n' >> "$barepara"
+  probe 'a row with no leading pipe is caught, not skipped' 1 "row I2 has no leading '|'" "$bare"
+  probe 'the same line below a blank line is a paragraph, not a row' 0 'barepara.md: 1 row(s)' "$barepara"
 
   # ── the floors and the doc assertions, over real trees ──
   local full="$box/full" small="$box/small" fewrows="$box/fewrows" novoid="$box/novoid"
@@ -724,6 +883,23 @@ selftest() {
   probe 'a clean tree SAYS the pipe ban was found in both docs' 0 \
     'ok    rule:' "$pipeok" --scan
 
+  # The --red run, taught where the next planner meets it (issue 92). The near miss is written by
+  # hand, never derived from RED_DOC: a planner naming only the --check run must still be refused,
+  # or a RED_DOC shortened to the script's name would pass on the --check sentence alone (#71).
+  local nored="$box/nored" rednear="$box/rednear"
+  build_tree "$nored"
+  strip_lit "$nored/agents/sdd-planner.md" "$RED_DOC"
+  probe 'a planner that forgot the --red run is caught' 1 \
+    'agents/sdd-planner.md never states the --red run' "$nored" --scan
+  build_tree "$rednear"
+  sed -i 's/check-checkpoint[.]sh --red /check-checkpoint.sh --check /' "$rednear/agents/sdd-planner.md"
+  probe 'a planner naming only the --check run is a near miss' 1 \
+    'agents/sdd-planner.md never states the --red run' "$rednear" --scan
+  build_tree "$rednear"
+  sed -i 's/tests[/]check-checkpoint[.]sh --red /the --red mode on /' "$rednear/agents/sdd-planner.md"
+  probe 'a planner naming --red without the script is a near miss' 1 \
+    'agents/sdd-planner.md never states the --red run' "$rednear" --scan
+
   # ── the calibration, over trees of fake sensors ──
   # These probes do NOT derive their `pass()` lines from OK_ANCHOR: that independence is the whole
   # point, and building them from the variable would reproduce the survivor this rule was born to
@@ -841,6 +1017,64 @@ selftest() {
   probe 'a done below a blocked row makes the whole scan red' 1 \
     'which is blocked' "$scanorder" --scan
 
+  # ── --red: the Check run at HEAD, refused when it is already green (issue 92) ──
+  # One fixture repository, one row per probe. Every refusal shares rc 1, so each probe asserts the
+  # message of ITS cause; the two that pass read rc 0, which a sabotage running the wrong rows or
+  # inverting the comparison cannot fake. The repo carries `rootmark` and the caller's cwd does not,
+  # so the probe reading it proves where the Check ran.
+  local red="$box/red" rf nogit="$box/nogit" red_p0="$PROBES" red_f0="$FAILS"
+  mkdir -p "$red/docs/handoffs/m" "$nogit/docs/handoffs/m"
+  git -C "$red" init -q
+  printf 'here\n' > "$red/rootmark"
+  rf="$red/docs/handoffs/m/checkpoint.md"
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 1` → `1`' pending
+  probe 'a Check already green at HEAD is refused' 1 'I1 is already green at HEAD' "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 0` → `1`' pending
+  probe 'a Check red at HEAD passes and says what it printed' 0 \
+    "I1 is red at HEAD (prints '0', wants '1')" "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 '`bash tests/run-all.sh` → verde' pending
+  probe 'prose after the arrow is outside the strict form' 1 'outside the strict form' "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 'echo 1 → 1' pending
+  probe 'a cell with no code span is outside the strict form' 1 'outside the strict form' "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 1` → `0`; `echo 2` → `0`' pending
+  probe 'two pairs in one cell are outside the strict form' 1 'outside the strict form' "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 1` → ``' pending
+  probe 'an empty expected value is outside the strict form' 1 'outside the strict form' "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 1` → `1`' 'done'; cp_row "$rf" I2 '`echo 0` → `1`' pending
+  probe 'a done row is never run' 0 '1 pending Check(s), every one red at HEAD' "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 '`false` → `0`' pending
+  probe 'a Check that prints nothing is refused, whatever its rc' 1 'I1 printed nothing (rc 1)' "$rf" --red
+  # A fresh shell, not a subshell of this one: under this file's `set -o pipefail` a Check's own
+  # `printf … | grep -q` would answer differently from the shell the executor runs it in.
+  cp_head "$rf"; cp_row "$rf" I1 '`shopt -qo pipefail; echo $?` → `0`' pending
+  probe "a Check runs in a fresh shell, not under this sensor's options" 0 \
+    "I1 is red at HEAD (prints '1', wants '0')" "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 '`cat rootmark` → `there`' pending
+  probe "a Check runs from the root of the checkpoint's repository" 0 "prints 'here'" "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 1; echo 2` → `1 2`' pending
+  probe 'a multi-line output folds into one line before the comparison' 1 \
+    'I1 is already green at HEAD' "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 1; echo noise >&2` → `1`' pending
+  probe 'stderr is not part of what a Check prints' 1 'I1 is already green at HEAD' "$rf" --red
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 1` → `1`' 'done'
+  probe 'a checkpoint with no pending row measured nothing' 93 'has no pending row' "$rf" --red
+  # A pending row with no leading pipe, whose Check is already green, below a red one: skipped, it
+  # left --red answering 0 over a Check it never ran (CodeRabbit review of PR #222).
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 0` → `1`' pending
+  printf 'I2 | slice | `echo 1` → `1` | pending | abc1234 |\n' >> "$rf"
+  probe 'a pending row with no leading pipe is refused by --red, never skipped' 1 \
+    "row I2 has no leading '|'" "$rf" --red
+  cp_head "$nogit/docs/handoffs/m/checkpoint.md"
+  cp_row "$nogit/docs/handoffs/m/checkpoint.md" I1 '`echo 0` → `1`' pending
+  GIT_CEILING_DIRECTORIES="$box" probe 'a checkpoint outside any repository has no root to run from' \
+    95 'not inside a git work tree' "$nogit/docs/handoffs/m/checkpoint.md" --red
+  # The `[ "$FAILS" -eq "$red_f0" ] &&` guard is the one survivor of the sabotage pass, declared: on
+  # its own it changes nothing observable — with any probe of the group broken the selftest rc is
+  # already 90, and every reader of this sensor reads the rc. It stays so the rule line never
+  # claims a group that just failed.
+  [ "$FAILS" -eq "$red_f0" ] && \
+    pass "rule: a Check already green at HEAD is refused by --red ($((PROBES - red_p0)) probe(s))"
+
   rm -rf "$box"
 
   if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then
@@ -868,6 +1102,7 @@ case "${1:-}" in
   --check)    check_one "${2-}"; exit $? ;;
   --scan)     scan "${2-}"; exit $? ;;
   --calibrate) calibrate "${2-}"; exit $? ;;
+  --red)      red_one "${2-}"; exit $? ;;
   '')         selftest || exit $?
               rc=0
               calibrate "$ROOT" || rc=1

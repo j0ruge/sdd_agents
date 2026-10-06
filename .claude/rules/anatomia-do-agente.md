@@ -99,11 +99,13 @@ julgam prosa (`Documentation`, `Overall`), nomeados positivamente; achado de pro
 **Onde mora hoje.** O componente mais forte do kit: `gate_<FASE>` por artefato (`TEST_CMD`, grep
 no checkpoint, `git log`, `gh pr view`); Check por incremento; **dezesseis** sensores em
 `tests/run-all.sh` (o décimo sexto é `check-coordination.sh`); catálogo de mutação com carimbo no
-`sdd health`; guarda de kit em quatro portas. Desde `20260917-o-numero-do-adr-nao-e-prosa` o
+`sdd health` (a chave lê `bin/ tests/ templates/ config/ agents/` — `agents/` desde a ADR 0015 §1,
+porque o runner lê cada chapéu dali); guarda de kit em quatro portas. Desde `20260917-o-numero-do-adr-nao-e-prosa` o
 `gate_PLAN` também cobra o `adr:` sob `ADR_CHECK=block`, e o comentário do gate **nomeia o dono do
 artefato** — `sdd-planner`, com o humano na sala —, que é a segunda metade da régua do princípio 1.
 É por isso que a recusa mora no PLAN e não no EXEC: nenhum agente do kit decide trade-off
-arquitetural, então cobrar a decisão de uma fase sem humano seria o gate insatisfazível.
+arquitetural, então cobrar a decisão de uma fase sem humano seria o gate insatisfazível. O
+próprio kit roda sob `block` desde `20261004-lote-4-a-catraca-zera` (§5).
 Desde `20260925-o-sensor-le-o-que-a-ancora-diz` o `TEST_CMD` deixa de ser certificado por grafia:
 `config_read_key` é a única leitura de chave fora do `load_config` e diz por que o arquivo não
 carrega ("does not parse" ou "does not evaluate", o mesmo rc 2);
@@ -111,6 +113,12 @@ carrega ("does not parse" ou "does not evaluate", o mesmo rc 2);
 do `TEST_CMD` no preflight chama `_fail`, e só emite `warn` no lugar dele quando o runner **diz**
 que falta o manifesto na raiz (`test_cmd_missing_manifest`). A âncora do `TODO.md` também virou
 sensor (ADR 0011).
+Desde `20261004-lote-4-a-catraca-zera` o `tests/check-checkpoint.sh --red <checkpoint>` roda o Check
+de cada linha `pending` a partir da raiz do repo e recusa o que já nasce verde, o mudo e o que
+foge da forma `` `comando` → `esperado` ``. Ele **executa** texto escrito por modelo, então é
+ferramenta do planner com o humano na sala, **nunca gate**: o runner não o chama, o `run-all.sh`
+também não, e o `gate_PLAN` não poderia — ele é reavaliado a cada derivação, e o Check do I1
+fica verde no instante em que o I1 fecha. Prova "não verde", não "vermelho pelo motivo certo".
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
@@ -128,11 +136,23 @@ Memória sem rota é prosa que a próxima sessão paga para reler e não usa.
 
 **Onde mora hoje.** Handoffs por missão, checkpoint, `TODO.md`, `KAIZEN_LOG.md`, `CONTEXT.md`,
 `docs/adr/`, ledger de autonomia (`autonomy_log_path`), logs JSON por sessão em `.sdd/logs/`.
+Desde `20261004-lote-4-a-catraca-zera` toda linha do ledger carrega `runner_sha`, o HEAD do kit no
+lançamento do processo, ao lado do `kit_sha` lido do disco: numa missão cujos commits movem o
+próprio kit, o segundo nomeia uma versão que o processo nunca rodou (22 de 35 `sdd run` do kit).
+Na mesma missão a fase feita à mão ganhou rota (#153): a página completa do `sdd status`
+(`status_unrecorded`) lista as fases de gate verde sem linha `session` nem `manual` desta missão no
+ledger **desta máquina**, cada uma com o `sdd note-manual` que a grava — pergunta, não acusação, e
+fora do `--no-gates`, que não sabe qual fase está feita.
 O `docs/adr/` deixou de ser memória **sem rota**: `sdd adr new` aloca o número com O_EXCL e escreve
 os dois lados do vínculo; `sdd adr check` lê de volta, em dois escopos. A rota do ADR é o
-`sdd-planner` com o humano, e o gate de PLAN é quem cobra.
+`sdd-planner` com o humano, e o gate de PLAN é quem cobra. Desde `20261004-lote-4-a-catraca-zera`
+o próprio kit roda sob `ADR_CHECK=block`: as 14 missões anteriores ao mecanismo declaram `adr:`
+(três apontam para a ADR de que nasceram — 0003, 0004 e 0006, que ganharam `Spec:` —, onze dizem
+`none`), e o `sdd adr check` responde rc 0 sem nenhuma missão indecisa.
 
-**Dívida declarada.** O namespace local `specs/*/adr/` do repo-alvo não é alcançado por nenhum dos
+**Dívida declarada.** As ADRs 0001, 0002, 0005 e 0007 do kit seguem sem `Spec:` — nenhuma
+nasceu de uma pasta de missão, e escrever a origem seria inventá-la; o limite está no comentário do
+`ADR_CHECK` em `.sdd/config.sh`. O namespace local `specs/*/adr/` do repo-alvo não é alcançado por nenhum dos
 dois escopos do `sdd adr check` — unificar ou declarar é decisão daquele repo, e o limite está
 escrito no cabeçalho do `tests/check-adr.sh` e no `config/schema.md`. Árvore que não tem o formato
 `<SPEC_DIR>/<dir>/spec.md` também não é varrida (o `docs/superpowers/` deste repo).
@@ -168,6 +188,15 @@ contornou pelo Bash com o caminho dentro do `writes:`. O contorno agora para a l
 `hat-crossed`, e a regra que muda vira linha `⛔` com texto proposto, que o `gate_DOCS` lê por linha
 e o PR leva ao humano — o `gate_PR` confere que o corpo do PR nomeia cada documento `⛔` numa linha
 com `⛔`, pelo mesmo leitor da tabela (`docs_checklist_rows`).
+Desde `20261004-lote-4-a-catraca-zera` o `cmd_run` relê o `.sdd/config.sh` no topo de cada volta
+(`config_reload`): antes de re-sourçar, toda chave de `health_default_keys` volta à **foto do
+ambiente** que `config_env_snapshot` tirou no lançamento — `unset` quando o ambiente não dizia nada —,
+então chave apagada do arquivo volta ao default e chave exportada (`ON_ESCALATION_CMD=… sdd run`)
+sobrevive à volta 2. Config que não carrega para a linha antes de a volta abrir sessão, com o `die`
+do `load_config`. Re-exec do `bin/sdd` entre voltas foi recusado: o runner não revisado da missão
+julgaria a própria REVIEW. Limites no comentário do `config_reload`: o que o `cmd_run` derivou antes
+do laço (branch da missão, `MISSION_DIR`) fica com o valor do lançamento; edição feita durante a
+sessão chega ao gate da volta **seguinte**; `sdd retry`, `sdd close` e `sdd kaizen` leem uma vez só.
 
 **Dívida declarada.** O `HAT_WRITES_EXTRA` **alarga** permissão e seu valor vira glob de shell no
 `case` do `hat_path_allowed`, então toda frouxidão da guarda falha **aberta** — por isso ela é
@@ -240,7 +269,10 @@ O prazo do hook vale para toda a árvore: um subreaper local cancela também fil
 sessão, com os mesmos 5 s + 1 s; o lock externo só sai depois do reap. Background do hook
 não pode sobreviver indefinidamente. A semântica geral de órfãos da execução é preservada.
 
-**Onde mora hoje.** `aprovacao:` + `sdd approve` (gate PLAN); rc 3 em
+**Onde mora hoje.** `aprovacao:` + `sdd approve` (gate PLAN); rc 2 sem sessão, que é passo humano
+desenhado e não escalada (sem linha de ledger, sem hook): o PLAN e, desde
+`20261004-lote-4-a-catraca-zera`, o carimbo de mutação quando o PR está aberto e só ele falta
+(`GATE_PR_STAMP_WHY`, ADR 0015 §1) — o `sdd run` nomeia a ordem e o `./bin/sdd health`; rc 3 em
 `handoff_blocked_escalation`, `app_down_escalation`, `increment-blocked`, `dirty-tree`,
 `no-progress`, `budget-exhausted`, e desde `20260922-o-motivo-da-fase` `no_work_escalation`
 (`kind: "no-work"`) — a única que para a linha **antes** da sessão, quando a célula do checkpoint
@@ -250,7 +282,10 @@ fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
 `ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos
 mais um de encerramento forçado, e a linha `- intervention:` escrita pelo
-runner (L2, L6 e L4).
+runner (L2, L6 e L4). Desde `20261004-lote-4-a-catraca-zera` (#153) a fase feita **à mão** também
+tem porta: `sdd note-manual <missão> <FASE>` escreve a `- intervention:` pelo mesmo escritor e a
+linha `event:"manual"` do ledger, que não gradua nada — antes dela, o PR publicado à mão de
+`20260916-destino-frete-cif` não deixou linha nenhuma, e 0 de 4 missões escreveram a nota.
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
 anterior desta seção dizia que não existia, e estava errada (foi o comando do incidente das 18:45).

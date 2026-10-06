@@ -15,11 +15,12 @@
 |---|---|---|---|---|
 | F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 **feito** em 2026-09-26 (espelho 82 ↔ 82, #144 fechada, PR #171; [handoff](../plans/2026-09-25-depois-do-170-handoff.md)). O P3 **ficou fora** da carona (`20260926-a-carona-antes-do-congelamento`, decisão 6 do grill): é pré-requisito do próximo aumento de paralelismo, que não acontece com o kit congelado | o fim da janela 4 (F3) |
 | F2 | Faxina pós-#57 | **fechada** pela missão `20260926-a-carona-antes-do-congelamento` (I7; o yokoten da crase no I1) | nada | — |
-| F3 | T3 e a janela do juiz | janela 1 **fechada**: veredito `melhorou` sobre `4fd0f31` (PR #175, `3d350ed`). Dos 8 achados, 5 foram consertados na missão `20260928-os-achados-da-janela` (3, 4, 6, 7 e 8; PR #176) e 3 foram para o `TODO.md` (1, 2 e 5). Janela 2 **fechada sem veredito** em 2026-09-30: `indeterminado` sobre `6323c6f`, porque o PR #184 (só `TODO.md` + catraca) cunhou um `kit_sha` novo e deixou as 3 missões de `5b98087` em `previous` (`window_missions_stranded: 3`); o achado está no `TODO.md`. Janela 3 (aberta no merge do PR #185, missão `20260930-a-sub-etapa-que-andou`) **abandonada por decisão humana em 2026-10-01, sem veredito**: o kit descongela para a missão `20261001-a-janela-nao-se-parte` (ADR 0014), que conserta a causa — o eixo passa a agrupar pelo último commit de comportamento (`kit_rev`, de `bin agents templates config`) e a chave do carimbo deixa a catraca de fora, então um PR só de `TODO.md` deixa de partir a janela e de matar o carimbo. **A janela 4 abre no primeiro carimbo de alvo após o merge desta missão** | merge de `20261001-a-janela-nao-se-parte` → 3 missões de alvo com sessão sobre a mesma versão de comportamento → `sdd kaizen`; a T3 vem depois do veredito | a missão `20261001-a-janela-nao-se-parte` |
+| F3 | T3 e a janela do juiz | janela 1 **fechada**: veredito `melhorou` sobre `4fd0f31` (PR #175, `3d350ed`). Dos 8 achados, 5 foram consertados na missão `20260928-os-achados-da-janela` (3, 4, 6, 7 e 8; PR #176) e 3 foram para o `TODO.md` (1, 2 e 5). Janela 2 **fechada sem veredito** em 2026-09-30: `indeterminado` sobre `6323c6f`, porque o PR #184 (só `TODO.md` + catraca) cunhou um `kit_sha` novo e deixou as 3 missões de `5b98087` em `previous` (`window_missions_stranded: 3`); o achado está no `TODO.md`. Janela 3 (aberta no merge do PR #185, missão `20260930-a-sub-etapa-que-andou`) **abandonada por decisão humana em 2026-10-01, sem veredito**: o kit descongela para a missão `20261001-a-janela-nao-se-parte` (ADR 0014), que conserta a causa — o eixo passa a agrupar pelo último commit de comportamento (`kit_rev`, de `bin agents templates config`) e a chave do carimbo deixa a catraca de fora, então um PR só de `TODO.md` deixa de partir a janela e de matar o carimbo. **A janela 4 abre no primeiro carimbo de alvo após o merge desta missão** | merge de `20261001-a-janela-nao-se-parte` → 3 missões de alvo com sessão sobre a mesma versão de comportamento → `sdd kaizen`; a T3 se desfez em 2026-10-04 (§ F3) | a missão `20261001-a-janela-nao-se-parte` |
 | F4 | Portabilidade para outros repos | sem pendência de código: lacunas 2 e 3 **consertadas** na missão `20260926-a-carona-antes-do-congelamento` (I5, I6), 4 e 5 no `TODO.md` (I7), 6 declarada no ADR 0007 | a prova num 2º alvo, que conta para a próxima janela do juiz | nada desde o veredito (F3, PR #175) |
 | F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
+| F8 | O plano mede contra a base, não contra os incrementos anteriores | nota de 2026-10-05, da execução do lote 4; sem missão | uma frase no `sdd-planner` (§ F8) | a próxima missão de kit depois do lote 4 |
 
 Fechados, para ninguém reabrir: o laço do fingerprint (#54–#56 → missão
 `20260922-o-motivo-da-fase`, PR #57, merge `2258e53`); o fluxo `develop → staging → main` com o
@@ -136,17 +137,22 @@ próximo PR do kit que já precise carimbar.
 
 ## F3 — T3 e a janela do juiz
 
-**A T3** é a terceira missão de kit nascida de `ACHADOS-20260917-sales-quote.md` (a T1 foi o #46 e
-a T2 o #47). Junta três itens, todos abertos no `TODO.md`:
-- **#6 — fase feita à mão não pode ser registrada.** Direção: `sdd note-manual <fase>`, que pede o
-  **6º `event`** do ledger. O ACHADOS o chama de "o mais caro dos nove".
-- **#7 — o teto de orçamento não conhece "missão reaberta".** Falta definir o que conta como
-  reaberta (por exemplo, `R<n>` pendente depois do `50-pr.md`).
-- **Observação "T5" — `Test Coverage = A` não implica caso negativo.** Toca `agents/sdd-reviewer.md`
-  e o `gate_REVIEW`, com risco de gate insatisfazível (princípio 1).
+**A T3** era a terceira missão de kit nascida de `ACHADOS-20260917-sales-quote.md` (a T1 foi o #46
+e a T2 o #47), e **se desfez em 2026-10-04**: dos três itens que ela juntava, nenhum sobrou para ela.
+- **#6 — fase feita à mão não pode ser registrada.** Sai pelos I17–I19 da missão
+  `20261004-lote-4-a-catraca-zera`: `sdd note-manual <missão> <fase>`, com o 6º `event` do ledger
+  (`manual`, que não pontua). O ACHADOS o chamava de "o mais caro dos nove".
+- **#7 — o teto de orçamento não conhece "missão reaberta".** Decidido em 2026-10-03, na seção
+  decidida do `TODO.md`: a porta humana para gastar mais é `--budget-override`, com a nota
+  `intervention:` que o runner escreve.
+- **Observação "T5" — `Test Coverage = A` não implica caso negativo.** Decidida como limite em
+  2026-10-04, na seção decidida do `TODO.md`: a nota de revisão é rótulo (anatomia §4). A parte
+  barata e real — o executor sabota a linha nova de um `R<n>` — é o I3 da mesma missão.
 
-As fontes listam **três** perguntas de desenho para o humano (a memória falava em duas): o 6º
-`event`, a definição de "reaberta" e a âncora de sabotagem no `gate_REVIEW`.
+As três perguntas de desenho que as fontes listavam para o humano — o 6º `event`, a definição de
+"reaberta" e a âncora de sabotagem no `gate_REVIEW` — estão respondidas: a primeira no grill do lote
+4, as outras duas por decisão escrita. A âncora no `gate_REVIEW` **não** foi construída: o risco de
+gate insatisfazível (princípio 1) que a recusava continua de pé.
 
 **A janela do juiz** (estado de 2026-09-23, **histórico**; o de hoje está logo abaixo). Para o
 `sdd kaizen` emitir veredito são necessárias **3 missões de alvo com sessão sobre o mesmo
@@ -265,6 +271,29 @@ fases 2–4 e 6 ficam **depois** do worker; a 5 é o W5–W6.
 
 ---
 
+## F8 — O plano mede contra a base, não contra os incrementos anteriores
+
+Nota da execução de `20261004-lote-4-a-catraca-zera` (2026-10-05), guardada aqui por decisão humana
+e **fora** do `TODO.md`: o lint do `TODO.md` já reprova o caso caro, então pela régua D15 não é
+fail-open. O plano mediu cada incremento contra o commit base (`fe9441d`), e três incrementos
+encontraram o disco que os anteriores deixaram:
+- **I14:** o plano dizia que a âncora `agents/sdd-publisher.md:41` "continua no alvo (medido)"; o
+  `check-todo.sh` reprovou (`off target — nearest ./bin/sdd health is at line 71`), porque o I5
+  tinha designado `./bin/sdd health` nesse item e o I14 tirou o símbolo do parágrafo;
+- **I11:** o conserto apaga `kit_root`, o símbolo que o I5 designou no item do `kaizen_reminder`, e o
+  plano dizia "nenhuma âncora em `bin/sdd`";
+- **I9:** a prosa do `config/schema.md` citava "110 herdadas", medidas antes de o I5 mudar a regra
+  (o número real passou a 209 e 127).
+
+A seção "Âncoras do TODO.md que o incremento desloca" conta só **deslocamento de linha**. Desde o
+símbolo designado (ADR 0015 §2), editar o símbolo derruba a âncora tanto quanto deslocá-la. Direção:
+uma frase no § 4 do `sdd-planner` — para cada incremento, `grep` dos símbolos designados do
+`TODO.md` contra o diff previsto, e número escrito em prosa que um incremento anterior muda é
+re-medido no estado depois dele. Nas três vezes, a execução decidiu na hora e registrou nas notas do
+checkpoint daquela missão.
+
+---
+
 ## Ordem sugerida
 
 **O que as fontes já decidem:** o worker só volta com os fluxos limpos (F6); as fases 2–4 e 6 do
@@ -283,7 +312,7 @@ terminal do humano; e qualquer PR do kit segue abrir → todos os revisores → 
 3. ~~Um PR de kit "de carona", que carimba uma vez só~~ — **feito** pela missão `20260926-a-carona-antes-do-congelamento`: F2, F4
    (lacunas 2 e 3 consertadas, 4 e 5 registradas) e as issues #50, #51 e #52 (a #53 já estava
    fechada). O F1-P3 ficou fora por decisão do grill.
-4. A T3 com as três decisões humanas, via `/sdd-plan`, depois do veredito da janela 4 (F3; a janela 3
-   foi abandonada em 2026-10-01 e a missão `20261001-a-janela-nao-se-parte` vem antes).
+4. ~~A T3 com as três decisões humanas~~ — desfeita em 2026-10-04: os três itens saíram pela missão
+   `20261004-lote-4-a-catraca-zera` ou por decisão escrita (§ F3).
 5. F1-P1 com ADR; depois decidir o F1-P4.
 6. F6 e F7, quando os fluxos rodarem limpos.

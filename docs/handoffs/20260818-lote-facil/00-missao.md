@@ -6,6 +6,7 @@ versao: n/a — JIRA_ENABLED=false neste repo
 branch: chore/lote-facil
 aprovacao: humano-2026-08-18
 ddd: n/a
+adr: none
 ---
 
 # Missão — O `sdd health` para de morrer calado, e 18 achados baratos saem do backlog

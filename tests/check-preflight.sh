@@ -712,6 +712,47 @@ branch_case develop    "is not a branch of this repository" \
                        "a DEFAULT_BRANCH that names no branch at all is refused, and the key is named"
 mv .sdd/config.sh.bak .sdd/config.sh
 
+# --- the TODO.md lint the starter suggests, run as a TEST_CMD (issue 95) -----
+# config/starter.conf suggests appending the kit's own check-todo.sh to a target's TEST_CMD, with
+# --baseline so a repo carrying inherited debt is not red on day one. The suggestion is a COMMENT,
+# so no gate reads it, and the only proof that it works is running it the way the runner would:
+# through `sdd preflight`, which evaluates TEST_CMD with run_check_cmd like every gate does. The
+# spelling is READ from the starter, never retyped here — a probe with its own copy would agree
+# with a suggestion it never ran. Three worlds, one file apart: the seeded TODO.md with no finding
+# (green — and only because of --allow-empty: without it the floor of an empty file is rc 94);
+# one malformed finding the base does not have (red); the same finding once origin/main carries it
+# (green again — inherited, which is the whole point of --baseline). `origin` is the bare repo the
+# DEFAULT_BRANCH block above pushed main to, without TODO.md: an empty baseline.
+echo "== the starter's TODO.md lint, run as a TEST_CMD =="
+cp .sdd/config.sh .sdd/config.sh.bak
+cp TODO.md "$PROBE/TODO.md.bak"
+todo_lint="$(sed -n "s/^#   TEST_CMD='<your suite> && \(.*\)'\$/\1/p" "$ROOT/config/starter.conf")"
+todo_lint_case() { # todo_lint_case → "green" | "red" | "neither"
+  local o; o="$( "$SDD" preflight 2>&1 )"
+  if grep -qF 'TEST_CMD ran green' <<< "$o"; then printf green
+  elif grep -qF 'TEST_CMD FAILED' <<< "$o"; then printf red
+  else printf neither; fi
+}
+if [ -z "$todo_lint" ]; then
+  fail "the TODO.md lint the starter suggests runs as a TEST_CMD" \
+    "a line '#   TEST_CMD='<your suite> && …' in config/starter.conf" "no such line"
+else
+  { grep -v '^TEST_CMD=' .sdd/config.sh; printf "TEST_CMD='\"%s\" && %s'\n" "$PROBE/suite-green.sh" "$todo_lint"; } \
+    > .sdd/config.sh.tmp && mv .sdd/config.sh.tmp .sdd/config.sh
+  w_clean="$(todo_lint_case)"
+  # Into the OPEN section, under its marker: appended at the end of the seed it would land below
+  # the decided marker and be measured as a malformed record instead of a finding.
+  sed -i '/^<!-- sdd:open -->$/a - [ ] **a finding with no anchor and no date**' TODO.md
+  w_new="$(todo_lint_case)"
+  git add TODO.md && git commit -qm "the base gains the finding" && git push -q origin main
+  w_inherited="$(todo_lint_case)"
+  assert_eq "the TODO.md lint the starter suggests runs as a TEST_CMD: green when clean, red on a new finding, green once the base has it" \
+    "green / red / green" "$w_clean / $w_new / $w_inherited"
+  git reset -q --hard HEAD~1 && git push -q -f origin main
+fi
+cp "$PROBE/TODO.md.bak" TODO.md
+mv .sdd/config.sh.bak .sdd/config.sh
+
 # --- third-party skills the phases depend on --------------------------------
 # Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
 # sub-steps boot `qa-report` and `qa-execution`, and REVIEW loads `codereview`. A missing one is

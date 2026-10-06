@@ -952,8 +952,11 @@ scan_surface() {
   local root="$1" files n_files fails=0 waived=0 f
   files="$(surface "$root")"
   n_files="$(grep -c . <<< "$files")"
-  # Explicit floor, same reason as the one in check-lang.sh: a glob that stops matching leaves the
-  # loop with nothing to read and the sensor reports "0 violations" — clean by vacuity. 14 paths
+  # Explicit floor, same reason as LINT_FLOOR in run-all.sh: a glob that stops matching leaves the
+  # loop with nothing to read and the sensor reports "0 violations" — clean by vacuity.
+  # DECLARED LIMIT (ADR 0015 §4): this floor is anti-vacuity, not a tracker of the surface — a
+  # sensor that lands without moving it leaves slack and it goes on passing; no lag in 105 commits,
+  # and the selftest fixture built at the floor is the fifth place CLAUDE.md names. 14 paths
   # today (bin/sdd + thirteen suite scripts, minus this file); it was 11 until
   # tests/check-entrypoint.sh landed, 12 until tests/check-checkpoint.sh did and 13 until
   # tests/check-health.sh did, and 15 until tests/check-adr.sh did, and it tracks the real count

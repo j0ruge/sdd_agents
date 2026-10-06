@@ -6,6 +6,7 @@ versao:
 branch: missao/20260815-ledger-sem-ponto-cego
 aprovacao: humano-2026-08-16
 ddd: n/a
+adr: none
 ---
 
 # Missão — o ledger e o Jidoka param de mentir

@@ -6,6 +6,7 @@ versao:
 branch: missao/20260816-portas-do-humano
 aprovacao: auto
 ddd: n/a
+adr: none
 ---
 
 # Missão — as portas de controle do humano

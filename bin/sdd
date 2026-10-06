@@ -560,7 +560,18 @@ checkpoint_rows() {
     # escapes the pipe; an EVEN one does not. ASCII only — mawk is byte-oriented and a negated
     # class with a multibyte character would negate its BYTES.
     function escaped_pipe(s,   t) { t = s; sub(/\\+$/, "", t); return (length(s) - length(t)) % 2 }
+    # GFM makes the leading pipe OPTIONAL: `I2 | … | pending | —` right below a row renders as one
+    # more row of the same table. Read as `|`-led lines only, that row vanished from
+    # checkpoint_tally and gate_EXEC passed over a pending increment (CodeRabbit review of PR
+    # #222, reproduced). Inside a table — no blank line since its last row — a line with a `|` is
+    # read as the row it renders, by giving it back the pipe it left out. Below a blank line it is
+    # a paragraph, as GFM renders it, and stays out. A heading or list item glued to the table
+    # without a blank line is read too: over-reading fails CLOSED — a line that is no increment
+    # reads as an invalid status or one more pending, never as a pass.
+    /^[ \t]*$/ { tbl = 0 }
+    tbl && /\|/ && !/^[ \t]*\|/ { $0 = "|" $0 }
     /^[ \t]*\|/ {
+      tbl = 1
       # A raw split on "|" cuts a Check cell at its `\|` and shifts every column after it one to
       # the left, so Status is read out of the CHECK cell: an increment written `done` was reported
       # as `invalid status`, naming a status the author never wrote, and gate_EXEC refused the
@@ -903,6 +914,36 @@ path_in_commits() {
   return 1
 }
 
+# tip_add_carries_mission <path> [<tip>...] — rc 0 unless a <tip> holds <path> and the newest
+# commit of that tip which ADDED it touches neither progress file of $HANDOFF_DIR/$MISSION/ —
+# checkpoint.md, checkpoint-notas.md (ADR 0015 §3).
+# A report new to the merge-base but already at a base tip is one of two things, and the base
+# commit that added it tells them apart without a clock: THIS mission's own report, squash-merged
+# and read from its branch after a fetch — the squash carries the mission's progress, which moves
+# with every increment — or another mission's, brought from the base's later history (`git checkout
+# origin/<b> -- f`, a cherry-pick): that commit carries another mission's progress or none.
+# The PROGRESS files and not the whole dir (Codex review of PR #222, reproduced): another mission's
+# squash can edit this one's approved intent — lote 4 backfilled `adr:` into fourteen 00-missao.md
+# in one commit — and "touches the dir" read its report as this mission's. DECLARED, fail open: a
+# commit of another mission that edits THIS mission's checkpoint as well; none is known.
+# PLUMBING, for the reason mission_qa_report gives (log.showSignature); `--root` so an add in a
+# root commit is seen at all. DECLARED, fail closed: the mission's own report cherry-picked to the
+# base without its dir, a rebase-merge (each commit replayed alone; 0 of 110 PR merges on
+# sales_quote's develop since 2026-08-01), and a report whose NAME another mission merged first.
+tip_add_carries_mission() {
+  local path="$1" c add
+  shift
+  for c in "$@"; do
+    git -C "$REPO_ROOT" cat-file -e "$c:$path" 2>/dev/null || continue
+    add=""
+    IFS= read -r -d '' add < <(git -C "$REPO_ROOT" rev-list --topo-order "$c" -- "$path" 2>/dev/null \
+        | git -C "$REPO_ROOT" diff-tree --stdin --root -r -z --diff-filter=A --name-only -- "$path" 2>/dev/null) || true
+    [ -n "$add" ] || return 1
+    [ -n "$(git -C "$REPO_ROOT" diff-tree --root --no-commit-id -r --name-only "$add" -- "$HANDOFF_DIR/$MISSION/checkpoint.md" "$HANDOFF_DIR/$MISSION/checkpoint-notas.md" 2>/dev/null)" ] || return 1
+  done
+  return 0
+}
+
 # mission_qa_report — the absolute path of the newest QA report that belongs to THIS mission, or
 # empty. One definition, two readers: qa_substep and Anchor 1 of gate_QA answer about the SAME file.
 # Measured in the judge's window: both used to pick `latest_matching reports/*.md`, and in SQ-146
@@ -947,10 +988,13 @@ path_in_commits() {
 # mission counts that mission's reports as its own (the fail-open survives there). A COPY of another
 # mission's report under a new name is a new path and counts. A mission that deletes a report and
 # adds a similar one may be paired as a rename and refused — fail closed, and the refusal names the
-# file it read. And the check is against the MERGE-BASE tree, not the base's tip: a report another
-# mission added upstream AFTER the fork, brought in by `git checkout origin/<b> -- f`, a squash or a
-# cherry-pick, is new to the merge-base and counts (review r5; TODO.md). Checking the tip too would
-# refuse a squash-merged mission its own report, seen from its branch after a fetch.
+# file it read. A new path is new to the MERGE-BASE tree; when a base TIP holds it too — a report
+# another mission added upstream AFTER the fork and brought in by `git checkout origin/<b> -- f`, a
+# squash or a cherry-pick, or this mission's own, squash-merged and read after a fetch — the base
+# commit that ADDED it decides (tip_add_carries_mission, ADR 0015 §3): it counts only when that
+# commit moves this mission's checkpoint (checkpoint.md or checkpoint-notas.md), never merely some
+# file of its dir. Refusing every report at the tip would take from a
+# squash-merged mission its own report; asking nothing let another mission's count (review r5).
 #
 # The charter stays out on purpose (decision 3 of the grill): it is durable doc that crosses cycles
 # and the qa-execution skill writes the one missing, so demanding the mission's would make QA:plan
@@ -1005,6 +1049,7 @@ mission_qa_report() {
   for p in ${owned[@]+"${!owned[@]}"}; do
     case "$p" in *.md) ;; *) continue ;; esac
     [ "$REPO_ROOT/$p" -ef "$dir/${p##*/}" ] || continue
+    tip_add_carries_mission "$p" "${nots[@]}" || continue
     printf '%s\n' "$dir/${p##*/}"
   done | sort -V | tail -1 || true
 }
@@ -1126,6 +1171,13 @@ gate_TICKET() {
   if [ "$st" != "done" ]; then
     GATE_WHY="10-ticket.md has invalid status '$st' (use done|blocked)"; return 1
   fi
+  # ⚠️ DECLARED LIMIT (D15), since 20261004-lote-4-a-catraca-zera: this gate never asks Jira. It
+  # reads `issue:` and `sprint:` from 10-ticket.md, the ticket skill's read-back written down by
+  # sdd-ticket, and proves the record exists and is whole. The hat used to promise a confirmation
+  # "through acli" that nothing made (issue 178). Making it would cost a Jira round trip on every
+  # evaluation of this gate — one per `sdd phase`, two per `sdd status` — and would NOT have caught
+  # the case that raised the finding: the TICKET of LH-4 recorded LH-5, a duplicate that WAS in the
+  # active sprint, so acli answers yes for it too.
   local issue; issue="$(frontmatter "$t" issue)"
   [ -n "$issue" ] || { GATE_WHY="10-ticket.md has no 'issue:' in the frontmatter"; return 1; }
   if ! grep -qiE '^sprint:[[:space:]]*\S' "$t"; then
@@ -2074,14 +2126,14 @@ gate_DOCS() {
 # The directories the catalogue's verdict is a function of, named in ONE place and read at both
 # ends: cmd_health writes the key, gate_PR demands it.
 #
-# FOUR, and the boundary is declared rather than assumed. sandbox() in tests/check-mutation.sh also
-# copies agents/, CLAUDE.md, TODO.md and docs/adr, so a change confined to THOSE is not covered by
-# this key. The narrowing is deliberate and its reason is operational: the DOCS phase edits
-# CLAUDE.md and TODO.md on its way to the PR, so keying on them would throw the stamp away between
-# the last code commit and the gate that reads it — a second twenty-minute run per mission, bought
-# for documents no mutant edits. What the mutants DO edit is bin/sdd, and what decides their fate
-# is the assertions in tests/ plus the templates/ and config/ those assertions read. The residual
-# gap is in TODO.md with its direction, not hidden in a sentence here.
+# FIVE, and the boundary is declared rather than assumed. The mutants edit bin/sdd; their fate is
+# decided by the assertions in tests/ and what those read: templates/, config/ and agents/ (the
+# runner reads each hat out of agents/<hat>.md, and three sensors copy the real agents/ into their
+# fixtures; agents/ joined in ADR 0015 §1, #67, at 0 extra `sdd health` runs in the last 30 merges).
+# sandbox() in tests/check-mutation.sh also copies CLAUDE.md, TODO.md, docs/adr, docs/pipeline.md:
+# OUT on purpose. Their readers work apart from any behaviour mutant (the ADR 0003 shape, the policy
+# rule of check-health.sh, the series-key block of check-kaizen.sh), and the DOCS phase edits them
+# on the way to the PR, so keying on them would throw the stamp away 14 more times in 30 merges.
 #
 # Only what git TRACKS under them, and minus MUTATION_STAMP_EXCLUDE (ADR 0014, increment I4). The
 # key used to hash every file `find` saw, which charged a stamp for two things no mutant reads:
@@ -2092,7 +2144,7 @@ gate_DOCS() {
 # outside the suite. A NEW file is outside the key until it is tracked — `git ls-files -c` reads the
 # index, so `git add` is enough, no commit needed; once tracked it enters the key and gate_PR refuses
 # until `sdd health` runs again — the safe direction.
-readonly MUTATION_STAMP_PATHS=(bin tests templates config)
+readonly MUTATION_STAMP_PATHS=(bin tests templates config agents)
 readonly MUTATION_STAMP_EXCLUDE=(tests/health-baseline.txt)
 # The git pathspec both readers of the listing hand to `git ls-files` — the key and the reason it
 # could not be computed — built ONCE from the two arrays above, so they cannot disagree about which
@@ -2118,7 +2170,7 @@ readonly MUTATION_STAMP_REL='.sdd/logs/mutation-stamp'
 # answered about $SDD_HOME and the reader asked about $REPO_ROOT.
 #
 # Scoped by ARTIFACT and never by the identity of the repository, for the reason gate_PR records
-# below: the identity door the kit already has (cmd_kaizen) carries a live worktree bug.
+# below: the stamp describes a catalogue, so the question is whether one is HERE.
 has_mutation_catalogue() { [ -f "$1/tests/check-mutation.sh" ]; }
 
 # The kit tree `sdd health` measures — and therefore the tree it stamps.
@@ -2164,7 +2216,7 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 # a file that merely MOVED changes the key.
 #
 # Empty is the whole guard, and it refuses these roots once, instead of at each call site:
-#   - a root where ANY ONE of the four paths is absent (ADR 0014, increment I3). The listing would
+#   - a root where ANY ONE of the paths is absent (ADR 0014, increment I3). The listing would
 #     otherwise be taken over whichever paths remain, `sdd health` would stamp that partial
 #     listing, and gate_PR would accept it. Checked per path (mutation_stamp_missing), before
 #     anything is listed.
@@ -2186,7 +2238,7 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 # turns ':(exclude)…' into a literal path, which puts the ratchet back in the key.
 #
 # Which of MUTATION_STAMP_PATHS are absent at <root>, PUBLISHED in MUTATION_STAMP_MISSING as a
-# space-separated list spelled `bin/ config/` (empty ⇒ all four are there). The ONE definition of
+# space-separated list spelled `bin/ config/` (empty ⇒ all of them are there). The ONE definition of
 # "which paths are missing": the key's guard below reads it, and so does mutation_stamp_why. Called,
 # never `$( )`-captured: the result is a global, and a capture would run it in a subshell and lose it.
 mutation_stamp_missing() { # mutation_stamp_missing <root>
@@ -2251,7 +2303,23 @@ mutation_stamp_key() { # mutation_stamp_key <root>
   md5sum <<< "$listing" | cut -d' ' -f1
 }
 
+# The refusal of gate_PR when the STAMP is all that is missing — the PR is open and every other
+# requirement above the stamp is met — PUBLISHED for cmd_run, which stops on it with rc 2 instead of
+# opening a publisher session (ADR 0015 §1; #142, #198). No session can write the stamp: `sdd health`
+# runs for twenty to fifty minutes, a headless session ends with its turn, and the order that makes
+# one run enough (every review bot, one batch of fixes, then the stamp) is the human's. A MARKER and
+# not a grep of GATE_WHY, for the reason GATE_APP_DOWN gives: GATE_WHY is prose.
+#
+# CONTRACT, re-derived and not inherited: reset at the ENTRY of gate_PR, its only setter, and armed
+# beside the two stamp refusals at the bottom, which only a gate that got past every other check
+# reaches. Read once, by cmd_run, right after a gate_PR it CALLED in the same lap — never through
+# `$( )`, where the assignment dies with the subshell (next_pending_phase is such a caller).
+# ⚠️ NO PROBE for the reset, declared: every lap that finds the marker armed returns 2 and every
+# `sdd run` is a new process, so no world reaches a gate_PR call over a marker left armed.
+GATE_PR_STAMP_WHY=""
+
 gate_PR() {
+  GATE_PR_STAMP_WHY=""
   local p="$MISSION_DIR/50-pr.md"
   [ -f "$p" ] || { GATE_WHY="missing 50-pr.md"; return 1; }
   local url; url="$(frontmatter "$p" pr_url)"
@@ -2306,8 +2374,8 @@ gate_PR() {
   #
   # Scoped by ARTIFACT — "is there a catalogue here?" — and never by the identity of the
   # repository. A target repo has no tests/check-mutation.sh, so nothing about it changes; and the
-  # identity door the kit already owns (cmd_kaizen) carries a live worktree bug, recorded in
-  # TODO.md, which inheriting would simply buy.
+  # stamp describes a catalogue, so a second clone or a worktree that carries one is a tree it is
+  # about (the identity door, cmd_kaizen, stopped misreading a worktree in 188ca87, issue 121).
   if has_mutation_catalogue "$REPO_ROOT"; then
     local key stamp
     key="$(mutation_stamp_key "$REPO_ROOT" || true)"
@@ -2332,11 +2400,13 @@ gate_PR() {
       mutation_stamp_why "$REPO_ROOT"
       if [ -n "$MUTATION_STAMP_WHY" ]; then
         GATE_WHY="no mutation stamp is possible for this tree: $MUTATION_STAMP_WHY, then run 'sdd health'"
+        GATE_PR_STAMP_WHY="$GATE_WHY"
         return 1
       fi
     fi
     if [ -z "$key" ] || [ "$stamp" != "$key" ]; then
       GATE_WHY="no green mutation catalogue for this content — run 'sdd health' (since 4c86712 TEST_CMD does not run the catalogue, so no gate before this one measures it)"
+      GATE_PR_STAMP_WHY="$GATE_WHY"
       return 1
     fi
   fi
@@ -3147,6 +3217,15 @@ AUTONOMY_WARNED=0
 # unrelated, and one warning must not suppress the other — a repo with jq installed but the kit
 # copied without .git still needs to hear about kit_sha:null, and vice versa.
 AUTONOMY_SHA_WARNED=0
+# One-shot per process: the first row whose kit_sha differs from AUTONOMY_RUNNER_SHA says so, once.
+AUTONOMY_RUNNER_NOTED=0
+# The kit HEAD this PROCESS was launched from (#129), taken once, at top level — bash runs this line
+# while it reads the file, before main — and `{ main "$@"; exit $?; }` keeps it from reading the
+# file again, so whatever a session commits into the kit later, this is the runner executing. Every
+# ledger row carries it as `runner_sha` beside the `kit_sha` autonomy_kit_stamp reads off the disk
+# (autonomy_append). Empty when the kit is not a git checkout.
+AUTONOMY_RUNNER_SHA="$( git -C "$SDD_HOME" rev-parse --short HEAD 2>/dev/null || true )"
+readonly AUTONOMY_RUNNER_SHA
 
 autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
 
@@ -4164,6 +4243,22 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   # ledger that JSONL gives no way to detect afterwards — the mission goes on, same as the
   # unwritable-file guard right below, so it gets the same warn.
   [ -n "${1:-}" ] || { warn "autonomy ledger row came out empty (jq failed to build it?) — the mission goes on, the row is lost"; return 0; }
+  # `runner_sha` (#129) is added HERE, at the door every row goes through, and not in the four
+  # builders: a writer added tomorrow is born carrying it. It is the HEAD the process was LAUNCHED
+  # from, while `kit_sha` is read off the disk when the row is built — the two differ exactly when
+  # the run's own commits moved the kit (22 of 35 `sdd run` of the kit, measured), and the first
+  # such row says so on the terminal and in the journal, once. A jq failure keeps the row as built:
+  # without the field it reads as "not measured" (`has("runner_sha")`), never as a wrong value.
+  local row disk=""
+  row="$( jq -c --arg r "$AUTONOMY_RUNNER_SHA" '. + {runner_sha: (if $r == "" then null else $r end)}' <<< "$1" 2>/dev/null )" || row=""
+  [ -n "$row" ] || row="$1"
+  disk="$( jq -r '.kit_sha // empty' <<< "$row" 2>/dev/null )" || disk=""
+  if [ "$AUTONOMY_RUNNER_NOTED" = 0 ] && [ -n "$AUTONOMY_RUNNER_SHA" ] && [ -n "$disk" ] \
+     && [ "$disk" != "$AUTONOMY_RUNNER_SHA" ]; then
+    AUTONOMY_RUNNER_NOTED=1
+    warn "the kit's HEAD moved under this run: launched from $AUTONOMY_RUNNER_SHA, now $disk — ledger rows carry both (runner_sha, kit_sha)"
+    pipeline_log_line "$(date -Iseconds)  RUNNER  launched from kit $AUTONOMY_RUNNER_SHA, the kit's HEAD is now $disk — rows carry runner_sha"
+  fi
   # ADR 0005, part 3 — the real ledger is refused to a checkout that lives under a temp root.
   # HERE and not in the callers, for the reason the header of this function already gives: every
   # row goes through this door, so a writer added tomorrow is born guarded.
@@ -4196,7 +4291,7 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   # complaint about the failed `open` escapes to an un-redirected stderr and rides along beside the
   # curated warning below. Both writers were aligned on purpose (R8), and are corrected together
   # (r3 finding #1) so they do not drift apart a third time.
-  printf '%s\n' "$1" 2>/dev/null >> "$file" || {
+  printf '%s\n' "$row" 2>/dev/null >> "$file" || {
     warn "could not write the autonomy ledger at $file — the mission goes on, the row is lost"
     return 0
   }
@@ -4318,7 +4413,20 @@ autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
 # Re-running the gate here to recover the sentence would run TEST_CMD a second time for prose.
 # The session fields are absent for the same reason an escalation row has none — a zeroed `rc` or
 # `cost_usd` would enter the judge's arithmetic as a session that ran.
-autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
+autonomy_gate_pass_row() { autonomy_phase_fact_row "gate_pass" "$1"; }   # autonomy_gate_pass_row <phase>
+
+# THE SIXTH EVENT (#153). A phase done BY HAND spent no session the runner saw, so until
+# `sdd note-manual` existed the ledger said it did not happen: 0 rows for the PR of
+# 20260916-destino-frete-cif, published by hand after three deaths. Same shape as the closure
+# above — a phase, no session fields, no kind — and the same reason: a zeroed `rc` or `cost_usd`
+# would enter the judge's arithmetic as a session that ran. It GRADES NOTHING: both readers admit
+# it by one definition each (`is_manual`), and graded_row, shas_in_file_order, phase_label,
+# $skipped, $order and reopened are written positively and do not name it.
+autonomy_manual_row() { autonomy_phase_fact_row "manual" "$1"; }   # autonomy_manual_row <phase>
+
+# The one constructor of the two no-session phase facts, `gate_pass` and `manual`: one shape,
+# written once, so the two cannot drift apart field by field.
+autonomy_phase_fact_row() {   # autonomy_phase_fact_row <event> <phase>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP" krev="$AUTONOMY_KIT_REV"
@@ -4327,12 +4435,12 @@ autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
   # below — a comment there breaks the command in silence and `bash -n` says nothing.
   local repo; repo="$(ledger_repo_root)"
   autonomy_append "$( jq -cn \
-    --arg ts "$(date -Iseconds)" --arg phase "$1" \
+    --arg ts "$(date -Iseconds)" --arg event "$1" --arg phase "$2" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
     --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
-    '{v: 1, ts: $ts, event: "gate_pass",
+    '{v: 1, ts: $ts, event: $event,
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
@@ -6679,14 +6787,16 @@ cmd_status() {
   fi
 
   local ph state why
+  local -a green=()
   for ph in $PHASES; do
-    if "gate_$ph"; then state="${C_GREEN}✓${C_RESET}"; else state="${C_YELLOW}·${C_RESET}"; fi
+    if "gate_$ph"; then state="${C_GREEN}✓${C_RESET}"; green+=("$ph"); else state="${C_YELLOW}·${C_RESET}"; fi
     why="$GATE_WHY"
     printf '  %b %-7s %s%s%s\n' "$state" "$ph" "$C_DIM" "$why" "$C_RESET"
   done
 
   info ""
   status_increments
+  status_unrecorded ${green[@]+"${green[@]}"}
 
   info ""
   local next; next="$(current_phase)"
@@ -6722,6 +6832,34 @@ status_increments() {
     esac
     printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
   done <<< "$rows"
+}
+
+# status_unrecorded <phase>... — the green phases (#153) that THIS machine's ledger holds no
+# session and no `manual` row of for this mission: the shape a phase done by hand leaves, and the
+# command that records it. Below cmd_status for the reason status_increments gives. PLAN never
+# asks (it is the human's by design) and neither does TICKET with JIRA off (the gate skips it).
+# Cost: one jq pass over the ledger — 9 ms over the 608 rows of 2026-10-04 — inside a page that
+# already ran every gate, which is why the cheap `--no-gates` page does not carry it: it knows no
+# phase is done. `fromjson?` so one malformed row costs the hint nothing but that row.
+status_unrecorded() {
+  local file seen ph out=""
+  autonomy_have_jq || return 0
+  file="$(autonomy_log_path)"
+  [ -f "$file" ] || return 0
+  seen="$(jq -rR --arg repo "$(ledger_repo_root)" --arg m "$MISSION" \
+            'fromjson? | select(type == "object" and .repo == $repo and .mission == $m
+                                and (.event == "session" or .event == "manual")) | .phase // empty' \
+            "$file" 2>/dev/null)" || seen=""
+  for ph in "$@"; do
+    [ "$ph" != PLAN ] || continue
+    [ "$ph" != TICKET ] || [ "$JIRA_ENABLED" = "true" ] || continue
+    grep -qxF "$ph" <<< "$seen" && continue
+    out+="$(printf '    %-7s %ssdd note-manual %s %s%s' "$ph" "$C_DIM" "$MISSION" "$ph" "$C_RESET")"$'\n'
+  done
+  [ -n "$out" ] || return 0
+  info ""
+  info "  green with no session and no manual row in this machine's ledger — done by hand?"
+  printf '%s' "$out"
 }
 
 # Prints only the name of the current phase (or DONE). It exists for scripts and for the kit's
@@ -7968,6 +8106,52 @@ gate_pass_rows() {   # gate_pass_rows <derived-phase, empty when the pipeline is
   done
 }
 
+# The keys load_config defaults, and the subset the ENVIRONMENT supplied when the command started —
+# both taken once by config_env_snapshot, read by config_reload at the top of every lap (#129).
+CONFIG_RELOAD_KEYS=()
+declare -A CONFIG_ENV_VALUES=()
+
+# config_env_snapshot — CALLED, never substituted, before the first load_config of a command that
+# will reload. No config key is assigned before load_config, so a key that is set here was exported
+# by the caller (`BUDGET_MISSION_USD=0 sdd run …`); its value is kept for config_reload. The key list
+# is health_default_keys, the same reader `sdd health` checks the schema with — one definition of
+# "the keys load_config defaults". It reads bin/sdd on disk, which here is the launched file.
+config_env_snapshot() {
+  local k
+  mapfile -t CONFIG_RELOAD_KEYS < <(health_default_keys)
+  for k in "${CONFIG_RELOAD_KEYS[@]}"; do
+    if [ -n "${!k+x}" ]; then CONFIG_ENV_VALUES[$k]="${!k}"; fi
+  done
+  return 0
+}
+
+# config_reload — .sdd/config.sh re-read at the top of every lap of cmd_run (#129). It used to be
+# sourced once, before the loop: measured on SQ-141, four EXEC sessions (US$ 5,93) against a gate
+# whose TEST_CMD had already been fixed on disk. Every key load_config defaults goes back to what the
+# environment said at launch — unset when it said nothing — before the file is sourced again, so a
+# key deleted from the file does not survive from the last read, and one the caller exported is not
+# lost on lap two. It fails CLOSED, before the lap opens a session: a config that no longer parses,
+# evaluates or validates is load_config's own `die`, the sentence the human gets at launch.
+# Re-executing bin/sdd between laps was refused: the mission's own unreviewed runner would judge its
+# own REVIEW. ⚠️ DECLARED LIMITS: what cmd_run derived from the config BEFORE its loop keeps the
+# launch value (the mission branch off DEFAULT_BRANCH, MISSION_DIR off HANDOFF_DIR); an edit made
+# DURING a session reaches the gate of the NEXT lap, not the gate right after that session nor its
+# inline retry; `sdd retry`, `sdd close` and `sdd kaizen` read the config once, as before.
+# A key the file declared `readonly` cannot be put back, so it stops the run here with a sentence
+# that names it (found by the final review of 20261004-lote-4-a-catraca-zera: lap 1 died on bash's
+# own `unset: …: readonly variable`). The probe is a subshell, so the real unset below never fails.
+config_reload() {
+  local k
+  for k in "${CONFIG_RELOAD_KEYS[@]}"; do
+    if [ -n "${!k+x}" ] && ! ( unset "$k" ) 2>/dev/null; then
+      die "config: $k is declared readonly in .sdd/config.sh, and sdd run puts every key back before it re-reads the file on each lap — drop the readonly (the file holds assignments only, config/schema.md)"
+    fi
+    if [ -n "${CONFIG_ENV_VALUES[$k]+x}" ]; then printf -v "$k" '%s' "${CONFIG_ENV_VALUES[$k]}"
+    else unset "$k"; fi
+  done
+  load_config
+}
+
 cmd_run() {
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
@@ -7982,6 +8166,7 @@ cmd_run() {
     shift
   done
 
+  config_env_snapshot
   load_config
   resolve_mission "$mission_arg"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
@@ -8043,6 +8228,8 @@ cmd_run() {
   local prev_step="" prev_why=""
 
   while :; do
+    # The config is re-read on every lap, before anything of the lap reads it (#129, config_reload).
+    config_reload
     # The two branches that do not derive also clear the derivation: a reason left over from an
     # earlier lap must not reach the boot of a phase the runner is now FORCING.
     derived=0
@@ -8091,6 +8278,28 @@ cmd_run() {
       dim "  sdd-planner agent (Fable model) and produce 00-missao.md, 01-plano.md, checkpoint.md."
       dim "  Once the PLAN-AUTO gate closes clean, 'sdd run $MISSION' goes on alone to the PR."
       return 2
+    fi
+
+    # The STAMP is not headless either (ADR 0015 §1; #142, #198), and the stop is PLAN's: rc 2, no
+    # session, no ledger row, no hook — a designed hand-off to the human, not an escalation. With
+    # the PR open and only the stamp missing, a publisher session can do nothing that satisfies
+    # gate_PR: it used to run `sdd health` itself, end its turn waiting for it (which ends a
+    # headless session), and stamp before the review bots had spoken, so their first code fix threw
+    # the stamp away. Measured: 19 PR sessions of the kit, US$ 39,13, 4,6 h. gate_PR is CALLED here
+    # on every PR lap — derived, forced or projected — because only a call in this shell publishes
+    # the marker; on a derived lap it repeats derive_phase's call, one `gh pr view` more. Above the
+    # dry-run branch, like PLAN, so the projection stops where the run would. ⚠️ Declared limit:
+    # `sdd retry PR` is the human's hand on the phase and has no such door.
+    if [ "$phase" = "PR" ]; then
+      gate_PR || true
+      if [ -n "$GATE_PR_STAMP_WHY" ]; then
+        info ""
+        warn "the PR phase is waiting for the mutation stamp, and the stamp is not headless: $GATE_PR_STAMP_WHY"
+        dim "  The PR is open and every other requirement of its gate is met. No session can write"
+        dim "  the stamp. The order: wait for every review bot on the PR, fix their findings in one"
+        dim "  batch, run './bin/sdd health' once, then 'sdd run $MISSION' again."
+        return 2
+      fi
     fi
 
     # Real Jidoka: a `blocked` increment escalates ON THE SPOT. Without this the runner read the
@@ -9172,7 +9381,11 @@ cmd_autonomy() {
     # own ($closes, below): admitting a row without naming it anywhere the arithmetic closes over
     # is `unrecognized` with the alarm switched off, which is what r1 finding #1 measured.
     def is_close: .event == "close";
-    def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close) | not;
+    # ONE definition of the SIXTH event for this program (#153): a phase recorded as done by hand
+    # by `sdd note-manual`. Admitted so it never reads as a stray, given a bucket of its own
+    # ($manuals) so the arithmetic closes over it, and kept out of every grade: no session ran.
+    def is_manual: .event == "manual";
+    def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual) | not;
     # ONE definition of "this row is the judge observing, not a row to grade" — read in TWO places
     # below (the count and the removal), which is exactly the shape CLAUDE.md demands of a predicate
     # with more than one reader: spelled twice, the two drift and the row leaves the list without
@@ -9344,18 +9557,21 @@ cmd_autonomy() {
     # The fifth bucket, and it exists because RECOGNISING a row is not the same as accounting for
     # it: without a count of its own the recorded closures would leave the header total without
     # leaving any line, which is `unrecognized` with the alarm switched off. tests/check-autonomy.sh
-    # closes the sum over ALL SEVEN terms, and seven is the number to read off the code and never
+    # closes the sum over ALL EIGHT terms, and eight is the number to read off the code and never
     # off this comment: comparable sessions (the table), $skipped, the escalations, $closed,
-    # $closes, $stray and $meta. It said "six" until r3 finding #6 of the 2026-09-11 judge mission —
+    # $closes, $manuals, $stray and $meta. It said "six" until r3 finding #6 of the 2026-09-11 judge mission —
     # the $meta bucket that R2 of that same mission added to the sum never reached the sentence, and
     # a count written by hand beside a sum that grows is the third rotten anchor of one phrase.
     | (map(select(is_gate_pass)) | length) as $closed
-    # The SIXTH bucket BY BIRTH — the sum it joins has seven terms since $meta, and the two numbers
+    # The SIXTH bucket BY BIRTH — the sum it joins has eight terms since $manuals, and the two numbers
     # are different questions — and it exists for exactly the reason the fifth does, one event later: the
     # header total is the shell `total=` above, computed over ledger_row_is_local, which knows
     # nothing about any filter inside this program. A close row therefore ENTERED that total and,
     # until r1 finding #1, left no line — measured on a two-row fixture: header 2, buckets 1.
     | (map(select(is_close)) | length) as $closes
+    # The EIGHTH bucket, for the sixth event, on the terms of the two above: local, counted in the
+    # header, and no graded phase — a phase done by hand left no session to grade.
+    | (map(select(is_manual)) | length) as $manuals
     # The MONEY a recorded closure cost, which until r? of this review the ledger recorded and no
     # view ever spent. `sdd close` buys a real paid session, and `cost_usd` was put on the close row
     # in this very mission so D12 (US$ per merged PR) could include it — but both groupings drew
@@ -9544,7 +9760,8 @@ cmd_autonomy() {
        # with the alarm switched off, in dollars. Exactly ONE US$ figure on this line, never the
        # close total beside it: the money already on the printed lines would be counted twice.
        , (if $closes > 0 then "  (\($closes) ticket closure(s) recorded: `sdd close` wrote the row — a closure grades no phase\(if $close_unattributed > 0 then ", US$ \($close_unattributed | usd) of it on no line above" else "" end))" else empty end)
-       , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass/close)" else empty end)
+       , (if $manuals > 0 then "  (\($manuals) phase(s) recorded as done by hand: `sdd note-manual` wrote the row — a manual phase grades nothing)" else empty end)
+       , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass/close/manual)" else empty end)
        , (if $history_extra > 0 then "  (launches, reopened and the review loop are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
        # NOT an exclusion — nothing left a bucket — which is why it rides at the end of the first
        # paragraph rather than among the four. It is the disclosure that half this ledger was read
@@ -9689,6 +9906,11 @@ kaizen_series() {
     # neither names it, so a close can never mint a version nor count as a mission, which is the
     # failure mode the comment at graded_row predicted for the day a fourth event arrived.
     def is_close: .event == "close";
+    # ONE definition of the SIXTH event for this program too (#153), admitted by the `$all` binding
+    # for the reason the two above give, and graded by nothing: graded_row and shas_in_file_order
+    # are written positively and do not name it, so a phase done by hand mints no version and no
+    # mission. tests/check-kaizen.sh asks it differentially, with and without the row.
+    def is_manual: .event == "manual";
 
     # ONE definition of the kit_sha axis for this program too — the third hand-written copy of the
     # same question lived here, as the complementary pair `.kit_dirty == true or .kit_sha == null`
@@ -10020,7 +10242,7 @@ kaizen_series() {
     # one. The two counts partition what the filter removed, so the arithmetic still closes.
     | (($file_rows | length) - ($raw | length) - $no_repo) as $other_repo
     | ($raw | map(select(type == "object" and .v == 1
-                         and (.event == "session" or is_escalation or is_gate_pass or is_close)))) as $all
+                         and (.event == "session" or is_escalation or is_gate_pass or is_close or is_manual)))) as $all
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
     | (($raw | length) - ($all | length)) as $unrec
@@ -10151,9 +10373,9 @@ kaizen_reminder() {
   # a judge that reads a DIFFERENT set of numbers. In a target repo the human would open the kit,
   # run the command, and be told something about the kit's own missions that has nothing to do with
   # the run that just finished. Same question cmd_kaizen asks to decide where it may run at all.
-  local kit_root
-  kit_root="$( cd "$SDD_HOME" && git rev-parse --show-toplevel 2>/dev/null || true )"
-  if [ -n "$kit_root" ] && [ "$kit_root" = "$REPO_ROOT" ]; then
+  local kit_id here_id
+  kit_id="$( REPO_ROOT="$SDD_HOME" ledger_repo_root )"; here_id="$( ledger_repo_root )"
+  if [ -n "$kit_id" ] && [ "$kit_id" = "$here_id" ]; then
     dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo ($SDD_HOME) for the next kit mission plan"
     return 0
   fi
@@ -10537,6 +10759,9 @@ USAGE
   sdd run <mission>          run from the first unsatisfied phase through to the PR
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
+  sdd note-manual <mission> <PHASE>
+                             record a phase done BY HAND: an intervention note in the checkpoint
+                             (committed alone) and a `manual` row in the ledger, which grades nothing
   sdd autonomy [--all-repos] what the sessions did per kit version — advanced · churned · idle, and
                              waste = churned + idle — for this repo unless --all-repos, from the ledger
                              advanced is the gate that passed OR the EXEC session that closed an
@@ -10701,7 +10926,7 @@ coordination_enter() {
     run|retry|close) kind=pipeline ;;
     # `boot` derives the phase since 20260922-o-motivo-da-fase, so it runs the gates — TEST_CMD and,
     # past EXEC, E2E_CMD — and a projection that runs the suite needs the lock like any other.
-    boot|install|preflight|health|approve|phase|why|link-agents) : ;;
+    boot|note-manual|install|preflight|health|approve|phase|why|link-agents) : ;;
     *) { COORDINATION_ADMITTED=1; return 0; } ;;
   esac
   if [ "$subcmd" = health ]; then
@@ -10777,6 +11002,7 @@ main() {
     run)       cmd_run "$@" ;;
     retry)     cmd_retry "$@" ;;
     close)     cmd_close "$@" ;;
+    note-manual) cmd_note_manual "$@" ;;
     autonomy)  cmd_autonomy "$@" ;;
     census)    cmd_census "$@" ;;
     boot)      cmd_boot "$@" ;;
@@ -10835,6 +11061,68 @@ close_query() {
   # `-F`: the JQL is what selects, but an acli that ever ignored it must not be able to satisfy this
   # with some other issue's key.
   if grep -qxF "$2" <<< "$keys"; then CLOSE_VERIFIED=true; fi
+}
+
+# sdd note-manual <mission> <PHASE> — the record of a phase done BY HAND (#153). The ledger is
+# written by the runner when it opens a session, so a phase a human did outside it (the PR of
+# 20260916-destino-frete-cif, published by hand after three deaths) left NO row, and every reader
+# of the ledger read that phase as never having happened. The `- intervention:` note was reserved
+# for it (checkpoint_note_intervention: "a phase done by hand") and 0 of 4 missions wrote one by
+# hand. This command writes both, the way the runner writes its own: the note through the one
+# writer (committed alone, on the mission branch), and the ledger row `event: "manual"`, which
+# grades nothing (autonomy_manual_row). It asks no gate — it runs no TEST_CMD and claims no
+# verdict; the note says what the runner knows, "recorded from the CLI", never who typed it.
+# PLAN is refused: it is planned with the human by design, so there is no session to miss.
+# It WRITES on the mission branch and LEAVES the human where they stood (found by the final review
+# of 20261004-lote-4-a-catraca-zera, reproduced): the record is often written after the merge, from
+# the base, and ensure_mission_branch alone moved the checkout to the spent branch and left it there
+# — the footgun close_return_home exists to avoid. A mission branch that is already an ancestor of
+# the local DEFAULT_BRANCH is told so: its note lands where the base will never look, and the ledger
+# row is the record the readers get. DECLARED LIMIT: a squash merge is not an ancestor, so that case
+# is not told — it still goes home. A tree left dirty (a checkpoint that was already dirty gets the
+# note and not the commit) stays put, as close_return_home does.
+# A DETACHED HEAD is a place to stand too (Codex review of PR #222, reproduced): it has no name for
+# symbolic-ref to give, so the commit is kept instead and the way home checks it out detached again.
+cmd_note_manual() {
+  [ $# -eq 2 ] || die "usage: sdd note-manual <mission> <PHASE>"
+  load_config
+  resolve_mission "$1"
+  local phase="$2" p known=0 home home_sha="" where="" branch merged=0 now out
+  local -a back=()
+  for p in $PHASES; do [ "$p" = PLAN ] || [ "$p" != "$phase" ] || known=1; done
+  [ "$known" = 1 ] || die "note-manual: '$phase' is not a phase a session runs — one of: ${PHASES#PLAN }"
+  AUTONOMY_RUN_ID="$(uuidgen)"
+  AUTONOMY_INVOCATION="note-manual"
+  home="$(git -C "$REPO_ROOT" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+  [ -n "$home" ] || home_sha="$(git -C "$REPO_ROOT" rev-parse -q --verify HEAD 2>/dev/null || true)"
+  branch="$(mission_branch_declared)"
+  if [ -n "$branch" ] && [ -n "${DEFAULT_BRANCH:-}" ] && [ "$branch" != "$DEFAULT_BRANCH" ] \
+     && git -C "$REPO_ROOT" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1 \
+     && git -C "$REPO_ROOT" merge-base --is-ancestor "refs/heads/$branch" "$DEFAULT_BRANCH" 2>/dev/null; then
+    merged=1
+  fi
+  ensure_mission_branch
+  checkpoint_note_intervention "sdd note-manual (the phase was recorded from the CLI as done by hand)" "$phase"
+  autonomy_manual_row "$phase"
+  if [ "$merged" = 1 ]; then
+    warn "'$branch' is already merged into '$DEFAULT_BRANCH': the note was committed on '$branch', which '$DEFAULT_BRANCH' will not see — the ledger row is the record its readers get"
+  fi
+  now="$(git -C "$REPO_ROOT" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+  if [ -n "$home" ] && [ "$now" != "$home" ]; then
+    back=("$home"); where="'$home'"
+  elif [ -z "$home" ] && [ -n "$home_sha" ] && [ -n "$now" ]; then
+    back=(--detach "$home_sha"); where="the detached commit ${home_sha:0:12}"
+  fi
+  if [ "${#back[@]}" -gt 0 ]; then
+    if [ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]; then
+      warn "staying on '$now': the tree has uncommitted changes, and $where is one 'git checkout' away once you have dealt with them"
+    elif out="$(git -C "$REPO_ROOT" checkout -q "${back[@]}" 2>&1)"; then
+      ok "back on $where, where you were"
+    else
+      warn "could not return to $where — still on '$now'. git said: $out"
+    fi
+  fi
+  ok "phase $phase of $MISSION recorded as done by hand: the note in the checkpoint, a manual row in the ledger"
 }
 
 # Post-merge: closes the JIRA issue. Fired by the human after the merge — it is the only thing

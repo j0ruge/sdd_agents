@@ -78,8 +78,9 @@ sum_escalations() {
 }
 
 # assert_bucket_sum <description> <reader output>
-# Every row lands in exactly one of SEVEN buckets: comparable session, non-comparable session,
-# escalation, recorded gate closure, recorded ticket closure, judge row, unrecognized. If the filter drops a row (finding 3) or
+# Every row lands in exactly one of EIGHT buckets: comparable session, non-comparable session,
+# escalation, recorded gate closure, recorded ticket closure, phase done by hand, judge row,
+# unrecognized. If the filter drops a row (finding 3) or
 # double-counts one, this sum drifts from the header total — an anti-vacuity check a broken filter
 # cannot pass by accident, unlike any single count in isolation.
 #
@@ -97,17 +98,21 @@ sum_escalations() {
 # drops every KAIZEN row before the buckets, but those rows are LOCAL, so the shell `total=` had
 # already counted them. Same header 2 against buckets 1, and the comment beside the split asserted
 # the opposite — which is why the property lives here and not in prose.
+#
+# The EIGHTH landed with #153 on purpose, not by finding: `sdd note-manual` writes `event:"manual"`,
+# and the bucket was named in the same commit that admitted the event, before any writer existed.
 assert_bucket_sum() {
-  local desc="$1" out="$2" total comparable noncomp escal closed closes meta stray sum
+  local desc="$1" out="$2" total comparable noncomp escal closed closes manuals meta stray sum
   total="$(num_before "$out" 'row\(s\)')"; total="${total:-0}"
   comparable="$(sum_sessions "$out")"
   noncomp="$(num_before "$out" 'non-comparable')"; noncomp="${noncomp:-0}"
   escal="$(sum_escalations "$out")"
   closed="$(num_before "$out" 'gate\(s\) closed without a session')"; closed="${closed:-0}"
   closes="$(num_before "$out" 'ticket closure\(s\) recorded')"; closes="${closes:-0}"
+  manuals="$(num_before "$out" 'phase\(s\) recorded as done by hand')"; manuals="${manuals:-0}"
   meta="$(num_before "$out" 'row\(s\) written by the judge')"; meta="${meta:-0}"
   stray="$(num_before "$out" 'unrecognized')"; stray="${stray:-0}"
-  sum=$((comparable + noncomp + escal + closed + closes + meta + stray))
+  sum=$((comparable + noncomp + escal + closed + closes + manuals + meta + stray))
   assert_eq "$desc" "$total" "$sum"
 }
 
@@ -574,6 +579,32 @@ assert_eq "sdd run --phase writes a second note, committed alone" "2 clean" "$(n
 "$SDD" run "$MISSION" --phase EXEC --dry-run >/dev/null 2>&1 || true
 assert_eq "sdd run --phase --dry-run writes none and leaves the tree clean" "2 clean" \
   "$(notes) $( [ -z "$(git -C "$FIX" status --porcelain)" ] && echo clean || echo dirty)"
+: > "$LEDGER"
+
+# --- a phase done BY HAND gets the record a session would have left (#153) ---------------------
+# Measured before the command existed: 0 ledger rows for the PR of 20260916-destino-frete-cif,
+# published by hand after three deaths, and 0 of 4 missions with the `- intervention:` note
+# checkpoint_note_intervention reserves for "a phase done by hand". The command writes BOTH, read
+# as one group so "a note and no row" (or the reverse) fails by name: the note through the one
+# writer, committed alone like every other door above; the row with the closure's shape — mission,
+# run, kit stamp, the phase — and no session field, because none ran.
+echo "== sdd note-manual records a phase done by hand =="
+nm_notes_before="$(notes)"
+NM_RC=0; "$SDD" note-manual "$MISSION" PR >/dev/null 2>&1 || NM_RC=$?
+assert_eq "sdd note-manual writes one note committed alone and one manual row for the phase" \
+  "rc:0 notes:+1 clean rows:1 manual:PR" \
+  "rc:$NM_RC notes:+$(( $(notes) - nm_notes_before )) $(ck_clean) rows:$(nrows) manual:$(rows 'select(.event == "manual") | .phase')"
+assert_eq "the manual note names the command, the phase and the date, in the form the template shows" "1" \
+  "$(grep -cE '^- intervention: sdd note-manual .* — PR — [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} · written by the runner$' "$MDIR/checkpoint.md" || true)"
+assert_eq "the manual row carries the mission, its own run and the kit stamp, and no session field" \
+  "$MISSION note-manual true true false" \
+  "$(rows 'select(.event == "manual") | "\(.mission) \(.invocation) \((.run_id | length) > 0) \(has("kit_sha")) \(has("rc") or has("cost_usd") or has("moved") or has("kind") or has("gate_why"))"')"
+# PLAN is the human's by design and an unknown name is a typo: both refused BEFORE anything is
+# written — the floor is the row and the note the call above left, unchanged.
+NM_PLAN_RC=0; "$SDD" note-manual "$MISSION" PLAN >/dev/null 2>&1 || NM_PLAN_RC=$?
+NM_BAD_RC=0; "$SDD" note-manual "$MISSION" PUBLISH >/dev/null 2>&1 || NM_BAD_RC=$?
+assert_eq "note-manual refuses PLAN and an unknown phase and writes nothing" "1 1 rows:1 notes:+1" \
+  "$NM_PLAN_RC $NM_BAD_RC rows:$(nrows) notes:+$(( $(notes) - nm_notes_before ))"
 : > "$LEDGER"
 
 echo "== the mission ceiling stops the line before a phase opens =="
@@ -3507,6 +3538,38 @@ assert_eq "it names the closure instead, so nothing leaves the accounting in sil
   "$(num_before "$out_close" 'ticket closure\(s\) recorded')"
 assert_bucket_sum "the buckets still sum to the header total (a close row)" "$out_close"
 
+# --- a phase done by hand is NAMED, and grades nothing (#153) -----------------------------------
+# The sixth event, on the terms the closure above was admitted on, and asked DIFFERENTIALLY: the
+# same ledger with and without the `manual` row. Everything the reader grades — sessions, the
+# outcomes, the US$ — reads the same; only the header total and the line of its own bucket move.
+# The row is copied from the shape autonomy_manual_row builds (the closure's shape, `phase` set).
+echo "== reader: a phase done by hand lands in a bucket of its own =="
+mkdir -p "$OUTSIDE/manualoff" "$OUTSIDE/manualon"
+manual_base() { cat <<'EOF'
+{"v":1,"ts":"2026-09-12T10:00:00-03:00","event":"session","run_id":"m1","invocation":"run","kit_sha":"mmm1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m22","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"m1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":""}
+EOF
+}
+manual_base | localize > "$OUTSIDE/manualoff/autonomy-log.jsonl"
+{ manual_base
+  printf '{"v":1,"ts":"2026-09-12T10:05:00-03:00","event":"manual","run_id":"m2","invocation":"note-manual","kit_sha":"mmm1111","kit_dirty":false,"kit_rev":null,"kit_rev_dirty":null,"project":"p1","repo":"/p1","mission":"m22","phase":"PR"}\n'
+} | localize > "$OUTSIDE/manualon/autonomy-log.jsonl"
+out_moff="$( SDD_STATE_DIR="$OUTSIDE/manualoff" "$SDD" autonomy 2>&1 )"
+out_mon="$( SDD_STATE_DIR="$OUTSIDE/manualon" "$SDD" autonomy 2>&1 )"
+out_moff_bm="$( SDD_STATE_DIR="$OUTSIDE/manualoff" "$SDD" autonomy --by-mission 2>&1 )"
+out_mon_bm="$( SDD_STATE_DIR="$OUTSIDE/manualon" "$SDD" autonomy --by-mission 2>&1 )"
+# THE FLOOR: the row really is in the header total, or the bucket sum closes by vacuity.
+assert_eq "the fixture really does put a manual row in the header total" "1 2" \
+  "$(num_before "$out_moff" 'row\(s\)') $(num_before "$out_mon" 'row\(s\)')"
+assert_eq "the human reader names the manual row and never calls it unrecognized" "1 0" \
+  "$(num_before "$out_mon" 'phase\(s\) recorded as done by hand') $(grep -c 'unrecognized' <<< "$out_mon")"
+# ⭐ DIFFERENTIAL, over both views: drop the header (it names the ledger file and counts the row)
+# and the manual line, and the page with the row is the page without it — the substitution eats
+# the blank line the paragraph opened. A reader that graded the row moves a number on the table.
+assert_eq "a manual row moves no graded number: each page with it is the page without it" \
+  "$(grep -v -e 'row(s)' <<< "$out_moff")|$(grep -v -e 'row(s)' <<< "$out_moff_bm")" \
+  "$(grep -v -e 'row(s)' -e 'recorded as done by hand' <<< "$out_mon")|$(grep -v -e 'row(s)' -e 'recorded as done by hand' <<< "$out_mon_bm")"
+assert_bucket_sum "the buckets still sum to the header total (a manual row)" "$out_mon"
+
 # --- a judge row leaves the AXIS, never the header ------------------------------------------------
 # r1 finding #2 of the 2026-09-11 judge mission, and it is finding #1 collected one filter over: the
 # `$meta` split drops every `phase == "KAIZEN"` row before the buckets (the judge must never grade
@@ -5779,11 +5842,140 @@ assert_eq "kit-guard: a session that leaves the kit alone is not accused of anyt
 kitguard_reset
 kitguard_world "$FAKEKIT"
 kitguard_stub "$FAKEKIT"
+# The kit HEAD this run is LAUNCHED from — read before the run, for the runner_sha probe below.
+KG3_LAUNCH="$(git -C "$FAKEKIT" rev-parse --short HEAD)"
 KG3_ERR="$( cd "$FAKEKIT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
 KG3_LOG="$(cat "$FAKEKIT/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "kit-guard: a mission whose own repo IS the kit is left alone — the guard must not cry wolf" \
   "moved:1 lines:0 warns:0" \
   "moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG3_LOG") warns:$(grep -c 'changed during' <<< "$KG3_ERR")"
+# 3b. THE RUNNER THAT WROTE THE ROW (#129; the item "a session writes the ledger with the bin/sdd it
+#     had in MEMORY"). This is the kit's own mission, and its session commits into the kit: every
+#     row born after that commit reads kit_sha off the disk and names a version this process never
+#     ran — measured, 22 of 35 `sdd run` of the kit stamped more than one kit_sha. Each row carries
+#     runner_sha, the HEAD the process was launched from, beside it. Four terms, so no fixture
+#     regime satisfies it by accident: every row names the launch (runner), at least one row names
+#     the moved disk (moved — the witness that the kit really changed under the run, without which
+#     "runner == launch" is a constant), the rows say so where a human reads (journal: one RUNNER
+#     line, not one per row), and a row count floor (rows).
+KG3_RUNNERS="$(jq -r -s 'map(.runner_sha // "absent") | unique | join(",")' "$LEDGER" 2>/dev/null)"
+KG3_MOVED="$(jq -r -s --arg l "$KG3_LAUNCH" 'map(select(.kit_sha != null and .kit_sha != $l)) | length' "$LEDGER" 2>/dev/null)"
+assert_eq "ledger: every row carries the launch-time runner, beside a kit_sha read off the moved disk" \
+  "runner:$KG3_LAUNCH moved:yes journal:1 rows:yes" \
+  "runner:$KG3_RUNNERS moved:$([ "${KG3_MOVED:-0}" -ge 1 ] && echo yes || echo no) journal:$(grep -c '  RUNNER  ' <<< "$KG3_LOG") rows:$([ "$(nrows)" -ge 1 ] && echo yes || echo no)"
+
+# 3c. THE CONFIG IS RE-READ AT THE TOP OF EVERY LAP (#129; SQ-141: four EXEC sessions, US$ 5,93,
+#     against a TEST_CMD already fixed on disk — the run had sourced .sdd/config.sh once, before its
+#     loop). The first session closes I1 and, meanwhile, the human edits the config and commits it;
+#     nothing after that moves the disk, so the run ends on an escalation (rc 3) and the pager runs
+#     — AFTER a reload. Three properties, three terms: the next lap's gate runs
+#     the EDITED TEST_CMD (the gate right after the edit still runs the lap's own, `launch` — also
+#     the floor that the gate was reached at all); a key DELETED from the file goes back to its
+#     default instead of surviving from the last read (the file's ON_ESCALATION_CMD is gone, so its
+#     hook must not run); and a key the ENVIRONMENT supplied survives the reload (an exported
+#     ON_ESCALATION_CMD the file never sets still pages). Each command appends its own word to a file
+#     outside the repo, so the answer is what RAN, never what the config says.
+echo "== config: the run re-reads .sdd/config.sh at the top of every lap =="
+CFG_MARKS="$OUTSIDE/config-reload-marks"
+cfg_world() {   # cfg_world <dir> <extra config line or ""> — a target at EXEC, I1 pending
+  kitguard_reset
+  kitguard_world "$1" "$ROOT"
+  sed -i "s|^TEST_CMD=.*|TEST_CMD='echo launch >> $CFG_MARKS'|" "$1/.sdd/config.sh"
+  [ -z "$2" ] || printf '%s\n' "$2" >> "$1/.sdd/config.sh"
+  git -C "$1" commit -qam "chore: the config the run is launched with"
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  sed -i -e "s|^TEST_CMD=.*|TEST_CMD='echo edited >> $CFG_MARKS'|" -e '/^ON_ESCALATION_CMD=/d' "$1/.sdd/config.sh"
+  h=\$(git -C "$1" rev-parse --short HEAD)
+  sed -i "/^| I1 /s/| pending | — |/| done | \$h |/" "$1/docs/handoffs/$MISSION/checkpoint.md"
+  git -C "$1" add -A
+  git -C "$1" commit -qm "feat: I1 — and the human edits the config meanwhile"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+: > "$CFG_MARKS"
+cfg_world "$OUTSIDE/config-reload-file" "ON_ESCALATION_CMD='echo file-hook >> $CFG_MARKS'"
+( cd "$OUTSIDE/config-reload-file" && "$SDD" run "$MISSION" >/dev/null 2>&1 ) || true
+CFG_FILE_MARKS="$(cat "$CFG_MARKS")"
+: > "$CFG_MARKS"
+cfg_world "$OUTSIDE/config-reload-env" ""
+( cd "$OUTSIDE/config-reload-env" && ON_ESCALATION_CMD="echo env-hook >> $CFG_MARKS" "$SDD" run "$MISSION" >/dev/null 2>&1 ) || true
+CFG_ENV_MARKS="$(cat "$CFG_MARKS")"
+cfg_has() { if grep -qx "$2" <<< "$1"; then printf yes; else printf no; fi; }
+assert_eq "config: the next lap runs the edited TEST_CMD, drops a key deleted from the file, keeps one the environment set" \
+  "launch:yes edited:yes deleted-hook:no env-hook:yes" \
+  "launch:$(cfg_has "$CFG_FILE_MARKS" launch) edited:$(cfg_has "$CFG_FILE_MARKS" edited) deleted-hook:$(cfg_has "$CFG_FILE_MARKS" file-hook) env-hook:$(cfg_has "$CFG_ENV_MARKS" env-hook)"
+
+# A key the file declares `readonly` cannot be put back by the reload. Found by the final review of
+# the lot, reproduced: lap 1 died on bash's own `unset: …: readonly variable`, rc 1, where the first
+# and only load_config used to take the file. The run still stops — the schema says assignments
+# only — but with the runner's sentence naming the key, never bash's. The control is the same world
+# without `readonly`, whose dry-run passes: the refusal is about the word, not about the key.
+echo "== config: a key declared readonly stops the run with the runner's sentence =="
+ro_says() {    # ro_says <dir> <config line> — rc, the runner's sentence, bash's own
+  local rc=0 out
+  kitguard_world "$1" "$ROOT"
+  printf '%s\n' "$2" >> "$1/.sdd/config.sh"
+  git -C "$1" commit -qam "chore: one more key" >/dev/null 2>&1
+  out="$( cd "$1" && "$SDD" run "$MISSION" --dry-run 2>&1 )" || rc=$?
+  printf 'rc:%s named:%s raw:%s' "$rc" "$(grep -c 'MODEL_EXEC is declared readonly' <<< "$out")" \
+    "$(grep -c 'unset: MODEL_EXEC' <<< "$out")"
+}
+assert_eq "config: a readonly key stops the run with a sentence that names it, and a plain one passes" \
+  "rc:1 named:1 raw:0|rc:0 named:0 raw:0" \
+  "$(ro_says "$OUTSIDE/config-readonly" 'readonly MODEL_EXEC="opus"')|$(ro_says "$OUTSIDE/config-plain" 'MODEL_EXEC="opus"')"
+: > "$LEDGER"
+
+# The record is written AFTER the fact, often after the merge (the PR of the motivating case was
+# published by hand), so the human runs it from the base. Found by the final review of the lot,
+# reproduced: the command moved the checkout to the spent mission branch, committed the note there
+# and LEFT the human on it. Two worlds, one apart: the mission branch merged into main, and the
+# same branch one commit ahead of it. Both end where the human stood, both record the note on the
+# mission branch and the row in the ledger, and only the merged one says the base will not see it.
+# It sits HERE, beside the kit-guard regimes, because its worlds are built by kitguard_world.
+echo "== sdd note-manual leaves the human where they stood =="
+nm_world() {   # nm_world <dir> <merged|ahead> — mission on branch feat/x, the human on main
+  kitguard_world "$1" "$ROOT"
+  ( cd "$1" || exit 1
+    sed -i 's/^branch: main$/branch: feat\/x/' "docs/handoffs/$MISSION/00-missao.md"
+    git commit -qam "chore: the mission declares feat/x"
+    git checkout -q -b feat/x
+    echo work >> file.txt && git commit -qam "feat: the mission's work"
+    git checkout -q main
+    if [ "$2" = merged ]; then git merge -q --no-ff -m "merge feat/x" feat/x; fi ) >/dev/null 2>&1
+}
+nm_says() {    # nm_says <dir> — rc, branch after, warning, note on feat/x, the row
+  local rc=0 err
+  err="$( cd "$1" && "$SDD" note-manual "$MISSION" PR 2>&1 >/dev/null )" || rc=$?
+  printf 'rc:%s branch:%s warn:%s note:%s row:%s' "$rc" \
+    "$(git -C "$1" symbolic-ref -q --short HEAD)" \
+    "$(grep -c 'will not see' <<< "$err")" \
+    "$(git -C "$1" show "feat/x:docs/handoffs/$MISSION/checkpoint.md" | grep -c '^- intervention: sdd note-manual')" \
+    "$(rows 'select(.event == "manual") | .phase' | tr -d '\n')"
+  : > "$LEDGER"
+}
+nm_world "$OUTSIDE/nm-merged" merged
+nm_world "$OUTSIDE/nm-ahead" ahead
+assert_eq "note-manual returns the human to the branch they stood on, and only a merged mission is told the base will not see the note" \
+  "rc:0 branch:main warn:1 note:1 row:PR|rc:0 branch:main warn:0 note:1 row:PR" \
+  "$(nm_says "$OUTSIDE/nm-merged")|$(nm_says "$OUTSIDE/nm-ahead")"
+# A DETACHED HEAD is a place to stand too (Codex review of PR #222, reproduced): `symbolic-ref`
+# answers empty there, ensure_mission_branch still switches, and the way home was guarded by a
+# non-empty branch name — the human was left on the spent mission branch. Back to the same commit,
+# still detached: `branch:` empty and HEAD on the sha they stood on.
+nm_world "$OUTSIDE/nm-detached" merged
+git -C "$OUTSIDE/nm-detached" checkout -q --detach main
+NM_DET_SHA="$(git -C "$OUTSIDE/nm-detached" rev-parse HEAD)"
+NM_DET="$(nm_says "$OUTSIDE/nm-detached")"
+assert_eq "note-manual from a detached HEAD returns the human to that commit, still detached" \
+  "rc:0 branch: warn:1 note:1 row:PR|$NM_DET_SHA" \
+  "$NM_DET|$(git -C "$OUTSIDE/nm-detached" rev-parse HEAD)"
 
 # 4. THE INLINE RETRY has a guard of its own. When the first session leaves the kit alone and the
 #    RETRY is the one that writes into it, only the check on the retry path can see it — measured:

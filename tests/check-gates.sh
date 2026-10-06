@@ -492,6 +492,27 @@ assert_phase "an increment left doing keeps the phase in EXEC" "EXEC"
 assert_why   "an increment left doing is still to execute" "EXEC" "1 of 1 increment\(s\) still to execute"
 mv "$MDIR/checkpoint.doing.bak" "$MDIR/checkpoint.md"
 
+# GFM makes the leading pipe OPTIONAL (CodeRabbit review of PR #222): a row written
+# `I2 | … | pending | —` right below a row renders as one more row of the same table, and
+# checkpoint_rows read only the `|`-led lines — the pending increment vanished from
+# checkpoint_tally and the gate passed over it to QA. The control is the same line below a BLANK
+# line, which ends the table: a paragraph, and no increment of anything.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.pipeless.bak"
+pipeless_row='I2 | slice two, no leading pipe | `true` → 0 | pending | —'
+awk -v row="$pipeless_row" -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print row }' \
+  "$MDIR/checkpoint.pipeless.bak" > "$MDIR/checkpoint.md"
+if [ "$(awk -v h="| done | $REAL_HASH |" 'seen { print; exit } index($0, h) { seen = 1 }' "$MDIR/checkpoint.md")" = "$pipeless_row" ]; then
+  pass "fixture: a pending row with no leading pipe sits right below the done row"
+else
+  fail "pipe-less fixture" "$pipeless_row" "$(cat "$MDIR/checkpoint.md")"
+fi
+assert_phase "a pending row with no leading pipe keeps the phase in EXEC" "EXEC"
+assert_why   "the pipe-less pending row is counted as still to execute" "EXEC" "1 of 2 increment\(s\) still to execute"
+awk -v row="$pipeless_row" -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print ""; print row }' \
+  "$MDIR/checkpoint.pipeless.bak" > "$MDIR/checkpoint.md"
+assert_phase "the same line below a blank line is a paragraph, not an increment" "QA"
+mv "$MDIR/checkpoint.pipeless.bak" "$MDIR/checkpoint.md"
+
 # A literal pipe inside a Check cell is spelled `\|` in GFM, and a raw split on "|" cuts the row
 # there — every column after it shifts one to the left, so the Status column is read out of the
 # CHECK cell. The increment is `done` and the gate answers "invalid status", naming a status the
@@ -1174,6 +1195,27 @@ git reset -q --hard HEAD~2
 git rm -q --cached "$FIX/docs/qa/reports/2026-01-01-fixture.md"
 qa_refused "a report of the base untracked in the index is not the mission's"
 git reset -q
+# (b') and (c') The same two shapes with the report GONE from the base tip: the base deleted it
+#     after the fork. No tip holds the path, so tip_add_carries_mission answers 0 and the merge-base
+#     test is the ONLY guard. In (b) and (c) above the tip test refuses too — since 79b6f93 it asks
+#     for the mission's progress, which the base commit that added this report does not move — so
+#     blinding the merge-base test there changed nothing, and QA_report_log_base_blind and
+#     QA_report_tree_base_blind survived the first catalogue of PR #222. main comes back at the end:
+#     every world below reads the base as it was.
+qa_base_tip="$(git rev-parse main)"
+git checkout -q main
+git rm -q "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+git commit -qm "chore: the base deletes its report after the fork" >/dev/null
+git checkout -q missao/qa-report-owner
+git rm -q "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+git commit -qm "chore: the mission deletes the base report" >/dev/null
+git revert --no-edit HEAD >/dev/null
+qa_refused "a report of the base, gone from the base tip, deleted and restored in commits is not the mission's"
+git reset -q --hard HEAD~2
+git rm -q --cached "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+qa_refused "a report of the base, gone from the base tip, untracked in the index is not the mission's"
+git reset -q
+git branch -q -f main "$qa_base_tip"
 # (d) A NEW file with the base report's name, one directory down: owned, but not a direct child of
 #     reports/ — a `-e` in place of `-ef` read it as the base report beside it.
 mkdir -p "$FIX/docs/qa/reports/archive"
@@ -1242,6 +1284,88 @@ cp "$SDD_STATE_FIX/qa-nobase-config.sh" .sdd/config.sh
 git branch -q -D qa-orphan-base
 rm -f "$FIX/docs/qa/reports/2026-01-12-fixture-ignored.md"
 sed -i '/2026-01-12-fixture-ignored/d' "$FIX/.git/info/exclude"
+# (h) A report that landed on the base AFTER the fork, brought from the base tip: new to the
+#     merge-base, so it counted (the residue ADR 0013 declared; reproduced in a scratch repo by the
+#     lote-4 gemba). The question is structural since ADR 0015 §3: the base commit that ADDED the
+#     path carries THIS mission's handoff dir? Another mission's squash carries ITS own dir, and
+#     the mission's own squash, read from its branch after a fetch, carries this one — the world
+#     right below is the control, and the two differ in nothing else.
+qa_tip_main="$(git rev-parse main)"
+git checkout -q main
+mkdir -p "$FIX/docs/handoffs/20260102-other"
+printf 'other mission\n' > "$FIX/docs/handoffs/20260102-other/checkpoint-notas.md"
+cat > "$FIX/docs/qa/reports/2026-01-13-fixture-other.md" <<'EOF'
+# QA Run Report — 2026-01-13 — another mission, squash-merged after the fork
+- **Started:** 2026-01-13T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "another mission (squash)" >/dev/null
+git checkout -q missao/qa-report-owner
+git checkout main -- docs/qa/reports/2026-01-13-fixture-other.md
+qa_refused "another mission's report staged from the base tip is not the mission's"
+git commit -qm "chore: the mission brings another mission's report from the base tip" >/dev/null
+qa_tip_other_floor="$(git cat-file -e main:docs/qa/reports/2026-01-13-fixture-other.md && echo tip)/$(git cat-file -e "$(git merge-base HEAD main):docs/qa/reports/2026-01-13-fixture-other.md" 2>/dev/null && echo base || echo new)"
+qa_tip_other="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+git reset -q --hard HEAD~1
+git branch -q -f main "$qa_tip_main"
+# The control: THIS mission's own report, squash-merged into the base and read from the branch.
+# The squash carries the mission's handoff dir, as every squash of a mission does (its checkpoint
+# moves with every increment; 9 of 9 sdd-mission reports on sales_quote's develop, 2026-10-04).
+printf 'own squash\n' >> "$MDIR/checkpoint-notas.md"
+cat > "$FIX/docs/qa/reports/2026-01-14-fixture-own.md" <<'EOF'
+# QA Run Report — 2026-01-14 — the mission's own, squash-merged
+- **Started:** 2026-01-14T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "chore: the mission's own report" >/dev/null
+git checkout -q main
+git merge -q --squash missao/qa-report-owner >/dev/null
+git commit -qm "the mission (squash)" >/dev/null
+git checkout -q missao/qa-report-owner
+qa_tip_own_floor="$(git cat-file -e main:docs/qa/reports/2026-01-14-fixture-own.md && echo tip)/$(git cat-file -e "$(git merge-base HEAD main):docs/qa/reports/2026-01-14-fixture-own.md" 2>/dev/null && echo base || echo new)"
+qa_tip_own="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+git reset -q --hard HEAD~1
+git branch -q -f main "$qa_tip_main"
+# FLOOR: both reports sit at the base tip AND are new to the merge-base, or neither world asks the
+# question the rule is about.
+assert_eq "both reports sit at the base tip and are new to the merge-base, so the worlds ask the tip question" \
+  "tip/new tip/new" "$qa_tip_other_floor $qa_tip_own_floor"
+# ⭐ DIFFERENTIAL: one shape, one question apart. Refusing every report at the tip passes the first
+# half and fails the second; asking nothing passes the second and fails the first.
+assert_eq "a report from the base tip counts only when the commit that added it carries this mission dir" \
+  "QA|REVIEW" "$qa_tip_other|$qa_tip_own"
+# (i) Another mission's squash that ALSO touches this mission's directory (Codex review of PR #222):
+#     lote 4 backfilled `adr:` into fourteen missions' 00-missao.md in one commit, and a commit of
+#     that shape carrying its own report passed "touches <HANDOFF_DIR>/<mission>/". What moves with
+#     the mission's own squash is its PROGRESS — checkpoint.md and checkpoint-notas.md —, never its
+#     approved intent, which is what another mission's edit reaches. The control is the (h) world
+#     right above, whose own squash moves checkpoint-notas.md.
+git checkout -q main
+mkdir -p "$FIX/docs/handoffs/20260102-other"
+printf 'other mission\n' > "$FIX/docs/handoffs/20260102-other/checkpoint-notas.md"
+printf '<!-- adr: backfilled by another mission -->\n' >> "$MDIR/00-missao.md"
+cat > "$FIX/docs/qa/reports/2026-01-15-fixture-backfill.md" <<'EOF'
+# QA Run Report — 2026-01-15 — another mission, whose squash also edits this mission's intent
+- **Started:** 2026-01-15T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "another mission (squash) that backfills this mission's 00-missao.md" >/dev/null
+# FLOOR: the commit that added the report touches this mission's dir, and not its progress files.
+qa_tip_backfill_floor="$(git diff-tree --no-commit-id -r --name-only HEAD -- "docs/handoffs/$MISSION/" | sed "s@^docs/handoffs/$MISSION/@@" | tr '\n' ' ')"
+git checkout -q missao/qa-report-owner
+git checkout main -- docs/qa/reports/2026-01-15-fixture-backfill.md
+git commit -qm "chore: the mission brings that report from the base tip" >/dev/null
+assert_eq "the backfill commit touches this mission's 00-missao.md and none of its progress files" \
+  "00-missao.md " "$qa_tip_backfill_floor"
+qa_refused "another mission's report whose squash also edited this mission's 00-missao.md is not the mission's"
+git reset -q --hard HEAD~1
+git branch -q -f main "$qa_tip_main"
 
 # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, as the fixture above.
 # First UNCOMMITTED — the skill may leave the report in the tree when the gate reads it — then
@@ -1367,6 +1491,15 @@ assert_phase "QA gate accepts the mission's report renamed in the index" "REVIEW
 #    `--diff-filter=A` drops it; the add it came from names a path that is gone.
 git commit -qm "chore: the mission renames its report" >/dev/null
 assert_phase "QA gate accepts the mission's report renamed in a commit" "REVIEW"
+#    3b. renamed again, to a name that sorts FIRST. Every name the report ever had stays owned, and
+#    `-ef` is what drops the ones gone from disk: string equality kept them, and the newest by
+#    version was a path that no longer exists. Every rename above sorts later, which is why
+#    QA_report_path_spelled_literally survived the first catalogue of PR #222 — since 52de46e the
+#    `./docs/qa/` world of (f) reaches the reader canonical, so only this one tells the two apart.
+git mv "$FIX/docs/qa/reports/2026-01-04-fixture-moved.md" "$FIX/docs/qa/reports/2026-01-01-fixture-moved-back.md"
+git commit -qm "chore: the mission renames its report to an earlier name" >/dev/null
+assert_phase "QA gate accepts the mission's report renamed to a name that sorts first" "REVIEW"
+git reset -q --hard HEAD~1
 # 4. a COMMITTED name git quotes (a `"`): `git log` prints `"…\"…"`, which is no path on disk, and
 #    the branch's own report was refused as "not one this branch added". `-z` quotes nothing. Newer
 #    and still `in-progress`, so the gate says which file it read, as in 1.
@@ -2539,10 +2672,10 @@ git add -A && git commit -qm "chore: docs, formatter-aligned again"
 #   WINDOW  (8) the green has to be about the content that is still here. The real catalogue runs
 #           for twenty to fifty minutes and the phase that starts it is a phase that commits, so a
 #           key read only after the run would stamp whatever the tree happens to be at the end.
-# Five more worlds follow the tally, each with an assertion of its own, because they are about the
+# Six more worlds follow the tally, each with an assertion of its own, because they are about the
 # KEY and not about where the demand applies: PARTIAL ROOT (9), RATCHET (10), IGNORED (11), DELETED
-# (12) and UNREADABLE (13) — the key is the tracked content of the four paths minus the backlog ratchet (ADR
-# 0014, increments I3 and I4).
+# (12), UNREADABLE (13) and AGENTS (11b) — the key is the tracked content of the five paths minus
+# the backlog ratchet (ADR 0014, increments I3 and I4; agents/ since ADR 0015 §1).
 #
 # The key is NEVER computed here. A second spelling of that algorithm would agree with the first by
 # construction and measure nothing, so world 3 drives the real WRITER instead: a LIVE copy of the
@@ -2608,7 +2741,7 @@ i4_why() { # i4_why <world> <regex the reason MUST match> <regex it must NOT mat
 i4_health() { ( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health >/dev/null 2>&1 ) || true; }
 
 # What the stub suite will answer next. It is written into .sdd/logs/, which is gitignored AND
-# outside the four measured directories — so changing the catalogue's verdict changes not one byte
+# outside the five measured directories — so changing the catalogue's verdict changes not one byte
 # of the content key. See the ⚠️ above: that separation is what the assertion rests on.
 i4_verdict() { # i4_verdict <exit code> <the score line> [move-the-tree]
   printf '%s\n%s\n%s\n' "$1" "$2" "${3-}" > "$FIX/.sdd/logs/stub-verdict"
@@ -2618,7 +2751,7 @@ i4_verdict() { # i4_verdict <exit code> <the score line> [move-the-tree]
 # control file above, so tests/ stays fixed across every world below.
 #
 # The scratch file it can append to lives INSIDE tests/ and is TRACKED — the content key is the
-# working-tree content of the tracked files of the four measured paths (ADR 0014, increment I4), so
+# working-tree content of the tracked files of the five measured paths (ADR 0014, increment I4), so
 # an ignored file there would move nothing. World 8 restores it with `git checkout` right after
 # the run, so the working tree is clean again and the mission does not fall back to the REVIEW
 # gate instead of reaching PR. That combination is the whole of world 8.
@@ -2707,8 +2840,8 @@ mkdir -p "$FIX/tests"
   cat <<'CAT'
 #!/usr/bin/env bash
 # Stand-in for the kit's mutation catalogue. Its EXISTENCE is what gate_PR scopes on — the artifact,
-# chosen over the identity of the repository because the identity door the kit already has
-# (cmd_kaizen) carries a live worktree bug recorded in TODO.md.
+# chosen over the identity of the repository because the stamp describes a catalogue, wherever one
+# is.
 #
 # The mut_*() lines below are the second thing read of this file, and by the OTHER end of the
 # mechanism: cmd_health counts them to decide whether the score line it was handed describes a
@@ -2733,13 +2866,14 @@ mkdir -p "$FIX/bin" "$FIX/.sdd/logs"
 cp "$ROOT/bin/sdd" "$FIX/bin/sdd"
 cp "$ROOT/bin/sdd-coordination.py" "$FIX/bin/sdd-coordination.py"
 i4_write_suite
-# All FOUR measured paths, each holding a file: mutation_stamp_key refuses a root missing any one of
-# them (ADR 0014, increment I3), so a fixture with only bin/ and tests/ would never be stamped and
-# every world below would be measuring that refusal instead of what it names. A file in each, and
-# not an empty directory, because git does not track an empty directory.
-mkdir -p "$FIX/templates" "$FIX/config"
+# All FIVE measured paths, each holding a file: mutation_stamp_key refuses a root missing any one of
+# them (ADR 0014, increment I3; agents/ since ADR 0015 §1), so a fixture with only bin/ and tests/
+# would never be stamped and every world below would be measuring that refusal instead of what it
+# names. A file in each, and not an empty directory, because git does not track an empty directory.
+mkdir -p "$FIX/templates" "$FIX/config" "$FIX/agents"
 printf 'fixture template\n' > "$FIX/templates/fixture.md"
 printf 'fixture config\n' > "$FIX/config/fixture.conf"
+printf -- '---\nname: fixture-hat\n---\n# A hat\n' > "$FIX/agents/fixture-hat.md"
 printf 'scratch\n' > "$FIX/tests/scratch.tracked"
 git add -A && git commit -qm "chore: a kit inside the fixture, so the writer can run" >/dev/null
 i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
@@ -2764,6 +2898,34 @@ printf '\n# one more line, so the measured content is not the content that was s
 git add -A && git commit -qm "chore: the catalogue changes after the stamp" >/dev/null
 i4_phase "a stamped repo whose tests/ moved is unstamped again" "PR"
 i4_why   "stale stamp" "sdd health" "50-pr\.md|does not confirm"
+
+# 4b. THE STAMP IS NOT HEADLESS (#142, #198; ADR 0015 §1). The PR is open, every other requirement
+#     is met and only the stamp is stale: `sdd run` stops with rc 2 and opens NO session — the
+#     claude stub counts them —, naming the command and the order. Differential, so neither half
+#     can pass by accident: with 50-pr.md carrying no pr_url the stamp is NOT the only refusal, and
+#     the same run must buy the publisher's session and say nothing about the stamp. Own assertions,
+#     outside the i4 tally, which is named for the scope of the demand.
+stamp_s0="$(stub_sessions)"
+stamp_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; stamp_rc=$?
+stamp_s1="$(stub_sessions)"
+assert_eq "run stops at the stamp: rc 2, no session, the stop names './bin/sdd health'" "2|0|1|1" \
+  "$stamp_rc|$(( stamp_s1 - stamp_s0 ))|$(grep -c 'the stamp is not headless' <<< "$stamp_out")|$(grep -c "run './bin/sdd health' once" <<< "$stamp_out")"
+# The projection stops where the run would — the stop sits above the dry-run branch, like PLAN's.
+stamp_s0="$(stub_sessions)"
+stamp_out="$( cd "$FIX" && "$SDD" run --dry-run "$MISSION" 2>&1 )"; stamp_rc=$?
+stamp_s1="$(stub_sessions)"
+assert_eq "run stops at the stamp under --dry-run too: rc 2, no session" "2|0|1" \
+  "$stamp_rc|$(( stamp_s1 - stamp_s0 ))|$(grep -c 'the stamp is not headless' <<< "$stamp_out")"
+cp "$MDIR/50-pr.md" "$SDD_STATE_FIX/50-pr-before-stamp-stop.md"
+printf -- '---\nfase: PR\n---\n# PR\n' > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md loses its pr_url" >/dev/null
+stamp_s0="$(stub_sessions)"
+stamp_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; stamp_rc=$?
+stamp_s1="$(stub_sessions)"
+assert_eq "run stops at the stamp only when the stamp is the only refusal" "yes|0" \
+  "$( [ "$stamp_s1" -gt "$stamp_s0" ] && echo yes || echo no )|$(grep -c 'the stamp is not headless' <<< "$stamp_out")"
+cp "$SDD_STATE_FIX/50-pr-before-stamp-stop.md" "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md gets its pr_url back" >/dev/null
 
 # 5. MEANING — stamp the new content, so worlds 6 and 7 have something to take away.
 i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
@@ -2816,7 +2978,7 @@ else
        "the $i4_worlds worlds above agreeing" "$i4_bad disagreement(s), listed above"
 fi
 
-# 9. PARTIAL ROOT — one of the four measured paths is gone and the other three are all there. Own
+# 9. PARTIAL ROOT — one of the five measured paths is gone and the other four are all there. Own
 #    assertion, outside the i4 tally: the tally is named for the scope of the demand, and this is a
 #    property of the KEY. The guard used to refuse only a root where all four were absent, so a root
 #    missing config/ was hashed over the three that remained, `sdd health` stamped that partial
@@ -2831,7 +2993,7 @@ i4_verdict 0 "$I4_SCORE_GREEN"
 # made with it captured (same HOME redirection, rc ignored for the same reason).
 partial_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
 partial_stamp=absent; [ -f "$FIX/.sdd/logs/mutation-stamp" ] && partial_stamp=written
-assert_eq "stamp-key: a root missing one of the four measured paths is never stamped" "PR|absent" \
+assert_eq "stamp-key: a root missing one of the measured paths is never stamped" "PR|absent" \
   "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$partial_stamp"
 # And neither end refuses in silence. gate_PR used to send the operator to `sdd health` blindly,
 # and `sdd health` over this root removed the stamp without a word: a refusal whose named remedy
@@ -2876,6 +3038,20 @@ ignored_witness=tracked; git -C "$FIX" check-ignore -q tests/debug.log && ignore
 assert_eq "stamp-key: an ignored file inside a measured directory does not move the key" \
   "DONE|DONE|ignored" "$ignored_before|$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$ignored_witness"
 rm -f "$FIX/tests/debug.log"
+
+# 11b. AGENTS — a commit touching only agents/ moves the key (#67; ADR 0015 §1). The runner reads
+#      every hat out of agents/<hat>.md (hat_field: `writes:`, `disallowedTools:`, `mcp:`), and
+#      check-hat.sh, check-autonomy.sh and check-kaizen.sh copy the real agents/ into their
+#      fixtures, so the catalogue's verdict is a function of it. The key used to read only bin/,
+#      tests/, templates/ and config/, and a stamp written before a hat edit stayed valid over
+#      content no catalogue had run against. Stamped again first and read back as DONE, so the PR
+#      afterwards is about the commit and never about a stamp that was not there.
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+agents_before="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+printf 'one more line of the hat, after the stamp\n' >> "$FIX/agents/fixture-hat.md"
+git add -A && git commit -qm "chore: only agents/ moves" >/dev/null
+assert_eq "stamp-key: a commit touching only agents/ moves the key" "DONE|PR" \
+  "$agents_before|$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 
 # 12. DELETED — a tracked file gone from the working tree, not committed. The listing names it and
 #     its `md5sum` fails; the key is then EMPTY, never the digest of the files that remain — a
@@ -2946,12 +3122,14 @@ tree_stamped() { [ -f "$1/$TREE_STAMP" ]; }
 # tree can still reach a verdict without the twenty-minute run — otherwise worlds 2 and 3 would be
 # measuring an absent suite instead of the fallback.
 TREE_KIT="$SDD_STATE_FIX/kit-install"
-mkdir -p "$TREE_KIT/bin" "$TREE_KIT/tests" "$TREE_KIT/templates" "$TREE_KIT/config" "$TREE_KIT/.sdd/logs"
+mkdir -p "$TREE_KIT/bin" "$TREE_KIT/tests" "$TREE_KIT/templates" "$TREE_KIT/config" \
+  "$TREE_KIT/agents" "$TREE_KIT/.sdd/logs"
 cp "$ROOT/bin/sdd" "$TREE_KIT/bin/sdd"
 cp "$ROOT/bin/sdd-coordination.py" "$TREE_KIT/bin/sdd-coordination.py"
-# The four measured paths, each with a file — a kit missing one is never stamped (world 9 above).
+# The five measured paths, each with a file — a kit missing one is never stamped (world 9 above).
 printf 'installed template\n' > "$TREE_KIT/templates/fixture.md"
 printf 'installed config\n' > "$TREE_KIT/config/fixture.conf"
+printf 'installed hat\n' > "$TREE_KIT/agents/fixture-hat.md"
 cat > "$TREE_KIT/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
 # Stub for the installed kit's own catalogue: always green, always this score.
@@ -2971,7 +3149,7 @@ chmod +x "$TREE_KIT/tests/run-all.sh"
   printf 'exit 0\n'
 } > "$TREE_KIT/tests/check-mutation.sh"
 chmod +x "$TREE_KIT/tests/check-mutation.sh"
-# A git checkout, committed: the key is the TRACKED content of the four paths, and a root that is
+# A git checkout, committed: the key is the TRACKED content of the five paths, and a root that is
 # not a git checkout gets no key at all (ADR 0014, increment I4) — an installed kit that is a plain
 # copy is never stamped. .sdd/ stays out of the commit; the stamp lands there.
 printf '.sdd/\n' > "$TREE_KIT/.gitignore"
@@ -4157,6 +4335,22 @@ if [ "$PI_SL_RC" -eq 3 ] && [ "$PI_SL_AT" = "$PTARGET" ] \
 else
   fail "a trailing slash in HANDOFF_DIR does not make the approved plan look missing" \
        "rc 3 on $PTARGET after the switch" "rc $PI_SL_RC at $PI_SL_AT: $(tail -3 <<< "$PI_SL_OUT")"
+fi
+git checkout -q main
+
+# The slash above no longer reaches ensure_mission_branch: since 52de46e load_config strips it from
+# HANDOFF_DIR, so that probe measures the normalization. The `//` still arrives through the MISSION
+# argument, which resolve_mission takes verbatim when it names a directory: `/<mission>` makes
+# MISSION_DIR `<base>//<mission>`. Without this world RUN_branch_double_slash survived the first
+# catalogue of PR #222.
+PI_LS_OUT="$( cd "$FIX" && "$SDD" run "/$PM" 2>&1 )"; PI_LS_RC=$?
+PI_LS_AT="$(git branch --show-current)"
+if [ "$PI_LS_RC" -eq 3 ] && [ "$PI_LS_AT" = "$PTARGET" ] \
+   && grep -qF "branch: main → $PTARGET" <<< "$PI_LS_OUT"; then
+  pass "a leading slash in the mission argument does not make the approved plan look missing"
+else
+  fail "a leading slash in the mission argument does not make the approved plan look missing" \
+       "rc 3 on $PTARGET after the switch" "rc $PI_LS_RC at $PI_LS_AT: $(tail -3 <<< "$PI_LS_OUT")"
 fi
 git checkout -q main
 
@@ -5416,6 +5610,28 @@ NG_TYPO_RC=0
 "$SDD" status "$MISSION" --no-gate >/dev/null 2>&1 || NG_TYPO_RC=$?
 assert_eq "a misspelt status option is refused, never read as a mission name" "1" \
   "$( [ "$NG_TYPO_RC" -ne 0 ] && echo 1 || echo 0 )"
+
+# #153: a green phase this machine's ledger holds no session of is the shape a phase done BY HAND
+# leaves, and the full page names the command that records it. The fixture is already that world:
+# its EXEC and REVIEW ran sessions in the blocks above, its QA and DOCS closed with none, PLAN is
+# the human's by design and TICKET is skipped by JIRA_ENABLED=false — so the hint names QA and DOCS
+# and nothing else. Then the DIFFERENTIAL: one `manual` row for QA (the shape autonomy_manual_row
+# writes, the repo copied off a session row of this ledger) takes QA off the page and leaves DOCS.
+hint_of() { grep -c "sdd note-manual $MISSION $2\$" <<< "$1"; }
+UNREC_LEDGER="$SDD_STATE_FIX/autonomy-log.jsonl"
+unrec_repo="$(jq -rn --arg m "$MISSION" 'first(inputs | select(.event == "session" and .mission == $m) | .repo)' "$UNREC_LEDGER")"
+assert_eq "the full page names the green phases with no session of the mission, and no other" \
+  "QA:1 DOCS:1 EXEC:0 REVIEW:0 PLAN:0 TICKET:0 PR:0 no-gates:0" \
+  "QA:$(hint_of "$FULL_OUT" QA) DOCS:$(hint_of "$FULL_OUT" DOCS) EXEC:$(hint_of "$FULL_OUT" EXEC) REVIEW:$(hint_of "$FULL_OUT" REVIEW) PLAN:$(hint_of "$FULL_OUT" PLAN) TICKET:$(hint_of "$FULL_OUT" TICKET) PR:$(hint_of "$FULL_OUT" PR) no-gates:$(grep -c 'sdd note-manual' <<< "$NG_OUT")"
+cp "$UNREC_LEDGER" "$SDD_STATE_FIX/unrec-ledger.bak"
+jq -cn --arg repo "$unrec_repo" --arg m "$MISSION" \
+  '{v: 1, ts: "2026-01-01T10:00:00-03:00", event: "manual", run_id: "u1", invocation: "note-manual",
+    kit_sha: null, kit_dirty: null, kit_rev: null, kit_rev_dirty: null, project: "fixture",
+    repo: $repo, mission: $m, phase: "QA"}' >> "$UNREC_LEDGER"
+UNREC_OUT="$( "$SDD" status "$MISSION" 2>&1 )"
+cp "$SDD_STATE_FIX/unrec-ledger.bak" "$UNREC_LEDGER"
+assert_eq "a manual row of the phase takes it off the page, and only it" "repo:1 QA:1>0 DOCS:1>1" \
+  "repo:$( [ -n "$unrec_repo" ] && echo 1 || echo 0 ) QA:$(hint_of "$FULL_OUT" QA)>$(hint_of "$UNREC_OUT" QA) DOCS:$(hint_of "$FULL_OUT" DOCS)>$(hint_of "$UNREC_OUT" DOCS)"
 
 # ---------------------------------------------------------------------------
 # HAT_WRITES_EXTRA — the project's exception to the hat's writes:, and its guard.

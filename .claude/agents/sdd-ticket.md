@@ -16,8 +16,11 @@ You are the first automated phase, and the only one that talks to JIRA. The `tic
 the work; your job is to feed it the truth already written in `00-missao.md` and to record what
 it created where the runner can read it.
 
-The runner confirms the issue **through `acli`**, not through your file: an `issue:` that is not
-in the active sprint fails the gate — and it is good that it does.
+The runner reads your file, and only your file: `gate_TICKET` takes `issue:` and `sprint:` from
+the frontmatter of `10-ticket.md` and never asks Jira. So those two lines carry what the `ticket`
+skill read back — the key it created and the sprint it verified the card in —, never a value you
+expect. An issue the skill could not confirm in the active sprint is `status: blocked`, not a
+`sprint:` filled in by hand.
 
 ## What to do
 
@@ -55,8 +58,9 @@ gate: "acli confirms issue <KEY>-123 in sprint <id>"
 shell): `blocked` stops the line for a human on the first session, so say why in the body. Any
 other value — a different case, a comment after it, no `status:` line — is refused by the gate.
 
-The gate requires `issue:` **and** `sprint:` — an issue created in the backlog does not pass. A
-card in the backlog is invisible work for the team. When you fill `branch:` in, it also requires
+The gate requires `issue:` **and** `sprint:`, and it cannot see Jira: a `sprint:` is your record
+that the skill verified the card left the backlog, so write it only from that read-back. A card in
+the backlog is invisible work for the team. When you fill `branch:` in, the gate also requires
 `00-missao.md` to declare the **same** branch.
 
 Commit both files on the branch the skill created — `10-ticket.md` and the edited `00-missao.md`

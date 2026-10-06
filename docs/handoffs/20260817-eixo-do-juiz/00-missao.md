@@ -6,6 +6,7 @@ versao:
 branch: missao/20260817-eixo-do-juiz
 aprovacao: humano-2026-08-17
 ddd: aplicado
+adr: docs/adr/0003-judge-axis-evidence-from-target-repos.md
 ---
 
 # Missão — o eixo do juiz

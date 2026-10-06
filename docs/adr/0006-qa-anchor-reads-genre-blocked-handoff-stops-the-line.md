@@ -2,6 +2,8 @@
 
 Date: 2026-08-26 · Status: accepted · Amended by: 0009
 
+Spec: docs/handoffs/20260826-o-laco-da-qa/00-missao.md
+
 ## Context
 
 A gate is verifiable by command or it is not a gate — that is principle 1 of `CLAUDE.md`, and it

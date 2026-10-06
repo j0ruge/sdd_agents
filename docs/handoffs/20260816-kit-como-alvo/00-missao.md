@@ -6,6 +6,7 @@ versao:
 branch: missao/20260816-kit-como-alvo
 aprovacao: humano-2026-08-16
 ddd: n/a
+adr: none
 ---
 
 # Missão — quando o kit é o próprio alvo, quatro instrumentos param de afirmar o que nunca mediram
