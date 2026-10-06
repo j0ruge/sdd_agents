@@ -71,6 +71,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que rode um sensor sob `GIT_DIR` apontando para um repo-isca. RESOLVED by fc763ef.
   — descoberto por `sessão interativa` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
+- [ ] **O censo do `GIT_DIR` não conta `/usr/bin/git` nem `"$GIT"` como o primeiro git de um sensor** —
+  `tests/check-health.sh:1733` (`gitenv_census`) — a classe à esquerda do `git` exclui `/`, e uma
+  variável não casa a palavra: um sensor que chame o binário por caminho ou por variável antes do
+  `source` do `tests/isolate-git.sh` passa no censo com o repositório de quem o chama ainda exportado.
+  Nenhum sensor faz isso hoje: falha aberta sem caso. Direção: contar o caminho absoluto e a variável
+  como git, com os dois mundos no controle negativo do censo.
+  — descoberto por `revisor final` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-06)
+
 ### Contrato e configuração
 
 - [ ] **`sdd run --phase PR` com só o carimbo faltando grava uma intervenção e não abre sessão** —
