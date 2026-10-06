@@ -134,7 +134,8 @@ where the gate can read it. Marking it is a duty, not an option.
   for. Only with the decision written in the bug's own body (a `## Decision` / `## Decisao`
   section carrying the date and who decided) and cited in your handoff. *"We are not doing this
   now"* without a recorded decision is `agent`, not this — and the gate reads it that way: Anchor 3
-  looks for a level-2 heading opening with `## Decis…` outside any fence (the plurals —
+  looks for a level-2 heading opening with `## Decis…` outside any fence, and for a date
+  (`YYYY-MM-DD`) on that heading or in its section — a bare heading is not a decision (the plurals —
   `## Decisions for a Human`, and the pt-BR `## Decisoes …` with or without its tilde — are open
   questions and do not count), and without one the bug counts as `agent`,
   blocks, and is named in the gate's reason (#232). With it, it does not block, and unlike `human` it

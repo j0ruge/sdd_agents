@@ -1542,6 +1542,12 @@ placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit p
 # Fence state for the genre extractor's reason: a bug filed about this rule quotes the heading. The
 # variable is `infence` and not `fenced` so QA_bug_genre_fenced, whose sed has no function range,
 # keeps sabotaging the extractor alone.
+# The heading opens the section and a DATE in it is the decision (Codex review of PR #237): § 5.1
+# and ADR 0009 ask for the date and who decided, and the heading alone — bare, or carrying only the
+# deferral — passed as decided. A `YYYY-MM-DD` on the heading line or under it, outside any fence,
+# before the next level-2 heading; a date in a later section vouches for nothing. Who decided is not
+# measurable and stays § 5.1's duty. Measured on 2026-10-06: the 18 decision sections the targets
+# wrote (17 in sales_quote, 1 in lighthouse_project) all carry a date, so no deferral there changes.
 # Who writes the artifact: the human, or the session recording the human's call — never sdd-qa on
 # its own (§ 5.1); without it the bug counts as `agent`, whose F<n> cycle the pipeline can close.
 # DECLARED, fail closed: a `###` heading, or an indented one, reads as no decision and blocks —
@@ -1550,7 +1556,9 @@ bug_decision_recorded() {
   awk '
     /^[[:space:]]*(```|~~~)/ { infence = !infence; next }
     infence { next }
-    /^## Decis/ && !/^## Decis(ions|oes|\303\265es)/ { found = 1; exit }
+    /^## / { insec = 0 }
+    /^## Decis/ && !/^## Decis(ions|oes|\303\265es)/ { insec = 1 }
+    insec && /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ { found = 1; exit }
     END { exit !found }
   ' "$1"
 }
@@ -1743,7 +1751,7 @@ gate_QA() {
     # check-gates.sh read it (:486 and the genre differential at :535).
     GATE_WHY="$openbugs bug(s) with Status: open in the registry that an agent could close (an unmarked genre counts) — they become fix increments (QA⇄EXEC loop); one that needs a human decision is marked 'Closable by: human' instead, and one a human has already decided and another mission will pay for is 'Closable by: deferred' (agents/sdd-qa.md § 5.1)"
     if [ "$undecided" -gt 0 ]; then
-      GATE_WHY="$GATE_WHY; $undecided of them marked 'Closable by: deferred' with no '## Decision' section in the body count as agent: $undecided_names"
+      GATE_WHY="$GATE_WHY; $undecided of them marked 'Closable by: deferred' with no dated '## Decision' section in the body count as agent: $undecided_names"
     fi
     return 1
   fi

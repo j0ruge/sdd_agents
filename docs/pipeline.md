@@ -307,9 +307,9 @@ issue #205 it passed as `done`. The conditions:
   matched as a whole lowercase word: `humano`, `humans`, `Human` and `deferredly` all read as
   absent, and block. `deferred` counts only with the human's decision written in the bug's body
   (#232): a level-2 heading opening with the ASCII prefix `## Decis` — `## Decision`, `## Decisao`
-  and the tilde spelling, with or without a date — outside any fence. The plurals — `## Decisions for a Human` and the
+  and the tilde spelling — outside any fence, whose section carries a date (`YYYY-MM-DD`, on the heading line or under it, before the next level-2 heading; Codex review of PR #237). The plurals — `## Decisions for a Human` and the
   pt-BR `## Decisoes …`, with or without its tilde — are questions still open and do not count. Without the section the bug counts as `agent`: it
-  blocks, and the reason names it (`… with no '## Decision' section in the body count as agent`);
+  blocks, and the reason names it (`… with no dated '## Decision' section in the body count as agent`);
 - `TEST_CMD` exits 0 and `E2E_CMD` exits 0 (when set). When the e2e is red the runner asks the app
   (`app_probe`): nothing listening at `APP_URL`, or a 2xx page that does not carry `APP_EXPECT` — another
   product on the same port — stops the line as `app-down` (see the `kind` column), because no session

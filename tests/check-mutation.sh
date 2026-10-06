@@ -1019,8 +1019,8 @@ mut_QA_bug_genre_deferred_join() {
 }
 
 # #232: `deferred` counts only with the human's decision written in the bug's body — a `## Decis…`
-# section outside any fence (bug_decision_recorded). Five mutants, because the rule fails open in
-# four independent ways and closed in one. UNDECIDED drops the check: the label alone passes again,
+# section outside any fence, dated (bug_decision_recorded). Eight mutants, because the rule fails
+# open in seven independent ways and closed in one. UNDECIDED drops the check: the label alone passes again,
 # the state the sales_quote finding measured. Dies on `deferred with no '## Decision' section counts
 # as agent` in check-gates.sh.
 mut_QA_bug_deferred_undecided() {
@@ -1055,6 +1055,17 @@ mut_QA_bug_deferred_decision_plural_english_only() {
 # decision headings count`.
 mut_QA_bug_deferred_decision_english_only() {
   sed -i '/^bug_decision_recorded() {/,/^}/ s|/^## Decis/ \&\& |/^## Decision/ \&\& |' "$1"
+}
+# UNDATED (Codex review of PR #237): the heading alone is the decision again, bare or carrying only
+# the deferral. Dies on the bare and undated terms of `a decision section with no date is not the
+# decision` in check-gates.sh.
+mut_QA_bug_deferred_decision_undated() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s|^    insec \&\& /\[0-9\]\[0-9\]\[0-9\]\[0-9\]-\[0-9\]\[0-9\]-\[0-9\]\[0-9\]/ {|    insec {|' "$1"
+}
+# UNBOUNDED: the section never ends, so a date anywhere below the heading — a later `## Evidence` —
+# vouches for an undated decision. Dies on the date-below term of the same assertion.
+mut_QA_bug_deferred_decision_unbounded() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ { /^    \/\^## \/ { insec = 0 }$/d; }' "$1"
 }
 
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
@@ -6054,6 +6065,8 @@ CATALOG=(
   QA_bug_deferred_decision_plural
   QA_bug_deferred_decision_plural_english_only
   QA_bug_deferred_decision_english_only
+  QA_bug_deferred_decision_undated
+  QA_bug_deferred_decision_unbounded
   QA_e2e_red_never_probed
   QA_app_down_on_unknown
   APP_expect_ignored

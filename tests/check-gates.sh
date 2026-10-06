@@ -1089,7 +1089,7 @@ genre_undecided="$(     cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 genre_why_undecided="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 assert_eq "deferred with no '## Decision' section counts as agent: it blocks, and the reason names it" \
   "REVIEW|QA|named:1" \
-  "$genre_decided|$genre_undecided|named:$( grep -cF "with no '## Decision' section in the body count as agent: BUG-20260102-genre" <<< "$genre_why_undecided" )"
+  "$genre_decided|$genre_undecided|named:$( grep -cF "with no dated '## Decision' section in the body count as agent: BUG-20260102-genre" <<< "$genre_why_undecided" )"
 # The pt-BR headings the targets write, measured on 2026-10-06: sales_quote spells it with a tilde
 # (`## Decis\303\243o`, octal bytes, 17 headings in 4 shapes: alone, `— <date>`, `(<date>, <who>)`,
 # and a qualifier before the date); lighthouse_project writes `## Decisao`. The tilde is written as
@@ -1104,17 +1104,20 @@ assert_eq "the pt-BR decision headings count: the tilde spelling with a date, an
   "REVIEW|REVIEW" "$genre_decided_tilde|$genre_decided_ascii"
 # A heading QUOTED inside a fence is not the decision, the same rule the genre field already obeys:
 # a bug filed about this very rule pastes the heading in its repro. `$genre_decided` is the passing
-# control, so a gate that blocked every deferred bug turns this red instead of passing it.
+# control, so a gate that blocked every deferred bug turns this red instead of passing it. The quoted
+# section carries a date, so the fence is the only thing refusing it: undated, a reader that stopped
+# tracking fences would still block on the missing date and the probe would prove nothing.
 write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
-  "$(printf '\nThe template reads:\n\n```md\n## Decision\n\n<date, who decided>\n```')"
+  "$(printf '\nThe template reads:\n\n```md\n## Decision\n\n2026-01-02, the repo owner.\n```')"
 genre_decision_fenced="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "a '## Decision' heading inside a fence is not the decision: the bug blocks" \
   "REVIEW|QA" "$genre_decided|$genre_decision_fenced"
 # `## Decisions for a Human` is the qa-execution skill's heading for questions still OPEN
 # (~/.claude/skills/qa-execution/assets/report-template.md) — the opposite of a decision, and it
-# starts with the same eight bytes. The plural is refused by name.
+# starts with the same eight bytes. The plural is refused by name. Dated, here and in the pt-BR pair
+# below, for the fence world's reason: the name is then the only thing refusing it.
 write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
-  "$(printf '\n## Decisions for a Human\n\n- Should the fix wait for the next mission?')"
+  "$(printf '\n## Decisions for a Human\n\n- Should the fix wait for the next mission? (asked 2026-10-06)')"
 genre_decision_pending="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "a '## Decisions for a Human' heading is a pending question, not the decision: the bug blocks" \
   "REVIEW|QA" "$genre_decided|$genre_decision_pending"
@@ -1123,13 +1126,31 @@ assert_eq "a '## Decisions for a Human' heading is a pending question, not the d
 # with the same eight bytes. Without them in the refusal the plural read as decided and `deferred`
 # passed — the fail-open #232 closed, by another spelling. Octal bytes, as in the tilde world above.
 write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
-  "$(printf '\n## Decis\303\265es pendentes\n\n- Does another mission pay for it?')"
+  "$(printf '\n## Decis\303\265es pendentes\n\n- Does another mission pay for it? (2026-10-06)')"
 genre_decision_pending_tilde="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
-  "$(printf '\n## Decisoes pendentes\n\n- Does another mission pay for it?')"
+  "$(printf '\n## Decisoes pendentes\n\n- Does another mission pay for it? (2026-10-06)')"
 genre_decision_pending_ascii="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "the pt-BR plural decision headings are pending questions too: with or without the tilde, the bug blocks" \
   "REVIEW|QA|QA" "$genre_decided|$genre_decision_pending_tilde|$genre_decision_pending_ascii"
+# A decision section with no DATE is a heading, not the decision (Codex review of PR #237): agents/
+# sdd-qa.md § 5.1 and ADR 0009 demand the section carry the date and who decided, and a bare
+# `## Decision`, or one whose only text is the deferral itself, passed as decided. The date is the
+# half of that contract a reader can measure (`YYYY-MM-DD`, in the heading or under it, outside any
+# fence); who decided is not, and stays the session's duty. Measured on 2026-10-06: the 18 decision
+# sections the targets wrote (17 in sales_quote, 1 in lighthouse_project) all carry one. Three worlds
+# against the decided control — the bare heading, the undated text, and a date that lives only in a
+# LATER section: the section ends at the next level-2 heading, or any date below would vouch for it.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' "$(printf '\n## Decision')"
+genre_decision_bare="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decision\n\nThe repo owner: another mission pays.')"
+genre_decision_undated="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decision\n\nThe repo owner: another mission pays.\n\n## Evidence\n\nSeen again on 2026-10-01.')"
+genre_decision_date_below="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a decision section with no date is not the decision: bare, undated, or dated only in a later section, the bug blocks" \
+  "REVIEW|QA|QA|QA" "$genre_decided|$genre_decision_bare|$genre_decision_undated|$genre_decision_date_below"
 
 # TWO deferred bugs at once, which is the only regime that exercises the JOIN. Every probe above
 # holds exactly one, and `deferred_names="${deferred_names:+$deferred_names, }${bugname%.md}"` is
