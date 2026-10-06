@@ -80,6 +80,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando a volta forçada abre sessão, ou declarar o limite nas duas portas.
   — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
+- [ ] **O `/sdd-plan` no próprio kit grava a missão no checkout que os `sdd run` dos alvos executam** —
+  `commands/sdd-plan.md:15` (`HANDOFF_DIR`) — o `sdd` do PATH é este checkout, e o `kit_guard_check`
+  de um run de alvo em voo lê o `status --porcelain` dele. Reproduzido numa cópia: kit limpo e um
+  `00-missao.md` não rastreado gravado durante o EXEC do alvo → rc 3 e `KIT-TOUCHED` (`|false` → `|true`);
+  controle rc 0. Direção: missão cujo repo é o kit é escrita e executada num worktree ligado, que não
+  move o carimbo do checkout principal; probe `command:` no `check-hat.sh` sobre o comando.
+  — descoberto por `sessão interativa` no planejamento do lote 5 (2026-10-06)
+
+- [ ] **O `sdd kaizen` no checkout principal do kit escreve e commita onde os `sdd run` dos alvos executam** —
+  `bin/sdd:10575` (`cmd_kaizen`) — a sessão KAIZEN escreve o veredito e o plano da próxima missão do kit e
+  commita no `REPO_ROOT` de onde foi chamada. Chamada do checkout que o `sdd` do PATH resolve, com um
+  `sdd run` de alvo em voo, é o mesmo `kit-touched` do `/sdd-plan` (lido no código, não reproduzido). A
+  ADR 0016 §2 manda a missão do kit para um worktree ligado e não decide o `sdd kaizen`. Direção: recusar
+  rodar nesse checkout nomeando o worktree, ou criá-lo; decidir com o humano.
+  — descoberto por `claude` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-06)
+
 ### Saída humana e cosmética
 
 - [ ] **Servidor deixado por uma fase segura o `sdd run` vivo e mudo depois do veredito** —
