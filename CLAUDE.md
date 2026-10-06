@@ -349,6 +349,12 @@ da lista: atrasou em 57 de 124 commits e virou derivado (`census()` — cada pad
 todo `docs/**/*.md` rastreado tem dono). O quinto lugar é o **fixture do selftest** do
 `check-pipefail.sh`, construído exatamente no piso: deixá-lo um curto fez três probes falharem com
 `surface shrank` em vez de medirem o que nomeiam.
+Desde #226 o sensor novo tem mais dois deveres: a linha
+`. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"` logo abaixo do `set … pipefail`, que o censo
+do `check-health.sh` cobra vermelho (`surface: every sensor sources …`), e o `GITENV_FLOOR` do
+mesmo arquivo, mais um piso anti-vacuidade escrito à mão, com o mesmo limite declarado. Um
+`tests/*.sh` que **não** é sensor (o próprio `isolate-git.sh`) move o `LINT_FLOOR`, o piso do
+`check-pipefail.sh` e o fixture dele, e mais nada.
 
 **Sensor que o catálogo de mutação não alcança carrega um auto-teste.** São duas situações, e
 hoje há **seis** sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o

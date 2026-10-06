@@ -151,6 +151,7 @@
 #   96  unknown option
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 SELF_PATH="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -4,6 +4,7 @@
 # fail here. Readiness and release FIFOs establish order; deadlines bound every subprocess.
 # The supervisor is not a security boundary against killing it or external daemon writers.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 python3 - "$ROOT" "$@" <<'PY'
 import contextlib

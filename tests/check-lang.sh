@@ -22,6 +22,7 @@
 # declared subtree.
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SELF_PATH="$ROOT/tests/$(basename "${BASH_SOURCE[0]}")"

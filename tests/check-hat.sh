@@ -37,6 +37,7 @@
 #        tests/check-hat.sh --check <f>  (one file, exit 1 on any violation — the selftest's path)
 #        tests/check-hat.sh selftest
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HAT_FLOOR=8
 PLACEHOLDERS='HANDOFF_DIR|MISSION|TODO_FILE|QA_DOCS_PATH|E2E_DIR|ADR_DIR'

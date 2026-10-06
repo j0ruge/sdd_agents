@@ -26,6 +26,10 @@
 #                                             map or no such revision)
 
 set -uo pipefail
+# The suite clearing it does not reach this file when a human calls it: `--only` and `--touched` run a
+# sensor in the sandbox directly, never through run-all.sh, and the selftests below tag a fixture repo
+# in every mode — the `base` and `hat` tags of the 2026-10-05 incident (tests/isolate-git.sh).
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 # Double guard against recursion: run-all.sh already does not call this script when SDD_MUTANT is
 # set. If we got here with it set, the guard over there fell — dying loudly beats fork-bombing the

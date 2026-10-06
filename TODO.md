@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
 
 - [ ] **O `--red` aborta sob `set -u` em bash 4.0–4.3 quando o Check não imprime nada** —
-  `tests/check-checkpoint.sh:536` (`red_norm`) — `read -ra w` de uma saída vazia deixa o array vazio, e
+  `tests/check-checkpoint.sh:537` (`red_norm`) — `read -ra w` de uma saída vazia deixa o array vazio, e
   `"${w[*]}"` é "unbound variable" antes do bash 4.4: o caso que o `--red` existe para recusar (o Check
   mudo) vira aborto do sensor. Não reproduz no bash 5.2 daqui; o kit promete bash 4+. Direção:
   `${w[@]+"${w[*]}"}`, o idioma que o `check-todo.sh` já usa.
@@ -63,7 +63,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `claude` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
 - [ ] **A suíte herda `GIT_DIR` de quem a chama, e os fixtures escrevem no repositório real** —
-  `tests/run-all.sh:33` (`SDD_TEST_STATE`) — o `run-all.sh` isola o estado do runner, mas não limpa
+  `tests/run-all.sh:36` (`SDD_TEST_STATE`) — o `run-all.sh` isola o estado do runner, mas não limpa
   `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE`. Sob `git bisect run` (e num hook `pre-push`, que o git chama
   com `GIT_DIR` exportado), o `git init --bare` do `check-gates.sh` reinicializou o kit como bare, o
   `git config user.email` gravou `[user] Fixture` e fixtures criaram tags — medido em 2026-10-05 21:17,

@@ -69,6 +69,10 @@
 #   19. a kit that is not a git checkout is warned about and never stamped, and health stays green:
 #      the stamp keys on tracked content and no gate can demand one there (ADR 0014, increment I4).
 #      Prefixed `stamp:`.
+#   20. the suite and the catalogue clear the repository a git-driven caller hands them: a BAIT repo
+#      aimed at by GIT_DIR and GIT_INDEX_FILE stays as it was through the suite and through
+#      `check-mutation.sh --only`, and both refuse a git that names no GIT_DIR (issue #226). Run
+#      outside a mutant only, because no mutant reaches tests/. Prefixed `surface:`.
 #   ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in 20261003-lote-3-a-catraca-desce: no rule refuses
 #      the NEXT `sdd health` invocation of a fixture that forgets to pin its `cd`, and the
 #      caller's cwd picks the measured tree (the comment above health_run says why that is
@@ -103,6 +107,7 @@
 # ---------------------------------------------------------------------------
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # `|| exit 90` and not a bare assignment: with mktemp failed, WORK is EMPTY and FIX becomes the
@@ -1272,6 +1277,9 @@ surface_rules_hold() {
 # rounds of this house have made exactly that mistake, so the anchor is CODE and a miss is loud.
 SURF="$WORK/surface"
 mkdir -p "$SURF/tests"
+# run-all.sh sources tests/isolate-git.sh from its own directory (issue #226): a world without it
+# would die on its first line and every probe below would measure that.
+cp "$ROOT/tests/isolate-git.sh" "$SURF/tests/"
 
 surface_degrade() { # surface_degrade <sed-expression> <what it should have changed>
   cp "$ROOT/tests/run-all.sh" "$SURF/tests/run-all.sh"
@@ -1421,6 +1429,7 @@ mkdir -p "$FAILFAST/bin" "$FAILFAST/tests"
 printf '#!/usr/bin/env bash\n:\n' > "$FAILFAST/bin/sdd"
 printf 'pass\n' > "$FAILFAST/bin/sdd-coordination.py"
 cp "$ROOT/tests/run-all.sh" "$FAILFAST/tests/run-all.sh"
+cp "$ROOT/tests/isolate-git.sh" "$FAILFAST/tests/"
 for f in "$ROOT"/tests/check-*.sh; do
   printf '#!/usr/bin/env bash\necho "${0##*/}" >> "$FAILFAST_LOG"\n[ "${0##*/}" != "${FAILFAST_SLOW:-}" ] || exec sleep 30\n[ "${0##*/}" != "${FAILFAST_124:-}" ] || exit 124\n[ "${0##*/}" != "${FAILFAST_RED:-}" ]\n' \
     > "$FAILFAST/tests/$(basename -- "$f")"
@@ -1656,6 +1665,190 @@ else
   fail 'surface: an interrupt still stops the suite while a step runs' \
        "the suite gone within 10 s of the group's SIGINT, rc non-zero, no step run after $TIMEOUT_STEP_FILE" \
        "ended: $INTR_ENDED, rc $INTR_RC, steps: $(tr '\n' ' ' < "$WORK/intr.log")"
+fi
+
+# ---------------------------------------------------------------------------
+# surface: the suite, the catalogue and every sensor clear the repository a git-driven caller hands
+# them (#226)
+#
+# Inside a linked worktree, `git bisect run`, `git rebase --exec`, the pre-commit and pre-push hooks
+# and a `!` alias all export an absolute GIT_DIR, and every fixture of every sensor trusts `cd` or
+# `git -C` to aim git at a temporary repo — which GIT_DIR beats. Measured on 89df2e5: ONE
+# `bash tests/check-hat.sh` under the GIT_DIR of a linked worktree wrote `core.bare = true` and a
+# `user.email` into the config of the main repository.
+#
+# The world is a BAIT repository (one commit, one tag) and the FAILFAST suite with ONE stub swapped
+# for what a fixture does: init, config, add, an empty commit and a tag, in a temp dir of its own.
+# Every run below aims GIT_DIR and GIT_INDEX_FILE at the bait, as the pre-commit hook of a linked
+# worktree does — the widest set a measured caller exports (GIT_WORK_TREE was measured from none, and
+# with it set the catalogue's selftest dies before it tags anything, so the probe would read a
+# crash as a clean bait):
+#   armed     the stub ALONE must move the bait — with the poison unarmed, the two below prove nothing;
+#   suite     the copied run-all.sh must leave the bait as it found it, AND the stub must have run
+#             and tagged its OWN repo (git still worked — it just worked where it was told);
+#   catalogue the real check-mutation.sh must leave it too. Its `--only` and `--touched` run a sensor
+#             without run-all.sh, and its selftests tag a fixture repo in every mode before any
+#             argument is judged — the `base` and `hat` tags of the 2026-10-05 incident. An unknown
+#             slug is refused right after them, so the probe costs the selftests (~2 s) and no mutant;
+#   alone     the real check-hat.sh, run ALONE (2 to 5 s): on 89df2e5 it wrote a `user.email` into the
+#             bait and exited 0, never noticing — the sensor that reproduced the incident's config.
+# One definition does the clearing, tests/isolate-git.sh, and the CENSUS asserts that run-all.sh and
+# every tests/check-*.sh source it, in its one spelling, before the first line that runs git (a
+# non-comment line with `git` as a word). Its negative control is a world of five known answers
+# (below): the census must name exactly the two wrong ones, or it is SENSOR-BROKEN — a census that
+# names nobody there names nobody anywhere.
+# The sourced file reads the list off `git rev-parse --local-env-vars`, and REFUSES a list that
+# names no GIT_DIR — so each assertion also runs its entry point behind a git that answers that one
+# question with nothing (a wrapper ahead on PATH, every other call handed to the real git) and
+# demands rc 1, the refusal's sentence, and no step or selftest run.
+# The census floor counts run-all.sh plus the sixteen sensors of 89df2e5; it moves with a new sensor.
+# Outside a mutant only: apply_mutant sabotages bin/ and nothing here reads it, so inside one the
+# verdict cannot move and each mutant would pay ~4 s to read it again.
+# ---------------------------------------------------------------------------
+GITENV_STUB=check-templates.sh
+gitenv_bait() { # gitenv_bait <dir> — a fresh bait repo with one commit and one tag, built free of any inherited GIT_DIR
+  rm -rf "$1"; mkdir -p "$1"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    cd "$1" && git init -q -b main . && printf 'bait\n' > README && git add README \
+      && git -c user.email=bait@invalid -c user.name=bait -c commit.gpgsign=false commit -qm bait \
+      && git tag bait ) >/dev/null 2>&1 \
+    || broken "gitenv probe: the bait repository could not be built"
+}
+gitenv_print() { # gitenv_print <dir> — what a stray fixture could touch: config, HEAD, every ref, the index
+  cat "$1/.git/config" "$1/.git/HEAD" 2>&1
+  git --git-dir="$1/.git" for-each-ref --format='%(refname) %(objectname)' 2>&1
+  cksum < "$1/.git/index" 2>&1
+}
+gitenv_poisoned() { # gitenv_poisoned <bait> <command...> — runs it the way a linked worktree's hook would
+  local b="$1"; shift
+  env -u SDD_MUTANT -u SDD_MUTANT_FIRST -u SDD_TPL_SELFTEST_CHILD \
+    GIT_DIR="$b/.git" GIT_INDEX_FILE="$b/.git/index" "$@"
+}
+GITENV_SOURCE='. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"'
+# ⚠️ DECLARED LIMIT (D15): like LINT_FLOOR, this floor is written by hand and nothing measures it.
+# `GITENV_FLOOR=0` alone survives the sabotage pass — it bites only paired with a narrowed glob, two
+# edits — and a floor a new sensor left behind keeps passing while it describes a smaller suite than
+# the one the census reads.
+GITENV_FLOOR=17
+gitenv_census() { # gitenv_census <tests dir> — PUBLISHES GITENV_SEEN (entry points read) and GITENV_MISSING (names not sourcing it before their first git)
+  local f at
+  GITENV_SEEN=0; GITENV_MISSING=""
+  for f in "$1/run-all.sh" "$1"/check-*.sh; do
+    [ -f "$f" ] || continue
+    GITENV_SEEN=$((GITENV_SEEN + 1))
+    at="$(awk -v want="$GITENV_SOURCE" '
+      $0 == want && !src { src = NR }
+      !first && $0 !~ /^[[:space:]]*#/ && $0 ~ /(^|[^[:alnum:]_.\/-])git([^[:alnum:]_-]|$)/ { first = NR }
+      END { print (src ? src : 0), (first ? first : 0) }' "$f")"
+    # sourced nowhere, or sourced below a line that already ran git
+    case "$at" in
+      "0 "*) GITENV_MISSING="${GITENV_MISSING:+$GITENV_MISSING }${f##*/}" ;;
+      *) [ "${at#* }" = 0 ] || [ "${at%% *}" -lt "${at#* }" ] \
+           || GITENV_MISSING="${GITENV_MISSING:+$GITENV_MISSING }${f##*/}" ;;
+    esac
+  done
+}
+gitenv_mute() { # gitenv_mute <out> <command...> — runs it behind a git that names no repository variable; PUBLISHES GITENV_MUTE_RC
+  GITENV_MUTE_RC=0
+  env -u SDD_MUTANT -u SDD_MUTANT_FIRST -u SDD_TPL_SELFTEST_CHILD PATH="$WORK/gitenv-mute:$PATH" "${@:2}" \
+    > "$1" 2>&1 || GITENV_MUTE_RC=$?
+}
+if [ -z "${SDD_MUTANT:-}" ]; then
+  mkdir -p "$WORK/gitenv-mute"
+  printf '#!/usr/bin/env bash\n[ "$*" != "rev-parse --local-env-vars" ] || exit 0\nexec %q "$@"\n' "$(command -v git)" \
+    > "$WORK/gitenv-mute/git"
+  chmod +x "$WORK/gitenv-mute/git"
+  GITENV="$WORK/gitenv"
+  rm -rf "$GITENV"; cp -r "$FAILFAST" "$GITENV"
+  [ -f "$GITENV/tests/$GITENV_STUB" ] \
+    || broken "gitenv probe: tests/$GITENV_STUB is gone — no step of the suite carries the fixture stub"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'echo "${0##*/}" >> "$FAILFAST_LOG"' \
+    'box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gitenv-fixture-XXXXXX")" || exit 1' \
+    '( cd "$box" && git init -q . && git config user.email fixture@example.com && git config user.name Fixture \' \
+    '    && printf "f\n" > f && git add f && git -c commit.gpgsign=false commit -qm fixture && git tag fixture ) >/dev/null 2>&1' \
+    'git --git-dir="$box/.git" rev-parse -q --verify refs/tags/fixture >/dev/null 2>&1 && echo fixture-tagged >> "$FAILFAST_LOG"' \
+    'rm -rf "$box"' > "$GITENV/tests/$GITENV_STUB"
+  chmod +x "$GITENV/tests/$GITENV_STUB"
+
+  gitenv_bait "$WORK/bait-armed"; GITENV_BEFORE="$(gitenv_print "$WORK/bait-armed")"
+  : > "$WORK/gitenv-armed.log"
+  gitenv_poisoned "$WORK/bait-armed" env FAILFAST_LOG="$WORK/gitenv-armed.log" \
+    "$GITENV/tests/$GITENV_STUB" >/dev/null 2>&1 || true
+  [ "$(gitenv_print "$WORK/bait-armed")" != "$GITENV_BEFORE" ] \
+    || broken "gitenv probe: the fixture stub run ALONE left the bait intact — the poison is not armed, so an intact bait below would prove nothing"
+
+  gitenv_bait "$WORK/bait-suite"; GITENV_BEFORE="$(gitenv_print "$WORK/bait-suite")"
+  : > "$WORK/gitenv-suite.log"
+  gitenv_poisoned "$WORK/bait-suite" env FAILFAST_LOG="$WORK/gitenv-suite.log" FAILFAST_RED= \
+    "$GITENV/tests/run-all.sh" > "$WORK/gitenv-suite.out" 2>&1 || true
+  GITENV_AFTER="$(gitenv_print "$WORK/bait-suite")"
+  gitenv_mute "$WORK/gitenv-mute-suite.out" "$GITENV/tests/run-all.sh" --list
+  if [ "$GITENV_AFTER" = "$GITENV_BEFORE" ] && grep -qxF fixture-tagged "$WORK/gitenv-suite.log" \
+     && [ "$GITENV_MUTE_RC" = 1 ] && grep -qF 'named no GIT_DIR' "$WORK/gitenv-mute-suite.out" \
+     && ! grep -qxF 'template contract' "$WORK/gitenv-mute-suite.out"; then
+    pass 'surface: the suite clears the repository a git-driven caller hands it'
+  else
+    fail 'surface: the suite clears the repository a git-driven caller hands it' \
+         "the bait's config, HEAD, refs and index unchanged, the fixture stub's tag in its own repo, and a git naming no GIT_DIR refused (rc 1) before any step" \
+         "bait $( [ "$GITENV_AFTER" = "$GITENV_BEFORE" ] && echo intact || echo MOVED ), stub log: $(tr '\n' ' ' < "$WORK/gitenv-suite.log"), mute git: rc $GITENV_MUTE_RC"
+  fi
+
+  gitenv_bait "$WORK/bait-catalogue"; GITENV_BEFORE="$(gitenv_print "$WORK/bait-catalogue")"
+  GITENV_RC=0
+  gitenv_poisoned "$WORK/bait-catalogue" "$ROOT/tests/check-mutation.sh" --only NO_SUCH_SLUG_GITENV \
+    > "$WORK/gitenv-catalogue.out" 2>&1 || GITENV_RC=$?
+  GITENV_AFTER="$(gitenv_print "$WORK/bait-catalogue")"
+  gitenv_mute "$WORK/gitenv-mute-catalogue.out" "$ROOT/tests/check-mutation.sh" --only NO_SUCH_SLUG_GITENV
+  if [ "$GITENV_RC" = 2 ] && [ "$GITENV_AFTER" = "$GITENV_BEFORE" ] \
+     && grep -q '^  ok    touched: ' "$WORK/gitenv-catalogue.out" \
+     && grep -qF "'NO_SUCH_SLUG_GITENV' is not a mutant of CATALOG" "$WORK/gitenv-catalogue.out" \
+     && [ "$GITENV_MUTE_RC" = 1 ] && grep -qF 'named no GIT_DIR' "$WORK/gitenv-mute-catalogue.out" \
+     && ! grep -q '^  ok    ' "$WORK/gitenv-mute-catalogue.out"; then
+    pass 'surface: the catalogue clears the repository a git-driven caller hands it'
+  else
+    fail 'surface: the catalogue clears the repository a git-driven caller hands it' \
+         "rc 2 refusing the unknown slug after its selftests ran, the bait's config, HEAD, refs and index unchanged, and a git naming no GIT_DIR refused (rc 1) before any selftest" \
+         "rc $GITENV_RC, bait $( [ "$GITENV_AFTER" = "$GITENV_BEFORE" ] && echo intact || echo MOVED ), selftest line: $(grep -c '^  ok    touched: ' "$WORK/gitenv-catalogue.out" || true), mute git: rc $GITENV_MUTE_RC"
+  fi
+
+  gitenv_bait "$WORK/bait-alone"; GITENV_BEFORE="$(gitenv_print "$WORK/bait-alone")"
+  GITENV_RC=0
+  gitenv_poisoned "$WORK/bait-alone" "$ROOT/tests/check-hat.sh" > "$WORK/gitenv-alone.out" 2>&1 || GITENV_RC=$?
+  GITENV_AFTER="$(gitenv_print "$WORK/bait-alone")"
+  if [ "$GITENV_RC" = 0 ] && [ "$GITENV_AFTER" = "$GITENV_BEFORE" ] \
+     && grep -q '^  ok    [0-9]* hat(s) declare their boundary' "$WORK/gitenv-alone.out"; then
+    pass 'surface: a sensor run alone clears the repository a git-driven caller hands it'
+  else
+    fail 'surface: a sensor run alone clears the repository a git-driven caller hands it' \
+         "tests/check-hat.sh green on its own, and the bait's config, HEAD, refs and index unchanged" \
+         "rc $GITENV_RC, bait $( [ "$GITENV_AFTER" = "$GITENV_BEFORE" ] && echo intact || echo MOVED )"
+  fi
+
+  # The census's negative control first, over a world of known answers and NOT a copy of tests/ —
+  # a copy would only work while the real tree is clean, and on a tree with no source line at all
+  # the control itself would break before the assertion could name anyone. Four sensors and a
+  # suite: sourced then git, git only in a comment above the source, sourced with no git at all,
+  # git BEFORE the source, and git with no source. The census must name exactly the last two.
+  GITENV_CW="$WORK/gitenv-census"; mkdir -p "$GITENV_CW"
+  printf '%s\n' '#!/usr/bin/env bash' '# git is only named here' 'set -uo pipefail' "$GITENV_SOURCE" 'git status' > "$GITENV_CW/run-all.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' "$GITENV_SOURCE" 'out="$(git -C "$box" log)"' > "$GITENV_CW/check-good.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' "$GITENV_SOURCE" 'echo nothing' > "$GITENV_CW/check-nogit.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' '( cd "$box" && git init -q )' "$GITENV_SOURCE" > "$GITENV_CW/check-late.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' 'git init -q "$box"' > "$GITENV_CW/check-none.sh"
+  gitenv_census "$GITENV_CW"
+  [ "$GITENV_MISSING" = 'check-late.sh check-none.sh' ] && [ "$GITENV_SEEN" = 5 ] \
+    || broken "gitenv census: a world with check-late.sh (git before the source) and check-none.sh (no source) was read as '$GITENV_MISSING' over $GITENV_SEEN file(s) — the census measures nothing"
+  gitenv_census "$ROOT/tests"
+  [ "$GITENV_SEEN" -ge "$GITENV_FLOOR" ] \
+    || broken "gitenv census: $GITENV_SEEN entry point(s) read, the floor is $GITENV_FLOOR — the glob stopped reading the suite"
+  if [ -z "$GITENV_MISSING" ]; then
+    pass 'surface: every sensor sources tests/isolate-git.sh before its first git'
+  else
+    fail 'surface: every sensor sources tests/isolate-git.sh before its first git' \
+         "run-all.sh and every tests/check-*.sh carry $GITENV_SOURCE above their first git line" \
+         "missing or too late in: $GITENV_MISSING"
+  fi
 fi
 
 # Inside a mutant a deadline is NOT a kill. The catalogue scores every rc it does not know as

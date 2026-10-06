@@ -208,6 +208,7 @@
 # Usage: tests/check-adr.sh             (exit 0 = allocator and link check behave)
 #        tests/check-adr.sh selftest    (the negative control alone; 90 = it did not go red)
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"

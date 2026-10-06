@@ -123,6 +123,7 @@
 #   96 unknown option
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 # `${BASH_SOURCE[0]}` and not a hardcoded name: the probes re-invoke THIS file, and a copy running
 # under another name has to probe itself, not whatever still sits at the old path.

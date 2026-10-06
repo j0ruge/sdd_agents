@@ -172,7 +172,12 @@ de EOL ou clean filters) e igualdade byte a byte de `00-missao.md` e
 `01-plano.md` antes e depois do checkout (progresso fica fora); `kit_guard_arm`/`kit_guard_check` em quatro portas
 (`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada); `hat_guard_check` nos três sítios onde
 o `review_scope_check` só avisava, lendo commits **e** árvore contra `writes:`; o catálogo de
-mutação sabota **uma cópia** em `mktemp -d`; o env do harness é apagado por `run_phase()` antes do
+mutação sabota **uma cópia** em `mktemp -d`. Desde #226 a suíte, o catálogo e todo
+`tests/check-*.sh` carregam `tests/isolate-git.sh` — uma definição, lista de
+`git rev-parse --local-env-vars` — antes do primeiro `git`; medido, sensor sozinho sob `GIT_DIR` de
+uma isca: 12 de 16 a moviam em `89df2e5` (o `check-autonomy` trocava o `.git` inteiro por um gitfile
+para um temporário apagado), 0 de 16 depois. O censo mora no `check-health.sh`
+(`surface: every sensor sources …`). O env do harness é apagado por `run_phase()` antes do
 `claude -p` (L5 da auditoria). Desde o PR #166 isso inclui o effort herdado: `CLAUDE_CODE_EFFORT_LEVEL`
 e `CLAUDE_EFFORT` estão no `HARNESS_ENV_UNSET` e no `env -u` do `sdd close`, porque a primeira passa
 por cima das settings; o nível da fase é do kit (`EFFORT_<FASE>` → `--effort`, vazio = settings) e

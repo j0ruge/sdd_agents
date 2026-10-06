@@ -19,6 +19,7 @@
 # Usage: tests/check-autonomy.sh   (exit 0 = the ledger tells the truth)
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"

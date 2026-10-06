@@ -15,6 +15,7 @@
 # Usage: tests/check-dry-run.sh   (exit 0 = projection correct)
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"

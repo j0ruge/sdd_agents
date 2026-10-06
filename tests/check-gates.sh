@@ -10,6 +10,7 @@
 # Usage: tests/check-gates.sh   (exit 0 = state machine correct)
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"

@@ -25,6 +25,7 @@
 # Usage: tests/check-kaizen.sh   (exit 0 = the series tells the truth and the gate holds)
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"
