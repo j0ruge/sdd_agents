@@ -1195,6 +1195,27 @@ git reset -q --hard HEAD~2
 git rm -q --cached "$FIX/docs/qa/reports/2026-01-01-fixture.md"
 qa_refused "a report of the base untracked in the index is not the mission's"
 git reset -q
+# (b') and (c') The same two shapes with the report GONE from the base tip: the base deleted it
+#     after the fork. No tip holds the path, so tip_add_carries_mission answers 0 and the merge-base
+#     test is the ONLY guard. In (b) and (c) above the tip test refuses too — since 79b6f93 it asks
+#     for the mission's progress, which the base commit that added this report does not move — so
+#     blinding the merge-base test there changed nothing, and QA_report_log_base_blind and
+#     QA_report_tree_base_blind survived the first catalogue of PR #222. main comes back at the end:
+#     every world below reads the base as it was.
+qa_base_tip="$(git rev-parse main)"
+git checkout -q main
+git rm -q "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+git commit -qm "chore: the base deletes its report after the fork" >/dev/null
+git checkout -q missao/qa-report-owner
+git rm -q "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+git commit -qm "chore: the mission deletes the base report" >/dev/null
+git revert --no-edit HEAD >/dev/null
+qa_refused "a report of the base, gone from the base tip, deleted and restored in commits is not the mission's"
+git reset -q --hard HEAD~2
+git rm -q --cached "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+qa_refused "a report of the base, gone from the base tip, untracked in the index is not the mission's"
+git reset -q
+git branch -q -f main "$qa_base_tip"
 # (d) A NEW file with the base report's name, one directory down: owned, but not a direct child of
 #     reports/ — a `-e` in place of `-ef` read it as the base report beside it.
 mkdir -p "$FIX/docs/qa/reports/archive"
