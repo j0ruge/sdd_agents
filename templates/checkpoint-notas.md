@@ -33,8 +33,9 @@
 > Só conta quando abre a linha — `intervention` no meio de uma frase é prosa e não é contado.
 >
 > Desde 2026-09-03 o **runner escreve a linha sozinho** quando é ele quem recebe a mão do humano —
-> `sdd run --phase X`, `sdd retry`, `--budget-override` — e a commita sozinha, na hora, para a
-> árvore chegar limpa ao gate da fase seguinte. A linha escrita à mão continua valendo para o que
+> `sdd run --phase X`, `sdd retry`, `--budget-override` — **e só na volta que abre sessão** (uma
+> volta parada antes dela, por PLAN, carimbo, teto ou no-work, não grava nota), e a commita sozinha,
+> na hora, para a árvore chegar limpa ao gate da fase seguinte. A linha escrita à mão continua valendo para o que
 > o runner não vê: conserto manual, `BLOCKED` assumido. Fase feita à mão tem comando:
 > `sdd note-manual <missão> <FASE>` escreve a nota e a linha `manual` do ledger, que não gradua
 > nada — escrita só aqui, a fase não existe para o ledger. `sdd approve` não

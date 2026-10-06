@@ -2653,6 +2653,12 @@ mut_RUN_intervention_before_the_stop() {
 mut_RUN_intervention_on_runner_forced_lap() {
   sed -i '/^cmd_run() {/,/^}/ s|^    cli_lap="$cli_phase"; cli_phase=""$|    cli_lap="$force_phase"; cli_phase=""|' "$1"
 }
+# Decision 11a: the retry's note goes back above the mission ceiling, so a retry the ceiling refuses
+# commits an intervention into a run that bought nothing. Caught by `sdd retry stopped by the
+# mission ceiling writes no intervention note and commits nothing` in check-autonomy.sh.
+mut_RUN_intervention_retry_before_the_ceiling() {
+  sed -i '/^cmd_retry() {/,/^}/ { /^  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "\$phase"$/d; s|^  if mission_budget_blown "\$phase"; then return 3; fi$|  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"\n&|; }' "$1"
+}
 mut_RUN_intervention_unwritten_on_retry() {
   sed -i 's|^  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"$|  :|' "$1"
 }
@@ -2701,7 +2707,39 @@ mut_RUN_mission_budget_fractional_disabled() {
   sed -i '/^mission_budget_blown() {/,/^}/ s|^  if LC_ALL=C awk -v c="$ceiling" .*|  case "$ceiling" in 0\|0.*) return 1 ;; esac|' "$1"
 }
 mut_RUN_mission_budget_override_unnoted() {
-  sed -i '/^mission_budget_blown() {/,/^}/ s|^      checkpoint_note_intervention "sdd $AUTONOMY_INVOCATION --budget-override .*$|      :|' "$1"
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^      BUDGET_OVERRIDE_NOTE="sdd $AUTONOMY_INVOCATION --budget-override .*$|      :|' "$1"
+}
+# Decision 11a (#227's neighbour), one mutant per door and per half. The override's note is
+# PUBLISHED by mission_budget_blown and WRITTEN by the door that buys the session:
+# - written at the lift again, so a lap the no-work door stops after the lift commits a note into
+#   a run that bought nothing — caught by `--budget-override on a lap that stops before any session
+#   writes no note`;
+# - never written by cmd_run, or by cmd_retry — caught by `--budget-override on a lap that opens a
+#   session writes exactly one note` (and `--budget-override goes on, …, once`), and by `sdd retry
+#   --budget-override buys its session and writes the retry note and the override note`;
+# - kept after it is written, or published on every lift — caught by `--budget-override over two
+#   sessions of one run writes one note, not one per session`.
+mut_RUN_budget_override_noted_at_the_lift() {
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^      BUDGET_OVERRIDE_NOTE="\(.*\)"$|      checkpoint_note_intervention "\1" "$phase"|' "$1"
+}
+mut_RUN_budget_override_unwritten_on_run() {
+  sed -i '/^cmd_run() {/,/^}/ s|^    budget_override_note_write "$phase"$|    :|' "$1"
+}
+mut_RUN_budget_override_unwritten_on_retry() {
+  sed -i '/^cmd_retry() {/,/^}/ s|^  budget_override_note_write "$phase"$|  :|' "$1"
+}
+mut_RUN_budget_override_note_kept() {
+  sed -i '/^budget_override_note_write() {/,/^}/ { /^  BUDGET_OVERRIDE_NOTE=""$/d; }' "$1"
+}
+# The pending note reset at the entry of its setter, the contract every other marker of this file
+# keeps: the draft jump's PR lap calls mission_budget_blown again before the session the REVIEW
+# lap's override bought, and the note is lost. Caught by `--budget-override lifted on the draft
+# jump's REVIEW lap is written above the PR session it bought`.
+mut_RUN_budget_override_note_reset_on_entry() {
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^  local phase="$1" spent ceiling="$BUDGET_MISSION_USD"$|&\n  BUDGET_OVERRIDE_NOTE=""|' "$1"
+}
+mut_RUN_budget_override_not_one_shot() {
+  sed -i '/^mission_budget_blown() {/,/^}/ { /^      BUDGET_OVERRIDE_NOTED=1$/d; }' "$1"
 }
 mut_RUN_mission_budget_stops_projection() {
   sed -i '/^mission_budget_blown() {/,/^}/ s|^  if \[ "$DRY_RUN" = "1" \]; then$|  if false; then|' "$1"
@@ -6096,6 +6134,7 @@ CATALOG=(
   RUN_intervention_unwritten_on_phase
   RUN_intervention_before_the_stop
   RUN_intervention_on_runner_forced_lap
+  RUN_intervention_retry_before_the_ceiling
   RUN_intervention_unwritten_on_retry
   RUN_intervention_written_on_dry_run
   RUN_escalation_hook_silent
@@ -6109,6 +6148,12 @@ CATALOG=(
   RUN_mission_budget_zero_is_a_ceiling
   RUN_mission_budget_fractional_disabled
   RUN_mission_budget_override_unnoted
+  RUN_budget_override_noted_at_the_lift
+  RUN_budget_override_unwritten_on_run
+  RUN_budget_override_unwritten_on_retry
+  RUN_budget_override_note_kept
+  RUN_budget_override_not_one_shot
+  RUN_budget_override_note_reset_on_entry
   RUN_mission_budget_stops_projection
   RUN_degraded_row_dropped
   RUN_degraded_repeats

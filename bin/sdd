@@ -448,6 +448,10 @@ frontmatter_write() {
 # it counts `^- intervention:` lines in the checkpoint — so a note the runner writes is counted by
 # the same instrument as one the human writes, and the hand-written note keeps its place for what
 # the runner cannot see (a fix by hand, a phase done by hand, a BLOCKED taken over).
+# WHEN: the three hands of the CLI are written only by the door that is about to buy a session,
+# right above its `before=` (#227 and decision 11a) — a lap that stops without one (PLAN, the
+# stamp, the mission ceiling, the REVIEW ceiling, no-work) writes none, because an intervention in
+# a run that bought nothing is what `sdd autonomy --by-mission` would then count.
 # Placement: last line of the execution-notes section (`## Notas de execu…`, the heading the
 # template fixes), before the next heading; at the end of the file
 # when the checkpoint has no such section (fixtures, checkpoints written before the template had
@@ -3203,9 +3207,19 @@ PIPELINE_LOG_WARNED=""
 DRY_RUN=0
 # `--budget-override` (L2 of the 2026-09-03 audit): the human lifting the mission ceiling for ONE
 # run. Global, like DRY_RUN, because the door that reads it (mission_budget_blown) is called from
-# two commands. Noted as an intervention the first time it actually lifts something, never before.
+# two commands. Noted as an intervention the first time it actually lifts something, never before —
+# and WRITTEN only where that lift buys a session (decision 11a, #227's neighbour).
 BUDGET_OVERRIDE=0
 BUDGET_OVERRIDE_NOTED=0
+# The note mission_budget_blown PUBLISHES and budget_override_note_write WRITES: the `what` of
+# checkpoint_note_intervention, empty when nothing is pending. One setter (mission_budget_blown,
+# behind the BUDGET_OVERRIDE_NOTED one-shot, so it is armed at most once per process) and one
+# consumer, which zeroes it. NOT reset at the setter's entry, which is the marker contract
+# elsewhere in this file, and the reason is a world: the PUBLISH_ON_REVIEW_BLOCKED=draft jump. The
+# REVIEW lap lifts the ceiling and leaves through `continue`; the PR lap calls mission_budget_blown
+# again before the session it opens, and a reset there would drop the note of the override that
+# bought that session.
+BUDGET_OVERRIDE_NOTE=""
 MISSION_BUDGET_PROJECTED=0
 
 pipeline_log_line() {
@@ -5384,8 +5398,14 @@ mission_budget_blown() {   # mission_budget_blown <phase> — rc 0 = STOP (row w
   if [ "$BUDGET_OVERRIDE" = "1" ]; then
     if [ "$BUDGET_OVERRIDE_NOTED" = "0" ]; then
       BUDGET_OVERRIDE_NOTED=1
+      # The warning is said NOW and the note only PUBLISHED (decision 11a). The two callers reach
+      # this door above guards that still stop the lap with no session — in cmd_run the REVIEW
+      # ceiling and door 1 of no-work —, and a note committed here was an intervention in a run that
+      # bought nothing. The warning is the terminal saying what just happened (the ceiling was
+      # crossed and lifted), true whatever the next guard decides; the note is the artefact
+      # `sdd autonomy --by-mission` counts, and it is written by the door that opens the session.
       warn "mission budget blown (US\$ $spent of $ceiling) — going on under --budget-override"
-      checkpoint_note_intervention "sdd $AUTONOMY_INVOCATION --budget-override (US\$ $spent spent against BUDGET_MISSION_USD=$ceiling)" "$phase"
+      BUDGET_OVERRIDE_NOTE="sdd $AUTONOMY_INVOCATION --budget-override (US\$ $spent spent against BUDGET_MISSION_USD=$ceiling)"
     fi
     return 1
   fi
@@ -5396,6 +5416,18 @@ mission_budget_blown() {   # mission_budget_blown <phase> — rc 0 = STOP (row w
   pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
   autonomy_blocked_row "budget-exhausted" "$phase" "$GATE_WHY"
   return 0
+}
+# Writes the note mission_budget_blown published, once, and zeroes it. Called by the two doors that
+# buy a session — cmd_run and cmd_retry —, right above their `before=` and the two guard arms: the
+# note is a commit, and inside that window it would read as the session's progress and as a commit
+# without the session's label. The phase is the one whose session the override is buying, which is
+# not always the one that lifted it (the draft jump lifts in REVIEW and opens PR). CALLED, never
+# substituted: the zeroing would die in the substitution and the next lap would write it again.
+budget_override_note_write() {   # budget_override_note_write <phase of the session being bought>
+  [ -n "$BUDGET_OVERRIDE_NOTE" ] || return 0
+  local what="$BUDGET_OVERRIDE_NOTE"
+  BUDGET_OVERRIDE_NOTE=""
+  checkpoint_note_intervention "$what" "$1"
 }
 
 phase_budget() {
@@ -8702,6 +8734,9 @@ cmd_run() {
     if [ -n "$cli_lap" ]; then
       checkpoint_note_intervention "sdd run --phase $cli_lap (the starting phase was forced from the CLI)" "$cli_lap"
     fi
+    # The override's note, on the same terms and at the same line (decision 11a): published by
+    # mission_budget_blown above the REVIEW ceiling and door 1 of no-work, written only here.
+    budget_override_note_write "$phase"
     before="$(state_fingerprint)"
     # The photograph, and it has to be taken HERE: once run_phase returns, the checkpoint the
     # session just edited is the only one left on disk and "how many were pending before" is
@@ -9090,10 +9125,14 @@ cmd_retry() {
   # there is nothing to attribute the note to, and nothing is committed on the human's behalf.
   no_work_check "$phase" ""
   if no_work_escalation "$phase"; then return 3; fi
-  # L4 (2026-09-03 audit): a retry IS the human's hand — the template's own first example of one.
-  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"
   # L2: the second door of the mission ceiling — a retry is a session too.
   if mission_budget_blown "$phase"; then return 3; fi
+  # L4 (2026-09-03 audit): a retry IS the human's hand — the template's own first example of one.
+  # BELOW the ceiling since decision 11a (#227's neighbour): written above it, a retry the ceiling
+  # refused committed a note into a mission whose run bought nothing. Then the override's note, if
+  # mission_budget_blown published one — both above `before=` and the two arms, never below.
+  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"
+  budget_override_note_write "$phase"
   step "retrying $phase with a FRESH session"
   local before after moved="false" gate_rc=0
   before="$(state_fingerprint)"

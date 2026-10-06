@@ -271,8 +271,9 @@ libera outro escritor. Não é isolamento de filesystem nem mudança do estado d
 
 **Regra.** Toda decisão de **abrir mais uma volta ou gastar mais** tem uma porta humana com
 artefato: teto por missão, aviso no bloqueio, e a linha `- intervention:` escrita **pelo runner**
-quando é ele quem recebe o comando pela CLI (`--phase`, `retry`, `--budget-override`) — dizendo o
-que ele sabe, nunca quem estava na CLI. O humano que precisa vigiar um `tail -F` para saber que a
+quando é ele quem recebe o comando pela CLI (`--phase`, `retry`, `--budget-override`), e **só onde
+a porta compra a sessão** (#227, decisão 11a do lote 5) — dizendo o que ele sabe, nunca quem estava
+na CLI. O humano que precisa vigiar um `tail -F` para saber que a
 linha parou não tem hook — tem vigília.
 
 **Admissão não é escalada.** `CHECKOUT-BUSY`/75 não abre sessão, não altera checkpoint,
@@ -296,7 +297,10 @@ fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
 `ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos
 mais um de encerramento forçado, e a linha `- intervention:` escrita pelo
-runner (L2, L6 e L4). Desde `20261004-lote-4-a-catraca-zera` (#153) a fase feita **à mão** também
+runner (L2, L6 e L4) — desde o lote 5 logo acima do `before=` da porta que abre a sessão: a do
+`--phase` consumida na 1ª volta (`cli_lap`), a do `retry` abaixo do teto, e a do `--budget-override`
+publicada pelo `mission_budget_blown` (`BUDGET_OVERRIDE_NOTE`) e escrita por
+`budget_override_note_write`; volta parada sem sessão não grava nota. Desde `20261004-lote-4-a-catraca-zera` (#153) a fase feita **à mão** também
 tem porta: `sdd note-manual <missão> <FASE>` escreve a `- intervention:` pelo mesmo escritor e a
 linha `event:"manual"` do ledger, que não gradua nada — antes dela, o PR publicado à mão de
 `20260916-destino-frete-cif` não deixou linha nenhuma, e 0 de 4 missões escreveram a nota.

@@ -638,8 +638,28 @@ assert_eq "US\$ 150.00 spent against a ceiling of 150 stops with rc 3: one budge
 assert_eq "and the journal says why, naming the phase that did not open" "1" \
   "$(grep -c 'BLOCKED  EXEC  mission budget' "$PLOG")"
 : > "$LEDGER"
+# Read off the whole mission directory, so a note in either notes file counts.
+mdir_notes() { grep -RhcE '^[[:space:]]*-[[:space:]]*intervention:' "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}'; }
+rt_notes0="$(mdir_notes)"; rt_head0="$(git -C "$FIX" rev-parse HEAD)"
 "$SDD" retry "$MISSION" >/dev/null 2>&1; rc=$?
 assert_eq "sdd retry is stopped by the same ceiling (second door)" "3 budget-exhausted" "$rc $(rows '.kind')"
+# Decision 11a, #227's neighbour: the retry's note is the CLI's hand on a session, and the ceiling
+# refuses that session. Written above the ceiling, it was committed into a mission whose run bought
+# nothing, and `sdd autonomy --by-mission` counted an intervention beside zero sessions. HEAD is the
+# witness that nothing was committed on the caller's behalf either.
+assert_eq "sdd retry stopped by the mission ceiling writes no intervention note and commits nothing" \
+  "notes:+0 head:same" \
+  "notes:+$(( $(mdir_notes) - rt_notes0 )) head:$([ "$(git -C "$FIX" rev-parse HEAD)" = "$rt_head0" ] && echo same || echo moved)"
+# The other half of the same door: lifted with --budget-override, the retry buys its session, and
+# BOTH hands are written above it — the retry's and the override's, one each. The override's note is
+# published by mission_budget_blown and written by cmd_retry, so this is what holds that writer.
+: > "$LEDGER"
+mdir_count() { grep -RhcF "$1" "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}'; }
+rt_notes0="$(mdir_notes)"; rt_retry0="$(mdir_count 'intervention: sdd retry (the phase')"
+"$SDD" retry "$MISSION" --budget-override >/dev/null 2>&1 || true
+assert_eq "sdd retry --budget-override buys its session and writes the retry note and the override note" \
+  "session:1 notes:+2 retry:+1 override:1" \
+  "session:$(rows 'select(.event == "session") | 1' | grep -c .) notes:+$(( $(mdir_notes) - rt_notes0 )) retry:+$(( $(mdir_count 'intervention: sdd retry (the phase') - rt_retry0 )) override:$(mdir_count 'intervention: sdd retry --budget-override')"
 : > "$LEDGER"
 dry_budget="$( "$SDD" run "$MISSION" --dry-run 2>&1 )"; rc=$?
 assert_eq "the projection says how much is spent and never stops there" "0 0 1" \
@@ -7099,6 +7119,57 @@ assert_eq "door 3: sdd retry refuses an unreadable cell before any session" \
   "rc:3 kind:no-work stub:0 rows:0 notes:0 head:same" \
   "rc:$NW6_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows) notes:$(cat "$NW6/docs/handoffs/$MISSION"/*.md | grep -c '^- intervention:') head:$([ "$(git -C "$NW6" rev-parse HEAD)" = "$NW6_HEAD" ] && echo same || echo moved)"
 
+# Decision 11a: the `--budget-override` note waits for the session it buys. mission_budget_blown is
+# called ABOVE the REVIEW ceiling and door 1 of no-work, and it used to write the note itself, so a
+# lap the override let through and the next guard stopped committed an intervention into a run that
+# bought nothing. DIFFERENTIAL, one world each side and the same blown ceiling (US$ 5 spent against
+# 1, the key from the environment): the unreadable cell stops before any session and must write no
+# note; the pending row opens one and must write exactly one. HEAD is the stop's second witness.
+nw_budget() { mkdir -p "$1/.sdd/logs/$MISSION"
+  printf '2026-01-01T10:00:00-03:00  EXEC  agent=sdd-executor  model=opus  session=nw  rc=0  dur=1s  cost_usd=5  log=/dev/null\n' \
+    > "$1/.sdd/logs/$MISSION/pipeline.log"; }
+nw_notes() { cat "$1/docs/handoffs/$MISSION"/*.md | grep -c '^- intervention: sdd run --budget-override' || true; }
+NW6B="$OUTSIDE/nowork-override-stop"
+nowork_world "$NW6B" "done" deadbee 1
+nowork_stub "$NW6B" empty-commit
+nw_budget "$NW6B"
+NW6B_HEAD="$(git -C "$NW6B" rev-parse HEAD)"
+: > "$LEDGER"
+( cd "$NW6B" && BUDGET_MISSION_USD=1 "$SDD" run "$MISSION" --budget-override ) >/dev/null 2>&1; NW6B_RC=$?
+assert_eq "--budget-override on a lap that stops before any session writes no note" \
+  "rc:3 kind:no-work stub:0 notes:0 head:same" \
+  "rc:$NW6B_RC kind:$(nw_last_kind) stub:$(nw_sessions) notes:$(nw_notes "$NW6B") head:$([ "$(git -C "$NW6B" rev-parse HEAD)" = "$NW6B_HEAD" ] && echo same || echo moved)"
+NW6C="$OUTSIDE/nowork-override-go"
+nowork_world "$NW6C" pending
+nowork_stub "$NW6C" empty-commit
+nw_budget "$NW6C"
+: > "$LEDGER"
+( cd "$NW6C" && BUDGET_MISSION_USD=1 "$SDD" run "$MISSION" --budget-override --max-phases 1 ) >/dev/null 2>&1
+assert_eq "--budget-override on a lap that opens a session writes exactly one note" \
+  "stub:1 notes:1" \
+  "stub:$(nw_sessions) notes:$(nw_notes "$NW6C")"
+# The pending note crosses a lap, and this is the world that says so. A REVIEW whose rounds on disk
+# already meet REVIEW_MAX_ITER, under PUBLISH_ON_REVIEW_BLOCKED=draft: the REVIEW lap lifts the
+# ceiling and leaves through the draft jump's `continue` with no session; the PR lap it forces
+# calls mission_budget_blown again and opens the session the override bought. One note, and it
+# names PR — a pending note reset on that second call (the marker contract applied blindly) is lost.
+# The stub moves nothing, so the PR lap also buys its inline retry: `PR,PR` with one note is the
+# witness that the retry is the same lap and writes nothing more.
+NW6D="$OUTSIDE/nowork-override-draft"
+nowork_world "$NW6D" "done" '{sha}' 1
+( cd "$NW6D" || exit 1
+  printf -- '---\nfase: QA\nstatus: skipped\n---\n' > "docs/handoffs/$MISSION/30-handoff-qa.md"
+  printf 'round one\n' > "docs/handoffs/$MISSION/40-review-r1.md"
+  printf 'REVIEW_MAX_ITER=1\nPUBLISH_ON_REVIEW_BLOCKED="draft"\n' >> .sdd/config.sh
+  git add -A && git commit -qm "chore: a mission out of review rounds" ) >/dev/null 2>&1
+nowork_stub "$NW6D" nothing
+nw_budget "$NW6D"
+: > "$LEDGER"
+( cd "$NW6D" && BUDGET_MISSION_USD=1 "$SDD" run "$MISSION" --budget-override ) >/dev/null 2>&1
+assert_eq "--budget-override lifted on the draft jump's REVIEW lap is written above the PR session it bought" \
+  "sessions:PR,PR notes:1 on-pr:1" \
+  "sessions:$(jq -r -s '[.[] | select(.event == "session") | .phase] | join(",")' "$LEDGER") notes:$(nw_notes "$NW6D") on-pr:$(cat "$NW6D/docs/handoffs/$MISSION"/*.md | grep -c '^- intervention: sdd run --budget-override .* — PR — ' || true)"
+
 # Form (a): the same phase derived twice in a row with the SAME reason. The stub is the incident's
 # session over a pending row it never executes — its no-op commit moves HEAD, so without the guard
 # the lap is bought again and again until the phase ceiling.
@@ -7170,6 +7241,20 @@ chmod +x "$OUTSIDE/stub/claude"
 assert_eq "a QA that advances its step behind the same reason is not no-work, and a repeated step still is" \
   "rc:3 kind:no-work stub:2 phases:QA,QA" \
   "rc:$NW10_RC kind:$(nw_last_kind) stub:$(nw_sessions) phases:$(jq -r -s '[.[] | select(.event == "session") | .phase] | join(",")' "$LEDGER")"
+# The same two-session run under a blown ceiling and --budget-override: ONE note per process, never
+# one per lap that buys a session. The note is published once (the BUDGET_OVERRIDE_NOTED one-shot)
+# and the writer zeroes it; a writer that kept it would write it again above the second session.
+# The twin world gets the same stub with its own path; `stub:2` is the witness that two laps bought.
+NW_E2E="true"
+NW10B="$OUTSIDE/nowork-qa-override"
+nowork_world "$NW10B" "done" '{sha}' 1
+NW_E2E=""
+sed -i "s|$NW10|$NW10B|g" "$OUTSIDE/stub/claude"
+nw_budget "$NW10B"
+: > "$LEDGER"
+( cd "$NW10B" && BUDGET_MISSION_USD=1 "$SDD" run "$MISSION" --budget-override ) >/dev/null 2>&1
+assert_eq "--budget-override over two sessions of one run writes one note, not one per session" \
+  "stub:2 notes:1" "stub:$(nw_sessions) notes:$(nw_notes "$NW10B")"
 
 # Door 2 is cmd_run's inline retry, reachable only when the first session moved nothing — so the
 # stub does nothing — and only under `--phase`, because door 1 refuses the derived lap first. Without

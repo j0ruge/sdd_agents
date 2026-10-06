@@ -998,7 +998,10 @@ sums the `cost_usd=` field of every session line (`?` counts as nothing) and com
 with rc 3 and a `budget-exhausted` row whose `gate_why` names the mission ceiling, so the money that stops
 the line is money already spent, never a session cut mid-way. `sdd run --budget-override` and
 `sdd retry --budget-override` go on for that one run, and the runner writes the `- intervention:`
-note itself. Zero spellings such as `0.00` are equivalent; a positive fraction such as `0.50` is
+note itself, once per run, right above the session the override buys — a lap the REVIEW ceiling or
+the no-work guard stops after the lift writes none, and `sdd retry` writes its own note only below
+the ceiling (#227, decision 11a of lote 5). The warning is still immediate; the note waits for the
+session, so on the draft jump it names PR, the phase whose session was bought. Zero spellings such as `0.00` are equivalent; a positive fraction such as `0.50` is
 still a real ceiling. The projection prints the sum and never stops there. L2 of the 2026-09-03 audit —
 the mission before it cost US$ 174 against a ceiling of US$ 150 that lived only in the plan's prose.
 
@@ -1397,10 +1400,10 @@ A mission whose sessions are all non-comparable does not appear — as before.
 
 The `- intervention:` notes of `checkpoint.md` are **narrative**, not the count. Since 2026-09-03
 the runner writes one itself, and commits it alone at once, whenever it is the runner that
-receives the human's hand — `sdd run --phase X`, `sdd retry`, `--budget-override`; since #227 the
-`--phase` note is written on the forced lap only once that lap is about to open a session, right
-above it (a `--phase PLAN`, or a `--phase PR` stopped at the stamp, writes none, and the draft jump's
-forced PR lap is the runner's hand, not the human's). The hand-written note stays for what the
+receives the human's hand — `sdd run --phase X`, `sdd retry`, `--budget-override` — only on a lap
+that opens a session, right above it (#227): a `--phase PLAN`, a `--phase PR` stopped at the stamp,
+a retry the mission ceiling refuses and an override lifted on a lap that then stops write none, and
+the draft jump's forced PR lap is the runner's hand, not the human's. The hand-written note stays for what the
 runner cannot see (a fix by hand, a phase done by hand). They print as
 `N intervention note(s)` between `reopened` and `US$` when the mission belongs to this repo and its
 checkpoint is on disk, and not at all otherwise — no `?`, no zero: `?` existed so that no false
