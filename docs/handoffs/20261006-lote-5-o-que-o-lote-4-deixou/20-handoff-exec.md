@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 773a289e-20ea-4203-817a-084658e86831
 data: 2026-10-06 14:03
-gate: "tests/run-all.sh → rc 0, 'suite green' (1892 linhas '  ok ', 0 FAIL, 556 s com TMPDIR=/tmp/l5-exec, depois da leva da revisão final); anchors: all 657 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '13 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 13, 12 com RESOLVED by"
+gate: "tests/run-all.sh → rc 0, 'suite green' (1895 linhas '  ok ', 0 FAIL, 413 s com TMPDIR=/tmp/l5pr/s2, depois da leva dos bots do PR #237); anchors: all 664 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '14 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 14, 12 com RESOLVED by"
 ---
 
 # Handoff — EXEC — Lote 5: o que o lote 4 deixou
@@ -25,18 +25,18 @@ mudou (I6); a nota `intervention:` só existe na volta que abre sessão, nas tr�
 página do `sdd status` cala sem `session` local e o `ok` do `note-manual` diz o que fez (I8); o
 supervisor nomeia quem segura o checkout e o `turn_rule` avisa toda fase (I9); o `/sdd-plan` no kit
 abre um worktree ligado (I10). ADR 0016 aceita, 0015 ganha `Amended by: 0016`. Revisão final:
-3 consertos (swap de editor, plural pt-BR, README), 5 minors para o humano. Catálogo 619 → 657,
-todos aplicam. Catraca 13 na branch (N = 0 nascidos) → 1 depois do chore. Próximo: push, PR, todos
-os bots, uma leva de consertos, `./bin/sdd health` UMA vez no worktree (com o `mutation-killers.tsv`
-copiado), merge pelo humano.
+3 consertos, 4 minors decididos pelo humano. PR #237: os bots deram 6 achados, consertados numa
+leva, e a leva achou a sandbox do catálogo sem o `.gitignore`. Catálogo 619 → 664, todos aplicam.
+Catraca 14 na branch (N = 1, a #238) → 2 depois do chore. Próximo: `./bin/sdd health` UMA vez no
+worktree (com o `mutation-killers.tsv` copiado), merge pelo humano.
 
 ## Estado do repo
 
 - **Branch:** `fix/lote-5-o-que-o-lote-4-deixou`, só local, no worktree `~/repos/sdd_agents-lote-5`
   (nunca empurrada; base `origin/main` = `89df2e5`)
-- **Último commit:** o registro da revisão final, sobre `0d6c165`
+- **Último commit:** o registro da rodada dos bots do PR #237, sobre `251d7be`
 - **Working tree:** limpo depois do commit deste handoff
-- **Suíte:** `tests/run-all.sh` → verde (rc 0, 556 s; 1892 linhas `ok`; 657 mutantes com âncora válida)
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, 413 s; 1895 linhas `ok`; 664 mutantes com âncora válida)
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
 - **Carimbo de mutação:** inválido para esta branch desde o I12 (esperado); o `sdd health` roda UMA
   vez, depois dos bots, no worktree
@@ -74,8 +74,8 @@ efeito e consertados numa leva, cada um com vermelho medido antes:
   sem a condição nova.
 
 Recusado: o achado 7 (`descendants()` calado sem `CONFIG_PROC_CHILDREN`) não procede — a admissão já
-recusa esse kernel (`bin/sdd-coordination.py:186`). Os minors 2, 4, 6 e 8 ficam para o humano
-decidir (`TODO.md` ou cabeçalho do sensor):
+recusa esse kernel (`bin/sdd-coordination.py:186`). Os minors 2, 4, 6 e 8 foram ao humano, que
+decidiu na rodada dos bots (seção abaixo):
 
 - **2 (I1):** o censo não conta `/usr/bin/git` nem `$GIT` como "primeiro git" (a classe exclui `/`):
   falha aberta sem caso hoje.
@@ -84,6 +84,32 @@ decidir (`TODO.md` ou cabeçalho do sensor):
 - **6 (I6):** o ramo `(no longer dirty)` do motivo não tem mutante próprio.
 - **8:** ordem de hash nos itens `(no longer dirty)`; tab num caminho do kit corta a chave; o `—` no
   `Status:` das ADRs 0014–0016.
+
+## Rodada dos bots (PR #237)
+
+Codex: 1 P1. CodeRabbit: 2 Major e 3 Minor. Copilot sem cota (lacuna de cobertura, não aprovação).
+Tudo numa leva, com vermelho medido antes onde há lógica e cada mutante novo provado por `--only`:
+
+- `06e0235` — **Codex P1 (I4):** a decisão do `deferred` valia só pelo título, e um `## Decision`
+  vazio passava. A seção agora precisa de uma data `AAAA-MM-DD` (no título ou no corpo, fora de
+  cerca, antes do próximo `##`). As 18 seções reais dos alvos têm data: nenhum veredito muda. Red
+  `REVIEW|REVIEW|REVIEW|REVIEW` → `REVIEW|QA|QA|QA`; 2 mutantes.
+- `592a74f` — **CodeRabbit, 2 Major (I9):** o aviso copiava a `cmdline` (credencial possível no
+  stderr) e agora nomeia só o executável; um stderr fechado matava o supervisor antes do `ECHILD` e
+  soltava a trava, e a escrita do aviso virou melhor esforço. 2 probes, 2 mutantes.
+- **CodeRabbit, 3 Minor:** pipes da tabela do `KAIZEN_LOG.md` escapados; a contagem de hoje do
+  `--check` acrescentada ao critério d do `00-missao.md` (12/11, sem reescrever a medição do
+  planejamento); o 656 deste handoff. No commit deste handoff.
+
+Os minors da revisão final, pela decisão do humano: 6 e 8 em `f2ef238` (o `(no longer dirty)`
+inteiro e na ordem do git; regime 2d, 3 mutantes), 4 em `d7ddf46` (a prosa do cabeçalho de seis
+campos), e o 2 virou item do `TODO.md` e a issue #238 (`251d7be`, catraca 13 → 14). Recusado do 8: o
+`—` no `Status:` das ADRs é o marcador de ticket ausente que o `sdd adr new` escreve
+(`bin/sdd:7713`), igual de 0010 a 0016.
+
+**Achado da própria leva:** os `--only` contra o `check-autonomy.sh` deram `HARNESS-BROKEN`. A
+sandbox do catálogo não copiava o `.gitignore` que o regime 2c (`3b1c4dc`) lê, e o `sdd health`
+teria parado antes do primeiro mutante, como o `commands/` no PR #222. `8c8be78` copia o arquivo.
 
 ## Artefatos
 
@@ -123,7 +149,7 @@ mais no stderr).
 
 ## Riscos e não-feitos
 
-- **Carimbo não medido:** o catálogo de 656 mutantes só roda no `sdd health`; as re-provas desta
+- **Carimbo não medido:** o catálogo de 664 mutantes só roda no `sdd health`; as re-provas desta
   leva foram por `--only` (dica), cada mutante novo e os vizinhos que o plano nomeia.
 - **`TMPDIR` longo:** cinco `--only` contra o `check-autonomy.sh` deram `HARNESS-BROKEN` com o nome
   do mutante no `TMPDIR` (limite já declarado no sensor desde `0c0e13a`); com `TMPDIR` curto, todos
@@ -137,4 +163,6 @@ mais no stderr).
 
 ## Achados fora de escopo
 
-Nenhum achado novo nesta leva (N = 0): a catraca fica em 13 na branch.
+Um, por decisão do humano na rodada dos bots: o minor 2 da revisão final (o censo do `GIT_DIR` não
+conta o git chamado por caminho ou variável), item do `TODO.md` e issue #238. A catraca fica em 14
+na branch e desce a 2 no chore pós-merge.
