@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 773a289e-20ea-4203-817a-084658e86831
 data: 2026-10-06 14:03
-gate: "tests/run-all.sh → rc 0, 'suite green' (1890 linhas '  ok ', 0 FAIL, 592 s com TMPDIR=/tmp/l5-exec); anchors: all 656 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '13 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 13, 12 com RESOLVED by"
+gate: "tests/run-all.sh → rc 0, 'suite green' (1892 linhas '  ok ', 0 FAIL, 556 s com TMPDIR=/tmp/l5-exec, depois da leva da revisão final); anchors: all 657 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '13 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 13, 12 com RESOLVED by"
 ---
 
 # Handoff — EXEC — Lote 5: o que o lote 4 deixou
@@ -24,7 +24,8 @@ checkpoint da missão (I5, ADR 0016 §1); a guarda do kit vê o kit sujo editado
 mudou (I6); a nota `intervention:` só existe na volta que abre sessão, nas três portas (I7); a
 página do `sdd status` cala sem `session` local e o `ok` do `note-manual` diz o que fez (I8); o
 supervisor nomeia quem segura o checkout e o `turn_rule` avisa toda fase (I9); o `/sdd-plan` no kit
-abre um worktree ligado (I10). ADR 0016 aceita, 0015 ganha `Amended by: 0016`. Catálogo 619 → 656,
+abre um worktree ligado (I10). ADR 0016 aceita, 0015 ganha `Amended by: 0016`. Revisão final:
+3 consertos (swap de editor, plural pt-BR, README), 5 minors para o humano. Catálogo 619 → 657,
 todos aplicam. Catraca 13 na branch (N = 0 nascidos) → 1 depois do chore. Próximo: push, PR, todos
 os bots, uma leva de consertos, `./bin/sdd health` UMA vez no worktree (com o `mutation-killers.tsv`
 copiado), merge pelo humano.
@@ -33,9 +34,9 @@ copiado), merge pelo humano.
 
 - **Branch:** `fix/lote-5-o-que-o-lote-4-deixou`, só local, no worktree `~/repos/sdd_agents-lote-5`
   (nunca empurrada; base `origin/main` = `89df2e5`)
-- **Último commit:** o commit deste handoff (I11)
+- **Último commit:** o registro da revisão final, sobre `0d6c165`
 - **Working tree:** limpo depois do commit deste handoff
-- **Suíte:** `tests/run-all.sh` → verde (rc 0, 592 s; 1890 linhas `ok`; 656 mutantes com âncora válida)
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, 556 s; 1892 linhas `ok`; 657 mutantes com âncora válida)
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
 - **Carimbo de mutação:** inválido para esta branch desde o I12 (esperado); o `sdd health` roda UMA
   vez, depois dos bots, no worktree
@@ -53,7 +54,36 @@ copiado), merge pelo humano.
 - `e892814`, `57ea34f` — I8 (#229, #230): status cala sem `session` local; o `ok` do `note-manual` lê `CHECKPOINT_NOTE`
 - `daf3a8e` — I9 (#234): `name_stragglers` no supervisor; o `turn_rule` ganha o processo em background
 - `4e9c854` — I10 (#235): passo 2 do `/sdd-plan` (worktree ligado no próprio kit)
-- este commit — I11: `RESOLVED by` nos 12, ADR 0016 aceita, emenda na 0015, drift, `KAIZEN_LOG.md` e este handoff
+- `6bc4b37` — I11: `RESOLVED by` nos 12, ADR 0016 aceita, emenda na 0015, drift, `KAIZEN_LOG.md` e este handoff
+
+## Revisão final da branch (depois do I11)
+
+Um revisor de contexto novo leu `89df2e5..3df598f`, só leitura, de uma cópia por `git archive`.
+Veredito: mergeável depois de uma leva pequena; 0 Critical, 1 Important, 7 Minor. Re-graduados por
+efeito e consertados numa leva, cada um com vermelho medido antes:
+
+- `3b1c4dc` — **Important (I6):** o swap do vim, reescrito a cada poucos segundos de digitação,
+  parava o `sdd run` de um alvo num kit já sujo, sem nada salvo. Os temporários de editor entram no
+  `.gitignore` do kit; o kit falso do `check-autonomy.sh` passa a carregar o `.gitignore` real e o
+  regime 2c é o sensor (red pelo `sdd run`: `kind:kit-touched same:1`). O `failure-modes.md` ganha o
+  verbete `kit-touched`, que não existia.
+- `875538b` — **Minor → Important (I4):** `## Decisões …`/`## Decisoes …` liam como decisão, e o
+  `deferred` só com a pergunta aberta passava: a falha aberta da #232 por outra grafia. Red
+  `REVIEW|REVIEW|REVIEW` → `REVIEW|QA|QA`; 1 mutante novo, 1 re-ancorado.
+- `0d6c165` — **Minor (I8, decisão minha errada):** o `README.md` descrevia a dica do `sdd status`
+  sem a condição nova.
+
+Recusado: o achado 7 (`descendants()` calado sem `CONFIG_PROC_CHILDREN`) não procede — a admissão já
+recusa esse kernel (`bin/sdd-coordination.py:186`). Os minors 2, 4, 6 e 8 ficam para o humano
+decidir (`TODO.md` ou cabeçalho do sensor):
+
+- **2 (I1):** o censo não conta `/usr/bin/git` nem `$GIT` como "primeiro git" (a classe exclui `/`):
+  falha aberta sem caso hoje.
+- **4 (I2):** comentário, ADR e prosa dizem "cabeçalho de cinco células"; o predicado admite quatro
+  com a barra final. Comportamento antigo; só a prosa exagera.
+- **6 (I6):** o ramo `(no longer dirty)` do motivo não tem mutante próprio.
+- **8:** ordem de hash nos itens `(no longer dirty)`; tab num caminho do kit corta a chave; o `—` no
+  `Status:` das ADRs 0014–0016.
 
 ## Artefatos
 

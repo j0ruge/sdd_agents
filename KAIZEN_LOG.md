@@ -29,8 +29,8 @@ kit era escrita no checkout que os `sdd run` dos alvos executam.
 | Relatório de outra missão que editou este checkpoint (mundo j) | `REVIEW|0` | `QA|1` |
 | Kit já sujo editado de novo durante a fase de um alvo | rc 0, 0 linhas | `kit-touched`, com o caminho nomeado |
 | Nota `intervention:` sem sessão (`--phase PLAN`, `--phase PR` no carimbo, retry no teto, override em volta parada) | gravada e commitada | nenhuma; a da override carrega a fase da sessão comprada |
-| Catálogo de mutação | 619 | **656** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 656 mutants still apply`; 4 re-ancorados |
-| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 592 s, 1890 linhas `ok`, 0 FAIL (TMPDIR curto; carga da máquina não controlada) |
+| Catálogo de mutação | 619 | **657** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 657 mutants still apply`; 5 re-ancorados |
+| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 556 s, 1892 linhas `ok`, 0 FAIL, depois da leva da revisão final (TMPDIR curto; carga da máquina não controlada) |
 
 **Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
 `~/repos/sdd_agents-lote-5` (ADR 0016 §2): nada escrito no checkout principal enquanto alvos rodavam.
@@ -50,7 +50,14 @@ hunk a hunk; onde divergiram do plano, o plano mandou e a nota do checkpoint reg
 - cinco `--only` do I6 deram `HARNESS-BROKEN` porque o nome do mutante no `TMPDIR` empurra a frase
   além do corte de 200 do ledger, um limite já declarado. Com `TMPDIR` curto, todos foram pegos.
 
-**Ainda não medido:** o carimbo do `sdd health` com 656 mutantes, que roda depois dos bots; e o uso
+**Revisão final da branch:** um revisor de contexto novo achou 1 Important e 7 Minor. Consertados
+numa leva, com vermelho medido: o swap do vim parava o `sdd run` de um alvo num kit já sujo, sem nada
+salvo (`3b1c4dc`: temporários de editor no `.gitignore` do kit, regime 2c, verbete `kit-touched` no
+`failure-modes.md`); o plural pt-BR `## Decisões`, reclassificado de Minor para Important pelo efeito
+(`875538b`); e o README da dica do `sdd status` (`0d6c165`). Um minor foi recusado com prova (a
+admissão já exige `CONFIG_PROC_CHILDREN`); quatro ficam para o humano.
+
+**Ainda não medido:** o carimbo do `sdd health` com 657 mutantes, que roda depois dos bots; e o uso
 real — a primeira parada `kit-touched` com o "what changed", o primeiro supervisor nomeando um
 processo, a primeira missão do kit aberta pelo passo 2 do `/sdd-plan`.
 
