@@ -4,6 +4,58 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-06 — Lote 5: o que o lote 4 deixou
+
+**Problema (Gemba):** o lote 4 fechou com 11 achados no `TODO.md`, e o planejamento do lote 5 achou
+mais dois (#235, e o `sdd kaizen` no checkout principal, que ficou para desenho próprio). Seis
+protótipos, cada um num clone de `89df2e5`, reproduziram os 12 com o probe escrito e a linha `FAIL`
+vista antes do conserto. Seis sensores falhavam abertos — a linha curta da tabela sumia dos dois
+leitores, `deferred` passava sem a decisão escrita, o relatório de outra missão contava quando ela
+editava este checkpoint, a guarda do kit não via kit já sujo editado de novo, o `red_norm` expandia
+array vazio sem guarda, e a suíte herdava o `GIT_DIR` de quem a chamava (o incidente de 2026-10-05,
+reparado à mão). A nota `intervention:` era contada numa corrida que não abriu sessão, e a missão do
+kit era escrita no checkout que os `sdd run` dos alvos executam.
+
+**Medição** (antes: `89df2e5`; depois: topo da branch, comandos rodados em 2026-10-06):
+
+| Fato | Antes | Depois |
+|---|---|---|
+| Catraca `todo-findings` | 11 na `main` (13 com os dois do planejamento) | 13 na branch, 12 com `RESOLVED by`, N = 0 nascidos → 1 depois do chore |
+| Sensores sozinhos que movem uma isca sob `GIT_DIR` | 12 de 16 (o `check-autonomy` trocava o `.git` por um gitfile para um temporário apagado) | 0 de 16, todos rc 0; a suíte inteira sob o veneno, `suite green` e isca intacta (461 s) |
+| `check-hat.sh` sozinho sob o `GIT_DIR` de um worktree ligado | gravava `user.email` na isca e saía 0 | isca intacta, rc 0 |
+| `--red` sobre Check mudo, docker `bash:4.3` | `grep -c "unbound variable"` → 1 | 0 |
+| Linha `| I2 | slice | pending |` no checkpoint | some; `gate_EXEC` passa a QA | `increment I2 has no Status`; `--check`/`--red` rc 1 |
+| Bug `deferred` sem `## Decis…` | passa a QA | barra e é nomeado no motivo |
+| Relatório de outra missão que editou este checkpoint (mundo j) | `REVIEW|0` | `QA|1` |
+| Kit já sujo editado de novo durante a fase de um alvo | rc 0, 0 linhas | `kit-touched`, com o caminho nomeado |
+| Nota `intervention:` sem sessão (`--phase PLAN`, `--phase PR` no carimbo, retry no teto, override em volta parada) | gravada e commitada | nenhuma; a da override carrega a fase da sessão comprada |
+| Catálogo de mutação | 619 | **656** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 656 mutants still apply`; 4 re-ancorados |
+| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 592 s, 1890 linhas `ok`, 0 FAIL (TMPDIR curto; carga da máquina não controlada) |
+
+**Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
+`~/repos/sdd_agents-lote-5` (ADR 0016 §2): nada escrito no checkout principal enquanto alvos rodavam.
+Cada incremento seguiu o mesmo roteiro. Primeiro o Check do plano, rodado antes do conserto e
+anotado (0 em todos). Depois o probe aplicado sozinho, com o `FAIL` visto pelo motivo que o plano
+mediu, e só então o conserto. Cada mutante novo e os vizinhos que o plano nomeia foram provados por
+`--only`: 129 re-provas, todas pegas. Sabotagem nos sensores que o catálogo não alcança: 8/8 no I1,
+8/8 no I2, 2/2 no I3 e 10/10 no I10. Re-âncora do `TODO.md` em todo commit. Os protótipos entraram
+hunk a hunk; onde divergiram do plano, o plano mandou e a nota do checkpoint registra o desvio.
+
+**O que travou e como se resolveu:**
+- duas premissas mudaram com a medição antes do plano: a #223 não aborta o sensor (é ruído no
+  stderr e risco latente), e a #226 não se conserta só no `run-all.sh`;
+- a #229 ganhou desvio medido da direção do item: calar só sem linha `session`;
+- três protótipos não traziam o que o plano pedia: o `GIT_OPTIONAL_LOCKS=0` do I6 (medido: sem ele o
+  `git status` reescreve o índice do kit), a frase do `./bin/sdd` do I10 e a numeração 11a do I7;
+- cinco `--only` do I6 deram `HARNESS-BROKEN` porque o nome do mutante no `TMPDIR` empurra a frase
+  além do corte de 200 do ledger, um limite já declarado. Com `TMPDIR` curto, todos foram pegos.
+
+**Ainda não medido:** o carimbo do `sdd health` com 656 mutantes, que roda depois dos bots; e o uso
+real — a primeira parada `kit-touched` com o "what changed", o primeiro supervisor nomeando um
+processo, a primeira missão do kit aberta pelo passo 2 do `/sdd-plan`.
+
+---
+
 ## 2026-10-05 — Lote 4: a catraca zera
 
 **Problema (Gemba):** o `TODO.md` do kit fechou o lote 3 com **23 achados abertos** (`todo-findings 23`

@@ -1221,7 +1221,9 @@ the fifth is a *phase recorded as done by hand* (`event:"manual"`): the gate clo
 `phase` it names, no `kind`, no `gate_why`, no money — written by `sdd note-manual` beside the
 `- intervention:` note it commits to the checkpoint — on the mission branch, after which the human
 is put back on the branch they stood on, and told when that mission branch is already merged into
-the local base (the note will not reach it; a squash merge is not seen). No session ran, so it grades nothing: `sdd autonomy` gives it a
+the local base (the note will not reach it; a squash merge is not seen). The row is written in
+every case, and since #230 the command's `ok` says what the note writer actually did (committed,
+written but not committed, not written, or no `checkpoint.md` at all). No session ran, so it grades nothing: `sdd autonomy` gives it a
 bucket of its own and `sdd kaizen --series` admits it without minting a version, a mission or a
 cell from it. Escalation and gate-closure
 rows carry only the columns marked "on escalation rows" in "absent when"; everything else is present

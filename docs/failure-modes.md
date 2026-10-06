@@ -20,8 +20,9 @@ for independent work, or wait for the current execution and its descendants to f
 The owner PID may already be dead while its supervisor still waits for a child. This includes
 children that closed inherited descriptors, called `setsid` or double-forked. The lock releases
 automatically after the last descendant exits, even after SIGKILL of the public owner/worker.
-A server left in the background keeps ownership; stop that task through its normal shutdown
-path. Do not delete the lock file or kill the supervisor to force entry: that defeats exclusion.
+A server left in the background keeps ownership; since #234 the supervisor names it once, a second
+after the worker exits (`sdd <command>: done, but 1 process it left running holds the checkout; …`,
+then `pid <n>: <command line>`), so you know which task to stop through its normal shutdown path. Do not delete the lock file or kill the supervisor to force entry: that defeats exclusion.
 Stale JSON without a live lock is harmless and does not require manual cleanup.
 
 **CHECKOUT-UNAVAILABLE:** coordinated execution requires Linux 5.3+ procfs, Python 3.9+ and kernel
@@ -501,7 +502,9 @@ the field has a third value for exactly that case: a human decided, another miss
 not block, and — unlike `human` — the gate's passing reason **names it on every evaluation**
 (`N deferred (visible, not blocking): BUG-a`), so the debt stays in front of whoever runs
 `sdd status`. Marking it requires the decision to be written in the bug's own body; *"not now"* with
-nothing recorded is `agent`. Using `human` for this is what SQ-129 did, and the swap back became a
+nothing recorded is `agent`, and since #232 the gate reads it that way: with no `## Decis…` heading
+outside a fence (`## Decisions for a Human` is an open question and does not count), the bug blocks
+and the reason names it (`… with no '## Decision' section in the body count as agent: BUG-…`). Using `human` for this is what SQ-129 did, and the swap back became a
 manual increment of the next mission.
 
 Three cheap things get read as "unmarked", because the match is deliberately strict and its
