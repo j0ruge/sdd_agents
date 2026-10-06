@@ -39,82 +39,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `log before..after`; regime "kit já sujo e editado" e mutante irmão do `kit_touched_silent`.
   — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
 
-- [ ] **O Red do `R<n>` prova o achado, não o conserto: nenhum passo sabota a linha nova** —
-  `agents/sdd-executor.md:83` (`Watch it fail`) — o conserto tira o sintoma e pode abrir um fail-open
-  ao lado com o probe verde. Medido só no laço interativo (PR #45, #46; `coderabbit-pr` 2.4.0 já
-  sabota); no headless, nunca. Direção: medir antes. O `40-review-r*.md` não grava o commit que
-  gerou o achado, então um achado da rodada N+1 só conta se o `git blame` da âncora dele cair num
-  commit `R<n>` da N; se houver caso, o executor sabota o conserto antes do commit. RESOLVED by 9c9c5e1.
-  — descoberto pela sessão interativa ao avaliar o `/insights`, sem missão (2026-10-01)
-
-- [ ] **A regra da âncora aceita qualquer símbolo citado que reapareça perto, e uma âncora podre passa** —
-  `tests/check-todo.sh:2132` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
-  basta; identificador que se repete no arquivo inteiro casa em qualquer lugar. Medido em `b3b6b98`:
-  `tests/check-autonomy.sh:6674` apontava para `exit 0` e passou verde porque `GIT_REFLOG_ACTION`
-  está em 6400 — o sensor disse `every anchor on target`. Direção: exigir o símbolo na própria linha
-  (ou no bloco da função), ou contar ocorrências e recusar símbolo que aparece em todo canto. RESOLVED by c2e508a.
-  — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
-
-- [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:2147` (`MUTATION_STAMP_PATHS`) contra `tests/check-mutation.sh:6284` — a chave lê
-  `bin tests templates config`, mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança
-  confinada a esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a regra 12 do
-  `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita `CLAUDE.md`, e chavear nele custaria
-  uma segunda rodada de ~20 min por missão). Direção: ler a lista do próprio `sandbox()`, decidido o custo.
-  RESOLVED by f05aa7a.
-  — descoberto por `sdd-executor` na missão `20260819-fecho-...` (2026-08-19)
-
-- [ ] **O gate PLAN-AUTO aceita Check que já nasce verde** — `templates/missao.md:45` (`Check executável`) — o critério
-  `d` cobra `Check executável (comando → esperado)`, não "Check que
-  reprova o HEAD de hoje". Medido: o Check do I1 desta missão era `grep -c 'gate_DOCS reprova'
-  TODO.md` → `0`, mas o título no `TODO.md` traz crases (`` `gate_DOCS` reprova ``), então o
-  comando já devolvia `0` **antes** da remoção — verde por construção, exatamente o que a casa
-  proíbe em teste. Direção: o planner roda cada Check contra o HEAD e registra o vermelho.
-  RESOLVED by ac0a6b2 e ee5c550.
-  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
-- [ ] **O formato de achado vale para os repos-alvo, mas o sensor só guarda o arquivo do kit** —
-  `tests/check-todo.sh` (`--allow-empty`) vs `CLAUDE.md` (princípio 5) — o esqueleto de duas seções e o ciclo
-  "fechado é apagado" valem para o `TODO.md` de **qualquer** repo. Desde o marcador, o sensor roda
-  num alvo (`--check <arquivo> --allow-empty`, e a skill `todo-to-github-issues` o chama antes de
-  espelhar), mas nada o põe na suíte do alvo: o inchaço volta sem ninguém medir a cada missão.
-  Direção: o `starter.conf` sugerir o `--check` do kit no `TEST_CMD` do alvo. RESOLVED by ef1bc82.
-  — descoberto por `humano` revisando o sensor novo (2026-08-16)
-
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9840`
-  (`kaizen_series`) vs `docs/pipeline.md:1400`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
-  `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:9350`) e
-  descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
-  `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
-  (sessão → missão) — o ADR que o runner cita, a folha do juiz, e a própria frase que o runner
-  IMPRIME. Direção: extrair os campos do `jq` e cobrá-los na doc. RESOLVED by dcfb072.
-  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
-- [ ] **Piso anti-vacuidade que fica para trás continua PASSANDO, e nada avisa** —
-  `tests/check-lang.sh:308` (`n_surface`) — o piso dizia 37 caminhos contra 40 reais: as ADRs 0004–0006 entraram
-  pelo glob `docs/adr/*.md` sem tocar o número, e piso menor que a superfície certifica menos do
-  que lê. Corrigido para 41 no I4, mas a **classe** segue viva — todo piso que convive com um glob
-  (`REVIEW_FLOOR`, `LINT_FLOOR`, os de `check-pipefail.sh`) falha igual, e é a segunda vez que este
-  mesmo piso paga. Direção: derivar o piso, ou um sensor que compare piso × superfície real.
-  RESOLVED by 76a2a06 e 83d9258.
-  — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
-
-- [ ] **`gate_TICKET` não confere no Jira a issue que o chapéu diz que ele confirma** — `bin/sdd:1147`
-  (`gate_TICKET`) — o `agents/sdd-ticket.md:18` promete que o runner confirma a issue por `acli`,
-  mas o gate só lê `issue:` e `sprint:` do frontmatter do `10-ticket.md`. Uma issue duplicada (LH-5
-  no lugar da LH-4) passa verde, e a LH-4 só se defendeu com um Check próprio no I1. Fail-open: o
-  chapéu afirma uma medição que ninguém faz. Direção: o gate chama o `acli` (a issue existe e está
-  no sprint ativo), ou o chapéu deixa de prometer. RESOLVED by ae81ed3.
-  — descoberto por `sdd-planner` na missão `20260927-idioma-da-spa-pelo-idp` (2026-09-27)
-
-- [ ] **Relatório trazido do histórico POSTERIOR da base conta como da missão** —
-  `bin/sdd:905` (`path_in_commits`) — a posse exige caminho ausente da árvore do merge-base; um
-  relatório que outra missão mergeou em `origin/<base>` DEPOIS do corte, trazido por `git checkout
-  origin/<base> -- f`, `merge --squash` ou `cherry-pick`, é novo para o merge-base e conta: a SQ-146
-  por outra porta. Checar a ponta da base recusaria o próprio relatório de missão mergeada por
-  squash (o fluxo do `sales_quote`). Direção: distinguir pelo blob na ponta, não pelo caminho. RESOLVED by 48e7870.
-  — descoberto por `revisor de contexto novo` na missão `20260928-os-achados-da-janela` (2026-09-29)
-
 - [ ] **O `--red` aborta sob `set -u` em bash 4.0–4.3 quando o Check não imprime nada** —
   `tests/check-checkpoint.sh:536` (`red_norm`) — `read -ra w` de uma saída vazia deixa o array vazio, e
   `"${w[*]}"` é "unbound variable" antes do bash 4.4: o caso que o `--red` existe para recusar (o Check
@@ -149,23 +73,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
-- [ ] **O `kaizen_reminder` diz a frase de repo-alvo quando roda de um worktree do kit** —
-  `bin/sdd:10378` (`kit_id`) — a grafia que a porta do `sdd kaizen` tinha antes do #121:
-  compara o `--show-toplevel` de `$SDD_HOME` com o `$REPO_ROOT`, e o toplevel é por worktree. Do
-  worktree, o `sdd` do checkout principal imprime "N mission(s) of this repo … The kaizen judge
-  counts them" no lugar da frase do kit. Direção: o mesmo `ledger_repo_root` dos dois lados, e
-  re-ancorar o `mut_KAIZEN_reminder_wrong_repo`. O `kit_guard_check` usa a grafia e não é defeito. RESOLVED by efb5db1.
-  — descoberto por `sdd-planner` na missão `20261003-lote-3-a-catraca-desce` (2026-10-03)
-
-- [ ] **Uma sessão escreve o ledger com o `bin/sdd` que tinha em MEMÓRIA ao ser lançada** —
-  `bin/sdd:4531` (`autonomy_session_row`) — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4
-  rodadas com `turns` nulo), e o ledger não distingue "medido nulo" de "não medido": fail-open de leitura. O
-  `.sdd/config.sh` tem o mesmo defeito (`bin/sdd:147`, `source` único): o `TEST_CMD` consertado a meio do run não vale,
-  e o EXEC da SQ-141 queimou 4 retries (~US$ 5,90) num gate insatisfazível. Direção: o `sdd run` avisar quando `bin/sdd`
-  ou config mudou sob ele (ou reler o config por gate). RESOLVED by ed252ce e 44de239.
-  — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01); config por `claude` na missão
-  `20260924-transacao-honra-o-timeout` (2026-09-24)
-
 - [ ] **`sdd run --phase PR` com só o carimbo faltando grava uma intervenção e não abre sessão** —
   `bin/sdd:8198` (`checkpoint_note_intervention`) — a nota "forced from the CLI" é commitada antes de a
   volta chegar à parada no carimbo (rc 2), e o `sdd autonomy --by-mission` conta uma intervenção numa
@@ -182,15 +89,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Nem agente nem `turn_rule` proíbem subir processo longo. Direção: worker colhido com filhos vivos
   imprime uma vez pid e cmdline de cada um; e uma frase no `turn_rule` da fase QA.
   — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
-
-- [ ] **As ADRs 0001–0007 não têm `Spec:`, e por isso 14 missões deste repo não podem declarar
-  `adr:`** — `docs/adr/0001-judge-split-deterministic-series-model-verdict.md:1` (`Status`) — nenhuma das sete
-  liga-se a uma missão por artefato (`git log --diff-filter=A` de cada uma não toca
-  `docs/handoffs/`), então o par das duas direções não fecha e `adr: none` seria rótulo sem
-  artefato. É o que segura este repo em `ADR_CHECK=warn`: o `sdd adr check` conta 14 sem decisão, e
-  `block` mandaria as 14 de volta para PLAN. Direção: o humano mapeia as sete, `sdd adr new --spec`
-  escreve os dois lados, o resto vira `adr: none`, e aí a chave volta para `block`. RESOLVED by 7cb9328.
-  — descoberto por `codereview` na missão `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
 
 - [ ] **A parada no carimbo manda rodar o `sdd health` mesmo quando o carimbo é impossível** —
   `bin/sdd:8300` (`GATE_PR_STAMP_WHY`) — numa cópia do kit fora do git, ou com um caminho medido
@@ -217,31 +115,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Idioma
 
-- [ ] **`surface()` do `check-lang.sh` ENUMERA arquivos em vez de casar `docs/*.md`** —
-  `tests/check-lang.sh:74` (`surface`) — um doc novo em `docs/` nasce **fora** da régua de idioma enquanto o
-  `CLAUDE.md § Idioma` promete `docs/` inteiro; o I4 cobriu `docs/graphify.md` **um arquivo por
-  vez**, que é o remendo e não o conserto. Direção: glob, com o piso derivado junto — é decisão,
-  porque glob e piso enumerado são a mesma discussão do item do piso acima. RESOLVED by 76a2a06.
-  — descoberto por `sdd-planner` na missão `20260901-o-revisor-so-acha` (2026-09-01)
-
 ### Custo e escala
-
-- [ ] **O `sdd-publisher` não consegue esperar o `sdd health` dentro de uma sessão headless** —
-  `agents/sdd-publisher.md:38` (`sdd health`) — o agente iniciou o health "em background" e encerrou o turno
-  "esperando a notificação": em `claude -p` encerrar o turno encerra a sessão, e o health morreu
-  com ela (US$ 1,46 por nada); a sessão seguinte rodou em primeiro plano e levou 82 min (US$ 2,73).
-  É a classe do *"waiting for the suite"* de `4c86712`, agora na fase PR. Direção: o **runner** roda
-  `sdd health` antes de abrir a sessão de PR quando o carimbo está inválido — é comando, não
-  julgamento. RESOLVED by bee7a63 e fd05345.
-  — descoberto por `humano` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-
-- [ ] **O carimbo da fase PR é medido antes da revisão dos bots, e o primeiro achado de código o descarta** —
-  `agents/sdd-publisher.md:71` (`./bin/sdd health`) — o `CLAUDE.md` manda esperar os revisores,
-  consertar numa leva e carimbar uma vez; a fase PR carimba logo depois de abrir o PR. Medido no #196:
-  health às 18:13, CodeRabbit às 18:27 com um achado em `bin/sdd`, run interrompido com 123 de 542
-  mutantes. A direção do item acima (o runner carimbar antes da sessão de PR) agrava isto. Direção, à
-  luz do ADR 0004: abrir o PR, esperar a rodada dos bots e só então carimbar. RESOLVED by bee7a63 e fd05345.
-  — descoberto pela sessão interativa que monitorava `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
 
 ### Sem seção — chegaram depois da última classificação
 
@@ -251,15 +125,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > evento que o reabre — pela régua D15, ausência de consumidor é decisão adiada, não achado. Os
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
-
-- [ ] **Fase executada à mão não tem como ser registrada, e o ledger afirma que ela não aconteceu** —
-  `agents/sdd-publisher.md:1` (`sdd-publisher`) — a fase PR da SQ-129 foi montada à mão depois de três mortes por
-  memória; não há sessão de publisher no ledger e o custo não entra na soma (US$ 161,29 é o total
-  que o journal conhece, e ele para na DOCS). A lacuna virou prosa no `50-pr.md`, que nem o
-  `sdd autonomy` nem o `sdd kaizen` leem. Direção: `sdd note-manual <fase>`, irmão do `intervention:`
-  — ⚠️ pede o **sexto** `event` do ledger, com dois leitores a ensinar no mesmo commit.
-  RESOLVED by 6eca40a, e03ca8b e 82c2986.
-  — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
