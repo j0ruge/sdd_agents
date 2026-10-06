@@ -6626,6 +6626,13 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # HARNESS-BROKEN before a single mutant ran — measured on the first health of PR #222, which no
   # fast step could have seen: `--anchors` copies only bin/. Read, never mutated: out of the stamp key.
   cp -r "$ROOT/commands" "$1/"
+  # `.gitignore`, the sixth, the same way: check-autonomy.sh builds its fake kit with the kit's real
+  # ignore rules (regime 2c — an editor's swap file is not the kit), copied from its own kit root.
+  # Absent here, that `cp` failed in silence, the swap file reached `git status`, the control went
+  # red on 2c and every --only against check-autonomy.sh answered HARNESS-BROKEN — measured on PR
+  # #237, before its `sdd health`, with the regime born in the final review of the same branch.
+  # Read, never mutated: out of the stamp key.
+  cp "$ROOT/.gitignore" "$1/"
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log
