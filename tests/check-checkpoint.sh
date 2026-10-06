@@ -545,11 +545,13 @@ check_one() { # check_one <path> — one checkpoint, no floors, no doc assertion
 
 # red_norm <text> — every run of blanks, newlines included, folds into one space; ends trimmed.
 # Applied to both sides, so `echo 1; echo 2` compares equal to `1 2`, the way a person reads it.
+# `${w[@]+…}` and not a bare `"${w[*]}"`: a Check that printed nothing leaves `w` EMPTY, and bash
+# 4.0-4.3 call an empty array unbound under `set -u` (issue #223, the idiom of check-todo.sh).
 red_norm() {
   local s="${1//$'\n'/ }" w
   s="${s//$'\t'/ }"
   read -ra w <<< "$s"
-  printf '%s' "${w[*]}"
+  printf '%s' ${w[@]+"${w[*]}"}
 }
 
 # red_cell <cell> — splits the strict form `command` → `expected` into RED_CMD and RED_EXP. Globals,
@@ -636,7 +638,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=63
+PROBE_FLOOR=64
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1111,6 +1113,19 @@ selftest() {
   # claims a group that just failed.
   [ "$FAILS" -eq "$red_f0" ] && \
     pass "rule: a Check already green at HEAD is refused by --red ($((PROBES - red_p0)) probe(s))"
+  # bash 4.0-4.3 call an EMPTY array unbound under `set -u`, and the kit promises bash 4+ (issue
+  # #223): `"${w[*]}"` over a Check that printed nothing killed red_norm with `w[*]: unbound
+  # variable` on stderr — measured in docker bash:4.3, the verdict right only because the dead
+  # substitution left the same empty string. The bash 5 this suite runs on cannot reproduce it
+  # (BASH_COMPAT=4.3 does not either), so the assertion reads the function: the guarded expansion
+  # check-todo.sh already uses, or red.
+  PROBES=$((PROBES + 1))
+  case "$(declare -f red_norm)" in
+    *'${w[@]+"${w[*]}"}'*)
+      pass 'red_norm guards its empty array, which bash 4.0-4.3 call unbound under set -u' ;;
+    *) printf 'SENSOR-BROKEN: red_norm expands its array unguarded — bash 4.0-4.3 call an empty one unbound under set -u\n' >&2
+       FAILS=$((FAILS + 1)); fail_rc 90 ;;
+  esac
 
   rm -rf "$box"
 

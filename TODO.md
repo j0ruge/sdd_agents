@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
 
 - [ ] **O `--red` aborta sob `set -u` em bash 4.0–4.3 quando o Check não imprime nada** —
-  `tests/check-checkpoint.sh:551` (`red_norm`) — `read -ra w` de uma saída vazia deixa o array vazio, e
+  `tests/check-checkpoint.sh:553` (`red_norm`) — `read -ra w` de uma saída vazia deixa o array vazio, e
   `"${w[*]}"` é "unbound variable" antes do bash 4.4: o caso que o `--red` existe para recusar (o Check
   mudo) vira aborto do sensor. Não reproduz no bash 5.2 daqui; o kit promete bash 4+. Direção:
   `${w[@]+"${w[*]}"}`, o idioma que o `check-todo.sh` já usa.
