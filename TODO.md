@@ -122,6 +122,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   por esse commit seja um blob que a branch da missão já teve.
   — descoberto por `claude` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
+- [ ] **A suíte herda `GIT_DIR` de quem a chama, e os fixtures escrevem no repositório real** —
+  `tests/run-all.sh:33` (`SDD_TEST_STATE`) — o `run-all.sh` isola o estado do runner, mas não limpa
+  `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE`. Sob `git bisect run` (e num hook `pre-push`, que o git chama
+  com `GIT_DIR` exportado), o `git init --bare` do `check-gates.sh` reinicializou o kit como bare, o
+  `git config user.email` gravou `[user] Fixture` e fixtures criaram tags — medido em 2026-10-05 21:17,
+  reparado à mão. Direção: `unset` de todo `GIT_*` de repositório ao lado do `SDD_STATE_DIR`, com probe
+  que rode um sensor sob `GIT_DIR` apontando para um repo-isca.
+  — descoberto por `sessão interativa` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
+
 ### Contrato e configuração
 
 - [ ] **O `kaizen_reminder` diz a frase de repo-alvo quando roda de um worktree do kit** —

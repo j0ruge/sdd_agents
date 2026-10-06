@@ -21,7 +21,7 @@ e I16–I24), cada um com o Check do plano medido vermelho antes e verde depois.
 mais o health (I14); o ledger carrega `runner_sha` (I15); o config é relido por volta (I16);
 `sdd note-manual` grava a fase feita à mão (I17–I19); o relatório na ponta da base pergunta quem o
 trouxe (I20); a régua de idioma lê `docs/` por censo (I21). ADR 0015 aceita, com as emendas em
-0004, 0011, 0013 e 0014. Catraca 23 → 23 na branch (16 resolvidos + N = 7 nascidos: 5 na revisão final, 2 na rodada dos bots do PR #222) → 7 depois do chore.
+0004, 0011, 0013 e 0014. Catraca 23 → 24 na branch (16 resolvidos + N = 8 nascidos: 5 na revisão final, 2 na rodada dos bots do PR #222, 1 no carimbo) → 8 depois do chore.
 Catálogo 593 → 612, todos aplicam. Próximo, pela decisão 6: push, PR, esperar TODOS os bots,
 consertar numa leva, `./bin/sdd health` uma vez (o humano dispara), merge pelo humano.
 
@@ -99,9 +99,9 @@ Ler o `01-plano.md` § "Depois do checkpoint" e seguir na ordem:
 3. `./bin/sdd health` uma vez, depois do último commit de código, disparado pelo humano (~45–55 min
    com 615 mutantes; lançador desanexado). Desde o I12 a chave inclui `agents/`.
 4. Merge pelo humano; depois o chore pós-merge numa branch `chore/todo-pos-merge-lote-4` (apaga os
-   16, catraca 23 → 7, `todo_rm.py` provando cada hash contra `origin/main`) e o re-sync do espelho
+   16, catraca 24 → 8, `todo_rm.py` provando cada hash contra `origin/main`) e o re-sync do espelho
    de issues — os 16 fecham como `fixed by <hash>`, as 7 saídas (#88, #218, #130, #155, #109, #180,
-   #135) à mão como `not planned`; os 7 nascidos viram issues novas.
+   #135) à mão como `not planned`; os 8 nascidos viram issues novas.
 
 ## Pendências / Decisions for a Human
 
@@ -141,3 +141,5 @@ Ler o `01-plano.md` § "Depois do checkpoint" e seguir na ordem:
 - 2 itens novos da rodada dos bots do PR #222 (N = 7): a linha do checkpoint com menos de cinco
   células, que os dois leitores pulam, e o fail-open residual da ADR 0015 §3 (outra missão que edite o
   checkpoint desta).
+- 1 item nascido no carimbo (N = 8): a suíte herda `GIT_DIR` de quem a chama — um `git bisect run`
+  fez os fixtures do `check-gates.sh` escreverem no repositório real (`core.bare`, `[user]`, tags).
