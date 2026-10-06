@@ -5116,6 +5116,23 @@ mut_RUN_manual_stays_when_detached() {
 mut_RUN_manual_merged_silent() {
   sed -i '/^cmd_note_manual() {/,/^}/ s@if \[ "\$merged" = 1 \]; then@if false; then@' "$1"
 }
+# #230: the `ok` stops reading what the writer published and claims the note again, over a mission
+# with no checkpoint. Caught by `note-manual's ok says what the note writer did, …` in
+# check-autonomy.sh, its first world (claimed:1, said:0).
+mut_RUN_manual_ok_unread() {
+  sed -i '/^cmd_note_manual() {/,/^}/ s@^  noted="\$CHECKPOINT_NOTE"$@  noted=committed@' "$1"
+}
+# The writer stops publishing one value, and the `ok` falls to the generic arm. Each is caught by
+# its own world of the same assertion: no checkpoint, the refused rewrite, the plain commit.
+mut_RUN_ck_note_none_unpublished() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ s@\[ -f "\$ck" \] || { CHECKPOINT_NOTE=none; return 0; }@[ -f "$ck" ] || return 0@' "$1"
+}
+mut_RUN_ck_note_failed_unpublished() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ { /^    CHECKPOINT_NOTE=failed$/d }' "$1"
+}
+mut_RUN_ck_note_committed_unpublished() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ { /^    CHECKPOINT_NOTE=committed$/d }' "$1"
+}
 # The command leaves the admission list and falls to the unlocked arm: it commits under a run.
 mut_COORD_note_manual_unlocked() {
   sed -i 's@    boot|note-manual|install|@    boot|install|@' "$1"
@@ -6419,6 +6436,10 @@ CATALOG=(
   KAIZEN_manual_mints_version
   KAIZEN_manual_counts_mission
   RUN_manual_row_missing
+  RUN_manual_ok_unread
+  RUN_ck_note_none_unpublished
+  RUN_ck_note_failed_unpublished
+  RUN_ck_note_committed_unpublished
   RUN_manual_stays_on_mission_branch
   RUN_manual_stays_when_detached
   RUN_manual_merged_silent

@@ -6058,6 +6058,35 @@ NM_DET="$(nm_says "$OUTSIDE/nm-detached")"
 assert_eq "note-manual from a detached HEAD returns the human to that commit, still detached" \
   "rc:0 branch: warn:1 note:1 row:PR|$NM_DET_SHA" \
   "$NM_DET|$(git -C "$OUTSIDE/nm-detached" rev-parse HEAD)"
+# #230: the closing `ok` said "the note in the checkpoint" whatever the writer did. With no
+# checkpoint.md, checkpoint_note_intervention returns 0 in silence (it must: three other doors call
+# it), and the `ok` claimed a note that does not exist — a label with no artifact, on the human's
+# screen. The writer now PUBLISHES what it did (CHECKPOINT_NOTE) and the `ok` reads it. Four worlds,
+# one per value the writer publishes: no checkpoint at all, a rewrite refused (the mv shim of the
+# retry probe above), a checkpoint already dirty, and the plain one. Each `said` term is that
+# world's own reason, so a setter that stops publishing falls to the generic arm and fails by name.
+# Every world still writes the manual row: it is the record every reader of the ledger gets, and a
+# missing note is no reason to lose it.
+nm_bare_says() {   # nm_bare_says <dir> <reason ERE> [PATH prefix] — rc, claimed, said, row, commits
+  local rc=0 out before
+  before="$(git -C "$1" rev-list --count HEAD)"
+  out="$( cd "$1" && PATH="${3:+$3:}$PATH" MV_SHIM_DIR="$MV_SHIM" MV_SHIM_REAL="$(command -v mv)" \
+          "$SDD" note-manual "$MISSION" PR 2>&1 )" || rc=$?
+  printf 'rc:%s claimed:%s said:%s row:%s commits:+%s' "$rc" \
+    "$(grep -c 'the note in the checkpoint' <<< "$out")" \
+    "$(grep -cE "ok .*recorded as done by hand: $2" <<< "$out")" \
+    "$(rows 'select(.event == "manual") | .phase' | tr -d '\n')" \
+    "$(( $(git -C "$1" rev-list --count HEAD) - before ))"
+  : > "$LEDGER"
+}
+for w in nockpt mvfail dirty plain; do kitguard_world "$OUTSIDE/nm-$w" "$ROOT"; done
+( cd "$OUTSIDE/nm-nockpt" && git rm -q "docs/handoffs/$MISSION/checkpoint.md" \
+    && git commit -qm "chore: a mission with no checkpoint" ) >/dev/null 2>&1
+echo "| I2 | edited by hand | \`true\` → 0 | pending | — |" >> "$OUTSIDE/nm-dirty/docs/handoffs/$MISSION/checkpoint.md"
+rm -f "$MV_SHIM/fired"
+assert_eq "note-manual's ok says what the note writer did, and the manual row is written in every case" \
+  "rc:0 claimed:0 said:1 row:PR commits:+0|rc:0 claimed:0 said:1 row:PR commits:+0 fired|rc:0 claimed:1 said:1 row:PR commits:+0|rc:0 claimed:1 said:1 row:PR commits:+1" \
+  "$(nm_bare_says "$OUTSIDE/nm-nockpt" 'a manual row in the ledger, and no note — [^ ]+ has no checkpoint\.md$')|$(nm_bare_says "$OUTSIDE/nm-mvfail" 'a manual row in the ledger, and no note — it could not be written' "$MV_SHIM") $( [ -f "$MV_SHIM/fired" ] && echo fired || echo not-fired )|$(nm_bare_says "$OUTSIDE/nm-dirty" 'the note in the checkpoint, NOT committed')|$(nm_bare_says "$OUTSIDE/nm-plain" 'the note in the checkpoint, a manual row in the ledger$')"
 
 # 4. THE INLINE RETRY has a guard of its own. When the first session leaves the kit alone and the
 #    RETRY is the one that writes into it, only the check on the retry path can see it — measured:

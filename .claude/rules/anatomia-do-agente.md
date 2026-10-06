@@ -307,7 +307,10 @@ publicada pelo `mission_budget_blown` (`BUDGET_OVERRIDE_NOTE`) e escrita por
 `budget_override_note_write`; volta parada sem sessão não grava nota. Desde `20261004-lote-4-a-catraca-zera` (#153) a fase feita **à mão** também
 tem porta: `sdd note-manual <missão> <FASE>` escreve a `- intervention:` pelo mesmo escritor e a
 linha `event:"manual"` do ledger, que não gradua nada — antes dela, o PR publicado à mão de
-`20260916-destino-frete-cif` não deixou linha nenhuma, e 0 de 4 missões escreveram a nota.
+`20260916-destino-frete-cif` não deixou linha nenhuma, e 0 de 4 missões escreveram a nota. Desde
+#230 o `ok` dele diz o que o escritor **fez**, lido do `CHECKPOINT_NOTE` que o
+`checkpoint_note_intervention` publica (`committed`, `uncommitted`, `failed`, `none`), e a linha
+`manual` é gravada em todo caso — antes, o `ok` afirmava a nota mesmo quando ela não existia.
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
 anterior desta seção dizia que não existia, e estava errada (foi o comando do incidente das 18:45).

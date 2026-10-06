@@ -469,11 +469,19 @@ frontmatter_write() {
 # switched the working tree's branch under a running `sdd health`, opened a real opus session, and
 # the first draft of this note wrote "the human forced the starting phase". That is the sandbox
 # debt of .claude/rules/anatomia-do-agente.md, with a date on it.
+# WHAT IT DID is published in CHECKPOINT_NOTE, never in the return code (#230): every path returns 0,
+# because the three runner doors that call it must go on whatever the note did. `none` (no
+# checkpoint.md), `failed` (the rewrite was refused), `uncommitted` (written, not committed) or
+# `committed`; empty for the projection, which writes nothing. ONE setter, reset on entry, so a
+# value never survives into the next call. A caller that SAYS what happened (cmd_note_manual) reads
+# it right after the call — called, never `$( )`, or the subshell would eat the global.
+CHECKPOINT_NOTE=""
 checkpoint_note_intervention() {   # checkpoint_note_intervention <what the human did> <phase>
+  CHECKPOINT_NOTE=""
   [ "$DRY_RUN" = "1" ] && return 0
   local ck="$MISSION_DIR/checkpoint.md" nf="$MISSION_DIR/checkpoint-notas.md"
   local what="$1" phase="$2" line rel dirty_before tmp target
-  [ -f "$ck" ] || return 0
+  [ -f "$ck" ] || { CHECKPOINT_NOTE=none; return 0; }
   # Two worlds, and the notes file wins WHEN IT IS THERE. A mission written before this layout
   # keeps its notes inside checkpoint.md and is never migrated: a mission in flight would have its
   # own artifact rewritten under it, and the gates parse that file. The presence of the sibling is
@@ -512,15 +520,18 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
     :
   else
     [ -n "${tmp:-}" ] && rm -f "$tmp"
+    CHECKPOINT_NOTE=failed
     warn "intervention NOT written in $rel — the checkpoint could not be rewritten; add it by hand: $line"
     return 0
   fi
   fi
+  CHECKPOINT_NOTE=uncommitted
   if [ -n "$dirty_before" ]; then
     warn "intervention noted in $rel but NOT committed — the file was already dirty; commit it with the work it carries"
     return 0
   fi
   if ( cd "$REPO_ROOT" && git add -- "$rel" && git commit -q -m "chore(checkpoint): intervention — $what — $phase" ); then
+    CHECKPOINT_NOTE=committed
     dim "  intervention noted in $rel and committed: $what — $phase"
   else
     warn "intervention noted in $rel but the commit failed — commit $rel by hand"
@@ -11339,7 +11350,7 @@ cmd_note_manual() {
   [ $# -eq 2 ] || die "usage: sdd note-manual <mission> <PHASE>"
   load_config
   resolve_mission "$1"
-  local phase="$2" p known=0 home home_sha="" where="" branch merged=0 now out
+  local phase="$2" p known=0 home home_sha="" where="" branch merged=0 now out noted note
   local -a back=()
   for p in $PHASES; do [ "$p" = PLAN ] || [ "$p" != "$phase" ] || known=1; done
   [ "$known" = 1 ] || die "note-manual: '$phase' is not a phase a session runs — one of: ${PHASES#PLAN }"
@@ -11355,6 +11366,7 @@ cmd_note_manual() {
   fi
   ensure_mission_branch
   checkpoint_note_intervention "sdd note-manual (the phase was recorded from the CLI as done by hand)" "$phase"
+  noted="$CHECKPOINT_NOTE"
   autonomy_manual_row "$phase"
   if [ "$merged" = 1 ]; then
     warn "'$branch' is already merged into '$DEFAULT_BRANCH': the note was committed on '$branch', which '$DEFAULT_BRANCH' will not see — the ledger row is the record its readers get"
@@ -11374,7 +11386,16 @@ cmd_note_manual() {
       warn "could not return to $where — still on '$now'. git said: $out"
     fi
   fi
-  ok "phase $phase of $MISSION recorded as done by hand: the note in the checkpoint, a manual row in the ledger"
+  # The `ok` says what the writer DID (#230), never what it was asked to do. The row is written in
+  # every case: it is the record the ledger's readers get, and a missing note is no reason to lose it.
+  case "$noted" in
+    committed)   note="the note in the checkpoint, a manual row in the ledger" ;;
+    uncommitted) note="the note in the checkpoint, NOT committed (see above), a manual row in the ledger" ;;
+    none)        note="a manual row in the ledger, and no note — $MISSION has no checkpoint.md" ;;
+    failed)      note="a manual row in the ledger, and no note — it could not be written (see above)" ;;
+    *)           note="a manual row in the ledger, and no note" ;;
+  esac
+  ok "phase $phase of $MISSION recorded as done by hand: $note"
 }
 
 # Post-merge: closes the JIRA issue. Fired by the human after the merge — it is the only thing
