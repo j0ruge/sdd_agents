@@ -591,6 +591,29 @@ see [the hat stopped correct work](#the-hat-stopped-correct-work).
 
 ---
 
+## The line stopped with `kit-touched`
+
+**Symptom:** `BLOCKED in <PHASE> — the kit at <path> was edited while <PHASE> ran (kit_before=<sha>|<dirty>
+kit_after=<sha>|<dirty>) — who edited it was not measured … — what changed: commits: <sha7> <subject>;
+paths: <XY path>, <XY path> (content changed), <path> (no longer dirty)`, a `KIT-TOUCHED` line in
+`.sdd/logs/<mission>/pipeline.log`, and a `kit-touched` row in the ledger (whose `gate_why` is cut at
+200 characters: the terminal's `BLOCKED` line carries the whole `what changed` clause).
+
+**What is happening:** the checkout the `sdd` on your PATH runs from — the kit — moved while a phase
+of another repository's mission ran: a commit, or a dirty path that appeared, changed content or went
+clean. Since #233 a kit that was already dirty when the phase opened is watched too, path by path and
+by content, so saving a file in a dirty kit stops the line as well. The runner does not know who did
+it: a session of this mission writing outside its repo, or you working on the kit in another terminal.
+
+**What you do:** read the `what changed` clause. If it is your own work on the kit, do kit work in a
+linked worktree (ADR 0016 §2; the `/sdd-plan` does it for a kit mission) and keep the checkout the PATH
+runs from on `main` and clean; then `sdd run` again. If it is the session's, the finding belongs in
+the handoff, marked `kit:`, never in a commit to the kit. Editor temp files (vim swap files, `*~`,
+emacs locks) are in the kit's `.gitignore` and stop nothing; another editor's temp file that is not
+there would, and the fix is one more ignore line, never a looser guard.
+
+---
+
 ## The review does not close at Grade A
 
 **Symptom:** `BLOCKED in REVIEW` with `N review round(s) already on disk, REVIEW_MAX_ITER=M`.

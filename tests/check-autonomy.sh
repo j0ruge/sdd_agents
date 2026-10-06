@@ -5729,6 +5729,9 @@ echo "== reader: a target-repo session that edits the kit =="
 FAKEKIT="$OUTSIDE/fakekit"
 mkdir -p "$FAKEKIT"
 cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$FAKEKIT/"
+# And the kit's own ignore rules: the guard reads the kit through `git status`, which honours them,
+# and regime 2c measures one of them (editor temp files are not the kit).
+cp "$ROOT/.gitignore" "$FAKEKIT/"
 ( cd "$FAKEKIT" && git init -q -b main && git config user.email "fixture@example.com" \
     && git config user.name "Fixture" && git add -A && git commit -qm "chore: the kit" ) >/dev/null
 
@@ -5916,6 +5919,22 @@ kitguard_dirty_run() {   # kitguard_dirty_run <target dir> <file or ""> — sess
 assert_eq "kit-guard: a kit already dirty and edited again stops the line and names the path, and left alone it is silent" \
   "sessions:1 lines:1 rc:3 kind:kit-touched same:1 named:1|sessions:2 lines:0 rc:3 kind:no-progress same:0 named:0" \
   "$(kitguard_dirty_run "$OUTSIDE/kitguard-dirty-edit" "$FAKEKIT/TODO.md")|$(kitguard_dirty_run "$OUTSIDE/kitguard-dirty-alone" "")"
+
+# 2c. AN EDITOR'S TEMP FILE IS NOT THE KIT (final review of 20261006-lote-5-o-que-o-lote-4-deixou).
+#     The tree term of 2b digests every untracked, non-ignored path, and vim rewrites its swap file
+#     every few seconds of TYPING, with nothing saved: a human with the kit's TODO.md open in a dirty
+#     kit would stop a target's run without saving anything — wider than the "saves a file" the
+#     human accepted. The kit's .gitignore lists the editor temp files, so `git status` (and both
+#     terms of the guard) never see them. Same pre-dirty kit as 2b; the session rewrites
+#     `.TODO.md.swp` and nothing else, and has to end like the benign run. `swap:written` is the
+#     witness that the session really wrote the file. The rule lives in .gitignore, which no mutant
+#     reaches: this assertion is its whole sensor.
+kg_swap="$FAKEKIT/.TODO.md.swp"
+kg_swap_out="$(kitguard_dirty_run "$OUTSIDE/kitguard-dirty-swap" "$kg_swap")"
+assert_eq "kit-guard: an editor's swap file rewritten in a dirty kit is not the kit, and stops nothing" \
+  "sessions:2 lines:0 rc:3 kind:no-progress same:0 named:0 swap:written" \
+  "$kg_swap_out swap:$(grep -qF 'the session edits the already-dirty file once more' "$kg_swap" 2>/dev/null && echo written || echo missing)"
+rm -f "$kg_swap"
 
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the
