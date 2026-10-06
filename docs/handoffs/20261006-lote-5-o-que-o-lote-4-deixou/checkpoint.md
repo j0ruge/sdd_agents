@@ -1,6 +1,6 @@
 ---
 missao: 20261006-lote-5-o-que-o-lote-4-deixou
-atualizado: 2026-10-06 11:31
+atualizado: 2026-10-06 11:54
 ---
 
 # Checkpoint — Lote 5: o que o lote 4 deixou
@@ -51,7 +51,7 @@ atualizado: 2026-10-06 11:31
 | I1 | #226: tests/isolate-git.sh carregado pela suíte, pelo catálogo e por todo sensor | `o=$(bash tests/check-health.sh 2>&1); grep -c -e '^  ok    surface: .* clears the repository a git-driven caller hands it' -e '^  ok    surface: every sensor sources tests/isolate-git.sh before its first git' <<< "$o"` → `4` | done | fc763ef |
 | I2 | #224: linha com menos de cinco células recusada pelo nome nos dois leitores | `o=$(bash tests/check-checkpoint.sh --selftest 2>&1; bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    rule: a row with fewer than five cells is refused by name' -e '^  ok    the row with fewer than five cells is refused by name' <<< "$o"` → `2` | done | dfd9ab5 |
 | I3 | #223: red_norm guarda o array vazio | `o=$(bash tests/check-checkpoint.sh --selftest 2>&1); grep -c '^  ok    red_norm guards its empty array' <<< "$o"` → `1` | done | 802b6d5 |
-| I4 | #232: deferred só vale com a decisão escrita no bug | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    .*## Decision' <<< "$o"` → `3` | pending | — |
+| I4 | #232: deferred só vale com a decisão escrita no bug | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    .*## Decision' <<< "$o"` → `3` | done | 4d72973 |
 | I5 | #225: relatório da base exige checkpoint que a missão já teve (ADR 0016 §1) | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    another mission.s report whose squash also edited this mission.s checkpoint is not' <<< "$o"` → `1` | pending | — |
 | I6 | #233: a guarda do kit vê o kit sujo editado de novo e diz o que mudou | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    kit-guard: a kit already dirty and edited again' -e '^  ok    kit-guard: the BLOCKED line names the commit' <<< "$o"` → `2` | pending | — |
 | I7 | #228 + #227 + decisão 11a: remédio do carimbo impossível; nota intervention só com sessão | `a=$(bash tests/check-autonomy.sh 2>&1); b=$(bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    run stops at an impossible stamp with the remedy that can work' -e '^  ok    sdd run --phase PLAN stops before any session and writes no note' -e '^  ok    the draft jump is the runner' -e '^  ok    run --phase PR stops at the stamp and writes no intervention note' -e '^  ok    sdd retry stopped by the mission ceiling writes no intervention note' -e '^  ok    sdd retry --budget-override buys its session' -e '^  ok    --budget-override on a lap that stops before any session writes no note' -e '^  ok    --budget-override on a lap that opens a session writes exactly one note' -e '^  ok    --budget-override lifted on the draft jump' -e '^  ok    --budget-override over two sessions of one run writes one note' <<< "$a"$'\n'"$b"` → `10` | pending | — |
