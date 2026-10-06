@@ -23,6 +23,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **`Closable by: deferred` passa no `gate_QA` sem a decisão humana escrita no bug** —
+  `bin/sdd:1618` (`genre_line`) — a âncora 3 lê só a linha do campo; `sdd-qa.md` §5.1 e a ADR 0009
+  exigem `## Decision`/`## Decisao` no corpo, e nada confere (a fixture `write_genre_bug` codifica o
+  caso). Medido no sales_quote: a `qa-execution` diferiu um bug "porque o conserto mora no TODO", sem
+  decisão, e o PR sairia sem ele. O alvo escreve `## Decisão`, com til. Direção: sem a seção fora de
+  cerca, o bug conta como `agent`; mundos "sem seção bloqueia" e "til passa" e um mutante.
+  — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
+
+- [ ] **O guarda do kit é cego a kit já sujo editado de novo, e o BLOCKED não diz o que mudou** —
+  `bin/sdd:3752` (`AUTONOMY_KIT_STAMP`) — o carimbo é `sha|dirty`: dirty→dirty no mesmo sha passa
+  calado (fora dos DECLARED LIMITS), e o KIT-TOUCHED só imprime os dois carimbos. Medido no
+  sales_quote: achar o autor exigiu `git status` no kit e caçar sessões com cwd nele. Direção: guardar
+  o `status --porcelain` no arm, como o `HAT_STATUS_BEFORE`, e pôr no motivo as linhas novas e o
+  `log before..after`; regime "kit já sujo e editado" e mutante irmão do `kit_touched_silent`.
+  — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
+
 - [ ] **O Red do `R<n>` prova o achado, não o conserto: nenhum passo sabota a linha nova** —
   `agents/sdd-executor.md:83` (`Watch it fail`) — o conserto tira o sintoma e pode abrir um fail-open
   ao lado com o probe verde. Medido só no laço interativo (PR #45, #46; `coderabbit-pr` 2.4.0 já
@@ -158,6 +174,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
 ### Saída humana e cosmética
+
+- [ ] **Servidor deixado por uma fase segura o `sdd run` vivo e mudo depois do veredito** —
+  `bin/sdd-coordination.py:337` (`waitpid`) — o supervisor é subreaper e espera até ECHILD (desenho,
+  `docs/pipeline.md:53`), mas não diz por quem espera. Medido no sales_quote: o QA:exec reiniciou o
+  backend com `nohup … &`, o runner imprimiu BLOCKED e ficou em `do_wait` até o `npm run dev` morrer.
+  Nem agente nem `turn_rule` proíbem subir processo longo. Direção: worker colhido com filhos vivos
+  imprime uma vez pid e cmdline de cada um; e uma frase no `turn_rule` da fase QA.
+  — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
 
 - [ ] **As ADRs 0001–0007 não têm `Spec:`, e por isso 14 missões deste repo não podem declarar
   `adr:`** — `docs/adr/0001-judge-split-deterministic-series-model-verdict.md:1` (`Status`) — nenhuma das sete
