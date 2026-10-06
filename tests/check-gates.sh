@@ -5820,6 +5820,32 @@ UNREC_OUT="$( "$SDD" status "$MISSION" 2>&1 )"
 cp "$SDD_STATE_FIX/unrec-ledger.bak" "$UNREC_LEDGER"
 assert_eq "a manual row of the phase takes it off the page, and only it" "repo:1 QA:1>0 DOCS:1>1" \
   "repo:$( [ -n "$unrec_repo" ] && echo 1 || echo 0 ) QA:$(hint_of "$FULL_OUT" QA)>$(hint_of "$UNREC_OUT" QA) DOCS:$(hint_of "$FULL_OUT" DOCS)>$(hint_of "$UNREC_OUT" DOCS)"
+# #229: the ledger is per MACHINE, so a mission run on another computer has no session row here, and
+# every green phase used to be asked "done by hand?" — a human following the hint would record as
+# manual a phase a session ran. No session of the mission in this repo's ledger is "ran elsewhere",
+# and the page asks nothing. The world keeps the three rows a looser test would count: one of
+# another mission in this repo, one session of THIS mission from another checkout (identity is
+# repo + mission, the select above), and one `manual` row of this mission here — the row the hint
+# itself makes the human write, which must not re-open the question for every other phase. The
+# green count is the witness that the gates answered the same in both worlds.
+jq -c --arg repo "$unrec_repo" --arg m "$MISSION" 'select((.repo == $repo and .mission == $m) | not)' \
+  "$SDD_STATE_FIX/unrec-ledger.bak" > "$UNREC_LEDGER"
+jq -cn --arg repo "$unrec_repo" --arg m "$MISSION" \
+  '{v: 1, ts: "2026-01-01T10:00:00-03:00", event: "manual", run_id: "u2", invocation: "note-manual",
+    kit_sha: null, kit_dirty: null, kit_rev: null, kit_rev_dirty: null, project: "fixture",
+    repo: $repo, mission: "20990101-another-mission", phase: "QA"},
+   {v: 1, ts: "2026-01-01T10:00:00-03:00", event: "session", run_id: "u3", invocation: "run",
+    kit_sha: null, kit_dirty: null, kit_rev: null, kit_rev_dirty: null, project: "fixture",
+    repo: "/elsewhere/another-checkout", mission: $m, phase: "QA"},
+   {v: 1, ts: "2026-01-01T10:00:00-03:00", event: "manual", run_id: "u4", invocation: "note-manual",
+    kit_sha: null, kit_dirty: null, kit_rev: null, kit_rev_dirty: null, project: "fixture",
+    repo: $repo, mission: $m, phase: "QA"}' >> "$UNREC_LEDGER"
+ELSEWHERE_OUT="$( "$SDD" status "$MISSION" 2>&1 )"
+elsewhere_rows="$(jq -r --arg repo "$unrec_repo" --arg m "$MISSION" 'select(.repo == $repo and .mission == $m) | .event' "$UNREC_LEDGER" | sort | uniq -c | awk '{ printf "%s%s:%s", (NR > 1 ? "," : ""), $2, $1 }')"
+cp "$SDD_STATE_FIX/unrec-ledger.bak" "$UNREC_LEDGER"
+assert_eq "a mission with no session in this machine's ledger ran elsewhere, and the page asks nothing" \
+  "rows:manual:1 hints:2>0 green:$(grep -c '✓' <<< "$FULL_OUT")" \
+  "rows:$elsewhere_rows hints:$(grep -c 'sdd note-manual' <<< "$FULL_OUT")>$(grep -c 'sdd note-manual' <<< "$ELSEWHERE_OUT" || true) green:$(grep -c '✓' <<< "$ELSEWHERE_OUT")"
 
 # ---------------------------------------------------------------------------
 # HAT_WRITES_EXTRA — the project's exception to the hat's writes:, and its guard.

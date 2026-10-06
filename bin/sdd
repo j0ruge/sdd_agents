@@ -7052,6 +7052,14 @@ status_increments() {
 # Cost: one jq pass over the ledger — 9 ms over the 608 rows of 2026-10-04 — inside a page that
 # already ran every gate, which is why the cheap `--no-gates` page does not carry it: it knows no
 # phase is done. `fromjson?` so one malformed row costs the hint nothing but that row.
+# A mission this machine never opened a SESSION of asks nothing (#229): the ledger is per machine, so
+# that is the shape of a mission run on another computer, and asking "done by hand?" of every phase
+# it passed had the human record as manual what a session ran. Presence is a `session` row, never
+# "any row": the `manual` row is the one this hint makes the human write, so counting it would
+# re-open the question for every other phase the moment the first one is recorded, and an
+# escalation can be written by a `sdd run` here that opened nothing. The same jq pass answers both
+# questions — a session row prints `+` beside its phase, which no phase is named. DECLARED LIMIT: a
+# mission done ENTIRELY by hand here leaves the same slice and is not asked either.
 status_unrecorded() {
   local file seen ph out=""
   autonomy_have_jq || return 0
@@ -7059,8 +7067,10 @@ status_unrecorded() {
   [ -f "$file" ] || return 0
   seen="$(jq -rR --arg repo "$(ledger_repo_root)" --arg m "$MISSION" \
             'fromjson? | select(type == "object" and .repo == $repo and .mission == $m
-                                and (.event == "session" or .event == "manual")) | .phase // empty' \
+                                and (.event == "session" or .event == "manual"))
+                       | (.phase // empty), (select(.event == "session") | "+")' \
             "$file" 2>/dev/null)" || seen=""
+  grep -qxF + <<< "$seen" || return 0
   for ph in "$@"; do
     [ "$ph" != PLAN ] || continue
     [ "$ph" != TICKET ] || [ "$JIRA_ENABLED" = "true" ] || continue

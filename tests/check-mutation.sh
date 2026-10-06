@@ -5125,6 +5125,17 @@ mut_COORD_note_manual_unlocked() {
 mut_STATUS_manual_row_ignored() {
   sed -i '/^status_unrecorded() {/,/^}/ s@and (.event == "session" or .event == "manual"))@and (.event == "session"))@' "$1"
 }
+# #229, the machine: a mission this machine never opened a session of ran elsewhere, and the page
+# goes back to asking "done by hand?" of every phase it passed. Caught by `a mission with no session
+# in this machine's ledger ran elsewhere, and the page asks nothing` in check-gates.sh.
+mut_STATUS_elsewhere_asked() {
+  sed -i '/^status_unrecorded() {/,/^}/ { /^  grep -qxF + <<< "\$seen" || return 0$/d }' "$1"
+}
+# Presence read off the manual row too, not only a session: the row the hint makes the human write
+# re-opens the question for every other phase. Same assertion, its manual-row world.
+mut_STATUS_presence_counts_manual() {
+  sed -i '/^status_unrecorded() {/,/^}/ s@| (.phase // empty), (select(.event == "session") | "+")@| (.phase // empty), "+"@' "$1"
+}
 
 # The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
 # of one. A group holding nothing but the closure falls through every arm of `phase_label` — no
@@ -6413,6 +6424,8 @@ CATALOG=(
   RUN_manual_merged_silent
   COORD_note_manual_unlocked
   STATUS_manual_row_ignored
+  STATUS_elsewhere_asked
+  STATUS_presence_counts_manual
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_counted_as_session
   LEDGER_gate_pass_mints_a_version
