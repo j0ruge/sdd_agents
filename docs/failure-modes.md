@@ -1041,14 +1041,17 @@ catalogue that the removal would have thrown away.
 **What you do** — from the main checkout, after it fast-forwarded to the merge, and **before**
 `git worktree remove`:
 
-1. `cp <worktree>/.sdd/cache/mutation-killers.tsv .sdd/cache/` — always. The map is an order hint,
+1. `mkdir -p .sdd/cache .sdd/logs` — a checkout that never ran `sdd health` has neither, since only
+   `.sdd/config.sh` is tracked and the writers create them lazily, and a `cp` into a missing
+   directory fails.
+2. `cp <worktree>/.sdd/cache/mutation-killers.tsv .sdd/cache/` — always. The map is an order hint,
    never a verdict, and the newer one knows the mission's mutants.
-2. Read line 6 of `./bin/sdd health --release`, which never runs the suite. Green: leave the stamp
+3. Read line 6 of `./bin/sdd health --release`, which never runs the suite. Green: leave the stamp
    alone. Red: copy `<worktree>/.sdd/logs/mutation-stamp` to `.sdd/logs/` and read line 6 again.
    Green now means the worktree's catalogue measured exactly what `main` carries. Still red means
    the merge brought content the worktree never measured, and the stamp is paid by a `sdd health`
    in the main checkout.
-3. Optionally, the gate logs under `<worktree>/.sdd/logs/<mission>/`, with `cp -n` so nothing of the
+4. Optionally, the gate logs under `<worktree>/.sdd/logs/<mission>/`, with `cp -n` so nothing of the
    main checkout is overwritten.
 
 ---

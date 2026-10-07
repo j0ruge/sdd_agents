@@ -1722,6 +1722,21 @@ EOF
       "$label" "$present" "$absent" "$got" "$out" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   }
+  # Controls over cli_says itself (Codex review of PR #242): it is the only judge of the four probes
+  # below and bumps PROBES on its own, so a body neutered to `return 0` left this rule green. As in
+  # helper_selfcheck, each control reads the helper's MESSAGE from a subshell, where the counters
+  # cannot move: one world per check it makes (the text, the absence, the rc), and one it must pass.
+  local cmsg cfail=0
+  cmsg="$(cli_says 'no findings file named' 'zzz' '<control>' --count "$box/does-not-exist.md" 2>&1)"
+  case "$cmsg" in *'SELFTEST FAIL'*) ;; *) cfail=$((cfail + 1)) ;; esac
+  cmsg="$(cli_says 'missing or unreadable' 'findings file' '<control>' --count "$box/does-not-exist.md" 2>&1)"
+  case "$cmsg" in *'SELFTEST FAIL'*) ;; *) cfail=$((cfail + 1)) ;; esac
+  cmsg="$(cli_says '1' 'zzz' '<control>' --count "$box/countable.md" 2>&1)"
+  case "$cmsg" in *'got rc 0'*) ;; *) cfail=$((cfail + 1)) ;; esac
+  cmsg="$(cli_says 'missing or unreadable' 'no findings file named' '<control>' --count "$box/does-not-exist.md" 2>&1)"
+  [ -z "$cmsg" ] || cfail=$((cfail + 1))
+  [ "$cfail" -eq 0 ] || { FAILS=$((FAILS + cfail)); fail_rc 90
+    printf '  SELFTEST FAIL  cli_says missed %d of its 4 controls — the helper no longer judges what it reports\n' "$cfail" >&2; }
   cli_says 'no findings file named' 'missing or unreadable' "--count with no file names the argument" --count
   cli_says 'no findings file named' 'missing or unreadable' "--anchors with no file names the argument" --anchors
   cli_says 'no findings file named' 'missing or unreadable' "--check '' names the argument" --check ''

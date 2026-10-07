@@ -42,9 +42,10 @@ writes the artifacts from memory, and their headings are the contract the gates 
      checkout's `agents/` over the worktree's;
    - tell the human, in one line, the worktree's path and branch, and that the mission is
      executed there too — interactively, never by a `sdd run` from this checkout. Add that, after
-     the merge and before `git worktree remove`, its killer map and its stamp come back to this
-     checkout (`docs/failure-modes.md`, "`sdd health` in the main checkout is slow again after a
-     kit mission"): both live in ignored directories, and the removal deletes them.
+     the merge and before `git worktree remove`, its killer map comes back to this checkout, and
+     its stamp too when line 6 of `./bin/sdd health --release` here is red (`docs/failure-modes.md`,
+     "`sdd health` in the main checkout is slow again after a kit mission"): both live in ignored
+     directories, and the removal deletes them.
 
    When `sdd` is not on the PATH, or resolves outside this root, skip this step: no run of another
    repository executes this checkout.
