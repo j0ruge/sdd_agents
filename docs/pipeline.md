@@ -766,11 +766,12 @@ Around every session that can commit — the two in `sdd run`'s loop, `sdd retry
 the runner samples the kit's `HEAD` plus its working-tree state before and after. A difference gets
 one `warn` and one `KIT-TOUCHED` line in `.sdd/logs/<mission>/pipeline.log`, naming both stamps.
 Since #233 the working-tree sample is the dirty tree **by path and content** (`kit_guard_tree`: one
-`XY path` plus the md5 of the file, read with `GIT_OPTIONAL_LOCKS=0`), not just "dirty or clean":
+`XY path` plus the md5 of the file and, since the Codex review of PR #237, its executable bit, read
+with `GIT_OPTIONAL_LOCKS=0`), not just "dirty or clean":
 before it, a kit already dirty when the phase opened could be edited again — a new file, or the
 same ` M` file once more — and the guard compared `dirty` with `dirty` and said nothing. The reason
 now says **what changed**: `— what changed: commits: <up to five, %h %s>; paths: <new paths, (content
-changed), (no longer dirty)>`, appended after the sentence so the ledger's 200-character cut keeps
+changed), (mode changed), (no longer dirty)>`, appended after the sentence so the ledger's 200-character cut keeps
 the admission and the terminal's `BLOCKED` line carries the whole clause. The price, accepted: a
 human who keeps the kit dirty and saves a file in it while a target's phase runs stops that line.
 

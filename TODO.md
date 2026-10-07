@@ -82,7 +82,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **`sdd run --phase PR` com só o carimbo faltando grava uma intervenção e não abre sessão** —
-  `bin/sdd:8782` (`checkpoint_note_intervention`) — a nota "forced from the CLI" é commitada antes de a
+  `bin/sdd:8791` (`checkpoint_note_intervention`) — a nota "forced from the CLI" é commitada antes de a
   volta chegar à parada no carimbo (rc 2), e o `sdd autonomy --by-mission` conta uma intervenção numa
   corrida que não fez nada. Mesma forma da porta do PLAN, anterior ao lote. Direção: escrever a nota só
   quando a volta forçada abre sessão, ou declarar o limite nas duas portas. RESOLVED by 0f5ad85 e 92f7d5c.
@@ -97,7 +97,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sessão interativa` no planejamento do lote 5 (2026-10-06)
 
 - [ ] **O `sdd kaizen` no checkout principal do kit escreve e commita onde os `sdd run` dos alvos executam** —
-  `bin/sdd:10864` (`cmd_kaizen`) — a sessão KAIZEN escreve o veredito e o plano da próxima missão do kit e
+  `bin/sdd:10873` (`cmd_kaizen`) — a sessão KAIZEN escreve o veredito e o plano da próxima missão do kit e
   commita no `REPO_ROOT` de onde foi chamada. Chamada do checkout que o `sdd` do PATH resolve, com um
   `sdd run` de alvo em voo, é o mesmo `kit-touched` do `/sdd-plan` (lido no código, não reproduzido). A
   ADR 0016 §2 manda a missão do kit para um worktree ligado e não decide o `sdd kaizen`. Direção: recusar
@@ -115,21 +115,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
 
 - [ ] **A parada no carimbo manda rodar o `sdd health` mesmo quando o carimbo é impossível** —
-  `bin/sdd:8562` (`GATE_PR_STAMP_WHY`) — numa cópia do kit fora do git, ou com um caminho medido
+  `bin/sdd:8571` (`GATE_PR_STAMP_WHY`) — numa cópia do kit fora do git, ou com um caminho medido
   ausente, nenhum `sdd health` carimba aquela árvore; o remédio certo só vem dentro do motivo, na linha
   de cima, e as linhas `dim` repetem a ordem genérica. Parar está certo; a prosa engana. Lido do
   código, não reproduzido. Direção: quando o motivo é "impossível", trocar as linhas de remédio. RESOLVED by 8778be8.
   — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
 - [ ] **A dica do `sdd status` pergunta "feita à mão?" de toda fase verde de missão rodada noutra máquina** —
-  `bin/sdd:7100` (`status_unrecorded`) — o ledger é por máquina, então missão executada noutro
+  `bin/sdd:7109` (`status_unrecorded`) — o ledger é por máquina, então missão executada noutro
   computador não tem linha `session` aqui e toda fase verde recebe o `sdd note-manual`; quem seguir a
   dica grava como feita à mão uma fase que não foi. A frase diz "this machine's ledger" (declarado no
   plano do I19). Direção: calar quando o ledger local não tem nenhuma linha da missão. RESOLVED by e892814.
   — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
 - [ ] **O `ok` do `sdd note-manual` diz que gravou a nota mesmo sem `checkpoint.md`** —
-  `bin/sdd:11394` (`checkpoint_note_intervention`) — sem o arquivo o escritor volta 0 em silêncio, a
+  `bin/sdd:11403` (`checkpoint_note_intervention`) — sem o arquivo o escritor volta 0 em silêncio, a
   linha `manual` vai para o ledger e a mensagem final afirma "the note in the checkpoint": rótulo sem
   artefato, na saída humana. Direção: o escritor publicar se escreveu, e o `ok` dizer só o que
   aconteceu. RESOLVED by 57ea34f.

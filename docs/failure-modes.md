@@ -596,7 +596,7 @@ see [the hat stopped correct work](#the-hat-stopped-correct-work).
 
 **Symptom:** `BLOCKED in <PHASE> — the kit at <path> was edited while <PHASE> ran (kit_before=<sha>|<dirty>
 kit_after=<sha>|<dirty>) — who edited it was not measured … — what changed: commits: <sha7> <subject>;
-paths: <XY path>, <XY path> (content changed), <path> (no longer dirty)`, a `KIT-TOUCHED` line in
+paths: <XY path>, <XY path> (content changed), <XY path> (mode changed), <path> (no longer dirty)`, a `KIT-TOUCHED` line in
 `.sdd/logs/<mission>/pipeline.log`, and a `kit-touched` row in the ledger (whose `gate_why` is cut at
 200 characters: the terminal's `BLOCKED` line carries the whole `what changed` clause).
 

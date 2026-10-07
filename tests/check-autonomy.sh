@@ -5975,6 +5975,38 @@ assert_eq "kit-guard: a kit path dirty before the phase and clean after is named
 rm -f "$FAKEKIT/zz.md" "$kg_tabbed"
 git -C "$FAKEKIT" checkout -q -- TODO.md
 
+# 2e. THE MODE OF AN ALREADY-DIRTY PATH (Codex review of PR #237). The kit's TODO.md is already
+#     modified, and the session changes only its executable bit: porcelain still says ` M TODO.md`
+#     and the content digest is the same, so the tree compared equal and the guard said nothing.
+#     The executable bit is the one mode git tracks for a regular file (100644/100755), and the
+#     tree now carries it beside the digest; the reason names the change as a mode change, not a
+#     content one. `x:1` is the witness that the session really flipped the bit.
+kitguard_mode_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  chmod +x "$FAKEKIT/TODO.md"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-mode"
+printf 'the human is editing the kit\n' >> "$FAKEKIT/TODO.md"
+kitguard_mode_stub
+kg_mode_rc=0
+kg_mode_err="$( cd "$OUTSIDE/kitguard-dirty-mode" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_mode_rc=$?
+assert_eq "kit-guard: a kit path already dirty whose executable bit alone changes stops the line, named as a mode change" \
+  "sessions:1 rc:3 kind:kit-touched named:1 x:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_mode_rc kind:$(hat_rows) named:$(grep -c 'paths: .M TODO.md (mode changed)' <<< "$kg_mode_err") x:$([ -x "$FAKEKIT/TODO.md" ] && echo 1 || echo 0)"
+chmod -x "$FAKEKIT/TODO.md"
+git -C "$FAKEKIT" checkout -q -- TODO.md
+
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the
 #    run it finally mattered on would scroll past unread. This regime is why the guard compares

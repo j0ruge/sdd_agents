@@ -4146,6 +4146,17 @@ mut_RUN_kit_guard_no_longer_dirty_hash_order() {
 mut_RUN_kit_guard_key_first_tab() {
   sed -i '/^kit_guard_changes() {/,/^}/ s#match(l, /\\t\[^\\t\]\*\$/) ? RSTART : length(l) + 1#index(l, "\\t")#' "$1"
 }
+# The executable bit of an already-dirty path (Codex review of PR #237): the tree drops it again,
+# and a phase that flips the bit alone compares equal — silent. Caught by `kit-guard: a kit path
+# already dirty whose executable bit alone changes stops the line …` (its kind and named terms).
+mut_RUN_kit_guard_tree_no_mode() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|((p in h) ? h\[p\] : "-") ((p in ex) ? "+x" : "")|((p in h) ? h[p] : "-")|' "$1"
+}
+# The stop survives, the reason says `(content changed)` about a file whose content did not change.
+# Caught by the `named` term of the same assertion.
+mut_RUN_kit_guard_mode_reads_as_content() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s|(md5(was\[p\]) == md5($0) ? " (mode changed)" : " (content changed)")|" (content changed)"|' "$1"
+}
 
 # ---------------------------------------------------------------------------
 # ADR 0014 — the behaviour version the ledger row carries.
@@ -6410,6 +6421,8 @@ CATALOG=(
   RUN_kit_guard_no_longer_dirty_silent
   RUN_kit_guard_no_longer_dirty_hash_order
   RUN_kit_guard_key_first_tab
+  RUN_kit_guard_tree_no_mode
+  RUN_kit_guard_mode_reads_as_content
   RUN_kit_rev_is_head
   RUN_kit_rev_dirty_whole_tree
   RUN_kit_guard_reads_rev
