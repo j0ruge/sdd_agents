@@ -6107,6 +6107,39 @@ assert_eq "kit-guard: a session that flips only the staged mode of an already-di
   "sessions:$(kitguard_sessions) rc:$kg_ixmode_rc kind:$(hat_rows) named:$(grep -c 'paths: MM TODO.md (index changed)' <<< "$kg_ixmode_err") mm:$kg_ixmode_mm"
 git -C "$FAKEKIT" checkout -q HEAD -- TODO.md
 
+# 2i. A KIT PATH THAT BEGINS WITH `-` (5th Codex review of PR #237). The digests come from ONE
+#     `xargs md5sum` over every dirty regular file, and a name like `-dash.md` reached it as an
+#     option: md5sum refused the batch and printed no digest at all, so every dirty path read `-`
+#     before and after, and an edit to any of them went unseen. The fixture commits the file into the
+#     fake kit and resets to the commit before it afterwards, as 2f does. `d:1` is the witness that
+#     the session's line really landed in `-dash.md`.
+kg_dash_base="$(git -C "$FAKEKIT" rev-parse HEAD)"
+( cd "$FAKEKIT" && printf 'tracked\n' > ./-dash.md && git add -- -dash.md && git commit -qm "fixture: a name that begins with a dash" ) >/dev/null
+kitguard_dash_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  printf 'edited by the session\n' >> "$FAKEKIT/-dash.md"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-dash"
+printf 'edited by the human\n' >> "$FAKEKIT/-dash.md"
+kitguard_dash_stub
+kg_dash_rc=0
+kg_dash_err="$( cd "$OUTSIDE/kitguard-dirty-dash" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_dash_rc=$?
+assert_eq "kit-guard: a kit path whose name begins with a dash, already dirty and edited again, stops the line and is named" \
+  "sessions:1 rc:3 kind:kit-touched named:1 d:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_dash_rc kind:$(hat_rows) named:$(grep -c 'paths: .M -dash.md (content changed)' <<< "$kg_dash_err") d:$(grep -c 'edited by the session' "$FAKEKIT/-dash.md")"
+git -C "$FAKEKIT" reset -q --hard "$kg_dash_base"
+
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the
 #    run it finally mattered on would scroll past unread. This regime is why the guard compares

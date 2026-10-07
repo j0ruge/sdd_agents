@@ -4178,6 +4178,12 @@ mut_RUN_kit_guard_index_reads_as_mode() {
 mut_RUN_kit_guard_index_reads_as_content() {
   sed -i '/^kit_guard_changes() {/,/^}/ s|function wt(l,  d) { d = substr(l, cut(l) + 1); sub(/@\.\*\$/, "", d); return d }|function wt(l,  d) { d = substr(l, cut(l) + 1); return d }|' "$1"
 }
+# A dirty kit name that begins with `-` (5th Codex review of PR #237): without the `--`, md5sum reads
+# it as an option and refuses the whole batch, every dirty path reads `-`, and an edit goes unseen.
+# Caught by `kit-guard: a kit path whose name begins with a dash …` in check-autonomy.sh.
+mut_RUN_kit_guard_md5_options() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s/| xargs -0 -r md5sum -- 2>\/dev\/null )"/| xargs -0 -r md5sum 2>\/dev\/null )"/' "$1"
+}
 # A symlink in the kit tree (3rd Codex review of PR #237): UNHASHED, it reads `-` before and after
 # whatever the session points it at; FOLLOWED, its digest is the file behind it again, and a link
 # retargeted to an identical file compares equal. Both silent; both caught by `kit-guard: an
@@ -6458,6 +6464,7 @@ CATALOG=(
   RUN_kit_guard_index_no_mode
   RUN_kit_guard_index_reads_as_mode
   RUN_kit_guard_index_reads_as_content
+  RUN_kit_guard_md5_options
   RUN_kit_guard_link_unhashed
   RUN_kit_guard_link_followed
   RUN_kit_rev_is_head

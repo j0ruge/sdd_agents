@@ -3966,7 +3966,9 @@ KIT_GUARD_CHANGES=""
 # a clean kit and for a kit that is not a git checkout — `git status` fails there and both samples
 # are empty, so the plain copy stays silent exactly as the stamp makes it. ONE md5sum for every
 # regular file, never one per path; one per symlink, which the kit does not carry today; one
-# `ls-files` for the whole index (406 entries in the kit today), never one per path.
+# `ls-files` for the whole index (406 entries in the kit today), never one per path. `md5sum --`
+# (5th Codex review of PR #237): a dirty name that begins with `-` reached the one md5sum as an
+# option, and md5sum refused the WHOLE batch — every dirty path read `-` and no edit was seen.
 # Called, never `$( )`-captured: the result is a global.
 # ⚠️ DECLARED LIMITS: the content of every dirty path is READ at each arm and each check, so a large
 # untracked file in the kit costs its read twice per phase (ignored paths are never read); a path
@@ -3986,7 +3988,7 @@ kit_guard_tree() {
   [ -n "$status" ] || return 0
   sums="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
            && while IFS= read -r e; do [ -f "${e:3}" ] && [ ! -L "${e:3}" ] && printf '%s\0' "${e:3}"; done <<< "$status" \
-              | xargs -0 -r md5sum 2>/dev/null )" || true
+              | xargs -0 -r md5sum -- 2>/dev/null )" || true
   # The executable bit beside the digest (Codex review of PR #237): it is the one mode git tracks for
   # a regular file (100644/100755), and on a path already dirty a phase that flipped it alone left
   # porcelain and content as they were — the trees compared equal and the guard said nothing.
