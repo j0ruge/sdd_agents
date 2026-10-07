@@ -766,8 +766,8 @@ Around every session that can commit — the two in `sdd run`'s loop, `sdd retry
 the runner samples the kit's `HEAD` plus its working-tree state before and after. A difference gets
 one `warn` and one `KIT-TOUCHED` line in `.sdd/logs/<mission>/pipeline.log`, naming both stamps.
 Since #233 the working-tree sample is the dirty tree **by path and content** (`kit_guard_tree`: one
-`XY path` plus the md5 of the file and, since the Codex review of PR #237, its executable bit, read
-with `GIT_OPTIONAL_LOCKS=0`), not just "dirty or clean":
+`XY path` plus the md5 of the file and, since the Codex reviews of PR #237, its executable bit, or a
+symlink's target text — the entry as git stores it — read with `GIT_OPTIONAL_LOCKS=0`), not just "dirty or clean":
 before it, a kit already dirty when the phase opened could be edited again — a new file, or the
 same ` M` file once more — and the guard compared `dirty` with `dirty` and said nothing. The reason
 now says **what changed**: `— what changed: commits: <up to five, %h %s>; paths: <new paths, (content

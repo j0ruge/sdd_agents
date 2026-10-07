@@ -3954,17 +3954,24 @@ KIT_GUARD_TREE_BEFORE=""
 KIT_GUARD_TREE=""
 KIT_GUARD_CHANGES=""
 
-# The kit's dirty tree, PUBLISHED in KIT_GUARD_TREE: one `XY path<TAB><md5 of the content>[+x]` line
-# per entry of hat_status_lines over SDD_HOME (`-` for an entry with no regular file behind it: a
-# deletion, a broken symlink, an untracked nested repository). Empty for a clean kit and for a kit
-# that is not a git checkout — `git status` fails there and both samples are empty, so the plain
-# copy stays silent exactly as the stamp makes it. ONE md5sum for every path, never one per path.
+# The kit's dirty tree, PUBLISHED in KIT_GUARD_TREE: one `XY path<TAB><digest>` line per entry of
+# hat_status_lines over SDD_HOME. The digest is the entry as git stores it — type, mode and content:
+# a regular file is the md5 of its content plus `+x` when executable, a symlink is `l` plus the md5
+# of its TARGET TEXT (never of the file it points at), and anything else is `-` (a deletion, an
+# untracked nested repository). Three review rounds of PR #237 found one dimension each — content
+# (#233), the executable bit, a symlink retargeted to an identical file — and the third is where the
+# patching stopped: the fingerprint is now the whole identity git gives a worktree entry. Empty for
+# a clean kit and for a kit that is not a git checkout — `git status` fails there and both samples
+# are empty, so the plain copy stays silent exactly as the stamp makes it. ONE md5sum for every
+# regular file, never one per path; one per symlink, which the kit does not carry today.
 # Called, never `$( )`-captured: the result is a global.
 # ⚠️ DECLARED LIMITS: the content of every dirty path is READ at each arm and each check, so a large
 # untracked file in the kit costs its read twice per phase (ignored paths are never read); a path
-# md5sum escapes (a backslash or a newline in the name) gets no digest and reads as `-`.
+# md5sum escapes (a backslash or a newline in the name) gets no digest and reads as `-`; a gitlink
+# (a submodule) reads as `-`, so its commit moving under an already-dirty entry is not seen — the
+# kit has no submodule.
 kit_guard_tree() {
-  local status sums execs
+  local status sums execs links
   KIT_GUARD_TREE=""
   # GIT_OPTIONAL_LOCKS=0: a read, never a write — `git status` would otherwise refresh and rewrite
   # the index of a kit someone may be committing in at that very moment (measured on git 2.43: the
@@ -3973,18 +3980,24 @@ kit_guard_tree() {
   status="$( GIT_OPTIONAL_LOCKS=0 hat_status_lines "$SDD_HOME" )"
   [ -n "$status" ] || return 0
   sums="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
-           && while IFS= read -r e; do [ -f "${e:3}" ] && printf '%s\0' "${e:3}"; done <<< "$status" \
+           && while IFS= read -r e; do [ -f "${e:3}" ] && [ ! -L "${e:3}" ] && printf '%s\0' "${e:3}"; done <<< "$status" \
               | xargs -0 -r md5sum 2>/dev/null )" || true
   # The executable bit beside the digest (Codex review of PR #237): it is the one mode git tracks for
   # a regular file (100644/100755), and on a path already dirty a phase that flipped it alone left
   # porcelain and content as they were — the trees compared equal and the guard said nothing.
   execs="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
-            && while IFS= read -r e; do [ -f "${e:3}" ] && [ -x "${e:3}" ] && printf '%s\n' "${e:3}"; done <<< "$status" )" || true
+            && while IFS= read -r e; do [ -f "${e:3}" ] && [ ! -L "${e:3}" ] && [ -x "${e:3}" ] && printf '%s\n' "${e:3}"; done <<< "$status" )" || true
+  # A symlink is its target text, which is what git stores (mode 120000): a digest that followed it
+  # hashed the file behind, and a link retargeted to an identical file compared equal.
+  links="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
+            && while IFS= read -r e; do [ -L "${e:3}" ] && printf '%s  %s\n' "$(readlink -- "${e:3}" | md5sum | cut -c1-32)" "${e:3}"; done <<< "$status" )" || true
   # ENVIRON and not `-v`: awk expands backslash escapes in a -v value, which would rewrite a name.
   # index/substr only — mawk is byte-oriented, and a path is arbitrary bytes.
-  KIT_GUARD_TREE="$( KG_SUMS="$sums" KG_EXECS="$execs" awk '
+  KIT_GUARD_TREE="$( KG_SUMS="$sums" KG_EXECS="$execs" KG_LINKS="$links" awk '
     BEGIN { n = split(ENVIRON["KG_SUMS"], a, "\n")
             for (i = 1; i <= n; i++) if (length(a[i]) > 34) h[substr(a[i], 35)] = substr(a[i], 1, 32)
+            n = split(ENVIRON["KG_LINKS"], y, "\n")
+            for (i = 1; i <= n; i++) if (length(y[i]) > 34) h[substr(y[i], 35)] = "l" substr(y[i], 1, 32)
             n = split(ENVIRON["KG_EXECS"], x, "\n")
             for (i = 1; i <= n; i++) if (x[i] != "") ex[x[i]] = 1 }
     { p = substr($0, 4); print $0 "\t" ((p in h) ? h[p] : "-") ((p in ex) ? "+x" : "") }' <<< "$status" )"

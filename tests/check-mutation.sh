@@ -4157,6 +4157,16 @@ mut_RUN_kit_guard_tree_no_mode() {
 mut_RUN_kit_guard_mode_reads_as_content() {
   sed -i '/^kit_guard_changes() {/,/^}/ s|(md5(was\[p\]) == md5($0) ? " (mode changed)" : " (content changed)")|" (content changed)"|' "$1"
 }
+# A symlink in the kit tree (3rd Codex review of PR #237): UNHASHED, it reads `-` before and after
+# whatever the session points it at; FOLLOWED, its digest is the file behind it again, and a link
+# retargeted to an identical file compares equal. Both silent; both caught by `kit-guard: an
+# already-dirty symlink retargeted to an identical file stops the line …` in check-autonomy.sh.
+mut_RUN_kit_guard_link_unhashed() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|do \[ -L "${e:3}" \] \&\& printf|do false \&\& printf|' "$1"
+}
+mut_RUN_kit_guard_link_followed() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|$(readlink -- "${e:3}" \| md5sum|$(cat -- "${e:3}" \| md5sum|' "$1"
+}
 
 # ---------------------------------------------------------------------------
 # ADR 0014 — the behaviour version the ledger row carries.
@@ -6423,6 +6433,8 @@ CATALOG=(
   RUN_kit_guard_key_first_tab
   RUN_kit_guard_tree_no_mode
   RUN_kit_guard_mode_reads_as_content
+  RUN_kit_guard_link_unhashed
+  RUN_kit_guard_link_followed
   RUN_kit_rev_is_head
   RUN_kit_rev_dirty_whole_tree
   RUN_kit_guard_reads_rev

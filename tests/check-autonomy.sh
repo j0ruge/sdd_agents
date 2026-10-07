@@ -6007,6 +6007,41 @@ assert_eq "kit-guard: a kit path already dirty whose executable bit alone change
 chmod -x "$FAKEKIT/TODO.md"
 git -C "$FAKEKIT" checkout -q -- TODO.md
 
+# 2f. A SYMLINK IS ITS TARGET TEXT, NOT THE FILE IT POINTS AT (3rd Codex review of PR #237). The
+#     kit tracks `link -> a.txt`; the human has already retargeted it to `b.txt`, and the session
+#     retargets it to `c.txt`, which has b's content and mode. Porcelain stays ` M link`, and a
+#     digest that FOLLOWS the link hashed b and then c — the same bytes — so the trees compared
+#     equal and the guard said nothing. Git stores a symlink as its target text (mode 120000), and
+#     the tree now does too. The fixture commits into the fake kit and is reset to the commit
+#     before it afterwards, so the regimes below see the kit they always saw. `c:1` is the witness.
+kg_link_base="$(git -C "$FAKEKIT" rev-parse HEAD)"
+( cd "$FAKEKIT" && printf 'same\n' > a.txt && printf 'same\n' > b.txt && printf 'same\n' > c.txt \
+    && ln -s a.txt link && git add a.txt b.txt c.txt link && git commit -qm "fixture: a tracked symlink" ) >/dev/null
+kitguard_link_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  ln -sfn c.txt "$FAKEKIT/link"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-link"
+ln -sfn b.txt "$FAKEKIT/link"
+kitguard_link_stub
+kg_link_rc=0
+kg_link_err="$( cd "$OUTSIDE/kitguard-dirty-link" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_link_rc=$?
+assert_eq "kit-guard: an already-dirty symlink retargeted to an identical file stops the line and names the link" \
+  "sessions:1 rc:3 kind:kit-touched named:1 c:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_link_rc kind:$(hat_rows) named:$(grep -c 'paths: .M link (content changed)' <<< "$kg_link_err") c:$([ "$(readlink "$FAKEKIT/link")" = c.txt ] && echo 1 || echo 0)"
+git -C "$FAKEKIT" reset -q --hard "$kg_link_base"
+
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the
 #    run it finally mattered on would scroll past unread. This regime is why the guard compares
