@@ -1044,15 +1044,28 @@ catalogue that the removal would have thrown away.
 1. `mkdir -p .sdd/cache .sdd/logs` — a checkout that never ran `sdd health` has neither, since only
    `.sdd/config.sh` is tracked and the writers create them lazily, and a `cp` into a missing
    directory fails.
-2. `cp <worktree>/.sdd/cache/mutation-killers.tsv .sdd/cache/` — always. The map is an order hint,
-   never a verdict, and the newer one knows the mission's mutants.
+2. Bring the killer map back — always, and as a **union**, never a plain `cp`: the main checkout may
+   know mutants the worktree never saw (content that reached `main` while the mission ran), and a
+   copy would drop them. One line per mutant, keyed by the slug in the first column; the worktree's
+   line wins where both know it:
+
+   ```bash
+   W=<worktree>; M=.sdd/cache/mutation-killers.tsv
+   if [ -f "$M" ]; then awk -F'\t' '!seen[$1]++' "$W/$M" "$M" > "$M.new" && mv "$M.new" "$M"
+   else cp "$W/$M" "$M"; fi
+   ```
+
+   The map is an order hint, never a verdict, so a stale line costs time and never a result.
 3. Read line 6 of `./bin/sdd health --release`, which never runs the suite. Green: leave the stamp
    alone. Red: copy `<worktree>/.sdd/logs/mutation-stamp` to `.sdd/logs/` and read line 6 again.
    Green now means the worktree's catalogue measured exactly what `main` carries. Still red means
    the merge brought content the worktree never measured, and the stamp is paid by a `sdd health`
    in the main checkout.
-4. Optionally, the gate logs under `<worktree>/.sdd/logs/<mission>/`, with `cp -n` so nothing of the
-   main checkout is overwritten.
+4. Optionally, the gate logs: `cp -Rn <worktree>/.sdd/logs/<mission> .sdd/logs/`. The `-R` because
+   it is a directory (a plain `cp -n` refuses it, and the logs go with the worktree); the `-n` so
+   nothing of the main checkout is overwritten. When `-n` skips a file that already exists here,
+   upstream coreutils 9.2+ exits non-zero; Debian and Ubuntu keep the old exit 0 and print a
+   "non-portable" warning instead (measured on Ubuntu's 9.4). Neither overwrites anything.
 
 ---
 
