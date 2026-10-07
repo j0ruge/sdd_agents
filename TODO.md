@@ -79,6 +79,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   como git, com os dois mundos no controle negativo do censo.
   — descoberto por `revisor final` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-06)
 
+- [ ] **A cerca dos leitores de bug alterna em qualquer marcador: um `~~~` dentro de crases a fecha** —
+  `bin/sdd:1557` (`bug_decision_recorded`) — a regex da cerca inverte o estado em qualquer marcador
+  (crases ou tis) e comprimento; no CommonMark só o mesmo caractere, com comprimento ≥ ao da abertura,
+  fecha a cerca. Um `## Decision` datado de exemplo, depois de um `~~~` dentro de crases, conta como a
+  decisão humana: falha aberta, sem caso real (achado do Codex no PR #237). O extrator do gênero
+  (`bin/sdd:1705`, `fenced`) tem o mesmo padrão. Direção: casar caractere e comprimento nos dois
+  leitores, com os mundos "til dentro de crases" e "fecho mais curto" e um mutante por leitor.
+  — descoberto por `Codex` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-07)
+
 ### Contrato e configuração
 
 - [ ] **`sdd run --phase PR` com só o carimbo faltando grava uma intervenção e não abre sessão** —
