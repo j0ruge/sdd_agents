@@ -330,15 +330,17 @@ def descendants():
                 identity = process(pid)
                 if identity is None or identity['parent'] != parent:
                     continue
-                try:
-                    command = Path('/proc/%s/cmdline' % pid).read_bytes()
-                except OSError:
-                    command = b''
                 # The executable alone, never its arguments (CodeRabbit review of PR #237): a command
                 # left in the background may carry a credential on its command line, and this report
                 # lands on stderr, which a log or a captured run keeps. The pid beside it is enough
-                # for `ps -o args= -p <pid>`, on the operator's own terminal.
-                command = os.path.basename(command.split(b'\0', 1)[0]).decode('utf-8', 'replace')
+                # for `ps -o args= -p <pid>`, on the operator's own terminal. The KERNEL's name and
+                # not argv[0] (5th Codex review): argv[0] is an argument the caller chooses
+                # (`exec -a "$TOKEN" sleep`), while `comm` is set from the file exec'd. DECLARED: a
+                # process can rename itself (PR_SET_NAME), 15 bytes at most — its own choice.
+                try:
+                    command = Path('/proc/%s/comm' % pid).read_text(errors='replace').strip()
+                except OSError:
+                    command = ''
                 found.append((identity['pid'], command or '?'))
                 pending.append(identity['pid'])
     return found

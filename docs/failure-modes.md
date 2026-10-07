@@ -22,7 +22,8 @@ children that closed inherited descriptors, called `setsid` or double-forked. Th
 automatically after the last descendant exits, even after SIGKILL of the public owner/worker.
 A server left in the background keeps ownership; since #234 the supervisor names it once, a second
 after the worker exits (`sdd <command>: done, but 1 process it left running holds the checkout; …`,
-then `pid <n>: <command line>`), so you know which task to stop through its normal shutdown path. Do not delete the lock file or kill the supervisor to force entry: that defeats exclusion.
+then `pid <n>: <executable>` — the kernel's name for it, never its arguments nor its `argv[0]`, which
+may carry a credential; `ps -o args= -p <n>` shows them on your own terminal), so you know which task to stop through its normal shutdown path. Do not delete the lock file or kill the supervisor to force entry: that defeats exclusion.
 Stale JSON without a live lock is harmless and does not require manual cleanup.
 
 **CHECKOUT-UNAVAILABLE:** coordinated execution requires Linux 5.3+ procfs, Python 3.9+ and kernel

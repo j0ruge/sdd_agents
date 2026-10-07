@@ -281,8 +281,9 @@ o `PYTHONPATH` de quem chama não troca os módulos do processo que decide a pos
 servem à sonda do remédio do `CHECKOUT-UNAVAILABLE`: `/usr/bin/python3` (ou `SDD_SYSTEM_PYTHON`) só
 é oferecido depois de passar no próprio `capable` do helper, nunca por ser executável. O supervisor
 acorda pelo pidfd do worker, não pelo tique de 10 ms. Desde #234 ele diz por quem espera: quando o
-worker sai sozinho e sobra descendente vivo, imprime uma vez, 1 s depois, o pid e a cmdline de cada
-um (`name_stragglers`, só leitura de `/proc`; quem libera o lock continua sendo o `ECHILD`). O hook
+worker sai sozinho e sobra descendente vivo, imprime uma vez, 1 s depois, o pid e o executável de cada
+um — o `comm` do kernel, nunca os argumentos nem o `argv[0]`, que quem chama escolhe e podem levar
+credencial (`name_stragglers`, só leitura de `/proc`; quem libera o lock continua sendo o `ECHILD`). O hook
 não nomeia: o prazo de 5 + 1 s já limita a família dele. O custo que sobra, ~30 ms do 2º Python do
 worker em toda chamada coordenada, é limite declarado: não chega ao humano, e o conserto (provar o worker
 por FD herdado, com ADR) mora na gaveta, F1 P1.

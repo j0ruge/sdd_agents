@@ -5946,7 +5946,12 @@ mut_COORD_hook_names_stragglers() {
 # review of PR #237). Caught by the `2.31` term of "a process the worker leaves behind is named once,
 # with its pid and executable, never its arguments" (check-coordination.sh).
 mut_COORD_stragglers_print_arguments() {
-  sed -i "s@^                command = os.path.basename(command.split(b'\\\\0', 1)\[0\]).decode('utf-8', 'replace')\$@                command = command.replace(b'\\\\0', b' ').strip().decode('utf-8', 'replace')@" "${1%/*}/sdd-coordination.py"
+  sed -i "s@^                    command = Path('/proc/%s/comm' % pid).read_text(errors='replace').strip()\$@                    command = Path('/proc/%s/cmdline' % pid).read_text(errors='replace').replace(chr(0), ' ').strip()@" "${1%/*}/sdd-coordination.py"
+}
+# argv[0] again (5th Codex review of PR #237): the first word of the command line, which the caller
+# chooses (`exec -a`). Caught by the `argv0-token-7f3` term of the same assertion.
+mut_COORD_stragglers_argv0() {
+  sed -i "s@^                    command = Path('/proc/%s/comm' % pid).read_text(errors='replace').strip()\$@                    command = os.path.basename(Path('/proc/%s/cmdline' % pid).read_text(errors='replace').split(chr(0), 1)[0])@" "${1%/*}/sdd-coordination.py"
 }
 # A closed stderr is fatal again: the BrokenPipeError leaves wait_family and the lock goes before
 # ECHILD. Caught by "a closed stderr does not end the supervision" (check-coordination.sh).
@@ -5987,6 +5992,7 @@ CATALOG=(
   COORD_stragglers_named_every_tick
   COORD_hook_names_stragglers
   COORD_stragglers_print_arguments
+  COORD_stragglers_argv0
   COORD_stragglers_pipe_fatal
   RUN_branch_double_slash
   COORD_admission_missing
