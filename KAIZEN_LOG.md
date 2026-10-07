@@ -29,8 +29,8 @@ kit era escrita no checkout que os `sdd run` dos alvos executam.
 | Relatório de outra missão que editou este checkpoint (mundo j) | `REVIEW\|0` | `QA\|1` |
 | Kit já sujo editado de novo durante a fase de um alvo | rc 0, 0 linhas | `kit-touched`, com o caminho nomeado; também só o bit, só o alvo do symlink, só o blob ou o modo do índice |
 | Nota `intervention:` sem sessão (`--phase PLAN`, `--phase PR` no carimbo, retry no teto, override em volta parada) | gravada e commitada | nenhuma; a da override carrega a fase da sessão comprada |
-| Catálogo de mutação | 619 | **674** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 674 mutants still apply`; 7 re-ancorados |
-| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 542 s, 1900 linhas `ok`, 0 FAIL, em `2dbc8b5`, depois da 5ª rodada dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada: 350 s na rodada anterior) |
+| Catálogo de mutação | 619 | **676** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 676 mutants still apply`; 7 re-ancorados |
+| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 570 s, 1901 linhas `ok`, 0 FAIL, em `d8e5bee`, depois da 6ª rodada dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada: 350 s na 4ª rodada) |
 
 **Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
 `~/repos/sdd_agents-lote-5` (ADR 0016 §2): nada escrito no checkout principal enquanto alvos rodavam.
@@ -75,9 +75,12 @@ media o blob quando dizia medir o modo (`update-index --chmod` relê o arquivo).
 virou a #239. A retro consertou uma corrida no probe de SIGINT do `check-coordination.sh` que daria
 mutante pego por acaso (`ef19862`). A 5ª achou dois furos de canal, não de dimensão: um nome com
 `-` na frente virava opção do `md5sum` e cegava o lote inteiro (`2282442`), e o aviso do supervisor
-imprimia o `argv[0]`, que quem chama escolhe (`2dbc8b5`, agora o `comm` do kernel).
+imprimia o `argv[0]`, que quem chama escolhe (`2dbc8b5`, agora o `comm` do kernel). A 6ª, mais um
+canal: o registro escapado do md5sum para nomes com `\`, que era limite declarado e falha aberta
+(`93fac25`); e a linha `4913` do `.gitignore`, que escondia esse nome da guarda e não comprava nada
+(`d8e5bee`).
 
-**Ainda não medido:** o carimbo do `sdd health` com 674 mutantes, que roda depois dos bots; e o uso
+**Ainda não medido:** o carimbo do `sdd health` com 676 mutantes, que roda depois dos bots; e o uso
 real — a primeira parada `kit-touched` com o "what changed", o primeiro supervisor nomeando um
 processo, a primeira missão do kit aberta pelo passo 2 do `/sdd-plan`.
 
