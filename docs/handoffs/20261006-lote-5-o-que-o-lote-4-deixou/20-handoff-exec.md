@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 773a289e-20ea-4203-817a-084658e86831
 data: 2026-10-06 14:03
-gate: "tests/run-all.sh → rc 0, 'suite green' (1895 linhas '  ok ', 0 FAIL, 413 s com TMPDIR=/tmp/l5pr/s2, depois da leva dos bots do PR #237); anchors: all 664 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '14 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 14, 12 com RESOLVED by"
+gate: "tests/run-all.sh → rc 0, 'suite green' (1896 linhas '  ok ', 0 FAIL, 366 s com TMPDIR=/tmp/l5pr/s3, depois da 2ª rodada dos bots do PR #237); anchors: all 666 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '14 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 14, 12 com RESOLVED by"
 ---
 
 # Handoff — EXEC — Lote 5: o que o lote 4 deixou
@@ -26,7 +26,8 @@ página do `sdd status` cala sem `session` local e o `ok` do `note-manual` diz o
 supervisor nomeia quem segura o checkout e o `turn_rule` avisa toda fase (I9); o `/sdd-plan` no kit
 abre um worktree ligado (I10). ADR 0016 aceita, 0015 ganha `Amended by: 0016`. Revisão final:
 3 consertos, 4 minors decididos pelo humano. PR #237: os bots deram 6 achados, consertados numa
-leva, e a leva achou a sandbox do catálogo sem o `.gitignore`. Catálogo 619 → 664, todos aplicam.
+leva, e a leva achou a sandbox do catálogo sem o `.gitignore`; a 2ª rodada do Codex, 1 P2 (o bit de
+execução na árvore do kit). Catálogo 619 → 666, todos aplicam.
 Catraca 14 na branch (N = 1, a #238) → 2 depois do chore. Próximo: `./bin/sdd health` UMA vez no
 worktree (com o `mutation-killers.tsv` copiado), merge pelo humano.
 
@@ -34,9 +35,9 @@ worktree (com o `mutation-killers.tsv` copiado), merge pelo humano.
 
 - **Branch:** `fix/lote-5-o-que-o-lote-4-deixou`, só local, no worktree `~/repos/sdd_agents-lote-5`
   (nunca empurrada; base `origin/main` = `89df2e5`)
-- **Último commit:** o registro da rodada dos bots do PR #237, sobre `251d7be`
+- **Último commit:** o registro da 2ª rodada dos bots do PR #237, sobre `6a93d14`
 - **Working tree:** limpo depois do commit deste handoff
-- **Suíte:** `tests/run-all.sh` → verde (rc 0, 413 s; 1895 linhas `ok`; 664 mutantes com âncora válida)
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, 366 s; 1896 linhas `ok`; 666 mutantes com âncora válida)
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
 - **Carimbo de mutação:** inválido para esta branch desde o I12 (esperado); o `sdd health` roda UMA
   vez, depois dos bots, no worktree
@@ -111,6 +112,11 @@ campos), e o 2 virou item do `TODO.md` e a issue #238 (`251d7be`, catraca 13 →
 sandbox do catálogo não copiava o `.gitignore` que o regime 2c (`3b1c4dc`) lê, e o `sdd health`
 teria parado antes do primeiro mutante, como o `commands/` no PR #222. `8c8be78` copia o arquivo.
 
+**2ª rodada do Codex (sobre `a3aeac4`):** 1 P2, procedente. Num caminho do kit já sujo, uma fase que
+só troca o bit de execução não mudava o porcelain nem o md5, e a guarda calava — a classe da #233
+por outro lado. `6a93d14` põe o bit ao lado do digest e o motivo diz `(mode changed)`; regime 2e, red
+`sessions:2 rc:3 kind:no-progress named:0 x:1`; 2 mutantes. O CodeRabbit confirmou os cinco consertos.
+
 ## Artefatos
 
 | Arquivo | O que contém |
@@ -149,7 +155,7 @@ mais no stderr).
 
 ## Riscos e não-feitos
 
-- **Carimbo não medido:** o catálogo de 664 mutantes só roda no `sdd health`; as re-provas desta
+- **Carimbo não medido:** o catálogo de 666 mutantes só roda no `sdd health`; as re-provas desta
   leva foram por `--only` (dica), cada mutante novo e os vizinhos que o plano nomeia.
 - **`TMPDIR` longo:** cinco `--only` contra o `check-autonomy.sh` deram `HARNESS-BROKEN` com o nome
   do mutante no `TMPDIR` (limite já declarado no sensor desde `0c0e13a`); com `TMPDIR` curto, todos

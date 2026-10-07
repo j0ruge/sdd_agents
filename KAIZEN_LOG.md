@@ -29,8 +29,8 @@ kit era escrita no checkout que os `sdd run` dos alvos executam.
 | Relatório de outra missão que editou este checkpoint (mundo j) | `REVIEW\|0` | `QA\|1` |
 | Kit já sujo editado de novo durante a fase de um alvo | rc 0, 0 linhas | `kit-touched`, com o caminho nomeado |
 | Nota `intervention:` sem sessão (`--phase PLAN`, `--phase PR` no carimbo, retry no teto, override em volta parada) | gravada e commitada | nenhuma; a da override carrega a fase da sessão comprada |
-| Catálogo de mutação | 619 | **664** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 664 mutants still apply`; 5 re-ancorados |
-| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 413 s, 1895 linhas `ok`, 0 FAIL, depois da leva dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada) |
+| Catálogo de mutação | 619 | **666** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 666 mutants still apply`; 5 re-ancorados |
+| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 366 s, 1896 linhas `ok`, 0 FAIL, depois da 2ª rodada dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada) |
 
 **Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
 `~/repos/sdd_agents-lote-5` (ADR 0016 §2): nada escrito no checkout principal enquanto alvos rodavam.
@@ -64,9 +64,11 @@ seções reais dos alvos têm, nenhum veredito muda (`06e0235`). O aviso do supe
 a trava (`592a74f`). Os minors do humano: o `(no longer dirty)` inteiro e na ordem do git
 (`f2ef238`), a prosa do cabeçalho (`d7ddf46`) e a #238. A própria leva achou que a sandbox do
 catálogo não levava o `.gitignore` que o regime 2c lê: todo `--only` contra o `check-autonomy.sh`
-dava `HARNESS-BROKEN`, e o `sdd health` teria parado antes do primeiro mutante (`8c8be78`).
+dava `HARNESS-BROKEN`, e o `sdd health` teria parado antes do primeiro mutante (`8c8be78`). A 2ª
+rodada do Codex achou mais um caminho da #233: num caminho já sujo, só o bit de execução trocado
+deixava a guarda calada; o bit entrou na árvore do kit (`6a93d14`).
 
-**Ainda não medido:** o carimbo do `sdd health` com 664 mutantes, que roda depois dos bots; e o uso
+**Ainda não medido:** o carimbo do `sdd health` com 666 mutantes, que roda depois dos bots; e o uso
 real — a primeira parada `kit-touched` com o "what changed", o primeiro supervisor nomeando um
 processo, a primeira missão do kit aberta pelo passo 2 do `/sdd-plan`.
 
