@@ -83,7 +83,12 @@ no K3 para proteger prosa colada à tabela, carregava um pendente para além do 
 inverteu a decisão, pelo princípio de ler como o GFM renderiza (`b0c34f8`). O P2 da 7ª (o limite do
 ambiente com milhares de caminhos sujos) virou a #240.
 
-**Ainda não medido:** o carimbo do `sdd health` com 676 mutantes, que roda depois dos bots; e o uso
+**Carimbo:** `./bin/sdd health` depois da rodada 8 do Codex (limpa), 2026-10-07 12:27 → 13:31, ~64 min
+com carga ~18: `score: 676 caught, 0 known gap(s), of 676`, `kit healthy`. Oito rodadas do Codex no
+PR: depois da 1ª, 1 P1 e 9 P2 — dois registrados como achado (#239, #240), os outros consertados com
+regime e mutante; a 8ª, limpa.
+
+**Ainda não medido:** o uso
 real — a primeira parada `kit-touched` com o "what changed", o primeiro supervisor nomeando um
 processo, a primeira missão do kit aberta pelo passo 2 do `/sdd-plan`.
 

@@ -32,8 +32,8 @@ acharam cada uma um caminho da árvore do kit (bit de execução, alvo do symlin
 registro escapado), o `argv[0]` no aviso do supervisor e o `4913` no `.gitignore`, consertados; a 7ª,
 a linha curta sem `|` inicial (consertada, invertendo o K3 por decisão do humano) e o limite do ambiente
 (#240). Catálogo 619 → 676, todos aplicam.
-Catraca 16 na branch (N = 3, #238, #239 e #240) → 4 depois do chore. Próximo: `./bin/sdd health` UMA vez no
-worktree (com o `mutation-killers.tsv` copiado), merge pelo humano.
+Catraca 16 na branch (N = 3, #238, #239 e #240) → 4 depois do chore. Rodada 8 do Codex limpa; carimbo
+verde, `676 caught … of 676` sobre `7785fe8`. Próximo: merge pelo humano.
 
 ## Estado do repo
 
@@ -43,8 +43,9 @@ worktree (com o `mutation-killers.tsv` copiado), merge pelo humano.
 - **Working tree:** limpo depois do commit deste handoff
 - **Suíte:** `tests/run-all.sh` → verde (rc 0, 359 s; 1904 linhas `ok`; 676 mutantes com âncora válida)
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
-- **Carimbo de mutação:** inválido para esta branch desde o I12 (esperado); o `sdd health` roda UMA
-  vez, depois dos bots, no worktree
+- **Carimbo de mutação:** verde — `./bin/sdd health` no worktree, 2026-10-07 12:27 → 13:31 (~64 min, 16
+  jobs, carga ~18): `score: 676 caught, 0 known gap(s), of 676`, `mutation stamp written`, `kit healthy`,
+  sobre `7785fe8` (o registro deste commit é prosa, fora da chave)
 
 ## O que foi feito
 
@@ -206,7 +207,6 @@ mais no stderr).
 
 ## Pendências / Decisions for a Human
 
-- O momento do `sdd health` (passo 3 acima) — o carimbo é do humano (ADR 0015 §1).
 - O merge, o chore pós-merge e o re-sync do espelho de issues (`todo_issues.py --apply`, depois
   `--apply --close-orphans`).
 - A remoção do worktree e da branch local depois do merge; o yokoten nos repos-alvo.
@@ -214,8 +214,6 @@ mais no stderr).
 
 ## Riscos e não-feitos
 
-- **Carimbo não medido:** o catálogo de 676 mutantes só roda no `sdd health`; as re-provas desta
-  leva foram por `--only` (dica), cada mutante novo e os vizinhos que o plano nomeia.
 - **`TMPDIR` longo:** cinco `--only` contra o `check-autonomy.sh` deram `HARNESS-BROKEN` com o nome
   do mutante no `TMPDIR` (limite já declarado no sensor desde `0c0e13a`); com `TMPDIR` curto, todos
   pegos. O `sdd health` roda com `TMPDIR=/tmp`.
