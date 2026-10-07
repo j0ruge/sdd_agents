@@ -177,6 +177,19 @@ diferencial; os fixtures do `build_tree` ganharam a linha em branco do template 
 variável de ambiente e o `sdd run` morre antes de abrir sessão. Barulhento e sem custo: item do
 `TODO.md` e #240 por decisão do humano (a criação da issue levou três HTTP 500 do GitHub antes de passar).
 
+**Retro do canal (decisão do humano, depois da rodada 8):** as rodadas 5, 6 e 7 acharam, uma por vez,
+defeitos no mesmo canal da guarda do kit (o nome com `-`, o registro escapado, o estouro do ambiente),
+e a direção do item da #240 passou a fechá-lo de ponta a ponta, incluindo o nome com quebra de linha,
+falha aberta que só estava declarada no cabeçalho do `kit_guard_tree`. `md5sum -z` ficou de fora:
+pelo NEWS do coreutils, o `--zero` nasceu no 8.30 (2018-07-01), e um coreutils anterior (o do Ubuntu
+18.04 ou o do CentOS 7, por exemplo) ou o busybox passam no probe do `sdd preflight`
+(`md5sum </dev/null`). Sob `2>/dev/null || true`, um `-z` recusado deixa `sums` vazio, todo caminho
+sujo lê `-` e a guarda fica cega sem avisar. Nem é preciso: o registro escapado que o `93fac25` decodifica
+já é à prova de delimitador. A quebra nasce antes do md5sum: o `hat_status_lines` lê `status -z` e
+imprime `\n` (a guarda do chapéu o compartilha, com o mesmo limite declarado), e o `ls-files -z` passa
+por `tr '\0' '\n'`. A missão do conserto traz dois regimes: ~1800 caminhos sujos no kit falso (o
+estouro) e um nome com `\n` já sujo e editado de novo (a falha aberta). Só prosa, fora da chave do carimbo.
+
 ## Artefatos
 
 | Arquivo | O que contém |
