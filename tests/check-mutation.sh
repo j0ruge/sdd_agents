@@ -6683,6 +6683,11 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # #237, before its `sdd health`, with the regime born in the final review of the same branch.
   # Read, never mutated: out of the stamp key.
   cp "$ROOT/.gitignore" "$1/"
+  # ⚠️ DECLARED LIMIT, paid twice now: NOTHING compares the `"$ROOT/…"` paths the sensors read with
+  # the list copied above. A sensor that starts reading a new file from its own kit root breaks this
+  # sandbox in silence until a control run goes red — `commands/` was found by the first health of
+  # PR #222, `.gitignore` by an `--only` before the health of PR #237. The cheap finder is that
+  # control: after teaching a sensor a new kit file, run `--only <a mutant that sensor kills>` once.
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log

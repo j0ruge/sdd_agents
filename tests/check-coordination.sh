@@ -835,7 +835,13 @@ try:
         recipient = cooperative[0].pid if receiver == "owner" else json.loads(cooperative[1].read_text())["pid"]
         os.kill(recipient, signal.SIGINT)
         deadline = time.monotonic() + 8
-        while not handled.exists() and cooperative[0].poll() is None and time.monotonic() < deadline:
+        # Wait for the WRITE, never for the file: the handler creates the marker and then writes it,
+        # and a wait that ended on `exists()` read it in between — `read_text() == ""`, a red with the
+        # real signature (`FAIL SIGINT executes handler: foreground/child`) on a handler that ran.
+        # Reproduced with that window widened to 0.3 s (PR #237 retro); under SDD_MUTANT it would
+        # score a mutant as caught by the race instead of by the sabotage.
+        while not (handled.exists() and handled.read_text() == "handled") \
+                and cooperative[0].poll() is None and time.monotonic() < deadline:
             time.sleep(.01)
         check("SIGINT executes handler: " + label, handled.exists() and handled.read_text() == "handled")
         busy(repo, "install", name="SIGINT cleanup retains ownership: " + label)
