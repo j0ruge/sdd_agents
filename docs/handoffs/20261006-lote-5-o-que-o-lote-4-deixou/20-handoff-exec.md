@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 773a289e-20ea-4203-817a-084658e86831
 data: 2026-10-06 14:03
-gate: "tests/run-all.sh → rc 0, 'suite green' (1901 linhas '  ok ', 0 FAIL, 570 s com TMPDIR=/tmp/l5s, em d8e5bee, depois da 6ª rodada dos bots do PR #237); anchors: all 676 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '15 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 15, 12 com RESOLVED by"
+gate: "tests/run-all.sh → rc 0, 'suite green' (1904 linhas '  ok ', 0 FAIL, 359 s com TMPDIR=/tmp/l5s, em a63896f, depois da 7ª rodada dos bots do PR #237); anchors: all 676 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '16 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 16, 12 com RESOLVED by"
 ---
 
 # Handoff — EXEC — Lote 5: o que o lote 4 deixou
@@ -29,18 +29,19 @@ abre um worktree ligado (I10). ADR 0016 aceita, 0015 ganha `Amended by: 0016`. R
 leva, e a leva achou a sandbox do catálogo sem o `.gitignore`; a 2ª, a 3ª e a 4ª rodadas do Codex
 acharam cada uma um caminho da árvore do kit (bit de execução, alvo do symlink, entrada do índice), e a
 4ª, mais um P2 registrado como achado (#239); a 5ª e a 6ª, entradas de borda do `md5sum` (`-` na frente,
-registro escapado), o `argv[0]` no aviso do supervisor e o `4913` no `.gitignore`, consertados.
-Catálogo 619 → 676, todos aplicam.
-Catraca 15 na branch (N = 2, #238 e #239) → 3 depois do chore. Próximo: `./bin/sdd health` UMA vez no
+registro escapado), o `argv[0]` no aviso do supervisor e o `4913` no `.gitignore`, consertados; a 7ª,
+a linha curta sem `|` inicial (consertada, invertendo o K3 por decisão do humano) e o limite do ambiente
+(#240). Catálogo 619 → 676, todos aplicam.
+Catraca 16 na branch (N = 3, #238, #239 e #240) → 4 depois do chore. Próximo: `./bin/sdd health` UMA vez no
 worktree (com o `mutation-killers.tsv` copiado), merge pelo humano.
 
 ## Estado do repo
 
 - **Branch:** `fix/lote-5-o-que-o-lote-4-deixou`, no worktree `~/repos/sdd_agents-lote-5`, empurrada
   (PR #237; base `origin/main` = `89df2e5`)
-- **Último commit:** o registro da 6ª rodada dos bots do PR #237, sobre `d8e5bee`
+- **Último commit:** o registro da 7ª rodada dos bots do PR #237, sobre `a63896f`
 - **Working tree:** limpo depois do commit deste handoff
-- **Suíte:** `tests/run-all.sh` → verde (rc 0, 570 s; 1901 linhas `ok`; 676 mutantes com âncora válida)
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, 359 s; 1904 linhas `ok`; 676 mutantes com âncora válida)
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
 - **Carimbo de mutação:** inválido para esta branch desde o I12 (esperado); o `sdd health` roda UMA
   vez, depois dos bots, no worktree
@@ -163,6 +164,18 @@ vizinhos. `d8e5bee` — o `4913` do `.gitignore` (a sonda de escrita do vim, da 
 caminho do kit com esse nome e não comprava nada; nenhum probe o media. Removido. O humano decidiu
 pedir a rodada 7 e trazer todo achado novo a ele antes de consertar.
 
+**7ª rodada do Codex (sobre `a4ac1fb`):** 1 P1 e 1 P2, levados ao humano antes de qualquer conserto.
+`b0c34f8` — **P1, a linha curta sem `|` inicial:** numa tabela larga, `I2 | slice | pending |` era pulada
+pelos dois leitores, e o gate_EXEC passava pelo pendente. O plano (K3) tinha recusado lê-la, para a
+prosa colada citando `|` não virar incremento; o humano inverteu, por ler como o GFM renderiza (a prosa
+colada também é linha no GFM, e agora é recusada pelo nome). 0 casos nos 98 checkpoints reais, nos dois
+sentidos. Red no check-gates (`QA`) e no selftest do check-checkpoint (rc 90); a prosa colada virou
+diferencial; os fixtures do `build_tree` ganharam a linha em branco do template real; o mutante
+`EXEC_short_row_reads_glued_prose` virou o conserto e saiu, entrou `EXEC_short_bare_row_skipped`.
+`a63896f` — **P2, o limite do ambiente:** com ~1700–2200 caminhos sujos, os digests passam de 128 KiB numa
+variável de ambiente e o `sdd run` morre antes de abrir sessão. Barulhento e sem custo: item do
+`TODO.md` e #240 por decisão do humano (a criação da issue levou três HTTP 500 do GitHub antes de passar).
+
 ## Artefatos
 
 | Arquivo | O que contém |
@@ -217,7 +230,8 @@ mais no stderr).
 
 ## Achados fora de escopo
 
-Dois, por decisão do humano: o minor 2 da revisão final (o censo do `GIT_DIR` não conta o git
-chamado por caminho ou variável), item do `TODO.md` e issue #238; e o P2 da 4ª rodada do Codex (a
-cerca dos leitores de bug alterna em qualquer marcador), item do `TODO.md` e issue #239. A catraca
-fica em 15 na branch e desce a 3 no chore pós-merge.
+Três, por decisão do humano: o minor 2 da revisão final (o censo do `GIT_DIR` não conta o git
+chamado por caminho ou variável), item do `TODO.md` e issue #238; o P2 da 4ª rodada do Codex (a
+cerca dos leitores de bug alterna em qualquer marcador), #239; e o P2 da 7ª (a guarda do kit estoura
+o limite do ambiente com milhares de caminhos sujos), #240. A catraca fica em 16 na branch e desce a
+4 no chore pós-merge.

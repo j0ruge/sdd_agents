@@ -20,17 +20,17 @@ kit era escrita no checkout que os `sdd run` dos alvos executam.
 
 | Fato | Antes | Depois |
 |---|---|---|
-| Catraca `todo-findings` | 11 na `main` (13 com os dois do planejamento) | 15 na branch, 12 com `RESOLVED by`, N = 2 nascidos (#238, o minor 2 da revisão final; #239, um P2 do Codex) → 3 depois do chore |
+| Catraca `todo-findings` | 11 na `main` (13 com os dois do planejamento) | 16 na branch, 12 com `RESOLVED by`, N = 3 nascidos (#238, o minor 2 da revisão final; #239 e #240, P2 do Codex) → 4 depois do chore |
 | Sensores sozinhos que movem uma isca sob `GIT_DIR` | 12 de 16 (o `check-autonomy` trocava o `.git` por um gitfile para um temporário apagado) | 0 de 16, todos rc 0; a suíte inteira sob o veneno, `suite green` e isca intacta (461 s) |
 | `check-hat.sh` sozinho sob o `GIT_DIR` de um worktree ligado | gravava `user.email` na isca e saía 0 | isca intacta, rc 0 |
 | `--red` sobre Check mudo, docker `bash:4.3` | `grep -c "unbound variable"` → 1 | 0 |
-| Linha `\| I2 \| slice \| pending \|` no checkpoint | some; `gate_EXEC` passa a QA | `increment I2 has no Status`; `--check`/`--red` rc 1 |
+| Linha `\| I2 \| slice \| pending \|` no checkpoint, com ou sem o `\|` inicial | some; `gate_EXEC` passa a QA | `increment I2 has no Status`; `--check`/`--red` rc 1 |
 | Bug `deferred` sem `## Decis…` | passa a QA | barra e é nomeado no motivo |
 | Relatório de outra missão que editou este checkpoint (mundo j) | `REVIEW\|0` | `QA\|1` |
 | Kit já sujo editado de novo durante a fase de um alvo | rc 0, 0 linhas | `kit-touched`, com o caminho nomeado; também só o bit, só o alvo do symlink, só o blob ou o modo do índice |
 | Nota `intervention:` sem sessão (`--phase PLAN`, `--phase PR` no carimbo, retry no teto, override em volta parada) | gravada e commitada | nenhuma; a da override carrega a fase da sessão comprada |
 | Catálogo de mutação | 619 | **676** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 676 mutants still apply`; 7 re-ancorados |
-| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 570 s, 1901 linhas `ok`, 0 FAIL, em `d8e5bee`, depois da 6ª rodada dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada: 350 s na 4ª rodada) |
+| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 359 s, 1904 linhas `ok`, 0 FAIL, em `a63896f`, depois da 7ª rodada dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada: 350–570 s nas rodadas 4–6) |
 
 **Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
 `~/repos/sdd_agents-lote-5` (ADR 0016 §2): nada escrito no checkout principal enquanto alvos rodavam.
@@ -78,7 +78,10 @@ mutante pego por acaso (`ef19862`). A 5ª achou dois furos de canal, não de dim
 imprimia o `argv[0]`, que quem chama escolhe (`2dbc8b5`, agora o `comm` do kernel). A 6ª, mais um
 canal: o registro escapado do md5sum para nomes com `\`, que era limite declarado e falha aberta
 (`93fac25`); e a linha `4913` do `.gitignore`, que escondia esse nome da guarda e não comprava nada
-(`d8e5bee`).
+(`d8e5bee`). A 7ª achou um P1 numa decisão do próprio plano: a linha curta sem `|` inicial, recusada
+no K3 para proteger prosa colada à tabela, carregava um pendente para além do gate_EXEC; o humano
+inverteu a decisão, pelo princípio de ler como o GFM renderiza (`b0c34f8`). O P2 da 7ª (o limite do
+ambiente com milhares de caminhos sujos) virou a #240.
 
 **Ainda não medido:** o carimbo do `sdd health` com 676 mutantes, que roda depois dos bots; e o uso
 real — a primeira parada `kit-touched` com o "what changed", o primeiro supervisor nomeando um
