@@ -4155,7 +4155,28 @@ mut_RUN_kit_guard_tree_no_mode() {
 # The stop survives, the reason says `(content changed)` about a file whose content did not change.
 # Caught by the `named` term of the same assertion.
 mut_RUN_kit_guard_mode_reads_as_content() {
-  sed -i '/^kit_guard_changes() {/,/^}/ s|(md5(was\[p\]) == md5($0) ? " (mode changed)" : " (content changed)")|" (content changed)"|' "$1"
+  sed -i '/^kit_guard_changes() {/,/^}/ s|(md5(was\[p\]) != md5($0) ? " (content changed)" : (wt(was\[p\]) != wt($0) ? " (mode changed)" : " (index changed)"))|" (content changed)"|' "$1"
+}
+# The INDEX entry of an already-dirty path (4th Codex review of PR #237). DROPPED, the tree is the
+# worktree alone again and a session that replaces only the staged blob of an `MM` path compares
+# equal — silent; caught by `kit-guard: a session that replaces only the staged blob …`. The MODE
+# dropped from the entry keeps the blob and loses the other half of what git stores there; caught by
+# `kit-guard: a session that flips only the staged mode …`. Both in check-autonomy.sh, by their kind
+# and named terms.
+mut_RUN_kit_guard_tree_no_index() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s| ((p in ix) ? "@" ix\[p\] : "")||' "$1"
+}
+mut_RUN_kit_guard_index_no_mode() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|e = f\[1\] ":" f\[2\]|e = f[2]|' "$1"
+}
+# The stop survives and the reason names the wrong place: a staged change read as the executable bit
+# (`(mode changed)`), or — the worktree digest keeping the index entry — as the file's content.
+# Caught by the `named` term of the same two assertions.
+mut_RUN_kit_guard_index_reads_as_mode() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s|(wt(was\[p\]) != wt($0) ? " (mode changed)" : " (index changed)")|" (mode changed)"|' "$1"
+}
+mut_RUN_kit_guard_index_reads_as_content() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s|function wt(l,  d) { d = substr(l, cut(l) + 1); sub(/@\.\*\$/, "", d); return d }|function wt(l,  d) { d = substr(l, cut(l) + 1); return d }|' "$1"
 }
 # A symlink in the kit tree (3rd Codex review of PR #237): UNHASHED, it reads `-` before and after
 # whatever the session points it at; FOLLOWED, its digest is the file behind it again, and a link
@@ -6433,6 +6454,10 @@ CATALOG=(
   RUN_kit_guard_key_first_tab
   RUN_kit_guard_tree_no_mode
   RUN_kit_guard_mode_reads_as_content
+  RUN_kit_guard_tree_no_index
+  RUN_kit_guard_index_no_mode
+  RUN_kit_guard_index_reads_as_mode
+  RUN_kit_guard_index_reads_as_content
   RUN_kit_guard_link_unhashed
   RUN_kit_guard_link_followed
   RUN_kit_rev_is_head

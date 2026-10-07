@@ -3958,18 +3958,23 @@ KIT_GUARD_CHANGES=""
 # hat_status_lines over SDD_HOME. The digest is the entry as git stores it — type, mode and content:
 # a regular file is the md5 of its content plus `+x` when executable, a symlink is `l` plus the md5
 # of its TARGET TEXT (never of the file it points at), and anything else is `-` (a deletion, an
-# untracked nested repository). Three review rounds of PR #237 found one dimension each — content
-# (#233), the executable bit, a symlink retargeted to an identical file — and the third is where the
-# patching stopped: the fingerprint is now the whole identity git gives a worktree entry. Empty for
+# untracked nested repository); then `@<mode>:<blob>` of the path's INDEX entry, when it has one.
+# Four review rounds of PR #237 found one dimension each — content (#233), the executable bit, a
+# symlink retargeted to an identical file, the staged entry under an `MM` — and the fourth stopped
+# patching dimensions and closed the places instead: HEAD is in the stamp, and the tree reads the
+# other two places git keeps a path, each with the whole identity git gives it there. Empty for
 # a clean kit and for a kit that is not a git checkout — `git status` fails there and both samples
 # are empty, so the plain copy stays silent exactly as the stamp makes it. ONE md5sum for every
-# regular file, never one per path; one per symlink, which the kit does not carry today.
+# regular file, never one per path; one per symlink, which the kit does not carry today; one
+# `ls-files` for the whole index (406 entries in the kit today), never one per path.
 # Called, never `$( )`-captured: the result is a global.
 # ⚠️ DECLARED LIMITS: the content of every dirty path is READ at each arm and each check, so a large
 # untracked file in the kit costs its read twice per phase (ignored paths are never read); a path
-# md5sum escapes (a backslash or a newline in the name) gets no digest and reads as `-`; a gitlink
-# (a submodule) reads as `-`, so its commit moving under an already-dirty entry is not seen — the
-# kit has no submodule.
+# md5sum escapes (a backslash or a newline in the name) gets no digest and reads as `-`, and a
+# newline in a name also splits its index entry, which then never meets the path; a gitlink (a
+# submodule) reads as `-` in the worktree, so the commit checked out under an already-dirty entry is
+# not seen — the kit has no submodule; the stages of a CONFLICTED path are joined, and no probe
+# builds a conflict in the kit, so dropping all but one of them is a mutant nothing would catch.
 kit_guard_tree() {
   local status sums execs links
   KIT_GUARD_TREE=""
@@ -3993,6 +3998,13 @@ kit_guard_tree() {
             && while IFS= read -r e; do [ -L "${e:3}" ] && printf '%s  %s\n' "$(readlink -- "${e:3}" | md5sum | cut -c1-32)" "${e:3}"; done <<< "$status" )" || true
   # ENVIRON and not `-v`: awk expands backslash escapes in a -v value, which would rewrite a name.
   # index/substr only — mawk is byte-oriented, and a path is arbitrary bytes.
+  # The INDEX entry of the path after an `@` (4th Codex review of PR #237): on a path already `MM`, a
+  # phase that replaces only the staged blob — or flips only the staged mode — leaves porcelain and the
+  # worktree as they were, and the next commit in the kit carries the session's entry. `ls-files -s`
+  # is `<mode> <sha> <stage><TAB><path>`; the entry kept is `<mode>:<sha>`, and a conflicted path's
+  # stages are joined in git's order. It is the FIRST file and read under `FILENAME == ARGV[1]`, never
+  # `NR == FNR`: an empty index makes the first file contribute no record, and `NR == FNR` would then
+  # swallow the status as if it were the index.
   KIT_GUARD_TREE="$( KG_SUMS="$sums" KG_EXECS="$execs" KG_LINKS="$links" awk '
     BEGIN { n = split(ENVIRON["KG_SUMS"], a, "\n")
             for (i = 1; i <= n; i++) if (length(a[i]) > 34) h[substr(a[i], 35)] = substr(a[i], 1, 32)
@@ -4000,13 +4012,18 @@ kit_guard_tree() {
             for (i = 1; i <= n; i++) if (length(y[i]) > 34) h[substr(y[i], 35)] = "l" substr(y[i], 1, 32)
             n = split(ENVIRON["KG_EXECS"], x, "\n")
             for (i = 1; i <= n; i++) if (x[i] != "") ex[x[i]] = 1 }
-    { p = substr($0, 4); print $0 "\t" ((p in h) ? h[p] : "-") ((p in ex) ? "+x" : "") }' <<< "$status" )"
+    FILENAME == ARGV[1] { t = index($0, "\t"); if (t == 0) next
+      split(substr($0, 1, t - 1), f, " "); e = f[1] ":" f[2]; q = substr($0, t + 1)
+      ix[q] = (q in ix) ? ix[q] "," e : e; next }
+    { p = substr($0, 4); print $0 "\t" ((p in h) ? h[p] : "-") ((p in ex) ? "+x" : "") ((p in ix) ? "@" ix[p] : "") }' \
+    <( git -C "$SDD_HOME" ls-files -s -z 2>/dev/null | tr '\0' '\n' ) - <<< "$status" )"
 }
 
 # What moved between two kit trees, PUBLISHED in KIT_GUARD_CHANGES as one comma-separated clause:
-# a path dirty now and not before (`XY path`), a path whose status, content or mode changed (`XY path
-# (content changed)` when only the content did, `(mode changed)` when only the executable bit did),
-# and a path dirty before and clean now (`path (no longer dirty)`). Empty when the two trees agree.
+# a path dirty now and not before (`XY path`), a path whose status or entry changed (`XY path
+# (content changed)` when the worktree content did, `(mode changed)` when only the executable bit
+# did, `(index changed)` when only the staged entry did), and a path dirty before and clean now
+# (`path (no longer dirty)`). Empty when the two trees agree.
 # Called, never `$( )`-captured.
 # The `(no longer dirty)` items come in the order of the tree before — git's — and never in awk's
 # hash order, which walked `TODO.md, notes, zz.md` as notes, zz, TODO (final review of
@@ -4019,13 +4036,14 @@ kit_guard_changes() {   # kit_guard_changes <tree before> <tree after>
     function cut(l) { return match(l, /\t[^\t]*$/) ? RSTART : length(l) + 1 }
     function key(l) { return substr(l, 4, cut(l) - 4) }
     function head(l) { return substr(l, 1, cut(l) - 1) }
-    function md5(l,  d) { d = substr(l, cut(l) + 1); sub(/\+x$/, "", d); return d }
+    function wt(l,  d) { d = substr(l, cut(l) + 1); sub(/@.*$/, "", d); return d }
+    function md5(l,  d) { d = wt(l); sub(/\+x$/, "", d); return d }
     BEGIN { n = split(ENVIRON["KG_BEFORE"], b, "\n")
             for (i = 1; i <= n; i++) if (b[i] != "") { k = key(b[i]); if (!(k in was)) ord[++m] = k; was[k] = b[i] } }
     $0 != "" { p = key($0); seen[p] = 1
       if (!(p in was)) item = head($0)
       else if (was[p] == $0) next
-      else if (substr(was[p], 1, 2) == substr($0, 1, 2)) item = head($0) (md5(was[p]) == md5($0) ? " (mode changed)" : " (content changed)")
+      else if (substr(was[p], 1, 2) == substr($0, 1, 2)) item = head($0) (md5(was[p]) != md5($0) ? " (content changed)" : (wt(was[p]) != wt($0) ? " (mode changed)" : " (index changed)"))
       else item = head($0)
       out = out sep item; sep = ", " }
     END { for (i = 1; i <= m; i++) if (!(ord[i] in seen)) { out = out sep ord[i] " (no longer dirty)"; sep = ", " }

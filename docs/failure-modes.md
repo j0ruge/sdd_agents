@@ -596,13 +596,13 @@ see [the hat stopped correct work](#the-hat-stopped-correct-work).
 
 **Symptom:** `BLOCKED in <PHASE> — the kit at <path> was edited while <PHASE> ran (kit_before=<sha>|<dirty>
 kit_after=<sha>|<dirty>) — who edited it was not measured … — what changed: commits: <sha7> <subject>;
-paths: <XY path>, <XY path> (content changed), <XY path> (mode changed), <path> (no longer dirty)`, a `KIT-TOUCHED` line in
+paths: <XY path>, <XY path> (content changed), <XY path> (mode changed), <XY path> (index changed), <path> (no longer dirty)`, a `KIT-TOUCHED` line in
 `.sdd/logs/<mission>/pipeline.log`, and a `kit-touched` row in the ledger (whose `gate_why` is cut at
 200 characters: the terminal's `BLOCKED` line carries the whole `what changed` clause).
 
 **What is happening:** the checkout the `sdd` on your PATH runs from — the kit — moved while a phase
-of another repository's mission ran: a commit, or a dirty path that appeared, changed content or went
-clean. Since #233 a kit that was already dirty when the phase opened is watched too, path by path and
+of another repository's mission ran: a commit, or a dirty path that appeared, changed content, mode or
+staged entry, or went clean. Since #233 a kit that was already dirty when the phase opened is watched too, path by path and
 by content, so saving a file in a dirty kit stops the line as well. The runner does not know who did
 it: a session of this mission writing outside its repo, or you working on the kit in another terminal.
 

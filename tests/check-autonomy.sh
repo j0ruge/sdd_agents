@@ -6042,6 +6042,71 @@ assert_eq "kit-guard: an already-dirty symlink retargeted to an identical file s
   "sessions:$(kitguard_sessions) rc:$kg_link_rc kind:$(hat_rows) named:$(grep -c 'paths: .M link (content changed)' <<< "$kg_link_err") c:$([ "$(readlink "$FAKEKIT/link")" = c.txt ] && echo 1 || echo 0)"
 git -C "$FAKEKIT" reset -q --hard "$kg_link_base"
 
+# 2g. THE INDEX OF AN ALREADY-DIRTY PATH (4th Codex review of PR #237). The kit's TODO.md has a
+#     staged change and an unstaged one (`MM`), and the session replaces only the blob in the
+#     INDEX. Porcelain stays `MM TODO.md` and the worktree file is untouched, so a tree of the
+#     worktree alone compared equal — while the next commit in the kit would carry the session's
+#     content. The tree now carries the index blob of each dirty path too: HEAD is in the stamp, so
+#     the guard reads the three places git keeps a path. `mm:1` is the witness that the status
+#     really stayed `MM` and the session's blob is the one staged.
+kitguard_index_stub() {   # kitguard_index_stub blob|mode — what the session replaces in the index
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  if [ "$1" = mode ]; then
+    git -C "$FAKEKIT" update-index --cacheinfo "100755,\$(git -C "$FAKEKIT" rev-parse :TODO.md),TODO.md"
+  else
+    blob="\$(printf 'staged by the session\n' | git -C "$FAKEKIT" hash-object -w --stdin)"
+    git -C "$FAKEKIT" update-index --cacheinfo "100644,\$blob,TODO.md"
+  fi
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-index"
+printf 'staged by the human\n' >> "$FAKEKIT/TODO.md"
+git -C "$FAKEKIT" add TODO.md
+printf 'unstaged by the human\n' >> "$FAKEKIT/TODO.md"
+kitguard_index_stub blob
+kg_index_rc=0
+kg_index_err="$( cd "$OUTSIDE/kitguard-dirty-index" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_index_rc=$?
+kg_index_mm="$( [ "$(git -C "$FAKEKIT" status --porcelain -- TODO.md)" = "MM TODO.md" ] \
+  && [ "$(git -C "$FAKEKIT" show :TODO.md)" = "staged by the session" ] && echo 1 || echo 0 )"
+assert_eq "kit-guard: a session that replaces only the staged blob of an already-dirty kit path stops the line, named as an index change" \
+  "sessions:1 rc:3 kind:kit-touched named:1 mm:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_index_rc kind:$(hat_rows) named:$(grep -c 'paths: MM TODO.md (index changed)' <<< "$kg_index_err") mm:$kg_index_mm"
+git -C "$FAKEKIT" checkout -q HEAD -- TODO.md
+
+# 2h. THE STAGED MODE OF AN ALREADY-DIRTY PATH — the same place, the other half of its identity. The
+#     session flips only the executable bit of the INDEX entry, by `--cacheinfo` with the blob it
+#     already had: `update-index --chmod=+x <path>` would re-read the worktree file and stage its
+#     content too, and the probe would then measure the blob again (measured: the mutant that drops
+#     the mode survived that version). The worktree is untouched and not executable, porcelain stays
+#     `MM`, and a tree that kept the staged blob alone compared equal. `mm:1` is the witness: status
+#     `MM`, staged mode 100755, staged blob the one from before the session, worktree not executable.
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-index-mode"
+printf 'staged by the human\n' >> "$FAKEKIT/TODO.md"
+git -C "$FAKEKIT" add TODO.md
+printf 'unstaged by the human\n' >> "$FAKEKIT/TODO.md"
+kg_ixmode_blob="$(git -C "$FAKEKIT" rev-parse :TODO.md)"
+kitguard_index_stub mode
+kg_ixmode_rc=0
+kg_ixmode_err="$( cd "$OUTSIDE/kitguard-dirty-index-mode" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_ixmode_rc=$?
+kg_ixmode_mm="$( [ "$(git -C "$FAKEKIT" status --porcelain -- TODO.md)" = "MM TODO.md" ] \
+  && [ "$(git -C "$FAKEKIT" ls-files -s -- TODO.md | cut -c1-6)" = 100755 ] \
+  && [ "$(git -C "$FAKEKIT" rev-parse :TODO.md)" = "$kg_ixmode_blob" ] && [ ! -x "$FAKEKIT/TODO.md" ] && echo 1 || echo 0 )"
+assert_eq "kit-guard: a session that flips only the staged mode of an already-dirty kit path stops the line, named as an index change" \
+  "sessions:1 rc:3 kind:kit-touched named:1 mm:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_ixmode_rc kind:$(hat_rows) named:$(grep -c 'paths: MM TODO.md (index changed)' <<< "$kg_ixmode_err") mm:$kg_ixmode_mm"
+git -C "$FAKEKIT" checkout -q HEAD -- TODO.md
+
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the
 #    run it finally mattered on would scroll past unread. This regime is why the guard compares
