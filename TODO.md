@@ -150,6 +150,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Custo e escala
 
+- [ ] **Com milhares de caminhos sujos no kit, a guarda estoura o limite do ambiente e o `sdd run` morre** —
+  `bin/sdd:4017` (`KG_SUMS`) — o `kit_guard_tree` passa digests, bits e links ao `awk` por variável de
+  ambiente, e o `kit_guard_changes` a árvore inteira (`KG_BEFORE`); o Linux recusa uma string de
+  ambiente acima de 128 KiB (medido: 140 KB dá `Argument list too long`, 120 KB passa), e sob `set -e`
+  o `sdd run` morre no `kit_guard_arm`, antes de abrir sessão. Barulhento e sem custo, mas ~1700–2200
+  caminhos sujos bastam (um `.venv` criado no kit). Direção: os fluxos e o `KG_BEFORE` por process
+  substitution, sob `FILENAME == ARGV[n]`, com um regime de ~1800 arquivos no kit falso.
+  — descoberto por `Codex` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-07)
+
 ### Sem seção — chegaram depois da última classificação
 
 > ⚠️ Esta seção **chamava-se "Adiados por YAGNI"** e não guarda mais nenhum adiamento: os três que
