@@ -821,6 +821,30 @@ the suite while a step runs (`timeout --foreground`).
 
 ---
 
+## The kit's own suite is red with `kit-touched` on an assertion about something else
+
+**Symptom:** `tests/run-all.sh`, run in the kit, goes red in `check-autonomy.sh` or `check-gates.sh` on
+an assertion whose subject is not the kit guard — it expected `kind:no-progress` (or another kind)
+and got `kind:kit-touched`, or counted fewer sessions than it expected — and the same commit is
+green when the suite runs again with the tree left alone.
+
+**Cause:** the kit was edited while its own suite ran — by you, by an editor saving a buffer, by
+another session. Those two sensors drive `sdd run`, `sdd retry` and `sdd close` with stubbed
+sessions and with the kit under test as `SDD_HOME` (`grep -cE '"\$SDD" (run|retry|close)\b'`: 124
+call sites in `check-autonomy.sh`, 47 in `check-gates.sh`), and the kit guard samples that checkout
+around every one of them. A file saved in the middle is, to the guard, the kit moving during a
+phase, so the fixture's run stops with `kit-touched` and the assertion reads the wrong kind. Since
+#233 the guard compares the dirty tree path by path and by content, so this happens whether the kit
+was clean or already dirty when the suite started; before it, the stamp compared `<sha>|<dirty>`
+alone and only a clean kit turning dirty tripped it. The mutation catalogue is not affected: every
+mutant runs on a copy in `mktemp -d`, which is not a git checkout, and the guard is silent there —
+the stamp `sdd health` writes is as honest as ever.
+
+**What you do:** run the suite again without touching the kit while it runs; draft elsewhere (a
+scratchpad, another worktree). A red that comes back on the untouched tree is a real one.
+
+---
+
 ## `sdd install` refuses to run: the kit has no `config/starter.conf`
 
 **Symptom:** `error: the kit at <path> has no config/starter.conf …`, rc 1, and **no**
