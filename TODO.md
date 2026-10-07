@@ -23,54 +23,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
-- [ ] **`Closable by: deferred` passa no `gate_QA` sem a decisão humana escrita no bug** —
-  `bin/sdd:1725` (`genre_line`) — a âncora 3 lê só a linha do campo; `sdd-qa.md` §5.1 e a ADR 0009
-  exigem `## Decision`/`## Decisao` no corpo, e nada confere (a fixture `write_genre_bug` codifica o
-  caso). Medido no sales_quote: a `qa-execution` diferiu um bug "porque o conserto mora no TODO", sem
-  decisão, e o PR sairia sem ele. O alvo escreve `## Decisão`, com til. Direção: sem a seção fora de
-  cerca, o bug conta como `agent`; mundos "sem seção bloqueia" e "til passa" e um mutante. RESOLVED by 4d72973.
-  — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
-
-- [ ] **O guarda do kit é cego a kit já sujo editado de novo, e o BLOCKED não diz o que mudou** —
-  `bin/sdd:3895` (`AUTONOMY_KIT_STAMP`) — o carimbo é `sha|dirty`: dirty→dirty no mesmo sha passa
-  calado (fora dos DECLARED LIMITS), e o KIT-TOUCHED só imprime os dois carimbos. Medido no
-  sales_quote: achar o autor exigiu `git status` no kit e caçar sessões com cwd nele. Direção: guardar
-  o `status --porcelain` no arm, como o `HAT_STATUS_BEFORE`, e pôr no motivo as linhas novas e o
-  `log before..after`; regime "kit já sujo e editado" e mutante irmão do `kit_touched_silent`. RESOLVED by 6a5c3bb.
-  — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
-
-- [ ] **O `--red` aborta sob `set -u` em bash 4.0–4.3 quando o Check não imprime nada** —
-  `tests/check-checkpoint.sh:558` (`red_norm`) — `read -ra w` de uma saída vazia deixa o array vazio, e
-  `"${w[*]}"` é "unbound variable" antes do bash 4.4. Medido em docker `bash:4.3`: o veredito sobrevive
-  (o `red_norm` só roda dentro de `$(…)` e o pai não usa `-e`); o defeito é ruído no stderr e o risco de
-  uma chamada futura fora de substituição. Conserto: `${w[@]+"${w[*]}"}`. RESOLVED by 802b6d5.
-  — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
-
-- [ ] **Linha `|`-led com menos de cinco células some dos dois leitores do checkpoint** —
-  `bin/sdd:620` (`if (n < 6)`) — `| I2 | slice | pending |` é linha da tabela no GFM, mas o
-  `checkpoint_rows` a descarta em silêncio: o `pending` sai do `checkpoint_tally` e o `gate_EXEC` pode
-  passar — a falha aberta da linha sem `|` inicial (c71913c), por outra forma. O `rows_of` do
-  `check-checkpoint.sh` pula igual (`if (NF < 6) next`), e nem `--check` nem `--red` a acusam. Direção:
-  dentro da tabela, linha que não dá cinco colunas é recusada pelo nome, como a sem `|` inicial. RESOLVED by dfd9ab5.
-  — descoberto por `claude` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
-
-- [ ] **Relatório na ponta da base ainda conta se outra missão editar o checkpoint desta** —
-  `bin/sdd:971` (`tip_add_carries_mission`) — desde 79b6f93 o commit da base que adicionou o relatório
-  tem de mover `checkpoint.md` ou `checkpoint-notas.md` da missão; um commit de outra missão que traga o
-  próprio relatório e edite também o checkpoint desta ainda passa, e o `gate_QA` fecha com a evidência
-  alheia. Declarado na ADR 0015 §3, sem escritor conhecido. Direção: exigir que o checkpoint deixado
-  por esse commit seja um blob que a branch da missão já teve. RESOLVED by ed5ef44.
-  — descoberto por `claude` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
-
-- [ ] **A suíte herda `GIT_DIR` de quem a chama, e os fixtures escrevem no repositório real** —
-  `tests/run-all.sh:36` (`SDD_TEST_STATE`) — o `run-all.sh` isola o estado do runner, mas não limpa
-  `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE`. Sob `git bisect run` (e num hook `pre-push`, que o git chama
-  com `GIT_DIR` exportado), o `git init --bare` do `check-gates.sh` reinicializou o kit como bare, o
-  `git config user.email` gravou `[user] Fixture` e fixtures criaram tags — medido em 2026-10-05 21:17,
-  reparado à mão. Direção: `unset` de todo `GIT_*` de repositório ao lado do `SDD_STATE_DIR`, com probe
-  que rode um sensor sob `GIT_DIR` apontando para um repo-isca. RESOLVED by fc763ef.
-  — descoberto por `sessão interativa` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
-
 - [ ] **O censo do `GIT_DIR` não conta `/usr/bin/git` nem `"$GIT"` como o primeiro git de um sensor** —
   `tests/check-health.sh:1733` (`gitenv_census`) — a classe à esquerda do `git` exclui `/`, e uma
   variável não casa a palavra: um sensor que chame o binário por caminho ou por variável antes do
@@ -90,21 +42,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
-- [ ] **`sdd run --phase PR` com só o carimbo faltando grava uma intervenção e não abre sessão** —
-  `bin/sdd:8835` (`checkpoint_note_intervention`) — a nota "forced from the CLI" é commitada antes de a
-  volta chegar à parada no carimbo (rc 2), e o `sdd autonomy --by-mission` conta uma intervenção numa
-  corrida que não fez nada. Mesma forma da porta do PLAN, anterior ao lote. Direção: escrever a nota só
-  quando a volta forçada abre sessão, ou declarar o limite nas duas portas. RESOLVED by 0f5ad85 e 92f7d5c.
-  — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
-
-- [ ] **O `/sdd-plan` no próprio kit grava a missão no checkout que os `sdd run` dos alvos executam** —
-  `commands/sdd-plan.md:15` (`HANDOFF_DIR`) — o `sdd` do PATH é este checkout, e o `kit_guard_check`
-  de um run de alvo em voo lê o `status --porcelain` dele. Reproduzido numa cópia: kit limpo e um
-  `00-missao.md` não rastreado gravado durante o EXEC do alvo → rc 3 e `KIT-TOUCHED` (`|false` → `|true`);
-  controle rc 0. Direção: missão cujo repo é o kit é escrita e executada num worktree ligado, que não
-  move o carimbo do checkout principal; probe `command:` no `check-hat.sh` sobre o comando. RESOLVED by 4e9c854.
-  — descoberto por `sessão interativa` no planejamento do lote 5 (2026-10-06)
-
 - [ ] **O `sdd kaizen` no checkout principal do kit escreve e commita onde os `sdd run` dos alvos executam** —
   `bin/sdd:10917` (`cmd_kaizen`) — a sessão KAIZEN escreve o veredito e o plano da próxima missão do kit e
   commita no `REPO_ROOT` de onde foi chamada. Chamada do checkout que o `sdd` do PATH resolve, com um
@@ -114,35 +51,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `claude` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-06)
 
 ### Saída humana e cosmética
-
-- [ ] **Servidor deixado por uma fase segura o `sdd run` vivo e mudo depois do veredito** —
-  `bin/sdd-coordination.py:402` (`waitpid`) — o supervisor é subreaper e espera até ECHILD (desenho,
-  `docs/pipeline.md:53`), mas não diz por quem espera. Medido no sales_quote: o QA:exec reiniciou o
-  backend com `nohup … &`, o runner imprimiu BLOCKED e ficou em `do_wait` até o `npm run dev` morrer.
-  Nem agente nem `turn_rule` proíbem subir processo longo. Direção: worker colhido com filhos vivos
-  imprime uma vez pid e cmdline de cada um; e uma frase no `turn_rule` da fase QA. RESOLVED by daf3a8e.
-  — descoberto por `sessão interativa` na missão `20261005-mascaras-ncm-e-painel` (2026-10-05)
-
-- [ ] **A parada no carimbo manda rodar o `sdd health` mesmo quando o carimbo é impossível** —
-  `bin/sdd:8615` (`GATE_PR_STAMP_WHY`) — numa cópia do kit fora do git, ou com um caminho medido
-  ausente, nenhum `sdd health` carimba aquela árvore; o remédio certo só vem dentro do motivo, na linha
-  de cima, e as linhas `dim` repetem a ordem genérica. Parar está certo; a prosa engana. Lido do
-  código, não reproduzido. Direção: quando o motivo é "impossível", trocar as linhas de remédio. RESOLVED by 8778be8.
-  — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
-
-- [ ] **A dica do `sdd status` pergunta "feita à mão?" de toda fase verde de missão rodada noutra máquina** —
-  `bin/sdd:7153` (`status_unrecorded`) — o ledger é por máquina, então missão executada noutro
-  computador não tem linha `session` aqui e toda fase verde recebe o `sdd note-manual`; quem seguir a
-  dica grava como feita à mão uma fase que não foi. A frase diz "this machine's ledger" (declarado no
-  plano do I19). Direção: calar quando o ledger local não tem nenhuma linha da missão. RESOLVED by e892814.
-  — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
-
-- [ ] **O `ok` do `sdd note-manual` diz que gravou a nota mesmo sem `checkpoint.md`** —
-  `bin/sdd:11447` (`checkpoint_note_intervention`) — sem o arquivo o escritor volta 0 em silêncio, a
-  linha `manual` vai para o ledger e a mensagem final afirma "the note in the checkpoint": rótulo sem
-  artefato, na saída humana. Direção: o escritor publicar se escreveu, e o `ok` dizer só o que
-  aconteceu. RESOLVED by 57ea34f.
-  — descoberto por `revisor final` na missão `20261004-lote-4-a-catraca-zera` (2026-10-05)
 
 ### Comentário e registro
 
