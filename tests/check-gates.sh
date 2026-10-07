@@ -535,10 +535,24 @@ assert_why   "the row with fewer than five cells is refused by name" "EXEC" "inc
 awk -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print ""; print "| File | sha256 |"; print "|---|---|"; print "| db.sql.gz | abc123 |" }' \
   "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
 assert_phase "a narrow table below the checkpoint's is no increment" "QA"
-# And a short line with no leading pipe stays out: prose glued to the table that only quotes a pipe.
+# And a short row with NO leading pipe either (7th Codex review of PR #237): GFM makes that pipe
+# optional and renders the missing cells empty, so it is read and refused by name like the `|`-led
+# one. It used to be skipped — DECLARED, so prose glued to the table that quotes a pipe stayed out —
+# and gate_EXEC passed over the pending increment it carried. The human ruled for reading it as it
+# renders: that prose IS a row of the table in GFM, and a refusal by name, cured by a blank line,
+# is the failure that shows. The differential: glued, the prose is a row; below a blank line, a
+# paragraph.
+short_bare='I2 | slice two, bare and short | pending |'
+awk -v row="$short_bare" -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print row }' \
+  "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
+assert_phase "a pending row with no leading pipe and fewer than five cells keeps the phase in EXEC" "EXEC"
+assert_why   "the bare row with fewer than five cells is refused by name" "EXEC" "increment I2 has no Status"
 awk -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print "Never a `|` in the Check cell." }' \
   "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
-assert_phase "prose glued to the table that quotes a pipe is no increment" "QA"
+assert_phase "prose glued to the table that quotes a pipe is a row of it, as GFM renders it" "EXEC"
+awk -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print ""; print "Never a `|` in the Check cell." }' \
+  "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
+assert_phase "the same prose below a blank line is a paragraph, no increment" "QA"
 mv "$MDIR/checkpoint.short.bak" "$MDIR/checkpoint.md"
 
 # A literal pipe inside a Check cell is spelled `\|` in GFM, and a raw split on "|" cuts the row

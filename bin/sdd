@@ -609,12 +609,15 @@ checkpoint_rows() {
       # six fields or more is read this way — five cells, or four closed by the trailing pipe
       # (DECLARED: that four-cell header is read as wide, and GFM would give its table four
       # columns). A narrow table elsewhere in the file is no increment, and target
-      # checkpoints carry such tables (35 lines in four of them, measured 2026-10-06). A line
-      # with no leading pipe stays out when short: prose glued to the table that merely quotes a
-      # pipe reads as one (DECLARED: such a line that IS a short row is still skipped). No
-      # apostrophe in this comment: it sits inside the single-quoted awk program.
+      # checkpoints carry such tables (35 lines in four of them, measured 2026-10-06). A short
+      # line with NO leading pipe is read the same way (7th Codex review of PR #237): it was
+      # skipped, on the guess that it is prose glued to the table quoting a pipe, and the pending
+      # increment such a row carried went past gate_EXEC. GFM renders that prose as a row too, so
+      # it is now refused by name, and a blank line cures it; 0 such lines in the 98 target
+      # checkpoints measured 2026-10-07. No apostrophe in this comment: it sits inside the
+      # single-quoted awk program.
       if (first) wide = (n >= 6)
-      if (n < 6) { if (!wide || bare) next; for (i = n + 1; i <= 6; i++) f[i] = "" }
+      if (n < 6) { if (!wide) next; for (i = n + 1; i <= 6; i++) f[i] = "" }
       for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", f[i]) }
       # The Commit cell only: a hash fenced in backticks renders exactly like the bare one, so the
       # human reading the table sees a SHA and the gate saw "`abc1234`", which does not exist —

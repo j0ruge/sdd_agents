@@ -529,7 +529,7 @@ mut_EXEC_pipeless_reads_past_the_table() {
 # carries vanishes from checkpoint_tally — gate_EXEC passes over it to QA. Caught by `a pending row
 # with fewer than five cells keeps the phase in EXEC` in check-gates.sh.
 mut_EXEC_short_row_skipped() {
-  sed -i '/^checkpoint_rows()/,/^}/ s@if (n < 6) { if (!wide || bare) next; @if (n < 6) { next; @' "$1"
+  sed -i '/^checkpoint_rows()/,/^}/ s@if (n < 6) { if (!wide) next; @if (n < 6) { next; @' "$1"
 }
 # The other direction: every block counts as the checkpoint table, so a narrow table elsewhere in
 # the file is padded into increments with no Status and gate_EXEC refuses a finished checkpoint.
@@ -537,11 +537,12 @@ mut_EXEC_short_row_skipped() {
 mut_EXEC_short_row_reads_narrow_table() {
   sed -i '/^checkpoint_rows()/,/^}/ s@if (first) wide = (n >= 6)@if (first) wide = 1@' "$1"
 }
-# A short line with no leading pipe is padded too, so prose glued to the table that only quotes a
-# pipe becomes an increment with no Status and gate_EXEC refuses a finished checkpoint. Caught by
-# `prose glued to the table that quotes a pipe is no increment`.
-mut_EXEC_short_row_reads_glued_prose() {
-  sed -i '/^checkpoint_rows()/,/^}/ s@if (!wide || bare) next;@if (!wide) next;@' "$1"
+# A short row with no leading pipe is skipped again (7th Codex review of PR #237), and the pending
+# increment it carries goes past gate_EXEC to QA. Caught by `a pending row with no leading pipe and
+# fewer than five cells keeps the phase in EXEC` in check-gates.sh — and by the glued-prose half of
+# its differential, which the human ruled a row as GFM renders it.
+mut_EXEC_short_bare_row_skipped() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@if (n < 6) { if (!wide) next; @if (n < 6) { if (!wide || bare) next; @' "$1"
 }
 # The padded row is refused, but as `invalid status ''` — a status nobody wrote — instead of by the
 # missing cell. Caught by `the row with fewer than five cells is refused by name`.
@@ -6045,7 +6046,7 @@ CATALOG=(
   EXEC_pipeless_reads_past_the_table
   EXEC_short_row_skipped
   EXEC_short_row_reads_narrow_table
-  EXEC_short_row_reads_glued_prose
+  EXEC_short_bare_row_skipped
   GATE_EXEC_empty_status_unnamed
   EXEC_rows_blind_to_review_increments
   EXEC_alignment_colon_blind

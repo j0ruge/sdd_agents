@@ -215,9 +215,11 @@ surface() {
 # checkpoint table. Six fields is five cells, or four closed by the trailing pipe — DECLARED: that
 # four-cell header reads as wide. A four-cell row closed the same way is refused all the same, by
 # rule 1's column count (4 instead of 5) and not by the fewer-than-five message.
-# A short line with no leading pipe stays out: prose glued to the table that quotes a pipe reads as
-# one (build_tree's own template does), and the runner skips it too — DECLARED, no reader refuses
-# a short row written without its leading pipe.
+# A short line with no leading pipe is emitted too, with NF 0 (7th Codex review of PR #237): GFM
+# renders it as a row, and the runner reads it since then — skipped on the guess that it was prose
+# glued to the table, it carried a pending increment past both readers. Prose glued to the table
+# that quotes a pipe is refused with it, as GFM renders it a row; a blank line cures it, and
+# build_tree's template carries that blank line, as the real one does.
 rows_of() {
   awk -F'|' '
     /^[ \t]*$/ { tbl = 0 }
@@ -226,7 +228,7 @@ rows_of() {
     /^[ \t]*\|/ {
       if (!tbl) wide = (NF >= 6)
       tbl = 1
-      if (NF < 6 && (!wide || bare)) next
+      if (NF < 6 && !wide) next
       id = $2; gsub(/^[ \t]+|[ \t]+$/, "", id)
       if (id == "ID" || id ~ /^-+$/ || id == "") next
       status = $5; gsub(/^[ \t]+|[ \t]+$/, "", status)
@@ -711,6 +713,8 @@ build_tree() { # build_tree <root>
 
   f="$root/templates/checkpoint.md"; cp_head "$f"
   cp_row "$f" I1 '`<comando>` → `<esperado>`'
+  # The blank line the real template has: prose glued to the table is a row of it in GFM.
+  printf '\n' >> "$f"
   printf 'A Check reading a sensor: `o=$(cmd 2>&1); grep -c '"'"'%s<assertion>'"'"' <<< "$o"`\n' \
     "$OK_ANCHOR" >> "$f"
   pipe_banner >> "$f"
@@ -793,6 +797,12 @@ selftest() {
   cp_head "$narrow"; cp_row "$narrow" I1 '`bash tests/run-all.sh` → verde'
   printf '\n| File | sha256 |\n|---|---|\n| db.sql.gz | abc123 |\n' >> "$narrow"
   probe 'a row with fewer than five cells is caught, not skipped' 1 'row I2 has fewer than five cells' "$short"
+  # The same short row with no leading pipe (7th Codex review of PR #237): read as GFM renders it,
+  # and refused — it used to be skipped on the guess that such a line is prose glued to the table.
+  local shortbare="$box/shortbare.md"
+  cp_head "$shortbare"; cp_row "$shortbare" I1 '`bash tests/run-all.sh` → verde'
+  printf 'I2 | slice | pending |\n' >> "$shortbare"
+  probe 'a bare row with fewer than five cells is caught, not skipped' 1 "row I2 has no leading '|'" "$shortbare"
   probe 'a narrow table below the checkpoint is no row of it' 0 'narrow.md: 1 row(s)' "$narrow"
   [ "$FAILS" -eq "$short_f0" ] && \
     pass 'rule: a row with fewer than five cells is refused by name, a narrow table is not'
@@ -829,6 +839,7 @@ selftest() {
   build_tree "$notmpl"
   cp_head "$notmpl/templates/checkpoint.md"
   cp_row "$notmpl/templates/checkpoint.md" I1 '`<comando>` → `<esperado>`'
+  printf '\n' >> "$notmpl/templates/checkpoint.md"
   printf 'A Check reading a sensor: `o=$(cmd 2>&1); grep -c <assertion> <<< "$o"`\n' \
     >> "$notmpl/templates/checkpoint.md"
   pipe_banner >> "$notmpl/templates/checkpoint.md"
