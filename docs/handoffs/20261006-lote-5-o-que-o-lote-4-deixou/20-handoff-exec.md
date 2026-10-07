@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 773a289e-20ea-4203-817a-084658e86831
 data: 2026-10-06 14:03
-gate: "tests/run-all.sh → rc 0, 'suite green' (1897 linhas '  ok ', 0 FAIL, 404 s com TMPDIR=/tmp/l5pr/s4, depois da 3ª rodada dos bots do PR #237); anchors: all 668 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '14 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 14, 12 com RESOLVED by"
+gate: "tests/run-all.sh → rc 0, 'suite green' (1899 linhas '  ok ', 0 FAIL, 350 s com TMPDIR=/tmp/l5s, em d7b6df2, depois da 4ª rodada dos bots do PR #237); anchors: all 672 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '15 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 15, 12 com RESOLVED by"
 ---
 
 # Handoff — EXEC — Lote 5: o que o lote 4 deixou
@@ -26,18 +26,19 @@ página do `sdd status` cala sem `session` local e o `ok` do `note-manual` diz o
 supervisor nomeia quem segura o checkout e o `turn_rule` avisa toda fase (I9); o `/sdd-plan` no kit
 abre um worktree ligado (I10). ADR 0016 aceita, 0015 ganha `Amended by: 0016`. Revisão final:
 3 consertos, 4 minors decididos pelo humano. PR #237: os bots deram 6 achados, consertados numa
-leva, e a leva achou a sandbox do catálogo sem o `.gitignore`; a 2ª e a 3ª rodadas do Codex, 1 P2 cada
-(bit de execução e alvo do symlink na árvore do kit). Catálogo 619 → 668, todos aplicam.
-Catraca 14 na branch (N = 1, a #238) → 2 depois do chore. Próximo: `./bin/sdd health` UMA vez no
+leva, e a leva achou a sandbox do catálogo sem o `.gitignore`; a 2ª, a 3ª e a 4ª rodadas do Codex
+acharam cada uma um caminho da árvore do kit (bit de execução, alvo do symlink, entrada do índice), e a
+4ª, mais um P2 registrado como achado (#239). Catálogo 619 → 672, todos aplicam.
+Catraca 15 na branch (N = 2, #238 e #239) → 3 depois do chore. Próximo: `./bin/sdd health` UMA vez no
 worktree (com o `mutation-killers.tsv` copiado), merge pelo humano.
 
 ## Estado do repo
 
-- **Branch:** `fix/lote-5-o-que-o-lote-4-deixou`, só local, no worktree `~/repos/sdd_agents-lote-5`
-  (nunca empurrada; base `origin/main` = `89df2e5`)
-- **Último commit:** o registro da 3ª rodada dos bots do PR #237, sobre `a55b53c`
+- **Branch:** `fix/lote-5-o-que-o-lote-4-deixou`, no worktree `~/repos/sdd_agents-lote-5`, empurrada
+  (PR #237; base `origin/main` = `89df2e5`)
+- **Último commit:** o registro da 4ª rodada dos bots do PR #237 e da retro, sobre `d7b6df2`
 - **Working tree:** limpo depois do commit deste handoff
-- **Suíte:** `tests/run-all.sh` → verde (rc 0, 404 s; 1897 linhas `ok`; 668 mutantes com âncora válida)
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, 350 s; 1899 linhas `ok`; 672 mutantes com âncora válida)
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
 - **Carimbo de mutação:** inválido para esta branch desde o I12 (esperado); o `sdd health` roda UMA
   vez, depois dos bots, no worktree
@@ -123,6 +124,26 @@ vizinhança, e ali o remendo parou: `a55b53c` faz o digest ser a identidade inte
 (tipo, modo, conteúdo; o symlink é o texto do alvo), com o gitlink declarado. Regime 2f, red
 `sessions:2 rc:3 kind:no-progress named:0 c:1`; 2 mutantes.
 
+**4ª rodada do Codex (sobre `9c05289`):** 2 P2, ambos procedentes, decididos pelo humano. O remendo
+da 3ª não tinha parado: num caminho já `MM`, uma fase que troca só o blob do índice deixava porcelain
+e árvore iguais. `b3a9e12` põe a entrada do índice (`@<modo>:<blob>`) no digest e o motivo diz
+`(index changed)`; com o HEAD no carimbo, a guarda lê os três lugares onde o git guarda um caminho.
+O modo do índice entrou junto, além do pedido: é a outra metade da entrada, e trocar só ele também
+passava calado. Regimes 2g (red `sessions:2 rc:3 kind:no-progress named:0 mm:1`) e 2h; 4 mutantes
+novos e 1 re-ancorado, 5 de 5 pegos por `--only`. O 2h nasceu errado e o catálogo o pegou:
+`update-index --chmod=+x <path>` relê o arquivo e encena o conteúdo junto, então o mutante que tira o
+modo sobreviveu; o regime passou a `--cacheinfo` com o mesmo blob, e a testemunha confere o blob. O
+outro P2 (a cerca do `bug_decision_recorded` alterna em qualquer marcador; o extrator do gênero tem o
+mesmo padrão) é falha aberta artificial: item do `TODO.md` e #239 (`d7b6df2`), conserto futuro nos
+dois leitores.
+
+**Retro da rodada (pedida pelo humano):** o probe de SIGINT do `check-coordination.sh` esperava o
+marcador existir e não ser escrito — corrida provada em cópias com a janela alargada, consertada em
+`ef19862`; o `sandbox()` do catálogo declara que nada confere os arquivos que os sensores leem com a
+lista copiada (2ª vez: `commands/`, `.gitignore`), no mesmo commit; o `failure-modes.md` ganha o
+verbete da suíte vermelha com `kit-touched` num regime alheio (`2bb1607`). O `remap.py` das âncoras
+não tinha sumido no reboot: mora em `~/.claude/plans/2026-10-03-helpers/`.
+
 ## Artefatos
 
 | Arquivo | O que contém |
@@ -161,20 +182,23 @@ mais no stderr).
 
 ## Riscos e não-feitos
 
-- **Carimbo não medido:** o catálogo de 668 mutantes só roda no `sdd health`; as re-provas desta
+- **Carimbo não medido:** o catálogo de 672 mutantes só roda no `sdd health`; as re-provas desta
   leva foram por `--only` (dica), cada mutante novo e os vizinhos que o plano nomeia.
 - **`TMPDIR` longo:** cinco `--only` contra o `check-autonomy.sh` deram `HARNESS-BROKEN` com o nome
   do mutante no `TMPDIR` (limite já declarado no sensor desde `0c0e13a`); com `TMPDIR` curto, todos
   pegos. O `sdd health` roda com `TMPDIR=/tmp`.
 - **Sem probe, declarados no código:** o `GIT_OPTIONAL_LOCKS=0` do `kit_guard_tree` (I6); o
   `GITENV_FLOOR=0` sozinho (I1); o reset do `CHECKPOINT_NOTE` e o braço `*` do `case` (I8); o grace e
-  o "não nomear quando chegou sinal" (I9); o re-arm da árvore do kit (I6).
+  o "não nomear quando chegou sinal" (I9); o re-arm da árvore do kit (I6); o `FILENAME == ARGV[1]`
+  do índice (só um kit de índice vazio o distingue de `NR == FNR`) e as fases de um caminho em
+  conflito no índice (4ª rodada).
 - **Desvios do protótipo, todos medidos e anotados nas notas do checkpoint:** I6 ganhou o
   `GIT_OPTIONAL_LOCKS=0` que o plano pedia e o patch não tinha; I10 ganhou a frase do `./bin/sdd` e a
   8ª verificação do probe; I7 corrigiu "decision 10a" para 11a.
 
 ## Achados fora de escopo
 
-Um, por decisão do humano na rodada dos bots: o minor 2 da revisão final (o censo do `GIT_DIR` não
-conta o git chamado por caminho ou variável), item do `TODO.md` e issue #238. A catraca fica em 14
-na branch e desce a 2 no chore pós-merge.
+Dois, por decisão do humano: o minor 2 da revisão final (o censo do `GIT_DIR` não conta o git
+chamado por caminho ou variável), item do `TODO.md` e issue #238; e o P2 da 4ª rodada do Codex (a
+cerca dos leitores de bug alterna em qualquer marcador), item do `TODO.md` e issue #239. A catraca
+fica em 15 na branch e desce a 3 no chore pós-merge.

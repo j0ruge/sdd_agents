@@ -20,17 +20,17 @@ kit era escrita no checkout que os `sdd run` dos alvos executam.
 
 | Fato | Antes | Depois |
 |---|---|---|
-| Catraca `todo-findings` | 11 na `main` (13 com os dois do planejamento) | 14 na branch, 12 com `RESOLVED by`, N = 1 nascido (#238, o minor 2 da revisão final) → 2 depois do chore |
+| Catraca `todo-findings` | 11 na `main` (13 com os dois do planejamento) | 15 na branch, 12 com `RESOLVED by`, N = 2 nascidos (#238, o minor 2 da revisão final; #239, um P2 do Codex) → 3 depois do chore |
 | Sensores sozinhos que movem uma isca sob `GIT_DIR` | 12 de 16 (o `check-autonomy` trocava o `.git` por um gitfile para um temporário apagado) | 0 de 16, todos rc 0; a suíte inteira sob o veneno, `suite green` e isca intacta (461 s) |
 | `check-hat.sh` sozinho sob o `GIT_DIR` de um worktree ligado | gravava `user.email` na isca e saía 0 | isca intacta, rc 0 |
 | `--red` sobre Check mudo, docker `bash:4.3` | `grep -c "unbound variable"` → 1 | 0 |
 | Linha `\| I2 \| slice \| pending \|` no checkpoint | some; `gate_EXEC` passa a QA | `increment I2 has no Status`; `--check`/`--red` rc 1 |
 | Bug `deferred` sem `## Decis…` | passa a QA | barra e é nomeado no motivo |
 | Relatório de outra missão que editou este checkpoint (mundo j) | `REVIEW\|0` | `QA\|1` |
-| Kit já sujo editado de novo durante a fase de um alvo | rc 0, 0 linhas | `kit-touched`, com o caminho nomeado |
+| Kit já sujo editado de novo durante a fase de um alvo | rc 0, 0 linhas | `kit-touched`, com o caminho nomeado; também só o bit, só o alvo do symlink, só o blob ou o modo do índice |
 | Nota `intervention:` sem sessão (`--phase PLAN`, `--phase PR` no carimbo, retry no teto, override em volta parada) | gravada e commitada | nenhuma; a da override carrega a fase da sessão comprada |
-| Catálogo de mutação | 619 | **668** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 668 mutants still apply`; 5 re-ancorados |
-| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 404 s, 1897 linhas `ok`, 0 FAIL, depois da 3ª rodada dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada) |
+| Catálogo de mutação | 619 | **672** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 672 mutants still apply`; 6 re-ancorados |
+| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 350 s, 1899 linhas `ok`, 0 FAIL, em `d7b6df2`, depois da 4ª rodada dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada) |
 
 **Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
 `~/repos/sdd_agents-lote-5` (ADR 0016 §2): nada escrito no checkout principal enquanto alvos rodavam.
@@ -67,10 +67,15 @@ catálogo não levava o `.gitignore` que o regime 2c lê: todo `--only` contra o
 dava `HARNESS-BROKEN`, e o `sdd health` teria parado antes do primeiro mutante (`8c8be78`). A 2ª
 rodada do Codex achou mais um caminho da #233: num caminho já sujo, só o bit de execução trocado
 deixava a guarda calada; o bit entrou na árvore do kit (`6a93d14`). A 3ª achou o symlink
-reapontado para um arquivo idêntico, e ali o remendo parou: o digest virou a identidade que o git dá
-à entrada — tipo, modo e conteúdo (`a55b53c`).
+reapontado para um arquivo idêntico, e o digest virou a identidade que o git dá à entrada — tipo,
+modo e conteúdo (`a55b53c`). A 4ª mostrou que o remendo por dimensão não tinha parado: num caminho
+`MM`, a entrada do índice trocada passava calada. A guarda passou a ler os lugares, não as
+dimensões — o HEAD no carimbo, o índice e a árvore (`b3a9e12`) —, e o catálogo pegou um regime que
+media o blob quando dizia medir o modo (`update-index --chmod` relê o arquivo). O outro P2 da 4ª
+virou a #239. A retro consertou uma corrida no probe de SIGINT do `check-coordination.sh` que daria
+mutante pego por acaso (`ef19862`).
 
-**Ainda não medido:** o carimbo do `sdd health` com 668 mutantes, que roda depois dos bots; e o uso
+**Ainda não medido:** o carimbo do `sdd health` com 672 mutantes, que roda depois dos bots; e o uso
 real — a primeira parada `kit-touched` com o "what changed", o primeiro supervisor nomeando um
 processo, a primeira missão do kit aberta pelo passo 2 do `/sdd-plan`.
 
