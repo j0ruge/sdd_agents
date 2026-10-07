@@ -136,6 +136,7 @@
 #   94  the file named on --check is missing or unreadable      96  unknown option
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SELF_PATH="$ROOT/tests/check-pipefail.sh"
@@ -895,7 +896,7 @@ EOF
   # shrank" and stops measuring the thing it names — which is how the floor bump of this mission
   # was caught, by three probes failing at once with the wrong message.
   tree="$box/full"; mkdir -p "$tree/bin" "$tree/tests"; : > "$tree/bin/sdd"; : > "$tree/bin/sdd-link-agents"
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do : > "$tree/tests/check-$i.sh"; done
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17; do : > "$tree/tests/check-$i.sh"; done
   probe 'a full clean surface passes' 0 '(0 waived)' "$tree" --scan
 
   # The waived COUNT is the only thing that makes the waiver hole visible in a diff, so it is a
@@ -963,8 +964,9 @@ scan_surface() {
 # rather than staying at a number that
   # would still pass while describing a smaller surface than the one actually scanned.
   # Coordination adds its sensor and the alternate linker: 16 -> 18 Bash paths.
-  if [ "$n_files" -lt 18 ]; then
-    printf '  FAIL  surface shrank to %d path(s), expected at least 18 — did something move?\n' \
+  # tests/isolate-git.sh, sourced by every sensor (issue #226): 18 -> 19.
+  if [ "$n_files" -lt 19 ]; then
+    printf '  FAIL  surface shrank to %d path(s), expected at least 19 — did something move?\n' \
       "$n_files" >&2
     return 93
   fi

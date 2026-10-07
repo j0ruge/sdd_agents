@@ -20,8 +20,10 @@ for independent work, or wait for the current execution and its descendants to f
 The owner PID may already be dead while its supervisor still waits for a child. This includes
 children that closed inherited descriptors, called `setsid` or double-forked. The lock releases
 automatically after the last descendant exits, even after SIGKILL of the public owner/worker.
-A server left in the background keeps ownership; stop that task through its normal shutdown
-path. Do not delete the lock file or kill the supervisor to force entry: that defeats exclusion.
+A server left in the background keeps ownership; since #234 the supervisor names it once, a second
+after the worker exits (`sdd <command>: done, but 1 process it left running holds the checkout; …`,
+then `pid <n>: <executable>` — the kernel's name for it, never its arguments nor its `argv[0]`, which
+may carry a credential; `ps -o args= -p <n>` shows them on your own terminal), so you know which task to stop through its normal shutdown path. Do not delete the lock file or kill the supervisor to force entry: that defeats exclusion.
 Stale JSON without a live lock is harmless and does not require manual cleanup.
 
 **CHECKOUT-UNAVAILABLE:** coordinated execution requires Linux 5.3+ procfs, Python 3.9+ and kernel
@@ -501,7 +503,10 @@ the field has a third value for exactly that case: a human decided, another miss
 not block, and — unlike `human` — the gate's passing reason **names it on every evaluation**
 (`N deferred (visible, not blocking): BUG-a`), so the debt stays in front of whoever runs
 `sdd status`. Marking it requires the decision to be written in the bug's own body; *"not now"* with
-nothing recorded is `agent`. Using `human` for this is what SQ-129 did, and the swap back became a
+nothing recorded is `agent`, and since #232 the gate reads it that way: with no `## Decis…` heading
+outside a fence whose section carries a date (`YYYY-MM-DD`, in the heading or under it) (the plurals — `## Decisions for a Human`, and the pt-BR `## Decisoes …` with or without its
+tilde — are open questions and do not count), the bug blocks
+and the reason names it (`… with no dated '## Decision' section in the body count as agent: BUG-…`). Using `human` for this is what SQ-129 did, and the swap back became a
 manual increment of the next mission.
 
 Three cheap things get read as "unmarked", because the match is deliberately strict and its
@@ -585,6 +590,29 @@ kit. The hat crossed nothing — widening either weakens a real guard for good t
 **If the reflog is off** (`core.logAllRefUpdates=false`, or `.git/logs` gone) the runner cannot tell
 whose move it was, falls back to the range diff and blames the hat as it always did, `hat-crossed` —
 see [the hat stopped correct work](#the-hat-stopped-correct-work).
+
+---
+
+## The line stopped with `kit-touched`
+
+**Symptom:** `BLOCKED in <PHASE> — the kit at <path> was edited while <PHASE> ran (kit_before=<sha>|<dirty>
+kit_after=<sha>|<dirty>) — who edited it was not measured … — what changed: commits: <sha7> <subject>;
+paths: <XY path>, <XY path> (content changed), <XY path> (mode changed), <XY path> (index changed), <path> (no longer dirty)`, a `KIT-TOUCHED` line in
+`.sdd/logs/<mission>/pipeline.log`, and a `kit-touched` row in the ledger (whose `gate_why` is cut at
+200 characters: the terminal's `BLOCKED` line carries the whole `what changed` clause).
+
+**What is happening:** the checkout the `sdd` on your PATH runs from — the kit — moved while a phase
+of another repository's mission ran: a commit, or a dirty path that appeared, changed content, mode or
+staged entry, or went clean. Since #233 a kit that was already dirty when the phase opened is watched too, path by path and
+by content, so saving a file in a dirty kit stops the line as well. The runner does not know who did
+it: a session of this mission writing outside its repo, or you working on the kit in another terminal.
+
+**What you do:** read the `what changed` clause. If it is your own work on the kit, do kit work in a
+linked worktree (ADR 0016 §2; the `/sdd-plan` does it for a kit mission) and keep the checkout the PATH
+runs from on `main` and clean; then `sdd run` again. If it is the session's, the finding belongs in
+the handoff, marked `kit:`, never in a commit to the kit. Editor temp files (vim swap files, `*~`,
+emacs locks) are in the kit's `.gitignore` and stop nothing; another editor's temp file that is not
+there would, and the fix is one more ignore line, never a looser guard.
 
 ---
 
@@ -794,6 +822,30 @@ the suite while a step runs (`timeout --foreground`).
 
 ---
 
+## The kit's own suite is red with `kit-touched` on an assertion about something else
+
+**Symptom:** `tests/run-all.sh`, run in the kit, goes red in `check-autonomy.sh` or `check-gates.sh` on
+an assertion whose subject is not the kit guard — it expected `kind:no-progress` (or another kind)
+and got `kind:kit-touched`, or counted fewer sessions than it expected — and the same commit is
+green when the suite runs again with the tree left alone.
+
+**Cause:** the kit was edited while its own suite ran — by you, by an editor saving a buffer, by
+another session. Those two sensors drive `sdd run`, `sdd retry` and `sdd close` with stubbed
+sessions and with the kit under test as `SDD_HOME` (`grep -cE '"\$SDD" (run|retry|close)\b'`: 124
+call sites in `check-autonomy.sh`, 47 in `check-gates.sh`), and the kit guard samples that checkout
+around every one of them. A file saved in the middle is, to the guard, the kit moving during a
+phase, so the fixture's run stops with `kit-touched` and the assertion reads the wrong kind. Since
+#233 the guard compares the dirty tree path by path and by content, so this happens whether the kit
+was clean or already dirty when the suite started; before it, the stamp compared `<sha>|<dirty>`
+alone and only a clean kit turning dirty tripped it. The mutation catalogue is not affected: every
+mutant runs on a copy in `mktemp -d`, which is not a git checkout, and the guard is silent there —
+the stamp `sdd health` writes is as honest as ever.
+
+**What you do:** run the suite again without touching the kit while it runs; draft elsewhere (a
+scratchpad, another worktree). A red that comes back on the untouched tree is a real one.
+
+---
+
 ## `sdd install` refuses to run: the kit has no `config/starter.conf`
 
 **Symptom:** `error: the kit at <path> has no config/starter.conf …`, rc 1, and **no**
@@ -886,7 +938,9 @@ there.
 likelier failures still speak first. Nothing is pushed, nothing is merged. In a repo without
 `tests/check-mutation.sh` this requirement does not exist at all. With the PR open and the stamp
 the only thing missing, `sdd run` itself stops with rc 2 and opens no session (`the stamp is not
-headless`): the publisher never runs `sdd health` (ADR 0015 §1).
+headless`): the publisher never runs `sdd health` (ADR 0015 §1). In the fourth state the stop says
+so (`no './bin/sdd health' can stamp this tree as it stands (<kind>)`) and asks for the fix first;
+for a stamp that is merely absent or stale it keeps the review-bot order (#228).
 
 **What you do:** run `./bin/sdd health` from the checkout the mission is in, and run it **after the
 last commit that touches a tracked file under `bin/ tests/ templates/ config/ agents/`**. About eighteen minutes on a laptop since PR #170 (twenty to fifty before it); a

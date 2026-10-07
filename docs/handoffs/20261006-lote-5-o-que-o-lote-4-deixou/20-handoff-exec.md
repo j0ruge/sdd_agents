@@ -1,0 +1,248 @@
+---
+missao: 20261006-lote-5-o-que-o-lote-4-deixou
+fase: EXEC
+status: done
+sessao: 773a289e-20ea-4203-817a-084658e86831
+data: 2026-10-06 14:03
+gate: "tests/run-all.sh → rc 0, 'suite green' (1904 linhas '  ok ', 0 FAIL, 359 s com TMPDIR=/tmp/l5s, em a63896f, depois da 7ª rodada dos bots do PR #237); anchors: all 676 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '16 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 16, 12 com RESOLVED by"
+---
+
+# Handoff — EXEC — Lote 5: o que o lote 4 deixou
+
+> Escrito no fim de cada fase. A próxima fase é uma **sessão nova sem memória**: se algo que ela
+> precisa saber não está aqui (ou nos artefatos linkados), está perdido.
+
+## TL;DR
+
+Os 12 incrementos estão `done`, executados de forma interativa no worktree ligado
+`~/repos/sdd_agents-lote-5` (ADR 0016 §2), cada um com o Check do plano medido vermelho antes e
+verde depois. As 12 issues (#223–#230, #232–#235) carregam `RESOLVED by` no `TODO.md`; a 13ª (o
+`sdd kaizen` no checkout principal, #236) fica aberta, decisão 11b. Comportamento novo: a suíte, o
+catálogo e todo sensor limpam o `GIT_DIR` de quem chama (I1); a linha curta da tabela é recusada
+pelo nome (I2); `deferred` sem `## Decis…` no bug barra a QA (I4); o relatório da base exige blob de
+checkpoint da missão (I5, ADR 0016 §1); a guarda do kit vê o kit sujo editado de novo e diz o que
+mudou (I6); a nota `intervention:` só existe na volta que abre sessão, nas três portas (I7); a
+página do `sdd status` cala sem `session` local e o `ok` do `note-manual` diz o que fez (I8); o
+supervisor nomeia quem segura o checkout e o `turn_rule` avisa toda fase (I9); o `/sdd-plan` no kit
+abre um worktree ligado (I10). ADR 0016 aceita, 0015 ganha `Amended by: 0016`. Revisão final:
+3 consertos, 4 minors decididos pelo humano. PR #237: os bots deram 6 achados, consertados numa
+leva, e a leva achou a sandbox do catálogo sem o `.gitignore`; a 2ª, a 3ª e a 4ª rodadas do Codex
+acharam cada uma um caminho da árvore do kit (bit de execução, alvo do symlink, entrada do índice), e a
+4ª, mais um P2 registrado como achado (#239); a 5ª e a 6ª, entradas de borda do `md5sum` (`-` na frente,
+registro escapado), o `argv[0]` no aviso do supervisor e o `4913` no `.gitignore`, consertados; a 7ª,
+a linha curta sem `|` inicial (consertada, invertendo o K3 por decisão do humano) e o limite do ambiente
+(#240). Catálogo 619 → 676, todos aplicam.
+Catraca 16 na branch (N = 3, #238, #239 e #240) → 4 depois do chore. Rodada 8 do Codex limpa; carimbo
+verde, `676 caught … of 676` sobre `7785fe8`. Próximo: merge pelo humano.
+
+## Estado do repo
+
+- **Branch:** `fix/lote-5-o-que-o-lote-4-deixou`, no worktree `~/repos/sdd_agents-lote-5`, empurrada
+  (PR #237; base `origin/main` = `89df2e5`)
+- **Último commit:** o registro da 7ª rodada dos bots do PR #237, sobre `a63896f`
+- **Working tree:** limpo depois do commit deste handoff
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, 359 s; 1904 linhas `ok`; 676 mutantes com âncora válida)
+- **E2E:** não se aplica (o kit não tem `E2E_CMD`)
+- **Carimbo de mutação:** verde — `./bin/sdd health` no worktree, 2026-10-07 12:27 → 13:31 (~64 min, 16
+  jobs, carga ~18): `score: 676 caught, 0 known gap(s), of 676`, `mutation stamp written`, `kit healthy`,
+  sobre `7785fe8` (o registro deste commit é prosa, fora da chave)
+
+## O que foi feito
+
+- `5df5176` — I12 (feito no planejamento): o `/sdd-plan` commita o que o `sdd approve` deixa; o relay segura o que não é resposta
+- `fc763ef` — I1 (#226): `tests/isolate-git.sh` em 17 arquivos; 12 de 16 sensores moviam a isca, 0 depois
+- `dfd9ab5` — I2 (#224): a linha `|`-led com menos de cinco células é recusada pelo nome nos dois leitores
+- `802b6d5` — I3 (#223): o `red_norm` guarda o array vazio (docker `bash:4.3`: 1 → 0)
+- `4d72973` — I4 (#232): `deferred` só vale com `## Decis…` fora de cerca no corpo do bug
+- `ed5ef44` — I5 (#225): relatório da ponta da base exige blob de checkpoint escrito pela missão
+- `6a5c3bb` — I6 (#233): a guarda do kit compara a árvore suja por caminho e conteúdo, e diz o que mudou
+- `8778be8`, `0f5ad85`, `92f7d5c` — I7 (#228, #227, decisão 11a): remédio do carimbo impossível; nota só com sessão nas três portas
+- `e892814`, `57ea34f` — I8 (#229, #230): status cala sem `session` local; o `ok` do `note-manual` lê `CHECKPOINT_NOTE`
+- `daf3a8e` — I9 (#234): `name_stragglers` no supervisor; o `turn_rule` ganha o processo em background
+- `4e9c854` — I10 (#235): passo 2 do `/sdd-plan` (worktree ligado no próprio kit)
+- `6bc4b37` — I11: `RESOLVED by` nos 12, ADR 0016 aceita, emenda na 0015, drift, `KAIZEN_LOG.md` e este handoff
+
+## Revisão final da branch (depois do I11)
+
+Um revisor de contexto novo leu `89df2e5..3df598f`, só leitura, de uma cópia por `git archive`.
+Veredito: mergeável depois de uma leva pequena; 0 Critical, 1 Important, 7 Minor. Re-graduados por
+efeito e consertados numa leva, cada um com vermelho medido antes:
+
+- `3b1c4dc` — **Important (I6):** o swap do vim, reescrito a cada poucos segundos de digitação,
+  parava o `sdd run` de um alvo num kit já sujo, sem nada salvo. Os temporários de editor entram no
+  `.gitignore` do kit; o kit falso do `check-autonomy.sh` passa a carregar o `.gitignore` real e o
+  regime 2c é o sensor (red pelo `sdd run`: `kind:kit-touched same:1`). O `failure-modes.md` ganha o
+  verbete `kit-touched`, que não existia.
+- `875538b` — **Minor → Important (I4):** `## Decisões …`/`## Decisoes …` liam como decisão, e o
+  `deferred` só com a pergunta aberta passava: a falha aberta da #232 por outra grafia. Red
+  `REVIEW|REVIEW|REVIEW` → `REVIEW|QA|QA`; 1 mutante novo, 1 re-ancorado.
+- `0d6c165` — **Minor (I8, decisão minha errada):** o `README.md` descrevia a dica do `sdd status`
+  sem a condição nova.
+
+Recusado: o achado 7 (`descendants()` calado sem `CONFIG_PROC_CHILDREN`) não procede — a admissão já
+recusa esse kernel (`bin/sdd-coordination.py:186`). Os minors 2, 4, 6 e 8 foram ao humano, que
+decidiu na rodada dos bots (seção abaixo):
+
+- **2 (I1):** o censo não conta `/usr/bin/git` nem `$GIT` como "primeiro git" (a classe exclui `/`):
+  falha aberta sem caso hoje.
+- **4 (I2):** comentário, ADR e prosa dizem "cabeçalho de cinco células"; o predicado admite quatro
+  com a barra final. Comportamento antigo; só a prosa exagera.
+- **6 (I6):** o ramo `(no longer dirty)` do motivo não tem mutante próprio.
+- **8:** ordem de hash nos itens `(no longer dirty)`; tab num caminho do kit corta a chave; o `—` no
+  `Status:` das ADRs 0014–0016.
+
+## Rodada dos bots (PR #237)
+
+Codex: 1 P1. CodeRabbit: 2 Major e 3 Minor. Copilot sem cota (lacuna de cobertura, não aprovação).
+Tudo numa leva, com vermelho medido antes onde há lógica e cada mutante novo provado por `--only`:
+
+- `06e0235` — **Codex P1 (I4):** a decisão do `deferred` valia só pelo título, e um `## Decision`
+  vazio passava. A seção agora precisa de uma data `AAAA-MM-DD` (no título ou no corpo, fora de
+  cerca, antes do próximo `##`). As 18 seções reais dos alvos têm data: nenhum veredito muda. Red
+  `REVIEW|REVIEW|REVIEW|REVIEW` → `REVIEW|QA|QA|QA`; 2 mutantes.
+- `592a74f` — **CodeRabbit, 2 Major (I9):** o aviso copiava a `cmdline` (credencial possível no
+  stderr) e agora nomeia só o executável; um stderr fechado matava o supervisor antes do `ECHILD` e
+  soltava a trava, e a escrita do aviso virou melhor esforço. 2 probes, 2 mutantes.
+- **CodeRabbit, 3 Minor:** pipes da tabela do `KAIZEN_LOG.md` escapados; a contagem de hoje do
+  `--check` acrescentada ao critério d do `00-missao.md` (12/11, sem reescrever a medição do
+  planejamento); o 656 deste handoff. No commit deste handoff.
+
+Os minors da revisão final, pela decisão do humano: 6 e 8 em `f2ef238` (o `(no longer dirty)`
+inteiro e na ordem do git; regime 2d, 3 mutantes), 4 em `d7ddf46` (a prosa do cabeçalho de seis
+campos), e o 2 virou item do `TODO.md` e a issue #238 (`251d7be`, catraca 13 → 14). Recusado do 8: o
+`—` no `Status:` das ADRs é o marcador de ticket ausente que o `sdd adr new` escreve
+(`bin/sdd:7713`), igual de 0010 a 0016.
+
+**Achado da própria leva:** os `--only` contra o `check-autonomy.sh` deram `HARNESS-BROKEN`. A
+sandbox do catálogo não copiava o `.gitignore` que o regime 2c (`3b1c4dc`) lê, e o `sdd health`
+teria parado antes do primeiro mutante, como o `commands/` no PR #222. `8c8be78` copia o arquivo.
+
+**2ª rodada do Codex (sobre `a3aeac4`):** 1 P2, procedente. Num caminho do kit já sujo, uma fase que
+só troca o bit de execução não mudava o porcelain nem o md5, e a guarda calava — a classe da #233
+por outro lado. `6a93d14` põe o bit ao lado do digest e o motivo diz `(mode changed)`; regime 2e, red
+`sessions:2 rc:3 kind:no-progress named:0 x:1`; 2 mutantes. O CodeRabbit confirmou os cinco consertos.
+
+**3ª rodada do Codex (sobre `aa18052`):** 1 P2, procedente. Um symlink já sujo, reapontado para um
+arquivo de mesmo conteúdo e modo, passava calado: o digest seguia o link. Terceira dimensão na mesma
+vizinhança, e ali o remendo parou: `a55b53c` faz o digest ser a identidade inteira que o git dá à entrada
+(tipo, modo, conteúdo; o symlink é o texto do alvo), com o gitlink declarado. Regime 2f, red
+`sessions:2 rc:3 kind:no-progress named:0 c:1`; 2 mutantes.
+
+**4ª rodada do Codex (sobre `9c05289`):** 2 P2, ambos procedentes, decididos pelo humano. O remendo
+da 3ª não tinha parado: num caminho já `MM`, uma fase que troca só o blob do índice deixava porcelain
+e árvore iguais. `b3a9e12` põe a entrada do índice (`@<modo>:<blob>`) no digest e o motivo diz
+`(index changed)`; com o HEAD no carimbo, a guarda lê os três lugares onde o git guarda um caminho.
+O modo do índice entrou junto, além do pedido: é a outra metade da entrada, e trocar só ele também
+passava calado. Regimes 2g (red `sessions:2 rc:3 kind:no-progress named:0 mm:1`) e 2h; 4 mutantes
+novos e 1 re-ancorado, 5 de 5 pegos por `--only`. O 2h nasceu errado e o catálogo o pegou:
+`update-index --chmod=+x <path>` relê o arquivo e encena o conteúdo junto, então o mutante que tira o
+modo sobreviveu; o regime passou a `--cacheinfo` com o mesmo blob, e a testemunha confere o blob. O
+outro P2 (a cerca do `bug_decision_recorded` alterna em qualquer marcador; o extrator do gênero tem o
+mesmo padrão) é falha aberta artificial: item do `TODO.md` e #239 (`d7b6df2`), conserto futuro nos
+dois leitores.
+
+**Retro da rodada (pedida pelo humano):** o probe de SIGINT do `check-coordination.sh` esperava o
+marcador existir e não ser escrito — corrida provada em cópias com a janela alargada, consertada em
+`ef19862`; o `sandbox()` do catálogo declara que nada confere os arquivos que os sensores leem com a
+lista copiada (2ª vez: `commands/`, `.gitignore`), no mesmo commit; o `failure-modes.md` ganha o
+verbete da suíte vermelha com `kit-touched` num regime alheio (`2bb1607`). O `remap.py` das âncoras
+não tinha sumido no reboot: mora em `~/.claude/plans/2026-10-03-helpers/`.
+
+**5ª rodada do Codex (sobre `3548a54`):** 2 P2, procedentes, consertados por decisão do humano.
+`2282442` — um caminho sujo do kit que começa com `-` chegava ao único `xargs md5sum` como opção, e o
+md5sum recusava o lote inteiro: todo caminho sujo lia `-` e nenhuma edição era vista. `md5sum --`;
+regime 2i, red `sessions:2 rc:3 kind:no-progress named:0 d:1`; 1 mutante. `2dbc8b5` — o aviso do
+supervisor imprimia o `argv[0]`, que quem chama escolhe (`exec -a SEGREDO sleep`), furando a garantia
+da `592a74f`; agora lê o `comm` do kernel. A testemunha roda sob o nome `argv0-token-7f3`, red
+`pid <n>: argv0-token-7f3`; 1 mutante novo, 1 re-ancorado, 4 de 4 pegos com os vizinhos. O
+`failure-modes.md` e a rule da anatomia ainda diziam "command line" desde a `592a74f`; corrigidos.
+
+**6ª rodada do Codex (sobre `c3e7c9f`):** 2 P2, procedentes, decididos pelo humano. `93fac25` — um nome
+com `\` sai do md5sum como registro escapado (`\<md5>  back\\slash.md`), e o parser por posição não
+achava digest nem caminho; era limite declarado e falha aberta. O `\` inicial cai e o nome é
+decodificado; regime 2j, red `sessions:2 rc:3 kind:no-progress named:0 b:1`; 2 mutantes, 4 de 4 com os
+vizinhos. `d8e5bee` — o `4913` do `.gitignore` (a sonda de escrita do vim, da `3b1c4dc`) escondia todo
+caminho do kit com esse nome e não comprava nada; nenhum probe o media. Removido. O humano decidiu
+pedir a rodada 7 e trazer todo achado novo a ele antes de consertar.
+
+**7ª rodada do Codex (sobre `a4ac1fb`):** 1 P1 e 1 P2, levados ao humano antes de qualquer conserto.
+`b0c34f8` — **P1, a linha curta sem `|` inicial:** numa tabela larga, `I2 | slice | pending |` era pulada
+pelos dois leitores, e o gate_EXEC passava pelo pendente. O plano (K3) tinha recusado lê-la, para a
+prosa colada citando `|` não virar incremento; o humano inverteu, por ler como o GFM renderiza (a prosa
+colada também é linha no GFM, e agora é recusada pelo nome). 0 casos nos 98 checkpoints reais, nos dois
+sentidos. Red no check-gates (`QA`) e no selftest do check-checkpoint (rc 90); a prosa colada virou
+diferencial; os fixtures do `build_tree` ganharam a linha em branco do template real; o mutante
+`EXEC_short_row_reads_glued_prose` virou o conserto e saiu, entrou `EXEC_short_bare_row_skipped`.
+`a63896f` — **P2, o limite do ambiente:** com ~1700–2200 caminhos sujos, os digests passam de 128 KiB numa
+variável de ambiente e o `sdd run` morre antes de abrir sessão. Barulhento e sem custo: item do
+`TODO.md` e #240 por decisão do humano (a criação da issue levou três HTTP 500 do GitHub antes de passar).
+
+**Retro do canal (decisão do humano, depois da rodada 8):** as rodadas 5, 6 e 7 acharam, uma por vez,
+defeitos no mesmo canal da guarda do kit (o nome com `-`, o registro escapado, o estouro do ambiente),
+e a direção do item da #240 passou a fechá-lo de ponta a ponta, incluindo o nome com quebra de linha,
+falha aberta que só estava declarada no cabeçalho do `kit_guard_tree`. `md5sum -z` ficou de fora:
+pelo NEWS do coreutils, o `--zero` nasceu no 8.30 (2018-07-01), e um coreutils anterior (o do Ubuntu
+18.04 ou o do CentOS 7, por exemplo) ou o busybox passam no probe do `sdd preflight`
+(`md5sum </dev/null`). Sob `2>/dev/null || true`, um `-z` recusado deixa `sums` vazio, todo caminho
+sujo lê `-` e a guarda fica cega sem avisar. Nem é preciso: o registro escapado que o `93fac25` decodifica
+já é à prova de delimitador. A quebra nasce antes do md5sum: o `hat_status_lines` lê `status -z` e
+imprime `\n` (a guarda do chapéu o compartilha, com o mesmo limite declarado), e o `ls-files -z` passa
+por `tr '\0' '\n'`. A missão do conserto traz dois regimes: ~1800 caminhos sujos no kit falso (o
+estouro) e um nome com `\n` já sujo e editado de novo (a falha aberta). Só prosa, fora da chave do carimbo.
+
+## Artefatos
+
+| Arquivo | O que contém |
+|---|---|
+| `docs/handoffs/20261006-lote-5-o-que-o-lote-4-deixou/checkpoint-notas.md` | uma nota por incremento: Red medido, desvios, sabotagens, re-provas |
+| `docs/adr/0016-the-mission-checkpoint-and-the-kit-worktree.md` | §1 posse do relatório (emenda a 0015 §3), §2 missão do kit em worktree; `accepted` |
+| `tests/isolate-git.sh` | a definição única que limpa as variáveis de repositório do git |
+| `KAIZEN_LOG.md` | entrada `2026-10-06 — Lote 5: o que o lote 4 deixou` |
+
+## Boot da próxima fase
+
+Execução interativa (decisão 2 do grill), no worktree, nunca `sdd run` no kit. Ordem, a mesma do
+lote 4 (`CLAUDE.md` § carimbo):
+
+1. `git push -u origin fix/lote-5-o-que-o-lote-4-deixou` e abrir o PR com o corpo do
+   `templates/pr-body.md`, declarando as quatro mudanças de comportamento (abaixo);
+2. esperar **todos** os bots (`@codex review`; `@coderabbitai review` se pausar) e consertar numa leva;
+3. `mkdir -p .sdd/cache && cp /home/joruge/repos/sdd_agents/.sdd/cache/mutation-killers.tsv .sdd/cache/`
+   no worktree, e só então `./bin/sdd health` UMA vez (lançador `setsid`, env sem `CLAUDE*`/`GIT_*`,
+   `TMPDIR` curto, vigiar pelo PID);
+4. merge pelo humano; depois o chore pós-merge (catraca 13 → 1) e o re-sync do espelho de issues.
+
+**Mudanças de comportamento a declarar no PR:** I4 (um bug `deferred` sem a seção de decisão
+bloqueia a QA); I6 (um kit sujo editado durante a fase de um alvo para a linha); I7 (a nota
+`intervention:` do `--phase`, do `retry` e do `--budget-override` só existe quando a volta abre
+sessão, e a da override carrega a fase da sessão comprada); I9 (o supervisor imprime uma linha a
+mais no stderr).
+
+## Pendências / Decisions for a Human
+
+- O merge, o chore pós-merge e o re-sync do espelho de issues (`todo_issues.py --apply`, depois
+  `--apply --close-orphans`).
+- A remoção do worktree e da branch local depois do merge; o yokoten nos repos-alvo.
+- O desenho da #236 (`sdd kaizen` no checkout principal), aberta de propósito (decisão 11b).
+
+## Riscos e não-feitos
+
+- **`TMPDIR` longo:** cinco `--only` contra o `check-autonomy.sh` deram `HARNESS-BROKEN` com o nome
+  do mutante no `TMPDIR` (limite já declarado no sensor desde `0c0e13a`); com `TMPDIR` curto, todos
+  pegos. O `sdd health` roda com `TMPDIR=/tmp`.
+- **Sem probe, declarados no código:** o `GIT_OPTIONAL_LOCKS=0` do `kit_guard_tree` (I6); o
+  `GITENV_FLOOR=0` sozinho (I1); o reset do `CHECKPOINT_NOTE` e o braço `*` do `case` (I8); o grace e
+  o "não nomear quando chegou sinal" (I9); o re-arm da árvore do kit (I6); o `FILENAME == ARGV[1]`
+  do índice (só um kit de índice vazio o distingue de `NR == FNR`) e as fases de um caminho em
+  conflito no índice (4ª rodada).
+- **Desvios do protótipo, todos medidos e anotados nas notas do checkpoint:** I6 ganhou o
+  `GIT_OPTIONAL_LOCKS=0` que o plano pedia e o patch não tinha; I10 ganhou a frase do `./bin/sdd` e a
+  8ª verificação do probe; I7 corrigiu "decision 10a" para 11a.
+
+## Achados fora de escopo
+
+Três, por decisão do humano: o minor 2 da revisão final (o censo do `GIT_DIR` não conta o git
+chamado por caminho ou variável), item do `TODO.md` e issue #238; o P2 da 4ª rodada do Codex (a
+cerca dos leitores de bug alterna em qualquer marcador), #239; e o P2 da 7ª (a guarda do kit estoura
+o limite do ambiente com milhares de caminhos sujos), #240. A catraca fica em 16 na branch e desce a
+4 no chore pós-merge.

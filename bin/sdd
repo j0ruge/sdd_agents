@@ -448,6 +448,10 @@ frontmatter_write() {
 # it counts `^- intervention:` lines in the checkpoint — so a note the runner writes is counted by
 # the same instrument as one the human writes, and the hand-written note keeps its place for what
 # the runner cannot see (a fix by hand, a phase done by hand, a BLOCKED taken over).
+# WHEN: the three hands of the CLI are written only by the door that is about to buy a session,
+# right above its `before=` (#227 and decision 11a) — a lap that stops without one (PLAN, the
+# stamp, the mission ceiling, the REVIEW ceiling, no-work) writes none, because an intervention in
+# a run that bought nothing is what `sdd autonomy --by-mission` would then count.
 # Placement: last line of the execution-notes section (`## Notas de execu…`, the heading the
 # template fixes), before the next heading; at the end of the file
 # when the checkpoint has no such section (fixtures, checkpoints written before the template had
@@ -465,11 +469,19 @@ frontmatter_write() {
 # switched the working tree's branch under a running `sdd health`, opened a real opus session, and
 # the first draft of this note wrote "the human forced the starting phase". That is the sandbox
 # debt of .claude/rules/anatomia-do-agente.md, with a date on it.
+# WHAT IT DID is published in CHECKPOINT_NOTE, never in the return code (#230): every path returns 0,
+# because the three runner doors that call it must go on whatever the note did. `none` (no
+# checkpoint.md), `failed` (the rewrite was refused), `uncommitted` (written, not committed) or
+# `committed`; empty for the projection, which writes nothing. ONE setter, reset on entry, so a
+# value never survives into the next call. A caller that SAYS what happened (cmd_note_manual) reads
+# it right after the call — called, never `$( )`, or the subshell would eat the global.
+CHECKPOINT_NOTE=""
 checkpoint_note_intervention() {   # checkpoint_note_intervention <what the human did> <phase>
+  CHECKPOINT_NOTE=""
   [ "$DRY_RUN" = "1" ] && return 0
   local ck="$MISSION_DIR/checkpoint.md" nf="$MISSION_DIR/checkpoint-notas.md"
   local what="$1" phase="$2" line rel dirty_before tmp target
-  [ -f "$ck" ] || return 0
+  [ -f "$ck" ] || { CHECKPOINT_NOTE=none; return 0; }
   # Two worlds, and the notes file wins WHEN IT IS THERE. A mission written before this layout
   # keeps its notes inside checkpoint.md and is never migrated: a mission in flight would have its
   # own artifact rewritten under it, and the gates parse that file. The presence of the sibling is
@@ -508,15 +520,18 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
     :
   else
     [ -n "${tmp:-}" ] && rm -f "$tmp"
+    CHECKPOINT_NOTE=failed
     warn "intervention NOT written in $rel — the checkpoint could not be rewritten; add it by hand: $line"
     return 0
   fi
   fi
+  CHECKPOINT_NOTE=uncommitted
   if [ -n "$dirty_before" ]; then
     warn "intervention noted in $rel but NOT committed — the file was already dirty; commit it with the work it carries"
     return 0
   fi
   if ( cd "$REPO_ROOT" && git add -- "$rel" && git commit -q -m "chore(checkpoint): intervention — $what — $phase" ); then
+    CHECKPOINT_NOTE=committed
     dim "  intervention noted in $rel and committed: $what — $phase"
   else
     warn "intervention noted in $rel but the commit failed — commit $rel by hand"
@@ -569,8 +584,10 @@ checkpoint_rows() {
     # without a blank line is read too: over-reading fails CLOSED — a line that is no increment
     # reads as an invalid status or one more pending, never as a pass.
     /^[ \t]*$/ { tbl = 0 }
-    tbl && /\|/ && !/^[ \t]*\|/ { $0 = "|" $0 }
+    { bare = (tbl && /\|/ && !/^[ \t]*\|/) }
+    bare { $0 = "|" $0 }
     /^[ \t]*\|/ {
+      first = !tbl
       tbl = 1
       # A raw split on "|" cuts a Check cell at its `\|` and shifts every column after it one to
       # the left, so Status is read out of the CHECK cell: an increment written `done` was reported
@@ -584,7 +601,23 @@ checkpoint_rows() {
         if (n > 0 && escaped_pipe(f[n])) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
         else { f[++n] = raw[i] }
       }
-      if (n < 6) next
+      # FEWER than five cells is a row of the table too: GFM renders the missing cells empty
+      # (issue #224). Dropped here, `| I2 | slice | pending |` vanished from checkpoint_tally and
+      # gate_EXEC passed over a pending increment, the failure above by another shape. Read as it
+      # renders, its Status is empty and gate_EXEC refuses it by name. GFM counts the columns of a
+      # table by its HEADER, the first line of the block, so only a table whose header splits into
+      # six fields or more is read this way — five cells, or four closed by the trailing pipe
+      # (DECLARED: that four-cell header is read as wide, and GFM would give its table four
+      # columns). A narrow table elsewhere in the file is no increment, and target
+      # checkpoints carry such tables (35 lines in four of them, measured 2026-10-06). A short
+      # line with NO leading pipe is read the same way (7th Codex review of PR #237): it was
+      # skipped, on the guess that it is prose glued to the table quoting a pipe, and the pending
+      # increment such a row carried went past gate_EXEC. GFM renders that prose as a row too, so
+      # it is now refused by name, and a blank line cures it; 0 such lines in the 98 target
+      # checkpoints measured 2026-10-07. No apostrophe in this comment: it sits inside the
+      # single-quoted awk program.
+      if (first) wide = (n >= 6)
+      if (n < 6) { if (!wide) next; for (i = n + 1; i <= 6; i++) f[i] = "" }
       for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", f[i]) }
       # The Commit cell only: a hash fenced in backticks renders exactly like the bare one, so the
       # human reading the table sees a SHA and the gate saw "`abc1234`", which does not exist —
@@ -924,14 +957,21 @@ path_in_commits() {
 # origin/<b> -- f`, a cherry-pick): that commit carries another mission's progress or none.
 # The PROGRESS files and not the whole dir (Codex review of PR #222, reproduced): another mission's
 # squash can edit this one's approved intent — lote 4 backfilled `adr:` into fourteen 00-missao.md
-# in one commit — and "touches the dir" read its report as this mission's. DECLARED, fail open: a
-# commit of another mission that edits THIS mission's checkpoint as well; none is known.
+# in one commit — and "touches the dir" read its report as this mission's. And every progress file
+# that commit moved must be left as a BLOB one of the mission's own commits wrote (#225, ADR 0016
+# §1): a commit of another mission that also edits THIS mission's checkpoint moves the right path
+# and leaves a blob no commit of the branch ever had. DECLARED, fail open: another mission's commit
+# that writes this checkpoint byte for byte as a version the branch already committed. DECLARED,
+# fail closed: a squash whose checkpoint no non-merge commit of the branch left — a conflict
+# resolved in a merge commit, or an edit made on the forge and never fetched.
 # PLUMBING, for the reason mission_qa_report gives (log.showSignature); `--root` so an add in a
 # root commit is seen at all. DECLARED, fail closed: the mission's own report cherry-picked to the
 # base without its dir, a rebase-merge (each commit replayed alone; 0 of 110 PR merges on
 # sales_quote's develop since 2026-08-01), and a report whose NAME another mission merged first.
 tip_add_carries_mission() {
-  local path="$1" c add
+  local path="$1" c add meta p blob ranged=""
+  local cp="$HANDOFF_DIR/$MISSION/checkpoint.md" cn="$HANDOFF_DIR/$MISSION/checkpoint-notas.md"
+  local -A mine=()
   shift
   for c in "$@"; do
     git -C "$REPO_ROOT" cat-file -e "$c:$path" 2>/dev/null || continue
@@ -940,6 +980,30 @@ tip_add_carries_mission() {
         | git -C "$REPO_ROOT" diff-tree --stdin --root -r -z --diff-filter=A --name-only -- "$path" 2>/dev/null) || true
     [ -n "$add" ] || return 1
     [ -n "$(git -C "$REPO_ROOT" diff-tree --root --no-commit-id -r --name-only "$add" -- "$HANDOFF_DIR/$MISSION/checkpoint.md" "$HANDOFF_DIR/$MISSION/checkpoint-notas.md" 2>/dev/null)" ] || return 1
+    # #225, ADR 0016 §1: and every progress file that commit moved is left as a BLOB this branch
+    # already had. The mission's own squash leaves the blob of the tip it squashed; another
+    # mission's commit that also edits this checkpoint leaves one no commit of the branch ever
+    # wrote. The branch's blobs are read once, lazily — only a report already on a base tip pays —
+    # from EVERY commit of `HEAD --not <base refs>` that moved the two files, never HEAD's alone: a
+    # note written after the squash moves HEAD's checkpoint and not the squash's. `--raw` carries
+    # the full blob id (the field before the status letter, whatever the hash length), and the key
+    # is "<blob> <path>" as git prints both sides alike (quoted or not), so no -z is needed. The two
+    # paths go through `cp`/`cn` and are not spelt out again: QA_report_tip_any_mission and
+    # _any_file_of_mission rewrite the literal pair on the line above, unranged, and a second
+    # literal copy here would widen this read with them and blind both (measured).
+    if [ -z "$ranged" ]; then
+      ranged=1
+      while IFS=$'\t' read -r meta p; do
+        meta="${meta% *}"; blob="${meta##* }"
+        if [ -n "$p" ]; then mine["$blob $p"]=1; fi
+      done < <(git -C "$REPO_ROOT" rev-list HEAD --not "$@" -- "$cp" "$cn" 2>/dev/null \
+                 | git -C "$REPO_ROOT" diff-tree --stdin --root --no-commit-id -r --raw -- "$cp" "$cn" 2>/dev/null || true)
+    fi
+    while IFS=$'\t' read -r meta p; do
+      [ -n "$p" ] || continue
+      meta="${meta% *}"; blob="${meta##* }"
+      [ -n "${mine["$blob $p"]+x}" ] || return 1
+    done < <(git -C "$REPO_ROOT" diff-tree --root --no-commit-id -r --raw "$add" -- "$cp" "$cn" 2>/dev/null || true)
   done
   return 0
 }
@@ -993,7 +1057,8 @@ tip_add_carries_mission() {
 # squash or a cherry-pick, or this mission's own, squash-merged and read after a fetch — the base
 # commit that ADDED it decides (tip_add_carries_mission, ADR 0015 §3): it counts only when that
 # commit moves this mission's checkpoint (checkpoint.md or checkpoint-notas.md), never merely some
-# file of its dir. Refusing every report at the tip would take from a
+# file of its dir, and leaves it as a blob a commit of the mission wrote (ADR 0016 §1). Refusing
+# every report at the tip would take from a
 # squash-merged mission its own report; asking nothing let another mission's count (review r5).
 #
 # The charter stays out on purpose (decision 3 of the grill): it is durable doc that crosses cycles
@@ -1356,6 +1421,10 @@ gate_EXEC() {
       # Valid and nothing to check — the arm exists so the enum stays exhaustive and the `*)` below
       # keeps meaning "not one of the four". Counting them is checkpoint_tally's job, below.
       pending|doing|blocked) ;;
+      # Empty is what a row with fewer than five cells hands over (checkpoint_rows pads it the way
+      # GFM renders it, issue #224): `invalid status ''` would name a status nobody wrote.
+      '') GATE_EXEC_CELL=1
+          GATE_WHY="increment $id has no Status — an empty cell, or a row with fewer than five cells (GFM renders the missing ones empty): write all five, ID | Title | Check | Status | Commit"; return 1 ;;
       *) GATE_EXEC_CELL=1
          GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
     esac
@@ -1458,6 +1527,44 @@ function placeholder(s,   u, w) {
 # placeholder <text> — rc 0 when <text> is a fill-in that says nothing, by the definition above.
 # Through ENVIRON and never `awk -v`, for gate_REVIEW's reason: -v runs escape sequences.
 placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit placeholder(ENVIRON["SDD_PLACEHOLDER_TEXT"]) ? 0 : 1 }'; }
+
+# bug_decision_recorded <bug file> — rc 0 when the bug's body carries the human's decision: a
+# level-2 heading opening with `## Decis`, outside any fenced block. It is what makes `Closable by:
+# deferred` an artifact and not a label (#232): agents/sdd-qa.md § 5.1 and ADR 0009 demand the
+# section before the value may be written, and until this function nothing read it — a qa-execution
+# session on sales_quote deferred a bug "because the fix lives in the TODO" and the gate passed it.
+#
+# The ASCII PREFIX and never the whole word, for the reason checkpoint_note_intervention gives for
+# `## Notas de execu`: this awk is mawk, byte-oriented in every locale, and the targets spell the
+# heading with a tilde (`## Decis\303\243o`, octal bytes, alone or followed by a date or a name) as
+# well as `## Decisao` and `## Decision` — eight ASCII bytes are what every one of them shares. The
+# plural is refused BY NAME: `## Decisions for a Human` is the qa-execution skill's heading for
+# questions still open, the opposite of a decision, and it opens with the same eight bytes — and so
+# do the pt-BR plurals a pt-BR session translates it into, `## Decis\303\265es` and `## Decisoes`
+# (final review of the lote 5: refusing the English one alone left them reading as decided).
+# Fence state for the genre extractor's reason: a bug filed about this rule quotes the heading. The
+# variable is `infence` and not `fenced` so QA_bug_genre_fenced, whose sed has no function range,
+# keeps sabotaging the extractor alone.
+# The heading opens the section and a DATE in it is the decision (Codex review of PR #237): § 5.1
+# and ADR 0009 ask for the date and who decided, and the heading alone — bare, or carrying only the
+# deferral — passed as decided. A `YYYY-MM-DD` on the heading line or under it, outside any fence,
+# before the next level-2 heading; a date in a later section vouches for nothing. Who decided is not
+# measurable and stays § 5.1's duty. Measured on 2026-10-06: the 18 decision sections the targets
+# wrote (17 in sales_quote, 1 in lighthouse_project) all carry a date, so no deferral there changes.
+# Who writes the artifact: the human, or the session recording the human's call — never sdd-qa on
+# its own (§ 5.1); without it the bug counts as `agent`, whose F<n> cycle the pipeline can close.
+# DECLARED, fail closed: a `###` heading, or an indented one, reads as no decision and blocks —
+# visibly, since the blocking reason names the bug.
+bug_decision_recorded() {
+  awk '
+    /^[[:space:]]*(```|~~~)/ { infence = !infence; next }
+    infence { next }
+    /^## / { insec = 0 }
+    /^## Decis/ && !/^## Decis(ions|oes|\303\265es)/ { insec = 1 }
+    insec && /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ { found = 1; exit }
+    END { exit !found }
+  ' "$1"
+}
 
 gate_QA() {
   GATE_HANDOFF_BLOCKED=0
@@ -1593,7 +1700,7 @@ gate_QA() {
   # the lesson check-todo.sh paid for when its parser did not know it was inside an item's code
   # block. `[*][*]` and not `\*\*`: mawk's handling of an escaped literal inside a regex is not
   # worth relying on when a bracket expression says the same thing unambiguously.
-  local openbugs=0 deferred=0 deferred_names="" bugfile genre_line bugname
+  local openbugs=0 deferred=0 deferred_names="" undecided=0 undecided_names="" bugfile genre_line bugname
   while IFS= read -r bugfile; do
     [ -n "$bugfile" ] || continue
     genre_line="$(awk '
@@ -1616,8 +1723,17 @@ gate_QA() {
     # human arm has a mutant (QA_bug_genre_prefix); the deferred arm got one of its own
     # (QA_bug_genre_deferred_prefix) rather than riding it, because they fail open independently.
     if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+deferred([[:space:]]|$)' <<< "$genre_line"; then
-      deferred=$((deferred + 1))
       bugname="${bugfile##*/}"
+      # #232: the value without the written decision is `agent` (§ 5.1), and it is NAMED in the
+      # blocking reason — otherwise the operator reads "an agent could close it" about a bug whose
+      # field says deferred, and nothing says why the deferral did not count.
+      if ! bug_decision_recorded "$bugfile"; then
+        openbugs=$((openbugs + 1))
+        undecided=$((undecided + 1))
+        undecided_names="${undecided_names:+$undecided_names, }${bugname%.md}"
+        continue
+      fi
+      deferred=$((deferred + 1))
       # Parameter expansion and never `$(basename …)`: this runs once per open bug, and the loop is
       # read by `sdd status` on every evaluation of the phase.
       deferred_names="${deferred_names:+$deferred_names, }${bugname%.md}"
@@ -1637,6 +1753,9 @@ gate_QA() {
     # door. The substring `with Status: open in the registry` is load-bearing: two assertions in
     # check-gates.sh read it (:486 and the genre differential at :535).
     GATE_WHY="$openbugs bug(s) with Status: open in the registry that an agent could close (an unmarked genre counts) — they become fix increments (QA⇄EXEC loop); one that needs a human decision is marked 'Closable by: human' instead, and one a human has already decided and another mission will pay for is 'Closable by: deferred' (agents/sdd-qa.md § 5.1)"
+    if [ "$undecided" -gt 0 ]; then
+      GATE_WHY="$GATE_WHY; $undecided of them marked 'Closable by: deferred' with no dated '## Decision' section in the body count as agent: $undecided_names"
+    fi
     return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
@@ -2317,9 +2436,15 @@ mutation_stamp_key() { # mutation_stamp_key <root>
 # ⚠️ NO PROBE for the reset, declared: every lap that finds the marker armed returns 2 and every
 # `sdd run` is a new process, so no world reaches a gate_PR call over a marker left armed.
 GATE_PR_STAMP_WHY=""
+# Its sibling, on the same contract (#228): the KIND of an empty key (mutation_stamp_why's
+# MUTATION_STAMP_WHY_KIND — `missing`, `not-git`, `deleted`, `untracked`, `unreadable`) when no
+# `sdd health` can stamp this tree as it stands, empty when the stamp is merely absent or stale.
+# cmd_run branches on it to name the remedy, never on the prose of GATE_PR_STAMP_WHY.
+GATE_PR_STAMP_IMPOSSIBLE=""
 
 gate_PR() {
   GATE_PR_STAMP_WHY=""
+  GATE_PR_STAMP_IMPOSSIBLE=""
   local p="$MISSION_DIR/50-pr.md"
   [ -f "$p" ] || { GATE_WHY="missing 50-pr.md"; return 1; }
   local url; url="$(frontmatter "$p" pr_url)"
@@ -2401,6 +2526,7 @@ gate_PR() {
       if [ -n "$MUTATION_STAMP_WHY" ]; then
         GATE_WHY="no mutation stamp is possible for this tree: $MUTATION_STAMP_WHY, then run 'sdd health'"
         GATE_PR_STAMP_WHY="$GATE_WHY"
+        GATE_PR_STAMP_IMPOSSIBLE="$MUTATION_STAMP_WHY_KIND"
         return 1
       fi
     fi
@@ -2994,10 +3120,17 @@ append-only, and rewriting it is exactly the cost this pipeline removed.
   # hand. In `claude -p` ending the turn ends the session, so nothing resumes. The sentence lived in
   # agents/sdd-reviewer.md alone; a rule that every phase needs is written here, once, never copied
   # into seven agents (the enum rule of CLAUDE.md). tests/check-dry-run.sh reads it per phase.
+  # The second paragraph is #234, measured on sales_quote (20261005-mascaras-ncm-e-painel): a QA
+  # session killed the human's backend and relaunched it with `nohup … &`, and `sdd run` printed
+  # BLOCKED and stayed alive until that server died — the supervisor waits for ECHILD by design.
   local turn_rule
   turn_rule="Never end the turn with a command or a task still running in the background: in a headless
 session ending the turn ends the session, and \"I will resume when it finishes\" resumes nothing.
-Wait for it, read its result, then write the artifacts and commit."
+Wait for it, read its result, then write the artifacts and commit.
+A process you start in the background (\`nohup … &\`) joins the pipeline's family: \`sdd run\` does
+not finish, and the checkout stays held, until it dies. Never stop or restart a process you did not
+start — the app under test is the human's; a restart, or another environment, goes to the handoff.
+What you started for your own check, stop before you end the turn."
   slash="$(phase_slash "$step")"
   agent="$(phase_agent "$step")"
   # Why the session was opened — decision 1 of 20260922-o-motivo-da-fase, ONE line for every phase.
@@ -3107,9 +3240,19 @@ PIPELINE_LOG_WARNED=""
 DRY_RUN=0
 # `--budget-override` (L2 of the 2026-09-03 audit): the human lifting the mission ceiling for ONE
 # run. Global, like DRY_RUN, because the door that reads it (mission_budget_blown) is called from
-# two commands. Noted as an intervention the first time it actually lifts something, never before.
+# two commands. Noted as an intervention the first time it actually lifts something, never before —
+# and WRITTEN only where that lift buys a session (decision 11a, #227's neighbour).
 BUDGET_OVERRIDE=0
 BUDGET_OVERRIDE_NOTED=0
+# The note mission_budget_blown PUBLISHES and budget_override_note_write WRITES: the `what` of
+# checkpoint_note_intervention, empty when nothing is pending. One setter (mission_budget_blown,
+# behind the BUDGET_OVERRIDE_NOTED one-shot, so it is armed at most once per process) and one
+# consumer, which zeroes it. NOT reset at the setter's entry, which is the marker contract
+# elsewhere in this file, and the reason is a world: the PUBLISH_ON_REVIEW_BLOCKED=draft jump. The
+# REVIEW lap lifts the ceiling and leaves through `continue`; the PR lap calls mission_budget_blown
+# again before the session it opens, and a reset there would drop the note of the override that
+# bought that session.
+BUDGET_OVERRIDE_NOTE=""
 MISSION_BUDGET_PROJECTED=0
 
 pipeline_log_line() {
@@ -3803,6 +3946,122 @@ autonomy_kit_stamp() {
 # (tests/check-autonomy.sh, kit-guard regimes 1, 4, 5 and 7), so a site added without one is a site
 # whose deletion no assertion notices.
 KIT_GUARD_BEFORE=""
+# The stamp alone is `<sha>|<dirty>`, and dirty -> dirty on the same sha compares EQUAL: a kit that
+# was already dirty when the phase opened could be edited again — a new file, the same file once
+# more — and the guard said nothing (#233, measured on the sales_quote: a /sdd-plan writing into a
+# kit someone was already editing). So the arm also keeps the kit's dirty TREE, one line per dirty
+# path with the digest of its content (kit_guard_tree), and the check compares both. Per path and
+# with the content, because porcelain alone gives the SAME line for a file already ` M` that is
+# edited again — the case "editado de novo" names.
+KIT_GUARD_TREE_BEFORE=""
+KIT_GUARD_TREE=""
+KIT_GUARD_CHANGES=""
+
+# The kit's dirty tree, PUBLISHED in KIT_GUARD_TREE: one `XY path<TAB><digest>` line per entry of
+# hat_status_lines over SDD_HOME. The digest is the entry as git stores it — type, mode and content:
+# a regular file is the md5 of its content plus `+x` when executable, a symlink is `l` plus the md5
+# of its TARGET TEXT (never of the file it points at), and anything else is `-` (a deletion, an
+# untracked nested repository); then `@<mode>:<blob>` of the path's INDEX entry, when it has one.
+# Four review rounds of PR #237 found one dimension each — content (#233), the executable bit, a
+# symlink retargeted to an identical file, the staged entry under an `MM` — and the fourth stopped
+# patching dimensions and closed the places instead: HEAD is in the stamp, and the tree reads the
+# other two places git keeps a path, each with the whole identity git gives it there. Empty for
+# a clean kit and for a kit that is not a git checkout — `git status` fails there and both samples
+# are empty, so the plain copy stays silent exactly as the stamp makes it. ONE md5sum for every
+# regular file, never one per path; one per symlink, which the kit does not carry today; one
+# `ls-files` for the whole index (406 entries in the kit today), never one per path. `md5sum --`
+# (5th Codex review of PR #237): a dirty name that begins with `-` reached the one md5sum as an
+# option, and md5sum refused the WHOLE batch — every dirty path read `-` and no edit was seen.
+# Called, never `$( )`-captured: the result is a global.
+# ⚠️ DECLARED LIMITS: the content of every dirty path is READ at each arm and each check, so a large
+# untracked file in the kit costs its read twice per phase (ignored paths are never read); a newline
+# in a name splits its status line and its index entry, so the path reads as `-` and its index
+# entry never meets it (md5sum's escaped record is decoded, but nothing upstream of it keeps the
+# name whole); a gitlink (a
+# submodule) reads as `-` in the worktree, so the commit checked out under an already-dirty entry is
+# not seen — the kit has no submodule; the stages of a CONFLICTED path are joined, and no probe
+# builds a conflict in the kit, so dropping all but one of them is a mutant nothing would catch.
+kit_guard_tree() {
+  local status sums execs links
+  KIT_GUARD_TREE=""
+  # GIT_OPTIONAL_LOCKS=0: a read, never a write — `git status` would otherwise refresh and rewrite
+  # the index of a kit someone may be committing in at that very moment (measured on git 2.43: the
+  # default rewrote a scratch repo's index after a `touch`, this did not). No probe reads the kit's
+  # index, so dropping the variable is a mutant nothing would catch — DECLARED.
+  status="$( GIT_OPTIONAL_LOCKS=0 hat_status_lines "$SDD_HOME" )"
+  [ -n "$status" ] || return 0
+  sums="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
+           && while IFS= read -r e; do [ -f "${e:3}" ] && [ ! -L "${e:3}" ] && printf '%s\0' "${e:3}"; done <<< "$status" \
+              | xargs -0 -r md5sum -- 2>/dev/null )" || true
+  # The executable bit beside the digest (Codex review of PR #237): it is the one mode git tracks for
+  # a regular file (100644/100755), and on a path already dirty a phase that flipped it alone left
+  # porcelain and content as they were — the trees compared equal and the guard said nothing.
+  execs="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
+            && while IFS= read -r e; do [ -f "${e:3}" ] && [ ! -L "${e:3}" ] && [ -x "${e:3}" ] && printf '%s\n' "${e:3}"; done <<< "$status" )" || true
+  # A symlink is its target text, which is what git stores (mode 120000): a digest that followed it
+  # hashed the file behind, and a link retargeted to an identical file compared equal.
+  links="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
+            && while IFS= read -r e; do [ -L "${e:3}" ] && printf '%s  %s\n' "$(readlink -- "${e:3}" | md5sum | cut -c1-32)" "${e:3}"; done <<< "$status" )" || true
+  # ENVIRON and not `-v`: awk expands backslash escapes in a -v value, which would rewrite a name.
+  # index/substr only — mawk is byte-oriented, and a path is arbitrary bytes.
+  # The INDEX entry of the path after an `@` (4th Codex review of PR #237): on a path already `MM`, a
+  # phase that replaces only the staged blob — or flips only the staged mode — leaves porcelain and the
+  # worktree as they were, and the next commit in the kit carries the session's entry. `ls-files -s`
+  # is `<mode> <sha> <stage><TAB><path>`; the entry kept is `<mode>:<sha>`, and a conflicted path's
+  # stages are joined in git's order. It is the FIRST file and read under `FILENAME == ARGV[1]`, never
+  # `NR == FNR`: an empty index makes the first file contribute no record, and `NR == FNR` would then
+  # swallow the status as if it were the index.
+  # An ESCAPED md5sum record (6th Codex review of PR #237): GNU md5sum writes a name holding a
+  # backslash, a newline or a CR as `\<md5>  <name>` with `\\`, `\n` and `\r` inside; read by
+  # position, it gave neither the digest nor the path. The leading `\` is dropped and the name decoded.
+  KIT_GUARD_TREE="$( KG_SUMS="$sums" KG_EXECS="$execs" KG_LINKS="$links" awk '
+    function unesc(s,  o, i, c) { o = ""
+      while ((i = index(s, "\\")) > 0) { c = substr(s, i + 1, 1); o = o substr(s, 1, i - 1) (c == "n" ? "\n" : (c == "r" ? "\r" : c)); s = substr(s, i + 2) }
+      return o s }
+    BEGIN { n = split(ENVIRON["KG_SUMS"], a, "\n")
+            for (i = 1; i <= n; i++) { r = a[i]; esc = (substr(r, 1, 1) == "\\"); if (esc) r = substr(r, 2)
+              if (length(r) > 34) h[esc ? unesc(substr(r, 35)) : substr(r, 35)] = substr(r, 1, 32) }
+            n = split(ENVIRON["KG_LINKS"], y, "\n")
+            for (i = 1; i <= n; i++) if (length(y[i]) > 34) h[substr(y[i], 35)] = "l" substr(y[i], 1, 32)
+            n = split(ENVIRON["KG_EXECS"], x, "\n")
+            for (i = 1; i <= n; i++) if (x[i] != "") ex[x[i]] = 1 }
+    FILENAME == ARGV[1] { t = index($0, "\t"); if (t == 0) next
+      split(substr($0, 1, t - 1), f, " "); e = f[1] ":" f[2]; q = substr($0, t + 1)
+      ix[q] = (q in ix) ? ix[q] "," e : e; next }
+    { p = substr($0, 4); print $0 "\t" ((p in h) ? h[p] : "-") ((p in ex) ? "+x" : "") ((p in ix) ? "@" ix[p] : "") }' \
+    <( git -C "$SDD_HOME" ls-files -s -z 2>/dev/null | tr '\0' '\n' ) - <<< "$status" )"
+}
+
+# What moved between two kit trees, PUBLISHED in KIT_GUARD_CHANGES as one comma-separated clause:
+# a path dirty now and not before (`XY path`), a path whose status or entry changed (`XY path
+# (content changed)` when the worktree content did, `(mode changed)` when only the executable bit
+# did, `(index changed)` when only the staged entry did), and a path dirty before and clean now
+# (`path (no longer dirty)`). Empty when the two trees agree.
+# Called, never `$( )`-captured.
+# The `(no longer dirty)` items come in the order of the tree before — git's — and never in awk's
+# hash order, which walked `TODO.md, notes, zz.md` as notes, zz, TODO (final review of
+# 20261006-lote-5-o-que-o-lote-4-deixou, finding 8). The key runs to the LAST tab, the separator
+# kit_guard_tree writes before the digest: `git status -z` hands a tab inside a name over as is,
+# and cut at the first one the reason named `notes` for `notes<TAB>draft.md`. Both only ever
+# garbled the reason — the stop itself compares the whole trees (kit_guard_check).
+kit_guard_changes() {   # kit_guard_changes <tree before> <tree after>
+  KIT_GUARD_CHANGES="$( KG_BEFORE="$1" awk '
+    function cut(l) { return match(l, /\t[^\t]*$/) ? RSTART : length(l) + 1 }
+    function key(l) { return substr(l, 4, cut(l) - 4) }
+    function head(l) { return substr(l, 1, cut(l) - 1) }
+    function wt(l,  d) { d = substr(l, cut(l) + 1); sub(/@.*$/, "", d); return d }
+    function md5(l,  d) { d = wt(l); sub(/\+x$/, "", d); return d }
+    BEGIN { n = split(ENVIRON["KG_BEFORE"], b, "\n")
+            for (i = 1; i <= n; i++) if (b[i] != "") { k = key(b[i]); if (!(k in was)) ord[++m] = k; was[k] = b[i] } }
+    $0 != "" { p = key($0); seen[p] = 1
+      if (!(p in was)) item = head($0)
+      else if (was[p] == $0) next
+      else if (substr(was[p], 1, 2) == substr($0, 1, 2)) item = head($0) (md5(was[p]) != md5($0) ? " (content changed)" : (wt(was[p]) != wt($0) ? " (mode changed)" : " (index changed)"))
+      else item = head($0)
+      out = out sep item; sep = ", " }
+    END { for (i = 1; i <= m; i++) if (!(ord[i] in seen)) { out = out sep ord[i] " (no longer dirty)"; sep = ", " }
+          print out }' <<< "$2" )"
+}
 
 # Called, never substituted. `$(kit_guard_arm)` would run the body in a subshell where the
 # assignment to KIT_GUARD_BEFORE dies with the substitution, leaving the baseline empty forever —
@@ -3830,11 +4089,13 @@ kit_guard_arm() {
   if [ "$DRY_RUN" = "1" ]; then KIT_GUARD_BEFORE=""; return 0; fi
   autonomy_kit_stamp
   KIT_GUARD_BEFORE="$AUTONOMY_KIT_STAMP"
+  kit_guard_tree
+  KIT_GUARD_TREE_BEFORE="$KIT_GUARD_TREE"
 }
 
 # kit_guard_check <phase> — one warn and one journal line per DIVERGENCE, never per session.
 kit_guard_check() {
-  local phase="${1:-}" kit_root kit_after
+  local phase="${1:-}" kit_root kit_after tree_after sha_before sha_after commits="" what=""
   KIT_TOUCHED_WHY=""
   # DISARMED, and it is the projection that gets here that way — kit_guard_arm clears the baseline
   # under DRY_RUN and this is the line that reads the clearing. It is also the honest answer for an
@@ -3858,14 +4119,34 @@ kit_guard_check() {
   # finally fires on the run that matters, nobody is reading.
   [ "$kit_root" = "$REPO_ROOT" ] && return 0
   autonomy_kit_stamp; kit_after="$AUTONOMY_KIT_STAMP"
-  [ "$kit_after" = "$KIT_GUARD_BEFORE" ] && return 0
+  kit_guard_tree; tree_after="$KIT_GUARD_TREE"
+  # The TREE first and the stamp last, one line: the stamp alone is blind to a kit that was dirty
+  # before and was edited again (#233) — see KIT_GUARD_TREE_BEFORE.
+  [ "$tree_after" = "$KIT_GUARD_TREE_BEFORE" ] && [ "$kit_after" = "$KIT_GUARD_BEFORE" ] && return 0
+  # WHAT moved, said in the reason (#233): the stamps alone told the sales_quote's human only that
+  # the kit was dirty, and finding the writer took a `git status` in the kit. The commits the kit
+  # gained (`log before..after`, five at most) and the paths whose dirt moved. Guarded captures:
+  # an unreachable `before` (a reset, a gc) answers nothing, never kills the run.
+  sha_before="${KIT_GUARD_BEFORE%%|*}"; sha_after="${kit_after%%|*}"
+  if [ -n "$sha_before" ] && [ "$sha_before" != "$sha_after" ]; then
+    commits="$( git -C "$SDD_HOME" log --format='%h %s' --max-count=5 "$sha_before..$sha_after" 2>/dev/null )" || commits=""
+    commits="${commits//$'\n'/; }"
+  fi
+  kit_guard_changes "$KIT_GUARD_TREE_BEFORE" "$tree_after"
+  [ -n "$commits" ] && what="commits: $commits"
+  [ -n "$KIT_GUARD_CHANGES" ] && what="${what:+$what; }paths: $KIT_GUARD_CHANGES"
   warn "the kit at $kit_root changed during $phase, and this mission's repo is $REPO_ROOT — the runner does not know who changed it: a session of this mission editing outside its repo, or someone working on the kit in another terminal"
   pipeline_log_line "$(date -Iseconds)  KIT-TOUCHED  $phase  kit_before=$KIT_GUARD_BEFORE  kit_after=$kit_after"
   KIT_TOUCHED_WHY="the kit at $kit_root was edited while $phase ran (kit_before=$KIT_GUARD_BEFORE kit_after=$kit_after) — who edited it was not measured: a session of this mission, or someone working on the kit in parallel"
+  # AFTER the sentence and only onto a sentence that exists: the ledger caps gate_why at 200
+  # characters, and what the human acts on (the admission, regime 1's `unmeasured` term) has to stay
+  # inside the cap; the terminal and the journal's BLOCKED line carry the whole clause.
+  KIT_TOUCHED_WHY="${KIT_TOUCHED_WHY:+$KIT_TOUCHED_WHY${what:+ — what changed: $what}}"
   # Re-armed on the new value, so one divergence is reported ONCE. Left un-rearmed, every later
   # phase of the run would compare against the original baseline and repeat the same warning to
   # the end of the pipeline.
   KIT_GUARD_BEFORE="$kit_after"
+  KIT_GUARD_TREE_BEFORE="$tree_after"
 }
 
 # --- the hat crossed its boundary --------------------------------------------------------------
@@ -4071,13 +4352,15 @@ hat_reflog_window() {
 # diff --name-only` prints it bare, and the two halves of the guard disagreed on one name. The
 # ORIG_PATH entry that follows a rename/copy is folded away. A newline inside a name is the one
 # residue left (declared in the header above).
-hat_status_lines() {
+# The kit guard reads the KIT's tree through the same parser (kit_guard_tree), so the optional
+# argument is the root; the hat's callers pass none and read REPO_ROOT as always.
+hat_status_lines() {   # hat_status_lines [root] — default REPO_ROOT
   local entry skip=0
   while IFS= read -r -d '' entry; do
     if [ "$skip" = 1 ]; then skip=0; continue; fi
     case "${entry:0:2}" in R?|C?|?R|?C) skip=1 ;; esac
     printf '%s\n' "$entry"
-  done < <( git -C "$REPO_ROOT" status --porcelain -z --untracked-files=all 2>/dev/null || true )
+  done < <( git -C "${1:-$REPO_ROOT}" status --porcelain -z --untracked-files=all 2>/dev/null || true )
 }
 
 hat_path_allowed() {   # hat_path_allowed <path> <expanded globs, comma-separated> — rc 0 = inside
@@ -5205,8 +5488,14 @@ mission_budget_blown() {   # mission_budget_blown <phase> — rc 0 = STOP (row w
   if [ "$BUDGET_OVERRIDE" = "1" ]; then
     if [ "$BUDGET_OVERRIDE_NOTED" = "0" ]; then
       BUDGET_OVERRIDE_NOTED=1
+      # The warning is said NOW and the note only PUBLISHED (decision 11a). The two callers reach
+      # this door above guards that still stop the lap with no session — in cmd_run the REVIEW
+      # ceiling and door 1 of no-work —, and a note committed here was an intervention in a run that
+      # bought nothing. The warning is the terminal saying what just happened (the ceiling was
+      # crossed and lifted), true whatever the next guard decides; the note is the artefact
+      # `sdd autonomy --by-mission` counts, and it is written by the door that opens the session.
       warn "mission budget blown (US\$ $spent of $ceiling) — going on under --budget-override"
-      checkpoint_note_intervention "sdd $AUTONOMY_INVOCATION --budget-override (US\$ $spent spent against BUDGET_MISSION_USD=$ceiling)" "$phase"
+      BUDGET_OVERRIDE_NOTE="sdd $AUTONOMY_INVOCATION --budget-override (US\$ $spent spent against BUDGET_MISSION_USD=$ceiling)"
     fi
     return 1
   fi
@@ -5217,6 +5506,18 @@ mission_budget_blown() {   # mission_budget_blown <phase> — rc 0 = STOP (row w
   pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
   autonomy_blocked_row "budget-exhausted" "$phase" "$GATE_WHY"
   return 0
+}
+# Writes the note mission_budget_blown published, once, and zeroes it. Called by the two doors that
+# buy a session — cmd_run and cmd_retry —, right above their `before=` and the two guard arms: the
+# note is a commit, and inside that window it would read as the session's progress and as a commit
+# without the session's label. The phase is the one whose session the override is buying, which is
+# not always the one that lifted it (the draft jump lifts in REVIEW and opens PR). CALLED, never
+# substituted: the zeroing would die in the substitution and the next lap would write it again.
+budget_override_note_write() {   # budget_override_note_write <phase of the session being bought>
+  [ -n "$BUDGET_OVERRIDE_NOTE" ] || return 0
+  local what="$BUDGET_OVERRIDE_NOTE"
+  BUDGET_OVERRIDE_NOTE=""
+  checkpoint_note_intervention "$what" "$1"
 }
 
 phase_budget() {
@@ -6841,6 +7142,14 @@ status_increments() {
 # Cost: one jq pass over the ledger — 9 ms over the 608 rows of 2026-10-04 — inside a page that
 # already ran every gate, which is why the cheap `--no-gates` page does not carry it: it knows no
 # phase is done. `fromjson?` so one malformed row costs the hint nothing but that row.
+# A mission this machine never opened a SESSION of asks nothing (#229): the ledger is per machine, so
+# that is the shape of a mission run on another computer, and asking "done by hand?" of every phase
+# it passed had the human record as manual what a session ran. Presence is a `session` row, never
+# "any row": the `manual` row is the one this hint makes the human write, so counting it would
+# re-open the question for every other phase the moment the first one is recorded, and an
+# escalation can be written by a `sdd run` here that opened nothing. The same jq pass answers both
+# questions — a session row prints `+` beside its phase, which no phase is named. DECLARED LIMIT: a
+# mission done ENTIRELY by hand here leaves the same slice and is not asked either.
 status_unrecorded() {
   local file seen ph out=""
   autonomy_have_jq || return 0
@@ -6848,8 +7157,10 @@ status_unrecorded() {
   [ -f "$file" ] || return 0
   seen="$(jq -rR --arg repo "$(ledger_repo_root)" --arg m "$MISSION" \
             'fromjson? | select(type == "object" and .repo == $repo and .mission == $m
-                                and (.event == "session" or .event == "manual")) | .phase // empty' \
+                                and (.event == "session" or .event == "manual"))
+                       | (.phase // empty), (select(.event == "session") | "+")' \
             "$file" 2>/dev/null)" || seen=""
+  grep -qxF + <<< "$seen" || return 0
   for ph in "$@"; do
     [ "$ph" != PLAN ] || continue
     [ "$ph" != TICKET ] || [ "$JIRA_ENABLED" = "true" ] || continue
@@ -8192,10 +8503,14 @@ cmd_run() {
   # in a dry run too: the projection is where you look BEFORE spending sessions, which makes it the
   # cheapest moment to learn you are about to commit into the base branch.
   warn_if_on_base_branch
-  # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The note is written
-  # HERE, off the CLI value and before the loop — inside it, force_phase is also set by the runner
-  # itself (PUBLISH_ON_REVIEW_BLOCKED=draft), and that is the runner's hand, not the human's.
-  [ -n "$force_phase" ] && checkpoint_note_intervention "sdd run --phase $force_phase (the starting phase was forced from the CLI)" "$force_phase"
+  # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The CLI value is kept
+  # HERE, before the loop — inside it, force_phase is also set by the runner itself
+  # (PUBLISH_ON_REVIEW_BLOCKED=draft), and that is the runner's hand, not the human's. It is consumed
+  # at the top of the FIRST lap (cli_lap), and the note is written only where that lap opens a
+  # session, right above `before=` (#227): written here, it was committed ahead of laps that stop
+  # without one — the stamp stop and PLAN return 2 — and `sdd autonomy --by-mission` counted an
+  # intervention in a run that did nothing.
+  local cli_phase="$force_phase" cli_lap=""
 
   local -A attempts=()
   # SESSIONS, which is not the same grandeza as `attempts` and was being printed as if it were.
@@ -8230,6 +8545,9 @@ cmd_run() {
   while :; do
     # The config is re-read on every lap, before anything of the lap reads it (#129, config_reload).
     config_reload
+    # Single use: the first lap takes the CLI's --phase, every later lap — the draft jump included,
+    # whose force_phase is the runner's — finds it empty.
+    cli_lap="$cli_phase"; cli_phase=""
     # The two branches that do not derive also clear the derivation: a reason left over from an
     # earlier lap must not reach the boot of a phase the runner is now FORCING.
     derived=0
@@ -8296,8 +8614,17 @@ cmd_run() {
         info ""
         warn "the PR phase is waiting for the mutation stamp, and the stamp is not headless: $GATE_PR_STAMP_WHY"
         dim "  The PR is open and every other requirement of its gate is met. No session can write"
-        dim "  the stamp. The order: wait for every review bot on the PR, fix their findings in one"
-        dim "  batch, run './bin/sdd health' once, then 'sdd run $MISSION' again."
+        # Two remedies, on the marker and never on the sentence (#228). When the key itself is
+        # refused, './bin/sdd health' over this tree refuses to stamp too: sending the human to it
+        # first costs a run that answers what the line above already says.
+        if [ -n "$GATE_PR_STAMP_IMPOSSIBLE" ]; then
+          dim "  the stamp, and no './bin/sdd health' can stamp this tree as it stands ($GATE_PR_STAMP_IMPOSSIBLE):"
+          dim "  fix what the reason above names first, then run './bin/sdd health' once, then"
+          dim "  'sdd run $MISSION' again."
+        else
+          dim "  the stamp. The order: wait for every review bot on the PR, fix their findings in one"
+          dim "  batch, run './bin/sdd health' once, then 'sdd run $MISSION' again."
+        fi
         return 2
       fi
     fi
@@ -8499,6 +8826,17 @@ cmd_run() {
       prev_why="$CURRENT_PHASE_WHY"
     fi
 
+    # The CLI's intervention, on the lap it forced and only once that lap is about to buy a session
+    # (#227). ABOVE `before=` and the two arms, never below: the note is a commit, and inside the
+    # window it would read as the session's progress (state_fingerprint reads HEAD) and as a commit
+    # with no session label (hat_guard_arm records the reflog's top). The inline retry is the same
+    # lap and writes nothing more; `sdd retry` is its own door and keeps its own note.
+    if [ -n "$cli_lap" ]; then
+      checkpoint_note_intervention "sdd run --phase $cli_lap (the starting phase was forced from the CLI)" "$cli_lap"
+    fi
+    # The override's note, on the same terms and at the same line (decision 11a): published by
+    # mission_budget_blown above the REVIEW ceiling and door 1 of no-work, written only here.
+    budget_override_note_write "$phase"
     before="$(state_fingerprint)"
     # The photograph, and it has to be taken HERE: once run_phase returns, the checkpoint the
     # session just edited is the only one left on disk and "how many were pending before" is
@@ -8887,10 +9225,14 @@ cmd_retry() {
   # there is nothing to attribute the note to, and nothing is committed on the human's behalf.
   no_work_check "$phase" ""
   if no_work_escalation "$phase"; then return 3; fi
-  # L4 (2026-09-03 audit): a retry IS the human's hand — the template's own first example of one.
-  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"
   # L2: the second door of the mission ceiling — a retry is a session too.
   if mission_budget_blown "$phase"; then return 3; fi
+  # L4 (2026-09-03 audit): a retry IS the human's hand — the template's own first example of one.
+  # BELOW the ceiling since decision 11a (#227's neighbour): written above it, a retry the ceiling
+  # refused committed a note into a mission whose run bought nothing. Then the override's note, if
+  # mission_budget_blown published one — both above `before=` and the two arms, never below.
+  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"
+  budget_override_note_write "$phase"
   step "retrying $phase with a FRESH session"
   local before after moved="false" gate_rc=0
   before="$(state_fingerprint)"
@@ -11087,7 +11429,7 @@ cmd_note_manual() {
   [ $# -eq 2 ] || die "usage: sdd note-manual <mission> <PHASE>"
   load_config
   resolve_mission "$1"
-  local phase="$2" p known=0 home home_sha="" where="" branch merged=0 now out
+  local phase="$2" p known=0 home home_sha="" where="" branch merged=0 now out noted note
   local -a back=()
   for p in $PHASES; do [ "$p" = PLAN ] || [ "$p" != "$phase" ] || known=1; done
   [ "$known" = 1 ] || die "note-manual: '$phase' is not a phase a session runs — one of: ${PHASES#PLAN }"
@@ -11103,6 +11445,7 @@ cmd_note_manual() {
   fi
   ensure_mission_branch
   checkpoint_note_intervention "sdd note-manual (the phase was recorded from the CLI as done by hand)" "$phase"
+  noted="$CHECKPOINT_NOTE"
   autonomy_manual_row "$phase"
   if [ "$merged" = 1 ]; then
     warn "'$branch' is already merged into '$DEFAULT_BRANCH': the note was committed on '$branch', which '$DEFAULT_BRANCH' will not see — the ledger row is the record its readers get"
@@ -11122,7 +11465,16 @@ cmd_note_manual() {
       warn "could not return to $where — still on '$now'. git said: $out"
     fi
   fi
-  ok "phase $phase of $MISSION recorded as done by hand: the note in the checkpoint, a manual row in the ledger"
+  # The `ok` says what the writer DID (#230), never what it was asked to do. The row is written in
+  # every case: it is the record the ledger's readers get, and a missing note is no reason to lose it.
+  case "$noted" in
+    committed)   note="the note in the checkpoint, a manual row in the ledger" ;;
+    uncommitted) note="the note in the checkpoint, NOT committed (see above), a manual row in the ledger" ;;
+    none)        note="a manual row in the ledger, and no note — $MISSION has no checkpoint.md" ;;
+    failed)      note="a manual row in the ledger, and no note — it could not be written (see above)" ;;
+    *)           note="a manual row in the ledger, and no note" ;;
+  esac
+  ok "phase $phase of $MISSION recorded as done by hand: $note"
 }
 
 # Post-merge: closes the JIRA issue. Fired by the human after the merge — it is the only thing

@@ -4,6 +4,7 @@
 # fail here. Readiness and release FIFOs establish order; deadlines bound every subprocess.
 # The supervisor is not a security boundary against killing it or external daemon writers.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 python3 - "$ROOT" "$@" <<'PY'
 import contextlib
@@ -118,6 +119,7 @@ ADR_CHECK=off
 ON_ESCALATION_CMD="${COORD_HOOK:-}"
 if [ -n "${COORD_PROBE:-}" ]; then printf touched >> "$COORD_PROBE"; fi
 if [ -n "${COORD_FDCOUNT:-}" ]; then ls /proc/$$/fd | wc -l > "$COORD_FDCOUNT"; fi
+if [ -n "${COORD_LEAVE:-}" ]; then ( exec -a "${COORD_LEAVE_ARGV0:-sleep}" sleep "$COORD_LEAVE" ) </dev/null >/dev/null 2>&1 & echo "$!" >> "$COORD_LEAVE_PID"; fi
 if [ -n "${COORD_HOLD:-}" ]; then
   if [ "${COORD_CHILD:-}" = cooperative ]; then
     exec 3<> "$COORD_RELEASE"
@@ -833,7 +835,13 @@ try:
         recipient = cooperative[0].pid if receiver == "owner" else json.loads(cooperative[1].read_text())["pid"]
         os.kill(recipient, signal.SIGINT)
         deadline = time.monotonic() + 8
-        while not handled.exists() and cooperative[0].poll() is None and time.monotonic() < deadline:
+        # Wait for the WRITE, never for the file: the handler creates the marker and then writes it,
+        # and a wait that ended on `exists()` read it in between — `read_text() == ""`, a red with the
+        # real signature (`FAIL SIGINT executes handler: foreground/child`) on a handler that ran.
+        # Reproduced with that window widened to 0.3 s (PR #237 retro); under SDD_MUTANT it would
+        # score a mutant as caught by the race instead of by the sabotage.
+        while not (handled.exists() and handled.read_text() == "handled") \
+                and cooperative[0].poll() is None and time.monotonic() < deadline:
             time.sleep(.01)
         check("SIGINT executes handler: " + label, handled.exists() and handled.read_text() == "handled")
         busy(repo, "install", name="SIGINT cleanup retains ownership: " + label)
@@ -911,6 +919,62 @@ try:
     failing = start(repo, code=7)
     check("error preserves worker status", release(failing) == 7)
     check("error recovers", run(repo, "install").returncode == 0)
+    # #234: a process the worker leaves running holds the supervisor until ECHILD — by design, the
+    # lock is released by the kernel's answer and never by a snapshot — and the call used to wait
+    # MUTE. Measured on sales_quote: a QA session relaunched the human's backend with `nohup … &`,
+    # and `sdd run` printed BLOCKED and stayed alive until that server died. The supervisor now
+    # names the family ONCE (not once per 10 ms tick), a second after the worker exits on its own.
+    # DIFFERENTIAL: the same call with nothing left behind names nothing.
+    leave_pid = work / "leave-pid"
+    left = run(repo, "phase", "20260101-one",
+               extra={"COORD_LEAVE": "2.31", "COORD_LEAVE_PID": str(leave_pid),
+                      "COORD_LEAVE_ARGV0": "argv0-token-7f3"})
+    pids = leave_pid.read_text().split() if leave_pid.exists() else []
+    quiet = run(repo, "phase", "20260101-one")
+    # The executable and never its arguments (CodeRabbit review of PR #237): a background command
+    # may carry a credential on its command line. `2.31` is the argument the witness was started with.
+    # argv[0] is an argument too (5th Codex review of PR #237): the caller chooses it (`exec -a`), and
+    # the witness runs `sleep` under the name `argv0-token-7f3`, which must never be printed.
+    check("a process the worker leaves behind is named once, with its pid and executable, never its arguments",
+          len(pids) == 1 and left.stdout.count("this command waits for") == 1
+          and ("  pid %s: sleep\n" % pids[0] if pids else "?") in left.stdout
+          and "2.31" not in left.stdout and "argv0-token-7f3" not in left.stdout
+          and "this command waits for" not in quiet.stdout,
+          "pids=%s left=%r quiet=%r" % (pids, left.stdout[-400:], quiet.stdout[-200:]))
+    # The hook names nothing: its family is bounded by the deadline (5 s + 1 s), so nothing waits on
+    # it long enough to need a name. A hook whose shell exits at once leaves its straggler to the
+    # hook's own subreaper, which waits for it in silence.
+    hook_quiet = subprocess.run(
+        [sys.executable, "-B", "-c",
+         "import importlib.util, sys\n"
+         "spec = importlib.util.spec_from_file_location('coord', sys.argv[1])\n"
+         "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+         "sys.exit(m.bounded_hook(5, 1, 'sleep 1.37 </dev/null >/dev/null 2>&1 &'))\n",
+         str(root / "bin/sdd-coordination.py")], capture_output=True, text=True, timeout=10)
+    check("a hook's straggler is waited for in silence: the hook names nothing",
+          hook_quiet.returncode == 0 and hook_quiet.stderr == "",
+          "rc=%s stderr=%r" % (hook_quiet.returncode, hook_quiet.stderr[-300:]))
+    # A closed stderr does not end the supervision (CodeRabbit review of PR #237): the report raised
+    # BrokenPipeError out of wait_family, the supervisor exited before ECHILD, and the checkout lock
+    # went with it while the family ran. name_stragglers is called alone, over a stderr whose every
+    # write raises and a family of one, and must return; `survived` is printed only if it did.
+    pipe_closed = subprocess.run(
+        [sys.executable, "-B", "-c",
+         "import importlib.util, sys\n"
+         "spec = importlib.util.spec_from_file_location('coord', sys.argv[1])\n"
+         "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+         "class Closed:\n"
+         "    def write(self, text): raise BrokenPipeError(32, 'Broken pipe')\n"
+         "    def flush(self): raise BrokenPipeError(32, 'Broken pipe')\n"
+         "m.descendants = lambda: [(4242, 'sleep')]\n"
+         "sys.stderr = Closed()\n"
+         "m.name_stragglers('phase')\n"
+         "sys.stderr = sys.__stderr__\n"
+         "print('survived')\n",
+         str(root / "bin/sdd-coordination.py")], capture_output=True, text=True, timeout=10)
+    check("a closed stderr does not end the supervision: naming the stragglers is best effort",
+          pipe_closed.returncode == 0 and pipe_closed.stdout == "survived\n",
+          "rc=%s stdout=%r" % (pipe_closed.returncode, pipe_closed.stdout[-300:]))
     for victim, mode in [("owner", "ordinary"), ("worker", "ordinary"), ("owner", "escaped")]:
         orphan = start(repo, mode=mode)
         identity = json.loads(orphan[1].read_text())

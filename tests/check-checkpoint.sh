@@ -151,6 +151,7 @@
 #   96  unknown option
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 SELF_PATH="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -206,14 +207,28 @@ surface() {
 # name: GFM makes that pipe optional, the runner reads the row since PR #222, and a reader of
 # `|`-led lines alone skipped it whole — --check never saw it, --red answered 0 over a pending Check
 # it never ran (CodeRabbit review). Below a blank line the same line is a paragraph and stays out.
+#
+# A row with FEWER than five cells is emitted too, with its NF under 6, so the callers refuse it by
+# name (issue #224): GFM renders the missing cells empty, and dropped here it vanished from --check
+# and --red alike. Only inside a table whose HEADER — the first line of the block — splits into six
+# fields or more: GFM counts a table's columns by its header, and a narrow table elsewhere is no
+# checkpoint table. Six fields is five cells, or four closed by the trailing pipe — DECLARED: that
+# four-cell header reads as wide. A four-cell row closed the same way is refused all the same, by
+# rule 1's column count (4 instead of 5) and not by the fewer-than-five message.
+# A short line with no leading pipe is emitted too, with NF 0 (7th Codex review of PR #237): GFM
+# renders it as a row, and the runner reads it since then — skipped on the guess that it was prose
+# glued to the table, it carried a pending increment past both readers. Prose glued to the table
+# that quotes a pipe is refused with it, as GFM renders it a row; a blank line cures it, and
+# build_tree's template carries that blank line, as the real one does.
 rows_of() {
   awk -F'|' '
     /^[ \t]*$/ { tbl = 0 }
     { bare = (tbl && /\|/ && !/^[ \t]*\|/) }
     bare { $0 = "|" $0 }
     /^[ \t]*\|/ {
+      if (!tbl) wide = (NF >= 6)
       tbl = 1
-      if (NF < 6) next
+      if (NF < 6 && !wide) next
       id = $2; gsub(/^[ \t]+|[ \t]+$/, "", id)
       if (id == "ID" || id ~ /^-+$/ || id == "") next
       status = $5; gsub(/^[ \t]+|[ \t]+$/, "", status)
@@ -250,6 +265,11 @@ scan_file() {
     # a truncation and rule 2 fails open. NF 0 is rows_of's mark for the missing leading pipe.
     if [ "$nf" -eq 0 ]; then
       fail "$label: row $id has no leading '|' — GFM renders it as a row and the runner counts it, but this repo's checkpoints open every row with the pipe"
+      V_COLS=$((V_COLS + 1))
+      continue
+    fi
+    if [ "$nf" -lt 6 ]; then
+      fail "$label: row $id has fewer than five cells — GFM renders the missing ones empty, so the runner reads no Status in it; write all five"
       V_COLS=$((V_COLS + 1))
       continue
     fi
@@ -530,11 +550,13 @@ check_one() { # check_one <path> — one checkpoint, no floors, no doc assertion
 
 # red_norm <text> — every run of blanks, newlines included, folds into one space; ends trimmed.
 # Applied to both sides, so `echo 1; echo 2` compares equal to `1 2`, the way a person reads it.
+# `${w[@]+…}` and not a bare `"${w[*]}"`: a Check that printed nothing leaves `w` EMPTY, and bash
+# 4.0-4.3 call an empty array unbound under `set -u` (issue #223, the idiom of check-todo.sh).
 red_norm() {
   local s="${1//$'\n'/ }" w
   s="${s//$'\t'/ }"
   read -ra w <<< "$s"
-  printf '%s' "${w[*]}"
+  printf '%s' ${w[@]+"${w[*]}"}
 }
 
 # red_cell <cell> — splits the strict form `command` → `expected` into RED_CMD and RED_EXP. Globals,
@@ -571,6 +593,10 @@ red_one() { # red_one <checkpoint> — 0 every pending Check is red at HEAD; 1 o
     [ -n "$nf" ] || continue
     if [ "$nf" -eq 0 ]; then
       fail "$label: row $id has no leading '|' — --red refuses the row a reader of '|'-led lines would skip; run --check first"
+      bad=$((bad + 1)); continue
+    fi
+    if [ "$nf" -lt 6 ]; then
+      fail "$label: row $id has fewer than five cells — --red refuses the row a reader of six fields would skip; run --check first"
       bad=$((bad + 1)); continue
     fi
     if [ "$nf" -ne 7 ]; then
@@ -617,7 +643,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=60
+PROBE_FLOOR=64
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -687,6 +713,8 @@ build_tree() { # build_tree <root>
 
   f="$root/templates/checkpoint.md"; cp_head "$f"
   cp_row "$f" I1 '`<comando>` → `<esperado>`'
+  # The blank line the real template has: prose glued to the table is a row of it in GFM.
+  printf '\n' >> "$f"
   printf 'A Check reading a sensor: `o=$(cmd 2>&1); grep -c '"'"'%s<assertion>'"'"' <<< "$o"`\n' \
     "$OK_ANCHOR" >> "$f"
   pipe_banner >> "$f"
@@ -759,6 +787,25 @@ selftest() {
   printf '\nI2 | slice | `bash tests/run-all.sh` → verde | pending | — |\n' >> "$barepara"
   probe 'a row with no leading pipe is caught, not skipped' 1 "row I2 has no leading '|'" "$bare"
   probe 'the same line below a blank line is a paragraph, not a row' 0 'barepara.md: 1 row(s)' "$barepara"
+  # A `|`-led row with FEWER than five cells is a row too — GFM renders the missing cells empty —
+  # and rows_of dropped every line under six fields, so --check never saw it (issue #224). The
+  # control is a NARROW table below the checkpoint's, past a blank line: GFM counts a table's
+  # columns by its header, and target checkpoints carry such tables, whose rows are no increments.
+  local short="$box/short.md" narrow="$box/narrow.md" short_f0="$FAILS"
+  cp_head "$short"; cp_row "$short" I1 '`bash tests/run-all.sh` → verde'
+  printf '| I2 | slice | pending |\n' >> "$short"
+  cp_head "$narrow"; cp_row "$narrow" I1 '`bash tests/run-all.sh` → verde'
+  printf '\n| File | sha256 |\n|---|---|\n| db.sql.gz | abc123 |\n' >> "$narrow"
+  probe 'a row with fewer than five cells is caught, not skipped' 1 'row I2 has fewer than five cells' "$short"
+  # The same short row with no leading pipe (7th Codex review of PR #237): read as GFM renders it,
+  # and refused — it used to be skipped on the guess that such a line is prose glued to the table.
+  local shortbare="$box/shortbare.md"
+  cp_head "$shortbare"; cp_row "$shortbare" I1 '`bash tests/run-all.sh` → verde'
+  printf 'I2 | slice | pending |\n' >> "$shortbare"
+  probe 'a bare row with fewer than five cells is caught, not skipped' 1 "row I2 has no leading '|'" "$shortbare"
+  probe 'a narrow table below the checkpoint is no row of it' 0 'narrow.md: 1 row(s)' "$narrow"
+  [ "$FAILS" -eq "$short_f0" ] && \
+    pass 'rule: a row with fewer than five cells is refused by name, a narrow table is not'
 
   # ── the floors and the doc assertions, over real trees ──
   local full="$box/full" small="$box/small" fewrows="$box/fewrows" novoid="$box/novoid"
@@ -792,6 +839,7 @@ selftest() {
   build_tree "$notmpl"
   cp_head "$notmpl/templates/checkpoint.md"
   cp_row "$notmpl/templates/checkpoint.md" I1 '`<comando>` → `<esperado>`'
+  printf '\n' >> "$notmpl/templates/checkpoint.md"
   printf 'A Check reading a sensor: `o=$(cmd 2>&1); grep -c <assertion> <<< "$o"`\n' \
     >> "$notmpl/templates/checkpoint.md"
   pipe_banner >> "$notmpl/templates/checkpoint.md"
@@ -1064,6 +1112,11 @@ selftest() {
   printf 'I2 | slice | `echo 1` → `1` | pending | abc1234 |\n' >> "$rf"
   probe 'a pending row with no leading pipe is refused by --red, never skipped' 1 \
     "row I2 has no leading '|'" "$rf" --red
+  # The same for a row with fewer than five cells (issue #224): skipped, --red answered 0.
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 0` → `1`' pending
+  printf '| I2 | slice | `echo 1` → `1` | pending\n' >> "$rf"
+  probe 'a pending row with fewer than five cells is refused by --red, never skipped' 1 \
+    'row I2 has fewer than five cells' "$rf" --red
   cp_head "$nogit/docs/handoffs/m/checkpoint.md"
   cp_row "$nogit/docs/handoffs/m/checkpoint.md" I1 '`echo 0` → `1`' pending
   GIT_CEILING_DIRECTORIES="$box" probe 'a checkpoint outside any repository has no root to run from' \
@@ -1074,6 +1127,19 @@ selftest() {
   # claims a group that just failed.
   [ "$FAILS" -eq "$red_f0" ] && \
     pass "rule: a Check already green at HEAD is refused by --red ($((PROBES - red_p0)) probe(s))"
+  # bash 4.0-4.3 call an EMPTY array unbound under `set -u`, and the kit promises bash 4+ (issue
+  # #223): `"${w[*]}"` over a Check that printed nothing killed red_norm with `w[*]: unbound
+  # variable` on stderr — measured in docker bash:4.3, the verdict right only because the dead
+  # substitution left the same empty string. The bash 5 this suite runs on cannot reproduce it
+  # (BASH_COMPAT=4.3 does not either), so the assertion reads the function: the guarded expansion
+  # check-todo.sh already uses, or red.
+  PROBES=$((PROBES + 1))
+  case "$(declare -f red_norm)" in
+    *'${w[@]+"${w[*]}"}'*)
+      pass 'red_norm guards its empty array, which bash 4.0-4.3 call unbound under set -u' ;;
+    *) printf 'SENSOR-BROKEN: red_norm expands its array unguarded — bash 4.0-4.3 call an empty one unbound under set -u\n' >&2
+       FAILS=$((FAILS + 1)); fail_rc 90 ;;
+  esac
 
   rm -rf "$box"
 

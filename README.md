@@ -75,8 +75,9 @@ runner says nothing about language, and each session follows whatever the existi
 ```bash
 sdd approve <mission>        # show the plan and, on an explicit y, switch to the declared branch, write the approval and commit the mission directory
 sdd run <mission>            # run from the first unsatisfied gate through to the PR
-sdd status <mission>         # where it stands, what is missing, why it stalled — and each green phase
-                             #   this machine's ledger holds no session of, with the `sdd note-manual` that records it
+sdd status <mission>         # where it stands, what is missing, why it stalled — and, when this machine ran
+                             #   a session of it, each green phase its ledger holds no session of, with the
+                             #   `sdd note-manual` that records it
 sdd why <mission> [PHASE]    # why that phase's gate did not pass — start any diagnosis here
 sdd phase <mission>          # print only the current phase (or DONE) — for scripts
 sdd retry <mission>          # retry the current phase with a fresh session

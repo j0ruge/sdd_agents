@@ -30,6 +30,7 @@
 # Usage: tests/check-preflight.sh   (exit 0 = the probe still fires, and still stays quiet)
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"

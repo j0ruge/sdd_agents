@@ -8,6 +8,9 @@
 #   --list           print the steps that WOULD run and exit 0, executing none of them.
 
 set -uo pipefail
+# Before anything runs git: the repository a git-driven caller hands this suite is cleared here,
+# in the one definition every sensor sources too (tests/isolate-git.sh says why, issue #226).
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 # SDD_TPL_SELFTEST_CHILD IN THIS ENVIRONMENT IS REFUSED, never ignored, and the reason is `run()`
 # below: it reads the step's exit status and NOTHING else. That variable is check-templates.sh's
@@ -244,8 +247,9 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 # still pass, and would go on describing a surface one file smaller than the one it reads — the
 # label-instead-of-artifact shape this whole mission is about, and the limit declared above.
 # Checkout coordination adds its sensor and the alternate linker: 17 -> 19 Bash paths.
+# tests/isolate-git.sh, sourced by every sensor and run by none (issue #226): 19 -> 20.
 LINT_SEVERITY=warning
-LINT_FLOOR=19
+LINT_FLOOR=20
 
 lint_surface() {
   local files=("$ROOT/bin/sdd" "$ROOT/bin/sdd-link-agents") f

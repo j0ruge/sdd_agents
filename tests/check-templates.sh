@@ -50,6 +50,7 @@
 # Usage: tests/check-templates.sh   (exit 0 = contract intact)
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Overridable for ONE reader: the selftest, which re-runs this very file over a doctored copy of

@@ -10,6 +10,7 @@
 # Usage: tests/check-gates.sh   (exit 0 = state machine correct)
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"
@@ -513,6 +514,47 @@ awk -v row="$pipeless_row" -v h="| done | $REAL_HASH |" '{ print } index($0, h) 
 assert_phase "the same line below a blank line is a paragraph, not an increment" "QA"
 mv "$MDIR/checkpoint.pipeless.bak" "$MDIR/checkpoint.md"
 
+# A `|`-led row with FEWER than five cells (issue #224) is a row of the table too: GFM renders the
+# missing cells empty. checkpoint_rows dropped every line under six fields, so `| I2 | … | pending |`
+# vanished from checkpoint_tally and the gate passed over it to QA — the failure c71913c closed
+# for the row with no leading pipe, by another shape. Read as it renders, its Status is empty and
+# the gate refuses it by name. The control is a NARROW table below the checkpoint's own, past a
+# blank line: GFM counts a table's columns by its header, so its rows are no increments — and
+# target checkpoints carry such tables (35 lines in four of them, measured 2026-10-06).
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.short.bak"
+short_row='| I2 | slice two, three cells | pending |'
+awk -v row="$short_row" -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print row }' \
+  "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
+if [ "$(awk -v h="| done | $REAL_HASH |" 'seen { print; exit } index($0, h) { seen = 1 }' "$MDIR/checkpoint.md")" = "$short_row" ]; then
+  pass "fixture: a pending row with three cells sits right below the done row"
+else
+  fail "short-row fixture" "$short_row" "$(cat "$MDIR/checkpoint.md")"
+fi
+assert_phase "a pending row with fewer than five cells keeps the phase in EXEC" "EXEC"
+assert_why   "the row with fewer than five cells is refused by name" "EXEC" "increment I2 has no Status"
+awk -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print ""; print "| File | sha256 |"; print "|---|---|"; print "| db.sql.gz | abc123 |" }' \
+  "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
+assert_phase "a narrow table below the checkpoint's is no increment" "QA"
+# And a short row with NO leading pipe either (7th Codex review of PR #237): GFM makes that pipe
+# optional and renders the missing cells empty, so it is read and refused by name like the `|`-led
+# one. It used to be skipped — DECLARED, so prose glued to the table that quotes a pipe stayed out —
+# and gate_EXEC passed over the pending increment it carried. The human ruled for reading it as it
+# renders: that prose IS a row of the table in GFM, and a refusal by name, cured by a blank line,
+# is the failure that shows. The differential: glued, the prose is a row; below a blank line, a
+# paragraph.
+short_bare='I2 | slice two, bare and short | pending |'
+awk -v row="$short_bare" -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print row }' \
+  "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
+assert_phase "a pending row with no leading pipe and fewer than five cells keeps the phase in EXEC" "EXEC"
+assert_why   "the bare row with fewer than five cells is refused by name" "EXEC" "increment I2 has no Status"
+awk -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print "Never a `|` in the Check cell." }' \
+  "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
+assert_phase "prose glued to the table that quotes a pipe is a row of it, as GFM renders it" "EXEC"
+awk -v h="| done | $REAL_HASH |" '{ print } index($0, h) { print ""; print "Never a `|` in the Check cell." }' \
+  "$MDIR/checkpoint.short.bak" > "$MDIR/checkpoint.md"
+assert_phase "the same prose below a blank line is a paragraph, no increment" "QA"
+mv "$MDIR/checkpoint.short.bak" "$MDIR/checkpoint.md"
+
 # A literal pipe inside a Check cell is spelled `\|` in GFM, and a raw split on "|" cuts the row
 # there — every column after it shifts one to the left, so the Status column is read out of the
 # CHECK cell. The increment is `done` and the gate answers "invalid status", naming a status the
@@ -745,12 +787,16 @@ assert_phase "wont-fix is a human decision and does not block" "REVIEW"
 # off for the whole registry — the same trap bin/sdd:587-588 already records for `closed`. With
 # the legend in the fixture, that loosening turns the differential red.
 GENRE_BUG="$FIX/docs/qa/bugs/BUG-20260102-genre.md"
-write_genre_bug() { # write_genre_bug <the `Closable by:` line, or '' for a bug older than the field>
+write_genre_bug() { # write_genre_bug <the `Closable by:` line, or '' for a bug older than the field> [<body>]
   { printf '# BUG-20260102-genre: needs a call nobody in the pipeline can make\n'
     printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
     if [ -n "$1" ]; then printf -- '%s\n' "$1"; fi
+    if [ -n "${2:-}" ]; then printf -- '%s\n' "$2"; fi
   } > "$GENRE_BUG"
 }
+# The human's decision, in the bug's own body: what agents/sdd-qa.md § 5.1 and ADR 0009 demand
+# before `deferred` may be written, and what gate_QA reads since #232 (bug_decision_recorded).
+GENRE_DECIDED=$'\n## Decision\n\n2026-01-02, the repo owner: mission 20260201-other pays for this fix.'
 
 write_genre_bug '- **Closable by:** human <!-- agent | human -->'
 genre_phase_human="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
@@ -987,7 +1033,7 @@ assert_eq "the field starts at column zero: an indented quote does not become th
 # The objection 0006 raised against narrowing this anchor was that debt "ages out of sight". The
 # answer here is VISIBILITY, not silence: `deferred` skips the count exactly as `human` does, and
 # the reason NAMES every deferred bug on every evaluation.
-write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->'
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' "$GENRE_DECIDED"
 genre_phase_deferred="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 genre_why_deferred="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 
@@ -1009,8 +1055,10 @@ assert_eq "the deferred reason is the passing one, not the blocking one reworded
 # gained one alternative. Inherited is a claim, though, and this file's rule is that a claim about
 # behaviour is written as an assertion. Each of the three fail-opens the anchor already paid for,
 # re-run with the NEW value; `$genre_exact` stays the passing control so a gate that blocked
-# everything takes it red instead of passing these quietly.
-write_genre_bug '- **Closable by:** deferredly <!-- agent | human | deferred -->'
+# everything takes it red instead of passing these quietly. Each carries the human's DECISION
+# (#232): without it the deferred arm blocks on its own and these worlds would stop measuring the
+# genre — measured, QA_bug_genre_deferred_prefix went uncaught until they carried it.
+write_genre_bug '- **Closable by:** deferredly <!-- agent | human | deferred -->' "$GENRE_DECIDED"
 genre_deferred_prefix="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "deferred is the whole word too: the near-miss 'deferredly' still blocks" \
   "REVIEW|QA" "$genre_exact|$genre_deferred_prefix"
@@ -1020,6 +1068,7 @@ assert_eq "deferred is the whole word too: the near-miss 'deferredly' still bloc
   printf '\nThe line this bug is about reads:\n\n```md\n'
   printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
   printf '```\n'
+  printf -- '%s\n' "$GENRE_DECIDED"
 } > "$GENRE_BUG"
 genre_deferred_fenced="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "a fenced 'deferred' quote does not become the genre either" \
@@ -1030,10 +1079,92 @@ assert_eq "a fenced 'deferred' quote does not become the genre either" \
   printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
   printf '```\n\n'
   printf -- '- **Closable by:** agent <!-- agent | human | deferred -->\n'
+  printf -- '%s\n' "$GENRE_DECIDED"
 } > "$GENRE_BUG"
 genre_deferred_above="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "a 'deferred' quote ABOVE the field does not become the genre either" \
   "REVIEW|QA" "$genre_exact|$genre_deferred_above"
+
+# #232: `deferred` is the human's decision, and the decision has to be WRITTEN in the bug's body —
+# a `## Decision` / `## Decisao` section, which agents/sdd-qa.md § 5.1 and ADR 0009 demanded and
+# nothing read. Measured on sales_quote (20261005-mascaras-ncm-e-painel): a qa-execution session
+# deferred a bug "because the fix lives in the TODO", with no decision, and the gate passed it. The
+# field alone is a label; the section is the artifact. Without it the bug counts as `agent`.
+#
+# DIFFERENTIAL on one paragraph: the same bug, the same `deferred` field, with and without the
+# section. "undecided blocks" alone is satisfied by a gate that blocks every deferred bug — the
+# over-broad fix the passing half takes red — and the third term demands the BLOCKING reason name
+# the bug as undecided, or the operator reads "an agent could close it" and nothing about why the
+# deferral did not count.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' "$GENRE_DECIDED"
+genre_decided="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->'
+genre_undecided="$(     cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+genre_why_undecided="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+assert_eq "deferred with no '## Decision' section counts as agent: it blocks, and the reason names it" \
+  "REVIEW|QA|named:1" \
+  "$genre_decided|$genre_undecided|named:$( grep -cF "with no dated '## Decision' section in the body count as agent: BUG-20260102-genre" <<< "$genre_why_undecided" )"
+# The pt-BR headings the targets write, measured on 2026-10-06: sales_quote spells it with a tilde
+# (`## Decis\303\243o`, octal bytes, 17 headings in 4 shapes: alone, `— <date>`, `(<date>, <who>)`,
+# and a qualifier before the date); lighthouse_project writes `## Decisao`. The tilde is written as
+# octal bytes: mawk reads bytes, and the match is the ASCII PREFIX `## Decis` for exactly that reason.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decis\303\243o \342\200\224 2026-08-26\n\nThe repo owner: another mission pays.')"
+genre_decided_tilde="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decisao\n\n2026-09-22, the repo owner.')"
+genre_decided_ascii="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the pt-BR decision headings count: the tilde spelling with a date, and '## Decisao', both pass" \
+  "REVIEW|REVIEW" "$genre_decided_tilde|$genre_decided_ascii"
+# A heading QUOTED inside a fence is not the decision, the same rule the genre field already obeys:
+# a bug filed about this very rule pastes the heading in its repro. `$genre_decided` is the passing
+# control, so a gate that blocked every deferred bug turns this red instead of passing it. The quoted
+# section carries a date, so the fence is the only thing refusing it: undated, a reader that stopped
+# tracking fences would still block on the missing date and the probe would prove nothing.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\nThe template reads:\n\n```md\n## Decision\n\n2026-01-02, the repo owner.\n```')"
+genre_decision_fenced="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a '## Decision' heading inside a fence is not the decision: the bug blocks" \
+  "REVIEW|QA" "$genre_decided|$genre_decision_fenced"
+# `## Decisions for a Human` is the qa-execution skill's heading for questions still OPEN
+# (~/.claude/skills/qa-execution/assets/report-template.md) — the opposite of a decision, and it
+# starts with the same eight bytes. The plural is refused by name. Dated, here and in the pt-BR pair
+# below, for the fence world's reason: the name is then the only thing refusing it.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decisions for a Human\n\n- Should the fix wait for the next mission? (asked 2026-10-06)')"
+genre_decision_pending="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a '## Decisions for a Human' heading is a pending question, not the decision: the bug blocks" \
+  "REVIEW|QA" "$genre_decided|$genre_decision_pending"
+# The same question in pt-BR (final review of 20261006-lote-5-o-que-o-lote-4-deixou): a pt-BR session
+# translates that heading, and `## Decis\303\265es pendentes` or `## Decisoes pendentes` open
+# with the same eight bytes. Without them in the refusal the plural read as decided and `deferred`
+# passed — the fail-open #232 closed, by another spelling. Octal bytes, as in the tilde world above.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decis\303\265es pendentes\n\n- Does another mission pay for it? (2026-10-06)')"
+genre_decision_pending_tilde="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decisoes pendentes\n\n- Does another mission pay for it? (2026-10-06)')"
+genre_decision_pending_ascii="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the pt-BR plural decision headings are pending questions too: with or without the tilde, the bug blocks" \
+  "REVIEW|QA|QA" "$genre_decided|$genre_decision_pending_tilde|$genre_decision_pending_ascii"
+# A decision section with no DATE is a heading, not the decision (Codex review of PR #237): agents/
+# sdd-qa.md § 5.1 and ADR 0009 demand the section carry the date and who decided, and a bare
+# `## Decision`, or one whose only text is the deferral itself, passed as decided. The date is the
+# half of that contract a reader can measure (`YYYY-MM-DD`, in the heading or under it, outside any
+# fence); who decided is not, and stays the session's duty. Measured on 2026-10-06: the 18 decision
+# sections the targets wrote (17 in sales_quote, 1 in lighthouse_project) all carry one. Three worlds
+# against the decided control — the bare heading, the undated text, and a date that lives only in a
+# LATER section: the section ends at the next level-2 heading, or any date below would vouch for it.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' "$(printf '\n## Decision')"
+genre_decision_bare="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decision\n\nThe repo owner: another mission pays.')"
+genre_decision_undated="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\n## Decision\n\nThe repo owner: another mission pays.\n\n## Evidence\n\nSeen again on 2026-10-01.')"
+genre_decision_date_below="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a decision section with no date is not the decision: bare, undated, or dated only in a later section, the bug blocks" \
+  "REVIEW|QA|QA|QA" "$genre_decided|$genre_decision_bare|$genre_decision_undated|$genre_decision_date_below"
 
 # TWO deferred bugs at once, which is the only regime that exercises the JOIN. Every probe above
 # holds exactly one, and `deferred_names="${deferred_names:+$deferred_names, }${bugname%.md}"` is
@@ -1046,10 +1177,11 @@ assert_eq "a 'deferred' quote ABOVE the field does not become the genre either" 
 # name the property — two names, one separator, nothing between them — and neither is satisfied
 # by a reason that merely contains both names somewhere.
 GENRE_BUG2="$FIX/docs/qa/bugs/BUG-20260103-genre-two.md"
-write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->'
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' "$GENRE_DECIDED"
 { printf '# BUG-20260103-genre-two: a second bug the same human decided\n'
   printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
   printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
+  printf -- '%s\n' "$GENRE_DECIDED"
 } > "$GENRE_BUG2"
 genre_why_two="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 assert_eq "two deferred bugs are counted as two and joined by ', ' — the N>1 regime" \
@@ -1364,6 +1496,85 @@ git commit -qm "chore: the mission brings that report from the base tip" >/dev/n
 assert_eq "the backfill commit touches this mission's 00-missao.md and none of its progress files" \
   "00-missao.md " "$qa_tip_backfill_floor"
 qa_refused "another mission's report whose squash also edited this mission's 00-missao.md is not the mission's"
+git reset -q --hard HEAD~1
+git branch -q -f main "$qa_tip_main"
+# (j) #225, ADR 0016 §1: another mission's commit that adds ITS report and ALSO edits THIS mission's
+#     checkpoint — the fail-open ADR 0015 §3 declared. "Touches the progress files" is a question
+#     about which paths the commit moved, and this commit moves the right one. What it cannot do is
+#     leave the checkpoint as a version the mission itself wrote: the mission's own squash leaves the
+#     blob of the branch tip it squashed, and another mission's edit leaves a blob no commit of this
+#     branch ever had. The controls are (h) above and (k) below.
+git checkout -q main
+mkdir -p "$FIX/docs/handoffs/20260102-other"
+printf 'other mission\n' > "$FIX/docs/handoffs/20260102-other/checkpoint-notas.md"
+printf '<!-- edited by another mission -->\n' >> "$MDIR/checkpoint.md"
+cat > "$FIX/docs/qa/reports/2026-01-16-fixture-intruder.md" <<'EOF'
+# QA Run Report — 2026-01-16 — another mission, whose squash also edits this mission's checkpoint
+- **Started:** 2026-01-16T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "another mission (squash) that also edits this mission's checkpoint" >/dev/null
+# FLOOR: the commit that added the report moves this mission's checkpoint, so the old question
+# ("does it touch the progress files?") answers yes and only the new one can refuse it.
+qa_tip_intruder_floor="$(git diff-tree --no-commit-id -r --name-only HEAD -- "docs/handoffs/$MISSION/" | sed "s@^docs/handoffs/$MISSION/@@" | tr '\n' ' ')"
+git checkout -q missao/qa-report-owner
+git checkout main -- docs/qa/reports/2026-01-16-fixture-intruder.md
+git commit -qm "chore: the mission brings that report from the base tip" >/dev/null
+assert_eq "the intruder commit adds its report and moves this mission's checkpoint.md" \
+  "checkpoint.md " "$qa_tip_intruder_floor"
+qa_refused "another mission's report whose squash also edited this mission's checkpoint is not the mission's"
+git reset -q --hard HEAD~1
+git branch -q -f main "$qa_tip_main"
+# (k) The control that pins WHICH of the branch's blobs count: the mission's own squash, read after
+#     the branch moved its checkpoint once more (a note written after the merge). The squash left
+#     the blob of the tip it squashed, which is no longer HEAD's — any commit of the branch counts,
+#     not only the newest. Asking HEAD alone would take from a merged mission its own report.
+printf 'own squash, then a later note\n' >> "$MDIR/checkpoint-notas.md"
+cat > "$FIX/docs/qa/reports/2026-01-17-fixture-own-later.md" <<'EOF'
+# QA Run Report — 2026-01-17 — the mission's own, squash-merged, read after a later note
+- **Started:** 2026-01-17T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "chore: the mission's own report" >/dev/null
+git checkout -q main
+git merge -q --squash missao/qa-report-owner >/dev/null
+git commit -qm "the mission (squash)" >/dev/null
+git checkout -q missao/qa-report-owner
+printf 'a note written after the squash\n' >> "$MDIR/checkpoint-notas.md"
+git add -A && git commit -qm "chore: the mission writes a note after its squash" >/dev/null
+qa_tip_own_later="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+git reset -q --hard HEAD~2
+git branch -q -f main "$qa_tip_main"
+assert_eq "the mission's own squash still counts after the branch moved its checkpoint again" \
+  "REVIEW" "$qa_tip_own_later"
+# (l) Which commits may vouch for a blob: the MISSION's (`HEAD --not <base refs>`), never HEAD's
+#     whole history. Another mission edits this checkpoint, then writes it back to the version the
+#     base had before the fork while adding its own report: that blob IS in HEAD's history (the fork
+#     point holds it) and in no commit of the mission. FLOOR: the fork point really holds the blob
+#     the intruder left, or the world measures nothing.
+git checkout -q main
+printf '<!-- edited by another mission -->\n' >> "$MDIR/checkpoint.md"
+git add -A && git commit -qm "another mission edits this mission's checkpoint" >/dev/null
+git checkout "$(git merge-base main missao/qa-report-owner)" -- "docs/handoffs/$MISSION/checkpoint.md"
+cat > "$FIX/docs/qa/reports/2026-01-18-fixture-restorer.md" <<'EOF'
+# QA Run Report — 2026-01-18 — another mission, whose squash restores this mission's checkpoint
+- **Started:** 2026-01-18T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "another mission (squash) that writes this checkpoint back to the fork's version" >/dev/null
+qa_tip_restorer_floor="$( [ "$(git rev-parse "HEAD:docs/handoffs/$MISSION/checkpoint.md")" = "$(git rev-parse "$(git merge-base HEAD missao/qa-report-owner):docs/handoffs/$MISSION/checkpoint.md")" ] && echo fork-blob )/$(git diff-tree --no-commit-id -r --name-only HEAD -- "docs/handoffs/$MISSION/" | sed "s@^docs/handoffs/$MISSION/@@" | tr '\n' ' ')"
+git checkout -q missao/qa-report-owner
+git checkout main -- docs/qa/reports/2026-01-18-fixture-restorer.md
+git commit -qm "chore: the mission brings that report from the base tip" >/dev/null
+assert_eq "the restoring commit leaves the fork point's blob of this mission's checkpoint.md" \
+  "fork-blob/checkpoint.md " "$qa_tip_restorer_floor"
+qa_refused "a checkpoint blob from before the fork does not vouch for another mission's report"
 git reset -q --hard HEAD~1
 git branch -q -f main "$qa_tip_main"
 
@@ -1743,6 +1954,7 @@ NOIF_BUG="$FIX/docs/qa/bugs/BUG-20260104-noif.md"
 { printf '# BUG-20260104-noif: decided by a human, another mission pays\n'
   printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
   printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
+  printf -- '%s\n' "$GENRE_DECIDED"
 } > "$NOIF_BUG"
 noif_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 noif_why="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
@@ -2910,6 +3122,17 @@ stamp_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; stamp_rc=$?
 stamp_s1="$(stub_sessions)"
 assert_eq "run stops at the stamp: rc 2, no session, the stop names './bin/sdd health'" "2|0|1|1" \
   "$stamp_rc|$(( stamp_s1 - stamp_s0 ))|$(grep -c 'the stamp is not headless' <<< "$stamp_out")|$(grep -c "run './bin/sdd health' once" <<< "$stamp_out")"
+# Kept for world 9b, which compares the remedy of an impossible stamp against THIS stale one.
+stale_stop_out="$stamp_out"
+# #227: forced from the CLI, the same stop writes no `- intervention:` note — the lap opens no
+# session, and a note there was an intervention `sdd autonomy --by-mission` counted in a run that did
+# nothing. Counts: rc · sessions bought · the stop · notes gained in the mission directory.
+pr_notes() { grep -Rhc '^- intervention:' "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}'; }
+stamp_n0="$(pr_notes)"; stamp_s0="$(stub_sessions)"
+stamp_out="$( cd "$FIX" && "$SDD" run --phase PR "$MISSION" 2>&1 )"; stamp_rc=$?
+stamp_s1="$(stub_sessions)"
+assert_eq "run --phase PR stops at the stamp and writes no intervention note" "2|0|1|+0" \
+  "$stamp_rc|$(( stamp_s1 - stamp_s0 ))|$(grep -c 'the stamp is not headless' <<< "$stamp_out")|+$(( $(pr_notes) - stamp_n0 ))"
 # The projection stops where the run would — the stop sits above the dry-run branch, like PLAN's.
 stamp_s0="$(stub_sessions)"
 stamp_out="$( cd "$FIX" && "$SDD" run --dry-run "$MISSION" 2>&1 )"; stamp_rc=$?
@@ -3003,6 +3226,18 @@ assert_eq "stamp-key: a root missing one of the measured paths is never stamped"
 partial_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
 assert_eq "gate_PR and sdd health both name the measured path a partial root is missing" "1|0|1" \
   "$(grep -c 'no mutation stamp is possible for this tree: config/ missing at ' <<< "$partial_why")|$(grep -c 'no green mutation catalogue' <<< "$partial_why")|$(grep -c 'nothing was stamped: config/ missing at' <<< "$partial_health")"
+# 9b. AN IMPOSSIBLE STAMP STOPS WITH ITS OWN REMEDY (#228). The stop above the session is the same
+#     rc 2, but the order it printed — every review bot, one batch, then './bin/sdd health' — sent the
+#     human to a command that refuses this tree in other words. DIFFERENTIAL against the stale world
+#     of 4b, on the marker gate_PR publishes and never on its prose: the stale stop keeps the order
+#     and does not say "fix first"; the impossible one says "fix first" and drops the order. Counts:
+#     rc · sessions bought · order · fix-first, stale world then impossible world.
+imp_s0="$(stub_sessions)"
+imp_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; imp_rc=$?
+imp_s1="$(stub_sessions)"
+assert_eq "run stops at an impossible stamp with the remedy that can work, and a stale stamp keeps the review-bot order" \
+  "stale:1:0|impossible:2|0|0|1" \
+  "stale:$(grep -c 'wait for every review bot' <<< "$stale_stop_out"):$(grep -c 'fix what the reason above names first' <<< "$stale_stop_out")|impossible:$imp_rc|$(( imp_s1 - imp_s0 ))|$(grep -c 'wait for every review bot' <<< "$imp_out")|$(grep -c 'fix what the reason above names first' <<< "$imp_out")"
 mkdir -p "$FIX/config"
 printf 'fixture config\n' > "$FIX/config/fixture.conf"
 git add -A && git commit -qm "chore: the measured path comes back" >/dev/null
@@ -5632,6 +5867,32 @@ UNREC_OUT="$( "$SDD" status "$MISSION" 2>&1 )"
 cp "$SDD_STATE_FIX/unrec-ledger.bak" "$UNREC_LEDGER"
 assert_eq "a manual row of the phase takes it off the page, and only it" "repo:1 QA:1>0 DOCS:1>1" \
   "repo:$( [ -n "$unrec_repo" ] && echo 1 || echo 0 ) QA:$(hint_of "$FULL_OUT" QA)>$(hint_of "$UNREC_OUT" QA) DOCS:$(hint_of "$FULL_OUT" DOCS)>$(hint_of "$UNREC_OUT" DOCS)"
+# #229: the ledger is per MACHINE, so a mission run on another computer has no session row here, and
+# every green phase used to be asked "done by hand?" — a human following the hint would record as
+# manual a phase a session ran. No session of the mission in this repo's ledger is "ran elsewhere",
+# and the page asks nothing. The world keeps the three rows a looser test would count: one of
+# another mission in this repo, one session of THIS mission from another checkout (identity is
+# repo + mission, the select above), and one `manual` row of this mission here — the row the hint
+# itself makes the human write, which must not re-open the question for every other phase. The
+# green count is the witness that the gates answered the same in both worlds.
+jq -c --arg repo "$unrec_repo" --arg m "$MISSION" 'select((.repo == $repo and .mission == $m) | not)' \
+  "$SDD_STATE_FIX/unrec-ledger.bak" > "$UNREC_LEDGER"
+jq -cn --arg repo "$unrec_repo" --arg m "$MISSION" \
+  '{v: 1, ts: "2026-01-01T10:00:00-03:00", event: "manual", run_id: "u2", invocation: "note-manual",
+    kit_sha: null, kit_dirty: null, kit_rev: null, kit_rev_dirty: null, project: "fixture",
+    repo: $repo, mission: "20990101-another-mission", phase: "QA"},
+   {v: 1, ts: "2026-01-01T10:00:00-03:00", event: "session", run_id: "u3", invocation: "run",
+    kit_sha: null, kit_dirty: null, kit_rev: null, kit_rev_dirty: null, project: "fixture",
+    repo: "/elsewhere/another-checkout", mission: $m, phase: "QA"},
+   {v: 1, ts: "2026-01-01T10:00:00-03:00", event: "manual", run_id: "u4", invocation: "note-manual",
+    kit_sha: null, kit_dirty: null, kit_rev: null, kit_rev_dirty: null, project: "fixture",
+    repo: $repo, mission: $m, phase: "QA"}' >> "$UNREC_LEDGER"
+ELSEWHERE_OUT="$( "$SDD" status "$MISSION" 2>&1 )"
+elsewhere_rows="$(jq -r --arg repo "$unrec_repo" --arg m "$MISSION" 'select(.repo == $repo and .mission == $m) | .event' "$UNREC_LEDGER" | sort | uniq -c | awk '{ printf "%s%s:%s", (NR > 1 ? "," : ""), $2, $1 }')"
+cp "$SDD_STATE_FIX/unrec-ledger.bak" "$UNREC_LEDGER"
+assert_eq "a mission with no session in this machine's ledger ran elsewhere, and the page asks nothing" \
+  "rows:manual:1 hints:2>0 green:$(grep -c '✓' <<< "$FULL_OUT")" \
+  "rows:$elsewhere_rows hints:$(grep -c 'sdd note-manual' <<< "$FULL_OUT")>$(grep -c 'sdd note-manual' <<< "$ELSEWHERE_OUT" || true) green:$(grep -c '✓' <<< "$ELSEWHERE_OUT")"
 
 # ---------------------------------------------------------------------------
 # HAT_WRITES_EXTRA — the project's exception to the hat's writes:, and its guard.

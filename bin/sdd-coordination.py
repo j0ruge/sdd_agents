@@ -306,8 +306,73 @@ def signal_family(number, delivered=None, relay=None):
             os.close(descriptor)
 
 
-def wait_family(child, signals, deadline=None, grace=2, relay=None):
+# How long the family may outlive the worker before the supervisor names it (#234). A worker that
+# exits leaves processes in the middle of exiting too; naming those would be noise on every run.
+STRAGGLER_GRACE = 1
+
+
+def descendants():
+    """(pid, executable) of every live descendant, read from /proc. It only READS: it selects no
+    recipient and decides nothing about the lock, which only ECHILD releases."""
+    found, pending = [], [os.getpid()]
+    while pending:
+        parent = pending.pop()
+        try:
+            tasks = list(Path('/proc/%d/task' % parent).iterdir())
+        except OSError:
+            continue
+        for task in tasks:
+            try:
+                children = (task / 'children').read_text().split()
+            except OSError:
+                continue
+            for pid in children:
+                identity = process(pid)
+                if identity is None or identity['parent'] != parent:
+                    continue
+                # The executable alone, never its arguments (CodeRabbit review of PR #237): a command
+                # left in the background may carry a credential on its command line, and this report
+                # lands on stderr, which a log or a captured run keeps. The pid beside it is enough
+                # for `ps -o args= -p <pid>`, on the operator's own terminal. The KERNEL's name and
+                # not argv[0] (5th Codex review): argv[0] is an argument the caller chooses
+                # (`exec -a "$TOKEN" sleep`), while `comm` is set from the file exec'd. DECLARED: a
+                # process can rename itself (PR_SET_NAME), 15 bytes at most — its own choice.
+                try:
+                    command = Path('/proc/%s/comm' % pid).read_text(errors='replace').strip()
+                except OSError:
+                    command = ''
+                found.append((identity['pid'], command or '?'))
+                pending.append(identity['pid'])
+    return found
+
+
+def name_stragglers(command):
+    """Said ONCE, on stderr: the worker is done and the call is still held by what it left behind."""
+    family = descendants()
+    if not family:
+        return
+    one = len(family) == 1
+    # Best effort (CodeRabbit review of PR #237): with stderr closed, the BrokenPipeError left
+    # wait_family, the supervisor exited before ECHILD, and the checkout lock went with it while the
+    # family still ran. A report nobody can read is dropped; the wait it describes goes on.
+    try:
+        print('sdd %s: done, but %d %s it left running %s the checkout; this command waits for %s, '
+              'and the checkout stays held, until %s (`ps -o args= -p <pid>` shows the arguments):'
+              % (command, len(family), 'process' if one else 'processes', 'holds' if one else 'hold',
+                 'it' if one else 'them', 'it exits' if one else 'they exit'), file=sys.stderr, flush=True)
+        for pid, line in family:
+            print('  pid %d: %s' % (pid, line), file=sys.stderr, flush=True)
+    except OSError:
+        pass
+
+
+def wait_family(child, signals, deadline=None, grace=2, relay=None, announce=None):
     worker_status = 1
+    # `announce` names the command when the family outlives a worker that exited on its own (#234):
+    # the supervisor waits for ECHILD by design, and a server a phase left in the background held
+    # `sdd run` alive and MUTE after its verdict. Only the supervisor passes it — the hook's family
+    # is bounded by its deadline, so nothing waits on it for long enough to need a name.
+    named_at = None
     # Whether the worker had already exited, on its own, before any signal was recorded. Then a
     # signal that arrives while only stragglers are being reaped does not rewrite its status: a
     # late Ctrl-C used to turn a successful `sdd run` into 128+n. A timeout is not a signal the
@@ -342,6 +407,8 @@ def wait_family(child, signals, deadline=None, grace=2, relay=None):
             if waited:
                 if waited == child:
                     worker_done_first = not signals['number']
+                    if announce and worker_done_first:
+                        named_at = time.monotonic() + STRAGGLER_GRACE
                     worker_status = os.waitstatus_to_exitcode(status)
                     if worker_status < 0:
                         worker_status = 128 - worker_status
@@ -355,6 +422,9 @@ def wait_family(child, signals, deadline=None, grace=2, relay=None):
             if signals['number']:
                 sent = signal.SIGKILL if time.monotonic() - signals['time'] >= grace else signals['number']
                 signal_family(sent, delivered, relay)
+            elif named_at is not None and time.monotonic() >= named_at:
+                named_at = None
+                name_stragglers(announce)
             if worker_fd is not None:
                 worker_poll.poll(10)
             else:
@@ -438,7 +508,7 @@ def supervise(root, lock, meta_path, args, caller, boot):
             pass
     finally:
         os.close(writer)
-    result = wait_family(child, signals)
+    result = wait_family(child, signals, announce=value['command'])
     # The kernel, not a process-tree snapshot or timer, established the absence of descendants.
     if metadata(meta_path).get('execution_id') == value['execution_id']:
         meta_path.unlink(missing_ok=True)

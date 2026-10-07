@@ -7,6 +7,8 @@
   designates),
   0013 (a QA report on the tip of the base belongs to the mission only if it arrived with the
   mission's directory)
+- **Amended by**: 0016 (§3: the checkpoint left by the base commit that added the report must be a
+  blob the mission's branch already had)
 
 ## Context
 

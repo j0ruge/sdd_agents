@@ -26,7 +26,11 @@ acrescenta restrição só para REVIEW e QA.
 **Dívida declarada.** "O revisor não toca código" e "o publisher não mergeia" são frases; o
 runner avisava (`REVIEW-EDITED-CODE`); desde `20260903-a-fronteira-do-chapeu` ele **para** (`hat-crossed`). A regra "nunca encerre o turno com trabalho em
 background" vivia só no `sdd-reviewer.md` e custou duas sessões do publisher em 2026-09-02 —
-fechada movendo-a para `boot_prompt()` (L3 da auditoria).
+fechada movendo-a para `boot_prompt()` (L3 da auditoria). Desde #234 o `turn_rule` diz também, a
+toda fase, que o processo posto em background (`nohup … &`) entra na família do pipeline — o `sdd
+run` não termina e o checkout segue preso até ele morrer — e que a sessão nunca para nem reinicia
+processo que não começou (o app sob teste é do humano): medido no `sales_quote`, uma sessão de QA
+matou o backend do humano e o relançou com `nohup`, e o `sdd run` ficou vivo até o servidor morrer.
 
 ## 2. Ferramentas — capacidades, não todas as possíveis
 
@@ -112,7 +116,9 @@ carrega ("does not parse" ou "does not evaluate", o mesmo rc 2);
 `test_cmd_lists_only` é o predicado único do `--list` (health 2b e preflight); e o ramo vermelho
 do `TEST_CMD` no preflight chama `_fail`, e só emite `warn` no lugar dele quando o runner **diz**
 que falta o manifesto na raiz (`test_cmd_missing_manifest`). A âncora do `TODO.md` também virou
-sensor (ADR 0011).
+sensor (ADR 0011). Desde #232 a Âncora 3 do `gate_QA` lê a decisão **escrita** do bug `deferred`
+(`bug_decision_recorded`: `## Decis…` fora de cerca e com data na seção, os plurais `## Decisions`/`## Decisões`/`## Decisoes` recusados): sem ela o
+bug conta como `agent`, barra e é nomeado no motivo — o campo sozinho era rótulo.
 Desde `20261004-lote-4-a-catraca-zera` o `tests/check-checkpoint.sh --red <checkpoint>` roda o Check
 de cada linha `pending` a partir da raiz do repo e recusa o que já nasce verde, o mudo e o que
 foge da forma `` `comando` → `esperado` ``. Ele **executa** texto escrito por modelo, então é
@@ -125,7 +131,10 @@ sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE
 de `REVIEW_PROSE_CRITERIA` (prosa) e exige A em todo o resto, nome desconhecido incluído. As
 Âncoras 1 e 2 do `gate_QA` satisfeitas por relatório de **outra** missão: fechada em
 `20260928-os-achados-da-janela` (ADR 0013) — o relatório é o que a branch da missão adicionou
-(`mission_qa_report`), com recuo para a resposta de antes quando o range é vazio.
+(`mission_qa_report`), com recuo para a resposta de antes quando o range é vazio. O relatório que
+outra missão pôs na ponta da base só conta com o checkpoint desta missão movido pelo commit que o
+adicionou (ADR 0015 §3) e deixado num blob que a própria missão escreveu (ADR 0016 §1, #225).
+Resíduo: outra missão que reescreve o checkpoint byte a byte igual a uma versão da branch passa.
 
 ## 5. Memória — o que persiste entre sessões
 
@@ -142,7 +151,11 @@ próprio kit, o segundo nomeia uma versão que o processo nunca rodou (22 de 35 
 Na mesma missão a fase feita à mão ganhou rota (#153): a página completa do `sdd status`
 (`status_unrecorded`) lista as fases de gate verde sem linha `session` nem `manual` desta missão no
 ledger **desta máquina**, cada uma com o `sdd note-manual` que a grava — pergunta, não acusação, e
-fora do `--no-gates`, que não sabe qual fase está feita.
+fora do `--no-gates`, que não sabe qual fase está feita. Desde #229 ela cala quando o ledger desta
+máquina não tem **nenhuma linha `session`** da missão: é a forma de uma missão rodada em outro
+computador, e a pergunta fazia o humano gravar como manual o que uma sessão rodou. Presença é
+`session`, nunca "qualquer linha" — a `manual` que a dica manda gravar reabriria a pergunta para
+toda outra fase. Limite declarado: missão feita inteira à mão nesta máquina também cala.
 O `docs/adr/` deixou de ser memória **sem rota**: `sdd adr new` aloca o número com O_EXCL e escreve
 os dois lados do vínculo; `sdd adr check` lê de volta, em dois escopos. A rota do ADR é o
 `sdd-planner` com o humano, e o gate de PLAN é quem cobra. Desde `20261004-lote-4-a-catraca-zera`
@@ -170,9 +183,18 @@ PR no `gh`).
 **Onde mora hoje.** `ensure_mission_branch`, com hashes crus `--no-filters` (sem normalização
 de EOL ou clean filters) e igualdade byte a byte de `00-missao.md` e
 `01-plano.md` antes e depois do checkout (progresso fica fora); `kit_guard_arm`/`kit_guard_check` em quatro portas
-(`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada); `hat_guard_check` nos três sítios onde
+(`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada; desde #233 a amostra compara também a
+árvore suja do kit como o git guarda cada entrada (conteúdo, bit de execução, alvo do symlink) e a
+entrada do índice de cada caminho sujo (modo e blob) — `kit_guard_tree`, com `GIT_OPTIONAL_LOCKS=0`; o
+HEAD está no carimbo, então a guarda lê os três lugares onde o git guarda um caminho —, e o
+motivo diz o que mudou: commits e caminhos); `hat_guard_check` nos três sítios onde
 o `review_scope_check` só avisava, lendo commits **e** árvore contra `writes:`; o catálogo de
-mutação sabota **uma cópia** em `mktemp -d`; o env do harness é apagado por `run_phase()` antes do
+mutação sabota **uma cópia** em `mktemp -d`. Desde #226 a suíte, o catálogo e todo
+`tests/check-*.sh` carregam `tests/isolate-git.sh` — uma definição, lista de
+`git rev-parse --local-env-vars` — antes do primeiro `git`; medido, sensor sozinho sob `GIT_DIR` de
+uma isca: 12 de 16 a moviam em `89df2e5` (o `check-autonomy` trocava o `.git` inteiro por um gitfile
+para um temporário apagado), 0 de 16 depois. O censo mora no `check-health.sh`
+(`surface: every sensor sources …`). O env do harness é apagado por `run_phase()` antes do
 `claude -p` (L5 da auditoria). Desde o PR #166 isso inclui o effort herdado: `CLAUDE_CODE_EFFORT_LEVEL`
 e `CLAUDE_EFFORT` estão no `HARNESS_ENV_UNSET` e no `env -u` do `sdd close`, porque a primeira passa
 por cima das settings; o nível da fase é do kit (`EFFORT_<FASE>` → `--effort`, vazio = settings) e
@@ -214,9 +236,21 @@ chapéu que escreve fora de `writes:` também (`hat-crossed`) — as duas pela m
 que explique o movimento, o diff do intervalo de antes; a atribuição nunca alarga o diff líquido da
 fase. Limites: um git que gravasse mensagem própria no lugar do rótulo trocaria o `kind`, nunca a
 parada (nenhum comando medido no git 2.43 faz isso; o `rebase` grava `<rótulo> (pick): …`); sujeira **não commitada** de um escritor
-concorrente continua atribuída ao chapéu; a guarda de kit não lê o rótulo. Sem worktree nem container: o ledger
-carimba caminho e um worktree já confundiu a identidade do repo (comentários `WORKTREE` do
-`bin/sdd`). Fechar pede desenho próprio, não um `git worktree add` no laço.
+concorrente continua atribuída ao chapéu; a guarda de kit não lê o rótulo. Sem container, e sem worktree
+**no laço**: o `sdd run` roda no checkout do humano, e isolar a fase num `git worktree add` dentro do
+`cmd_run` pede desenho próprio (Y2 do `CONTEXT.md`). A identidade do repo deixou de ser o obstáculo —
+o ledger lê o `.git` comum desde `c514e36`, e worktree do mesmo repo é o mesmo repo. A exceção é a
+**missão do próprio kit**, desde o lote 5 (#235, ADR 0016 §2): o `sdd` do PATH é o checkout
+principal do kit, e o `kit_guard_check` de todo `sdd run` de alvo compara o `HEAD` e o
+`status --porcelain` dele, então um `00-missao.md` não rastreado gravado ali durante o EXEC de um
+alvo para aquela corrida com `KIT-TOUCHED`. Por isso o `/sdd-plan` (passo 2 de *Before anything
+else*) escreve a missão do kit num worktree ligado, e a sessão **interativa** a executa lá — nunca
+um `sdd run` a partir do checkout principal; dentro dele `health`, `preflight` e `install` rodam
+por `./bin/sdd`. Medido: worktree sujo e com commit deixa o carimbo do principal em
+`89df2e5|false`; o mesmo arquivo no principal, `|true`. É posse do checkout, não isolamento de
+filesystem. ⚠️ Dentro de um worktree ligado, `git bisect run`, `git rebase --exec`, os hooks
+`pre-commit`/`pre-push` e um alias `!` exportam `GIT_DIR` absoluto; a suíte, o catálogo e cada
+sensor o limpam desde #226 (`tests/isolate-git.sh`).
 ⚠️ **Medido em 2026-09-03 18:45, vinte minutos depois de o L4 pousar:** uma segunda sessão
 interativa do Claude Code, aberta em outro repo, rodou `sdd run --phase REVIEW --budget-override`
 sobre a missão já mergeada do próprio kit — trocou a branch da árvore de trabalho **debaixo de um
@@ -246,21 +280,26 @@ O helper sobe com `python3 -I -S` (`COORDINATION_PYTHON`, uma definição para o
 o `PYTHONPATH` de quem chama não troca os módulos do processo que decide a posse. As mesmas flags
 servem à sonda do remédio do `CHECKOUT-UNAVAILABLE`: `/usr/bin/python3` (ou `SDD_SYSTEM_PYTHON`) só
 é oferecido depois de passar no próprio `capable` do helper, nunca por ser executável. O supervisor
-acorda pelo pidfd do worker, não pelo tique de 10 ms. O custo que sobra, ~30 ms do 2º Python do
+acorda pelo pidfd do worker, não pelo tique de 10 ms. Desde #234 ele diz por quem espera: quando o
+worker sai sozinho e sobra descendente vivo, imprime uma vez, 1 s depois, o pid e o executável de cada
+um — o `comm` do kernel, nunca os argumentos nem o `argv[0]`, que quem chama escolhe e podem levar
+credencial (`name_stragglers`, só leitura de `/proc`; quem libera o lock continua sendo o `ECHILD`). O hook
+não nomeia: o prazo de 5 + 1 s já limita a família dele. O custo que sobra, ~30 ms do 2º Python do
 worker em toda chamada coordenada, é limite declarado: não chega ao humano, e o conserto (provar o worker
 por FD herdado, com ADR) mora na gaveta, F1 P1.
 
 **Limite da posse.** Coordena entradas do kit, não edição externa nem daemon preexistente.
 Matar o supervisor, adulterar arquivos/namespace do lock ou intervenção privilegiada derrota
-essa coordenação. Descendente de longa duração conserva o lock até terminar; timeout não
-libera outro escritor. Não é isolamento de filesystem nem mudança do estado derivado da missão.
+essa coordenação. Descendente de longa duração conserva o lock até terminar — desde #234 nomeado no
+stderr do supervisor, não mais em silêncio —; timeout não libera outro escritor. Não é isolamento de filesystem nem mudança do estado derivado da missão.
 
 ## 7. Hooks — pontos de intervenção humana
 
 **Regra.** Toda decisão de **abrir mais uma volta ou gastar mais** tem uma porta humana com
 artefato: teto por missão, aviso no bloqueio, e a linha `- intervention:` escrita **pelo runner**
-quando é ele quem recebe o comando pela CLI (`--phase`, `retry`, `--budget-override`) — dizendo o
-que ele sabe, nunca quem estava na CLI. O humano que precisa vigiar um `tail -F` para saber que a
+quando é ele quem recebe o comando pela CLI (`--phase`, `retry`, `--budget-override`), e **só onde
+a porta compra a sessão** (#227, decisão 11a do lote 5) — dizendo o que ele sabe, nunca quem estava
+na CLI. O humano que precisa vigiar um `tail -F` para saber que a
 linha parou não tem hook — tem vigília.
 
 **Admissão não é escalada.** `CHECKOUT-BUSY`/75 não abre sessão, não altera checkpoint,
@@ -272,7 +311,9 @@ não pode sobreviver indefinidamente. A semântica geral de órfãos da execuç�
 **Onde mora hoje.** `aprovacao:` + `sdd approve` (gate PLAN); rc 2 sem sessão, que é passo humano
 desenhado e não escalada (sem linha de ledger, sem hook): o PLAN e, desde
 `20261004-lote-4-a-catraca-zera`, o carimbo de mutação quando o PR está aberto e só ele falta
-(`GATE_PR_STAMP_WHY`, ADR 0015 §1) — o `sdd run` nomeia a ordem e o `./bin/sdd health`; rc 3 em
+(`GATE_PR_STAMP_WHY`, ADR 0015 §1) — o `sdd run` nomeia a ordem e o `./bin/sdd health`, e desde
+#228 o carimbo **impossível** (`GATE_PR_STAMP_IMPOSSIBLE`) troca a ordem por "conserte o que o
+motivo nomeia primeiro"; rc 3 em
 `handoff_blocked_escalation`, `app_down_escalation`, `increment-blocked`, `dirty-tree`,
 `no-progress`, `budget-exhausted`, e desde `20260922-o-motivo-da-fase` `no_work_escalation`
 (`kind: "no-work"`) — a única que para a linha **antes** da sessão, quando a célula do checkpoint
@@ -282,10 +323,16 @@ fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
 `ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos
 mais um de encerramento forçado, e a linha `- intervention:` escrita pelo
-runner (L2, L6 e L4). Desde `20261004-lote-4-a-catraca-zera` (#153) a fase feita **à mão** também
+runner (L2, L6 e L4) — desde o lote 5 logo acima do `before=` da porta que abre a sessão: a do
+`--phase` consumida na 1ª volta (`cli_lap`), a do `retry` abaixo do teto, e a do `--budget-override`
+publicada pelo `mission_budget_blown` (`BUDGET_OVERRIDE_NOTE`) e escrita por
+`budget_override_note_write`; volta parada sem sessão não grava nota. Desde `20261004-lote-4-a-catraca-zera` (#153) a fase feita **à mão** também
 tem porta: `sdd note-manual <missão> <FASE>` escreve a `- intervention:` pelo mesmo escritor e a
 linha `event:"manual"` do ledger, que não gradua nada — antes dela, o PR publicado à mão de
-`20260916-destino-frete-cif` não deixou linha nenhuma, e 0 de 4 missões escreveram a nota.
+`20260916-destino-frete-cif` não deixou linha nenhuma, e 0 de 4 missões escreveram a nota. Desde
+#230 o `ok` dele diz o que o escritor **fez**, lido do `CHECKPOINT_NOTE` que o
+`checkpoint_note_intervention` publica (`committed`, `uncommitted`, `failed`, `none`), e a linha
+`manual` é gravada em todo caso — antes, o `ok` afirmava a nota mesmo quando ela não existia.
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
 anterior desta seção dizia que não existia, e estava errada (foi o comando do incidente das 18:45).

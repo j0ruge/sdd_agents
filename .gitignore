@@ -5,6 +5,18 @@
 .sdd/cache/
 *.log
 
+# Arquivos temporários de editor — não são conteúdo do kit. A guarda do kit (kit_guard_check) lê
+# este checkout pelo `git status`, e o vim reescreve o swap a cada poucos segundos de DIGITAÇÃO, sem
+# salvar nada: sem estas linhas, quem tem um arquivo do kit aberto parava o `sdd run` de um alvo
+# (regime 2c do tests/check-autonomy.sh, que é o sensor destas linhas).
+.*.sw[a-p]
+*~
+.#*
+\#*#
+# NÃO o `4913`, a sonda de escrita do vim (6ª revisão do Codex no PR #237): o padrão sem barra escondia
+# da guarda todo caminho do kit com esse nome, em qualquer profundidade, e não comprava nada — o vim
+# cria e apaga o arquivo no mesmo instante, e o salvamento que ele precede já é mudança no kit.
+
 # Configuração local de máquina
 .claude/settings.local.json
 # O napkin é runbook LOCAL, por máquina — não contrato do repo. Versionado, ele citava números da

@@ -4,6 +4,96 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-06 — Lote 5: o que o lote 4 deixou
+
+**Problema (Gemba):** o lote 4 fechou com 11 achados no `TODO.md`, e o planejamento do lote 5 achou
+mais dois (#235, e o `sdd kaizen` no checkout principal, que ficou para desenho próprio). Seis
+protótipos, cada um num clone de `89df2e5`, reproduziram os 12 com o probe escrito e a linha `FAIL`
+vista antes do conserto. Seis sensores falhavam abertos — a linha curta da tabela sumia dos dois
+leitores, `deferred` passava sem a decisão escrita, o relatório de outra missão contava quando ela
+editava este checkpoint, a guarda do kit não via kit já sujo editado de novo, o `red_norm` expandia
+array vazio sem guarda, e a suíte herdava o `GIT_DIR` de quem a chamava (o incidente de 2026-10-05,
+reparado à mão). A nota `intervention:` era contada numa corrida que não abriu sessão, e a missão do
+kit era escrita no checkout que os `sdd run` dos alvos executam.
+
+**Medição** (antes: `89df2e5`; depois: topo da branch, comandos rodados em 2026-10-06):
+
+| Fato | Antes | Depois |
+|---|---|---|
+| Catraca `todo-findings` | 11 na `main` (13 com os dois do planejamento) | 16 na branch, 12 com `RESOLVED by`, N = 3 nascidos (#238, o minor 2 da revisão final; #239 e #240, P2 do Codex) → 4 depois do chore |
+| Sensores sozinhos que movem uma isca sob `GIT_DIR` | 12 de 16 (o `check-autonomy` trocava o `.git` por um gitfile para um temporário apagado) | 0 de 16, todos rc 0; a suíte inteira sob o veneno, `suite green` e isca intacta (461 s) |
+| `check-hat.sh` sozinho sob o `GIT_DIR` de um worktree ligado | gravava `user.email` na isca e saía 0 | isca intacta, rc 0 |
+| `--red` sobre Check mudo, docker `bash:4.3` | `grep -c "unbound variable"` → 1 | 0 |
+| Linha `\| I2 \| slice \| pending \|` no checkpoint, com ou sem o `\|` inicial | some; `gate_EXEC` passa a QA | `increment I2 has no Status`; `--check`/`--red` rc 1 |
+| Bug `deferred` sem `## Decis…` | passa a QA | barra e é nomeado no motivo |
+| Relatório de outra missão que editou este checkpoint (mundo j) | `REVIEW\|0` | `QA\|1` |
+| Kit já sujo editado de novo durante a fase de um alvo | rc 0, 0 linhas | `kit-touched`, com o caminho nomeado; também só o bit, só o alvo do symlink, só o blob ou o modo do índice |
+| Nota `intervention:` sem sessão (`--phase PLAN`, `--phase PR` no carimbo, retry no teto, override em volta parada) | gravada e commitada | nenhuma; a da override carrega a fase da sessão comprada |
+| Catálogo de mutação | 619 | **676** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 676 mutants still apply`; 7 re-ancorados |
+| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 359 s, 1904 linhas `ok`, 0 FAIL, em `a63896f`, depois da 7ª rodada dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada: 350–570 s nas rodadas 4–6) |
+
+**Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
+`~/repos/sdd_agents-lote-5` (ADR 0016 §2): nada escrito no checkout principal enquanto alvos rodavam.
+Cada incremento seguiu o mesmo roteiro. Primeiro o Check do plano, rodado antes do conserto e
+anotado (0 em todos). Depois o probe aplicado sozinho, com o `FAIL` visto pelo motivo que o plano
+mediu, e só então o conserto. Cada mutante novo e os vizinhos que o plano nomeia foram provados por
+`--only`: 129 re-provas, todas pegas. Sabotagem nos sensores que o catálogo não alcança: 8/8 no I1,
+8/8 no I2, 2/2 no I3 e 10/10 no I10. Re-âncora do `TODO.md` em todo commit. Os protótipos entraram
+hunk a hunk; onde divergiram do plano, o plano mandou e a nota do checkpoint registra o desvio.
+
+**O que travou e como se resolveu:**
+- duas premissas mudaram com a medição antes do plano: a #223 não aborta o sensor (é ruído no
+  stderr e risco latente), e a #226 não se conserta só no `run-all.sh`;
+- a #229 ganhou desvio medido da direção do item: calar só sem linha `session`;
+- três protótipos não traziam o que o plano pedia: o `GIT_OPTIONAL_LOCKS=0` do I6 (medido: sem ele o
+  `git status` reescreve o índice do kit), a frase do `./bin/sdd` do I10 e a numeração 11a do I7;
+- cinco `--only` do I6 deram `HARNESS-BROKEN` porque o nome do mutante no `TMPDIR` empurra a frase
+  além do corte de 200 do ledger, um limite já declarado. Com `TMPDIR` curto, todos foram pegos.
+
+**Revisão final da branch:** um revisor de contexto novo achou 1 Important e 7 Minor. Consertados
+numa leva, com vermelho medido: o swap do vim parava o `sdd run` de um alvo num kit já sujo, sem nada
+salvo (`3b1c4dc`: temporários de editor no `.gitignore` do kit, regime 2c, verbete `kit-touched` no
+`failure-modes.md`); o plural pt-BR `## Decisões`, reclassificado de Minor para Important pelo efeito
+(`875538b`); e o README da dica do `sdd status` (`0d6c165`). Um minor foi recusado com prova (a
+admissão já exige `CONFIG_PROC_CHILDREN`); quatro foram ao humano, que decidiu na rodada dos bots.
+
+**Rodada dos bots (PR #237):** o Codex achou 1 P1 e o CodeRabbit, 2 Major e 3 Minor; o Copilot não
+tinha cota. A decisão do `deferred` valia só pelo título, e agora precisa de uma data na seção — as 18
+seções reais dos alvos têm, nenhum veredito muda (`06e0235`). O aviso do supervisor copiava a
+`cmdline`, com credencial possível no stderr, e um stderr fechado o matava antes do `ECHILD`, soltando
+a trava (`592a74f`). Os minors do humano: o `(no longer dirty)` inteiro e na ordem do git
+(`f2ef238`), a prosa do cabeçalho (`d7ddf46`) e a #238. A própria leva achou que a sandbox do
+catálogo não levava o `.gitignore` que o regime 2c lê: todo `--only` contra o `check-autonomy.sh`
+dava `HARNESS-BROKEN`, e o `sdd health` teria parado antes do primeiro mutante (`8c8be78`). A 2ª
+rodada do Codex achou mais um caminho da #233: num caminho já sujo, só o bit de execução trocado
+deixava a guarda calada; o bit entrou na árvore do kit (`6a93d14`). A 3ª achou o symlink
+reapontado para um arquivo idêntico, e o digest virou a identidade que o git dá à entrada — tipo,
+modo e conteúdo (`a55b53c`). A 4ª mostrou que o remendo por dimensão não tinha parado: num caminho
+`MM`, a entrada do índice trocada passava calada. A guarda passou a ler os lugares, não as
+dimensões — o HEAD no carimbo, o índice e a árvore (`b3a9e12`) —, e o catálogo pegou um regime que
+media o blob quando dizia medir o modo (`update-index --chmod` relê o arquivo). O outro P2 da 4ª
+virou a #239. A retro consertou uma corrida no probe de SIGINT do `check-coordination.sh` que daria
+mutante pego por acaso (`ef19862`). A 5ª achou dois furos de canal, não de dimensão: um nome com
+`-` na frente virava opção do `md5sum` e cegava o lote inteiro (`2282442`), e o aviso do supervisor
+imprimia o `argv[0]`, que quem chama escolhe (`2dbc8b5`, agora o `comm` do kernel). A 6ª, mais um
+canal: o registro escapado do md5sum para nomes com `\`, que era limite declarado e falha aberta
+(`93fac25`); e a linha `4913` do `.gitignore`, que escondia esse nome da guarda e não comprava nada
+(`d8e5bee`). A 7ª achou um P1 numa decisão do próprio plano: a linha curta sem `|` inicial, recusada
+no K3 para proteger prosa colada à tabela, carregava um pendente para além do gate_EXEC; o humano
+inverteu a decisão, pelo princípio de ler como o GFM renderiza (`b0c34f8`). O P2 da 7ª (o limite do
+ambiente com milhares de caminhos sujos) virou a #240.
+
+**Carimbo:** `./bin/sdd health` depois da rodada 8 do Codex (limpa), 2026-10-07 12:27 → 13:31, ~64 min
+com carga ~18: `score: 676 caught, 0 known gap(s), of 676`, `kit healthy`. Oito rodadas do Codex no
+PR: depois da 1ª, 1 P1 e 9 P2 — dois registrados como achado (#239, #240), os outros consertados com
+regime e mutante; a 8ª, limpa.
+
+**Ainda não medido:** o uso
+real — a primeira parada `kit-touched` com o "what changed", o primeiro supervisor nomeando um
+processo, a primeira missão do kit aberta pelo passo 2 do `/sdd-plan`.
+
+---
+
 ## 2026-10-05 — Lote 4: a catraca zera
 
 **Problema (Gemba):** o `TODO.md` do kit fechou o lote 3 com **23 achados abertos** (`todo-findings 23`

@@ -26,6 +26,10 @@
 #                                             map or no such revision)
 
 set -uo pipefail
+# The suite clearing it does not reach this file when a human calls it: `--only` and `--touched` run a
+# sensor in the sandbox directly, never through run-all.sh, and the selftests below tag a fixture repo
+# in every mode — the `base` and `hat` tags of the 2026-10-05 incident (tests/isolate-git.sh).
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 # Double guard against recursion: run-all.sh already does not call this script when SDD_MUTANT is
 # set. If we got here with it set, the guard over there fell — dying loudly beats fork-bombing the
@@ -521,6 +525,31 @@ mut_EXEC_pipeless_reads_past_the_table() {
   sed -i '/^checkpoint_rows()/,/^}/ s@/\^\[ \\t\]\*\$/ { tbl = 0 }@/^[ \\t]*$/ { }@' "$1"
 }
 
+# Issue #224: a `|`-led row with fewer than five cells is dropped again, and the pending increment it
+# carries vanishes from checkpoint_tally — gate_EXEC passes over it to QA. Caught by `a pending row
+# with fewer than five cells keeps the phase in EXEC` in check-gates.sh.
+mut_EXEC_short_row_skipped() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@if (n < 6) { if (!wide) next; @if (n < 6) { next; @' "$1"
+}
+# The other direction: every block counts as the checkpoint table, so a narrow table elsewhere in
+# the file is padded into increments with no Status and gate_EXEC refuses a finished checkpoint.
+# Caught by the control beside it, `a narrow table below the checkpoint's is no increment`.
+mut_EXEC_short_row_reads_narrow_table() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@if (first) wide = (n >= 6)@if (first) wide = 1@' "$1"
+}
+# A short row with no leading pipe is skipped again (7th Codex review of PR #237), and the pending
+# increment it carries goes past gate_EXEC to QA. Caught by `a pending row with no leading pipe and
+# fewer than five cells keeps the phase in EXEC` in check-gates.sh — and by the glued-prose half of
+# its differential, which the human ruled a row as GFM renders it.
+mut_EXEC_short_bare_row_skipped() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@if (n < 6) { if (!wide) next; @if (n < 6) { if (!wide || bare) next; @' "$1"
+}
+# The padded row is refused, but as `invalid status ''` — a status nobody wrote — instead of by the
+# missing cell. Caught by `the row with fewer than five cells is refused by name`.
+mut_GATE_EXEC_empty_status_unnamed() {
+  sed -i "/^gate_EXEC() {/,/^}/ s@^      '') GATE_EXEC_CELL=1\$@      __never__) GATE_EXEC_CELL=1@" "$1"
+}
+
 # The reviewer's increments vanish from the checkpoint: checkpoint_rows skips every `R<n>` row, so a
 # round that found something hands nothing to EXEC and the B review keeps the ball in REVIEW — the
 # REVIEW⇄EXEC loop of `20260901-o-revisor-so-acha` silently cut. Issue #111 measured that only two
@@ -865,6 +894,26 @@ mut_QA_report_tip_any_file_of_mission() {
 mut_QA_report_tip_refused_outright() {
   sed -i '/^tip_add_carries_mission() {/,/^}/ s@^    add=""$@    return 1@' "$1"
 }
+# #225, ADR 0016 §1: every progress file the adding commit moved must be left as a blob one of the
+# MISSION's commits wrote. UNCHECKED drops the comparison: another mission's commit that also edits
+# this checkpoint passes for this mission's own again — the fail-open ADR 0015 §3 declared. Dies on
+# `another mission's report whose squash also edited this mission's checkpoint is not the mission's`.
+mut_QA_report_tip_blob_unchecked() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s@\[ -n "\${mine\["\$blob \$p"\]+x}" \] || return 1@:@' "$1"
+}
+# NEWEST_ONLY: only the newest commit of the mission that moved the checkpoint vouches — HEAD's
+# blob, in effect. A note written after the squash then takes from a merged mission its own
+# report. Dies on `the mission's own squash still counts after the branch moved its checkpoint again`.
+mut_QA_report_tip_blob_newest_only() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s|rev-list HEAD --not "\$@" --|rev-list -n 1 HEAD --not "$@" --|' "$1"
+}
+# `|` and not `@` as the delimiter in these two: the text being matched carries `"$@"`.
+# WHOLE_HISTORY: every commit of HEAD vouches, the base's before the fork included, so another
+# mission that writes this checkpoint back to the fork's version passes. Dies on `a checkpoint blob
+# from before the fork does not vouch for another mission's report`.
+mut_QA_report_tip_blob_whole_history() {
+  sed -i '/^tip_add_carries_mission() {/,/^}/ s|rev-list HEAD --not "\$@" --|rev-list HEAD --|' "$1"
+}
 
 # Anchor 3 goes back to counting EVERY open bug, whatever its genre. That is the state the kit was
 # in until 20260826-o-laco-da-qa: a bug whose fix is a product decision blocked the QA phase, and
@@ -968,6 +1017,56 @@ mut_QA_bug_genre_deferred_unseen_no_interface() {
 # genre block — the N>1 regime is the only one that can see it, and it exists for this.
 mut_QA_bug_genre_deferred_join() {
   sed -i 's|{deferred_names:+$deferred_names, }|{deferred_names:+$deferred_names }|' "$1"
+}
+
+# #232: `deferred` counts only with the human's decision written in the bug's body — a `## Decis…`
+# section outside any fence, dated (bug_decision_recorded). Eight mutants, because the rule fails
+# open in seven independent ways and closed in one. UNDECIDED drops the check: the label alone passes again,
+# the state the sales_quote finding measured. Dies on `deferred with no '## Decision' section counts
+# as agent` in check-gates.sh.
+mut_QA_bug_deferred_undecided() {
+  sed -i '/^gate_QA() {/,/^}/ s|^      if ! bug_decision_recorded "\$bugfile"; then$|      if false; then|' "$1"
+}
+# UNNAMED: the undecided bug still blocks, but the reason stops saying why the deferral did not
+# count — the operator reads "an agent could close it" about a bug whose field says deferred. Dies
+# on the `named:` term of the same assertion.
+mut_QA_bug_deferred_undecided_unnamed() {
+  sed -i '/^gate_QA() {/,/^}/ s|^    if \[ "\$undecided" -gt 0 \]; then$|    if false; then|' "$1"
+}
+# FENCED: the decision reader stops tracking fences, so a bug that QUOTES the heading in a repro
+# reads as decided. `infence` is this function's own variable, so QA_bug_genre_fenced (unranged)
+# and this one sabotage one reader each.
+mut_QA_bug_deferred_decision_fenced() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s|{ infence = !infence; next }|{ next }|' "$1"
+}
+# PLURAL: `## Decisions for a Human` — the qa-execution skill's heading for questions still open —
+# reads as the decision again, through the shared eight-byte prefix.
+mut_QA_bug_deferred_decision_plural() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s@/^## Decis/ \&\& !/^## Decis(ions|oes|\\303\\265es)/@/^## Decis/@' "$1"
+}
+# The pt-BR half of the plural refusal (final review of the lote 5): only the English plural is
+# refused again, so `## Decis\303\265es pendentes` and `## Decisoes pendentes` read as the decision
+# and a deferred bug with only an open question passes. Dies on `the pt-BR plural decision headings
+# are pending questions too` in check-gates.sh.
+mut_QA_bug_deferred_decision_plural_english_only() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s@!/^## Decis(ions|oes|\\303\\265es)/@!/^## Decisions/@' "$1"
+}
+# ENGLISH_ONLY, the fail-closed direction: the whole English word instead of the ASCII prefix, and
+# every pt-BR heading the targets wrote (tilde or `## Decisao`) stops counting. Dies on `the pt-BR
+# decision headings count`.
+mut_QA_bug_deferred_decision_english_only() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s|/^## Decis/ \&\& |/^## Decision/ \&\& |' "$1"
+}
+# UNDATED (Codex review of PR #237): the heading alone is the decision again, bare or carrying only
+# the deferral. Dies on the bare and undated terms of `a decision section with no date is not the
+# decision` in check-gates.sh.
+mut_QA_bug_deferred_decision_undated() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s|^    insec \&\& /\[0-9\]\[0-9\]\[0-9\]\[0-9\]-\[0-9\]\[0-9\]-\[0-9\]\[0-9\]/ {|    insec {|' "$1"
+}
+# UNBOUNDED: the section never ends, so a date anywhere below the heading — a later `## Evidence` —
+# vouches for an undated decision. Dies on the date-below term of the same assertion.
+mut_QA_bug_deferred_decision_unbounded() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ { /^    \/\^## \/ { insec = 0 }$/d; }' "$1"
 }
 
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
@@ -1323,6 +1422,17 @@ mut_RUN_stamp_stop_missing() {
 # Caught by `run stops at the stamp only when the stamp is the only refusal` in check-gates.sh.
 mut_PR_stamp_marker_always() {
   sed -i '/^gate_PR() {/,/^}/ s@^  GATE_PR_STAMP_WHY=""$@  GATE_PR_STAMP_WHY="armed on entry"@' "$1"
+}
+# #228 back, from both sides. The impossible-stamp marker is never armed, so a tree no `sdd health`
+# can stamp is sent to the review-bot order and to './bin/sdd health' all the same; or the stop
+# always takes the impossible branch, so a merely stale stamp loses the order that makes one run
+# enough. Caught by `run stops at an impossible stamp with the remedy that can work, and a stale stamp
+# keeps the review-bot order` (world 9b of check-gates.sh) — its impossible half and its stale half.
+mut_PR_stamp_impossible_unmarked() {
+  sed -i '/^gate_PR() {/,/^}/ { /^        GATE_PR_STAMP_IMPOSSIBLE="\$MUTATION_STAMP_WHY_KIND"$/d; }' "$1"
+}
+mut_RUN_stamp_remedy_always_impossible() {
+  sed -i '/^cmd_run() {/,/^}/ s@if \[ -n "\$GATE_PR_STAMP_IMPOSSIBLE" \]; then@if true; then@' "$1"
 }
 
 # agents/ falls out of the key again (#67; ADR 0015 §1): a commit that edits only a hat leaves the
@@ -2515,6 +2625,13 @@ mut_HEALTH_with_mutation_refused() {
 mut_RUN_turn_rule_dropped() {
   perl -0pi -e 's/\$turn_rule\n\n(Write the artifacts to disk and commit\. The runner re-evaluates the gate from outside — it runs)/$1/' "$1"
 }
+# #234: the turn rule loses its background paragraph — a session no longer told that what it starts
+# with `nohup … &` holds `sdd run` and the checkout, nor that the human's app is not its to restart.
+# The closing quote stays, so the runner still parses. Caught by "every projected phase is told a
+# background process holds the run, …" (check-dry-run.sh), at "5 0 0".
+mut_RUN_turn_rule_background_dropped() {
+  sed -i '/^boot_prompt() {/,/^}/ { /^A process you start in the background/,/^start — the app under test is the human/d; s@^What you started for your own check, stop before you end the turn\."$@"@ }' "$1"
+}
 
 # L5 of the 2026-09-03 audit: the phase session is opened through `env -u <harness vars>`, one
 # definition (HARNESS_ENV_UNSET) read by run_phase. Opening `claude` directly is the runner of
@@ -2546,7 +2663,27 @@ mut_RUN_close_git_label_unexported() {
 # tree it promised not to touch. The probes are in tests/check-autonomy.sh (retry block and the
 # `--phase` block right after it), each reading count AND cleanliness as a pair.
 mut_RUN_intervention_unwritten_on_phase() {
-  sed -i 's|^  \[ -n "$force_phase" \] && checkpoint_note_intervention "sdd run --phase $force_phase (the starting phase was forced from the CLI)" "$force_phase"$|  :|' "$1"
+  sed -i '/^cmd_run() {/,/^}/ s|^      checkpoint_note_intervention "sdd run --phase $cli_lap (the starting phase was forced from the CLI)" "$cli_lap"$|      :|' "$1"
+}
+# #227 back: the CLI's note goes to the top of the lap it forced, ahead of the stops that open no
+# session — PLAN and the stamp return 2 — so `sdd autonomy --by-mission` counts an intervention in a
+# run that did nothing. Caught by `sdd run --phase PLAN stops before any session and writes no note`
+# in check-autonomy.sh and `run --phase PR stops at the stamp and writes no intervention note` in
+# check-gates.sh; the `--phase EXEC` note stays exactly one.
+mut_RUN_intervention_before_the_stop() {
+  sed -i '/^cmd_run() {/,/^}/ s|^    cli_lap="$cli_phase"; cli_phase=""$|    cli_lap="$cli_phase"; cli_phase=""; [ -n "$cli_lap" ] \&\& checkpoint_note_intervention "sdd run --phase $cli_lap (the starting phase was forced from the CLI)" "$cli_lap"; cli_lap=""|' "$1"
+}
+# The runner's own forced lap (PUBLISH_ON_REVIEW_BLOCKED=draft) is read as the CLI's: every forced
+# lap that opens a session writes the note. Caught by `the draft jump is the runner's hand: its
+# forced PR lap writes no intervention note` in check-autonomy.sh.
+mut_RUN_intervention_on_runner_forced_lap() {
+  sed -i '/^cmd_run() {/,/^}/ s|^    cli_lap="$cli_phase"; cli_phase=""$|    cli_lap="$force_phase"; cli_phase=""|' "$1"
+}
+# Decision 11a: the retry's note goes back above the mission ceiling, so a retry the ceiling refuses
+# commits an intervention into a run that bought nothing. Caught by `sdd retry stopped by the
+# mission ceiling writes no intervention note and commits nothing` in check-autonomy.sh.
+mut_RUN_intervention_retry_before_the_ceiling() {
+  sed -i '/^cmd_retry() {/,/^}/ { /^  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "\$phase"$/d; s|^  if mission_budget_blown "\$phase"; then return 3; fi$|  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"\n&|; }' "$1"
 }
 mut_RUN_intervention_unwritten_on_retry() {
   sed -i 's|^  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"$|  :|' "$1"
@@ -2596,7 +2733,39 @@ mut_RUN_mission_budget_fractional_disabled() {
   sed -i '/^mission_budget_blown() {/,/^}/ s|^  if LC_ALL=C awk -v c="$ceiling" .*|  case "$ceiling" in 0\|0.*) return 1 ;; esac|' "$1"
 }
 mut_RUN_mission_budget_override_unnoted() {
-  sed -i '/^mission_budget_blown() {/,/^}/ s|^      checkpoint_note_intervention "sdd $AUTONOMY_INVOCATION --budget-override .*$|      :|' "$1"
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^      BUDGET_OVERRIDE_NOTE="sdd $AUTONOMY_INVOCATION --budget-override .*$|      :|' "$1"
+}
+# Decision 11a (#227's neighbour), one mutant per door and per half. The override's note is
+# PUBLISHED by mission_budget_blown and WRITTEN by the door that buys the session:
+# - written at the lift again, so a lap the no-work door stops after the lift commits a note into
+#   a run that bought nothing — caught by `--budget-override on a lap that stops before any session
+#   writes no note`;
+# - never written by cmd_run, or by cmd_retry — caught by `--budget-override on a lap that opens a
+#   session writes exactly one note` (and `--budget-override goes on, …, once`), and by `sdd retry
+#   --budget-override buys its session and writes the retry note and the override note`;
+# - kept after it is written, or published on every lift — caught by `--budget-override over two
+#   sessions of one run writes one note, not one per session`.
+mut_RUN_budget_override_noted_at_the_lift() {
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^      BUDGET_OVERRIDE_NOTE="\(.*\)"$|      checkpoint_note_intervention "\1" "$phase"|' "$1"
+}
+mut_RUN_budget_override_unwritten_on_run() {
+  sed -i '/^cmd_run() {/,/^}/ s|^    budget_override_note_write "$phase"$|    :|' "$1"
+}
+mut_RUN_budget_override_unwritten_on_retry() {
+  sed -i '/^cmd_retry() {/,/^}/ s|^  budget_override_note_write "$phase"$|  :|' "$1"
+}
+mut_RUN_budget_override_note_kept() {
+  sed -i '/^budget_override_note_write() {/,/^}/ { /^  BUDGET_OVERRIDE_NOTE=""$/d; }' "$1"
+}
+# The pending note reset at the entry of its setter, the contract every other marker of this file
+# keeps: the draft jump's PR lap calls mission_budget_blown again before the session the REVIEW
+# lap's override bought, and the note is lost. Caught by `--budget-override lifted on the draft
+# jump's REVIEW lap is written above the PR session it bought`.
+mut_RUN_budget_override_note_reset_on_entry() {
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^  local phase="$1" spent ceiling="$BUDGET_MISSION_USD"$|&\n  BUDGET_OVERRIDE_NOTE=""|' "$1"
+}
+mut_RUN_budget_override_not_one_shot() {
+  sed -i '/^mission_budget_blown() {/,/^}/ { /^      BUDGET_OVERRIDE_NOTED=1$/d; }' "$1"
 }
 mut_RUN_mission_budget_stops_projection() {
   sed -i '/^mission_budget_blown() {/,/^}/ s|^  if \[ "$DRY_RUN" = "1" \]; then$|  if false; then|' "$1"
@@ -3938,6 +4107,105 @@ mut_RUN_kit_guard_arms_projection() {
   sed -i '/^  if \[ "$DRY_RUN" = "1" \]; then KIT_GUARD_BEFORE=""; return 0; fi$/d' "$1"
 }
 
+# #233 back: the guard compares the stamp alone, and `<sha>|true` -> `<sha>|true` is equal — a kit
+# already dirty when the phase opened is edited again in silence. The tree term is neutralised, the
+# stamp term left whole, so what dies is the half #233 added. Caught by `kit-guard: a kit already
+# dirty and edited again stops the line …` in check-autonomy.sh (its edit half goes silent).
+mut_RUN_kit_guard_tree_blind() {
+  sed -i '/^kit_guard_check() {/,/^}/ s|^  \[ "$tree_after" = "$KIT_GUARD_TREE_BEFORE" \] \&\& |  [ true ] \&\& |' "$1"
+}
+# The tree keeps the porcelain and drops the content: a NEW dirty path is still seen, the SAME path
+# edited again gives the identical ` M TODO.md` line and is not. Caught by the same assertion, whose
+# session edits the file that was already dirty.
+mut_RUN_kit_guard_tree_no_content() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|print $0 "\\t" ((p in h) ? h\[p\] : "-")|print $0 "\\t-"|' "$1"
+}
+# The arm forgets the tree it sampled: the human's own dirt, there before the phase, reads as the
+# session's and every phase over a dirty kit stops. Caught by the benign half of the same assertion
+# (`kind:no-progress` becomes `kind:kit-touched`).
+mut_RUN_kit_guard_tree_unarmed() {
+  sed -i '/^kit_guard_arm() {/,/^}/ s|^  KIT_GUARD_TREE_BEFORE="$KIT_GUARD_TREE"$|  KIT_GUARD_TREE_BEFORE=""|' "$1"
+}
+# The reason stops saying what moved: back to the two stamps alone, and the human goes looking in the
+# kit (#233, sales_quote). Caught by `kit-guard: the BLOCKED line names the commit the kit gained …`
+# and the `named` term of the already-dirty assertion.
+mut_RUN_kit_touched_says_nothing_changed() {
+  sed -i '/^kit_guard_check() {/,/^}/ { /^  KIT_TOUCHED_WHY="${KIT_TOUCHED_WHY:+/d; }' "$1"
+}
+# The three rules of kit_guard_changes that only the reason shows (final review of
+# 20261006-lote-5-o-que-o-lote-4-deixou, findings 6 and 8): a path dirty before the phase and clean
+# after drops out of the clause; it comes back in awk's hash order; the key stops at the FIRST tab
+# and `notes<TAB>draft.md` reads as `notes`. The stop survives all three — the trees still differ —
+# so each is caught by the `named` term of `kit-guard: a kit path dirty before the phase and clean
+# after is named whole, in git's order` in check-autonomy.sh, never by its rc or kind.
+mut_RUN_kit_guard_no_longer_dirty_silent() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s|for (i = 1; i <= m; i++) if (!(ord\[i\] in seen)) { out = out sep ord\[i\] " (no longer dirty)"; sep = ", " }||' "$1"
+}
+mut_RUN_kit_guard_no_longer_dirty_hash_order() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s|for (i = 1; i <= m; i++) if (!(ord\[i\] in seen)) { out = out sep ord\[i\] |for (p in was) if (!(p in seen)) { out = out sep p |' "$1"
+}
+mut_RUN_kit_guard_key_first_tab() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s#match(l, /\\t\[^\\t\]\*\$/) ? RSTART : length(l) + 1#index(l, "\\t")#' "$1"
+}
+# The executable bit of an already-dirty path (Codex review of PR #237): the tree drops it again,
+# and a phase that flips the bit alone compares equal — silent. Caught by `kit-guard: a kit path
+# already dirty whose executable bit alone changes stops the line …` (its kind and named terms).
+mut_RUN_kit_guard_tree_no_mode() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|((p in h) ? h\[p\] : "-") ((p in ex) ? "+x" : "")|((p in h) ? h[p] : "-")|' "$1"
+}
+# The stop survives, the reason says `(content changed)` about a file whose content did not change.
+# Caught by the `named` term of the same assertion.
+mut_RUN_kit_guard_mode_reads_as_content() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s|(md5(was\[p\]) != md5($0) ? " (content changed)" : (wt(was\[p\]) != wt($0) ? " (mode changed)" : " (index changed)"))|" (content changed)"|' "$1"
+}
+# The INDEX entry of an already-dirty path (4th Codex review of PR #237). DROPPED, the tree is the
+# worktree alone again and a session that replaces only the staged blob of an `MM` path compares
+# equal — silent; caught by `kit-guard: a session that replaces only the staged blob …`. The MODE
+# dropped from the entry keeps the blob and loses the other half of what git stores there; caught by
+# `kit-guard: a session that flips only the staged mode …`. Both in check-autonomy.sh, by their kind
+# and named terms.
+mut_RUN_kit_guard_tree_no_index() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s| ((p in ix) ? "@" ix\[p\] : "")||' "$1"
+}
+mut_RUN_kit_guard_index_no_mode() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|e = f\[1\] ":" f\[2\]|e = f[2]|' "$1"
+}
+# The stop survives and the reason names the wrong place: a staged change read as the executable bit
+# (`(mode changed)`), or — the worktree digest keeping the index entry — as the file's content.
+# Caught by the `named` term of the same two assertions.
+mut_RUN_kit_guard_index_reads_as_mode() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s|(wt(was\[p\]) != wt($0) ? " (mode changed)" : " (index changed)")|" (mode changed)"|' "$1"
+}
+mut_RUN_kit_guard_index_reads_as_content() {
+  sed -i '/^kit_guard_changes() {/,/^}/ s|function wt(l,  d) { d = substr(l, cut(l) + 1); sub(/@\.\*\$/, "", d); return d }|function wt(l,  d) { d = substr(l, cut(l) + 1); return d }|' "$1"
+}
+# A dirty kit name that begins with `-` (5th Codex review of PR #237): without the `--`, md5sum reads
+# it as an option and refuses the whole batch, every dirty path reads `-`, and an edit goes unseen.
+# Caught by `kit-guard: a kit path whose name begins with a dash …` in check-autonomy.sh.
+mut_RUN_kit_guard_md5_options() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s/| xargs -0 -r md5sum -- 2>\/dev\/null )"/| xargs -0 -r md5sum 2>\/dev\/null )"/' "$1"
+}
+# An ESCAPED md5sum record (6th Codex review of PR #237), its two rules: the name KEPT escaped
+# (`back\\slash.md` never meets the status line's `back\slash.md`), and the leading `\` KEPT (the
+# digest and the name both shift one byte). Either way the file reads `-` and an edit goes unseen.
+# Caught by `kit-guard: a kit path with a backslash in its name …` in check-autonomy.sh.
+mut_RUN_kit_guard_md5_escape_kept() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|h\[esc ? unesc(substr(r, 35)) : substr(r, 35)\]|h[substr(r, 35)]|' "$1"
+}
+mut_RUN_kit_guard_md5_escape_prefix() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|if (esc) r = substr(r, 2)|if (0) r = substr(r, 2)|' "$1"
+}
+# A symlink in the kit tree (3rd Codex review of PR #237): UNHASHED, it reads `-` before and after
+# whatever the session points it at; FOLLOWED, its digest is the file behind it again, and a link
+# retargeted to an identical file compares equal. Both silent; both caught by `kit-guard: an
+# already-dirty symlink retargeted to an identical file stops the line …` in check-autonomy.sh.
+mut_RUN_kit_guard_link_unhashed() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|do \[ -L "${e:3}" \] \&\& printf|do false \&\& printf|' "$1"
+}
+mut_RUN_kit_guard_link_followed() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|$(readlink -- "${e:3}" \| md5sum|$(cat -- "${e:3}" \| md5sum|' "$1"
+}
+
 # ---------------------------------------------------------------------------
 # ADR 0014 — the behaviour version the ledger row carries.
 # ---------------------------------------------------------------------------
@@ -4947,6 +5215,23 @@ mut_RUN_manual_stays_when_detached() {
 mut_RUN_manual_merged_silent() {
   sed -i '/^cmd_note_manual() {/,/^}/ s@if \[ "\$merged" = 1 \]; then@if false; then@' "$1"
 }
+# #230: the `ok` stops reading what the writer published and claims the note again, over a mission
+# with no checkpoint. Caught by `note-manual's ok says what the note writer did, …` in
+# check-autonomy.sh, its first world (claimed:1, said:0).
+mut_RUN_manual_ok_unread() {
+  sed -i '/^cmd_note_manual() {/,/^}/ s@^  noted="\$CHECKPOINT_NOTE"$@  noted=committed@' "$1"
+}
+# The writer stops publishing one value, and the `ok` falls to the generic arm. Each is caught by
+# its own world of the same assertion: no checkpoint, the refused rewrite, the plain commit.
+mut_RUN_ck_note_none_unpublished() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ s@\[ -f "\$ck" \] || { CHECKPOINT_NOTE=none; return 0; }@[ -f "$ck" ] || return 0@' "$1"
+}
+mut_RUN_ck_note_failed_unpublished() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ { /^    CHECKPOINT_NOTE=failed$/d }' "$1"
+}
+mut_RUN_ck_note_committed_unpublished() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ { /^    CHECKPOINT_NOTE=committed$/d }' "$1"
+}
 # The command leaves the admission list and falls to the unlocked arm: it commits under a run.
 mut_COORD_note_manual_unlocked() {
   sed -i 's@    boot|note-manual|install|@    boot|install|@' "$1"
@@ -4955,6 +5240,17 @@ mut_COORD_note_manual_unlocked() {
 # #153, the page: it reads sessions only, and a phase already recorded by hand is suggested forever.
 mut_STATUS_manual_row_ignored() {
   sed -i '/^status_unrecorded() {/,/^}/ s@and (.event == "session" or .event == "manual"))@and (.event == "session"))@' "$1"
+}
+# #229, the machine: a mission this machine never opened a session of ran elsewhere, and the page
+# goes back to asking "done by hand?" of every phase it passed. Caught by `a mission with no session
+# in this machine's ledger ran elsewhere, and the page asks nothing` in check-gates.sh.
+mut_STATUS_elsewhere_asked() {
+  sed -i '/^status_unrecorded() {/,/^}/ { /^  grep -qxF + <<< "\$seen" || return 0$/d }' "$1"
+}
+# Presence read off the manual row too, not only a session: the row the hint makes the human write
+# re-opens the question for every other phase. Same assertion, its manual-row world.
+mut_STATUS_presence_counts_manual() {
+  sed -i '/^status_unrecorded() {/,/^}/ s@| (.phase // empty), (select(.event == "session") | "+")@| (.phase // empty), "+"@' "$1"
 }
 
 # The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
@@ -5642,6 +5938,38 @@ mut_COORD_select_pidfd() {
   sed -i 's@^                worker_poll.poll(10)$@                select.select([worker_fd], [], [], .01)@' "${1%/*}/sdd-coordination.py"
 }
 
+# #234: the supervisor goes back to waiting MUTE for the family a worker left behind — `sdd run`
+# alive after its verdict, and nothing saying why. Caught by "a process the worker leaves behind is
+# named once, with its pid and executable, never its arguments" (check-coordination.sh).
+mut_COORD_stragglers_unnamed() {
+  sed -i "s@^    result = wait_family(child, signals, announce=value\['command'\])\$@    result = wait_family(child, signals)@" "${1%/*}/sdd-coordination.py"
+}
+# The name is said on every 10 ms tick instead of once. Same assertion, its `count == 1` term.
+mut_COORD_stragglers_named_every_tick() {
+  sed -i '/^def wait_family(/,/^def / { /^                named_at = None$/d }' "${1%/*}/sdd-coordination.py"
+}
+# The hook names its stragglers too, over a family its deadline already bounds. Caught by "a hook's
+# straggler is waited for in silence: the hook names nothing" (check-coordination.sh).
+mut_COORD_hook_names_stragglers() {
+  sed -i "s@^    return wait_family(child, signals, deadline, grace, relay=child)\$@    return wait_family(child, signals, deadline, grace, relay=child, announce='hook')@" "${1%/*}/sdd-coordination.py"
+}
+# The report prints the whole command line again, arguments and any credential in them (CodeRabbit
+# review of PR #237). Caught by the `2.31` term of "a process the worker leaves behind is named once,
+# with its pid and executable, never its arguments" (check-coordination.sh).
+mut_COORD_stragglers_print_arguments() {
+  sed -i "s@^                    command = Path('/proc/%s/comm' % pid).read_text(errors='replace').strip()\$@                    command = Path('/proc/%s/cmdline' % pid).read_text(errors='replace').replace(chr(0), ' ').strip()@" "${1%/*}/sdd-coordination.py"
+}
+# argv[0] again (5th Codex review of PR #237): the first word of the command line, which the caller
+# chooses (`exec -a`). Caught by the `argv0-token-7f3` term of the same assertion.
+mut_COORD_stragglers_argv0() {
+  sed -i "s@^                    command = Path('/proc/%s/comm' % pid).read_text(errors='replace').strip()\$@                    command = os.path.basename(Path('/proc/%s/cmdline' % pid).read_text(errors='replace').split(chr(0), 1)[0])@" "${1%/*}/sdd-coordination.py"
+}
+# A closed stderr is fatal again: the BrokenPipeError leaves wait_family and the lock goes before
+# ECHILD. Caught by "a closed stderr does not end the supervision" (check-coordination.sh).
+mut_COORD_stragglers_pipe_fatal() {
+  sed -i '/^def name_stragglers(/,/^def / s/^    except OSError:$/    except ZeroDivisionError:/' "${1%/*}/sdd-coordination.py"
+}
+
 CATALOG=(
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
@@ -5671,6 +5999,12 @@ CATALOG=(
   CLOSE_claims_unverified_merge
   CLOSE_never_records_the_merge
   COORD_select_pidfd
+  COORD_stragglers_unnamed
+  COORD_stragglers_named_every_tick
+  COORD_hook_names_stragglers
+  COORD_stragglers_print_arguments
+  COORD_stragglers_argv0
+  COORD_stragglers_pipe_fatal
   RUN_branch_double_slash
   COORD_admission_missing
   COORD_linker_unlocked
@@ -5710,6 +6044,10 @@ CATALOG=(
   EXEC_escaped_pipe_blind
   EXEC_pipeless_row_skipped
   EXEC_pipeless_reads_past_the_table
+  EXEC_short_row_skipped
+  EXEC_short_row_reads_narrow_table
+  EXEC_short_bare_row_skipped
+  GATE_EXEC_empty_status_unnamed
   EXEC_rows_blind_to_review_increments
   EXEC_alignment_colon_blind
   EXEC_dirty_tree_as_red
@@ -5786,6 +6124,9 @@ CATALOG=(
   QA_report_tip_any_mission
   QA_report_tip_any_file_of_mission
   QA_report_tip_refused_outright
+  QA_report_tip_blob_unchecked
+  QA_report_tip_blob_newest_only
+  QA_report_tip_blob_whole_history
   QA_bug_genre_ignored
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
@@ -5796,6 +6137,14 @@ CATALOG=(
   QA_bug_genre_deferred_prefix
   QA_bug_genre_deferred_unseen_no_interface
   QA_bug_genre_deferred_join
+  QA_bug_deferred_undecided
+  QA_bug_deferred_undecided_unnamed
+  QA_bug_deferred_decision_fenced
+  QA_bug_deferred_decision_plural
+  QA_bug_deferred_decision_plural_english_only
+  QA_bug_deferred_decision_english_only
+  QA_bug_deferred_decision_undated
+  QA_bug_deferred_decision_unbounded
   QA_e2e_red_never_probed
   QA_app_down_on_unknown
   APP_expect_ignored
@@ -5843,6 +6192,8 @@ CATALOG=(
   PR_stamp_key_ignores_agents
   RUN_stamp_stop_missing
   PR_stamp_marker_always
+  PR_stamp_impossible_unmarked
+  RUN_stamp_remedy_always_impossible
   RUN_config_not_reloaded
   RUN_config_reload_keeps_deleted
   RUN_config_reload_drops_env
@@ -5945,10 +6296,14 @@ CATALOG=(
   RUN_window_not_netted
   RUN_rebase_read_as_foreign
   RUN_turn_rule_dropped
+  RUN_turn_rule_background_dropped
   RUN_harness_env_inherited
   RUN_git_label_unexported
   RUN_close_git_label_unexported
   RUN_intervention_unwritten_on_phase
+  RUN_intervention_before_the_stop
+  RUN_intervention_on_runner_forced_lap
+  RUN_intervention_retry_before_the_ceiling
   RUN_intervention_unwritten_on_retry
   RUN_intervention_written_on_dry_run
   RUN_escalation_hook_silent
@@ -5962,6 +6317,12 @@ CATALOG=(
   RUN_mission_budget_zero_is_a_ceiling
   RUN_mission_budget_fractional_disabled
   RUN_mission_budget_override_unnoted
+  RUN_budget_override_noted_at_the_lift
+  RUN_budget_override_unwritten_on_run
+  RUN_budget_override_unwritten_on_retry
+  RUN_budget_override_note_kept
+  RUN_budget_override_not_one_shot
+  RUN_budget_override_note_reset_on_entry
   RUN_mission_budget_stops_projection
   RUN_degraded_row_dropped
   RUN_degraded_repeats
@@ -6107,6 +6468,24 @@ CATALOG=(
   RUN_kit_touched_blind
   RUN_kit_guard_cries_wolf
   RUN_kit_guard_arms_projection
+  RUN_kit_guard_tree_blind
+  RUN_kit_guard_tree_no_content
+  RUN_kit_guard_tree_unarmed
+  RUN_kit_touched_says_nothing_changed
+  RUN_kit_guard_no_longer_dirty_silent
+  RUN_kit_guard_no_longer_dirty_hash_order
+  RUN_kit_guard_key_first_tab
+  RUN_kit_guard_tree_no_mode
+  RUN_kit_guard_mode_reads_as_content
+  RUN_kit_guard_tree_no_index
+  RUN_kit_guard_index_no_mode
+  RUN_kit_guard_index_reads_as_mode
+  RUN_kit_guard_index_reads_as_content
+  RUN_kit_guard_md5_options
+  RUN_kit_guard_md5_escape_kept
+  RUN_kit_guard_md5_escape_prefix
+  RUN_kit_guard_link_unhashed
+  RUN_kit_guard_link_followed
   RUN_kit_rev_is_head
   RUN_kit_rev_dirty_whole_tree
   RUN_kit_guard_reads_rev
@@ -6212,11 +6591,17 @@ CATALOG=(
   KAIZEN_manual_mints_version
   KAIZEN_manual_counts_mission
   RUN_manual_row_missing
+  RUN_manual_ok_unread
+  RUN_ck_note_none_unpublished
+  RUN_ck_note_failed_unpublished
+  RUN_ck_note_committed_unpublished
   RUN_manual_stays_on_mission_branch
   RUN_manual_stays_when_detached
   RUN_manual_merged_silent
   COORD_note_manual_unlocked
   STATUS_manual_row_ignored
+  STATUS_elsewhere_asked
+  STATUS_presence_counts_manual
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_counted_as_session
   LEDGER_gate_pass_mints_a_version
@@ -6317,6 +6702,18 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # HARNESS-BROKEN before a single mutant ran — measured on the first health of PR #222, which no
   # fast step could have seen: `--anchors` copies only bin/. Read, never mutated: out of the stamp key.
   cp -r "$ROOT/commands" "$1/"
+  # `.gitignore`, the sixth, the same way: check-autonomy.sh builds its fake kit with the kit's real
+  # ignore rules (regime 2c — an editor's swap file is not the kit), copied from its own kit root.
+  # Absent here, that `cp` failed in silence, the swap file reached `git status`, the control went
+  # red on 2c and every --only against check-autonomy.sh answered HARNESS-BROKEN — measured on PR
+  # #237, before its `sdd health`, with the regime born in the final review of the same branch.
+  # Read, never mutated: out of the stamp key.
+  cp "$ROOT/.gitignore" "$1/"
+  # ⚠️ DECLARED LIMIT, paid twice now: NOTHING compares the `"$ROOT/…"` paths the sensors read with
+  # the list copied above. A sensor that starts reading a new file from its own kit root breaks this
+  # sandbox in silence until a control run goes red — `commands/` was found by the first health of
+  # PR #222, `.gitignore` by an `--only` before the health of PR #237. The cheap finder is that
+  # control: after teaching a sensor a new kit file, run `--only <a mutant that sensor kills>` once.
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log

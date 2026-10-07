@@ -19,6 +19,7 @@
 # Usage: tests/check-autonomy.sh   (exit 0 = the ledger tells the truth)
 
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"
@@ -579,6 +580,14 @@ assert_eq "sdd run --phase writes a second note, committed alone" "2 clean" "$(n
 "$SDD" run "$MISSION" --phase EXEC --dry-run >/dev/null 2>&1 || true
 assert_eq "sdd run --phase --dry-run writes none and leaves the tree clean" "2 clean" \
   "$(notes) $( [ -z "$(git -C "$FIX" status --porcelain)" ] && echo clean || echo dirty)"
+# #227: the note is the CLI's hand on a lap that BUYS a session. `--phase PLAN` stops before any
+# session (rc 2: the planner is interactive), and so does `--phase PR` with only the stamp missing
+# (check-gates.sh, world 4b) — a note written there was counted by `sdd autonomy --by-mission` as an
+# intervention in a run that did nothing. DIFFERENTIAL against the `--phase EXEC` run above: same
+# writer, same flag, and only whether the lap opened a session differs.
+plan_rc=0; "$SDD" run "$MISSION" --phase PLAN >/dev/null 2>&1 || plan_rc=$?
+assert_eq "sdd run --phase PLAN stops before any session and writes no note" "rc:2 notes:2 clean" \
+  "rc:$plan_rc notes:$(notes) $(ck_clean)"
 : > "$LEDGER"
 
 # --- a phase done BY HAND gets the record a session would have left (#153) ---------------------
@@ -629,8 +638,28 @@ assert_eq "US\$ 150.00 spent against a ceiling of 150 stops with rc 3: one budge
 assert_eq "and the journal says why, naming the phase that did not open" "1" \
   "$(grep -c 'BLOCKED  EXEC  mission budget' "$PLOG")"
 : > "$LEDGER"
+# Read off the whole mission directory, so a note in either notes file counts.
+mdir_notes() { grep -RhcE '^[[:space:]]*-[[:space:]]*intervention:' "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}'; }
+rt_notes0="$(mdir_notes)"; rt_head0="$(git -C "$FIX" rev-parse HEAD)"
 "$SDD" retry "$MISSION" >/dev/null 2>&1; rc=$?
 assert_eq "sdd retry is stopped by the same ceiling (second door)" "3 budget-exhausted" "$rc $(rows '.kind')"
+# Decision 11a, #227's neighbour: the retry's note is the CLI's hand on a session, and the ceiling
+# refuses that session. Written above the ceiling, it was committed into a mission whose run bought
+# nothing, and `sdd autonomy --by-mission` counted an intervention beside zero sessions. HEAD is the
+# witness that nothing was committed on the caller's behalf either.
+assert_eq "sdd retry stopped by the mission ceiling writes no intervention note and commits nothing" \
+  "notes:+0 head:same" \
+  "notes:+$(( $(mdir_notes) - rt_notes0 )) head:$([ "$(git -C "$FIX" rev-parse HEAD)" = "$rt_head0" ] && echo same || echo moved)"
+# The other half of the same door: lifted with --budget-override, the retry buys its session, and
+# BOTH hands are written above it — the retry's and the override's, one each. The override's note is
+# published by mission_budget_blown and written by cmd_retry, so this is what holds that writer.
+: > "$LEDGER"
+mdir_count() { grep -RhcF "$1" "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}'; }
+rt_notes0="$(mdir_notes)"; rt_retry0="$(mdir_count 'intervention: sdd retry (the phase')"
+"$SDD" retry "$MISSION" --budget-override >/dev/null 2>&1 || true
+assert_eq "sdd retry --budget-override buys its session and writes the retry note and the override note" \
+  "session:1 notes:+2 retry:+1 override:1" \
+  "session:$(rows 'select(.event == "session") | 1' | grep -c .) notes:+$(( $(mdir_notes) - rt_notes0 )) retry:+$(( $(mdir_count 'intervention: sdd retry (the phase') - rt_retry0 )) override:$(mdir_count 'intervention: sdd retry --budget-override')"
 : > "$LEDGER"
 dry_budget="$( "$SDD" run "$MISSION" --dry-run 2>&1 )"; rc=$?
 assert_eq "the projection says how much is spent and never stops there" "0 0 1" \
@@ -1957,8 +1986,14 @@ chmod +x "$OUTSIDE/stub/claude"
 # the runner announcing out loud that it entered the branch, and counting it is what proves the
 # regime. It is deliberately OUTSIDE the one-shot guard in bin/sdd — the runner really is jumping
 # to PR on this lap, and an assertion over the writers must not be its own witness.
+draft_notes0="$(grep -RhcE '^[[:space:]]*-[[:space:]]*intervention:' "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}')"
 err="$( "$SDD" run "$MISSION" 2>&1 >/dev/null )"; rc=$?
 assert_eq "the run still ends in an escalation, whichever path took it there" "3" "$rc"
+# #227: the jump writes force_phase too, and that hand is the runner's — the PR lap it forces opens
+# a session and must still write no `- intervention:` note. The CLI value is consumed by the first
+# lap; read off the whole mission directory, so a note in either notes file counts.
+assert_eq "the draft jump is the runner's hand: its forced PR lap writes no intervention note" "+0" \
+  "+$(( $(grep -RhcE '^[[:space:]]*-[[:space:]]*intervention:' "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}') - draft_notes0 ))"
 # I9 — THE LOOP HALF. `force_phase="PR"` never ended the run: PR ran, its own gate failed, and
 # `current_phase` handed REVIEW straight back with the budget still blown, so the runner re-entered
 # the branch lap after lap (measured before the fix: warn 3×, PR sessions 3). F1 closed the RECORD
@@ -5694,6 +5729,9 @@ echo "== reader: a target-repo session that edits the kit =="
 FAKEKIT="$OUTSIDE/fakekit"
 mkdir -p "$FAKEKIT"
 cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$FAKEKIT/"
+# And the kit's own ignore rules: the guard reads the kit through `git status`, which honours them,
+# and regime 2c measures one of them (editor temp files are not the kit).
+cp "$ROOT/.gitignore" "$FAKEKIT/"
 ( cd "$FAKEKIT" && git init -q -b main && git config user.email "fixture@example.com" \
     && git config user.name "Fixture" && git add -A && git commit -qm "chore: the kit" ) >/dev/null
 
@@ -5834,6 +5872,306 @@ KG2_LOG="$(cat "$KGC/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "kit-guard: a session that leaves the kit alone is not accused of anything" \
   "sessions:2 moved:0 lines:0 warns:0" \
   "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG2_LOG") warns:$(grep -c 'changed during' <<< "$KG2_ERR")"
+
+# 1b. WHAT MOVED (#233). The BLOCKED line names the commit the kit gained, so the human reading it
+#     does not have to open the kit to find out what happened under the run. Read off stderr, where
+#     `bad` writes the whole reason: the ledger caps gate_why at 200 characters.
+assert_eq "kit-guard: the BLOCKED line names the commit the kit gained during the phase" "1" \
+  "$(grep -c 'what changed: commits: [0-9a-f]* chore: the session wrote into the kit' <<< "$KG1_ERR")"
+
+# 2b. THE KIT WAS ALREADY DIRTY (#233). The stamp is `<sha>|<dirty>`, so dirty -> dirty on the same
+#     sha compared equal and a kit someone was already editing could be edited again in silence —
+#     measured on the sales_quote. DIFFERENTIAL, one pre-dirty kit and two sessions: the one that
+#     edits the SAME already-modified file again (porcelain gives the identical ` M TODO.md` line
+#     before and after, so only the content can tell) has to stop the line and name the path; the
+#     one that leaves the kit alone has to say nothing, or the human editing the kit pays a stop on
+#     every phase. `same:1` is the witness that the stamps agree, so the regime really is the one
+#     the stamp cannot see. TODO.md is tracked in the fake kit since regime 1 committed it. The
+#     benign run ends on no-progress (rc 3 too, its session moved nothing) — `kind` tells them apart.
+kitguard_dirty_stub() {   # kitguard_dirty_stub <file to append to, or "" for benign>
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ -n "$1" ] && [ "\$n" -eq 1 ]; then
+  printf 'the session edits the already-dirty file once more\n' >> "$1"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_dirty_run() {   # kitguard_dirty_run <target dir> <file or ""> — sessions, lines, rc, stamps, named
+  local err log rc=0 before after
+  kitguard_reset
+  kitguard_world "$1"
+  printf 'the human is editing the kit\n' >> "$FAKEKIT/TODO.md"
+  kitguard_dirty_stub "$2"
+  err="$( cd "$1" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || rc=$?
+  log="$(cat "$1/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+  before="$(grep -oE 'kit_before=[^ ]+' <<< "$log" | head -1)"; after="$(grep -oE 'kit_after=[^ ]+' <<< "$log" | head -1)"
+  printf 'sessions:%s lines:%s rc:%s kind:%s same:%s named:%s' "$(kitguard_sessions)" "$(grep -c 'KIT-TOUCHED' <<< "$log")" "$rc" "$(hat_rows)" \
+    "$([ -n "$before" ] && [ "${before#kit_before=}" = "${after#kit_after=}" ] && echo 1 || echo 0)" \
+    "$(grep -c 'what changed: paths: .M TODO.md (content changed)' <<< "$err")"
+  git -C "$FAKEKIT" checkout -q -- TODO.md
+}
+assert_eq "kit-guard: a kit already dirty and edited again stops the line and names the path, and left alone it is silent" \
+  "sessions:1 lines:1 rc:3 kind:kit-touched same:1 named:1|sessions:2 lines:0 rc:3 kind:no-progress same:0 named:0" \
+  "$(kitguard_dirty_run "$OUTSIDE/kitguard-dirty-edit" "$FAKEKIT/TODO.md")|$(kitguard_dirty_run "$OUTSIDE/kitguard-dirty-alone" "")"
+
+# 2c. AN EDITOR'S TEMP FILE IS NOT THE KIT (final review of 20261006-lote-5-o-que-o-lote-4-deixou).
+#     The tree term of 2b digests every untracked, non-ignored path, and vim rewrites its swap file
+#     every few seconds of TYPING, with nothing saved: a human with the kit's TODO.md open in a dirty
+#     kit would stop a target's run without saving anything — wider than the "saves a file" the
+#     human accepted. The kit's .gitignore lists the editor temp files, so `git status` (and both
+#     terms of the guard) never see them. Same pre-dirty kit as 2b; the session rewrites
+#     `.TODO.md.swp` and nothing else, and has to end like the benign run. `swap:written` is the
+#     witness that the session really wrote the file. The rule lives in .gitignore, which no mutant
+#     reaches: this assertion is its whole sensor.
+kg_swap="$FAKEKIT/.TODO.md.swp"
+kg_swap_out="$(kitguard_dirty_run "$OUTSIDE/kitguard-dirty-swap" "$kg_swap")"
+assert_eq "kit-guard: an editor's swap file rewritten in a dirty kit is not the kit, and stops nothing" \
+  "sessions:2 lines:0 rc:3 kind:no-progress same:0 named:0 swap:written" \
+  "$kg_swap_out swap:$(grep -qF 'the session edits the already-dirty file once more' "$kg_swap" 2>/dev/null && echo written || echo missing)"
+rm -f "$kg_swap"
+
+# 2d. A PATH DIRTY BEFORE THE PHASE AND CLEAN AFTER IS NAMED (final review of
+#     20261006-lote-5-o-que-o-lote-4-deixou, findings 6 and 8). The kit is dirty in three places —
+#     TODO.md modified, `zz.md` and `notes<TAB>draft.md` untracked — and the session puts all three
+#     back. The stamp moves (dirty -> clean), so the line stops in every version of the guard; what
+#     this regime measures is the REASON. Three rules, one mutant each: the `(no longer dirty)`
+#     clause exists at all; it follows git's order, which is the tree before, and not awk's hash
+#     order (mawk walks these three keys as notes, zz, TODO — measured); and the key runs to the
+#     LAST tab, the separator kit_guard_tree writes, so a tab inside a name does not cut it to
+#     `notes`. `clean:1` is the witness that the session really put the kit back.
+kitguard_clean_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  git -C "$FAKEKIT" checkout -q -- TODO.md
+  rm -f "$FAKEKIT/zz.md" "$FAKEKIT/notes"\$'\t'"draft.md"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kg_tabbed="$FAKEKIT/notes"$'\t'"draft.md"
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-clean"
+printf 'the human is editing the kit\n' >> "$FAKEKIT/TODO.md"
+printf 'scratch\n' > "$FAKEKIT/zz.md"
+printf 'scratch\n' > "$kg_tabbed"
+kitguard_clean_stub
+kg_clean_rc=0
+kg_clean_err="$( cd "$OUTSIDE/kitguard-dirty-clean" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_clean_rc=$?
+assert_eq "kit-guard: a kit path dirty before the phase and clean after is named whole, in git's order" \
+  "sessions:1 rc:3 kind:kit-touched named:1 clean:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_clean_rc kind:$(hat_rows) named:$(grep -cF "paths: TODO.md (no longer dirty), notes"$'\t'"draft.md (no longer dirty), zz.md (no longer dirty)" <<< "$kg_clean_err") clean:$([ -z "$(git -C "$FAKEKIT" status --porcelain)" ] && echo 1 || echo 0)"
+rm -f "$FAKEKIT/zz.md" "$kg_tabbed"
+git -C "$FAKEKIT" checkout -q -- TODO.md
+
+# 2e. THE MODE OF AN ALREADY-DIRTY PATH (Codex review of PR #237). The kit's TODO.md is already
+#     modified, and the session changes only its executable bit: porcelain still says ` M TODO.md`
+#     and the content digest is the same, so the tree compared equal and the guard said nothing.
+#     The executable bit is the one mode git tracks for a regular file (100644/100755), and the
+#     tree now carries it beside the digest; the reason names the change as a mode change, not a
+#     content one. `x:1` is the witness that the session really flipped the bit.
+kitguard_mode_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  chmod +x "$FAKEKIT/TODO.md"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-mode"
+printf 'the human is editing the kit\n' >> "$FAKEKIT/TODO.md"
+kitguard_mode_stub
+kg_mode_rc=0
+kg_mode_err="$( cd "$OUTSIDE/kitguard-dirty-mode" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_mode_rc=$?
+assert_eq "kit-guard: a kit path already dirty whose executable bit alone changes stops the line, named as a mode change" \
+  "sessions:1 rc:3 kind:kit-touched named:1 x:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_mode_rc kind:$(hat_rows) named:$(grep -c 'paths: .M TODO.md (mode changed)' <<< "$kg_mode_err") x:$([ -x "$FAKEKIT/TODO.md" ] && echo 1 || echo 0)"
+chmod -x "$FAKEKIT/TODO.md"
+git -C "$FAKEKIT" checkout -q -- TODO.md
+
+# 2f. A SYMLINK IS ITS TARGET TEXT, NOT THE FILE IT POINTS AT (3rd Codex review of PR #237). The
+#     kit tracks `link -> a.txt`; the human has already retargeted it to `b.txt`, and the session
+#     retargets it to `c.txt`, which has b's content and mode. Porcelain stays ` M link`, and a
+#     digest that FOLLOWS the link hashed b and then c — the same bytes — so the trees compared
+#     equal and the guard said nothing. Git stores a symlink as its target text (mode 120000), and
+#     the tree now does too. The fixture commits into the fake kit and is reset to the commit
+#     before it afterwards, so the regimes below see the kit they always saw. `c:1` is the witness.
+kg_link_base="$(git -C "$FAKEKIT" rev-parse HEAD)"
+( cd "$FAKEKIT" && printf 'same\n' > a.txt && printf 'same\n' > b.txt && printf 'same\n' > c.txt \
+    && ln -s a.txt link && git add a.txt b.txt c.txt link && git commit -qm "fixture: a tracked symlink" ) >/dev/null
+kitguard_link_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  ln -sfn c.txt "$FAKEKIT/link"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-link"
+ln -sfn b.txt "$FAKEKIT/link"
+kitguard_link_stub
+kg_link_rc=0
+kg_link_err="$( cd "$OUTSIDE/kitguard-dirty-link" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_link_rc=$?
+assert_eq "kit-guard: an already-dirty symlink retargeted to an identical file stops the line and names the link" \
+  "sessions:1 rc:3 kind:kit-touched named:1 c:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_link_rc kind:$(hat_rows) named:$(grep -c 'paths: .M link (content changed)' <<< "$kg_link_err") c:$([ "$(readlink "$FAKEKIT/link")" = c.txt ] && echo 1 || echo 0)"
+git -C "$FAKEKIT" reset -q --hard "$kg_link_base"
+
+# 2g. THE INDEX OF AN ALREADY-DIRTY PATH (4th Codex review of PR #237). The kit's TODO.md has a
+#     staged change and an unstaged one (`MM`), and the session replaces only the blob in the
+#     INDEX. Porcelain stays `MM TODO.md` and the worktree file is untouched, so a tree of the
+#     worktree alone compared equal — while the next commit in the kit would carry the session's
+#     content. The tree now carries the index blob of each dirty path too: HEAD is in the stamp, so
+#     the guard reads the three places git keeps a path. `mm:1` is the witness that the status
+#     really stayed `MM` and the session's blob is the one staged.
+kitguard_index_stub() {   # kitguard_index_stub blob|mode — what the session replaces in the index
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  if [ "$1" = mode ]; then
+    git -C "$FAKEKIT" update-index --cacheinfo "100755,\$(git -C "$FAKEKIT" rev-parse :TODO.md),TODO.md"
+  else
+    blob="\$(printf 'staged by the session\n' | git -C "$FAKEKIT" hash-object -w --stdin)"
+    git -C "$FAKEKIT" update-index --cacheinfo "100644,\$blob,TODO.md"
+  fi
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-index"
+printf 'staged by the human\n' >> "$FAKEKIT/TODO.md"
+git -C "$FAKEKIT" add TODO.md
+printf 'unstaged by the human\n' >> "$FAKEKIT/TODO.md"
+kitguard_index_stub blob
+kg_index_rc=0
+kg_index_err="$( cd "$OUTSIDE/kitguard-dirty-index" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_index_rc=$?
+kg_index_mm="$( [ "$(git -C "$FAKEKIT" status --porcelain -- TODO.md)" = "MM TODO.md" ] \
+  && [ "$(git -C "$FAKEKIT" show :TODO.md)" = "staged by the session" ] && echo 1 || echo 0 )"
+assert_eq "kit-guard: a session that replaces only the staged blob of an already-dirty kit path stops the line, named as an index change" \
+  "sessions:1 rc:3 kind:kit-touched named:1 mm:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_index_rc kind:$(hat_rows) named:$(grep -c 'paths: MM TODO.md (index changed)' <<< "$kg_index_err") mm:$kg_index_mm"
+git -C "$FAKEKIT" checkout -q HEAD -- TODO.md
+
+# 2h. THE STAGED MODE OF AN ALREADY-DIRTY PATH — the same place, the other half of its identity. The
+#     session flips only the executable bit of the INDEX entry, by `--cacheinfo` with the blob it
+#     already had: `update-index --chmod=+x <path>` would re-read the worktree file and stage its
+#     content too, and the probe would then measure the blob again (measured: the mutant that drops
+#     the mode survived that version). The worktree is untouched and not executable, porcelain stays
+#     `MM`, and a tree that kept the staged blob alone compared equal. `mm:1` is the witness: status
+#     `MM`, staged mode 100755, staged blob the one from before the session, worktree not executable.
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-index-mode"
+printf 'staged by the human\n' >> "$FAKEKIT/TODO.md"
+git -C "$FAKEKIT" add TODO.md
+printf 'unstaged by the human\n' >> "$FAKEKIT/TODO.md"
+kg_ixmode_blob="$(git -C "$FAKEKIT" rev-parse :TODO.md)"
+kitguard_index_stub mode
+kg_ixmode_rc=0
+kg_ixmode_err="$( cd "$OUTSIDE/kitguard-dirty-index-mode" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_ixmode_rc=$?
+kg_ixmode_mm="$( [ "$(git -C "$FAKEKIT" status --porcelain -- TODO.md)" = "MM TODO.md" ] \
+  && [ "$(git -C "$FAKEKIT" ls-files -s -- TODO.md | cut -c1-6)" = 100755 ] \
+  && [ "$(git -C "$FAKEKIT" rev-parse :TODO.md)" = "$kg_ixmode_blob" ] && [ ! -x "$FAKEKIT/TODO.md" ] && echo 1 || echo 0 )"
+assert_eq "kit-guard: a session that flips only the staged mode of an already-dirty kit path stops the line, named as an index change" \
+  "sessions:1 rc:3 kind:kit-touched named:1 mm:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_ixmode_rc kind:$(hat_rows) named:$(grep -c 'paths: MM TODO.md (index changed)' <<< "$kg_ixmode_err") mm:$kg_ixmode_mm"
+git -C "$FAKEKIT" checkout -q HEAD -- TODO.md
+
+# 2i. A KIT PATH THAT BEGINS WITH `-` (5th Codex review of PR #237). The digests come from ONE
+#     `xargs md5sum` over every dirty regular file, and a name like `-dash.md` reached it as an
+#     option: md5sum refused the batch and printed no digest at all, so every dirty path read `-`
+#     before and after, and an edit to any of them went unseen. The fixture commits the file into the
+#     fake kit and resets to the commit before it afterwards, as 2f does. `d:1` is the witness that
+#     the session's line really landed in `-dash.md`.
+kg_dash_base="$(git -C "$FAKEKIT" rev-parse HEAD)"
+( cd "$FAKEKIT" && printf 'tracked\n' > ./-dash.md && git add -- -dash.md && git commit -qm "fixture: a name that begins with a dash" ) >/dev/null
+kitguard_dash_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  printf 'edited by the session\n' >> "$FAKEKIT/-dash.md"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-dash"
+printf 'edited by the human\n' >> "$FAKEKIT/-dash.md"
+kitguard_dash_stub
+kg_dash_rc=0
+kg_dash_err="$( cd "$OUTSIDE/kitguard-dirty-dash" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_dash_rc=$?
+assert_eq "kit-guard: a kit path whose name begins with a dash, already dirty and edited again, stops the line and is named" \
+  "sessions:1 rc:3 kind:kit-touched named:1 d:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_dash_rc kind:$(hat_rows) named:$(grep -c 'paths: .M -dash.md (content changed)' <<< "$kg_dash_err") d:$(grep -c 'edited by the session' "$FAKEKIT/-dash.md")"
+git -C "$FAKEKIT" reset -q --hard "$kg_dash_base"
+
+# 2j. A KIT PATH WITH A BACKSLASH IN ITS NAME (6th Codex review of PR #237). GNU md5sum ESCAPES such
+#     a record — a leading `\`, and `\\` for each backslash in the name — and the parser read it by
+#     position: neither the digest nor the path came out, the file read `-` before and after, and an
+#     edit to it went unseen. The fixture commits the file and resets afterwards, as 2f and 2i do.
+#     `b:1` is the witness that the session's line really landed in the file.
+kg_bs_name='back\slash.md'
+kg_bs_base="$(git -C "$FAKEKIT" rev-parse HEAD)"
+( cd "$FAKEKIT" && printf 'tracked\n' > "$kg_bs_name" && git add -- "$kg_bs_name" && git commit -qm "fixture: a name with a backslash" ) >/dev/null
+kitguard_bs_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  printf 'edited by the session\n' >> '$FAKEKIT/$kg_bs_name'
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-backslash"
+printf 'edited by the human\n' >> "$FAKEKIT/$kg_bs_name"
+kitguard_bs_stub
+kg_bs_rc=0
+kg_bs_err="$( cd "$OUTSIDE/kitguard-dirty-backslash" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_bs_rc=$?
+assert_eq "kit-guard: a kit path with a backslash in its name, already dirty and edited again, stops the line and is named" \
+  "sessions:1 rc:3 kind:kit-touched named:1 b:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_bs_rc kind:$(hat_rows) named:$(grep -cF " M $kg_bs_name (content changed)" <<< "$kg_bs_err") b:$(grep -c 'edited by the session' "$FAKEKIT/$kg_bs_name")"
+git -C "$FAKEKIT" reset -q --hard "$kg_bs_base"
 
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the
@@ -5976,6 +6314,35 @@ NM_DET="$(nm_says "$OUTSIDE/nm-detached")"
 assert_eq "note-manual from a detached HEAD returns the human to that commit, still detached" \
   "rc:0 branch: warn:1 note:1 row:PR|$NM_DET_SHA" \
   "$NM_DET|$(git -C "$OUTSIDE/nm-detached" rev-parse HEAD)"
+# #230: the closing `ok` said "the note in the checkpoint" whatever the writer did. With no
+# checkpoint.md, checkpoint_note_intervention returns 0 in silence (it must: three other doors call
+# it), and the `ok` claimed a note that does not exist — a label with no artifact, on the human's
+# screen. The writer now PUBLISHES what it did (CHECKPOINT_NOTE) and the `ok` reads it. Four worlds,
+# one per value the writer publishes: no checkpoint at all, a rewrite refused (the mv shim of the
+# retry probe above), a checkpoint already dirty, and the plain one. Each `said` term is that
+# world's own reason, so a setter that stops publishing falls to the generic arm and fails by name.
+# Every world still writes the manual row: it is the record every reader of the ledger gets, and a
+# missing note is no reason to lose it.
+nm_bare_says() {   # nm_bare_says <dir> <reason ERE> [PATH prefix] — rc, claimed, said, row, commits
+  local rc=0 out before
+  before="$(git -C "$1" rev-list --count HEAD)"
+  out="$( cd "$1" && PATH="${3:+$3:}$PATH" MV_SHIM_DIR="$MV_SHIM" MV_SHIM_REAL="$(command -v mv)" \
+          "$SDD" note-manual "$MISSION" PR 2>&1 )" || rc=$?
+  printf 'rc:%s claimed:%s said:%s row:%s commits:+%s' "$rc" \
+    "$(grep -c 'the note in the checkpoint' <<< "$out")" \
+    "$(grep -cE "ok .*recorded as done by hand: $2" <<< "$out")" \
+    "$(rows 'select(.event == "manual") | .phase' | tr -d '\n')" \
+    "$(( $(git -C "$1" rev-list --count HEAD) - before ))"
+  : > "$LEDGER"
+}
+for w in nockpt mvfail dirty plain; do kitguard_world "$OUTSIDE/nm-$w" "$ROOT"; done
+( cd "$OUTSIDE/nm-nockpt" && git rm -q "docs/handoffs/$MISSION/checkpoint.md" \
+    && git commit -qm "chore: a mission with no checkpoint" ) >/dev/null 2>&1
+echo "| I2 | edited by hand | \`true\` → 0 | pending | — |" >> "$OUTSIDE/nm-dirty/docs/handoffs/$MISSION/checkpoint.md"
+rm -f "$MV_SHIM/fired"
+assert_eq "note-manual's ok says what the note writer did, and the manual row is written in every case" \
+  "rc:0 claimed:0 said:1 row:PR commits:+0|rc:0 claimed:0 said:1 row:PR commits:+0 fired|rc:0 claimed:1 said:1 row:PR commits:+0|rc:0 claimed:1 said:1 row:PR commits:+1" \
+  "$(nm_bare_says "$OUTSIDE/nm-nockpt" 'a manual row in the ledger, and no note — [^ ]+ has no checkpoint\.md$')|$(nm_bare_says "$OUTSIDE/nm-mvfail" 'a manual row in the ledger, and no note — it could not be written' "$MV_SHIM") $( [ -f "$MV_SHIM/fired" ] && echo fired || echo not-fired )|$(nm_bare_says "$OUTSIDE/nm-dirty" 'the note in the checkpoint, NOT committed')|$(nm_bare_says "$OUTSIDE/nm-plain" 'the note in the checkpoint, a manual row in the ledger$')"
 
 # 4. THE INLINE RETRY has a guard of its own. When the first session leaves the kit alone and the
 #    RETRY is the one that writes into it, only the check on the retry path can see it — measured:
@@ -7037,6 +7404,57 @@ assert_eq "door 3: sdd retry refuses an unreadable cell before any session" \
   "rc:3 kind:no-work stub:0 rows:0 notes:0 head:same" \
   "rc:$NW6_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows) notes:$(cat "$NW6/docs/handoffs/$MISSION"/*.md | grep -c '^- intervention:') head:$([ "$(git -C "$NW6" rev-parse HEAD)" = "$NW6_HEAD" ] && echo same || echo moved)"
 
+# Decision 11a: the `--budget-override` note waits for the session it buys. mission_budget_blown is
+# called ABOVE the REVIEW ceiling and door 1 of no-work, and it used to write the note itself, so a
+# lap the override let through and the next guard stopped committed an intervention into a run that
+# bought nothing. DIFFERENTIAL, one world each side and the same blown ceiling (US$ 5 spent against
+# 1, the key from the environment): the unreadable cell stops before any session and must write no
+# note; the pending row opens one and must write exactly one. HEAD is the stop's second witness.
+nw_budget() { mkdir -p "$1/.sdd/logs/$MISSION"
+  printf '2026-01-01T10:00:00-03:00  EXEC  agent=sdd-executor  model=opus  session=nw  rc=0  dur=1s  cost_usd=5  log=/dev/null\n' \
+    > "$1/.sdd/logs/$MISSION/pipeline.log"; }
+nw_notes() { cat "$1/docs/handoffs/$MISSION"/*.md | grep -c '^- intervention: sdd run --budget-override' || true; }
+NW6B="$OUTSIDE/nowork-override-stop"
+nowork_world "$NW6B" "done" deadbee 1
+nowork_stub "$NW6B" empty-commit
+nw_budget "$NW6B"
+NW6B_HEAD="$(git -C "$NW6B" rev-parse HEAD)"
+: > "$LEDGER"
+( cd "$NW6B" && BUDGET_MISSION_USD=1 "$SDD" run "$MISSION" --budget-override ) >/dev/null 2>&1; NW6B_RC=$?
+assert_eq "--budget-override on a lap that stops before any session writes no note" \
+  "rc:3 kind:no-work stub:0 notes:0 head:same" \
+  "rc:$NW6B_RC kind:$(nw_last_kind) stub:$(nw_sessions) notes:$(nw_notes "$NW6B") head:$([ "$(git -C "$NW6B" rev-parse HEAD)" = "$NW6B_HEAD" ] && echo same || echo moved)"
+NW6C="$OUTSIDE/nowork-override-go"
+nowork_world "$NW6C" pending
+nowork_stub "$NW6C" empty-commit
+nw_budget "$NW6C"
+: > "$LEDGER"
+( cd "$NW6C" && BUDGET_MISSION_USD=1 "$SDD" run "$MISSION" --budget-override --max-phases 1 ) >/dev/null 2>&1
+assert_eq "--budget-override on a lap that opens a session writes exactly one note" \
+  "stub:1 notes:1" \
+  "stub:$(nw_sessions) notes:$(nw_notes "$NW6C")"
+# The pending note crosses a lap, and this is the world that says so. A REVIEW whose rounds on disk
+# already meet REVIEW_MAX_ITER, under PUBLISH_ON_REVIEW_BLOCKED=draft: the REVIEW lap lifts the
+# ceiling and leaves through the draft jump's `continue` with no session; the PR lap it forces
+# calls mission_budget_blown again and opens the session the override bought. One note, and it
+# names PR — a pending note reset on that second call (the marker contract applied blindly) is lost.
+# The stub moves nothing, so the PR lap also buys its inline retry: `PR,PR` with one note is the
+# witness that the retry is the same lap and writes nothing more.
+NW6D="$OUTSIDE/nowork-override-draft"
+nowork_world "$NW6D" "done" '{sha}' 1
+( cd "$NW6D" || exit 1
+  printf -- '---\nfase: QA\nstatus: skipped\n---\n' > "docs/handoffs/$MISSION/30-handoff-qa.md"
+  printf 'round one\n' > "docs/handoffs/$MISSION/40-review-r1.md"
+  printf 'REVIEW_MAX_ITER=1\nPUBLISH_ON_REVIEW_BLOCKED="draft"\n' >> .sdd/config.sh
+  git add -A && git commit -qm "chore: a mission out of review rounds" ) >/dev/null 2>&1
+nowork_stub "$NW6D" nothing
+nw_budget "$NW6D"
+: > "$LEDGER"
+( cd "$NW6D" && BUDGET_MISSION_USD=1 "$SDD" run "$MISSION" --budget-override ) >/dev/null 2>&1
+assert_eq "--budget-override lifted on the draft jump's REVIEW lap is written above the PR session it bought" \
+  "sessions:PR,PR notes:1 on-pr:1" \
+  "sessions:$(jq -r -s '[.[] | select(.event == "session") | .phase] | join(",")' "$LEDGER") notes:$(nw_notes "$NW6D") on-pr:$(cat "$NW6D/docs/handoffs/$MISSION"/*.md | grep -c '^- intervention: sdd run --budget-override .* — PR — ' || true)"
+
 # Form (a): the same phase derived twice in a row with the SAME reason. The stub is the incident's
 # session over a pending row it never executes — its no-op commit moves HEAD, so without the guard
 # the lap is bought again and again until the phase ceiling.
@@ -7108,6 +7526,20 @@ chmod +x "$OUTSIDE/stub/claude"
 assert_eq "a QA that advances its step behind the same reason is not no-work, and a repeated step still is" \
   "rc:3 kind:no-work stub:2 phases:QA,QA" \
   "rc:$NW10_RC kind:$(nw_last_kind) stub:$(nw_sessions) phases:$(jq -r -s '[.[] | select(.event == "session") | .phase] | join(",")' "$LEDGER")"
+# The same two-session run under a blown ceiling and --budget-override: ONE note per process, never
+# one per lap that buys a session. The note is published once (the BUDGET_OVERRIDE_NOTED one-shot)
+# and the writer zeroes it; a writer that kept it would write it again above the second session.
+# The twin world gets the same stub with its own path; `stub:2` is the witness that two laps bought.
+NW_E2E="true"
+NW10B="$OUTSIDE/nowork-qa-override"
+nowork_world "$NW10B" "done" '{sha}' 1
+NW_E2E=""
+sed -i "s|$NW10|$NW10B|g" "$OUTSIDE/stub/claude"
+nw_budget "$NW10B"
+: > "$LEDGER"
+( cd "$NW10B" && BUDGET_MISSION_USD=1 "$SDD" run "$MISSION" --budget-override ) >/dev/null 2>&1
+assert_eq "--budget-override over two sessions of one run writes one note, not one per session" \
+  "stub:2 notes:1" "stub:$(nw_sessions) notes:$(nw_notes "$NW10B")"
 
 # Door 2 is cmd_run's inline retry, reachable only when the first session moved nothing — so the
 # stub does nothing — and only under `--phase`, because door 1 refuses the derived lap first. Without
