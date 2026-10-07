@@ -3971,9 +3971,10 @@ KIT_GUARD_CHANGES=""
 # option, and md5sum refused the WHOLE batch — every dirty path read `-` and no edit was seen.
 # Called, never `$( )`-captured: the result is a global.
 # ⚠️ DECLARED LIMITS: the content of every dirty path is READ at each arm and each check, so a large
-# untracked file in the kit costs its read twice per phase (ignored paths are never read); a path
-# md5sum escapes (a backslash or a newline in the name) gets no digest and reads as `-`, and a
-# newline in a name also splits its index entry, which then never meets the path; a gitlink (a
+# untracked file in the kit costs its read twice per phase (ignored paths are never read); a newline
+# in a name splits its status line and its index entry, so the path reads as `-` and its index
+# entry never meets it (md5sum's escaped record is decoded, but nothing upstream of it keeps the
+# name whole); a gitlink (a
 # submodule) reads as `-` in the worktree, so the commit checked out under an already-dirty entry is
 # not seen — the kit has no submodule; the stages of a CONFLICTED path are joined, and no probe
 # builds a conflict in the kit, so dropping all but one of them is a mutant nothing would catch.
@@ -4007,9 +4008,16 @@ kit_guard_tree() {
   # stages are joined in git's order. It is the FIRST file and read under `FILENAME == ARGV[1]`, never
   # `NR == FNR`: an empty index makes the first file contribute no record, and `NR == FNR` would then
   # swallow the status as if it were the index.
+  # An ESCAPED md5sum record (6th Codex review of PR #237): GNU md5sum writes a name holding a
+  # backslash, a newline or a CR as `\<md5>  <name>` with `\\`, `\n` and `\r` inside; read by
+  # position, it gave neither the digest nor the path. The leading `\` is dropped and the name decoded.
   KIT_GUARD_TREE="$( KG_SUMS="$sums" KG_EXECS="$execs" KG_LINKS="$links" awk '
+    function unesc(s,  o, i, c) { o = ""
+      while ((i = index(s, "\\")) > 0) { c = substr(s, i + 1, 1); o = o substr(s, 1, i - 1) (c == "n" ? "\n" : (c == "r" ? "\r" : c)); s = substr(s, i + 2) }
+      return o s }
     BEGIN { n = split(ENVIRON["KG_SUMS"], a, "\n")
-            for (i = 1; i <= n; i++) if (length(a[i]) > 34) h[substr(a[i], 35)] = substr(a[i], 1, 32)
+            for (i = 1; i <= n; i++) { r = a[i]; esc = (substr(r, 1, 1) == "\\"); if (esc) r = substr(r, 2)
+              if (length(r) > 34) h[esc ? unesc(substr(r, 35)) : substr(r, 35)] = substr(r, 1, 32) }
             n = split(ENVIRON["KG_LINKS"], y, "\n")
             for (i = 1; i <= n; i++) if (length(y[i]) > 34) h[substr(y[i], 35)] = "l" substr(y[i], 1, 32)
             n = split(ENVIRON["KG_EXECS"], x, "\n")

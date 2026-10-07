@@ -4184,6 +4184,16 @@ mut_RUN_kit_guard_index_reads_as_content() {
 mut_RUN_kit_guard_md5_options() {
   sed -i '/^kit_guard_tree() {/,/^}/ s/| xargs -0 -r md5sum -- 2>\/dev\/null )"/| xargs -0 -r md5sum 2>\/dev\/null )"/' "$1"
 }
+# An ESCAPED md5sum record (6th Codex review of PR #237), its two rules: the name KEPT escaped
+# (`back\\slash.md` never meets the status line's `back\slash.md`), and the leading `\` KEPT (the
+# digest and the name both shift one byte). Either way the file reads `-` and an edit goes unseen.
+# Caught by `kit-guard: a kit path with a backslash in its name …` in check-autonomy.sh.
+mut_RUN_kit_guard_md5_escape_kept() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|h\[esc ? unesc(substr(r, 35)) : substr(r, 35)\]|h[substr(r, 35)]|' "$1"
+}
+mut_RUN_kit_guard_md5_escape_prefix() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|if (esc) r = substr(r, 2)|if (0) r = substr(r, 2)|' "$1"
+}
 # A symlink in the kit tree (3rd Codex review of PR #237): UNHASHED, it reads `-` before and after
 # whatever the session points it at; FOLLOWED, its digest is the file behind it again, and a link
 # retargeted to an identical file compares equal. Both silent; both caught by `kit-guard: an
@@ -6471,6 +6481,8 @@ CATALOG=(
   RUN_kit_guard_index_reads_as_mode
   RUN_kit_guard_index_reads_as_content
   RUN_kit_guard_md5_options
+  RUN_kit_guard_md5_escape_kept
+  RUN_kit_guard_md5_escape_prefix
   RUN_kit_guard_link_unhashed
   RUN_kit_guard_link_followed
   RUN_kit_rev_is_head

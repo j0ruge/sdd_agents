@@ -6140,6 +6140,39 @@ assert_eq "kit-guard: a kit path whose name begins with a dash, already dirty an
   "sessions:$(kitguard_sessions) rc:$kg_dash_rc kind:$(hat_rows) named:$(grep -c 'paths: .M -dash.md (content changed)' <<< "$kg_dash_err") d:$(grep -c 'edited by the session' "$FAKEKIT/-dash.md")"
 git -C "$FAKEKIT" reset -q --hard "$kg_dash_base"
 
+# 2j. A KIT PATH WITH A BACKSLASH IN ITS NAME (6th Codex review of PR #237). GNU md5sum ESCAPES such
+#     a record — a leading `\`, and `\\` for each backslash in the name — and the parser read it by
+#     position: neither the digest nor the path came out, the file read `-` before and after, and an
+#     edit to it went unseen. The fixture commits the file and resets afterwards, as 2f and 2i do.
+#     `b:1` is the witness that the session's line really landed in the file.
+kg_bs_name='back\slash.md'
+kg_bs_base="$(git -C "$FAKEKIT" rev-parse HEAD)"
+( cd "$FAKEKIT" && printf 'tracked\n' > "$kg_bs_name" && git add -- "$kg_bs_name" && git commit -qm "fixture: a name with a backslash" ) >/dev/null
+kitguard_bs_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  printf 'edited by the session\n' >> '$FAKEKIT/$kg_bs_name'
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-dirty-backslash"
+printf 'edited by the human\n' >> "$FAKEKIT/$kg_bs_name"
+kitguard_bs_stub
+kg_bs_rc=0
+kg_bs_err="$( cd "$OUTSIDE/kitguard-dirty-backslash" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_bs_rc=$?
+assert_eq "kit-guard: a kit path with a backslash in its name, already dirty and edited again, stops the line and is named" \
+  "sessions:1 rc:3 kind:kit-touched named:1 b:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_bs_rc kind:$(hat_rows) named:$(grep -cF " M $kg_bs_name (content changed)" <<< "$kg_bs_err") b:$(grep -c 'edited by the session' "$FAKEKIT/$kg_bs_name")"
+git -C "$FAKEKIT" reset -q --hard "$kg_bs_base"
+
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the
 #    run it finally mattered on would scroll past unread. This regime is why the guard compares
