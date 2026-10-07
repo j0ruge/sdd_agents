@@ -13,7 +13,9 @@
 *~
 .#*
 \#*#
-4913
+# NÃO o `4913`, a sonda de escrita do vim (6ª revisão do Codex no PR #237): o padrão sem barra escondia
+# da guarda todo caminho do kit com esse nome, em qualquer profundidade, e não comprava nada — o vim
+# cria e apaga o arquivo no mesmo instante, e o salvamento que ele precede já é mudança no kit.
 
 # Configuração local de máquina
 .claude/settings.local.json
