@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 773a289e-20ea-4203-817a-084658e86831
 data: 2026-10-06 14:03
-gate: "tests/run-all.sh → rc 0, 'suite green' (1899 linhas '  ok ', 0 FAIL, 350 s com TMPDIR=/tmp/l5s, em d7b6df2, depois da 4ª rodada dos bots do PR #237); anchors: all 672 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '15 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 15, 12 com RESOLVED by"
+gate: "tests/run-all.sh → rc 0, 'suite green' (1900 linhas '  ok ', 0 FAIL, 542 s com TMPDIR=/tmp/l5s, em 2dbc8b5, depois da 5ª rodada dos bots do PR #237); anchors: all 674 mutants still apply and leave valid code; checkpoint I1–I12 done, cada Commit um sha no git log; check-todo: '15 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 15, 12 com RESOLVED by"
 ---
 
 # Handoff — EXEC — Lote 5: o que o lote 4 deixou
@@ -28,7 +28,8 @@ abre um worktree ligado (I10). ADR 0016 aceita, 0015 ganha `Amended by: 0016`. R
 3 consertos, 4 minors decididos pelo humano. PR #237: os bots deram 6 achados, consertados numa
 leva, e a leva achou a sandbox do catálogo sem o `.gitignore`; a 2ª, a 3ª e a 4ª rodadas do Codex
 acharam cada uma um caminho da árvore do kit (bit de execução, alvo do symlink, entrada do índice), e a
-4ª, mais um P2 registrado como achado (#239). Catálogo 619 → 672, todos aplicam.
+4ª, mais um P2 registrado como achado (#239); a 5ª, um nome com `-` na frente que cegava o `md5sum` e o
+`argv[0]` no aviso do supervisor, consertados. Catálogo 619 → 674, todos aplicam.
 Catraca 15 na branch (N = 2, #238 e #239) → 3 depois do chore. Próximo: `./bin/sdd health` UMA vez no
 worktree (com o `mutation-killers.tsv` copiado), merge pelo humano.
 
@@ -36,9 +37,9 @@ worktree (com o `mutation-killers.tsv` copiado), merge pelo humano.
 
 - **Branch:** `fix/lote-5-o-que-o-lote-4-deixou`, no worktree `~/repos/sdd_agents-lote-5`, empurrada
   (PR #237; base `origin/main` = `89df2e5`)
-- **Último commit:** o registro da 4ª rodada dos bots do PR #237 e da retro, sobre `d7b6df2`
+- **Último commit:** o registro da 5ª rodada dos bots do PR #237, sobre `2dbc8b5`
 - **Working tree:** limpo depois do commit deste handoff
-- **Suíte:** `tests/run-all.sh` → verde (rc 0, 350 s; 1899 linhas `ok`; 672 mutantes com âncora válida)
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, 542 s; 1900 linhas `ok`; 674 mutantes com âncora válida)
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
 - **Carimbo de mutação:** inválido para esta branch desde o I12 (esperado); o `sdd health` roda UMA
   vez, depois dos bots, no worktree
@@ -144,6 +145,15 @@ lista copiada (2ª vez: `commands/`, `.gitignore`), no mesmo commit; o `failure-
 verbete da suíte vermelha com `kit-touched` num regime alheio (`2bb1607`). O `remap.py` das âncoras
 não tinha sumido no reboot: mora em `~/.claude/plans/2026-10-03-helpers/`.
 
+**5ª rodada do Codex (sobre `3548a54`):** 2 P2, procedentes, consertados por decisão do humano.
+`2282442` — um caminho sujo do kit que começa com `-` chegava ao único `xargs md5sum` como opção, e o
+md5sum recusava o lote inteiro: todo caminho sujo lia `-` e nenhuma edição era vista. `md5sum --`;
+regime 2i, red `sessions:2 rc:3 kind:no-progress named:0 d:1`; 1 mutante. `2dbc8b5` — o aviso do
+supervisor imprimia o `argv[0]`, que quem chama escolhe (`exec -a SEGREDO sleep`), furando a garantia
+da `592a74f`; agora lê o `comm` do kernel. A testemunha roda sob o nome `argv0-token-7f3`, red
+`pid <n>: argv0-token-7f3`; 1 mutante novo, 1 re-ancorado, 4 de 4 pegos com os vizinhos. O
+`failure-modes.md` e a rule da anatomia ainda diziam "command line" desde a `592a74f`; corrigidos.
+
 ## Artefatos
 
 | Arquivo | O que contém |
@@ -182,7 +192,7 @@ mais no stderr).
 
 ## Riscos e não-feitos
 
-- **Carimbo não medido:** o catálogo de 672 mutantes só roda no `sdd health`; as re-provas desta
+- **Carimbo não medido:** o catálogo de 674 mutantes só roda no `sdd health`; as re-provas desta
   leva foram por `--only` (dica), cada mutante novo e os vizinhos que o plano nomeia.
 - **`TMPDIR` longo:** cinco `--only` contra o `check-autonomy.sh` deram `HARNESS-BROKEN` com o nome
   do mutante no `TMPDIR` (limite já declarado no sensor desde `0c0e13a`); com `TMPDIR` curto, todos

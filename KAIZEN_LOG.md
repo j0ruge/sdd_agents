@@ -29,8 +29,8 @@ kit era escrita no checkout que os `sdd run` dos alvos executam.
 | Relatório de outra missão que editou este checkpoint (mundo j) | `REVIEW\|0` | `QA\|1` |
 | Kit já sujo editado de novo durante a fase de um alvo | rc 0, 0 linhas | `kit-touched`, com o caminho nomeado; também só o bit, só o alvo do symlink, só o blob ou o modo do índice |
 | Nota `intervention:` sem sessão (`--phase PLAN`, `--phase PR` no carimbo, retry no teto, override em volta parada) | gravada e commitada | nenhuma; a da override carrega a fase da sessão comprada |
-| Catálogo de mutação | 619 | **672** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 672 mutants still apply`; 6 re-ancorados |
-| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 350 s, 1899 linhas `ok`, 0 FAIL, em `d7b6df2`, depois da 4ª rodada dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada) |
+| Catálogo de mutação | 619 | **674** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 674 mutants still apply`; 7 re-ancorados |
+| Suíte (`tests/run-all.sh`) | 351 s em `5df5176` | 542 s, 1900 linhas `ok`, 0 FAIL, em `2dbc8b5`, depois da 5ª rodada dos bots do PR #237 (TMPDIR curto; carga da máquina não controlada: 350 s na rodada anterior) |
 
 **Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
 `~/repos/sdd_agents-lote-5` (ADR 0016 §2): nada escrito no checkout principal enquanto alvos rodavam.
@@ -73,9 +73,11 @@ modo e conteúdo (`a55b53c`). A 4ª mostrou que o remendo por dimensão não tin
 dimensões — o HEAD no carimbo, o índice e a árvore (`b3a9e12`) —, e o catálogo pegou um regime que
 media o blob quando dizia medir o modo (`update-index --chmod` relê o arquivo). O outro P2 da 4ª
 virou a #239. A retro consertou uma corrida no probe de SIGINT do `check-coordination.sh` que daria
-mutante pego por acaso (`ef19862`).
+mutante pego por acaso (`ef19862`). A 5ª achou dois furos de canal, não de dimensão: um nome com
+`-` na frente virava opção do `md5sum` e cegava o lote inteiro (`2282442`), e o aviso do supervisor
+imprimia o `argv[0]`, que quem chama escolhe (`2dbc8b5`, agora o `comm` do kernel).
 
-**Ainda não medido:** o carimbo do `sdd health` com 672 mutantes, que roda depois dos bots; e o uso
+**Ainda não medido:** o carimbo do `sdd health` com 674 mutantes, que roda depois dos bots; e o uso
 real — a primeira parada `kit-touched` com o "what changed", o primeiro supervisor nomeando um
 processo, a primeira missão do kit aberta pelo passo 2 do `/sdd-plan`.
 
