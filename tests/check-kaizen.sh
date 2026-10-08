@@ -1945,21 +1945,24 @@ assert_eq "kaizen door: with no sdd on the PATH nothing is refused" \
 # directory with a space split `git -C <root>` in two. A linked worktree with a space in its name, whose
 # own bin/sdd the PATH resolves into, is refused; the named command runs behind a `git` that only writes
 # its arguments down, one per line, and the root and the worktree path must come out whole. `fetch:1` is
-# the witness that the named command really ran.
+# the witness that the named command really ran. The base branch too (2nd Codex round): git accepts
+# `release&prod`, and an unquoted `origin/release&prod` ran `git … origin/release` in the background and
+# `prod` as a command of its own.
 KWT3="$OUTSIDE/kit wt"; KPATH3="$OUTSIDE/kaizen-pathbin3"; KGITLOG="$OUTSIDE/kaizen-git-argv"
 git -C "$FIX" worktree add -q -b kaizen/space-fixture "$KWT3"
 mkdir -p "$KPATH3" "$OUTSIDE/kaizen-gitstub"; ln -s "$KWT3/bin/sdd" "$KPATH3/sdd"
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" >> %q\n' "$KGITLOG" > "$OUTSIDE/kaizen-gitstub/git"
 chmod +x "$OUTSIDE/kaizen-gitstub/git"
+sed -i 's/^DEFAULT_BRANCH=.*/DEFAULT_BRANCH="release\&prod"/' "$KWT3/.sdd/config.sh"
 mkdir -p "$OUTSIDE/shared-space"
 kz_space_rc=0
 kz_space_out="$( cd "$KWT3" && PATH="$KPATH3:$PATH" SDD_STATE_DIR="$OUTSIDE/shared-space" "$KWT3/bin/sdd" kaizen 2>&1 )" || kz_space_rc=$?
 kz_space_cmd="$(sed -n "s/.* — run '\(git -C .*\)', then 'sdd kaizen' from there.*/\1/p" <<< "$kz_space_out")"
 : > "$KGITLOG"
 [ -z "$kz_space_cmd" ] || ( cd "$OUTSIDE" && PATH="$OUTSIDE/kaizen-gitstub:$PATH" bash -c "$kz_space_cmd" ) >/dev/null 2>&1 || true
-assert_eq "kaizen remedy: the command the refusal names keeps a root with a space whole" \
-  "rc:1 fetch:1 root:2 worktree:1" \
-  "rc:$kz_space_rc fetch:$(grep -cx fetch "$KGITLOG" || true) root:$(grep -cxF "$KWT3" "$KGITLOG" || true) worktree:$(grep -cxF '../kit wt-kaizen' "$KGITLOG" || true)"
+assert_eq "kaizen remedy: the command the refusal names keeps a root with a space, and a base with a shell operator, whole" \
+  "rc:1 fetch:1 root:2 worktree:1 base:1" \
+  "rc:$kz_space_rc fetch:$(grep -cx fetch "$KGITLOG" || true) root:$(grep -cxF "$KWT3" "$KGITLOG" || true) worktree:$(grep -cxF '../kit wt-kaizen' "$KGITLOG" || true) base:$(grep -cxF 'origin/release&prod' "$KGITLOG" || true)"
 git -C "$FIX" worktree remove --force "$KWT3"
 git -C "$FIX" branch -q -D kaizen/space-fixture
 git -C "$FIX" worktree remove --force "$KWT2"
