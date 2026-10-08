@@ -30,9 +30,9 @@ merge (decisão 6). Próximo: PR, bots, uma leva, `sdd health` uma vez, merge pe
 
 ## Estado do repo
 
-- **Branch:** `fix/lote-6-as-quatro-que-faltam`, no worktree `~/repos/sdd_agents-lote-6`, **não
-  empurrada** (base `origin/main` = `fc32329`)
-- **Último commit:** o registro da 2ª rodada do Codex, sobre `4dfb0be`; empurrada (PR #244)
+- **Branch:** `fix/lote-6-as-quatro-que-faltam`, no worktree `~/repos/sdd_agents-lote-6`, empurrada
+  (PR #244; base `origin/main` = `fc32329`)
+- **Último commit:** o registro da 2ª rodada do Codex, sobre `4dfb0be`
 - **Working tree:** limpo depois do commit deste handoff
 - **Suíte:** `tests/run-all.sh` → verde (rc 0, 566 s; 1930 linhas `ok`; 687 mutantes com âncora válida), em `4dfb0be`
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
