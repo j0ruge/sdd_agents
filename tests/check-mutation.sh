@@ -3870,6 +3870,24 @@ mut_KAIZEN_reminder_per_worktree() {
   sed -i '/^kaizen_reminder()/,/^}/ s@kit_id="\$( REPO_ROOT="\$SDD_HOME" ledger_repo_root )"; here_id="\$( ledger_repo_root )"@kit_id="$( git -C "$SDD_HOME" rev-parse --show-toplevel )"; here_id="$REPO_ROOT"@' "$1"
 }
 
+# The checkout every target's `sdd run` executes is refused to the judge (#236, ADR 0017): one mutant
+# per rule of the door, each caught by its `kaizen door: ` world in check-kaizen.sh. ADMITTED: the
+# real run opens its session there again. SILENT: the projection stops saying what the real run
+# would do. PREFIX: the trailing slash goes, and a sibling `<root>-kaizen` is taken for the checkout.
+# NO_SDD: with no `sdd` on the PATH, the helper answers "this is it".
+mut_KAIZEN_shared_checkout_admitted() {
+  sed -i '/^cmd_kaizen() {/,/^}/ s@else die "\$shared_why"; fi@else :; fi@' "$1"
+}
+mut_KAIZEN_shared_checkout_projection_silent() {
+  sed -i '/^cmd_kaizen() {/,/^}/ s@then warn "a real run here would refuse: \$shared_why"; else@then :; else@' "$1"
+}
+mut_KAIZEN_shared_checkout_prefix() {
+  sed -i '/^kit_checkout_targets_run() {/,/^}/ s@case "\$p" in "\$REPO_ROOT"/\*)@case "$p" in "$REPO_ROOT"*)@' "$1"
+}
+mut_KAIZEN_shared_checkout_no_sdd() {
+  sed -i '/^kit_checkout_targets_run() {/,/^}/ s@p="\$(command -v sdd 2>/dev/null)" || return 1@p="$(command -v sdd 2>/dev/null)" || return 0@' "$1"
+}
+
 # The kaizen door goes back to comparing TOPLEVELS (issue 121): a linked worktree of the kit has its
 # own, and the kit's `sdd` run from one refuses as if it stood in a target. Caught by `kit-repo
 # guard: a linked worktree of the kit answers like the main checkout` in check-kaizen.sh.
@@ -6464,6 +6482,10 @@ CATALOG=(
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
   KAIZEN_reminder_per_worktree
+  KAIZEN_shared_checkout_admitted
+  KAIZEN_shared_checkout_projection_silent
+  KAIZEN_shared_checkout_prefix
+  KAIZEN_shared_checkout_no_sdd
   KAIZEN_kit_door_per_worktree
   KAIZEN_kit_door_open
   KAIZEN_already_judged_spends

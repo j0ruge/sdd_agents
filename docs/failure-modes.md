@@ -616,6 +616,24 @@ there would, and the fix is one more ignore line, never a looser guard.
 
 ---
 
+## `sdd kaizen` refuses: "this is the checkout every target's 'sdd run' executes"
+
+**Symptom:** `sdd kaizen` dies with rc 1 before any session — `this is the checkout every target's 'sdd
+run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git
+-C <root> fetch && git -C <root> worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>',
+then 'sdd kaizen' from there`. With `--dry-run` the same sentence comes as a warning, after `a real run
+here would refuse:`, and the projection follows.
+
+**What is happening:** you ran the judge in the checkout the `sdd` on your PATH resolves into. Every
+target's `sdd run` on this machine executes that checkout, and the session would write and commit the
+verdict and the next plan there — the commit stops each target run in flight with `KIT-TOUCHED`.
+
+**What you do:** run the command the message names — a fetch, never a pull, which moves the `HEAD` the
+kit guard compares — and `sdd kaizen` from the new worktree. Push its branch and open the PR from
+there; after the merge, `git worktree remove` it.
+
+---
+
 ## The review does not close at Grade A
 
 **Symptom:** `BLOCKED in REVIEW` with `N review round(s) already on disk, REVIEW_MAX_ITER=M`.

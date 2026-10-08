@@ -246,7 +246,9 @@ principal do kit, e o `kit_guard_check` de todo `sdd run` de alvo compara o `HEA
 alvo para aquela corrida com `KIT-TOUCHED`. Por isso o `/sdd-plan` (passo 2 de *Before anything
 else*) escreve a missão do kit num worktree ligado, e a sessão **interativa** a executa lá — nunca
 um `sdd run` a partir do checkout principal; dentro dele `health`, `preflight` e `install` rodam
-por `./bin/sdd`. Medido: worktree sujo e com commit deixa o carimbo do principal em
+por `./bin/sdd`. Desde o lote 6 (#236, ADR 0017) o `sdd kaizen` obedece à mesma regra por recusa
+do runner, não por frase: a corrida real morre antes da sessão no checkout para onde o `sdd` do PATH
+resolve (`kit_checkout_targets_run`) e nomeia o `git worktree add`; a projeção avisa e segue. Medido: worktree sujo e com commit deixa o carimbo do principal em
 `89df2e5|false`; o mesmo arquivo no principal, `|true`. É posse do checkout, não isolamento de
 filesystem. ⚠️ Dentro de um worktree ligado, `git bisect run`, `git rebase --exec`, os hooks
 `pre-commit`/`pre-push` e um alias `!` exportam `GIT_DIR` absoluto; a suíte, o catálogo e cada

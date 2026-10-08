@@ -1435,6 +1435,13 @@ linked worktree of the kit is the kit, compared by the same common-dir identity 
 judges the previous kit change and gives birth to the kit's next mission plan — detection without
 closure is inventory, not improvement.
 
+It does not run in the checkout the `sdd` on the PATH resolves into (ADR 0017): every target's
+`sdd run` on the machine executes that checkout, and its kit guard stops them with `KIT-TOUCHED` when
+a KAIZEN session commits there. The real run dies before any session and names the command — `git -C
+<root> fetch && git -C <root> worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD>
+origin/<DEFAULT_BRANCH>`, then `sdd kaizen` from there; `--dry-run` there warns with the same
+sentence and projects, and `--series` reads as before. With no `sdd` on the PATH nothing is refused.
+
 The judge is split in two (ADR 0001):
 
 **The runner derives the numbers.** `sdd kaizen --series` prints a versioned JSON (`v: 1`) about

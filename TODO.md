@@ -43,7 +43,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **O `sdd kaizen` no checkout principal do kit escreve e commita onde os `sdd run` dos alvos executam** —
-  `bin/sdd:10934` (`cmd_kaizen`) — a sessão KAIZEN escreve o veredito e o plano da próxima missão do kit e
+  `bin/sdd:10948` (`cmd_kaizen`) — a sessão KAIZEN escreve o veredito e o plano da próxima missão do kit e
   commita no `REPO_ROOT` de onde foi chamada. Chamada do checkout que o `sdd` do PATH resolve, com um
   `sdd run` de alvo em voo, é o mesmo `kit-touched` do `/sdd-plan` (lido no código, não reproduzido). A
   ADR 0016 §2 manda a missão do kit para um worktree ligado e não decide o `sdd kaizen`. Direção: recusar
