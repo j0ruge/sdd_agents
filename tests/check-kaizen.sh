@@ -1941,6 +1941,27 @@ kz_armed="$(PATH="$KZ_NOSDD_PATH" command -v sdd >/dev/null 2>&1 && echo 0 || ec
 kz_shared "$FIX" "$KZ_NOSDD_PATH" nosdd --dry-run
 assert_eq "kaizen door: with no sdd on the PATH nothing is refused" \
   "armed:1 rc:0 warned:0" "armed:$kz_armed rc:$KZ_RC warned:$KZ_WARNED"
+# The command the refusal names must survive the path it names (Codex on PR #244): a checkout under a
+# directory with a space split `git -C <root>` in two. A linked worktree with a space in its name, whose
+# own bin/sdd the PATH resolves into, is refused; the named command runs behind a `git` that only writes
+# its arguments down, one per line, and the root and the worktree path must come out whole. `fetch:1` is
+# the witness that the named command really ran.
+KWT3="$OUTSIDE/kit wt"; KPATH3="$OUTSIDE/kaizen-pathbin3"; KGITLOG="$OUTSIDE/kaizen-git-argv"
+git -C "$FIX" worktree add -q -b kaizen/space-fixture "$KWT3"
+mkdir -p "$KPATH3" "$OUTSIDE/kaizen-gitstub"; ln -s "$KWT3/bin/sdd" "$KPATH3/sdd"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" >> %q\n' "$KGITLOG" > "$OUTSIDE/kaizen-gitstub/git"
+chmod +x "$OUTSIDE/kaizen-gitstub/git"
+mkdir -p "$OUTSIDE/shared-space"
+kz_space_rc=0
+kz_space_out="$( cd "$KWT3" && PATH="$KPATH3:$PATH" SDD_STATE_DIR="$OUTSIDE/shared-space" "$KWT3/bin/sdd" kaizen 2>&1 )" || kz_space_rc=$?
+kz_space_cmd="$(sed -n "s/.* — run '\(git -C .*\)', then 'sdd kaizen' from there.*/\1/p" <<< "$kz_space_out")"
+: > "$KGITLOG"
+[ -z "$kz_space_cmd" ] || ( cd "$OUTSIDE" && PATH="$OUTSIDE/kaizen-gitstub:$PATH" bash -c "$kz_space_cmd" ) >/dev/null 2>&1 || true
+assert_eq "kaizen remedy: the command the refusal names keeps a root with a space whole" \
+  "rc:1 fetch:1 root:2 worktree:1" \
+  "rc:$kz_space_rc fetch:$(grep -cx fetch "$KGITLOG" || true) root:$(grep -cxF "$KWT3" "$KGITLOG" || true) worktree:$(grep -cxF '../kit wt-kaizen' "$KGITLOG" || true)"
+git -C "$FIX" worktree remove --force "$KWT3"
+git -C "$FIX" branch -q -D kaizen/space-fixture
 git -C "$FIX" worktree remove --force "$KWT2"
 git -C "$FIX" branch -q -D kaizen/shared-fixture
 

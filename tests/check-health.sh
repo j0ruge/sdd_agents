@@ -1738,14 +1738,17 @@ gitenv_census() { # gitenv_census <tests dir> — PUBLISHES GITENV_SEEN (entry p
     GITENV_SEEN=$((GITENV_SEEN + 1))
     # A line runs git when it names `git` as a word, a path ending in `/git` (`/usr/bin/git`,
     # "$ROOT/bin/git" — the `.` and the `-` on the right keep `/git.sh` and `/git-core` out), or the
-    # variable GIT exactly ($GIT, ${GIT}, "$GIT" — never $GIT_DIR). ⚠️ DECLARED LIMIT (D15): a git run
-    # through a variable of any other name ("$g" init) is undecidable in a line regex, like the
-    # variable operand of `cd` in RULE 2 of check-pipefail.sh; this census does not see it.
+    # variable GIT exactly ($GIT, ${GIT}, "$GIT", and the parameter under any modifier, ${GIT:-git},
+    # ${GIT-git}, ${GIT:=git} — never $GIT_DIR nor $GITHUB; Codex on PR #244). ⚠️ DECLARED LIMITS (D15): a git run through a
+    # variable of any other name ("$g" init) is undecidable in a line regex, like the variable operand
+    # of `cd` in RULE 2 of check-pipefail.sh; this census does not see it. And a path through a `git`
+    # directory (`$HOME/.config/git/config`) reads as a git run: fail closed, a sensor carrying one
+    # above its source is named, and the line moves below the source.
     at="$(awk -v want="$GITENV_SOURCE" '
       $0 == want && !src { src = NR }
       !first && $0 !~ /^[[:space:]]*#/ &&
         ($0 ~ /(^|[^[:alnum:]_.\/-])git([^[:alnum:]_-]|$)/ || $0 ~ /\/git([^[:alnum:]_.-]|$)/ ||
-         $0 ~ /[$]([{]GIT[}]|GIT([^[:alnum:]_]|$))/) { first = NR }
+         $0 ~ /[$]([{]GIT([^}[:alnum:]_][^}]*)?[}]|GIT([^[:alnum:]_]|$))/) { first = NR }
       END { print (src ? src : 0), (first ? first : 0) }' "$f")"
     # sourced nowhere, or sourced below a line that already ran git
     case "$at" in
@@ -1850,10 +1853,11 @@ if [ -z "${SDD_MUTANT:-}" ]; then
   printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' 'git init -q "$box"' > "$GITENV_CW/check-none.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' '/usr/bin/git init -q "$box"' "$GITENV_SOURCE" > "$GITENV_CW/check-abspath.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' '"$GIT" init -q "$box"' "$GITENV_SOURCE" > "$GITENV_CW/check-var.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' '"${GIT:-git}" init -q "$box"' "$GITENV_SOURCE" > "$GITENV_CW/check-default.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' '[ -z "${GIT_DIR:-}" ] || echo "$GIT_DIR" "$b/.git" /usr/lib/git-core/x' "$GITENV_SOURCE" > "$GITENV_CW/check-gitdir.sh"
   gitenv_census "$GITENV_CW"
-  [ "$GITENV_MISSING" = 'check-abspath.sh check-late.sh check-none.sh check-var.sh' ] && [ "$GITENV_SEEN" = 8 ] \
-    || broken "gitenv census: a world with check-abspath.sh (/usr/bin/git before the source), check-late.sh (git before the source), check-none.sh (no source) and check-var.sh (\$GIT before the source) — and check-gitdir.sh, which names GIT_DIR, .git and /git-core but runs no git — was read as '$GITENV_MISSING' over $GITENV_SEEN file(s) — the census measures nothing"
+  [ "$GITENV_MISSING" = 'check-abspath.sh check-default.sh check-late.sh check-none.sh check-var.sh' ] && [ "$GITENV_SEEN" = 9 ] \
+    || broken "gitenv census: a world with check-abspath.sh (/usr/bin/git before the source), check-default.sh (\${GIT:-git} before the source), check-late.sh (git before the source), check-none.sh (no source) and check-var.sh (\$GIT before the source) — and check-gitdir.sh, which names GIT_DIR, .git and /git-core but runs no git — was read as '$GITENV_MISSING' over $GITENV_SEEN file(s) — the census measures nothing"
   pass 'surface: the gitenv census names a git run by path or by variable before the source'
   gitenv_census "$ROOT/tests"
   [ "$GITENV_SEEN" -ge "$GITENV_FLOOR" ] \

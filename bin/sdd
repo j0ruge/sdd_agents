@@ -11036,8 +11036,11 @@ cmd_kaizen() {
   # opens no session and writes nothing, and it is the read-only look the measurement window is told
   # to use, so it warns with the same sentence and projects. `--series` returned above.
   if kit_checkout_targets_run; then
-    local shared_why
-    shared_why="this is the checkout every target's 'sdd run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git -C $REPO_ROOT fetch && git -C $REPO_ROOT worktree add ../${REPO_ROOT##*/}-kaizen -b kaizen/$(date +%Y%m%d) origin/$DEFAULT_BRANCH', then 'sdd kaizen' from there"
+    # The path operands of the named command are shell-quoted (Codex on PR #244): a checkout under a
+    # directory with a space split `git -C <root>` in two, and the remedy could not run.
+    local shared_why q_root q_wt
+    q_root="$(printf '%q' "$REPO_ROOT")"; q_wt="$(printf '%q' "../${REPO_ROOT##*/}-kaizen")"
+    shared_why="this is the checkout every target's 'sdd run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git -C $q_root fetch && git -C $q_root worktree add $q_wt -b kaizen/$(date +%Y%m%d) origin/$DEFAULT_BRANCH', then 'sdd kaizen' from there"
     if [ "$DRY_RUN" = 1 ]; then warn "a real run here would refuse: $shared_why"; else die "$shared_why"; fi
   fi
   # A dirty tree does not block (the judge may be invoked mid-work on purpose), but the rows born

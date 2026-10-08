@@ -3887,6 +3887,9 @@ mut_KAIZEN_shared_checkout_projection_silent() {
 mut_KAIZEN_shared_checkout_prefix() {
   sed -i '/^kit_checkout_targets_run() {/,/^}/ s@case "\$p" in "\$REPO_ROOT"/\*)@case "$p" in "$REPO_ROOT"*)@' "$1"
 }
+mut_KAIZEN_shared_checkout_unquoted() {          # the named command splits a root with a space
+  sed -i '/^cmd_kaizen() {/,/^}/ s@q_root="\$(printf '"'"'%q'"'"' "\$REPO_ROOT")"@q_root="$REPO_ROOT"@' "$1"
+}
 mut_KAIZEN_shared_checkout_no_sdd() {
   sed -i '/^kit_checkout_targets_run() {/,/^}/ s@p="\$(command -v sdd 2>/dev/null)" || return 1@p="$(command -v sdd 2>/dev/null)" || return 0@' "$1"
 }
@@ -6501,6 +6504,7 @@ CATALOG=(
   KAIZEN_shared_checkout_projection_silent
   KAIZEN_shared_checkout_prefix
   KAIZEN_shared_checkout_no_sdd
+  KAIZEN_shared_checkout_unquoted
   KAIZEN_kit_door_per_worktree
   KAIZEN_kit_door_open
   KAIZEN_already_judged_spends
