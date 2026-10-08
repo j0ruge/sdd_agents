@@ -1694,9 +1694,9 @@ fi
 #             bait and exited 0, never noticing — the sensor that reproduced the incident's config.
 # One definition does the clearing, tests/isolate-git.sh, and the CENSUS asserts that run-all.sh and
 # every tests/check-*.sh source it, in its one spelling, before the first line that runs git (a
-# non-comment line with `git` as a word). Its negative control is a world of five known answers
-# (below): the census must name exactly the two wrong ones, or it is SENSOR-BROKEN — a census that
-# names nobody there names nobody anywhere.
+# non-comment line with `git` as a word, a path ending in `/git`, or the variable GIT). Its negative
+# control is a world of eight known answers (below): the census must name exactly the four wrong
+# ones, or it is SENSOR-BROKEN — a census that names nobody there names nobody anywhere.
 # The sourced file reads the list off `git rev-parse --local-env-vars`, and REFUSES a list that
 # names no GIT_DIR — so each assertion also runs its entry point behind a git that answers that one
 # question with nothing (a wrapper ahead on PATH, every other call handed to the real git) and
@@ -1736,9 +1736,16 @@ gitenv_census() { # gitenv_census <tests dir> — PUBLISHES GITENV_SEEN (entry p
   for f in "$1/run-all.sh" "$1"/check-*.sh; do
     [ -f "$f" ] || continue
     GITENV_SEEN=$((GITENV_SEEN + 1))
+    # A line runs git when it names `git` as a word, a path ending in `/git` (`/usr/bin/git`,
+    # "$ROOT/bin/git" — the `.` and the `-` on the right keep `/git.sh` and `/git-core` out), or the
+    # variable GIT exactly ($GIT, ${GIT}, "$GIT" — never $GIT_DIR). ⚠️ DECLARED LIMIT (D15): a git run
+    # through a variable of any other name ("$g" init) is undecidable in a line regex, like the
+    # variable operand of `cd` in RULE 2 of check-pipefail.sh; this census does not see it.
     at="$(awk -v want="$GITENV_SOURCE" '
       $0 == want && !src { src = NR }
-      !first && $0 !~ /^[[:space:]]*#/ && $0 ~ /(^|[^[:alnum:]_.\/-])git([^[:alnum:]_-]|$)/ { first = NR }
+      !first && $0 !~ /^[[:space:]]*#/ &&
+        ($0 ~ /(^|[^[:alnum:]_.\/-])git([^[:alnum:]_-]|$)/ || $0 ~ /\/git([^[:alnum:]_.-]|$)/ ||
+         $0 ~ /[$]([{]GIT[}]|GIT([^[:alnum:]_]|$))/) { first = NR }
       END { print (src ? src : 0), (first ? first : 0) }' "$f")"
     # sourced nowhere, or sourced below a line that already ran git
     case "$at" in
@@ -1827,18 +1834,27 @@ if [ -z "${SDD_MUTANT:-}" ]; then
 
   # The census's negative control first, over a world of known answers and NOT a copy of tests/ —
   # a copy would only work while the real tree is clean, and on a tree with no source line at all
-  # the control itself would break before the assertion could name anyone. Four sensors and a
+  # the control itself would break before the assertion could name anyone. Seven sensors and a
   # suite: sourced then git, git only in a comment above the source, sourced with no git at all,
-  # git BEFORE the source, and git with no source. The census must name exactly the last two.
+  # git BEFORE the source, git with no source, git run by PATH before the source, git run through
+  # the variable GIT before the source, and — before the source — a line that only names GIT_DIR,
+  # a `.git` directory and a `/git-core` path. The census must name exactly the four that run git
+  # too early or never source it; the last file is built so that each loosening of the census
+  # (the variable widened to GIT_DIR, the path without its `/`, the path without its right-hand
+  # class) names it.
   GITENV_CW="$WORK/gitenv-census"; mkdir -p "$GITENV_CW"
   printf '%s\n' '#!/usr/bin/env bash' '# git is only named here' 'set -uo pipefail' "$GITENV_SOURCE" 'git status' > "$GITENV_CW/run-all.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' "$GITENV_SOURCE" 'out="$(git -C "$box" log)"' > "$GITENV_CW/check-good.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' "$GITENV_SOURCE" 'echo nothing' > "$GITENV_CW/check-nogit.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' '( cd "$box" && git init -q )' "$GITENV_SOURCE" > "$GITENV_CW/check-late.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' 'git init -q "$box"' > "$GITENV_CW/check-none.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' '/usr/bin/git init -q "$box"' "$GITENV_SOURCE" > "$GITENV_CW/check-abspath.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' '"$GIT" init -q "$box"' "$GITENV_SOURCE" > "$GITENV_CW/check-var.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' '[ -z "${GIT_DIR:-}" ] || echo "$GIT_DIR" "$b/.git" /usr/lib/git-core/x' "$GITENV_SOURCE" > "$GITENV_CW/check-gitdir.sh"
   gitenv_census "$GITENV_CW"
-  [ "$GITENV_MISSING" = 'check-late.sh check-none.sh' ] && [ "$GITENV_SEEN" = 5 ] \
-    || broken "gitenv census: a world with check-late.sh (git before the source) and check-none.sh (no source) was read as '$GITENV_MISSING' over $GITENV_SEEN file(s) — the census measures nothing"
+  [ "$GITENV_MISSING" = 'check-abspath.sh check-late.sh check-none.sh check-var.sh' ] && [ "$GITENV_SEEN" = 8 ] \
+    || broken "gitenv census: a world with check-abspath.sh (/usr/bin/git before the source), check-late.sh (git before the source), check-none.sh (no source) and check-var.sh (\$GIT before the source) — and check-gitdir.sh, which names GIT_DIR, .git and /git-core but runs no git — was read as '$GITENV_MISSING' over $GITENV_SEEN file(s) — the census measures nothing"
+  pass 'surface: the gitenv census names a git run by path or by variable before the source'
   gitenv_census "$ROOT/tests"
   [ "$GITENV_SEEN" -ge "$GITENV_FLOOR" ] \
     || broken "gitenv census: $GITENV_SEEN entry point(s) read, the floor is $GITENV_FLOOR — the glob stopped reading the suite"
