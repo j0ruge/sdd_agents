@@ -274,6 +274,20 @@ executor_agent_probes() {
      && grep -qF 'whole paragraph' <<< "$sab"; then
     pass "hat: the executor sabotages the new line of an R<n>, notes it, and re-reads the paragraph of a prose fix"
   else fail "hat: sdd-executor lost the sabotage step of an R<n> (its scope, its note in checkpoint-notas.md, or the prose re-read)"; fi
+  # Codex on sales_quote#416 (2026-10-07): the sabotage step came BEFORE the refactor, so a refactor
+  # that rewrote the fix's lines committed code no sabotage had degraded. The order is read from the
+  # numbered headings of the TDD section — Refactor, then Sabotage, then Commit — and the scope is read
+  # from the IMPERATIVE, not from a slogan beside it (Codex on #243: "each line the fix added" left out
+  # the lines the refactor changed and the ones the diff deletes, under a sentence that promised the
+  # whole commit): every line the final diff adds or changes, and every line it deletes, put back.
+  local nref nsab ncom
+  nref="$(awk '/^[0-9]+\. \*\*Refactor/ { print NR; exit }' "$ex")"
+  nsab="$(awk '/^[0-9]+\. \*\*Sabotage/ { print NR; exit }' "$ex")"
+  ncom="$(awk '/^[0-9]+\. \*\*Commit/ { print NR; exit }' "$ex")"
+  if [ -n "$nref" ] && [ -n "$nsab" ] && [ -n "$ncom" ] && [ "$nref" -lt "$nsab" ] && [ "$nsab" -lt "$ncom" ] \
+     && grep -qF 'each line the final diff adds or changes' <<< "$sab" && grep -qF 'each line it deletes' <<< "$sab"; then
+    pass "hat: the executor sabotages an R<n> after the refactor, every line the final diff adds, changes or deletes"
+  else fail "hat: sdd-executor sabotages an R<n> before its refactor, or no longer every line the final diff adds, changes or deletes (Codex on sales_quote#416 and #243)"; fi
 }
 
 # One hat promised a measurement nobody makes, and another was silent where its boundary needed a

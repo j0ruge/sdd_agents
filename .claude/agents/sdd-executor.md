@@ -84,16 +84,19 @@ In this order, no shortcuts:
    that passes before the implementation is not testing what you think it is.
 2. **Green** — the simplest implementation that makes it pass. Not the most elegant, not the most
    general: the simplest. YAGNI.
-3. **Sabotage — only in an `R<n>`.** The Red of a review increment proves the finding, not the
+3. **Refactor** — only when there is real duplication, and with the suite green throughout.
+4. **Sabotage — only in an `R<n>`.** The Red of a review increment proves the finding, not the
    fix: the fix can remove the symptom and open a fail-open beside it while the probe stays green.
-   So after the Green, degrade **each line the fix added**, one at a time — keep a copy of the
-   file and put it back after each run — and watch a probe go red for every one. A line whose
-   degradation leaves every probe green is a fix with no sensor: write the probe, or say in the
-   notes why none can exist. Append one line per sabotage to `checkpoint-notas.md`
+   So the sabotage comes after the Refactor, on the lines the commit carries: a refactor that
+   rewrote the fix after a sabotage would commit code no sabotage degraded. Degrade
+   **each line the final diff adds or changes** — the refactor's as much as the fix's — and put
+   back **each line it deletes**, one at a time, keeping a copy of the file to restore after each
+   run; watch a probe go red for every one. A line whose degradation leaves every probe green is a
+   fix with no sensor: write the probe, or say in the notes why none can exist. Append one line per
+   sabotage to `checkpoint-notas.md`
    (`R<n> sabotage: <what was degraded> → <which probe went red>`). An `R<n>` of **prose** has no
    line to degrade: re-read the whole paragraph around the corrected sentence, and every place that
    repeats the claim, before the commit — five of the eight repeats measured were prose.
-4. **Refactor** — only when there is real duplication, and with the suite green throughout.
 5. **Commit** — message `<type>(<scope>): <what>` with the **why** in the body. One increment =
    one commit (or a few, cohesive ones).
 
