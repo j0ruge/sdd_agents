@@ -25,9 +25,9 @@ checkout que todos os `sdd run` dos alvos executam e commitava ali (o vetor da A
 | Nome sujo `notes<LF>draft.md` editado durante a fase de um alvo (regime 2l) | `no-progress` nas duas corridas: a edição passava calada | `kit-touched`, nomeado `notes\ndraft.md` |
 | `sdd kaizen` no checkout para onde o `sdd` do PATH resolve | `rc:3 named:0 sessions:2` | `rc:1 named:1 sessions:0`; `--dry-run` avisa e projeta |
 | Catraca `todo-findings` | 4 | 4 na branch, todos com `RESOLVED by`, N = 0 nascidos → 0 depois do chore |
-| Catálogo de mutação | 676 | **686** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 686 mutants still apply` |
+| Catálogo de mutação | 676 | **687** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 687 mutants still apply` |
 | `tests/check-autonomy.sh` sozinho | 3:22 (no Red do I5, com o 2k) | 2:06 (com o 2k, o 2l e o índice do 2j) |
-| Suíte (`tests/run-all.sh`) | 548 s em `fc32329` (medido no planejamento) | 507 s, 1929 linhas `ok`, 0 FAIL, em `bae95dd`, depois da revisão final (carga 2,2–4,5) |
+| Suíte (`tests/run-all.sh`) | 548 s em `fc32329` (medido no planejamento) | 571 s, 1930 linhas `ok`, 0 FAIL, em `fbaae50`, depois da 1ª rodada dos bots (carga 3,2–7,8) |
 
 **Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
 `~/repos/sdd_agents-lote-6` (ADR 0016 §2). Cada incremento seguiu o mesmo roteiro: o Check do plano
@@ -56,6 +56,12 @@ numa leva, com vermelho medido (`bae95dd`): a recusa de identidade do `sdd kaize
 para o `$SDD_HOME`, o checkout que a porta nova recusa; e um Minor regradeado para Important pelo
 efeito — num arquivo CRLF a cerca nunca fechava, regressão desta leva nos dois leitores de bug (o
 toggle antigo fechava ali). Os outros três minors foram ao humano.
+
+**Rodada dos bots (PR #244):** o CodeRabbit leu o range inteiro sem comentário acionável; o Copilot
+estava sem cota. O Codex achou dois P2, consertados com vermelho medido (`fbaae50`): o censo do
+`GIT_DIR` não contava `"${GIT:-git}"` (o minor (c) da revisão final, agora com outro autor), e o comando
+que a recusa do `sdd kaizen` nomeia partia uma raiz com espaço — os operandos de caminho saem por
+`printf '%q'`.
 
 **Ainda não medido:** o uso real — a primeira guarda de kit de uma máquina com milhares de caminhos
 sujos, o primeiro `sdd kaizen` recusado no checkout dos alvos. O kit **congela no merge** deste lote

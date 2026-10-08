@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 489b90d7-dcd1-4b0c-8926-e5cbcb2864a4
 data: 2026-10-08 15:41
-gate: "tests/run-all.sh → rc 0, 'suite green' (1929 linhas '  ok ', 0 FAIL, 507 s com TMPDIR=/tmp/l6-exec, em bae95dd, depois da revisão final); anchors: all 686 mutants still apply and leave valid code; checkpoint I1–I7 done, cada Commit um sha no git log; check-todo: '4 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 4, os 4 com RESOLVED by"
+gate: "tests/run-all.sh → rc 0, 'suite green' (1930 linhas '  ok ', 0 FAIL, 571 s com TMPDIR=/tmp/l6-exec, em fbaae50, depois da 1ª rodada dos bots); anchors: all 687 mutants still apply and leave valid code; checkpoint I1–I7 done, cada Commit um sha no git log; check-todo: '4 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 4, os 4 com RESOLVED by"
 ---
 
 # Handoff — EXEC — Lote 6: as quatro que faltam
@@ -25,16 +25,16 @@ ou fecho mais curto não vira decisão nem gênero (I2); o `sdd kaizen` recusa o
 (I4, espelho por `./bin/sdd install --force`); a guarda de kit não passa mais o kit pelo ambiente e
 aguenta milhares de caminhos sujos (I5), e vê o nome com `\n`, publicado codificado como o `md5sum` o
 escapa (I6). Revisão final: 1 Important e 1 Minor regradeado, consertados (`bae95dd`); 3 minors ao
-humano. Catálogo 676 → 686, todos aplicam. Catraca 4 na branch → 0 depois do chore. O kit congela no
+humano. PR #244: 2 P2 do Codex consertados (`fbaae50`). Catálogo 676 → 687, todos aplicam. Catraca 4 na branch → 0 depois do chore. O kit congela no
 merge (decisão 6). Próximo: PR, bots, uma leva, `sdd health` uma vez, merge pelo humano.
 
 ## Estado do repo
 
 - **Branch:** `fix/lote-6-as-quatro-que-faltam`, no worktree `~/repos/sdd_agents-lote-6`, **não
   empurrada** (base `origin/main` = `fc32329`)
-- **Último commit:** o registro da revisão final, sobre `bae95dd`
+- **Último commit:** o registro da 1ª rodada dos bots, sobre `fbaae50`; empurrada (PR #244)
 - **Working tree:** limpo depois do commit deste handoff
-- **Suíte:** `tests/run-all.sh` → verde (rc 0, 507 s; 1929 linhas `ok`; 686 mutantes com âncora válida), em `bae95dd`
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, 571 s; 1930 linhas `ok`; 687 mutantes com âncora válida), em `fbaae50`
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
 - **Carimbo de mutação:** ainda não — `./bin/sdd health` roda UMA vez, depois de todos os revisores
 
@@ -49,6 +49,7 @@ merge (decisão 6). Próximo: PR, bots, uma leva, `sdd health` uma vez, merge pe
 - `94c48ec` — I6 (#240, fatia 2): `hat_status_lines -z`, chave crua e o nome codificado uma vez na linha publicada; regime 2l e o índice do 2j; 2 mutantes
 - `54e2f18` — I7: `RESOLVED by` nos 4, ADR 0017 aceita, emenda na 0016, o congelamento na gaveta e no `CONTEXT.md`, `KAIZEN_LOG.md` e este handoff
 - `bae95dd` — revisão final: a recusa de identidade do `sdd kaizen` aponta o worktree; a cerca fecha em CRLF (mutante `FENCE_crlf_never_closes`)
+- `fbaae50` — rodada dos bots: o censo conta `"${GIT:-git}"`; o comando que a recusa do `sdd kaizen` nomeia cita os caminhos (mutante `KAIZEN_shared_checkout_unquoted`)
 
 ## Revisão final da branch
 
@@ -68,8 +69,20 @@ pela guarda, todos nomeados. Uma leva, com vermelho medido antes:
   duas amostras; o motivo do `kit-touched` não a imprime;
 - `kit_checkout_targets_run` com `REPO_ROOT` vazio responderia "recusado"; inalcançável hoje (a recusa
   de identidade vem antes);
-- o censo do `GIT_DIR` não conta `"${GIT:-git}" init` (falha aberta, estreita) e conta
-  `cfg="$HOME/.config/git/config"` como git (falha fechada).
+- ~~o censo do `GIT_DIR` não conta `"${GIT:-git}" init`~~ — consertado na rodada dos bots (`fbaae50`, P2 do
+  Codex); o `cfg="$HOME/.config/git/config"` lido como git (falha fechada) ficou declarado no comentário.
+
+## Rodada dos bots (PR #244)
+
+O CodeRabbit leu `fc32329..3bd890c` e não gerou comentário acionável; o Copilot estava sem cota
+(lacuna, não aprovação). O Codex, pedido com `@codex review`, deu dois P2, consertados numa leva com
+vermelho medido (`fbaae50`):
+
+- **Censo:** `"${GIT:-git}" init` antes do `source` passava; a variável `GIT` sob qualquer modificador
+  conta agora, e o mundo de controle ganhou o `check-default.sh` (9 arquivos).
+- **Comando da recusa do `sdd kaizen`:** sob um diretório com espaço, `git -C $REPO_ROOT …` partia a
+  raiz; os operandos de caminho saem por `printf '%q'`. Mundo novo: um worktree ligado chamado `kit wt`,
+  e o comando nomeado rodado atrás de um `git` que só anota o argv (`fetch:1 root:2 worktree:1`).
 
 O que o revisor deixou de lado é decisão do grill (5, 1, 6, P1) ou limite já declarado; fica como está.
 
