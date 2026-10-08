@@ -28,7 +28,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   variável não casa a palavra: um sensor que chame o binário por caminho ou por variável antes do
   `source` do `tests/isolate-git.sh` passa no censo com o repositório de quem o chama ainda exportado.
   Nenhum sensor faz isso hoje: falha aberta sem caso. Direção: contar o caminho absoluto e a variável
-  como git, com os dois mundos no controle negativo do censo.
+  como git, com os dois mundos no controle negativo do censo. RESOLVED by aa3a0b8.
   — descoberto por `revisor final` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-06)
 
 - [ ] **A cerca dos leitores de bug alterna em qualquer marcador: um `~~~` dentro de crases a fecha** —
@@ -37,7 +37,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   fecha a cerca. Um `## Decision` datado de exemplo, depois de um `~~~` dentro de crases, conta como a
   decisão humana: falha aberta, sem caso real (achado do Codex no PR #237). O extrator do gênero
   (`bin/sdd:1708`, `fenced`) tem o mesmo padrão. Direção: casar caractere e comprimento nos dois
-  leitores, com os mundos "til dentro de crases" e "fecho mais curto" e um mutante por leitor.
+  leitores, com os mundos "til dentro de crases" e "fecho mais curto" e um mutante por leitor. RESOLVED by ea289b4.
   — descoberto por `Codex` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-07)
 
 ### Contrato e configuração
@@ -47,7 +47,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   commita no `REPO_ROOT` de onde foi chamada. Chamada do checkout que o `sdd` do PATH resolve, com um
   `sdd run` de alvo em voo, é o mesmo `kit-touched` do `/sdd-plan` (lido no código, não reproduzido). A
   ADR 0016 §2 manda a missão do kit para um worktree ligado e não decide o `sdd kaizen`. Direção: recusar
-  rodar nesse checkout nomeando o worktree, ou criá-lo; decidir com o humano.
+  rodar nesse checkout nomeando o worktree, ou criá-lo; decidir com o humano. RESOLVED by 3c54ac1.
   — descoberto por `claude` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-06)
 
 ### Saída humana e cosmética
@@ -59,12 +59,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Custo e escala
 
 - [ ] **Com milhares de caminhos sujos no kit, a guarda estoura o limite do ambiente e o `sdd run` morre** —
-  `bin/sdd:4001` (`kit_guard_tree`) — digests, bits, links e a árvore inteira (`KG_BEFORE`) vão ao `awk` por
-  variável de ambiente; acima de 128 KiB o Linux recusa (140 KB dá `Argument list too long`) e o `sdd run`
-  morre no `kit_guard_arm`, antes da sessão: ~1700–2200 caminhos sujos bastam. O mesmo canal parte um nome
-  com `\n` (`hat_status_lines` lê `-z` e imprime `\n`; o `ls-files -z` passa por `tr`), falha aberta só
-  declarada. Direção: NUL até o `awk`, fluxos por process substitution sob `FILENAME == ARGV[n]`, nome
-  codificado na linha publicada, e o registro escapado do md5sum, nunca `md5sum -z` (só coreutils 8.30+).
+  `bin/sdd:4001` (`kit_guard_tree`) — digests, bits, links e a árvore inteira iam ao `awk` por variável de
+  ambiente; acima de 128 KiB o Linux recusa (`Argument list too long`) e o `sdd run` morria no
+  `kit_guard_arm`, antes da sessão (~1000 caminhos sujos bastavam). O mesmo canal partia um nome com `\n`,
+  falha aberta só declarada. Direção: NUL até o `awk`, fluxos por process substitution sob
+  `FILENAME == ARGV[n]`, nome codificado na linha publicada, nunca `md5sum -z`. RESOLVED by 94c48ec.
   — descoberto por `Codex` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-07)
 
 ### Sem seção — chegaram depois da última classificação

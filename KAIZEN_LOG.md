@@ -4,6 +4,58 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-08 — Lote 6: as quatro que faltam
+
+**Problema (Gemba):** o lote 5 fechou com quatro achados no `TODO.md`, espelhados nas issues #236,
+#238, #239 e #240, e a gaveta guardava um quinto (F8). Três sensores falhavam abertos sem caso real
+e um quebrava alto: o censo do `GIT_DIR` não via o git chamado por caminho nem por `$GIT`; os dois
+leitores de bug alternavam a cerca em qualquer marcador, e um `## Decision` de exemplo depois de um
+`~~~` dentro de crases contava como a decisão humana; a guarda de kit passava o kit sujo inteiro por
+variável de ambiente, e com ~1000 caminhos sujos o `sdd run` de um alvo morria antes da sessão, pelo
+mesmo canal que partia um nome com `\n` e deixava a edição dele calada. O `sdd kaizen` rodava no
+checkout que todos os `sdd run` dos alvos executam e commitava ali (o vetor da ADR 0016 §2).
+
+**Medição** (antes: `fc32329`; depois: topo da branch, comandos rodados em 2026-10-08):
+
+| Fato | Antes | Depois |
+|---|---|---|
+| Controle negativo do censo do `GIT_DIR` (mundo de 8 arquivos) | `SENSOR-BROKEN`, rc 90: leu `check-late.sh check-none.sh` | os 4 errados nomeados, `check-gitdir.sh` (só `GIT_DIR`, `.git`, `/git-core`) não |
+| Exemplo cercado com `~~~` dentro de crases, ou fecho mais curto, nos dois leitores de bug | `REVIEW\|REVIEW`: a decisão citada contava, o cabeçalho citado virava o gênero | `REVIEW\|QA`; os três leitores leem uma cerca só (`FENCE_AWK`) |
+| Kit com 1000 executáveis e 700 symlinks sujos, nomes de ~200 B (regime 2k) | `sessions:0 … rc:126`, nas duas corridas | `kit-touched` na edição, calado deixado em paz |
+| Nome sujo `notes<LF>draft.md` editado durante a fase de um alvo (regime 2l) | `no-progress` nas duas corridas: a edição passava calada | `kit-touched`, nomeado `notes\ndraft.md` |
+| `sdd kaizen` no checkout para onde o `sdd` do PATH resolve | `rc:3 named:0 sessions:2` | `rc:1 named:1 sessions:0`; `--dry-run` avisa e projeta |
+| Catraca `todo-findings` | 4 | 4 na branch, todos com `RESOLVED by`, N = 0 nascidos → 0 depois do chore |
+| Catálogo de mutação | 676 | **685** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 685 mutants still apply` |
+| `tests/check-autonomy.sh` sozinho | 3:22 (no Red do I5, com o 2k) | 2:06 (com o 2k, o 2l e o índice do 2j) |
+| Suíte (`tests/run-all.sh`) | 548 s em `fc32329` (medido no planejamento) | 582 s, 1927 linhas `ok`, 0 FAIL, em `bbff069` + o fecho (carga 1,2–3,2) |
+
+**Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
+`~/repos/sdd_agents-lote-6` (ADR 0016 §2). Cada incremento seguiu o mesmo roteiro: o Check do plano
+rodado antes do conserto, o probe com o `FAIL` visto pelo motivo que o plano mediu, o conserto, e a
+sabotagem de cada linha que o diff final acrescenta ou muda, **depois** do refactor (#243), numa cópia
+do worktree com um controle sem sabotagem. Mutantes provados por `--only`: 30 no I2, 11 no I3, 15 no
+I5 e 22 no I6, todos pegos. Re-âncora do `TODO.md` em todo commit que deslocou um símbolo designado,
+como a frase do F8 manda.
+
+**O que a sabotagem achou e mudou a forma:**
+- I2: o mundo `a ~~~ fence hides the quote just as a ``` fence does` não media o til desde a issue 63
+  (a linha em branco fechava o bloco do cabeçalho antes da cerca), e uma cerca que só reconhecesse
+  crases passava; o corpo passou a citar um cabeçalho inteiro. O valor de retorno do `fence_line` era
+  inobservável (`fence { next }` já pula toda linha que ele nomeava) e saiu;
+- I3: a segunda frase do lembrete do `sdd kaizen` mudava sem asserção que a lesse;
+- I5: com `printf '%s\n'` a árvore anterior sempre trazia um registro, e `FILENAME == ARGV[1]` era
+  indistinguível de `NR == FNR`; com `printf '%s'` o kit limpo vira arquivo vazio, e um regime novo
+  (kit limpo que ganha um caminho) separa os dois;
+- I6: com o `enc()` aplicado em quatro sítios, os de links e executáveis não teriam regime; a forma
+  ficou chave crua em todo lado e uma codificação só, na linha publicada. O ramo do CR só decide o
+  que o motivo imprime e ficou declarado.
+
+**Ainda não medido:** o uso real — a primeira guarda de kit de uma máquina com milhares de caminhos
+sujos, o primeiro `sdd kaizen` recusado no checkout dos alvos. O kit **congela no merge** deste lote
+até o veredito do juiz (decisão 6).
+
+---
+
 ## 2026-10-06 — Lote 5: o que o lote 4 deixou
 
 **Problema (Gemba):** o lote 4 fechou com 11 achados no `TODO.md`, e o planejamento do lote 5 achou

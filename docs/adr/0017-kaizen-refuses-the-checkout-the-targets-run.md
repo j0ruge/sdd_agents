@@ -1,6 +1,6 @@
 # ADR 0017 — `sdd kaizen` refuses the checkout the targets run, and names the worktree
 
-- **Status**: proposed (—, 2026-10-08)
+- **Status**: accepted (—, 2026-10-08)
 - **Spec**: docs/handoffs/20261008-lote-6-as-quatro-que-faltam/00-missao.md
 - **Amends**: 0016 (§2: the kit's own judge joins the kit mission in a linked worktree — the runner
   refuses the shared checkout, it does not create one)
