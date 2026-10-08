@@ -1183,6 +1183,14 @@ write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' 
   "$(printf '\nThe template reads:\n\n```md\nthe example\n```')$GENRE_DECIDED"
 assert_eq "fence: after a closed example fence the real dated decision counts — the bug passes" \
   "REVIEW|REVIEW" "$genre_decided|$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+# ...and in a file written with CRLF line endings (final review of batch 6): the closing line is the run
+# and a CR, and a close that demanded nothing but blanks after the run never came — the fence ran to the
+# end of the file, swallowed the real decision, and a decided bug blocked. The loose toggle closed there.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\nThe template reads:\n\n```md\nthe example\n```')$GENRE_DECIDED"
+sed -i 's/$/\r/' "$GENRE_BUG"
+assert_eq "a bug written with CRLF line endings closes its example fence — the real dated decision counts" \
+  "REVIEW|REVIEW|1" "$genre_decided|$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c $'\r$' "$GENRE_BUG" | grep -c '^[1-9]')"
 # Two more rules of FENCE_AWK that only these worlds measure (the sabotage pass of #239): a fence
 # opened with tildes hides what it quotes, and a closing line indented by a few blanks still closes
 # (CommonMark lets the closing fence carry up to three) — read with its blanks, it never closed and

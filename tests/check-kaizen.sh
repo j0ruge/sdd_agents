@@ -1874,6 +1874,10 @@ out="$( cd "$TGT" && "$KSDD" kaizen 2>&1 )"; rc=$?
 assert_eq "sdd kaizen refuses to run outside the kit repo (rc 1)" "1" "$rc"
 assert_eq "and points at the kit repo" "yes" \
   "$(grep -q 'run it in the kit repo' <<< "$out" && echo yes || echo no)"
+# ...from a linked worktree of it (final review of batch 6): the kit repo it names is $SDD_HOME, the
+# checkout the PATH's `sdd` runs from, and the door below refuses exactly that one (ADR 0017).
+assert_eq "and to a linked worktree of it, never to the checkout the targets run" "yes" \
+  "$(grep -q 'run it in the kit repo, from a linked worktree of it' <<< "$out" && echo yes || echo no)"
 
 # A linked WORKTREE of the kit is the kit (issue 121). The door compared the `--show-toplevel` of
 # $SDD_HOME with the cwd's, and a worktree has a toplevel of its own, so the kit's `sdd` run from a

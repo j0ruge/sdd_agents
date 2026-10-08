@@ -617,7 +617,10 @@ mut_FENCE_closes_on_shorter() {                   # a ``` closes a ```` example
   sed -i '/^function fence_line(/,/^}/ s@else if (ch == fch && len >= flen && @else if (ch == fch \&\& @' "$1"
 }
 mut_FENCE_closes_with_info() {                    # a ```bash closes a ``` example
-  sed -i '/^function fence_line(/,/^}/ s@ && l ~ /^\[ \\t\]\*(`+|~+)\[ \\t\]\*\$/) fence = 0@) fence = 0@' "$1"
+  sed -i '/^function fence_line(/,/^}/ s@ && l ~ /^\[ \\t\]\*(`+|~+)\[ \\t\\r\]\*\$/) fence = 0@) fence = 0@' "$1"
+}
+mut_FENCE_crlf_never_closes() {                   # a closing line ending in CR closes nothing
+  sed -i '/^function fence_line(/,/^}/ s@(`+|~+)\[ \\t\\r\]\*\$/) fence = 0@(`+|~+)[ \\t]*$/) fence = 0@' "$1"
 }
 # Each reader keeps its own CALL of the fragment (decision 3 of #239): handed back the loose toggle
 # it carried before, it alone reads a `~~~` inside a backtick fence as the close again.
@@ -6124,6 +6127,7 @@ CATALOG=(
   FENCE_closes_on_other_char
   FENCE_closes_on_shorter
   FENCE_closes_with_info
+  FENCE_crlf_never_closes
   DOCS_fence_loose
   DOCS_blocked_writable_passes
   DOCS_blocked_cell_not_split

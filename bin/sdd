@@ -1542,6 +1542,8 @@ placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit p
 # the sabotage pass of #239 found one unobservable — `fence { next }` already skips every line it
 # could name. The mutation catalogue sabotages the CONDITIONS in this body and each reader's CALL in
 # its own function. No apostrophe anywhere inside the string: it is single-quoted shell.
+# A CR before the end of the closing line counts as a blank: in a file written with CRLF the close never
+# came, and the fence swallowed the rest of the file (final review of batch 6).
 # DECLARED LIMITS (D15), none of which a reader has needed: an indent of four or more blanks opens a
 # fence here (an indented code block in CommonMark); a backtick inside the info string of a backtick
 # fence is not refused; a fence that never closes runs to the end of the file, as in CommonMark.
@@ -1551,7 +1553,7 @@ function fence_line(l,   run, ch, len) {
   run = substr(l, RSTART, RLENGTH); sub(/^[ \t]+/, "", run)
   ch = substr(run, 1, 1); len = length(run)
   if (!fence) { fence = 1; fch = ch; flen = len }
-  else if (ch == fch && len >= flen && l ~ /^[ \t]*(`+|~+)[ \t]*$/) fence = 0
+  else if (ch == fch && len >= flen && l ~ /^[ \t]*(`+|~+)[ \t\r]*$/) fence = 0
 }
 '
 
@@ -11026,7 +11028,7 @@ cmd_kaizen() {
   local kit_id here_id
   kit_id="$( REPO_ROOT="$SDD_HOME" ledger_repo_root )"; here_id="$( ledger_repo_root )"
   [ -n "$kit_id" ] && [ "$kit_id" = "$here_id" ] \
-    || die "sdd kaizen plans the KIT's next mission — run it in the kit repo ($SDD_HOME)"
+    || die "sdd kaizen plans the KIT's next mission — run it in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME)"
   # The kit, but the checkout every target's `sdd run` executes (#236, ADR 0017): a KAIZEN session
   # writes and commits the verdict and the next plan here, and the kit guard of each target run in
   # flight stops it with KIT-TOUCHED. The real run dies before any session, naming the worktree that
