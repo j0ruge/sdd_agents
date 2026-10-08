@@ -6144,7 +6144,8 @@ git -C "$FAKEKIT" reset -q --hard "$kg_dash_base"
 #     a record — a leading `\`, and `\\` for each backslash in the name — and the parser read it by
 #     position: neither the digest nor the path came out, the file read `-` before and after, and an
 #     edit to it went unseen. The fixture commits the file and resets afterwards, as 2f and 2i do.
-#     `b:1` is the witness that the session's line really landed in the file.
+#     `b:1` is the witness that the session's line really landed in the file. Since #240 the tree
+#     publishes every name encoded the way md5sum escapes one, so the reason names `back\\slash.md`.
 kg_bs_name='back\slash.md'
 kg_bs_base="$(git -C "$FAKEKIT" rev-parse HEAD)"
 ( cd "$FAKEKIT" && printf 'tracked\n' > "$kg_bs_name" && git add -- "$kg_bs_name" && git commit -qm "fixture: a name with a backslash" ) >/dev/null
@@ -6170,7 +6171,33 @@ kg_bs_rc=0
 kg_bs_err="$( cd "$OUTSIDE/kitguard-dirty-backslash" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_bs_rc=$?
 assert_eq "kit-guard: a kit path with a backslash in its name, already dirty and edited again, stops the line and is named" \
   "sessions:1 rc:3 kind:kit-touched named:1 b:1" \
-  "sessions:$(kitguard_sessions) rc:$kg_bs_rc kind:$(hat_rows) named:$(grep -cF " M $kg_bs_name (content changed)" <<< "$kg_bs_err") b:$(grep -c 'edited by the session' "$FAKEKIT/$kg_bs_name")"
+  "sessions:$(kitguard_sessions) rc:$kg_bs_rc kind:$(hat_rows) named:$(grep -cF ' M back\\slash.md (content changed)' <<< "$kg_bs_err") b:$(grep -c 'edited by the session' "$FAKEKIT/$kg_bs_name")"
+# ...and its INDEX entry meets it under the same encoding (#240): the path is staged and dirty again
+#    (`MM`), and the session replaces only the staged blob. The index reaches awk NUL-terminated and
+#    keyed by the raw name like every other side, or the entry never meets the line and the change
+#    goes unseen.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ "\$n" -eq 1 ]; then
+  blob="\$(printf 'staged by the session\n' | git -C "$FAKEKIT" hash-object -w --stdin)"
+  git -C "$FAKEKIT" update-index --cacheinfo "100644,\$blob,$kg_bs_name"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-index-backslash"
+git -C "$FAKEKIT" add -- "$kg_bs_name"
+printf 'unstaged by the human\n' >> "$FAKEKIT/$kg_bs_name"
+kg_bsix_rc=0
+kg_bsix_err="$( cd "$OUTSIDE/kitguard-index-backslash" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_bsix_rc=$?
+assert_eq "kit-guard: the staged entry of a path with a backslash in its name meets it — replaced alone, it is named as an index change" \
+  "sessions:1 rc:3 kind:kit-touched named:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_bsix_rc kind:$(hat_rows) named:$(grep -cF 'MM back\\slash.md (index changed)' <<< "$kg_bsix_err")"
 git -C "$FAKEKIT" reset -q --hard "$kg_bs_base"
 
 # 2k. THOUSANDS OF DIRTY PATHS IN THE KIT (#240). The tree reached awk through four environment
@@ -6203,6 +6230,28 @@ assert_eq "kit-guard: a clean kit that gains one dirty path names exactly that p
   "sessions:1 rc:3 kind:kit-touched named:1" \
   "sessions:$(kitguard_sessions) rc:$kg_gain_rc kind:$(hat_rows) named:$(grep -cE 'paths: [?][?] gained-by-the-session[.]md($|[^,])' <<< "$kg_gain_err")"
 rm -f "$FAKEKIT/gained-by-the-session.md"
+
+# 2l. A DIRTY NAME HOLDING A NEWLINE (#240). hat_status_lines read `git status -z` and printed each
+#     entry with `\n`, so `notes<LF>draft.md` came out as two lines, `?? notes` and `draft.md`: both
+#     read `-`, the tree was the same before and after an edit to the file, and the edit went unseen
+#     (reproduced). The kit guard now reads the status NUL-terminated and publishes each name ENCODED
+#     the way md5sum escapes one — `\\`, `\n`, `\r` — so the path is one line and its digest meets it.
+#     Differential: edited again it stops the line and is named, encoded; left alone it is silent.
+kg_nl_name="notes"$'\n'"draft.md"
+kitguard_nl_run() {   # kitguard_nl_run <target dir> <1 = the session edits the file> — sessions, rc, kind, named
+  local err rc=0
+  kitguard_reset
+  kitguard_world "$1"
+  printf 'scratch\n' > "$FAKEKIT/$kg_nl_name"
+  if [ "$2" = 1 ]; then kitguard_dirty_stub "$FAKEKIT/$kg_nl_name"; else kitguard_dirty_stub ""; fi
+  err="$( cd "$1" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || rc=$?
+  printf 'sessions:%s rc:%s kind:%s named:%s' "$(kitguard_sessions)" "$rc" "$(hat_rows)" \
+    "$(grep -cF '?? notes\ndraft.md (content changed)' <<< "$err")"
+  rm -f "$FAKEKIT/$kg_nl_name"
+}
+assert_eq "kit-guard: a dirty name holding a newline is one path — edited again it stops the line and is named, left alone it is silent" \
+  "sessions:1 rc:3 kind:kit-touched named:1|sessions:2 rc:3 kind:no-progress named:0" \
+  "$(kitguard_nl_run "$OUTSIDE/kitguard-newline-edit" 1)|$(kitguard_nl_run "$OUTSIDE/kitguard-newline-alone" 0)"
 
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the

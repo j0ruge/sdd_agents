@@ -4154,7 +4154,7 @@ mut_RUN_kit_guard_tree_blind() {
 # edited again gives the identical ` M TODO.md` line and is not. Caught by the same assertion, whose
 # session edits the file that was already dirty.
 mut_RUN_kit_guard_tree_no_content() {
-  sed -i '/^kit_guard_tree() {/,/^}/ s|print $0 "\\t" ((p in h) ? h\[p\] : "-")|print $0 "\\t-"|' "$1"
+  sed -i '/^kit_guard_tree() {/,/^}/ s|print substr($0, 1, 3) enc(p) "\\t" ((p in h) ? h\[p\] : "-")|print substr($0, 1, 3) enc(p) "\\t-"|' "$1"
 }
 # The arm forgets the tree it sampled: the human's own dirt, there before the phase, reads as the
 # session's and every phase over a dirty kit stops. Caught by the benign half of the same assertion
@@ -4230,6 +4230,17 @@ mut_RUN_kit_guard_md5_escape_kept() {
 }
 mut_RUN_kit_guard_md5_escape_prefix() {
   sed -i '/^kit_guard_tree() {/,/^}/ s|if (esc) r = substr(r, 2)|if (0) r = substr(r, 2)|' "$1"
+}
+# A name holding a newline is ONE path (#240): the status reaches the kit guard NUL-terminated and
+# every name is published encoded the way md5sum escapes one, once, on the printed line. UNENCODED:
+# enc() hands the name back as is — the newline splits the tree line in two. Z_NEWLINE: the `-z` mode of hat_status_lines prints `\n` again, and the NUL-reading array
+# gets one garbled entry. Both caught by `kit-guard: a dirty name holding a newline is one path …`
+# (2l); unencoded, the backslash regime (2j) reads its name undoubled too.
+mut_RUN_kit_guard_name_unencoded() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|    function enc(s,  o, i, c) { o = ""|    function enc(s,  o, i, c) { return s; o = ""|' "$1"
+}
+mut_RUN_hat_status_z_newline() {
+  sed -i '/^hat_status_lines() {/,/^}/ s|if \[ "\$z" = 1 \]; then printf|if false; then printf|' "$1"
 }
 # A symlink in the kit tree (3rd Codex review of PR #237): UNHASHED, it reads `-` before and after
 # whatever the session points it at; FOLLOWED, its digest is the file behind it again, and a link
@@ -6527,6 +6538,8 @@ CATALOG=(
   RUN_kit_guard_md5_options
   RUN_kit_guard_md5_escape_kept
   RUN_kit_guard_md5_escape_prefix
+  RUN_kit_guard_name_unencoded
+  RUN_hat_status_z_newline
   RUN_kit_guard_link_unhashed
   RUN_kit_guard_link_followed
   RUN_kit_rev_is_head

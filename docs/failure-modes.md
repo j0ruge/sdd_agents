@@ -603,7 +603,8 @@ paths: <XY path>, <XY path> (content changed), <XY path> (mode changed), <XY pat
 
 **What is happening:** the checkout the `sdd` on your PATH runs from — the kit — moved while a phase
 of another repository's mission ran: a commit, or a dirty path that appeared, changed content, mode or
-staged entry, or went clean. Since #233 a kit that was already dirty when the phase opened is watched too, path by path and
+staged entry, or went clean. A name holding a backslash, a newline or a CR is printed escaped, as `md5sum`
+prints it (`\\`, `\n`, `\r`), so `notes<newline>draft.md` reads `notes\ndraft.md` (#240). Since #233 a kit that was already dirty when the phase opened is watched too, path by path and
 by content, so saving a file in a dirty kit stops the line as well. The runner does not know who did
 it: a session of this mission writing outside its repo, or you working on the kit in another terminal.
 
