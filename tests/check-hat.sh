@@ -381,6 +381,26 @@ command_relay_probes() {
 # not the file: a step moved below the delegation would create the worktree after the planner wrote.
 # It also demands that `health`, `preflight` and `install` run as ./bin/sdd inside the worktree: the
 # `sdd` on the PATH has its SDD_HOME in the main checkout and would install THAT checkout's agents/.
+# The planner measures each increment against the disk the earlier ones leave (F8 of the drawer,
+# closed by batch 6): an open item of TODO.md designates a symbol by `path:N` (`symbol`), and
+# tests/check-todo.sh — in TEST_CMD — fails the commit whose increment moved that symbol more than 10
+# lines; a count the plan writes in prose goes stale the same way. Paid twice: batch 4, and the
+# planning of batch 6, whose four fixes edit exactly the four designated symbols. Read as the § 4
+# SECTION, so the paragraph moved to another section reads red. The catalogue cannot reach it — the
+# same limit as executor_agent_probes, declared the same way; the sabotage pass that proves each
+# phrase and the section is in the notes of 20261008-lote-6-as-quatro-que-faltam.
+planner_agent_probes() {
+  local agent="$ROOT/agents/sdd-planner.md" sec
+  sec="$(awk '/^## 4\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'against the disk the earlier ones leave' <<< "$sec" \
+     && grep -qF 'tests/check-todo.sh --anchors' <<< "$sec" \
+     && grep -qF 're-measured in the state after that increment' <<< "$sec"; then
+    pass "hat: the planner measures each increment against the disk the earlier ones leave (TODO.md anchors and prose numbers)"
+  else
+    fail "hat: sdd-planner no longer measures each increment against the disk the earlier ones leave"
+  fi
+}
+
 command_worktree_probes() {
   local cmd="$ROOT/commands/sdd-plan.md" sec
   sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
@@ -606,6 +626,7 @@ if [ "$n" -lt "$HAT_FLOOR" ]; then
 fi
 census_probes
 executor_agent_probes
+planner_agent_probes
 hat_promise_probes
 command_approval_probes
 command_relay_probes

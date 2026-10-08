@@ -20,7 +20,7 @@
 | F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
-| F8 | O plano mede contra a base, não contra os incrementos anteriores | nota de 2026-10-05, da execução do lote 4; sem missão | uma frase no `sdd-planner` (§ F8) | a próxima missão de kit depois do lote 4 |
+| F8 | O plano mede contra a base, não contra os incrementos anteriores | **fechada** pelo I4 de `20261008-lote-6-as-quatro-que-faltam`: o parágrafo no § 4 do `sdd-planner`, segurado pelo probe `hat:` do `tests/check-hat.sh` | nada | — |
 
 Fechados, para ninguém reabrir: o laço do fingerprint (#54–#56 → missão
 `20260922-o-motivo-da-fase`, PR #57, merge `2258e53`); o fluxo `develop → staging → main` com o
@@ -291,6 +291,13 @@ uma frase no § 4 do `sdd-planner` — para cada incremento, `grep` dos símbolo
 `TODO.md` contra o diff previsto, e número escrito em prosa que um incremento anterior muda é
 re-medido no estado depois dele. Nas três vezes, a execução decidiu na hora e registrou nas notas do
 checkpoint daquela missão.
+
+**Fechada pelo I4 de `20261008-lote-6-as-quatro-que-faltam` (2026-10-08).** A frase entrou no § 4 do
+`agents/sdd-planner.md` como parágrafo `⚠️`, e o probe `hat: the planner measures each increment
+against the disk the earlier ones leave` do `tests/check-hat.sh` a lê como seção, no `TEST_CMD`. A
+lição foi paga pela segunda vez no planejamento do próprio lote 6: os quatro consertos editam
+exatamente os quatro símbolos designados do `TODO.md`, e o plano trouxe a tabela de âncoras por
+incremento.
 
 ---
 
