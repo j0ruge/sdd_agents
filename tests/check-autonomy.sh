@@ -6173,6 +6173,37 @@ assert_eq "kit-guard: a kit path with a backslash in its name, already dirty and
   "sessions:$(kitguard_sessions) rc:$kg_bs_rc kind:$(hat_rows) named:$(grep -cF " M $kg_bs_name (content changed)" <<< "$kg_bs_err") b:$(grep -c 'edited by the session' "$FAKEKIT/$kg_bs_name")"
 git -C "$FAKEKIT" reset -q --hard "$kg_bs_base"
 
+# 2k. THOUSANDS OF DIRTY PATHS IN THE KIT (#240). The tree reached awk through four environment
+#     variables — digests, executable bits, links, and the tree before — and one variable holds at
+#     most 131 063 bytes of value (measured: MAX_ARG_STRLEN less the name and the NUL). Past that the
+#     `awk` of kit_guard_arm failed to exec (`Argument list too long`, rc 126 on the extracted
+#     functions), and under `set -e` the target's `sdd run` died before its session. The bulk is
+#     sized to overflow EACH of the four on its own — 1000 executable regular files and 700
+#     symlinks, every name ~200 bytes — so a channel handed back to the environment is caught by
+#     itself. Same differential as 2b, over the same pre-dirty TODO.md: the edit stops the line and
+#     is named, the kit left alone is silent. `bulk/` is not in the fake kit's .gitignore, and
+#     kitguard_reset does not clean the kit, so the bulk is removed by hand afterwards.
+kg_bulk="$FAKEKIT/bulk"; mkdir -p "$kg_bulk"
+kg_long="$(printf '%0190d' 0 | tr 0 n)"
+( cd "$kg_bulk" && for i in $(seq -w 1 1000); do : > "x-$kg_long-$i"; done && chmod +x x-* \
+  && for i in $(seq -w 1 700); do ln -s "x-$kg_long-0001" "l-$kg_long-$i"; done )
+assert_eq "kit-guard: a kit with thousands of dirty paths still opens the session, sees the edit, and stays silent left alone" \
+  "sessions:1 lines:1 rc:3 kind:kit-touched same:1 named:1|sessions:2 lines:0 rc:3 kind:no-progress same:0 named:0" \
+  "$(kitguard_dirty_run "$OUTSIDE/kitguard-bulk-edit" "$FAKEKIT/TODO.md")|$(kitguard_dirty_run "$OUTSIDE/kitguard-bulk-alone" "")"
+rm -rf "$kg_bulk"
+# ...and the tree BEFORE reaches awk as a file of its own (#240): from a clean kit it is an empty file,
+# with no record, so only `FILENAME == ARGV[1]` keeps the tree after out of it. A clean kit that gains
+# one dirty path names exactly that path — no other item, no empty one beside it.
+kitguard_reset
+kitguard_world "$OUTSIDE/kitguard-clean-gains"
+kitguard_dirty_stub "$FAKEKIT/gained-by-the-session.md"
+kg_gain_rc=0
+kg_gain_err="$( cd "$OUTSIDE/kitguard-clean-gains" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )" || kg_gain_rc=$?
+assert_eq "kit-guard: a clean kit that gains one dirty path names exactly that path" \
+  "sessions:1 rc:3 kind:kit-touched named:1" \
+  "sessions:$(kitguard_sessions) rc:$kg_gain_rc kind:$(hat_rows) named:$(grep -cE 'paths: [?][?] gained-by-the-session[.]md($|[^,])' <<< "$kg_gain_err")"
+rm -f "$FAKEKIT/gained-by-the-session.md"
+
 # 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
 #    fired on every phase of every kit mission would train its only reader to ignore it, and the
 #    run it finally mattered on would scroll past unread. This regime is why the guard compares

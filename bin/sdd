@@ -4019,8 +4019,12 @@ kit_guard_tree() {
   # hashed the file behind, and a link retargeted to an identical file compared equal.
   links="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
             && while IFS= read -r e; do [ -L "${e:3}" ] && printf '%s  %s\n' "$(readlink -- "${e:3}" | md5sum | cut -c1-32)" "${e:3}"; done <<< "$status" )" || true
-  # ENVIRON and not `-v`: awk expands backslash escapes in a -v value, which would rewrite a name.
-  # index/substr only — mawk is byte-oriented, and a path is arbitrary bytes.
+  # FILES, never the environment nor `-v` (#240): awk expands backslash escapes in a -v value, which
+  # would rewrite a name, and one environment variable holds at most 131 063 bytes of value — past
+  # that awk failed to exec, and under `set -e` the target's `sdd run` died before its session
+  # (~1000 dirty paths, measured). Each stream is a process substitution read under
+  # `FILENAME == ARGV[n]`, never `NR == FNR`, for the reason the index gives below: an empty stream
+  # contributes no record. index/substr only — mawk is byte-oriented, and a path is arbitrary bytes.
   # The INDEX entry of the path after an `@` (4th Codex review of PR #237): on a path already `MM`, a
   # phase that replaces only the staged blob — or flips only the staged mode — leaves porcelain and the
   # worktree as they were, and the next commit in the kit carries the session's entry. `ls-files -s`
@@ -4031,22 +4035,20 @@ kit_guard_tree() {
   # An ESCAPED md5sum record (6th Codex review of PR #237): GNU md5sum writes a name holding a
   # backslash, a newline or a CR as `\<md5>  <name>` with `\\`, `\n` and `\r` inside; read by
   # position, it gave neither the digest nor the path. The leading `\` is dropped and the name decoded.
-  KIT_GUARD_TREE="$( KG_SUMS="$sums" KG_EXECS="$execs" KG_LINKS="$links" awk '
+  KIT_GUARD_TREE="$( awk '
     function unesc(s,  o, i, c) { o = ""
       while ((i = index(s, "\\")) > 0) { c = substr(s, i + 1, 1); o = o substr(s, 1, i - 1) (c == "n" ? "\n" : (c == "r" ? "\r" : c)); s = substr(s, i + 2) }
       return o s }
-    BEGIN { n = split(ENVIRON["KG_SUMS"], a, "\n")
-            for (i = 1; i <= n; i++) { r = a[i]; esc = (substr(r, 1, 1) == "\\"); if (esc) r = substr(r, 2)
-              if (length(r) > 34) h[esc ? unesc(substr(r, 35)) : substr(r, 35)] = substr(r, 1, 32) }
-            n = split(ENVIRON["KG_LINKS"], y, "\n")
-            for (i = 1; i <= n; i++) if (length(y[i]) > 34) h[substr(y[i], 35)] = "l" substr(y[i], 1, 32)
-            n = split(ENVIRON["KG_EXECS"], x, "\n")
-            for (i = 1; i <= n; i++) if (x[i] != "") ex[x[i]] = 1 }
     FILENAME == ARGV[1] { t = index($0, "\t"); if (t == 0) next
       split(substr($0, 1, t - 1), f, " "); e = f[1] ":" f[2]; q = substr($0, t + 1)
       ix[q] = (q in ix) ? ix[q] "," e : e; next }
+    FILENAME == ARGV[2] { r = $0; esc = (substr(r, 1, 1) == "\\"); if (esc) r = substr(r, 2)
+      if (length(r) > 34) h[esc ? unesc(substr(r, 35)) : substr(r, 35)] = substr(r, 1, 32); next }
+    FILENAME == ARGV[3] { if (length($0) > 34) h[substr($0, 35)] = "l" substr($0, 1, 32); next }
+    FILENAME == ARGV[4] { if ($0 != "") ex[$0] = 1; next }
     { p = substr($0, 4); print $0 "\t" ((p in h) ? h[p] : "-") ((p in ex) ? "+x" : "") ((p in ix) ? "@" ix[p] : "") }' \
-    <( git -C "$SDD_HOME" ls-files -s -z 2>/dev/null | tr '\0' '\n' ) - <<< "$status" )"
+    <( git -C "$SDD_HOME" ls-files -s -z 2>/dev/null | tr '\0' '\n' ) \
+    <( printf '%s' "$sums" ) <( printf '%s' "$links" ) <( printf '%s' "$execs" ) - <<< "$status" )"
 }
 
 # What moved between two kit trees, PUBLISHED in KIT_GUARD_CHANGES as one comma-separated clause:
@@ -4054,7 +4056,11 @@ kit_guard_tree() {
 # (content changed)` when the worktree content did, `(mode changed)` when only the executable bit
 # did, `(index changed)` when only the staged entry did), and a path dirty before and clean now
 # (`path (no longer dirty)`). Empty when the two trees agree.
-# Called, never `$( )`-captured.
+# Called, never `$( )`-captured. The tree before reaches awk as its FIRST FILE, never through the
+# environment, for kit_guard_tree's reason (#240): a variable holds at most 131 063 bytes of value.
+# Written with `printf '%s'`, no newline: a clean kit before is an EMPTY file, no record at all, so
+# only `FILENAME == ARGV[1]` keeps the records after out of it — `NR == FNR` would swallow them, and
+# a clean kit that gained a path would name none (regime 2k).
 # The `(no longer dirty)` items come in the order of the tree before — git's — and never in awk's
 # hash order, which walked `TODO.md, notes, zz.md` as notes, zz, TODO (final review of
 # 20261006-lote-5-o-que-o-lote-4-deixou, finding 8). The key runs to the LAST tab, the separator
@@ -4062,14 +4068,13 @@ kit_guard_tree() {
 # and cut at the first one the reason named `notes` for `notes<TAB>draft.md`. Both only ever
 # garbled the reason — the stop itself compares the whole trees (kit_guard_check).
 kit_guard_changes() {   # kit_guard_changes <tree before> <tree after>
-  KIT_GUARD_CHANGES="$( KG_BEFORE="$1" awk '
+  KIT_GUARD_CHANGES="$( awk '
     function cut(l) { return match(l, /\t[^\t]*$/) ? RSTART : length(l) + 1 }
     function key(l) { return substr(l, 4, cut(l) - 4) }
     function head(l) { return substr(l, 1, cut(l) - 1) }
     function wt(l,  d) { d = substr(l, cut(l) + 1); sub(/@.*$/, "", d); return d }
     function md5(l,  d) { d = wt(l); sub(/\+x$/, "", d); return d }
-    BEGIN { n = split(ENVIRON["KG_BEFORE"], b, "\n")
-            for (i = 1; i <= n; i++) if (b[i] != "") { k = key(b[i]); if (!(k in was)) ord[++m] = k; was[k] = b[i] } }
+    FILENAME == ARGV[1] { k = key($0); if (!(k in was)) ord[++m] = k; was[k] = $0; next }
     $0 != "" { p = key($0); seen[p] = 1
       if (!(p in was)) item = head($0)
       else if (was[p] == $0) next
@@ -4077,7 +4082,7 @@ kit_guard_changes() {   # kit_guard_changes <tree before> <tree after>
       else item = head($0)
       out = out sep item; sep = ", " }
     END { for (i = 1; i <= m; i++) if (!(ord[i] in seen)) { out = out sep ord[i] " (no longer dirty)"; sep = ", " }
-          print out }' <<< "$2" )"
+          print out }' <( printf '%s' "$1" ) - <<< "$2" )"
 }
 
 # Called, never substituted. `$(kit_guard_arm)` would run the body in a subshell where the
