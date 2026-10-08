@@ -192,7 +192,7 @@
 # the reader unable to tell which failure happened:
 #    0  clean          1  the file has shape violations
 #   89  no temp dir (the probes never ran)   90/91/92  a selftest probe failed
-#   93  findings file missing or unreadable  94  fewer items than the floor
+#   93  findings file not named, missing or unreadable   94  fewer items than the floor
 #   95  SDD_TODO_CAP is not a positive integer   96  unknown option
 #   97  the selftest was poisoned on purpose (a probe of the dispatch, never a real run)
 #   98  the bare path reached check_file without the selftest
@@ -1708,7 +1708,41 @@ EOF
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   assert_rc 93 "--count on a missing file must exit 93" bash "$SELF" --count "$box/does-not-exist.md"
-  rule_end 5 'the CLI answers --count, and --allow-empty lowers the floor to zero'
+  # A mode given NO file names the missing argument (retro of batch 5, 2026-10-07): the empty name
+  # printed "findings file missing or unreadable: " with nothing after the colon — the shape of a
+  # file that vanished — and the caller went looking for a file instead of an argument. The rc stays
+  # 93, the contract callers read; the rc is shared, so each side requires its own text AND the
+  # absence of the other's.
+  cli_says() { # cli_says <present> <absent> <label> <args...> — rc 93, from /
+    PROBES=$((PROBES + 1))
+    local present="$1" absent="$2" label="$3" out got; shift 3
+    out="$(cd / && bash "$SELF" "$@" 2>&1)"; got=$?
+    if [ "$got" -eq 93 ] && [[ "$out" == *"$present"* ]] && [[ "$out" != *"$absent"* ]]; then return 0; fi
+    printf '  SELFTEST FAIL  %s — expected rc 93 with "%s" and without "%s", got rc %s: %s\n' \
+      "$label" "$present" "$absent" "$got" "$out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  }
+  # Controls over cli_says itself (Codex review of PR #242): it is the only judge of the four probes
+  # below and bumps PROBES on its own, so a body neutered to `return 0` left this rule green. As in
+  # helper_selfcheck, each control reads the helper's MESSAGE from a subshell, where the counters
+  # cannot move: one world per check it makes (the text, the absence, the rc), and one it must pass.
+  local cmsg cfail=0
+  cmsg="$(cli_says 'no findings file named' 'zzz' '<control>' --count "$box/does-not-exist.md" 2>&1)"
+  case "$cmsg" in *'SELFTEST FAIL'*) ;; *) cfail=$((cfail + 1)) ;; esac
+  cmsg="$(cli_says 'missing or unreadable' 'findings file' '<control>' --count "$box/does-not-exist.md" 2>&1)"
+  case "$cmsg" in *'SELFTEST FAIL'*) ;; *) cfail=$((cfail + 1)) ;; esac
+  cmsg="$(cli_says '1' 'zzz' '<control>' --count "$box/countable.md" 2>&1)"
+  case "$cmsg" in *'got rc 0'*) ;; *) cfail=$((cfail + 1)) ;; esac
+  cmsg="$(cli_says 'missing or unreadable' 'no findings file named' '<control>' --count "$box/does-not-exist.md" 2>&1)"
+  [ -z "$cmsg" ] || cfail=$((cfail + 1))
+  [ "$cfail" -eq 0 ] || { FAILS=$((FAILS + cfail)); fail_rc 90
+    printf '  SELFTEST FAIL  cli_says missed %d of its 4 controls — the helper no longer judges what it reports\n' "$cfail" >&2; }
+  cli_says 'no findings file named' 'missing or unreadable' "--count with no file names the argument" --count
+  cli_says 'no findings file named' 'missing or unreadable' "--anchors with no file names the argument" --anchors
+  cli_says 'no findings file named' 'missing or unreadable' "--check '' names the argument" --check ''
+  cli_says 'missing or unreadable' 'no findings file named' "a named file that is absent is still missing" \
+    --count "$box/does-not-exist.md"
+  rule_end 9 'the CLI answers --count, names a missing file argument, and --allow-empty lowers the floor to zero'
 
   # ── Rule 5 has no shortcut: a physical line of the findings section holds at most 120 chars ──
   # The line cap counts PHYSICAL lines, so before this rule a whole analysis joined onto one line
@@ -2016,12 +2050,20 @@ EOF
 # check_file <file> <cap> — the real check. Kept out of the top-level flow so the selftest can
 # invoke it through `--check` without recursing into itself.
 # require_marked_file <file> — the ONE guard the three entry points share (check_file, count_file,
-# anchors_file): rc 93 when the file is missing or unreadable, rc 99 when it carries no open marker.
+# anchors_file): rc 93 when the file is not named, missing or unreadable, rc 99 when it carries no
+# open marker.
 # It was written three times and the copies had already drifted — only one printed the skeleton
 # hint, only two refused an empty name.
 require_marked_file() {
   local file="${1-}"
-  if [ -z "$file" ] || [ ! -f "$file" ] || [ ! -r "$file" ]; then
+  # An empty name is a mode called with no file, or an unset variable — an ARGUMENT that is
+  # missing, not a file. Same rc 93; its own sentence, since "missing or unreadable: " with nothing
+  # after the colon sent the caller looking for a file (retro of batch 5).
+  if [ -z "$file" ]; then
+    printf '  FAIL  no findings file named — pass it after the mode (`--count TODO.md`, `--anchors TODO.md`); an empty name is never defaulted\n' >&2
+    return 93
+  fi
+  if [ ! -f "$file" ] || [ ! -r "$file" ]; then
     printf '  FAIL  findings file missing or unreadable: %s\n' "$file" >&2
     return 93
   fi

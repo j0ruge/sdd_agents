@@ -384,6 +384,24 @@ command_worktree_probes() {
   fi
 }
 
+# The same step tells the human what comes back BEFORE the worktree goes (retro of batch 5; Codex on
+# PR #242): `.sdd/cache/` and `.sdd/logs/` are ignored and per worktree, so `git worktree remove`
+# deletes the killer map the mission's health taught and the stamp it wrote — 676 mutants against
+# 619 in the main checkout, measured. The map always returns; the stamp only when line 6 of
+# `./bin/sdd health --release` is red, or a valid stamp of the main checkout is overwritten. Its own
+# probe, so a red names this sentence and not the creation step's.
+command_worktree_return_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" sec
+  sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  if grep -qF 'before `git worktree remove`, its killer map comes back to this checkout' <<< "$sec" \
+     && grep -qF 'its stamp too when line 6 of `./bin/sdd health --release` here is red' <<< "$sec" \
+     && grep -qF '`docs/failure-modes.md`' <<< "$sec"; then
+    pass "command: /sdd-plan tells the human the killer map, and the stamp when line 6 is red, come back before the worktree is removed"
+  else
+    fail "command: /sdd-plan no longer tells the human what comes back before the worktree is removed (the killer map always, the stamp when line 6 of health --release is red, the failure-modes pointer)"
+  fi
+}
+
 
 # --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
 # The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
@@ -578,6 +596,7 @@ hat_promise_probes
 command_approval_probes
 command_relay_probes
 command_worktree_probes
+command_worktree_return_probes
 publisher_stamp_probes
 boot_probes
 release_probes
