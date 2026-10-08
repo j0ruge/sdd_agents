@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 489b90d7-dcd1-4b0c-8926-e5cbcb2864a4
 data: 2026-10-08 15:41
-gate: "tests/run-all.sh → rc 0, 'suite green' (1927 linhas '  ok ', 0 FAIL, 582 s com TMPDIR=/tmp/l6-exec, em bbff069); anchors: all 685 mutants still apply and leave valid code; checkpoint I1–I7 done, cada Commit um sha no git log; check-todo: '4 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 4, os 4 com RESOLVED by"
+gate: "tests/run-all.sh → rc 0, 'suite green' (1929 linhas '  ok ', 0 FAIL, 507 s com TMPDIR=/tmp/l6-exec, em bae95dd, depois da revisão final); anchors: all 686 mutants still apply and leave valid code; checkpoint I1–I7 done, cada Commit um sha no git log; check-todo: '4 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 4, os 4 com RESOLVED by"
 ---
 
 # Handoff — EXEC — Lote 6: as quatro que faltam
@@ -24,17 +24,17 @@ ou fecho mais curto não vira decisão nem gênero (I2); o `sdd kaizen` recusa o
 0016 com `Amended by`); o `sdd-planner` mede cada incremento contra o disco que os anteriores deixam
 (I4, espelho por `./bin/sdd install --force`); a guarda de kit não passa mais o kit pelo ambiente e
 aguenta milhares de caminhos sujos (I5), e vê o nome com `\n`, publicado codificado como o `md5sum` o
-escapa (I6). Catálogo 676 → 685, todos aplicam. Catraca 4 na branch → 0 depois do chore. O kit congela
-no merge (decisão 6). Próximo: revisão final da branch, PR, bots, uma leva, `sdd health` uma vez, merge
-pelo humano.
+escapa (I6). Revisão final: 1 Important e 1 Minor regradeado, consertados (`bae95dd`); 3 minors ao
+humano. Catálogo 676 → 686, todos aplicam. Catraca 4 na branch → 0 depois do chore. O kit congela no
+merge (decisão 6). Próximo: PR, bots, uma leva, `sdd health` uma vez, merge pelo humano.
 
 ## Estado do repo
 
 - **Branch:** `fix/lote-6-as-quatro-que-faltam`, no worktree `~/repos/sdd_agents-lote-6`, **não
   empurrada** (base `origin/main` = `fc32329`)
-- **Último commit:** o fecho do I7 (este handoff), sobre `bbff069`
+- **Último commit:** o registro da revisão final, sobre `bae95dd`
 - **Working tree:** limpo depois do commit deste handoff
-- **Suíte:** `tests/run-all.sh` → verde (rc 0, 582 s; 1927 linhas `ok`; 685 mutantes com âncora válida)
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, 507 s; 1929 linhas `ok`; 686 mutantes com âncora válida), em `bae95dd`
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
 - **Carimbo de mutação:** ainda não — `./bin/sdd health` roda UMA vez, depois de todos os revisores
 
@@ -47,7 +47,31 @@ pelo humano.
 - `81aef08` — I4 (F8): parágrafo no § 4 do `sdd-planner`, probe `hat:` no `check-hat.sh`; gaveta
 - `d3e3db0` — I5 (#240, fatia 1): os quatro canais da guarda viram arquivos; regime 2k e o kit limpo que ganha um caminho
 - `94c48ec` — I6 (#240, fatia 2): `hat_status_lines -z`, chave crua e o nome codificado uma vez na linha publicada; regime 2l e o índice do 2j; 2 mutantes
-- I7 (este commit): `RESOLVED by` nos 4, ADR 0017 aceita, emenda na 0016, o congelamento na gaveta e no `CONTEXT.md`, `KAIZEN_LOG.md` e este handoff
+- `54e2f18` — I7: `RESOLVED by` nos 4, ADR 0017 aceita, emenda na 0016, o congelamento na gaveta e no `CONTEXT.md`, `KAIZEN_LOG.md` e este handoff
+- `bae95dd` — revisão final: a recusa de identidade do `sdd kaizen` aponta o worktree; a cerca fecha em CRLF (mutante `FENCE_crlf_never_closes`)
+
+## Revisão final da branch
+
+Um revisor de contexto novo leu `fc32329..5176f20`, só leitura (suíte e `--anchors` numa cópia por
+`git archive`): 0 Critical, 1 Important, 4 Minor. Os nomes hostis (tab, CR, `-` na frente, espaço,
+barra invertida, symlink com `\n`, rename sob `-z`, índice vazio, kit limpo, kit não-git) passaram
+pela guarda, todos nomeados. Uma leva, com vermelho medido antes:
+
+- **Important:** a recusa de identidade do `cmd_kaizen` mandava rodar "in the kit repo ($SDD_HOME)", o
+  checkout que a porta da ADR 0017 recusa na linha seguinte. Agora diz "from a linked worktree of it".
+- **Minor → Important pelo efeito:** num arquivo CRLF a cerca do `FENCE_AWK` nunca fechava e engolia a
+  decisão real; nos dois leitores de bug é regressão desta leva. O CR conta como branco no fecho.
+
+**Minors adiados, para o humano decidir** (consertar na leva dos bots ou registrar no `TODO.md`):
+- a entrada do índice publicada na árvore do kit leva vírgula inicial (`@,100644:…`): o mawk avalia o
+  lado esquerdo de `ix[q] = (q in ix) ? … : e` antes do `in`. Linha antiga, interna, consistente nas
+  duas amostras; o motivo do `kit-touched` não a imprime;
+- `kit_checkout_targets_run` com `REPO_ROOT` vazio responderia "recusado"; inalcançável hoje (a recusa
+  de identidade vem antes);
+- o censo do `GIT_DIR` não conta `"${GIT:-git}" init` (falha aberta, estreita) e conta
+  `cfg="$HOME/.config/git/config"` como git (falha fechada).
+
+O que o revisor deixou de lado é decisão do grill (5, 1, 6, P1) ou limite já declarado; fica como está.
 
 ## Artefatos
 

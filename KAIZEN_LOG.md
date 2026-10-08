@@ -25,9 +25,9 @@ checkout que todos os `sdd run` dos alvos executam e commitava ali (o vetor da A
 | Nome sujo `notes<LF>draft.md` editado durante a fase de um alvo (regime 2l) | `no-progress` nas duas corridas: a edição passava calada | `kit-touched`, nomeado `notes\ndraft.md` |
 | `sdd kaizen` no checkout para onde o `sdd` do PATH resolve | `rc:3 named:0 sessions:2` | `rc:1 named:1 sessions:0`; `--dry-run` avisa e projeta |
 | Catraca `todo-findings` | 4 | 4 na branch, todos com `RESOLVED by`, N = 0 nascidos → 0 depois do chore |
-| Catálogo de mutação | 676 | **685** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 685 mutants still apply` |
+| Catálogo de mutação | 676 | **686** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 686 mutants still apply` |
 | `tests/check-autonomy.sh` sozinho | 3:22 (no Red do I5, com o 2k) | 2:06 (com o 2k, o 2l e o índice do 2j) |
-| Suíte (`tests/run-all.sh`) | 548 s em `fc32329` (medido no planejamento) | 582 s, 1927 linhas `ok`, 0 FAIL, em `bbff069` + o fecho (carga 1,2–3,2) |
+| Suíte (`tests/run-all.sh`) | 548 s em `fc32329` (medido no planejamento) | 507 s, 1929 linhas `ok`, 0 FAIL, em `bae95dd`, depois da revisão final (carga 2,2–4,5) |
 
 **Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
 `~/repos/sdd_agents-lote-6` (ADR 0016 §2). Cada incremento seguiu o mesmo roteiro: o Check do plano
@@ -49,6 +49,13 @@ como a frase do F8 manda.
 - I6: com o `enc()` aplicado em quatro sítios, os de links e executáveis não teriam regime; a forma
   ficou chave crua em todo lado e uma codificação só, na linha publicada. O ramo do CR só decide o
   que o motivo imprime e ficou declarado.
+
+**Revisão final da branch:** um revisor de contexto novo leu `fc32329..5176f20` (só leitura; a suíte e
+o `--anchors` rodaram numa cópia por `git archive`): 0 Critical, 1 Important, 4 Minor. Consertados
+numa leva, com vermelho medido (`bae95dd`): a recusa de identidade do `sdd kaizen` mandava o humano
+para o `$SDD_HOME`, o checkout que a porta nova recusa; e um Minor regradeado para Important pelo
+efeito — num arquivo CRLF a cerca nunca fechava, regressão desta leva nos dois leitores de bug (o
+toggle antigo fechava ali). Os outros três minors foram ao humano.
 
 **Ainda não medido:** o uso real — a primeira guarda de kit de uma máquina com milhares de caminhos
 sujos, o primeiro `sdd kaizen` recusado no checkout dos alvos. O kit **congela no merge** deste lote
