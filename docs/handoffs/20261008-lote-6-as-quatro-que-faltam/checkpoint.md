@@ -50,7 +50,7 @@ atualizado: 2026-10-08 11:32
 |---|---|---|---|---|
 | I1 | #238: o censo do GIT_DIR conta o git chamado por caminho e pela variável GIT | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    surface: the gitenv census names a git run by path or by variable' <<< "$o"` → `1` | done | aa3a0b8 |
 | I2 | #239: uma cerca CommonMark para os três leitores (FENCE_AWK) | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    fence: ' <<< "$o"` → `7` | done | ea289b4 |
-| I3 | #236: o sdd kaizen recusa o checkout que os alvos executam (ADR 0017) | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    kaizen door: ' <<< "$o"` → `6` | pending | — |
+| I3 | #236: o sdd kaizen recusa o checkout que os alvos executam (ADR 0017) | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    kaizen door: ' <<< "$o"` → `6` | done | 3c54ac1 |
 | I4 | F8: o sdd-planner mede cada incremento contra o disco que os anteriores deixam | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: the planner measures each increment against the disk the earlier ones leave' <<< "$o"` → `1` | pending | — |
 | I5 | #240, fatia 1: o canal da guarda de kit sai do ambiente | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    kit-guard: a kit with thousands of dirty paths' <<< "$o"` → `1` | pending | — |
 | I6 | #240, fatia 2: o nome com quebra de linha atravessa a guarda de kit inteiro | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    kit-guard: a dirty name holding a newline' <<< "$o"` → `1` | pending | — |
