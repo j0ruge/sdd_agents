@@ -27,7 +27,7 @@ checkout que todos os `sdd run` dos alvos executam e commitava ali (o vetor da A
 | Catraca `todo-findings` | 4 | 4 na branch, todos com `RESOLVED by`, N = 0 nascidos → 0 depois do chore |
 | Catálogo de mutação | 676 | **687** (`grep -cE '^mut_[A-Za-z0-9_]+\(\)'`), `anchors: all 687 mutants still apply` |
 | `tests/check-autonomy.sh` sozinho | 3:22 (no Red do I5, com o 2k) | 2:06 (com o 2k, o 2l e o índice do 2j) |
-| Suíte (`tests/run-all.sh`) | 548 s em `fc32329` (medido no planejamento) | 571 s, 1930 linhas `ok`, 0 FAIL, em `fbaae50`, depois da 1ª rodada dos bots (carga 3,2–7,8) |
+| Suíte (`tests/run-all.sh`) | 548 s em `fc32329` (medido no planejamento) | 566 s, 1930 linhas `ok`, 0 FAIL, em `4dfb0be`, depois da 2ª rodada do Codex (carga 1,2–2,4) |
 
 **Contramedida:** o lote foi executado de forma interativa, um incremento por vez, no worktree ligado
 `~/repos/sdd_agents-lote-6` (ADR 0016 §2). Cada incremento seguiu o mesmo roteiro: o Check do plano
@@ -61,7 +61,9 @@ toggle antigo fechava ali). Os outros três minors foram ao humano.
 estava sem cota. O Codex achou dois P2, consertados com vermelho medido (`fbaae50`): o censo do
 `GIT_DIR` não contava `"${GIT:-git}"` (o minor (c) da revisão final, agora com outro autor), e o comando
 que a recusa do `sdd kaizen` nomeia partia uma raiz com espaço — os operandos de caminho saem por
-`printf '%q'`.
+`printf '%q'`. A 2ª rodada do Codex refutou uma decisão minha da 1ª: eu tinha deixado o `origin/<base>`
+sem aspas por "nenhum mundo exercitar" um nome de branch que as pedisse, e o git aceita `release&prod`
+(`4dfb0be`).
 
 **Ainda não medido:** o uso real — a primeira guarda de kit de uma máquina com milhares de caminhos
 sujos, o primeiro `sdd kaizen` recusado no checkout dos alvos. O kit **congela no merge** deste lote

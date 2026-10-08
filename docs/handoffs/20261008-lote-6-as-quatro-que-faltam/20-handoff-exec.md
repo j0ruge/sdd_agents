@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 489b90d7-dcd1-4b0c-8926-e5cbcb2864a4
 data: 2026-10-08 15:41
-gate: "tests/run-all.sh → rc 0, 'suite green' (1930 linhas '  ok ', 0 FAIL, 571 s com TMPDIR=/tmp/l6-exec, em fbaae50, depois da 1ª rodada dos bots); anchors: all 687 mutants still apply and leave valid code; checkpoint I1–I7 done, cada Commit um sha no git log; check-todo: '4 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 4, os 4 com RESOLVED by"
+gate: "tests/run-all.sh → rc 0, 'suite green' (1930 linhas '  ok ', 0 FAIL, 566 s com TMPDIR=/tmp/l6-exec, em 4dfb0be, depois da 2ª rodada do Codex); anchors: all 687 mutants still apply and leave valid code; checkpoint I1–I7 done, cada Commit um sha no git log; check-todo: '4 finding(s), all within 8 lines, carrying anchor + date, every anchor on target' = todo-findings 4, os 4 com RESOLVED by"
 ---
 
 # Handoff — EXEC — Lote 6: as quatro que faltam
@@ -25,16 +25,16 @@ ou fecho mais curto não vira decisão nem gênero (I2); o `sdd kaizen` recusa o
 (I4, espelho por `./bin/sdd install --force`); a guarda de kit não passa mais o kit pelo ambiente e
 aguenta milhares de caminhos sujos (I5), e vê o nome com `\n`, publicado codificado como o `md5sum` o
 escapa (I6). Revisão final: 1 Important e 1 Minor regradeado, consertados (`bae95dd`); 3 minors ao
-humano. PR #244: 2 P2 do Codex consertados (`fbaae50`). Catálogo 676 → 687, todos aplicam. Catraca 4 na branch → 0 depois do chore. O kit congela no
+humano. PR #244: 3 P2 do Codex em duas rodadas, consertados (`fbaae50`, `4dfb0be`). Catálogo 676 → 687, todos aplicam. Catraca 4 na branch → 0 depois do chore. O kit congela no
 merge (decisão 6). Próximo: PR, bots, uma leva, `sdd health` uma vez, merge pelo humano.
 
 ## Estado do repo
 
 - **Branch:** `fix/lote-6-as-quatro-que-faltam`, no worktree `~/repos/sdd_agents-lote-6`, **não
   empurrada** (base `origin/main` = `fc32329`)
-- **Último commit:** o registro da 1ª rodada dos bots, sobre `fbaae50`; empurrada (PR #244)
+- **Último commit:** o registro da 2ª rodada do Codex, sobre `4dfb0be`; empurrada (PR #244)
 - **Working tree:** limpo depois do commit deste handoff
-- **Suíte:** `tests/run-all.sh` → verde (rc 0, 571 s; 1930 linhas `ok`; 687 mutantes com âncora válida), em `fbaae50`
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, 566 s; 1930 linhas `ok`; 687 mutantes com âncora válida), em `4dfb0be`
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
 - **Carimbo de mutação:** ainda não — `./bin/sdd health` roda UMA vez, depois de todos os revisores
 
@@ -50,6 +50,7 @@ merge (decisão 6). Próximo: PR, bots, uma leva, `sdd health` uma vez, merge pe
 - `54e2f18` — I7: `RESOLVED by` nos 4, ADR 0017 aceita, emenda na 0016, o congelamento na gaveta e no `CONTEXT.md`, `KAIZEN_LOG.md` e este handoff
 - `bae95dd` — revisão final: a recusa de identidade do `sdd kaizen` aponta o worktree; a cerca fecha em CRLF (mutante `FENCE_crlf_never_closes`)
 - `fbaae50` — rodada dos bots: o censo conta `"${GIT:-git}"`; o comando que a recusa do `sdd kaizen` nomeia cita os caminhos (mutante `KAIZEN_shared_checkout_unquoted`)
+- `4dfb0be` — 2ª rodada do Codex: o comando cita também o `origin/<base>` (`release&prod` é nome de branch válido)
 
 ## Revisão final da branch
 
@@ -83,6 +84,10 @@ vermelho medido (`fbaae50`):
 - **Comando da recusa do `sdd kaizen`:** sob um diretório com espaço, `git -C $REPO_ROOT …` partia a
   raiz; os operandos de caminho saem por `printf '%q'`. Mundo novo: um worktree ligado chamado `kit wt`,
   e o comando nomeado rodado atrás de um `git` que só anota o argv (`fetch:1 root:2 worktree:1`).
+
+A 2ª rodada do Codex deu um P2, que refutou um `Ruling:` meu da 1ª: eu tinha deixado o
+`origin/<base>` sem aspas porque "nenhum mundo exercita um nome de branch que peça aspas", e o git
+aceita `release&prod`. O mundo `kit wt` passou a ter esse `DEFAULT_BRANCH` (Red `base:0`, `4dfb0be`).
 
 O que o revisor deixou de lado é decisão do grill (5, 1, 6, P1) ou limite já declarado; fica como está.
 
