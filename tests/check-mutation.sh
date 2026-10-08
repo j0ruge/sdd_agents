@@ -606,16 +606,23 @@ mut_DOCS_marker_unanchored() {                    # the marker quoted in a table
 mut_DOCS_marker_in_fence() {                      # an example of the marker inside a fence counts
   sed -i '/^gate_DOCS() {/,/^}/ s@^        !fence && /^\[\[:space:\]\]\*<!-- sdd:proposed@        /^[[:space:]]*<!-- sdd:proposed@' "$1"
 }
-# The fence closes only on its own delimiter (Codex on PR #176): one mutant per condition, each
-# caught by its world in check-gates.sh ("...not its own delimiter: tilde|shorter|info").
-mut_DOCS_fence_closes_on_other_char() {           # a ~~~ closes a ``` example
-  sed -i '/^gate_DOCS() {/,/^}/ s@else if (ch == fch && len >= flen@else if (len >= flen@' "$1"
+# The fence closes only on its own delimiter (Codex on PR #176): one mutant per condition. Since
+# #239 the conditions live ONCE, in FENCE_AWK, and each of these sabotages the three readers at
+# once — caught by the gate_DOCS loop ("...not its own delimiter: tilde|shorter|info") and by the
+# `fence: ` worlds of the two bug readers. The range is the awk function inside the string.
+mut_FENCE_closes_on_other_char() {                # a ~~~ closes a ``` example
+  sed -i '/^function fence_line(/,/^}/ s@else if (ch == fch && len >= flen@else if (len >= flen@' "$1"
 }
-mut_DOCS_fence_closes_on_shorter() {              # a ``` closes a ```` example
-  sed -i '/^gate_DOCS() {/,/^}/ s@else if (ch == fch && len >= flen && @else if (ch == fch \&\& @' "$1"
+mut_FENCE_closes_on_shorter() {                   # a ``` closes a ```` example
+  sed -i '/^function fence_line(/,/^}/ s@else if (ch == fch && len >= flen && @else if (ch == fch \&\& @' "$1"
 }
-mut_DOCS_fence_closes_with_info() {               # a ```bash closes a ``` example
-  sed -i '/^gate_DOCS() {/,/^}/ s@ && \$0 ~ /^\[ \\t\]\*(`+|~+)\[ \\t\]\*\$/) is_fence = 1@) is_fence = 1@' "$1"
+mut_FENCE_closes_with_info() {                    # a ```bash closes a ``` example
+  sed -i '/^function fence_line(/,/^}/ s@ && l ~ /^\[ \\t\]\*(`+|~+)\[ \\t\]\*\$/) fence = 0@) fence = 0@' "$1"
+}
+# Each reader keeps its own CALL of the fragment (decision 3 of #239): handed back the loose toggle
+# it carried before, it alone reads a `~~~` inside a backtick fence as the close again.
+mut_DOCS_fence_loose() {                          # gate_DOCS toggles on any fence line again
+  sed -i '/^gate_DOCS() {/,/^}/ s@^        { fence_line(\$0) }$@        /^[[:space:]]*(```|~~~)/ { fence = !fence }@' "$1"
 }
 # A ⛔ is a boundary (codereview of 2026-09-28): one mutant for the refusal, one for its exception.
 mut_DOCS_blocked_writable_passes() {              # a ⛔ on README.md waits for a human again
@@ -965,12 +972,18 @@ mut_QA_bug_genre_anywhere() {
 # without the fence (its blank line closes the block); what dies now is `a whole header quoted
 # inside a fence above the real one`, whose quoted Status line would open the block.
 #
-# `fenced = !fenced` occurs on the CODE line only — the prose beside it says "SKIPS fenced blocks"
-# and "the fence is STATE", neither of which contains the assignment. Same anchoring discipline as
-# the three mutants above, and for the same measured reason: a mutant that rewrites only a comment
-# applies, clears the rc-90 `cmp -s` guard, and certifies a protection nobody measured.
+# Since #239 the fence is FENCE_AWK's, and the extractor skips the inside of a fence with its own
+# `fence { next }` line, the CODE line this mutant deletes inside gate_QA — the prose beside it says
+# "SKIPS fenced blocks" and "the fence is STATE", neither of which is that line. Same anchoring
+# discipline as the three mutants above, and for the same measured reason: a mutant that rewrites
+# only a comment applies, clears the rc-90 `cmp -s` guard, and certifies a protection nobody measured.
 mut_QA_bug_genre_fenced() {
-  sed -i 's|{ fenced = !fenced; next }|{ next }|' "$1"
+  sed -i '/^gate_QA() {/,/^}/ s|^      fence { next }$||' "$1"
+}
+# LOOSE: the extractor's call of FENCE_AWK goes back to the toggle it carried before #239, so a `~~~`
+# inside a backtick fence, or a shorter run, closes it and the quoted header becomes the genre.
+mut_QA_bug_genre_fence_loose() {
+  sed -i '/^gate_QA() {/,/^}/ s@^      { fence_line(\$0) }$@      /^[[:space:]]*(```|~~~)/ { fence = !fence }@' "$1"
 }
 
 # Issue 63, the two halves of "the genre is read from the Status block", one mutant each because
@@ -1033,11 +1046,16 @@ mut_QA_bug_deferred_undecided() {
 mut_QA_bug_deferred_undecided_unnamed() {
   sed -i '/^gate_QA() {/,/^}/ s|^    if \[ "\$undecided" -gt 0 \]; then$|    if false; then|' "$1"
 }
-# FENCED: the decision reader stops tracking fences, so a bug that QUOTES the heading in a repro
-# reads as decided. `infence` is this function's own variable, so QA_bug_genre_fenced (unranged)
-# and this one sabotage one reader each.
+# FENCED: the decision reader stops skipping the inside of a fence, so a bug that QUOTES the heading
+# in a repro reads as decided. Ranged on its own function, as QA_bug_genre_fenced is on gate_QA: the
+# two readers carry the same `fence { next }` line, and each mutant sabotages one of them.
 mut_QA_bug_deferred_decision_fenced() {
-  sed -i '/^bug_decision_recorded() {/,/^}/ s|{ infence = !infence; next }|{ next }|' "$1"
+  sed -i '/^bug_decision_recorded() {/,/^}/ s|^    fence { next }$||' "$1"
+}
+# LOOSE: the decision reader's call of FENCE_AWK goes back to the toggle it carried before #239, so a
+# `~~~` inside a backtick fence, or a shorter run, closes it and the quoted dated heading counts.
+mut_QA_bug_deferred_decision_fence_loose() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s@^    { fence_line(\$0) }$@    /^[[:space:]]*(```|~~~)/ { fence = !fence }@' "$1"
 }
 # PLURAL: `## Decisions for a Human` — the qa-execution skill's heading for questions still open —
 # reads as the decision again, through the shared eight-byte prefix.
@@ -6074,9 +6092,10 @@ CATALOG=(
   DOCS_doc_needs_no_name
   DOCS_marker_unanchored
   DOCS_marker_in_fence
-  DOCS_fence_closes_on_other_char
-  DOCS_fence_closes_on_shorter
-  DOCS_fence_closes_with_info
+  FENCE_closes_on_other_char
+  FENCE_closes_on_shorter
+  FENCE_closes_with_info
+  DOCS_fence_loose
   DOCS_blocked_writable_passes
   DOCS_blocked_cell_not_split
   DOCS_blocked_empty_cell_vanishes
@@ -6131,6 +6150,7 @@ CATALOG=(
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
   QA_bug_genre_fenced
+  QA_bug_genre_fence_loose
   QA_bug_genre_outside_header
   QA_bug_genre_header_unbounded
   QA_bug_genre_deferred_blocks
@@ -6140,6 +6160,7 @@ CATALOG=(
   QA_bug_deferred_undecided
   QA_bug_deferred_undecided_unnamed
   QA_bug_deferred_decision_fenced
+  QA_bug_deferred_decision_fence_loose
   QA_bug_deferred_decision_plural
   QA_bug_deferred_decision_plural_english_only
   QA_bug_deferred_decision_english_only

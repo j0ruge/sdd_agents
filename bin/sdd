@@ -1528,6 +1528,33 @@ function placeholder(s,   u, w) {
 # Through ENVIRON and never `awk -v`, for gate_REVIEW's reason: -v runs escape sequences.
 placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit placeholder(ENVIRON["SDD_PLACEHOLDER_TEXT"]) ? 0 : 1 }'; }
 
+# FENCE_AWK — the one definition of a fenced code block, for the runner's three fence readers:
+# bug_decision_recorded, the genre extractor of gate_QA and the proposed-text reader of gate_DOCS.
+# A fence opens on a run of three or more backticks or tildes, and closes only on a line of the SAME
+# character, at least as long, with nothing but blanks after it (CommonMark). Toggling on any fence
+# line let a `~~~` inside a backtick fence, a shorter run or a ```bash "close" it: gate_DOCS was
+# fixed alone (Codex on PR #176), the two bug readers were born after it with the loose copy, and a
+# quoted dated `## Decision` counted as the human's call (#239). Three copies of one rule drifted,
+# so the rule lives here once. Each reader concatenates it ahead of its own program, as with
+# PLACEHOLDER_AWK, calls fence_line($0) on every line, and reads the global `fence`: the line that
+# opens a fence leaves it set, so the reader skips it with the inside; the closing line leaves it
+# clear and flows on, and no reader rule matches a line that is only a fence run. No return value:
+# the sabotage pass of #239 found one unobservable — `fence { next }` already skips every line it
+# could name. The mutation catalogue sabotages the CONDITIONS in this body and each reader's CALL in
+# its own function. No apostrophe anywhere inside the string: it is single-quoted shell.
+# DECLARED LIMITS (D15), none of which a reader has needed: an indent of four or more blanks opens a
+# fence here (an indented code block in CommonMark); a backtick inside the info string of a backtick
+# fence is not refused; a fence that never closes runs to the end of the file, as in CommonMark.
+FENCE_AWK='
+function fence_line(l,   run, ch, len) {
+  if (!match(l, /^[ \t]*(```+|~~~+)/)) return
+  run = substr(l, RSTART, RLENGTH); sub(/^[ \t]+/, "", run)
+  ch = substr(run, 1, 1); len = length(run)
+  if (!fence) { fence = 1; fch = ch; flen = len }
+  else if (ch == fch && len >= flen && l ~ /^[ \t]*(`+|~+)[ \t]*$/) fence = 0
+}
+'
+
 # bug_decision_recorded <bug file> — rc 0 when the bug's body carries the human's decision: a
 # level-2 heading opening with `## Decis`, outside any fenced block. It is what makes `Closable by:
 # deferred` an artifact and not a label (#232): agents/sdd-qa.md § 5.1 and ADR 0009 demand the
@@ -1543,8 +1570,8 @@ placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit p
 # do the pt-BR plurals a pt-BR session translates it into, `## Decis\303\265es` and `## Decisoes`
 # (final review of the lote 5: refusing the English one alone left them reading as decided).
 # Fence state for the genre extractor's reason: a bug filed about this rule quotes the heading. The
-# variable is `infence` and not `fenced` so QA_bug_genre_fenced, whose sed has no function range,
-# keeps sabotaging the extractor alone.
+# fence is FENCE_AWK's, the CommonMark one: a `~~~` inside a backtick example, or a shorter run, does
+# not close it (#239).
 # The heading opens the section and a DATE in it is the decision (Codex review of PR #237): § 5.1
 # and ADR 0009 ask for the date and who decided, and the heading alone — bare, or carrying only the
 # deferral — passed as decided. A `YYYY-MM-DD` on the heading line or under it, outside any fence,
@@ -1556,9 +1583,9 @@ placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit p
 # DECLARED, fail closed: a `###` heading, or an indented one, reads as no decision and blocks —
 # visibly, since the blocking reason names the bug.
 bug_decision_recorded() {
-  awk '
-    /^[[:space:]]*(```|~~~)/ { infence = !infence; next }
-    infence { next }
+  awk "$FENCE_AWK"'
+    { fence_line($0) }
+    fence { next }
     /^## / { insec = 0 }
     /^## Decis/ && !/^## Decis(ions|oes|\303\265es)/ { insec = 1 }
     insec && /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ { found = 1; exit }
@@ -1703,10 +1730,10 @@ gate_QA() {
   local openbugs=0 deferred=0 deferred_names="" undecided=0 undecided_names="" bugfile genre_line bugname
   while IFS= read -r bugfile; do
     [ -n "$bugfile" ] || continue
-    genre_line="$(awk '
+    genre_line="$(awk "$FENCE_AWK"'
       !/^-[[:space:]]+[*][*][^*]+:[*][*]/ { if (inheader) exit }
-      /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
-      fenced { next }
+      { fence_line($0) }
+      fence { next }
       /^-[[:space:]]+[*][*]Status:[*][*]/ { inheader = 1 }
       inheader && /^-[[:space:]]+[*][*]Closable by:[*][*]/ { print; exit }
     ' "$bugfile" || true)"
@@ -2191,24 +2218,14 @@ gate_DOCS() {
       GATE_WHY="45-docs.md has $n_writable ⛔ row(s) on a document the DOCS hat writes itself: $writable — a ⛔ is for a path the hat may not write or the harness refuses (.claude/); write the document and mark the row ✅ with the hash"
       return 1
     fi
-    # A fence opens on ``` or ~~~ and closes only on a line of the SAME character, at least as long,
-    # with nothing but blanks after it (CommonMark). Toggling on every fence line let a `~~~`, a
+    # The fence is FENCE_AWK's, the CommonMark one: toggling on every fence line let a `~~~`, a
     # shorter run or a ```bash inside an example "close" it, and a marker example past that line
     # read as the section: a ⛔ passed with no proposal behind it (Codex on PR #176).
-    proposed="$(awk '
-        {
-          is_fence = 0
-          if (match($0, /^[ \t]*(```+|~~~+)/)) {
-            run = substr($0, RSTART, RLENGTH); sub(/^[ \t]+/, "", run)
-            ch = substr(run, 1, 1); len = length(run)
-            if (!fence) is_fence = 1
-            else if (ch == fch && len >= flen && $0 ~ /^[ \t]*(`+|~+)[ \t]*$/) is_fence = 1
-          }
-        }
+    proposed="$(awk "$FENCE_AWK"'
+        { fence_line($0) }
         !fence && /^[[:space:]]*<!-- sdd:proposed -->[[:space:]]*$/ { on = 1; next }
         on && !fence && /^## / { on = 0 }
         on { print }
-        is_fence { if (fence) fence = 0; else { fence = 1; fch = ch; flen = len } }
       ' "$d")"
     for doc in "${blocked_docs[@]}"; do
       if [[ "$doc" =~ [[:alnum:]] ]] && grep -qF -- "$doc" <<< "$proposed"; then

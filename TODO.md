@@ -32,7 +32,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor final` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-06)
 
 - [ ] **A cerca dos leitores de bug alterna em qualquer marcador: um `~~~` dentro de crases a fecha** —
-  `bin/sdd:1560` (`bug_decision_recorded`) — a regex da cerca inverte o estado em qualquer marcador
+  `bin/sdd:1585` (`bug_decision_recorded`) — a regex da cerca inverte o estado em qualquer marcador
   (crases ou tis) e comprimento; no CommonMark só o mesmo caractere, com comprimento ≥ ao da abertura,
   fecha a cerca. Um `## Decision` datado de exemplo, depois de um `~~~` dentro de crases, conta como a
   decisão humana: falha aberta, sem caso real (achado do Codex no PR #237). O extrator do gênero
@@ -43,7 +43,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **O `sdd kaizen` no checkout principal do kit escreve e commita onde os `sdd run` dos alvos executam** —
-  `bin/sdd:10917` (`cmd_kaizen`) — a sessão KAIZEN escreve o veredito e o plano da próxima missão do kit e
+  `bin/sdd:10934` (`cmd_kaizen`) — a sessão KAIZEN escreve o veredito e o plano da próxima missão do kit e
   commita no `REPO_ROOT` de onde foi chamada. Chamada do checkout que o `sdd` do PATH resolve, com um
   `sdd run` de alvo em voo, é o mesmo `kit-touched` do `/sdd-plan` (lido no código, não reproduzido). A
   ADR 0016 §2 manda a missão do kit para um worktree ligado e não decide o `sdd kaizen`. Direção: recusar
@@ -59,7 +59,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Custo e escala
 
 - [ ] **Com milhares de caminhos sujos no kit, a guarda estoura o limite do ambiente e o `sdd run` morre** —
-  `bin/sdd:4017` (`KG_SUMS`) — digests, bits, links e a árvore inteira (`KG_BEFORE`) vão ao `awk` por
+  `bin/sdd:4034` (`KG_SUMS`) — digests, bits, links e a árvore inteira (`KG_BEFORE`) vão ao `awk` por
   variável de ambiente; acima de 128 KiB o Linux recusa (140 KB dá `Argument list too long`) e o `sdd run`
   morre no `kit_guard_arm`, antes da sessão: ~1700–2200 caminhos sujos bastam. O mesmo canal parte um nome
   com `\n` (`hat_status_lines` lê `-z` e imprime `\n`; o `ls-files -z` passa por `tr`), falha aberta só

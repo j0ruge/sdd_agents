@@ -939,6 +939,40 @@ assert_eq "the genre is read from the Status block: a field-shaped line in a lat
 genre_fenced_header="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "a whole header quoted inside a fence above the real one does not become the genre" \
   "REVIEW|QA" "$genre_exact|$genre_fenced_header"
+# ...and that fence closes only on its OWN delimiter (#239), the CommonMark rule gate_DOCS already
+# read: one FENCE_AWK for the three readers since then. A `~~~` inside a backtick fence, or a run
+# shorter than the opening one, toggled the fence off, and the quoted header below it became the genre.
+for genre_fence_rule in tilde shorter; do
+  case "$genre_fence_rule" in
+    tilde)   genre_fence_open='```md\n~~~\n';  genre_fence_close='```'
+             genre_fence_name='a ~~~ inside a backtick fence does not close it' ;;
+    shorter) genre_fence_open='````md\n```\n'; genre_fence_close='````'
+             genre_fence_name='a shorter run does not close a longer fence' ;;
+  esac
+  { printf '# BUG-20260102-genre: the repro quotes a whole header\n'
+    printf '\nThe header that triggers it:\n\n'"$genre_fence_open"
+    printf -- '- **Status:** open\n'
+    printf -- '- **Closable by:** human <!-- agent | human -->\n'
+    printf '%s\n\n' "$genre_fence_close"
+    printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+    printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+  } > "$GENRE_BUG"
+  assert_eq "fence: $genre_fence_name — a quoted header does not become the genre" \
+    "REVIEW|QA" "$genre_exact|$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+done
+# The control of the pair: a CLOSED fence quoting an agent header, the real human header below it.
+# Every fenced world above expects a block, so a fence that never closes would pass them all; here
+# it hides the real header, the genre goes absent, and the bug blocks.
+{ printf '# BUG-20260102-genre: the repro quotes an agent header\n'
+  printf '\nThe header that triggers it:\n\n```md\n'
+  printf -- '- **Status:** open\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+  printf '```\n\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+assert_eq "fence: after a closed fence quoting an agent header the real human header is the genre" \
+  "REVIEW|REVIEW" "$genre_exact|$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 
 # Four more rules of the same anchor, one regime each. All four were found by an adversarial
 # sabotage pass in the REVIEW round of 20260826-o-laco-da-qa: each was degraded in turn and
@@ -979,13 +1013,16 @@ assert_eq "the FIRST unfenced field wins: a second field-shaped line later does 
 
 # (c) BOTH fence spellings. GFM fences with ``` or with ~~~, and the extractor has to know both:
 # knowing only ``` leaves a ~~~-fenced quote counting as an ordinary line, which puts the defect
-# straight back for any bug filed with the other spelling. Same body as the quote-ABOVE regime,
-# one character of fence apart.
+# straight back for any bug filed with the other spelling. The quote is a WHOLE header above the
+# real one: since issue 63 the blank line under the Status line closed the header block before the
+# old body ever reached its fence, so it blocked with or without the fence — the sabotage pass of
+# #239 found a FENCE_AWK that knew only backticks leaving it green.
 { printf '# BUG-20260102-genre: the repro is fenced with tildes\n'
-  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
   printf '\nSteps to reproduce:\n\n~~~md\n'
+  printf -- '- **Status:** open\n'
   printf -- '- **Closable by:** human <!-- agent | human -->\n'
   printf '~~~\n\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
   printf -- '- **Closable by:** agent <!-- agent | human -->\n'
 } > "$GENRE_BUG"
 genre_tilde="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
@@ -1126,6 +1163,38 @@ write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' 
 genre_decision_fenced="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "a '## Decision' heading inside a fence is not the decision: the bug blocks" \
   "REVIEW|QA" "$genre_decided|$genre_decision_fenced"
+# ...and that fence closes only on its OWN delimiter (#239): a `~~~` inside a backtick fence, or a
+# run shorter than the opening one, toggled it off, and the quoted dated heading counted.
+for decision_fence_rule in tilde shorter; do
+  case "$decision_fence_rule" in
+    tilde)   decision_fence_open='```md\n~~~\n';  decision_fence_close='```'
+             decision_fence_name='a ~~~ inside a backtick fence does not close it' ;;
+    shorter) decision_fence_open='````md\n```\n'; decision_fence_close='````'
+             decision_fence_name='a shorter run does not close a longer fence' ;;
+  esac
+  write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+    "$(printf '\nThe template reads:\n\n'"$decision_fence_open"'## Decision\n\n2026-01-02, the repo owner.\n'"$decision_fence_close")"
+  assert_eq "fence: $decision_fence_name — a quoted dated decision does not count" \
+    "REVIEW|QA" "$genre_decided|$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+done
+# The control: a CLOSED example fence, then the real dated decision. A fence that never closes
+# swallows the decision and the bug blocks.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\nThe template reads:\n\n```md\nthe example\n```')$GENRE_DECIDED"
+assert_eq "fence: after a closed example fence the real dated decision counts — the bug passes" \
+  "REVIEW|REVIEW" "$genre_decided|$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+# Two more rules of FENCE_AWK that only these worlds measure (the sabotage pass of #239): a fence
+# opened with tildes hides what it quotes, and a closing line indented by a few blanks still closes
+# (CommonMark lets the closing fence carry up to three) — read with its blanks, it never closed and
+# swallowed the real decision.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\nThe template reads:\n\n~~~md\n## Decision\n\n2026-01-02, the repo owner.\n~~~')"
+assert_eq "a ~~~ fence hides a quoted dated decision just as a backtick fence does" \
+  "REVIEW|QA" "$genre_decided|$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->' \
+  "$(printf '\nThe template reads:\n\n```md\nthe example\n  ```')$GENRE_DECIDED"
+assert_eq "an example fence whose closing line is indented still closes — the real dated decision counts" \
+  "REVIEW|REVIEW" "$genre_decided|$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 # `## Decisions for a Human` is the qa-execution skill's heading for questions still OPEN
 # (~/.claude/skills/qa-execution/assets/report-template.md) — the opposite of a decision, and it
 # starts with the same eight bytes. The plural is refused by name. Dated, here and in the pt-BR pair
@@ -2773,6 +2842,11 @@ for docs_fence_rule in tilde shorter info; do
   assert_eq "a fence is not closed by a line that is not its own delimiter: $docs_fence_rule" "DOCS|1" \
     "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
 done
+# The control of the loop: a CLOSED example fence, then the real section. A fence that never closes
+# swallows the real marker and the ⛔ is refused.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## How a proposal looks\n\n```md\n## Proposed text\nthe example\n```\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a closed example fence above the real proposal"
+assert_phase "fence: after a closed example fence the real proposal counts" "PR"
 # A ⛔ is a boundary, and a document the DOCS hat writes itself is not one (codereview of
 # 2026-09-28): with its proposal in place, `README.md` passed as "waiting for a human" — the drift
 # the session owed, handed to the PR. Refused, and the reason says it is the hat's to write.
