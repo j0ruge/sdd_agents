@@ -1239,8 +1239,8 @@ out="$( cd "$FIX" && "$KSDD" run 20260102-donemission 2>&1 )"; rc=$?
 assert_eq "the complete mission reaches the human gate (rc 0)" "0" "$rc"
 assert_eq "and reminds: missions accumulated on the current kit without a verdict" "yes" \
   "$(grep -q "autonomy series: 3 mission(s) on kit aaa1111 without a verdict" <<< "$out" && echo yes || echo no)"
-assert_eq "pointing at sdd kaizen" "yes" \
-  "$(grep -q "run 'sdd kaizen' in the kit repo" <<< "$out" && echo yes || echo no)"
+assert_eq "pointing at sdd kaizen, from a linked worktree of the kit" "yes" \
+  "$(grep -q "run 'sdd kaizen' in the kit repo, from a linked worktree" <<< "$out" && echo yes || echo no)"
 
 # A linked WORKTREE of the kit is still the kit, and has to get the kit's sentence (TODO.md, the
 # kaizen_reminder item). kaizen_reminder compared `git rev-parse --show-toplevel` of $SDD_HOME with
@@ -1295,8 +1295,8 @@ assert_eq "outside the kit the pipeline still completes (rc 0)" "0" "$rc"
 # ADR 0003 says a target repo's rows are exactly the evidence a verdict should rest on. So the
 # reminder points at the judge instead of warning the human away from it, and the assertion moved
 # with the fact rather than the fact being left to rot behind a green assertion.
-assert_eq "outside the kit the reminder tells the truth about the judge" "yes" \
-  "$(grep -q 'The kaizen judge counts them' <<< "$out" && echo yes || echo no)"
+assert_eq "outside the kit the reminder tells the truth about the judge, and where to run it" "yes" \
+  "$(grep -q "The kaizen judge counts them (ADR 0005) — run 'sdd kaizen' in the kit repo, from a linked worktree" <<< "$out" && echo yes || echo no)"
 # The other half, the house rule: the text of the right branch AND the absence of the wrong one.
 # Without it the assertion above passes on a runner that prints both lines — which is exactly what
 # mut_KAIZEN_reminder_wrong_repo makes it do. The tell can no longer be "does it name sdd kaizen"
@@ -1874,6 +1874,10 @@ out="$( cd "$TGT" && "$KSDD" kaizen 2>&1 )"; rc=$?
 assert_eq "sdd kaizen refuses to run outside the kit repo (rc 1)" "1" "$rc"
 assert_eq "and points at the kit repo" "yes" \
   "$(grep -q 'run it in the kit repo' <<< "$out" && echo yes || echo no)"
+# ...from a linked worktree of it (final review of batch 6): the kit repo it names is $SDD_HOME, the
+# checkout the PATH's `sdd` runs from, and the door below refuses exactly that one (ADR 0017).
+assert_eq "and to a linked worktree of it, never to the checkout the targets run" "yes" \
+  "$(grep -q 'run it in the kit repo, from a linked worktree of it' <<< "$out" && echo yes || echo no)"
 
 # A linked WORKTREE of the kit is the kit (issue 121). The door compared the `--show-toplevel` of
 # $SDD_HOME with the cwd's, and a worktree has a toplevel of its own, so the kit's `sdd` run from a
@@ -1891,6 +1895,78 @@ assert_eq "kit-repo guard: a linked worktree of the kit answers like the main ch
 assert_eq "kit-repo guard: and the worktree is admitted, not refused" "admitted" "${kz_wt#* }"
 git -C "$FIX" worktree remove --force "$KWT"
 git -C "$FIX" branch -q -D kaizen/worktree-fixture
+
+echo "== the checkout the targets run is refused to the judge (ADR 0017) =="
+# Every `sdd run` of a target on this machine executes the checkout the `sdd` on the PATH resolves
+# into, and its kit guard compares that checkout's HEAD and status before and after each phase: a
+# KAIZEN session that writes and commits there stops every target run in flight with KIT-TOUCHED
+# (#236, ADR 0017). The world: a PATH whose `sdd` is a symlink to this fixture kit's bin/sdd, and a
+# linked worktree whose name EXTENDS the fixture's, `${FIX}-kaizen`, with a second PATH resolving
+# into it. Each run reads a fresh, empty SDD_STATE_DIR: the exported one holds a verdict for
+# aaa1111, and the real run would answer "already judged" with no session even before the door.
+# The witness of "no session" is the session rows of that run's own ledger.
+loud_stub
+KPATH="$OUTSIDE/kaizen-pathbin"; KPATH2="$OUTSIDE/kaizen-pathbin2"; KWT2="${FIX}-kaizen"
+KZ_NOSDD_PATH="$OUTSIDE/stub:/usr/local/bin:/usr/bin:/bin"
+mkdir -p "$KPATH" "$KPATH2"
+git -C "$FIX" worktree add -q -b kaizen/shared-fixture "$KWT2"
+ln -s "$KSDD" "$KPATH/sdd"; ln -s "$KWT2/bin/sdd" "$KPATH2/sdd"
+kz_shared() { # kz_shared <cwd> <PATH> <state name> <kaizen args...> — PUBLISHES KZ_OUT, KZ_RC, KZ_SESSIONS, KZ_WARNED
+  local cwd="$1" p="$2" st="$OUTSIDE/shared-$3"; shift 3
+  mkdir -p "$st"
+  KZ_RC=0
+  KZ_OUT="$( cd "$cwd" && PATH="$p" SDD_STATE_DIR="$st" "$KSDD" kaizen "$@" 2>&1 )" || KZ_RC=$?
+  KZ_SESSIONS="$(grep -c '"event":"session"' "$st/autonomy-log.jsonl" 2>/dev/null || true)"
+  KZ_WARNED="$(grep -c 'a real run here would refuse' <<< "$KZ_OUT" || true)"
+}
+kz_shared "$FIX" "$KPATH:$PATH" real
+assert_eq "kaizen door: the checkout the PATH's sdd runs from is refused before any session, naming git worktree add" \
+  "rc:1 named:1 sessions:0" \
+  "rc:$KZ_RC named:$(grep -c 'git -C .* worktree add' <<< "$KZ_OUT" || true) sessions:${KZ_SESSIONS:-0}"
+kz_shared "$FIX" "$KPATH:$PATH" dry --dry-run
+assert_eq "kaizen door: the projection there warns with the same sentence and still projects" \
+  "rc:0 warned:1" "rc:$KZ_RC warned:$KZ_WARNED"
+kz_shared "$KWT2" "$KPATH:$PATH" worktree --dry-run
+assert_eq "kaizen door: a linked worktree of that checkout is admitted under the same PATH" \
+  "rc:0 warned:0" "rc:$KZ_RC warned:$KZ_WARNED"
+kz_shared "$FIX" "$KPATH2:$PATH" sibling --dry-run
+assert_eq "kaizen door: a sibling whose name extends this one is not taken for it" \
+  "rc:0 warned:0" "rc:$KZ_RC warned:$KZ_WARNED"
+kz_shared "$FIX" "$KPATH:$PATH" series --series
+assert_eq "kaizen door: --series still reads from that checkout" \
+  "rc:0 json:1" "rc:$KZ_RC json:$(jq -e .guard <<< "$KZ_OUT" >/dev/null 2>&1 && echo 1 || echo 0)"
+# The poison is armed first: with no `sdd` on this PATH, `command -v sdd` must fail, or the
+# assertion measures nothing.
+kz_armed="$(PATH="$KZ_NOSDD_PATH" command -v sdd >/dev/null 2>&1 && echo 0 || echo 1)"
+kz_shared "$FIX" "$KZ_NOSDD_PATH" nosdd --dry-run
+assert_eq "kaizen door: with no sdd on the PATH nothing is refused" \
+  "armed:1 rc:0 warned:0" "armed:$kz_armed rc:$KZ_RC warned:$KZ_WARNED"
+# The command the refusal names must survive the path it names (Codex on PR #244): a checkout under a
+# directory with a space split `git -C <root>` in two. A linked worktree with a space in its name, whose
+# own bin/sdd the PATH resolves into, is refused; the named command runs behind a `git` that only writes
+# its arguments down, one per line, and the root and the worktree path must come out whole. `fetch:1` is
+# the witness that the named command really ran. The base branch too (2nd Codex round): git accepts
+# `release&prod`, and an unquoted `origin/release&prod` ran `git … origin/release` in the background and
+# `prod` as a command of its own.
+KWT3="$OUTSIDE/kit wt"; KPATH3="$OUTSIDE/kaizen-pathbin3"; KGITLOG="$OUTSIDE/kaizen-git-argv"
+git -C "$FIX" worktree add -q -b kaizen/space-fixture "$KWT3"
+mkdir -p "$KPATH3" "$OUTSIDE/kaizen-gitstub"; ln -s "$KWT3/bin/sdd" "$KPATH3/sdd"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" >> %q\n' "$KGITLOG" > "$OUTSIDE/kaizen-gitstub/git"
+chmod +x "$OUTSIDE/kaizen-gitstub/git"
+sed -i 's/^DEFAULT_BRANCH=.*/DEFAULT_BRANCH="release\&prod"/' "$KWT3/.sdd/config.sh"
+mkdir -p "$OUTSIDE/shared-space"
+kz_space_rc=0
+kz_space_out="$( cd "$KWT3" && PATH="$KPATH3:$PATH" SDD_STATE_DIR="$OUTSIDE/shared-space" "$KWT3/bin/sdd" kaizen 2>&1 )" || kz_space_rc=$?
+kz_space_cmd="$(sed -n "s/.* — run '\(git -C .*\)', then 'sdd kaizen' from there.*/\1/p" <<< "$kz_space_out")"
+: > "$KGITLOG"
+[ -z "$kz_space_cmd" ] || ( cd "$OUTSIDE" && PATH="$OUTSIDE/kaizen-gitstub:$PATH" bash -c "$kz_space_cmd" ) >/dev/null 2>&1 || true
+assert_eq "kaizen remedy: the command the refusal names keeps a root with a space, and a base with a shell operator, whole" \
+  "rc:1 fetch:1 root:2 worktree:1 base:1" \
+  "rc:$kz_space_rc fetch:$(grep -cx fetch "$KGITLOG" || true) root:$(grep -cxF "$KWT3" "$KGITLOG" || true) worktree:$(grep -cxF '../kit wt-kaizen' "$KGITLOG" || true) base:$(grep -cxF 'origin/release&prod' "$KGITLOG" || true)"
+git -C "$FIX" worktree remove --force "$KWT3"
+git -C "$FIX" branch -q -D kaizen/space-fixture
+git -C "$FIX" worktree remove --force "$KWT2"
+git -C "$FIX" branch -q -D kaizen/shared-fixture
 
 echo "== the base branch warning reaches the kaizen door =="
 # The kaizen door is the WORSE of the two that open a committing session: it validates the kit repo

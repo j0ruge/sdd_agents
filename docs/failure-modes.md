@@ -603,7 +603,8 @@ paths: <XY path>, <XY path> (content changed), <XY path> (mode changed), <XY pat
 
 **What is happening:** the checkout the `sdd` on your PATH runs from — the kit — moved while a phase
 of another repository's mission ran: a commit, or a dirty path that appeared, changed content, mode or
-staged entry, or went clean. Since #233 a kit that was already dirty when the phase opened is watched too, path by path and
+staged entry, or went clean. A name holding a backslash, a newline or a CR is printed escaped, as `md5sum`
+prints it (`\\`, `\n`, `\r`), so `notes<newline>draft.md` reads `notes\ndraft.md` (#240). Since #233 a kit that was already dirty when the phase opened is watched too, path by path and
 by content, so saving a file in a dirty kit stops the line as well. The runner does not know who did
 it: a session of this mission writing outside its repo, or you working on the kit in another terminal.
 
@@ -613,6 +614,24 @@ runs from on `main` and clean; then `sdd run` again. If it is the session's, the
 the handoff, marked `kit:`, never in a commit to the kit. Editor temp files (vim swap files, `*~`,
 emacs locks) are in the kit's `.gitignore` and stop nothing; another editor's temp file that is not
 there would, and the fix is one more ignore line, never a looser guard.
+
+---
+
+## `sdd kaizen` refuses: "this is the checkout every target's 'sdd run' executes"
+
+**Symptom:** `sdd kaizen` dies with rc 1 before any session — `this is the checkout every target's 'sdd
+run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git
+-C <root> fetch && git -C <root> worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>',
+then 'sdd kaizen' from there`. With `--dry-run` the same sentence comes as a warning, after `a real run
+here would refuse:`, and the projection follows.
+
+**What is happening:** you ran the judge in the checkout the `sdd` on your PATH resolves into. Every
+target's `sdd run` on this machine executes that checkout, and the session would write and commit the
+verdict and the next plan there — the commit stops each target run in flight with `KIT-TOUCHED`.
+
+**What you do:** run the command the message names — a fetch, never a pull, which moves the `HEAD` the
+kit guard compares — and `sdd kaizen` from the new worktree. Push its branch and open the PR from
+there; after the merge, `git worktree remove` it.
 
 ---
 

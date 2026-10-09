@@ -15,12 +15,12 @@
 |---|---|---|---|---|
 | F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 **feito** em 2026-09-26 (espelho 82 ↔ 82, #144 fechada, PR #171; [handoff](../plans/2026-09-25-depois-do-170-handoff.md)). O P3 **ficou fora** da carona (`20260926-a-carona-antes-do-congelamento`, decisão 6 do grill): é pré-requisito do próximo aumento de paralelismo, que não acontece com o kit congelado | o fim da janela 4 (F3) |
 | F2 | Faxina pós-#57 | **fechada** pela missão `20260926-a-carona-antes-do-congelamento` (I7; o yokoten da crase no I1) | nada | — |
-| F3 | T3 e a janela do juiz | janela 1 **fechada**: veredito `melhorou` sobre `4fd0f31` (PR #175, `3d350ed`). Dos 8 achados, 5 foram consertados na missão `20260928-os-achados-da-janela` (3, 4, 6, 7 e 8; PR #176) e 3 foram para o `TODO.md` (1, 2 e 5). Janela 2 **fechada sem veredito** em 2026-09-30: `indeterminado` sobre `6323c6f`, porque o PR #184 (só `TODO.md` + catraca) cunhou um `kit_sha` novo e deixou as 3 missões de `5b98087` em `previous` (`window_missions_stranded: 3`); o achado está no `TODO.md`. Janela 3 (aberta no merge do PR #185, missão `20260930-a-sub-etapa-que-andou`) **abandonada por decisão humana em 2026-10-01, sem veredito**: o kit descongela para a missão `20261001-a-janela-nao-se-parte` (ADR 0014), que conserta a causa — o eixo passa a agrupar pelo último commit de comportamento (`kit_rev`, de `bin agents templates config`) e a chave do carimbo deixa a catraca de fora, então um PR só de `TODO.md` deixa de partir a janela e de matar o carimbo. **A janela 4 abre no primeiro carimbo de alvo após o merge desta missão** | merge de `20261001-a-janela-nao-se-parte` → 3 missões de alvo com sessão sobre a mesma versão de comportamento → `sdd kaizen`; a T3 se desfez em 2026-10-04 (§ F3) | a missão `20261001-a-janela-nao-se-parte` |
+| F3 | T3 e a janela do juiz | janela 1 **fechada**: veredito `melhorou` sobre `4fd0f31` (PR #175, `3d350ed`). Dos 8 achados, 5 foram consertados na missão `20260928-os-achados-da-janela` (3, 4, 6, 7 e 8; PR #176) e 3 foram para o `TODO.md` (1, 2 e 5). Janela 2 **fechada sem veredito** em 2026-09-30: `indeterminado` sobre `6323c6f`, porque o PR #184 (só `TODO.md` + catraca) cunhou um `kit_sha` novo e deixou as 3 missões de `5b98087` em `previous` (`window_missions_stranded: 3`); o achado está no `TODO.md`. Janela 3 (aberta no merge do PR #185, missão `20260930-a-sub-etapa-que-andou`) **abandonada por decisão humana em 2026-10-01, sem veredito**: o kit descongela para a missão `20261001-a-janela-nao-se-parte` (ADR 0014), que conserta a causa — o eixo passa a agrupar pelo último commit de comportamento (`kit_rev`, de `bin agents templates config`) e a chave do carimbo deixa a catraca de fora, então um PR só de `TODO.md` deixa de partir a janela e de matar o carimbo. **A janela 4 abre no primeiro carimbo de alvo após o merge desta missão**. Ela partiu com os lotes 1–5, que mudaram o runner sem juiz (`./bin/sdd kaizen --series` em 2026-10-08: última fatia em `94123a4`, 1 missão, `window_broken: true`). **O kit congela no merge do lote 6** (`20261008-lote-6-as-quatro-que-faltam`, decisão 6): a janela seguinte abre no primeiro carimbo de alvo depois dele | merge do lote 6 → 3 missões de alvo com sessão sobre a mesma versão de comportamento, nada em `bin agents templates config` até o veredito → `sdd kaizen` de um worktree ligado (ADR 0017); a T3 se desfez em 2026-10-04 (§ F3) | o merge do lote 6 |
 | F4 | Portabilidade para outros repos | sem pendência de código: lacunas 2 e 3 **consertadas** na missão `20260926-a-carona-antes-do-congelamento` (I5, I6), 4 e 5 no `TODO.md` (I7), 6 declarada no ADR 0007 | a prova num 2º alvo, que conta para a próxima janela do juiz | nada desde o veredito (F3, PR #175) |
 | F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
-| F8 | O plano mede contra a base, não contra os incrementos anteriores | nota de 2026-10-05, da execução do lote 4; sem missão | uma frase no `sdd-planner` (§ F8) | a próxima missão de kit depois do lote 4 |
+| F8 | O plano mede contra a base, não contra os incrementos anteriores | **fechada** pelo I4 de `20261008-lote-6-as-quatro-que-faltam`: o parágrafo no § 4 do `sdd-planner`, segurado pelo probe `hat:` do `tests/check-hat.sh` | nada | — |
 
 Fechados, para ninguém reabrir: o laço do fingerprint (#54–#56 → missão
 `20260922-o-motivo-da-fase`, PR #57, merge `2258e53`); o fluxo `develop → staging → main` com o
@@ -174,6 +174,13 @@ veredito**: em vez de congelar de novo sob a regra "nenhum commit, nem de `TODO.
 preferiu consertar a causa (missão `20261001-a-janela-nao-se-parte`, ADR 0014). A **janela 4** abre
 no primeiro carimbo de alvo após o merge dessa missão; a T3 vem **depois** do veredito dela.
 
+**Hoje (2026-10-08).** A janela 4 partiu: os lotes 1–5 mudaram o runner sem juiz, e o último veredito
+continua o `melhorou` sobre `4fd0f31` (PR #175). Com o backlog zerando no chore do lote 6, o humano
+decidiu **congelar o kit no merge do lote 6** (`20261008-lote-6-as-quatro-que-faltam`, decisão 6):
+a janela seguinte abre no primeiro carimbo de alvo depois do merge; nada em `bin agents templates
+config` até o veredito (achado novo vai só ao `TODO.md`, que desde a ADR 0014 não parte a janela);
+o `sdd kaizen` roda de um worktree ligado do kit (ADR 0017); a frente F1-P1 espera o veredito.
+
 ## F4 — Portabilidade para outros repos
 
 Fontes, transcritas aqui porque não eram versionadas:
@@ -291,6 +298,13 @@ uma frase no § 4 do `sdd-planner` — para cada incremento, `grep` dos símbolo
 `TODO.md` contra o diff previsto, e número escrito em prosa que um incremento anterior muda é
 re-medido no estado depois dele. Nas três vezes, a execução decidiu na hora e registrou nas notas do
 checkpoint daquela missão.
+
+**Fechada pelo I4 de `20261008-lote-6-as-quatro-que-faltam` (2026-10-08).** A frase entrou no § 4 do
+`agents/sdd-planner.md` como parágrafo `⚠️`, e o probe `hat: the planner measures each increment
+against the disk the earlier ones leave` do `tests/check-hat.sh` a lê como seção, no `TEST_CMD`. A
+lição foi paga pela segunda vez no planejamento do próprio lote 6: os quatro consertos editam
+exatamente os quatro símbolos designados do `TODO.md`, e o plano trouxe a tabela de âncoras por
+incremento.
 
 ---
 

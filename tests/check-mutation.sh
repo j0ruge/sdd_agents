@@ -606,16 +606,26 @@ mut_DOCS_marker_unanchored() {                    # the marker quoted in a table
 mut_DOCS_marker_in_fence() {                      # an example of the marker inside a fence counts
   sed -i '/^gate_DOCS() {/,/^}/ s@^        !fence && /^\[\[:space:\]\]\*<!-- sdd:proposed@        /^[[:space:]]*<!-- sdd:proposed@' "$1"
 }
-# The fence closes only on its own delimiter (Codex on PR #176): one mutant per condition, each
-# caught by its world in check-gates.sh ("...not its own delimiter: tilde|shorter|info").
-mut_DOCS_fence_closes_on_other_char() {           # a ~~~ closes a ``` example
-  sed -i '/^gate_DOCS() {/,/^}/ s@else if (ch == fch && len >= flen@else if (len >= flen@' "$1"
+# The fence closes only on its own delimiter (Codex on PR #176): one mutant per condition. Since
+# #239 the conditions live ONCE, in FENCE_AWK, and each of these sabotages the three readers at
+# once — caught by the gate_DOCS loop ("...not its own delimiter: tilde|shorter|info") and by the
+# `fence: ` worlds of the two bug readers. The range is the awk function inside the string.
+mut_FENCE_closes_on_other_char() {                # a ~~~ closes a ``` example
+  sed -i '/^function fence_line(/,/^}/ s@else if (ch == fch && len >= flen@else if (len >= flen@' "$1"
 }
-mut_DOCS_fence_closes_on_shorter() {              # a ``` closes a ```` example
-  sed -i '/^gate_DOCS() {/,/^}/ s@else if (ch == fch && len >= flen && @else if (ch == fch \&\& @' "$1"
+mut_FENCE_closes_on_shorter() {                   # a ``` closes a ```` example
+  sed -i '/^function fence_line(/,/^}/ s@else if (ch == fch && len >= flen && @else if (ch == fch \&\& @' "$1"
 }
-mut_DOCS_fence_closes_with_info() {               # a ```bash closes a ``` example
-  sed -i '/^gate_DOCS() {/,/^}/ s@ && \$0 ~ /^\[ \\t\]\*(`+|~+)\[ \\t\]\*\$/) is_fence = 1@) is_fence = 1@' "$1"
+mut_FENCE_closes_with_info() {                    # a ```bash closes a ``` example
+  sed -i '/^function fence_line(/,/^}/ s@ && l ~ /^\[ \\t\]\*(`+|~+)\[ \\t\\r\]\*\$/) fence = 0@) fence = 0@' "$1"
+}
+mut_FENCE_crlf_never_closes() {                   # a closing line ending in CR closes nothing
+  sed -i '/^function fence_line(/,/^}/ s@(`+|~+)\[ \\t\\r\]\*\$/) fence = 0@(`+|~+)[ \\t]*$/) fence = 0@' "$1"
+}
+# Each reader keeps its own CALL of the fragment (decision 3 of #239): handed back the loose toggle
+# it carried before, it alone reads a `~~~` inside a backtick fence as the close again.
+mut_DOCS_fence_loose() {                          # gate_DOCS toggles on any fence line again
+  sed -i '/^gate_DOCS() {/,/^}/ s@^        { fence_line(\$0) }$@        /^[[:space:]]*(```|~~~)/ { fence = !fence }@' "$1"
 }
 # A ⛔ is a boundary (codereview of 2026-09-28): one mutant for the refusal, one for its exception.
 mut_DOCS_blocked_writable_passes() {              # a ⛔ on README.md waits for a human again
@@ -965,12 +975,18 @@ mut_QA_bug_genre_anywhere() {
 # without the fence (its blank line closes the block); what dies now is `a whole header quoted
 # inside a fence above the real one`, whose quoted Status line would open the block.
 #
-# `fenced = !fenced` occurs on the CODE line only — the prose beside it says "SKIPS fenced blocks"
-# and "the fence is STATE", neither of which contains the assignment. Same anchoring discipline as
-# the three mutants above, and for the same measured reason: a mutant that rewrites only a comment
-# applies, clears the rc-90 `cmp -s` guard, and certifies a protection nobody measured.
+# Since #239 the fence is FENCE_AWK's, and the extractor skips the inside of a fence with its own
+# `fence { next }` line, the CODE line this mutant deletes inside gate_QA — the prose beside it says
+# "SKIPS fenced blocks" and "the fence is STATE", neither of which is that line. Same anchoring
+# discipline as the three mutants above, and for the same measured reason: a mutant that rewrites
+# only a comment applies, clears the rc-90 `cmp -s` guard, and certifies a protection nobody measured.
 mut_QA_bug_genre_fenced() {
-  sed -i 's|{ fenced = !fenced; next }|{ next }|' "$1"
+  sed -i '/^gate_QA() {/,/^}/ s|^      fence { next }$||' "$1"
+}
+# LOOSE: the extractor's call of FENCE_AWK goes back to the toggle it carried before #239, so a `~~~`
+# inside a backtick fence, or a shorter run, closes it and the quoted header becomes the genre.
+mut_QA_bug_genre_fence_loose() {
+  sed -i '/^gate_QA() {/,/^}/ s@^      { fence_line(\$0) }$@      /^[[:space:]]*(```|~~~)/ { fence = !fence }@' "$1"
 }
 
 # Issue 63, the two halves of "the genre is read from the Status block", one mutant each because
@@ -1033,11 +1049,16 @@ mut_QA_bug_deferred_undecided() {
 mut_QA_bug_deferred_undecided_unnamed() {
   sed -i '/^gate_QA() {/,/^}/ s|^    if \[ "\$undecided" -gt 0 \]; then$|    if false; then|' "$1"
 }
-# FENCED: the decision reader stops tracking fences, so a bug that QUOTES the heading in a repro
-# reads as decided. `infence` is this function's own variable, so QA_bug_genre_fenced (unranged)
-# and this one sabotage one reader each.
+# FENCED: the decision reader stops skipping the inside of a fence, so a bug that QUOTES the heading
+# in a repro reads as decided. Ranged on its own function, as QA_bug_genre_fenced is on gate_QA: the
+# two readers carry the same `fence { next }` line, and each mutant sabotages one of them.
 mut_QA_bug_deferred_decision_fenced() {
-  sed -i '/^bug_decision_recorded() {/,/^}/ s|{ infence = !infence; next }|{ next }|' "$1"
+  sed -i '/^bug_decision_recorded() {/,/^}/ s|^    fence { next }$||' "$1"
+}
+# LOOSE: the decision reader's call of FENCE_AWK goes back to the toggle it carried before #239, so a
+# `~~~` inside a backtick fence, or a shorter run, closes it and the quoted dated heading counts.
+mut_QA_bug_deferred_decision_fence_loose() {
+  sed -i '/^bug_decision_recorded() {/,/^}/ s@^    { fence_line(\$0) }$@    /^[[:space:]]*(```|~~~)/ { fence = !fence }@' "$1"
 }
 # PLURAL: `## Decisions for a Human` — the qa-execution skill's heading for questions still open —
 # reads as the decision again, through the shared eight-byte prefix.
@@ -3852,6 +3873,27 @@ mut_KAIZEN_reminder_per_worktree() {
   sed -i '/^kaizen_reminder()/,/^}/ s@kit_id="\$( REPO_ROOT="\$SDD_HOME" ledger_repo_root )"; here_id="\$( ledger_repo_root )"@kit_id="$( git -C "$SDD_HOME" rev-parse --show-toplevel )"; here_id="$REPO_ROOT"@' "$1"
 }
 
+# The checkout every target's `sdd run` executes is refused to the judge (#236, ADR 0017): one mutant
+# per rule of the door, each caught by its `kaizen door: ` world in check-kaizen.sh. ADMITTED: the
+# real run opens its session there again. SILENT: the projection stops saying what the real run
+# would do. PREFIX: the trailing slash goes, and a sibling `<root>-kaizen` is taken for the checkout.
+# NO_SDD: with no `sdd` on the PATH, the helper answers "this is it".
+mut_KAIZEN_shared_checkout_admitted() {
+  sed -i '/^cmd_kaizen() {/,/^}/ s@else die "\$shared_why"; fi@else :; fi@' "$1"
+}
+mut_KAIZEN_shared_checkout_projection_silent() {
+  sed -i '/^cmd_kaizen() {/,/^}/ s@then warn "a real run here would refuse: \$shared_why"; else@then :; else@' "$1"
+}
+mut_KAIZEN_shared_checkout_prefix() {
+  sed -i '/^kit_checkout_targets_run() {/,/^}/ s@case "\$p" in "\$REPO_ROOT"/\*)@case "$p" in "$REPO_ROOT"*)@' "$1"
+}
+mut_KAIZEN_shared_checkout_unquoted() {          # the named command splits a root with a space
+  sed -i '/^cmd_kaizen() {/,/^}/ s@q_root="\$(printf '"'"'%q'"'"' "\$REPO_ROOT")"@q_root="$REPO_ROOT"@' "$1"
+}
+mut_KAIZEN_shared_checkout_no_sdd() {
+  sed -i '/^kit_checkout_targets_run() {/,/^}/ s@p="\$(command -v sdd 2>/dev/null)" || return 1@p="$(command -v sdd 2>/dev/null)" || return 0@' "$1"
+}
+
 # The kaizen door goes back to comparing TOPLEVELS (issue 121): a linked worktree of the kit has its
 # own, and the kit's `sdd` run from one refuses as if it stood in a target. Caught by `kit-repo
 # guard: a linked worktree of the kit answers like the main checkout` in check-kaizen.sh.
@@ -4118,7 +4160,7 @@ mut_RUN_kit_guard_tree_blind() {
 # edited again gives the identical ` M TODO.md` line and is not. Caught by the same assertion, whose
 # session edits the file that was already dirty.
 mut_RUN_kit_guard_tree_no_content() {
-  sed -i '/^kit_guard_tree() {/,/^}/ s|print $0 "\\t" ((p in h) ? h\[p\] : "-")|print $0 "\\t-"|' "$1"
+  sed -i '/^kit_guard_tree() {/,/^}/ s|print substr($0, 1, 3) enc(p) "\\t" ((p in h) ? h\[p\] : "-")|print substr($0, 1, 3) enc(p) "\\t-"|' "$1"
 }
 # The arm forgets the tree it sampled: the human's own dirt, there before the phase, reads as the
 # session's and every phase over a dirty kit stops. Caught by the benign half of the same assertion
@@ -4194,6 +4236,17 @@ mut_RUN_kit_guard_md5_escape_kept() {
 }
 mut_RUN_kit_guard_md5_escape_prefix() {
   sed -i '/^kit_guard_tree() {/,/^}/ s|if (esc) r = substr(r, 2)|if (0) r = substr(r, 2)|' "$1"
+}
+# A name holding a newline is ONE path (#240): the status reaches the kit guard NUL-terminated and
+# every name is published encoded the way md5sum escapes one, once, on the printed line. UNENCODED:
+# enc() hands the name back as is — the newline splits the tree line in two. Z_NEWLINE: the `-z` mode of hat_status_lines prints `\n` again, and the NUL-reading array
+# gets one garbled entry. Both caught by `kit-guard: a dirty name holding a newline is one path …`
+# (2l); unencoded, the backslash regime (2j) reads its name undoubled too.
+mut_RUN_kit_guard_name_unencoded() {
+  sed -i '/^kit_guard_tree() {/,/^}/ s|    function enc(s,  o, i, c) { o = ""|    function enc(s,  o, i, c) { return s; o = ""|' "$1"
+}
+mut_RUN_hat_status_z_newline() {
+  sed -i '/^hat_status_lines() {/,/^}/ s|if \[ "\$z" = 1 \]; then printf|if false; then printf|' "$1"
 }
 # A symlink in the kit tree (3rd Codex review of PR #237): UNHASHED, it reads `-` before and after
 # whatever the session points it at; FOLLOWED, its digest is the file behind it again, and a link
@@ -6074,9 +6127,11 @@ CATALOG=(
   DOCS_doc_needs_no_name
   DOCS_marker_unanchored
   DOCS_marker_in_fence
-  DOCS_fence_closes_on_other_char
-  DOCS_fence_closes_on_shorter
-  DOCS_fence_closes_with_info
+  FENCE_closes_on_other_char
+  FENCE_closes_on_shorter
+  FENCE_closes_with_info
+  FENCE_crlf_never_closes
+  DOCS_fence_loose
   DOCS_blocked_writable_passes
   DOCS_blocked_cell_not_split
   DOCS_blocked_empty_cell_vanishes
@@ -6131,6 +6186,7 @@ CATALOG=(
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
   QA_bug_genre_fenced
+  QA_bug_genre_fence_loose
   QA_bug_genre_outside_header
   QA_bug_genre_header_unbounded
   QA_bug_genre_deferred_blocks
@@ -6140,6 +6196,7 @@ CATALOG=(
   QA_bug_deferred_undecided
   QA_bug_deferred_undecided_unnamed
   QA_bug_deferred_decision_fenced
+  QA_bug_deferred_decision_fence_loose
   QA_bug_deferred_decision_plural
   QA_bug_deferred_decision_plural_english_only
   QA_bug_deferred_decision_english_only
@@ -6443,6 +6500,11 @@ CATALOG=(
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
   KAIZEN_reminder_per_worktree
+  KAIZEN_shared_checkout_admitted
+  KAIZEN_shared_checkout_projection_silent
+  KAIZEN_shared_checkout_prefix
+  KAIZEN_shared_checkout_no_sdd
+  KAIZEN_shared_checkout_unquoted
   KAIZEN_kit_door_per_worktree
   KAIZEN_kit_door_open
   KAIZEN_already_judged_spends
@@ -6484,6 +6546,8 @@ CATALOG=(
   RUN_kit_guard_md5_options
   RUN_kit_guard_md5_escape_kept
   RUN_kit_guard_md5_escape_prefix
+  RUN_kit_guard_name_unencoded
+  RUN_hat_status_z_newline
   RUN_kit_guard_link_unhashed
   RUN_kit_guard_link_followed
   RUN_kit_rev_is_head

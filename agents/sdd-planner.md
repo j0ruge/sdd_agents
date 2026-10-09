@@ -116,6 +116,13 @@ Every increment needs:
 - **the size of one session.** The increment is the anti-overflow unit: one headless session
   executes it whole, from Red to commit. If you cannot describe the Red in one sentence, the slice
   is too big.
+  ⚠️ **Measure each increment against the disk the earlier ones leave, not against the base.** For
+  every increment, grep the symbols the open items of `TODO.md` designate (`` `path:N` (`symbol`) ``)
+  against the lines it will edit, move or delete: an increment that edits a designated symbol, or
+  moves it more than 10 lines, re-anchors that item in its own commit
+  (`tests/check-todo.sh --anchors <TODO_FILE>`), and the plan says which increment re-anchors which
+  item. A number the plan writes in prose that an earlier increment changes — a count of mutants,
+  sensors or rows — is re-measured in the state after that increment, never copied from the base.
 - **a commit as its product.** `gate_EXEC` reads 7–64 hex digits in the Commit cell and nothing
   else. An increment whose act happens outside git — an e-mail sent, a KB page published, an IdP
   setting — still commits a RECORD: an evidence file in the mission folder (`record-<ID>.md`: what

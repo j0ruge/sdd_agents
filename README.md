@@ -94,7 +94,9 @@ sdd autonomy --by-mission    # ...per mission: the same outcomes, launch(es) (di
                              #   count), reopened phases, the checkpoint's intervention notes, the review loop
                              #   (REVIEW plus the EXEC sessions after it, in US$ and as a share), and the mission cost
 sdd kaizen                   # judge the previous kit change and plan the next kit mission (kit repo only);
-                             #   it reads EVERY repo (ADR 0005) — --all-repos is accepted and is a no-op here
+                             #   it reads EVERY repo (ADR 0005) — --all-repos is accepted and is a no-op here;
+                             #   it refuses the checkout the `sdd` on the PATH runs from, and names the
+                             #   `git worktree add` to run it from (ADR 0017); --dry-run there only warns
 sdd kaizen --series          # the deterministic series (JSON) the judge cites, on its own, with the
                              #   composition of the slice it read: how many missions came from which repo,
                              #   and the guard that REFUSES a slice it cannot answer for (`guard.sufficient`

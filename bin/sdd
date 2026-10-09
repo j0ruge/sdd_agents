@@ -1528,6 +1528,35 @@ function placeholder(s,   u, w) {
 # Through ENVIRON and never `awk -v`, for gate_REVIEW's reason: -v runs escape sequences.
 placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit placeholder(ENVIRON["SDD_PLACEHOLDER_TEXT"]) ? 0 : 1 }'; }
 
+# FENCE_AWK — the one definition of a fenced code block, for the runner's three fence readers:
+# bug_decision_recorded, the genre extractor of gate_QA and the proposed-text reader of gate_DOCS.
+# A fence opens on a run of three or more backticks or tildes, and closes only on a line of the SAME
+# character, at least as long, with nothing but blanks after it (CommonMark). Toggling on any fence
+# line let a `~~~` inside a backtick fence, a shorter run or a ```bash "close" it: gate_DOCS was
+# fixed alone (Codex on PR #176), the two bug readers were born after it with the loose copy, and a
+# quoted dated `## Decision` counted as the human's call (#239). Three copies of one rule drifted,
+# so the rule lives here once. Each reader concatenates it ahead of its own program, as with
+# PLACEHOLDER_AWK, calls fence_line($0) on every line, and reads the global `fence`: the line that
+# opens a fence leaves it set, so the reader skips it with the inside; the closing line leaves it
+# clear and flows on, and no reader rule matches a line that is only a fence run. No return value:
+# the sabotage pass of #239 found one unobservable — `fence { next }` already skips every line it
+# could name. The mutation catalogue sabotages the CONDITIONS in this body and each reader's CALL in
+# its own function. No apostrophe anywhere inside the string: it is single-quoted shell.
+# A CR before the end of the closing line counts as a blank: in a file written with CRLF the close never
+# came, and the fence swallowed the rest of the file (final review of batch 6).
+# DECLARED LIMITS (D15), none of which a reader has needed: an indent of four or more blanks opens a
+# fence here (an indented code block in CommonMark); a backtick inside the info string of a backtick
+# fence is not refused; a fence that never closes runs to the end of the file, as in CommonMark.
+FENCE_AWK='
+function fence_line(l,   run, ch, len) {
+  if (!match(l, /^[ \t]*(```+|~~~+)/)) return
+  run = substr(l, RSTART, RLENGTH); sub(/^[ \t]+/, "", run)
+  ch = substr(run, 1, 1); len = length(run)
+  if (!fence) { fence = 1; fch = ch; flen = len }
+  else if (ch == fch && len >= flen && l ~ /^[ \t]*(`+|~+)[ \t\r]*$/) fence = 0
+}
+'
+
 # bug_decision_recorded <bug file> — rc 0 when the bug's body carries the human's decision: a
 # level-2 heading opening with `## Decis`, outside any fenced block. It is what makes `Closable by:
 # deferred` an artifact and not a label (#232): agents/sdd-qa.md § 5.1 and ADR 0009 demand the
@@ -1543,8 +1572,8 @@ placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit p
 # do the pt-BR plurals a pt-BR session translates it into, `## Decis\303\265es` and `## Decisoes`
 # (final review of the lote 5: refusing the English one alone left them reading as decided).
 # Fence state for the genre extractor's reason: a bug filed about this rule quotes the heading. The
-# variable is `infence` and not `fenced` so QA_bug_genre_fenced, whose sed has no function range,
-# keeps sabotaging the extractor alone.
+# fence is FENCE_AWK's, the CommonMark one: a `~~~` inside a backtick example, or a shorter run, does
+# not close it (#239).
 # The heading opens the section and a DATE in it is the decision (Codex review of PR #237): § 5.1
 # and ADR 0009 ask for the date and who decided, and the heading alone — bare, or carrying only the
 # deferral — passed as decided. A `YYYY-MM-DD` on the heading line or under it, outside any fence,
@@ -1556,9 +1585,9 @@ placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit p
 # DECLARED, fail closed: a `###` heading, or an indented one, reads as no decision and blocks —
 # visibly, since the blocking reason names the bug.
 bug_decision_recorded() {
-  awk '
-    /^[[:space:]]*(```|~~~)/ { infence = !infence; next }
-    infence { next }
+  awk "$FENCE_AWK"'
+    { fence_line($0) }
+    fence { next }
     /^## / { insec = 0 }
     /^## Decis/ && !/^## Decis(ions|oes|\303\265es)/ { insec = 1 }
     insec && /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ { found = 1; exit }
@@ -1703,10 +1732,10 @@ gate_QA() {
   local openbugs=0 deferred=0 deferred_names="" undecided=0 undecided_names="" bugfile genre_line bugname
   while IFS= read -r bugfile; do
     [ -n "$bugfile" ] || continue
-    genre_line="$(awk '
+    genre_line="$(awk "$FENCE_AWK"'
       !/^-[[:space:]]+[*][*][^*]+:[*][*]/ { if (inheader) exit }
-      /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
-      fenced { next }
+      { fence_line($0) }
+      fence { next }
       /^-[[:space:]]+[*][*]Status:[*][*]/ { inheader = 1 }
       inheader && /^-[[:space:]]+[*][*]Closable by:[*][*]/ { print; exit }
     ' "$bugfile" || true)"
@@ -2191,24 +2220,14 @@ gate_DOCS() {
       GATE_WHY="45-docs.md has $n_writable ⛔ row(s) on a document the DOCS hat writes itself: $writable — a ⛔ is for a path the hat may not write or the harness refuses (.claude/); write the document and mark the row ✅ with the hash"
       return 1
     fi
-    # A fence opens on ``` or ~~~ and closes only on a line of the SAME character, at least as long,
-    # with nothing but blanks after it (CommonMark). Toggling on every fence line let a `~~~`, a
+    # The fence is FENCE_AWK's, the CommonMark one: toggling on every fence line let a `~~~`, a
     # shorter run or a ```bash inside an example "close" it, and a marker example past that line
     # read as the section: a ⛔ passed with no proposal behind it (Codex on PR #176).
-    proposed="$(awk '
-        {
-          is_fence = 0
-          if (match($0, /^[ \t]*(```+|~~~+)/)) {
-            run = substr($0, RSTART, RLENGTH); sub(/^[ \t]+/, "", run)
-            ch = substr(run, 1, 1); len = length(run)
-            if (!fence) is_fence = 1
-            else if (ch == fch && len >= flen && $0 ~ /^[ \t]*(`+|~+)[ \t]*$/) is_fence = 1
-          }
-        }
+    proposed="$(awk "$FENCE_AWK"'
+        { fence_line($0) }
         !fence && /^[[:space:]]*<!-- sdd:proposed -->[[:space:]]*$/ { on = 1; next }
         on && !fence && /^## / { on = 0 }
         on { print }
-        is_fence { if (fence) fence = 0; else { fence = 1; fch = ch; flen = len } }
       ' "$d")"
     for doc in "${blocked_docs[@]}"; do
       if [[ "$doc" =~ [[:alnum:]] ]] && grep -qF -- "$doc" <<< "$proposed"; then
@@ -3957,8 +3976,11 @@ KIT_GUARD_TREE_BEFORE=""
 KIT_GUARD_TREE=""
 KIT_GUARD_CHANGES=""
 
-# The kit's dirty tree, PUBLISHED in KIT_GUARD_TREE: one `XY path<TAB><digest>` line per entry of
-# hat_status_lines over SDD_HOME. The digest is the entry as git stores it — type, mode and content:
+# The kit's dirty tree, PUBLISHED in KIT_GUARD_TREE: one `XY <name><TAB><digest>` line per entry of
+# hat_status_lines -z over SDD_HOME, the name ENCODED the way md5sum escapes one — `\` as `\\`, LF as
+# `\n`, CR as `\r` (#240) — so a name holding a newline is one line; a name without those bytes reads
+# as it is. Every side is keyed by the RAW name and the encoding happens once, on the published line.
+# The digest is the entry as git stores it — type, mode and content:
 # a regular file is the md5 of its content plus `+x` when executable, a symlink is `l` plus the md5
 # of its TARGET TEXT (never of the file it points at), and anything else is `-` (a deletion, an
 # untracked nested repository); then `@<mode>:<blob>` of the path's INDEX entry, when it has one.
@@ -3974,62 +3996,75 @@ KIT_GUARD_CHANGES=""
 # option, and md5sum refused the WHOLE batch — every dirty path read `-` and no edit was seen.
 # Called, never `$( )`-captured: the result is a global.
 # ⚠️ DECLARED LIMITS: the content of every dirty path is READ at each arm and each check, so a large
-# untracked file in the kit costs its read twice per phase (ignored paths are never read); a newline
-# in a name splits its status line and its index entry, so the path reads as `-` and its index
-# entry never meets it (md5sum's escaped record is decoded, but nothing upstream of it keeps the
-# name whole); a gitlink (a
+# untracked file in the kit costs its read twice per phase (ignored paths are never read); a gitlink (a
 # submodule) reads as `-` in the worktree, so the commit checked out under an already-dirty entry is
 # not seen — the kit has no submodule; the stages of a CONFLICTED path are joined, and no probe
 # builds a conflict in the kit, so dropping all but one of them is a mutant nothing would catch.
 kit_guard_tree() {
-  local status sums execs links
+  local sums e
+  local -a st=()
   KIT_GUARD_TREE=""
   # GIT_OPTIONAL_LOCKS=0: a read, never a write — `git status` would otherwise refresh and rewrite
   # the index of a kit someone may be committing in at that very moment (measured on git 2.43: the
   # default rewrote a scratch repo's index after a `touch`, this did not). No probe reads the kit's
   # index, so dropping the variable is a mutant nothing would catch — DECLARED.
-  status="$( GIT_OPTIONAL_LOCKS=0 hat_status_lines "$SDD_HOME" )"
-  [ -n "$status" ] || return 0
+  # Read ONCE, into an array: a bash variable cannot hold a NUL, and `$( … -z … )` drops them in
+  # silence, which put the newline residue back (#240).
+  mapfile -d '' st < <( GIT_OPTIONAL_LOCKS=0 hat_status_lines -z "$SDD_HOME" )
+  [ "${#st[@]}" -gt 0 ] || return 0
   sums="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
-           && while IFS= read -r e; do [ -f "${e:3}" ] && [ ! -L "${e:3}" ] && printf '%s\0' "${e:3}"; done <<< "$status" \
+           && for e in "${st[@]}"; do [ -f "${e:3}" ] && [ ! -L "${e:3}" ] && printf '%s\0' "${e:3}"; done \
               | xargs -0 -r md5sum -- 2>/dev/null )" || true
-  # The executable bit beside the digest (Codex review of PR #237): it is the one mode git tracks for
-  # a regular file (100644/100755), and on a path already dirty a phase that flipped it alone left
-  # porcelain and content as they were — the trees compared equal and the guard said nothing.
-  execs="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
-            && while IFS= read -r e; do [ -f "${e:3}" ] && [ ! -L "${e:3}" ] && [ -x "${e:3}" ] && printf '%s\n' "${e:3}"; done <<< "$status" )" || true
-  # A symlink is its target text, which is what git stores (mode 120000): a digest that followed it
-  # hashed the file behind, and a link retargeted to an identical file compared equal.
-  links="$( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
-            && while IFS= read -r e; do [ -L "${e:3}" ] && printf '%s  %s\n' "$(readlink -- "${e:3}" | md5sum | cut -c1-32)" "${e:3}"; done <<< "$status" )" || true
-  # ENVIRON and not `-v`: awk expands backslash escapes in a -v value, which would rewrite a name.
+  # FILES, never the environment nor `-v` (#240): awk expands backslash escapes in a -v value, which
+  # would rewrite a name, and one environment variable holds at most 131 063 bytes of value — past
+  # that awk failed to exec, and under `set -e` the target's `sdd run` died before its session
+  # (~1000 dirty paths, measured). Each stream is a process substitution read under
+  # `FILENAME == ARGV[n]`, never `NR == FNR`, for the reason the index gives below: an empty stream
+  # contributes no record. The status, the index, the links and the executable names are
+  # NUL-terminated (`RS` set between the operands, which count in ARGV: the index is ARGV[2]); the
+  # md5sum records are lines, since md5sum escapes a name that would break one. Every key is the raw
+  # name, and enc() encodes it ONCE, on the printed line: four encoding sites would be four places a
+  # name could miss its own key, and the sabotage pass of #240 found two of them unprobed. DECLARED
+  # (D15): the CR branch of enc() decides only what the reason PRINTS — a raw CR does not split the
+  # tree line, so the comparison is right without it, no regime can tell, and none builds a CR name.
   # index/substr only — mawk is byte-oriented, and a path is arbitrary bytes.
   # The INDEX entry of the path after an `@` (4th Codex review of PR #237): on a path already `MM`, a
   # phase that replaces only the staged blob — or flips only the staged mode — leaves porcelain and the
   # worktree as they were, and the next commit in the kit carries the session's entry. `ls-files -s`
   # is `<mode> <sha> <stage><TAB><path>`; the entry kept is `<mode>:<sha>`, and a conflicted path's
-  # stages are joined in git's order. It is the FIRST file and read under `FILENAME == ARGV[1]`, never
+  # stages are joined in git's order. It is the FIRST file and read under `FILENAME == ARGV[2]`, never
   # `NR == FNR`: an empty index makes the first file contribute no record, and `NR == FNR` would then
   # swallow the status as if it were the index.
   # An ESCAPED md5sum record (6th Codex review of PR #237): GNU md5sum writes a name holding a
   # backslash, a newline or a CR as `\<md5>  <name>` with `\\`, `\n` and `\r` inside; read by
   # position, it gave neither the digest nor the path. The leading `\` is dropped and the name decoded.
-  KIT_GUARD_TREE="$( KG_SUMS="$sums" KG_EXECS="$execs" KG_LINKS="$links" awk '
+  # The executable bit beside the digest (Codex review of PR #237): it is the one mode git tracks for
+  # a regular file (100644/100755), and on a path already dirty a phase that flipped it alone left
+  # porcelain and content as they were — the trees compared equal and the guard said nothing.
+  # A symlink is its target text, which is what git stores (mode 120000): a digest that followed it
+  # hashed the file behind, and a link retargeted to an identical file compared equal.
+  KIT_GUARD_TREE="$( awk '
     function unesc(s,  o, i, c) { o = ""
       while ((i = index(s, "\\")) > 0) { c = substr(s, i + 1, 1); o = o substr(s, 1, i - 1) (c == "n" ? "\n" : (c == "r" ? "\r" : c)); s = substr(s, i + 2) }
       return o s }
-    BEGIN { n = split(ENVIRON["KG_SUMS"], a, "\n")
-            for (i = 1; i <= n; i++) { r = a[i]; esc = (substr(r, 1, 1) == "\\"); if (esc) r = substr(r, 2)
-              if (length(r) > 34) h[esc ? unesc(substr(r, 35)) : substr(r, 35)] = substr(r, 1, 32) }
-            n = split(ENVIRON["KG_LINKS"], y, "\n")
-            for (i = 1; i <= n; i++) if (length(y[i]) > 34) h[substr(y[i], 35)] = "l" substr(y[i], 1, 32)
-            n = split(ENVIRON["KG_EXECS"], x, "\n")
-            for (i = 1; i <= n; i++) if (x[i] != "") ex[x[i]] = 1 }
-    FILENAME == ARGV[1] { t = index($0, "\t"); if (t == 0) next
+    function enc(s,  o, i, c) { o = ""
+      for (i = 1; i <= length(s); i++) { c = substr(s, i, 1); o = o (c == "\\" ? "\\\\" : (c == "\n" ? "\\n" : (c == "\r" ? "\\r" : c))) }
+      return o }
+    FILENAME == ARGV[2] { t = index($0, "\t"); if (t == 0) next
       split(substr($0, 1, t - 1), f, " "); e = f[1] ":" f[2]; q = substr($0, t + 1)
       ix[q] = (q in ix) ? ix[q] "," e : e; next }
-    { p = substr($0, 4); print $0 "\t" ((p in h) ? h[p] : "-") ((p in ex) ? "+x" : "") ((p in ix) ? "@" ix[p] : "") }' \
-    <( git -C "$SDD_HOME" ls-files -s -z 2>/dev/null | tr '\0' '\n' ) - <<< "$status" )"
+    FILENAME == ARGV[4] { r = $0; esc = (substr(r, 1, 1) == "\\"); if (esc) r = substr(r, 2)
+      if (length(r) > 34) h[esc ? unesc(substr(r, 35)) : substr(r, 35)] = substr(r, 1, 32); next }
+    FILENAME == ARGV[6] { if (length($0) > 34) h[substr($0, 35)] = "l" substr($0, 1, 32); next }
+    FILENAME == ARGV[7] { if ($0 != "") ex[$0] = 1; next }
+    { p = substr($0, 4); print substr($0, 1, 3) enc(p) "\t" ((p in h) ? h[p] : "-") ((p in ex) ? "+x" : "") ((p in ix) ? "@" ix[p] : "") }' \
+    RS='\0' <( git -C "$SDD_HOME" ls-files -s -z 2>/dev/null ) \
+    RS='\n' <( printf '%s' "$sums" ) \
+    RS='\0' <( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
+               && for e in "${st[@]}"; do [ -L "${e:3}" ] && printf '%s  %s\0' "$(readlink -- "${e:3}" | md5sum | cut -c1-32)" "${e:3}"; done ) \
+    <( CDPATH='' cd "$SDD_HOME" 2>/dev/null \
+       && for e in "${st[@]}"; do [ -f "${e:3}" ] && [ ! -L "${e:3}" ] && [ -x "${e:3}" ] && printf '%s\0' "${e:3}"; done ) \
+    <( printf '%s\0' "${st[@]}" ) )"
 }
 
 # What moved between two kit trees, PUBLISHED in KIT_GUARD_CHANGES as one comma-separated clause:
@@ -4037,7 +4072,11 @@ kit_guard_tree() {
 # (content changed)` when the worktree content did, `(mode changed)` when only the executable bit
 # did, `(index changed)` when only the staged entry did), and a path dirty before and clean now
 # (`path (no longer dirty)`). Empty when the two trees agree.
-# Called, never `$( )`-captured.
+# Called, never `$( )`-captured. The tree before reaches awk as its FIRST FILE, never through the
+# environment, for kit_guard_tree's reason (#240): a variable holds at most 131 063 bytes of value.
+# Written with `printf '%s'`, no newline: a clean kit before is an EMPTY file, no record at all, so
+# only `FILENAME == ARGV[1]` keeps the records after out of it — `NR == FNR` would swallow them, and
+# a clean kit that gained a path would name none (regime 2k).
 # The `(no longer dirty)` items come in the order of the tree before — git's — and never in awk's
 # hash order, which walked `TODO.md, notes, zz.md` as notes, zz, TODO (final review of
 # 20261006-lote-5-o-que-o-lote-4-deixou, finding 8). The key runs to the LAST tab, the separator
@@ -4045,14 +4084,13 @@ kit_guard_tree() {
 # and cut at the first one the reason named `notes` for `notes<TAB>draft.md`. Both only ever
 # garbled the reason — the stop itself compares the whole trees (kit_guard_check).
 kit_guard_changes() {   # kit_guard_changes <tree before> <tree after>
-  KIT_GUARD_CHANGES="$( KG_BEFORE="$1" awk '
+  KIT_GUARD_CHANGES="$( awk '
     function cut(l) { return match(l, /\t[^\t]*$/) ? RSTART : length(l) + 1 }
     function key(l) { return substr(l, 4, cut(l) - 4) }
     function head(l) { return substr(l, 1, cut(l) - 1) }
     function wt(l,  d) { d = substr(l, cut(l) + 1); sub(/@.*$/, "", d); return d }
     function md5(l,  d) { d = wt(l); sub(/\+x$/, "", d); return d }
-    BEGIN { n = split(ENVIRON["KG_BEFORE"], b, "\n")
-            for (i = 1; i <= n; i++) if (b[i] != "") { k = key(b[i]); if (!(k in was)) ord[++m] = k; was[k] = b[i] } }
+    FILENAME == ARGV[1] { k = key($0); if (!(k in was)) ord[++m] = k; was[k] = $0; next }
     $0 != "" { p = key($0); seen[p] = 1
       if (!(p in was)) item = head($0)
       else if (was[p] == $0) next
@@ -4060,7 +4098,7 @@ kit_guard_changes() {   # kit_guard_changes <tree before> <tree after>
       else item = head($0)
       out = out sep item; sep = ", " }
     END { for (i = 1; i <= m; i++) if (!(ord[i] in seen)) { out = out sep ord[i] " (no longer dirty)"; sep = ", " }
-          print out }' <<< "$2" )"
+          print out }' <( printf '%s' "$1" ) - <<< "$2" )"
 }
 
 # Called, never substituted. `$(kit_guard_arm)` would run the body in a subshell where the
@@ -4350,16 +4388,18 @@ hat_reflog_window() {
 # `git status --porcelain -z`, one `XY path` line per entry with the NAME LITERAL — the line-mode
 # porcelain C-quotes a path holding a space (measured: `?? "docs/handoffs/m/a b.md"`) while `git
 # diff --name-only` prints it bare, and the two halves of the guard disagreed on one name. The
-# ORIG_PATH entry that follows a rename/copy is folded away. A newline inside a name is the one
-# residue left (declared in the header above).
-# The kit guard reads the KIT's tree through the same parser (kit_guard_tree), so the optional
-# argument is the root; the hat's callers pass none and read REPO_ROOT as always.
-hat_status_lines() {   # hat_status_lines [root] — default REPO_ROOT
-  local entry skip=0
+# ORIG_PATH entry that follows a rename/copy is folded away. The kit guard reads the KIT's tree
+# through the same parser (kit_guard_tree), in the `-z` mode, which ends each entry with a NUL and
+# keeps a name holding a newline whole (#240). The hat's callers stay in the `\n` mode and pass no
+# root, so for them a newline inside a name is the one residue left (declared in the header above,
+# decision 5 of #240).
+hat_status_lines() {   # hat_status_lines [-z] [root] — default REPO_ROOT; -z ends each entry with a NUL
+  local entry skip=0 z=0
+  if [ "${1:-}" = -z ]; then z=1; shift; fi
   while IFS= read -r -d '' entry; do
     if [ "$skip" = 1 ]; then skip=0; continue; fi
     case "${entry:0:2}" in R?|C?|?R|?C) skip=1 ;; esac
-    printf '%s\n' "$entry"
+    if [ "$z" = 1 ]; then printf '%s\0' "$entry"; else printf '%s\n' "$entry"; fi
   done < <( git -C "${1:-$REPO_ROOT}" status --porcelain -z --untracked-files=all 2>/dev/null || true )
 }
 
@@ -10718,7 +10758,7 @@ kaizen_reminder() {
   local kit_id here_id
   kit_id="$( REPO_ROOT="$SDD_HOME" ledger_repo_root )"; here_id="$( ledger_repo_root )"
   if [ -n "$kit_id" ] && [ "$kit_id" = "$here_id" ]; then
-    dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo ($SDD_HOME) for the next kit mission plan"
+    dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME), for the next kit mission plan"
     return 0
   fi
   # Outside the kit the pointer is to the kit, and the sentence is the one thing here that had to
@@ -10731,7 +10771,7 @@ kaizen_reminder() {
   # that just finished contributed, `sdd run` carries no ledger option to widen it with, and a
   # reminder that answered with other projects' missions would be reporting somebody else's work
   # as this repo's.
-  dim "  autonomy series: $n mission(s) of this repo on kit $sha are in the ledger. The kaizen judge counts them (ADR 0005) — run 'sdd kaizen' in the kit repo ($SDD_HOME)."
+  dim "  autonomy series: $n mission(s) of this repo on kit $sha are in the ledger. The kaizen judge counts them (ADR 0005) — run 'sdd kaizen' in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME)."
 }
 
 # KAIZEN gate — same convention as every gate (0/1, reason in GATE_WHY), but NOT in PHASES:
@@ -10914,6 +10954,20 @@ kaizen_composition_note() {
   local l; while IFS= read -r l; do dim "$l"; done <<< "$lines"
 }
 
+# kit_checkout_targets_run — rc 0 when REPO_ROOT is the checkout the `sdd` on the PATH resolves
+# into: the one every target's `sdd run` on this machine executes, whose HEAD and status the kit
+# guard compares around each of their phases (ADR 0016 §2, ADR 0017). The test of step 2 of
+# /sdd-plan, trailing slash included, so a sibling such as <root>-kaizen is never taken for it. No
+# `sdd` on the PATH answers no: no target run here executes this checkout. DECLARED LIMIT (D15): the
+# `|| return 1` of the `readlink -f` has no world — it does not fail on a path `command -v` found.
+kit_checkout_targets_run() {
+  local p
+  p="$(command -v sdd 2>/dev/null)" || return 1
+  p="$(readlink -f -- "$p" 2>/dev/null)" || return 1
+  case "$p" in "$REPO_ROOT"/*) return 0 ;; esac
+  return 1
+}
+
 cmd_kaizen() {
   # ADR 0005, part 1 — the judge reads the WHOLE ledger. ADR 0003 had already said where verdict
   # evidence lives (real target repos: in the repo that BUILDS the kit every session lands on a
@@ -10974,7 +11028,23 @@ cmd_kaizen() {
   local kit_id here_id
   kit_id="$( REPO_ROOT="$SDD_HOME" ledger_repo_root )"; here_id="$( ledger_repo_root )"
   [ -n "$kit_id" ] && [ "$kit_id" = "$here_id" ] \
-    || die "sdd kaizen plans the KIT's next mission — run it in the kit repo ($SDD_HOME)"
+    || die "sdd kaizen plans the KIT's next mission — run it in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME)"
+  # The kit, but the checkout every target's `sdd run` executes (#236, ADR 0017): a KAIZEN session
+  # writes and commits the verdict and the next plan here, and the kit guard of each target run in
+  # flight stops it with KIT-TOUCHED. The real run dies before any session, naming the worktree that
+  # fixes it — a fetch, never a pull, which would move the HEAD the guard compares. The projection
+  # opens no session and writes nothing, and it is the read-only look the measurement window is told
+  # to use, so it warns with the same sentence and projects. `--series` returned above.
+  if kit_checkout_targets_run; then
+    # Every operand of the named command is shell-quoted (Codex on PR #244): a checkout under a
+    # directory with a space split `git -C <root>` in two, and a base branch git accepts, such as
+    # `release&prod`, ran half the command in the background and the rest as a command of its own.
+    local shared_why q_root q_wt q_base
+    q_root="$(printf '%q' "$REPO_ROOT")"; q_wt="$(printf '%q' "../${REPO_ROOT##*/}-kaizen")"
+    q_base="$(printf '%q' "origin/$DEFAULT_BRANCH")"
+    shared_why="this is the checkout every target's 'sdd run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git -C $q_root fetch && git -C $q_root worktree add $q_wt -b kaizen/$(date +%Y%m%d) $q_base', then 'sdd kaizen' from there"
+    if [ "$DRY_RUN" = 1 ]; then warn "a real run here would refuse: $shared_why"; else die "$shared_why"; fi
+  fi
   # A dirty tree does not block (the judge may be invoked mid-work on purpose), but the rows born
   # now carry kit_dirty:true and stay out of the comparable series forever — worth hearing once.
   [ -z "$( git -C "$REPO_ROOT" status --porcelain 2>/dev/null )" ] \

@@ -28,26 +28,26 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   variável não casa a palavra: um sensor que chame o binário por caminho ou por variável antes do
   `source` do `tests/isolate-git.sh` passa no censo com o repositório de quem o chama ainda exportado.
   Nenhum sensor faz isso hoje: falha aberta sem caso. Direção: contar o caminho absoluto e a variável
-  como git, com os dois mundos no controle negativo do censo.
+  como git, com os dois mundos no controle negativo do censo. RESOLVED by aa3a0b8.
   — descoberto por `revisor final` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-06)
 
 - [ ] **A cerca dos leitores de bug alterna em qualquer marcador: um `~~~` dentro de crases a fecha** —
-  `bin/sdd:1560` (`bug_decision_recorded`) — a regex da cerca inverte o estado em qualquer marcador
+  `bin/sdd:1587` (`bug_decision_recorded`) — a regex da cerca inverte o estado em qualquer marcador
   (crases ou tis) e comprimento; no CommonMark só o mesmo caractere, com comprimento ≥ ao da abertura,
   fecha a cerca. Um `## Decision` datado de exemplo, depois de um `~~~` dentro de crases, conta como a
   decisão humana: falha aberta, sem caso real (achado do Codex no PR #237). O extrator do gênero
   (`bin/sdd:1708`, `fenced`) tem o mesmo padrão. Direção: casar caractere e comprimento nos dois
-  leitores, com os mundos "til dentro de crases" e "fecho mais curto" e um mutante por leitor.
+  leitores, com os mundos "til dentro de crases" e "fecho mais curto" e um mutante por leitor. RESOLVED by ea289b4.
   — descoberto por `Codex` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-07)
 
 ### Contrato e configuração
 
 - [ ] **O `sdd kaizen` no checkout principal do kit escreve e commita onde os `sdd run` dos alvos executam** —
-  `bin/sdd:10917` (`cmd_kaizen`) — a sessão KAIZEN escreve o veredito e o plano da próxima missão do kit e
+  `bin/sdd:10971` (`cmd_kaizen`) — a sessão KAIZEN escreve o veredito e o plano da próxima missão do kit e
   commita no `REPO_ROOT` de onde foi chamada. Chamada do checkout que o `sdd` do PATH resolve, com um
   `sdd run` de alvo em voo, é o mesmo `kit-touched` do `/sdd-plan` (lido no código, não reproduzido). A
   ADR 0016 §2 manda a missão do kit para um worktree ligado e não decide o `sdd kaizen`. Direção: recusar
-  rodar nesse checkout nomeando o worktree, ou criá-lo; decidir com o humano.
+  rodar nesse checkout nomeando o worktree, ou criá-lo; decidir com o humano. RESOLVED by 3c54ac1.
   — descoberto por `claude` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-06)
 
 ### Saída humana e cosmética
@@ -59,12 +59,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Custo e escala
 
 - [ ] **Com milhares de caminhos sujos no kit, a guarda estoura o limite do ambiente e o `sdd run` morre** —
-  `bin/sdd:4017` (`KG_SUMS`) — digests, bits, links e a árvore inteira (`KG_BEFORE`) vão ao `awk` por
-  variável de ambiente; acima de 128 KiB o Linux recusa (140 KB dá `Argument list too long`) e o `sdd run`
-  morre no `kit_guard_arm`, antes da sessão: ~1700–2200 caminhos sujos bastam. O mesmo canal parte um nome
-  com `\n` (`hat_status_lines` lê `-z` e imprime `\n`; o `ls-files -z` passa por `tr`), falha aberta só
-  declarada. Direção: NUL até o `awk`, fluxos por process substitution sob `FILENAME == ARGV[n]`, nome
-  codificado na linha publicada, e o registro escapado do md5sum, nunca `md5sum -z` (só coreutils 8.30+).
+  `bin/sdd:4003` (`kit_guard_tree`) — digests, bits, links e a árvore inteira iam ao `awk` por variável de
+  ambiente; acima de 128 KiB o Linux recusa (`Argument list too long`) e o `sdd run` morria no
+  `kit_guard_arm`, antes da sessão (~1000 caminhos sujos bastavam). O mesmo canal partia um nome com `\n`,
+  falha aberta só declarada. Direção: NUL até o `awk`, fluxos por process substitution sob
+  `FILENAME == ARGV[n]`, nome codificado na linha publicada, nunca `md5sum -z`. RESOLVED by 94c48ec.
   — descoberto por `Codex` na missão `20261006-lote-5-o-que-o-lote-4-deixou` (2026-10-07)
 
 ### Sem seção — chegaram depois da última classificação
@@ -103,3 +102,5 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - **Nenhum instrumento mediria prosa de CONTRATO fora de templates/** — decidido: a fase DOCS é a dona dessa prosa (a checklist de drift do 45-docs.md percorre o diff inteiro da missão), o config/schema.md já é medido contra o load_config pelo sdd health, a tabela de agentes do README bate 8 = 8, e os drifts registrados foram pegos antes do merge; o limite está no cabeçalho do sensor; reabre quando um drift de contrato escapar para a main — `tests/check-templates.sh:39` (2026-10-04)
 - **O checkpoint não teria grafia para incremento cujo produto não é commit** — decidido: a grafia é o commit de registro — o ato fora do git (e-mail, página da KB, config no IdP) deixa na pasta da missão um record-<ID>.md com o que foi feito, a URL ou o ID e a data, e o hash dele vai na célula Commit que o gate_EXEC já lê; passo pós-merge ou de janela externa sai da tabela para as Pendências para o humano do 00-missao.md ou para a missão seguinte (o token de espera é o Y8 do CONTEXT.md); os casos medidos (o I5 da LH-3, KB sem commit; o I6 de 20260918-a-excecao-do-chapeu-e-o-genero-diferido, pending eterno; os I1–I3 de 20260825-cif-forma-pagamento no sales_quote, blocked eterno) não são migrados, porque handoff fechado não se reescreve — `templates/checkpoint.md:35` (2026-10-04)
 - **Drift de comentário em código não teria dono: nem a DOCS nem a EXEC** — decidido: comentário de código é do código — a REVIEW o manda para um lote R<n> da EXEC, a DOCS marca ⛔ com o texto proposto (o bin/sdd fica fora do writes: dela, e o gate só recusa ⛔ em documento que ela pode escrever), ou ele vai para o TODO_FILE quando o carimbo não compensa; o caminho estreito "a DOCS edita só hunk de comentário" falharia aberto, porque o bin/sdd tem 6 heredocs e # dentro de string, awk e jq; 0 hat-crossed por código em 15 sessões DOCS desde 2026-09-12 — `agents/sdd-docs.md:104` (2026-10-04)
+- **A entrada do índice na árvore do kit leva vírgula inicial (`@,100644:…`)** — decidido (D15): o mawk avalia o lado esquerdo de `ix[q] = (q in ix) ? … : e` antes do `in`, então toda entrada nasce com `,`; é representação interna, igual nas duas amostras que a guarda compara, e o motivo do `kit-touched` não a imprime — sem consumidor, não é achado — `bin/sdd:4003` (`kit_guard_tree`), revisão final de `20261008-lote-6-as-quatro-que-faltam` (2026-10-08)
+- **`kit_checkout_targets_run` com `REPO_ROOT` vazio responderia "recusado"** — decidido (D15): inalcançável, a recusa de identidade do `cmd_kaizen` vem antes e o `load_config` sempre publica a raiz; reabre se a função ganhar outro chamador — `bin/sdd:10963` (`kit_checkout_targets_run`), revisão final de `20261008-lote-6-as-quatro-que-faltam` (2026-10-08)

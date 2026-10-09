@@ -185,7 +185,9 @@ de EOL ou clean filters) e igualdade byte a byte de `00-missao.md` e
 `01-plano.md` antes e depois do checkout (progresso fica fora); `kit_guard_arm`/`kit_guard_check` em quatro portas
 (`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada; desde #233 a amostra compara também a
 árvore suja do kit como o git guarda cada entrada (conteúdo, bit de execução, alvo do symlink) e a
-entrada do índice de cada caminho sujo (modo e blob) — `kit_guard_tree`, com `GIT_OPTIONAL_LOCKS=0`; o
+entrada do índice de cada caminho sujo (modo e blob) — `kit_guard_tree`, com `GIT_OPTIONAL_LOCKS=0`;
+desde #240 a árvore chega ao `awk` por arquivos e nunca pelo ambiente, o status e o índice
+NUL-terminados (`hat_status_lines -z`), e o nome sai codificado como o `md5sum` o escapa; o
 HEAD está no carimbo, então a guarda lê os três lugares onde o git guarda um caminho —, e o
 motivo diz o que mudou: commits e caminhos); `hat_guard_check` nos três sítios onde
 o `review_scope_check` só avisava, lendo commits **e** árvore contra `writes:`; o catálogo de
@@ -246,7 +248,9 @@ principal do kit, e o `kit_guard_check` de todo `sdd run` de alvo compara o `HEA
 alvo para aquela corrida com `KIT-TOUCHED`. Por isso o `/sdd-plan` (passo 2 de *Before anything
 else*) escreve a missão do kit num worktree ligado, e a sessão **interativa** a executa lá — nunca
 um `sdd run` a partir do checkout principal; dentro dele `health`, `preflight` e `install` rodam
-por `./bin/sdd`. Medido: worktree sujo e com commit deixa o carimbo do principal em
+por `./bin/sdd`. Desde o lote 6 (#236, ADR 0017) o `sdd kaizen` obedece à mesma regra por recusa
+do runner, não por frase: a corrida real morre antes da sessão no checkout para onde o `sdd` do PATH
+resolve (`kit_checkout_targets_run`) e nomeia o `git worktree add`; a projeção avisa e segue. Medido: worktree sujo e com commit deixa o carimbo do principal em
 `89df2e5|false`; o mesmo arquivo no principal, `|true`. É posse do checkout, não isolamento de
 filesystem. ⚠️ Dentro de um worktree ligado, `git bisect run`, `git rebase --exec`, os hooks
 `pre-commit`/`pre-push` e um alias `!` exportam `GIT_DIR` absoluto; a suíte, o catálogo e cada
