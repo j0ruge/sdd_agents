@@ -25,6 +25,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
+  (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
+  squash, e o item fica preso para sempre; no `sales_quote` os PRs #405 e #406 entraram por squash e
+  quatro itens com `RESOLVED by` não saíam. Direção: aceitar como prova também o merge do PR que
+  carregou o hash, ou declarar que o ciclo exige merge commit. Fonte:
+  `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C7) — descoberto na triagem
+  das issues do `sales_quote` (2026-10-09)
+
 ### Saída humana e cosmética
 
 ### Comentário e registro
