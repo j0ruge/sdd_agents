@@ -23,7 +23,23 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **Nenhum comando do alvo mede a forma do `TODO_FILE`, e o cabeçalho semeado diz que mede** —
+  `bin/sdd:5701` (`sdd:open`) — o `sdd install` só confere o marcador; regra nova do `check-todo.sh`
+  (ADR 0015 §2) não chega ao alvo, e o `TODO.md` do `sales_quote` divergiu calado até 206 violações,
+  achadas só quando o espelho de issues recusou. Direção: o `sdd preflight` do alvo roda
+  `check-todo.sh --check "$TODO_FILE" --allow-empty` e avisa com a contagem. Fonte:
+  `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C8) — descoberto na faxina das
+  issues do `sales_quote` (2026-10-09)
+
 ### Contrato e configuração
+
+- [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
+  (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
+  squash, e o item fica preso para sempre; no `sales_quote` os PRs #405 e #406 entraram por squash e
+  quatro itens com `RESOLVED by` não saíam. Direção: aceitar como prova também o merge do PR que
+  carregou o hash, ou declarar que o ciclo exige merge commit. Fonte:
+  `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C7) — descoberto na triagem
+  das issues do `sales_quote` (2026-10-09)
 
 ### Saída humana e cosmética
 
