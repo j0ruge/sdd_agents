@@ -36,7 +36,9 @@ merge (decisão 6). Próximo: PR, bots, uma leva, `sdd health` uma vez, merge pe
 - **Working tree:** limpo depois do commit deste handoff
 - **Suíte:** `tests/run-all.sh` → verde (rc 0, 566 s; 1930 linhas `ok`; 687 mutantes com âncora válida), em `4dfb0be`
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
-- **Carimbo de mutação:** ainda não — `./bin/sdd health` roda UMA vez, depois de todos os revisores
+- **Carimbo de mutação:** verde — `./bin/sdd health` no worktree, 2026-10-08 23:35 → 2026-10-09 00:36
+  (~61 min): `score: 687 caught, 0 known gap(s), of 687`, `mutation stamp written`, `kit healthy`, sobre o
+  conteúdo de `4dfb0be` (depois dele só prosa, fora da chave)
 
 ## O que foi feito
 

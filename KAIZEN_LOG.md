@@ -63,7 +63,11 @@ estava sem cota. O Codex achou dois P2, consertados com vermelho medido (`fbaae5
 que a recusa do `sdd kaizen` nomeia partia uma raiz com espaço — os operandos de caminho saem por
 `printf '%q'`. A 2ª rodada do Codex refutou uma decisão minha da 1ª: eu tinha deixado o `origin/<base>`
 sem aspas por "nenhum mundo exercitar" um nome de branch que as pedisse, e o git aceita `release&prod`
-(`4dfb0be`).
+(`4dfb0be`). A 3ª rodada do Codex veio limpa; a revisão incremental do CodeRabbit achou 1 Minor de prosa.
+
+**Carimbo:** `./bin/sdd health` no worktree depois da 3ª rodada do Codex (limpa), 2026-10-08 23:35 →
+2026-10-09 00:36, ~61 min com carga ~1: `score: 687 caught, 0 known gap(s), of 687`, `mutation stamp
+written`, `kit healthy`, sobre o conteúdo de `4dfb0be` (os commits depois dele são prosa, fora da chave).
 
 **Ainda não medido:** o uso real — a primeira guarda de kit de uma máquina com milhares de caminhos
 sujos, o primeiro `sdd kaizen` recusado no checkout dos alvos. O kit **congela no merge** deste lote
