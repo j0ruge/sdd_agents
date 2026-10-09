@@ -218,8 +218,11 @@ WIDTH_CAP=120
 OPEN_MARKER='<!-- sdd:open -->'
 DECIDED_MARKER='<!-- sdd:decided -->'
 OPEN_MARKER_ERE='^<!-- sdd:open -->[[:space:]]*$'
-# The item floor. 1 for the kit's own file (an empty count there means the parser broke); a target
-# with no findings yet is legitimate, and `--check <file> --allow-empty` lowers it to 0.
+# The item floor. 1 by default: a count of zero fails only when the open section still holds item
+# lines (open_item_lines), which means the parser broke. An empty backlog passes — it is the state
+# this sensor exists to reach, and the kit's own file reached it in batch 6, where "at least one
+# item" failed the very run it existed to allow. `--check <file> --allow-empty` lowers it to 0 and
+# skips the comparison, as a target with no findings yet always could.
 FLOOR=1
 
 # valid_cap <value> — a cap that is not a positive integer would be compared as a STRING by awk
@@ -264,6 +267,25 @@ unassignable() {
 # Anchored at both ends: a marker QUOTED in prose (the seed explains it in its own preamble) is
 # documentation, and an unanchored match would call that file sectioned.
 has_open_marker() { grep -qE "$OPEN_MARKER_ERE" "$(unassignable "$1")" 2>/dev/null; }
+
+# open_item_lines <file> — the item lines of the open section, counted by a reader INDEPENDENT of the
+# parser: every line opening with `- [ ]` between the open marker and the decided marker (the whole
+# file when it carries no open marker). The floor compares it with the parser's count. Fences are
+# not skipped: the findings section refuses them in the lint, which runs before the floor, and the
+# preamble's fenced example lies above the open marker. DECLARED (D15): with a correct parser the two
+# counts agree, so the floor's FAIL has no content world — it decides which failure a broken parser
+# produces (94, "did the format change?") instead of a green "0 finding(s)".
+open_item_lines() {
+  local marked=0
+  has_open_marker "$1" && marked=1
+  awk -v om="$OPEN_MARKER" -v dm="$DECIDED_MARKER" -v marked="$marked" '
+    BEGIN { on = !marked }
+    { l = $0; sub(/[ \t\r]+$/, "", l) }
+    l == om { on = 1; next }
+    l == dm { on = 0; next }
+    on && /^- \[ \]/ { n++ }
+    END { print n + 0 }' "$(unassignable "$1")"
+}
 
 todo_awk() {
   local marked f
@@ -2016,9 +2038,35 @@ EOF
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
   assert_rc 96 "an unknown option must exit 96" bash "$SELF" --bogus
   assert_rc 93 "a missing file must exit 93"    bash "$SELF" --check "$box/does-not-exist.md"
-  # A file with prose but no items at all trips the floor, not the linter.
+  # An open section with no items is the state this sensor exists to reach, and the kit's own file
+  # reached it in batch 6: it passes and says `0 finding(s)`, the line sdd health reads. The floor
+  # compares the parser's count with an independent count of the open section's item lines.
   printf '# Heading\n\n## Aberto\n<!-- sdd:open -->\n' > "$box/noitems.md"
-  assert_rc 94 "a file with no items must exit 94" bash "$SELF" --check "$(with_decided "$box/noitems.md")"
+  assert_rc 0 "an open section with no items passes" bash "$SELF" --check "$(with_decided "$box/noitems.md")"
+  PROBES=$((PROBES + 1))
+  if ! grep -q '^  ok    0 finding(s)' <<< "$(bash "$SELF" --check "$(with_decided "$box/noitems.md")" 2>&1)"; then
+    printf '  SELFTEST FAIL  an empty open section did not report "ok    0 finding(s)" — sdd health reads that line\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  # ...and the independent count reads the OPEN section only: not the format example fenced in the
+  # preamble, not a record of the decided section — three item-shaped lines, two of them findings. The
+  # open marker carries a trailing blank, which the marker rule allows.
+  printf '%s\n' '# Heading' '```md' '- [ ] **an example in the preamble**' '```' '## Aberto' "$OPEN_MARKER " '' \
+    '- [ ] **one**' '- [ ] **two**' '' '## Decided' "$DECIDED_MARKER" '- [ ] **a record**' > "$box/rawcount.md"
+  PROBES=$((PROBES + 1))
+  if [ "$(open_item_lines "$box/rawcount.md")" != 2 ]; then
+    printf '  SELFTEST FAIL  open_item_lines counted %s item line(s), want 2 — the floor would compare against the wrong section\n' \
+      "$(open_item_lines "$box/rawcount.md")" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  # A file with no section markers is all findings (the legacy shape): every item line counts.
+  printf '%s\n' '# TODO' '' '- [ ] **one**' '- [ ] **two**' > "$box/rawunmarked.md"
+  PROBES=$((PROBES + 1))
+  if [ "$(open_item_lines "$box/rawunmarked.md")" != 2 ]; then
+    printf '  SELFTEST FAIL  open_item_lines counted %s item line(s) in an unmarked file, want 2\n' \
+      "$(open_item_lines "$box/rawunmarked.md")" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
   # And an unclosed fence above every item must still say WHY, instead of the floor's generic
   # "did the format change?" — the linter runs first for exactly this case.
 
@@ -2125,12 +2173,14 @@ check_file() {
     return 1
   fi
 
-  # Floor against a file that lost its items entirely. It is deliberately 1, not a headcount:
-  # this sensor exists to make the file SHRINK, so a floor near today's size would fail the run
-  # the day the cleanup finally works. The real defence against a parser that stopped matching is
-  # the selftest, whose probes go red on every rule.
-  if [ "$n_items" -lt "$FLOOR" ]; then
-    printf '  FAIL  no items parsed from %s — did the format change?\n' "$file" >&2
+  # Floor against a parser that lost the items: zero parsed while the open section still holds item
+  # lines. It is never a headcount: this sensor exists to make the file SHRINK, and "at least one"
+  # failed the run the day the cleanup finally worked (batch 6). The real defence against a parser
+  # that stopped matching is the selftest, whose probes go red on every rule.
+  local raw
+  raw="$(open_item_lines "$file")"
+  if [ "$n_items" -lt "$FLOOR" ] && [ "$raw" -gt 0 ]; then
+    printf '  FAIL  no items parsed from %s, which holds %d item line(s) in its open section — did the format change?\n' "$file" "$raw" >&2
     return 94
   fi
 
@@ -2375,8 +2425,8 @@ baseline_file() {
     printf '  FAIL  could not parse %s — the counter returned "%s"\n' "$file" "$n_items" >&2
     return 93 ;;
   esac
-  if [ "$n_items" -lt "$FLOOR" ]; then
-    printf '  FAIL  no items parsed from %s — did the format change?\n' "$file" >&2
+  if [ "$n_items" -lt "$FLOOR" ] && [ "$(open_item_lines "$file")" -gt 0 ]; then
+    printf '  FAIL  no items parsed from %s, which holds item line(s) in its open section — did the format change?\n' "$file" >&2
     return 94
   fi
   printf '  ok    %s: 0 new shape violation(s) against %s (%d inherited)\n' \
