@@ -56,7 +56,7 @@ Uma linha por missão, escrita depois do merge. Colunas que só um humano preenc
 
 | missão | issues | PLAN | worker? | ambiente à mão | toques depois da aprovação | o worker teria | PR |
 |---|---|---|---|---|---|---|---|
-| L1 — backend: o que some calado | #251 #254 #270 #273 #274 | — | — | — | — | — | — |
+| L1 — backend: o que some calado | #251 #254 #270 #273 #274 | 184 min (18:31 → 21:35 de 2026-10-09), 10 perguntas no grill | sim pela triagem (backend puro, vitest, sem decisão de produto); na prática, só com W4: a QA por projeto (C2) rodou a e2e, e o #254 virou bug de tela (o link "Substituída por"), com spec contra o stack real | `dev.sh` (Postgres :5433, IdP, backend :3000, Vite :5173); `npm run dev` do `erp_api` (:9998); o token do proxy do Vite ainda como `ERP_API_TOKEN` no `.env` ignorado — renomeado, e as chaves vazias do `.env.local`, que o sobrepunham, apagadas | (1) QA `blocked`: proxy sem token, e o handoff culpava o `.env.local` — conserto do env a pedido do humano, handoff `blocked` → `done`, relançamento; (2) DOCS `hat-crossed` na linha da SQ-156 do índice de `.claude/rules/techspec.md` — o humano aceitou o commit e liberou só esse arquivo em `HAT_WRITES_EXTRA`, relançamento; (3) PR: Copilot sem cota, `@codex review` pedido à mão, 1 P1 (piso da e2e) refutado com evidência, sem commit | (1) parado e chamado: o W4 precisa sondar o proxy de verdade, no formato que a rota aceita (CNPJ mascarado; os 14 dígitos crus dão 404 mesmo autenticado); (2) parado e chamado: fronteira de chapéu é decisão humana, e a próxima missão já não para ali; (3) esperado ≥ 60 min (W7) e chamado: refutar P1 é julgamento | #420 (merge commit `2f5fb7e2`, US$ 59,28) · chore #421 |
 
 ## 4. Perguntas que voltam ao humano com o roadmap
 
