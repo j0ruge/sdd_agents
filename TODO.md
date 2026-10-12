@@ -25,7 +25,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **Uma âncora de caminho longo não cabe no teto de largura** — `tests/check-todo.sh:211` (`WIDTH_CAP`) —
+  com o teto de 120 por linha física e a continuação recuada em 2 espaços, um `path:N` acima de 116
+  caracteres não cabe: no alvo, o `prisma-cotacao-repository-query.integration.test.ts:420` tem 121, e o
+  item ancorou outro arquivo. Falha fechada, mas o consumidor está fora da suíte do kit (D15). Direção:
+  isentar do teto a linha cujo excesso é só a âncora, ou o template dizer a saída.
+  Fonte: `docs/handoffs/20261012-a-rota-da-qa/05-verdict.md` — achado `kit:` do `sdd-planner` em
+  `20261010-o-backlog-volta-a-medir`, transportado por `sdd-kaizen` (2026-10-12)
+
 ### Saída humana e cosmética
+
+- [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1800` (`gate-qa-e2e`) —
+  um caso intermitente anterior à missão devolve a fase ao `sdd-qa`, que gasta o começo descobrindo isso:
+  no alvo, o `frete-ipi.spec.ts:319` já tinha caído duas vezes, com os logs de gate em disco. Direção: o
+  `GATE_WHY` cita quantas vezes cada caso vermelho já caiu nos logs `gate-qa-e2e` anteriores.
+  Fonte: `docs/handoffs/20261012-a-rota-da-qa/05-verdict.md` — achado `kit:` do `sdd-qa` em
+  `20261005-mascaras-ncm-e-painel`, transportado por `sdd-kaizen` (2026-10-12)
 
 ### Comentário e registro
 
