@@ -41,9 +41,10 @@ The judge's window over batches 5 and 6 (`05-verdict.md` beside the spec, `melho
   field empty. Relaying the sentence "Never write `aprovacao:` by hand", which forbids approval
   *prose*, suppressed the `auto` (L2). The acceptance step of `commands/sdd-plan.md` showed only
   paths and one line per increment, and its question named "the criterion that is ✗", which no
-  criterion was. In this session's two grills the human picked the recommended option 16 times out
-  of 16. That count is consistent both with good recommendations and with anchoring, and no
-  artifact records which decision was the recommended one. In L4 the acceptance step itself, where
+  criterion was. In the two grills of 2026-10-12 (L4's, and this mission's up to D8) the human picked
+  the recommended option 16 times out of 16; that was the sample when §3 was decided (this mission
+  reached 18 of 18 by D18). That count is consistent both with good recommendations and with
+  anchoring, and no artifact records which decision was the recommended one. In L4 the acceptance step itself, where
   the relay re-ran `check-checkpoint.sh --red` before showing the plan, caught a stale
   red-measurement section that the plan carried.
 

@@ -12,7 +12,8 @@ ddd: n/a
 # Missão — o lote 7: a rota da QA e o aceite que lê o plano
 
 > Nascida do laço `sdd kaizen` (2026-10-12, veredito `melhorou` sobre `0270727` em `05-verdict.md`)
-> e **replanejada com o humano** num grill de 16 perguntas, conduzido pelo `sdd-planner` com relay.
+> e **replanejada com o humano** em 18 perguntas (D1–D18; da 13ª à 18ª vieram das rodadas de revisão
+> do PR #247), conduzidas pelo `sdd-planner` com relay.
 > `aprovacao:` fica vazio por regra (plano nascido do kaizen nunca é `auto`, `gate_PLAN`) e porque o
 > D4 manda: o humano aprova com `sdd approve` depois de ler o plano na tela.
 >
@@ -67,8 +68,9 @@ Três famílias de lacuna, medidas na janela do lote 6 (cinco missões do `sales
   perguntou no meio se estava tudo certo. Item (i).
 - O planner do L3 nomeou arquivos em português contra o `<CRITICAL>` do `CLAUDE.md:233` do alvo, e
   só o Codex pegou, depois do PR. Item (g).
-- Nesta sessão o humano escolheu a opção recomendada em 16 de 16 perguntas (8 no grill do L4, 8
-  neste até a D8), e nenhum artefato registra isso.
+- Na sessão do grill (2026-10-12), o humano escolheu a opção recomendada em 16 de 16 perguntas (8 no
+  grill do L4, 8 neste até a D8), e nenhum artefato registra isso. É a amostra histórica que motivou
+  a D8; a contagem desta missão hoje está na D8 e nas pendências.
 
 **3. Dois chapéus headless escrevem artefato que mente.**
 - **Carimbo de hora inventado.** No L4 o `10-ticket.md` diz `data: 2026-10-12 12:10` com a sessão
@@ -94,7 +96,8 @@ Todas binárias, lidas nas linhas `ok` de sensor da suíte:
 - **M3:** `30-handoff-qa.md` commitado antes de um `F<n>` `done` → o `gate_QA` reprova nomeando o F,
   nos dois caminhos. Hoje passa.
 - **M4:** K8 ✅ ou ⏳ no checklist do `00-missao.md` (também com uma linha K8 de exemplo `✗` antes
-  da real, duas linhas K8 no checklist, o título do checklist renomeado) e nenhuma entrada nova da
+  da real, duas linhas K8 no checklist, o título do checklist renomeado, um título só parecido com
+  o do checklist, como `## Checklist kaizenx`) e nenhuma entrada nova da
   missão no `KAIZEN_LOG.md` (nada, uma
   linha trocada, um cabeçalho renomeado, mais uma linha citando a missão numa entrada antiga, uma
   linha que cita a missão duas vezes partida em duas, uma entrada nova que não cita a missão, uma
@@ -204,7 +207,8 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
    a branch da missão tem de ter tocado o `KAIZEN_LOG.md`, quem quer que tenha escrito a entrada.
    Porquê: o gate lê dois artefatos, e o dono (`sdd-docs`, que tem o arquivo no `writes:`) existe.
 8. **D8 — o D4 fica, o grill não muda neste lote, e passa a se medir** (recommended). Cada decisão
-   leva `(recommended)` ou `(other: …)`, e o aceite mostra a contagem. Porquê: 16 de 16 é compatível
+   leva `(recommended)` ou `(other: …)`, e o aceite mostra a contagem. Hoje são 18 de 18 nesta missão
+   (D1–D18). Porquê, na amostra que havia quando a D8 foi decidida: 16 de 16 é compatível
    com recomendação boa e com ancoragem, e só o dado separa as duas. ⚠️ O texto aprovado dizia
    `(recomendada)`/`(outra: …)`; os tokens viraram inglês porque marcador é contrato (`CLAUDE.md`,
    "o contrato é sempre inglês") e porque `outra` é stopword do `tests/check-lang.sh`, que reprovaria
@@ -273,8 +277,8 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     novo: fail-open de novo) e manter a D15 mandando os mundos ao `TODO.md` (o lote sairia com um
     gate sabidamente frouxo). Preço: volta a exigir entradas abertas por `## ` (o kit e o
     `sales_quote` as abrem assim; um log de outro formato reprova até o humano decidir, e o motivo
-    diz isso), e o I9 vai a treze asserções e onze mutantes (onze e sete antes da 6ª rodada; dezenove e
-    dezesseis com a D18).
+    diz isso), e o I9 vai a treze asserções e onze mutantes (onze e sete antes da 6ª rodada; vinte e
+    dezessete com a D18 refinada na 8ª).
     **Refinada na 6ª rodada** (Codex, PR #247, `a85e6ff`), sem pergunta nova ao humano: "citar a
     missão" é citar o id **inteiro**, com o byte antes e o depois fora de `[A-Za-z0-9_-]`. A citação
     era substring desde a D15 (`grep -cF`), e a D16 a herdou (`index`): uma entrada nova citando só
@@ -311,6 +315,14 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     entrada citando o id. Recusados: todo K8 do arquivo votando sem estado de seção (cobra uma entrada
     não prometida quando um exemplo `✅` precede o `✗` real) e o `✅` sozinho (deixa o `⏳` sem
     cobrança). O I9 vai a dezenove asserções e dezesseis mutantes.
+    **Refinada na 8ª rodada** (CodeRabbit, PR #247, `a3d7b90`), sem pergunta nova ao humano: a seção
+    é a do título `## Checklist kaizen` seguido de espaço ou fim de linha. O teste do título casava
+    também `## Checklist kaizenx`, e uma seção quase igual com um `✗` calava o voto do arquivo, um
+    passo aquém do que a D18 decidiu ("a seção `## Checklist kaizen`"). Não houve pergunta porque o
+    conserto só alcança a decisão já tomada. Medido no `mawk` 1.3.4: o título do template, o nu, o
+    com `\r` e o com tab abrem a seção; `kaizenx` e `kaizen-software` não. Em 16 mundos de status, o
+    leitor de antes falha aberto em 6 e fechado em 4, e este é exato nos 16. O I9 vai a vinte
+    asserções e dezessete mutantes.
     **A revisão é laço, e aqui a pergunta foi que estado faltava.** A âncora tem três entradas: a
     promessa do plano, a entrada do log e o id. Da 2ª à 6ª rodada só a entrada ganhou estrutura (o
     bloco da D16); a promessa era a primeira linha K8 do arquivo e o id era convenção, as duas regra
@@ -327,15 +339,16 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
   origin/main`, e de lá `sdd approve 20261012-a-rota-da-qa` e a execução interativa, incremento por
   incremento. O `sdd approve` faz checkout da `branch:` e a cria a partir da atual quando não existe.
 - **Carimbo de mutação:** `./bin/sdd health` uma vez, no worktree, depois do último commit de código
-  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 714 depois dos vinte e sete
+  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 715 depois dos vinte e oito
   deste lote (689 medidos depois do I1 no teste de autocontenção): ~40 a 60 min.
 - **Yokoten nos alvos:** mudam `agents/sdd-qa.md`, `sdd-planner.md` e `sdd-docs.md`. No
   `sales_quote`, `sdd install --force` numa branch `chore/kit-<sha>` e PR para a `develop`; os alvos
   com symlink seguem sozinhos.
 - **O congelamento (D11):** no merge do PR de código deste lote. Até o veredito, nada em
   `bin agents templates config`; o achado de kit que nascer nos alvos vai ao handoff (`kit:`) e espera.
-- **O caderno de campo do worker** (PR #246): anotar que, sob o `/sdd-plan` do L0 ao L4 e neste
-  grill, o humano escolheu a recomendada em 16 de 16, e que daqui em diante a contagem sai do
+- **O caderno de campo do worker** (PR #246): anotar que, sob o `/sdd-plan`, o humano escolheu a
+  recomendada em toda pergunta com opção marcada: 8 de 8 no grill do L4 e 18 de 18 nesta missão
+  (D1–D18, da 13ª à 18ª nas rodadas de revisão do PR #247), e que daqui em diante a contagem sai do
   `00-missao.md`.
 - **Remover o worktree** depois do merge, pelo verbete "`sdd health` in the main checkout is slow
   again after a kit mission" de `docs/failure-modes.md`.

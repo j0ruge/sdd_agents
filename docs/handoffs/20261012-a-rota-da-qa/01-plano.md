@@ -641,7 +641,7 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
      awk -F'|' "$FENCE_AWK"'
        { fence_line($0) }
        fence { next }
-       /^## / { sec = ($0 ~ /^## Checklist kaizen/) }
+       /^## / { sec = ($0 ~ /^## Checklist kaizen([[:space:]]|$)/) }
        $2 ~ /^[[:space:]]*K8[[:space:]]*$/ {
          s = $4; gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); p = (s == "✅" || s == "⏳")
          if (sec) { insec = 1; if (p) psec = 1 } else if (p) pout = 1
@@ -651,8 +651,12 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
      ```
 
      O que cada linha decide, cada uma com mutante: linha dentro de cerca não conta, nem a de abrir;
-     a seção é a do título `## Checklist kaizen` (contrato do template), aberta por um `## ` fora de
-     cerca e fechada pelo seguinte; **toda** linha K8 da seção vota, e uma que prometa basta (a
+     a seção é a do título `## Checklist kaizen` (contrato do template) seguido de espaço ou fim de
+     linha, aberta por um `## ` fora de cerca e fechada pelo seguinte: o título do template
+     (`` ## Checklist kaizen (`kaizen-software`) ``), o título nu, um `\r` de CRLF e um tab abrem a
+     seção, e `## Checklist kaizenx` ou `## Checklist kaizen-software` não abrem, e o arquivo vota
+     (CodeRabbit, 8ª rodada: sem a fronteira, a seção quase igual com um `✗` calava o recuo; medido
+     no `mawk` 1.3.4, que lê o `$` dentro do grupo); **toda** linha K8 da seção vota, e uma que prometa basta (a
      ambiguidade cai do lado que o dono, o `sdd-docs`, consegue satisfazer escrevendo a entrada;
      recusar a ambiguidade daria um gate que nenhum chapéu satisfaz, porque o `sdd-docs` não
      escreve o `00-missao.md`); se a seção não tem linha K8 (ou não existe), votam as linhas K8 do
@@ -672,6 +676,7 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
      | exemplo de tabela com K8 `✅` antes do `✗` real | não cobra | cobra | não cobra |
      | exemplo cercado com K8 `✅` (fora ou dentro da seção) e `✗` real | não cobra | cobra | não cobra |
      | título da seção renomeado, K8 `✅` | cobra | cobra | cobra |
+     | título quase igual (`## Checklist kaizenx`) com K8 `✗`, e um K8 `✅` noutra seção | cobra | **não cobra** | cobra |
      | seção sem K8 e um K8 `✅` noutra seção | cobra | cobra | cobra |
      | sem K8, ou o marcador `<✅/✗>` | não cobra | não cobra | não cobra |
 
@@ -849,14 +854,14 @@ tem seção nenhuma, Contexto verificado) a seção do checklist, como o templat
 | K8 | Registro no KAIZEN_LOG | ✅ | |
 ```
 
-Commite e guarde `k8_start="$(git rev-parse HEAD)"`. Dezenove asserções `assert_phase` com o
-prefixo exato `kaizen-log: `, nesta ordem. Os mundos 1–16 são **independentes**: cada um é um
+Commite e guarde `k8_start="$(git rev-parse HEAD)"`. Vinte asserções `assert_phase` com o
+prefixo exato `kaizen-log: `, nesta ordem. Os mundos 1–17 são **independentes**: cada um é um
 commit sobre `k8_start` e volta com `git reset -q --hard "$k8_start"` (o molde de `:1349`). Os
-mundos 1–10 mexem só no `KAIZEN_LOG.md`, e os 11–16 só no `00-missao.md`, com o `KAIZEN_LOG.md`
+mundos 1–10 mexem só no `KAIZEN_LOG.md`, e os 11–17 só no `00-missao.md`, com o `KAIZEN_LOG.md`
 de `k8_start` (nenhuma entrada nova: cobrar dá `DOCS`, não cobrar dá `PR`). ⚠️ Não os acumule: o
 mundo 3 (renome) seguido do 4 (citação na mesma entrada) é o resíduo declarado, e a fase passaria.
-Os dezenove mundos, com estes textos e esta base, foram rodados no protótipo contra a regra e contra
-cada mutante (a fase esperada em todos; 2026-10-13, 7ª rodada).
+Os vinte mundos, com estes textos e esta base, foram rodados no protótipo contra a regra e contra
+cada mutante (a fase esperada em todos; 2026-10-13, 8ª rodada).
 1. `kaizen-log: a base that already cites the mission is not the entry`: nada acrescentado → `DOCS`.
    Junto, um `assert_why` **sem** o prefixo (não entra na conta do Check), `K8 names the missing
    KAIZEN_LOG entry`, com a regex `adds no KAIZEN_LOG.md entry of its own`;
@@ -905,24 +910,31 @@ cada mutante (a fase esperada em todos; 2026-10-13, 7ª rodada).
 15. `kaizen-log: a fenced K8 row inside the checklist promises nothing`: a linha real vira `✗` e,
     logo acima dela, um bloco cercado por três crases com `| K8 | exemplo | ✅ | |` dentro → `PR`;
 16. `kaizen-log: a pending K8 demands the entry like a checked one`: a linha real com `⏳` → `DOCS`;
-17. `kaizen-log: a new entry that cites the mission lets DOCS pass`: `## 2026-01-02 — Lote` novo, logo
+17. `kaizen-log: a heading that only starts like the checklist is not the checklist`:
+    `## Checklist kaizen` vira `## Checklist kaizenx`, a linha real vira `✗`, e no fim do arquivo
+    uma seção `## Outra seção` com a tabela `| # | Item | Status | Nota |` / `|---|---|---|---|` /
+    `| K8 | Registro no KAIZEN_LOG | ✅ | |` → `DOCS`. É o mundo do CodeRabbit na 8ª rodada: sem a
+    fronteira depois de `kaizen`, a seção quase igual tomava o lugar do checklist e o seu `✗` calava
+    o voto do arquivo. ⚠️ Troque a linha real **antes** de acrescentar a do fim, que é igual a ela
+    byte a byte;
+18. `kaizen-log: a new entry that cites the mission lets DOCS pass`: `## 2026-01-02 — Lote` novo, logo
     abaixo do primeiro `---`, com `$MISSION: antes 1, depois 2.` no corpo → `PR`. O id fica **na
     coluna 1 e sem crase**: é o mundo da armadilha do `mawk` (`substr(s, 0, 1)`). O I11 acrescenta
     aqui, com o mundo no lugar, uma asserção sua (`mission-id: `, fora da conta deste Check);
-18. `kaizen-log: an entry written and then reverted in the mission branch holds DOCS`: sobre o 17,
+19. `kaizen-log: an entry written and then reverted in the mission branch holds DOCS`: sobre o 18,
     `git revert --no-edit HEAD` (sem `-q`, que o git 2.43 não aceita) → `DOCS`;
-19. `kaizen-log: K8 unchecked demands nothing`: com `✗` no lugar de `✅` na linha do checklist, e o
+20. `kaizen-log: K8 unchecked demands nothing`: com `✗` no lugar de `✅` na linha do checklist, e o
     revert no lugar, a fase segue → `PR`.
 
 Volte à `main` e restaure o fixture. Um probe em `hat_promise_probes` lê o `sdd-docs.md` § 3: exige
 `K8` na linha do `KAIZEN_LOG.md`, a instrução de abrir a entrada com o seu próprio `## ` e a de citar
 o id da missão, e imprime `hat: the docs hat reads K8 of the plan before it marks KAIZEN_LOG`.
-Dezesseis mutantes, provados por `--only <slug> check-gates.sh`. Os dezesseis foram sabotados no
+Dezessete mutantes, provados por `--only <slug> check-gates.sh`. Os dezessete foram sabotados no
 protótipo, sobre a base deste fixture, e cada um mudou a fase exatamente nos mundos indicados:
-- `DOCS_k8_ignored` neutraliza o `if` novo → mundos 1–7, 9, 11, 13, 14, 16 e 18;
+- `DOCS_k8_ignored` neutraliza o `if` novo → mundos 1–7, 9, 11, 13, 14, 16, 17 e 19;
 - `DOCS_k8_presence_is_enough` troca `"$b"` pela árvore vazia
   (`4b825dc642cb6eb9a060e54bf8d69288fbee4904`) no `diff-tree`, e toda linha vira nova → mundos 1–7,
-  9, 11, 13, 14, 16 e 18;
+  9, 11, 13, 14, 16, 17 e 19;
 - `DOCS_k8_reads_deleted_lines` deixa as linhas `-` entrarem (`t != " " && t != "+" && t != "-"
   { next }`) → só o mundo 8;
 - `DOCS_k8_heading_not_new` tira `hnew &&` da condição da citação → mundos 4–7;
@@ -936,23 +948,26 @@ protótipo, sobre a base deste fixture, e cada um mudou a fase exatamente nos mu
   só o mundo 9 (o `$MISSION-extra` e o `${MISSION}s`);
 - `DOCS_k8_cite_first_only` troca o `while ((i` por `if ((i`, e só a primeira ocorrência conta →
   só o mundo 10;
-- `DOCS_k8_cite_unpadded` apaga a linha `s = " " s` → só o mundo 17 (e a asserção do I11 no mesmo
+- `DOCS_k8_cite_unpadded` apaga a linha `s = " " s` → só o mundo 18 (e a asserção do I11 no mesmo
   mundo);
 - `DOCS_k8_status_section_blind` troca `if (sec) {` por `if (1) {` no leitor do passo 1 → só o
   mundo 12;
 - `DOCS_k8_status_first_vote` troca `if (sec) { insec = 1; if (p) psec = 1 }` por
   `if (sec) { if (!insec) psec = p; insec = 1 }`, e só a primeira linha da seção vota → só o mundo 13;
-- `DOCS_k8_status_no_fallback` troca `exit !(insec ? psec : pout)` por `exit !psec` → só o mundo 14;
+- `DOCS_k8_status_no_fallback` troca `exit !(insec ? psec : pout)` por `exit !psec` → mundos 14 e
+  17;
 - `DOCS_k8_status_fence_blind` apaga a linha `fence { next }` do leitor do passo 1 → só o mundo 15;
 - `DOCS_k8_pending_ignored` troca `p = (s == "✅" || s == "⏳")` por `p = (s == "✅")` → só o
-  mundo 16.
-O leitor de antes do passo 1 (primeira linha K8 do arquivo, só `✅`) muda os mundos 11, 12, 13, 15 e
-16 (medido): o 11 é a regressão que o Codex pediu, e nenhum mutante sozinho a refaz.
+  mundo 16;
+- `DOCS_k8_status_heading_unbounded` troca `/^## Checklist kaizen([[:space:]]|$)/` por
+  `/^## Checklist kaizen/` → só o mundo 17.
+O leitor de antes do passo 1 (primeira linha K8 do arquivo, só `✅`) muda os mundos 11, 12, 13, 15,
+16 e 17 (medido): o 11 é a regressão que o Codex pediu, e nenhum mutante sozinho a refaz.
 A classe não tem mutante próprio, e o mundo 9 é o que a segura: no protótipo, a classe reduzida a
 `[-]` e a classe sem o `-` deixaram o mundo 9 em `PR` (por isso ele leva um vizinho letra e um
 vizinho `-`); a classe alargada com `.` e `/` (aperto, falha fechada) deixou o 10 em `DOCS`.
-**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `19 1`
-**Sensor durável:** as dezenove asserções, o `assert_why`, o probe e os dezesseis mutantes.
+**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `20 1`
+**Sensor durável:** as vinte asserções, o `assert_why`, o probe e os dezessete mutantes.
 **Reversível por:** reverter o commit.
 
 ### I10 — onde vai o `RESOLVED by` num item no teto
@@ -1021,7 +1036,7 @@ apagado depois:
 4. `mission-id: a slash after the mission argument still resolves`:
    `"$SDD" status "$MISSION/" --no-gates` sai com rc 0 e nomeia `$MISSION`.
 
-A quinta fica no bloco do I9, logo depois do mundo 17 (a entrada nova citando a missão), com o
+A quinta fica no bloco do I9, logo depois do mundo 18 (a entrada nova citando a missão), com o
 mundo no lugar:
 5. `mission-id: a slash before the mission argument still finds the K8 entry`:
    `assert_eq "mission-id: a slash before the mission argument still finds the K8 entry" PR "$(cd "$FIX" && "$SDD" phase "/$MISSION" 2>&1)"`.
@@ -1083,14 +1098,15 @@ passar o `é` da asserção 2 sob o locale armado; sem o `^`, passa o `sq…` da
 
 ## Medição do vermelho
 
-Rodado pelo planner em 2026-10-13 às 14:10, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
-`kaizen/20261012`, head `8f032d8` mais a D17 e a D18 da 7ª rodada), sobre o checkpoint **final**.
-É a sétima medição: as anteriores (2026-10-12 20:53, 2026-10-13 05:02, 07:53, 08:12, 09:59 e 11:53)
-foram refeitas porque o Check do I9 mudou, de `3 1` para `4 1` (D13), para `5 1` (D14), para `7 1`
-(D15), para `11 1` (D16), para `13 1` (a fronteira do id, 6ª rodada) e para `19 1` (D18), e porque
-a D17 trouxe um incremento novo, o I11 (o fecho virou I12).
+Rodado pelo planner em 2026-10-13 às 14:38, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
+`kaizen/20261012`, head `a3d7b90` mais a fronteira do título do checklist da 8ª rodada), sobre o
+checkpoint **final**. É a oitava medição: as anteriores (2026-10-12 20:53, 2026-10-13 05:02, 07:53,
+08:12, 09:59, 11:53 e 14:10) foram refeitas porque o Check do I9 mudou, de `3 1` para `4 1` (D13),
+para `5 1` (D14), para `7 1` (D15), para `11 1` (D16), para `13 1` (a fronteira do id, 6ª rodada),
+para `19 1` (D18) e para `20 1` (a fronteira do título, 8ª rodada), e porque a D17 trouxe um
+incremento novo, o I11 (o fecho virou I12).
 
-O `--check` e o `--red` levaram 9 min 52 s (14:10:10 → 14:20:02): quatro Checks rodam o
+O `--check` e o `--red` levaram 9 min 47 s (14:38:12 → 14:47:59): quatro Checks rodam o
 `check-gates.sh`, de ~130 s nesta máquina.
 
 ```text
@@ -1106,7 +1122,7 @@ $ bash tests/check-checkpoint.sh --red docs/handoffs/20261012-a-rota-da-qa/check
   ok    checkpoint.md: I6 is red at HEAD (prints '0', wants '3')
   ok    checkpoint.md: I7 is red at HEAD (prints '0', wants '4')
   ok    checkpoint.md: I8 is red at HEAD (prints '0', wants '1')
-  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '19 1')
+  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '20 1')
   ok    checkpoint.md: I10 is red at HEAD (prints '0', wants '2')
   ok    checkpoint.md: I11 is red at HEAD (prints '0 0', wants '5 1')
   ok    checkpoint.md: I12 is red at HEAD (prints '0 0 0', wants '1 1 1')
@@ -1149,7 +1165,7 @@ baixar o modelo do `QA:close`.
 - `tests/run-all.sh` verde, com as asserções novas de `check-dry-run.sh`, `check-gates.sh`,
   `check-hat.sh` e `check-templates.sh`.
 - Os Checks de I1–I12 dão o esperado da tabela; M1–M6 e M8 do `00-missao.md` são as linhas `ok` deles.
-- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos vinte e sete mutantes novos
+- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos vinte e oito mutantes novos
   (`QA_substep_skipped_ignored`, `QA_substep_skipped_loose`, `QA_substep_retest_ignored`,
   `QA_fix_ahead_any_order`, `QA_fix_ahead_counts_merges`, `QA_fix_ahead_reads_the_directory`,
   `QA_handoff_freshness_ignored`,
@@ -1158,7 +1174,8 @@ baixar o modelo do `QA:close`.
   `DOCS_k8_block_not_reset`, `DOCS_k8_fence_blind`, `DOCS_k8_cite_no_left_boundary`,
   `DOCS_k8_cite_no_right_boundary`, `DOCS_k8_cite_first_only`, `DOCS_k8_cite_unpadded`,
   `DOCS_k8_status_section_blind`, `DOCS_k8_status_first_vote`, `DOCS_k8_status_no_fallback`,
-  `DOCS_k8_status_fence_blind`, `DOCS_k8_pending_ignored`, `RUN_mission_id_unchecked`,
+  `DOCS_k8_status_fence_blind`, `DOCS_k8_pending_ignored`, `DOCS_k8_status_heading_unbounded`,
+  `RUN_mission_id_unchecked`,
   `RUN_mission_id_slashes_kept`, `DOCS_k8_mission_arg_raw`), e o `--anchors` diz
   `all N mutants still apply`.
 - `./bin/sdd adr check` → rc 0; `env -u CLAUDECODE ./bin/sdd preflight` sem `agent … stale`.

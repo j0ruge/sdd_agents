@@ -181,12 +181,13 @@ a janela seguinte abre no primeiro carimbo de alvo depois do merge; nada em `bin
 config` até o veredito (achado novo vai só ao `TODO.md`, que desde a ADR 0014 não parte a janela);
 o `sdd kaizen` roda de um worktree ligado do kit (ADR 0017); a frente F1-P1 espera o veredito.
 
-**Hoje (2026-10-12).** A janela do lote 6 fechou com veredito: `melhorou` sobre `0270727`, no
+**Hoje (2026-10-13).** A janela do lote 6 fechou com veredito: `melhorou` sobre `0270727`, no
 `docs/handoffs/20261012-a-rota-da-qa/05-verdict.md` (5 missões do `sales_quote`, 66 sessões, um harness só).
 Os limites estão escritos no veredito: a fatia anterior é uma missão só, o harness mudou entre as fatias, e
 três das cinco missões fizeram a QA à mão — a lacuna que virou o lote 7 (`20261012-a-rota-da-qa`, ADR
-0018), replanejado com o humano num grill de 16 perguntas. O kit descongela no merge do veredito e congela
-de novo no merge do lote 7 (D11); a frente F1-P1 continua esperando.
+0018), replanejado com o humano em 18 perguntas (D1–D18; da 13ª à 18ª vieram das rodadas de revisão
+do PR #247). O kit descongela no merge do veredito e congela de novo no merge do lote 7 (D11); a
+frente F1-P1 continua esperando.
 
 ## F4 — Portabilidade para outros repos
 
