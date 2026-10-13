@@ -92,7 +92,8 @@ Todas binárias, lidas nas linhas `ok` de sensor da suíte:
 - **M1:** com interface, charter presente, nenhum relatório da missão e `qa: skipped` no
   `00-missao.md` → `sdd run --dry-run --phase QA` projeta `QA:close=sdd-qa`. Hoje: `QA:exec=<none>`.
 - **M2:** relatório da missão fechado e um `F<n>` `done` depois do qual o relatório não foi reescrito
-  (nenhum commit, ou um commit revertido em seguida) → projeta `QA:exec=<none>`. Hoje:
+  (nenhum commit, um commit revertido em seguida, uma versão que um merge trouxe ou uma versão de
+  antes do conserto restaurada) → projeta `QA:exec=<none>`. Hoje:
   `QA:close=sdd-qa`.
 - **M3:** `30-handoff-qa.md` commitado antes de um `F<n>` `done`, ou reescrito depois e revertido
   → o `gate_QA` reprova nomeando o F, nos dois caminhos. Hoje passa.
@@ -220,7 +221,13 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
    nova: "reescrito depois do conserto" é um commit sem merge depois dele que tocou o caminho **e** o
    caminho em `HEAD` diferente do caminho no conserto. Só a história lia como reescrito um relatório
    editado e revertido; só o estado líquido lia como reescrito o relatório que um merge traz.
-   Medido: com as duas, sete mundos dão a resposta esperada (detalhe no I3). Na 11ª rodada o
+   Medido: com as duas, sete mundos dão a resposta esperada (detalhe no I3). **Refinada de novo na
+   12ª rodada** (Codex, `f769084`), sem pergunta nova: as duas metades eram proxies da origem dos
+   bytes, e um merge que muda o arquivo seguido de uma edição e do seu revert passava por elas.
+   "Reescrito" passa a ser: os bytes em `HEAD` são novos (nenhuma versão do caminho até o conserto)
+   e o primeiro commit depois do conserto que os carrega não é um merge. Medido em 12 mundos: a
+   regra anterior falha aberto em 2 (esse e uma versão de antes do conserto restaurada), "nenhum
+   merge tocou o caminho" cobra a mais em 2, e esta acerta os 12 (detalhe no I3). Na 11ª rodada o
    CodeRabbit pediu "evidência explícita de reteste" no lugar da reescrita; recusado com argumento:
    o resultado do reteste já tem artefato, o `Status:` do bug que só as skills escrevem e que a
    Âncora 3 exige, e a reescrita é a prova de que o dono escreveu depois do conserto (detalhe no I3).
@@ -380,7 +387,10 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     layout do template e nenhuma em voo muda de resposta; nos seis sensores que criam missões, o raio
     é zero (as mesmas contagens de `ok` e `FAIL`). Preço: cobra a mais, por desenho, um plano que
     diga `✗` fora do layout, o marcador ou um checklist sem K8. O I9 vai a vinte e sete asserções e
-    vinte mutantes.
+    vinte mutantes. **Refinada na 12ª rodada** (Codex, `f769084`), sem pergunta nova: a tabela do
+    template é o cabeçalho seguido da linha delimitadora de quatro células; sem ela, ou com outra
+    largura, o GFM não desenha tabela, e a linha `K8` não é a do template. O I9 vai a vinte e nove
+    asserções e vinte e dois mutantes.
 20. **D20 — na base, recusar só a promessa explícita** (recommended; **reaberta** pela medição dos
     fixtures, e a reaberta também recommended). O `gate_PLAN` recusa a missão cuja `branch:` é a
     `DEFAULT_BRANCH` quando a `k8_promise` diz `yes`, nomeando a base e os dois remédios (um branch
@@ -407,7 +417,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
   origin/main`, e de lá `sdd approve 20261012-a-rota-da-qa` e a execução interativa, incremento por
   incremento. O `sdd approve` faz checkout da `branch:` e a cria a partir da atual quando não existe.
 - **Carimbo de mutação:** `./bin/sdd health` uma vez, no worktree, depois do último commit de código
-  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 722 depois dos trinta e cinco
+  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 725 depois dos trinta e oito
   deste lote (689 medidos depois do I1 no teste de autocontenção): ~40 a 60 min.
 - **Yokoten nos alvos:** mudam `agents/sdd-qa.md`, `sdd-planner.md` e `sdd-docs.md`. No
   `sales_quote`, `sdd install --force` numa branch `chore/kit-<sha>` e PR para a `develop`; os alvos

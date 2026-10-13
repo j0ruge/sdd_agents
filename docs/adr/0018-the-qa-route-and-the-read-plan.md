@@ -76,12 +76,14 @@ measured.
 ### §2 — The retest is the runner's route, and the QA handoff is written after the last fix
 
 One definition, `qa_fix_ahead_of <path>`, answers with the first `F<n>` row marked `done` after
-which `<path>` was not rewritten. Rewritten takes both halves: a non-merge commit touching `<path>`
-among the fix's descendants up to `HEAD` (`git rev-list -1 --no-merges --ancestry-path <F>..HEAD --
-<path>` is not empty), **and** the blob of `<path>` at `HEAD` differs from its blob at the fix. Each
-half alone was measured wrong (Codex on PR #247, round 10): history alone reads a rewrite reverted
-right after as rewritten, though the file is byte for byte the one of the fix; the net state alone
-reads as rewritten a report that a merge brings in after the fix. Two readers use it:
+which `<path>` was not rewritten. Rewritten means two things at once: the bytes of `<path>` at
+`HEAD` are new, no version the path had up to the fix; **and** the first commit after the fix (topological
+order, ancestry path) that carries those bytes is not a merge. That is the provenance of the content
+`HEAD` holds, which the two halves of round 10 (a non-merge commit touched the path; the blob changed)
+only approximated. Codex on PR #247 measured each gap: a rewrite reverted right after (round 10), and a
+merge that changes the file followed by an edit and its revert, whose surviving change is the merge's
+(round 12). Over 12 worlds the round-10 rule failed open in two (that one, and a pre-fix version
+restored after the fix), and this one answered all 12. Two readers use it:
 
 - **`qa_substep`**, after the closed-report check, answers `exec` when an `F<n>` is ahead of the
   **mission's** report: the file `mission_qa_report` picks, the same one Anchor 1 reads. Never the

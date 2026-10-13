@@ -261,8 +261,9 @@ boot_prompt/turn_rule: "todo carimbo sai de date"                               
   escrever o que o gate exige). A chave é **literal e positiva**: só `qa: skipped` exato desvia, e
   qualquer outra grafia é a rota de hoje (frouxidão pularia QA de verdade, falha aberta).
 - **O reteste e o frescor são a mesma pergunta**: "existe `F<n>` `done` depois do qual o caminho X
-  não foi reescrito?", e reescrito é um commit sem merge depois dele que tocou X **e** X em `HEAD`
-  diferente de X no conserto (o I3 diz por que as duas). X = o relatório da missão (o arquivo que o `mission_qa_report` escolhe, o mesmo
+  não foi reescrito?", e reescrito é: os bytes de X em `HEAD` são novos (nenhuma versão de X até o
+  conserto) **e** o primeiro commit depois do conserto que os carrega não é um merge (o I3 diz por
+  quê, medido). X = o relatório da missão (o arquivo que o `mission_qa_report` escolhe, o mesmo
   que a Âncora 1 lê) decide a sub-etapa, e X = `$HANDOFF_DIR/$MISSION/30-handoff-qa.md` decide o gate. Uma definição, como o `report_closed`
   (o cabeçalho dele, `:2656-2660`, conta o que custou ter a âncora duplicada). O ciclo F vira
   `close` → EXEC → `exec` (reteste, move o `Status:`) → `close` (reescreve o handoff) → passa.
@@ -380,18 +381,52 @@ medido pelo I1.
 ### I3 — a rota do reteste
 
 **O quê:**
-- O helper `qa_fix_ahead_of <caminho relativo à raiz>`, perto do `report_closed` (`bin/sdd:2666`).
-  Para cada linha de `checkpoint_rows` com ID `^F[0-9]+$`, status `done` e commit não vazio, o
-  caminho conta como **reescrito depois do conserto** só com as duas condições: (1) a história,
-  `git -C "$REPO_ROOT" rev-list -1 --no-merges --ancestry-path "$c..HEAD" -- "$1"` não vazio; e (2)
-  o estado líquido, o blob do caminho em `HEAD` diferente do blob dele em `$c`
-  (`git -C "$REPO_ROOT" rev-parse -q --verify "HEAD:$1"` contra `"$c:$1"`, vazio quando o caminho
-  não existe ali, cada um com `|| true`). Faltando uma, imprime `<ID> <commit>` e para. Senão, não
-  imprime nada. As duas, e não uma: **medido** (protótipo, git 2.43.0), só a história lê como
-  reescrito um relatório editado depois do conserto e revertido em seguida, de volta byte a byte ao
-  estado do conserto (Codex, 10ª rodada); só o estado líquido lê como reescrito o relatório que um
-  merge traz depois do conserto, que não existia no conserto (o mundo do passo 4); com as duas,
-  sete mundos dão a resposta esperada, inclusive reescrever, reverter e reescrever de novo.
+- O helper `qa_fix_ahead_of <caminho relativo à raiz>`, perto do `report_closed` (`bin/sdd:2666`),
+  e o seu predicado `qa_rewritten_after <conserto> <caminho>`, os dois lidos por `$( )` ou como
+  condição, sem tocar global:
+
+  ```bash
+  qa_rewritten_after() {
+    local c="$1" p="$2" h x rest
+    h="$(git -C "$REPO_ROOT" rev-parse -q --verify "HEAD:$p" 2>/dev/null || true)"
+    [ -n "$h" ] || return 1
+    while read -r x; do
+      [ "$(git -C "$REPO_ROOT" rev-parse -q --verify "$x:$p" 2>/dev/null || true)" = "$h" ] && return 1
+    done < <(git -C "$REPO_ROOT" rev-list --full-history "$c" -- "$p" 2>/dev/null || true)
+    while read -r x rest; do
+      [ "$(git -C "$REPO_ROOT" rev-parse -q --verify "$x:$p" 2>/dev/null || true)" = "$h" ] || continue
+      [ "$(wc -w <<< "$rest")" -eq 1 ]; return
+    done < <(git -C "$REPO_ROOT" rev-list --reverse --topo-order --ancestry-path --parents "$c..HEAD" 2>/dev/null || true)
+    return 1
+  }
+  ```
+
+  Para cada linha de `checkpoint_rows` com ID `^F[0-9]+$`, status `done` e commit não vazio que
+  resolve, o `qa_fix_ahead_of` imprime `<ID> <commit>` e para quando `qa_rewritten_after` falha.
+  Senão, não imprime nada. **Reescrito depois do conserto** são duas coisas ao mesmo tempo:
+  - **os bytes são novos.** O blob do caminho em `HEAD` não é nenhuma versão que o caminho teve
+    até o conserto (`rev-list --full-history` do conserto, inclusive ele);
+  - **quem os escreveu não foi um merge.** O primeiro commit depois do conserto, na ordem
+    topológica e no caminho de ancestralidade, que carrega aquele blob tem um pai só.
+
+  É o estado que faltava (12ª rodada, a segunda seguida neste helper): a origem dos bytes que `HEAD`
+  tem. As duas metades da 10ª rodada (um commit sem merge tocou o caminho; o blob mudou) eram proxies
+  dela. Codex, na 12ª rodada: depois do conserto, um merge leva o arquivo de A a B, uma edição comum
+  o leva a C, e o revert dela o devolve a B. As duas metades viam um commit sem merge e um blob
+  diferente do conserto, e liam reescrito; a única mudança que sobrou veio do merge.
+  **Medido** (protótipo, git 2.43.0), em 12 mundos:
+  - a regra da 10ª rodada falha aberto em 2: o do Codex, e uma versão de antes do conserto
+    restaurada depois dele;
+  - "sem merge que tocou o caminho" (no lugar do primeiro portador) cobra a mais em 2: um merge
+    seguido de uma reescrita honesta, e uma reescrita feita numa branch cortada depois do conserto e
+    mergeada de volta;
+  - esta dá a resposta esperada nos 12, inclusive reescrever, reverter e reescrever de novo.
+
+  Resíduos declarados no comentário:
+  - uma reescrita honesta que reproduz byte a byte uma versão anterior ao conserto lê como não
+    reescrita (falha fechada: mais um reteste);
+  - o custo é um `rev-parse` por commit que tocou o caminho até o conserto, mais um por commit da
+    missão depois dele, poucos numa missão.
   **O que a reescrita prova, e o que não prova** (CodeRabbit, 11ª rodada, que pedia "evidência
   explícita de reteste"): ela prova que o dono do arquivo escreveu nele depois do conserto, e é o
   artefato mais forte que existe para "o reteste rodou". O **resultado** do reteste já tem artefato
@@ -443,9 +478,10 @@ medido pelo I1.
 **Como (TDD):** um mundo novo no `check-dry-run.sh`, no bloco de QA, depois do mundo da posse do
 relatório (`:522-538`) e **antes** da limpeza dele. No fixture em `main` o range é vazio e o
 `mission_qa_report` lê o mais novo. Passos, em ordem:
-1. Com `E2E_CMD="true"` e charter presente, escreva um relatório `closed` e commite-o
-   (`git add docs/qa && git commit -qm …`). Faça um commit vazio de conserto
-   (`git commit -q --allow-empty -m "fix: F1"`) e guarde o hash curto `h`.
+1. Com `E2E_CMD="true"` e charter presente, escreva um relatório `open` e commite; troque-o para
+   `closed` e commite de novo (`git add docs/qa && git commit -qm …`), e guarde o hash do primeiro
+   commit, `o`. Faça um commit vazio de conserto (`git commit -q --allow-empty -m "fix: F1"`) e
+   guarde o hash curto `h`.
 2. Acrescente ao `$MDIR/checkpoint.md` a linha `| F1 | the fix | \`true\` → 0 | pending | — |`.
    Afirme `QA:close=sdd-qa` com o nome `a pending fix increment does not reopen the walk`.
 3. Troque a linha para `done` com `$h`. Afirme `QA:exec=<none>` com o nome
@@ -455,40 +491,51 @@ relatório (`:522-538`) e **antes** da limpeza dele. No fixture em `main` o rang
    `the retest boot tells the session to retest the fixed bugs`, que ele contém
    `retest the fixed bugs` (a tarefa nova do `QA:exec`). Um bloco vazio reprova, como no bloco
    `review_prompt` logo abaixo da função, que recusa ler o nada.
-4. O mundo do merge: corte uma branch do commit **anterior** ao F, acrescente nela um relatório com
+4. O mundo da versão antiga: `git checkout "$o" -- <relatório>` e commite (a versão `open`, de antes
+   do conserto, volta depois dele). Afirme `QA:exec=<none>` com o nome
+   `a pre-fix version restored after the fix is not the retest`. Depois, `git revert --no-edit HEAD`.
+5. O mundo do merge: corte uma branch do commit **anterior** ao F, acrescente nela um relatório com
    nome que ordena **depois** do da missão (em `main`, com range vazio, ele vira a escolha do
    `mission_qa_report`), volte e faça `git merge --no-ff`. Afirme que ainda é `QA:exec=<none>`, com o
-   nome `a report a merge brings in after the fix is not the retest`.
-5. Acrescente uma linha ao relatório escolhido e commite. Afirme `QA:close=sdd-qa` com o nome
+   nome `a report a merge brings in after the fix is not the retest`. **Guarde a branch**: o passo 8
+   volta a ela.
+6. Acrescente uma linha ao relatório escolhido e commite. Afirme `QA:close=sdd-qa` com o nome
    `a report committed after the fix closes the retest`.
-6. O mundo do revert (Codex, PR #247, 10ª rodada): `git revert --no-edit HEAD` desfaz o commit do
-   passo 5, e o relatório volta byte a byte ao estado do conserto. Afirme `QA:exec=<none>` com o
-   nome `a report edit reverted after the fix is not the retest`. O passo 7 corta a sua própria
-   branch e não lê o relatório deste passo.
-7. O mundo da posse (CodeRabbit, PR #247): corte uma branch de missão a partir deste ponto (molde
+7. O mundo do revert (Codex, PR #247, 10ª rodada): `git revert --no-edit HEAD` desfaz o commit do
+   passo 6, e o relatório volta byte a byte ao estado do conserto. Afirme `QA:exec=<none>` com o
+   nome `a report edit reverted after the fix is not the retest`.
+8. O mundo do merge com revert (Codex, PR #247, 12ª rodada): na branch do passo 5 (cortada antes do
+   F), troque o conteúdo do relatório escolhido por uma linha `B` e commite; na `main`,
+   `git merge --no-ff` dela (o relatório chega a `B` pelo merge); acrescente uma linha ao relatório e
+   commite; `git revert --no-edit HEAD`. Afirme `QA:exec=<none>` com o nome
+   `a report a merge changed after the fix is not the retest, even after an edit and its revert`.
+9. O mundo da posse (CodeRabbit, PR #247): corte uma branch de missão a partir deste ponto (molde
    `:522-538`, porque com range vazio não há posse a medir). Nela, commite um relatório **novo** e
    `closed` (o da missão), um commit de conserto com o `F1` `done` no hash dele, e depois, num commit
    comum, uma linha acrescentada a um relatório **da base** (de outra missão: editar não dá posse).
    Afirme `QA:exec=<none>`, com o nome `another mission's report touched after the fix is not the
    retest`. Volte à `main` e apague a branch.
-8. Restaure tudo byte a byte: o checkpoint com `git checkout -- "$MDIR/checkpoint.md"`, a história
-   com `git reset -q <sha guardado antes do mundo>` (mixed, como o bloco vizinho, porque o config
-   modificado é do bloco seguinte), a branch apagada, e `docs/qa/` removido.
+10. Restaure tudo byte a byte: o checkpoint com `git checkout -- "$MDIR/checkpoint.md"`, a história
+    com `git reset -q <sha guardado antes do mundo>` (mixed, como o bloco vizinho, porque o config
+    modificado é do bloco seguinte), as branches apagadas, e `docs/qa/` removido.
 
-Mutantes (cada um provado por `--only <slug> check-dry-run.sh`):
-- `QA_substep_retest_ignored` apaga a linha nova do `qa_substep`;
-- `QA_fix_ahead_any_order` troca `--ancestry-path "$c..HEAD"` por `HEAD`, e o passo 3 o pega,
-  porque há commit de relatório antes do F;
-- `QA_fix_ahead_counts_merges` tira o `--no-merges`, e o passo 4 o pega;
+Mutantes (cada um provado por `--only <slug> check-dry-run.sh`), cada um sabotado no protótipo:
+- `QA_substep_retest_ignored` apaga a linha nova do `qa_substep` → o passo 3;
+- `QA_fix_ahead_any_order` troca `--ancestry-path --parents "$c..HEAD"` por `--parents HEAD` na
+  segunda varredura → os passos 5 e 8;
+- `QA_fix_ahead_counts_merges` troca `[ "$(wc -w <<< "$rest")" -eq 1 ]; return` por `return 0` (o
+  merge conta como quem escreveu) → os passos 5 e 8;
+- `QA_fix_ahead_old_content_ok` apaga o primeiro laço (o dos bytes novos) → os passos 4 e 7;
+- `QA_fix_ahead_any_carrier` troca `[ "$(wc -w <<< "$rest")" -eq 1 ]; return` por
+  `[ "$(wc -w <<< "$rest")" -eq 1 ] || continue; return 0` (pula o merge e aceita um portador
+  posterior) → só o passo 8;
 - `QA_fix_ahead_reads_the_directory` troca o `${report#…}` do `qa_substep` por
-  `$QA_DOCS_PATH/reports/`, e o passo 7 o pega;
-- `QA_fix_ahead_history_only` apaga a condição do estado líquido (fica só o `rev-list`), e o passo 6
-  o pega (o I4 tem o mundo irmão, no handoff).
+  `$QA_DOCS_PATH/reports/` → o passo 9.
 
 **Check:** `o=$(bash tests/check-dry-run.sh 2>&1); h=$(bash tests/check-hat.sh 2>&1); a=$(grep -c '^  ok    a fix increment done after the closed report sends QA back to exec for the retest' <<< "$o"); c=$(grep -c '^  ok    the retest boot tells the session to retest the fixed bugs' <<< "$o"); d=$(grep -c '^  ok    hat: sdd-qa leaves the retest to the runner' <<< "$h"); b=$(awk '/disable-model-invocation/ { n++ } END { print n + 0 }' bin/sdd); echo "$a $c $d $b"` → `1 1 1 1`
 O Check lê os três contratos que o I3 escreve (a rota no `qa_substep`, a tarefa do `QA:exec`, a
 frase do `sdd-qa.md` § 4) e a contagem dos comentários do `bin/sdd` (CodeRabbit, 10ª rodada).
-**Sensor durável:** as sete asserções no `check-dry-run.sh`, os cinco mutantes, o probe do
+**Sensor durável:** as nove asserções no `check-dry-run.sh`, os seis mutantes, o probe do
 `check-hat.sh`, e o `no_work_check` como freio de um reteste que não produz commit.
 **Reversível por:** reverter o commit. O `sdd-qa` volta a improvisar como hoje.
 
@@ -548,7 +595,7 @@ Restaure o fixture (o checkpoint e a história) para o bloco seguinte. Mutante
 QA_handoff_freshness_ignored check-gates.sh` (~2 min).
 
 **Check:** `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    freshness: ' <<< "$o"` → `5`
-**Sensor durável:** as cinco asserções e o mutante (o `QA_fix_ahead_history_only` do I3 também
+**Sensor durável:** as cinco asserções e o mutante (o `QA_fix_ahead_old_content_ok` do I3 também
 cai no passo 4). O `check-autonomy.sh` passa a medir a corrida
 com o frescor.
 **Reversível por:** reverter o commit, junto com o I3, porque o reteste sem frescor deixa o handoff
@@ -707,7 +754,8 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
          !sec { next }
          !/^[ \t]*\|/ { hdr = 0 }
          { l = $0; gsub(/[ \t]+/, " ", l) }
-         l ~ /^ ?\| ?# ?\| ?Item ?\| ?Status ?\| ?Nota ?\| ?$/ { hdr = 1; next }
+         l ~ /^ ?\| ?# ?\| ?Item ?\| ?Status ?\| ?Nota ?\| ?$/ { hdr = 0; dlm = 1; next }
+         dlm { dlm = 0; if (l ~ /^ ?\| ?:?-+:? ?\| ?:?-+:? ?\| ?:?-+:? ?\| ?:?-+:? ?\| ?$/) { hdr = 1; next } }
          { h = $0; sub(/^[ \t]*\|/, "", h); split(h, c0, "|"); k = c0[1]; gsub(/^[ \t]+|[ \t]+$/, "", k) }
          k == "K8" {
            if (hdr && $0 !~ /\\\|/) { rows++; split($0, c, "|"); s = c[4]; gsub(/^[ \t]+|[ \t]+$/, "", s); if (s != "✗") yes = 1 }
@@ -719,9 +767,12 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
      ```
 
      **Só a linha do template diz "não"** (D19). `no` sai só quando a seção `## Checklist kaizen`
-     (título seguido de espaço ou fim de linha, fora de cerca) tem, dentro da tabela cujo cabeçalho é
-     o do template (`| # | Item | Status | Nota |`, no mesmo bloco contíguo de linhas que abrem por
-     `|`), linhas `K8` sem `\|`, todas com `✗` na célula de Status. `none` é a seção sem nenhuma
+     (título seguido de espaço ou fim de linha, fora de cerca) tem, dentro da tabela do template (o
+     cabeçalho `| # | Item | Status | Nota |` **seguido logo abaixo da linha delimitadora** de quatro
+     células, como `|---|---|---|---|`, e as linhas que continuam o mesmo bloco contíguo aberto por
+     `|`), linhas `K8` sem `\|`, todas com `✗` na célula de Status. Sem a delimitadora, ou com uma
+     de outro número de células, o GFM não desenha tabela, então a linha `K8` não é a do template
+     (Codex, 12ª rodada). `none` é a seção sem nenhuma
      linha `K8`, ou ausente. Toda outra forma é `yes`: uma linha cuja primeira célula é `K8` fora
      daquela tabela (sem a barra inicial, em parágrafo, em outra tabela, sob outro cabeçalho), com
      `\|`, ou com status que não seja o literal `✗` (`✅`, `⏳`, o marcador `<✅/✗>`, vazio). Uma
@@ -932,15 +983,15 @@ tem seção nenhuma, Contexto verificado) a seção do checklist, como o templat
 | K8 | Registro no KAIZEN_LOG | ✅ | |
 ```
 
-Commite e guarde `k8_start="$(git rev-parse HEAD)"`. Vinte e sete asserções `assert_phase` com o
-prefixo exato `kaizen-log: `, nesta ordem. Os mundos 1–17 e 21–27 são **independentes**: cada um é
+Commite e guarde `k8_start="$(git rev-parse HEAD)"`. Vinte e nove asserções `assert_phase` com o
+prefixo exato `kaizen-log: `, nesta ordem. Os mundos 1–17 e 21–29 são **independentes**: cada um é
 um commit sobre `k8_start` e volta com `git reset -q --hard "$k8_start"` (o molde de `:1349`); os
 18–20 são uma sequência, e o 21 começa com esse reset. Os mundos 1–10 mexem só no `KAIZEN_LOG.md`,
-e os 11–17 e 21–27 só no `00-missao.md`, com o `KAIZEN_LOG.md`
+e os 11–17 e 21–29 só no `00-missao.md`, com o `KAIZEN_LOG.md`
 de `k8_start` (nenhuma entrada nova: cobrar dá `DOCS`, não cobrar dá `PR`). ⚠️ Não os acumule: o
 mundo 3 (renome) seguido do 4 (citação na mesma entrada) é o resíduo declarado, e a fase passaria.
-Os vinte e sete mundos, com estes textos e esta base, foram rodados no protótipo contra a regra e
-contra cada mutante (a fase esperada em todos; 2026-10-13, 11ª rodada). ⚠️ Nos mundos que trocam a
+Os vinte e nove mundos, com estes textos e esta base, foram rodados no protótipo contra a regra e
+contra cada mutante (a fase esperada em todos; 2026-10-13, 12ª rodada). ⚠️ Nos mundos que trocam a
 linha real **e** acrescentam outra linha K8, troque a real primeiro: as duas seriam iguais byte a
 byte, e um `sed` na real depois reescreveria as duas (aconteceu no protótipo).
 1. `kaizen-log: a base that already cites the mission is not the entry`: nada acrescentado → `DOCS`.
@@ -1026,17 +1077,21 @@ byte, e um `sed` na real depois reescreveria as duas (aconteceu no protótipo).
 27. `kaizen-log: a K8-like paragraph in the checklist does not hide the entry` (o mundo do CodeRabbit
     na 11ª rodada): a linha real apagada; depois da tabela, separada por uma linha em branco,
     `K8 | item | ✗ |`; e no fim do arquivo uma seção `## Outra seção` com a tabela do template e a
-    linha `| K8 | Registro no KAIZEN_LOG | ✅ | |` → `DOCS` (o leitor da 10ª rodada dava `PR`).
+    linha `| K8 | Registro no KAIZEN_LOG | ✅ | |` → `DOCS` (o leitor da 10ª rodada dava `PR`);
+28. `kaizen-log: a header without its delimiter row is not the template table` (o mundo do Codex na
+    12ª rodada): a linha real vira `✗` e a delimitadora `|---|---|---|---|` é apagada → `DOCS`;
+29. `kaizen-log: a delimiter row of another width is not the template table`: a linha real vira `✗`
+    e a delimitadora vira `|---|---|---|` → `DOCS`.
 
 Volte à `main` e restaure o fixture. Um probe em `hat_promise_probes` lê o `sdd-docs.md` § 3: exige
 `K8` na linha do `KAIZEN_LOG.md`, a instrução de abrir a entrada com o seu próprio `## ` e a de citar
 o id da missão, e imprime `hat: the docs hat reads K8 of the plan before it marks KAIZEN_LOG`.
-Vinte mutantes, provados por `--only <slug> check-gates.sh`. Os vinte foram sabotados no
+Vinte e dois mutantes, provados por `--only <slug> check-gates.sh`. Os vinte e dois foram sabotados no
 protótipo, sobre a base deste fixture, e cada um mudou a fase exatamente nos mundos indicados:
-- `DOCS_k8_ignored` neutraliza o `if` novo → mundos 1–7, 9, 11, 13, 14, 16, 17, 19 e 21–27;
+- `DOCS_k8_ignored` neutraliza o `if` novo → mundos 1–7, 9, 11, 13, 14, 16, 17, 19 e 21–29;
 - `DOCS_k8_presence_is_enough` troca `"$b"` pela árvore vazia
   (`4b825dc642cb6eb9a060e54bf8d69288fbee4904`) no `diff-tree`, e toda linha vira nova → mundos 1–7,
-  9, 11, 13, 14, 16, 17, 19 e 21–27;
+  9, 11, 13, 14, 16, 17, 19 e 21–29;
 - `DOCS_k8_reads_deleted_lines` deixa as linhas `-` entrarem (`t != " " && t != "+" && t != "-"
   { next }`) → só o mundo 8;
 - `DOCS_k8_heading_not_new` tira `hnew &&` da condição da citação → mundos 4–7;
@@ -1055,7 +1110,7 @@ protótipo, sobre a base deste fixture, e cada um mudou a fase exatamente nos mu
 - `DOCS_k8_status_fence_blind` apaga a linha `fence { next }` do `k8_promise` → só o mundo 15;
 - `DOCS_k8_status_heading_unbounded` troca `/^## Checklist kaizen([[:space:]]|$)/` por
   `/^## Checklist kaizen/` → só o mundo 17;
-- `DOCS_k8_status_header_ignored` troca `if (hdr && $0 !~` por `if ($0 !~` → mundos 21 e 23;
+- `DOCS_k8_status_header_ignored` troca `if (hdr && $0 !~` por `if ($0 !~` → mundos 21, 23, 28 e 29;
 - `DOCS_k8_status_header_not_reset` apaga a linha `!/^[ \t]*\|/ { hdr = 0 }` → só o mundo 21;
 - `DOCS_k8_status_escaped_ok` troca `if (hdr && $0 !~ /\\\|/)` por `if (hdr)` → só o mundo 22;
 - `DOCS_k8_status_no_is_not_promised` troca `if (s != "✗") yes = 1` por
@@ -1064,15 +1119,19 @@ protótipo, sobre a base deste fixture, e cada um mudou a fase exatamente nos mu
 - `DOCS_k8_status_first_row_only` troca `if (s != "✗") yes = 1` por
   `if (rows == 1 && s != "✗") yes = 1` → só o mundo 13;
 - `DOCS_k8_status_none_is_no` faz o `gate_DOCS` seguir também com `none` (o `case` do passo 2) →
-  mundos 14, 17 e 25.
-O leitor da 10ª rodada (a D18 com a linha GFM) muda os mundos 23, 24, 25 e 27 (medido): o 27 é o
+  mundos 14, 17 e 25;
+- `DOCS_k8_status_delimiter_ignored` troca `{ hdr = 0; dlm = 1; next }` por `{ hdr = 1; next }` (o
+  cabeçalho basta) → mundos 28 e 29;
+- `DOCS_k8_status_delimiter_any_count` troca a regex da delimitadora de quatro células por
+  `/^ ?\|( ?:?-+:? ?\|)+ ?$/` (qualquer largura) → só o mundo 29.
+O leitor da 10ª rodada (a D18 com a linha GFM) muda os mundos 23, 24, 25, 27, 28 e 29 (medido): o 27 é o
 mundo do CodeRabbit, e o 24 e o 25 são o que a D19 decidiu cobrar e a D18 não cobrava. Nenhum
 mutante sozinho refaz o 27, que fica como a regressão pedida.
 A classe não tem mutante próprio, e o mundo 9 é o que a segura: no protótipo, a classe reduzida a
 `[-]` e a classe sem o `-` deixaram o mundo 9 em `PR` (por isso ele leva um vizinho letra e um
 vizinho `-`); a classe alargada com `.` e `/` (aperto, falha fechada) deixou o 10 em `DOCS`.
-**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `27 1`
-**Sensor durável:** as vinte e sete asserções, o `assert_why`, o probe e os vinte mutantes.
+**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `29 1`
+**Sensor durável:** as vinte e nove asserções, o `assert_why`, o probe e os vinte e dois mutantes.
 **Reversível por:** reverter o commit.
 
 ### I10 — onde vai o `RESOLVED by` num item no teto
@@ -1251,15 +1310,18 @@ provados por `--only <slug> check-gates.sh`:
 ### I13 — fecho
 
 **O quê:**
-- `CONTEXT.md`: um verbete "Rota da QA", com as duas perguntas novas do `qa_substep`, o helper com
+- `CONTEXT.md`: um verbete "Rota da QA" (a linha da tabela abre com `| **Rota da QA** |`, o formato
+  dos verbetes), com as duas perguntas novas do `qa_substep`, o helper com
   dois leitores, o frescor, e por que o `skipped` não mudou gate nenhum. O verbete "Janela de
   medição" registra o congelamento da D11: o kit congela no merge do lote 7, e a janela abre no
   primeiro carimbo de alvo depois dele.
 - `.claude/rules/anatomia-do-agente.md` § 7 (o aceite renderizado, `aprovacao:` vazio sob
-  `/sdd-plan`, a contagem). ⚠️ `.claude/` é caminho sensível: em sessão interativa o harness pode
+  `/sdd-plan`, a contagem, escrita com o token literal `(recommended)`, como no `N (recommended) of
+  M` do aceite). ⚠️ `.claude/` é caminho sensível: em sessão interativa o harness pode
   pedir permissão; nunca contorne por Bash.
 - A gaveta (`docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md`): a linha F3 e o § F3 "Hoje"
-  registram o congelamento da D11 (o molde é o do lote 6, `54e2f18`), e a F6 registra que a C2 do
+  registram o congelamento da D11 com a frase **O kit congelou no merge do lote 7** (o molde é o do
+  lote 6, `54e2f18`, que escreveu "O kit congelou no merge do lote 6"), e a F6 registra que a C2 do
   caderno tem a resposta do D2.
 - ADR 0018: `Status: accepted`.
 - `./bin/sdd install --force`, `./bin/sdd adr check` (rc 0), e
@@ -1272,26 +1334,36 @@ provados por `--only <slug> check-gates.sh`:
     `KAIZEN_LOG` escrita à mão;
   - **depois**, M1–M6, M8 e M9 medidos (as linhas `ok` dos Checks);
   - **M7**, declarada como a medida da próxima janela.
-- O `20-handoff-exec.md` da missão, pelo `templates/handoff.md`.
-- `tests/run-all.sh` inteiro verde, e `tests/check-mutation.sh --anchors` → `all N mutants still
-  apply`.
+- O `20-handoff-exec.md` da missão, pelo `templates/handoff.md`, com a verificação citando a
+  última linha de cada comando de fecho: `tests/run-all.sh` inteiro verde,
+  `tests/check-mutation.sh --anchors` (`all N mutants still apply`), `./bin/sdd adr check` (rc 0),
+  `env -u CLAUDECODE ./bin/sdd preflight` sem `agent … stale`, e o `./bin/sdd install --force`.
 
 **Onde:** os arquivos acima.
-**Check:** `a=$(grep -c -E '^## .*Lote 7: a rota da QA' KAIZEN_LOG.md); b=$(grep -c -E '^- [*][*]Status[*][*]: accepted' docs/adr/0018-the-qa-route-and-the-read-plan.md); f=$(awk 'END{print (NR>0)}' docs/handoffs/20261012-a-rota-da-qa/20-handoff-exec.md 2>/dev/null); echo "$a $b ${f:-0}"` → `1 1 1`
+**Check:** `a=$(grep -c -E '^## .*Lote 7: a rota da QA' KAIZEN_LOG.md); b=$(grep -c -E '^- [*][*]Status[*][*]: accepted' docs/adr/0018-the-qa-route-and-the-read-plan.md); c=$(awk '/^. [*][*]Rota da QA[*][*]/ { n = 1 } END { print n + 0 }' CONTEXT.md); d=$(awk '/\(recommended\)/ { n = 1 } END { print n + 0 }' .claude/rules/anatomia-do-agente.md); e=$(awk '/O kit congelou no merge do lote 7/ { n = 1 } END { print n + 0 }' docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md); f=$(awk '/mutants still apply/ { n = 1 } END { print n + 0 }' docs/handoffs/20261012-a-rota-da-qa/20-handoff-exec.md 2>/dev/null); echo "$a $b $c $d $e ${f:-0}"` → `1 1 1 1 1 1`
+O Check lê os resultados que deixam artefato (CodeRabbit, 12ª rodada): a entrada do `KAIZEN_LOG`, a
+ADR aceita, o verbete do `CONTEXT.md`, o `(recommended)` da anatomia, a frase da gaveta e, no
+handoff, a linha do `--anchors`. Três resultados não têm Check que nasça vermelho, e por isso são
+declarados no handoff: o `install --force` (o espelho `.claude/agents/` é rastreado, e cada
+incremento que muda um chapéu já roda o `install --force`, então no HEAD ele já está em dia), o
+`preflight` sem `agent … stale` (pelo mesmo motivo) e o `adr check` com rc 0 (verde hoje). O verbete
+"Janela de medição" já existe no `CONTEXT.md`, e a frase nova dele não tem forma fixa; o "Hoje" da
+gaveta e a frase da linha F3 a cobrem.
 **Sensor durável:** não se aplica, é registro. A suíte inteira e o `--anchors` são a verificação.
 **Reversível por:** reverter o commit.
 
 ## Medição do vermelho
 
-Rodado pelo planner em 2026-10-13 às 20:03, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
-`kaizen/20261012`, head `6e4d344` mais os consertos da 11ª rodada), sobre o checkpoint **final**, em
-background e lido até a linha final. É a 11ª medição: as anteriores (2026-10-12 20:53, 2026-10-13
-05:02, 07:53, 08:12, 09:59, 11:53, 14:10, 14:38, 17:42 e 18:16) foram refeitas porque um Check
-mudou. O do I9 foi de `3 1` a `27 1` em nove passos (D13, D14, D15, D16, a fronteira do id, D18, a
-fronteira do título, a linha GFM, D19). A D17 trouxe o I11 e a D20 trouxe o I12, e o fecho virou
-I13. O do I3 foi de `1` a `1 1` (9ª rodada) e a `1 1 1 1` (10ª), e o do I4 de `4` a `5` (10ª).
+Rodado pelo planner em 2026-10-13 às 20:37, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
+`kaizen/20261012`, head `f769084` mais os consertos da 12ª rodada), sobre o checkpoint **final**, em
+background e lido até a linha final. É a 12ª medição: as anteriores (2026-10-12 20:53, 2026-10-13
+05:02, 07:53, 08:12, 09:59, 11:53, 14:10, 14:38, 17:42, 18:16 e 20:03) foram refeitas porque um Check
+mudou. O do I9 foi de `3 1` a `29 1` em dez passos (D13, D14, D15, D16, a fronteira do id, D18, a
+fronteira do título, a linha GFM, D19, a delimitadora). A D17 trouxe o I11, a D20 trouxe o I12, e o
+fecho virou I13. O do I3 foi de `1` a `1 1` (9ª rodada) e a `1 1 1 1` (10ª); o do I4 de `4` a `5`
+(10ª); o do I13 de `1 1 1` a `1 1 1 1 1 1` (12ª).
 
-O `--check` e o `--red` levaram 10 min 50 s (20:03:46 → 20:14:36): cinco Checks rodam o
+O `--check` e o `--red` levaram 10 min 34 s (20:37:09 → 20:47:43): cinco Checks rodam o
 `check-gates.sh` (I1, I4, I9, I11 e I12), de ~130 s nesta máquina.
 
 ```text
@@ -1307,11 +1379,11 @@ $ bash tests/check-checkpoint.sh --red docs/handoffs/20261012-a-rota-da-qa/check
   ok    checkpoint.md: I6 is red at HEAD (prints '0', wants '3')
   ok    checkpoint.md: I7 is red at HEAD (prints '0', wants '4')
   ok    checkpoint.md: I8 is red at HEAD (prints '0', wants '1')
-  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '27 1')
+  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '29 1')
   ok    checkpoint.md: I10 is red at HEAD (prints '0', wants '2')
   ok    checkpoint.md: I11 is red at HEAD (prints '0 0', wants '5 1')
   ok    checkpoint.md: I12 is red at HEAD (prints '0 0', wants '3 1')
-  ok    checkpoint.md: I13 is red at HEAD (prints '0 0 0', wants '1 1 1')
+  ok    checkpoint.md: I13 is red at HEAD (prints '0 0 0 0 0 0', wants '1 1 1 1 1 1')
   ok    checkpoint.md: 13 pending Check(s), every one red at HEAD
 (rc 0)
 ```
@@ -1356,10 +1428,11 @@ baixar o modelo do `QA:close`.
 - `tests/run-all.sh` verde, com as asserções novas de `check-dry-run.sh`, `check-gates.sh`,
   `check-hat.sh` e `check-templates.sh`.
 - Os Checks de I1–I13 dão o esperado da tabela; M1–M6, M8 e M9 do `00-missao.md` são as linhas `ok` deles.
-- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos trinta e cinco mutantes novos
+- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos trinta e oito mutantes novos
   (`QA_substep_skipped_ignored`, `QA_substep_skipped_loose`, `QA_substep_retest_ignored`,
   `QA_fix_ahead_any_order`, `QA_fix_ahead_counts_merges`, `QA_fix_ahead_reads_the_directory`,
-  `QA_fix_ahead_history_only`, `QA_handoff_freshness_ignored`, `RUN_turn_rule_no_clock`,
+  `QA_fix_ahead_old_content_ok`, `QA_fix_ahead_any_carrier`, `QA_handoff_freshness_ignored`,
+  `RUN_turn_rule_no_clock`,
   `DOCS_k8_ignored`, `DOCS_k8_presence_is_enough`, `DOCS_k8_reads_deleted_lines`,
   `DOCS_k8_heading_not_new`, `DOCS_k8_cite_not_new`, `DOCS_k8_block_not_reset`,
   `DOCS_k8_fence_blind`, `DOCS_k8_cite_no_left_boundary`, `DOCS_k8_cite_no_right_boundary`,
@@ -1367,7 +1440,8 @@ baixar o modelo do `QA:close`.
   `DOCS_k8_status_heading_unbounded`, `DOCS_k8_status_header_ignored`,
   `DOCS_k8_status_header_not_reset`, `DOCS_k8_status_escaped_ok`,
   `DOCS_k8_status_no_is_not_promised`, `DOCS_k8_status_odd_ignored`,
-  `DOCS_k8_status_first_row_only`, `DOCS_k8_status_none_is_no`, `RUN_mission_id_unchecked`,
+  `DOCS_k8_status_first_row_only`, `DOCS_k8_status_none_is_no`, `DOCS_k8_status_delimiter_ignored`,
+  `DOCS_k8_status_delimiter_any_count`, `RUN_mission_id_unchecked`,
   `RUN_mission_id_slashes_kept`, `DOCS_k8_mission_arg_raw`, `PLAN_base_branch_k8_ignored`,
   `DOCS_base_branch_k8_ignored`, `PLAN_base_branch_refuses_silence`), e o `--anchors` diz `all N mutants
   still apply`.
