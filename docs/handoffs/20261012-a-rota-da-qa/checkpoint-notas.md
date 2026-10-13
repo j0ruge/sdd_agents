@@ -30,3 +30,5 @@
 > Só conta quando abre a linha — `intervention` no meio de uma frase é prosa e não é contado.
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
+- 2026-10-12 20:53 · `—` · plano replanejado com o humano (grill de 10 perguntas, D1–D10, todas `(recommended)`): 11 incrementos; ADR 0018 alocada por `./bin/sdd adr new` e escrita; o (e) foi ao `TODO.md` (catraca 2 → 3); a correção do I10 medida (o `RESOLVED by` no fim da linha `Fonte:` reprova no `check-todo.sh`); os tokens da D8 viraram inglês por causa do `check-lang.sh`
+- 2026-10-12 21:14 · `—` · teste de autocontenção real do I1 (subagente novo, clone descartável, 21:01–21:12): Check `1 1`, mutantes pegos; três lacunas escritas no plano (`--only` com o nome nu do sensor; formato e commit da nota; o I1 já move a âncora `bin/sdd:1800` do `TODO.md` em 2 linhas); clone apagado
