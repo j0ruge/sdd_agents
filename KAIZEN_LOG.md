@@ -14,7 +14,10 @@ uma mudança lógica só para o juiz, congelada no merge do lote 6 e medida em c
 `advance_rate` 0,91 → **0,98**; `outcomes` 10/1/0 → **65/1/0** (advanced/churned/idle) sobre 11 → 66
 sessões; rótulos 3/1/1 → **25/0/2** (ok/leve/refez); escaladas `kit-touched` → `handoff-blocked` +
 `hat-crossed`, as duas paradas boas da mesma missão; custo por sessão ≈ US$ 5,02 → ≈ 2,91.
-Intervenções (`sdd autonomy --all-repos --by-mission`, launches − 1): 5 em 1 missão → **5 em 5**.
+Intervenções: sem antes/depois por missão, porque a `previous` é meia missão. O `--by-mission`
+contava as 22 sessões dela, 11 fora da fatia; lida por `kit_rev` no ledger, a fatia `94123a4` tem 3
+lançamentos, 2 a 3 intervenções. A `latest` tem **5 em 5 missões**, 3 delas o ritual da QA
+(corrigido na revisão do PR #247).
 
 **Limites declarados:** `previous` de uma missão só, com 11 das suas 22 sessões; harness diferente
 entre as fatias (2.1.289 × 2.1.291); `window_missions_stranded: 3`; e três das cinco missões gravaram

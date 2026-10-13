@@ -96,9 +96,13 @@ troca de régua.
 
 Intervenções, de `sdd autonomy --all-repos --by-mission` (*intervenções = launches − 1*, D16):
 
-- `previous`: `20261005-mascaras-ncm-e-painel` 6 launches → **5 intervenções em 1 missão** (o comando
-  conta todas as 22 sessões da missão, inclusive as de `c71913c`), mais uma fase TICKET gravada à
-  mão (linha `manual` de 2026-10-05, lida no ledger).
+- `previous`: `20261005-mascaras-ncm-e-painel` — **a comparação por missão não está disponível**
+  (corrigido na revisão do PR #247, achado do Codex). O comando dá 6 launches → 5 intervenções, mas
+  conta a missão inteira, as 22 sessões, e 11 delas são de `c71913c`, fora da fatia julgada. Lido no
+  ledger por `kit_rev`, a fatia `94123a4` tem 11 sessões em 3 lançamentos (`b99c1125`, `3e9a06eb`,
+  `f7175adc`), e os três relançam uma missão aberta em `c71913c`: 2 intervenções pela régua D16
+  dentro da fatia, 3 contando a volta que a abriu. Meia missão não dá taxa por missão. A fase TICKET
+  gravada à mão (linha `manual` de 2026-10-05) também é de `c71913c`.
 - `latest`: `o-que-some-calado` 3 → 2; `o-backlog-volta-a-medir` 2 → 1; `a-catraca-ganha-folga` 2 → 1;
   `detalhe-e-lista-dizem-a-verdade` 1 → 0; `o-rascunho-que-entra-cru` 2 → 1. **5 intervenções em 5
   missões**, mais três fases QA gravadas à mão (abaixo).
@@ -123,9 +127,12 @@ Intervenções, de `sdd autonomy --all-repos --by-mission` (*intervenções = la
 4. **Custo.** O total sobe porque a fatia tem quatro missões a mais. Por sessão cai (US$ 55,23 / 11 ≈
    5,02 → 192,06 / 66 ≈ 2,91) e por missão cai (≈ 55,23 → ≈ 38,41) — divisões dos números da série,
    não recálculo do ledger. A queda vem em boa parte da mistura: três missões não pagaram QA nenhuma.
-5. **Intervenções por missão caem de 5 para 1**, com uma missão inteira sem mão humana — e, das cinco
-   da `latest`, **três são o mesmo ritual** causado por uma lacuna do kit (seção seguinte). As outras
-   duas são as duas paradas boas.
+5. **Intervenções: sem antes e depois por missão.** A `previous` é meia missão (acima): na fatia
+   julgada, 2 a 3 relançamentos em 11 sessões, um número que não entra como antes/depois deste
+   veredito. Na `latest`, 5 intervenções em 5 missões, uma delas inteira sem mão humana, e **três são
+   o mesmo ritual** causado por uma lacuna do kit (seção seguinte); as outras duas são as duas
+   paradas boas. O `5 → 1` que estava aqui somava os lançamentos das duas versões da `previous`
+   (corrigido na revisão do PR #247). O veredito não se apoiava nele: os itens 1 a 3 decidem.
 
 ## Os dois `refez` — paradas boas
 
@@ -176,7 +183,9 @@ As duas metades são o mesmo ponto do runner, e por isso viram **uma** missão: 
 
 ## Limites deste `melhorou`, ditos em vez de calados
 
-- `previous` fina: **uma** missão, com **11** das suas 22 sessões; as outras estão em `c71913c`.
+- `previous` fina: **uma** missão, com **11** das suas 22 sessões; as outras estão em `c71913c`. Por
+  isso a contagem de intervenções da `previous` não tem leitura por missão: o `--by-mission` conta a
+  missão inteira (corrigido na revisão do PR #247).
 - Harness diferente entre as fatias (2.1.289 × 2.1.291), que a guarda não mede.
 - Mistura diferente: três missões da `latest` sem QA, por decisão humana e à mão.
 - `window_missions_stranded: 3`.
