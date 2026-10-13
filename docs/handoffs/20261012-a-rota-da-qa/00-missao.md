@@ -93,7 +93,9 @@ Todas binárias, lidas nas linhas `ok` de sensor da suíte:
   `QA:exec=<none>`. Hoje: `QA:close=sdd-qa`.
 - **M3:** `30-handoff-qa.md` commitado antes de um `F<n>` `done` → o `gate_QA` reprova nomeando o F,
   nos dois caminhos. Hoje passa.
-- **M4:** K8 ✅ no `00-missao.md` e nenhuma entrada nova da missão no `KAIZEN_LOG.md` (nada, uma
+- **M4:** K8 ✅ ou ⏳ no checklist do `00-missao.md` (também com uma linha K8 de exemplo `✗` antes
+  da real, duas linhas K8 no checklist, o título do checklist renomeado) e nenhuma entrada nova da
+  missão no `KAIZEN_LOG.md` (nada, uma
   linha trocada, um cabeçalho renomeado, mais uma linha citando a missão numa entrada antiga, uma
   linha que cita a missão duas vezes partida em duas, uma entrada nova que não cita a missão, uma
   entrada nova que só cita ids mais longos que contêm o da missão, um `## ` dentro de cerca de
@@ -108,6 +110,9 @@ Todas binárias, lidas nas linhas `ok` de sensor da suíte:
   em missão com `qa: skipped`; nenhuma sessão `sdd-qa` chamando a ferramenta `Skill`; nenhum
   `data:` de handoff fora da janela da sessão; a contagem de recomendadas legível por `grep` nos
   `00-missao.md`.
+- **M8:** um diretório de missão fora de `^[0-9]{8}-[a-z0-9-]+$` (com `.`, com letra acentuada sob
+  um locale em que `[a-z]` a alcança, com prefixo antes da data) → `sdd status` o recusa nomeando a
+  gramática; o mesmo id com `/` nas pontas do argumento segue resolvendo. Hoje aceita qualquer nome.
 
 ## Resultado esperado
 
@@ -141,10 +146,10 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
 
 | # | Critério | Status | Evidência |
 |---|---|---|---|
-| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✅ | 16 perguntas, 16 respostas do humano (D1–D16; da 13ª à 16ª vieram da 2ª à 5ª rodada dos bots do PR #247), mais a confirmação do "nos dois caminhos" da D3; a 6ª rodada refinou a D16 sem pergunta nova (o conserto cabe no contrato decidido, ver a D16); nenhuma pendente |
+| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✅ | 18 perguntas, 18 respostas do humano (D1–D18; da 13ª à 16ª vieram da 2ª à 5ª rodada dos bots do PR #247, a 17ª e a 18ª da 7ª), mais a confirmação do "nos dois caminhos" da D3; a 6ª rodada refinou a D16 sem pergunta nova (o conserto cabe no contrato decidido, ver a D16); nenhuma pendente |
 | b | Checklist kaizen 100% ✅ e checklist DDD 100% ✅ ou `n/a` justificado | ✅ | seções abaixo; DDD `n/a` justificado |
 | c | Plano passa no teste de autocontenção (sessão nova só com 00/01/checkpoint executa) | ✅ | real, em 2026-10-12 21:01–21:12: um subagente novo, lendo só os três arquivos, executou o I1 inteiro num clone descartável (Check `1 1`, os dois mutantes pegos por `--only`, `--anchors` 689); os três "só se souber X" que ele achou (a sintaxe do `--only`, o formato e o commit da nota, a âncora do `TODO.md` que o I1 já move) estão escritos no `01-plano.md` |
-| d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado), vermelho no HEAD pelo `tests/check-checkpoint.sh --red` do kit | ✅ | 11 de 11; `--check` e `--red` rodados nesta sessão, saída final no `01-plano.md` § Medição do vermelho |
+| d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado), vermelho no HEAD pelo `tests/check-checkpoint.sh --red` do kit | ✅ | 12 de 12; `--check` e `--red` rodados nesta sessão, saída final no `01-plano.md` § Medição do vermelho |
 | e | `versao:` confirmada pelo humano (ou `JIRA_ENABLED=false`) | ✅ | `JIRA_ENABLED=false` (`.sdd/config.sh`) |
 | f | `adr:` é uma decisão — um caminho, ou o literal `none` (alocado por `sdd adr new`) | ✅ | `docs/adr/0018-the-qa-route-and-the-read-plan.md`, alocada por `./bin/sdd adr new` nesta sessão e com o corpo escrito (D9); `./bin/sdd adr check --mission 20261012-a-rota-da-qa --phase plan` → rc 0 |
 
@@ -155,11 +160,11 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
 | K1 | Gemba — fui ver onde o trabalho acontece | ✅ | `qa_substep`, `gate_QA`, `gate_DOCS`, `turn_rule` e os sensores lidos com `arquivo:linha`; `pipeline.log`, handoffs e ledger do alvo; a condição de descendência prototipada num repo descartável (git 2.43.0); as duas posições do `RESOLVED by` medidas no `check-todo.sh` |
 | K2 | Problema declarado com métrica | ✅ | 3 de 5 missões com QA à mão; 5 retestes improvisados; dois carimbos errados em até 5 h; M1–M7 |
 | K3 | Desperdícios identificados e cortados | ✅ | o segundo lançamento por missão sem QA; a sessão de caminhada paga para chegar ao `skipped`; o reteste que depende de uma flag de terceiro; a entrada do `KAIZEN_LOG` escrita à mão depois do PR |
-| K4 | Fatiamento incremental, cada fatia verificável | ✅ | 11 incrementos, cada um com uma regra e o seu sensor |
-| K5 | Check por artefato (rótulo ≠ artefato) | ✅ | todo Check lê linhas `^  ok    ` de `check-dry-run.sh`, `check-gates.sh`, `check-hat.sh` ou `check-templates.sh`, menos o do I10 (presença no template) e o do I11 (registro) |
-| K6 | Jidoka — o que para a linha está definido | ✅ | `qa: skipped` com diff visível → `blocked` (`handoff-blocked`); handoff mais velho que o F → `gate_QA` reprova; reteste que não muda nada → `no_work_check` forma (a); K8 sem entrada → `gate_DOCS` reprova |
+| K4 | Fatiamento incremental, cada fatia verificável | ✅ | 12 incrementos, cada um com uma regra e o seu sensor |
+| K5 | Check por artefato (rótulo ≠ artefato) | ✅ | todo Check lê linhas `^  ok    ` de `check-dry-run.sh`, `check-gates.sh`, `check-hat.sh` ou `check-templates.sh`, menos o do I10 (presença no template) e o do I12 (registro) |
+| K6 | Jidoka — o que para a linha está definido | ✅ | `qa: skipped` com diff visível → `blocked` (`handoff-blocked`); handoff mais velho que o F → `gate_QA` reprova; reteste que não muda nada → `no_work_check` forma (a); K8 ✅/⏳ sem entrada → `gate_DOCS` reprova; id de missão fora da gramática → todo comando recusa |
 | K7 | SDCA — a melhoria vira padrão (doc/rule/teste) | ✅ | asserções novas em quatro sensores, mutantes no catálogo, ADR 0018, `docs/pipeline.md`, `CONTEXT.md`, anatomia |
-| K8 | Registro no KAIZEN_LOG | ✅ | o I11 escreve a entrada `Lote 7: a rota da QA e o aceite que lê o plano`; antes = o veredito ao lado, depois = M1–M6 medidos |
+| K8 | Registro no KAIZEN_LOG | ✅ | o I12 escreve a entrada `Lote 7: a rota da QA e o aceite que lê o plano`; antes = o veredito ao lado, depois = M1–M6 e M8 medidos |
 
 ## Checklist DDD (`ddd`) — condicional
 
@@ -212,7 +217,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     descongela o kit sem esperar a execução, e o PR de código não mistura julgamento com código.
 11. **D11 — o kit congela no merge do lote 7** (recommended). Nada em `bin agents templates config`
     até o veredito; a janela abre no primeiro carimbo de alvo depois do merge; o `sdd kaizen` roda de
-    um worktree ligado (ADR 0017); o I11 escreve o congelamento na gaveta (F3) e no verbete Janela de
+    um worktree ligado (ADR 0017); o I12 escreve o congelamento na gaveta (F3) e no verbete Janela de
     medição do `CONTEXT.md`. Porquê: a próxima janela julga este lote, e o caderno do worker precisa
     de dados de uma versão só (C1: "o worker precisa de um kit fixo").
 12. **D12 — os tokens da D8 em inglês: `(recommended)`/`(other: …)`** (recommended). Porquê: marcador
@@ -268,7 +273,8 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     novo: fail-open de novo) e manter a D15 mandando os mundos ao `TODO.md` (o lote sairia com um
     gate sabidamente frouxo). Preço: volta a exigir entradas abertas por `## ` (o kit e o
     `sales_quote` as abrem assim; um log de outro formato reprova até o humano decidir, e o motivo
-    diz isso), e o I9 vai a treze asserções e onze mutantes (onze e sete antes da 6ª rodada).
+    diz isso), e o I9 vai a treze asserções e onze mutantes (onze e sete antes da 6ª rodada; dezenove e
+    dezesseis com a D18).
     **Refinada na 6ª rodada** (Codex, PR #247, `a85e6ff`), sem pergunta nova ao humano: "citar a
     missão" é citar o id **inteiro**, com o byte antes e o depois fora de `[A-Za-z0-9_-]`. A citação
     era substring desde a D15 (`grep -cF`), e a D16 a herdou (`index`): uma entrada nova citando só
@@ -279,6 +285,37 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     de citar continuam passando, e cada sabotagem da fronteira muda a fase de um mundo do fixture
     (detalhe no I9). Não é o laço da D13–D16: aquelas rodadas mediam **qual é a entrada**; esta mede
     **o que é citar o id**, eixo que a D15 abriu sem fronteira.
+17. **D17 — a gramática do id da missão vira fato do runner: o `resolve_mission` recusa um id fora de
+    `^[0-9]{8}-[a-z0-9-]+$`, e o planner e o `/sdd-plan` passam a dizer a gramática** (recommended).
+    Um incremento novo, o I11 (o fecho vira I12). Porquê: o CodeRabbit (PR #247, 7ª rodada, sobre o
+    resíduo que a D16 refinada declarou) mostrou que a fronteira do `cites_id` só é exata para um id
+    sem `.` e sem letra acentuada, e isso era convenção: a missão `foo` era satisfeita por
+    `` `foo.bar` `` e `` `fooé` `` (medido). O `resolve_mission` é a única porta por onde todo
+    `MISSION` passa, inclusive o `--phase` forçado, que pula o `gate_PLAN`. Medido: 64 de 64 ids reais
+    e os 19 ids que os testes passam à CLI cabem. A classe é enumerada, porque sob `pt_BR.UTF-8` o
+    `=~` do bash faz `[a-z]` casar `é`, e a checagem lê o id sem as barras do argumento, porque o
+    `/<missão>` sustenta o `RUN_branch_double_slash`. Amplia o D1 com uma regra de runner fora do K8.
+    Recusados: a recusa no `gate_PLAN` (o `--phase` forçado a pula) e manter o resíduo declarado com
+    a gramática no `TODO.md` (o lote sairia com uma falha aberta conhecida). Preço: o kit é público, e
+    um id fora da gramática noutra máquina para em todo comando, com o motivo nomeando a gramática.
+18. **D18 — o leitor do status K8: votam as linhas K8 da seção `## Checklist kaizen`, fora de cerca,
+    e um `✅` ou `⏳` basta para cobrar a entrada; se a seção não tiver K8, vota o arquivo**
+    (recommended). Refina a D7, que cobrava "com K8 ✅" pela primeira linha K8 do arquivo. Porquê: o
+    Codex (PR #247, 7ª rodada) mostrou que um exemplo `| K8 | … | ✗ |` antes do checklist real
+    escondia o `✅`. Medido em 15 mundos: o leitor de antes falha aberto em 5 (um deles o `⏳`) e
+    fechado em 4; este é exato nos 15. O pedido literal do Codex (a primeira linha da seção, e recusar a ambiguidade)
+    ainda falhava aberto em 3 mundos, e recusar seria um gate que o `sdd-docs`, dono da entrada, não
+    satisfaz (ele não escreve o `00-missao.md`); no voto, a ambiguidade cai do lado que o dono
+    consegue satisfazer. O `⏳` entra porque 3 das 59 missões reais com K8 o escrevem com a nota
+    "Fase DOCS", exatamente a promessa que a âncora existe para cobrar, e duas delas não têm a
+    entrada citando o id. Recusados: todo K8 do arquivo votando sem estado de seção (cobra uma entrada
+    não prometida quando um exemplo `✅` precede o `✗` real) e o `✅` sozinho (deixa o `⏳` sem
+    cobrança). O I9 vai a dezenove asserções e dezesseis mutantes.
+    **A revisão é laço, e aqui a pergunta foi que estado faltava.** A âncora tem três entradas: a
+    promessa do plano, a entrada do log e o id. Da 2ª à 6ª rodada só a entrada ganhou estrutura (o
+    bloco da D16); a promessa era a primeira linha K8 do arquivo e o id era convenção, as duas regra
+    sobre texto cru. A D17 e a D18 dão estrutura às duas que faltavam: o id é uma gramática que o
+    runner confere, e a promessa é a linha lida na seção do checklist.
 
 ## Pendências para o humano
 
@@ -290,7 +327,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
   origin/main`, e de lá `sdd approve 20261012-a-rota-da-qa` e a execução interativa, incremento por
   incremento. O `sdd approve` faz checkout da `branch:` e a cria a partir da atual quando não existe.
 - **Carimbo de mutação:** `./bin/sdd health` uma vez, no worktree, depois do último commit de código
-  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 706 depois dos dezenove
+  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 714 depois dos vinte e sete
   deste lote (689 medidos depois do I1 no teste de autocontenção): ~40 a 60 min.
 - **Yokoten nos alvos:** mudam `agents/sdd-qa.md`, `sdd-planner.md` e `sdd-docs.md`. No
   `sales_quote`, `sdd install --force` numa branch `chore/kit-<sha>` e PR para a `develop`; os alvos
