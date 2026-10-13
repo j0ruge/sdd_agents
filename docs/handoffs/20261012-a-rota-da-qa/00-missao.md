@@ -12,7 +12,7 @@ ddd: n/a
 # Missão — o lote 7: a rota da QA e o aceite que lê o plano
 
 > Nascida do laço `sdd kaizen` (2026-10-12, veredito `melhorou` sobre `0270727` em `05-verdict.md`)
-> e **replanejada com o humano** num grill de 12 perguntas, conduzido pelo `sdd-planner` com relay.
+> e **replanejada com o humano** num grill de 13 perguntas, conduzido pelo `sdd-planner` com relay.
 > `aprovacao:` fica vazio por regra (plano nascido do kaizen nunca é `auto`, `gate_PLAN`) e porque o
 > D4 manda: o humano aprova com `sdd approve` depois de ler o plano na tela.
 >
@@ -93,7 +93,8 @@ Todas binárias, lidas nas linhas `ok` de sensor da suíte:
   `QA:exec=<none>`. Hoje: `QA:close=sdd-qa`.
 - **M3:** `30-handoff-qa.md` commitado antes de um `F<n>` `done` → o `gate_QA` reprova nomeando o F,
   nos dois caminhos. Hoje passa.
-- **M4:** K8 ✅ no `00-missao.md` e a branch da missão sem commit no `KAIZEN_LOG.md` → o `gate_DOCS`
+- **M4:** K8 ✅ no `00-missao.md` e a branch da missão sem linha acrescentada no `KAIZEN_LOG.md`
+  (nenhuma, ou uma entrada escrita e revertida) → o `gate_DOCS`
   reprova. Hoje passa.
 - **M5:** o prompt de boot de toda fase projetada diz que o carimbo de hora sai de `date` (5 de 5).
   Hoje 0 de 5.
@@ -138,7 +139,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
 
 | # | Critério | Status | Evidência |
 |---|---|---|---|
-| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✅ | 12 perguntas, 12 respostas do humano (D1–D12), mais a confirmação do "nos dois caminhos" da D3; nenhuma pendente |
+| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✅ | 13 perguntas, 13 respostas do humano (D1–D13; a 13ª veio da 2ª rodada dos bots do PR #247), mais a confirmação do "nos dois caminhos" da D3; nenhuma pendente |
 | b | Checklist kaizen 100% ✅ e checklist DDD 100% ✅ ou `n/a` justificado | ✅ | seções abaixo; DDD `n/a` justificado |
 | c | Plano passa no teste de autocontenção (sessão nova só com 00/01/checkpoint executa) | ✅ | real, em 2026-10-12 21:01–21:12: um subagente novo, lendo só os três arquivos, executou o I1 inteiro num clone descartável (Check `1 1`, os dois mutantes pegos por `--only`, `--anchors` 689); os três "só se souber X" que ele achou (a sintaxe do `--only`, o formato e o commit da nota, a âncora do `TODO.md` que o I1 já move) estão escritos no `01-plano.md` |
 | d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado), vermelho no HEAD pelo `tests/check-checkpoint.sh --red` do kit | ✅ | 11 de 11; `--check` e `--red` rodados nesta sessão, saída final no `01-plano.md` § Medição do vermelho |
@@ -191,7 +192,8 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
 6. **D6 — o carimbo de hora: uma frase no `turn_rule` do `boot_prompt`, para toda fase**
    (recommended). Porquê: é o lugar que a anatomia §1 dá à regra de toda fase, e chega aos sete
    chapéus de uma vez.
-7. **D7 — o K8 contra a DOCS: uma âncora nova no `gate_DOCS`, mais a prosa** (recommended). Com K8 ✅,
+7. **D7 — o K8 contra a DOCS: uma âncora nova no `gate_DOCS`, mais a prosa** (recommended; o que a
+   âncora lê foi refinado pela D13). Com K8 ✅,
    a branch da missão tem de ter tocado o `KAIZEN_LOG.md`, quem quer que tenha escrito a entrada.
    Porquê: o gate lê dois artefatos, e o dono (`sdd-docs`, que tem o arquivo no `writes:`) existe.
 8. **D8 — o D4 fica, o grill não muda neste lote, e passa a se medir** (recommended). Cada decisão
@@ -213,6 +215,13 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     de dados de uma versão só (C1: "o worker precisa de um kit fixo").
 12. **D12 — os tokens da D8 em inglês: `(recommended)`/`(other: …)`** (recommended). Porquê: marcador
     é contrato, e o contrato é inglês; nenhuma exceção nova no `check-lang.sh`.
+13. **D13 — a âncora do K8 lê o saldo da branch** (recommended). Com K8 ✅, o `git diff --numstat`
+    de cada merge-base de HEAD com as bases até HEAD tem de acrescentar linhas ao `KAIZEN_LOG.md`;
+    uma entrada escrita e depois revertida ou apagada reprova (4ª asserção e um 2º mutante). Refina
+    a D7, que lia "tocou o arquivo". Porquê: fecha o caso do Codex (PR #247, 2ª rodada) sem contrato
+    novo; resíduo declarado, uma edição alheia que acrescenta linhas passa. Recusados: um marcador
+    com o título da entrada na nota do K8 (contrato novo, e missão em voo reprovaria) e manter o toque
+    declarando o limite (fail-open, que a régua D15 não admite como limite).
 
 ## Pendências para o humano
 
@@ -224,7 +233,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
   origin/main`, e de lá `sdd approve 20261012-a-rota-da-qa` e a execução interativa, incremento por
   incremento. O `sdd approve` faz checkout da `branch:` e a cria a partir da atual quando não existe.
 - **Carimbo de mutação:** `./bin/sdd health` uma vez, no worktree, depois do último commit de código
-  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 696 depois dos nove
+  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 697 depois dos dez
   deste lote (689 medidos depois do I1 no teste de autocontenção): ~40 a 60 min.
 - **Yokoten nos alvos:** mudam `agents/sdd-qa.md`, `sdd-planner.md` e `sdd-docs.md`. No
   `sales_quote`, `sdd install --force` numa branch `chore/kit-<sha>` e PR para a `develop`; os alvos
