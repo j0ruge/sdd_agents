@@ -135,6 +135,15 @@ Lido nesta sessão, sobre `4f16a6d` (a `main` do kit em 2026-10-12) mais o commi
 - A linha K8 do template é `| K8 | Registro no KAIZEN_LOG | <✅/✗> | |` (`templates/missao.md:60`):
   o status é o 3º campo da tabela. O `awk` desta máquina é o `mawk`, orientado a byte: comparar a
   célula aparada com `✅` por igualdade funciona; classe negada com multibyte, não.
+- Os ids de missão (o nome do diretório; o runner não valida o formato, `resolve_mission`,
+  `bin/sdd:307`) são todos `^[0-9]{8}-[a-z0-9-]+$`: 64 de 64 diretórios com `00-missao.md` em cinco
+  repos (o kit 28, `sales_quote` 31, `lighthouse_project` 3, `ansible-jrc` 1,
+  `digital_service_report_frontend` 1), medido em 2026-10-13. Nenhum par em que um id contém outro
+  hoje. Os dois diretórios pontuados do `sales_quote` (`20260916-release-notes-0.8.0`, `…-0.8.1`)
+  não são missões (não têm `00-missao.md`).
+- ⚠️ `mawk` 1.3.4: `substr(s, 0, 1)` devolve o **primeiro** caractere de `s`, não `""`; `substr`
+  além do fim devolve `""`; `index(s, "")` devolve 1 (medido nesta sessão). É a armadilha da
+  fronteira do id no I9.
 
 **O `boot_prompt` (`bin/sdd:3078`)**
 
@@ -608,12 +617,20 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
 
      ```bash
      SDD_K8_MISSION="$MISSION" awk "$FENCE_AWK"'
+       function cites_id(s, m,   p, i) {
+         s = " " s
+         while ((i = index(substr(s, p + 1), m)) > 0) {
+           p += i
+           if (substr(s, p - 1, 1) !~ /[A-Za-z0-9_-]/ && substr(s, p + length(m), 1) !~ /[A-Za-z0-9_-]/) return 1
+         }
+         return 0
+       }
        BEGIN { m = ENVIRON["SDD_K8_MISSION"] }
        { t = substr($0, 1, 1) }
        t != " " && t != "+" { next }
        { l = substr($0, 2); fence_line(l) }
        !fence && l ~ /^## / { hnew = (t == "+") }
-       t == "+" && hnew && index(l, m) { found = 1 }
+       t == "+" && hnew && cites_id(l, m) { found = 1 }
        END { exit !found }
      ' <<< "$patch"
      ```
@@ -623,13 +640,32 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
      citação nova partiria o bloco; um `## ` fora de cerca abre bloco, e `hnew` é **reatribuído** em
      todo título, novo ou de contexto, senão o "novo" de uma entrada vazaria para a seguinte; a
      citação só conta se a própria linha é `+` e o título do bloco é `+` (um título que cita a missão
-     conta como a linha); antes do primeiro `## ` nada conta. `index`, string fixa. O cabeçalho do
+     conta como a linha); antes do primeiro `## ` nada conta. O cabeçalho do
      patch não tem regra própria, e não precisa: `diff`, `index`, `---` e `@@` não começam por ` `
      nem `+`, e o `+++ b/KAIZEN_LOG.md` passa pelo filtro mas não abre bloco nem cita a missão (o
      caminho é literal e `hnew` começa em 0). Medido: a variante com um `!body` que pula o cabeçalho
-     até o primeiro `@@ ` responde igual em todos os mundos, então ficou fora. Faltando em qualquer merge-base (a direção que falha
-     fechada), o `GATE_WHY` é
-     `00-missao.md checks K8 (a KAIZEN_LOG entry) and the mission branch adds no KAIZEN_LOG.md entry of its own — a '## ' heading new in the branch whose block has a new line citing $MISSION; write the entry, citing the mission, with the before and after the plan names, or uncheck K8 with the human`.
+     até o primeiro `@@ ` responde igual em todos os mundos, então ficou fora.
+
+     **Citar é o id inteiro** (`cites_id`, 6ª rodada do PR #247): uma ocorrência de `m` na linha só
+     conta quando o byte antes e o byte depois dela ficam fora de `[A-Za-z0-9_-]`, a classe de todo
+     id de missão que existe (Contexto verificado). `$MISSION-extra`, `${MISSION}s`,
+     `${MISSION}_old`, `revisita-$MISSION` e `docs/handoffs/$MISSION-extra/` **não** citam a
+     missão; `` `$MISSION` ``, `docs/handoffs/$MISSION/…`, `($MISSION)`, `$MISSION.`, o id entre
+     espaços, colado num travessão, no fim ou no começo da linha citam. O id é procurado **literal**
+     (`index`, string fixa) e o laço anda até a última ocorrência, porque um id mais longo antes da
+     citação, na mesma linha, não pode escondê-la. ⚠️ O `s = " " s` é a armadilha do `mawk`
+     (Contexto verificado): sem ele, `substr(s, 0, 1)` devolve o primeiro dígito do próprio id, e um
+     id na coluna 1 é recusado (falha fechada). Do lado direito não precisa: `substr` além do fim
+     devolve `""`. A classe é ASCII, a regra do `CLAUDE.md` para o `mawk`. Recusados: exigir o
+     caminho do handoff (`$HANDOFF_DIR/$MISSION/`), que troca o contrato da D15/D16 (citar o id),
+     recusaria a forma com crase que o I11 e o `sdd-docs` usam e, sem a `/` final, tem o mesmo furo;
+     uma regex montada com o id, que dá a um metacaractere de id futuro o poder de mudar o que casa; e
+     normalizar a linha trocando por espaço todo byte fora da classe, que deixa de casar um id que
+     tenha um desses bytes (gate insatisfazível para aquela missão), salvo normalizando o id também,
+     regra que nenhum mundo do fixture observa.
+
+     Faltando em qualquer merge-base (a direção que falha fechada), o `GATE_WHY` é
+     `00-missao.md checks K8 (a KAIZEN_LOG entry) and the mission branch adds no KAIZEN_LOG.md entry of its own — a '## ' heading new in the branch whose block has a new line citing $MISSION as a whole id (a longer id that contains it does not count); write the entry, citing the mission, with the before and after the plan names, or uncheck K8 with the human`.
      **Por que o bloco** (D16): o `KAIZEN_LOG.md` da `main` já cita esta missão (a entrada do
      veredito aponta para `docs/handoffs/20261012-a-rota-da-qa/05-verdict.md`), como o de toda
      missão nascida do kaizen, então "ausente na base" reprovaria a entrada dela para sempre; e a
@@ -652,10 +688,24 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
      | entrada nova escrita por cima de um `## ` antigo apagado (o diff põe o `-## ` entre o título novo e a citação nova) | passa | passa |
      | a entrada nova revertida | reprova | reprova |
 
+     **Medido na 6ª rodada** (o mesmo protótipo, git 2.43.0, `mawk` 1.3.4): os treze mundos acima
+     dão a mesma fase com o `cites_id`, e os de colisão separam a citação solta da inteira:
+
+     | Mundo | D16 com `index(l, m)` solto | D16 com `cites_id` |
+     |---|---|---|
+     | entrada nova citando só `$MISSION-extra` (Codex, 6ª rodada) | **passa** | reprova |
+     | entrada nova citando só `revisita-$MISSION` | **passa** | reprova |
+     | entrada nova citando só `${MISSION}s` | **passa** | reprova |
+     | entrada nova citando só `${MISSION}_old` | **passa** | reprova |
+     | entrada nova citando só `docs/handoffs/$MISSION-extra/05-verdict.md` | **passa** | reprova |
+     | entrada nova citando o id entre crases, num caminho (`/`), entre parênteses, antes de `.`, entre espaços, colado num travessão, no fim e no começo da linha (oito mundos) | passa | passa |
+     | as três colisões e, depois delas na mesma linha, `docs/handoffs/$MISSION/01-plano.md` | passa | passa |
+
      As regras recusadas, e o que cada uma deixava passar: "algum commit tocou o arquivo" (D7), uma
      entrada revertida; "linhas acrescentadas" (D13), a troca de uma linha; "um `+## `
      acrescentado" (D14), o renome de um cabeçalho; "as linhas que citam a missão crescem" (D15), as
-     quatro linhas em negrito acima; "adições menos remoções > 0", nada disso, mas reprovaria a
+     quatro linhas em negrito acima; a citação como substring (`grep -cF` na D15, `index` na D16
+     até a 5ª rodada), as cinco linhas em negrito da segunda tabela; "adições menos remoções > 0", nada disso, mas reprovaria a
      missão que escreve a entrada e enxuga o log, sem saída honesta para o dono; um marcador
      `<!-- sdd:kaizen <missão> -->`, rótulo que o modelo escreve, e escrito numa entrada antiga
      passaria num mundo que se distingue (sem título novo).
@@ -669,12 +719,19 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
      - não medido: uma linha da entrada nova igual byte a byte a uma linha **apagada** noutro ponto
        do log pode sair do diff como contexto, e a entrada reprova (falha fechada);
      - o `-U1000000` limita o contexto a um milhão de linhas (o log tem 3259);
-     - o "cada merge-base" não tem mundo próprio no fixture, porque pede duas bases divergentes.
+     - o "cada merge-base" não tem mundo próprio no fixture, porque pede duas bases divergentes;
+     - a fronteira do id é a classe ASCII `[A-Za-z0-9_-]`: um byte ≥ 0x80 conta como fronteira (o
+       `mawk` lê byte), então um id seguido de letra acentuada passaria por citação; e o `.` é
+       fronteira, porque o id no fim da frase é forma honesta, então um id com `.` colidiria com um
+       id pontuado mais longo (`…-0.8` dentro de `…-0.8.0`). Nenhum id de missão tem nenhum dos
+       dois (Contexto verificado), e um id com byte fora da classe continua citável, porque é
+       procurado literal.
   4. O comentário nomeia o dono: o `sdd-docs`, com `KAIZEN_LOG.md` no `writes:`.
 - `agents/sdd-docs.md` § 3, linha `KAIZEN_LOG.md`: atualize quando a missão mede um antes/depois
   **ou quando o K8 do `00-missao.md` está ✅**, e o gate cobra. `n/a` só com K8 que não esteja ✅.
   A entrada **abre com o seu próprio `## `** e **cita o id da missão** (`<YYYYMMDD>-<slug>`) numa
-  linha dela; citar a missão numa entrada que já existe não conta.
+  linha dela, inteiro (um id mais longo que o contém, como `<id>-r2`, não conta); citar a missão
+  numa entrada que já existe não conta. O probe do `check-hat.sh` abaixo não muda por isso.
 - `docs/pipeline.md` § DOCS: a condição nova. Anatomia § 4: uma frase.
 - `./bin/sdd install --force`.
 
@@ -700,12 +757,13 @@ Outra linha do veredito.
 ```
 
 Corte uma branch de missão (molde `:1318-1326`), acrescente ao `$MDIR/00-missao.md` a linha
-`| K8 | Registro no KAIZEN_LOG | ✅ | |`, commite e guarde `k8_start="$(git rev-parse HEAD)"`. Onze
-asserções `assert_phase` com o prefixo exato `kaizen-log: `, nesta ordem. Os mundos 1–8 são
+`| K8 | Registro no KAIZEN_LOG | ✅ | |`, commite e guarde `k8_start="$(git rev-parse HEAD)"`. Treze
+asserções `assert_phase` com o prefixo exato `kaizen-log: `, nesta ordem. Os mundos 1–10 são
 **independentes**: cada um é um commit sobre `k8_start` e volta com `git reset -q --hard
 "$k8_start"` (o molde de `:1349`). ⚠️ Não os acumule: o mundo 3 (renome) seguido do 4 (citação na
-mesma entrada) é o resíduo declarado, e a fase passaria. Os onze mundos, com estes textos e esta
-base, foram rodados no protótipo contra a regra e contra cada mutante (a fase esperada em todos).
+mesma entrada) é o resíduo declarado, e a fase passaria. Os treze mundos, com estes textos e esta
+base, foram rodados no protótipo contra a regra e contra cada mutante (a fase esperada em todos;
+2026-10-13, 6ª rodada).
 1. `kaizen-log: a base that already cites the mission is not the entry`: nada acrescentado → `DOCS`.
    Junto, um `assert_why` **sem** o prefixo (não entra na conta do Check), `K8 names the missing
    KAIZEN_LOG entry`, com a regex `adds no KAIZEN_LOG.md entry of its own`;
@@ -729,31 +787,51 @@ base, foram rodados no protótipo contra a regra e contra cada mutante (a fase e
    `Outra linha do veredito.` → `PR`. O diff de contexto inteiro sai ` # KAIZEN_LOG`, ` `, `----`,
    `+## 2026-01-02 — Lote`, ` `, `-## 2026-01-01 — O veredito`, `+---`, …, `+Missão …` (medido): o
    `-## ` cai entre o título novo e a citação nova;
-9. `kaizen-log: a new entry that cites the mission lets DOCS pass`: `## 2026-01-02 — Lote` novo, logo
-   abaixo do primeiro `---`, com `` Missão `$MISSION`: antes 1, depois 2. `` no corpo → `PR`;
-10. `kaizen-log: an entry written and then reverted in the mission branch holds DOCS`: sobre o 9,
+9. `kaizen-log: a new entry citing only longer ids that contain the mission keeps DOCS blocked`: um
+   `## 2026-01-02 — Lote` novo, logo abaixo do primeiro `---`, com a linha
+   `` Ver `$MISSION-extra`, `${MISSION}s` e `revisita-$MISSION`. `` (o mundo do Codex na 6ª rodada,
+   mais um vizinho letra à direita e um vizinho `-` à esquerda: cada sabotagem da fronteira precisa
+   de um deles) → `DOCS`;
+10. `kaizen-log: the same entry citing the mission itself after the longer ids lets DOCS pass`: o
+    mundo 9 com `; plano em docs/handoffs/$MISSION/01-plano.md` antes do ponto final → `PR`. É o
+    gêmeo diferencial do 9: só a citação inteira os separa, e ela vem **depois** das três colisões
+    na mesma linha;
+11. `kaizen-log: a new entry that cites the mission lets DOCS pass`: `## 2026-01-02 — Lote` novo, logo
+    abaixo do primeiro `---`, com `$MISSION: antes 1, depois 2.` no corpo → `PR`. O id fica **na
+    coluna 1 e sem crase**: é o mundo da armadilha do `mawk` (`substr(s, 0, 1)`);
+12. `kaizen-log: an entry written and then reverted in the mission branch holds DOCS`: sobre o 11,
     `git revert --no-edit HEAD` (sem `-q`, que o git 2.43 não aceita) → `DOCS`;
-11. `kaizen-log: K8 unchecked demands nothing`: com `✗` no lugar de `✅`, e o revert no lugar, a fase
+13. `kaizen-log: K8 unchecked demands nothing`: com `✗` no lugar de `✅`, e o revert no lugar, a fase
     segue → `PR`.
 
 Volte à `main` e restaure o fixture. Um probe em `hat_promise_probes` lê o `sdd-docs.md` § 3: exige
 `K8` na linha do `KAIZEN_LOG.md`, a instrução de abrir a entrada com o seu próprio `## ` e a de citar
-o id da missão, e imprime `hat: the docs hat reads K8 of the plan before it marks KAIZEN_LOG`. Sete
-mutantes, provados por `--only <slug> check-gates.sh`. Os sete foram sabotados no protótipo, sobre
+o id da missão, e imprime `hat: the docs hat reads K8 of the plan before it marks KAIZEN_LOG`. Onze
+mutantes, provados por `--only <slug> check-gates.sh`. Os onze foram sabotados no protótipo, sobre
 a base deste fixture, e cada um mudou a fase exatamente nos mundos indicados:
-- `DOCS_k8_ignored` neutraliza o `if` novo → mundos 1–7 e 10;
+- `DOCS_k8_ignored` neutraliza o `if` novo → mundos 1–7, 9 e 12;
 - `DOCS_k8_presence_is_enough` troca `"$b"` pela árvore vazia
-  (`4b825dc642cb6eb9a060e54bf8d69288fbee4904`) no `diff-tree`, e toda linha vira nova → mundos 1–7
-  e 10;
+  (`4b825dc642cb6eb9a060e54bf8d69288fbee4904`) no `diff-tree`, e toda linha vira nova → mundos 1–7,
+  9 e 12;
 - `DOCS_k8_reads_deleted_lines` deixa as linhas `-` entrarem (`t != " " && t != "+" && t != "-"
   { next }`) → só o mundo 8;
 - `DOCS_k8_heading_not_new` tira `hnew &&` da condição da citação → mundos 4–7;
 - `DOCS_k8_cite_not_new` tira `t == "+" &&` da condição da citação → só o mundo 3;
 - `DOCS_k8_block_not_reset` troca a reatribuição por `!fence && l ~ /^## / && t == "+" { hnew = 1 }`
   → só o mundo 6;
-- `DOCS_k8_fence_blind` tira `!fence &&` do teste de título → só o mundo 7.
-**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `11 1`
-**Sensor durável:** as onze asserções, o `assert_why`, o probe e os sete mutantes.
+- `DOCS_k8_fence_blind` tira `!fence &&` do teste de título → só o mundo 7;
+- `DOCS_k8_cite_no_left_boundary` apaga `substr(s, p - 1, 1) !~ /[A-Za-z0-9_-]/ && ` do `cites_id`
+  → só o mundo 9 (o `revisita-$MISSION`);
+- `DOCS_k8_cite_no_right_boundary` apaga ` && substr(s, p + length(m), 1) !~ /[A-Za-z0-9_-]/` →
+  só o mundo 9 (o `$MISSION-extra` e o `${MISSION}s`);
+- `DOCS_k8_cite_first_only` troca o `while ((i` por `if ((i`, e só a primeira ocorrência conta →
+  só o mundo 10;
+- `DOCS_k8_cite_unpadded` apaga a linha `s = " " s` → só o mundo 11.
+A classe não tem mutante próprio, e o mundo 9 é o que a segura: no protótipo, a classe reduzida a
+`[-]` e a classe sem o `-` deixaram o mundo 9 em `PR` (por isso ele leva um vizinho letra e um
+vizinho `-`); a classe alargada com `.` e `/` (aperto, falha fechada) deixou o 10 em `DOCS`.
+**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `13 1`
+**Sensor durável:** as treze asserções, o `assert_why`, o probe e os onze mutantes.
 **Reversível por:** reverter o commit.
 
 ### I10 — onde vai o `RESOLVED by` num item no teto
@@ -810,12 +888,14 @@ esqueleto das variantes; prosa é livre) e `bash tests/check-todo.sh --check TOD
 
 ## Medição do vermelho
 
-Rodado pelo planner em 2026-10-13 às 09:59, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
-`kaizen/20261012`, head `26f858a` mais a D16), sobre o checkpoint **final**. É a quinta medição: as
-anteriores (2026-10-12 20:53, 2026-10-13 05:02, 07:53 e 08:12) foram refeitas porque o Check do I9
-mudou, de `3 1` para `4 1` (D13), para `5 1` (D14), para `7 1` (D15) e para `11 1` (D16).
+Rodado pelo planner em 2026-10-13 às 11:53, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
+`kaizen/20261012`, head `a85e6ff` mais a fronteira do id da 6ª rodada), sobre o checkpoint **final**.
+É a sexta medição: as anteriores (2026-10-12 20:53, 2026-10-13 05:02, 07:53, 08:12 e 09:59) foram
+refeitas porque o Check do I9 mudou, de `3 1` para `4 1` (D13), para `5 1` (D14), para `7 1` (D15),
+para `11 1` (D16) e para `13 1` (a fronteira do id, 6ª rodada).
 
-O `--red` levou 6 min 59 s (09:59:34 → 10:06:33): três Checks rodam o `check-gates.sh`, de ~95 s.
+O `--check` e o `--red` levaram 6 min 40 s (11:53:05 → 11:59:45): três Checks rodam o
+`check-gates.sh`, de ~95 s.
 
 ```text
 $ bash tests/check-checkpoint.sh --check docs/handoffs/20261012-a-rota-da-qa/checkpoint.md
@@ -830,7 +910,7 @@ $ bash tests/check-checkpoint.sh --red docs/handoffs/20261012-a-rota-da-qa/check
   ok    checkpoint.md: I6 is red at HEAD (prints '0', wants '3')
   ok    checkpoint.md: I7 is red at HEAD (prints '0', wants '4')
   ok    checkpoint.md: I8 is red at HEAD (prints '0', wants '1')
-  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '11 1')
+  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '13 1')
   ok    checkpoint.md: I10 is red at HEAD (prints '0', wants '2')
   ok    checkpoint.md: I11 is red at HEAD (prints '0 0 0', wants '1 1 1')
   ok    checkpoint.md: 11 pending Check(s), every one red at HEAD
@@ -870,13 +950,15 @@ baixar o modelo do `QA:close`.
 - `tests/run-all.sh` verde, com as asserções novas de `check-dry-run.sh`, `check-gates.sh`,
   `check-hat.sh` e `check-templates.sh`.
 - Os Checks de I1–I11 dão o esperado da tabela; M1–M6 do `00-missao.md` são as linhas `ok` deles.
-- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos quinze mutantes novos
+- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos dezenove mutantes novos
   (`QA_substep_skipped_ignored`, `QA_substep_skipped_loose`, `QA_substep_retest_ignored`,
   `QA_fix_ahead_any_order`, `QA_fix_ahead_counts_merges`, `QA_fix_ahead_reads_the_directory`,
   `QA_handoff_freshness_ignored`,
   `RUN_turn_rule_no_clock`, `DOCS_k8_ignored`, `DOCS_k8_presence_is_enough`,
   `DOCS_k8_reads_deleted_lines`, `DOCS_k8_heading_not_new`, `DOCS_k8_cite_not_new`,
-  `DOCS_k8_block_not_reset`, `DOCS_k8_fence_blind`), e o `--anchors` diz `all N mutants still apply`.
+  `DOCS_k8_block_not_reset`, `DOCS_k8_fence_blind`, `DOCS_k8_cite_no_left_boundary`,
+  `DOCS_k8_cite_no_right_boundary`, `DOCS_k8_cite_first_only`, `DOCS_k8_cite_unpadded`), e o
+  `--anchors` diz `all N mutants still apply`.
 - `./bin/sdd adr check` → rc 0; `env -u CLAUDECODE ./bin/sdd preflight` sem `agent … stale`.
 - `./bin/sdd health` depois da rodada dos bots → `score: N caught of N`, `kit healthy`, carimbo
   escrito.

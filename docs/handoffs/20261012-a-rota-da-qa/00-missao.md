@@ -95,8 +95,9 @@ Todas binárias, lidas nas linhas `ok` de sensor da suíte:
   nos dois caminhos. Hoje passa.
 - **M4:** K8 ✅ no `00-missao.md` e nenhuma entrada nova da missão no `KAIZEN_LOG.md` (nada, uma
   linha trocada, um cabeçalho renomeado, mais uma linha citando a missão numa entrada antiga, uma
-  linha que cita a missão duas vezes partida em duas, uma entrada nova que não cita a missão, um `## `
-  dentro de cerca de código, uma entrada revertida) → o `gate_DOCS` reprova. Hoje passa.
+  linha que cita a missão duas vezes partida em duas, uma entrada nova que não cita a missão, uma
+  entrada nova que só cita ids mais longos que contêm o da missão, um `## ` dentro de cerca de
+  código, uma entrada revertida) → o `gate_DOCS` reprova. Hoje passa.
 - **M5:** o prompt de boot de toda fase projetada diz que o carimbo de hora sai de `date` (5 de 5).
   Hoje 0 de 5.
 - **M6:** o `check-hat.sh` lê no `/sdd-plan` e no `sdd-planner.md` o aceite renderizado, o
@@ -140,7 +141,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
 
 | # | Critério | Status | Evidência |
 |---|---|---|---|
-| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✅ | 16 perguntas, 16 respostas do humano (D1–D16; da 13ª à 16ª vieram da 2ª à 5ª rodada dos bots do PR #247), mais a confirmação do "nos dois caminhos" da D3; nenhuma pendente |
+| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✅ | 16 perguntas, 16 respostas do humano (D1–D16; da 13ª à 16ª vieram da 2ª à 5ª rodada dos bots do PR #247), mais a confirmação do "nos dois caminhos" da D3; a 6ª rodada refinou a D16 sem pergunta nova (o conserto cabe no contrato decidido, ver a D16); nenhuma pendente |
 | b | Checklist kaizen 100% ✅ e checklist DDD 100% ✅ ou `n/a` justificado | ✅ | seções abaixo; DDD `n/a` justificado |
 | c | Plano passa no teste de autocontenção (sessão nova só com 00/01/checkpoint executa) | ✅ | real, em 2026-10-12 21:01–21:12: um subagente novo, lendo só os três arquivos, executou o I1 inteiro num clone descartável (Check `1 1`, os dois mutantes pegos por `--only`, `--anchors` 689); os três "só se souber X" que ele achou (a sintaxe do `--only`, o formato e o commit da nota, a âncora do `TODO.md` que o I1 já move) estão escritos no `01-plano.md` |
 | d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado), vermelho no HEAD pelo `tests/check-checkpoint.sh --red` do kit | ✅ | 11 de 11; `--check` e `--red` rodados nesta sessão, saída final no `01-plano.md` § Medição do vermelho |
@@ -267,7 +268,17 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     novo: fail-open de novo) e manter a D15 mandando os mundos ao `TODO.md` (o lote sairia com um
     gate sabidamente frouxo). Preço: volta a exigir entradas abertas por `## ` (o kit e o
     `sales_quote` as abrem assim; um log de outro formato reprova até o humano decidir, e o motivo
-    diz isso), e o I9 vai a onze asserções e sete mutantes.
+    diz isso), e o I9 vai a treze asserções e onze mutantes (onze e sete antes da 6ª rodada).
+    **Refinada na 6ª rodada** (Codex, PR #247, `a85e6ff`), sem pergunta nova ao humano: "citar a
+    missão" é citar o id **inteiro**, com o byte antes e o depois fora de `[A-Za-z0-9_-]`. A citação
+    era substring desde a D15 (`grep -cF`), e a D16 a herdou (`index`): uma entrada nova citando só
+    `<id>-extra` passava. Não houve pergunta porque não sobrou escolha dentro do decidido: exigir o
+    caminho do handoff trocaria o contrato da D15/D16 (citar o id) e, sem a `/` final, tem o mesmo
+    furo; "as duas" é a fronteira, porque o caminho já passa por ela. Medido no protótipo: os treze
+    mundos da D16 dão a mesma fase, cinco mundos de colisão passam a reprovar, oito formas honestas
+    de citar continuam passando, e cada sabotagem da fronteira muda a fase de um mundo do fixture
+    (detalhe no I9). Não é o laço da D13–D16: aquelas rodadas mediam **qual é a entrada**; esta mede
+    **o que é citar o id**, eixo que a D15 abriu sem fronteira.
 
 ## Pendências para o humano
 
@@ -279,7 +290,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
   origin/main`, e de lá `sdd approve 20261012-a-rota-da-qa` e a execução interativa, incremento por
   incremento. O `sdd approve` faz checkout da `branch:` e a cria a partir da atual quando não existe.
 - **Carimbo de mutação:** `./bin/sdd health` uma vez, no worktree, depois do último commit de código
-  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 702 depois dos quinze
+  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 706 depois dos dezenove
   deste lote (689 medidos depois do I1 no teste de autocontenção): ~40 a 60 min.
 - **Yokoten nos alvos:** mudam `agents/sdd-qa.md`, `sdd-planner.md` e `sdd-docs.md`. No
   `sales_quote`, `sdd install --force` numa branch `chore/kit-<sha>` e PR para a `develop`; os alvos
