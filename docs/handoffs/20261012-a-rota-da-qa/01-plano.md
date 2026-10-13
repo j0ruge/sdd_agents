@@ -102,6 +102,16 @@ Lido nesta sessão, sobre `4f16a6d` (a `main` do kit em 2026-10-12) mais o commi
   **depois** do F tocou `<caminho>`. Sem `--no-merges`, o merge de uma base que trouxe o relatório
   de outra missão contava como reteste (medido: o merge apareceu); com ele, não. Um commit do
   reteste depois do F aparece.
+- **O caminho que o reteste lê é o relatório DA MISSÃO, nunca o diretório** (achado do CodeRabbit no
+  PR #247, conferido): `--no-merges` tira o merge, mas um commit comum da branch, depois do F, que
+  edita o relatório de outra missão (ou o copia da base) tocaria `$QA_DOCS_PATH/reports/` e
+  responderia `close` sem reteste nenhum, falha aberta. O `mission_qa_report` (`:1067`) já é a
+  definição de posse (ADR 0013, 0015 §3, 0016 §1): editar relatório da base nunca dá posse, e o
+  `qa_substep` já tem o arquivo em `report` (`:2680`). O preço declarado: um reteste que escreve um
+  arquivo novo cujo nome ordena **antes** do atual deixa a sub-etapa em `exec`, e o `no_work_check`
+  para a 2ª volta igual (falha fechada e alta). O `qa-execution` continua o relatório existente ao
+  retomar e só abre arquivo novo numa corrida nova, datado (`references/status-and-reporting.md:69`
+  da skill).
 
 **O `gate_DOCS` (`bin/sdd:2131-2248`)**
 
@@ -187,7 +197,7 @@ qa_substep (com interface)                                   gate_QA (os dois ca
   ├─ 00-missao.md: qa: skipped (literal) → close   (I1)       ├─ blocked → para a linha
   ├─ sem charter                         → plan               ├─ ≠ done  → recusa
   ├─ sem relatório da missão fechado     → exec               ├─ F<n> done sem commit do handoff depois → recusa  (I4)
-  ├─ F<n> done sem commit em reports/ depois → exec  (I3)     └─ … âncoras de hoje
+  ├─ F<n> done sem commit no relatório da missão depois → exec (I3)  └─ … âncoras de hoje
   └─ senão                               → close
 
 qa_fix_ahead_of <caminho>  — UMA definição, DOIS leitores (I3 no qa_substep, I4 no gate_QA)
@@ -201,11 +211,15 @@ boot_prompt/turn_rule: "todo carimbo sai de date"                               
   escrever o que o gate exige). A chave é **literal e positiva**: só `qa: skipped` exato desvia, e
   qualquer outra grafia é a rota de hoje (frouxidão pularia QA de verdade, falha aberta).
 - **O reteste e o frescor são a mesma pergunta**: "existe `F<n>` `done` sem um commit, depois dele,
-  no caminho X?". X = `$QA_DOCS_PATH/reports/` decide a sub-etapa, e X =
-  `$HANDOFF_DIR/$MISSION/30-handoff-qa.md` decide o gate. Uma definição, como o `report_closed`
+  no caminho X?". X = o relatório da missão (o arquivo que o `mission_qa_report` escolhe, o mesmo
+  que a Âncora 1 lê) decide a sub-etapa, e X = `$HANDOFF_DIR/$MISSION/30-handoff-qa.md` decide o gate. Uma definição, como o `report_closed`
   (o cabeçalho dele, `:2656-2660`, conta o que custou ter a âncora duplicada). O ciclo F vira
   `close` → EXEC → `exec` (reteste, move o `Status:`) → `close` (reescreve o handoff) → passa.
-  Sem interface: `close` → EXEC → `close` (caminha de novo e reescreve).
+  Sem interface: `close` → EXEC → `close` (caminha de novo e reescreve). ⚠️ Ali o `qa_substep`
+  devolve `close` antes de ler relatório (`:2678`), **de propósito**: o caminhante é o próprio
+  `sdd-qa`, e o reteste é a caminhada do `close`. A pergunta do I3 só existe com interface; quem faz
+  o `close` rodar de novo depois do F, nos dois caminhos, é o frescor do I4 (o CodeRabbit leu a
+  ausência como lacuna no PR #247; não é).
 - **A âncora do K8 lê dois artefatos**: a linha K8 do plano e o histórico da branch. Ela não lê o
   `45-docs.md`, que é rótulo; o que conta é o commit no `KAIZEN_LOG.md`, quem quer que o tenha feito
   (a DOCS ou um incremento do EXEC, como o I11 desta missão). Range vazio (missão na base, já
@@ -268,8 +282,14 @@ dois mutantes no catálogo.
     1. leia a justificativa no `00-missao.md`;
     2. compare com o diff real (`git diff <base>...HEAD --stat` e os arquivos);
     3. nada visível ao usuário → `status: skipped`, citando a decisão do plano e os arquivos;
-    4. algo visível → `status: blocked`, nomeando os arquivos e dizendo ao humano para tirar a chave
-       e rodar de novo.
+    4. algo visível → `status: blocked`, nomeando os arquivos e o remédio inteiro: tirar o
+       `qa: skipped` do `00-missao.md` **e apagar este handoff** (`git rm` do `30-handoff-qa.md`),
+       commitar, e `sdd run`. Achado do Codex no PR #247, conferido: o `gate_QA` relê um handoff
+       `blocked` deixado no lugar e arma o `GATE_HANDOFF_BLOCKED` (`bin/sdd:1612-1615`); como a
+       escalada só é lida **depois** da sessão (`bin/sdd:8989-8990`), cada `sdd run` paga uma sessão
+       (`QA:plan`, depois `QA:exec`) e para de novo, e só o 3º lançamento chega ao `close` que
+       reescreve. Sem o handoff, o gate diz `missing 30-handoff-qa.md`, não escala, e a corrida
+       segue `plan` → `exec` → `close` num lançamento só.
 
     Sob a declaração, nunca caminhe, nunca crie `docs/qa/`, nunca escreva `done`.
 - `agents/sdd-planner.md` § 1: quando o grill decide que a QA não se aplica num projeto com
@@ -278,8 +298,8 @@ dois mutantes no catálogo.
   `qa: skipped`", e o parágrafo do `skipped` (`:354`) diz quem declara e quem confere.
 - `tests/check-hat.sh`: um probe novo dentro de `hat_promise_probes` (`:305`), que lê a § 2 do
   `sdd-qa.md` por seção (`awk '/^## 2\. /{s=1; next} s && /^## /{s=0} s'`, o molde do
-  `planner_agent_probes`). Ele exige o literal `the plan declares` + `qa: skipped` e `status:
-  blocked` e imprime `hat: sdd-qa confirms a declared qa: skipped against the diff`. Passada de
+  `planner_agent_probes`). Ele exige o literal `the plan declares` + `qa: skipped`, `status:
+  blocked` e o remédio (`git rm`) e imprime `hat: sdd-qa confirms a declared qa: skipped against the diff`. Passada de
   sabotagem de cada frase no `checkpoint-notas.md`.
 - `./bin/sdd install --force`.
 
@@ -303,8 +323,9 @@ medido pelo I1.
   - Captura com `|| true`.
   - Commit que não resolve é pulado; é inalcançável numa corrida derivada, porque o `gate_EXEC` vem antes.
   - O comentário do cabeçalho diz "uma definição, dois leitores" e cita a ADR 0018 §2.
-- No `qa_substep`, depois do `report_closed`:
-  `[ -z "$(qa_fix_ahead_of "$QA_DOCS_PATH/reports/")" ] || { printf 'exec\n'; return 0; }`.
+- No `qa_substep`, depois do `report_closed`, sobre o relatório que ele já leu (`report`, `:2680`):
+  `[ -z "$(qa_fix_ahead_of "${report#"$REPO_ROOT"/}")" ] || { printf 'exec\n'; return 0; }`.
+  Nunca o diretório `reports/` inteiro: ver o Contexto verificado (a posse).
 - Os comentários de `:2650-2655` e `:2913-2921` deixam de afirmar `disable-model-invocation` e
   dizem o que o kit sabe:
   - o slash é a rota do runner, qualquer que seja a flag;
@@ -337,12 +358,19 @@ relatório (`:522-538`) e **antes** da limpeza dele. No fixture em `main` o rang
 3. Troque a linha para `done` com `$h`. Afirme `QA:exec=<none>` com o nome
    `a fix increment done after the closed report sends QA back to exec for the retest`. Hoje isso é
    vermelho: projeta `QA:close=sdd-qa`.
-4. O mundo do merge: corte uma branch do commit **anterior** ao F, acrescente um relatório nela,
-   volte e faça `git merge --no-ff`. Afirme que ainda é `QA:exec=<none>`, com o nome
-   `a report a merge brings in after the fix is not the retest`.
-5. Acrescente uma linha ao relatório e commite. Afirme `QA:close=sdd-qa` com o nome
+4. O mundo do merge: corte uma branch do commit **anterior** ao F, acrescente nela um relatório com
+   nome que ordena **depois** do da missão (em `main`, com range vazio, ele vira a escolha do
+   `mission_qa_report`), volte e faça `git merge --no-ff`. Afirme que ainda é `QA:exec=<none>`, com o
+   nome `a report a merge brings in after the fix is not the retest`.
+5. Acrescente uma linha ao relatório escolhido e commite. Afirme `QA:close=sdd-qa` com o nome
    `a report committed after the fix closes the retest`.
-6. Restaure tudo byte a byte: o checkpoint com `git checkout -- "$MDIR/checkpoint.md"`, a história
+6. O mundo da posse (CodeRabbit, PR #247): corte uma branch de missão a partir deste ponto (molde
+   `:522-538`, porque com range vazio não há posse a medir). Nela, commite um relatório **novo** e
+   `closed` (o da missão), um commit de conserto com o `F1` `done` no hash dele, e depois, num commit
+   comum, uma linha acrescentada a um relatório **da base** (de outra missão: editar não dá posse).
+   Afirme `QA:exec=<none>`, com o nome `another mission's report touched after the fix is not the
+   retest`. Volte à `main` e apague a branch.
+7. Restaure tudo byte a byte: o checkpoint com `git checkout -- "$MDIR/checkpoint.md"`, a história
    com `git reset -q <sha guardado antes do mundo>` (mixed, como o bloco vizinho, porque o config
    modificado é do bloco seguinte), a branch apagada, e `docs/qa/` removido.
 
@@ -350,10 +378,12 @@ Mutantes (cada um provado por `--only <slug> check-dry-run.sh`):
 - `QA_substep_retest_ignored` apaga a linha nova do `qa_substep`;
 - `QA_fix_ahead_any_order` troca `--ancestry-path "$c..HEAD"` por `HEAD`, e o passo 3 o pega,
   porque há commit de relatório antes do F;
-- `QA_fix_ahead_counts_merges` tira o `--no-merges`, e o passo 4 o pega.
+- `QA_fix_ahead_counts_merges` tira o `--no-merges`, e o passo 4 o pega;
+- `QA_fix_ahead_reads_the_directory` troca o `${report#…}` do `qa_substep` por
+  `$QA_DOCS_PATH/reports/`, e o passo 6 o pega.
 
 **Check:** `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    a fix increment done after the closed report sends QA back to exec for the retest' <<< "$o"` → `1`
-**Sensor durável:** as quatro asserções no `check-dry-run.sh`, os três mutantes, o probe do
+**Sensor durável:** as cinco asserções no `check-dry-run.sh`, os quatro mutantes, o probe do
 `check-hat.sh`, e o `no_work_check` como freio de um reteste que não produz commit.
 **Reversível por:** reverter o commit. O `sdd-qa` volta a improvisar como hoje.
 
@@ -671,7 +701,8 @@ medição velha que o aceite do L4 pegou (item (h)).
 | O `check-autonomy.sh:1715-1775` muda de significado no I4 | alta | o I4 o ajusta e anota qual das duas correções escolheu; a propriedade que ele mede continua medida |
 | O reteste custa uma sessão a mais que a improvisação | alta | é o trade-off do D3 contra a dependência de uma flag de terceiro |
 | A âncora `bin/sdd:1800` do `TODO.md` sai do alvo no I4 | alta | o I4 roda `check-todo.sh --anchors` e reancora no mesmo commit |
-| `qa: skipped` declarado e o EXEC tocou a tela | média | Jidoka desenhado: o `sdd-qa` escreve `blocked`, `handoff-blocked` para a linha (rc 3), o humano tira a chave |
+| `qa: skipped` declarado e o EXEC tocou a tela | média | Jidoka desenhado: o `sdd-qa` escreve `blocked`, `handoff-blocked` para a linha (rc 3), o humano tira a chave **e apaga o handoff bloqueado** (senão paga mais duas sessões e duas escaladas) |
+| O reteste escreve um relatório novo cujo nome ordena antes do atual | baixa | a sub-etapa fica em `exec`; o `no_work_check` para a 2ª volta igual (falha fechada); o `qa-execution` continua o relatório existente ao retomar |
 | Um handoff ou relatório reescrito e não commitado | baixa | falha fechada: a volta seguinte pede de novo, e o `no_work_check` para a linha na repetição |
 | O K8 ✅ de missões antigas em voo passa a cobrar a entrada na DOCS | média | a DOCS a escreve (o dono existe); com range vazio, nada muda |
 | `qa_substep` ou `qa_fix_ahead_of` passando a atribuir global | baixa | proibido no plano; o `step_after` do `check-autonomy.sh` segue valendo |
@@ -686,9 +717,10 @@ baixar o modelo do `QA:close`.
 - `tests/run-all.sh` verde, com as asserções novas de `check-dry-run.sh`, `check-gates.sh`,
   `check-hat.sh` e `check-templates.sh`.
 - Os Checks de I1–I11 dão o esperado da tabela; M1–M6 do `00-missao.md` são as linhas `ok` deles.
-- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos oito mutantes novos
+- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos nove mutantes novos
   (`QA_substep_skipped_ignored`, `QA_substep_skipped_loose`, `QA_substep_retest_ignored`,
-  `QA_fix_ahead_any_order`, `QA_fix_ahead_counts_merges`, `QA_handoff_freshness_ignored`,
+  `QA_fix_ahead_any_order`, `QA_fix_ahead_counts_merges`, `QA_fix_ahead_reads_the_directory`,
+  `QA_handoff_freshness_ignored`,
   `RUN_turn_rule_no_clock`, `DOCS_k8_ignored`), e o `--anchors` diz `all N mutants still apply`.
 - `./bin/sdd adr check` → rc 0; `env -u CLAUDECODE ./bin/sdd preflight` sem `agent … stale`.
 - `./bin/sdd health` depois da rodada dos bots → `score: N caught of N`, `kit healthy`, carimbo

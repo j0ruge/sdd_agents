@@ -89,7 +89,7 @@ Todas binárias, lidas nas linhas `ok` de sensor da suíte:
 
 - **M1:** com interface, charter presente, nenhum relatório da missão e `qa: skipped` no
   `00-missao.md` → `sdd run --dry-run --phase QA` projeta `QA:close=sdd-qa`. Hoje: `QA:exec=<none>`.
-- **M2:** relatório fechado e um `F<n>` `done` sem commit de relatório depois dele → projeta
+- **M2:** relatório da missão fechado e um `F<n>` `done` sem commit nesse relatório depois dele → projeta
   `QA:exec=<none>`. Hoje: `QA:close=sdd-qa`.
 - **M3:** `30-handoff-qa.md` commitado antes de um `F<n>` `done` → o `gate_QA` reprova nomeando o F,
   nos dois caminhos. Hoje passa.
@@ -172,7 +172,9 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
    ao `TODO.md`. Porquê: uma janela do juiz mede o lote, um carimbo o cobre, e a fila espera desde o L0.
 2. **D2 — quem decide o `skipped` com interface: o plano declara, o `sdd-qa` confere** (recommended).
    `qa: skipped` literal no frontmatter do `00-missao.md`; o `qa_substep` devolve `close`; o `sdd-qa`
-   compara com o diff e escreve `skipped` ou `blocked`. Porquê: um lançamento, ~US$ 1,6, e o único
+   compara com o diff e escreve `skipped` ou `blocked`. Com `blocked`, o remédio é tirar a chave **e
+   apagar o handoff bloqueado** (achado do Codex no PR #247: só tirar a chave paga mais duas sessões
+   e duas escaladas antes do `close`). Porquê: um lançamento, ~US$ 1,6, e o único
    olhar independente do chapéu que escreveu o código. Qualquer outra grafia é a rota de hoje
    (frouxidão pularia QA de verdade).
 3. **D3 — a rota do reteste: `exec` no runner e o frescor do handoff, nos dois caminhos**
@@ -222,7 +224,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
   origin/main`, e de lá `sdd approve 20261012-a-rota-da-qa` e a execução interativa, incremento por
   incremento. O `sdd approve` faz checkout da `branch:` e a cria a partir da atual quando não existe.
 - **Carimbo de mutação:** `./bin/sdd health` uma vez, no worktree, depois do último commit de código
-  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 695 depois dos oito
+  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 696 depois dos nove
   deste lote (689 medidos depois do I1 no teste de autocontenção): ~40 a 60 min.
 - **Yokoten nos alvos:** mudam `agents/sdd-qa.md`, `sdd-planner.md` e `sdd-docs.md`. No
   `sales_quote`, `sdd install --force` numa branch `chore/kit-<sha>` e PR para a `develop`; os alvos

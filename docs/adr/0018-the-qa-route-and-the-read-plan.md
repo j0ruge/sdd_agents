@@ -61,8 +61,13 @@ QA, which fails open.
 
 The `sdd-qa` session confirms the declaration against the real diff before writing anything. If
 nothing in the diff reaches the user, it writes `status: skipped`, citing the plan and the files. If
-something does, it writes `status: blocked`, naming the files. `handoff-blocked` then stops the line
-(rc 3), and the human removes the key and runs again. No gate changes for this: `gate_QA` already
+something does, it writes `status: blocked`, naming the files and the whole remedy. `handoff-blocked`
+then stops the line (rc 3), and the human removes the key **and deletes that handoff** (`git rm`), then
+runs again. Removing the key alone does not recover: `gate_QA` re-reads a `blocked` handoff left in
+place and arms the marker, and the escalation is read only after a session, so each run would pay
+for `QA:plan`, then `QA:exec`, and stop again before the `close` that can rewrite it (Codex on PR
+#247). With the handoff gone the gate says `missing 30-handoff-qa.md`, which does not escalate, and
+one run goes `plan` → `exec` → `close`. No gate changes for this: `gate_QA` already
 accepts `skipped` with an interface. Its passing reason now says what it read (`30-handoff-qa.md
 declares status: skipped`) instead of asserting a property of the diff that the runner never
 measured.
@@ -73,8 +78,12 @@ One definition, `qa_fix_ahead_of <path>`, answers with the first `F<n>` row mark
 no non-merge commit touching `<path>` among its descendants up to `HEAD`:
 `git rev-list -1 --no-merges --ancestry-path <F>..HEAD -- <path>` is empty. Two readers use it:
 
-- **`qa_substep`**, after the closed-report check, answers `exec` when an `F<n>` is ahead of
-  `$QA_DOCS_PATH/reports/`. `qa-execution` enters through its slash, as in every walk, retests,
+- **`qa_substep`**, after the closed-report check, answers `exec` when an `F<n>` is ahead of the
+  **mission's** report: the file `mission_qa_report` picks, the same one Anchor 1 reads. Never the
+  whole `reports/` directory: a plain commit after the fix that edits or copies another mission's
+  report would touch it and answer `close` with no retest (CodeRabbit on PR #247). Without an
+  interface the sub-step answers `close` before it reads any report, on purpose: there `sdd-qa` is
+  the walker, its `close` is the retest, and the freshness rule below is what brings it back. `qa-execution` enters through its slash, as in every walk, retests,
   and moves the bug's `Status:`. The task text of `QA:exec` covers the retest.
 - **`gate_QA`**, on both paths and after the status enum, refuses while an `F<n>` is ahead of
   `30-handoff-qa.md` and names that row. The owner of the artifact is `sdd-qa`, which the default
@@ -137,10 +146,12 @@ may take alone. `gate_PLAN` does not change. Both values stay valid, and a plan 
   depending on a skill's invocation flag, and hands DOCS and PR a handoff written after the fix.
   Missions in flight with a fix done and an older handoff run one `close` more after the upgrade.
 - Mutants hold each rule: the `skipped` branch, the retest branch, the descendant order, the
-  freshness anchor. The assertions live in `tests/check-dry-run.sh` and `tests/check-gates.sh`.
-- Declared limits: a base merge brings its report commits in as merge commits, which
-  `--no-merges` leaves out, so another mission's report never counts as this mission's retest. A
-  report or handoff rewritten but not committed does not count, and that fails closed (one more
+  merge exclusion, the mission's report over the directory, the freshness anchor. The assertions live in `tests/check-dry-run.sh` and `tests/check-gates.sh`.
+- Declared limits: the retest reads the mission's own report, so another mission's report, merged
+  in or edited on the branch, never counts as this mission's retest; `--no-merges` keeps a merge
+  that touched the file out too. A retest written to a new file whose name sorts before the current
+  one leaves the sub-step on `exec`, and `no_work_check` stops the second identical lap: fail closed
+  and loud. A report or handoff rewritten but not committed does not count, and that fails closed (one more
   lap, then `no_work_check`). An `F` row whose commit does not resolve is skipped, which
   `gate_EXEC` makes unreachable in a derived run. The `(recommended)` mark is the planner's own
   account of the grill: a label, read as a count and never as a gate.
