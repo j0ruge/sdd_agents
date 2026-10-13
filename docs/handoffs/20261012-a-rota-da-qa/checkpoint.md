@@ -1,6 +1,6 @@
 ---
 missao: 20261012-a-rota-da-qa
-atualizado: 2026-10-13 07:53
+atualizado: 2026-10-13 08:12
 ---
 
 # Checkpoint — o lote 7: a rota da QA e o aceite que lê o plano
@@ -56,7 +56,7 @@ atualizado: 2026-10-13 07:53
 | I6 | o aceite lê o plano (D4, D5 (h), D8, (a), (b)): o `/sdd-plan` renderiza o plano, refaz `--check`/`--red`, nomeia os ✗ ou diz todos ✅, conta as recomendadas, e o aviso final proíbe prosa | `o=$(bash tests/check-hat.sh 2>&1); grep -c -e '^  ok    command: /sdd-plan renders the plan' -e '^  ok    command: /sdd-plan names every unmet criterion' -e '^  ok    command: /sdd-plan forbids approval prose' <<< "$o"` → `3` | pending | — |
 | I7 | o planner (D4, D5 (g) e (i), D8): `aprovacao:` vazio sob `/sdd-plan` salvo pedido, decisão marcada `(recommended)`/`(other: …)`, regras de nome do alvo, reestimativa a 2×; template da missão | `o=$(bash tests/check-hat.sh 2>&1); grep -c -e '^  ok    hat: the planner marks each grill decision' -e '^  ok    hat: the planner leaves aprovacao empty' -e '^  ok    hat: the planner reads the naming rules' -e '^  ok    command: /sdd-plan re-estimates long work' <<< "$o"` → `4` | pending | — |
 | I8 | o carimbo de hora sai de `date` (D6): uma frase no `turn_rule` do `boot_prompt`, lida em toda fase projetada | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    every projected phase is told that a timestamp it writes comes from date' <<< "$o"` → `1` | pending | — |
-| I9 | o K8 contra a DOCS (D7, D13, D14): o `gate_DOCS` exige que a branch da missão acrescente uma entrada nova (um cabeçalho `## `) ao `KAIZEN_LOG.md`, no saldo contra cada merge-base, quando o K8 do `00-missao.md` é ✅; `sdd-docs` § 3 manda ler o K8 | `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `5 1` | pending | — |
+| I9 | o K8 contra a DOCS (D7, D13, D15): o `gate_DOCS` exige que as linhas do `KAIZEN_LOG.md` que citam o id da missão cresçam de cada merge-base até HEAD quando o K8 do `00-missao.md` é ✅; `sdd-docs` § 3 manda ler o K8 e citar a missão | `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `7 1` | pending | — |
 | I10 | onde vai o `RESOLVED by` num item no teto (c): os dois templates do `TODO.md` dizem a posição que passa no `check-todo.sh` | `o=$(cat templates/todo.pt-BR.md templates/todo.md); grep -c -e 'nunca numa linha própria' -e 'never on a line of its own' <<< "$o"` → `2` | pending | — |
 | I11 | fecho: `CONTEXT.md`, anatomia § 7, gaveta, ADR 0018 `accepted`, `./bin/sdd install --force`, a entrada do `KAIZEN_LOG.md` e o `20-handoff-exec.md` | `a=$(grep -c -E '^## .*Lote 7: a rota da QA' KAIZEN_LOG.md); b=$(grep -c -E '^- [*][*]Status[*][*]: accepted' docs/adr/0018-the-qa-route-and-the-read-plan.md); f=$(awk 'END{print (NR>0)}' docs/handoffs/20261012-a-rota-da-qa/20-handoff-exec.md 2>/dev/null); echo "$a $b ${f:-0}"` → `1 1 1` | pending | — |
 

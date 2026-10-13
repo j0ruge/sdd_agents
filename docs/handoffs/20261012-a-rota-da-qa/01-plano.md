@@ -220,11 +220,11 @@ boot_prompt/turn_rule: "todo carimbo sai de date"                               
   `sdd-qa`, e o reteste é a caminhada do `close`. A pergunta do I3 só existe com interface; quem faz
   o `close` rodar de novo depois do F, nos dois caminhos, é o frescor do I4 (o CodeRabbit leu a
   ausência como lacuna no PR #247; não é).
-- **A âncora do K8 lê dois artefatos**: a linha K8 do plano e o saldo da branch no `KAIZEN_LOG.md`
-  (D13), em que tem de haver uma entrada nova, um cabeçalho `## ` acrescentado contra cada merge-base
-  com as bases (D14). Ela não lê o `45-docs.md`, que é rótulo, nem o "algum commit tocou o
-  arquivo", que passa sobre uma entrada revertida, nem uma linha trocada; o que conta é a entrada
-  que ficou, quem quer que a tenha escrito (a DOCS ou um incremento do EXEC, como o I11
+- **A âncora do K8 lê dois artefatos**: a linha K8 do plano e o `KAIZEN_LOG.md` de cada merge-base e
+  de HEAD, em que as linhas que citam o id da missão têm de crescer (D15). A identidade da entrada é
+  o estado que faltava às três regras anteriores (D7, D13, D14), e cada uma deixou passar um caso
+  num diff que não sabia qual entrada procurava. Ela não lê o `45-docs.md`, que é rótulo; o que
+  conta é a entrada que ficou, citando a missão, quem quer que a tenha escrito (a DOCS ou um incremento do EXEC, como o I11
   desta missão). Range vazio (missão na base, já
   mergeada, sem base resolvida) → a resposta de hoje, como o `mission_qa_report`.
 - **O aceite e o planner são prosa**, e o sensor é o `check-hat.sh`. O `gate_PLAN` não muda: `auto`
@@ -582,30 +582,40 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
   2. Só com o literal `✅` (admissão **positiva**), monte `nots` por `mission_base_refs`. Sem base
      que resolva, ou com range vazio (`git rev-list -n 1 HEAD --not …` vazio), fica a resposta de
      hoje, o molde do `mission_qa_report` (`:1080-1084`).
-  3. Senão, leia o **saldo** da branch (D13) e exija nele uma **entrada nova** (D14): para **cada**
-     merge-base `b` de HEAD com as bases (o `bases` do molde do `mission_qa_report`, `:1069-1074`),
-     o `git -C "$REPO_ROOT" diff "$b" HEAD -- KAIZEN_LOG.md` tem de conter uma linha que comece por
-     `+## ` (um cabeçalho de nível 2 acrescentado; o `+++ b/KAIZEN_LOG.md` do cabeçalho do diff não
-     casa). Leia por herestring (`grep -q '^+## ' <<< "$d"`, nunca `printf … | grep -q`) e capture
-     o diff com `|| true`. Exigir todas é a direção que falha fechada: uma `main` local velha não faz
-     passar uma entrada que veio da base. Na falta, o `GATE_WHY` é
-     `00-missao.md checks K8 (a KAIZEN_LOG entry) and the mission branch adds no new entry (a '## ' heading) to KAIZEN_LOG.md — write the entry with the before and after the plan names, or uncheck K8 with the human`.
-     **Medido** num repo descartável, com a regra da entrada nova:
-     - nenhum commit → reprova;
-     - uma linha trocada (`1 1`) → reprova;
-     - entrada nova → passa;
-     - entrada nova e depois revertida → reprova;
-     - entrada nova com faxina de 30 linhas antigas (`numstat 3 30`) → passa.
+  3. Senão, conte a **identidade** da entrada (D15): o id da missão. Para **cada** merge-base `b`
+     de HEAD com as bases (o `bases` do molde do `mission_qa_report`, `:1069-1074`), o número de
+     linhas do `KAIZEN_LOG.md` que citam `$MISSION` (`grep -cF -- "$MISSION"`, string fixa) tem de
+     **crescer** de `b` até HEAD. Leia os dois lados do git, nunca da árvore:
+     `blob="$(git -C "$REPO_ROOT" show "$b:KAIZEN_LOG.md" 2>/dev/null || true)"` e o mesmo com
+     `HEAD:`, e conte por herestring (`grep -cF -- "$MISSION" <<< "$blob" || true`), nunca com
+     `git show … | grep`, que sob `pipefail` morre quando o arquivo não existe na base. Exigir todas
+     as merge-bases é a direção que falha fechada. Na falta, o `GATE_WHY` é
+     `00-missao.md checks K8 (a KAIZEN_LOG entry) and the mission branch adds no entry that cites $MISSION to KAIZEN_LOG.md — write the entry, citing the mission, with the before and after the plan names, or uncheck K8 with the human`.
+     **Por que contar e não "ausente na base":** o `KAIZEN_LOG.md` da `main` já cita esta missão (a
+     entrada do veredito aponta para `docs/handoffs/20261012-a-rota-da-qa/05-verdict.md`), e toda
+     missão nascida do kaizen nasce assim; "ausente na base" reprovaria a entrada dela para sempre.
+     **Medido** num repo descartável, com a base já citando a missão uma vez:
+     - nada acrescentado → reprova (1→1);
+     - uma linha trocada → reprova (1→1);
+     - um cabeçalho antigo renomeado → reprova (1→1);
+     - uma entrada nova que não cita a missão → reprova (1→1);
+     - uma entrada nova que cita a missão → passa (1→2);
+     - essa entrada revertida → reprova (1→1).
 
-     As duas regras recusadas, e por quê: o "algum commit tocou o arquivo" (`rev-list … --
-     KAIZEN_LOG.md`) passa sobre a entrada revertida (dois commits tocaram); "adições menos remoções
-     > 0" reprovaria a missão que escreve a entrada e enxuga o log, sem saída honesta para o dono.
-     Resíduos declarados no comentário: renomear um cabeçalho antigo passa; um alvo cujo log não abre
-     cada entrada com `## ` reprova até o humano decidir (o kit e o `sales_quote` usam
-     `## YYYY-MM-DD — <título>`).
+     As regras recusadas, e o que cada uma deixava passar: "algum commit tocou o arquivo" (D7),
+     uma entrada revertida; "linhas acrescentadas" (D13), a troca de uma linha; "um `+## `
+     acrescentado" (D14), o renome de um cabeçalho; "adições menos remoções > 0", nada disso, mas
+     reprovaria a missão que escreve a entrada e enxuga o log, sem saída honesta para o dono.
+     Resíduos declarados no comentário:
+     - acrescentar uma citação da missão a uma entrada antiga passa;
+     - uma faxina que apaga uma linha antiga que já citava a missão e escreve a entrada com uma só
+       linha citando-a reprova (raro; falha fechada);
+     - a conta é por linha, então citar a missão duas vezes na mesma linha conta uma;
+     - o "cada merge-base" não tem mundo próprio no fixture, porque pede duas bases divergentes.
   4. O comentário nomeia o dono: o `sdd-docs`, com `KAIZEN_LOG.md` no `writes:`.
 - `agents/sdd-docs.md` § 3, linha `KAIZEN_LOG.md`: atualize quando a missão mede um antes/depois
   **ou quando o K8 do `00-missao.md` está ✅**, e o gate cobra. `n/a` só com K8 que não esteja ✅.
+  A entrada **cita o id da missão** (`<YYYYMMDD>-<slug>`) no corpo: é a linha que o gate conta.
 - `docs/pipeline.md` § DOCS: a condição nova. Anatomia § 4: uma frase.
 - `./bin/sdd install --force`.
 
@@ -613,30 +623,39 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
 `tests/check-gates.sh`, `tests/check-hat.sh`, `tests/check-mutation.sh`.
 **Como (TDD):** no bloco da DOCS do `check-gates.sh`, logo depois de `:2753` (`assert_phase "drift
 checklist complete" "PR"`, o primeiro ponto em que a DOCS passa), corte uma branch de missão (molde `:1318-1326`) e escreva no `$MDIR/00-missao.md` uma linha
-`| K8 | Registro no KAIZEN_LOG | ✅ | |`. Cinco asserções com o prefixo exato `kaizen-log: `, nesta
-ordem:
-1. `kaizen-log: K8 checked and no new entry in KAIZEN_LOG.md in the mission branch holds DOCS`: a
-   fase é `DOCS`, e o motivo contém `adds no new entry`;
-2. `kaizen-log: a one-line edit with no new entry keeps DOCS blocked`: um commit que troca uma linha
-   de uma entrada antiga (`1 1` no numstat) deixa a fase em `DOCS`, com o mesmo motivo;
-3. `kaizen-log: an entry added to KAIZEN_LOG.md in the mission branch lets DOCS pass`: depois de
-   commitar uma entrada nova (`## <data> — <título>` e um corpo), a fase segue;
-4. `kaizen-log: an entry written and then reverted in the mission branch holds DOCS`: depois de
-   `git revert --no-edit HEAD` (sem `-q`, que o git 2.43 não aceita), a fase volta a `DOCS` com o
-   mesmo motivo do 1;
-5. `kaizen-log: K8 unchecked demands nothing`: com `✗` no lugar de `✅`, e o revert no lugar, a fase
+`| K8 | Registro no KAIZEN_LOG | ✅ | |`. Antes de cortar a branch, a `main` do fixture ganha um
+`KAIZEN_LOG.md` cuja entrada antiga já cita `$MISSION` (por exemplo `Veredito em
+\`docs/handoffs/$MISSION/05-verdict.md\``), a forma de toda missão nascida do kaizen. Sete asserções
+com o prefixo exato `kaizen-log: `, nesta ordem, cada mundo um commit na branch:
+1. `kaizen-log: a base that already cites the mission is not the entry`: nada acrescentado, a fase
+   é `DOCS`, e o motivo contém `adds no entry that cites`;
+2. `kaizen-log: a one-line edit with no new entry keeps DOCS blocked`: uma linha trocada numa
+   entrada antiga;
+3. `kaizen-log: renaming an old heading is not a new entry`: o `## ` antigo renomeado (o mundo do
+   Codex na 4ª rodada do PR #247);
+4. `kaizen-log: a new entry that does not cite the mission keeps DOCS blocked`: um `## ` novo cujo
+   corpo não cita a missão;
+5. `kaizen-log: a new entry that cites the mission lets DOCS pass`: um `## ` novo cujo corpo cita
+   `$MISSION`;
+6. `kaizen-log: an entry written and then reverted in the mission branch holds DOCS`: depois de
+   `git revert --no-edit HEAD` (sem `-q`, que o git 2.43 não aceita);
+7. `kaizen-log: K8 unchecked demands nothing`: com `✗` no lugar de `✅`, e o revert no lugar, a fase
    segue.
 
+As asserções 1, 2, 3, 4 e 6 deixam a fase em `DOCS`, com o motivo da regra; a 5ª e a 7ª deixam a
+fase seguir para `PR`.
+
 Volte à `main` e restaure o fixture. Um probe em `hat_promise_probes` lê o `sdd-docs.md` § 3: exige
-`K8` na linha do `KAIZEN_LOG.md` e imprime `hat: the docs hat reads K8 of the plan before it marks
-KAIZEN_LOG`. Três mutantes, provados por `--only <slug> check-gates.sh`:
+`K8` na linha do `KAIZEN_LOG.md` e a instrução de citar o id da missão, e imprime `hat: the docs hat
+reads K8 of the plan before it marks KAIZEN_LOG`. Três mutantes, provados por `--only <slug>
+check-gates.sh`:
 - `DOCS_k8_ignored` neutraliza o `if` novo, e a asserção 1 o pega;
-- `DOCS_k8_any_added_line` troca o `'^+## '` por qualquer linha acrescentada (`'^+[^+]'`), e a
-  asserção 2 o pega;
-- `DOCS_k8_touch_is_enough` troca o saldo pela história (por exemplo `git log -p "$b"..HEAD`, que
-  ainda mostra o `+## ` do commit da entrada depois do revert), e a asserção 4 o pega.
-**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `5 1`
-**Sensor durável:** as cinco asserções, o probe e os três mutantes.
+- `DOCS_k8_presence_is_enough` compara a conta de HEAD com 0 em vez da conta da base, e a asserção
+  1 o pega (a base já cita a missão);
+- `DOCS_k8_any_new_heading` conta linhas `## ` no lugar de linhas que citam `$MISSION`, e a
+  asserção 4 o pega.
+**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `7 1`
+**Sensor durável:** as sete asserções, o probe e os três mutantes.
 **Reversível por:** reverter o commit.
 
 ### I10 — onde vai o `RESOLVED by` num item no teto
@@ -675,6 +694,8 @@ esqueleto das variantes; prosa é livre) e `bash tests/check-todo.sh --check TOD
 - `./bin/sdd install --force`, `./bin/sdd adr check` (rc 0), e
   `env -u CLAUDECODE ./bin/sdd preflight` sem `agent … stale`.
 - A entrada `## <data> — Lote 7: a rota da QA e o aceite que lê o plano` no `KAIZEN_LOG.md`:
+  - a entrada **cita o id da missão** (`20261012-a-rota-da-qa`), que é a linha que a âncora do I9
+    conta (D15);
   - **antes**, o veredito ao lado: 3 de 5 missões com QA à mão, 3 de 5 intervenções, reteste
     improvisado em duas missões (cinco vezes), dois carimbos com até 5 h de erro, a entrada do
     `KAIZEN_LOG` escrita à mão;
@@ -691,12 +712,12 @@ esqueleto das variantes; prosa é livre) e `bash tests/check-todo.sh --check TOD
 
 ## Medição do vermelho
 
-Rodado pelo planner em 2026-10-13 às 07:53, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
-`kaizen/20261012`, head `b46da50` mais a D14), sobre o checkpoint **final**. É a terceira medição: a
-primeira (2026-10-12 20:53) e a segunda (2026-10-13 05:02) foram refeitas porque o Check do I9 mudou,
-de `3 1` para `4 1` (D13) e de `4 1` para `5 1` (D14).
+Rodado pelo planner em 2026-10-13 às 08:12, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
+`kaizen/20261012`, head `1b03ec5` mais a D15), sobre o checkpoint **final**. É a quarta medição: as
+anteriores (2026-10-12 20:53, 2026-10-13 05:02 e 07:53) foram refeitas porque o Check do I9 mudou,
+de `3 1` para `4 1` (D13), para `5 1` (D14) e para `7 1` (D15).
 
-O `--red` levou 7 min 53 s (07:53:36 → 08:01:29): três Checks rodam o `check-gates.sh`, de ~95 s.
+O `--red` levou 7 min 48 s (08:12:47 → 08:20:35): três Checks rodam o `check-gates.sh`, de ~95 s.
 
 ```text
 $ bash tests/check-checkpoint.sh --check docs/handoffs/20261012-a-rota-da-qa/checkpoint.md
@@ -711,7 +732,7 @@ $ bash tests/check-checkpoint.sh --red docs/handoffs/20261012-a-rota-da-qa/check
   ok    checkpoint.md: I6 is red at HEAD (prints '0', wants '3')
   ok    checkpoint.md: I7 is red at HEAD (prints '0', wants '4')
   ok    checkpoint.md: I8 is red at HEAD (prints '0', wants '1')
-  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '5 1')
+  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '7 1')
   ok    checkpoint.md: I10 is red at HEAD (prints '0', wants '2')
   ok    checkpoint.md: I11 is red at HEAD (prints '0 0 0', wants '1 1 1')
   ok    checkpoint.md: 11 pending Check(s), every one red at HEAD
@@ -755,7 +776,7 @@ baixar o modelo do `QA:close`.
   (`QA_substep_skipped_ignored`, `QA_substep_skipped_loose`, `QA_substep_retest_ignored`,
   `QA_fix_ahead_any_order`, `QA_fix_ahead_counts_merges`, `QA_fix_ahead_reads_the_directory`,
   `QA_handoff_freshness_ignored`,
-  `RUN_turn_rule_no_clock`, `DOCS_k8_ignored`, `DOCS_k8_any_added_line`, `DOCS_k8_touch_is_enough`), e o `--anchors` diz `all N mutants still apply`.
+  `RUN_turn_rule_no_clock`, `DOCS_k8_ignored`, `DOCS_k8_presence_is_enough`, `DOCS_k8_any_new_heading`), e o `--anchors` diz `all N mutants still apply`.
 - `./bin/sdd adr check` → rc 0; `env -u CLAUDECODE ./bin/sdd preflight` sem `agent … stale`.
 - `./bin/sdd health` depois da rodada dos bots → `score: N caught of N`, `kit healthy`, carimbo
   escrito.
