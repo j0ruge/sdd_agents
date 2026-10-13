@@ -32,6 +32,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   isentar do teto a linha cujo excesso é só a âncora, ou o template dizer a saída.
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/05-verdict.md` — achado `kit:` do `sdd-planner` em
   `20261010-o-backlog-volta-a-medir`, transportado por `sdd-kaizen` (2026-10-12)
+- [ ] **A regra 2 do check-checkpoint vale por célula** — `tests/check-checkpoint.sh:310` (`count_occ`) — e não pela
+  leitura: um `2>&1` na célula obriga todo `grep` dela a ancorar em `^  ok    `, até o que lê um arquivo:
+  `o=$(bash t.sh 2>&1); a=$(grep -c '^  ok    x' <<< "$o"); b=$(grep -c foo f)` reprova com `1 of 2 pattern(s)`
+  (reproduzido em 2026-10-12). Falha fechada, contorno `2>/dev/null`; o consumidor é o planner do alvo (D15).
+  Regra por segmento ficaria cega na forma canônica, que separa `2>&1` e `grep` por `;`: o conserto segue a variável.
+  Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — item (e) da fila do operador, D1 do grill,
+  registrado pelo `sdd-planner` (2026-10-12)
 
 ### Saída humana e cosmética
 
