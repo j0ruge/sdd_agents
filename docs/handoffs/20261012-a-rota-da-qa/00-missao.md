@@ -132,7 +132,26 @@ prometeu.
 - **(e) a regra 2 do `check-checkpoint.sh` por célula:** vai ao `TODO.md` neste PR de docs (catraca
   2 → 3). A forma canônica separa `2>&1` e `grep` por `;`, então uma regra por segmento ficaria cega
   nela, e o conserto pede seguir a variável (D1).
-- **O `WIDTH_CAP` e o histórico do e2e no `GATE_WHY`:** já estão no `TODO.md`, pelo commit do veredito.
+- **O `WIDTH_CAP` e o histórico do e2e no `GATE_WHY`:** já estão no `TODO.md`, pelo commit do
+  veredito, e este é o handoff que os dois itens citam em `Fonte:`. A medida mora aqui porque a
+  origem está num alvo (`sales_quote`), fora deste repositório; recontada em 2026-10-13:
+  - **`WIDTH_CAP`.** O `tests/check-todo.sh:211` fixa 120 caracteres por linha física, e a
+    continuação de um item é recuada em 2 espaços: uma âncora `path:N` de mais de 116 caracteres
+    não cabe entre as crases. No alvo,
+    `packages/backend/src/modules/sales-quote/infrastructure/__tests__/prisma-cotacao-repository-query.integration.test.ts`
+    tem 117 caracteres, 121 com `:420` (`wc -c`), e o planner de `20261010-o-backlog-volta-a-medir`
+    ancorou outro arquivo (`00-missao.md:101-105` e `20-handoff-exec.md:296` daquela missão, no
+    `sales_quote`). Reproduzido com o sensor de hoje: um item de prova com essa âncora na linha de
+    continuação reprova com `line 7: 147 characters on one physical line, cap is 120`.
+  - **O histórico do e2e.** Em `20261005-mascaras-ncm-e-painel` (`sales_quote`), o gate de
+    2026-10-06 02:16 reprovou o `E2E_CMD` por um caso só, `e2e/frete-ipi.spec.ts:319` (Cenário 6:
+    `toHaveValue("")` recebeu `"CIF"` depois de `removeItem` + `reload`;
+    `.sdd/logs/20261005-mascaras-ncm-e-painel/gate-qa-e2e-20261006-021633-Kc2Mw6.log`, `1 failed`), e
+    a sessão `sdd-qa` começou descobrindo que a queda era anterior à missão. Nos logs
+    `gate-qa-e2e-*.log` do alvo, o caso caiu em 3 de 143 até aquele gate (dois de 2026-08-27, em
+    `20260827-condicoes-pagamento-mesmo-cliente`, e o de 2026-10-06), e em 3 de 158 hoje. O
+    `30-handoff-qa.md:7,43` daquela missão contou "3 em 45" (outra janela de contagem) e registrou
+    15/15 isolado e o mecanismo medido por sonda (`checkpoint-notas.md:74`).
 - **Encolher o grill** (o planner decidir sozinho o técnico): recusado nesta missão (D8). Primeiro se
   mede, pelo `(recommended)`/`(other: …)`.
 - **Uma chave de config para o modelo de aprovação** e um gate que recuse `auto`: recusados (D4).

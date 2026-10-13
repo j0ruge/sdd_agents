@@ -386,12 +386,19 @@ medido pelo I1.
 - No `qa_substep`, depois do `report_closed`, sobre o relatório que ele já leu (`report`, `:2680`):
   `[ -z "$(qa_fix_ahead_of "${report#"$REPO_ROOT"/}")" ] || { printf 'exec\n'; return 0; }`.
   Nunca o diretório `reports/` inteiro: ver o Contexto verificado (a posse).
-- Os comentários de `:2650-2655` e `:2913-2921` deixam de afirmar `disable-model-invocation` e
-  dizem o que o kit sabe:
+- Os três comentários que afirmam `disable-model-invocation` das skills de QA deixam de afirmar:
+  o do `qa_substep` (`:2650-2655`), o de antes do `ticket` (`:2913-2921`) e o do boot (`:2977-2979`,
+  "the QA skills carry disable-model-invocation, so there is no other route"). Eles passam a dizer o
+  que o kit sabe, **sem escrever o nome da flag** (chame-a "the skill's invocation flag"):
   - o slash é a rota do runner, qualquer que seja a flag;
-  - medido em 2026-10-12, as duas skills declaram `false`, e o `sdd-qa` as chamou pela ferramenta
+  - medido em 2026-10-12, as duas skills a declaram `false`, e o `sdd-qa` as chamou pela ferramenta
     `Skill` cinco vezes;
   - a rota existe para isso não ser preciso.
+  O comentário do `ticket` (`:2920`, "the `ticket` skill has no `disable-model-invocation`") está
+  certo e fica: depois do I3, `grep -c 'disable-model-invocation' bin/sdd` dá `1`, e essa linha fala
+  do `ticket` (hoje dá `4`: `:2652`, `:2916`, `:2920`, `:2978`). O Check cobra a contagem, e a conta
+  com `awk`, não com `grep`: a regra 2 do `tests/check-checkpoint.sh` vale por célula (o item (e) do
+  `TODO.md`), e um segundo `grep` na célula que tem `2>&1` reprova mesmo lendo um arquivo.
 - `phase_task` do `QA:exec` (`:2935`): o texto cobre também o reteste dos bugs consertados, por
   exemplo `walk the journeys in persona and write the dated report + the bug registry; after a fix
   increment, retest the fixed bugs and move their Status`.
@@ -442,7 +449,7 @@ Mutantes (cada um provado por `--only <slug> check-dry-run.sh`):
 - `QA_fix_ahead_reads_the_directory` troca o `${report#…}` do `qa_substep` por
   `$QA_DOCS_PATH/reports/`, e o passo 6 o pega.
 
-**Check:** `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    a fix increment done after the closed report sends QA back to exec for the retest' <<< "$o"` → `1`
+**Check:** `o=$(bash tests/check-dry-run.sh 2>&1); a=$(grep -c '^  ok    a fix increment done after the closed report sends QA back to exec for the retest' <<< "$o"); b=$(awk '/disable-model-invocation/ { n++ } END { print n + 0 }' bin/sdd); echo "$a $b"` → `1 1`
 **Sensor durável:** as cinco asserções no `check-dry-run.sh`, os quatro mutantes, o probe do
 `check-hat.sh`, e o `no_work_check` como freio de um reteste que não produz commit.
 **Reversível por:** reverter o commit. O `sdd-qa` volta a improvisar como hoje.
@@ -464,10 +471,10 @@ Mutantes (cada um provado por `--only <slug> check-dry-run.sh`):
 - `agents/sdd-qa.md` § 6: o handoff é reescrito e commitado depois de cada `F<n>` feito, e o gate
   recusa um handoff mais velho que o último conserto.
 - `docs/pipeline.md` § QA "Passes when": a condição nova. Anatomia § 4: uma frase.
-- **A âncora do `TODO.md`.** O item `bin/sdd:1800` (`gate-qa-e2e`) desce com as linhas novas. O I1
-  já o empurra 2 linhas (medido no teste de autocontenção: fica em `:1802`, dentro da janela de 10),
-  e o I4 soma as dele. Rode `bash tests/check-todo.sh --anchors TODO.md`; se sair do alvo, troque o
-  número pela linha atual do `run_check_cmd "$E2E_CMD" "gate-qa-e2e"` **no mesmo commit**.
+- **A âncora do `TODO.md`.** O item `bin/sdd:1800` (`gate-qa-e2e`) desce com as linhas que o I1 e
+  o I4 acrescentam acima dele. Confira com `bash tests/check-todo.sh --anchors TODO.md` **depois do
+  I4**, nunca por um número escrito aqui; se sair do alvo, troque o número pela linha atual do
+  `run_check_cmd "$E2E_CMD" "gate-qa-e2e"` **no mesmo commit**.
 - **O fixture do `check-autonomy.sh:1715-1775`.** A sessão 2 do stub (EXEC) fecha o F1 e o bug, e a
   asserção espera `QA EXEC REVIEW DOCS`. Com o frescor, a QA reabre. Escolha uma das duas
   correções e anote qual no `checkpoint-notas.md`:
@@ -530,7 +537,10 @@ pergunta, nesta ordem:
    pelo caminho do kit (`~/repos/sdd_agents/tests/…` num alvo; `tests/…` no worktree do kit), a
    partir da raiz, e mostre as linhas. Um `FAIL`, ou uma linha `is red at HEAD (prints …)` diferente
    da que o plano registra, volta ao planner antes da pergunta. Foi esse passo que pegou a medição
-   velha do L4.
+   velha do L4. O `--red` custa o que os Checks custam (o deste plano levou 9 min 47 s), e a
+   ferramenta Bash corta em 2 min por padrão e em 10 no máximo: rode-o **em background** e espere a
+   linha final `<n> pending Check(s), every one red at HEAD`. Uma corrida sem essa linha (cortada,
+   morta, sem saída) conta como **não medida** e volta ao planner, como um `FAIL`.
 2. **Renderizar o plano**, no formato de um plano `superpowers:writing-plans`:
    - cabeçalho com **Goal**, **Architecture** e **Tech Stack**;
    - as restrições globais: escopo, fora de escopo, as decisões do grill;
@@ -610,13 +620,19 @@ planner**, cujas frases o `check-checkpoint.sh` lê. `bash tests/check-templates
 ### I8 — o carimbo de hora sai de `date`
 
 **O quê:**
-- O `turn_rule` (`bin/sdd:3146-3152`) ganha, numa linha física própria antes do fecho das aspas:
-  `` Every timestamp you write (a data: or atualizado: field, a note) comes from \`date '+%Y-%m-%d
-  %H:%M'\` run in the same batch of commands, never from a log you read or from memory. `` (as crases
-  escapadas, como as vizinhas).
+- O `turn_rule` (`bin/sdd:3146-3152`) ganha uma linha física própria, inserida **antes** da última
+  linha da string (`What you started for your own check, stop before you end the turn."`). O `"` de
+  fecho continua nessa última linha, que o mutante não toca: o `RUN_turn_rule_no_clock` apaga só a
+  linha nova, e a string continua válida. A linha nova é esta, inteira numa linha física (o probe a
+  lê por `grep`, e frase partida em duas linhas não casa), com as crases escapadas como as vizinhas:
+
+  ```text
+  Every timestamp you write (a data: or atualizado: field, a note) comes from \`date '+%Y-%m-%d %H:%M'\` run in the same batch of commands, never from a log you read or from memory.
+  ```
 - O comentário acima cita o L4: `10-ticket.md` às 12:10 com a sessão às 17:03, e `45-docs.md` às
   18:10 com a sessão às 18:02.
-- Anatomia § 1: uma frase.
+- Anatomia § 1: uma frase. ⚠️ `.claude/` é caminho sensível: em sessão interativa o harness pode
+  pedir permissão; nunca contorne por Bash.
 
 **Onde:** `bin/sdd` (`boot_prompt`), `tests/check-dry-run.sh` (`:422-452`), `tests/check-mutation.sh`,
 `.claude/rules/anatomia-do-agente.md` § 1.
@@ -804,6 +820,11 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
        do log pode sair do diff como contexto, e a entrada reprova (falha fechada);
      - o `-U1000000` limita o contexto a um milhão de linhas (o log tem 3259);
      - o "cada merge-base" não tem mundo próprio no fixture, porque pede duas bases divergentes;
+     - um id vazio cita toda linha: no `mawk`, `index(s, "")` vale 1 (Contexto verificado), e o
+       laço do `cites_id` acaba aceitando a primeira linha nova. É inalcançável, e o comentário do
+       `cites_id` o declara assim: o `resolve_mission` morre com nome vazio (`missing mission
+       name`), e desde o I11 com qualquer id fora da gramática, que exige ao menos um caractere
+       depois do hífen;
      - a fronteira do id conta um byte ≥ 0x80 e o `.` como fronteira (o `mawk` lê byte; o id no fim
        da frase é forma honesta). Isso só é exato porque o id não pode conter nenhum dos dois: até
        a 6ª rodada era convenção (o CodeRabbit, na 7ª, mostrou a missão `foo` satisfeita por
@@ -1046,7 +1067,7 @@ mundo no lugar:
    probe depois de `:2753`, 130 s, 0 FAIL), então nenhum outro gate tropeça na barra; no protótipo,
    o `cites_id` com `/$MISSION` dá `DOCS`.
 
-O probe que já existe para o `/<missão>` (`run "/$PM"`, `:4662`) continua verde. Um probe em
+O probe que já existe para o `/<missão>` (`run "/$PM"`, `:4663`) continua verde. Um probe em
 `hat_promise_probes` do `check-hat.sh` lê o `agents/sdd-planner.md` e o `commands/sdd-plan.md`,
 exige o literal `^[0-9]{8}-[a-z0-9-]+$` nos dois, e imprime
 `hat: the planner names the mission id grammar`. Três mutantes, provados por
@@ -1098,15 +1119,16 @@ passar o `é` da asserção 2 sob o locale armado; sem o `^`, passa o `sq…` da
 
 ## Medição do vermelho
 
-Rodado pelo planner em 2026-10-13 às 14:38, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
-`kaizen/20261012`, head `a3d7b90` mais a fronteira do título do checklist da 8ª rodada), sobre o
-checkpoint **final**. É a oitava medição: as anteriores (2026-10-12 20:53, 2026-10-13 05:02, 07:53,
-08:12, 09:59, 11:53 e 14:10) foram refeitas porque o Check do I9 mudou, de `3 1` para `4 1` (D13),
-para `5 1` (D14), para `7 1` (D15), para `11 1` (D16), para `13 1` (a fronteira do id, 6ª rodada),
-para `19 1` (D18) e para `20 1` (a fronteira do título, 8ª rodada), e porque a D17 trouxe um
-incremento novo, o I11 (o fecho virou I12).
+Rodado pelo planner em 2026-10-13 às 17:42, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
+`kaizen/20261012`, head `1443cfb` mais os consertos da 9ª rodada), sobre o checkpoint **final**, em
+background e lido até a linha final. É a nona medição: as anteriores (2026-10-12 20:53, 2026-10-13
+05:02, 07:53, 08:12, 09:59, 11:53, 14:10 e 14:38) foram refeitas porque o Check do I9 mudou, de `3 1`
+para `4 1` (D13), para `5 1` (D14), para `7 1` (D15), para `11 1` (D16), para `13 1` (a fronteira do
+id, 6ª rodada), para `19 1` (D18) e para `20 1` (a fronteira do título, 8ª rodada), porque a D17
+trouxe um incremento novo, o I11 (o fecho virou I12), e porque o Check do I3 passou de `1` a `1 1`
+(a contagem de `disable-model-invocation`, 9ª rodada).
 
-O `--check` e o `--red` levaram 9 min 47 s (14:38:12 → 14:47:59): quatro Checks rodam o
+O `--check` e o `--red` levaram 9 min 46 s (17:42:17 → 17:52:03): quatro Checks rodam o
 `check-gates.sh`, de ~130 s nesta máquina.
 
 ```text
@@ -1116,7 +1138,7 @@ $ bash tests/check-checkpoint.sh --check docs/handoffs/20261012-a-rota-da-qa/che
 $ bash tests/check-checkpoint.sh --red docs/handoffs/20261012-a-rota-da-qa/checkpoint.md
   ok    checkpoint.md: I1 is red at HEAD (prints '0 0', wants '1 1')
   ok    checkpoint.md: I2 is red at HEAD (prints '0 0', wants '1 1')
-  ok    checkpoint.md: I3 is red at HEAD (prints '0', wants '1')
+  ok    checkpoint.md: I3 is red at HEAD (prints '0 4', wants '1 1')
   ok    checkpoint.md: I4 is red at HEAD (prints '0', wants '4')
   ok    checkpoint.md: I5 is red at HEAD (prints '0', wants '1')
   ok    checkpoint.md: I6 is red at HEAD (prints '0', wants '3')
@@ -1132,7 +1154,9 @@ $ bash tests/check-checkpoint.sh --red docs/handoffs/20261012-a-rota-da-qa/check
 
 **Como ler:** o vermelho de todos vem da presença do que o incremento acrescenta (uma asserção
 nomeada, um probe, uma frase, uma entrada); nenhum Check é de ausência. Os pares `x y` do I1, I2,
-I9 e I11 juntam dois sensores com `echo`, e cada número é uma contagem ancorada em `^  ok    `. O `--red`
+I9 e I11 juntam dois sensores com `echo`, e cada número é uma contagem ancorada em `^  ok    `. O
+par do I3 junta uma contagem ancorada e a contagem de `disable-model-invocation` no `bin/sdd`, que
+desce de `4` para `1` (só o comentário do `ticket` fica). O `--red`
 prova que nada nasce verde, não que fica verde pelo motivo certo: isso é o TDD de cada incremento e o
 mutante que o acompanha.
 

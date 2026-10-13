@@ -30,7 +30,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   caracteres não cabe: no alvo, o `prisma-cotacao-repository-query.integration.test.ts:420` tem 121, e o
   item ancorou outro arquivo. Falha fechada, mas o consumidor está fora da suíte do kit (D15). Direção:
   isentar do teto a linha cujo excesso é só a âncora, ou o template dizer a saída.
-  Fonte: `docs/handoffs/20261012-a-rota-da-qa/05-verdict.md` — achado `kit:` do `sdd-planner` em
+  Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-planner` em
   `20261010-o-backlog-volta-a-medir`, transportado por `sdd-kaizen` (2026-10-12)
 - [ ] **A regra 2 do check-checkpoint vale por célula** — `tests/check-checkpoint.sh:310` (`count_occ`) — e não pela
   leitura: um `2>&1` na célula obriga todo `grep` dela a ancorar em `^  ok    `, até o que lê um arquivo:
@@ -46,7 +46,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   um caso intermitente anterior à missão devolve a fase ao `sdd-qa`, que gasta o começo descobrindo isso:
   no alvo, o `frete-ipi.spec.ts:319` já tinha caído duas vezes, com os logs de gate em disco. Direção: o
   `GATE_WHY` cita quantas vezes cada caso vermelho já caiu nos logs `gate-qa-e2e` anteriores.
-  Fonte: `docs/handoffs/20261012-a-rota-da-qa/05-verdict.md` — achado `kit:` do `sdd-qa` em
+  Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-qa` em
   `20261005-mascaras-ncm-e-painel`, transportado por `sdd-kaizen` (2026-10-12)
 
 ### Comentário e registro
