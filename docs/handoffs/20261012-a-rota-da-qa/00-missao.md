@@ -91,13 +91,15 @@ Todas binárias, lidas nas linhas `ok` de sensor da suíte:
 
 - **M1:** com interface, charter presente, nenhum relatório da missão e `qa: skipped` no
   `00-missao.md` → `sdd run --dry-run --phase QA` projeta `QA:close=sdd-qa`. Hoje: `QA:exec=<none>`.
-- **M2:** relatório da missão fechado e um `F<n>` `done` sem commit nesse relatório depois dele → projeta
-  `QA:exec=<none>`. Hoje: `QA:close=sdd-qa`.
-- **M3:** `30-handoff-qa.md` commitado antes de um `F<n>` `done` → o `gate_QA` reprova nomeando o F,
-  nos dois caminhos. Hoje passa.
+- **M2:** relatório da missão fechado e um `F<n>` `done` depois do qual o relatório não foi reescrito
+  (nenhum commit, ou um commit revertido em seguida) → projeta `QA:exec=<none>`. Hoje:
+  `QA:close=sdd-qa`.
+- **M3:** `30-handoff-qa.md` commitado antes de um `F<n>` `done`, ou reescrito depois e revertido
+  → o `gate_QA` reprova nomeando o F, nos dois caminhos. Hoje passa.
 - **M4:** K8 ✅ ou ⏳ no checklist do `00-missao.md` (também com uma linha K8 de exemplo `✗` antes
   da real, duas linhas K8 no checklist, o título do checklist renomeado, um título só parecido com
-  o do checklist, como `## Checklist kaizenx`) e nenhuma entrada nova da
+  o do checklist, como `## Checklist kaizenx`, a linha K8 sem a barra inicial, um `\|` escapado na
+  célula do item) e nenhuma entrada nova da
   missão no `KAIZEN_LOG.md` (nada, uma
   linha trocada, um cabeçalho renomeado, mais uma linha citando a missão numa entrada antiga, uma
   linha que cita a missão duas vezes partida em duas, uma entrada nova que não cita a missão, uma
@@ -210,7 +212,11 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
 3. **D3 — a rota do reteste: `exec` no runner e o frescor do handoff, nos dois caminhos**
    (recommended; "nos dois caminhos" confirmado numa segunda pergunta do relay). Porquê: o reteste
    deixa de depender da flag da skill, e o handoff que vai ao PR diz a verdade; custa uma sessão
-   `sdd-qa` a mais por ciclo F.
+   `sdd-qa` a mais por ciclo F. **Refinada na 10ª rodada** (Codex, PR #247, `e0feff3`), sem pergunta
+   nova: "reescrito depois do conserto" é um commit sem merge depois dele que tocou o caminho **e** o
+   caminho em `HEAD` diferente do caminho no conserto. Só a história lia como reescrito um relatório
+   editado e revertido; só o estado líquido lia como reescrito o relatório que um merge traz.
+   Medido: com as duas, sete mundos dão a resposta esperada (detalhe no I3).
 4. **D4 — sob `/sdd-plan` o humano sempre lê e aprova** (recommended). O planner só escreve `auto`
    quando o humano pede no grill; o aceite renderiza o plano no formato superpowers e pergunta
    YES/NO nomeando os ✗ ou "todos ✅"; o aviso final proíbe prosa no campo. Porquê: vira contrato o
@@ -297,7 +303,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     gate sabidamente frouxo). Preço: volta a exigir entradas abertas por `## ` (o kit e o
     `sales_quote` as abrem assim; um log de outro formato reprova até o humano decidir, e o motivo
     diz isso), e o I9 vai a treze asserções e onze mutantes (onze e sete antes da 6ª rodada; vinte e
-    dezessete com a D18 refinada na 8ª).
+    dezessete com a D18 refinada na 8ª; vinte e duas e dezenove na 10ª).
     **Refinada na 6ª rodada** (Codex, PR #247, `a85e6ff`), sem pergunta nova ao humano: "citar a
     missão" é citar o id **inteiro**, com o byte antes e o depois fora de `[A-Za-z0-9_-]`. A citação
     era substring desde a D15 (`grep -cF`), e a D16 a herdou (`index`): uma entrada nova citando só
@@ -342,6 +348,12 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     com `\r` e o com tab abrem a seção; `kaizenx` e `kaizen-software` não. Em 16 mundos de status, o
     leitor de antes falha aberto em 6 e fechado em 4, e este é exato nos 16. O I9 vai a vinte
     asserções e dezessete mutantes.
+    **Refinada na 10ª rodada** (Codex, PR #247, `e0feff3`), sem pergunta nova: a linha K8 é lida como
+    o GFM a renderiza. A barra inicial é opcional (`K8 | … | ✅ |` é a mesma linha) e `\|` é pipe
+    escapado, as duas regras que o `checkpoint_rows` já aplica à tabela do checkpoint; o leitor leva
+    a sua cópia da `escaped_pipe`, pela decisão documentada lá (cada cópia com o seu mutante). O
+    leitor de antes não via a linha sem barra e lia `LOG` como status quando o item tinha `\|`. O I9
+    vai a vinte e duas asserções e dezenove mutantes.
     **A revisão é laço, e aqui a pergunta foi que estado faltava.** A âncora tem três entradas: a
     promessa do plano, a entrada do log e o id. Da 2ª à 6ª rodada só a entrada ganhou estrutura (o
     bloco da D16); a promessa era a primeira linha K8 do arquivo e o id era convenção, as duas regra
@@ -358,7 +370,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
   origin/main`, e de lá `sdd approve 20261012-a-rota-da-qa` e a execução interativa, incremento por
   incremento. O `sdd approve` faz checkout da `branch:` e a cria a partir da atual quando não existe.
 - **Carimbo de mutação:** `./bin/sdd health` uma vez, no worktree, depois do último commit de código
-  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 715 depois dos vinte e oito
+  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 718 depois dos trinta e um
   deste lote (689 medidos depois do I1 no teste de autocontenção): ~40 a 60 min.
 - **Yokoten nos alvos:** mudam `agents/sdd-qa.md`, `sdd-planner.md` e `sdd-docs.md`. No
   `sales_quote`, `sdd install --force` numa branch `chore/kit-<sha>` e PR para a `develop`; os alvos
