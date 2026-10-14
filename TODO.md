@@ -27,6 +27,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Saída humana e cosmética
 
+- [ ] **O `sdd status` manda `sdd run` com o app fora do ar, e a fase fechada volta a pendente** — `bin/sdd:7149`
+  (`run: sdd run`) — com o `30-handoff-qa.md` em `done`, o `gate_QA` refaz a e2e ao vivo; app caído vira `· QA`,
+  `next phase: QA` e `run: sdd run`, embora o motivo diga "no session can start it" (`:1810`). Esse `sdd run`
+  compra uma sessão `QA:close` (opus no alvo) antes de escalar `app-down` (`tests/check-autonomy.sh:2522`), e cada
+  leitura roda a e2e, que no `lighthouse_project` grava uma demanda e gasta um número da sequência. Direção: o
+  status lê o `GATE_APP_DOWN` e diz "fechada, e2e não re-verificável agora: app fora", com o remédio da escalada.
+  — descoberto por `sessão coordenadora` na missão `20261013-amep-alignment-review` (2026-10-14)
+
 ### Comentário e registro
 
 ### Idioma
