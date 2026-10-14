@@ -42,8 +42,8 @@ The judge's window over batches 5 and 6 (`05-verdict.md` beside the spec, `melho
   *prose*, suppressed the `auto` (L2). The acceptance step of `commands/sdd-plan.md` showed only
   paths and one line per increment, and its question named "the criterion that is ✗", which no
   criterion was. In the two grills of 2026-10-12 (L4's, and this mission's up to D8) the human picked
-  the recommended option 16 times out of 16; that was the sample when §3 was decided (this mission
-  went on to 22 of 22 by D21). That count is consistent both with good recommendations and with
+  the recommended option 16 times out of 16; that was the sample when §3 was decided (this mission's
+  own count comes from the reader below, never from this line). That count is consistent both with good recommendations and with
   anchoring, and no artifact records which decision was the recommended one. In L4 the acceptance step itself, where
   the relay re-ran `check-checkpoint.sh --red` before showing the plan, caught a stale
   red-measurement section that the plan carried.
@@ -113,11 +113,20 @@ and writes `auto` only when the human asks for it in the grill. The acceptance s
    its `- [ ]` steps and its Check as command and expected result;
 3. asks YES/NO, naming the ✗ criteria or saying that all are ✅.
 
-The closing warning forbids approval prose in the field, never `auto`. Every grill decision in
-`00-missao.md` is marked `(recommended)` or `(other: …)`, and the acceptance step shows the count:
-that is the datum the worker roadmap needs before anyone decides how much of the grill a planner
-may take alone. `gate_PLAN` does not change. Both values stay valid, and a plan born of
-`sdd kaizen` still never carries `auto`.
+The closing warning forbids approval prose in the field, never `auto`. Every answer the human
+gives in the grill is its own line at the end of its decision in `00-missao.md`,
+`- answer: (recommended)` or `- answer: (other: <the option chosen>)`: one line per answer, so a
+confirmation or a reopened decision adds one, and a note stays in the decision's prose, never
+inside the parentheses. The acceptance step counts only those whole lines inside the decisions
+section, with one `awk` written in `commands/sdd-plan.md` (the section opened by
+`^## Decis[^ ]* do grill`, a line counted by `^ +- answer: \((recommended|other: .+)\)$`), and
+prints `N (recommended) of M`: that is the datum the worker roadmap needs before anyone decides
+how much of the grill a planner may take alone. The first form, a mark inside each decision's
+text, could not be counted: on this mission's own decisions a literal scan found 17
+`(recommended)` and 3 `(other:` for 21 decisions and 23 answers, because the prose that explains
+the tokens matched too, three marks carried a note inside the parentheses and four were split
+across two lines (Codex on PR #247, round 15). `gate_PLAN` does not change. Both values stay
+valid, and a plan born of `sdd kaizen` still never carries `auto`.
 
 ## Discarded
 
@@ -144,6 +153,11 @@ may take alone. `gate_PLAN` does not change. Both values stay valid, and a plan 
   acceptance.** It goes straight at the PLAN-time bottleneck the worker notebook measures (138–372
   min per mission), but it would change the grill's contract on a single data point. This ADR
   measures first.
+- **§3: one mark per decision, at the end of its text.** It was the first form, and it could not
+  be counted (see §3): the prose citing the token matched, notes went inside the parentheses, and
+  a decision asked twice (a confirmation, a reopened decision) held two answers in one mark. Fixing
+  the count written in prose, twice (rounds 8 and 14 of PR #247), did not make the answers
+  countable; the missing state was where the mark lives.
 
 ## Consequences
 
@@ -160,5 +174,7 @@ may take alone. `gate_PLAN` does not change. Both values stay valid, and a plan 
   one leaves the sub-step on `exec`, and `no_work_check` stops the second identical lap: fail closed
   and loud. A report or handoff rewritten but not committed does not count, and that fails closed (one more
   lap, then `no_work_check`). An `F` row whose commit does not resolve is skipped, which
-  `gate_EXEC` makes unreachable in a derived run. The `(recommended)` mark is the planner's own
-  account of the grill: a label, read as a count and never as a gate.
+  `gate_EXEC` makes unreachable in a derived run. The `- answer:` line is the planner's own
+  account of the grill: a label, read as a count and never as a gate. An `- answer:` line inside a
+  code fence in the decisions section is counted, and a mark with trailing whitespace or `\r` is
+  not (the answer drops out of `M`).

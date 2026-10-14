@@ -185,9 +185,10 @@ o `sdd kaizen` roda de um worktree ligado do kit (ADR 0017); a frente F1-P1 espe
 `docs/handoffs/20261012-a-rota-da-qa/05-verdict.md` (5 missões do `sales_quote`, 66 sessões, um harness só).
 Os limites estão escritos no veredito: a fatia anterior é uma missão só, o harness mudou entre as fatias, e
 três das cinco missões fizeram a QA à mão — a lacuna que virou o lote 7 (`20261012-a-rota-da-qa`, ADR
-0018), replanejado com o humano em 22 perguntas (D1–D21; da 13ª à 22ª vieram das rodadas de revisão
-do PR #247, e a D20 foi perguntada duas vezes). O kit descongela no merge do veredito e congela de novo no merge do lote 7 (D11); a
-frente F1-P1 continua esperando.
+0018), replanejado com o humano no grill e nas rodadas de revisão do PR #247; cada resposta é uma
+linha `- answer:` nas decisões do `00-missao.md`, e a contagem sai do leitor da D22 (I6 do
+`01-plano.md`), nunca deste parágrafo. O kit descongela no merge do veredito e congela de novo no
+merge do lote 7 (D11); a frente F1-P1 continua esperando.
 
 ## F4 — Portabilidade para outros repos
 

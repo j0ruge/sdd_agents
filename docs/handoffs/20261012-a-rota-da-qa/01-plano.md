@@ -236,6 +236,18 @@ Lido nesta sessão, sobre `4f16a6d` (a `main` do kit em 2026-10-12) mais o commi
   no fim da última linha do **corpo** → `ok` (é a forma do lote 6, `54e2f18`); dentro da linha
   `Fonte:`, antes do `— descoberto por` → `ok`. O "anexado à `Fonte:` passa" do L2 do alvo vale só
   para item antigo sem descoberto-por.
+- **A marca da D22 (15ª rodada do PR #247, medida em 2026-10-14 no `mawk` 1.3.4).** Na forma de
+  antes, a varredura literal da seção de decisões deste `00-missao.md` dava 17 `(recommended)` e 3
+  `(other:` para 21 decisões e 23 respostas: a prosa que explica os tokens contava junto, e das 21
+  primeiras marcas 14 eram o token exato, 3 levavam nota dentro dos parênteses e 4 se partiam em
+  duas linhas. O leitor do I6 conta só a linha inteira dentro da seção. Num mundo descartável não
+  contam: a prosa com `(recommended)` no meio, a marca `(recommended; nota)`, a `- answer:` sem
+  recuo, a `(other: )x`, os dois formatos de placeholder e uma linha `- answer:` de outra seção;
+  contam a `   - answer: (other: x)`, a recuada com 4 espaços e a `(other: …)` com parênteses
+  dentro. A mesma resposta sob o `mawk` em `C` e em `pt_BR.UTF-8` e sob o `busybox awk` (não há
+  `gawk` nesta máquina). O template de hoje e o template com o placeholder novo do I7 dão
+  `0 (recommended) of 0`. O número desta missão sai do comando, nunca deste plano; o da 15ª rodada
+  está na nota dela, no `checkpoint-notas.md`.
 
 ## Arquitetura da mudança
 
@@ -644,7 +656,23 @@ pergunta, nesta ordem:
    - cada incremento como `### Task <ID>`, com **Files:**, passos `- [ ]` (comando e resultado
      esperado) e o Check;
    - a tabela PLAN-AUTO e as pendências;
-   - a contagem das decisões: `N (recommended) of M`.
+   - a contagem das respostas do grill, `N (recommended) of M`, que sai do **leitor da D22**,
+     escrito literal na seção num bloco `bash` (é ele que o probe lê):
+
+     ```bash
+     awk '/^## / { s = /^## Decis[^ ]* do grill/ } s && /^ +- answer: \((recommended|other: .+)\)$/ { m++; if (/^ +- answer: \(recommended\)$/) n++ } END { print n + 0 " (recommended) of " m + 0 }' <HANDOFF_DIR>/<mission>/00-missao.md
+     ```
+
+     `M` é o número de linhas inteiras `- answer: (recommended)` ou `- answer: (other: …)` dentro da
+     seção de decisões do grill; `N`, as `(recommended)` entre elas. Nada fora dessas linhas conta:
+     a prosa que cita o token, uma nota dentro dos parênteses, uma marca partida em duas linhas, uma
+     linha `- answer:` sem recuo (fecharia a lista numerada), o placeholder do template e qualquer
+     outra seção. A seção é aberta por `^## Decis[^ ]* do grill`, em ASCII, porque o
+     `check-lang.sh` reprova o `õ` do título dentro do `commands/` (medido num clone: o título
+     escrito no `commands/sdd-plan.md` dá `FAIL  Portuguese outside the allowlist`, o leitor acima
+     não dá `FAIL` nenhum). Logo abaixo do bloco, a seção diz os dois limites: uma linha
+     `- answer:` dentro de cerca de código na seção de decisões conta, e uma marca com espaço ou
+     `\r` no fim não conta (a resposta some do `M`).
 
    Mantenha a frase `first show the human what they are approving`.
 3. **Perguntar.** A pergunta YES/NO nomeia cada critério PLAN-AUTO ✗, ou diz que todos estão ✅ e a
@@ -663,7 +691,11 @@ os nomes exatos:
 - `command: /sdd-plan renders the plan and re-runs --check and --red before the YES or NO`: exige
   `check-checkpoint.sh --check`, `--red`, `Goal`, `Architecture`, `Tech Stack` e `**Files:**`;
 - `command: /sdd-plan names every unmet criterion, or says all are met, and counts the recommended
-  answers`: exige `(recommended)` e a frase que cobre o caso todo ✅;
+  answers`: exige a frase que cobre o caso todo ✅ e o leitor da D22 literal, por `grep -qF` de três
+  pedaços na seção: `/^## Decis[^ ]* do grill/`, `/^ +- answer: \((recommended|other: .+)\)$/` e
+  `" (recommended) of "`. Um `(recommended)` solto na prosa não o satisfaz; a sabotagem tira o `^`
+  ou o `$` da regex da linha, e troca a âncora da seção por `/^## /`, e o probe fica vermelho em
+  cada uma;
 - `command: /sdd-plan forbids approval prose in aprovacao, never auto`: exige a frase nova do aviso.
 
 Vermelhos antes da prosa. Passada de sabotagem de cada frase nas notas. O par antigo
@@ -677,10 +709,16 @@ probe é o sensor inteiro, como o de `command_approval_probes` declara.
 
 **O quê:**
 - `agents/sdd-planner.md`:
-  - **§ 1, a marca da decisão.** Cada decisão do grill no `00-missao.md` termina com
-    `(recommended)` quando o humano escolheu a opção marcada como recomendada, ou com
-    `(other: <o texto da opção escolhida>)` quando escolheu outra. O aceite conta as marcas
-    (ADR 0018 §3).
+  - **§ 1, a marca de cada resposta (D8 na forma da D22).** Logo depois do parágrafo "Record the
+    decisions in `00-missao.md`", um parágrafo novo, com estas frases (o probe lê os quatro
+    pedaços em itálico; o itálico é só deste plano, o arquivo leva o texto sem ele):
+    "**Mark each answer.** Every answer the human gives becomes its own line at the end of its
+    decision in `00-missao.md`, indented under it: *`- answer: (recommended)`* when they chose the
+    option you marked recommended, *`- answer: (other: <the option they chose>)`* when they chose
+    another. *One line per answer*: a question asked twice (a confirmation, a reopened decision)
+    gets two lines. A note *never goes inside the parentheses*; it goes in the decision's prose.
+    The acceptance step of `/sdd-plan` counts only these whole lines inside the decisions section,
+    so no count of answers is written by hand anywhere in the plan (ADR 0018 §3)."
   - **§ 1, a reestimativa (i).** O aviso de trabalho longo leva uma estimativa. O planner roda
     `date` ao começar, e ao chegar a 2× a estimativa para no próximo ponto seguro e devolve uma
     linha: o que fez, o que falta, a nova estimativa. Medido no L4: 30 min estimados, ~2h55 reais.
@@ -695,11 +733,24 @@ probe é o sensor inteiro, como o de `command_approval_probes` declara.
     regra inegociável de `:251` acompanha.
 - `commands/sdd-plan.md`, seção `## Relaying the grill to the human`, bullet "Long work" (`:99`): a
   mesma reestimativa a 2×, vista do lado do relay.
-- `templates/missao.md`, `## Decisões do grill`: o placeholder passa a
-  `1. <decisão + porquê em uma linha> (recommended | other: <a opção escolhida>)`.
+- `templates/missao.md`, `## Decisões do grill`: o placeholder `1. <decisão + porquê em uma linha>`
+  ganha a linha de baixo, e fica:
+
+  ```text
+  1. <decisão + porquê em uma linha>
+     - answer: <(recommended), ou (other: <a opção escolhida>); uma linha por resposta>
+  ```
+
+  O `<` logo depois de `answer: ` faz o leitor da D22 não contar o placeholder (medido: um
+  `00-missao.md` recém-copiado do template dá `0 (recommended) of 0`). Na lista numerada, a linha
+  `- answer:` recua 3 espaços sob `1.` a `9.` e 4 sob `10.` em diante, senão o GFM fecha a lista;
+  o leitor aceita qualquer recuo (`^ +`).
 - `tests/check-hat.sh`:
   - `planner_agent_probes` (`:392`) ganha três pares, cada um lendo a **sua** seção (§ 1, § 2, § 6):
-    - `hat: the planner marks each grill decision (recommended) or (other)`;
+    - `hat: the planner marks each grill decision (recommended) or (other)`: o nome fica (o Check
+      conta por ele), e o probe exige na § 1, por `grep -qF`, os quatro pedaços em itálico acima:
+      `- answer: (recommended)`, `- answer: (other: <the option they chose>)`,
+      `One line per answer` e `never goes inside the parentheses`; a sabotagem tira cada um;
     - `hat: the planner reads the naming rules of the target before it names a file`;
     - `hat: the planner leaves aprovacao empty under /sdd-plan unless the human asks for auto`.
   - `command_relay_probes` (`:349`) ganha `command: /sdd-plan re-estimates long work that runs past
@@ -1339,8 +1390,8 @@ provados por `--only <slug> check-gates.sh`:
   medição" registra o congelamento da D11: o kit congela no merge do lote 7, e a janela abre no
   primeiro carimbo de alvo depois dele.
 - `.claude/rules/anatomia-do-agente.md` § 7 (o aceite renderizado, `aprovacao:` vazio sob
-  `/sdd-plan`, a contagem, escrita com o token literal `(recommended)`, como no `N (recommended) of
-  M` do aceite). ⚠️ `.claude/` é caminho sensível: em sessão interativa o harness pode
+  `/sdd-plan`, a contagem das linhas `- answer:` pelo leitor da D22, escrita com o token literal
+  `(recommended)`, como no `N (recommended) of M` do aceite). ⚠️ `.claude/` é caminho sensível: em sessão interativa o harness pode
   pedir permissão; nunca contorne por Bash.
 - A gaveta (`docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md`): a linha F3 e o § F3 "Hoje"
   registram o congelamento da D11 com a frase **O kit congelou no merge do lote 7** (o molde é o do
