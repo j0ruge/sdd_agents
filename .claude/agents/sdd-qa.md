@@ -96,6 +96,14 @@ becomes a permanent sensor in CI:
 - run `E2E_CMD` and **watch the spec fail** while the bug is present. A spec that passes with the
   bug in place is not a sensor, it is decoration.
 
+A bug no agent here closes (`Closable by: human` or `deferred`, § 5.1) still gets its spec, which
+reproduces the finding — but a red spec would take `E2E_CMD` down in the gate and spend
+`QA_MAX_ITER` on a bug nobody in this pipeline can fix. Call Playwright's `test.fail()`
+**after the preconditions**, right before the step that exposes the bug: the preconditions fail
+red when the setup breaks, the spec passes while the bug is there, and it fails the day the fix
+lands, which is the day to remove the marker. `test.fixme()` and `test.skip()` do not run the spec at all, so
+they are decoration. Name the bug file in a comment beside the marker.
+
 A finding that is **not** about a journey (pure logic, a calculation edge, a contract) becomes a
 unit/integration test in the `TEST_CMD` suite, not an e2e spec. The criterion is where the defect
 lives, not where it was found.

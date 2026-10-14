@@ -332,6 +332,15 @@ hat_promise_probes() {
      && grep -qF 'this session never invokes the `qa-*` skills, not even through' <<< "$q4"; then
     pass "hat: sdd-qa leaves the retest to the runner and never invokes the qa-* skills itself"
   else fail "hat: sdd-qa no longer leaves the retest to the runner, or may invoke the qa-* skills itself"; fi
+  # Item (f) of 20261012-a-rota-da-qa: the spec of a bug no agent here closes (`Closable by: human`
+  # or `deferred`) used to stay red, take E2E_CMD down in gate_QA and spend QA_MAX_ITER on a bug
+  # nobody could fix; L3 of sales_quote used test.fail() called after the preconditions, so a broken
+  # setup still fails. Read in § 3, where the spec is born.
+  local q3
+  q3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$qa")"
+  if grep -qF 'test.fail()' <<< "$q3" && grep -qF 'after the preconditions' <<< "$q3"; then
+    pass "hat: sdd-qa writes the spec of a bug no agent closes with test.fail() after its preconditions"
+  else fail "hat: sdd-qa no longer says how the spec of a bug no agent closes stays a sensor without taking E2E_CMD down (test.fail() after the preconditions)"; fi
 }
 
 # --- /sdd-plan: the approval is the human's answer to a YES/NO question -------------------------
