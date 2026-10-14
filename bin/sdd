@@ -1528,8 +1528,9 @@ function placeholder(s,   u, w) {
 # Through ENVIRON and never `awk -v`, for gate_REVIEW's reason: -v runs escape sequences.
 placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit placeholder(ENVIRON["SDD_PLACEHOLDER_TEXT"]) ? 0 : 1 }'; }
 
-# FENCE_AWK — the one definition of a fenced code block, for the runner's three fence readers:
-# bug_decision_recorded, the genre extractor of gate_QA and the proposed-text reader of gate_DOCS.
+# FENCE_AWK — the one definition of a fenced code block, for the runner's four fence readers:
+# bug_decision_recorded, the genre extractor of gate_QA, and the proposed-text reader and the
+# KAIZEN_LOG entry reader of gate_DOCS.
 # A fence opens on a run of three or more backticks or tildes, and closes only on a line of the SAME
 # character, at least as long, with nothing but blanks after it (CommonMark). Toggling on any fence
 # line let a `~~~` inside a backtick fence, a shorter run or a ```bash "close" it: gate_DOCS was
@@ -2202,6 +2203,77 @@ gate_DOCS() {
     # PR #57). A reason over a countable set carries the count.
     GATE_WHY="45-docs.md has $pending_n area(s) pending in the drift checklist (the first with Status '$pending_cell') — every row needs ✅ (with a hash) or a justified n/a"
     return 1
+  fi
+  # K8 against the DOCS phase (ADR 0018 §4; D7, D13, D16, D23 of 20261012-a-rota-da-qa). In L4 of
+  # sales_quote the K8 row promised the KAIZEN_LOG entry to this phase, 45-docs.md marked it n/a and
+  # the operator wrote it by hand after the PR: this gate never read the plan. Placed before the ⛔
+  # block so it holds both returns below.
+  #
+  # Only the KEY says "no" (D23): the literal `kaizen_log: skipped` in the frontmatter of 00-missao.md,
+  # read by `frontmatter`, the reader qa_substep uses for `qa: skipped` (one line, by $( ), no global).
+  # Its owner is sdd-planner, with the human in the room. Literal because "no" is the one side that
+  # fails open. The K8 row of the checklist is prose and is not read: the 16th round of PR #247
+  # measured the earlier reader (the row of the template with ✗) on a real CommonMark parser, and it
+  # read "no" in 9 of 13 worlds where the rendered Markdown said otherwise — reading Markdown in
+  # pieces does not close, so the "no" left the Markdown.
+  #
+  # Otherwise the mission branch must add an ENTRY (D16): a `## ` block of KAIZEN_LOG.md whose heading
+  # and one line citing the mission are both new in the diff of each merge-base to HEAD. The base
+  # already cites the mission for every mission born of the kaizen loop, so "absent on the base"
+  # would refuse it forever; the heading alone missed the rename, the citation alone grew with no
+  # entry, "a commit touched it" passed a revert. Only HEAD's lines (` ` and `+`) enter, so a `-## `
+  # deleted between a new heading and its new citation does not split the block; every heading
+  # outside a fence REASSIGNS hnew, so "new" never leaks into the next entry; before the first `## `
+  # nothing counts, and the patch header needs no rule (`+++ b/KAIZEN_LOG.md` cites nothing).
+  # Citing is the WHOLE id (cites_id): the bytes around an occurrence fall outside [A-Za-z0-9_-], the
+  # class of every id resolve_mission accepts, looked up literally with index() and to the LAST
+  # occurrence, so a longer id earlier on the line cannot hide the citation. `s = " " s` is the mawk
+  # trap: substr(s, 0, 1) returns the id's own first digit, and an id at column 1 would be refused.
+  # The owner of the entry is sdd-docs (KAIZEN_LOG.md is in its writes:), or an EXEC increment.
+  # DECLARED RESIDUES: renaming an old `## ` and adding a citation under it passes — its honest twin
+  # (delete the old entry, write a new one reusing the text) leaves KAIZEN_LOG.md identical byte for
+  # byte (measured, cmp), and no reader of base and HEAD separates them; a log whose entries do not
+  # open with `## ` is refused until the human decides; a line of the new entry equal to a line
+  # deleted elsewhere may come out as context and refuse (fails closed); -U1000000 caps the context
+  # at a million lines; "each merge-base" has no fixture world (it takes two diverging bases); an
+  # empty id would cite every line (index(s, "") is 1 in mawk), unreachable because resolve_mission
+  # dies on an empty name; `.` and a byte >= 0x80 count as a boundary, exact because no id can hold
+  # them. No base, or an empty range (HEAD on the base, merged, unrelated): today's answer, the
+  # shape of mission_qa_report.
+  if [ "$(frontmatter "$MISSION_DIR/00-missao.md" kaizen_log)" != skipped ]; then
+    local -a k8_nots=() k8_bases=()
+    local k8_c k8_b k8_patch
+    mapfile -t k8_nots < <(mission_base_refs)
+    for k8_c in ${k8_nots[@]+"${k8_nots[@]}"}; do
+      k8_b="$(git -C "$REPO_ROOT" merge-base HEAD "$k8_c" 2>/dev/null || true)"
+      [ -z "$k8_b" ] || k8_bases+=("$k8_b")
+    done
+    if [ "${#k8_bases[@]}" -gt 0 ] \
+        && [ -n "$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not "${k8_nots[@]}" 2>/dev/null || true)" ]; then
+      for k8_b in "${k8_bases[@]}"; do
+        k8_patch="$(git -C "$REPO_ROOT" diff-tree -p --no-color --no-ext-diff -U1000000 "$k8_b" HEAD -- KAIZEN_LOG.md 2>/dev/null || true)"
+        if ! SDD_K8_MISSION="$MISSION" awk "$FENCE_AWK"'
+          function cites_id(s, m,   p, i) {
+            s = " " s
+            while ((i = index(substr(s, p + 1), m)) > 0) {
+              p += i
+              if (substr(s, p - 1, 1) !~ /[A-Za-z0-9_-]/ && substr(s, p + length(m), 1) !~ /[A-Za-z0-9_-]/) return 1
+            }
+            return 0
+          }
+          BEGIN { m = ENVIRON["SDD_K8_MISSION"] }
+          { t = substr($0, 1, 1) }
+          t != " " && t != "+" { next }
+          { l = substr($0, 2); fence_line(l) }
+          !fence && l ~ /^## / { hnew = (t == "+") }
+          t == "+" && hnew && cites_id(l, m) { found = 1 }
+          END { exit !found }
+        ' <<< "$k8_patch"; then
+          GATE_WHY="00-missao.md does not declare kaizen_log: skipped in its frontmatter (the K8 row of the checklist is prose and dispenses nothing) and the mission branch adds no KAIZEN_LOG.md entry of its own — a '## ' heading new in the branch whose block has a new line citing $MISSION as a whole id (a longer id that contains it does not count); write the entry, citing the mission, with the before and after the plan names, or declare kaizen_log: skipped with the human"
+          return 1
+        fi
+      done
+    fi
   fi
   # A ⛔ passes only when the proposed-text section NAMES its document: the lines after EVERY
   # `<!-- sdd:proposed -->` LINE — the marker alone on it, outside a code fence: quoted in a table

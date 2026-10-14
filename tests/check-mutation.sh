@@ -823,6 +823,48 @@ mut_QA_fix_ahead_old_content_ok() {           # a pre-fix version restored after
 mut_QA_fix_ahead_any_carrier() {              # past the merge, a later carrier of the bytes counts
   sed -i '/^qa_rewritten_after() {/,/^}/ s@\[ "\$(wc -w <<< "\$rest")" -eq 1 \]; return$@[ "$(wc -w <<< "$rest")" -eq 1 ] || continue; return 0@' "$1"
 }
+# K8 against the DOCS phase (ADR 0018 §4): one mutant per decision of the entry reader and per half
+# of the key. Each was sabotaged on the prototype over this fixture's base and changed the phase in
+# exactly the worlds of check-gates.sh its comment names (the `kaizen-log:` assertions).
+mut_DOCS_k8_ignored() {                       # worlds 1–7, 9, 12, 14–16, 18, 19
+  sed -i '/^gate_DOCS() {/,/^}/ s@^  if \[ "\$(frontmatter "\$MISSION_DIR/00-missao.md" kaizen_log)" != skipped \]; then$@  if false; then@' "$1"
+}
+mut_DOCS_k8_presence_is_enough() {            # the empty tree as the base: every line is new
+  sed -i '/^gate_DOCS() {/,/^}/ s@-U1000000 "\$k8_b" HEAD@-U1000000 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD@' "$1"
+}
+mut_DOCS_k8_reads_deleted_lines() {           # world 8: a deleted `-## ` splits the block
+  sed -i '/^gate_DOCS() {/,/^}/ s@t != " " && t != "+" { next }@t != " " \&\& t != "+" \&\& t != "-" { next }@' "$1"
+}
+mut_DOCS_k8_heading_not_new() {               # worlds 4–7: a new citation in an old entry counts
+  sed -i '/^gate_DOCS() {/,/^}/ s@t == "+" && hnew && cites_id@t == "+" \&\& cites_id@' "$1"
+}
+mut_DOCS_k8_cite_not_new() {                  # world 3: a renamed heading over an old citation counts
+  sed -i '/^gate_DOCS() {/,/^}/ s@t == "+" && hnew && cites_id@hnew \&\& cites_id@' "$1"
+}
+mut_DOCS_k8_block_not_reset() {               # world 6: "new" leaks from one entry into the next
+  sed -i '/^gate_DOCS() {/,/^}/ s@!fence && l ~ /^## / { hnew = (t == "+") }@!fence \&\& l ~ /^## / \&\& t == "+" { hnew = 1 }@' "$1"
+}
+mut_DOCS_k8_fence_blind() {                   # world 7: a heading inside a code fence opens a block
+  sed -i '/^gate_DOCS() {/,/^}/ s@!fence && l ~ /^## /@l ~ /^## /@' "$1"
+}
+mut_DOCS_k8_cite_no_left_boundary() {         # world 9: `revisita-<id>` cites the mission
+  sed -i '/^gate_DOCS() {/,/^}/ s@substr(s, p - 1, 1) !~ /\[A-Za-z0-9_-\]/ && @@' "$1"
+}
+mut_DOCS_k8_cite_no_right_boundary() {        # world 9: `<id>-extra` and `<id>s` cite the mission
+  sed -i '/^gate_DOCS() {/,/^}/ s@ && substr(s, p + length(m), 1) !~ /\[A-Za-z0-9_-\]/@@' "$1"
+}
+mut_DOCS_k8_cite_first_only() {               # world 10: the whole id after three longer ones is missed
+  sed -i '/^gate_DOCS() {/,/^}/ s@while ((i@if ((i@' "$1"
+}
+mut_DOCS_k8_cite_unpadded() {                 # world 11: the mawk trap, an id at column 1 is refused
+  sed -i '/^gate_DOCS() {/,/^}/ { /^ *s = " " s$/d; }' "$1"
+}
+mut_DOCS_k8_key_ignored() {                   # worlds 13 and 17: the key never dispenses
+  sed -i '/^gate_DOCS() {/,/^}/ s@kaizen_log)" != skipped \]; then@kaizen_log)" != skipped ] || true; then@' "$1"
+}
+mut_DOCS_k8_key_loose() {                     # worlds 14 and 18: any non-empty value dispenses
+  sed -i '/^gate_DOCS() {/,/^}/ s@kaizen_log)" != skipped \]; then@kaizen_log)" = "" ]; then@' "$1"
+}
 mut_QA_handoff_freshness_ignored() {          # a handoff older than the last done F<n> passes gate_QA
   sed -i '/^gate_QA() {/,/^}/ s@^  if \[ -n "\$ahead" \]; then$@  if false; then@' "$1"
 }
@@ -6198,6 +6240,19 @@ CATALOG=(
   QA_fix_ahead_any_carrier
   QA_fix_ahead_reads_the_directory
   QA_handoff_freshness_ignored
+  DOCS_k8_ignored
+  DOCS_k8_presence_is_enough
+  DOCS_k8_reads_deleted_lines
+  DOCS_k8_heading_not_new
+  DOCS_k8_cite_not_new
+  DOCS_k8_block_not_reset
+  DOCS_k8_fence_blind
+  DOCS_k8_cite_no_left_boundary
+  DOCS_k8_cite_no_right_boundary
+  DOCS_k8_cite_first_only
+  DOCS_k8_cite_unpadded
+  DOCS_k8_key_ignored
+  DOCS_k8_key_loose
   QA_report_ignores_untracked
   QA_report_range_no_origin
   QA_report_range_no_upstream

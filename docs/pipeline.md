@@ -486,6 +486,16 @@ Reading the column, and not the whole file, is deliberate: an earlier version gr
 the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is exactly what
 `sdd-docs` is required to do.
 
+**The `KAIZEN_LOG.md` entry the plan promised** ([ADR 0018 §4](adr/0018-the-qa-route-and-the-read-plan.md)).
+Unless the frontmatter of `00-missao.md` declares the literal `kaizen_log: skipped` (decided with the
+human in the grill; the K8 row of the checklist is prose and dispenses nothing), the mission branch
+must add an **entry** of its own: a `## ` block of `KAIZEN_LOG.md` whose heading and one line citing
+the mission's whole id are both new in the diff of each merge-base to HEAD. The base already cites
+every mission born of the kaizen loop, so a new citation in an old entry, a renamed heading, a
+heading inside a code fence, a longer id that contains the mission's and a reverted entry do not
+count. No base, or an empty range (the mission on the base, or merged), gives the answer of before.
+The owner is `sdd-docs` (`KAIZEN_LOG.md` is in its `writes:`), or an EXEC increment that wrote it.
+
 ### PR — confirmed by `gh`, not by the file
 
 **Passes when:** `50-pr.md` exists with `pr_url:` **and** `gh pr view <url>` confirms the PR

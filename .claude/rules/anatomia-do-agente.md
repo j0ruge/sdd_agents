@@ -138,6 +138,10 @@ leitores; reescrito = bytes que nenhuma versão até o conserto teve, trazidos p
 é merge), e o `sdd-qa` deixa de chamar as skills `qa-*` pela ferramenta `Skill`.
 O `gate_QA` cobra o frescor pela mesma `qa_fix_ahead_of`, nos dois caminhos: um
 `30-handoff-qa.md` não reescrito depois do último `F<n>` feito reprova, nomeando o F.
+E o `gate_DOCS` passou a ler o plano: sem o literal `kaizen_log: skipped` no frontmatter do
+`00-missao.md` (a linha K8 do checklist é prosa), a branch tem de acrescentar ao `KAIZEN_LOG.md` uma
+entrada — um bloco `## ` cujo título e uma linha que cita o id inteiro da missão são novos no diff
+de cada merge-base (ADR 0018 §4); o dono é o `sdd-docs`.
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas

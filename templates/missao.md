@@ -8,6 +8,7 @@ aprovacao: <auto | humano-YYYY-MM-DD>
 adr: <none | TBD | docs/adr/NNNN-slug.md — allocate it with `sdd adr new --slug <s> --spec <este arquivo>`; sob ADR_CHECK=block o gate de PLAN recusa vazio, TBD e este placeholder>
 ddd: <aplicado | n/a>
 qa: <vazio, ou skipped quando o grill decide que o diff não chega ao usuário — só o literal skipped desvia a rota da QA; a justificativa vai nas Decisões do grill>
+kaizen_log: <vazio, ou skipped quando o K8 é ✗ com o humano — só o literal skipped dispensa a entrada do KAIZEN_LOG.md>
 ---
 
 # Missão — <título>
@@ -48,6 +49,8 @@ sozinho. Qualquer ✗ → `aprovacao` fica vazio e o runner para pedindo aprova�
 | f | `adr:` é uma decisão — um caminho, ou o literal `none` (alocado por `sdd adr new`) | <✅/✗> | <qual ADR, ou por que `none`> |
 
 ## Checklist kaizen (`kaizen-software`)
+
+> O K8 desta tabela é prosa: quem dispensa a entrada do KAIZEN_LOG.md é só o literal kaizen_log: skipped no frontmatter, decidido com o humano no grill.
 
 | # | Item | Status | Nota |
 |---|---|---|---|

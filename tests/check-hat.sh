@@ -310,6 +310,17 @@ hat_promise_probes() {
   if grep -qF 'A comment in the code belongs to the code' "$dc" && grep -qE 'R<n>.*batch' "$dc"; then
     pass "hat: the docs hat leaves a code comment to the code's own phase (R<n>, a proposed-text row, or the TODO file)"
   else fail "hat: sdd-docs no longer says who owns a drifted code comment"; fi
+  # ADR 0018 §4 (D7, D16, D23): gate_DOCS demands the KAIZEN_LOG entry unless the plan's frontmatter
+  # says `kaizen_log: skipped`, and the entry is a block with its own `## ` citing the whole id. The
+  # hat reads the key in its § 3 table row; L4 marked the entry n/a over a K8 that promised it.
+  local d3 d3row
+  d3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$dc")"
+  d3row="$(grep -E '^\| `KAIZEN_LOG\.md` \|' <<< "$d3" || true)"
+  if grep -qF 'kaizen_log: skipped' <<< "$d3row" \
+     && grep -qF 'opens with its own `## ` heading' <<< "$d3" \
+     && grep -qF "cites the mission's id" <<< "$d3"; then
+    pass "hat: the docs hat reads kaizen_log of the plan before it marks KAIZEN_LOG, and writes the entry as a block citing the id"
+  else fail "hat: sdd-docs no longer reads kaizen_log of the plan before it marks KAIZEN_LOG, or no longer says the entry opens with its own heading and cites the whole id"; fi
   # ADR 0018 §1: the plan declares `qa: skipped` and the runner sends the phase straight to this
   # hat, with an interface; the hat CONFIRMS the declaration against the real diff and stops the line
   # with `blocked` when the diff reaches the user. The remedy names the handoff's removal: a blocked

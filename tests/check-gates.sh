@@ -2811,6 +2811,139 @@ git add -A && git commit -qm "chore: docs"
 assert_phase "drift checklist complete" "PR"
 assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
 
+# --- K8 against the DOCS phase: the KAIZEN_LOG entry the plan promised (ADR 0018 §4) -----------
+# In L4 of sales_quote the K8 row promised the KAIZEN_LOG entry to the DOCS phase, the 45-docs.md
+# marked it n/a, and the operator wrote it by hand after the PR: gate_DOCS never read the plan. Now,
+# unless the frontmatter of 00-missao.md says the literal `kaizen_log: skipped` (D23), the mission
+# branch has to add an ENTRY: a `## ` block whose heading and one line citing the mission's whole id
+# are both new in the diff of each merge-base to HEAD (D16). The base already cites the mission, as
+# it does for every mission born of the kaizen loop, twice on one line (world 5 needs it) and with
+# a line that does not cite it (worlds 2 and 4 use it). Each world is one commit on k8_start and goes
+# back with a hard reset — never accumulate them: world 3 followed by world 4 is the declared residue,
+# and it passes. Worlds 1–12 touch only KAIZEN_LOG.md; 13–19 only 00-missao.md.
+k8_main_before="$(git rev-parse HEAD)"
+k8_old_entry() {
+  printf '## 2026-01-01 — The verdict\n\n'
+  printf 'Verdict in `docs/handoffs/%s/05-verdict.md`; plan in `docs/handoffs/%s/01-plano.md`.\n' "$MISSION" "$MISSION"
+  printf 'Another line of the verdict.\n'
+}
+k8_base_log() { printf '# KAIZEN_LOG\n\n---\n\n'; k8_old_entry; printf '\n---\n'; }
+k8_with_new() { printf '# KAIZEN_LOG\n\n---\n\n## %s\n\n%s\n\n---\n\n' "$1" "$2"; k8_old_entry; printf '\n---\n'; }
+k8_base_log > KAIZEN_LOG.md
+git add -A && git commit -qm "chore: the base KAIZEN_LOG already cites the mission"
+git checkout -q -b missao/k8-entry
+# The mission's branch, never `main`: with I12, a mission whose branch: is the base and whose
+# frontmatter has the key without `skipped` is refused for the base BEFORE the anchor, and worlds
+# 14, 15 and 18 would read DOCS for the wrong reason.
+sed -i 's|^branch: main$|branch: missao/k8-entry|' "$MDIR/00-missao.md"
+printf '\n## Checklist kaizen (`kaizen-software`)\n\n| # | Item | Status | Note |\n|---|---|---|---|\n| K8 | KAIZEN_LOG record | ✅ | |\n' \
+  >> "$MDIR/00-missao.md"
+git add -A && git commit -qm "chore: the mission promises K8"
+k8_start="$(git rev-parse HEAD)"
+k8_world() { # k8_world <builder> — one commit on k8_start
+  git reset -q --hard "$k8_start"
+  "$@"
+  if [ -n "$(git status --porcelain)" ]; then git add -A && git commit -qm "chore: a K8 world"; fi
+}
+k8_more_cite() { k8_base_log | sed "s/^Another line of the verdict\.\$/&\nSee also \`$MISSION\`./"; }
+k8_world :
+assert_phase "kaizen-log: a base that already cites the mission is not the entry" "DOCS"
+assert_why   "K8 names the missing KAIZEN_LOG entry" "DOCS" "adds no KAIZEN_LOG.md entry of its own"
+k8_w2() { k8_base_log | sed 's/^Another line of the verdict\.$/Another line of the verdict, rewritten./' > KAIZEN_LOG.md; }
+k8_world k8_w2
+assert_phase "kaizen-log: a one-line edit with no new entry keeps DOCS blocked" "DOCS"
+k8_w3() { k8_base_log | sed 's/^## 2026-01-01 — The verdict$/## 2026-01-01 — The verdict (renamed)/' > KAIZEN_LOG.md; }
+k8_world k8_w3
+assert_phase "kaizen-log: renaming an old heading is not a new entry" "DOCS"
+k8_w4() { k8_more_cite > KAIZEN_LOG.md; }
+k8_world k8_w4
+assert_phase "kaizen-log: another line citing the mission in an old entry is not a new entry" "DOCS"
+k8_w5() { k8_base_log | sed 's/; plan in /;\nplan in /' > KAIZEN_LOG.md; }
+k8_world k8_w5
+assert_phase "kaizen-log: splitting an old line that cites the mission twice is not a new entry" "DOCS"
+k8_w6() { k8_with_new '2026-01-02 — Batch' 'An entry with no citation.' | sed "s/^Another line of the verdict\.\$/&\nSee also \`$MISSION\`./" > KAIZEN_LOG.md; }
+k8_world k8_w6
+assert_phase "kaizen-log: a new entry that does not cite the mission keeps DOCS blocked" "DOCS"
+k8_w7() {
+  k8_base_log | awk -v c="See \`$MISSION\`." '{ print } /^Another line of the verdict\.$/ { print "```"; print "## 2026-01-02 — example"; print c; print "```" }' > KAIZEN_LOG.md
+}
+k8_world k8_w7
+assert_phase "kaizen-log: a heading inside a code fence is not an entry" "DOCS"
+k8_w8() {
+  { printf '# KAIZEN_LOG\n\n## 2026-01-02 — Batch\n\n---\n\n'
+    printf 'Verdict in `docs/handoffs/%s/05-verdict.md`; plan in `docs/handoffs/%s/01-plano.md`.\n' "$MISSION" "$MISSION"
+    printf 'Another line of the verdict.\nMission `%s`: before 1, after 2.\n\n---\n' "$MISSION"
+  } > KAIZEN_LOG.md
+}
+k8_world k8_w8
+assert_phase "kaizen-log: a new entry written over a deleted old heading lets DOCS pass" "PR"
+k8_w9() { k8_with_new '2026-01-02 — Batch' "See \`$MISSION-extra\`, \`${MISSION}s\` and \`revisita-$MISSION\`." > KAIZEN_LOG.md; }
+k8_world k8_w9
+assert_phase "kaizen-log: a new entry citing only longer ids that contain the mission keeps DOCS blocked" "DOCS"
+k8_w10() { k8_with_new '2026-01-02 — Batch' "See \`$MISSION-extra\`, \`${MISSION}s\` and \`revisita-$MISSION\`; plan in docs/handoffs/$MISSION/01-plano.md." > KAIZEN_LOG.md; }
+k8_world k8_w10
+assert_phase "kaizen-log: the same entry citing the mission itself after the longer ids lets DOCS pass" "PR"
+# The id at column 1 and with no backtick: the world of the mawk trap (`substr(s, 0, 1)`).
+k8_w11() { k8_with_new '2026-01-02 — Batch' "$MISSION: before 1, after 2." > KAIZEN_LOG.md; }
+k8_world k8_w11
+assert_phase "kaizen-log: a new entry that cites the mission lets DOCS pass" "PR"
+git revert --no-edit HEAD >/dev/null
+assert_phase "kaizen-log: an entry written and then reverted in the mission branch holds DOCS" "DOCS"
+# The key worlds: only the literal `kaizen_log: skipped` in the frontmatter dispenses the entry.
+k8_key() { sed -i "s|^branch: \(.*\)\$|branch: \1\n$1|" "$MDIR/00-missao.md"; }
+k8_real() { sed -i "s/^| K8 | KAIZEN_LOG record | ✅ | |\$/| K8 | KAIZEN_LOG record | $1 | |/" "$MDIR/00-missao.md"; }
+k8_w13() { k8_key 'kaizen_log: skipped'; k8_real '✗'; }
+k8_world k8_w13
+assert_phase "kaizen-log: kaizen_log: skipped in the frontmatter dispenses the entry" "PR"
+k8_world k8_key 'kaizen_log: Skipped'
+assert_phase "kaizen-log: a misspelt kaizen_log: Skipped demands the entry" "DOCS"
+k8_world k8_key 'kaizen_log:'
+assert_phase "kaizen-log: an empty kaizen_log demands the entry" "DOCS"
+k8_w16() { printf 'kaizen_log: skipped\n' >> "$MDIR/00-missao.md"; }
+k8_world k8_w16
+assert_phase "kaizen-log: kaizen_log: skipped in the body is not the frontmatter" "DOCS"
+k8_world k8_key 'kaizen_log: skipped '
+assert_phase "kaizen-log: a trailing space after skipped is trimmed like any frontmatter value" "PR"
+k8_world k8_key 'kaizen_log: skipped\r'
+assert_phase "kaizen-log: a trailing carriage return after skipped demands the entry" "DOCS"
+# World 19: no Markdown form of the K8 row dispenses the entry without the key (D23). The 13 forms of
+# the 16th round of PR #247, measured on a real CommonMark parser: the D19 reader said "no" in all of
+# them, and 9 of those were not the template's ✗ row as the parser renders it. Each builder starts
+# from k8_start, and a world counts as built only when its marking line is in the file.
+K8_T1='| # | Item | Status | Note |'; K8_T2='|---|---|---|---|'; K8_T3='| K8 | KAIZEN_LOG record | ✗ | |'
+k8_del() { sed -i '/^| K8 | KAIZEN_LOG record | ✅ | |$/d' "$MDIR/00-missao.md"; }
+k8_add() { printf '%s\n' "$@" >> "$MDIR/00-missao.md"; }
+k8_m_template_x()   { k8_real '✗'; }
+k8_m_indent_3()     { k8_del; k8_add '' '   Example:' '' "   $K8_T1" "   $K8_T2" "   $K8_T3"; }
+k8_m_indent_4()     { k8_del; k8_add '' '    Example:' '' "    $K8_T1" "    $K8_T2" "    $K8_T3"; }
+k8_m_indent_tab()   { k8_del; k8_add '' $'\tExample:' '' $'\t'"$K8_T1" $'\t'"$K8_T2" $'\t'"$K8_T3"; }
+k8_m_para_glued()   { k8_del; k8_add '' 'Example:' "$K8_T1" "$K8_T2" "$K8_T3"; }
+k8_m_list_table()   { k8_del; k8_add '' '- item' '' "  $K8_T1" "  $K8_T2" "  $K8_T3"; }
+k8_m_html_comment() { k8_del; k8_add '' 'Example:' '' '<!--' "$K8_T1" "$K8_T2" "$K8_T3" '-->'; }
+k8_m_html_details() { k8_del; k8_add '' '<details>' "$K8_T1" "$K8_T2" "$K8_T3" '</details>'; }
+k8_m_lazy_quote()   { k8_del; k8_add '' '> Note:' "$K8_T1" "$K8_T2" "$K8_T3"; }
+k8_m_list_html()    { k8_del; k8_add '' '- <!--' "  $K8_T1" "  $K8_T2" "  $K8_T3" '  -->'; }
+k8_m_bold_k8()      { k8_real '✗'; k8_add '' "$K8_T1" "$K8_T2" '| **K8** | example | ✅ | |'; }
+k8_m_code_k8()      { k8_real '✗'; k8_add '' "$K8_T1" "$K8_T2" '| `K8` | example | ✅ | |'; }
+k8_m_quote_k8()     { k8_real '✗'; k8_add '' "> $K8_T1" "> $K8_T2" '> | K8 | example | ✅ | |'; }
+K8_MW=(template_x indent_3 indent_4 indent_tab para_glued list_table html_comment html_details lazy_quote list_html bold_k8 code_k8 quote_k8)
+K8_MARK=("$K8_T3" "   $K8_T3" "    $K8_T3" $'\t'"$K8_T3" 'Example:' "  $K8_T3" '<!--' '<details>' '> Note:' '- <!--' '| **K8** |' '| `K8` |' '> | K8 | example')
+k8_built=0; k8_docs=0; k8_missed=""
+for k8_i in "${!K8_MW[@]}"; do
+  k8_world "k8_m_${K8_MW[$k8_i]}"
+  grep -qF -- "${K8_MARK[$k8_i]}" "$MDIR/00-missao.md" || continue
+  k8_built=$((k8_built + 1))
+  if [ "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )" = DOCS ]; then k8_docs=$((k8_docs + 1))
+  else k8_missed+="${k8_missed:+,}${K8_MW[$k8_i]}"; fi
+done
+assert_eq "kaizen-log: no Markdown form of K8 in the checklist dispenses the entry without the key" \
+  "13 13 -" "$k8_built $k8_docs ${k8_missed:--}"
+git reset -q --hard "$k8_start"
+git checkout -q main
+git branch -q -D missao/k8-entry
+git reset -q --hard "$k8_main_before"
+assert_phase "the fixture is back where the next block starts, after the K8 worlds" "PR"
+
 # Same formatter, other gate. Here the alignment colons land in the Status COLUMN of the separator
 # row, so the skip lets `:---:` through as a Status value and gate_DOCS fails a drift checklist
 # with nothing pending in it — the phase refused for a row the author never wrote.
