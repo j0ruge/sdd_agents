@@ -865,6 +865,17 @@ mut_DOCS_k8_key_ignored() {                   # worlds 13 and 17: the key never 
 mut_DOCS_k8_key_loose() {                     # worlds 14 and 18: any non-empty value dispenses
   sed -i '/^gate_DOCS() {/,/^}/ s@kaizen_log)" != skipped \]; then@kaizen_log)" = "" ]; then@' "$1"
 }
+# D17: the mission id grammar of resolve_mission, the slashes mission_id strips, and the K8 reader
+# that looks for the id instead of the argument.
+mut_RUN_mission_id_unchecked() {              # any directory name resolves as a mission (mission-id: 1–3)
+  sed -i '/^resolve_mission() {/,/^}/ { /=~ \$MISSION_ID_RE \]\] || die/d; }' "$1"
+}
+mut_RUN_mission_id_slashes_kept() {           # `/<mission>` and `<mission>/` keep their slashes (4, 5)
+  sed -i '/^mission_id() {/,/^}/ { /^  while \[\[ \$id == /d; }' "$1"
+}
+mut_DOCS_k8_mission_arg_raw() {               # the K8 reader looks for `/<id>` (mission-id: 5)
+  sed -i '/^gate_DOCS() {/,/^}/ s@SDD_K8_MISSION="\$(mission_id "\$MISSION")"@SDD_K8_MISSION="$MISSION"@' "$1"
+}
 mut_QA_handoff_freshness_ignored() {          # a handoff older than the last done F<n> passes gate_QA
   sed -i '/^gate_QA() {/,/^}/ s@^  if \[ -n "\$ahead" \]; then$@  if false; then@' "$1"
 }
@@ -6253,6 +6264,9 @@ CATALOG=(
   DOCS_k8_cite_unpadded
   DOCS_k8_key_ignored
   DOCS_k8_key_loose
+  RUN_mission_id_unchecked
+  RUN_mission_id_slashes_kept
+  DOCS_k8_mission_arg_raw
   QA_report_ignores_untracked
   QA_report_range_no_origin
   QA_report_range_no_upstream

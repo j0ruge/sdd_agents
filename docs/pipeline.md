@@ -147,6 +147,10 @@ instructs.
 **Passes when:** `00-missao.md`, `01-plano.md` and `checkpoint.md` exist; the mission frontmatter
 carries `aprovacao: auto` or `aprovacao: humano-<date>`; with `JIRA_ENABLED=true`, `versao:` is
 filled in; and `checkpoint.md` has at least one parseable row.
+The mission's id — the name of its directory under `HANDOFF_DIR` — is a grammar every command
+checks in `resolve_mission`: `^[0-9]{8}-[a-z0-9-]+$` (eight digits, a hyphen, then lower-case ASCII
+letters, digits and hyphens; slashes at the ends of the argument are ignored). Any other name is
+refused, naming the directory to rename (D17 of `20261012-a-rota-da-qa`).
 With `ADR_CHECK=block`, the mission's `adr:` is also a **decision**: a path to a real ADR whose
 `Spec:` line points back at `00-missao.md`, or the literal `none`. Empty, `TBD` and the untouched
 template placeholder all stall here, and the reason names `sdd adr new --slug <s> --spec <path>`.

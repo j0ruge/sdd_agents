@@ -27,6 +27,10 @@ because a session with no memory at all can execute it. That is the test, and it
 | `docs/handoffs/<YYYYMMDD>-<slug>/checkpoint.md` | the table the runner parses |
 | `docs/handoffs/<YYYYMMDD>-<slug>/checkpoint-notas.md` | the execution notes, append-only — its presence is what tells the runner this mission uses the split layout |
 
+The mission's directory name is its id, `<YYYYMMDD>-<slug>`, and the runner refuses any other in
+every command: `^[0-9]{8}-[a-z0-9-]+$` — eight digits, a hyphen, then lower-case ASCII letters,
+digits and hyphens (no dot, no accented letter, nothing before the date).
+
 Use `missao.md`, `plano.md`, `checkpoint.md` and `checkpoint-notas.md` from the templates directory your boot prompt
 names — a bare `templates/` resolves to nothing in a target repo, since the kit installs the
 agents and the config there but never the templates. Preserve the headings: the runner and the

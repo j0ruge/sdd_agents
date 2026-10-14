@@ -75,6 +75,10 @@ The planner conducts the brainstorm and the grill **with the human present** —
 next section says, because it cannot reach the human on its own. Do not plan on their behalf, and
 do not let the session drift into implementing: PLAN writes three artifacts and nothing else.
 
+The mission's id names its directory and must match `^[0-9]{8}-[a-z0-9-]+$` (eight digits, a
+hyphen, then lower-case ASCII letters, digits and hyphens): the runner refuses any other mission
+name in every command, so a slug with a dot, an accented letter or a prefix stops at `sdd status`.
+
 ## Relaying the grill to the human
 
 The planner runs as a subagent, and a subagent has no tool to ask the human anything; in this

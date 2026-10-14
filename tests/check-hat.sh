@@ -310,6 +310,13 @@ hat_promise_probes() {
   if grep -qF 'A comment in the code belongs to the code' "$dc" && grep -qE 'R<n>.*batch' "$dc"; then
     pass "hat: the docs hat leaves a code comment to the code's own phase (R<n>, a proposed-text row, or the TODO file)"
   else fail "hat: sdd-docs no longer says who owns a drifted code comment"; fi
+  # D17 of 20261012-a-rota-da-qa: resolve_mission refuses a mission id outside the grammar, so the
+  # two places that name a new mission say it — the planner that writes the directory and the
+  # command that delegates to it. The literal regex is what both carry.
+  local pl="$ROOT/agents/sdd-planner.md" sp="$ROOT/commands/sdd-plan.md"
+  if grep -qF '^[0-9]{8}-[a-z0-9-]+$' "$pl" && grep -qF '^[0-9]{8}-[a-z0-9-]+$' "$sp"; then
+    pass "hat: the planner names the mission id grammar, and so does /sdd-plan"
+  else fail "hat: sdd-planner or /sdd-plan no longer names the mission id grammar the runner refuses outside of"; fi
   # ADR 0018 §4 (D7, D16, D23): gate_DOCS demands the KAIZEN_LOG entry unless the plan's frontmatter
   # says `kaizen_log: skipped`, and the entry is a block with its own `## ` citing the whole id. The
   # hat reads the key in its § 3 table row; L4 marked the entry n/a over a K8 that promised it.

@@ -2887,6 +2887,10 @@ assert_phase "kaizen-log: the same entry citing the mission itself after the lon
 k8_w11() { k8_with_new '2026-01-02 — Batch' "$MISSION: before 1, after 2." > KAIZEN_LOG.md; }
 k8_world k8_w11
 assert_phase "kaizen-log: a new entry that cites the mission lets DOCS pass" "PR"
+# D17: the K8 reader looks for the id, never the argument with its slash — `/<mission>` is a form
+# resolve_mission accepts, and with the raw argument cites_id would look for `/<id>` and miss.
+assert_eq "mission-id: a slash before the mission argument still finds the K8 entry" PR \
+  "$(cd "$FIX" && "$SDD" phase "/$MISSION" 2>&1)"
 git revert --no-edit HEAD >/dev/null
 assert_phase "kaizen-log: an entry written and then reverted in the mission branch holds DOCS" "DOCS"
 # The key worlds: only the literal `kaizen_log: skipped` in the frontmatter dispenses the entry.
@@ -6118,6 +6122,40 @@ NG_TYPO_RC=0
 "$SDD" status "$MISSION" --no-gate >/dev/null 2>&1 || NG_TYPO_RC=$?
 assert_eq "a misspelt status option is refused, never read as a mission name" "1" \
   "$( [ "$NG_TYPO_RC" -ne 0 ] && echo 1 || echo 0 )"
+
+# D17 of 20261012-a-rota-da-qa: the mission id is a grammar the runner checks in resolve_mission,
+# ^[0-9]{8}-[a-z0-9-]+$, and that is what makes the whole-id boundary of the K8 reader exact
+# (CodeRabbit on PR #247: a mission `foo` was satisfied by an entry citing only `foo.bar` or `foo` plus U+00E9).
+# Each world gets its own directory, created and removed here; the refusal names the grammar.
+mid_refused() { # mid_refused <dir name> [locale] → "rc:<0|1> named:<0|1>"
+  local out rc=0
+  mkdir -p "$FIX/docs/handoffs/$1"
+  if [ -n "${2:-}" ]; then out="$(LC_ALL="$2" "$SDD" status "$1" --no-gates 2>&1)" || rc=$?
+  else out="$("$SDD" status "$1" --no-gates 2>&1)" || rc=$?; fi
+  rm -rf "${FIX:?}/docs/handoffs/$1"
+  printf 'rc:%s named:%s\n' "$( [ "$rc" -ne 0 ] && echo 1 || echo 0 )" "$( grep -qF 'is not <YYYYMMDD>-<slug>' <<< "$out" && echo 1 || echo 0 )"
+}
+assert_eq "mission-id: an id with a dot is refused by name" "rc:1 named:1" "$(mid_refused "$MISSION.v2")"
+# The poison has to be ARMED: under a locale where `[a-z]` reaches U+00E9 (MID_E, spelled in octal
+# bytes because tests/ is English surface), a range class would let the
+# id through. Without one on this machine the refusal still runs, and the ok line says so.
+MID_E=$'\303\251'
+mid_loc=""
+while IFS= read -r mid_l; do
+  if LC_ALL="$mid_l" bash -c '[[ $1 =~ ^[a-z]$ ]]' _ "$MID_E" 2>/dev/null; then mid_loc="$mid_l"; break; fi
+done < <(locale -a 2>/dev/null || true)
+if [ -n "$mid_loc" ]; then
+  assert_eq "mission-id: an id with a non-ASCII letter is refused where [a-z] reaches it ($mid_loc)" \
+    "rc:1 named:1" "$(mid_refused "${MISSION}${MID_E}" "$mid_loc")"
+else
+  assert_eq "mission-id: an id with a non-ASCII letter is refused where [a-z] reaches it (no locale armed the poison here)" \
+    "rc:1 named:1" "$(mid_refused "${MISSION}${MID_E}")"
+fi
+assert_eq "mission-id: an id with a prefix before the date is refused" "rc:1 named:1" "$(mid_refused "sq$MISSION")"
+mid_rc=0
+mid_out="$("$SDD" status "$MISSION/" --no-gates 2>&1)" || mid_rc=$?
+assert_eq "mission-id: a slash after the mission argument still resolves" "rc:0 named:1" \
+  "rc:$mid_rc named:$( grep -qF "$MISSION" <<< "$mid_out" && echo 1 || echo 0 )"
 
 # #153: a green phase this machine's ledger holds no session of is the shape a phase done BY HAND
 # leaves, and the full page names the command that records it. The fixture is already that world:

@@ -303,6 +303,22 @@ load_config() {
 MISSION=""
 MISSION_DIR=""
 
+# The mission id is a GRAMMAR the runner checks, not a convention (D17 of 20261012-a-rota-da-qa):
+# ^[0-9]{8}-[a-z0-9-]+$ — eight digits, a hyphen, then lower-case ASCII letters, digits and hyphens.
+# It is what makes the whole-id boundary of the K8 reader of gate_DOCS exact: CodeRabbit on PR #247
+# showed a mission `foo` satisfied by an entry citing only `foo.bar` or `foo` plus U+00E9. The classes
+# are ENUMERATED, never ranges: under pt_BR.UTF-8 the `=~` of bash 5.2 makes [a-z] match U+00E9.
+MISSION_ID_RE='^[0123456789]{8}-[abcdefghijklmnopqrstuvwxyz0123456789-]+$'
+
+# mission_id <name> — the name without the slashes at its ends (`/<mission>` and `<mission>/` are
+# forms the CLI accepts). Read by $( ); it sets no global.
+mission_id() {
+  local id="$1"
+  while [[ $id == /* ]]; do id="${id#/}"; done
+  while [[ $id == */ ]]; do id="${id%/}"; done
+  printf '%s\n' "$id"
+}
+
 # Accepts the full name (20260814-spinner) or a unique prefix/slug.
 resolve_mission() {
   local want="${1:-}" base="$REPO_ROOT/$HANDOFF_DIR" matches=()
@@ -321,6 +337,9 @@ resolve_mission() {
       *) die "'$want' is ambiguous: ${matches[*]}" ;;
     esac
   fi
+  # MISSION stays LITERAL (the `/<mission>` world keeps RUN_branch_double_slash alive); the check
+  # reads the id without the slashes and rewrites nothing.
+  [[ "$(mission_id "$MISSION")" =~ $MISSION_ID_RE ]] || die "mission '$MISSION' is not <YYYYMMDD>-<slug> (^[0-9]{8}-[a-z0-9-]+\$: eight digits, a hyphen, then lower-case ASCII letters, digits and hyphens) — rename $HANDOFF_DIR/$MISSION"
   MISSION_DIR="$base/$MISSION"
 }
 
@@ -2252,7 +2271,7 @@ gate_DOCS() {
         && [ -n "$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not "${k8_nots[@]}" 2>/dev/null || true)" ]; then
       for k8_b in "${k8_bases[@]}"; do
         k8_patch="$(git -C "$REPO_ROOT" diff-tree -p --no-color --no-ext-diff -U1000000 "$k8_b" HEAD -- KAIZEN_LOG.md 2>/dev/null || true)"
-        if ! SDD_K8_MISSION="$MISSION" awk "$FENCE_AWK"'
+        if ! SDD_K8_MISSION="$(mission_id "$MISSION")" awk "$FENCE_AWK"'
           function cites_id(s, m,   p, i) {
             s = " " s
             while ((i = index(substr(s, p + 1), m)) > 0) {
