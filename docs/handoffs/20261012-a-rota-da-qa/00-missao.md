@@ -12,7 +12,7 @@ ddd: n/a
 # Missão — o lote 7: a rota da QA e o aceite que lê o plano
 
 > Nascida do laço `sdd kaizen` (2026-10-12, veredito `melhorou` sobre `0270727` em `05-verdict.md`)
-> e **replanejada com o humano** em 21 perguntas (D1–D20; da 13ª à 21ª vieram das rodadas de revisão
+> e **replanejada com o humano** em 22 perguntas (D1–D21; da 13ª à 22ª vieram das rodadas de revisão
 > do PR #247, e a D20 foi perguntada duas vezes), conduzidas pelo `sdd-planner` com relay.
 > `aprovacao:` fica vazio por regra (plano nascido do kaizen nunca é `auto`, `gate_PLAN`) e porque o
 > D4 manda: o humano aprova com `sdd approve` depois de ler o plano na tela.
@@ -139,6 +139,10 @@ prometeu.
 - **(e) a regra 2 do `check-checkpoint.sh` por célula:** vai ao `TODO.md` neste PR de docs (catraca
   2 → 3). A forma canônica separa `2>&1` e `grep` por `;`, então uma regra por segmento ficaria cega
   nela, e o conserto pede seguir a variável (D1).
+- **O veredito da QA depois de um `R<n>` (D21):** vai ao `TODO.md` neste PR de docs (catraca 3 → 4).
+  O reteste e o frescor desta missão só leem `F<n>`; um `R<n>` do REVIEW, que vem depois da QA, muda
+  o código sem reabri-la, e o `skipped` que o `sdd-qa` conferiu no diff não é reconferido. É o
+  comportamento do kit de antes desta missão (`docs/pipeline.md:95-100`).
 - **O `WIDTH_CAP` e o histórico do e2e no `GATE_WHY`:** já estão no `TODO.md`, pelo commit do
   veredito, e este é o handoff que os dois itens citam em `Fonte:`. A medida mora aqui porque a
   origem está num alvo (`sales_quote`), fora deste repositório; recontada em 2026-10-13:
@@ -175,7 +179,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
 
 | # | Critério | Status | Evidência |
 |---|---|---|---|
-| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✅ | 21 perguntas, 21 respostas do humano (D1–D20; da 13ª à 16ª vieram da 2ª à 5ª rodada dos bots do PR #247, a 17ª e a 18ª da 7ª, e da 19ª à 21ª da 11ª, a D20 duas vezes), mais a confirmação do "nos dois caminhos" da D3; a 6ª rodada refinou a D16 sem pergunta nova (o conserto cabe no contrato decidido, ver a D16); nenhuma pendente |
+| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✅ | 22 perguntas, 22 respostas do humano (D1–D21; da 13ª à 16ª vieram da 2ª à 5ª rodada dos bots do PR #247, a 17ª e a 18ª da 7ª, da 19ª à 21ª da 11ª, a D20 duas vezes, e a 22ª da 14ª), mais a confirmação do "nos dois caminhos" da D3; a 6ª rodada refinou a D16 sem pergunta nova (o conserto cabe no contrato decidido, ver a D16); nenhuma pendente |
 | b | Checklist kaizen 100% ✅ e checklist DDD 100% ✅ ou `n/a` justificado | ✅ | seções abaixo; DDD `n/a` justificado |
 | c | Plano passa no teste de autocontenção (sessão nova só com 00/01/checkpoint executa) | ✅ | real, em 2026-10-12 21:01–21:12: um subagente novo, lendo só os três arquivos, executou o I1 inteiro num clone descartável (Check `1 1`, os dois mutantes pegos por `--only`, `--anchors` 689); os três "só se souber X" que ele achou (a sintaxe do `--only`, o formato e o commit da nota, a âncora do `TODO.md` que o I1 já move) estão escritos no `01-plano.md` |
 | d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado), vermelho no HEAD pelo `tests/check-checkpoint.sh --red` do kit | ✅ | 13 de 13; `--check` e `--red` rodados nesta sessão, saída final no `01-plano.md` § Medição do vermelho |
@@ -246,8 +250,8 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
    a branch da missão tem de ter tocado o `KAIZEN_LOG.md`, quem quer que tenha escrito a entrada.
    Porquê: o gate lê dois artefatos, e o dono (`sdd-docs`, que tem o arquivo no `writes:`) existe.
 8. **D8 — o D4 fica, o grill não muda neste lote, e passa a se medir** (recommended). Cada decisão
-   leva `(recommended)` ou `(other: …)`, e o aceite mostra a contagem. Hoje são 21 de 21 perguntas nesta missão
-   (D1–D20, a D20 duas vezes). Porquê, na amostra que havia quando a D8 foi decidida: 16 de 16 é compatível
+   leva `(recommended)` ou `(other: …)`, e o aceite mostra a contagem. Hoje são 22 de 22 perguntas nesta missão
+   (D1–D21, a D20 duas vezes). Porquê, na amostra que havia quando a D8 foi decidida: 16 de 16 é compatível
    com recomendação boa e com ancoragem, e só o dado separa as duas. ⚠️ O texto aprovado dizia
    `(recomendada)`/`(outra: …)`; os tokens viraram inglês porque marcador é contrato (`CLAUDE.md`,
    "o contrato é sempre inglês") e porque `outra` é stopword do `tests/check-lang.sh`, que reprovaria
@@ -411,11 +415,23 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     K8 não é cobrado, porque não há range para ler a entrada e não há promessa escrita; 0 de 64
     missões reais estão na base. Recusados: a primeira forma com o checklist `✗` nos 12 fixtures
     (acoplaria a suíte ao K8) e tirar os fixtures da base.
+21. **D21 — o `R<n>` não reabre a QA nesta missão: o achado vai ao `TODO.md`** (recommended). O
+    reteste do I3 e o frescor do I4 continuam lendo só `F<n>`, e o `skipped` da D2 continua conferido
+    uma vez; o I3, o I4 e o "Fora de escopo" declaram o limite, e o `TODO.md` ganha o achado (catraca
+    3 → 4), com a direção: amarrar o veredito da QA ao commit que ela viu e decidir, com custo medido,
+    o que um `R<n>` reabre. Porquê: o Codex (PR #247, 14ª rodada) mostrou que um `R<n>` do REVIEW,
+    que vem depois da QA, muda o código sem reabri-la, e que o `skipped` fica com um diff velho; os
+    dois achados são um estado só (o veredito amarrado ao código que a QA viu) e são o comportamento
+    do kit de antes desta missão. Trazer o `R<n>` para dentro custaria um reteste por rodada de
+    revisão com `R<n>` (22 de 64 missões reais tiveram `R<n>`, 72 linhas; um reteste improvisado
+    custou US$ 7,19 e 1144 s) e reabriria a D2, e um `R<n>` não diz se mudou comportamento (seria
+    rótulo). Recusados: o `R<n>` no helper com o frescor também para o `skipped` (o custo acima, em
+    toda rodada com `R<n>`) e só o `skipped` reconferido (fecha metade e deixa o desenho partido).
 
 ## Pendências para o humano
 
 - **O PR de docs** (D10): da `kaizen/20261012`, com o `05-verdict.md`, estes quatro artefatos, a ADR
-  0018 (`proposed`), o `TODO.md` e a catraca (`todo-findings 3`). No mesmo PR, a linha F3 da gaveta
+  0018 (`proposed`), o `TODO.md` e a catraca (`todo-findings 4`). No mesmo PR, a linha F3 da gaveta
   (`docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md`) registra a janela do lote 6 fechada pelo
   veredito: frente que fecha atualiza o índice no mesmo commit (`CLAUDE.md`).
 - **Depois do merge:** `git fetch`, `git worktree add ../sdd_agents-lote-7 -b fix/lote-7-a-rota-da-qa
@@ -430,8 +446,8 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
 - **O congelamento (D11):** no merge do PR de código deste lote. Até o veredito, nada em
   `bin agents templates config`; o achado de kit que nascer nos alvos vai ao handoff (`kit:`) e espera.
 - **O caderno de campo do worker** (PR #246): anotar que, sob o `/sdd-plan`, o humano escolheu a
-  recomendada em toda pergunta com opção marcada: 8 de 8 no grill do L4 e 21 de 21 nesta missão
-  (D1–D20, a D20 duas vezes; da 13ª à 21ª nas rodadas de revisão do PR #247), e que daqui em diante
+  recomendada em toda pergunta com opção marcada: 8 de 8 no grill do L4 e 22 de 22 nesta missão
+  (D1–D21, a D20 duas vezes; da 13ª à 22ª nas rodadas de revisão do PR #247), e que daqui em diante
   a contagem sai do `00-missao.md`.
 - **Remover o worktree** depois do merge, pelo verbete "`sdd health` in the main checkout is slow
   again after a kit mission" de `docs/failure-modes.md`.

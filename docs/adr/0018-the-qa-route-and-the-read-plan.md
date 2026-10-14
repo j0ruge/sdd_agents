@@ -43,7 +43,7 @@ The judge's window over batches 5 and 6 (`05-verdict.md` beside the spec, `melho
   paths and one line per increment, and its question named "the criterion that is ✗", which no
   criterion was. In the two grills of 2026-10-12 (L4's, and this mission's up to D8) the human picked
   the recommended option 16 times out of 16; that was the sample when §3 was decided (this mission
-  went on to 21 of 21 by D20). That count is consistent both with good recommendations and with
+  went on to 22 of 22 by D21). That count is consistent both with good recommendations and with
   anchoring, and no artifact records which decision was the recommended one. In L4 the acceptance step itself, where
   the relay re-ran `check-checkpoint.sh --red` before showing the plan, caught a stale
   red-measurement section that the plan carried.

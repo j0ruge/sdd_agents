@@ -263,7 +263,8 @@ boot_prompt/turn_rule: "todo carimbo sai de date"                               
 - **O reteste e o frescor são a mesma pergunta**: "existe `F<n>` `done` depois do qual o caminho X
   não foi reescrito?", e reescrito é: os bytes de X em `HEAD` são novos (nenhuma versão de X até o
   conserto) **e** o primeiro commit depois do conserto que os carrega não é um merge (o I3 diz por
-  quê, medido). X = o relatório da missão (o arquivo que o `mission_qa_report` escolhe, o mesmo
+  quê, medido). Só `F<n>` conta: um `R<n>` do REVIEW não reabre a QA (D21, limite declarado e
+  achado no `TODO.md`). X = o relatório da missão (o arquivo que o `mission_qa_report` escolhe, o mesmo
   que a Âncora 1 lê) decide a sub-etapa, e X = `$HANDOFF_DIR/$MISSION/30-handoff-qa.md` decide o gate. Uma definição, como o `report_closed`
   (o cabeçalho dele, `:2656-2660`, conta o que custou ter a âncora duplicada). O ciclo F vira
   `close` → EXEC → `exec` (reteste, move o `Status:`) → `close` (reescreve o handoff) → passa.
@@ -439,6 +440,9 @@ medido pelo I1.
   do handoff diz é rótulo que o modelo escreve, e a REVIEW o lê (princípio 1 do `CLAUDE.md`).
   Exigir no texto do relatório uma citação do `F<n>` seria esse rótulo, e a skill de terceiro que
   escreve o relatório não conhece o id do `F<n>`.
+  **Limite declarado (D21):** o helper só lê `F<n>`. Um `R<n>` do REVIEW, que vem depois da QA, muda
+  o código sem reabrir o reteste; é o comportamento do kit de antes desta missão, e o achado está no
+  `TODO.md`. O comentário do helper diz isso.
   - Não atribui global (é lido por `$( )`).
   - Captura com `|| true`.
   - Commit que não resolve é pulado; é inalcançável numa corrida derivada, porque o `gate_EXEC` vem antes.
@@ -552,7 +556,9 @@ frase do `sdd-qa.md` § 4) e a contagem dos comentários do `bin/sdd` (CodeRabbi
 - O comentário nomeia o dono, que é o `sdd-qa` (§ 6 "Commit everything"), e diz como ele é
   alcançado: com interface, pelo `close` que o `qa_substep` dá depois do commit de relatório do
   reteste; sem interface, de imediato. Diz também por que o `skipped` e o `blocked` ficam fora: os
-  dois retornam antes.
+  dois retornam antes. E declara o limite da D21: o frescor só olha `F<n>`, então um `R<n>` do
+  REVIEW depois da QA não pede o handoff de novo, e um `skipped` não é reconferido contra o diff que
+  o `R<n>` mudou (o achado está no `TODO.md`).
 - `agents/sdd-qa.md` § 6: o handoff é reescrito e commitado depois de cada `F<n>` feito, e o gate
   recusa um handoff mais velho que o último conserto.
 - `docs/pipeline.md` § QA "Passes when": a condição nova. Anatomia § 4: uma frase.
@@ -1380,8 +1386,12 @@ D18, a fronteira do título, a linha GFM, D19, a delimitadora, o estado da tabel
 fecho virou I13. O do I3 foi de `1` a `1 1` (9ª rodada) e a `1 1 1 1` (10ª); o do I4 de `4` a `5`
 (10ª); o do I13 de `1 1 1` a `1 1 1 1 1 1` (12ª).
 
-O `--check` e o `--red` levaram 8 min 41 s (21:41:52 → 21:50:33): cinco Checks rodam o
-`check-gates.sh` (I1, I4, I9, I11 e I12), de ~130 s nesta máquina.
+O `--check` e o `--red` levaram 8 min 41 s (21:41:52 → 21:50:33). Cinco Checks rodam o
+`check-gates.sh` (I1, I4, I9, I11 e I12), um depois do outro: o `--red` não paraleliza nem corta por
+tempo (`tests/check-checkpoint.sh:612`), então o total é a soma das corridas. O tempo de uma
+corrida do `check-gates.sh` varia com a carga desta máquina: ~95 s no Contexto verificado, 144 s
+numa corrida isolada medida às 22:51 de 2026-10-13. Para as cinco caberem nos 521 s, cada uma
+ficou perto dos ~95 s durante este `--red`.
 
 ```text
 $ bash tests/check-checkpoint.sh --check docs/handoffs/20261012-a-rota-da-qa/checkpoint.md

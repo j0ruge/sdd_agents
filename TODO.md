@@ -39,6 +39,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Regra por segmento ficaria cega na forma canônica, que separa `2>&1` e `grep` por `;`: o conserto segue a variável.
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — item (e) da fila do operador, D1 do grill,
   registrado pelo `sdd-planner` (2026-10-12)
+- [ ] **O veredito da QA não é revalidado depois de um R<n>** — `docs/pipeline.md:99` (`R<n>`) — o REVIEW
+  vem depois da QA e um `R<n>` muda o código sem reabri-la: o reteste do lote 7 só lê `F<n>`, e o `skipped`
+  que o `sdd-qa` conferiu no diff não é reconferido (Codex no PR #247, 14ª rodada; 22 de 64 missões reais
+  tiveram `R<n>`). Falha aberta, com consumidor fora da suíte do kit (D15). Direção: amarrar o veredito
+  ao commit que a QA viu e decidir, com custo medido, o que um `R<n>` reabre (um reteste custou US$ 7,19).
+  Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — D21 do grill, registrado pelo `sdd-planner` (2026-10-14)
 
 ### Saída humana e cosmética
 
