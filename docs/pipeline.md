@@ -172,9 +172,12 @@ open, checklists, self-containment, a Check per increment that is red at HEAD, t
 `adr:` decision) **with evidence**. The red is measured by the kit's
 `tests/check-checkpoint.sh --red <checkpoint>`, which the planner runs and no gate does: it executes
 each pending Check from the repo root and refuses one already green, one outside the strict form
-`` `command` → `expected` ``, and one that prints nothing. A well-run grill is the approval — the
-human was present. Any criterion left open and the planner
-leaves `aprovacao` empty, and the runner stops asking for explicit approval.
+`` `command` → `expected` ``, and one that prints nothing. Closing the six is not the approval: under
+`/sdd-plan` the planner leaves `aprovacao:` empty even with all of them ✅, and the human reads the
+plan in the acceptance step and approves with `sdd approve`. The planner writes `auto` only when the
+human asked for it in the grill — then the grill is the approval, because the human was present and
+chose to skip the reading ([ADR 0018](adr/0018-the-qa-route-and-the-read-plan.md) §3). Any criterion
+left open and the planner leaves `aprovacao` empty, and the runner stops asking for explicit approval.
 
 **And that explicit approval is a command, not a hand edit.** `sdd approve <mission>` prints what is
 being approved — the title, the PLAN-AUTO evidence, the increments, the open questions — asks

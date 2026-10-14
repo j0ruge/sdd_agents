@@ -522,6 +522,23 @@ planner_agent_probes() {
   else
     fail "hat: sdd-planner writes aprovacao: auto on its own again, instead of leaving it to the human who reads the plan"
   fi
+  # Codex review of PR #252: § 6 changed and two other copies of the same contract did not — the
+  # template the planner copies said "all ✅ → auto", and the pipeline doc said a well-run grill is
+  # the approval. A planner following either skips the reading the human asked for. The template is
+  # pt-BR content, so its probe reads language-neutral tokens: the old arrow gone, the ADR and the
+  # command present, inside the PLAN-AUTO section.
+  local tpl="$ROOT/templates/missao.md" pipe="$ROOT/docs/pipeline.md" tsec psec
+  tsec="$(awk '/^## Gate PLAN-AUTO/{s=1; next} s && /^## /{s=0} s' "$tpl")"
+  psec="$(awk '/^\*\*PLAN-AUTO:\*\*/{s=1} s && /^$/{s=0} s' "$pipe")"
+  if ! grep -qF '✅ → `aprovacao: auto`' <<< "$tsec" \
+     && grep -qF 'ADR 0018 §3' <<< "$tsec" && grep -qF 'sdd approve' <<< "$tsec" \
+     && ! grep -qF 'A well-run grill is the approval' <<< "$psec" \
+     && grep -qF 'writes `auto` only when the' <<< "$psec" \
+     && grep -qF 'leaves `aprovacao:` empty even with all of them ✅' <<< "$psec"; then
+    pass "hat: the mission template and the pipeline doc say what § 6 says about aprovacao"
+  else
+    fail "hat: templates/missao.md or docs/pipeline.md went back to auto-approving an all-✅ plan, against § 6 of sdd-planner"
+  fi
 }
 
 command_worktree_probes() {
