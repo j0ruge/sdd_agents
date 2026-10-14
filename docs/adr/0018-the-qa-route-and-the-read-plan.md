@@ -8,7 +8,8 @@
 The judge's window over batches 5 and 6 (`05-verdict.md` beside the spec, `melhorou` over
 `0270727`) measured five `sales_quote` missions, and two gaps sat at the same point of the runner,
 `qa_substep` (`bin/sdd`). The grill of this mission then opened a third question, about the
-`/sdd-plan` approval.
+`/sdd-plan` approval, and the review of its plan a fourth, about where the plan's dispensation of
+the `KAIZEN_LOG.md` entry is read (§4).
 
 - **A `skipped` the grill decided had no headless route.** With `E2E_CMD` or `APP_URL` set,
   `qa_substep` answers `plan` with no charter and `exec` with no closed report of the mission, and
@@ -128,6 +129,31 @@ the tokens matched too, three marks carried a note inside the parentheses and fo
 across two lines (Codex on PR #247, round 15). `gate_PLAN` does not change. Both values stay
 valid, and a plan born of `sdd kaizen` still never carries `auto`.
 
+### §4 — The KAIZEN_LOG entry is dispensed only by `kaizen_log: skipped` in the frontmatter
+
+Batch 7 makes `gate_DOCS` demand the mission's own `KAIZEN_LOG.md` entry unless the plan dispenses
+it. Until round 16 of PR #247 the dispensation was read from the K8 row of the kaizen checklist: a
+byte-level `awk` that imitated Markdown piece by piece (fence, heading, table header, delimiter
+row) and answered "no" only for the template's K8 row with `✗`. Every Markdown form it did not
+imitate became a false "no", and that was a review finding in rounds 7, 8, 10, 11, 12, 13 and 16.
+Measured in round 16 with a real CommonMark parser (markdown-it-py 3.0.0, the CommonMark preset
+plus the GFM table rule) over 13 checklist variants: the table reader answered "no" in 9 variants
+where the parser renders no template table with the `✗` row, or renders another K8 row with `✅`
+(a table indented by four spaces or a tab, inside `<!-- -->`, right after `<details>`, lazily
+continued after a block quote, inside `- <!--`, and a `**K8**`, `` `K8` `` or quoted K8 row beside
+a real `✗`). Fixing the indentation, as the review asked, closed 2 of the 9.
+
+The dispensation therefore leaves Markdown. `00-missao.md` gains a frontmatter key, `kaizen_log:`,
+in the mold of §1: only the literal `kaizen_log: skipped` dispenses the entry, read by the
+runner's existing `frontmatter` reader; anything else (absent, empty, `Skipped`, `skipped # note`,
+a trailing `\r`, the key written in the body) demands it. The K8 row stays in the checklist as
+prose for the human, and the planner writes the key when K8 is `✗` with the human. The template
+ships the key with a placeholder that promises the entry. On the base branch, where there is no
+range to read an entry in, `gate_PLAN` refuses a mission that carries the key with any value but
+`skipped`, and `gate_DOCS` repeats the refusal for a forced phase; a plan without the key is not
+refused, so the fixtures that live on the base keep passing. No real mission changes its answer:
+none of 64 writes `✗` in K8 or carries the key.
+
 ## Discarded
 
 - **§1: `gate_QA` passes on the plan's declaration with no session.** Zero cost, but nobody checks
@@ -158,6 +184,12 @@ valid, and a plan born of `sdd kaizen` still never carries `auto`.
   a decision asked twice (a confirmation, a reopened decision) held two answers in one mark. Fixing
   the count written in prose, twice (rounds 8 and 14 of PR #247), did not make the answers
   countable; the missing state was where the mark lives.
+- **§4: keep reading the K8 row, with the "no" switched off by every form the reader does not
+  model** (indentation, any HTML block opener, any `K8` outside the template row, a table header
+  without a blank line before it). Four new rules, and the closure rests on enumerating CommonMark
+  without a renderer in the runner.
+- **§4: fix the indentation only, and send the other seven measured variants to the backlog.** The
+  smallest diff, and the reader keeps failing open in variants already measured.
 
 ## Consequences
 
@@ -178,3 +210,7 @@ valid, and a plan born of `sdd kaizen` still never carries `auto`.
   account of the grill: a label, read as a count and never as a gate. An `- answer:` line inside a
   code fence in the decisions section is counted, and a mark with trailing whitespace or `\r` is
   not (the answer drops out of `M`).
+- A mission without `kaizen_log: skipped` has its `KAIZEN_LOG.md` entry demanded at DOCS whatever
+  its K8 row says; a plan that writes `✗` in K8 and forgets the key fails closed, and DOCS satisfies
+  the gate by writing the entry. On the base branch a plan without the key is neither refused nor
+  read, the same residue as before, now named by the key.

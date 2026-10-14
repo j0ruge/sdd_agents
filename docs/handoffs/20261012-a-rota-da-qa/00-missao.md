@@ -98,22 +98,21 @@ Todas binárias, lidas nas linhas `ok` de sensor da suíte:
   `QA:close=sdd-qa`.
 - **M3:** `30-handoff-qa.md` commitado antes de um `F<n>` `done`, ou reescrito depois e revertido
   → o `gate_QA` reprova nomeando o F, nos dois caminhos. Hoje passa.
-- **M4:** o checklist do `00-missao.md` sem o `✗` na linha K8 da tabela do template (`✅`, `⏳`, o
-  marcador, nenhuma linha K8, uma linha K8 fora daquela tabela ou sob outro cabeçalho, sem a barra
-  inicial, com `\|`, um parágrafo `K8 |` no checklist, um título só parecido com o do checklist,
-  como `## Checklist kaizenx`, e também uma linha K8 de exemplo `✗` antes da real) e nenhuma
-  entrada nova da
-  missão no `KAIZEN_LOG.md` (nada, uma
+- **M4:** o frontmatter do `00-missao.md` sem o literal `kaizen_log: skipped` (a chave ausente,
+  vazia, `Skipped`, com `\r` no fim, escrita no corpo, e a linha K8 do checklist com `✗` em
+  qualquer forma de Markdown: na tabela do template, recuada, dentro de comentário HTML, citada,
+  com outro K8 `✅` ao lado; D23) e nenhuma entrada nova da missão no `KAIZEN_LOG.md` (nada, uma
   linha trocada, um cabeçalho renomeado, mais uma linha citando a missão numa entrada antiga, uma
   linha que cita a missão duas vezes partida em duas, uma entrada nova que não cita a missão, uma
   entrada nova que só cita ids mais longos que contêm o da missão, um `## ` dentro de cerca de
-  código, uma entrada revertida) → o `gate_DOCS` reprova. Hoje passa.
+  código, uma entrada revertida) → o `gate_DOCS` reprova; com `kaizen_log: skipped` (também com
+  espaço no fim), passa. Hoje passa.
 - **M5:** o prompt de boot de toda fase projetada diz que o carimbo de hora sai de `date` (5 de 5).
   Hoje 0 de 5.
 - **M6:** o `check-hat.sh` lê no `/sdd-plan` e no `sdd-planner.md` o aceite renderizado, o
   `--check`/`--red` refeito, a contagem `(recommended)`/`(other: …)`, a reestimativa a 2× e as
   regras de nome do alvo; lê no `sdd-qa.md` a conferência do `qa: skipped` e o `test.fail()`; lê no
-  `sdd-docs.md` a leitura do K8. Hoje nenhuma dessas linhas existe.
+  `sdd-docs.md` a leitura da chave `kaizen_log`. Hoje nenhuma dessas linhas existe.
 - **M7 (uso real, próxima janela do juiz, não desta missão):** nenhuma linha `manual` de QA no ledger
   em missão com `qa: skipped`; nenhuma sessão `sdd-qa` chamando a ferramenta `Skill`; nenhum
   `data:` de handoff fora da janela da sessão; a contagem de recomendadas legível nos `00-missao.md`
@@ -121,9 +120,9 @@ Todas binárias, lidas nas linhas `ok` de sensor da suíte:
 - **M8:** um diretório de missão fora de `^[0-9]{8}-[a-z0-9-]+$` (com `.`, com letra acentuada sob
   um locale em que `[a-z]` a alcança, com prefixo antes da data) → `sdd status` o recusa nomeando a
   gramática; o mesmo id com `/` nas pontas do argumento segue resolvendo. Hoje aceita qualquer nome.
-- **M9:** uma missão com `branch:` igual à `DEFAULT_BRANCH` e um checklist que promete o K8 de forma
-  explícita → o `gate_PLAN` a recusa nomeando a base, e o `gate_DOCS` também; com `✗` na linha do
-  template, ou sem linha K8, passa. Hoje passa nos três casos.
+- **M9:** uma missão com `branch:` igual à `DEFAULT_BRANCH` e a chave `kaizen_log:` presente sem
+  `skipped` (a promessa escrita, D23) → o `gate_PLAN` a recusa nomeando a base, e o `gate_DOCS`
+  também; com `kaizen_log: skipped`, ou sem a chave, passa. Hoje passa nos três casos.
 
 ## Resultado esperado
 
@@ -196,7 +195,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
 | K3 | Desperdícios identificados e cortados | ✅ | o segundo lançamento por missão sem QA; a sessão de caminhada paga para chegar ao `skipped`; o reteste que depende de uma flag de terceiro; a entrada do `KAIZEN_LOG` escrita à mão depois do PR |
 | K4 | Fatiamento incremental, cada fatia verificável | ✅ | 13 incrementos, cada um com uma regra e o seu sensor |
 | K5 | Check por artefato (rótulo ≠ artefato) | ✅ | todo Check lê linhas `^  ok    ` de `check-dry-run.sh`, `check-gates.sh`, `check-hat.sh` ou `check-templates.sh`, menos o do I10 (presença no template) e o do I13 (registro) |
-| K6 | Jidoka — o que para a linha está definido | ✅ | `qa: skipped` com diff visível → `blocked` (`handoff-blocked`); handoff mais velho que o F → `gate_QA` reprova; reteste que não muda nada → `no_work_check` forma (a); K8 prometido sem entrada → `gate_DOCS` reprova; missão na base com K8 prometido → `gate_PLAN` recusa; id de missão fora da gramática → todo comando recusa |
+| K6 | Jidoka — o que para a linha está definido | ✅ | `qa: skipped` com diff visível → `blocked` (`handoff-blocked`); handoff mais velho que o F → `gate_QA` reprova; reteste que não muda nada → `no_work_check` forma (a); plano sem `kaizen_log: skipped` e sem entrada → `gate_DOCS` reprova; missão na base com a chave sem `skipped` → `gate_PLAN` recusa; id de missão fora da gramática → todo comando recusa |
 | K7 | SDCA — a melhoria vira padrão (doc/rule/teste) | ✅ | asserções novas em quatro sensores, mutantes no catálogo, ADR 0018, `docs/pipeline.md`, `CONTEXT.md`, anatomia |
 | K8 | Registro no KAIZEN_LOG | ✅ | o I13 escreve a entrada `Lote 7: a rota da QA e o aceite que lê o plano`; antes = o veredito ao lado, depois = M1–M6 e M8 medidos |
 
@@ -401,7 +400,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     sobre texto cru. A D17 e a D18 dão estrutura às duas que faltavam: o id é uma gramática que o
     runner confere, e a promessa é a linha lida na seção do checklist.
     - answer: (recommended)
-19. **D19 — só a linha do template com `✗` diz "não".** A `k8_promise` lê a seção
+19. **D19 — só a linha do template com `✗` diz "não".** Substituída pela D23. A `k8_promise` lê a seção
     `## Checklist kaizen` (título com fronteira, fora de cerca) e responde `no` só quando as linhas
     `K8` da tabela cujo cabeçalho é o do template (`| # | Item | Status | Nota |`) abrem por `|`, não
     têm `\|` e dizem o literal `✗`; `none` quando não há linha K8; `yes` para toda outra forma. O
@@ -426,7 +425,9 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     asserções e vinte e quatro mutantes.
     - answer: (recommended)
 20. **D20 — na base, recusar só a promessa explícita.** Perguntada duas vezes: **reaberta** pela
-    medição dos fixtures (as duas respostas abaixo). O `gate_PLAN` recusa a missão cuja `branch:` é a
+    medição dos fixtures (as duas respostas abaixo). Adaptada pela D23: a recusa lê a chave
+    `kaizen_log` presente sem `skipped`, não a tabela, e o resíduo segue o plano sem promessa
+    escrita, agora o plano sem a chave. O `gate_PLAN` recusa a missão cuja `branch:` é a
     `DEFAULT_BRANCH` quando a `k8_promise` diz `yes`, nomeando a base e os dois remédios (um branch
     próprio, ou `✗` na linha do template); o `gate_DOCS` recusa o mesmo como reforço para o
     `--phase` forçado. Um plano sem linha K8 (`none`) passa, como hoje. Incremento novo, o I12 (o
@@ -474,6 +475,33 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     Limites declarados no I6: uma linha `- answer:` dentro de cerca de código nesta seção conta, e
     uma marca com espaço ou `\r` no fim não conta (o `M` cai, falha visível no aceite).
     - answer: (recommended)
+23. **D23 — o "não" do K8 sai do Markdown: só o literal `kaizen_log: skipped` no frontmatter
+    dispensa a entrada do `KAIZEN_LOG.md`, no molde do `qa: skipped` da D2.** Sem a chave, o
+    `gate_DOCS` cobra a entrada, e a linha K8 do checklist fica só como prosa para o humano. O
+    leitor é o `frontmatter` (`bin/sdd:337`) que o runner já tem; a recusa da base (D20, I12) passa
+    a ler a chave presente sem `skipped`, pelo `frontmatter_has` (`:371`). O template ganha a chave
+    no frontmatter, com um placeholder que promete, e uma frase no checklist; o `sdd-planner` a
+    escreve quando o K8 é `✗` com o humano. Substitui a D19 e adapta a D20; a ADR 0018 ganha o §4,
+    no molde do §1. Porquê: o Codex (PR
+    #247, 16ª rodada, thread `4271964548`) mostrou que uma tabela do template recuada 4 espaços ou
+    por tab, com K8 `✗`, virava `no` no leitor da D19, embora o CommonMark a renderize como bloco de
+    código. Medido com um parser CommonMark de verdade (`markdown-it-py` 3.0.0 com a regra de tabela
+    GFM), o leitor dizia `no` em 9 de 13 mundos onde o parser não renderiza a linha `✗` do template,
+    ou renderiza outro K8 `✅` (recuo, tab, `<!-- -->`, `<details>`, continuação preguiçosa depois
+    de `> `, `- <!--`, e `**K8**`, `` `K8` `` ou `>` numa segunda tabela); o recuo de 0 a 3 espaços
+    que o Codex pediu fechava 2 dos 9. **A revisão é laço:** era o 7º achado do leitor da promessa
+    (rodadas 7, 8, 10, 11, 12, 13 e 16), e a D19, que tirou regras, ainda levou três; o estado que
+    faltava é a estrutura que o Markdown renderiza, que um `awk` por byte não tem, e a chave tira a
+    pergunta do Markdown. Raio: 0 das 64 missões reais dizem `✗` ou têm a chave, nenhum arquivo de
+    `tests/` cita `K8` ou `kaizen_log`, e o I9 cai de 31 asserções e 24 mutantes para 19 e 13 (o
+    lote, de 40 mutantes novos para 29). Recusados: ficar no Markdown com o "não" desligado por toda
+    forma que o leitor não modela (quatro regras novas, um fechamento por enumeração do CommonMark
+    sem renderizador no runner) e só o recuo, com os outros 7 mundos no `TODO.md` (o leitor seguiria
+    falhando aberto em mundos medidos). Achado ao adaptar, e consertado no plano: o fixture do
+    `check-gates.sh` diz `branch: main` também na branch de missão, e com o I12 a recusa da base
+    respondia antes da âncora (medido nos mundos 14, 15 e 18 do I9; o plano da D19 tinha a mesma
+    colisão em todo mundo com K8 `✅`); o I9 troca o `branch:` do fixture pelo nome da branch.
+    - answer: (recommended)
 
 ## Pendências para o humano
 
@@ -485,8 +513,8 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
   origin/main`, e de lá `sdd approve 20261012-a-rota-da-qa` e a execução interativa, incremento por
   incremento. O `sdd approve` faz checkout da `branch:` e a cria a partir da atual quando não existe.
 - **Carimbo de mutação:** `./bin/sdd health` uma vez, no worktree, depois do último commit de código
-  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 727 depois dos quarenta
-  deste lote (689 medidos depois do I1 no teste de autocontenção): ~40 a 60 min.
+  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 716 depois dos vinte e
+  nove deste lote (689 medidos depois do I1 no teste de autocontenção): ~40 a 60 min.
 - **Yokoten nos alvos:** mudam `agents/sdd-qa.md`, `sdd-planner.md` e `sdd-docs.md`. No
   `sales_quote`, `sdd install --force` numa branch `chore/kit-<sha>` e PR para a `develop`; os alvos
   com symlink seguem sozinhos.

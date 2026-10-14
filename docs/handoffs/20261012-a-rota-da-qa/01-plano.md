@@ -132,9 +132,17 @@ Lido nesta sessão, sobre `4f16a6d` (a `main` do kit em 2026-10-12) mais o commi
   `sales_quote` (71 `## `, um deles a seção `## Onde cada coisa mora`, que não é entrada). Nenhum dos
   dois tem `## ` dentro de cerca de código hoje. A entrada do L4 escrita à mão (`acb708b9` do
   `sales_quote`) **não** cita o id da missão; por isso o `sdd-docs.md` passa a mandar citar.
-- A linha K8 do template é `| K8 | Registro no KAIZEN_LOG | <✅/✗> | |` (`templates/missao.md:60`):
-  o status é o 3º campo da tabela. O `awk` desta máquina é o `mawk`, orientado a byte: comparar a
-  célula aparada com `✅` por igualdade funciona; classe negada com multibyte, não.
+- **O leitor da chave do K8 (D23)** é o `frontmatter <arquivo> <chave>` (`bin/sdd:337`), o mesmo
+  do `qa: skipped` do I1, e a presença é o `frontmatter_has` (`bin/sdd:371`), que pergunta pelo
+  próprio `frontmatter` com o sentinela `FRONTMATTER_ABSENT`. Ele só lê o bloco entre a primeira
+  linha, se ela for exatamente `---`, e o `---` seguinte; a primeira ocorrência da chave vence;
+  apara espaço e tab nas pontas do valor e uma aspa de cada lado; não apara `\r` nem comentário.
+  **Medido em 2026-10-14** com as duas funções extraídas do `bin/sdd`, sobre treze grafias:
+  dispensam `kaizen_log: skipped`, `skipped` com espaço ou tab no fim e `"skipped"`; cobram
+  `Skipped`, a chave vazia (presente, valor vazio), o placeholder do template (presente),
+  `skipped # nada a medir`, `skipped` + `\r`, uma `kaizen_log: no` antes de uma `kaizen_log:
+  skipped`, a chave ausente e a chave no corpo (as duas ausentes para o `frontmatter_has`), e um
+  arquivo CRLF inteiro (a primeira linha é `---\r`, então nenhuma chave é lida).
 - Os ids de missão (o nome do diretório; o runner não valida o formato, `resolve_mission`,
   `bin/sdd:307`) são todos `^[0-9]{8}-[a-z0-9-]+$`: 64 de 64 diretórios com `00-missao.md` em cinco
   repos (o kit 28, `sales_quote` 31, `lighthouse_project` 3, `ansible-jrc` 1,
@@ -144,17 +152,20 @@ Lido nesta sessão, sobre `4f16a6d` (a `main` do kit em 2026-10-12) mais o commi
 - ⚠️ `mawk` 1.3.4: `substr(s, 0, 1)` devolve o **primeiro** caractere de `s`, não `""`; `substr`
   além do fim devolve `""`; `index(s, "")` devolve 1 (medido nesta sessão). É a armadilha da
   fronteira do id no I9.
-- **A linha K8 real** (censo de 2026-10-13, os 64 `00-missao.md`): 59 têm exatamente uma linha K8,
-  sempre sob `## Checklist kaizen` e fora de cerca; 5 não têm K8 nenhuma; nenhuma tem duas, nem uma
-  dentro de cerca, nem uma fora da seção. O título `## Checklist kaizen` é contrato do template
-  (`tests/check-templates.sh:344`). Os valores são `✅` 56 vezes (bytes `e2 9c 85`) e `⏳` 3 vezes
-  (`e2 8f b3`), sem seletor de variação. Os três `⏳` são do `sales_quote`
-  (`20260917-papeis-consultor-admin`, `20260924-todo-no-esqueleto`,
-  `20260924-transacao-honra-o-timeout`) e dizem "Fase DOCS" na nota: a promessa que a âncora existe
-  para cobrar. Duas das três não têm linha do `KAIZEN_LOG.md` citando o id.
+- **A linha K8 real e a chave** (censo de 2026-10-13, refeito para o `✗` e a chave em 2026-10-14,
+  os 64 `00-missao.md` dos cinco repos): 59 têm uma linha K8, todas com `✅` (56) ou `⏳` (3,
+  do `sales_quote`, com a nota "Fase DOCS"); **nenhuma diz `✗`**, e **nenhuma tem `kaizen_log`** no
+  frontmatter. Logo, a D23 não muda a resposta de nenhuma missão real: todas prometiam pela D19 e
+  prometem pela D23. Nenhum arquivo de `tests/` cita `K8` ou `kaizen_log`
+  (`grep -rn 'K8\|kaizen_log' tests/` vazio).
+- **O parser de referência da 16ª rodada:** `markdown-it-py` 3.0.0 (`/usr/lib/python3/dist-packages`),
+  pelo `python3 -I`, com `MarkdownIt("commonmark").enable("table")` (o preset `gfm-like` exige o
+  `linkify-it`, que não está instalado). Não é o `cmark-gfm` do GitHub; é o que mediu os 13 mundos
+  da asserção 19 do I9.
 - O `00-missao.md` do fixture do `check-gates.sh` (`:144-151`) é só frontmatter mais `# Mission`,
-  sem seção nenhuma. O `assert_phase` (`:47-51`) resolve a fase por `sdd phase "$MISSION"`, então
-  passa pelo `resolve_mission`.
+  sem seção nenhuma, e diz `branch: main`, que o molde de branch de missão (`:1318-1326`) não muda.
+  O `assert_phase` (`:47-51`) resolve a fase por `sdd phase "$MISSION"`, então passa pelo
+  `resolve_mission`.
 - ⚠️ **Locale e o `=~` do bash 5.2.21:** sob `LC_ALL=pt_BR.UTF-8` (o locale desta máquina; nem o
   runner nem a suíte fixam `LC_ALL`), `[[ 20260101-fixtureé =~ ^[0-9]{8}-[a-z0-9-]+$ ]]` **casa**: a
   faixa `[a-z]` alcança o `é`. Sob `C.UTF-8`, não. A classe **enumerada**
@@ -261,8 +272,8 @@ qa_substep (com interface)                                   gate_QA (os dois ca
   └─ senão                               → close
 
 qa_fix_ahead_of <caminho>  — UMA definição, DOIS leitores (I3 no qa_substep, I4 no gate_QA)
-gate_DOCS: o checklist não diz ✗ na linha K8 do template ⇒ entrada nova no KAIZEN_LOG.md  (I9)
-gate_PLAN: branch: = base e K8 prometido explicitamente → recusa (e gate_DOCS de reforço)   (I12)
+gate_DOCS: frontmatter sem kaizen_log: skipped ⇒ entrada nova no KAIZEN_LOG.md        (I9)
+gate_PLAN: branch: = base e kaizen_log: presente sem skipped → recusa (e gate_DOCS de reforço) (I12)
 resolve_mission: id fora de ^[0-9]{8}-[a-z0-9-]+$ → recusa, em todo comando      (I11)
 boot_prompt/turn_rule: "todo carimbo sai de date"                                 (I8)
 /sdd-plan + sdd-planner: o aceite renderiza, refaz --check/--red, conta as recomendadas (I6, I7)
@@ -285,7 +296,8 @@ boot_prompt/turn_rule: "todo carimbo sai de date"                               
   `sdd-qa`, e o reteste é a caminhada do `close`. A pergunta do I3 só existe com interface; quem faz
   o `close` rodar de novo depois do F, nos dois caminhos, é o frescor do I4 (o CodeRabbit leu a
   ausência como lacuna no PR #247; não é).
-- **A âncora do K8 lê dois artefatos**: a linha K8 do plano e o diff do `KAIZEN_LOG.md` de cada
+- **A âncora do K8 lê dois artefatos**: a chave `kaizen_log` do frontmatter do plano (D23) e o diff
+  do `KAIZEN_LOG.md` de cada
   merge-base até HEAD, em que tem de haver um bloco `## ` cujo título e uma linha citando o id da
   missão são novos (D16). A entrada é a unidade (o título, D14) com a identidade (o id, D15), no
   mesmo bloco: a D14 media a unidade sem a identidade, a D15 a identidade sem a unidade, e cada
@@ -294,15 +306,17 @@ boot_prompt/turn_rule: "todo carimbo sai de date"                               
   conta é a entrada que ficou, citando a missão, quem quer que a tenha escrito (a DOCS ou um incremento do EXEC, como o I13
   desta missão). Range vazio (missão na base, já
   mergeada, sem base resolvida) → a resposta de hoje, como o `mission_qa_report`.
-- **As três entradas da âncora têm estrutura** (D16, D17, D19): a entrada do `KAIZEN_LOG.md` é um
+- **As três entradas da âncora têm estrutura** (D16, D17, D23): a entrada do `KAIZEN_LOG.md` é um
   bloco (D16); o id da missão é uma gramática que o runner confere no `resolve_mission` (D17, I11),
-  e é ela que torna exata a fronteira do `cites_id`; a promessa do plano só diz "não" pela linha K8
-  do template com `✗`, e toda outra forma cobra (D19, que substituiu o voto e o recuo da D18). Até a
-  7ª rodada do PR #247, só a primeira tinha estrutura; as outras duas eram regra sobre texto cru, e
-  cada rodada achou o caso que o texto cru deixava passar.
+  e é ela que torna exata a fronteira do `cites_id`; a promessa do plano é uma chave literal do
+  frontmatter, lida pelo `frontmatter` que o runner já tem (D23, que substituiu a D19). Até a 7ª
+  rodada do PR #247, só a primeira tinha estrutura; as outras duas eram regra sobre texto cru, e
+  cada rodada achou o caso que o texto cru deixava passar. A D19 deu estrutura à promessa lendo a
+  tabela, e a 16ª rodada mostrou que ler Markdown aos pedaços não fecha: o "não" saiu do Markdown.
 - **A missão na base não promete o K8** (D20, I12): na base não há range para ler a entrada, então
-  o `gate_PLAN` recusa `branch:` igual à `DEFAULT_BRANCH` quando o checklist promete explicitamente,
-  e o `gate_DOCS` recusa o mesmo como reforço para o `--phase` forçado.
+  o `gate_PLAN` recusa `branch:` igual à `DEFAULT_BRANCH` quando o frontmatter tem `kaizen_log:` sem
+  `skipped` (a promessa escrita, D23), e o `gate_DOCS` recusa o mesmo como reforço para o `--phase`
+  forçado.
 - **O aceite e o planner são prosa**, e o sensor é o `check-hat.sh`. O `gate_PLAN` muda só pelo I12:
   `auto` e `humano-YYYY-MM-DD` continuam válidos.
 
@@ -798,84 +812,59 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
 
 **O quê:**
 - No `gate_DOCS`, entre a checagem de pendentes (`bin/sdd:2183-2190`) e o bloco `⛔` (`:2211`):
-  1. Pergunte o que o plano diz da entrada (D19). A função `k8_promise`, definida logo acima do
-     `gate_DOCS`, é uma definição com dois leitores (este gate e o `gate_PLAN` do I12). Ela imprime
-     `no`, `none` ou `yes` e é lida por `$( )`: não toca global, e o `awk` sai sempre 0.
+  1. Pergunte ao frontmatter se o plano dispensa a entrada (D23). O leitor é o `frontmatter`
+     (`bin/sdd:337`), o mesmo que o I1 usa para o `qa: skipped`, e a condição abre o bloco do K8:
 
      ```bash
-     k8_promise() {
-       awk "$FENCE_AWK"'
-         !/^[ \t]*\|/ { hdr = 0; dlm = 0 }
-         { fence_line($0) }
-         fence { next }
-         /^## / { sec = ($0 ~ /^## Checklist kaizen([[:space:]]|$)/); next }
-         !sec { next }
-         { l = $0; gsub(/[ \t]+/, " ", l) }
-         l ~ /^ ?\| ?# ?\| ?Item ?\| ?Status ?\| ?Nota ?\| ?$/ { hdr = 0; dlm = 1; next }
-         dlm { dlm = 0; if (l ~ /^ ?\| ?:?-+:? ?\| ?:?-+:? ?\| ?:?-+:? ?\| ?:?-+:? ?\| ?$/) { hdr = 1; next } }
-         { h = $0; sub(/^[ \t]*\|/, "", h); split(h, c0, "|"); k = c0[1]; gsub(/^[ \t]+|[ \t]+$/, "", k) }
-         k == "K8" {
-           if (hdr && $0 !~ /\\\|/) { rows++; split($0, c, "|"); s = c[4]; gsub(/^[ \t]+|[ \t]+$/, "", s); if (s != "✗") yes = 1 }
-           else odd = 1
-         }
-         END { print ((yes || odd) ? "yes" : (rows ? "no" : "none")) }
-       ' "$MISSION_DIR/00-missao.md"
-     }
+     if [ "$(frontmatter "$MISSION_DIR/00-missao.md" kaizen_log)" != skipped ]; then
+       # passos 2 e 3; o I12 põe a recusa da base como a primeira linha daqui
+     fi
      ```
 
-     **Só a linha do template diz "não"** (D19). `no` sai só quando a seção `## Checklist kaizen`
-     (título seguido de espaço ou fim de linha, fora de cerca) tem, dentro da tabela do template (o
-     cabeçalho `| # | Item | Status | Nota |` **seguido logo abaixo da linha delimitadora** de quatro
-     células, como `|---|---|---|---|`, e as linhas que continuam o mesmo bloco contíguo aberto por
-     `|`), linhas `K8` sem `\|`, todas com `✗` na célula de Status. Sem a delimitadora, ou com uma
-     de outro número de células, o GFM não desenha tabela, então a linha `K8` não é a do template
-     (Codex, 12ª rodada). **O estado da tabela vive só entre linhas que abrem por `|`** (13ª
-     rodada): toda linha que não abre por `|` (título, linha em branco, prosa, cerca, linha de outra
-     seção) zera `hdr` e `dlm` na primeira regra do programa, antes de qualquer `next`. Medido, com
-     o leitor da 12ª rodada: o reset ficava depois do `next` do título e do `!sec { next }`, e o
-     estado vazava por três portas: o título `## ` (o `hdr` de uma tabela que acaba colada nele,
-     mundo do Codex), o mesmo título com o `dlm` (um cabeçalho colado no título faz a primeira linha
-     da seção seguinte valer como delimitadora) e as linhas de uma seção que não é o checklist. A
-     cerca não vazava: a linha que a fecha já zera. `none` é a seção sem nenhuma
-     linha `K8`, ou ausente. Toda outra forma é `yes`: uma linha cuja primeira célula é `K8` fora
-     daquela tabela (sem a barra inicial, em parágrafo, em outra tabela, sob outro cabeçalho), com
-     `\|`, ou com status que não seja o literal `✗` (`✅`, `⏳`, o marcador `<✅/✗>`, vazio). Uma
-     linha cuja primeira célula não é `K8` não conta, mesmo citando o K8 no texto (a nota do K6
-     desta missão o cita). O gate segue com `no` e cobra a entrada com `yes` e com `none`: fora da
-     forma do template, cobra. O `none` fica à parte por causa da D20 (I12), que na base recusa só o
-     `yes`. Cada regra tem um mutante e um mundo (abaixo).
+     **Só a chave diz "não"** (D23). Com o literal `kaizen_log: skipped` no frontmatter, o gate
+     segue sem ler o `KAIZEN_LOG.md`; com qualquer outra coisa, cobra a entrada. A linha K8 do
+     checklist é prosa para o humano e não é lida: o `✗` dela, sozinho, não dispensa nada. A régua é
+     a do leitor, medida nesta sessão sobre o `frontmatter` real (Contexto verificado): `skipped`,
+     `skipped` com espaço ou tab no fim e `"skipped"` dispensam; `Skipped`, a chave vazia, o
+     placeholder do template, `skipped # nota`, `skipped` seguido de `\r`, a chave ausente, a chave
+     no corpo (depois do segundo `---`), uma segunda `kaizen_log:` depois de uma primeira com outro
+     valor e um arquivo com fim de linha CRLF (a primeira linha deixa de ser `---`) cobram. O
+     comentário nomeia o dono da chave, o `sdd-planner` com o humano na sala, e diz por que ela é
+     literal: o "não" é o único lado que falha aberto, como no `qa: skipped` da D2. Uma linha só,
+     lida por `$( )`, sem global.
 
-     Por que a classe e não o caso: era o 4º achado do leitor da promessa desde a D18 (rodadas 7, 8,
-     10 e 11), e o da 11ª (o CodeRabbit: um parágrafo `K8 | item | ✗ |` no checklist calava o recuo
-     para o arquivo e deixava passar um `✅` real de outra seção) nasceu do conserto da 10ª. Cada
-     forma GFM era uma regra e um achado possível. A D19 tira regras: o "não cobra" tem uma forma só,
-     e todo desvio cai do lado que o dono da entrada, o `sdd-docs`, satisfaz escrevendo-a.
-     **Medido** (protótipo, `mawk` 1.3.4), em 24 mundos de status:
-     - o leitor da 10ª rodada falha aberto em 3: o parágrafo do CodeRabbit, as colunas reordenadas e
-       a Nota antes do Status;
-     - um leitor com estado de tabela GFM (cabeçalho e delimitadora) mais a D18 também falha aberto
-       em 3: as colunas reordenadas, a Nota antes do Status e um `\|` que põe `✗` na 3ª célula;
-     - este não falha aberto em nenhum, e cobra a mais, por desenho, em 4: sem linha K8, a linha
-       `✗` sem a barra, o marcador `<✅/✗>`, a seção sem K8.
-     Nas 64 missões reais: as 59 com K8 têm uma linha só, no layout do template e sob o cabeçalho do
-     template, e todas dizem `✅` ou `⏳` (nenhuma diz `✗`); das 5 sem K8, quatro estão na base e a
-     quinta (`ansible-jrc`) nunca passou do PLAN. Nenhuma missão em voo muda de resposta. **Raio
-     nos fixtures:** zero. Com a D19 aplicada numa cópia do kit (repositório git), os seis sensores
-     que criam missões (`check-gates`, `check-autonomy`, `check-dry-run`, `check-adr`,
-     `check-kaizen`, `check-coordination`) deram as mesmas contagens de `ok` e `FAIL` da cópia sem
-     mudança (439/0, 495/2, 72/0, 81/0, 227/3, 193/0; os 2 e os 3 `FAIL` são do ambiente da cópia e
-     aparecem nas duas).
+     **Por que o "não" saiu do Markdown** (D23, 16ª rodada do PR #247). O leitor da D19 decidia o
+     "não" sobre o texto cru, imitando o Markdown aos pedaços (cerca, título, tabela, delimitadora),
+     e cada forma que ele não imitava virava um "não" falso: foi o achado das rodadas 7, 8, 10, 11,
+     12, 13 e 16. **Medido** na 16ª com um parser CommonMark de verdade (`markdown-it-py` 3.0.0, o
+     preset `commonmark` mais a regra de tabela GFM, por `python3 -I`), nos 13 mundos da asserção 19
+     abaixo: o leitor da D19 dizia `no` em 9 onde o parser não renderiza a linha `✗` do template
+     como tabela, ou renderiza outro K8 `✅` (a tabela recuada 4 espaços ou por tab, dentro de
+     `<!-- -->`, logo depois de `<details>`, continuada depois de `> Nota:`, dentro de um
+     `- <!--`, e a linha `✗` real com outra tabela de `**K8**`, de `` `K8` `` ou citada por `>`).
+     O conserto que o Codex pediu, o recuo de 0 a 3 espaços sem tab, fechava 2 dos 9. O estado que
+     faltava é a estrutura que o Markdown renderiza, e um `awk` que lê byte não a tem; a chave
+     literal tira a pergunta do Markdown e usa um leitor exato que já existe. **Raio:** 0 das 64
+     missões reais têm uma linha K8 com `✗` ou a chave `kaizen_log` (medido nesta sessão), e nenhum
+     arquivo de `tests/` cita `K8` ou `kaizen_log`. Todo fixture lia `none` na D19 e lê "sem a
+     chave" agora, e as duas respostas cobram, então o raio medido da D19 vale igual: com ela
+     aplicada numa cópia do kit, os seis sensores que criam missões (`check-gates`,
+     `check-autonomy`, `check-dry-run`, `check-adr`, `check-kaizen`, `check-coordination`) deram as
+     mesmas contagens de `ok` e `FAIL` da cópia sem mudança (439/0, 495/2, 72/0, 81/0, 227/3,
+     193/0; os 2 e os 3 `FAIL` são do ambiente da cópia e aparecem nas duas).
 
-     Recusados: o estado de tabela GFM mantendo a D18 (as 3 falhas abertas acima); ler a linha sem
-     barra só dentro de uma tabela começada por `|` (a regra do `checkpoint_rows`), que volta a não
-     ler uma tabela inteira sem barra; e a D18 com o recuo para o arquivo, que era a porta da falha
-     aberta do CodeRabbit.
-  2. Com `no`, o gate segue: `case "$(k8_promise)" in no) ;; *) <a âncora> ;; esac`. Com `yes` ou
-     `none`, monte `nots` por `mission_base_refs` (o I12 põe, antes disso, a recusa da missão cuja
-     `branch:` é a base com `yes`). Sem base que resolva, ou com
-     range vazio (`git rev-list -n 1 HEAD --not …` vazio), fica a resposta de hoje, o molde do
-     `mission_qa_report` (`:1080-1084`).
-  3. Senão, procure a **entrada** (D16): um bloco do `KAIZEN_LOG.md` cujo título e uma linha que
+     Recusados (D23): ficar no Markdown com o "não" desligado por toda forma que o leitor não
+     modela (o recuo, uma abertura de bloco HTML, um `K8` fora da linha do template, o cabeçalho
+     sem linha em branco antes), que eram quatro regras novas e um fechamento por enumeração do
+     CommonMark sem renderizador no runner; e só o conserto do recuo, com os outros 7 mundos no
+     `TODO.md`, que deixava o leitor falhando aberto em mundos medidos. A D19 (só a linha do
+     template com `✗` diz "não") e o leitor `k8_promise` saem do plano.
+  2. Dentro do `if`, monte `nots` por `mission_base_refs` (o I12 põe, antes disso, a recusa da
+     missão cuja `branch:` é a base e cuja chave está presente sem `skipped`). Sem base que
+     resolva, ou com range vazio (`git rev-list -n 1 HEAD --not …` vazio), fica a resposta de hoje,
+     o molde do `mission_qa_report` (`:1080-1084`).
+  3. Com range, ainda dentro do `if`, procure a **entrada** (D16): um bloco do `KAIZEN_LOG.md` cujo
+     título e uma linha que
      cita a missão são, os dois, novos na branch. Para **cada** merge-base `b` de HEAD com as bases
      (o `bases` do molde do `mission_qa_report`, `:1069-1074`), leia o diff com o arquivo inteiro de
      contexto, pela plumbing, numa variável:
@@ -937,7 +926,7 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
      regra que nenhum mundo do fixture observa.
 
      Faltando em qualquer merge-base (a direção que falha fechada), o `GATE_WHY` é
-     `00-missao.md promises K8 (only ✗ in the template K8 row of the kaizen checklist promises nothing) and the mission branch adds no KAIZEN_LOG.md entry of its own — a '## ' heading new in the branch whose block has a new line citing $MISSION as a whole id (a longer id that contains it does not count); write the entry, citing the mission, with the before and after the plan names, or uncheck K8 with the human`.
+     `00-missao.md does not declare kaizen_log: skipped in its frontmatter (the K8 row of the checklist is prose and dispenses nothing) and the mission branch adds no KAIZEN_LOG.md entry of its own — a '## ' heading new in the branch whose block has a new line citing $MISSION as a whole id (a longer id that contains it does not count); write the entry, citing the mission, with the before and after the plan names, or declare kaizen_log: skipped with the human`.
      **Por que o bloco** (D16): o `KAIZEN_LOG.md` da `main` já cita esta missão (a entrada do
      veredito aponta para `docs/handoffs/20261012-a-rota-da-qa/05-verdict.md`), como o de toda
      missão nascida do kaizen, então "ausente na base" reprovaria a entrada dela para sempre; e a
@@ -1006,16 +995,28 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
        esse texto.
   4. O comentário nomeia o dono: o `sdd-docs`, com `KAIZEN_LOG.md` no `writes:`.
 - `agents/sdd-docs.md` § 3, linha `KAIZEN_LOG.md`: atualize quando a missão mede um antes/depois
-  **ou quando o K8 do checklist do `00-missao.md` não diz `✗` na linha do template** (D19), e o gate
-  cobra. `n/a` só com o `✗` na linha do template.
+  **ou quando o frontmatter do `00-missao.md` não declara `kaizen_log: skipped`** (D23), e o gate
+  cobra. `n/a` só com `kaizen_log: skipped`; a linha K8 do checklist não decide nada.
   A entrada **abre com o seu próprio `## `** e **cita o id da missão** (`<YYYYMMDD>-<slug>`) numa
   linha dela, inteiro (um id mais longo que o contém, como `<id>-r2`, não conta); citar a missão
-  numa entrada que já existe não conta. O probe do `check-hat.sh` abaixo não muda por isso.
+  numa entrada que já existe não conta.
+- `templates/missao.md`, o contrato da chave (D23), no mesmo commit:
+  - no frontmatter, logo depois do `qa:` do I2, a linha
+    `kaizen_log: <vazio, ou skipped quando o K8 é ✗ com o humano — só o literal skipped dispensa a entrada do KAIZEN_LOG.md>`.
+    O placeholder não é o literal, então um plano que o copia promete a entrada (medido: o
+    `frontmatter` devolve o placeholder inteiro, e o `frontmatter_has` diz que a chave existe, que
+    é o que o I12 lê);
+  - em `## Checklist kaizen`, entre o título e a tabela, uma linha em branco e
+    `> O K8 desta tabela é prosa: quem dispensa a entrada do KAIZEN_LOG.md é só o literal kaizen_log: skipped no frontmatter, decidido com o humano no grill.`
+    seguida de outra linha em branco. A tabela não muda.
+- `tests/check-templates.sh:336`: `kaizen_log` entra na lista de chaves, depois do `qa` do I2, e
+  imprime `missao.md: frontmatter key 'kaizen_log'`.
 - `docs/pipeline.md` § DOCS: a condição nova. Anatomia § 4: uma frase.
 - `./bin/sdd install --force`.
 
-**Onde:** `bin/sdd` (`gate_DOCS`), `agents/sdd-docs.md`, `docs/pipeline.md`, a anatomia,
-`tests/check-gates.sh`, `tests/check-hat.sh`, `tests/check-mutation.sh`.
+**Onde:** `bin/sdd` (`gate_DOCS`), `agents/sdd-docs.md`, `templates/missao.md`, `docs/pipeline.md`,
+a anatomia, `tests/check-gates.sh`, `tests/check-hat.sh`, `tests/check-templates.sh`,
+`tests/check-mutation.sh`.
 **Como (TDD):** no bloco da DOCS do `check-gates.sh`, logo depois de `:2753` (`assert_phase "drift
 checklist complete" "PR"`, o primeiro ponto em que a DOCS passa). Antes de cortar a branch, a `main`
 do fixture ganha um `KAIZEN_LOG.md` com uma entrada antiga que já cita `$MISSION`, a forma de toda
@@ -1035,8 +1036,9 @@ Outra linha do veredito.
 ---
 ```
 
-Corte uma branch de missão (molde `:1318-1326`), acrescente ao `$MDIR/00-missao.md` (que hoje não
-tem seção nenhuma, Contexto verificado) a seção do checklist, como o template a escreve:
+Corte uma branch de missão (molde `:1318-1326`). No `$MDIR/00-missao.md` (que hoje não tem seção
+nenhuma, Contexto verificado), troque `branch: main` pelo nome dessa branch e acrescente a seção do
+checklist, como o template a escreve (a linha K8 é prosa; nenhuma `kaizen_log:` no frontmatter):
 
 ```text
 
@@ -1047,17 +1049,23 @@ tem seção nenhuma, Contexto verificado) a seção do checklist, como o templat
 | K8 | Registro no KAIZEN_LOG | ✅ | |
 ```
 
-Commite e guarde `k8_start="$(git rev-parse HEAD)"`. Trinta e uma asserções `assert_phase` com o
-prefixo exato `kaizen-log: `, nesta ordem. Os mundos 1–17 e 21–31 são **independentes**: cada um é
-um commit sobre `k8_start` e volta com `git reset -q --hard "$k8_start"` (o molde de `:1349`); os
-18–20 são uma sequência, e o 21 começa com esse reset. Os mundos 1–10 mexem só no `KAIZEN_LOG.md`,
-e os 11–17 e 21–31 só no `00-missao.md`, com o `KAIZEN_LOG.md`
-de `k8_start` (nenhuma entrada nova: cobrar dá `DOCS`, não cobrar dá `PR`). ⚠️ Não os acumule: o
-mundo 3 (renome) seguido do 4 (citação na mesma entrada) é o resíduo declarado, e a fase passaria.
-Os trinta e um mundos, com estes textos e esta base, foram rodados no protótipo contra a regra e
-contra cada mutante (a fase esperada em todos; 2026-10-13, 13ª rodada). ⚠️ Nos mundos que trocam a
-linha real **e** acrescentam outra linha K8, troque a real primeiro: as duas seriam iguais byte a
-byte, e um `sed` na real depois reescreveria as duas (aconteceu no protótipo).
+⚠️ **Troque o `branch:`.** O fixture diz `branch: main` (`:144-151`), e o molde de branch de
+missão não o muda. Com o I12 no lugar, uma missão que diz `branch: main` e tem a chave presente sem
+`skipped` é recusada pela base **antes** da âncora: os mundos 14, 15 e 18 abaixo dariam `DOCS` pelo
+motivo errado, e a sabotagem da âncora não os mudaria. Medido no protótipo: com `branch: main`, o
+motivo desses três é o `names the base branch` do I12. (O plano da D19 tinha a mesma colisão, maior:
+todo mundo com o checklist `✅` dizia `yes`, e com `branch: main` os mundos que esperam `PR`, como o
+8 e o 10, dariam `DOCS` depois do I12; nenhum protótipo anterior tinha o `branch:` no fixture.)
+
+Commite e guarde `k8_start="$(git rev-parse HEAD)"`. Dezenove asserções com o prefixo exato
+`kaizen-log: `, nesta ordem. Os mundos 1–10 e 13–19 são **independentes**: cada um é um commit
+sobre `k8_start` e volta com `git reset -q --hard "$k8_start"` (o molde de `:1349`); os 11–12 são
+uma sequência, e o 13 começa com esse reset. Os mundos 1–12 mexem só no `KAIZEN_LOG.md`, e os
+13–19 só no `00-missao.md`, com o `KAIZEN_LOG.md` de `k8_start` (nenhuma entrada nova: cobrar dá
+`DOCS`, dispensar dá `PR`). ⚠️ Não os acumule: o mundo 3 (renome) seguido do 4 (citação na mesma
+entrada) é o resíduo declarado, e a fase passaria. Os dezenove mundos, com estes textos e esta base,
+foram rodados no protótipo contra a regra e contra cada mutante (a fase esperada em todos;
+2026-10-14, 16ª rodada).
 1. `kaizen-log: a base that already cites the mission is not the entry`: nada acrescentado → `DOCS`.
    Junto, um `assert_why` **sem** o prefixo (não entra na conta do Check), `K8 names the missing
    KAIZEN_LOG entry`, com a regex `adds no KAIZEN_LOG.md entry of its own`;
@@ -1090,78 +1098,69 @@ byte, e um `sed` na real depois reescreveria as duas (aconteceu no protótipo).
     mundo 9 com `; plano em docs/handoffs/$MISSION/01-plano.md` antes do ponto final → `PR`. É o
     gêmeo diferencial do 9: só a citação inteira os separa, e ela vem **depois** das três colisões
     na mesma linha;
-11. `kaizen-log: a sample K8 row before the checklist does not hide the real one`: entre o
-    `# Mission` e o `## Checklist kaizen`, uma seção `## Problema (Gemba)` com `Exemplo:` e uma
-    tabela `| # | Item | Status | Nota |` / `|---|---|---|---|` /
-    `| K8 | Registro no KAIZEN_LOG | ✗ | |`; a linha real segue `✅` → `DOCS`. É o mundo do Codex
-    na 7ª rodada: o leitor de antes lia o exemplo e dava `PR`;
-12. `kaizen-log: a sample K8 row outside the checklist promises nothing`: a linha real vira `✗` e
-    a tabela de exemplo do 11 vem com `✅` → `PR`. ⚠️ Troque a linha real **antes** de inserir o
-    exemplo: as duas linhas são iguais byte a byte, e um `sed` na real depois reescreve as duas
-    (aconteceu no protótipo);
-13. `kaizen-log: any K8 row of the checklist that promises the entry is read`: a linha real vira
-    `✗` e, logo abaixo dela, `| K8 | Registro no KAIZEN_LOG (de novo) | ✅ | |` → `DOCS`;
-14. `kaizen-log: a renamed checklist heading does not hide the K8 row`: `## Checklist kaizen` vira
-    `## Kaizen checklist`, a linha segue `✅` → `DOCS`;
-15. `kaizen-log: a fenced K8 row in the checklist promises nothing`: a linha real vira `✗` e, entre
-    o título do checklist e o cabeçalho da tabela, entram `Exemplo:`, uma linha em branco, um bloco
-    cercado por três crases com `| K8 | exemplo | ✅ | |` dentro e outra linha em branco → `PR`. A
-    cerca fica **fora** da tabela: dentro dela, a cerca corta a tabela (GFM), e a linha real
-    deixaria de ser da tabela do template;
-16. `kaizen-log: a pending K8 demands the entry like a checked one`: a linha real com `⏳` → `DOCS`;
-17. `kaizen-log: a heading that only starts like the checklist is not the checklist`:
-    `## Checklist kaizen` vira `## Checklist kaizenx`, a linha real vira `✗`, e no fim do arquivo
-    uma seção `## Outra seção` com a tabela `| # | Item | Status | Nota |` / `|---|---|---|---|` /
-    `| K8 | Registro no KAIZEN_LOG | ✅ | |` → `DOCS`. É o mundo do CodeRabbit na 8ª rodada: sem a
-    fronteira depois de `kaizen`, a seção quase igual tomava o lugar do checklist e o seu `✗` calava
-    o voto do arquivo. ⚠️ Troque a linha real **antes** de acrescentar a do fim, que é igual a ela
-    byte a byte;
-18. `kaizen-log: a new entry that cites the mission lets DOCS pass`: `## 2026-01-02 — Lote` novo, logo
+11. `kaizen-log: a new entry that cites the mission lets DOCS pass`: `## 2026-01-02 — Lote` novo, logo
     abaixo do primeiro `---`, com `$MISSION: antes 1, depois 2.` no corpo → `PR`. O id fica **na
     coluna 1 e sem crase**: é o mundo da armadilha do `mawk` (`substr(s, 0, 1)`). O I11 acrescenta
     aqui, com o mundo no lugar, uma asserção sua (`mission-id: `, fora da conta deste Check);
-19. `kaizen-log: an entry written and then reverted in the mission branch holds DOCS`: sobre o 18,
+12. `kaizen-log: an entry written and then reverted in the mission branch holds DOCS`: sobre o 11,
     `git revert --no-edit HEAD` (sem `-q`, que o git 2.43 não aceita) → `DOCS`;
-20. `kaizen-log: K8 unchecked demands nothing`: com `✗` no lugar de `✅` na linha do checklist, e o
-    revert no lugar, a fase segue → `PR`;
-21. `kaizen-log: a K8 row without its leading pipe is still read`: de volta a `k8_start`, a linha
-    real reescrita sem a barra inicial, `K8 | Registro no KAIZEN_LOG | ✅ | ✗ |`, dentro da tabela →
-    `DOCS`. É o mundo do Codex na 10ª rodada (o leitor da D18 dava `PR`); o `✗` na Nota é o que faz o
-    mutante do cabeçalho que não se reinicia ler `✗` no lugar do status;
-22. `kaizen-log: an escaped pipe in the K8 row does not move its status`: de volta a `k8_start`, a
-    linha real vira `| K8 | Registro \| ✗ | ✅ | |` → `DOCS` (o GFM mostra `✅` no Status; um corte
-    cego leria `✗`);
-23. `kaizen-log: a K8 row under another header is not the template row`: o cabeçalho vira
-    `| # | Item | Nota | Status |` e a linha `| K8 | Registro no KAIZEN_LOG | ✗ | ✅ |` → `DOCS`;
-24. `kaizen-log: the template placeholder is not a no`: a linha real com `<✅/✗>` no Status → `DOCS`;
-25. `kaizen-log: a checklist without a K8 row demands the entry`: a linha real apagada → `DOCS`;
-26. `kaizen-log: a K8 line outside the template table demands the entry`: a linha real vira `✗`, e
-    depois da tabela, separada por uma linha em branco, entra `K8 | Registro no KAIZEN_LOG (de novo) |
-    ✅ |` → `DOCS`;
-27. `kaizen-log: a K8-like paragraph in the checklist does not hide the entry` (o mundo do CodeRabbit
-    na 11ª rodada): a linha real apagada; depois da tabela, separada por uma linha em branco,
-    `K8 | item | ✗ |`; e no fim do arquivo uma seção `## Outra seção` com a tabela do template e a
-    linha `| K8 | Registro no KAIZEN_LOG | ✅ | |` → `DOCS` (o leitor da 10ª rodada dava `PR`);
-28. `kaizen-log: a header without its delimiter row is not the template table` (o mundo do Codex na
-    12ª rodada): a linha real vira `✗` e a delimitadora `|---|---|---|---|` é apagada → `DOCS`;
-29. `kaizen-log: a delimiter row of another width is not the template table`: a linha real vira `✗`
-    e a delimitadora vira `|---|---|---|` → `DOCS`;
-30. `kaizen-log: a checklist table does not leak into the next heading` (o mundo do Codex na 13ª
-    rodada): a linha real apagada, e colado na delimitadora, sem linha em branco,
-    `## Checklist kaizen` e logo abaixo `| K8 | Registro no KAIZEN_LOG | ✗ | |` → `DOCS`;
-31. `kaizen-log: a header does not lend its delimiter to the next section`: a linha real e a
-    delimitadora apagadas, e colado no cabeçalho, sem linha em branco, `## Checklist kaizen`,
-    `|---|---|---|---|` e `| K8 | Registro no KAIZEN_LOG | ✗ | |` → `DOCS`.
+13. `kaizen-log: kaizen_log: skipped in the frontmatter dispenses the entry`: de volta a `k8_start`,
+    a linha `kaizen_log: skipped` logo abaixo do `branch:` e a linha K8 do checklist com `✗` no lugar
+    do `✅` → `PR`. É o gêmeo diferencial do primeiro mundo da asserção 19 (a mesma linha `✗`, sem a
+    chave): só a chave os separa;
+14. `kaizen-log: a misspelt kaizen_log: Skipped demands the entry`: `kaizen_log: Skipped` → `DOCS`;
+15. `kaizen-log: an empty kaizen_log demands the entry`: `kaizen_log:` sem valor → `DOCS` (a chave
+    existe, o valor é vazio: o `frontmatter` devolve vazio para os dois casos, e os dois cobram);
+16. `kaizen-log: kaizen_log: skipped in the body is not the frontmatter`: a linha `kaizen_log: skipped`
+    depois do `# Mission`, fora do frontmatter → `DOCS`;
+17. `kaizen-log: a trailing space after skipped is trimmed like any frontmatter value`:
+    `kaizen_log: skipped ` (um espaço no fim) → `PR`. É a régua do leitor, a mesma do `qa:`;
+18. `kaizen-log: a trailing carriage return after skipped demands the entry`: `kaizen_log: skipped`
+    seguido de `\r` (`printf 'kaizen_log: skipped\r\n'`) → `DOCS`. O `frontmatter` apara espaço e
+    tab, não o `\r`;
+19. `kaizen-log: no Markdown form of K8 in the checklist dispenses the entry without the key`: um
+    `assert_eq` só, sobre um laço de 13 mundos. Cada um parte de `k8_start` (sem a chave), edita só o
+    `00-missao.md`, commita, lê `"$SDD" phase "$MISSION"` e volta com o reset. O laço conta os
+    mundos construídos (cada construtor confere por `grep -qF` que a sua linha marcante entrou, ou
+    não conta) e os que deram `DOCS`, e guarda o nome dos que não deram:
+    `assert_eq "kaizen-log: no Markdown form of K8 in the checklist dispenses the entry without the key" "13 13 -" "$built $docs ${missed:--}"`.
+    Nas receitas abaixo, "apague a real" é apagar a linha `| K8 | Registro no KAIZEN_LOG | ✅ | |`
+    (antes de acrescentar qualquer linha, que pode ser igual a ela), "a real com `✗`" é trocar o
+    `✅` dela por `✗`, e **T** são as três linhas `| # | Item | Status | Nota |`,
+    `|---|---|---|---|` e `| K8 | Registro no KAIZEN_LOG | ✗ | |`. Cada "acrescente" vai para o
+    fim do arquivo, e a primeira linha acrescentada é sempre uma linha em branco:
+    1. `template-x`: a real com `✗`;
+    2. `indent-3`: apague a real; acrescente `Exemplo:`, uma linha em branco e T, cada linha
+       recuada 3 espaços;
+    3. `indent-4`: o mesmo, com 4 espaços;
+    4. `indent-tab`: o mesmo, com um tab;
+    5. `para-glued`: apague a real; acrescente `Exemplo:` e T, sem linha em branco entre eles;
+    6. `list-table`: apague a real; acrescente `- item`, uma linha em branco e T recuada 2 espaços;
+    7. `html-comment`: apague a real; acrescente `Exemplo:`, uma linha em branco, `<!--`, T e `-->`;
+    8. `html-details`: apague a real; acrescente `<details>`, T e `</details>`;
+    9. `lazy-quote`: apague a real; acrescente `> Nota:` e T, sem linha em branco;
+    10. `list-html`: apague a real; acrescente `- <!--`, T recuada 2 espaços e `  -->`;
+    11. `bold-k8`: a real com `✗`; acrescente o cabeçalho, a delimitadora e
+        `| **K8** | exemplo | ✅ | |`;
+    12. `code-k8`: o mesmo, com `` | `K8` | exemplo | ✅ | | ``;
+    13. `quote-k8`: a real com `✗`; acrescente `> | # | Item | Status | Nota |`,
+        `> |---|---|---|---|` e `> | K8 | exemplo | ✅ | |`.
+
+    Os 13 são os da 16ª rodada (D23). Num parser CommonMark de verdade (`markdown-it-py` 3.0.0,
+    Contexto verificado), os mundos 1, 2, 5 e 6 renderizam a linha `✗` do template numa tabela, e
+    os outros nove não a renderizam ou renderizam outro K8 `✅`; o leitor da D19 dizia `no` nos 13.
+    Sem a chave, todos cobram, e o laço afirma isso: a tabela do checklist não decide mais nada.
 
 Volte à `main` e restaure o fixture. Um probe em `hat_promise_probes` lê o `sdd-docs.md` § 3: exige
-`K8` na linha do `KAIZEN_LOG.md`, a instrução de abrir a entrada com o seu próprio `## ` e a de citar
-o id da missão, e imprime `hat: the docs hat reads K8 of the plan before it marks KAIZEN_LOG`.
-Vinte e quatro mutantes, provados por `--only <slug> check-gates.sh`. Os vinte e quatro foram sabotados no
-protótipo, sobre a base deste fixture, e cada um mudou a fase exatamente nos mundos indicados:
-- `DOCS_k8_ignored` neutraliza o `if` novo → mundos 1–7, 9, 11, 13, 14, 16, 17, 19 e 21–31;
+`kaizen_log: skipped` na linha do `KAIZEN_LOG.md`, a instrução de abrir a entrada com o seu próprio
+`## ` e a de citar o id da missão, e imprime
+`hat: the docs hat reads kaizen_log of the plan before it marks KAIZEN_LOG`. Treze mutantes,
+provados por `--only <slug> check-gates.sh`, sabotados no protótipo sobre a base deste fixture, e
+cada um mudou a fase exatamente nos mundos indicados:
+- `DOCS_k8_ignored` neutraliza o `if` novo → mundos 1–7, 9, 12, 14, 15, 16, 18 e 19;
 - `DOCS_k8_presence_is_enough` troca `"$b"` pela árvore vazia
   (`4b825dc642cb6eb9a060e54bf8d69288fbee4904`) no `diff-tree`, e toda linha vira nova → mundos 1–7,
-  9, 11, 13, 14, 16, 17, 19 e 21–31;
+  9, 12, 14, 15, 16, 18 e 19;
 - `DOCS_k8_reads_deleted_lines` deixa as linhas `-` entrarem (`t != " " && t != "+" && t != "-"
   { next }`) → só o mundo 8;
 - `DOCS_k8_heading_not_new` tira `hnew &&` da condição da citação → mundos 4–7;
@@ -1175,37 +1174,21 @@ protótipo, sobre a base deste fixture, e cada um mudou a fase exatamente nos mu
   só o mundo 9 (o `$MISSION-extra` e o `${MISSION}s`);
 - `DOCS_k8_cite_first_only` troca o `while ((i` por `if ((i`, e só a primeira ocorrência conta →
   só o mundo 10;
-- `DOCS_k8_cite_unpadded` apaga a linha `s = " " s` → só o mundo 18 (e a asserção do I11 no mesmo
+- `DOCS_k8_cite_unpadded` apaga a linha `s = " " s` → só o mundo 11 (e a asserção do I11 no mesmo
   mundo);
-- `DOCS_k8_status_fence_blind` apaga a linha `fence { next }` do `k8_promise` → só o mundo 15;
-- `DOCS_k8_status_heading_unbounded` troca `/^## Checklist kaizen([[:space:]]|$)/` por
-  `/^## Checklist kaizen/` → só o mundo 17;
-- `DOCS_k8_status_header_ignored` troca `if (hdr && $0 !~` por `if ($0 !~` → mundos 21, 23 e 28–31;
-- `DOCS_k8_status_header_not_reset` apaga a linha `!/^[ \t]*\|/ { hdr = 0; dlm = 0 }` →
-  mundos 21, 30 e 31;
-- `DOCS_k8_status_reset_in_section_only` move essa linha para depois do `!sec { next }` (o lugar da
-  12ª rodada) → mundos 30 e 31;
-- `DOCS_k8_status_dlm_kept` troca `{ hdr = 0; dlm = 0 }` por `{ hdr = 0 }` → só o mundo 31;
-- `DOCS_k8_status_escaped_ok` troca `if (hdr && $0 !~ /\\\|/)` por `if (hdr)` → só o mundo 22;
-- `DOCS_k8_status_no_is_not_promised` troca `if (s != "✗") yes = 1` por
-  `if (s == "✅" || s == "⏳") yes = 1` (o "não" da D18) → só o mundo 24;
-- `DOCS_k8_status_odd_ignored` troca `else odd = 1` por `else odd = 0` → só o mundo 26;
-- `DOCS_k8_status_first_row_only` troca `if (s != "✗") yes = 1` por
-  `if (rows == 1 && s != "✗") yes = 1` → só o mundo 13;
-- `DOCS_k8_status_none_is_no` faz o `gate_DOCS` seguir também com `none` (o `case` do passo 2) →
-  mundos 14, 17 e 25;
-- `DOCS_k8_status_delimiter_ignored` troca `{ hdr = 0; dlm = 1; next }` por `{ hdr = 1; next }` (o
-  cabeçalho basta) → mundos 28 e 29;
-- `DOCS_k8_status_delimiter_any_count` troca a regex da delimitadora de quatro células por
-  `/^ ?\|( ?:?-+:? ?\|)+ ?$/` (qualquer largura) → só o mundo 29.
-O leitor da 10ª rodada (a D18 com a linha GFM) muda os mundos 23, 24, 25 e 27–31 (medido): o 27 é o
-mundo do CodeRabbit, e o 24 e o 25 são o que a D19 decidiu cobrar e a D18 não cobrava. Nenhum
-mutante sozinho refaz o 27, que fica como a regressão pedida.
-A classe não tem mutante próprio, e o mundo 9 é o que a segura: no protótipo, a classe reduzida a
-`[-]` e a classe sem o `-` deixaram o mundo 9 em `PR` (por isso ele leva um vizinho letra e um
-vizinho `-`); a classe alargada com `.` e `/` (aperto, falha fechada) deixou o 10 em `DOCS`.
-**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `31 1`
-**Sensor durável:** as trinta e uma asserções, o `assert_why`, o probe e os vinte e quatro mutantes.
+- `DOCS_k8_key_ignored` troca `!= skipped ]; then` por `!= skipped ] || true; then`, e a chave
+  nunca dispensa → mundos 13 e 17;
+- `DOCS_k8_key_loose` troca `!= skipped ]; then` por `= "" ]; then`, e qualquer valor não vazio
+  dispensa (o molde do `QA_substep_skipped_loose`) → mundos 14 e 18.
+Os mundos 15, 16 e 17 seguram a régua do leitor e não têm mutante próprio, como o I1. Medido no
+protótipo: trocar o teste do valor por `frontmatter_has` (a chave presente dispensa) faz o 15 dar
+`PR` (e o 14 e o 18); trocar o `frontmatter` por um `sed` no arquivo inteiro faz o 16 dar `PR` e o
+17 dar `DOCS`. A classe do `cites_id` não tem mutante próprio, e o mundo 9 é
+o que a segura: no protótipo, a classe reduzida a `[-]` e a classe sem o `-` deixaram o mundo 9 em
+`PR` (por isso ele leva um vizinho letra e um vizinho `-`); a classe alargada com `.` e `/` (aperto,
+falha fechada) deixou o 10 em `DOCS`.
+**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); c=$(bash tests/check-templates.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads kaizen_log of the plan' <<< "$b"); z=$(grep -c "^  ok    missao.md: frontmatter key 'kaizen_log'" <<< "$c"); echo "$x $y $z"` → `19 1 1`
+**Sensor durável:** as dezenove asserções, o `assert_why`, a chave no `check-templates.sh`, o probe e os treze mutantes.
 **Reversível por:** reverter o commit.
 
 ### I10 — onde vai o `RESOLVED by` num item no teto
@@ -1274,7 +1257,7 @@ apagado depois:
 4. `mission-id: a slash after the mission argument still resolves`:
    `"$SDD" status "$MISSION/" --no-gates` sai com rc 0 e nomeia `$MISSION`.
 
-A quinta fica no bloco do I9, logo depois do mundo 18 (a entrada nova citando a missão), com o
+A quinta fica no bloco do I9, logo depois do mundo 11 (a entrada nova citando a missão), com o
 mundo no lugar:
 5. `mission-id: a slash before the mission argument still finds the K8 entry`:
    `assert_eq "mission-id: a slash before the mission argument still finds the K8 entry" PR "$(cd "$FIX" && "$SDD" phase "/$MISSION" 2>&1)"`.
@@ -1301,45 +1284,55 @@ passar o `é` da asserção 2 sob o locale armado; sem o `^`, passa o `sq…` da
 **Sensor durável:** as cinco asserções, o probe e os três mutantes.
 **Reversível por:** reverter o commit.
 
-### I12 — a missão na base não promete o K8 (D20)
+### I12 — a missão na base não promete o K8 (D20, adaptada pela D23)
 
 **O quê:** uma missão cuja `branch:` é a base commita na base, e o range da âncora do K8 fica vazio
 por construção, o mesmo vazio de uma missão mergeada (Codex, PR #247, 11ª rodada). A recusa mora
-onde o humano está, como a do `adr:`.
-- `bin/sdd`, junto da `k8_promise` do I9, uma definição com dois leitores:
+onde o humano está, como a do `adr:`. Desde a D23 ela lê a chave, não a tabela.
+- `bin/sdd`, logo acima do `gate_DOCS`, uma definição com dois leitores:
 
   ```bash
   k8_base_refusal() {
-    [ "$(frontmatter "$MISSION_DIR/00-missao.md" branch)" = "$DEFAULT_BRANCH" ] || return 0
-    [ "$(k8_promise)" = yes ] || return 0
-    printf '%s\n' "00-missao.md names the base branch ($DEFAULT_BRANCH) in branch: and its kaizen checklist promises the KAIZEN_LOG entry (K8): on the base branch there is no range to read the entry in — give the mission its own branch, or write ✗ in the template K8 row, with the human"
+    local m="$MISSION_DIR/00-missao.md"
+    [ "$(frontmatter "$m" branch)" = "$DEFAULT_BRANCH" ] || return 0
+    frontmatter_has "$m" kaizen_log || return 0
+    [ "$(frontmatter "$m" kaizen_log)" != skipped ] || return 0
+    printf '%s\n' "00-missao.md names the base branch ($DEFAULT_BRANCH) in branch: and carries kaizen_log: without skipped, so it promises a KAIZEN_LOG entry: on the base branch there is no range to read the entry in — give the mission its own branch, or write kaizen_log: skipped with the human"
   }
   ```
 
-  Ela é lida por `$( )` e não toca global.
+  Ela é lida por `$( )` e não toca global. O `frontmatter_has` (`bin/sdd:371`) é a pergunta "a
+  chave existe?", feita pelo próprio `frontmatter` com um sentinela, então os dois leitores nunca
+  discordam.
 - No `gate_PLAN`, depois do `adr_gate_verdict plan || return 1` (`:1208`) e antes de contar as
   linhas do checkpoint: `why="$(k8_base_refusal)"; [ -z "$why" ] || { GATE_WHY="$why"; return 1; }`.
   O comentário nomeia o dono: o `sdd-planner`, com o humano na sala.
-- No `gate_DOCS`, dentro do bloco do K8 do I9 e antes do `mission_base_refs`, a mesma linha: é o
-  reforço para o `--phase` forçado, que pula a derivação e com ela o `gate_PLAN` (o mesmo argumento
-  da D17).
-- O comentário declara o resíduo. Na base, só o `yes` é recusado: um plano sem linha K8 (`none`)
-  passa, e a sua entrada não é lida, porque não há range e não há promessa escrita. 0 de 64 missões
-  reais estão na base (Contexto verificado).
-- `agents/sdd-planner.md` § 8, no item "a real branch name" (`:225-230`), a frase sobre nomear a
-  base passa a dizer: "Naming the base branch itself (`main`) is a decision too, and passes, unless
-  the kaizen checklist promises K8: on the base branch there is no range to read the KAIZEN_LOG
-  entry in, so `gate_PLAN` refuses that pair; write `✗` in the template K8 row, or give the mission
-  its own branch."
+- No `gate_DOCS`, como a primeira linha dentro do `if` do I9 (antes do `mission_base_refs`), a mesma
+  linha: é o reforço para o `--phase` forçado, que pula a derivação e com ela o `gate_PLAN` (o mesmo
+  argumento da D17).
+- O comentário declara o resíduo. Na base, só a chave **presente** sem `skipped` é recusada (vazia,
+  o placeholder do template, `Skipped`, `skipped # nota`, com `\r`): um plano sem a chave passa, e a
+  sua entrada não é lida, porque não há range e não há promessa escrita. É o `none` da D20 com
+  outro leitor: todo plano escrito pelo template novo carrega a chave, e os fixtures e as missões
+  anteriores não. 0 de 64 missões reais têm a chave (Contexto verificado).
+- `agents/sdd-planner.md`:
+  - § 3, junto do K8 do checklist kaizen: "K8 ✗ is decided with the human and written as
+    `kaizen_log: skipped` in the frontmatter of `00-missao.md`; the K8 row alone dispenses nothing,
+    and without the key `gate_DOCS` demands a `KAIZEN_LOG.md` entry citing the mission."
+  - § 8, no item "a real branch name" (`:225-230`), a frase sobre nomear a base passa a dizer:
+    "Naming the base branch itself (`main`) is a decision too, and passes, unless `00-missao.md`
+    carries `kaizen_log:` with anything but `skipped` (the template ships it): on the base branch
+    there is no range to read the KAIZEN_LOG entry in, so `gate_PLAN` refuses that pair; write
+    `kaizen_log: skipped` with the human, or give the mission its own branch."
 - `docs/pipeline.md` § PLAN, "Passes when" (`:147`): a mesma condição, numa frase.
 - `./bin/sdd install --force` (mudou um `agents/*.md`).
 
-**Por que só a promessa explícita** (D20, reaberta pela medição dos fixtures): com a D19, um plano
-sem linha K8 conta como prometido, e a primeira forma da D20 recusava toda missão na base que não
-escrevesse `✗` no template. **Medido** numa cópia do kit (repositório git), contra a mesma cópia sem
-mudança, nos seis sensores que criam missões:
+**Por que a chave presente, e não toda missão sem `skipped`** (D20, reaberta pela medição dos
+fixtures, e adaptada pela D23): a primeira forma da D20 recusava toda missão na base que não
+dispensasse a entrada. **Medido** (com o leitor da D19) numa cópia do kit (repositório git), contra
+a mesma cópia sem mudança, nos seis sensores que criam missões:
 
-| Sensor | Base (ok / FAIL) | D20 contra toda promessa | D20 só contra o `yes` |
+| Sensor | Base (ok / FAIL) | D20 contra toda promessa | D20 só contra a promessa escrita |
 |---|---|---|---|
 | `check-gates` | 439 / 0 | 231 / 208 | 439 / 0 |
 | `check-autonomy` | 495 / 2 | 296 / 201 | 495 / 2 |
@@ -1351,32 +1344,41 @@ mudança, nos seis sensores que criam missões:
 A primeira forma recusou 556 vezes no `gate_PLAN` e 41 no `gate_DOCS`, em 12 missões de fixture
 (seis no `check-gates`, duas no `check-adr`, uma em cada um dos outros), todas na `main` com
 `branch: main` e sem checklist. Os 2 e os 3 `FAIL` da base são do ambiente da cópia e aparecem nas
-três colunas. Recusados: a primeira forma, com o checklist `✗` nos 12 fixtures, que acoplaria a
-suíte inteira ao K8; e tirar os fixtures da base, que é o mundo em que o `ensure_mission_branch` não
-faz nada.
+três colunas. Com a D23 o conjunto é o mesmo: nenhum fixture tem a chave nem uma linha K8
+(`grep -rn 'K8\|kaizen_log' tests/` vazio, nesta sessão), então "sem a chave" recusa exatamente as
+12 que "sem `✗`" recusava, e "só a chave presente" não recusa nenhuma, como "só o `yes`". Recusados:
+a primeira forma, com a chave nos 12 fixtures, que acoplaria a suíte inteira ao K8; e tirar os
+fixtures da base, que é o mundo em que o `ensure_mission_branch` não faz nada.
 
 **Onde:** `bin/sdd` (`gate_PLAN`, `gate_DOCS`), `agents/sdd-planner.md`, `docs/pipeline.md`,
 `tests/check-gates.sh`, `tests/check-hat.sh`, `tests/check-mutation.sh`.
 **Como (TDD):** três asserções com o prefixo exato `base-branch: ` no `check-gates.sh`, logo depois
 de `assert_phase "drift checklist complete" "PR"` (`:2753`) e **antes** do bloco do I9, que corta a
 branch de missão. Nesse ponto o fixture está na `main`, com `branch: main`, `DEFAULT_BRANCH="main"`
-e sem checklist, e passa: é o `none`, o resíduo declarado, que o resto da suíte já exercita.
-1. Acrescente ao `$MDIR/00-missao.md`, sem commitar, a seção do checklist do template (o título, o
-   cabeçalho `| # | Item | Status | Nota |`, a delimitadora e `| K8 | Registro no KAIZEN_LOG | ✅ | |`).
-   `base-branch: a mission on the base branch that promises K8 is held at PLAN` → `PLAN`;
+e sem a chave, e passa: é o resíduo declarado, que o resto da suíte já exercita.
+1. Acrescente ao frontmatter do `$MDIR/00-missao.md`, sem commitar, a linha `kaizen_log:` sem valor,
+   logo abaixo do `branch: main`:
+   `base-branch: a mission on the base branch that promises the KAIZEN_LOG entry is held at PLAN` →
+   `PLAN`;
 2. `base-branch: a forced DOCS on that mission is refused too`: `assert_why` com a fase `DOCS` e a
    regex `names the base branch` (o `sdd why <missão> DOCS` lê o `gate_DOCS` direto, sem derivar,
    que é o caminho do `--phase` forçado);
-3. troque o `✅` por `✗`: `base-branch: the same mission with ✗ in the template K8 row goes on` →
-   `PR`.
+3. troque a linha por `kaizen_log: skipped`: `base-branch: the same mission with kaizen_log: skipped
+   goes on` → `PR`.
 Restaure com `git checkout -- "$MDIR/00-missao.md"`. Um probe em `hat_promise_probes` do
-`check-hat.sh` exige, no `agents/sdd-planner.md`, a frase sobre nomear a base com `K8` e `✗`, e
-imprime `hat: the planner knows a mission on the base branch cannot promise K8`. Três mutantes,
-provados por `--only <slug> check-gates.sh`:
+`check-hat.sh` exige, no `agents/sdd-planner.md`, `kaizen_log: skipped` na § 3 e na frase da § 8
+sobre nomear a base, e imprime `hat: the planner knows a mission on the base branch cannot promise
+K8` (o nome fica: a promessa do K8 é a entrada). Três mutantes, provados por
+`--only <slug> check-gates.sh`:
 - `PLAN_base_branch_k8_ignored` apaga a linha do `k8_base_refusal` no `gate_PLAN` → a asserção 1;
 - `DOCS_base_branch_k8_ignored` apaga a do `gate_DOCS` → a asserção 2;
-- `PLAN_base_branch_refuses_silence` troca `[ "$(k8_promise)" = yes ]` por
-  `[ "$(k8_promise)" != no ]` → a suíte inteira (a primeira forma da D20, medida acima).
+- `PLAN_base_branch_refuses_silence` apaga a linha `frontmatter_has "$m" kaizen_log || return 0`, e
+  a missão sem a chave passa a ser recusada → a suíte inteira (a primeira forma da D20, medida
+  acima).
+Medido no protótipo, com a função extraída deste plano e o `frontmatter`/`frontmatter_has` reais:
+na base, a chave vazia, `Skipped`, o placeholder e `skipped` com `\r` recusam; `skipped`, a chave
+ausente e a chave no corpo passam; numa branch própria, nada recusa; e o mutante
+`refuses_silence` recusa a chave ausente.
 **Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    base-branch: ' <<< "$a"); y=$(grep -c '^  ok    hat: the planner knows a mission on the base branch cannot promise K8' <<< "$b"); echo "$x $y"` → `3 1`
 **Sensor durável:** as três asserções, o probe e os três mutantes.
 **Reversível por:** reverter o commit.
@@ -1428,21 +1430,23 @@ gaveta e a frase da linha F3 a cobrem.
 
 ## Medição do vermelho
 
-Rodado pelo planner em 2026-10-13 às 21:41, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
-`kaizen/20261012`, head `87a4a84` mais o conserto da 13ª rodada), sobre o checkpoint **final**, em
-background e lido até a linha final. É a 13ª medição: as anteriores (2026-10-12 20:53, 2026-10-13
-05:02, 07:53, 08:12, 09:59, 11:53, 14:10, 14:38, 17:42, 18:16, 20:03 e 20:37) foram refeitas porque
-um Check mudou. O do I9 foi de `3 1` a `31 1` em onze passos (D13, D14, D15, D16, a fronteira do id,
-D18, a fronteira do título, a linha GFM, D19, a delimitadora, o estado da tabela por bloco). A D17 trouxe o I11, a D20 trouxe o I12, e o
-fecho virou I13. O do I3 foi de `1` a `1 1` (9ª rodada) e a `1 1 1 1` (10ª); o do I4 de `4` a `5`
+Rodado pelo planner em 2026-10-14 às 12:23, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
+`kaizen/20261012`, head `c01c24a` mais o conserto da 16ª rodada), sobre o checkpoint **final**, em
+background e lido até a linha final. É a 14ª medição: as anteriores (2026-10-12 20:53, 2026-10-13
+05:02, 07:53, 08:12, 09:59, 11:53, 14:10, 14:38, 17:42, 18:16, 20:03, 20:37 e 21:41) foram refeitas
+porque um Check mudou. O do I9 foi de `3 1` a `31 1` em onze passos (D13, D14, D15, D16, a fronteira
+do id, D18, a fronteira do título, a linha GFM, D19, a delimitadora, o estado da tabela por bloco) e,
+na 16ª rodada, a `19 1 1`: a D23 tirou os mundos da tabela, juntou os 13 mundos de Markdown numa
+asserção só e acrescentou a chave do template no `check-templates.sh`. A D17 trouxe o I11, a D20
+trouxe o I12, e o fecho virou I13. O do I3 foi de `1` a `1 1` (9ª rodada) e a `1 1 1 1` (10ª); o do I4 de `4` a `5`
 (10ª); o do I13 de `1 1 1` a `1 1 1 1 1 1` (12ª).
 
-O `--check` e o `--red` levaram 8 min 41 s (21:41:52 → 21:50:33). Cinco Checks rodam o
-`check-gates.sh` (I1, I4, I9, I11 e I12), um depois do outro: o `--red` não paraleliza nem corta por
-tempo (`tests/check-checkpoint.sh:612`), então o total é a soma das corridas. O tempo de uma
-corrida do `check-gates.sh` varia com a carga desta máquina: ~95 s no Contexto verificado, 144 s
-numa corrida isolada medida às 22:51 de 2026-10-13. Para as cinco caberem nos 521 s, cada uma
-ficou perto dos ~95 s durante este `--red`.
+O `--check` e o `--red` levaram 11 min 20 s (12:23:56 → 12:35:16); a 13ª medição levou 8 min 41 s.
+Cinco Checks rodam o `check-gates.sh` (I1, I4, I9, I11 e I12), um depois do outro: o `--red` não
+paraleliza nem corta por tempo (`tests/check-checkpoint.sh:612`), então o total é a soma das
+corridas. O tempo de uma corrida do `check-gates.sh` varia com a carga desta máquina: ~95 s no
+Contexto verificado, 144 s numa corrida isolada medida às 22:51 de 2026-10-13; nos 680 s desta
+medição, cada uma das cinco ficou perto dos ~130 s.
 
 ```text
 $ bash tests/check-checkpoint.sh --check docs/handoffs/20261012-a-rota-da-qa/checkpoint.md
@@ -1457,7 +1461,7 @@ $ bash tests/check-checkpoint.sh --red docs/handoffs/20261012-a-rota-da-qa/check
   ok    checkpoint.md: I6 is red at HEAD (prints '0', wants '3')
   ok    checkpoint.md: I7 is red at HEAD (prints '0', wants '4')
   ok    checkpoint.md: I8 is red at HEAD (prints '0', wants '1')
-  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '31 1')
+  ok    checkpoint.md: I9 is red at HEAD (prints '0 0 0', wants '19 1 1')
   ok    checkpoint.md: I10 is red at HEAD (prints '0', wants '2')
   ok    checkpoint.md: I11 is red at HEAD (prints '0 0', wants '5 1')
   ok    checkpoint.md: I12 is red at HEAD (prints '0 0', wants '3 1')
@@ -1468,7 +1472,8 @@ $ bash tests/check-checkpoint.sh --red docs/handoffs/20261012-a-rota-da-qa/check
 
 **Como ler:** o vermelho de todos vem da presença do que o incremento acrescenta (uma asserção
 nomeada, um probe, uma frase, uma entrada); nenhum Check é de ausência. Os pares `x y` do I1, I2,
-I9, I11 e I12 juntam dois sensores com `echo`, e cada número é uma contagem ancorada em `^  ok    `. O
+I11 e I12, e o trio `x y z` do I9, juntam sensores com `echo`, e cada número é uma contagem ancorada
+em `^  ok    `. O
 quarteto do I3 junta três contagens ancoradas (duas do `check-dry-run.sh`, uma do `check-hat.sh`) e
 a contagem de `disable-model-invocation` no `bin/sdd`, que desce de `4` para `1` (só o comentário
 do `ticket` fica). O `--red`
@@ -1489,11 +1494,10 @@ medição velha que o aceite do L4 pegou (item (h)).
 | `qa: skipped` declarado e o EXEC tocou a tela | média | Jidoka desenhado: o `sdd-qa` escreve `blocked`, `handoff-blocked` para a linha (rc 3), o humano tira a chave **e apaga o handoff bloqueado** (senão paga mais duas sessões e duas escaladas) |
 | O reteste escreve um relatório novo cujo nome ordena antes do atual | baixa | a sub-etapa fica em `exec`; o `no_work_check` para a 2ª volta igual (falha fechada); o `qa-execution` continua o relatório existente ao retomar |
 | Um handoff ou relatório reescrito e não commitado | baixa | falha fechada: a volta seguinte pede de novo, e o `no_work_check` para a linha na repetição |
-| O K8 ✅ de missões antigas em voo passa a cobrar a entrada na DOCS | média | a DOCS a escreve (o dono existe); com range vazio, nada muda |
-| O K8 `⏳` passa a cobrar (D18): as três missões do `sales_quote` que o escrevem já estão mergeadas, e a próxima com `⏳` "Fase DOCS" passa a ter a entrada cobrada | média | é a promessa que o plano escreveu; a DOCS a cumpre, ou o humano troca o K8 |
+| Toda missão em voo sem `kaizen_log: skipped` passa a ter a entrada cobrada na DOCS (D23), com K8 `✅`, `⏳` ou `✗` na tabela | média | 0 de 64 missões reais dizem `✗` ou têm a chave, então nenhuma muda de resposta; a DOCS escreve a entrada (o dono existe), ou o humano declara `kaizen_log: skipped`; com range vazio, nada muda |
 | O `resolve_mission` passa a recusar id fora de `^[0-9]{8}-[a-z0-9-]+$` em todo comando (D17); o kit é público, e um alvo de outra máquina com um nome fora da gramática para em `sdd status` | baixa | medido: 64 de 64 ids reais e os 19 ids de teste cabem; o motivo nomeia a gramática e o diretório a renomear; a entrada do `KAIZEN_LOG.md` do I13 registra a mudança (M8) |
-| A D19 cobra a entrada de um plano que diga `✗` fora do layout do template, que deixe o marcador ou que não tenha linha K8 | baixa | 0 de 64 missões reais; as 59 com K8 dizem `✅` ou `⏳` no layout. A DOCS escreve a entrada (o dono existe), ou o humano escreve `✗` na linha do template |
-| Na base, um plano sem linha K8 não é cobrado (o resíduo da D20) | baixa | 0 de 64 missões reais estão na base; declarado no comentário do `k8_base_refusal`; a promessa explícita é recusada no PLAN |
+| Um plano que escreve `✗` na linha K8 e esquece a chave tem a entrada cobrada (D23) | baixa | falha fechada e satisfazível: a DOCS escreve a entrada, ou o humano declara a chave; o `sdd-planner` § 3 manda escrever os dois juntos, e o template traz a chave no frontmatter e a frase no checklist |
+| Na base, um plano sem a chave `kaizen_log` não é recusado nem cobrado (o resíduo da D20, com o leitor da D23) | baixa | todo plano escrito pelo template novo carrega a chave; 0 de 64 missões reais a têm; declarado no comentário do `k8_base_refusal`; a chave presente sem `skipped` é recusada no PLAN |
 | `qa_substep` ou `qa_fix_ahead_of` passando a atribuir global | baixa | proibido no plano; o `step_after` do `check-autonomy.sh` segue valendo |
 | Probe de prosa que passa sem a frase (sensor que mente) | média | passada de sabotagem de cada frase, registrada nas notas |
 | O carimbo de mutação rodado antes da rodada dos bots | média | ordem do `CLAUDE.md`: PR aberto, todos os bots, uma leva de consertos, `./bin/sdd health` uma vez |
@@ -1504,9 +1508,9 @@ baixar o modelo do `QA:close`.
 ## Verificação end-to-end
 
 - `tests/run-all.sh` verde, com as asserções novas de `check-dry-run.sh`, `check-gates.sh`,
-  `check-hat.sh` e `check-templates.sh`.
+  `check-hat.sh` e `check-templates.sh` (as chaves `qa` e `kaizen_log`).
 - Os Checks de I1–I13 dão o esperado da tabela; M1–M6, M8 e M9 do `00-missao.md` são as linhas `ok` deles.
-- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos quarenta mutantes novos
+- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos vinte e nove mutantes novos
   (`QA_substep_skipped_ignored`, `QA_substep_skipped_loose`, `QA_substep_retest_ignored`,
   `QA_fix_ahead_any_order`, `QA_fix_ahead_counts_merges`, `QA_fix_ahead_reads_the_directory`,
   `QA_fix_ahead_old_content_ok`, `QA_fix_ahead_any_carrier`, `QA_handoff_freshness_ignored`,
@@ -1514,13 +1518,8 @@ baixar o modelo do `QA:close`.
   `DOCS_k8_ignored`, `DOCS_k8_presence_is_enough`, `DOCS_k8_reads_deleted_lines`,
   `DOCS_k8_heading_not_new`, `DOCS_k8_cite_not_new`, `DOCS_k8_block_not_reset`,
   `DOCS_k8_fence_blind`, `DOCS_k8_cite_no_left_boundary`, `DOCS_k8_cite_no_right_boundary`,
-  `DOCS_k8_cite_first_only`, `DOCS_k8_cite_unpadded`, `DOCS_k8_status_fence_blind`,
-  `DOCS_k8_status_heading_unbounded`, `DOCS_k8_status_header_ignored`,
-  `DOCS_k8_status_header_not_reset`, `DOCS_k8_status_escaped_ok`,
-  `DOCS_k8_status_no_is_not_promised`, `DOCS_k8_status_odd_ignored`,
-  `DOCS_k8_status_first_row_only`, `DOCS_k8_status_none_is_no`, `DOCS_k8_status_delimiter_ignored`,
-  `DOCS_k8_status_delimiter_any_count`, `DOCS_k8_status_reset_in_section_only`,
-  `DOCS_k8_status_dlm_kept`, `RUN_mission_id_unchecked`,
+  `DOCS_k8_cite_first_only`, `DOCS_k8_cite_unpadded`, `DOCS_k8_key_ignored`, `DOCS_k8_key_loose`,
+  `RUN_mission_id_unchecked`,
   `RUN_mission_id_slashes_kept`, `DOCS_k8_mission_arg_raw`, `PLAN_base_branch_k8_ignored`,
   `DOCS_base_branch_k8_ignored`, `PLAN_base_branch_refuses_silence`), e o `--anchors` diz `all N mutants
   still apply`.
