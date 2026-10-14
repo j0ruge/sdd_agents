@@ -2685,6 +2685,13 @@ mut_RUN_turn_rule_dropped() {
 mut_RUN_turn_rule_background_dropped() {
   sed -i '/^boot_prompt() {/,/^}/ { /^A process you start in the background/,/^start — the app under test is the human/d; s@^What you started for your own check, stop before you end the turn\."$@"@ }' "$1"
 }
+# Item (j) of 20261012-a-rota-da-qa: the turn rule loses its clock line — a phase no longer told that
+# a timestamp it writes comes from `date`. The line has its own physical line and the closing quote
+# lives on the next one, so the runner still parses. Caught by "every projected phase is told that
+# a timestamp it writes comes from date" (check-dry-run.sh), at "5 0".
+mut_RUN_turn_rule_no_clock() {
+  sed -i '/^boot_prompt() {/,/^}/ { /never from a log you read/d; }' "$1"
+}
 
 # L5 of the 2026-09-03 audit: the phase session is opened through `env -u <harness vars>`, one
 # definition (HARNESS_ENV_UNSET) read by run_phase. Opening `claude` directly is the runner of
@@ -6395,6 +6402,7 @@ CATALOG=(
   RUN_rebase_read_as_foreign
   RUN_turn_rule_dropped
   RUN_turn_rule_background_dropped
+  RUN_turn_rule_no_clock
   RUN_harness_env_inherited
   RUN_git_label_unexported
   RUN_close_git_label_unexported

@@ -31,6 +31,9 @@ toda fase, que o processo posto em background (`nohup … &`) entra na família 
 run` não termina e o checkout segue preso até ele morrer — e que a sessão nunca para nem reinicia
 processo que não começou (o app sob teste é do humano): medido no `sales_quote`, uma sessão de QA
 matou o backend do humano e o relançou com `nohup`, e o `sdd run` ficou vivo até o servidor morrer.
+Desde `20261012-a-rota-da-qa` o `turn_rule` diz também que todo carimbo de hora que a fase escreve
+(`data:`, `atualizado:`, nota) sai de `date` rodado no mesmo lote de comandos: no L4 do `sales_quote`
+o `10-ticket.md` dizia 12:10 para uma sessão às 17:03, e o `45-docs.md` 18:10 para uma às 18:02.
 
 ## 2. Ferramentas — capacidades, não todas as possíveis
 
