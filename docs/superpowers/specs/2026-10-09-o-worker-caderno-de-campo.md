@@ -9,17 +9,19 @@
 > **Regra do caderno:** o que o ledger e o journal já sabem (custo, sessões, escaladas, tempos)
 > **não** se copia para cá — sai dos comandos da §7 da linha de base. Aqui entra só o que nenhum
 > instrumento registra: tempo humano de PLAN, passos de ambiente feitos à mão, o que o humano fez
-> entre dois lançamentos, e o que o worker teria feito em cada parada.
+> entre dois lançamentos, e o que o worker teria feito em cada parada. Uma exceção, declarada: o
+> número que liga a linha ao ledger — o custo total, as sessões e as rodadas na coluna PR da §3, e o
+> custo de uma fase quando ele é o próprio fato do toque (a QA real do L3).
 
-## 1. A linha de base (21 missões do `sales_quote`, 2026-08-14 → 2026-10-06)
+## 1. A linha de base (21 missões do `sales_quote`, 2026-08-25 → 2026-10-06)
 
 Medida só por leitura, com método e comandos reprodutíveis em
 [`2026-10-09-o-worker-linha-de-base.md`](2026-10-09-o-worker-linha-de-base.md):
 
 - **US$ 1 636 no runner**; por missão, mediana US$ 52,94 e p90 US$ 159,38 (desde 2026-09-24 a
   mediana caiu para US$ 35). EXEC 43 %, REVIEW 27 %, QA 19 % do custo.
-- **Só 4 de 21 (19 %) foram do TICKET ao PR sem toque humano.** 46 relançamentos antes do PR,
-  mediana de 10 min entre parar e relançar — o humano estava olhando.
+- **Só 4 de 21 (19 %) foram do TICKET ao PR sem toque humano.** 44 relançamentos antes do PR,
+  mediana de 8,5 min entre parar e relançar — o humano estava olhando.
 - **25 escaladas rc 3** (12 de kit, 9 de decisão humana, 4 de ambiente) e **27 paradas sem
   escalada** (14 de operador, 7 de ambiente). `app-down` e `session-died` nunca dispararam.
 - **Contrafactual:** com W2, W4 e W6 prontos e o kit de hoje, ≈ 12 de 21 (57 %) teriam chegado ao
@@ -37,12 +39,12 @@ humano quando o roadmap sair do estacionamento.
 | C3 | **O regime do timer já matou um `sdd run`.** O único lançado por `systemd-run` morreu com rc 127: o npm do nvm fora do PATH. Houve também node errado, OAuth expirado e mortes por memória — daí os 14 `--max-phases 1` do humano. | linha de base §2.1, §4.2 | W6 |
 | C4 | **Clone novo tem passo escondido.** Um worktree novo do `sales_quote` reprova 55 arquivos de teste do backend com `Cannot find module '.prisma/client/default'` até alguém rodar `npm run db:generate`; o `npm ci` não o roda. | faxina de 2026-10-09 | W2 ("clone novo sem passo manual escondido") |
 | C5 | **Nenhuma escalada chega a um pager.** `ON_ESCALATION_CMD=""` no `sales_quote`; 9 das 21 missões pararam por decisão humana ou teto. | `.sdd/config.sh` do alvo | W6 deve exigir o pager |
-| C6 | **Bots do PR:** o Codex revisou 12 de 21 PRs (achou algo em 10, 6 P1), sempre numa leva só; um achado chegou em 51 min. Copilot 0 de 21 (cota), CodeRabbit ausente. 10 de 21 PRs ganharam commit de conserto depois de abertos. "Cota/limite" tem de ler como **não revisou**, nunca como limpo. | linha de base §3.4 | W7: espera ≥ 60 min |
+| C6 | **Bots do PR:** o Codex revisou 12 de 20 PRs (achou algo em 10, 6 P1), sempre numa leva só; um achado chegou em 51 min. Copilot 0 de 20 (cota), CodeRabbit ausente. 10 de 20 PRs ganharam commit de conserto depois de abertos. "Cota/limite" tem de ler como **não revisou**, nunca como limpo. | linha de base §3.4 | W7: espera ≥ 60 min |
 | C7 | **O squash merge quebra o ciclo do `RESOLVED by`.** Os PRs de missão #405 e #406 entraram por squash; o hash do branch nunca vira ancestral da base e quatro itens ficaram presos no `TODO.md`. Decisão do humano em 2026-10-09: PR de missão do `sales_quote` entra por **merge commit**. O template do kit segue sem caminho para quem faz squash. | `git cat-file -p` dos merges | W3 e W7 (o aviso de pronto para merge) |
 | C8 | **O espelho de issues é a fila do D6, e estava parado.** Sem re-sincronizar desde 2026-09-24: 8 issues órfãs, 40 itens sem issue, e o script recusa o `TODO.md` com 206 violações da ADR 0015 §2 (âncora sem símbolo) — o arquivo é anterior à regra. Com `TRACKER=github`, um worker que lê prioridade do rastreador leria uma fila falsa. | `todo_issues.py --audit` | W3, W5 |
 | C9 | **Admissão: nem toda issue é material de worker.** Triagem das 194 abertas: 69 sim, 31 talvez, 66 não; os quatro traços do "sim" são verificável por `TEST_CMD`, sem decisão de produto, sem acesso externo e sem QA de interface — e o C2 tira o último no `sales_quote`. | triagem de 2026-10-09 | W5 (o "porque Z" do dry-run) |
 | C10 | **Pendência de operador escrita num handoff `done` não chega a ninguém.** No L1, o handoff do EXEC do ciclo de QA 1 (`757da125`, 2026-10-09 23:50, `status: done`) pediu "Antes do `gate_QA`: corrigir o `.env.local` do frontend". O gate lê o status, não as pendências: a linha seguiu, e a QA parou `blocked` 21 min depois pelo mesmo motivo (`ecb3df0b`, 00:11). O pedido só vira parada quando uma fase seguinte falha, e à noite ninguém o lê antes disso. | `git log -S` no `20-handoff-exec.md` de `20261009-o-que-some-calado` | W6 (o pager do C5) e o gate: pendência de operador num handoff `done` devia parar a linha ou notificar |
-| C11 | **O Codex sem achado não publica review.** No #470 e no #471 (L2, 2026-10-11) ele só atualizou o próprio resumo para `✅ Completed` com o sha curto do head e pôs 👍 no PR; `pulls/<n>/reviews` não ganhou nada dele. Um poll que espera a review do Codex no head nunca termina: o do #470 girou 20 min depois de o Codex ter acabado em 2. | `gh api repos/JRC-Brasil/sales_quote/pulls/470/reviews` e `…/issues/470/reactions` | W7: o sinal de "revisado" é o resumo `Completed` no sha do head ou a reação, nunca só a review |
+| C11 | **O Codex sem achado não publica review.** No #470 e no #471 (L2, 2026-10-11) ele só atualizou o próprio resumo para `✅ Completed` com o sha curto do head e pôs 👍 no PR; `pulls/<n>/reviews` não ganhou nada dele. Um poll que espera a review do Codex no head nunca termina: o do #470 girou 20 min depois de o Codex ter acabado em 2. | `gh api repos/JRC-Brasil/sales_quote/pulls/470/reviews` e `…/issues/470/reactions` | W7: "revisado" é só o resumo `Completed` do Codex com o sha do head atual; a reação fica no PR, não no sha, e só dispara uma nova consulta ao resumo |
 
 ## 3. Registro por missão (de 2026-10-09 em diante)
 

@@ -13,8 +13,8 @@
   sessões mediana **15** (p90 22); tempo de máquina mediana **2,6 h** (p90 4,3 h). Até 2026-09-18 a
   mediana era US$ 84; desde 2026-09-24, US$ 35.
 - **Só 4 de 21 (19 %) foram do TICKET ao PR sem toque humano.** 16 missões precisaram de mais de um
-  `sdd run`: 46 relançamentos antes do PR, mediana de 10 min entre parar e relançar (o humano estava
-  olhando). As 11 esperas acima de 30 min somam 35,4 h, e 29,2 h delas são quatro noites inteiras.
+  `sdd run`: 44 relançamentos antes do PR, mediana de 8,5 min entre parar e relançar (o humano estava
+  olhando). As 10 esperas acima de 30 min somam 34,5 h, e 29,2 h delas são quatro noites inteiras.
 - **25 escaladas rc 3** (KIT 12 · decisão humana 9 · ambiente 4) e **27 paradas sem escalada**
   (operador 14 · ambiente 7 · decisão 3 · sem explicação 2 · kit 1). `sdd retry` nunca foi usado;
   `app-down` e `session-died` nunca dispararam.
@@ -51,7 +51,7 @@ PR #105) e sete pastas de `docs/handoffs/` que nunca passaram pelo `sdd run`
 `20260922-aceite-po-storage`, `20260928-painel-gerencial`) — trabalho interativo ou abandonado.
 
 Conferência cruzada: soma das sessões no journal (era do ledger) = US$ 1 633,45; no ledger =
-US$ 1 632,38 + 1 sessão ausente (US$ 1,08) = US$ 1 633,46. Os dois instrumentos concordam ao centavo.
+US$ 1 632,38 + 1 sessão ausente (US$ 1,08) = US$ 1 633,46. Os dois instrumentos diferem em um centavo.
 
 ## 2. Tabela por missão
 
@@ -214,9 +214,9 @@ relatório, `QA:exec`) 4, 4, 5 e 7 sessões.
 | Missões do início ao PR **com zero toque humano** depois da aprovação | **4 de 21 (19 %)** — `a-tela-que-mente-o-pagamento`, `o-rascunho-fantasma-do-mount`, `breadcrumb-numero-cotacao`, `ver-vira-olho-na-lista` | 1 lançamento `run`, terminou em `PR-open`, nenhuma escalada, nenhuma fase manual. ⚠️ É teto: as quatro tinham interface e dependeram do stack local que o humano deixou no ar (o gate de QA roda `E2E_CMD` contra `localhost:5173`/`:3000`) |
 | Missões com ao menos uma escalada rc 3 | 13 de 21 (62 %) | 25 escaladas |
 | Missões com mais de um lançamento | 16 de 21 (76 %) | |
-| Relançamentos antes do PR | **46** em 16 missões | `run_id` novo depois do anterior parar |
-| Intervalo entre parar e relançar | **mediana 10 min**; depois de rc 3: n=21, mediana 9 min; depois de parada sem escalada: n=25, mediana 11 min | o humano estava olhando |
-| Intervalos > 30 min (proxy de "esperando humano") | **11**, somando **35,4 h**; 4 deles são noite inteira (547, 560, 371 e 271 min = 29,2 h) | a linha parou de madrugada e voltou de manhã |
+| Relançamentos antes do PR | **44** em 16 missões | `run_id` novo de `invocation: run` depois do anterior parar, começado antes de o PR abrir — pela sessão de PR ou, nos três abertos à mão (#139, #145, #167), pelo `createdAt` do GitHub. A versão anterior contava 46: o `note-manual` do TICKET da `mascaras` e o L6 da `destino`, pós-PR |
+| Intervalo entre parar e relançar | **mediana 8,5 min**; depois de rc 3: n=21, mediana 9 min; depois de parada sem escalada: n=23, mediana 8 min | o humano estava olhando |
+| Intervalos > 30 min (proxy de "esperando humano") | **10**, somando **34,5 h**; 4 deles são noite inteira (547, 560, 371 e 271 min = 29,2 h) | a linha parou de madrugada e voltou de manhã |
 | Sessões já rodadas entre 22h e 07h | 101 de 311 (32 %) — **nenhuma entre 05h e 08h** | o humano roda à noite, mas acordado, e para por volta das 04h |
 | `ON_ESCALATION_CMD` no `.sdd/config.sh` do `sales_quote` | **vazio** — nenhuma escalada chegou a pager | |
 | `sdd retry` / `auto_retry` | 0 / 0 | |
@@ -253,16 +253,18 @@ QA do regime antigo subestima o que o worker vai pagar.
 
 ### 3.4 Bots do PR (o que a W7 encontraria)
 
-21 PRs, **21 mergeados**, todos por humano. Abertura → merge: mediana ≈ 1 h, p90 8,2 h.
+20 PRs, **20 mergeados**, todos por humano. Abertura → merge: mediana ≈ 1 h, p90 8,2 h. O piloto
+(#105, fora do escopo) fica à parte: Copilot sem cota, Codex em "usage limits", nenhum commit de
+conserto depois da abertura.
 
 | Bot | Resultado |
 |---|---|
-| Copilot (`copilot-pull-request-reviewer`) | pedido em 21/21, **revisou 0/21** — "unable to review … quota limit" em todos |
-| CodeRabbit | **ausente** nos 21 |
-| Codex (`chatgpt-codex-connector`) | "usage limits" nos 9 primeiros (#105–#144, até 2026-09-06); desde #145 revisou **12/12**: 10 com achados, 2 limpos (#377, #406) |
+| Copilot (`copilot-pull-request-reviewer`) | pedido em 20/20, **revisou 0/20** — "unable to review … quota limit" em todos |
+| CodeRabbit | **ausente** nos 20 |
+| Codex (`chatgpt-codex-connector`) | "usage limits" nos 8 primeiros (#127–#144, até 2026-09-06); desde #145 revisou **12/12**: 10 com achados, 2 limpos (#377, #406) |
 | Achados do Codex | **14** (P1 = 6, P2 = 8), sempre numa leva só (mesmo timestamp); 1º achado chega **3–5 min** depois da abertura (um caso, #145, em 51 min) |
 | Segunda rodada de achados do Codex depois do conserto | **0** — a regra "uma leva, segunda rodada escala" da W7 nunca teria disparado |
-| PRs com commit de conserto depois da abertura | **10 de 21 (48 %)**; dos 10 com achado do Codex, 9 ganharam commit (o #180 não) — 1 a 4 commits, 15–60 min depois |
+| PRs com commit de conserto depois da abertura | **10 de 20 (50 %)**; dos 10 com achado do Codex, 9 ganharam commit (o #180 não) — 1 a 4 commits, 15–60 min depois |
 | Commits pós-PR que não vêm de bot | #398, #401, #406: humano aplicando o texto `⛔` do DOCS (rule proposta que o chapéu não pode escrever); #406: 15 commits de uma volta QA⇄EXEC **depois** do PR, aberta por decisão humana sobre o CEP; #145: `AGENTS.md` para o Codex ler o `CLAUDE.md` |
 | Resposta inline do humano ao Codex | 5 PRs (#145, #167, #168, #382, #383) — "procede, corrigido em <sha>" |
 
@@ -375,15 +377,16 @@ W3 entrega/rastreador · W4 ambiente · W5 olhar · W6 executar/teto/pager · W7
 | **Defeito de kit já consertado** — chapéu sem Bash (harness 2.1.263), `writes:` estreito ×3, publisher encerrando turno com background, aceite do B, plano não versionado | **(a)** hoje | Cada um tem conserto mergeado. Mas o ritmo foi ~1 defeito de kit novo a cada 3–4 missões até 2026-09-30 (7 casos em 6 de 21) — a próxima noite deve ser esperada a achar o seguinte, e o W5 (`--dry-run`) não o pegaria (aparecem na sessão, não na derivação). |
 | **Fase TICKET** — feita à mão uma vez (`note-manual`), presa uma vez (placeholder) | **(c) W3** | Adotar o cartão em vez de criar. |
 | **PR aberto à mão** porque o publisher morreu (#139, #145, #167) | **(a)** hoje | Consertado pela `turn_rule` no `boot_prompt`. |
-| **Bots do PR** — Codex revisou 12/21 (10 com achado, 14 achados, P1 = 6, sempre uma leva, 3–5 min; um caso 51 min); Copilot 0/21 por cota; CodeRabbit ausente; 9/21 PRs sem revisão de bot nenhuma; conserto em 1–4 commits, um deles pelo runner (R5 do #167, com `--budget-override`) | **(c) W7** | Timeout que cubra a cauda (≥ 60 min) e tratar "quota / usage limits" como **"não revisou"** — nem esperar para sempre, nem anunciar "limpo". A regra "segunda leva escala" nunca teria disparado (0 segundas rodadas). |
+| **Bots do PR** — Codex revisou 12/20 (10 com achado, 14 achados, P1 = 6, sempre uma leva, 3–5 min; um caso 51 min); Copilot 0/20 por cota; CodeRabbit ausente; 8/20 PRs sem revisão de bot nenhuma; conserto em 1–4 commits, um deles pelo runner (R5 do #167, com `--budget-override`) | **(c) W7** | Timeout que cubra a cauda (≥ 60 min) e tratar "quota / usage limits" como **"não revisou"** — nem esperar para sempre, nem anunciar "limpo". A regra "segunda leva escala" nunca teria disparado (0 segundas rodadas). |
 | **Texto `⛔` de rule** aplicado à mão no PR (3 PRs) | **(b)** por desenho | `claude -p` recusa `.claude/`; o aviso "pronto para merge" da W7 deve listar os `⛔` pendentes. |
 | **QA humana depois do PR** (`mascaras`: decisão sobre o CEP reabriu QA⇄EXEC, 6 sessões, US$ 29) | **(b)** | Fora do escopo do worker; é julgamento sobre o produto. |
-| **Parada à noite, retomada de manhã** — 4 esperas de noite inteira (29,2 h das 35,4 h de espera > 30 min) | **(a)** com **W6** | O worker não encurta a espera pela decisão, mas o tick seguinte pode pegar **outra** missão em vez de deixar a máquina parada. |
+| **Parada à noite, retomada de manhã** — 4 esperas de noite inteira (29,2 h das 34,5 h de espera > 30 min) | **(a)** com **W6** | O worker não encurta a espera pela decisão, mas o tick seguinte pode pegar **outra** missão em vez de deixar a máquina parada. |
 
 ### 5.1 Quanto teria passado sozinho
 
 - **Histórico real:** 4 de 21 (19 %) do TICKET ao PR sem toque humano depois da aprovação.
-- **Com o kit de hoje + W2 (clone, kit fixo) + W4 (stack) + W6 (ambiente do processo, pager):**
+- **Com o kit de hoje + W2 estendida com kit fixo (o kit fixo fica fora da W2 como escrita, ver a
+  linha `kit-touched` acima) + W4 (stack) + W6 (ambiente do processo, pager):**
   ≈ **12 de 21 (57 %)** não tiveram nenhuma parada de julgamento nem de teto antes do PR
   (`condicoes`, `a-tela`, `invariante`, `fantasma`, `contato`, `quatro-silencios`, `todo`,
   `transacao`, `breadcrumb`, `ver-vira`, `e2e-local`, `justificativa`) e o worker poderia tê-las
@@ -453,7 +456,9 @@ jq -s -f $S/mission.jq $L > $S/missions.json
 # 2. lançamentos e como cada um terminou
 jq -s -f $S/launches.jq $L > $S/launches.json
 # 3. intervalos entre lançamentos
-jq -s -f $S/gaps.jq $L > $S/launch_gaps.json
+#    $o: os PRs abertos à mão, no relógio local do ledger (createdAt do GitHub − 3 h)
+jq -s --argjson o '{"20260902-o-rascunho-legado-fala-cru":"2026-09-02T23:46:01Z","20260907-o-descarte-do-pagamento-fala":"2026-09-07T12:08:16Z","20260916-destino-frete-cif":"2026-09-16T19:36:27Z"}' \
+  -f $S/gaps.jq $L > $S/launch_gaps.json
 # 4. conferência ledger × journal (sessões por id)
 for f in /home/joruge/repos/sales_quote/.sdd/logs/*/pipeline.log; do m=$(basename $(dirname $f));
   LC_ALL=C awk -v m=$m '$2 ~ /^(TICKET|EXEC|QA|REVIEW|DOCS|PR)$/ && /session=/ {…}' $f; done
@@ -553,11 +558,13 @@ Programa `gaps.jq`:
 ```jq
 def t: .ts[0:19] + "Z" | fromdateiso8601;
 def med: sort | if length==0 then null elif length%2==1 then .[length/2|floor] else ((.[length/2-1] + .[length/2])/2) end;
-[ .[] | select(.repo | test("/sales_quote$")) ] | group_by(.mission) | map(sort_by(t))
+($o | map_values(fromdateiso8601)) as $opened
+| [ .[] | select(.repo | test("/sales_quote$")) ] | group_by(.mission) | map(sort_by(t))
 | map( . as $m
-  | ([$m[] | select(.event=="session" and .phase=="PR" and .gate=="pass") | t] | first) as $pr
+  | (([$m[] | select(.event=="session" and .phase=="PR" and .gate=="pass") | t] | first) // ($opened[$m[0].mission] // null)) as $pr
   | ($m | map(.run_id) | reduce .[] as $r ([]; if index($r) then . else . + [$r] end)) as $ids
-  | [ $ids[] as $id | ($m | map(select(.run_id==$id))) | {id: $id, inv: .[0].invocation, start: (.[0] | t - (.dur_s // 0)), end: (.[-1]|t), last: .[-1]} ] as $L
+  | [ $ids[] as $id | ($m | map(select(.run_id==$id))) | {id: $id, inv: .[0].invocation, start: (.[0] | t - (.dur_s // 0)), end: (.[-1]|t), last: .[-1]} ]
+    | map(select(.inv == "run" or .inv == "close")) as $L
   | [ range(1; $L|length) as $i | select($L[$i].inv != "close")
       | {mission: $m[0].mission, gap_min: (($L[$i].start - $L[$i-1].end)/60|round),
          prepr: ($pr == null or $L[$i].start < $pr),

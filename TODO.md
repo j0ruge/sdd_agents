@@ -23,11 +23,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
-- [ ] **Nenhum comando do alvo mede a forma do `TODO_FILE`, e o cabeçalho semeado diz que mede** —
-  `bin/sdd:5701` (`sdd:open`) — o `sdd install` só confere o marcador; regra nova do `check-todo.sh`
-  (ADR 0015 §2) não chega ao alvo, e o `TODO.md` do `sales_quote` divergiu calado até 206 violações,
-  achadas só quando o espelho de issues recusou. Direção: o `sdd preflight` do alvo roda
-  `check-todo.sh --check "$TODO_FILE" --allow-empty` e avisa com a contagem. Fonte:
+- [ ] **O `sdd preflight` não mede a forma do `TODO_FILE`, e nada avisa o alvo sem o opt-in** —
+  `bin/sdd:6144` (`preflight-test`) — a forma só é medida quando o `TEST_CMD` do alvo inclui o
+  `check-todo.sh` (o opt-in de `config/schema.md`); o do `sales_quote` não incluía, e o `TODO.md` dele
+  divergiu calado até 206 violações, achadas só quando o espelho de issues recusou. Direção: o
+  `sdd preflight` roda `check-todo.sh --check "$TODO_FILE" --allow-empty` sozinho, ou avisa. Fonte:
   `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C8) — descoberto na faxina das
   issues do `sales_quote` (2026-10-09)
 
