@@ -25,7 +25,35 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **Uma âncora de caminho longo não cabe no teto de largura** — `tests/check-todo.sh:211` (`WIDTH_CAP`) —
+  com o teto de 120 por linha física e a continuação recuada em 2 espaços, um `path:N` acima de 116
+  caracteres não cabe: no alvo, o `prisma-cotacao-repository-query.integration.test.ts:420` tem 121, e o
+  item ancorou outro arquivo. Falha fechada, mas o consumidor está fora da suíte do kit (D15). Direção:
+  isentar do teto a linha cujo excesso é só a âncora, ou o template dizer a saída.
+  Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-planner` em
+  `20261010-o-backlog-volta-a-medir`, transportado por `sdd-kaizen` (2026-10-12)
+- [ ] **A regra 2 do check-checkpoint vale por célula** — `tests/check-checkpoint.sh:310` (`count_occ`) — e não pela
+  leitura: um `2>&1` na célula obriga todo `grep` dela a ancorar em `^  ok    `, até o que lê um arquivo:
+  `o=$(bash t.sh 2>&1); a=$(grep -c '^  ok    x' <<< "$o"); b=$(grep -c foo f)` reprova com `1 of 2 pattern(s)`
+  (reproduzido em 2026-10-12). Falha fechada, contorno `2>/dev/null`; o consumidor é o planner do alvo (D15).
+  Regra por segmento ficaria cega na forma canônica, que separa `2>&1` e `grep` por `;`: o conserto segue a variável.
+  Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — item (e) da fila do operador, D1 do grill,
+  registrado pelo `sdd-planner` (2026-10-12)
+- [ ] **O veredito da QA não é revalidado depois de um R<n>** — `docs/pipeline.md:99` (`R<n>`) — o REVIEW
+  vem depois da QA e um `R<n>` muda o código sem reabri-la: o reteste do lote 7 só lê `F<n>`, e o `skipped`
+  que o `sdd-qa` conferiu no diff não é reconferido (Codex no PR #247, 14ª rodada; 22 de 64 missões reais
+  tiveram `R<n>`). Falha aberta, com consumidor fora da suíte do kit (D15). Direção: amarrar o veredito
+  ao commit que a QA viu e decidir, com custo medido, o que um `R<n>` reabre (um reteste custou US$ 7,19).
+  Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — D21 do grill, registrado pelo `sdd-planner` (2026-10-14)
+
 ### Saída humana e cosmética
+
+- [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1800` (`gate-qa-e2e`) —
+  um caso intermitente anterior à missão devolve a fase ao `sdd-qa`, que gasta o começo descobrindo isso:
+  no alvo, o `frete-ipi.spec.ts:319` já tinha caído duas vezes, com os logs de gate em disco. Direção: o
+  `GATE_WHY` cita quantas vezes cada caso vermelho já caiu nos logs `gate-qa-e2e` anteriores.
+  Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-qa` em
+  `20261005-mascaras-ncm-e-painel`, transportado por `sdd-kaizen` (2026-10-12)
 
 ### Comentário e registro
 
