@@ -797,6 +797,15 @@ mut_QA_report_not_mission_bound() {           # Anchor 1 back on the newest repo
 mut_QA_substep_report_not_mission_bound() {   # the sub-step back on the newest report in the tree
   sed -i '/^qa_substep() {/,/^}/ s@report="\$(mission_qa_report)"@report="$(latest_matching "$qa/reports/*.md")"@' "$1"
 }
+# The route of a `qa: skipped` the plan declares (ADR 0018 §1): one mutant per half. Ignored, the
+# sub-step answers exec with an interface again; loose, any value of the key skips a real QA, which
+# only the misspelt control of check-dry-run.sh can see.
+mut_QA_substep_skipped_ignored() {            # the declared skipped no longer routes to close
+  sed -i '/^qa_substep() {/,/^}/ { /qa)" = skipped \]/d; }' "$1"
+}
+mut_QA_substep_skipped_loose() {              # any value of the qa: key routes to close
+  sed -i '/^qa_substep() {/,/^}/ s@qa)" = skipped \]@qa)" != "" ]@' "$1"
+}
 # The report is the mission's by three facts (review r4 of the codereview fixes rewrote the reader
 # around them): the mission's COMMITS are HEAD --not the local and remote base; a NEW path is absent
 # from the base tree; OWNERSHIP follows the rename chain. One mutant per rule and per read. The old
@@ -6150,6 +6159,8 @@ CATALOG=(
   QA_bug_open
   QA_report_not_mission_bound
   QA_substep_report_not_mission_bound
+  QA_substep_skipped_ignored
+  QA_substep_skipped_loose
   QA_report_ignores_untracked
   QA_report_range_no_origin
   QA_report_range_no_upstream

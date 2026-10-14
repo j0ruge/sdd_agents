@@ -1603,7 +1603,8 @@ gate_QA() {
   handoff_tldr_ok "$h" || return 1
 
   local st; st="$(frontmatter "$h" status)"
-  if [ "$st" = "skipped" ]; then GATE_WHY="qa: skipped (diff has no user-visible change)"; return 0; fi
+  # The reason says what was read, never a property of the diff the runner did not measure.
+  if [ "$st" = "skipped" ]; then GATE_WHY="30-handoff-qa.md declares status: skipped"; return 0; fi
   # The marker, not the prose, is what cmd_run reads to escalate on the spot — see
   # GATE_HANDOFF_BLOCKED above. `blocked` means the line stopped and a human has to act (:1602);
   # QA is where that costs the most, because no agent in this pipeline may close the bugs that
@@ -2676,6 +2677,11 @@ qa_substep() {
   # and, when it is not, writes `qa: skipped` with the justification. Bootstrapping a tree of
   # browser journeys in a project with no browser is the paperwork `skipped` exists to avoid.
   if [ -z "$E2E_CMD" ] && [ -z "$APP_URL" ]; then printf 'close\n'; return 0; fi
+  # The grill decided QA does not apply and the plan says so (ADR 0018 §1). Straight to sdd-qa: it
+  # owns the 30-handoff-qa.md the gate demands, confirms the declaration against the diff, and
+  # writes `skipped` or, when the diff touched the interface, `blocked`. Literal on purpose: any
+  # other spelling keeps the route of today, because a loose reading would skip a real QA.
+  if [ "$(frontmatter "$MISSION_DIR/00-missao.md" qa)" = skipped ]; then printf 'close\n'; return 0; fi
   [ -n "$(latest_matching "$qa/charters/*.md")" ] || { printf 'plan\n'; return 0; }
   report="$(mission_qa_report)"
   if ! report_closed "$report"; then printf 'exec\n'; return 0; fi

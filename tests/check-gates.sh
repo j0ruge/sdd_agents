@@ -2045,6 +2045,12 @@ assert_phase "no interface, the registry is clean again" "REVIEW"
 cp "$MDIR/30-handoff-qa.md" "$MDIR/30.bak"
 printf -- '---\nfase: QA\nstatus: skipped\n---\n' > "$MDIR/30-handoff-qa.md"
 assert_phase "qa: skipped skips the whole phase" "REVIEW"
+# The reason says what the runner read (the handoff's status), never a property of the diff it did
+# not measure: the old text claimed "diff has no user-visible change", which only the session that
+# wrote the handoff ever judged.
+assert_why "the skipped reason names the handoff that declares it" "QA" \
+  "30-handoff-qa.md declares status: skipped"
+assert_why_absent "the skipped reason no longer claims a property of the diff" "QA" "user-visible"
 mv "$MDIR/30.bak" "$MDIR/30-handoff-qa.md"
 
 # --- REVIEW ----------------------------------------------------------------

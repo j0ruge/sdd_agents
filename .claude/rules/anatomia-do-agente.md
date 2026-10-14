@@ -125,6 +125,10 @@ foge da forma `` `comando` → `esperado` ``. Ele **executa** texto escrito por 
 ferramenta do planner com o humano na sala, **nunca gate**: o runner não o chama, o `run-all.sh`
 também não, e o `gate_PLAN` não poderia — ele é reavaliado a cada derivação, e o Check do I1
 fica verde no instante em que o I1 fecha. Prova "não verde", não "vermelho pelo motivo certo".
+Desde `20261012-a-rota-da-qa` (ADR 0018 §1) a sub-etapa da QA lê o `qa: skipped` literal do
+frontmatter do `00-missao.md` e, com interface, vai direto ao `close`: o `sdd-qa` é o dono do
+handoff que o gate exige, e o motivo do `skipped` diz o que o runner leu
+(`30-handoff-qa.md declares status: skipped`), nunca uma propriedade do diff que ele não mediu.
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas

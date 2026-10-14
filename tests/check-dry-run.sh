@@ -519,6 +519,22 @@ out4="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
 assert_eq "an in-progress report goes back to the exec sub-step" \
   "QA:exec=<none>" "$(printf '%s\n' "$out4" | projected)"
 
+# A plan that declares `qa: skipped` (the grill decided QA does not apply) goes straight to
+# sdd-qa, which confirms the diff and writes the handoff: with an interface, the sub-step used to
+# answer exec here, and the only way to `skipped` was the operator's ritual by hand. Same world as
+# above (charter, report still open), so the answer moves only by the key. The control keeps the
+# key literal: any other spelling is the route of today, because a loose reading would skip a
+# real QA and fail open.
+sed -i 's/^aprovacao: auto$/&\nqa: skipped/' "$MDIR/00-missao.md"
+out4s="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+assert_eq "a plan that declares qa: skipped goes straight to QA:close with an interface" \
+  "QA:close=sdd-qa" "$(printf '%s\n' "$out4s" | projected)"
+sed -i 's/^qa: skipped$/qa: Skipped/' "$MDIR/00-missao.md"
+out4m="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+assert_eq "a misspelt qa: Skipped keeps the route of today" \
+  "QA:exec=<none>" "$(printf '%s\n' "$out4m" | projected)"
+git checkout -q -- "$MDIR/00-missao.md"
+
 # And a closed report that the MISSION BRANCH did not add orders execution too: it is some other
 # mission's QA (measured in SQ-146, where the sub-step answered `close` on SQ-143's report and the
 # QA skills never ran). Charter and report land on the base, a mission branch is cut with one
