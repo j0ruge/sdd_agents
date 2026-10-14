@@ -4,6 +4,34 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-12 — O veredito da janela do lote 6: `melhorou` sobre `0270727`
+
+**O que foi julgado:** os lotes 5 e 6 (`b411239`, `fc32329` e `0270727` — PRs #237, #243 e #244),
+uma mudança lógica só para o juiz, congelada no merge do lote 6 e medida em cinco missões reais do
+`sales_quote`, todas em harness 2.1.291.
+
+**Antes → depois** (`sdd kaizen --series`, `previous` = `94123a4` → `latest` = `0270727`):
+`advance_rate` 0,91 → **0,98**; `outcomes` 10/1/0 → **65/1/0** (advanced/churned/idle) sobre 11 → 66
+sessões; rótulos 3/1/1 → **25/0/2** (ok/leve/refez); escaladas `kit-touched` → `handoff-blocked` +
+`hat-crossed`, as duas paradas boas da mesma missão; custo por sessão ≈ US$ 5,02 → ≈ 2,91.
+Intervenções: sem antes/depois por missão, porque a `previous` é meia missão. O `--by-mission`
+contava as 22 sessões dela, 11 fora da fatia; lida por `kit_rev` no ledger, a fatia `94123a4` tem 3
+lançamentos, 2 a 3 intervenções. A `latest` tem **5 em 5 missões**, 3 delas o ritual da QA
+(corrigido na revisão do PR #247).
+
+**Limites declarados:** `previous` de uma missão só, com 11 das suas 22 sessões; harness diferente
+entre as fatias (2.1.289 × 2.1.291); `window_missions_stranded: 3`; e três das cinco missões gravaram
+a QA à mão (`sdd note-manual`), por decisão do grill e por uma lacuna do kit. Veredito e análise em
+`docs/handoffs/20261012-a-rota-da-qa/05-verdict.md`.
+
+**O que a janela ensinou e virou plano:** 3 das 5 intervenções da fatia foram o mesmo ritual — o
+`qa_substep` não tem rota headless para o `skipped` que o grill decidiu quando há interface — e o
+reteste depois de um `F<n>` só acontece porque a sessão `sdd-qa` chama a skill de improviso. A
+missão nascida na mesma pasta dá rota às duas; dois achados `kit:` menores foram ao `TODO.md`
+(catraca 0 → 2).
+
+---
+
 ## 2026-10-08 — Lote 6: as quatro que faltam
 
 **Problema (Gemba):** o lote 5 fechou com quatro achados no `TODO.md`, espelhados nas issues #236,
