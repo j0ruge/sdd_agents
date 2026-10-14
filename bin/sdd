@@ -1225,6 +1225,10 @@ gate_PLAN() {
   # Under ADR_CHECK=block this is where an undecided `adr:` stops the line, and PLAN is the only
   # phase where it can: the artifact's owner is `sdd-planner`, running with the human in the room.
   adr_gate_verdict plan || return 1
+  # A mission on the base branch cannot promise the K8 entry (D20, adapted by D23 of
+  # 20261012-a-rota-da-qa): refused here, where the human is, as the adr: is. Its owner is
+  # sdd-planner, with the human in the room. k8_base_refusal says why.
+  local why; why="$(k8_base_refusal)"; [ -z "$why" ] || { GATE_WHY="$why"; return 1; }
   local n; n="$(checkpoint_rows | wc -l)"
   [ "$n" -gt 0 ] || { GATE_WHY="checkpoint.md has no parseable increment row"; return 1; }
   GATE_WHY="plan approved ($approval), $n increment(s)"
@@ -2163,6 +2167,27 @@ docs_checklist_rows() {
     ' "$1"
 }
 
+# k8_base_refusal — the reason a mission on the base branch promises a KAIZEN_LOG entry nobody can
+# read, or nothing. ONE definition, TWO readers: gate_PLAN, where the human is, and gate_DOCS as the
+# reinforcement for a forced --phase, which skips the derivation and gate_PLAN with it. A mission
+# whose branch: is the base commits on the base, and the range the K8 anchor reads is empty by
+# construction — the same empty range as a merged mission (Codex on PR #247, 11th round). Since D23
+# it reads the KEY: present (frontmatter_has, the same reader as `frontmatter`, so the two never
+# disagree) and not `skipped` is the written promise. Read by $( ); it sets no global.
+# DECLARED RESIDUE: on the base only the key PRESENT without `skipped` is refused (empty, the
+# template's placeholder, `Skipped`, `skipped # note`, with a `\r`); a plan without the key passes
+# and its entry is never read, since there is no range and no written promise. Every plan written
+# from the template carries the key, and the fixtures and earlier missions do not (0 of 64 real
+# missions have it): refusing every mission on the base held 556 PLAN and 41 DOCS evaluations of
+# twelve fixture missions in six sensors (measured, D20).
+k8_base_refusal() {
+  local m="$MISSION_DIR/00-missao.md"
+  [ "$(frontmatter "$m" branch)" = "$DEFAULT_BRANCH" ] || return 0
+  frontmatter_has "$m" kaizen_log || return 0
+  [ "$(frontmatter "$m" kaizen_log)" != skipped ] || return 0
+  printf '%s\n' "00-missao.md names the base branch ($DEFAULT_BRANCH) in branch: and carries kaizen_log: without skipped, so it promises a KAIZEN_LOG entry: on the base branch there is no range to read the entry in — give the mission its own branch, or write kaizen_log: skipped with the human"
+}
+
 gate_DOCS() {
   local d="$MISSION_DIR/45-docs.md"
   [ -f "$d" ] || { GATE_WHY="missing 45-docs.md"; return 1; }
@@ -2260,6 +2285,7 @@ gate_DOCS() {
   # them. No base, or an empty range (HEAD on the base, merged, unrelated): today's answer, the
   # shape of mission_qa_report.
   if [ "$(frontmatter "$MISSION_DIR/00-missao.md" kaizen_log)" != skipped ]; then
+    local k8_why; k8_why="$(k8_base_refusal)"; [ -z "$k8_why" ] || { GATE_WHY="$k8_why"; return 1; }
     local -a k8_nots=() k8_bases=()
     local k8_c k8_b k8_patch
     mapfile -t k8_nots < <(mission_base_refs)

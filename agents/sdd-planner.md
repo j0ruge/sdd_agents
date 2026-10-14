@@ -94,7 +94,9 @@ named in Portuguese against the target's `<CRITICAL>` rule, caught only by a bot
 ## 3. Validate with the skills
 
 - **`Skill(kaizen-software)` — always.** Fill the K1–K8 checklist in `00-missao.md` with an honest
-  grade. A `✗` is information, not shame.
+  grade. A `✗` is information, not shame. K8 ✗ is decided with the human and written as
+  `kaizen_log: skipped` in the frontmatter of `00-missao.md`; the K8 row alone dispenses nothing,
+  and without the key `gate_DOCS` demands a `KAIZEN_LOG.md` entry citing the mission.
 - **`Skill(ddd:ddd)` — conditional.** Trigger it when the mission touches domain modelling or
   architecture: aggregates, bounded contexts, events, new entities, contracts between modules.
   A mechanical, visual or trivial mission → record `n/a — no domain touched` with a one-line
@@ -253,8 +255,12 @@ behaviours:
 - **a real branch name** → checked out if it exists, cut from the current branch if it does not.
   With `JIRA_ENABLED` anything but `true` it is **mandatory**: nothing else will ever create the
   branch, so `gate_PLAN` refuses an empty value or the placeholder and the mission stays in PLAN.
-  Decide the name with the human, in the room — it is part of the plan they approve. Naming the
-  base branch itself (`main`) is a decision too, and passes; leaving the field empty is not.
+  Decide the name with the human, in the room — it is part of the plan they approve. Leaving the
+  field empty is not a decision.
+  Naming the base branch itself (`main`) is a decision too, and passes, unless `00-missao.md`
+  carries `kaizen_log:` with anything but `skipped` (the template ships it): on the base branch
+  there is no range to read the KAIZEN_LOG entry in, so `gate_PLAN` refuses that pair; write
+  `kaizen_log: skipped` with the human, or give the mission its own branch.
 - **anything git refuses** (a name starting with `-`, spaces, `..`) → the runner `die`s and the
   pipeline stops before spending a session.
 

@@ -151,6 +151,10 @@ The mission's id — the name of its directory under `HANDOFF_DIR` — is a gram
 checks in `resolve_mission`: `^[0-9]{8}-[a-z0-9-]+$` (eight digits, a hyphen, then lower-case ASCII
 letters, digits and hyphens; slashes at the ends of the argument are ignored). Any other name is
 refused, naming the directory to rename (D17 of `20261012-a-rota-da-qa`).
+A mission whose `branch:` is `DEFAULT_BRANCH` and whose frontmatter carries `kaizen_log:` with
+anything but `skipped` is refused too (`k8_base_refusal`, read again by `gate_DOCS` for a forced
+`--phase`): on the base branch there is no range to read the `KAIZEN_LOG.md` entry in. Without the
+key the mission passes, and its entry is not read (declared residue).
 With `ADR_CHECK=block`, the mission's `adr:` is also a **decision**: a path to a real ADR whose
 `Spec:` line points back at `00-missao.md`, or the literal `none`. Empty, `TBD` and the untouched
 template placeholder all stall here, and the reason names `sdd adr new --slug <s> --spec <path>`.

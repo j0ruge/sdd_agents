@@ -876,6 +876,16 @@ mut_RUN_mission_id_slashes_kept() {           # `/<mission>` and `<mission>/` ke
 mut_DOCS_k8_mission_arg_raw() {               # the K8 reader looks for `/<id>` (mission-id: 5)
   sed -i '/^gate_DOCS() {/,/^}/ s@SDD_K8_MISSION="\$(mission_id "\$MISSION")"@SDD_K8_MISSION="$MISSION"@' "$1"
 }
+# D20 adapted by D23: the base-branch refusal, one mutant per reader and one for the residue.
+mut_PLAN_base_branch_k8_ignored() {           # gate_PLAN lets the base-branch promise through (base-branch: 1)
+  sed -i '/^gate_PLAN() {/,/^}/ { /why="\$(k8_base_refusal)"/d; }' "$1"
+}
+mut_DOCS_base_branch_k8_ignored() {           # a forced DOCS lets it through (base-branch: 2)
+  sed -i '/^gate_DOCS() {/,/^}/ { /k8_why="\$(k8_base_refusal)"/d; }' "$1"
+}
+mut_PLAN_base_branch_refuses_silence() {      # a plan WITHOUT the key is refused on the base: the whole suite
+  sed -i '/^k8_base_refusal() {/,/^}/ { /^  frontmatter_has "\$m" kaizen_log || return 0$/d; }' "$1"
+}
 mut_QA_handoff_freshness_ignored() {          # a handoff older than the last done F<n> passes gate_QA
   sed -i '/^gate_QA() {/,/^}/ s@^  if \[ -n "\$ahead" \]; then$@  if false; then@' "$1"
 }
@@ -6267,6 +6277,9 @@ CATALOG=(
   RUN_mission_id_unchecked
   RUN_mission_id_slashes_kept
   DOCS_k8_mission_arg_raw
+  PLAN_base_branch_k8_ignored
+  DOCS_base_branch_k8_ignored
+  PLAN_base_branch_refuses_silence
   QA_report_ignores_untracked
   QA_report_range_no_origin
   QA_report_range_no_upstream

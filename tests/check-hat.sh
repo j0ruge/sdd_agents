@@ -317,6 +317,16 @@ hat_promise_probes() {
   if grep -qF '^[0-9]{8}-[a-z0-9-]+$' "$pl" && grep -qF '^[0-9]{8}-[a-z0-9-]+$' "$sp"; then
     pass "hat: the planner names the mission id grammar, and so does /sdd-plan"
   else fail "hat: sdd-planner or /sdd-plan no longer names the mission id grammar the runner refuses outside of"; fi
+  # D20 adapted by D23: the planner writes K8 ✗ as the key (§ 3), and knows that naming the base
+  # branch with the key present and not `skipped` is a pair gate_PLAN refuses (§ 8). Read by section.
+  local p3 p8
+  p3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$pl")"
+  p8="$(awk '/^## 8\. /{s=1; next} s && /^## /{s=0} s' "$pl")"
+  if grep -qF '`kaizen_log: skipped` in the frontmatter of `00-missao.md`; the K8 row alone dispenses nothing' <<< "$p3" \
+     && grep -qF 'Naming the base branch itself (`main`) is a decision too, and passes, unless' <<< "$p8" \
+     && grep -qF '`kaizen_log: skipped` with the human, or give the mission its own branch' <<< "$p8"; then
+    pass "hat: the planner knows a mission on the base branch cannot promise K8, and writes K8 ✗ as kaizen_log: skipped"
+  else fail "hat: sdd-planner no longer writes K8 ✗ as kaizen_log: skipped, or no longer knows a mission on the base branch cannot promise K8"; fi
   # ADR 0018 §4 (D7, D16, D23): gate_DOCS demands the KAIZEN_LOG entry unless the plan's frontmatter
   # says `kaizen_log: skipped`, and the entry is a block with its own `## ` citing the whole id. The
   # hat reads the key in its § 3 table row; L4 marked the entry n/a over a K8 that promised it.

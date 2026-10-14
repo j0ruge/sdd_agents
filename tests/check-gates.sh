@@ -2811,6 +2811,19 @@ git add -A && git commit -qm "chore: docs"
 assert_phase "drift checklist complete" "PR"
 assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
 
+# --- a mission on the base branch cannot promise the K8 entry (D20, adapted by D23) -------------
+# A mission whose branch: is the base commits on the base, and the range the K8 anchor reads is
+# empty by construction. Here the fixture stands on main with `branch: main` and no key, and goes on:
+# that is the declared residue the rest of the suite already exercises. With the key present and
+# anything but `skipped`, gate_PLAN refuses where the human is, and gate_DOCS refuses too for a
+# forced --phase, which skips the derivation (sdd why reads gate_DOCS directly, the same road).
+sed -i 's/^branch: main$/&\nkaizen_log:/' "$MDIR/00-missao.md"
+assert_phase "base-branch: a mission on the base branch that promises the KAIZEN_LOG entry is held at PLAN" "PLAN"
+assert_why   "base-branch: a forced DOCS on that mission is refused too" "DOCS" "names the base branch"
+sed -i 's/^kaizen_log:$/kaizen_log: skipped/' "$MDIR/00-missao.md"
+assert_phase "base-branch: the same mission with kaizen_log: skipped goes on" "PR"
+git checkout -- "$MDIR/00-missao.md"
+
 # --- K8 against the DOCS phase: the KAIZEN_LOG entry the plan promised (ADR 0018 §4) -----------
 # In L4 of sales_quote the K8 row promised the KAIZEN_LOG entry to the DOCS phase, the 45-docs.md
 # marked it n/a, and the operator wrote it by hand after the PR: gate_DOCS never read the plan. Now,
