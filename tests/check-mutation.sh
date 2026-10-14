@@ -806,6 +806,26 @@ mut_QA_substep_skipped_ignored() {            # the declared skipped no longer r
 mut_QA_substep_skipped_loose() {              # any value of the qa: key routes to close
   sed -i '/^qa_substep() {/,/^}/ s@qa)" = skipped \]@qa)" != "" ]@' "$1"
 }
+# The retest (ADR 0018 §2): one mutant per half of "rewritten after the fix" and one for the path the
+# sub-step reads; each dies on the world of check-dry-run.sh its comment names.
+mut_QA_substep_retest_ignored() {             # a done F<n> no longer sends QA back to exec
+  sed -i '/^qa_substep() {/,/^}/ { /qa_fix_ahead_of "\${report#/d; }' "$1"
+}
+mut_QA_fix_ahead_any_order() {                # any commit of the history carries the bytes (merge worlds)
+  sed -i '/^qa_rewritten_after() {/,/^}/ s@--ancestry-path --parents "\$c\.\.HEAD"@--parents HEAD@' "$1"
+}
+mut_QA_fix_ahead_counts_merges() {            # the merge that brought the bytes counts as the rewrite
+  sed -i '/^qa_rewritten_after() {/,/^}/ s@\[ "\$(wc -w <<< "\$rest")" -eq 1 \]; return$@return 0@' "$1"
+}
+mut_QA_fix_ahead_old_content_ok() {           # a pre-fix version restored after the fix reads as new
+  sed -i '/^qa_rewritten_after() {/,/^}/ { /^  while read -r x; do$/,/--full-history/d; }' "$1"
+}
+mut_QA_fix_ahead_any_carrier() {              # past the merge, a later carrier of the bytes counts
+  sed -i '/^qa_rewritten_after() {/,/^}/ s@\[ "\$(wc -w <<< "\$rest")" -eq 1 \]; return$@[ "$(wc -w <<< "$rest")" -eq 1 ] || continue; return 0@' "$1"
+}
+mut_QA_fix_ahead_reads_the_directory() {      # the whole reports/ directory instead of the mission's report
+  sed -i '/^qa_substep() {/,/^}/ s@qa_fix_ahead_of "\${report#"\$REPO_ROOT"/}"@qa_fix_ahead_of "$QA_DOCS_PATH/reports/"@' "$1"
+}
 # The report is the mission's by three facts (review r4 of the codereview fixes rewrote the reader
 # around them): the mission's COMMITS are HEAD --not the local and remote base; a NEW path is absent
 # from the base tree; OWNERSHIP follows the rename chain. One mutant per rule and per read. The old
@@ -6161,6 +6181,12 @@ CATALOG=(
   QA_substep_report_not_mission_bound
   QA_substep_skipped_ignored
   QA_substep_skipped_loose
+  QA_substep_retest_ignored
+  QA_fix_ahead_any_order
+  QA_fix_ahead_counts_merges
+  QA_fix_ahead_old_content_ok
+  QA_fix_ahead_any_carrier
+  QA_fix_ahead_reads_the_directory
   QA_report_ignores_untracked
   QA_report_range_no_origin
   QA_report_range_no_upstream

@@ -323,6 +323,15 @@ hat_promise_probes() {
      && grep -qF 'git rm' <<< "$qs"; then
     pass "hat: sdd-qa confirms a declared qa: skipped against the diff, and blocks with the whole remedy when it reaches the user"
   else fail "hat: sdd-qa no longer confirms a declared qa: skipped against the diff, or lost the blocked branch and its remedy (git rm of the handoff)"; fi
+  # ADR 0018 §2: after a done F<n> the runner routes the retest (QA:exec, then QA:close). Before the
+  # route, the hat improvised it by calling the qa-* skills through the Skill tool, five times in
+  # 2026-10; the sentence that forbids it lives in § 4, where the F<n> is born, read by section.
+  local q4
+  q4="$(awk '/^## 4\. /{s=1; next} s && /^## /{s=0} s' "$qa")"
+  if grep -qF 'the runner sends the QA back to `qa-execution`' <<< "$q4" \
+     && grep -qF 'this session never invokes the `qa-*` skills, not even through' <<< "$q4"; then
+    pass "hat: sdd-qa leaves the retest to the runner and never invokes the qa-* skills itself"
+  else fail "hat: sdd-qa no longer leaves the retest to the runner, or may invoke the qa-* skills itself"; fi
 }
 
 # --- /sdd-plan: the approval is the human's answer to a YES/NO question -------------------------

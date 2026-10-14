@@ -2649,10 +2649,12 @@ phase_budget_usd() {
 }
 
 # QA sub-step, DERIVED from the artifacts — same philosophy as the gates, no extra state.
-# The QA phase is three sessions: the qa-report/qa-execution skills carry
-# `disable-model-invocation`, so each one has to enter through the literal slash as the opening
-# prompt of ITS OWN session (verified on 2026-08-14: the slash expands headless and the skill
-# loads). sdd-qa closes the cycle afterwards.
+# The QA phase is three sessions: each of the qa-report/qa-execution skills enters through the
+# literal slash as the opening prompt of ITS OWN session (verified on 2026-08-14: the slash expands
+# headless and the skill loads). The slash is the runner's route whatever the skill's invocation
+# flag says: measured on 2026-10-12, both skills declare it false, and sdd-qa had called them through
+# the Skill tool five times to retest — the route exists so that is never needed. sdd-qa closes the
+# cycle afterwards.
 # Is the qa-execution skill's dated report closed?
 #
 # ONE function, used by the gate AND by the sub-step. The anchor used to live duplicated in
@@ -2670,6 +2672,54 @@ report_closed() {
   grep -qE '^[[:space:]]*-.*\*\*Status:\*\*[[:space:]]*closed' "$report"
 }
 
+# qa_fix_ahead_of <path relative to the repo root> — the first done F<n> after which <path> was NOT
+# rewritten, printed as "<ID> <commit>"; nothing when every done F<n> is behind a rewrite.
+#
+# ONE definition, TWO readers (ADR 0018 §2), for the reason report_closed above gives: qa_substep asks
+# it of the mission's report (the retest, back to QA:exec) and gate_QA of 30-handoff-qa.md (the
+# freshness of the handoff). A fix increment changes the code the walk judged, and until the
+# artifact is rewritten after it, nobody looked at the code that is there now.
+#
+# Rewritten is the ORIGIN of the bytes HEAD has (qa_rewritten_after), measured on 12 worlds: the
+# bytes are no version the path had up to the fix, AND the first commit after the fix that carries
+# them is not a merge. The two halves the 10th round of PR #247 used (a non-merge commit touched the
+# path; the blob changed) were proxies of it, and failed open where a merge brought the change and an
+# ordinary edit was reverted (Codex, 12th round). Declared residues: an honest rewrite that
+# reproduces a pre-fix version byte for byte reads as not rewritten (fails closed: one more retest);
+# the cost is one rev-parse per commit that touched the path up to the fix, plus one per mission
+# commit after it. What a rewrite proves is that the owner wrote after the fix; the RESULT of the
+# retest has its own artifact, the bug's `Status:`, which Anchor 3 of gate_QA already demands.
+# Declared limit (D21 of 20261012-a-rota-da-qa): only F<n> is read. An R<n> of the REVIEW, after the
+# QA, changes the code without reopening it — the kit's behaviour before that mission, in TODO.md.
+#
+# Read by $( ) and as a condition: it sets NO global. A commit that does not resolve is skipped
+# (unreachable in a derived run: gate_EXEC, earlier in the derivation, demands it resolve).
+qa_rewritten_after() {
+  local c="$1" p="$2" h x rest
+  h="$(git -C "$REPO_ROOT" rev-parse -q --verify "HEAD:$p" 2>/dev/null || true)"
+  [ -n "$h" ] || return 1
+  while read -r x; do
+    [ "$(git -C "$REPO_ROOT" rev-parse -q --verify "$x:$p" 2>/dev/null || true)" = "$h" ] && return 1
+  done < <(git -C "$REPO_ROOT" rev-list --full-history "$c" -- "$p" 2>/dev/null || true)
+  while read -r x rest; do
+    [ "$(git -C "$REPO_ROOT" rev-parse -q --verify "$x:$p" 2>/dev/null || true)" = "$h" ] || continue
+    [ "$(wc -w <<< "$rest")" -eq 1 ]; return
+  done < <(git -C "$REPO_ROOT" rev-list --reverse --topo-order --ancestry-path --parents "$c..HEAD" 2>/dev/null || true)
+  return 1
+}
+
+qa_fix_ahead_of() {
+  local p="$1" id st commit c
+  while IFS="$CK_SEP" read -r id _ _ st commit; do
+    [[ "$id" =~ ^F[0-9]+$ ]] || continue
+    [ "$st" = "done" ] && [ -n "$commit" ] || continue
+    c="$(git -C "$REPO_ROOT" rev-parse -q --verify "$commit^{commit}" 2>/dev/null || true)"
+    [ -n "$c" ] || continue
+    qa_rewritten_after "$c" "$p" || { printf '%s %s\n' "$id" "$commit"; return 0; }
+  done < <(checkpoint_rows)
+  return 0
+}
+
 qa_substep() {
   local qa="$REPO_ROOT/$QA_DOCS_PATH" report
   # Project with no interface to walk (no E2E_CMD and no APP_URL): the in-persona dogfooding
@@ -2685,6 +2735,10 @@ qa_substep() {
   [ -n "$(latest_matching "$qa/charters/*.md")" ] || { printf 'plan\n'; return 0; }
   report="$(mission_qa_report)"
   if ! report_closed "$report"; then printf 'exec\n'; return 0; fi
+  # The retest (ADR 0018 §2): a done F<n> after which the MISSION's report was not rewritten sends
+  # the phase back to qa-execution, which retests and moves the bug's Status. The path is the report
+  # mission_qa_report chose, never reports/: an edit to another mission's report gives no ownership.
+  [ -z "$(qa_fix_ahead_of "${report#"$REPO_ROOT"/}")" ] || { printf 'exec\n'; return 0; }
   printf 'close\n'
 }
 
@@ -2918,9 +2972,10 @@ hat_writes() {   # hat_writes <step> — expanded globs; "" when the hat may wri
 
 # Literal slash that opens the session, when the phase is driven by a third-party skill.
 #
-# ONLY where the skill cannot be reached any other way. The `qa-report` and `qa-execution` skills
-# carry `disable-model-invocation`, so the literal slash as the first line of the prompt is their
-# only route — and both answer `<none>` in phase_agent, exactly as the invariant above it requires.
+# ONLY where the phase is driven by the skill itself, with no kit agent. The literal slash as the
+# first line of the prompt is the runner's route into `qa-report` and `qa-execution`, whatever the
+# skill's invocation flag says (both declared it false when measured on 2026-10-12) — and both
+# answer `<none>` in phase_agent, exactly as the invariant above it requires.
 # TICKET used to be listed here as well, WITH `sdd-publisher` as its agent: two system prompts over
 # one session, which is the thing that invariant refuses. The slash was the half that went, because
 # the `ticket` skill has no `disable-model-invocation` and agents/sdd-ticket.md already tells the
@@ -2938,7 +2993,7 @@ phase_task() {
   case "$1" in
     EXEC)     printf '%s\n' "execute the NEXT pending increment of the checkpoint, in TDD, and commit" ;;
     QA:plan)  printf '%s\n' "plan the QA cycle for this mission: personas, journeys, scenarios and charters" ;;
-    QA:exec)  printf '%s\n' "walk the journeys in persona and write the dated report + the bug registry" ;;
+    QA:exec)  printf '%s\n' "walk the journeys in persona and write the dated report + the bug registry; after a fix increment, retest the fixed bugs and move their Status" ;;
     QA:close|QA) printf '%s\n' "close the QA cycle: a confirmed finding becomes an e2e spec, a fixable bug becomes a fix increment, and write 30-handoff-qa.md" ;;
     REVIEW)   printf '%s\n' "review, reproduce and grade honestly; every finding that must be fixed becomes an R<n> increment in the checkpoint — you do NOT fix the code" ;;
     DOCS)     printf '%s\n' "sync the repo's living documentation with what this mission changed" ;;
@@ -2981,8 +3036,8 @@ EOF
 # disk; this prompt only says WHERE to look and that there was no earlier conversation.
 #
 # When the phase is driven by a third-party skill, the literal slash has to be the FIRST line of
-# the prompt: that is how it expands headless (the QA skills carry disable-model-invocation, so
-# there is no other route).
+# the prompt: that is how it expands headless, and it is the runner's route whatever the skill's
+# invocation flag says.
 # The templates a phase actually writes from, and the fifth lever of the diet. Item 6 of the boot
 # used to point at the WHOLE directory — seven files, 22 480 B — when a phase produces one or two
 # artifacts: REVIEW never writes a pr-body, PR never writes a review. Measured per phase, the set

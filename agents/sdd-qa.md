@@ -124,6 +124,11 @@ the phase (§ 5.1). The two are not the same silence: `human` passes without a w
 here can act on it, while `deferred` is NAMED in the gate's own passing reason on every evaluation,
 because somebody will act on it in a mission that has not opened yet.
 
+After an `F<n>` is done, the runner sends the QA back to `qa-execution` (`QA:exec`), which retests
+the fixed bugs and moves their `Status:`, and then back to this session, to rewrite the handoff
+(§ 6). The route is the runner's: **this session never invokes the `qa-*` skills, not even through
+the `Skill` tool.**
+
 ## 5. What does NOT become a fix increment
 
 An item that requires **genuine human judgement** — UX policy, a product decision, a real payment,

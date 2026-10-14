@@ -248,7 +248,7 @@ The phase is **three sessions**, and the current sub-step is **derived from the 
 | Sub-step | Who drives | When | Delivers |
 |---|---|---|---|
 | `QA:plan` | `/qa-report` skill (no kit agent) | there is no charter in `<QA_DOCS_PATH>/charters/` | charters, personas, journeys |
-| `QA:exec` | `/qa-execution` skill (no kit agent) | there is a charter, but no `closed` report **of this mission** | dated report + bug registry |
+| `QA:exec` | `/qa-execution` skill (no kit agent) | there is a charter, but no `closed` report **of this mission** — or the mission's report was not rewritten after a done `F<n>` (the retest) | dated report + bug registry |
 | `QA:close` | `sdd-qa` agent | report **of this mission** `closed` — or a project with no interface, or the plan declares `qa: skipped` | e2e specs, fix increments, `30-handoff-qa.md` |
 
 The two skills **own** `docs/qa/`; `sdd-qa` does not rewrite what they produced. A project **with

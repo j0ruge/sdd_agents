@@ -549,6 +549,100 @@ assert_eq "a report from before the mission branch does not close the QA sub-ste
   "QA:exec=<none>" "$(printf '%s\n' "$out5" | projected)"
 git checkout -q main
 git branch -q -D missao/dry-run-report-owner
+
+# --- the retest: a done F<n> after the closed report sends QA back to exec (ADR 0018 §2) ---------
+# A fix increment changes the code the walk judged; until the mission's report is REWRITTEN after
+# the fix, the walk did not see it. Rewritten is two facts at once: the bytes HEAD has are no
+# version the report had up to the fix, and the first commit after the fix that carries them is
+# not a merge. Each world below holds one half against one sabotage (the mutants name the world).
+# Every report here is `closed`: an open one sends the sub-step to exec by itself, and the assertion
+# would pass by the regime of the fixture, never by the rule it names.
+# In main the range is empty, so mission_qa_report reads the newest report (sort -V on the name).
+retest_base="$(git rev-parse HEAD)"
+RETEST_REPORT=docs/qa/reports/2026-01-02-retest.md
+f1_row() { # f1_row <status> <commit> — the one F1 row of the fixture checkpoint, uncommitted
+  sed -i '/^| F1 | /d' "$MDIR/checkpoint.md"
+  printf '| F1 | the fix | `true` → 0 | %s | %s |\n' "$1" "$2" >> "$MDIR/checkpoint.md"
+}
+qa_step() { "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 | projected; }
+printf -- '# QA Run Report\n- **Started:** 2026-01-02T10:00:00Z · **Status:** closed <!-- in-progress | closed -->\n' \
+  > "$RETEST_REPORT"
+git add docs/qa && git commit -qm "chore: the mission's report, first closed version"
+retest_v1="$(git rev-parse HEAD)"
+printf -- '- journey A walked\n' >> "$RETEST_REPORT"
+git add docs/qa && git commit -qm "chore: the mission's report, second closed version"
+git commit -q --allow-empty -m "fix: F1"
+retest_fix="$(git rev-parse --short HEAD)"
+f1_row "pending" "—"
+assert_eq "a pending fix increment does not reopen the walk" "QA:close=sdd-qa" "$(qa_step)"
+f1_row "done" "$retest_fix"
+out_r3="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+assert_eq "a fix increment done after the closed report sends QA back to exec for the retest" \
+  "QA:exec=<none>" "$(printf '%s\n' "$out_r3" | projected)"
+# The boot of that projection carries the retest in the task: an empty block refuses, like the
+# REVIEW block above, because a grep over nothing answers "absent" for every sentence.
+retest_boot="$(out="$out_r3" prompt_of QA:exec)"
+if [ -n "$retest_boot" ] && grep -qF 'retest the fixed bugs' <<< "$retest_boot"; then
+  pass "the retest boot tells the session to retest the fixed bugs"
+else
+  fail "the retest boot tells the session to retest the fixed bugs" \
+       "a QA:exec boot block quoting 'retest the fixed bugs'" "${retest_boot:-no QA:exec boot block}"
+fi
+# A version from before the fix, restored by an ordinary commit after it: new commit, old bytes.
+git checkout -q "$retest_v1" -- "$RETEST_REPORT"
+git commit -qm "chore: the first version of the report comes back"
+assert_eq "a pre-fix version restored after the fix is not the retest" "QA:exec=<none>" "$(qa_step)"
+git revert --no-edit HEAD >/dev/null
+# A report a merge brings in after the fix: cut before the fix, named to order AFTER the mission's
+# report, so with the empty range it becomes the one the sub-step reads.
+MERGED_REPORT=docs/qa/reports/2026-01-03-merged.md
+git checkout -q -b missao/dry-run-retest-merge "$retest_fix~1"
+printf -- '# QA Run Report\n- **Started:** 2026-01-03T10:00:00Z · **Status:** closed <!-- in-progress | closed -->\n' \
+  > "$MERGED_REPORT"
+git add docs/qa && git commit -qm "chore: a report on a branch cut before the fix"
+git checkout -q main
+git merge -q --no-ff --no-edit missao/dry-run-retest-merge >/dev/null
+assert_eq "a report a merge brings in after the fix is not the retest" "QA:exec=<none>" "$(qa_step)"
+printf -- '- the fixed bug retested\n' >> "$MERGED_REPORT"
+git add docs/qa && git commit -qm "chore: the report rewritten after the fix"
+assert_eq "a report committed after the fix closes the retest" "QA:close=sdd-qa" "$(qa_step)"
+# Codex on PR #247 (10th round): the edit reverted brings the bytes back to what the merge wrote.
+git revert --no-edit HEAD >/dev/null
+assert_eq "a report edit reverted after the fix is not the retest" "QA:exec=<none>" "$(qa_step)"
+# Codex on PR #247 (12th round): a merge changes the report, an ordinary edit follows and is
+# reverted. A commit with no merge touched the path and the bytes differ from the fix's, yet the
+# only change left came from the merge.
+git checkout -q missao/dry-run-retest-merge
+printf -- '# QA Run Report\n- **Started:** 2026-01-03T10:00:00Z · **Status:** closed <!-- in-progress | closed -->\nB\n' \
+  > "$MERGED_REPORT"
+git add docs/qa && git commit -qm "chore: the branch changes the report to B"
+git checkout -q main
+git merge -q --no-ff --no-edit missao/dry-run-retest-merge >/dev/null
+printf -- '- one more line\n' >> "$MERGED_REPORT"
+git add docs/qa && git commit -qm "chore: an edit after the merge"
+git revert --no-edit HEAD >/dev/null
+assert_eq "a report a merge changed after the fix is not the retest, even after an edit and its revert" \
+  "QA:exec=<none>" "$(qa_step)"
+git branch -q -D missao/dry-run-retest-merge
+# CodeRabbit on PR #247: the path read is the MISSION's report, never the directory. On a mission
+# branch the report the branch added is the mission's; an ordinary commit after the fix that edits a
+# base report (another mission's: editing gives no ownership) touches reports/ and is not the retest.
+git checkout -q -b missao/dry-run-retest-owner
+printf -- '# QA Run Report\n- **Started:** 2026-01-04T10:00:00Z · **Status:** closed <!-- in-progress | closed -->\n' \
+  > docs/qa/reports/2026-01-04-mission.md
+git add docs/qa && git commit -qm "chore: the mission's own report"
+git commit -q --allow-empty -m "fix: F1 on the mission branch"
+f1_row "done" "$(git rev-parse --short HEAD)"
+printf -- '- touched by this branch\n' >> docs/qa/reports/2026-01-01-fixture.md
+git add docs/qa && git commit -qm "chore: an edit to another mission's report"
+assert_eq "another mission's report touched after the fix is not the retest" "QA:exec=<none>" "$(qa_step)"
+git checkout -q main
+git branch -q -D missao/dry-run-retest-owner
+git checkout -q -- "$MDIR/checkpoint.md"
+# Mixed reset to the commit before the world: the working tree keeps the modified config, and the
+# report files the world left behind go with docs/qa below.
+git reset -q "$retest_base"
+
 # Mixed reset: the index and HEAD go back, the working tree keeps the modified config.
 git reset -q HEAD~1
 rm -rf docs/qa/charters docs/qa/reports

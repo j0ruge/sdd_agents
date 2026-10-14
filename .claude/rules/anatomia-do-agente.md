@@ -129,6 +129,10 @@ Desde `20261012-a-rota-da-qa` (ADR 0018 §1) a sub-etapa da QA lê o `qa: skippe
 frontmatter do `00-missao.md` e, com interface, vai direto ao `close`: o `sdd-qa` é o dono do
 handoff que o gate exige, e o motivo do `skipped` diz o que o runner leu
 (`30-handoff-qa.md declares status: skipped`), nunca uma propriedade do diff que ele não mediu.
+Na mesma missão (ADR 0018 §2) o reteste ganhou rota: um `F<n>` feito depois do qual o relatório da
+missão não foi reescrito devolve a sub-etapa ao `exec` (`qa_fix_ahead_of`, uma definição, dois
+leitores; reescrito = bytes que nenhuma versão até o conserto teve, trazidos por um commit que não
+é merge), e o `sdd-qa` deixa de chamar as skills `qa-*` pela ferramenta `Skill`.
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
