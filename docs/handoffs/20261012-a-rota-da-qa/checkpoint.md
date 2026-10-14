@@ -1,6 +1,6 @@
 ---
 missao: 20261012-a-rota-da-qa
-atualizado: 2026-10-14 14:48
+atualizado: 2026-10-14 14:55
 ---
 
 # Checkpoint — o lote 7: a rota da QA e o aceite que lê o plano
@@ -49,7 +49,7 @@ atualizado: 2026-10-14 14:48
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | a rota do `skipped` declarado (D2): o `qa_substep` devolve `close` quando o `00-missao.md` diz `qa: skipped`, com interface; e o motivo do `skipped` diz o que leu (d) | `a=$(bash tests/check-dry-run.sh 2>&1); b=$(bash tests/check-gates.sh 2>&1); x=$(grep -c '^  ok    a plan that declares qa: skipped goes straight to QA:close with an interface' <<< "$a"); y=$(grep -c '^  ok    the skipped reason names the handoff that declares it' <<< "$b"); echo "$x $y"` → `1 1` | done | 4614701 |
-| I2 | o contrato da chave `qa:` (D2): template da missão, `sdd-qa` § 0 e § 2 (confere o diff; visível vira `blocked`), planner, `docs/pipeline.md` | `a=$(bash tests/check-templates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c "^  ok    missao.md: frontmatter key 'qa'" <<< "$a"); y=$(grep -c '^  ok    hat: sdd-qa confirms a declared qa: skipped against the diff' <<< "$b"); echo "$x $y"` → `1 1` | pending | — |
+| I2 | o contrato da chave `qa:` (D2): template da missão, `sdd-qa` § 0 e § 2 (confere o diff; visível vira `blocked`), planner, `docs/pipeline.md` | `a=$(bash tests/check-templates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c "^  ok    missao.md: frontmatter key 'qa'" <<< "$a"); y=$(grep -c '^  ok    hat: sdd-qa confirms a declared qa: skipped against the diff' <<< "$b"); echo "$x $y"` → `1 1` | done | 1e82e36 |
 | I3 | a rota do reteste (D3): `qa_fix_ahead_of`, o `qa_substep` devolve `exec` quando o relatório da missão não foi reescrito depois de um `F<n>` feito (os bytes em `HEAD` são novos e o primeiro commit depois do conserto que os carrega não é um merge); comentários das skills, tarefa do `QA:exec`, `sdd-qa` § 4 | `o=$(bash tests/check-dry-run.sh 2>&1); h=$(bash tests/check-hat.sh 2>&1); a=$(grep -c '^  ok    a fix increment done after the closed report sends QA back to exec for the retest' <<< "$o"); c=$(grep -c '^  ok    the retest boot tells the session to retest the fixed bugs' <<< "$o"); d=$(grep -c '^  ok    hat: sdd-qa leaves the retest to the runner' <<< "$h"); b=$(awk '/disable-model-invocation/ { n++ } END { print n + 0 }' bin/sdd); echo "$a $c $d $b"` → `1 1 1 1` | pending | — |
 | I4 | o frescor do handoff de QA (D3): o `gate_QA` recusa, nos dois caminhos, um `30-handoff-qa.md` não reescrito depois do último `F<n>` feito (inclusive a reescrita revertida); `sdd-qa` reescreve; o fixture do `check-autonomy.sh` e a âncora `bin/sdd:1800` do `TODO.md` acompanham | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    freshness: ' <<< "$o"` → `5` | pending | — |
 | I5 | o spec do bug que nenhum agente fecha (f): `sdd-qa` § 3 nomeia o `test.fail()` chamado depois das pré-condições | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: sdd-qa writes the spec of a bug no agent closes with test.fail' <<< "$o"` → `1` | pending | — |
