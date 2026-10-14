@@ -354,6 +354,11 @@ linha `event:"manual"` do ledger, que não gradua nada — antes dela, o PR publ
 #230 o `ok` dele diz o que o escritor **fez**, lido do `CHECKPOINT_NOTE` que o
 `checkpoint_note_intervention` publica (`committed`, `uncommitted`, `failed`, `none`), e a linha
 `manual` é gravada em todo caso — antes, o `ok` afirmava a nota mesmo quando ela não existia.
+Desde `20261012-a-rota-da-qa` (ADR 0018 §3) a porta do PLAN mostra o que o humano aprova: sob o
+`/sdd-plan` o planner deixa `aprovacao:` vazio (o `auto` só a pedido no grill), e o aceite mede de
+novo (`--check`/`--red`), renderiza o plano e conta as respostas do grill, `N (recommended) of M`,
+pelo leitor da D22 sobre as linhas `- answer:` das decisões — a escolha do humano passa a ser
+medida, nunca escrita à mão.
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
 anterior desta seção dizia que não existia, e estava errada (foi o comando do incidente das 18:45).
