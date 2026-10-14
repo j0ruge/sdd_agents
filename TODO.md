@@ -45,6 +45,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   tiveram `R<n>`). Falha aberta, com consumidor fora da suíte do kit (D15). Direção: amarrar o veredito
   ao commit que a QA viu e decidir, com custo medido, o que um `R<n>` reabre (um reteste custou US$ 7,19).
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — D21 do grill, registrado pelo `sdd-planner` (2026-10-14)
+- [ ] **Recado ao planner rodando chega depois da devolução** — `commands/sdd-plan.md:93` (`SendMessage`) —
+  a regra "nada retoma o planner com pergunta pendente" supõe que o relay sabe que há pergunta: no grill da 0.4.0
+  do `lighthouse_project`, um recado mandado com o planner rodando voltou `Resuming agent`, e não `queued`, porque
+  ele já tinha devolvido a Pergunta 2, que voltou revista e com a recomendação invertida. Falha aberta: o relay
+  mostraria a versão velha ao humano. Direção: ler o retorno do `SendMessage`; com `Resuming`, esperar a nova
+  devolução e descartar a anterior sem mostrá-la.
+  Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
 
 ### Saída humana e cosmética
 
@@ -58,6 +65,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Comentário e registro
 
 ### Idioma
+
+- [ ] **A devolução do planner ao relay não tem regra de idioma** — `agents/sdd-planner.md:240` (`OUTPUT_LANG`) —
+  o `## Language` cobre só os três artefatos e o parágrafo do relay (`:47`) não fala de idioma; só o
+  `commands/sdd-plan.md:85` pede `OUTPUT_LANG`. No grill da 0.4.0 do `lighthouse_project` (`pt-BR`), a 1ª
+  devolução veio inteira em inglês apesar do prompt de delegação em pt-BR, e outra abriu em inglês depois de um
+  lembrete: o relay teria de traduzir, e traduzir é parafrasear. Causa não verificada. Direção: o `## Language`
+  estende o `OUTPUT_LANG` às devoluções, com um caso que o meça.
+  Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
 
 ### Custo e escala
 
