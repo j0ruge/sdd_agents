@@ -363,6 +363,36 @@ command_approval_probes() {
   else
     fail "command: /sdd-plan no longer shows the plan and asks YES or NO before sdd approve, or lost the rule that only the human's answer approves"
   fi
+  # Lote 7 (D4, D5 (h), D8, D22, items (a) and (b) of 20261012-a-rota-da-qa). The human asked to READ
+  # the plan before the YES/NO, rendered like a superpowers plan; the re-run of --check/--red is
+  # what caught the stale red measurement of L4; the question covers the all-met case; the count of
+  # recommended answers comes from the D22 reader, written literally — a loose `(recommended)` in
+  # prose does not satisfy it, so the three pieces are fixed strings of the reader itself.
+  # `--red <checkpoint>` and not a bare `--red`: the section names the flag in other sentences, and
+  # the sabotage pass measured a bare match surviving the removal of the command itself.
+  if grep -qF 'check-checkpoint.sh --check <checkpoint>' <<< "$sec" \
+     && grep -qF -- '`--red <checkpoint>`' <<< "$sec" \
+     && grep -qF 'Goal' <<< "$sec" && grep -qF 'Architecture' <<< "$sec" \
+     && grep -qF 'Tech Stack' <<< "$sec" && grep -qF '**Files:**' <<< "$sec"; then
+    pass "command: /sdd-plan renders the plan and re-runs --check and --red before the YES or NO"
+  else
+    fail "command: /sdd-plan no longer renders the plan (Goal, Architecture, Tech Stack, Files) or re-runs --check and --red before the YES or NO"
+  fi
+  if grep -qF 'or says that all of them are ✅' <<< "$sec" \
+     && grep -qF '/^## Decis[^ ]* do grill/' <<< "$sec" \
+     && grep -qF '/^ +- answer: \((recommended|other: .+)\)$/' <<< "$sec" \
+     && grep -qF '" (recommended) of "' <<< "$sec"; then
+    pass "command: /sdd-plan names every unmet criterion, or says all are met, and counts the recommended answers"
+  else
+    fail "command: /sdd-plan no longer covers the all-met case in the question, or lost the literal D22 reader of the recommended answers"
+  fi
+  # Item (a): relayed to the planner as "never write aprovacao:", the old warning suppressed an
+  # `auto` in L2. It forbids PROSE in the field; `auto` is a value the gate accepts.
+  if grep -qF 'forbids approval prose in `aprovacao:`, never `auto`' <<< "$sec"; then
+    pass "command: /sdd-plan forbids approval prose in aprovacao, never auto"
+  else
+    fail "command: /sdd-plan no longer says its warning forbids approval prose in aprovacao, never the auto value"
+  fi
 }
 
 # --- /sdd-plan: what the relay commits, and what it holds back -----------------------------------
