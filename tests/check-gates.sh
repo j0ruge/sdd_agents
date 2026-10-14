@@ -1968,6 +1968,40 @@ fi
 sed -i 's|^E2E_CMD=.*|E2E_CMD="true"|; s|^APP_URL=.*|APP_URL="http://example.invalid"|' .sdd/config.sh
 assert_phase "the fixture is back where the next block starts" "REVIEW"
 
+# --- freshness: the handoff is rewritten after the last done F<n> (ADR 0018 §2) ----------------
+# A fix increment changes the code the QA judged; a 30-handoff-qa.md committed before it says the F
+# is pending, and it is the file the DOCS phase and the PR body read. Rewritten is the same question
+# qa_substep asks of the report (qa_fix_ahead_of), and the reason says "not rewritten", never "no
+# commit": after a revert there IS a commit, and the handoff is the one from before the fix. Only the
+# checkpoint and the handoff are committed — the modified config belongs to the blocks around.
+fresh_base="$(git rev-parse HEAD)"
+git add "$MDIR/30-handoff-qa.md" && git commit -q --allow-empty -m "chore: the QA handoff before the fix"
+printf '| F1 | the fix | `true` → 0 | pending | — |\n' >> "$MDIR/checkpoint.md"
+assert_why_absent "freshness: a pending F<n> demands nothing of the handoff" "QA" "was not rewritten after"
+git commit -q --allow-empty -m "fix: F1"
+fresh_fix="$(git rev-parse --short HEAD)"
+sed -i "s/^| F1 | the fix | \`true\` → 0 | pending | — |\$/| F1 | the fix | \`true\` → 0 | done | $fresh_fix |/" "$MDIR/checkpoint.md"
+git add "$MDIR/checkpoint.md" && git commit -q -m "chore: F1 is done"
+if [ "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )" = QA ] \
+   && grep -qF '30-handoff-qa.md was not rewritten after F1' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"; then
+  pass "freshness: with an interface, a handoff committed before a done F<n> holds QA and names the fix"
+else
+  fail "freshness: with an interface, a handoff committed before a done F<n> holds QA and names the fix" \
+       "phase QA and a reason naming F1" "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+fi
+printf -- '\nThe fixed bug was retested after F1.\n' >> "$MDIR/30-handoff-qa.md"
+git add "$MDIR/30-handoff-qa.md" && git commit -q -m "chore: the QA handoff rewritten after the fix"
+assert_phase "freshness: the handoff committed after the fix lets QA pass" "REVIEW"
+# Codex on PR #247 (10th round): the rewrite reverted brings the handoff back to the bytes of before
+# the fix, under a commit that came after it.
+git revert --no-edit HEAD >/dev/null
+assert_phase "freshness: a handoff rewrite reverted after the fix holds QA again" "QA"
+# Back to the world before the block: mixed reset (the config stays modified), the checkpoint from
+# HEAD; the handoff in the tree is already the bytes the block started from.
+git reset -q "$fresh_base"
+git checkout -q -- "$MDIR/checkpoint.md"
+assert_phase "the fixture is back where the next block starts, after the freshness worlds" "REVIEW"
+
 echo "== QA phase — project WITHOUT an interface =="
 # With no E2E_CMD and no APP_URL the docs/qa/ tree is never created by anyone. Here the gate
 # measures the handoff: `status: done` only passes together with the evidence of the journey.
@@ -2014,6 +2048,24 @@ assert_phase "QA: a missing status line does not pass" "QA"
 assert_why   "...and the reason names the empty status" "QA" "invalid status ''"
 printf -- '---\nfase: QA\nstatus: done\n%s\n---\n' "$QA_EVIDENCE" > "$MDIR/30-handoff-qa.md"
 assert_phase "QA: back to 'done' with evidence, the world passes again" "REVIEW"
+
+# The freshness reads before the interface split, so the walk sdd-qa does itself is held the same
+# way: the same handoff, committed before a done F<n>, holds QA here too.
+fresh_base="$(git rev-parse HEAD)"
+git add "$MDIR/30-handoff-qa.md" && git commit -q --allow-empty -m "chore: the QA handoff before the fix"
+git commit -q --allow-empty -m "fix: F1"
+printf '| F1 | the fix | `true` → 0 | done | %s |\n' "$(git rev-parse --short HEAD)" >> "$MDIR/checkpoint.md"
+git add "$MDIR/checkpoint.md" && git commit -q -m "chore: F1 is done"
+if [ "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )" = QA ] \
+   && grep -qF '30-handoff-qa.md was not rewritten after F1' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"; then
+  pass "freshness: without an interface, the same handoff holds QA too"
+else
+  fail "freshness: without an interface, the same handoff holds QA too" \
+       "phase QA and a reason naming F1" "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+fi
+git reset -q "$fresh_base"
+git checkout -q -- "$MDIR/checkpoint.md"
+assert_phase "QA: the world before the freshness check passes again" "REVIEW"
 
 # ...and the deferred debt is named HERE too. The registry loop in gate_QA runs on both branches —
 # it reads $QA_DOCS_PATH/bugs/ without asking whether the repo has an interface — but the sentence

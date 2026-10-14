@@ -1623,6 +1623,20 @@ gate_QA() {
   if [ "$st" != "done" ]; then
     GATE_WHY="30-handoff-qa.md has invalid status '$st' (use done|blocked|skipped)"; return 1
   fi
+  # Freshness (ADR 0018 §2): a handoff not rewritten after the last done F<n> still says the fix is
+  # pending, and it is the file the DOCS phase and the PR body read. The same question qa_substep
+  # asks of the report, through the same qa_fix_ahead_of. Read before the interface split, so it
+  # holds both paths. Its owner is sdd-qa (§ 6, "Commit everything"), reached by the close that
+  # qa_substep answers once the retest committed the report (with an interface), at once without
+  # one. `skipped` and `blocked` returned above and are not asked. Declared limit (D21 of
+  # 20261012-a-rota-da-qa): only F<n> is read, so an R<n> of the REVIEW after the QA neither asks
+  # for the handoff again nor re-checks a `skipped` against the diff it changed (in TODO.md).
+  # MISSION_DIR is "$REPO_ROOT/$HANDOFF_DIR/<mission>" (resolve_mission), so the prefix holds.
+  local ahead; ahead="$(qa_fix_ahead_of "${h#"$REPO_ROOT"/}")"
+  if [ -n "$ahead" ]; then
+    GATE_WHY="30-handoff-qa.md was not rewritten after ${ahead%% *} (${ahead#* }) — the sdd-qa close rewrites it once the fix is retested"
+    return 1
+  fi
 
   # Project with no interface: the qa-report/qa-execution skills never ran (qa_substep sends it
   # straight to sdd-qa), so the docs/qa/ tree does not exist. Demanding their dated report would

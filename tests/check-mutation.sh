@@ -823,6 +823,9 @@ mut_QA_fix_ahead_old_content_ok() {           # a pre-fix version restored after
 mut_QA_fix_ahead_any_carrier() {              # past the merge, a later carrier of the bytes counts
   sed -i '/^qa_rewritten_after() {/,/^}/ s@\[ "\$(wc -w <<< "\$rest")" -eq 1 \]; return$@[ "$(wc -w <<< "$rest")" -eq 1 ] || continue; return 0@' "$1"
 }
+mut_QA_handoff_freshness_ignored() {          # a handoff older than the last done F<n> passes gate_QA
+  sed -i '/^gate_QA() {/,/^}/ s@^  if \[ -n "\$ahead" \]; then$@  if false; then@' "$1"
+}
 mut_QA_fix_ahead_reads_the_directory() {      # the whole reports/ directory instead of the mission's report
   sed -i '/^qa_substep() {/,/^}/ s@qa_fix_ahead_of "\${report#"\$REPO_ROOT"/}"@qa_fix_ahead_of "$QA_DOCS_PATH/reports/"@' "$1"
 }
@@ -6187,6 +6190,7 @@ CATALOG=(
   QA_fix_ahead_old_content_ok
   QA_fix_ahead_any_carrier
   QA_fix_ahead_reads_the_directory
+  QA_handoff_freshness_ignored
   QA_report_ignores_untracked
   QA_report_range_no_origin
   QA_report_range_no_upstream

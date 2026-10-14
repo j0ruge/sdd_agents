@@ -133,6 +133,8 @@ Na mesma missão (ADR 0018 §2) o reteste ganhou rota: um `F<n>` feito depois do
 missão não foi reescrito devolve a sub-etapa ao `exec` (`qa_fix_ahead_of`, uma definição, dois
 leitores; reescrito = bytes que nenhuma versão até o conserto teve, trazidos por um commit que não
 é merge), e o `sdd-qa` deixa de chamar as skills `qa-*` pela ferramenta `Skill`.
+O `gate_QA` cobra o frescor pela mesma `qa_fix_ahead_of`, nos dois caminhos: um
+`30-handoff-qa.md` não reescrito depois do último `F<n>` feito reprova, nomeando o F.
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas

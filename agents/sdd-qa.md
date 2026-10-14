@@ -224,6 +224,11 @@ installs the agents and the config there but never the templates:
 
 Commit everything: specs, updated checkpoint, handoff.
 
+The handoff is rewritten and committed after every `F<n>` that is done: the gate refuses a handoff
+older than the last fix, because it still says the fix is pending and it is the file the DOCS
+phase and the PR body read. When the runner boots you after a fix, rewrite it with what the retest
+saw.
+
 ## 7. Findings outside the mission's scope
 
 A real bug that does not belong to this mission, a fragile journey nobody asked about, a stale QA

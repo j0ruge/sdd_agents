@@ -260,6 +260,13 @@ conditions). `status: blocked` stops the line (`handoff-blocked`); any other val
 literal `<done | blocked | skipped>`, `BLOCKED`, a missing line — is refused by name, where until
 issue #205 it passed as `done`. The conditions:
 
+- **the handoff is fresh** (ADR 0018 §2), on both paths: no done `F<n>` after which
+  `30-handoff-qa.md` was not rewritten — rewritten meaning bytes no version had up to the fix,
+  brought by a commit that is not a merge (`qa_fix_ahead_of`, the same reader the retest route
+  uses). A handoff from before the fix says the fix is pending, and the DOCS phase and the PR
+  body read it. Only `F<n>` counts: an `R<n>` of the REVIEW, after the QA, does not reopen it
+  (D21 of `20261012-a-rota-da-qa`, in `TODO.md`);
+
 - **the evidence of the journey walked**, which takes two forms depending on the project:
   - **with an interface** (`E2E_CMD` or `APP_URL` set) — the most recent report **the mission
     branch added** to `<QA_DOCS_PATH>/reports/` (in its own commits, `HEAD --not` the local and the
