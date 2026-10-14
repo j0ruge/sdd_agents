@@ -748,11 +748,11 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
      ```bash
      k8_promise() {
        awk "$FENCE_AWK"'
+         !/^[ \t]*\|/ { hdr = 0; dlm = 0 }
          { fence_line($0) }
          fence { next }
          /^## / { sec = ($0 ~ /^## Checklist kaizen([[:space:]]|$)/); next }
          !sec { next }
-         !/^[ \t]*\|/ { hdr = 0 }
          { l = $0; gsub(/[ \t]+/, " ", l) }
          l ~ /^ ?\| ?# ?\| ?Item ?\| ?Status ?\| ?Nota ?\| ?$/ { hdr = 0; dlm = 1; next }
          dlm { dlm = 0; if (l ~ /^ ?\| ?:?-+:? ?\| ?:?-+:? ?\| ?:?-+:? ?\| ?:?-+:? ?\| ?$/) { hdr = 1; next } }
@@ -772,7 +772,14 @@ linha física nova (âncora no texto `never from a log you read`); a string cont
      células, como `|---|---|---|---|`, e as linhas que continuam o mesmo bloco contíguo aberto por
      `|`), linhas `K8` sem `\|`, todas com `✗` na célula de Status. Sem a delimitadora, ou com uma
      de outro número de células, o GFM não desenha tabela, então a linha `K8` não é a do template
-     (Codex, 12ª rodada). `none` é a seção sem nenhuma
+     (Codex, 12ª rodada). **O estado da tabela vive só entre linhas que abrem por `|`** (13ª
+     rodada): toda linha que não abre por `|` (título, linha em branco, prosa, cerca, linha de outra
+     seção) zera `hdr` e `dlm` na primeira regra do programa, antes de qualquer `next`. Medido, com
+     o leitor da 12ª rodada: o reset ficava depois do `next` do título e do `!sec { next }`, e o
+     estado vazava por três portas: o título `## ` (o `hdr` de uma tabela que acaba colada nele,
+     mundo do Codex), o mesmo título com o `dlm` (um cabeçalho colado no título faz a primeira linha
+     da seção seguinte valer como delimitadora) e as linhas de uma seção que não é o checklist. A
+     cerca não vazava: a linha que a fecha já zera. `none` é a seção sem nenhuma
      linha `K8`, ou ausente. Toda outra forma é `yes`: uma linha cuja primeira célula é `K8` fora
      daquela tabela (sem a barra inicial, em parágrafo, em outra tabela, sob outro cabeçalho), com
      `\|`, ou com status que não seja o literal `✗` (`✅`, `⏳`, o marcador `<✅/✗>`, vazio). Uma
@@ -983,15 +990,15 @@ tem seção nenhuma, Contexto verificado) a seção do checklist, como o templat
 | K8 | Registro no KAIZEN_LOG | ✅ | |
 ```
 
-Commite e guarde `k8_start="$(git rev-parse HEAD)"`. Vinte e nove asserções `assert_phase` com o
-prefixo exato `kaizen-log: `, nesta ordem. Os mundos 1–17 e 21–29 são **independentes**: cada um é
+Commite e guarde `k8_start="$(git rev-parse HEAD)"`. Trinta e uma asserções `assert_phase` com o
+prefixo exato `kaizen-log: `, nesta ordem. Os mundos 1–17 e 21–31 são **independentes**: cada um é
 um commit sobre `k8_start` e volta com `git reset -q --hard "$k8_start"` (o molde de `:1349`); os
 18–20 são uma sequência, e o 21 começa com esse reset. Os mundos 1–10 mexem só no `KAIZEN_LOG.md`,
-e os 11–17 e 21–29 só no `00-missao.md`, com o `KAIZEN_LOG.md`
+e os 11–17 e 21–31 só no `00-missao.md`, com o `KAIZEN_LOG.md`
 de `k8_start` (nenhuma entrada nova: cobrar dá `DOCS`, não cobrar dá `PR`). ⚠️ Não os acumule: o
 mundo 3 (renome) seguido do 4 (citação na mesma entrada) é o resíduo declarado, e a fase passaria.
-Os vinte e nove mundos, com estes textos e esta base, foram rodados no protótipo contra a regra e
-contra cada mutante (a fase esperada em todos; 2026-10-13, 12ª rodada). ⚠️ Nos mundos que trocam a
+Os trinta e um mundos, com estes textos e esta base, foram rodados no protótipo contra a regra e
+contra cada mutante (a fase esperada em todos; 2026-10-13, 13ª rodada). ⚠️ Nos mundos que trocam a
 linha real **e** acrescentam outra linha K8, troque a real primeiro: as duas seriam iguais byte a
 byte, e um `sed` na real depois reescreveria as duas (aconteceu no protótipo).
 1. `kaizen-log: a base that already cites the mission is not the entry`: nada acrescentado → `DOCS`.
@@ -1081,17 +1088,23 @@ byte, e um `sed` na real depois reescreveria as duas (aconteceu no protótipo).
 28. `kaizen-log: a header without its delimiter row is not the template table` (o mundo do Codex na
     12ª rodada): a linha real vira `✗` e a delimitadora `|---|---|---|---|` é apagada → `DOCS`;
 29. `kaizen-log: a delimiter row of another width is not the template table`: a linha real vira `✗`
-    e a delimitadora vira `|---|---|---|` → `DOCS`.
+    e a delimitadora vira `|---|---|---|` → `DOCS`;
+30. `kaizen-log: a checklist table does not leak into the next heading` (o mundo do Codex na 13ª
+    rodada): a linha real apagada, e colado na delimitadora, sem linha em branco,
+    `## Checklist kaizen` e logo abaixo `| K8 | Registro no KAIZEN_LOG | ✗ | |` → `DOCS`;
+31. `kaizen-log: a header does not lend its delimiter to the next section`: a linha real e a
+    delimitadora apagadas, e colado no cabeçalho, sem linha em branco, `## Checklist kaizen`,
+    `|---|---|---|---|` e `| K8 | Registro no KAIZEN_LOG | ✗ | |` → `DOCS`.
 
 Volte à `main` e restaure o fixture. Um probe em `hat_promise_probes` lê o `sdd-docs.md` § 3: exige
 `K8` na linha do `KAIZEN_LOG.md`, a instrução de abrir a entrada com o seu próprio `## ` e a de citar
 o id da missão, e imprime `hat: the docs hat reads K8 of the plan before it marks KAIZEN_LOG`.
-Vinte e dois mutantes, provados por `--only <slug> check-gates.sh`. Os vinte e dois foram sabotados no
+Vinte e quatro mutantes, provados por `--only <slug> check-gates.sh`. Os vinte e quatro foram sabotados no
 protótipo, sobre a base deste fixture, e cada um mudou a fase exatamente nos mundos indicados:
-- `DOCS_k8_ignored` neutraliza o `if` novo → mundos 1–7, 9, 11, 13, 14, 16, 17, 19 e 21–29;
+- `DOCS_k8_ignored` neutraliza o `if` novo → mundos 1–7, 9, 11, 13, 14, 16, 17, 19 e 21–31;
 - `DOCS_k8_presence_is_enough` troca `"$b"` pela árvore vazia
   (`4b825dc642cb6eb9a060e54bf8d69288fbee4904`) no `diff-tree`, e toda linha vira nova → mundos 1–7,
-  9, 11, 13, 14, 16, 17, 19 e 21–29;
+  9, 11, 13, 14, 16, 17, 19 e 21–31;
 - `DOCS_k8_reads_deleted_lines` deixa as linhas `-` entrarem (`t != " " && t != "+" && t != "-"
   { next }`) → só o mundo 8;
 - `DOCS_k8_heading_not_new` tira `hnew &&` da condição da citação → mundos 4–7;
@@ -1110,8 +1123,12 @@ protótipo, sobre a base deste fixture, e cada um mudou a fase exatamente nos mu
 - `DOCS_k8_status_fence_blind` apaga a linha `fence { next }` do `k8_promise` → só o mundo 15;
 - `DOCS_k8_status_heading_unbounded` troca `/^## Checklist kaizen([[:space:]]|$)/` por
   `/^## Checklist kaizen/` → só o mundo 17;
-- `DOCS_k8_status_header_ignored` troca `if (hdr && $0 !~` por `if ($0 !~` → mundos 21, 23, 28 e 29;
-- `DOCS_k8_status_header_not_reset` apaga a linha `!/^[ \t]*\|/ { hdr = 0 }` → só o mundo 21;
+- `DOCS_k8_status_header_ignored` troca `if (hdr && $0 !~` por `if ($0 !~` → mundos 21, 23 e 28–31;
+- `DOCS_k8_status_header_not_reset` apaga a linha `!/^[ \t]*\|/ { hdr = 0; dlm = 0 }` →
+  mundos 21, 30 e 31;
+- `DOCS_k8_status_reset_in_section_only` move essa linha para depois do `!sec { next }` (o lugar da
+  12ª rodada) → mundos 30 e 31;
+- `DOCS_k8_status_dlm_kept` troca `{ hdr = 0; dlm = 0 }` por `{ hdr = 0 }` → só o mundo 31;
 - `DOCS_k8_status_escaped_ok` troca `if (hdr && $0 !~ /\\\|/)` por `if (hdr)` → só o mundo 22;
 - `DOCS_k8_status_no_is_not_promised` troca `if (s != "✗") yes = 1` por
   `if (s == "✅" || s == "⏳") yes = 1` (o "não" da D18) → só o mundo 24;
@@ -1124,14 +1141,14 @@ protótipo, sobre a base deste fixture, e cada um mudou a fase exatamente nos mu
   cabeçalho basta) → mundos 28 e 29;
 - `DOCS_k8_status_delimiter_any_count` troca a regex da delimitadora de quatro células por
   `/^ ?\|( ?:?-+:? ?\|)+ ?$/` (qualquer largura) → só o mundo 29.
-O leitor da 10ª rodada (a D18 com a linha GFM) muda os mundos 23, 24, 25, 27, 28 e 29 (medido): o 27 é o
+O leitor da 10ª rodada (a D18 com a linha GFM) muda os mundos 23, 24, 25 e 27–31 (medido): o 27 é o
 mundo do CodeRabbit, e o 24 e o 25 são o que a D19 decidiu cobrar e a D18 não cobrava. Nenhum
 mutante sozinho refaz o 27, que fica como a regressão pedida.
 A classe não tem mutante próprio, e o mundo 9 é o que a segura: no protótipo, a classe reduzida a
 `[-]` e a classe sem o `-` deixaram o mundo 9 em `PR` (por isso ele leva um vizinho letra e um
 vizinho `-`); a classe alargada com `.` e `/` (aperto, falha fechada) deixou o 10 em `DOCS`.
-**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `29 1`
-**Sensor durável:** as vinte e nove asserções, o `assert_why`, o probe e os vinte e dois mutantes.
+**Check:** `a=$(bash tests/check-gates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); x=$(grep -c '^  ok    kaizen-log: ' <<< "$a"); y=$(grep -c '^  ok    hat: the docs hat reads K8 of the plan' <<< "$b"); echo "$x $y"` → `31 1`
+**Sensor durável:** as trinta e uma asserções, o `assert_why`, o probe e os vinte e quatro mutantes.
 **Reversível por:** reverter o commit.
 
 ### I10 — onde vai o `RESOLVED by` num item no teto
@@ -1354,16 +1371,16 @@ gaveta e a frase da linha F3 a cobrem.
 
 ## Medição do vermelho
 
-Rodado pelo planner em 2026-10-13 às 20:37, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
-`kaizen/20261012`, head `f769084` mais os consertos da 12ª rodada), sobre o checkpoint **final**, em
-background e lido até a linha final. É a 12ª medição: as anteriores (2026-10-12 20:53, 2026-10-13
-05:02, 07:53, 08:12, 09:59, 11:53, 14:10, 14:38, 17:42, 18:16 e 20:03) foram refeitas porque um Check
-mudou. O do I9 foi de `3 1` a `29 1` em dez passos (D13, D14, D15, D16, a fronteira do id, D18, a
-fronteira do título, a linha GFM, D19, a delimitadora). A D17 trouxe o I11, a D20 trouxe o I12, e o
+Rodado pelo planner em 2026-10-13 às 21:41, a partir de `/home/joruge/repos/sdd_agents-kaizen` (branch
+`kaizen/20261012`, head `87a4a84` mais o conserto da 13ª rodada), sobre o checkpoint **final**, em
+background e lido até a linha final. É a 13ª medição: as anteriores (2026-10-12 20:53, 2026-10-13
+05:02, 07:53, 08:12, 09:59, 11:53, 14:10, 14:38, 17:42, 18:16, 20:03 e 20:37) foram refeitas porque
+um Check mudou. O do I9 foi de `3 1` a `31 1` em onze passos (D13, D14, D15, D16, a fronteira do id,
+D18, a fronteira do título, a linha GFM, D19, a delimitadora, o estado da tabela por bloco). A D17 trouxe o I11, a D20 trouxe o I12, e o
 fecho virou I13. O do I3 foi de `1` a `1 1` (9ª rodada) e a `1 1 1 1` (10ª); o do I4 de `4` a `5`
 (10ª); o do I13 de `1 1 1` a `1 1 1 1 1 1` (12ª).
 
-O `--check` e o `--red` levaram 10 min 34 s (20:37:09 → 20:47:43): cinco Checks rodam o
+O `--check` e o `--red` levaram 8 min 41 s (21:41:52 → 21:50:33): cinco Checks rodam o
 `check-gates.sh` (I1, I4, I9, I11 e I12), de ~130 s nesta máquina.
 
 ```text
@@ -1379,7 +1396,7 @@ $ bash tests/check-checkpoint.sh --red docs/handoffs/20261012-a-rota-da-qa/check
   ok    checkpoint.md: I6 is red at HEAD (prints '0', wants '3')
   ok    checkpoint.md: I7 is red at HEAD (prints '0', wants '4')
   ok    checkpoint.md: I8 is red at HEAD (prints '0', wants '1')
-  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '29 1')
+  ok    checkpoint.md: I9 is red at HEAD (prints '0 0', wants '31 1')
   ok    checkpoint.md: I10 is red at HEAD (prints '0', wants '2')
   ok    checkpoint.md: I11 is red at HEAD (prints '0 0', wants '5 1')
   ok    checkpoint.md: I12 is red at HEAD (prints '0 0', wants '3 1')
@@ -1428,7 +1445,7 @@ baixar o modelo do `QA:close`.
 - `tests/run-all.sh` verde, com as asserções novas de `check-dry-run.sh`, `check-gates.sh`,
   `check-hat.sh` e `check-templates.sh`.
 - Os Checks de I1–I13 dão o esperado da tabela; M1–M6, M8 e M9 do `00-missao.md` são as linhas `ok` deles.
-- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos trinta e oito mutantes novos
+- `tests/check-mutation.sh --only <slug> <sensor>.sh` (nome nu) pega cada um dos quarenta mutantes novos
   (`QA_substep_skipped_ignored`, `QA_substep_skipped_loose`, `QA_substep_retest_ignored`,
   `QA_fix_ahead_any_order`, `QA_fix_ahead_counts_merges`, `QA_fix_ahead_reads_the_directory`,
   `QA_fix_ahead_old_content_ok`, `QA_fix_ahead_any_carrier`, `QA_handoff_freshness_ignored`,
@@ -1441,7 +1458,8 @@ baixar o modelo do `QA:close`.
   `DOCS_k8_status_header_not_reset`, `DOCS_k8_status_escaped_ok`,
   `DOCS_k8_status_no_is_not_promised`, `DOCS_k8_status_odd_ignored`,
   `DOCS_k8_status_first_row_only`, `DOCS_k8_status_none_is_no`, `DOCS_k8_status_delimiter_ignored`,
-  `DOCS_k8_status_delimiter_any_count`, `RUN_mission_id_unchecked`,
+  `DOCS_k8_status_delimiter_any_count`, `DOCS_k8_status_reset_in_section_only`,
+  `DOCS_k8_status_dlm_kept`, `RUN_mission_id_unchecked`,
   `RUN_mission_id_slashes_kept`, `DOCS_k8_mission_arg_raw`, `PLAN_base_branch_k8_ignored`,
   `DOCS_base_branch_k8_ignored`, `PLAN_base_branch_refuses_silence`), e o `--anchors` diz `all N mutants
   still apply`.

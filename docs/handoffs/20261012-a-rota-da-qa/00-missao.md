@@ -390,7 +390,12 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
     vinte mutantes. **Refinada na 12ª rodada** (Codex, `f769084`), sem pergunta nova: a tabela do
     template é o cabeçalho seguido da linha delimitadora de quatro células; sem ela, ou com outra
     largura, o GFM não desenha tabela, e a linha `K8` não é a do template. O I9 vai a vinte e nove
-    asserções e vinte e dois mutantes.
+    asserções e vinte e dois mutantes. **E na 13ª** (Codex, `87a4a84`), também sem pergunta: o estado
+    da tabela vive só entre linhas que abrem por `|`; o título, a linha em branco, a prosa, a cerca e
+    as linhas de outra seção o zeram antes de qualquer `next`. Antes, ele vazava pelo título e pelas
+    linhas de outra seção, e uma tabela de checklist sem K8, colada num `## Checklist kaizen`
+    duplicado, emprestava o cabeçalho à linha `| K8 | … | ✗ |` dele. O I9 vai a trinta e uma
+    asserções e vinte e quatro mutantes.
 20. **D20 — na base, recusar só a promessa explícita** (recommended; **reaberta** pela medição dos
     fixtures, e a reaberta também recommended). O `gate_PLAN` recusa a missão cuja `branch:` é a
     `DEFAULT_BRANCH` quando a `k8_promise` diz `yes`, nomeando a base e os dois remédios (um branch
@@ -417,7 +422,7 @@ nascido do kaizen nunca é `auto`, e o D4 manda o humano ler e aprovar.
   origin/main`, e de lá `sdd approve 20261012-a-rota-da-qa` e a execução interativa, incremento por
   incremento. O `sdd approve` faz checkout da `branch:` e a cria a partir da atual quando não existe.
 - **Carimbo de mutação:** `./bin/sdd health` uma vez, no worktree, depois do último commit de código
-  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 725 depois dos trinta e oito
+  **e** da rodada de todos os bots do PR (ADR 0015 §1). São 687 mutantes hoje e 727 depois dos quarenta
   deste lote (689 medidos depois do I1 no teste de autocontenção): ~40 a 60 min.
 - **Yokoten nos alvos:** mudam `agents/sdd-qa.md`, `sdd-planner.md` e `sdd-docs.md`. No
   `sales_quote`, `sdd install --force` numa branch `chore/kit-<sha>` e PR para a `develop`; os alvos
