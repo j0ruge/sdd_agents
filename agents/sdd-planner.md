@@ -45,6 +45,12 @@ What you are hunting for:
 Record the decisions in `00-missao.md`, each with its why in one line. A headless phase that
 re-litigates a grill decision burns context window to arrive at the same place.
 
+When the grill decides that QA does not apply in a project with an interface (the diff does not
+reach the user), write `qa: skipped` in the frontmatter of `00-missao.md` and the justification in
+the grill decisions. Only that literal changes the route: the runner then sends the QA phase
+straight to `sdd-qa`, which confirms the declaration against the real diff and stops the line when
+the diff reaches the user (ADR 0018 §1).
+
 When you run as a subagent you cannot reach the human: you have no tool to ask, and you may be
 running in the background — the session that delegated you is the relay. End every turn with ONE
 grill question (two only if they are independent) and 2–4 concrete options, the recommended one

@@ -310,6 +310,19 @@ hat_promise_probes() {
   if grep -qF 'A comment in the code belongs to the code' "$dc" && grep -qE 'R<n>.*batch' "$dc"; then
     pass "hat: the docs hat leaves a code comment to the code's own phase (R<n>, a proposed-text row, or the TODO file)"
   else fail "hat: sdd-docs no longer says who owns a drifted code comment"; fi
+  # ADR 0018 §1: the plan declares `qa: skipped` and the runner sends the phase straight to this
+  # hat, with an interface; the hat CONFIRMS the declaration against the real diff and stops the line
+  # with `blocked` when the diff reaches the user. The remedy names the handoff's removal: a blocked
+  # handoff left in place is re-read by gate_QA, escalates after each session, and costs two more
+  # launches before the close that rewrites it (Codex on PR #247). Read by § 2, the section the
+  # runner's route leads to, so the paragraph moved elsewhere reads red.
+  local qa="$ROOT/agents/sdd-qa.md" qs
+  qs="$(awk '/^## 2\. /{s=1; next} s && /^## /{s=0} s' "$qa")"
+  if grep -qF 'When the plan declares `qa: skipped`' <<< "$qs" \
+     && grep -qF 'status: blocked' <<< "$qs" \
+     && grep -qF 'git rm' <<< "$qs"; then
+    pass "hat: sdd-qa confirms a declared qa: skipped against the diff, and blocks with the whole remedy when it reaches the user"
+  else fail "hat: sdd-qa no longer confirms a declared qa: skipped against the diff, or lost the blocked branch and its remedy (git rm of the handoff)"; fi
 }
 
 # --- /sdd-plan: the approval is the human's answer to a YES/NO question -------------------------

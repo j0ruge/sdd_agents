@@ -38,6 +38,12 @@ Do not force `status: skipped` just because there is no browser. `skipped` is fo
 **does not reach the user** (§2). A command-line project has journeys — they are walked in the
 terminal.
 
+There is a third case, on the **with interface** path: the plan declares `qa: skipped` in the
+frontmatter of `00-missao.md`, because the grill decided the diff does not reach the user. The
+runner then sends the phase straight to you, with no `qa-report` and no `qa-execution` session
+before you, and the `docs/qa/` tree may hold nothing of this mission. Your job there is to
+**confirm** that declaration against the real diff (§2), never to walk.
+
 ## 1. Load the state
 
 1. `docs/handoffs/<mission>/00-missao.md` and `01-plano.md` — what the mission promised.
@@ -61,6 +67,22 @@ It happens and it is legitimate (internal refactor, types, build, docs). In that
 
 The runner recognises `status: skipped` and moves on to the review. That is expected behaviour,
 not a failure.
+
+When the plan declares `qa: skipped` (the third case of §0), the decision was the grill's, and
+you check it:
+
+1. read its justification in the grill decisions of `00-missao.md`;
+2. compare it with the real diff (`git diff <base>...HEAD --stat`, then the files it lists);
+3. nothing in the diff reaches the user → `status: skipped`, citing the plan's decision and the
+   files you read;
+4. something reaches the user → `status: blocked`, naming the files, with the whole remedy for the
+   human: remove `qa: skipped` from `00-missao.md` **and delete this handoff**
+   (`git rm docs/handoffs/<mission>/30-handoff-qa.md`), commit, then `sdd run`. A blocked handoff
+   left in place is read again by the gate, which stops the line after every session, so each
+   launch pays one more session before the close that rewrites it; without the handoff the next
+   run walks `plan` → `exec` → `close` in one launch.
+
+Under the declaration never walk, never create `docs/qa/`, and never write `status: done`.
 
 ## 3. A confirmed journey finding → a Playwright spec
 

@@ -7,6 +7,7 @@ branch: <nome da branch de trabalho — sdd approve/run/retry faz checkout dela,
 aprovacao: <auto | humano-YYYY-MM-DD>
 adr: <none | TBD | docs/adr/NNNN-slug.md — allocate it with `sdd adr new --slug <s> --spec <este arquivo>`; sob ADR_CHECK=block o gate de PLAN recusa vazio, TBD e este placeholder>
 ddd: <aplicado | n/a>
+qa: <vazio, ou skipped quando o grill decide que o diff não chega ao usuário — só o literal skipped desvia a rota da QA; a justificativa vai nas Decisões do grill>
 ---
 
 # Missão — <título>

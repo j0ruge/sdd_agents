@@ -249,7 +249,7 @@ The phase is **three sessions**, and the current sub-step is **derived from the 
 |---|---|---|---|
 | `QA:plan` | `/qa-report` skill (no kit agent) | there is no charter in `<QA_DOCS_PATH>/charters/` | charters, personas, journeys |
 | `QA:exec` | `/qa-execution` skill (no kit agent) | there is a charter, but no `closed` report **of this mission** | dated report + bug registry |
-| `QA:close` | `sdd-qa` agent | report **of this mission** `closed` — or a project with no interface | e2e specs, fix increments, `30-handoff-qa.md` |
+| `QA:close` | `sdd-qa` agent | report **of this mission** `closed` — or a project with no interface, or the plan declares `qa: skipped` | e2e specs, fix increments, `30-handoff-qa.md` |
 
 The two skills **own** `docs/qa/`; `sdd-qa` does not rewrite what they produced. A project **with
 no interface** (no `E2E_CMD` and no `APP_URL`) goes straight to `QA:close`: bootstrapping browser
@@ -353,6 +353,14 @@ works out why.
 
 `qa: skipped` is a legitimate and expected answer: a diff with no user-visible change (refactor,
 types, build, docs) has no journey to walk. Inventing a journey just to "have QA" is waste.
+
+Who declares it and who confirms it (ADR 0018 §1): when the grill decides QA does not apply in a
+project with an interface, `sdd-planner` writes `qa: skipped` in the frontmatter of `00-missao.md`
+and the justification in the grill decisions. Only that literal changes the route: `qa_substep`
+sends the phase straight to `QA:close`, and `sdd-qa` confirms the declaration against the real
+diff — `status: skipped` when nothing reaches the user, `status: blocked` with the files and the
+remedy (remove the key **and** `git rm` the blocked handoff) when something does. Any other
+spelling keeps the route of today.
 
 ### REVIEW — Grade A where a sensor exists, B tolerated on prose
 
