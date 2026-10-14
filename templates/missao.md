@@ -71,6 +71,7 @@ sozinho. Qualquer ✗ → `aprovacao` fica vazio e o runner para pedindo aprova�
 ## Decisões do grill (não re-litigar)
 
 1. <decisão + porquê em uma linha>
+   - answer: <(recommended), ou (other: <a opção escolhida>); uma linha por resposta>
 
 ## Pendências para o humano
 

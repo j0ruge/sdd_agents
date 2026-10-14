@@ -429,6 +429,13 @@ command_relay_probes() {
   else
     fail "command: /sdd-plan lets a message that answers nothing resume the planner, or relays an answer by its position"
   fi
+  # Item (i) of 20261012-a-rota-da-qa: 30 min announced, ~2h55 real in L4, and the human asked midway
+  # whether all was well. The relay holds the planner to a re-estimate at twice the announced time.
+  if grep -qF 'twice the estimate' <<< "$relay" && grep -qF 'a new estimate' <<< "$relay"; then
+    pass "command: /sdd-plan re-estimates long work that runs past twice the estimate"
+  else
+    fail "command: /sdd-plan no longer re-estimates long work that runs past twice the estimate"
+  fi
 }
 
 # --- /sdd-plan: a mission of the kit `sdd` runs from is written in a linked worktree (#235) -------
@@ -459,6 +466,33 @@ planner_agent_probes() {
     pass "hat: the planner measures each increment against the disk the earlier ones leave (TODO.md anchors and prose numbers)"
   else
     fail "hat: sdd-planner no longer measures each increment against the disk the earlier ones leave"
+  fi
+  # Lote 7 (20261012-a-rota-da-qa), one pair per section the rule lives in, read by section like the
+  # one above. § 1, D8 in the form of D22: every answer is a whole line the acceptance step counts —
+  # the four pieces are what the D22 reader needs, and each was removed by the sabotage pass. § 2,
+  # item (g): L3 named a new file in Portuguese against the target's <CRITICAL>, caught only by a
+  # bot after the PR. § 6, D4 and item (a): under /sdd-plan the human reads the plan and approves.
+  local s1 s2 s6
+  s1="$(awk '/^## 1\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  s2="$(awk '/^## 2\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  s6="$(awk '/^## 6\. /{s=1; next} s && /^### /{s=0} s && /^## /{s=0} s' "$agent")"
+  if grep -qF -- '- answer: (recommended)' <<< "$s1" \
+     && grep -qF -- '- answer: (other: <the option they chose>)' <<< "$s1" \
+     && grep -qF 'One line per answer' <<< "$s1" \
+     && grep -qF 'never goes inside the parentheses' <<< "$s1"; then
+    pass "hat: the planner marks each grill decision (recommended) or (other), one whole line per answer"
+  else
+    fail "hat: sdd-planner no longer marks each grill answer as a whole '- answer:' line the acceptance step can count"
+  fi
+  if grep -qF 'naming and language rules of the target' <<< "$s2" && grep -qF '.claude/rules/' <<< "$s2"; then
+    pass "hat: the planner reads the naming rules of the target before it names a file"
+  else
+    fail "hat: sdd-planner no longer reads the naming and language rules of the target before it names a file"
+  fi
+  if grep -qF 'leave `aprovacao:` empty' <<< "$s6" && grep -qF 'only when the human asked for it in the grill' <<< "$s6"; then
+    pass "hat: the planner leaves aprovacao empty under /sdd-plan unless the human asks for auto"
+  else
+    fail "hat: sdd-planner writes aprovacao: auto on its own again, instead of leaving it to the human who reads the plan"
   fi
 }
 

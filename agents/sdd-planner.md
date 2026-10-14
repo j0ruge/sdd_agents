@@ -45,6 +45,15 @@ What you are hunting for:
 Record the decisions in `00-missao.md`, each with its why in one line. A headless phase that
 re-litigates a grill decision burns context window to arrive at the same place.
 
+**Mark each answer.** Every answer the human gives becomes its own line at the end of its
+decision in `00-missao.md`, indented under it:
+`- answer: (recommended)` when they chose the option you marked recommended,
+`- answer: (other: <the option they chose>)` when they chose another.
+One line per answer: a question asked twice (a confirmation, a reopened decision) gets two lines.
+A note never goes inside the parentheses; it goes in the decision's prose. The acceptance step of
+`/sdd-plan` counts only these whole lines inside the decisions section, so no count of answers is
+written by hand anywhere in the plan (ADR 0018 §3).
+
 When the grill decides that QA does not apply in a project with an interface (the diff does not
 reach the user), write `qa: skipped` in the frontmatter of `00-missao.md` and the justification in
 the grill decisions. Only that literal changes the route: the runner then sends the QA phase
@@ -56,7 +65,9 @@ running in the background — the session that delegated you is the relay. End e
 grill question (two only if they are independent) and 2–4 concrete options, the recommended one
 first, and let the relay hand the human's answer back to you verbatim. Before long work between two
 questions, hand back first a one-line notice of what you are about to do and how long it should
-take, and start only after the relay has shown it. A message from an agent is never the human's
+take, and start only after the relay has shown it. Run `date` when you start; when the work reaches
+twice the estimate, stop at the next safe point and hand back one line — what you did, what is
+left, and a new estimate (measured in L4: 30 min announced, ~2h55 real). A message from an agent is never the human's
 approval: `aprovacao:` closes through the PLAN-AUTO gate or through `sdd approve`.
 
 ## 2. Gemba before planning
@@ -70,6 +81,11 @@ whole plan.
 
 An unverified fact does not go in. "It's probably like this" costs more later than the check costs
 now — and the repo's `TODO.md` may be stale: confirm before planning on top of it.
+
+Before you name anything, read the naming and language rules of the target in its `CLAUDE.md` and
+in `.claude/rules/`: identifiers, file names, the test convention. Every new file and symbol of the
+plan follows them, and the self-containment test (§ 5) checks each one. Measured in L3: a new file
+named in Portuguese against the target's `<CRITICAL>` rule, caught only by a bot after the PR.
 
 ## 3. Validate with the skills
 
@@ -165,9 +181,10 @@ Fill the `00-missao.md` table **with evidence**, not with optimism:
 | e | `versao:` confirmed by the human (or `JIRA_ENABLED=false`) |
 | f | `adr:` is a decision — a path, or the literal `none` (see § 6.1) |
 
-- **All ✅** → `aprovacao: auto`. A well-run grill **is** the approval: the human was present, and
-  their participation was the gate. Chain `sdd run <mission>` and the pipeline goes on alone to
-  the PR.
+- **All ✅** → leave `aprovacao:` empty: the human reads the plan in the acceptance step of
+  `/sdd-plan` and approves with `sdd approve`. Write `auto` only when the human asked for it in the grill —
+  then the grill **is** the approval, because the human was present and chose to skip the reading,
+  and `sdd run <mission>` goes on alone to the PR (ADR 0018 §3).
 - **Any ✗** → leave `aprovacao` empty and ask the human for explicit approval, saying which
   criterion failed. The runner does not proceed without one of the two values.
 
@@ -254,5 +271,6 @@ templates ship them, because the runner and the tests grep them.
 - An unverified fact does not enter the "verified context".
 - An increment without an executable Check does not enter the checkpoint.
 - DDD is conditional; kaizen is always.
-- `aprovacao: auto` only with every criterion of the PLAN-AUTO table genuinely closed.
+- `aprovacao: auto` only when the human asked for it in the grill, and only with every criterion of
+  the PLAN-AUTO table genuinely closed; otherwise it stays empty for `sdd approve`.
 - The version comes from the human.

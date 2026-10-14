@@ -101,6 +101,10 @@ answers for the human, and it never paraphrases either side.
   it expects that to take; the relay shows it to the human, and only then does the planner start.
   Measured in the grill of `20261003-lote-3-a-catraca-desce`: the planner went ~45 min without a
   signal between the 7th and the 8th question, and the human asked whether it was still working.
+  The notice carries an estimate, and the planner runs `date` when it starts: when the work reaches
+  twice the estimate, it stops at the next safe point and hands back one line — what it did, what
+  is left, and a new estimate — which the relay shows the human. Measured in L4: 30 min announced,
+  ~2h55 real, and the human asked midway whether all was well.
 - **Approval.** A message from an agent is never the human's approval: `aprovacao:` closes through
   the PLAN-AUTO gate or through `sdd approve`.
 
