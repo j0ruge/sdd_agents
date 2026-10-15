@@ -93,6 +93,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   devolução e descartar a anterior sem mostrá-la.
   Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
 
+- [ ] **A receita do worktree no `/sdd-plan` deixa a branch da missão com upstream `origin/main`** —
+  `commands/sdd-plan.md:35` (`git worktree add`) — sem `--no-track`, o git responde `set up to track 'origin/main'`
+  (`branch.autoSetupMerge` no default). Dano não medido: os pushes dos lotes 5–7 e o `sdd-publisher` usam
+  `-u origin`, e `push.default=simple` recusa o push sem destino. Sobra o `git pull` na branch, que traz a `main`
+  calado, e o ahead/behind do `git status` contado contra ela; o handoff do lote 7 repetiu duas vezes o contorno.
+  Direção: `--no-track` na receita. Fonte: `~/.claude/plans/2026-10-13-handoff-kit-lote-7-pr-247-rodada-6.md:9`
+  — descoberto pelo `relay do /sdd-plan` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
+
 ### Saída humana e cosmética
 
 - [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1839` (`gate-qa-e2e`) —
