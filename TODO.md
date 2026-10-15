@@ -100,6 +100,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   calado, e o ahead/behind do `git status` contado contra ela; o handoff do lote 7 repetiu duas vezes o contorno.
   Direção: `--no-track` na receita. Fonte: `~/.claude/plans/2026-10-13-handoff-kit-lote-7-pr-247-rodada-6.md:9`
   — descoberto pelo `relay do /sdd-plan` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
+- [ ] **O remédio do `sdd kaizen` recusado ensina a mesma receita sem `--no-track`** — `bin/sdd:11241`
+  (`shared_why`) — o motivo manda `worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>`, e a
+  branch do juiz nasce rastreando a `main` (git 2.43, medido em repo de rascunho); o `docs/failure-modes.md:624`
+  e o `docs/pipeline.md:1477` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
+  `/sdd-plan` porque o `bin/` está congelado até o veredito. Direção: `--no-track` no motivo e nas duas citações.
+  — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
 ### Saída humana e cosmética
 
