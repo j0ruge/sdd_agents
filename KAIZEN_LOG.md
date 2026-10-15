@@ -4,6 +4,31 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-14 — Lote 7: a rota da QA e o aceite que lê o plano
+
+**Missão:** `20261012-a-rota-da-qa` (ADR 0018, PR de docs #247), nascida do veredito `melhorou`
+sobre `0270727` e replanejada com o humano no grill e em 17 rodadas de revisão (D1–D23).
+
+**Antes** (o veredito ao lado, cinco missões do `sales_quote`): 3 de 5 missões fizeram a QA à mão
+(`sdd note-manual … QA`), e esse ritual foi 3 das 5 intervenções da fatia; o reteste depois de um
+`F<n>` foi improvisado em duas missões, cinco vezes, pela ferramenta `Skill`; dois carimbos de hora
+inventados, com até 5 h de erro (`10-ticket.md` 12:10 × sessão 17:03); a entrada do `KAIZEN_LOG` do
+L4 escrita à mão depois do PR, sobre um K8 que a prometia à DOCS.
+
+**Depois** (linhas `ok` dos Checks, na suíte): M1 — `qa: skipped` com interface projeta
+`QA:close=sdd-qa` (era `QA:exec`); M2 — nove mundos do reteste, cada um com o seu mutante; M3 — o
+frescor do handoff em 5 asserções, nos dois caminhos; M4 — 19 mundos do K8 (a chave literal, a
+entrada como bloco, o id inteiro), 13 mutantes; M5 — a hora de `date` em 5 de 5 fases (era 0);
+M6 — os probes do aceite, do planner, do `sdd-qa` e do `sdd-docs`, cada frase sabotada; M8 — o id
+fora de `^[0-9]{8}-[a-z0-9-]+$` recusado em todo comando; M9 — a missão na base que promete o K8
+recusada no PLAN e na DOCS. Catálogo de 687 para 716 mutantes.
+
+**M7** é a medida da próxima janela do juiz, no uso real: nenhuma linha `manual` de QA em missão
+com `qa: skipped`, nenhuma sessão `sdd-qa` chamando `Skill`, nenhum `data:` fora da janela da
+sessão, e a contagem das respostas recomendadas legível pelo leitor da D22.
+
+---
+
 ## 2026-10-12 — O veredito da janela do lote 6: `melhorou` sobre `0270727`
 
 **O que foi julgado:** os lotes 5 e 6 (`b411239`, `fc32329` e `0270727` — PRs #237, #243 e #244),

@@ -1,6 +1,6 @@
 # ADR 0018 — The QA route is the runner's, and under `/sdd-plan` the human reads the plan before approving
 
-- **Status**: proposed (—, 2026-10-12)
+- **Status**: accepted (—, 2026-10-14)
 - **Spec**: docs/handoffs/20261012-a-rota-da-qa/00-missao.md
 
 ## Context
