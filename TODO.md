@@ -31,6 +31,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C8) — descoberto na faxina das
   issues do `sales_quote` (2026-10-09)
 
+- [ ] **A mitigação de risco que cita um sensor não prova que ele cobre o alvo** — `templates/plano.md:41`
+  (`Mitigação`) — o plano da LH-5 do `lighthouse_project` mitigou "a troca de assinatura do port espalha
+  pelas fixtures de teste" com "o compilador lista"; o `tsc --noEmit` do backend exclui `__tests__` e saiu
+  rc 0 com testes ainda na assinatura velha. Executor que confia no verde deixa chamador quebrado, que o
+  Vitest (sem checagem de tipo) só pega se tropeçar em runtime. Direção: o planner roda no PLAN, contra o
+  que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
+  — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
