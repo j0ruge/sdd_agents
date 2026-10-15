@@ -1746,6 +1746,12 @@ elif [ "\$n" = "2" ]; then
     "$MDIR/checkpoint.md"
   git -C "$FIX" add -A
   git -C "$FIX" commit -qm "chore: F1 is done"
+  # Since the freshness of gate_QA (ADR 0018 §2) a handoff committed before a done F<n> holds QA, and
+  # a real run would pay a QA:close session to rewrite it. This stub rewrites it here instead, so QA
+  # still closes WITHOUT a session — which is what this fixture measures (the gate_pass row).
+  printf -- '\nThe fixed bug was retested after F1.\n' >> "$MDIR/30-handoff-qa.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the QA handoff rewritten after the fix"
 elif [ "\$n" = "3" ]; then
   # The REVIEW session lands a round that satisfies its gate, so the run takes a FOURTH lap and
   # gate_pass_rows is asked a second time with QA's failed verdict still on the books.

@@ -797,6 +797,101 @@ mut_QA_report_not_mission_bound() {           # Anchor 1 back on the newest repo
 mut_QA_substep_report_not_mission_bound() {   # the sub-step back on the newest report in the tree
   sed -i '/^qa_substep() {/,/^}/ s@report="\$(mission_qa_report)"@report="$(latest_matching "$qa/reports/*.md")"@' "$1"
 }
+# The route of a `qa: skipped` the plan declares (ADR 0018 §1): one mutant per half. Ignored, the
+# sub-step answers exec with an interface again; loose, any value of the key skips a real QA, which
+# only the misspelt control of check-dry-run.sh can see.
+mut_QA_substep_skipped_ignored() {            # the declared skipped no longer routes to close
+  sed -i '/^qa_substep() {/,/^}/ { /qa)" = skipped \]/d; }' "$1"
+}
+mut_QA_substep_skipped_loose() {              # any value of the qa: key routes to close
+  sed -i '/^qa_substep() {/,/^}/ s@qa)" = skipped \]@qa)" != "" ]@' "$1"
+}
+# The retest (ADR 0018 §2): one mutant per half of "rewritten after the fix" and one for the path the
+# sub-step reads; each dies on the world of check-dry-run.sh its comment names.
+mut_QA_substep_retest_ignored() {             # a done F<n> no longer sends QA back to exec
+  sed -i '/^qa_substep() {/,/^}/ { /qa_fix_ahead_of "\${report#/d; }' "$1"
+}
+mut_QA_fix_ahead_any_order() {                # any commit of the history carries the bytes (merge worlds)
+  sed -i '/^qa_rewritten_after() {/,/^}/ s@--ancestry-path --parents "\$c\.\.HEAD"@--parents HEAD@' "$1"
+}
+mut_QA_fix_ahead_counts_merges() {            # the merge that brought the bytes counts as the rewrite
+  sed -i '/^qa_rewritten_after() {/,/^}/ s@\[ "\$(wc -w <<< "\$rest")" -eq 1 \]; return$@return 0@' "$1"
+}
+mut_QA_fix_ahead_old_content_ok() {           # a pre-fix version restored after the fix reads as new
+  sed -i '/^qa_rewritten_after() {/,/^}/ { /^  while read -r x; do$/,/--full-history/d; }' "$1"
+}
+mut_QA_fix_ahead_any_carrier() {              # past the merge, a later carrier of the bytes counts
+  sed -i '/^qa_rewritten_after() {/,/^}/ s@\[ "\$(wc -w <<< "\$rest")" -eq 1 \]; return$@[ "$(wc -w <<< "$rest")" -eq 1 ] || continue; return 0@' "$1"
+}
+# K8 against the DOCS phase (ADR 0018 §4): one mutant per decision of the entry reader and per half
+# of the key. Each was sabotaged on the prototype over this fixture's base and changed the phase in
+# exactly the worlds of check-gates.sh its comment names (the `kaizen-log:` assertions).
+mut_DOCS_k8_ignored() {                       # worlds 1–7, 9, 12, 14–16, 18, 19
+  sed -i '/^gate_DOCS() {/,/^}/ s@^  if \[ "\$(frontmatter "\$MISSION_DIR/00-missao.md" kaizen_log)" != skipped \]; then$@  if false; then@' "$1"
+}
+mut_DOCS_k8_presence_is_enough() {            # the empty tree as the base: every line is new
+  sed -i '/^gate_DOCS() {/,/^}/ s@-U1000000 "\$k8_b" HEAD@-U1000000 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD@' "$1"
+}
+mut_DOCS_k8_reads_deleted_lines() {           # world 8: a deleted `-## ` splits the block
+  sed -i '/^gate_DOCS() {/,/^}/ s@t != " " && t != "+" { next }@t != " " \&\& t != "+" \&\& t != "-" { next }@' "$1"
+}
+mut_DOCS_k8_heading_not_new() {               # worlds 4–7: a new citation in an old entry counts
+  sed -i '/^gate_DOCS() {/,/^}/ s@t == "+" && hnew && cites_id@t == "+" \&\& cites_id@' "$1"
+}
+mut_DOCS_k8_cite_not_new() {                  # world 3: a renamed heading over an old citation counts
+  sed -i '/^gate_DOCS() {/,/^}/ s@t == "+" && hnew && cites_id@hnew \&\& cites_id@' "$1"
+}
+mut_DOCS_k8_block_not_reset() {               # world 6: "new" leaks from one entry into the next
+  sed -i '/^gate_DOCS() {/,/^}/ s@!fence && l ~ /^## / { hnew = (t == "+") }@!fence \&\& l ~ /^## / \&\& t == "+" { hnew = 1 }@' "$1"
+}
+mut_DOCS_k8_fence_blind() {                   # world 7: a heading inside a code fence opens a block
+  sed -i '/^gate_DOCS() {/,/^}/ s@!fence && l ~ /^## /@l ~ /^## /@' "$1"
+}
+mut_DOCS_k8_cite_no_left_boundary() {         # world 9: `revisita-<id>` cites the mission
+  sed -i '/^gate_DOCS() {/,/^}/ s@substr(s, p - 1, 1) !~ /\[A-Za-z0-9_-\]/ && @@' "$1"
+}
+mut_DOCS_k8_cite_no_right_boundary() {        # world 9: `<id>-extra` and `<id>s` cite the mission
+  sed -i '/^gate_DOCS() {/,/^}/ s@ && substr(s, p + length(m), 1) !~ /\[A-Za-z0-9_-\]/@@' "$1"
+}
+mut_DOCS_k8_cite_first_only() {               # world 10: the whole id after three longer ones is missed
+  sed -i '/^gate_DOCS() {/,/^}/ s@while ((i@if ((i@' "$1"
+}
+mut_DOCS_k8_cite_unpadded() {                 # world 11: the mawk trap, an id at column 1 is refused
+  sed -i '/^gate_DOCS() {/,/^}/ { /^ *s = " " s$/d; }' "$1"
+}
+mut_DOCS_k8_key_ignored() {                   # worlds 13 and 17: the key never dispenses
+  sed -i '/^gate_DOCS() {/,/^}/ s@kaizen_log)" != skipped \]; then@kaizen_log)" != skipped ] || true; then@' "$1"
+}
+mut_DOCS_k8_key_loose() {                     # worlds 14 and 18: any non-empty value dispenses
+  sed -i '/^gate_DOCS() {/,/^}/ s@kaizen_log)" != skipped \]; then@kaizen_log)" = "" ]; then@' "$1"
+}
+# D17: the mission id grammar of resolve_mission, the slashes mission_id strips, and the K8 reader
+# that looks for the id instead of the argument.
+mut_RUN_mission_id_unchecked() {              # any directory name resolves as a mission (mission-id: 1–3)
+  sed -i '/^resolve_mission() {/,/^}/ { /=~ \$MISSION_ID_RE \]\] || die/d; }' "$1"
+}
+mut_RUN_mission_id_slashes_kept() {           # `/<mission>` and `<mission>/` keep their slashes (4, 5)
+  sed -i '/^mission_id() {/,/^}/ { /^  while \[\[ \$id == /d; }' "$1"
+}
+mut_DOCS_k8_mission_arg_raw() {               # the K8 reader looks for `/<id>` (mission-id: 5)
+  sed -i '/^gate_DOCS() {/,/^}/ s@SDD_K8_MISSION="\$(mission_id "\$MISSION")"@SDD_K8_MISSION="$MISSION"@' "$1"
+}
+# D20 adapted by D23: the base-branch refusal, one mutant per reader and one for the residue.
+mut_PLAN_base_branch_k8_ignored() {           # gate_PLAN lets the base-branch promise through (base-branch: 1)
+  sed -i '/^gate_PLAN() {/,/^}/ { /why="\$(k8_base_refusal)"/d; }' "$1"
+}
+mut_DOCS_base_branch_k8_ignored() {           # a forced DOCS lets it through (base-branch: 2)
+  sed -i '/^gate_DOCS() {/,/^}/ { /k8_why="\$(k8_base_refusal)"/d; }' "$1"
+}
+mut_PLAN_base_branch_refuses_silence() {      # a plan WITHOUT the key is refused on the base: the whole suite
+  sed -i '/^k8_base_refusal() {/,/^}/ { /^  frontmatter_has "\$m" kaizen_log || return 0$/d; }' "$1"
+}
+mut_QA_handoff_freshness_ignored() {          # a handoff older than the last done F<n> passes gate_QA
+  sed -i '/^gate_QA() {/,/^}/ s@^  if \[ -n "\$ahead" \]; then$@  if false; then@' "$1"
+}
+mut_QA_fix_ahead_reads_the_directory() {      # the whole reports/ directory instead of the mission's report
+  sed -i '/^qa_substep() {/,/^}/ s@qa_fix_ahead_of "\${report#"\$REPO_ROOT"/}"@qa_fix_ahead_of "$QA_DOCS_PATH/reports/"@' "$1"
+}
 # The report is the mission's by three facts (review r4 of the codereview fixes rewrote the reader
 # around them): the mission's COMMITS are HEAD --not the local and remote base; a NEW path is absent
 # from the base tree; OWNERSHIP follows the rename chain. One mutant per rule and per read. The old
@@ -2652,6 +2747,13 @@ mut_RUN_turn_rule_dropped() {
 # background process holds the run, …" (check-dry-run.sh), at "5 0 0".
 mut_RUN_turn_rule_background_dropped() {
   sed -i '/^boot_prompt() {/,/^}/ { /^A process you start in the background/,/^start — the app under test is the human/d; s@^What you started for your own check, stop before you end the turn\."$@"@ }' "$1"
+}
+# Item (j) of 20261012-a-rota-da-qa: the turn rule loses its clock line — a phase no longer told that
+# a timestamp it writes comes from `date`. The line has its own physical line and the closing quote
+# lives on the next one, so the runner still parses. Caught by "every projected phase is told that
+# a timestamp it writes comes from date" (check-dry-run.sh), at "5 0".
+mut_RUN_turn_rule_no_clock() {
+  sed -i '/^boot_prompt() {/,/^}/ { /never from a log you read/d; }' "$1"
 }
 
 # L5 of the 2026-09-03 audit: the phase session is opened through `env -u <harness vars>`, one
@@ -6150,6 +6252,34 @@ CATALOG=(
   QA_bug_open
   QA_report_not_mission_bound
   QA_substep_report_not_mission_bound
+  QA_substep_skipped_ignored
+  QA_substep_skipped_loose
+  QA_substep_retest_ignored
+  QA_fix_ahead_any_order
+  QA_fix_ahead_counts_merges
+  QA_fix_ahead_old_content_ok
+  QA_fix_ahead_any_carrier
+  QA_fix_ahead_reads_the_directory
+  QA_handoff_freshness_ignored
+  DOCS_k8_ignored
+  DOCS_k8_presence_is_enough
+  DOCS_k8_reads_deleted_lines
+  DOCS_k8_heading_not_new
+  DOCS_k8_cite_not_new
+  DOCS_k8_block_not_reset
+  DOCS_k8_fence_blind
+  DOCS_k8_cite_no_left_boundary
+  DOCS_k8_cite_no_right_boundary
+  DOCS_k8_cite_first_only
+  DOCS_k8_cite_unpadded
+  DOCS_k8_key_ignored
+  DOCS_k8_key_loose
+  RUN_mission_id_unchecked
+  RUN_mission_id_slashes_kept
+  DOCS_k8_mission_arg_raw
+  PLAN_base_branch_k8_ignored
+  DOCS_base_branch_k8_ignored
+  PLAN_base_branch_refuses_silence
   QA_report_ignores_untracked
   QA_report_range_no_origin
   QA_report_range_no_upstream
@@ -6354,6 +6484,7 @@ CATALOG=(
   RUN_rebase_read_as_foreign
   RUN_turn_rule_dropped
   RUN_turn_rule_background_dropped
+  RUN_turn_rule_no_clock
   RUN_harness_env_inherited
   RUN_git_label_unexported
   RUN_close_git_label_unexported

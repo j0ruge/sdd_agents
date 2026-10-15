@@ -15,10 +15,10 @@
 |---|---|---|---|---|
 | F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 **feito** em 2026-09-26 (espelho 82 ↔ 82, #144 fechada, PR #171; [handoff](../plans/2026-09-25-depois-do-170-handoff.md)). O P3 **ficou fora** da carona (`20260926-a-carona-antes-do-congelamento`, decisão 6 do grill): é pré-requisito do próximo aumento de paralelismo, que não acontece com o kit congelado | o fim da janela 4 (F3) |
 | F2 | Faxina pós-#57 | **fechada** pela missão `20260926-a-carona-antes-do-congelamento` (I7; o yokoten da crase no I1) | nada | — |
-| F3 | T3 e a janela do juiz | janela 1 **fechada**: veredito `melhorou` sobre `4fd0f31` (PR #175, `3d350ed`). Dos 8 achados, 5 foram consertados na missão `20260928-os-achados-da-janela` (3, 4, 6, 7 e 8; PR #176) e 3 foram para o `TODO.md` (1, 2 e 5). Janela 2 **fechada sem veredito** em 2026-09-30: `indeterminado` sobre `6323c6f`, porque o PR #184 (só `TODO.md` + catraca) cunhou um `kit_sha` novo e deixou as 3 missões de `5b98087` em `previous` (`window_missions_stranded: 3`); o achado está no `TODO.md`. Janela 3 (aberta no merge do PR #185, missão `20260930-a-sub-etapa-que-andou`) **abandonada por decisão humana em 2026-10-01, sem veredito**: o kit descongela para a missão `20261001-a-janela-nao-se-parte` (ADR 0014), que conserta a causa — o eixo passa a agrupar pelo último commit de comportamento (`kit_rev`, de `bin agents templates config`) e a chave do carimbo deixa a catraca de fora, então um PR só de `TODO.md` deixa de partir a janela e de matar o carimbo. **A janela 4 abre no primeiro carimbo de alvo após o merge desta missão**. Ela partiu com os lotes 1–5, que mudaram o runner sem juiz (`./bin/sdd kaizen --series` em 2026-10-08: última fatia em `94123a4`, 1 missão, `window_broken: true`). **O kit congela no merge do lote 6** (`20261008-lote-6-as-quatro-que-faltam`, decisão 6): a janela seguinte abre no primeiro carimbo de alvo depois dele | merge do lote 6 → 3 missões de alvo com sessão sobre a mesma versão de comportamento, nada em `bin agents templates config` até o veredito → `sdd kaizen` de um worktree ligado (ADR 0017); a T3 se desfez em 2026-10-04 (§ F3) | o merge do lote 6 |
+| F3 | T3 e a janela do juiz | janela 1 **fechada**: veredito `melhorou` sobre `4fd0f31` (PR #175, `3d350ed`). Dos 8 achados, 5 foram consertados na missão `20260928-os-achados-da-janela` (3, 4, 6, 7 e 8; PR #176) e 3 foram para o `TODO.md` (1, 2 e 5). Janela 2 **fechada sem veredito** em 2026-09-30: `indeterminado` sobre `6323c6f`, porque o PR #184 (só `TODO.md` + catraca) cunhou um `kit_sha` novo e deixou as 3 missões de `5b98087` em `previous` (`window_missions_stranded: 3`); o achado está no `TODO.md`. Janela 3 (aberta no merge do PR #185, missão `20260930-a-sub-etapa-que-andou`) **abandonada por decisão humana em 2026-10-01, sem veredito**: o kit descongela para a missão `20261001-a-janela-nao-se-parte` (ADR 0014), que conserta a causa — o eixo passa a agrupar pelo último commit de comportamento (`kit_rev`, de `bin agents templates config`) e a chave do carimbo deixa a catraca de fora, então um PR só de `TODO.md` deixa de partir a janela e de matar o carimbo. **A janela 4 abre no primeiro carimbo de alvo após o merge desta missão**. Ela partiu com os lotes 1–5, que mudaram o runner sem juiz (`./bin/sdd kaizen --series` em 2026-10-08: última fatia em `94123a4`, 1 missão, `window_broken: true`). **O kit congelou no merge do lote 6** (`20261008-lote-6-as-quatro-que-faltam`, decisão 6). Janela do lote 6 **fechada** em 2026-10-12: veredito `melhorou` sobre `0270727` (`sdd kaizen` de um worktree ligado; 5 missões do `sales_quote`, `advance_rate` 0,91 → 0,98, o `kit-touched` some da fatia), e o plano nascido foi replanejado com o humano como o lote 7 (`20261012-a-rota-da-qa`, ADR 0018). O kit descongelou no merge do veredito; o lote 7 foi executado num worktree ligado, e **O kit congelou no merge do lote 7** (D11 daquela missão) | 3 missões de alvo com sessão sobre a versão do lote 7, nada em `bin agents templates config` até o veredito → `sdd kaizen` de um worktree ligado (ADR 0017); a T3 se desfez em 2026-10-04 (§ F3) | o veredito da janela do lote 7 |
 | F4 | Portabilidade para outros repos | sem pendência de código: lacunas 2 e 3 **consertadas** na missão `20260926-a-carona-antes-do-congelamento` (I5, I6), 4 e 5 no `TODO.md` (I7), 6 declarada no ADR 0007 | a prova num 2º alvo, que conta para a próxima janela do juiz | nada desde o veredito (F3, PR #175) |
 | F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
-| F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
+| F6 | O worker (W1–W7) | estacionada por decisão; **coleta de campo aberta em 2026-10-09** ([caderno](2026-10-09-o-worker-caderno-de-campo.md), [linha de base](2026-10-09-o-worker-linha-de-base.md): 21 missões, 4 sem toque humano) | uma linha do caderno por missão do `sales_quote` | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
 | F8 | O plano mede contra a base, não contra os incrementos anteriores | **fechada** pelo I4 de `20261008-lote-6-as-quatro-que-faltam`: o parágrafo no § 4 do `sdd-planner`, segurado pelo probe `hat:` do `tests/check-hat.sh` | nada | — |
 
@@ -181,6 +181,23 @@ a janela seguinte abre no primeiro carimbo de alvo depois do merge; nada em `bin
 config` até o veredito (achado novo vai só ao `TODO.md`, que desde a ADR 0014 não parte a janela);
 o `sdd kaizen` roda de um worktree ligado do kit (ADR 0017); a frente F1-P1 espera o veredito.
 
+**Hoje (2026-10-13).** A janela do lote 6 fechou com veredito: `melhorou` sobre `0270727`, no
+`docs/handoffs/20261012-a-rota-da-qa/05-verdict.md` (5 missões do `sales_quote`, 66 sessões, um harness só).
+Os limites estão escritos no veredito: a fatia anterior é uma missão só, o harness mudou entre as fatias, e
+três das cinco missões fizeram a QA à mão — a lacuna que virou o lote 7 (`20261012-a-rota-da-qa`, ADR
+0018), replanejado com o humano no grill e nas rodadas de revisão do PR #247; cada resposta é uma
+linha `- answer:` nas decisões do `00-missao.md`, e a contagem sai do leitor da D22 (I6 do
+`01-plano.md`), nunca deste parágrafo. O kit descongela no merge do veredito e congela de novo no
+merge do lote 7 (D11); a frente F1-P1 continua esperando.
+
+**Hoje (2026-10-14).** O lote 7 (`20261012-a-rota-da-qa`, ADR 0018 aceita) foi executado num worktree
+ligado, I1–I13: a rota do `qa: skipped` declarado, o reteste e o frescor do handoff de QA, o aceite
+que mede de novo e renderiza o plano, o carimbo de hora pelo `date`, o K8 cobrado pelo `gate_DOCS` e
+a gramática do id da missão. O kit congelou no merge do lote 7: a janela seguinte abre no primeiro
+carimbo de alvo depois desse merge, e o veredito dela mede a M7 do lote (nenhuma linha `manual` de
+QA em missão com `qa: skipped`, nenhuma sessão `sdd-qa` chamando a ferramenta `Skill`, nenhum
+`data:` de handoff fora da janela da sessão).
+
 ## F4 — Portabilidade para outros repos
 
 Fontes, transcritas aqui porque não eram versionadas:
@@ -258,6 +275,17 @@ até o PR com os bots tratados.
 rodarem até o fim sem problemas, e na volta começa pelo W2 via `/sdd-plan`. Dentro dele, cada degrau
 só executa sozinho depois de o anterior ter sensor, e o worker só executa depois de o W5 mostrar o
 que faria.
+
+**Coleta de campo desde 2026-10-09.** O humano passou a resolver as issues do `sales_quote` com o
+kit, e cada missão deixa uma linha no
+[caderno de campo](2026-10-09-o-worker-caderno-de-campo.md) — só o que ledger e journal não sabem.
+A [linha de base](2026-10-09-o-worker-linha-de-base.md) mede as 21 missões anteriores e acrescenta
+ao roadmap nove fatos (C1–C9 do caderno), entre eles um degrau que nenhum W nomeia: o **kit fixo**
+que o worker executa (6 das 25 escaladas foram `kit-touched`).
+
+A C2 do caderno de campo (PR #246: no `sales_quote` a QA é por projeto, não por missão) tem a
+resposta do D2 do lote 7 (`20261012-a-rota-da-qa`): uma missão cujo plano declara `qa: skipped` vai
+direto ao `sdd-qa`, que confere o diff, sem as sessões de QA nem o stack de pé.
 
 ## F7 — Plano Astra, fases 2–7
 
