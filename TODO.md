@@ -24,7 +24,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Sensores que faltam
 
 - [ ] **O `sdd preflight` não mede a forma do `TODO_FILE`, e nada avisa o alvo sem o opt-in** —
-  `bin/sdd:6144` (`preflight-test`) — a forma só é medida quando o `TEST_CMD` do alvo inclui o
+  `bin/sdd:6340` (`preflight-test`) — a forma só é medida quando o `TEST_CMD` do alvo inclui o
   `check-todo.sh` (o opt-in de `config/schema.md`); o do `sales_quote` não incluía, e o `TODO.md` dele
   divergiu calado até 206 violações, achadas só quando o espelho de issues recusou. Direção: o
   `sdd preflight` roda `check-todo.sh --check "$TODO_FILE" --allow-empty` sozinho, ou avisa. Fonte:
@@ -63,7 +63,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Saída humana e cosmética
 
-- [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1800` (`gate-qa-e2e`) —
+- [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1839` (`gate-qa-e2e`) —
   um caso intermitente anterior à missão devolve a fase ao `sdd-qa`, que gasta o começo descobrindo isso:
   no alvo, o `frete-ipi.spec.ts:319` já tinha caído duas vezes, com os logs de gate em disco. Direção: o
   `GATE_WHY` cita quantas vezes cada caso vermelho já caiu nos logs `gate-qa-e2e` anteriores.

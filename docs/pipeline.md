@@ -147,6 +147,14 @@ instructs.
 **Passes when:** `00-missao.md`, `01-plano.md` and `checkpoint.md` exist; the mission frontmatter
 carries `aprovacao: auto` or `aprovacao: humano-<date>`; with `JIRA_ENABLED=true`, `versao:` is
 filled in; and `checkpoint.md` has at least one parseable row.
+The mission's id — the name of its directory under `HANDOFF_DIR` — is a grammar every command
+checks in `resolve_mission`: `^[0-9]{8}-[a-z0-9-]+$` (eight digits, a hyphen, then lower-case ASCII
+letters, digits and hyphens; slashes at the ends of the argument are ignored). Any other name is
+refused, naming the directory to rename (D17 of `20261012-a-rota-da-qa`).
+A mission whose `branch:` is `DEFAULT_BRANCH` and whose frontmatter carries `kaizen_log:` with
+anything but `skipped` is refused too (`k8_base_refusal`, read again by `gate_DOCS` for a forced
+`--phase`): on the base branch there is no range to read the `KAIZEN_LOG.md` entry in. Without the
+key the mission passes, and its entry is not read (declared residue).
 With `ADR_CHECK=block`, the mission's `adr:` is also a **decision**: a path to a real ADR whose
 `Spec:` line points back at `00-missao.md`, or the literal `none`. Empty, `TBD` and the untouched
 template placeholder all stall here, and the reason names `sdd adr new --slug <s> --spec <path>`.
@@ -164,9 +172,12 @@ open, checklists, self-containment, a Check per increment that is red at HEAD, t
 `adr:` decision) **with evidence**. The red is measured by the kit's
 `tests/check-checkpoint.sh --red <checkpoint>`, which the planner runs and no gate does: it executes
 each pending Check from the repo root and refuses one already green, one outside the strict form
-`` `command` → `expected` ``, and one that prints nothing. A well-run grill is the approval — the
-human was present. Any criterion left open and the planner
-leaves `aprovacao` empty, and the runner stops asking for explicit approval.
+`` `command` → `expected` ``, and one that prints nothing. Closing the six is not the approval: under
+`/sdd-plan` the planner leaves `aprovacao:` empty even with all of them ✅, and the human reads the
+plan in the acceptance step and approves with `sdd approve`. The planner writes `auto` only when the
+human asked for it in the grill — then the grill is the approval, because the human was present and
+chose to skip the reading ([ADR 0018](adr/0018-the-qa-route-and-the-read-plan.md) §3). Any criterion
+left open and the planner leaves `aprovacao` empty, and the runner stops asking for explicit approval.
 
 **And that explicit approval is a command, not a hand edit.** `sdd approve <mission>` prints what is
 being approved — the title, the PLAN-AUTO evidence, the increments, the open questions — asks
@@ -248,8 +259,8 @@ The phase is **three sessions**, and the current sub-step is **derived from the 
 | Sub-step | Who drives | When | Delivers |
 |---|---|---|---|
 | `QA:plan` | `/qa-report` skill (no kit agent) | there is no charter in `<QA_DOCS_PATH>/charters/` | charters, personas, journeys |
-| `QA:exec` | `/qa-execution` skill (no kit agent) | there is a charter, but no `closed` report **of this mission** | dated report + bug registry |
-| `QA:close` | `sdd-qa` agent | report **of this mission** `closed` — or a project with no interface | e2e specs, fix increments, `30-handoff-qa.md` |
+| `QA:exec` | `/qa-execution` skill (no kit agent) | there is a charter, but no `closed` report **of this mission** — or the mission's report was not rewritten after a done `F<n>` (the retest) | dated report + bug registry |
+| `QA:close` | `sdd-qa` agent | report **of this mission** `closed` — or a project with no interface, or the plan declares `qa: skipped` | e2e specs, fix increments, `30-handoff-qa.md` |
 
 The two skills **own** `docs/qa/`; `sdd-qa` does not rewrite what they produced. A project **with
 no interface** (no `E2E_CMD` and no `APP_URL`) goes straight to `QA:close`: bootstrapping browser
@@ -259,6 +270,13 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
 conditions). `status: blocked` stops the line (`handoff-blocked`); any other value — the template's
 literal `<done | blocked | skipped>`, `BLOCKED`, a missing line — is refused by name, where until
 issue #205 it passed as `done`. The conditions:
+
+- **the handoff is fresh** (ADR 0018 §2), on both paths: no done `F<n>` after which
+  `30-handoff-qa.md` was not rewritten — rewritten meaning bytes no version had up to the fix,
+  brought by a commit that is not a merge (`qa_fix_ahead_of`, the same reader the retest route
+  uses). A handoff from before the fix says the fix is pending, and the DOCS phase and the PR
+  body read it. Only `F<n>` counts: an `R<n>` of the REVIEW, after the QA, does not reopen it
+  (D21 of `20261012-a-rota-da-qa`, in `TODO.md`);
 
 - **the evidence of the journey walked**, which takes two forms depending on the project:
   - **with an interface** (`E2E_CMD` or `APP_URL` set) — the most recent report **the mission
@@ -353,6 +371,14 @@ works out why.
 
 `qa: skipped` is a legitimate and expected answer: a diff with no user-visible change (refactor,
 types, build, docs) has no journey to walk. Inventing a journey just to "have QA" is waste.
+
+Who declares it and who confirms it (ADR 0018 §1): when the grill decides QA does not apply in a
+project with an interface, `sdd-planner` writes `qa: skipped` in the frontmatter of `00-missao.md`
+and the justification in the grill decisions. Only that literal changes the route: `qa_substep`
+sends the phase straight to `QA:close`, and `sdd-qa` confirms the declaration against the real
+diff — `status: skipped` when nothing reaches the user, `status: blocked` with the files and the
+remedy (remove the key **and** `git rm` the blocked handoff) when something does. Any other
+spelling keeps the route of today.
 
 ### REVIEW — Grade A where a sensor exists, B tolerated on prose
 
@@ -470,6 +496,16 @@ applies it there.
 Reading the column, and not the whole file, is deliberate: an earlier version grepped the file for
 the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is exactly what
 `sdd-docs` is required to do.
+
+**The `KAIZEN_LOG.md` entry the plan promised** ([ADR 0018 §4](adr/0018-the-qa-route-and-the-read-plan.md)).
+Unless the frontmatter of `00-missao.md` declares the literal `kaizen_log: skipped` (decided with the
+human in the grill; the K8 row of the checklist is prose and dispenses nothing), the mission branch
+must add an **entry** of its own: a `## ` block of `KAIZEN_LOG.md` whose heading and one line citing
+the mission's whole id are both new in the diff of each merge-base to HEAD. The base already cites
+every mission born of the kaizen loop, so a new citation in an old entry, a renamed heading, a
+heading inside a code fence, a longer id that contains the mission's and a reverted entry do not
+count. No base, or an empty range (the mission on the base, or merged), gives the answer of before.
+The owner is `sdd-docs` (`KAIZEN_LOG.md` is in its `writes:`), or an EXEC increment that wrote it.
 
 ### PR — confirmed by `gh`, not by the file
 
