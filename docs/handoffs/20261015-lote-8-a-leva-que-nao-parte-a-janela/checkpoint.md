@@ -1,6 +1,6 @@
 ---
 missao: 20261015-lote-8-a-leva-que-nao-parte-a-janela
-atualizado: 2026-10-15 16:08
+atualizado: 2026-10-15 16:37
 ---
 
 # Checkpoint — o lote 8: a leva que não parte a janela
@@ -49,7 +49,7 @@ atualizado: 2026-10-15 16:08
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | a regra 2 lê a variável, não a célula (#258, decisão 5): só o `grep` que lê uma variável capturada com `2>&1` precisa de âncora; forma não reconhecida cai na regra de hoje | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: the anchor rule reads the variable the merged output went into, not the whole cell' <<< "$o"` → `1` | done | 53057c2 |
-| I2 | a marca de passou do runner ancora (#249, decisão 5): `'^ *✓ '` (U+2713) ao lado de `^  ok    ` | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: a pass mark of a test runner at the start of a line anchors like the ok prefix' <<< "$o"` → `1` | pending | — |
+| I2 | a marca de passou do runner ancora (#249, decisão 5): `'^ *✓ '` (U+2713) ao lado de `^  ok    ` | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: a pass mark of a test runner at the start of a line anchors like the ok prefix' <<< "$o"` → `1` | done | 3324d6c |
 | I3 | a linha que só carrega a âncora sai do teto de largura do `check-todo.sh` (#257, decisão 6), e a mensagem do teto nomeia a saída | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: a line holding only the anchor is exempt from the width cap' <<< "$o"` → `1` | pending | — |
 | I4 | o relay descarta a devolução que um recado superou (#264): bullet novo no `/sdd-plan` e par em `command_relay_probes` | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan waits for the new hand-back when a relay message resumed a planner that had already answered' <<< "$o"` → `1` | pending | — |
 | I5 | a branch da missão nasce sem upstream: `--no-track` na receita do worktree do `/sdd-plan` e par em `command_worktree_probes` | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan cuts the mission branch with --no-track, so it never tracks the base' <<< "$o"` → `1` | pending | — |
