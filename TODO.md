@@ -85,7 +85,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o boot da rodada lista o commit que não fecha `R<n>`, e o platô compara a classe do achado, não só a letra.
   — descoberto por `sdd-reviewer` na missão `20261013-amep-alignment-review` (2026-10-14)
 
-- [ ] **Recado ao planner rodando chega depois da devolução** — `commands/sdd-plan.md:93` (`SendMessage`) —
+- [ ] **Recado ao planner rodando chega depois da devolução** — `commands/sdd-plan.md:97` (`SendMessage`) —
   a regra "nada retoma o planner com pergunta pendente" supõe que o relay sabe que há pergunta: no grill da 0.4.0
   do `lighthouse_project`, um recado mandado com o planner rodando voltou `Resuming agent`, e não `queued`, porque
   ele já tinha devolvido a Pergunta 2, que voltou revista e com a recomendação invertida. Falha aberta: o relay
@@ -114,9 +114,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Idioma
 
-- [ ] **A devolução do planner ao relay não tem regra de idioma** — `agents/sdd-planner.md:240` (`OUTPUT_LANG`) —
-  o `## Language` cobre só os três artefatos e o parágrafo do relay (`:47`) não fala de idioma; só o
-  `commands/sdd-plan.md:85` pede `OUTPUT_LANG`. No grill da 0.4.0 do `lighthouse_project` (`pt-BR`), a 1ª
+- [ ] **A devolução do planner ao relay não tem regra de idioma** — `agents/sdd-planner.md:273` (`OUTPUT_LANG`) —
+  o `## Language` cobre só os três artefatos e o parágrafo do relay (`:67`) não fala de idioma; só o
+  `commands/sdd-plan.md:89` pede `OUTPUT_LANG`. No grill da 0.4.0 do `lighthouse_project` (`pt-BR`), a 1ª
   devolução veio inteira em inglês apesar do prompt de delegação em pt-BR, e outra abriu em inglês depois de um
   lembrete: o relay teria de traduzir, e traduzir é parafrasear. Causa não verificada. Direção: o `## Language`
   estende o `OUTPUT_LANG` às devoluções, com um caso que o meça.
