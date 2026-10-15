@@ -63,28 +63,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   carregou o hash, ou declarar que o ciclo exige merge commit. Fonte:
   `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C7) — descoberto na triagem
   das issues do `sales_quote` (2026-10-09)
-- [ ] **Uma âncora de caminho longo não cabe no teto de largura** — `tests/check-todo.sh:211` (`WIDTH_CAP`) —
-  com o teto de 120 por linha física e a continuação recuada em 2 espaços, um `path:N` acima de 116
-  caracteres não cabe: no alvo, o `prisma-cotacao-repository-query.integration.test.ts:420` tem 121, e o
-  item ancorou outro arquivo. Falha fechada, mas o consumidor está fora da suíte do kit (D15). Direção:
-  isentar do teto a linha cujo excesso é só a âncora, ou o template dizer a saída. RESOLVED by 3a7b12f.
-  Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-planner` em
-  `20261010-o-backlog-volta-a-medir`, transportado por `sdd-kaizen` (2026-10-12)
-- [ ] **A regra 2 do check-checkpoint vale por célula** — `tests/check-checkpoint.sh:673` (`count_occ`) — e não pela
-  leitura: um `2>&1` na célula obriga todo `grep` dela a ancorar em `^  ok    `, até o que lê um arquivo:
-  `o=$(bash t.sh 2>&1); a=$(grep -c '^  ok    x' <<< "$o"); b=$(grep -c foo f)` reprova com `1 of 2 pattern(s)`
-  (reproduzido em 2026-10-12). Falha fechada, contorno `2>/dev/null`; o consumidor é o planner do alvo (D15).
-  Regra por segmento ficaria cega na forma canônica (`2>&1` e `grep` separados por `;`). RESOLVED by 53057c2.
-  Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — item (e) da fila do operador, D1 do grill,
-  registrado pelo `sdd-planner` (2026-10-12)
-- [ ] **A regra 2 reprova a Check de repo-alvo ancorada no `✓` do vitest** — `tests/check-checkpoint.sh:382`
-  (`r2_anchored`) — a regra só aceita o `^  ok    ` do kit, mas o caso vermelho do vitest imprime `×`, então
-  `2>&1` + `grep -c '^ ✓ …'` já separa verde de vermelho: as 10 Checks da LH-4 do `lighthouse_project`
-  reprovam no `--check` (medido em 2026-10-13). O contorno (ler só a stdout, `2>/dev/null`) funciona, mas
-  só se acha tropeçando. Direção: aceitar âncoras de verde conhecidas (vitest `^ ✓ `) ou documentar a forma
-  só-stdout no `templates/checkpoint.md` e no `agents/sdd-planner.md`. RESOLVED by 3324d6c.
-  Fonte: `lighthouse_project/docs/handoffs/20261013-amep-alignment-review/checkpoint-notas.md` —
-  descoberto pelo planejador (Opus 5.5) na missão `20261013-amep-alignment-review` (2026-10-13)
 - [ ] **A prosa congelada diz a regra 2 e o teto de largura mais estritos que os sensores** —
   `templates/checkpoint.md:27` (`check-x.sh`) — desde o lote 8 a regra 2 lê a variável e aceita `'^ *✓ '`,
   e o teto isenta a linha que só carrega a âncora; o template e o `agents/sdd-planner.md:111` ainda dizem só
@@ -122,22 +100,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o boot da rodada lista o commit que não fecha `R<n>`, e o platô compara a classe do achado, não só a letra.
   — descoberto por `sdd-reviewer` na missão `20261013-amep-alignment-review` (2026-10-14)
 
-- [ ] **Recado ao planner rodando chega depois da devolução** — `commands/sdd-plan.md:97` (`SendMessage`) —
-  a regra "nada retoma o planner com pergunta pendente" supõe que o relay sabe que há pergunta: no grill da 0.4.0
-  do `lighthouse_project`, um recado mandado com o planner rodando voltou `Resuming agent`, e não `queued`, porque
-  ele já tinha devolvido a Pergunta 2, que voltou revista e com a recomendação invertida. Falha aberta: o relay
-  mostraria a versão velha ao humano. Direção: ler o retorno do `SendMessage`; com `Resuming`, esperar a nova
-  devolução e descartar a anterior sem mostrá-la. RESOLVED by fcb8872.
-  Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
-
-- [ ] **A receita do worktree no `/sdd-plan` deixa a branch da missão com upstream `origin/main`** —
-  `commands/sdd-plan.md:35` (`git worktree add`) — sem `--no-track`, o git responde `set up to track 'origin/main'`
-  (`branch.autoSetupMerge` no default). Dano não medido: os pushes dos lotes 5–7 e o `sdd-publisher` usam
-  `-u origin`, e `push.default=simple` recusa o push sem destino. Sobra o `git pull` na branch, que traz a `main`
-  calado, e o ahead/behind do `git status` contado contra ela; o handoff do lote 7 repetiu duas vezes o contorno.
-  Direção: `--no-track` na receita. RESOLVED by 708b10c.
-  Fonte: `~/.claude/plans/2026-10-13-handoff-kit-lote-7-pr-247-rodada-6.md:9`
-  — descoberto pelo `relay do /sdd-plan` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 - [ ] **O remédio do `sdd kaizen` recusado ensina a mesma receita sem `--no-track`** — `bin/sdd:11241`
   (`shared_why`) — o motivo manda `worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>`, e a
   branch do juiz nasce rastreando a `main` (git 2.43, medido em repo de rascunho); o `docs/failure-modes.md:624`
