@@ -68,6 +68,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   tiveram `R<n>`). Falha aberta, com consumidor fora da suíte do kit (D15). Direção: amarrar o veredito
   ao commit que a QA viu e decidir, com custo medido, o que um `R<n>` reabre (um reteste custou US$ 7,19).
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — D21 do grill, registrado pelo `sdd-planner` (2026-10-14)
+- [ ] **O registro do PR nasce depois do push e fica fora do sha verificado** — `agents/sdd-publisher.md:83`
+  (`50-pr.md`) — o passo 2 roda o `TEST_CMD` antes do push e o passo 5 escreve o `50-pr.md` depois, sem dizer
+  se ele entra no PR: commitado, move a cabeça do PR para um sha que nenhuma verificação viu (no alvo sem
+  Actions, o `local/ci` publicado no sha anterior deixa de cobrir a cabeça); fora do commit, suja a árvore. No
+  `lighthouse_project` o `sdd-publisher` o deixou fora, e a sessão coordenadora o commitou (`fe5f1ae`), rodou o
+  gate de novo e republicou o `local/ci`. Direção: o contrato diz onde o registro mora e, se ele entra no PR,
+  que a verificação do passo 2 corre de novo na cabeça final.
+  — descoberto por `sessão coordenadora` na missão `20261013-amep-alignment-review` (2026-10-14)
+- [ ] **O platô da REVIEW lê só as letras, e pararia um laço que converge** — `agents/sdd-reviewer.md:62`
+  (`Overall Grade`) — "as mesmas letras da rodada anterior" é platô, mas não separa o achado que a rodada
+  não fechou do material que entrou entre as rodadas sem ser `R<n>`, nem da classe que a varredura pulou. No
+  `lighthouse_project` a REVIEW ficou em B de r3 a r6, cada rodada com um achado real e menor, fechado pelo
+  `R<n>` seguinte sem defeito novo; 4 dos 7 da r6 vieram de um bump commitado entre r5 e r6. A regra teria
+  parado na r4; a r7, com só o `R7` entre as rodadas, deu A em tudo. Direção: só `R<n>` entra entre rodadas,
+  o boot da rodada lista o commit que não fecha `R<n>`, e o platô compara a classe do achado, não só a letra.
+  — descoberto por `sdd-reviewer` na missão `20261013-amep-alignment-review` (2026-10-14)
 
 ### Saída humana e cosmética
 
