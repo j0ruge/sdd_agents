@@ -25,6 +25,14 @@
 #      counts PHYSICAL lines, so it carries a width: no physical line of the findings section holds
 #      more than WIDTH_CAP (120) CHARACTERS. Without it, 1794 characters on one line passed as one.
 #      Characters and not bytes — mawk counts bytes, and a probe of accented text proves the rest.
+#      One line is exempt (issue #257, lote 8): after the indent, ONE span in the anchor grammar,
+#      the anchor of a file whose path alone outgrows the cap (117 characters, measured in a target
+#      repo); its `(symbol)` goes on the next line. The grammar is `path:N` (or `:N-M`, `:N,M`),
+#      the line REQUIRED — a whole-file anchor writes `:1` — and the path in printable ASCII with a
+#      `.` or `/` and no `:`. DECLARED: that line has no width cap, and nothing measures that it is
+#      the item's anchor rather than an anchor-shaped token; but no blank of any kind, a URL scheme
+#      or a non-ASCII byte fits in the span, so no prose rides on it. A non-ASCII path loses the
+#      exemption (fail-safe). A refused line that carries a path-shaped span is told that exit.
 #
 # And per decided record: `- **<title>** — …`, one physical line, a code span after the title (the
 # pointer to the evidence) and a `(YYYY-MM-DD)` at the end. Records are not counted as findings.
@@ -569,10 +577,24 @@ todo_awk() {
     # CHARACTERS: under LC_ALL=C (see the call) length() counts bytes in every awk, so the UTF-8
     # continuation bytes (0x80-0xBF) are dropped from a copy first, and every character then weighs
     # one. No `next`: the line still goes on to the whitelist below.
+    # A line that is ONE span in the anchor grammar, once the indent is off, is exempt (issue #257):
+    # it is an anchor too long to share a line. The grammar is the one the anchor rule parses —
+    # `path:N`, `path:N-M`, `path:N,M,…` —, with the line REQUIRED (a whole-file anchor writes `:1`)
+    # and the path spelt in a POSITIVE class of printable ASCII minus `:` and the backtick. "A dot
+    # or a slash with no space" exempted a URL, a TAB-separated sentence and a no-break space (its
+    # bytes are not a space, and a negated class admits them): Codex on PR #267. A refused line that
+    # carries a path-shaped span is told that exit. ASCII classes only, safe in mawk.
     sect == 1 && mode == "lint" {
       w = $0; gsub(/[\200-\277]/, "", w)
-      if (length(w) > wcap)
-        print "  line " NR ": " length(w) " characters on one physical line, cap is " wcap " — the long analysis lives in the handoff"
+      if (length(w) > wcap) {
+        a = $0; sub(/^[ \t]+/, "", a)
+        if (a !~ /^`[!-9;-_a-~]*[.\/][!-9;-_a-~]*:[0-9]+([-,][0-9,-]*)?`[ \t]*$/) {
+          m = "  line " NR ": " length(w) " characters on one physical line, cap is " wcap " — the long analysis lives in the handoff"
+          if ($0 ~ /`[^` ]*[.\/][^` ]*`/)
+            m = m " — a line holding only the anchor `path:N` is exempt: write it alone and (`symbol`) on the next line"
+          print m
+        }
+      }
     }
     # ── Findings section: a WHITELIST. Item, indented continuation, heading, block quote, blank ─
     # Everything else at column 0 is refused. Seven rounds of fail-open came from trying to decide
@@ -679,7 +701,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=11
+RULES_FLOOR=12
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -1808,6 +1830,59 @@ EOF
     env LC_ALL=C.UTF-8 PATH="$box/awkshim:$PATH" bash "$SELF" --check "$(with_decided "$box/line120acc.md")"
   rule_end 7 'a physical line of the open section holds at most 120 characters'
 
+  # ── Issue #257: a line holding only the anchor is exempt from the width cap ──────────────────
+  # A real anchor outgrew the cap: a test file of a target repo sits at 117 characters, and with
+  # `:420`, the backticks and the indent its line is 125. The anchor parser already reads the
+  # `(symbol)` on the next physical line, so the only exempt line is ONE span in the anchor grammar
+  # (`path:N`, printable ASCII). The path below keeps the real one's length, with one word of the
+  # target's language swapped for an English one of the same length.
+  rule_begin
+  local lp='packages/backend/src/modules/sales-quote/infrastructure/__tests__/prisma-quoting-repository-query.integration.test.ts'
+  mkdir -p "$box/${lp%/*}"
+  { seq 1 419 | sed 's/^/l /'; printf 'sanity_perf_case\n'; seq 421 430 | sed 's/^/l /'; } > "$box/$lp"
+  local wx='is exempt: write it alone and (`symbol`) on the next line'
+  anchor_only() { # <anchor line> — one finding whose second physical line is <anchor line>
+    printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Long anchor** —\n%s\n  (`sanity_perf_case`) — one second ceiling.\n  — found by `sdd-qa` in mission `y` (2026-10-15)\n' "$1"
+  }
+  anchor_only "  \`$lp:420\`" > "$box/w1.md"
+  assert_rc 0 "a 125-character line holding only the anchor passes --check" \
+    bash "$SELF" --check "$(with_decided "$box/w1.md")"
+  anchor_only "  \`$lp:420\` (\`sanity_perf_case\`)" > "$box/w2.md"
+  assert_says "$box/w2.md" 8 'line 5: 146 characters on one physical line' "the anchor line with its symbol is not exempt"
+  anchor_only "  \`$(rep 'e' 60)/ $(rep 'e' 56):420\`" > "$box/w3.md"
+  assert_says "$box/w3.md" 8 'line 5: 126 characters on one physical line' "a lone path-shaped span with a blank inside is not exempt"
+  anchor_only "  \`$(rep 'e' 118):420\`" > "$box/w4.md"
+  assert_says "$box/w4.md" 8 'line 5: 126 characters on one physical line' "a lone span with no path shape is not exempt"
+  anchor_only "  see the case at \`$lp:420\`" > "$box/w5.md"
+  assert_says "$box/w5.md" 8 "$wx" "a long line ending on a path span is not exempt, and names the exemption"
+  # Absence, with the needle W5 just proved present as its witness: a misspelt needle would make
+  # this probe pass over any message. The span it carries has no path shape.
+  anchor_only "  \`xsym\` $(rep 'e' 123)" > "$box/w6.md"
+  PROBES=$((PROBES + 1))
+  local w6; w6="$(lint_todo "$box/w6.md" 8)"
+  case "$w6" in
+    *"$wx"*|'') printf '  SELFTEST FAIL  a long line with no path span is refused without the exemption — got: %s\n' \
+                  "${w6:-<nothing>}" >&2
+                FAILS=$((FAILS + 1)); fail_rc 91 ;;
+    *'line 5: 132 characters on one physical line'*) ;;
+    *) printf '  SELFTEST FAIL  a long line with no path span is not refused at its width — got: %s\n' "$w6" >&2
+       FAILS=$((FAILS + 1)); fail_rc 91 ;;
+  esac
+  # The exempt span is the ANCHOR grammar, not "a dot or a slash" (Codex on PR #267): each probe
+  # below passed the looser rule with rc 0. A URL, a path with no line, and prose behind a blank
+  # the old class let through — a TAB, and a no-break space, whose bytes a NEGATED class admits.
+  anchor_only "  \`https://example.com/$(rep 'e' 110).html\`" > "$box/w7.md"
+  assert_says "$box/w7.md" 8 'line 5: 139 characters on one physical line' "a lone URL span is not exempt"
+  anchor_only "  \`$lp\`" > "$box/w8.md"
+  assert_says "$box/w8.md" 8 "$wx" "a lone path span with no :N is not exempt, and names the exemption"
+  anchor_only "  \`$(rep 'e' 60)/x$(printf '\t')$(rep 'e' 60).md:420\`" > "$box/w9.md"
+  assert_says "$box/w9.md" 8 'line 5: 134 characters on one physical line' "a TAB inside the anchor span voids the exemption"
+  anchor_only "  \`$(rep 'e' 60)/x"$'\302\240'"$(rep 'e' 60).md:420\`" > "$box/w10.md"
+  assert_says "$box/w10.md" 8 'line 5: 134 characters on one physical line' "a no-break space inside the anchor span voids the exemption"
+  anchor_only "  \`https://example.com/$(rep 'e' 106).html:420\`" > "$box/w11.md"
+  assert_says "$box/w11.md" 8 'line 5: 139 characters on one physical line' "a URL span with a line is not exempt: the path holds no colon"
+  rule_end 11 'a line holding only the anchor is exempt from the width cap'
+
   # ── Issue 70: every sabotage it listed turns this selftest red ─────────────────────────────────
   # Each probe below was written against the mutant it names, applied to a scratch copy, and seen
   # red there before it was seen green here. The survivors it closes, one per probe:
@@ -2073,8 +2148,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 168 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 168\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 192 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 192\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi

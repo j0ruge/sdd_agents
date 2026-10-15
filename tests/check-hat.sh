@@ -457,6 +457,14 @@ command_relay_probes() {
   else
     fail "command: /sdd-plan lets a message that answers nothing resume the planner, or relays an answer by its position"
   fi
+  # Issue #264: a message sent to a planner that had already handed back resumes it, and its next
+  # hand-back supersedes the one the relay holds. The relay waits for that one and shows only it.
+  if grep -qF 'resumed a planner that had already handed back' <<< "$relay" \
+     && grep -qF 'never show the superseded hand-back' <<< "$relay"; then
+    pass "command: /sdd-plan waits for the new hand-back when a relay message resumed a planner that had already answered"
+  else
+    fail "command: /sdd-plan lets the relay show a hand-back that a resumed planner superseded"
+  fi
   # Item (i) of 20261012-a-rota-da-qa: 30 min announced, ~2h55 real in L4, and the human asked midway
   # whether all was well. The relay holds the planner to a re-estimate at twice the announced time.
   if grep -qF 'twice the estimate' <<< "$relay" && grep -qF 'a new estimate' <<< "$relay"; then
@@ -555,6 +563,14 @@ command_worktree_probes() {
     pass "command: /sdd-plan moves a mission of the kit sdd runs from into a linked worktree before writing it"
   else
     fail "command: /sdd-plan no longer moves a mission of the kit sdd runs from into a linked worktree before writing it (the PATH check, the worktree, the root switch, ./bin/sdd inside it, or the line to the human)"
+  fi
+  # Its own pair, so a red names this flag: without it the branch tracks origin/<DEFAULT_BRANCH>, a
+  # `git pull` in the worktree brings the base in silently, and `git status` counts ahead/behind
+  # against it (measured with git 2.43.0 in the lote 8 worktree, 2026-10-15).
+  if grep -qF 'git worktree add ../<repo>-<slug> --no-track -b <branch> origin/<DEFAULT_BRANCH>' <<< "$sec"; then
+    pass "command: /sdd-plan cuts the mission branch with --no-track, so it never tracks the base"
+  else
+    fail "command: /sdd-plan cuts the mission branch without --no-track, and it tracks the base"
   fi
 }
 

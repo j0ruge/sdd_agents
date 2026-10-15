@@ -39,6 +39,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
   — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
 
+- [ ] **A regra 2 do check-checkpoint só vê a mescla escrita `2>&1`** — `tests/check-checkpoint.sh:672` (`2>&1`) —
+  a pré-condição é o literal: `bash tests/check-a.sh &> out.log; grep -c 'alpha holds' out.log` → `1` sai
+  `0 under the anchor rule` (medido em 2026-10-15) e responde "a asserção existe" como a forma que a regra
+  recusa; `>&` e `&>>` passam igual. Falha aberta, sem limite declarado no cabeçalho. Direção: a pré-condição
+  lê toda grafia de mescla da stderr na stdout, com um probe por grafia.
+  — descoberto pelo `sdd-executor` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
+
+- [ ] **A regra 2 do check-checkpoint não sabe o papel de cada palavra do grep** — `tests/check-checkpoint.sh:412`
+  (`r2_grep_anchored`) — toda palavra entre aspas fora do herestring conta como padrão: um argumento de opção
+  (`grep --label='^  ok    x' -H -c 'caso' <<< "$o"` sai "none blind" e imprime `^  ok    x:1` com FAIL ou
+  com ok) ou um FILE com nome de âncora ao lado de um `-e` cego passam. Falha aberta; a do FILE já estava
+  declarada no cabeçalho. Direção: ler o argv do grep como o getopt_long (opções com argumento, posição do
+  padrão, arquivos) e cobrar a âncora só do padrão.
+  — descoberto pelo `codex` no PR #267, missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
@@ -52,16 +67,38 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   com o teto de 120 por linha física e a continuação recuada em 2 espaços, um `path:N` acima de 116
   caracteres não cabe: no alvo, o `prisma-cotacao-repository-query.integration.test.ts:420` tem 121, e o
   item ancorou outro arquivo. Falha fechada, mas o consumidor está fora da suíte do kit (D15). Direção:
-  isentar do teto a linha cujo excesso é só a âncora, ou o template dizer a saída.
+  isentar do teto a linha cujo excesso é só a âncora, ou o template dizer a saída. RESOLVED by 3a7b12f.
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-planner` em
   `20261010-o-backlog-volta-a-medir`, transportado por `sdd-kaizen` (2026-10-12)
-- [ ] **A regra 2 do check-checkpoint vale por célula** — `tests/check-checkpoint.sh:310` (`count_occ`) — e não pela
+- [ ] **A regra 2 do check-checkpoint vale por célula** — `tests/check-checkpoint.sh:673` (`count_occ`) — e não pela
   leitura: um `2>&1` na célula obriga todo `grep` dela a ancorar em `^  ok    `, até o que lê um arquivo:
   `o=$(bash t.sh 2>&1); a=$(grep -c '^  ok    x' <<< "$o"); b=$(grep -c foo f)` reprova com `1 of 2 pattern(s)`
   (reproduzido em 2026-10-12). Falha fechada, contorno `2>/dev/null`; o consumidor é o planner do alvo (D15).
-  Regra por segmento ficaria cega na forma canônica, que separa `2>&1` e `grep` por `;`: o conserto segue a variável.
+  Regra por segmento ficaria cega na forma canônica (`2>&1` e `grep` separados por `;`). RESOLVED by 53057c2.
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — item (e) da fila do operador, D1 do grill,
   registrado pelo `sdd-planner` (2026-10-12)
+- [ ] **A regra 2 reprova a Check de repo-alvo ancorada no `✓` do vitest** — `tests/check-checkpoint.sh:382`
+  (`r2_anchored`) — a regra só aceita o `^  ok    ` do kit, mas o caso vermelho do vitest imprime `×`, então
+  `2>&1` + `grep -c '^ ✓ …'` já separa verde de vermelho: as 10 Checks da LH-4 do `lighthouse_project`
+  reprovam no `--check` (medido em 2026-10-13). O contorno (ler só a stdout, `2>/dev/null`) funciona, mas
+  só se acha tropeçando. Direção: aceitar âncoras de verde conhecidas (vitest `^ ✓ `) ou documentar a forma
+  só-stdout no `templates/checkpoint.md` e no `agents/sdd-planner.md`. RESOLVED by 3324d6c.
+  Fonte: `lighthouse_project/docs/handoffs/20261013-amep-alignment-review/checkpoint-notas.md` —
+  descoberto pelo planejador (Opus 5.5) na missão `20261013-amep-alignment-review` (2026-10-13)
+- [ ] **A prosa congelada diz a regra 2 e o teto de largura mais estritos que os sensores** —
+  `templates/checkpoint.md:27` (`check-x.sh`) — desde o lote 8 a regra 2 lê a variável e aceita `'^ *✓ '`,
+  e o teto isenta a linha que só carrega a âncora; o template e o `agents/sdd-planner.md:111` ainda dizem só
+  `^  ok    `, e o `templates/todo.pt-BR.md:24`, o `templates/todo.md:24` e o `agents/sdd-executor.md:127`,
+  "nenhuma linha passa de 120". Não falha aberta, mas a saída só aparece na mensagem de FAIL. Direção: as
+  cinco frases dizem a regra nova quando o congelamento cair.
+  — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
+- [ ] **A regra 2 recusa o grep de esperado `0` na saída mesclada de um build** — `tests/check-checkpoint.sh:677`
+  (`rule2`) — a I8 da LH-4 do `lighthouse_project` faz `b=$(npm run build … 2>&1)` e
+  `grep -ci 'chunks larger than' <<< "$b"` → `0`, uma das 2 recusas da LH-4 depois do lote 8; o mesmo molde
+  (`grep -c 'error TS'` → `0`) está em 29 das 98 recusas do `sales_quote`. Um grep de esperado `0` fica
+  vermelho, nunca verde, sobre texto que ok e FAIL dividem. Falha fechada, com consumidor fora da suíte
+  (D15). Direção: medir se o grep de esperado `0` pode sair da regra, com probes, ou declarar o limite.
+  — descoberto pelo `sdd-executor` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 - [ ] **O veredito da QA não é revalidado depois de um R<n>** — `docs/pipeline.md:99` (`R<n>`) — o REVIEW
   vem depois da QA e um `R<n>` muda o código sem reabri-la: o reteste do lote 7 só lê `F<n>`, e o `skipped`
   que o `sdd-qa` conferiu no diff não é reconferido (Codex no PR #247, 14ª rodada; 22 de 64 missões reais
@@ -90,8 +127,23 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   do `lighthouse_project`, um recado mandado com o planner rodando voltou `Resuming agent`, e não `queued`, porque
   ele já tinha devolvido a Pergunta 2, que voltou revista e com a recomendação invertida. Falha aberta: o relay
   mostraria a versão velha ao humano. Direção: ler o retorno do `SendMessage`; com `Resuming`, esperar a nova
-  devolução e descartar a anterior sem mostrá-la.
+  devolução e descartar a anterior sem mostrá-la. RESOLVED by fcb8872.
   Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
+
+- [ ] **A receita do worktree no `/sdd-plan` deixa a branch da missão com upstream `origin/main`** —
+  `commands/sdd-plan.md:35` (`git worktree add`) — sem `--no-track`, o git responde `set up to track 'origin/main'`
+  (`branch.autoSetupMerge` no default). Dano não medido: os pushes dos lotes 5–7 e o `sdd-publisher` usam
+  `-u origin`, e `push.default=simple` recusa o push sem destino. Sobra o `git pull` na branch, que traz a `main`
+  calado, e o ahead/behind do `git status` contado contra ela; o handoff do lote 7 repetiu duas vezes o contorno.
+  Direção: `--no-track` na receita. RESOLVED by 708b10c.
+  Fonte: `~/.claude/plans/2026-10-13-handoff-kit-lote-7-pr-247-rodada-6.md:9`
+  — descoberto pelo `relay do /sdd-plan` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
+- [ ] **O remédio do `sdd kaizen` recusado ensina a mesma receita sem `--no-track`** — `bin/sdd:11241`
+  (`shared_why`) — o motivo manda `worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>`, e a
+  branch do juiz nasce rastreando a `main` (git 2.43, medido em repo de rascunho); o `docs/failure-modes.md:624`
+  e o `docs/pipeline.md:1477` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
+  `/sdd-plan` porque o `bin/` está congelado até o veredito. Direção: `--no-track` no motivo e nas duas citações.
+  — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
 ### Saída humana e cosmética
 
@@ -132,15 +184,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > evento que o reabre — pela régua D15, ausência de consumidor é decisão adiada, não achado. Os
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
-
-- [ ] **A regra 2 reprova a Check de repo-alvo ancorada no `✓` do vitest** — `tests/check-checkpoint.sh:313`
-  (`ANCHOR_SQ`) — a regra só aceita o `^  ok    ` do kit, mas o caso vermelho do vitest imprime `×`, então
-  `2>&1` + `grep -c '^ ✓ …'` já separa verde de vermelho: as 10 Checks da LH-4 do `lighthouse_project`
-  reprovam no `--check` (medido em 2026-10-13). O contorno (ler só a stdout, `2>/dev/null`) funciona, mas
-  só se acha tropeçando. Direção: aceitar âncoras de verde conhecidas (vitest `^ ✓ `) ou documentar a forma
-  só-stdout no `templates/checkpoint.md` e no `agents/sdd-planner.md`.
-  Fonte: `lighthouse_project/docs/handoffs/20261013-amep-alignment-review/checkpoint-notas.md` —
-  descoberto pelo planejador (Opus 5.5) na missão `20261013-amep-alignment-review` (2026-10-13)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
