@@ -310,6 +310,65 @@ hat_promise_probes() {
   if grep -qF 'A comment in the code belongs to the code' "$dc" && grep -qE 'R<n>.*batch' "$dc"; then
     pass "hat: the docs hat leaves a code comment to the code's own phase (R<n>, a proposed-text row, or the TODO file)"
   else fail "hat: sdd-docs no longer says who owns a drifted code comment"; fi
+  # D17 of 20261012-a-rota-da-qa: resolve_mission refuses a mission id outside the grammar, so the
+  # two places that name a new mission say it — the planner that writes the directory and the
+  # command that delegates to it. The literal regex is what both carry.
+  local pl="$ROOT/agents/sdd-planner.md" sp="$ROOT/commands/sdd-plan.md"
+  if grep -qF '^[0-9]{8}-[a-z0-9-]+$' "$pl" && grep -qF '^[0-9]{8}-[a-z0-9-]+$' "$sp"; then
+    pass "hat: the planner names the mission id grammar, and so does /sdd-plan"
+  else fail "hat: sdd-planner or /sdd-plan no longer names the mission id grammar the runner refuses outside of"; fi
+  # D20 adapted by D23: the planner writes K8 ✗ as the key (§ 3), and knows that naming the base
+  # branch with the key present and not `skipped` is a pair gate_PLAN refuses (§ 8). Read by section.
+  local p3 p8
+  p3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$pl")"
+  p8="$(awk '/^## 8\. /{s=1; next} s && /^## /{s=0} s' "$pl")"
+  if grep -qF '`kaizen_log: skipped` in the frontmatter of `00-missao.md`; the K8 row alone dispenses nothing' <<< "$p3" \
+     && grep -qF 'Naming the base branch itself (`main`) is a decision too, and passes, unless' <<< "$p8" \
+     && grep -qF '`kaizen_log: skipped` with the human, or give the mission its own branch' <<< "$p8"; then
+    pass "hat: the planner knows a mission on the base branch cannot promise K8, and writes K8 ✗ as kaizen_log: skipped"
+  else fail "hat: sdd-planner no longer writes K8 ✗ as kaizen_log: skipped, or no longer knows a mission on the base branch cannot promise K8"; fi
+  # ADR 0018 §4 (D7, D16, D23): gate_DOCS demands the KAIZEN_LOG entry unless the plan's frontmatter
+  # says `kaizen_log: skipped`, and the entry is a block with its own `## ` citing the whole id. The
+  # hat reads the key in its § 3 table row; L4 marked the entry n/a over a K8 that promised it.
+  local d3 d3row
+  d3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$dc")"
+  d3row="$(grep -E '^\| `KAIZEN_LOG\.md` \|' <<< "$d3" || true)"
+  if grep -qF 'kaizen_log: skipped' <<< "$d3row" \
+     && grep -qF 'opens with its own `## ` heading' <<< "$d3" \
+     && grep -qF "cites the mission's id" <<< "$d3"; then
+    pass "hat: the docs hat reads kaizen_log of the plan before it marks KAIZEN_LOG, and writes the entry as a block citing the id"
+  else fail "hat: sdd-docs no longer reads kaizen_log of the plan before it marks KAIZEN_LOG, or no longer says the entry opens with its own heading and cites the whole id"; fi
+  # ADR 0018 §1: the plan declares `qa: skipped` and the runner sends the phase straight to this
+  # hat, with an interface; the hat CONFIRMS the declaration against the real diff and stops the line
+  # with `blocked` when the diff reaches the user. The remedy names the handoff's removal: a blocked
+  # handoff left in place is re-read by gate_QA, escalates after each session, and costs two more
+  # launches before the close that rewrites it (Codex on PR #247). Read by § 2, the section the
+  # runner's route leads to, so the paragraph moved elsewhere reads red.
+  local qa="$ROOT/agents/sdd-qa.md" qs
+  qs="$(awk '/^## 2\. /{s=1; next} s && /^## /{s=0} s' "$qa")"
+  if grep -qF 'When the plan declares `qa: skipped`' <<< "$qs" \
+     && grep -qF 'status: blocked' <<< "$qs" \
+     && grep -qF 'git rm' <<< "$qs"; then
+    pass "hat: sdd-qa confirms a declared qa: skipped against the diff, and blocks with the whole remedy when it reaches the user"
+  else fail "hat: sdd-qa no longer confirms a declared qa: skipped against the diff, or lost the blocked branch and its remedy (git rm of the handoff)"; fi
+  # ADR 0018 §2: after a done F<n> the runner routes the retest (QA:exec, then QA:close). Before the
+  # route, the hat improvised it by calling the qa-* skills through the Skill tool, five times in
+  # 2026-10; the sentence that forbids it lives in § 4, where the F<n> is born, read by section.
+  local q4
+  q4="$(awk '/^## 4\. /{s=1; next} s && /^## /{s=0} s' "$qa")"
+  if grep -qF 'the runner sends the QA back to `qa-execution`' <<< "$q4" \
+     && grep -qF 'this session never invokes the `qa-*` skills, not even through' <<< "$q4"; then
+    pass "hat: sdd-qa leaves the retest to the runner and never invokes the qa-* skills itself"
+  else fail "hat: sdd-qa no longer leaves the retest to the runner, or may invoke the qa-* skills itself"; fi
+  # Item (f) of 20261012-a-rota-da-qa: the spec of a bug no agent here closes (`Closable by: human`
+  # or `deferred`) used to stay red, take E2E_CMD down in gate_QA and spend QA_MAX_ITER on a bug
+  # nobody could fix; L3 of sales_quote used test.fail() called after the preconditions, so a broken
+  # setup still fails. Read in § 3, where the spec is born.
+  local q3
+  q3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$qa")"
+  if grep -qF 'test.fail()' <<< "$q3" && grep -qF 'after the preconditions' <<< "$q3"; then
+    pass "hat: sdd-qa writes the spec of a bug no agent closes with test.fail() after its preconditions"
+  else fail "hat: sdd-qa no longer says how the spec of a bug no agent closes stays a sensor without taking E2E_CMD down (test.fail() after the preconditions)"; fi
 }
 
 # --- /sdd-plan: the approval is the human's answer to a YES/NO question -------------------------
@@ -331,6 +390,36 @@ command_approval_probes() {
     pass "command: /sdd-plan asks the human YES or NO before it runs sdd approve"
   else
     fail "command: /sdd-plan no longer shows the plan and asks YES or NO before sdd approve, or lost the rule that only the human's answer approves"
+  fi
+  # Lote 7 (D4, D5 (h), D8, D22, items (a) and (b) of 20261012-a-rota-da-qa). The human asked to READ
+  # the plan before the YES/NO, rendered like a superpowers plan; the re-run of --check/--red is
+  # what caught the stale red measurement of L4; the question covers the all-met case; the count of
+  # recommended answers comes from the D22 reader, written literally — a loose `(recommended)` in
+  # prose does not satisfy it, so the three pieces are fixed strings of the reader itself.
+  # `--red <checkpoint>` and not a bare `--red`: the section names the flag in other sentences, and
+  # the sabotage pass measured a bare match surviving the removal of the command itself.
+  if grep -qF 'check-checkpoint.sh --check <checkpoint>' <<< "$sec" \
+     && grep -qF -- '`--red <checkpoint>`' <<< "$sec" \
+     && grep -qF 'Goal' <<< "$sec" && grep -qF 'Architecture' <<< "$sec" \
+     && grep -qF 'Tech Stack' <<< "$sec" && grep -qF '**Files:**' <<< "$sec"; then
+    pass "command: /sdd-plan renders the plan and re-runs --check and --red before the YES or NO"
+  else
+    fail "command: /sdd-plan no longer renders the plan (Goal, Architecture, Tech Stack, Files) or re-runs --check and --red before the YES or NO"
+  fi
+  if grep -qF 'or says that all of them are ✅' <<< "$sec" \
+     && grep -qF '/^## Decis[^ ]* do grill/' <<< "$sec" \
+     && grep -qF '/^ +- answer: \((recommended|other: .+)\)$/' <<< "$sec" \
+     && grep -qF '" (recommended) of "' <<< "$sec"; then
+    pass "command: /sdd-plan names every unmet criterion, or says all are met, and counts the recommended answers"
+  else
+    fail "command: /sdd-plan no longer covers the all-met case in the question, or lost the literal D22 reader of the recommended answers"
+  fi
+  # Item (a): relayed to the planner as "never write aprovacao:", the old warning suppressed an
+  # `auto` in L2. It forbids PROSE in the field; `auto` is a value the gate accepts.
+  if grep -qF 'forbids approval prose in `aprovacao:`, never `auto`' <<< "$sec"; then
+    pass "command: /sdd-plan forbids approval prose in aprovacao, never auto"
+  else
+    fail "command: /sdd-plan no longer says its warning forbids approval prose in aprovacao, never the auto value"
   fi
 }
 
@@ -368,6 +457,13 @@ command_relay_probes() {
   else
     fail "command: /sdd-plan lets a message that answers nothing resume the planner, or relays an answer by its position"
   fi
+  # Item (i) of 20261012-a-rota-da-qa: 30 min announced, ~2h55 real in L4, and the human asked midway
+  # whether all was well. The relay holds the planner to a re-estimate at twice the announced time.
+  if grep -qF 'twice the estimate' <<< "$relay" && grep -qF 'a new estimate' <<< "$relay"; then
+    pass "command: /sdd-plan re-estimates long work that runs past twice the estimate"
+  else
+    fail "command: /sdd-plan no longer re-estimates long work that runs past twice the estimate"
+  fi
 }
 
 # --- /sdd-plan: a mission of the kit `sdd` runs from is written in a linked worktree (#235) -------
@@ -398,6 +494,50 @@ planner_agent_probes() {
     pass "hat: the planner measures each increment against the disk the earlier ones leave (TODO.md anchors and prose numbers)"
   else
     fail "hat: sdd-planner no longer measures each increment against the disk the earlier ones leave"
+  fi
+  # Lote 7 (20261012-a-rota-da-qa), one pair per section the rule lives in, read by section like the
+  # one above. § 1, D8 in the form of D22: every answer is a whole line the acceptance step counts —
+  # the four pieces are what the D22 reader needs, and each was removed by the sabotage pass. § 2,
+  # item (g): L3 named a new file in Portuguese against the target's <CRITICAL>, caught only by a
+  # bot after the PR. § 6, D4 and item (a): under /sdd-plan the human reads the plan and approves.
+  local s1 s2 s6
+  s1="$(awk '/^## 1\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  s2="$(awk '/^## 2\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  s6="$(awk '/^## 6\. /{s=1; next} s && /^### /{s=0} s && /^## /{s=0} s' "$agent")"
+  if grep -qF -- '- answer: (recommended)' <<< "$s1" \
+     && grep -qF -- '- answer: (other: <the option they chose>)' <<< "$s1" \
+     && grep -qF 'One line per answer' <<< "$s1" \
+     && grep -qF 'never goes inside the parentheses' <<< "$s1"; then
+    pass "hat: the planner marks each grill decision (recommended) or (other), one whole line per answer"
+  else
+    fail "hat: sdd-planner no longer marks each grill answer as a whole '- answer:' line the acceptance step can count"
+  fi
+  if grep -qF 'naming and language rules of the target' <<< "$s2" && grep -qF '.claude/rules/' <<< "$s2"; then
+    pass "hat: the planner reads the naming rules of the target before it names a file"
+  else
+    fail "hat: sdd-planner no longer reads the naming and language rules of the target before it names a file"
+  fi
+  if grep -qF 'leave `aprovacao:` empty' <<< "$s6" && grep -qF 'only when the human asked for it in the grill' <<< "$s6"; then
+    pass "hat: the planner leaves aprovacao empty under /sdd-plan unless the human asks for auto"
+  else
+    fail "hat: sdd-planner writes aprovacao: auto on its own again, instead of leaving it to the human who reads the plan"
+  fi
+  # Codex review of PR #252: § 6 changed and two other copies of the same contract did not — the
+  # template the planner copies said "all ✅ → auto", and the pipeline doc said a well-run grill is
+  # the approval. A planner following either skips the reading the human asked for. The template is
+  # pt-BR content, so its probe reads language-neutral tokens: the old arrow gone, the ADR and the
+  # command present, inside the PLAN-AUTO section.
+  local tpl="$ROOT/templates/missao.md" pipe="$ROOT/docs/pipeline.md" tsec psec
+  tsec="$(awk '/^## Gate PLAN-AUTO/{s=1; next} s && /^## /{s=0} s' "$tpl")"
+  psec="$(awk '/^\*\*PLAN-AUTO:\*\*/{s=1} s && /^$/{s=0} s' "$pipe")"
+  if ! grep -qF '✅ → `aprovacao: auto`' <<< "$tsec" \
+     && grep -qF 'ADR 0018 §3' <<< "$tsec" && grep -qF 'sdd approve' <<< "$tsec" \
+     && ! grep -qF 'A well-run grill is the approval' <<< "$psec" \
+     && grep -qF 'writes `auto` only when the' <<< "$psec" \
+     && grep -qF 'leaves `aprovacao:` empty even with all of them ✅' <<< "$psec"; then
+    pass "hat: the mission template and the pipeline doc say what § 6 says about aprovacao"
+  else
+    fail "hat: templates/missao.md or docs/pipeline.md went back to auto-approving an all-✅ plan, against § 6 of sdd-planner"
   fi
 }
 

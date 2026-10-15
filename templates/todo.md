@@ -35,6 +35,11 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > is nothing to commit, so it leaves the open section and becomes a decided record in the same
 > commit. A duplicate is deleted, naming the survivor. Before filing, read the decided records:
 > what is there does not come back.
+>
+> **Where `RESOLVED by` goes.** At the end of the body's last line, or inside the `Source:` line
+> before `— found by`; never on a line of its own, which on an item at the cap becomes its 9th line
+> (`9 content lines, cap is 8`), nor after the found-by, which has to be the last field. With no
+> room in the 120 characters, shorten the body.
 
 ## Open
 <!-- sdd:open -->

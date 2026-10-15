@@ -4,6 +4,59 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-14 — Lote 7: a rota da QA e o aceite que lê o plano
+
+**Missão:** `20261012-a-rota-da-qa` (ADR 0018, PR de docs #247), nascida do veredito `melhorou`
+sobre `0270727` e replanejada com o humano no grill e em 17 rodadas de revisão (D1–D23).
+
+**Antes** (o veredito ao lado, cinco missões do `sales_quote`): 3 de 5 missões fizeram a QA à mão
+(`sdd note-manual … QA`), e esse ritual foi 3 das 5 intervenções da fatia; o reteste depois de um
+`F<n>` foi improvisado em duas missões, cinco vezes, pela ferramenta `Skill`; dois carimbos de hora
+inventados, com até 5 h de erro (`10-ticket.md` 12:10 × sessão 17:03); a entrada do `KAIZEN_LOG` do
+L4 escrita à mão depois do PR, sobre um K8 que a prometia à DOCS.
+
+**Depois** (linhas `ok` dos Checks, na suíte): M1 — `qa: skipped` com interface projeta
+`QA:close=sdd-qa` (era `QA:exec`); M2 — nove mundos do reteste, cada um com o seu mutante; M3 — o
+frescor do handoff em 5 asserções, nos dois caminhos; M4 — 19 mundos do K8 (a chave literal, a
+entrada como bloco, o id inteiro), 13 mutantes; M5 — a hora de `date` em 5 de 5 fases (era 0);
+M6 — os probes do aceite, do planner, do `sdd-qa` e do `sdd-docs`, cada frase sabotada; M8 — o id
+fora de `^[0-9]{8}-[a-z0-9-]+$` recusado em todo comando; M9 — a missão na base que promete o K8
+recusada no PLAN e na DOCS. Catálogo de 687 para 716 mutantes.
+
+**M7** é a medida da próxima janela do juiz, no uso real: nenhuma linha `manual` de QA em missão
+com `qa: skipped`, nenhuma sessão `sdd-qa` chamando `Skill`, nenhum `data:` fora da janela da
+sessão, e a contagem das respostas recomendadas legível pelo leitor da D22.
+
+---
+
+## 2026-10-12 — O veredito da janela do lote 6: `melhorou` sobre `0270727`
+
+**O que foi julgado:** os lotes 5 e 6 (`b411239`, `fc32329` e `0270727` — PRs #237, #243 e #244),
+uma mudança lógica só para o juiz, congelada no merge do lote 6 e medida em cinco missões reais do
+`sales_quote`, todas em harness 2.1.291.
+
+**Antes → depois** (`sdd kaizen --series`, `previous` = `94123a4` → `latest` = `0270727`):
+`advance_rate` 0,91 → **0,98**; `outcomes` 10/1/0 → **65/1/0** (advanced/churned/idle) sobre 11 → 66
+sessões; rótulos 3/1/1 → **25/0/2** (ok/leve/refez); escaladas `kit-touched` → `handoff-blocked` +
+`hat-crossed`, as duas paradas boas da mesma missão; custo por sessão ≈ US$ 5,02 → ≈ 2,91.
+Intervenções: sem antes/depois por missão, porque a `previous` é meia missão. O `--by-mission`
+contava as 22 sessões dela, 11 fora da fatia; lida por `kit_rev` no ledger, a fatia `94123a4` tem 3
+lançamentos, 2 a 3 intervenções. A `latest` tem **5 em 5 missões**, 3 delas o ritual da QA
+(corrigido na revisão do PR #247).
+
+**Limites declarados:** `previous` de uma missão só, com 11 das suas 22 sessões; harness diferente
+entre as fatias (2.1.289 × 2.1.291); `window_missions_stranded: 3`; e três das cinco missões gravaram
+a QA à mão (`sdd note-manual`), por decisão do grill e por uma lacuna do kit. Veredito e análise em
+`docs/handoffs/20261012-a-rota-da-qa/05-verdict.md`.
+
+**O que a janela ensinou e virou plano:** 3 das 5 intervenções da fatia foram o mesmo ritual — o
+`qa_substep` não tem rota headless para o `skipped` que o grill decidiu quando há interface — e o
+reteste depois de um `F<n>` só acontece porque a sessão `sdd-qa` chama a skill de improviso. A
+missão nascida na mesma pasta dá rota às duas; dois achados `kit:` menores foram ao `TODO.md`
+(catraca 0 → 2).
+
+---
+
 ## 2026-10-08 — Lote 6: as quatro que faltam
 
 **Problema (Gemba):** o lote 5 fechou com quatro achados no `TODO.md`, espelhados nas issues #236,
