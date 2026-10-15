@@ -4,6 +4,32 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-15 — Lote 8: a leva que não parte a janela
+
+**Missão:** `20261015-lote-8-a-leva-que-nao-parte-a-janela`, a leva do backlog que só toca `tests/` e
+`commands/` e por isso não parte a janela do juiz do lote 7 (1 de 3 missões em 2026-10-15).
+
+**Antes** (o sensor da `fec0cca`, remedido em 2026-10-15): o `--check` sobre os 36 checkpoints dos dois
+alvos recusava **122** células (24 no `lighthouse_project`, 98 no `sales_quote`), **10** delas na LH-4,
+todas Checks que leem o `✓` do vitest; a linha de 125 caracteres que só carrega a âncora era recusada
+pelo teto do `check-todo.sh`; o `/sdd-plan` cortava a branch da missão rastreando `origin/main` e não
+dizia o que fazer com a devolução que um recado superou.
+
+**Depois** (os mesmos comandos, sensores do lote 8): **114** células (16 + 98) e **2** na LH-4. A I9 lê
+`^Total:` sem marca de "passou"; a I8 grepa o aviso do build numa captura mesclada, recusa da própria
+regra da decisão 5 — a M1 previa no máximo 1, e o protótipo do planner tinha descartado a I8 como
+artefato. O `sales_quote` não se moveu: das 98, 48 leem só a linha de resumo do runner (fora pela
+decisão 5), 29 têm um grep de esperado `0` como o da I8 e 21 são outras formas. A linha de 125
+caracteres passa. Cinco linhas `ok` novas (as regras do I1, do I2 e do I3 e os dois pares do
+`/sdd-plan`), 32 probes novos nos selftests e 56 sabotagens, todas vermelhas no fim; 6 sobreviveram
+primeiro e viraram probe ou apertaram um fixture.
+
+**Achados:** três itens novos no `TODO.md`, catraca 15 → 18: a prosa congelada mais estrita que os
+sensores (decisão 7), o grep de esperado `0` na saída mesclada de um build e a mescla escrita `&>`,
+que a regra 2 não vê (falha aberta, anterior ao lote).
+
+---
+
 ## 2026-10-14 — Lote 7: a rota da QA e o aceite que lê o plano
 
 **Missão:** `20261012-a-rota-da-qa` (ADR 0018, PR de docs #247), nascida do veredito `melhorou`
