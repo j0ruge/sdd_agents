@@ -67,3 +67,4 @@
 - 2026-10-15 17:36 · `EXEC` · Final: minor (deferred): a isenção do teto de largura aceita TAB dentro do span e um span de URL, e o cabeçalho diz "blank-free" (`tests/check-todo.sh`, `[^` ]`).
 - 2026-10-15 17:36 · `EXEC` · Final: minor (deferred): `commands/sdd-plan.md` põe o "(measured with git 2.43.0)" sobre o `git pull` e o ahead/behind, mas o medido foi o upstream; o próprio item do `TODO.md` diz "Dano não medido".
 - 2026-10-15 17:36 · `EXEC` · Final: minor (deferred): o comentário do `rule_ok` diz "a probe group", e a linha `rule:` do banimento do `|` sai por `pass` fora dele (`RULE_FLOOR=4` está certo).
+- 2026-10-15 17:36 · `EXEC` · I6 feito em `e6ec129` (o fecho em `a5d70e7`, o conserto da revisão em `fd124bc`, o handoff em `e6ec129`). Check: `1 5 1 0`. Suíte `tests/run-all.sh` verde em `fd124bc`. `git diff --stat fec0cca.. -- bin agents templates config` vazio: a janela não partiu.
