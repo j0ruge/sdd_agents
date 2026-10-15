@@ -39,7 +39,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
   — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
 
-- [ ] **A regra 2 do check-checkpoint só vê a mescla escrita `2>&1`** — `tests/check-checkpoint.sh:600` (`2>&1`) —
+- [ ] **A regra 2 do check-checkpoint só vê a mescla escrita `2>&1`** — `tests/check-checkpoint.sh:650` (`2>&1`) —
   a pré-condição é o literal: `bash tests/check-a.sh &> out.log; grep -c 'alpha holds' out.log` → `1` sai
   `0 under the anchor rule` (medido em 2026-10-15) e responde "a asserção existe" como a forma que a regra
   recusa; `>&` e `&>>` passam igual. Falha aberta, sem limite declarado no cabeçalho. Direção: a pré-condição
@@ -62,14 +62,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   isentar do teto a linha cujo excesso é só a âncora, ou o template dizer a saída. RESOLVED by 3a7b12f.
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-planner` em
   `20261010-o-backlog-volta-a-medir`, transportado por `sdd-kaizen` (2026-10-12)
-- [ ] **A regra 2 do check-checkpoint vale por célula** — `tests/check-checkpoint.sh:601` (`count_occ`) — e não pela
+- [ ] **A regra 2 do check-checkpoint vale por célula** — `tests/check-checkpoint.sh:651` (`count_occ`) — e não pela
   leitura: um `2>&1` na célula obriga todo `grep` dela a ancorar em `^  ok    `, até o que lê um arquivo:
   `o=$(bash t.sh 2>&1); a=$(grep -c '^  ok    x' <<< "$o"); b=$(grep -c foo f)` reprova com `1 of 2 pattern(s)`
   (reproduzido em 2026-10-12). Falha fechada, contorno `2>/dev/null`; o consumidor é o planner do alvo (D15).
   Regra por segmento ficaria cega na forma canônica (`2>&1` e `grep` separados por `;`). RESOLVED by 53057c2.
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — item (e) da fila do operador, D1 do grill,
   registrado pelo `sdd-planner` (2026-10-12)
-- [ ] **A regra 2 reprova a Check de repo-alvo ancorada no `✓` do vitest** — `tests/check-checkpoint.sh:355`
+- [ ] **A regra 2 reprova a Check de repo-alvo ancorada no `✓` do vitest** — `tests/check-checkpoint.sh:382`
   (`r2_anchored`) — a regra só aceita o `^  ok    ` do kit, mas o caso vermelho do vitest imprime `×`, então
   `2>&1` + `grep -c '^ ✓ …'` já separa verde de vermelho: as 10 Checks da LH-4 do `lighthouse_project`
   reprovam no `--check` (medido em 2026-10-13). O contorno (ler só a stdout, `2>/dev/null`) funciona, mas
@@ -84,7 +84,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   "nenhuma linha passa de 120". Não falha aberta, mas a saída só aparece na mensagem de FAIL. Direção: as
   cinco frases dizem a regra nova quando o congelamento cair.
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
-- [ ] **A regra 2 recusa o grep de esperado `0` na saída mesclada de um build** — `tests/check-checkpoint.sh:605`
+- [ ] **A regra 2 recusa o grep de esperado `0` na saída mesclada de um build** — `tests/check-checkpoint.sh:655`
   (`rule2`) — a I8 da LH-4 do `lighthouse_project` faz `b=$(npm run build … 2>&1)` e
   `grep -ci 'chunks larger than' <<< "$b"` → `0`, uma das 2 recusas da LH-4 depois do lote 8; o mesmo molde
   (`grep -c 'error TS'` → `0`) está em 29 das 98 recusas do `sales_quote`. Um grep de esperado `0` fica
