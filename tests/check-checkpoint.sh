@@ -40,7 +40,8 @@
 #      `2>&1` there is no FAIL text in the stream to confuse, and without `grep` nothing is being
 #      read. Which grep reads it is rule2()'s answer (issue #258): the one whose herestring is a
 #      variable a clean `NAME=$(… 2>&1)` captured, so a grep of a file owes nothing. A cell the
-#      reader cannot follow keeps the cell rule: every grep anchored.
+#      reader cannot follow keeps the cell rule: every grep anchored. A test runner's pass mark at
+#      the start of the pattern (`'^ *✓ '`, issue #249) anchors like the ok prefix, on both paths.
 #   3. the rule is written where the next mission will meet it — templates/checkpoint.md and
 #      agents/sdd-planner.md — so a checkpoint born tomorrow does not have to rediscover it.
 #      Contract in three places, the house rule from CLAUDE.md.
@@ -118,6 +119,15 @@
 # reader honours quotes, nested parens and `\` escapes and nothing else of the shell grammar: every
 # shape it does not follow reads as a leak of the stream, and the cell keeps the cell rule.
 #
+# DECLARED LIMITS of the pass mark (issue #249, lote 8). Only U+2713 counts, the mark the two
+# measured runners print (see PASS_MARK); `✔` (U+2714) and every fail mark do not. A runner that
+# printed `✓` at the start of a FAILURE line would fool the rule, and none measured does. The
+# runner's summary lines (`Tests  N passed`, ` N passed`) are no anchor by decision 5 of that
+# mission: a list of phrases per runner is a list nobody keeps. Between the caret and the mark only
+# blanks are read, each with or without a star (` *`), so `'^[[:space:]]*✓ '` or `'^\s*✓ '` is
+# refused although it anchors — closed, and the message names the shape that passes. A star with
+# no blank before it (`'^*✓ '`) is refused too: in an ERE or a PCRE it may quantify the caret away.
+#
 # NOT measured either: whether the anchor's assertion text matches an assertion that exists. A
 # Check anchored on `^  ok    ` for a sentence no sensor ever prints returns 0 instead of 1 and
 # fails honestly — wrong answer, not a silent green — which is the direction that costs nothing.
@@ -155,6 +165,9 @@
 # became probes: the single quotes of the capture pass, whose absence let a `$(` inside quotes
 # swallow a real merge into a file, and the `NAME="$(…)"` form.
 #
+# The pass mark added 18 more the same day, all dead. One first survived and became a probe: the
+# cell rule's count taking every `'^` without asking the predicate.
+#
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
 #   89  no temp dir (probes never ran)      90/91/92  a selftest probe failed
@@ -173,8 +186,13 @@ ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # the probes. Written twice it would be the enum-in-three-places failure the house rule forbids —
 # widen the cell rule to accept three spaces and the doc assertion would go on certifying four.
 OK_ANCHOR='^  ok    '
-ANCHOR_SQ="'${OK_ANCHOR}"
-ANCHOR_DQ="\"${OK_ANCHOR}"
+# The pass mark of a test runner (issue #249): U+2713 and a blank, bytes e2 9c 93 20. It is the
+# mark both runners measured in the target repos print before a case that passed — vitest 3.2.7
+# (` ✓ ` passed, ` × ` failed, on stdout) and the Playwright list reporter (`  ✓   1 [chromium] › …`
+# and `  ✘   8 …`, in lighthouse_project/.sdd/logs/). Read by r2_anchored alone, after `^` and
+# blanks. The blank is part of it: a quantifier on the mark (`'^ ✓* x'`) matches every line that
+# opens with a blank, `  FAIL  ` included.
+PASS_MARK='✓ '
 
 # Floors against vacuity. The first two catch a glob that stops matching or a parser that stops
 # recognising rows; the third is the one that matters most, because rule 2 only APPLIES to a cell
@@ -330,10 +348,35 @@ r2_bounded() {
   return 1
 }
 
-# r2_anchored <literal> — the pattern opens with the ok prefix.
+# r2_anchored <literal> — the pattern opens with the ok prefix, or with `^`, blanks and the pass
+# mark (issue #249). A blank may carry a star (` *`, the shape the FAIL message names); a star with
+# no blank before it is no blank. Prefix tests on bytes, so it answers the same under `LC_ALL=C`
+# and a UTF-8 locale: the mark is the same four bytes in both.
 r2_anchored() {
-  case "$1" in "$OK_ANCHOR"*) return 0 ;; esac
+  local rest
+  case "$1" in "$OK_ANCHOR"*) return 0 ;; '^'*) ;; *) return 1 ;; esac
+  rest="${1#^}"
+  while :; do
+    case "$rest" in ' *'*) rest="${rest#' *'}" ;; ' '*) rest="${rest# }" ;; *) break ;; esac
+  done
+  case "$rest" in "$PASS_MARK"*) return 0 ;; esac
   return 1
+}
+
+# r2_count_anchored <cell> — the cell rule's count: the quoted literals anywhere in the cell that
+# open with an anchor, by the reader's own predicate, so the two paths cannot disagree on what an
+# anchor is. Published in R2_A.
+r2_count_anchored() {
+  local LC_ALL=C
+  local q rest k=0
+  for q in "'" '"'; do
+    rest="$1"
+    while [ "${rest#*"$q^"}" != "$rest" ]; do
+      rest="${rest#*"$q"}"
+      if r2_anchored "$rest"; then k=$((k + 1)); fi
+    done
+  done
+  R2_A="$k"
 }
 
 # rule2 <check cell> — R2_STRICT=1 asks for the cell rule; otherwise R2_G greps read a merged
@@ -564,11 +607,11 @@ scan_file() {
       g="$R2_G"; a="$R2_A"
       [ "$g" -gt 0 ] || continue
     else
-      a=$(( $(count_occ "$ANCHOR_SQ" "$chk") + $(count_occ "$ANCHOR_DQ" "$chk") ))
+      r2_count_anchored "$chk"; a="$R2_A"
     fi
     N_RULED=$((N_RULED + 1))
     if [ "$a" -lt "$g" ]; then
-      fail "$label: the Check of $id greps a sensor's merged output with $a of $g pattern(s) anchored on the ok prefix — FAIL prints the same text as ok, so this cell answers 'the assertion exists', never 'the assertion passed'"
+      fail "$label: the Check of $id greps a sensor's merged output with $a of $g pattern(s) anchored on the ok prefix or on a pass mark ('^ *${PASS_MARK}') — FAIL prints the same text as ok, so this cell answers 'the assertion exists', never 'the assertion passed'"
       V_ANCHOR=$((V_ANCHOR + 1))
     fi
   done <<< "$rows"
@@ -899,7 +942,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=76
+PROBE_FLOOR=91
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -911,7 +954,7 @@ fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
 # selftest green (the sabotage pass of lote 8, 2026-10-15). Tight, like PROBE_FLOOR, and the same
 # shape as rule_end in check-todo.sh.
 RULE_LINES=0
-RULE_FLOOR=3
+RULE_FLOOR=4
 rule_ok() { pass "rule: $1"; RULE_LINES=$((RULE_LINES + 1)); }
 
 probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode]
@@ -1088,6 +1131,71 @@ selftest() {
   probe 'a $( inside single quotes opens no capture' 1 '0 of 1 pattern(s) anchored' "$r2"
   [ "$FAILS" -eq "$r2_f0" ] && \
     rule_ok "the anchor rule reads the variable the merged output went into, not the whole cell ($((PROBES - r2_p0)) probe(s))"
+
+  # ── the pass mark of a test runner anchors like the ok prefix (issue #249) ──
+  # `^`, blanks, then U+2713 and a blank: the mark vitest and Playwright print before a case that
+  # passed, and that no failure line opens with. Each rc-1 probe is one step off that shape.
+  local r3_p0="$PROBES" r3_f0="$FAILS" r3
+  r3="$box/r3-vitest.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^ ✓ src/a.test.ts > caso' <<< \"\$o\"\` → \`1\`"
+  probe 'the vitest pass mark, one blank after the caret, anchors' 0 '1 under the anchor rule' "$r3"
+  r3="$box/r3-playwright.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npx playwright test 2>&1); grep -c '^  ✓ ' <<< \"\$o\"\` → \`1\`"
+  probe 'the Playwright pass mark, two blanks after the caret, anchors' 0 '1 under the anchor rule' "$r3"
+  r3="$box/r3-tight.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^✓ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'the pass mark right after the caret anchors' 0 '1 under the anchor rule' "$r3"
+  # The shape the FAIL message names, written literally: ` *` is still blanks before the mark.
+  r3="$box/r3-blankstar.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^ *✓ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'the blank-star the message names anchors' 0 '1 under the anchor rule' "$r3"
+  # A star with no blank before it may quantify the caret away in an ERE or a PCRE.
+  r3="$box/r3-caretstar.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^*✓ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'a star right after the caret is caught' 1 '0 of 1 pattern(s) anchored' "$r3"
+  r3="$box/r3-nocaret.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c ' ✓ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'a pass mark without the caret is caught, and the message names both anchors' \
+    1 '0 of 1 pattern(s) anchored on the ok prefix or on a pass mark' "$r3"
+  r3="$box/r3-inside.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^ x ✓ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'a pass mark past the start of the pattern is caught' 1 '0 of 1 pattern(s) anchored' "$r3"
+  r3="$box/r3-failmarks.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^ × caso' <<< \"\$o\"; grep -c '^  ✘ caso' <<< \"\$o\"\` → \`0 0\`"
+  probe 'the fail marks of vitest and Playwright anchor nothing' 1 '0 of 2 pattern(s) anchored' "$r3"
+  r3="$box/r3-heavy.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^ ✔ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'the heavy check mark (U+2714), which no measured runner prints, is caught' \
+    1 '0 of 1 pattern(s) anchored' "$r3"
+  r3="$box/r3-blind.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c 'caso' <<< \"\$o\"\` → \`1\`"
+  probe 'the bare case name of a runner is still caught' 1 '0 of 1 pattern(s) anchored' "$r3"
+  # A quantifier on the mark matches every line that opens with a blank, `  FAIL  ` included: the
+  # blank after the mark is what keeps one out.
+  r3="$box/r3-star.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^ ✓* caso' <<< \"\$o\"\` → \`1\`"
+  probe 'a quantifier on the pass mark is caught' 1 '0 of 1 pattern(s) anchored' "$r3"
+  # Copied from the source, with the mission slug and the test file renamed: row I1 of the LH-4
+  # checkpoint under lighthouse_project/docs/handoffs/ (the mission of 2026-09-27), one of the 10
+  # cells it refused before lote 8. It passes only with the reader (a grep of a file beside the
+  # capture) and the mark together.
+  r3="$box/r3-lh4.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`grep -c '^issue: LH-4\$' docs/handoffs/m/10-ticket.md\` → \`1\`; \`o=\$(npm run test -w packages/frontend 2>&1); grep -c '^ ✓ src/test/a.test.tsx > ' <<< \"\$o\"\` → \`7\`"
+  probe 'a target Check that reads a file and the vitest mark passes' 0 '1 under the anchor rule' "$r3"
+  # The cell rule counts the same anchors: a merge outside a capture keeps it, with either quote.
+  r3="$box/r3-loose.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`npm test > out.log 2>&1; grep -c '^ ✓ a' out.log; grep -c \"^ ✓ b\" out.log\` → \`1 1\`"
+  probe 'the cell rule counts the pass mark, in either quote' 0 '1 under the anchor rule' "$r3"
+  r3="$box/r3-loose-blind.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`npm test > out.log 2>&1; grep -c ' ✓ a' out.log\` → \`1\`"
+  probe 'the cell rule still catches a pass mark without the caret' 1 '0 of 1 pattern(s) anchored' "$r3"
+  # A caret alone is no anchor on this path either: the sabotage pass found the count taking every
+  # `'^` while the reader's predicate went unasked.
+  r3="$box/r3-loose-caret.md"; cp_head "$r3"
+  cp_row "$r3" I1 "\`bash t.sh > out.log 2>&1; grep -c '^  ok   a' out.log; grep -c '^ x ✓ b' out.log\` → \`0 0\`"
+  probe 'the cell rule asks the same predicate of every caret' 1 '0 of 2 pattern(s) anchored' "$r3"
+  [ "$FAILS" -eq "$r3_f0" ] && \
+    rule_ok "a pass mark of a test runner at the start of a line anchors like the ok prefix ($((PROBES - r3_p0)) probe(s))"
   # GFM makes the leading pipe optional, so a row written without it renders like the rest of the
   # table — and a reader of `|`-led lines skipped it whole (CodeRabbit review of PR #222). The
   # control is the same line below a blank line: a paragraph, which is no row and stays out.

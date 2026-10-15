@@ -55,7 +55,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   isentar do teto a linha cujo excesso é só a âncora, ou o template dizer a saída.
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-planner` em
   `20261010-o-backlog-volta-a-medir`, transportado por `sdd-kaizen` (2026-10-12)
-- [ ] **A regra 2 do check-checkpoint vale por célula** — `tests/check-checkpoint.sh:558` (`count_occ`) — e não pela
+- [ ] **A regra 2 do check-checkpoint vale por célula** — `tests/check-checkpoint.sh:601` (`count_occ`) — e não pela
   leitura: um `2>&1` na célula obriga todo `grep` dela a ancorar em `^  ok    `, até o que lê um arquivo:
   `o=$(bash t.sh 2>&1); a=$(grep -c '^  ok    x' <<< "$o"); b=$(grep -c foo f)` reprova com `1 of 2 pattern(s)`
   (reproduzido em 2026-10-12). Falha fechada, contorno `2>/dev/null`; o consumidor é o planner do alvo (D15).
@@ -147,8 +147,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
 
-- [ ] **A regra 2 reprova a Check de repo-alvo ancorada no `✓` do vitest** — `tests/check-checkpoint.sh:567`
-  (`ANCHOR_SQ`) — a regra só aceita o `^  ok    ` do kit, mas o caso vermelho do vitest imprime `×`, então
+- [ ] **A regra 2 reprova a Check de repo-alvo ancorada no `✓` do vitest** — `tests/check-checkpoint.sh:355`
+  (`r2_anchored`) — a regra só aceita o `^  ok    ` do kit, mas o caso vermelho do vitest imprime `×`, então
   `2>&1` + `grep -c '^ ✓ …'` já separa verde de vermelho: as 10 Checks da LH-4 do `lighthouse_project`
   reprovam no `--check` (medido em 2026-10-13). O contorno (ler só a stdout, `2>/dev/null`) funciona, mas
   só se acha tropeçando. Direção: aceitar âncoras de verde conhecidas (vitest `^ ✓ `) ou documentar a forma
