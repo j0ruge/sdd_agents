@@ -23,8 +23,31 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O `sdd preflight` não mede a forma do `TODO_FILE`, e nada avisa o alvo sem o opt-in** —
+  `bin/sdd:6340` (`preflight-test`) — a forma só é medida quando o `TEST_CMD` do alvo inclui o
+  `check-todo.sh` (o opt-in de `config/schema.md`); o do `sales_quote` não incluía, e o `TODO.md` dele
+  divergiu calado até 206 violações, achadas só quando o espelho de issues recusou. Direção: o
+  `sdd preflight` roda `check-todo.sh --check "$TODO_FILE" --allow-empty` sozinho, ou avisa. Fonte:
+  `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C8) — descoberto na faxina das
+  issues do `sales_quote` (2026-10-09)
+
+- [ ] **A mitigação de risco que cita um sensor não prova que ele cobre o alvo** — `templates/plano.md:41`
+  (`Mitigação`) — o plano da LH-5 do `lighthouse_project` mitigou "a troca de assinatura do port espalha
+  pelas fixtures de teste" com "o compilador lista"; o `tsc --noEmit` do backend exclui `__tests__` e saiu
+  rc 0 com testes ainda na assinatura velha. Executor que confia no verde deixa chamador quebrado, que o
+  Vitest (sem checagem de tipo) só pega se tropeçar em runtime. Direção: o planner roda no PLAN, contra o
+  que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
+  — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
+
 ### Contrato e configuração
 
+- [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
+  (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
+  squash, e o item fica preso para sempre; no `sales_quote` os PRs #405 e #406 entraram por squash e
+  quatro itens com `RESOLVED by` não saíam. Direção: aceitar como prova também o merge do PR que
+  carregou o hash, ou declarar que o ciclo exige merge commit. Fonte:
+  `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C7) — descoberto na triagem
+  das issues do `sales_quote` (2026-10-09)
 - [ ] **Uma âncora de caminho longo não cabe no teto de largura** — `tests/check-todo.sh:211` (`WIDTH_CAP`) —
   com o teto de 120 por linha física e a continuação recuada em 2 espaços, um `path:N` acima de 116
   caracteres não cabe: no alvo, o `prisma-cotacao-repository-query.integration.test.ts:420` tem 121, e o
@@ -64,12 +87,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Saída humana e cosmética
 
-- [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1800` (`gate-qa-e2e`) —
+- [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1839` (`gate-qa-e2e`) —
   um caso intermitente anterior à missão devolve a fase ao `sdd-qa`, que gasta o começo descobrindo isso:
   no alvo, o `frete-ipi.spec.ts:319` já tinha caído duas vezes, com os logs de gate em disco. Direção: o
   `GATE_WHY` cita quantas vezes cada caso vermelho já caiu nos logs `gate-qa-e2e` anteriores.
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-qa` em
   `20261005-mascaras-ncm-e-painel`, transportado por `sdd-kaizen` (2026-10-12)
+
+- [ ] **O `sdd status` manda `sdd run` com o app fora do ar, e a fase fechada volta a pendente** — `bin/sdd:7345`
+  (`run: sdd run`) — com o `30-handoff-qa.md` em `done`, o `gate_QA` refaz a e2e ao vivo; app caído vira `· QA`,
+  `next phase: QA` e `run: sdd run`, embora o motivo diga "no session can start it" (`:1849`). Esse `sdd run`
+  compra uma sessão `QA:close` (opus no alvo) antes de escalar `app-down` (`tests/check-autonomy.sh:2528`), e cada
+  leitura roda a e2e, que no `lighthouse_project` grava uma demanda e gasta um número da sequência. Direção: o
+  status lê o `GATE_APP_DOWN` e diz "fechada, e2e não re-verificável agora: app fora", com o remédio da escalada.
+  — descoberto por `sessão coordenadora` na missão `20261013-amep-alignment-review` (2026-10-14)
 
 ### Comentário e registro
 
@@ -85,6 +116,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > evento que o reabre — pela régua D15, ausência de consumidor é decisão adiada, não achado. Os
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
+
+- [ ] **A regra 2 reprova a Check de repo-alvo ancorada no `✓` do vitest** — `tests/check-checkpoint.sh:313`
+  (`ANCHOR_SQ`) — a regra só aceita o `^  ok    ` do kit, mas o caso vermelho do vitest imprime `×`, então
+  `2>&1` + `grep -c '^ ✓ …'` já separa verde de vermelho: as 10 Checks da LH-4 do `lighthouse_project`
+  reprovam no `--check` (medido em 2026-10-13). O contorno (ler só a stdout, `2>/dev/null`) funciona, mas
+  só se acha tropeçando. Direção: aceitar âncoras de verde conhecidas (vitest `^ ✓ `) ou documentar a forma
+  só-stdout no `templates/checkpoint.md` e no `agents/sdd-planner.md`.
+  Fonte: `lighthouse_project/docs/handoffs/20261013-amep-alignment-review/checkpoint-notas.md` —
+  descoberto pelo planejador (Opus 5.5) na missão `20261013-amep-alignment-review` (2026-10-13)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->

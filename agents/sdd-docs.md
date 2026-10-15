@@ -47,8 +47,14 @@ An index file **routes**; depth lives in `references/` or in specific docs.
 | `CLAUDE.md` / `.claude/rules/` | **a convention actually changed** (`.claude/rules/`: as proposed text, § 5) | you "feel" the convention should change |
 | `CONTEXT.md` (glossary) | a domain term entered or changed | the term only appeared in a variable name |
 | `CHANGELOG.md` | the mission ships something user-visible | internal refactor with no external effect |
-| `KAIZEN_LOG.md` | the mission measures a before/after | there is no number to show |
+| `KAIZEN_LOG.md` | the mission measures a before/after, **or** the frontmatter of `00-missao.md` does not declare `kaizen_log: skipped` (the gate demands the entry) | `kaizen_log: skipped` is declared and there is no number to show |
 | `$ADR_DIR/*` | an architectural decision was taken or reversed | the decision is already recorded and still holds |
+
+The `KAIZEN_LOG.md` entry opens with its own `## ` heading and cites the mission's id
+(`<YYYYMMDD>-<slug>`) whole on one of its lines: a longer id that contains it, like `<id>-r2`, does
+not count, and citing the mission in an entry that already exists does not count either. Mark it
+`n/a` only when the plan declares `kaizen_log: skipped`; the K8 row of the plan's checklist is prose
+and decides nothing (ADR 0018 §4).
 
 On rules and `CLAUDE.md`: **SDCA** — standardising requires confirming in the file that the change
 is there. Did the convention really change? Write it. Did it not? Do not write it. A rule invented

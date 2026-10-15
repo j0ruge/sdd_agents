@@ -34,6 +34,11 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > então é **apagado**, nunca marcado. Refutado, decidido, wont-fix ou risco aceito: não há o que
 > commitar, então sai da seção aberta e vira registro decidido no mesmo commit. Duplicado é
 > apagado, citando o sobrevivente. Antes de registrar, leia os decididos: o que está lá não volta.
+>
+> **Onde vai o `RESOLVED by`.** No fim da última linha do corpo, ou dentro da linha `Fonte:` antes
+> do `— descoberto por`; nunca numa linha própria, que num item no teto vira a 9ª linha
+> (`9 content lines, cap is 8`), nem depois do descoberto-por, que tem de ser o último campo. Sem
+> espaço nos 120 caracteres, encurte o corpo.
 
 ## Aberto
 <!-- sdd:open -->
