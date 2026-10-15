@@ -39,6 +39,7 @@ Próximo: o PR, pelas pendências 1 a 3 do `00-missao.md`, com o carimbo depois 
 - `a576a27` — PR #267, Codex: `-F`/`--fixed-strings` e `-v`/`--invert-match` nunca ancoram, nos dois caminhos.
 - `5c53e33` — PR #267, 2ª rodada do Codex: a isenção de largura do I3 só aceita `path:N` em ASCII imprimível sem `:`.
 - `44339ab` — PR #267, 3ª rodada do Codex: a regra 2 recusa o grep com um padrão em aspas ANSI-C (`$'…\n…'` são dois padrões), nos dois caminhos.
+- `67df1c5` — PR #267, 4ª rodada do Codex: a regra 2 lê opção longa por prefixo (`--fixed`, `--inv`, `--reg=`) e lê `egrep`/`fgrep`.
 - `fd124bc` — revisão final: a regra 2 cai para a regra da célula com `${!v}`, nameref ou `eval`, e um grep só ancora com uma âncora por padrão que nomeia (`-e`, `--regexp`; nunca `-f`), nos dois caminhos.
 
 Medido (os dois sensores reais, o da `fec0cca` e o desta branch): os 36 checkpoints dos alvos recusam
@@ -95,6 +96,7 @@ O PR, no worktree, nesta ordem (pendências 1 a 3 do `00-missao.md`):
 - `grep -v` e `grep -F` com padrão ancorado passavam como ancorados: declarados no cabeçalho até o Codex no PR #267 reproduzir o `-F`; recusados em `a576a27`.
 - A isenção de largura do I3 aceitava um URL e prosa separada por TAB ou NBSP (o Minor "TAB/URL" adiado): recusados em `5c53e33`; a linha isenta segue sem prova de que é a âncora do item, declarado no cabeçalho.
 - Um padrão em aspas ANSI-C (`$'^ ✓ a\ncaso'`) passava como ancorado: o `\n` vira um segundo padrão; recusado em `44339ab`, junto com um `\$'` escapado (o lado seguro).
+- Opção longa abreviada (`--fixed`, `--inv`, `--reg=`) passava como a grafia que o grep não lia, e um `egrep` ancorado era recusado (regressão do lote): consertados em `67df1c5`. Segue não medido: `rg`, `awk`, e um FILE entre aspas com nome de âncora ao lado de um `-e` cego.
 
 ## Achados fora de escopo
 
