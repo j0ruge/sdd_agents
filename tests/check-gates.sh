@@ -1968,6 +1968,40 @@ fi
 sed -i 's|^E2E_CMD=.*|E2E_CMD="true"|; s|^APP_URL=.*|APP_URL="http://example.invalid"|' .sdd/config.sh
 assert_phase "the fixture is back where the next block starts" "REVIEW"
 
+# --- freshness: the handoff is rewritten after the last done F<n> (ADR 0018 §2) ----------------
+# A fix increment changes the code the QA judged; a 30-handoff-qa.md committed before it says the F
+# is pending, and it is the file the DOCS phase and the PR body read. Rewritten is the same question
+# qa_substep asks of the report (qa_fix_ahead_of), and the reason says "not rewritten", never "no
+# commit": after a revert there IS a commit, and the handoff is the one from before the fix. Only the
+# checkpoint and the handoff are committed — the modified config belongs to the blocks around.
+fresh_base="$(git rev-parse HEAD)"
+git add "$MDIR/30-handoff-qa.md" && git commit -q --allow-empty -m "chore: the QA handoff before the fix"
+printf '| F1 | the fix | `true` → 0 | pending | — |\n' >> "$MDIR/checkpoint.md"
+assert_why_absent "freshness: a pending F<n> demands nothing of the handoff" "QA" "was not rewritten after"
+git commit -q --allow-empty -m "fix: F1"
+fresh_fix="$(git rev-parse --short HEAD)"
+sed -i "s/^| F1 | the fix | \`true\` → 0 | pending | — |\$/| F1 | the fix | \`true\` → 0 | done | $fresh_fix |/" "$MDIR/checkpoint.md"
+git add "$MDIR/checkpoint.md" && git commit -q -m "chore: F1 is done"
+if [ "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )" = QA ] \
+   && grep -qF '30-handoff-qa.md was not rewritten after F1' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"; then
+  pass "freshness: with an interface, a handoff committed before a done F<n> holds QA and names the fix"
+else
+  fail "freshness: with an interface, a handoff committed before a done F<n> holds QA and names the fix" \
+       "phase QA and a reason naming F1" "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+fi
+printf -- '\nThe fixed bug was retested after F1.\n' >> "$MDIR/30-handoff-qa.md"
+git add "$MDIR/30-handoff-qa.md" && git commit -q -m "chore: the QA handoff rewritten after the fix"
+assert_phase "freshness: the handoff committed after the fix lets QA pass" "REVIEW"
+# Codex on PR #247 (10th round): the rewrite reverted brings the handoff back to the bytes of before
+# the fix, under a commit that came after it.
+git revert --no-edit HEAD >/dev/null
+assert_phase "freshness: a handoff rewrite reverted after the fix holds QA again" "QA"
+# Back to the world before the block: mixed reset (the config stays modified), the checkpoint from
+# HEAD; the handoff in the tree is already the bytes the block started from.
+git reset -q "$fresh_base"
+git checkout -q -- "$MDIR/checkpoint.md"
+assert_phase "the fixture is back where the next block starts, after the freshness worlds" "REVIEW"
+
 echo "== QA phase — project WITHOUT an interface =="
 # With no E2E_CMD and no APP_URL the docs/qa/ tree is never created by anyone. Here the gate
 # measures the handoff: `status: done` only passes together with the evidence of the journey.
@@ -2015,6 +2049,24 @@ assert_why   "...and the reason names the empty status" "QA" "invalid status ''"
 printf -- '---\nfase: QA\nstatus: done\n%s\n---\n' "$QA_EVIDENCE" > "$MDIR/30-handoff-qa.md"
 assert_phase "QA: back to 'done' with evidence, the world passes again" "REVIEW"
 
+# The freshness reads before the interface split, so the walk sdd-qa does itself is held the same
+# way: the same handoff, committed before a done F<n>, holds QA here too.
+fresh_base="$(git rev-parse HEAD)"
+git add "$MDIR/30-handoff-qa.md" && git commit -q --allow-empty -m "chore: the QA handoff before the fix"
+git commit -q --allow-empty -m "fix: F1"
+printf '| F1 | the fix | `true` → 0 | done | %s |\n' "$(git rev-parse --short HEAD)" >> "$MDIR/checkpoint.md"
+git add "$MDIR/checkpoint.md" && git commit -q -m "chore: F1 is done"
+if [ "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )" = QA ] \
+   && grep -qF '30-handoff-qa.md was not rewritten after F1' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"; then
+  pass "freshness: without an interface, the same handoff holds QA too"
+else
+  fail "freshness: without an interface, the same handoff holds QA too" \
+       "phase QA and a reason naming F1" "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+fi
+git reset -q "$fresh_base"
+git checkout -q -- "$MDIR/checkpoint.md"
+assert_phase "QA: the world before the freshness check passes again" "REVIEW"
+
 # ...and the deferred debt is named HERE too. The registry loop in gate_QA runs on both branches —
 # it reads $QA_DOCS_PATH/bugs/ without asking whether the repo has an interface — but the sentence
 # that names the deferred bugs used to live inside `if [ -n "$report" ]`, and only the interface
@@ -2045,6 +2097,12 @@ assert_phase "no interface, the registry is clean again" "REVIEW"
 cp "$MDIR/30-handoff-qa.md" "$MDIR/30.bak"
 printf -- '---\nfase: QA\nstatus: skipped\n---\n' > "$MDIR/30-handoff-qa.md"
 assert_phase "qa: skipped skips the whole phase" "REVIEW"
+# The reason says what the runner read (the handoff's status), never a property of the diff it did
+# not measure: the old text claimed "diff has no user-visible change", which only the session that
+# wrote the handoff ever judged.
+assert_why "the skipped reason names the handoff that declares it" "QA" \
+  "30-handoff-qa.md declares status: skipped"
+assert_why_absent "the skipped reason no longer claims a property of the diff" "QA" "user-visible"
 mv "$MDIR/30.bak" "$MDIR/30-handoff-qa.md"
 
 # --- REVIEW ----------------------------------------------------------------
@@ -2752,6 +2810,156 @@ assert_why "DOCS names the uncommitted 45-docs.md" "DOCS" "45-docs.md is not com
 git add -A && git commit -qm "chore: docs"
 assert_phase "drift checklist complete" "PR"
 assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
+
+# --- a mission on the base branch cannot promise the K8 entry (D20, adapted by D23) -------------
+# A mission whose branch: is the base commits on the base, and the range the K8 anchor reads is
+# empty by construction. Here the fixture stands on main with `branch: main` and no key, and goes on:
+# that is the declared residue the rest of the suite already exercises. With the key present and
+# anything but `skipped`, gate_PLAN refuses where the human is, and gate_DOCS refuses too for a
+# forced --phase, which skips the derivation (sdd why reads gate_DOCS directly, the same road).
+sed -i 's/^branch: main$/&\nkaizen_log:/' "$MDIR/00-missao.md"
+assert_phase "base-branch: a mission on the base branch that promises the KAIZEN_LOG entry is held at PLAN" "PLAN"
+assert_why   "base-branch: a forced DOCS on that mission is refused too" "DOCS" "names the base branch"
+sed -i 's/^kaizen_log:$/kaizen_log: skipped/' "$MDIR/00-missao.md"
+assert_phase "base-branch: the same mission with kaizen_log: skipped goes on" "PR"
+git checkout -- "$MDIR/00-missao.md"
+
+# --- K8 against the DOCS phase: the KAIZEN_LOG entry the plan promised (ADR 0018 §4) -----------
+# In L4 of sales_quote the K8 row promised the KAIZEN_LOG entry to the DOCS phase, the 45-docs.md
+# marked it n/a, and the operator wrote it by hand after the PR: gate_DOCS never read the plan. Now,
+# unless the frontmatter of 00-missao.md says the literal `kaizen_log: skipped` (D23), the mission
+# branch has to add an ENTRY: a `## ` block whose heading and one line citing the mission's whole id
+# are both new in the diff of each merge-base to HEAD (D16). The base already cites the mission, as
+# it does for every mission born of the kaizen loop, twice on one line (world 5 needs it) and with
+# a line that does not cite it (worlds 2 and 4 use it). Each world is one commit on k8_start and goes
+# back with a hard reset — never accumulate them: world 3 followed by world 4 is the declared residue,
+# and it passes. Worlds 1–12 touch only KAIZEN_LOG.md; 13–19 only 00-missao.md.
+k8_main_before="$(git rev-parse HEAD)"
+k8_old_entry() {
+  printf '## 2026-01-01 — The verdict\n\n'
+  printf 'Verdict in `docs/handoffs/%s/05-verdict.md`; plan in `docs/handoffs/%s/01-plano.md`.\n' "$MISSION" "$MISSION"
+  printf 'Another line of the verdict.\n'
+}
+k8_base_log() { printf '# KAIZEN_LOG\n\n---\n\n'; k8_old_entry; printf '\n---\n'; }
+k8_with_new() { printf '# KAIZEN_LOG\n\n---\n\n## %s\n\n%s\n\n---\n\n' "$1" "$2"; k8_old_entry; printf '\n---\n'; }
+k8_base_log > KAIZEN_LOG.md
+git add -A && git commit -qm "chore: the base KAIZEN_LOG already cites the mission"
+git checkout -q -b missao/k8-entry
+# The mission's branch, never `main`: with I12, a mission whose branch: is the base and whose
+# frontmatter has the key without `skipped` is refused for the base BEFORE the anchor, and worlds
+# 14, 15 and 18 would read DOCS for the wrong reason.
+sed -i 's|^branch: main$|branch: missao/k8-entry|' "$MDIR/00-missao.md"
+printf '\n## Checklist kaizen (`kaizen-software`)\n\n| # | Item | Status | Note |\n|---|---|---|---|\n| K8 | KAIZEN_LOG record | ✅ | |\n' \
+  >> "$MDIR/00-missao.md"
+git add -A && git commit -qm "chore: the mission promises K8"
+k8_start="$(git rev-parse HEAD)"
+k8_world() { # k8_world <builder> — one commit on k8_start
+  git reset -q --hard "$k8_start"
+  "$@"
+  if [ -n "$(git status --porcelain)" ]; then git add -A && git commit -qm "chore: a K8 world"; fi
+}
+k8_more_cite() { k8_base_log | sed "s/^Another line of the verdict\.\$/&\nSee also \`$MISSION\`./"; }
+k8_world :
+assert_phase "kaizen-log: a base that already cites the mission is not the entry" "DOCS"
+assert_why   "K8 names the missing KAIZEN_LOG entry" "DOCS" "adds no KAIZEN_LOG.md entry of its own"
+k8_w2() { k8_base_log | sed 's/^Another line of the verdict\.$/Another line of the verdict, rewritten./' > KAIZEN_LOG.md; }
+k8_world k8_w2
+assert_phase "kaizen-log: a one-line edit with no new entry keeps DOCS blocked" "DOCS"
+k8_w3() { k8_base_log | sed 's/^## 2026-01-01 — The verdict$/## 2026-01-01 — The verdict (renamed)/' > KAIZEN_LOG.md; }
+k8_world k8_w3
+assert_phase "kaizen-log: renaming an old heading is not a new entry" "DOCS"
+k8_w4() { k8_more_cite > KAIZEN_LOG.md; }
+k8_world k8_w4
+assert_phase "kaizen-log: another line citing the mission in an old entry is not a new entry" "DOCS"
+k8_w5() { k8_base_log | sed 's/; plan in /;\nplan in /' > KAIZEN_LOG.md; }
+k8_world k8_w5
+assert_phase "kaizen-log: splitting an old line that cites the mission twice is not a new entry" "DOCS"
+k8_w6() { k8_with_new '2026-01-02 — Batch' 'An entry with no citation.' | sed "s/^Another line of the verdict\.\$/&\nSee also \`$MISSION\`./" > KAIZEN_LOG.md; }
+k8_world k8_w6
+assert_phase "kaizen-log: a new entry that does not cite the mission keeps DOCS blocked" "DOCS"
+k8_w7() {
+  k8_base_log | awk -v c="See \`$MISSION\`." '{ print } /^Another line of the verdict\.$/ { print "```"; print "## 2026-01-02 — example"; print c; print "```" }' > KAIZEN_LOG.md
+}
+k8_world k8_w7
+assert_phase "kaizen-log: a heading inside a code fence is not an entry" "DOCS"
+k8_w8() {
+  { printf '# KAIZEN_LOG\n\n## 2026-01-02 — Batch\n\n---\n\n'
+    printf 'Verdict in `docs/handoffs/%s/05-verdict.md`; plan in `docs/handoffs/%s/01-plano.md`.\n' "$MISSION" "$MISSION"
+    printf 'Another line of the verdict.\nMission `%s`: before 1, after 2.\n\n---\n' "$MISSION"
+  } > KAIZEN_LOG.md
+}
+k8_world k8_w8
+assert_phase "kaizen-log: a new entry written over a deleted old heading lets DOCS pass" "PR"
+k8_w9() { k8_with_new '2026-01-02 — Batch' "See \`$MISSION-extra\`, \`${MISSION}s\` and \`revisita-$MISSION\`." > KAIZEN_LOG.md; }
+k8_world k8_w9
+assert_phase "kaizen-log: a new entry citing only longer ids that contain the mission keeps DOCS blocked" "DOCS"
+k8_w10() { k8_with_new '2026-01-02 — Batch' "See \`$MISSION-extra\`, \`${MISSION}s\` and \`revisita-$MISSION\`; plan in docs/handoffs/$MISSION/01-plano.md." > KAIZEN_LOG.md; }
+k8_world k8_w10
+assert_phase "kaizen-log: the same entry citing the mission itself after the longer ids lets DOCS pass" "PR"
+# The id at column 1 and with no backtick: the world of the mawk trap (`substr(s, 0, 1)`).
+k8_w11() { k8_with_new '2026-01-02 — Batch' "$MISSION: before 1, after 2." > KAIZEN_LOG.md; }
+k8_world k8_w11
+assert_phase "kaizen-log: a new entry that cites the mission lets DOCS pass" "PR"
+# D17: the K8 reader looks for the id, never the argument with its slash — `/<mission>` is a form
+# resolve_mission accepts, and with the raw argument cites_id would look for `/<id>` and miss.
+assert_eq "mission-id: a slash before the mission argument still finds the K8 entry" PR \
+  "$(cd "$FIX" && "$SDD" phase "/$MISSION" 2>&1)"
+git revert --no-edit HEAD >/dev/null
+assert_phase "kaizen-log: an entry written and then reverted in the mission branch holds DOCS" "DOCS"
+# The key worlds: only the literal `kaizen_log: skipped` in the frontmatter dispenses the entry.
+k8_key() { sed -i "s|^branch: \(.*\)\$|branch: \1\n$1|" "$MDIR/00-missao.md"; }
+k8_real() { sed -i "s/^| K8 | KAIZEN_LOG record | ✅ | |\$/| K8 | KAIZEN_LOG record | $1 | |/" "$MDIR/00-missao.md"; }
+k8_w13() { k8_key 'kaizen_log: skipped'; k8_real '✗'; }
+k8_world k8_w13
+assert_phase "kaizen-log: kaizen_log: skipped in the frontmatter dispenses the entry" "PR"
+k8_world k8_key 'kaizen_log: Skipped'
+assert_phase "kaizen-log: a misspelt kaizen_log: Skipped demands the entry" "DOCS"
+k8_world k8_key 'kaizen_log:'
+assert_phase "kaizen-log: an empty kaizen_log demands the entry" "DOCS"
+k8_w16() { printf 'kaizen_log: skipped\n' >> "$MDIR/00-missao.md"; }
+k8_world k8_w16
+assert_phase "kaizen-log: kaizen_log: skipped in the body is not the frontmatter" "DOCS"
+k8_world k8_key 'kaizen_log: skipped '
+assert_phase "kaizen-log: a trailing space after skipped is trimmed like any frontmatter value" "PR"
+k8_world k8_key 'kaizen_log: skipped\r'
+assert_phase "kaizen-log: a trailing carriage return after skipped demands the entry" "DOCS"
+# World 19: no Markdown form of the K8 row dispenses the entry without the key (D23). The 13 forms of
+# the 16th round of PR #247, measured on a real CommonMark parser: the D19 reader said "no" in all of
+# them, and 9 of those were not the template's ✗ row as the parser renders it. Each builder starts
+# from k8_start, and a world counts as built only when its marking line is in the file.
+K8_T1='| # | Item | Status | Note |'; K8_T2='|---|---|---|---|'; K8_T3='| K8 | KAIZEN_LOG record | ✗ | |'
+k8_del() { sed -i '/^| K8 | KAIZEN_LOG record | ✅ | |$/d' "$MDIR/00-missao.md"; }
+k8_add() { printf '%s\n' "$@" >> "$MDIR/00-missao.md"; }
+k8_m_template_x()   { k8_real '✗'; }
+k8_m_indent_3()     { k8_del; k8_add '' '   Example:' '' "   $K8_T1" "   $K8_T2" "   $K8_T3"; }
+k8_m_indent_4()     { k8_del; k8_add '' '    Example:' '' "    $K8_T1" "    $K8_T2" "    $K8_T3"; }
+k8_m_indent_tab()   { k8_del; k8_add '' $'\tExample:' '' $'\t'"$K8_T1" $'\t'"$K8_T2" $'\t'"$K8_T3"; }
+k8_m_para_glued()   { k8_del; k8_add '' 'Example:' "$K8_T1" "$K8_T2" "$K8_T3"; }
+k8_m_list_table()   { k8_del; k8_add '' '- item' '' "  $K8_T1" "  $K8_T2" "  $K8_T3"; }
+k8_m_html_comment() { k8_del; k8_add '' 'Example:' '' '<!--' "$K8_T1" "$K8_T2" "$K8_T3" '-->'; }
+k8_m_html_details() { k8_del; k8_add '' '<details>' "$K8_T1" "$K8_T2" "$K8_T3" '</details>'; }
+k8_m_lazy_quote()   { k8_del; k8_add '' '> Note:' "$K8_T1" "$K8_T2" "$K8_T3"; }
+k8_m_list_html()    { k8_del; k8_add '' '- <!--' "  $K8_T1" "  $K8_T2" "  $K8_T3" '  -->'; }
+k8_m_bold_k8()      { k8_real '✗'; k8_add '' "$K8_T1" "$K8_T2" '| **K8** | example | ✅ | |'; }
+k8_m_code_k8()      { k8_real '✗'; k8_add '' "$K8_T1" "$K8_T2" '| `K8` | example | ✅ | |'; }
+k8_m_quote_k8()     { k8_real '✗'; k8_add '' "> $K8_T1" "> $K8_T2" '> | K8 | example | ✅ | |'; }
+K8_MW=(template_x indent_3 indent_4 indent_tab para_glued list_table html_comment html_details lazy_quote list_html bold_k8 code_k8 quote_k8)
+K8_MARK=("$K8_T3" "   $K8_T3" "    $K8_T3" $'\t'"$K8_T3" 'Example:' "  $K8_T3" '<!--' '<details>' '> Note:' '- <!--' '| **K8** |' '| `K8` |' '> | K8 | example')
+k8_built=0; k8_docs=0; k8_missed=""
+for k8_i in "${!K8_MW[@]}"; do
+  k8_world "k8_m_${K8_MW[$k8_i]}"
+  grep -qF -- "${K8_MARK[$k8_i]}" "$MDIR/00-missao.md" || continue
+  k8_built=$((k8_built + 1))
+  if [ "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )" = DOCS ]; then k8_docs=$((k8_docs + 1))
+  else k8_missed+="${k8_missed:+,}${K8_MW[$k8_i]}"; fi
+done
+assert_eq "kaizen-log: no Markdown form of K8 in the checklist dispenses the entry without the key" \
+  "13 13 -" "$k8_built $k8_docs ${k8_missed:--}"
+git reset -q --hard "$k8_start"
+git checkout -q main
+git branch -q -D missao/k8-entry
+git reset -q --hard "$k8_main_before"
+assert_phase "the fixture is back where the next block starts, after the K8 worlds" "PR"
 
 # Same formatter, other gate. Here the alignment colons land in the Status COLUMN of the separator
 # row, so the skip lets `:---:` through as a Status value and gate_DOCS fails a drift checklist
@@ -5927,6 +6135,40 @@ NG_TYPO_RC=0
 "$SDD" status "$MISSION" --no-gate >/dev/null 2>&1 || NG_TYPO_RC=$?
 assert_eq "a misspelt status option is refused, never read as a mission name" "1" \
   "$( [ "$NG_TYPO_RC" -ne 0 ] && echo 1 || echo 0 )"
+
+# D17 of 20261012-a-rota-da-qa: the mission id is a grammar the runner checks in resolve_mission,
+# ^[0-9]{8}-[a-z0-9-]+$, and that is what makes the whole-id boundary of the K8 reader exact
+# (CodeRabbit on PR #247: a mission `foo` was satisfied by an entry citing only `foo.bar` or `foo` plus U+00E9).
+# Each world gets its own directory, created and removed here; the refusal names the grammar.
+mid_refused() { # mid_refused <dir name> [locale] → "rc:<0|1> named:<0|1>"
+  local out rc=0
+  mkdir -p "$FIX/docs/handoffs/$1"
+  if [ -n "${2:-}" ]; then out="$(LC_ALL="$2" "$SDD" status "$1" --no-gates 2>&1)" || rc=$?
+  else out="$("$SDD" status "$1" --no-gates 2>&1)" || rc=$?; fi
+  rm -rf "${FIX:?}/docs/handoffs/$1"
+  printf 'rc:%s named:%s\n' "$( [ "$rc" -ne 0 ] && echo 1 || echo 0 )" "$( grep -qF 'is not <YYYYMMDD>-<slug>' <<< "$out" && echo 1 || echo 0 )"
+}
+assert_eq "mission-id: an id with a dot is refused by name" "rc:1 named:1" "$(mid_refused "$MISSION.v2")"
+# The poison has to be ARMED: under a locale where `[a-z]` reaches U+00E9 (MID_E, spelled in octal
+# bytes because tests/ is English surface), a range class would let the
+# id through. Without one on this machine the refusal still runs, and the ok line says so.
+MID_E=$'\303\251'
+mid_loc=""
+while IFS= read -r mid_l; do
+  if LC_ALL="$mid_l" bash -c '[[ $1 =~ ^[a-z]$ ]]' _ "$MID_E" 2>/dev/null; then mid_loc="$mid_l"; break; fi
+done < <(locale -a 2>/dev/null || true)
+if [ -n "$mid_loc" ]; then
+  assert_eq "mission-id: an id with a non-ASCII letter is refused where [a-z] reaches it ($mid_loc)" \
+    "rc:1 named:1" "$(mid_refused "${MISSION}${MID_E}" "$mid_loc")"
+else
+  assert_eq "mission-id: an id with a non-ASCII letter is refused where [a-z] reaches it (no locale armed the poison here)" \
+    "rc:1 named:1" "$(mid_refused "${MISSION}${MID_E}")"
+fi
+assert_eq "mission-id: an id with a prefix before the date is refused" "rc:1 named:1" "$(mid_refused "sq$MISSION")"
+mid_rc=0
+mid_out="$("$SDD" status "$MISSION/" --no-gates 2>&1)" || mid_rc=$?
+assert_eq "mission-id: a slash after the mission argument still resolves" "rc:0 named:1" \
+  "rc:$mid_rc named:$( grep -qF "$MISSION" <<< "$mid_out" && echo 1 || echo 0 )"
 
 # #153: a green phase this machine's ledger holds no session of is the shape a phase done BY HAND
 # leaves, and the full page names the command that records it. The fixture is already that world:

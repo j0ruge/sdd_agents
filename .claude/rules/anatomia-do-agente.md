@@ -31,6 +31,9 @@ toda fase, que o processo posto em background (`nohup … &`) entra na família 
 run` não termina e o checkout segue preso até ele morrer — e que a sessão nunca para nem reinicia
 processo que não começou (o app sob teste é do humano): medido no `sales_quote`, uma sessão de QA
 matou o backend do humano e o relançou com `nohup`, e o `sdd run` ficou vivo até o servidor morrer.
+Desde `20261012-a-rota-da-qa` o `turn_rule` diz também que todo carimbo de hora que a fase escreve
+(`data:`, `atualizado:`, nota) sai de `date` rodado no mesmo lote de comandos: no L4 do `sales_quote`
+o `10-ticket.md` dizia 12:10 para uma sessão às 17:03, e o `45-docs.md` 18:10 para uma às 18:02.
 
 ## 2. Ferramentas — capacidades, não todas as possíveis
 
@@ -125,6 +128,20 @@ foge da forma `` `comando` → `esperado` ``. Ele **executa** texto escrito por 
 ferramenta do planner com o humano na sala, **nunca gate**: o runner não o chama, o `run-all.sh`
 também não, e o `gate_PLAN` não poderia — ele é reavaliado a cada derivação, e o Check do I1
 fica verde no instante em que o I1 fecha. Prova "não verde", não "vermelho pelo motivo certo".
+Desde `20261012-a-rota-da-qa` (ADR 0018 §1) a sub-etapa da QA lê o `qa: skipped` literal do
+frontmatter do `00-missao.md` e, com interface, vai direto ao `close`: o `sdd-qa` é o dono do
+handoff que o gate exige, e o motivo do `skipped` diz o que o runner leu
+(`30-handoff-qa.md declares status: skipped`), nunca uma propriedade do diff que ele não mediu.
+Na mesma missão (ADR 0018 §2) o reteste ganhou rota: um `F<n>` feito depois do qual o relatório da
+missão não foi reescrito devolve a sub-etapa ao `exec` (`qa_fix_ahead_of`, uma definição, dois
+leitores; reescrito = bytes que nenhuma versão até o conserto teve, trazidos por um commit que não
+é merge), e o `sdd-qa` deixa de chamar as skills `qa-*` pela ferramenta `Skill`.
+O `gate_QA` cobra o frescor pela mesma `qa_fix_ahead_of`, nos dois caminhos: um
+`30-handoff-qa.md` não reescrito depois do último `F<n>` feito reprova, nomeando o F.
+E o `gate_DOCS` passou a ler o plano: sem o literal `kaizen_log: skipped` no frontmatter do
+`00-missao.md` (a linha K8 do checklist é prosa), a branch tem de acrescentar ao `KAIZEN_LOG.md` uma
+entrada — um bloco `## ` cujo título e uma linha que cita o id inteiro da missão são novos no diff
+de cada merge-base (ADR 0018 §4); o dono é o `sdd-docs`.
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
@@ -337,6 +354,11 @@ linha `event:"manual"` do ledger, que não gradua nada — antes dela, o PR publ
 #230 o `ok` dele diz o que o escritor **fez**, lido do `CHECKPOINT_NOTE` que o
 `checkpoint_note_intervention` publica (`committed`, `uncommitted`, `failed`, `none`), e a linha
 `manual` é gravada em todo caso — antes, o `ok` afirmava a nota mesmo quando ela não existia.
+Desde `20261012-a-rota-da-qa` (ADR 0018 §3) a porta do PLAN mostra o que o humano aprova: sob o
+`/sdd-plan` o planner deixa `aprovacao:` vazio (o `auto` só a pedido no grill), e o aceite mede de
+novo (`--check`/`--red`), renderiza o plano e conta as respostas do grill, `N (recommended) of M`,
+pelo leitor da D22 sobre as linhas `- answer:` das decisões — a escolha do humano passa a ser
+medida, nunca escrita à mão.
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
 anterior desta seção dizia que não existia, e estava errada (foi o comando do incidente das 18:45).

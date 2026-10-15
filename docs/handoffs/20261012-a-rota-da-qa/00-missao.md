@@ -4,7 +4,7 @@ titulo: a QA que o grill dispensou e o reteste depois de um F<n> passam a ter ro
 data: 2026-10-12
 versao:
 branch: fix/lote-7-a-rota-da-qa
-aprovacao:
+aprovacao: humano-2026-10-14
 adr: docs/adr/0018-the-qa-route-and-the-read-plan.md
 ddd: n/a
 ---
