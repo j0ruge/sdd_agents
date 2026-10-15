@@ -36,8 +36,11 @@
 #      what target repos write, not a licence for what this repo writes. Stricter and loud is the
 #      one direction that costs nothing: the row fails, it never passes unmeasured.
 #   2. a Check cell that merges stderr (`2>&1`) AND greps must carry the `^  ok    ` anchor on
-#      every one of its greps. Both halves of the precondition matter: without `2>&1` there is no
-#      FAIL text in the stream to confuse, and without `grep` nothing is being read.
+#      every grep that reads the merged output. Both halves of the precondition matter: without
+#      `2>&1` there is no FAIL text in the stream to confuse, and without `grep` nothing is being
+#      read. Which grep reads it is rule2()'s answer (issue #258): the one whose herestring is a
+#      variable a clean `NAME=$(… 2>&1)` captured, so a grep of a file owes nothing. A cell the
+#      reader cannot follow keeps the cell rule: every grep anchored.
 #   3. the rule is written where the next mission will meet it — templates/checkpoint.md and
 #      agents/sdd-planner.md — so a checkpoint born tomorrow does not have to rediscover it.
 #      Contract in three places, the house rule from CLAUDE.md.
@@ -109,6 +112,12 @@
 # which is a literal single-quoted pattern handed to `grep`. Widening it needs a shell parser, and
 # every generalisation tried on the neighbouring sensors fired on legitimate lines first.
 #
+# DECLARED LIMITS of rule 2's reader (issue #258), both CLOSED: a merged variable assigned again in
+# the same cell stays tainted, so a grep of the new value still owes the anchor; and a herestring
+# that is not exactly one variable (`<<< "$o$p"`) sends the whole cell back to the cell rule. The
+# reader honours quotes, nested parens and `\` escapes and nothing else of the shell grammar: every
+# shape it does not follow reads as a leak of the stream, and the cell keeps the cell rule.
+#
 # NOT measured either: whether the anchor's assertion text matches an assertion that exists. A
 # Check anchored on `^  ok    ` for a sentence no sensor ever prints returns 0 instead of 1 and
 # fails honestly — wrong answer, not a silent green — which is the direction that costs nothing.
@@ -141,6 +150,10 @@
 # the floor is tight now and a deleted probe is caught. All eight DELETED something; the four that
 # SHORTEN a literal instead (PIPE_MECH "aw", "awk" or "a", PIPE_ESCAPE '\') survived until issue
 # #71 gave each literal a hand-written near-miss doc, and now die too.
+#
+# Rule 2's reader added 19 more (lote 8, 2026-10-15), all dead. Two of them first survived and
+# became probes: the single quotes of the capture pass, whose absence let a `$(` inside quotes
+# swallow a real merge into a file, and the `NAME="$(…)"` form.
 #
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
@@ -186,6 +199,241 @@ count_occ() {
     n=$((n + 1)); hay="${hay#*"$needle"}"
   done
   printf '%d\n' "$n"
+}
+
+# ── rule 2's reader: which greps read the merged output (issue #258) ───────────────────────────
+#
+# A `2>&1` in the cell used to put EVERY grep of it under the anchor, the one that reads a file the
+# sensor never wrote to included. The reader below asks the narrower question the rule is about:
+# which grep reads the variable the merged output went into? A NAMED capture `NAME=$(…)` (or
+# `NAME="$(…)"`) whose text merges and carries no `grep` taints NAME; a grep whose herestring is
+# exactly `$NAME` or `${NAME}` (quoted or not) of a tainted name owes the anchor, and no other does.
+#
+# It is no shell parser, so it falls back to the cell rule — every grep anchored, which is closed —
+# whenever it cannot follow the stream: a `2>&1` left outside the clean captures (a file, a `<(…)`,
+# an anonymous `$(…)`, a capture that also greps), a tainted name read anywhere but a grep
+# herestring, or a quote or a capture that never closes. Each fallback has a probe in the selftest.
+# Results are published in R2_* and never through a command substitution (see the counters below).
+# Byte-wise on purpose (`LC_ALL=C`): every character it acts on is ASCII, and indexing a UTF-8
+# string costs a walk from its start.
+R2_STRICT=0; R2_G=0; R2_A=0; R2_END=-1; R2_HS=''
+R2_LITS=()
+# Regexes live in variables: written inline, `[[ =~ ]]` would hand regcomp a backslash per quoted
+# character, and inside a bracket expression that backslash is one more literal.
+R2_VAR_RE='^[$]([A-Za-z_][A-Za-z0-9_]*)$'
+R2_BRACED_RE='^[$][{]([A-Za-z_][A-Za-z0-9_]*)[}]$'
+R2_NAME_RE='(^|[[:space:];&|(`!{])([A-Za-z_][A-Za-z0-9_]*)$'
+
+# r2_close <text> <i> — the index of the `)` closing the `$(` whose `(` sits at i-1, with quotes
+# and nested parens honoured; -1 when it never closes. Published in R2_END.
+r2_close() {
+  local LC_ALL=C
+  local t="$1" i="$2" n="${#1}" c sq=0 st=P
+  R2_END=-1
+  while [ "$i" -lt "$n" ]; do
+    c="${t:i:1}"
+    if [ "$sq" -eq 1 ]; then
+      [ "$c" = "'" ] && sq=0
+      i=$((i + 1)); continue
+    fi
+    if [ "${st: -1}" = D ]; then
+      case "$c" in
+        '\') i=$((i + 2)); continue ;;
+        '"') st="${st%?}" ;;
+        '$') if [ "${t:i+1:1}" = '(' ]; then st="${st}P"; i=$((i + 2)); continue; fi ;;
+      esac
+      i=$((i + 1)); continue
+    fi
+    case "$c" in
+      '\') i=$((i + 2)); continue ;;
+      "'") sq=1 ;;
+      '"') st="${st}D" ;;
+      '(') st="${st}P" ;;
+      ')') st="${st%?}"; if [ -z "$st" ]; then R2_END="$i"; return 0; fi ;;
+    esac
+    i=$((i + 1))
+  done
+  return 0
+}
+
+# r2_grep_at <text> <i> — the grep command that starts at i: where it ends (R2_END: the first `;`,
+# `&`, `|`, newline or backtick outside quotes and parens, or a `)` closing the paren it sits in),
+# the quoted literals among its words (R2_LITS) and its herestring (R2_HS: the variable name when
+# it is exactly one variable, `?` when it is anything else, empty when there is none).
+r2_grep_at() {
+  local LC_ALL=C
+  local t="$1" i="$2" n="${#1}" c sq=0 st='' from=0 hs=-1 w
+  R2_LITS=(); R2_HS=''; R2_END="$n"
+  while [ "$i" -lt "$n" ]; do
+    c="${t:i:1}"
+    if [ "$sq" -eq 1 ]; then
+      if [ "$c" = "'" ]; then
+        sq=0; [ -z "$st" ] && R2_LITS+=("${t:from:i-from}")
+      fi
+      i=$((i + 1)); continue
+    fi
+    if [ "${st: -1}" = D ]; then
+      case "$c" in
+        '\') i=$((i + 2)); continue ;;
+        '"') st="${st%?}"; [ -z "$st" ] && R2_LITS+=("${t:from:i-from}") ;;
+        '$') if [ "${t:i+1:1}" = '(' ]; then st="${st}P"; i=$((i + 2)); continue; fi ;;
+      esac
+      i=$((i + 1)); continue
+    fi
+    case "$c" in
+      '\') i=$((i + 2)); continue ;;
+      "'") sq=1; [ -z "$st" ] && from=$((i + 1)) ;;
+      '"') [ -z "$st" ] && from=$((i + 1)); st="${st}D" ;;
+      '(') st="${st}P" ;;
+      ')') if [ -z "$st" ]; then R2_END="$i"; break; fi; st="${st%?}" ;;
+      ';'|'&'|'|'|$'\n'|'`') if [ -z "$st" ]; then R2_END="$i"; break; fi ;;
+      '<') if [ -z "$st" ] && [ "${t:i:3}" = '<<<' ]; then hs=$((i + 3)); i=$((i + 3)); continue; fi ;;
+    esac
+    i=$((i + 1))
+  done
+  [ "$hs" -ge 0 ] || return 0
+  w="${t:hs:R2_END-hs}"
+  w="${w#"${w%%[! 	]*}"}"; w="${w%%[ 	]*}"
+  case "$w" in \"*\") w="${w#\"}"; w="${w%\"}" ;; esac
+  if [[ "$w" =~ $R2_VAR_RE ]] || [[ "$w" =~ $R2_BRACED_RE ]]; then
+    R2_HS="${BASH_REMATCH[1]}"
+  else
+    R2_HS='?'
+  fi
+  return 0
+}
+
+# r2_refs <name> <text> — how many times `$name` or `${name…` occurs, the next character not one
+# that would lengthen the name.
+r2_refs() {
+  local LC_ALL=C
+  local name="$1" rest needle k=0
+  for needle in "\$$name" "\${$name"; do
+    rest="$2"
+    while [ "${rest#*"$needle"}" != "$rest" ]; do
+      rest="${rest#*"$needle"}"
+      case "${rest:0:1}" in [A-Za-z0-9_]) ;; *) k=$((k + 1)) ;; esac
+    done
+  done
+  R2_REFS="$k"
+}
+R2_REFS=0
+
+# r2_bounded <text> <i> — the `grep` at i is a command word: what precedes it starts a command
+# (or nothing does), and a blank or the end follows it.
+r2_bounded() {
+  local LC_ALL=C
+  local p=' ' f="${1:$2+4:1}"
+  [ "$2" -gt 0 ] && p="${1:$2-1:1}"
+  case "$f" in ''|' '|$'\t') ;; *) return 1 ;; esac
+  case "$p" in ' '|$'\t'|$'\n'|';'|'&'|'|'|'('|'`'|'!'|'{') return 0 ;; esac
+  return 1
+}
+
+# r2_anchored <literal> — the pattern opens with the ok prefix.
+r2_anchored() {
+  case "$1" in "$OK_ANCHOR"*) return 0 ;; esac
+  return 1
+}
+
+# rule2 <check cell> — R2_STRICT=1 asks for the cell rule; otherwise R2_G greps read a merged
+# variable and R2_A of them are anchored.
+rule2() {
+  local LC_ALL=C
+  local t="$1" n="${#1}" i=0 c sq=0 dq=0 from=0 res='' pre inner name k hsrefs=0 refs=0
+  local -a tainted=()
+  R2_STRICT=0; R2_G=0; R2_A=0
+
+  # Pass 1 — the captures. Each `$(` outside single quotes is skipped whole; the named clean ones
+  # taint their name and leave the residue.
+  while [ "$i" -lt "$n" ]; do
+    c="${t:i:1}"
+    if [ "$sq" -eq 1 ]; then
+      [ "$c" = "'" ] && sq=0
+      i=$((i + 1)); continue
+    fi
+    case "$c" in
+      '\') i=$((i + 2)); continue ;;
+      "'") [ "$dq" -eq 0 ] && sq=1 ;;
+      '"') dq=$((1 - dq)) ;;
+      '$')
+        if [ "${t:i+1:1}" = '(' ]; then
+          r2_close "$t" $((i + 2))
+          if [ "$R2_END" -lt 0 ]; then R2_STRICT=1; return 0; fi
+          inner="${t:i+2:R2_END-i-2}"
+          pre="${t:0:i}"; name=''
+          if [ "$dq" -eq 1 ]; then
+            [ "${pre%=\"}" != "$pre" ] && pre="${pre%=\"}" && name=y
+          else
+            [ "${pre%=}" != "$pre" ] && pre="${pre%=}" && name=y
+          fi
+          if [ -n "$name" ] && [[ "$pre" =~ $R2_NAME_RE ]]; then
+            name="${BASH_REMATCH[2]}"
+          else
+            name=''
+          fi
+          if [ -n "$name" ] && [ "${inner#*2>&1}" != "$inner" ] && [ "${inner#*grep}" = "$inner" ]; then
+            case " ${tainted[*]-} " in *" $name "*) ;; *) tainted+=("$name") ;; esac
+            k=$(( ${#pre} - ${#name} ))
+            res="${res}${t:from:k-from}"
+            from=$((R2_END + 1))
+          fi
+          i=$((R2_END + 1)); continue
+        fi ;;
+    esac
+    i=$((i + 1))
+  done
+  res="${res}${t:from}"
+  if [ "$sq" -eq 1 ] || [ "$dq" -eq 1 ] || [ "${res#*2>&1}" != "$res" ]; then
+    R2_STRICT=1; return 0
+  fi
+
+  # Pass 2 — every grep outside quotes, read where it stands.
+  i=0; sq=0
+  local st=''
+  while [ "$i" -lt "$n" ]; do
+    c="${t:i:1}"
+    if [ "$sq" -eq 1 ]; then
+      [ "$c" = "'" ] && sq=0
+      i=$((i + 1)); continue
+    fi
+    if [ "${st: -1}" = D ]; then
+      case "$c" in
+        '\') i=$((i + 2)); continue ;;
+        '"') st="${st%?}" ;;
+        '$') if [ "${t:i+1:1}" = '(' ]; then st="${st}P"; i=$((i + 2)); continue; fi ;;
+      esac
+      i=$((i + 1)); continue
+    fi
+    case "$c" in
+      '\') i=$((i + 2)); continue ;;
+      "'") sq=1 ;;
+      '"') st="${st}D" ;;
+      '(') st="${st}P" ;;
+      ')') st="${st%?}" ;;
+      g)
+        if [ "${t:i:4}" = grep ] && r2_bounded "$t" "$i"; then
+          r2_grep_at "$t" $((i + 4))
+          for name in ${tainted[@]+"${tainted[@]}"}; do
+            [ "$R2_HS" = "$name" ] || continue
+            R2_G=$((R2_G + 1)); hsrefs=$((hsrefs + 1))
+            for k in ${R2_LITS[@]+"${R2_LITS[@]}"}; do
+              if r2_anchored "$k"; then R2_A=$((R2_A + 1)); break; fi
+            done
+            break
+          done
+        fi ;;
+    esac
+    i=$((i + 1))
+  done
+
+  # Every read of a tainted name has to be one of those herestrings, or the stream went somewhere
+  # this reader does not follow.
+  for name in ${tainted[@]+"${tainted[@]}"}; do
+    r2_refs "$name" "$t"; refs=$((refs + R2_REFS))
+  done
+  [ "$refs" -eq "$hsrefs" ] || R2_STRICT=1
+  return 0
 }
 
 # The scanned surface: every mission checkpoint plus the template they are all born from.
@@ -309,8 +557,16 @@ scan_file() {
     case "$chk" in *'2>&1'*) ;; *) continue ;; esac
     g="$(count_occ 'grep' "$chk")"
     [ "$g" -gt 0 ] || continue
+    # Then the reader (issue #258): only a grep whose herestring reads the variable the merged
+    # output went into owes the anchor. A cell it cannot follow keeps the cell rule below.
+    rule2 "$chk"
+    if [ "$R2_STRICT" -eq 0 ]; then
+      g="$R2_G"; a="$R2_A"
+      [ "$g" -gt 0 ] || continue
+    else
+      a=$(( $(count_occ "$ANCHOR_SQ" "$chk") + $(count_occ "$ANCHOR_DQ" "$chk") ))
+    fi
     N_RULED=$((N_RULED + 1))
-    a=$(( $(count_occ "$ANCHOR_SQ" "$chk") + $(count_occ "$ANCHOR_DQ" "$chk") ))
     if [ "$a" -lt "$g" ]; then
       fail "$label: the Check of $id greps a sensor's merged output with $a of $g pattern(s) anchored on the ok prefix — FAIL prints the same text as ok, so this cell answers 'the assertion exists', never 'the assertion passed'"
       V_ANCHOR=$((V_ANCHOR + 1))
@@ -643,12 +899,20 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=64
+PROBE_FLOOR=76
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
 # then exits 0.
 fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
+
+# rule_ok <text> — the `ok    rule: ` line a probe group prints when none of its probes failed, and
+# a count of them: a mission Check reads that line, and before the count deleting it left the
+# selftest green (the sabotage pass of lote 8, 2026-10-15). Tight, like PROBE_FLOOR, and the same
+# shape as rule_end in check-todo.sh.
+RULE_LINES=0
+RULE_FLOOR=3
+rule_ok() { pass "rule: $1"; RULE_LINES=$((RULE_LINES + 1)); }
 
 probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode]
   local desc="$1" want_rc="$2" want_txt="$3" target="$4" mode="${5---check}" out rc
@@ -777,6 +1041,53 @@ selftest() {
   probe 'two anchored greps pass'             0 '1 under the anchor rule' "$two"
   probe 'one of two greps unanchored is caught' 1 '1 of 2 pattern(s) anchored' "$onlyone"
   probe 'a checkpoint that does not exist'   94 'not readable' "$box/nowhere.md"
+
+  # ── rule 2 reads the variable the merged output went into, not the whole cell (issue #258) ──
+  # A grep that reads a file never sees FAIL text, so only the greps whose herestring reads a
+  # variable captured with `2>&1` owe the anchor. Every shape the reader cannot follow falls back to
+  # the cell rule, which is closed: each rc-1 probe below would pass on the reading path, so its rc
+  # proves the fallback ran.
+  local r2_p0="$PROBES" r2_f0="$FAILS" r2
+  r2="$box/r2-file.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1); a=\$(grep -c '${OK_ANCHOR}x' <<< \"\$o\"); b=\$(grep -c foo f); echo \"\$a \$b\"\` → \`1 0\`"
+  probe 'a grep that reads a file owes no anchor beside one that reads the merged output' \
+    0 '1 under the anchor rule' "$r2"
+  r2="$box/r2-blind.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'beta' <<< \"\$o\"; grep -c '${OK_ANCHOR}x' f\` → \`0\`"
+  probe 'the unanchored grep of the merged output is caught, whatever anchor another grep carries' \
+    1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-loose.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`bash t.sh > out.log 2>&1; grep -c 'alpha' out.log\` → \`1\`"
+  probe 'a merge outside a capture falls back to the cell rule' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-leak.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1); echo \"\$o\" > f; grep -c x f\` → \`1\`"
+  probe 'a merged variable read anywhere but a grep herestring falls back' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-inner.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`n=\$(grep -c x <<< \"\$(bash t.sh 2>&1)\"); echo \"\$n\"\` → \`1\`"
+  probe 'a capture that merges and greps falls back' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-quoted.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh 'a)b' 2>&1); grep -c '${OK_ANCHOR}a (b); c' <<< \"\$o\"; grep -c 'x;y' f\` → \`1 0\`"
+  probe 'a paren or a semicolon inside quotes splits nothing' 0 '1 under the anchor rule' "$r2"
+  r2="$box/r2-clean.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh \$(echo a) 2>&1); p=\$(cat f); grep -c '${OK_ANCHOR}a' <<< \"\$o\"; grep -c x <<< \"\$p\"\` → \`1 0\`"
+  probe 'a variable captured without the merge owes no anchor, nested parens included' \
+    0 '1 under the anchor rule' "$r2"
+  r2="$box/r2-open.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1; grep -c x <<< \"\$o\"\` → \`1\`"
+  probe 'a capture that never closes falls back' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-concat.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1); p=a; grep -c '${OK_ANCHOR}x' <<< \"\$o\$p\"; grep -c y f\` → \`1 0\`"
+  probe 'a herestring that concatenates the merged variable falls back' 1 '1 of 2 pattern(s) anchored' "$r2"
+  r2="$box/r2-dq.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\"\$(bash t.sh 2>&1)\"; grep -c '${OK_ANCHOR}a' <<< \"\${o}\"; grep -c x f\` → \`1 0\`"
+  probe 'a capture inside double quotes taints its name, and a braced read is a read' 0 '1 under the anchor rule' "$r2"
+  # Without the single quotes the first `$(` opens a capture that swallows the real merge into a
+  # file, and the unanchored grep of that file passes — the fail-open the sabotage pass found.
+  r2="$box/r2-sq.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`echo ' o=\$('; bash t.sh > out 2>&1; echo ')'; grep -c x out\` → \`1\`"
+  probe 'a $( inside single quotes opens no capture' 1 '0 of 1 pattern(s) anchored' "$r2"
+  [ "$FAILS" -eq "$r2_f0" ] && \
+    rule_ok "the anchor rule reads the variable the merged output went into, not the whole cell ($((PROBES - r2_p0)) probe(s))"
   # GFM makes the leading pipe optional, so a row written without it renders like the rest of the
   # table — and a reader of `|`-led lines skipped it whole (CodeRabbit review of PR #222). The
   # control is the same line below a blank line: a paragraph, which is no row and stays out.
@@ -805,7 +1116,7 @@ selftest() {
   probe 'a bare row with fewer than five cells is caught, not skipped' 1 "row I2 has no leading '|'" "$shortbare"
   probe 'a narrow table below the checkpoint is no row of it' 0 'narrow.md: 1 row(s)' "$narrow"
   [ "$FAILS" -eq "$short_f0" ] && \
-    pass 'rule: a row with fewer than five cells is refused by name, a narrow table is not'
+    rule_ok 'a row with fewer than five cells is refused by name, a narrow table is not'
 
   # ── the floors and the doc assertions, over real trees ──
   local full="$box/full" small="$box/small" fewrows="$box/fewrows" novoid="$box/novoid"
@@ -1126,7 +1437,7 @@ selftest() {
   # already 90, and every reader of this sensor reads the rc. It stays so the rule line never
   # claims a group that just failed.
   [ "$FAILS" -eq "$red_f0" ] && \
-    pass "rule: a Check already green at HEAD is refused by --red ($((PROBES - red_p0)) probe(s))"
+    rule_ok "a Check already green at HEAD is refused by --red ($((PROBES - red_p0)) probe(s))"
   # bash 4.0-4.3 call an EMPTY array unbound under `set -u`, and the kit promises bash 4+ (issue
   # #223): `"${w[*]}"` over a Check that printed nothing killed red_norm with `w[*]: unbound
   # variable` on stderr — measured in docker bash:4.3, the verdict right only because the dead
@@ -1146,6 +1457,11 @@ selftest() {
   if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then
     printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least %d — probes were deleted\n' \
       "$PROBES" "$PROBE_FLOOR" >&2
+    fail_rc 92
+  fi
+  if [ "$RULE_LINES" -lt "$RULE_FLOOR" ]; then
+    printf 'SENSOR-BROKEN: %d rule line(s) printed, expected %d — a group failed or its line was deleted\n' \
+      "$RULE_LINES" "$RULE_FLOOR" >&2
     fail_rc 92
   fi
   if [ "$FAILS" -ne 0 ] && [ "$SELFTEST_RC" -eq 0 ]; then
