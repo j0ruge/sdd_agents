@@ -23,8 +23,23 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O `sdd preflight` não mede a forma do `TODO_FILE`, e nada avisa o alvo sem o opt-in** —
+  `bin/sdd:6340` (`preflight-test`) — a forma só é medida quando o `TEST_CMD` do alvo inclui o
+  `check-todo.sh` (o opt-in de `config/schema.md`); o do `sales_quote` não incluía, e o `TODO.md` dele
+  divergiu calado até 206 violações, achadas só quando o espelho de issues recusou. Direção: o
+  `sdd preflight` roda `check-todo.sh --check "$TODO_FILE" --allow-empty` sozinho, ou avisa. Fonte:
+  `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C8) — descoberto na faxina das
+  issues do `sales_quote` (2026-10-09)
+
 ### Contrato e configuração
 
+- [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
+  (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
+  squash, e o item fica preso para sempre; no `sales_quote` os PRs #405 e #406 entraram por squash e
+  quatro itens com `RESOLVED by` não saíam. Direção: aceitar como prova também o merge do PR que
+  carregou o hash, ou declarar que o ciclo exige merge commit. Fonte:
+  `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C7) — descoberto na triagem
+  das issues do `sales_quote` (2026-10-09)
 - [ ] **Uma âncora de caminho longo não cabe no teto de largura** — `tests/check-todo.sh:211` (`WIDTH_CAP`) —
   com o teto de 120 por linha física e a continuação recuada em 2 espaços, um `path:N` acima de 116
   caracteres não cabe: no alvo, o `prisma-cotacao-repository-query.integration.test.ts:420` tem 121, e o
