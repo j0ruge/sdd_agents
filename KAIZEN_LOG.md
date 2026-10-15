@@ -21,10 +21,11 @@ regra da decisão 5 — a M1 previa no máximo 1, e o protótipo do planner tinh
 artefato. O `sales_quote` não se moveu: das 98, 48 leem só a linha de resumo do runner (fora pela
 decisão 5), 29 têm um grep de esperado `0` como o da I8 e 21 são outras formas. A linha de 125
 caracteres passa. Cinco linhas `ok` novas (as regras do I1, do I2 e do I3 e os dois pares do
-`/sdd-plan`), 54 probes novos nos selftests e 78 sabotagens, todas vermelhas no fim; 10 sobreviveram
+`/sdd-plan`), 59 probes novos nos selftests e 89 sabotagens, todas vermelhas no fim; 10 sobreviveram
 primeiro e viraram probe ou apertaram um fixture. A revisão final da branch reproduziu duas falhas
 abertas da regra 2 (um nome lido por indireção e um segundo padrão no mesmo `grep`) e o Codex no PR
-#267 uma terceira (`grep -F`, com o `-v` da mesma família), todas fechadas antes do merge.
+#267 uma terceira (`grep -F`, com o `-v` da mesma família); a 2ª rodada dele, uma quarta no I3 (a
+isenção de largura aceitava um URL e prosa separada por TAB), todas fechadas antes do merge.
 
 **Achados:** três itens novos no `TODO.md`, catraca 15 → 18: a prosa congelada mais estrita que os
 sensores (decisão 7), o grep de esperado `0` na saída mesclada de um build e a mescla escrita `&>`,
