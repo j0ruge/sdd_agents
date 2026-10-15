@@ -122,7 +122,9 @@
 # rule too: the three read the stream with no rule at all until the final review of lote 8.
 # One grep is anchored by r2_grep_anchored, on both paths: an anchored quoted pattern, as many of
 # them as `-e`/`--regexp` it names, no `-f`, no unquoted pattern glued to `-e`, and no `-F` or `-v`,
-# which turn the caret into a literal or count every other line (Codex on PR #267). Its words are read
+# which turn the caret into a literal or count every other line (Codex on PR #267), and no ANSI-C quote
+# `$'…'`, whose `\n` hands grep a second pattern (the same PR, third round; an escaped `\$'` is
+# refused with it, the safe side). Its words are read
 # past the herestring, since grep takes options anywhere; the herestring's own operand is skipped.
 # A quoted word that is no pattern (the file it reads) owes nothing, so a quoted FILE named like an
 # anchor beside a blind `-e` would pass — no world but a contrived one, and no probe.
@@ -249,7 +251,7 @@ count_occ() {
 # Results are published in R2_* and never through a command substitution (see the counters below).
 # Byte-wise on purpose (`LC_ALL=C`): every character it acts on is ASCII, and indexing a UTF-8
 # string costs a walk from its start.
-R2_STRICT=0; R2_G=0; R2_A=0; R2_AA=0; R2_HSREFS=0; R2_END=-1; R2_HS=''; R2_BARE=''
+R2_STRICT=0; R2_G=0; R2_A=0; R2_AA=0; R2_HSREFS=0; R2_END=-1; R2_HS=''; R2_BARE=''; R2_ANSI=0
 R2_LITS=(); R2_TAINTED=()
 # Regexes live in variables: written inline, `[[ =~ ]]` would hand regcomp a backslash per quoted
 # character, and inside a bracket expression that backslash is one more literal.
@@ -294,12 +296,13 @@ r2_close() {
 # `&`, `|`, newline or backtick outside quotes and parens, or a `)` closing the paren it sits in),
 # the quoted literals among its words (R2_LITS) and the rest of those words with each quoted part
 # read as a blank (R2_BARE) — every word but the herestring's operand, since grep takes its options
-# and its pattern anywhere — and its herestring (R2_HS: the variable name when it is exactly one
-# variable, `?` when it is anything else, empty when there is none).
+# and its pattern anywhere —, whether one of those words holds an ANSI-C quote `$'…'` (R2_ANSI), and
+# its herestring (R2_HS: the variable name when it is exactly one variable, `?` when it is anything
+# else, empty when there is none).
 r2_grep_at() {
   local LC_ALL=C
   local t="$1" i="$2" n="${#1}" c sq=0 st='' from=0 hs=-1 hw=0 hseen=0 w
-  R2_LITS=(); R2_HS=''; R2_END="$n"; R2_BARE=''
+  R2_LITS=(); R2_HS=''; R2_END="$n"; R2_BARE=''; R2_ANSI=0
   while [ "$i" -lt "$n" ]; do
     c="${t:i:1}"
     if [ "$sq" -eq 1 ]; then
@@ -327,7 +330,8 @@ r2_grep_at() {
     fi
     case "$c" in
       '\') i=$((i + 2)); continue ;;
-      "'") sq=1; [ -z "$st" ] && from=$((i + 1)) ;;
+      "'") sq=1; [ -z "$st" ] && from=$((i + 1))
+           [ "$hw" -ne 1 ] && [ "${t:i-1:1}" = '$' ] && R2_ANSI=1 ;;
       '"') [ -z "$st" ] && from=$((i + 1)); st="${st}D" ;;
       '(') st="${st}P" ;;
       ')') if [ -z "$st" ]; then R2_END="$i"; break; fi; st="${st%?}" ;;
@@ -393,12 +397,15 @@ r2_anchored() {
 # r2_grep_anchored — the grep r2_grep_at just read is anchored: a quoted word before its herestring
 # opens with an anchor, and as many do as it names patterns with `-e`/`--regexp`; a pattern behind
 # `-f`, or glued to `-e` with no quote, is never anchored, nor is any pattern of a grep that reads its
-# caret as a literal (`-F`) or counts the other lines (`-v`). A quoted word that is no pattern (the file
+# caret as a literal (`-F`) or counts the other lines (`-v`), nor of one with an ANSI-C quote among its
+# words: `$'…\n…'` hands grep two patterns, and the anchor of the first rode for the second (Codex on
+# PR #267, third round). A quoted word that is no pattern (the file
 # a grep reads) needs no anchor. One definition for both paths: the final review of lote 8 measured
 # a second pattern riding on the first one's anchor in each.
 r2_grep_anchored() {
   local k w e=0 a=0
   local -a ws
+  [ "$R2_ANSI" -eq 0 ] || return 1
   for k in ${R2_LITS[@]+"${R2_LITS[@]}"}; do
     if r2_anchored "$k"; then a=$((a + 1)); fi
   done
@@ -993,7 +1000,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=113
+PROBE_FLOOR=118
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1240,6 +1247,33 @@ selftest() {
   r2="$box/r2-invert-long.md"; cp_head "$r2"
   cp_row "$r2" I1 "\`bash t.sh > out 2>&1; grep --invert-match -c '${OK_ANCHOR}x' out\` → \`3\`"
   probe 'the cell rule refuses --invert-match too' 1 '0 of 1 pattern(s) anchored' "$r2"
+  # An ANSI-C quote can hold a newline, and grep reads one pattern per line of its pattern (Codex on
+  # PR #267, third round): the anchor of the first line rode for the second.
+  r2="$box/r2-ansi.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep -c \$'^ ✓ pass\\ncaso' <<< \"\$o\"\` → \`0\`"
+  probe 'an ANSI-C quoted pattern anchors nothing' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-ansi-glued.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep -c '^ ✓ pass'\$'\\n''caso' <<< \"\$o\"\` → \`0\`"
+  probe 'an ANSI-C piece glued to an anchored pattern anchors nothing' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-ansi-cell.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`npm test > out.log 2>&1; grep -c \$'^ ✓ a\\ncaso' out.log\` → \`1\`"
+  probe 'the cell rule refuses an ANSI-C quoted pattern too' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-ansi-hs.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep -c '^ ✓ pass' <<< \$'\\n'\"\$o\"\` → \`1\`"
+  probe 'an ANSI-C quote in the herestring operand is no pattern' 0 '1 under the anchor rule' "$r2"
+  # The flag is per grep: a refused ANSI-C row must not refuse the anchored row after it. Absence,
+  # with I1's refusal as the witness that the needle is spelt right.
+  r2="$box/r2-ansi-reset.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep -c \$'^ ✓ a\\ncaso' <<< \"\$o\"\` → \`0\`"
+  cp_row "$r2" I2 "\`o=\$(npm test 2>&1); grep -c '^ ✓ b' <<< \"\$o\"\` → \`1\`"
+  PROBES=$((PROBES + 1)); local out; out="$("$SELF_PATH" --check "$r2" 2>&1)"
+  case "$out" in
+    *'the Check of I2 '*|'') printf 'SENSOR-BROKEN: an ANSI-C row leaks its refusal into the next row\n%s\n' "$out" >&2
+                            FAILS=$((FAILS + 1)); fail_rc 91 ;;
+    *'the Check of I1 '*) ;;
+    *) printf 'SENSOR-BROKEN: an ANSI-C row next to an anchored one is not refused\n%s\n' "$out" >&2
+       FAILS=$((FAILS + 1)); fail_rc 91 ;;
+  esac
   r2="$box/r2-two-anchored.md"; cp_head "$r2"
   cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep -c -e '^ ✓ a' -e '^ ✓ b' <<< \"\$o\"\` → \`2\`"
   probe 'every -e anchored passes' 0 '1 under the anchor rule' "$r2"
