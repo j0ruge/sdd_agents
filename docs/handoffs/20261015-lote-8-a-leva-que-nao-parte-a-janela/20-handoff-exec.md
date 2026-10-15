@@ -36,6 +36,7 @@ Próximo: o PR, pelas pendências 1 a 3 do `00-missao.md`, com o carimbo depois 
 - `fcb8872` — I4: o relay do `/sdd-plan` descarta a devolução que um recado superou (#264).
 - `708b10c` — I5: a receita do worktree do `/sdd-plan` corta a branch com `--no-track`.
 - `a5d70e7` — I6: `RESOLVED by` nos 5 itens, três itens novos (catraca 15 → 18), a entrada do `KAIZEN_LOG.md` e a gaveta F3.
+- `a576a27` — PR #267, Codex: `-F`/`--fixed-strings` e `-v`/`--invert-match` nunca ancoram, nos dois caminhos.
 - `fd124bc` — revisão final: a regra 2 cai para a regra da célula com `${!v}`, nameref ou `eval`, e um grep só ancora com uma âncora por padrão que nomeia (`-e`, `--regexp`; nunca `-f`), nos dois caminhos.
 
 Medido (os dois sensores reais, o da `fec0cca` e o desta branch): os 36 checkpoints dos alvos recusam
@@ -89,7 +90,7 @@ O PR, no worktree, nesta ordem (pendências 1 a 3 do `00-missao.md`):
 - A regra 2 segue cega para `&>`, `>&` e `&>>` (falha aberta anterior ao lote, medida nesta sessão): registrada, não consertada.
 - A prosa congelada (`templates/`, `agents/`) segue mais estrita que os sensores, por decisão 7.
 - O caminho entre o `^` e a marca só lê brancos (com ou sem `*`): `'^[[:space:]]*✓ '` é recusada, fechado e declarado no cabeçalho.
-- `grep -v` e `grep -F` com padrão ancorado passam como ancorados: declarados no cabeçalho, sem conserto.
+- `grep -v` e `grep -F` com padrão ancorado passavam como ancorados: declarados no cabeçalho até o Codex no PR #267 reproduzir o `-F`; recusados em `a576a27`.
 
 ## Achados fora de escopo
 
