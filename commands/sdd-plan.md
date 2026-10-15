@@ -100,6 +100,13 @@ answers for the human, and it never paraphrases either side.
   Hold such a message and send it WITH the human's next answer. Measured in the grill of
   `20261006-lote-5-o-que-o-lote-4-deixou`: an issue number sent alone brought questions 4 and 5 back
   with the recommended option of question 5 swapped, after the human had answered the first asking.
+- **A message can land after the hand-back.** Read what `SendMessage` returns. When the planner was
+  still running, the message is queued into the turn in progress, and the next hand-back already
+  answers it. When the send instead resumed a planner that had already handed back,
+  the hand-back you hold is superseded: never show the superseded hand-back to the human — wait
+  for the new one and relay only that. Measured in the grill of the 0.4.0 of `lighthouse_project`
+  (2026-10-14): a message sent while the relay believed the planner was still running came back
+  `Resuming agent`, and question 2 returned revised, with its recommendation inverted.
 - **Long work between two questions:** before it — prototyping fixes with parallel subagents, for
   instance — the planner first hands back a ONE-line notice of what it is about to do and how long
   it expects that to take; the relay shows it to the human, and only then does the planner start.

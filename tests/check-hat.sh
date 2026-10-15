@@ -457,6 +457,14 @@ command_relay_probes() {
   else
     fail "command: /sdd-plan lets a message that answers nothing resume the planner, or relays an answer by its position"
   fi
+  # Issue #264: a message sent to a planner that had already handed back resumes it, and its next
+  # hand-back supersedes the one the relay holds. The relay waits for that one and shows only it.
+  if grep -qF 'resumed a planner that had already handed back' <<< "$relay" \
+     && grep -qF 'never show the superseded hand-back' <<< "$relay"; then
+    pass "command: /sdd-plan waits for the new hand-back when a relay message resumed a planner that had already answered"
+  else
+    fail "command: /sdd-plan lets the relay show a hand-back that a resumed planner superseded"
+  fi
   # Item (i) of 20261012-a-rota-da-qa: 30 min announced, ~2h55 real in L4, and the human asked midway
   # whether all was well. The relay holds the planner to a re-estimate at twice the announced time.
   if grep -qF 'twice the estimate' <<< "$relay" && grep -qF 'a new estimate' <<< "$relay"; then
