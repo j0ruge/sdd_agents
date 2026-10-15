@@ -41,6 +41,7 @@ Próximo: o PR, pelas pendências 1 a 3 do `00-missao.md`, com o carimbo depois 
 - `44339ab` — PR #267, 3ª rodada do Codex: a regra 2 recusa o grep com um padrão em aspas ANSI-C (`$'…\n…'` são dois padrões), nos dois caminhos.
 - `67df1c5` — PR #267, 4ª rodada do Codex: a regra 2 lê opção longa por prefixo (`--fixed`, `--inv`, `--reg=`) e lê `egrep`/`fgrep`.
 - (este commit) — PR #267, 5ª rodada do Codex: as três âncoras do `TODO.md` em `tests/check-checkpoint.sh` voltam ao alvo (650/651/655 → 672/673/677).
+- (este commit) — PR #267, 6ª rodada do Codex: o argumento de opção contado como padrão vai para o `TODO.md` (catraca 18 → 19), por decisão do humano.
 - `fd124bc` — revisão final: a regra 2 cai para a regra da célula com `${!v}`, nameref ou `eval`, e um grep só ancora com uma âncora por padrão que nomeia (`-e`, `--regexp`; nunca `-f`), nos dois caminhos.
 
 Medido (os dois sensores reais, o da `fec0cca` e o desta branch): os 36 checkpoints dos alvos recusam
@@ -83,8 +84,9 @@ O PR, no worktree, nesta ordem (pendências 1 a 3 do `00-missao.md`):
   decisão 5; a I8 virou o item "A regra 2 recusa o grep de esperado `0`…" no `TODO.md`. Se o humano
   preferir consertar nesta leva, é só `tests/` — mas é uma regra nova, e a decisão é dele.
 - **O Check do I6 lia `todo-findings 16`** e passou a ler 18, pelos dois achados do EXEC (princípio 5).
-  O chore pós-merge desce a catraca de 18 para 13 (não 16 → 11), fecha #249, #257, #258 e #264 e
-  abre **quatro** issues: o gêmeo do `--no-track`, a prosa congelada, o grep de esperado `0` e a mescla `&>`.
+  O chore pós-merge desce a catraca de 19 para 14 (não 16 → 11), fecha #249, #257, #258 e #264 e
+  abre **cinco** issues: o gêmeo do `--no-track`, a prosa congelada, o grep de esperado `0`, a mescla `&>`
+  e o papel das palavras do grep (6ª rodada do Codex, registrado por decisão do humano).
 - **Revisão final da branch:** 0 Critical, 2 Important (consertados em `fd124bc`), 4 Minor. Três Minor ficaram
   adiados e estão no `checkpoint-notas.md` (`Final: minor (deferred)`); o `-v` ficou declarado no cabeçalho.
 
@@ -102,5 +104,6 @@ O PR, no worktree, nesta ordem (pendências 1 a 3 do `00-missao.md`):
 ## Achados fora de escopo
 
 - A regra 2 só vê a mescla escrita `2>&1` → `TODO.md`, seção `<!-- sdd:open -->` › Sensores que faltam
+- A regra 2 não sabe o papel de cada palavra do grep (6ª rodada do Codex no PR #267) → `TODO.md`, seção `<!-- sdd:open -->` › Sensores que faltam
 - A regra 2 recusa o grep de esperado `0` na saída mesclada de um build → `TODO.md`, seção `<!-- sdd:open -->` › Contrato e configuração
 - A prosa congelada mais estrita que os sensores (decisão 7) → `TODO.md`, seção `<!-- sdd:open -->` › Contrato e configuração

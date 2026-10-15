@@ -46,6 +46,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   lê toda grafia de mescla da stderr na stdout, com um probe por grafia.
   — descoberto pelo `sdd-executor` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
+- [ ] **A regra 2 do check-checkpoint não sabe o papel de cada palavra do grep** — `tests/check-checkpoint.sh:412`
+  (`r2_grep_anchored`) — toda palavra entre aspas fora do herestring conta como padrão: um argumento de opção
+  (`grep --label='^  ok    x' -H -c 'caso' <<< "$o"` sai "none blind" e imprime `^  ok    x:1` com FAIL ou
+  com ok) ou um FILE com nome de âncora ao lado de um `-e` cego passam. Falha aberta; a do FILE já estava
+  declarada no cabeçalho. Direção: ler o argv do grep como o getopt_long (opções com argumento, posição do
+  padrão, arquivos) e cobrar a âncora só do padrão.
+  — descoberto pelo `codex` no PR #267, missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`

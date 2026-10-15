@@ -131,8 +131,8 @@
 # (`--fixed`, `--inv`, `--reg=`, measured on GNU grep 3.11; the fourth round), and an ambiguous
 # prefix is refused with them, since grep refuses it too. Its words are read
 # past the herestring, since grep takes options anywhere; the herestring's own operand is skipped.
-# A quoted word that is no pattern (the file it reads) owes nothing, so a quoted FILE named like an
-# anchor beside a blind `-e` would pass — no world but a contrived one, and no probe.
+# FAIL-OPEN, in TODO.md: a quoted word that is no pattern counts as one, so a FILE beside a blind `-e`
+# or an option's argument (`--label='^  ok    x'`, Codex on PR #267) named like an anchor passes.
 #
 # DECLARED LIMITS of the pass mark (issue #249, lote 8). Only U+2713 counts, the mark the two
 # measured runners print (see PASS_MARK); `✔` (U+2714) and every fail mark do not. A runner that

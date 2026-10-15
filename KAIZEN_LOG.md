@@ -31,9 +31,11 @@ em aspas ANSI-C, cujo `\n` vira um segundo padrão sem âncora); a 4ª, uma sext
 fechadas antes do merge. Três rodadas na mesma vizinhança pediram estado, não remendo: o leitor
 passou a modelar a regra de abreviação do getopt_long.
 
-**Achados:** três itens novos no `TODO.md`, catraca 15 → 18: a prosa congelada mais estrita que os
-sensores (decisão 7), o grep de esperado `0` na saída mesclada de um build e a mescla escrita `&>`,
-que a regra 2 não vê (falha aberta, anterior ao lote).
+**Achados:** quatro itens novos no `TODO.md`, catraca 15 → 19: a prosa congelada mais estrita que os
+sensores (decisão 7), o grep de esperado `0` na saída mesclada de um build, a mescla escrita `&>`,
+que a regra 2 não vê (falha aberta, anterior ao lote), e o papel de cada palavra do grep — a 6ª
+rodada do Codex no PR #267 achou um argumento de opção contado como padrão, e o humano escolheu
+registrar em vez de escrever o parser de argv dentro do PR.
 
 ---
 
