@@ -40,6 +40,7 @@ Próximo: o PR, pelas pendências 1 a 3 do `00-missao.md`, com o carimbo depois 
 - `5c53e33` — PR #267, 2ª rodada do Codex: a isenção de largura do I3 só aceita `path:N` em ASCII imprimível sem `:`.
 - `44339ab` — PR #267, 3ª rodada do Codex: a regra 2 recusa o grep com um padrão em aspas ANSI-C (`$'…\n…'` são dois padrões), nos dois caminhos.
 - `67df1c5` — PR #267, 4ª rodada do Codex: a regra 2 lê opção longa por prefixo (`--fixed`, `--inv`, `--reg=`) e lê `egrep`/`fgrep`.
+- (este commit) — PR #267, 5ª rodada do Codex: as três âncoras do `TODO.md` em `tests/check-checkpoint.sh` voltam ao alvo (650/651/655 → 672/673/677).
 - `fd124bc` — revisão final: a regra 2 cai para a regra da célula com `${!v}`, nameref ou `eval`, e um grep só ancora com uma âncora por padrão que nomeia (`-e`, `--regexp`; nunca `-f`), nos dois caminhos.
 
 Medido (os dois sensores reais, o da `fec0cca` e o desta branch): os 36 checkpoints dos alvos recusam
