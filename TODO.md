@@ -85,6 +85,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
 
+- [ ] **A regra 2 reprova a Check de repo-alvo ancorada no `✓` do vitest** — `tests/check-checkpoint.sh:313`
+  (`ANCHOR_SQ`) — a regra só aceita o `^  ok    ` do kit, mas o caso vermelho do vitest imprime `×`, então
+  `2>&1` + `grep -c '^ ✓ …'` já separa verde de vermelho: as 10 Checks da LH-4 do `lighthouse_project`
+  reprovam no `--check` (medido em 2026-10-13). O contorno (ler só a stdout, `2>/dev/null`) funciona, mas
+  só se acha tropeçando. Direção: aceitar âncoras de verde conhecidas (vitest `^ ✓ `) ou documentar a forma
+  só-stdout no `templates/checkpoint.md` e no `agents/sdd-planner.md`.
+  Fonte: `lighthouse_project/docs/handoffs/20261013-amep-alignment-review/checkpoint-notas.md` —
+  descoberto pelo planejador (Opus 5.5) na missão `20261013-amep-alignment-review` (2026-10-13)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
