@@ -108,10 +108,13 @@
 # but it is correct by the redirection it omits rather than by the anchor, so a later edit adding
 # `2>&1` for convenience turns it blind and this file catches it only from that moment on.
 #
-# NOT measured either: a grep whose pattern is built from a variable, or one spelled `egrep` /
-# `rg` / `awk /.../`. The rule is keyed on the shape people actually write in a checkpoint cell,
-# which is a literal single-quoted pattern handed to `grep`. Widening it needs a shell parser, and
-# every generalisation tried on the neighbouring sensors fired on legitimate lines first.
+# NOT measured either: a grep whose pattern is built from a variable, or one spelled `rg` /
+# `awk /.../`. `egrep` is read as `grep -E` and `fgrep` as `grep -F`, never anchored: the cell rule
+# counted both by substring while the reader saw neither, and refused an anchored `egrep` the base
+# accepted (Codex on PR #267, fourth round). The rule is keyed on the shape people actually write
+# in a checkpoint cell, which is a literal single-quoted pattern handed to `grep`. Widening it
+# needs a shell parser, and every generalisation tried on the neighbouring sensors fired on
+# legitimate lines first.
 #
 # DECLARED LIMITS of rule 2's reader (issue #258), both CLOSED: a merged variable assigned again in
 # the same cell stays tainted, so a grep of the new value still owes the anchor; and a herestring
@@ -124,7 +127,9 @@
 # them as `-e`/`--regexp` it names, no `-f`, no unquoted pattern glued to `-e`, and no `-F` or `-v`,
 # which turn the caret into a literal or count every other line (Codex on PR #267), and no ANSI-C quote
 # `$'…'`, whose `\n` hands grep a second pattern (the same PR, third round; an escaped `\$'` is
-# refused with it, the safe side). Its words are read
+# refused with it, the safe side). A long option counts by grep's own rule, any unambiguous prefix
+# (`--fixed`, `--inv`, `--reg=`, measured on GNU grep 3.11; the fourth round), and an ambiguous
+# prefix is refused with them, since grep refuses it too. Its words are read
 # past the herestring, since grep takes options anywhere; the herestring's own operand is skipped.
 # A quoted word that is no pattern (the file it reads) owes nothing, so a quoted FILE named like an
 # anchor beside a blind `-e` would pass — no world but a contrived one, and no probe.
@@ -368,11 +373,11 @@ r2_refs() {
 }
 R2_REFS=0
 
-# r2_bounded <text> <i> — the `grep` at i is a command word: what precedes it starts a command
-# (or nothing does), and a blank or the end follows it.
+# r2_bounded <text> <i> [len] — the `grep` at i (len characters, 4 unless `egrep`/`fgrep`) is a
+# command word: what precedes it starts a command (or nothing does), and a blank or the end follows it.
 r2_bounded() {
   local LC_ALL=C
-  local p=' ' f="${1:$2+4:1}"
+  local p=' ' f="${1:$2+${3:-4}:1}"
   [ "$2" -gt 0 ] && p="${1:$2-1:1}"
   case "$f" in ''|' '|$'\t') ;; *) return 1 ;; esac
   case "$p" in ' '|$'\t'|$'\n'|';'|'&'|'|'|'('|'`'|'!'|'{') return 0 ;; esac
@@ -399,11 +404,13 @@ r2_anchored() {
 # `-f`, or glued to `-e` with no quote, is never anchored, nor is any pattern of a grep that reads its
 # caret as a literal (`-F`) or counts the other lines (`-v`), nor of one with an ANSI-C quote among its
 # words: `$'…\n…'` hands grep two patterns, and the anchor of the first rode for the second (Codex on
-# PR #267, third round). A quoted word that is no pattern (the file
+# PR #267, third round). A long option is read as GNU grep reads it, by prefix: a prefix of
+# `fixed-strings`, `invert-match` or `file` is that option, a prefix of `regexp` names a pattern, and
+# `--` alone ends the options (the same PR, fourth round). A quoted word that is no pattern (the file
 # a grep reads) needs no anchor. One definition for both paths: the final review of lote 8 measured
 # a second pattern riding on the first one's anchor in each.
 r2_grep_anchored() {
-  local k w e=0 a=0
+  local k w o e=0 a=0
   local -a ws
   [ "$R2_ANSI" -eq 0 ] || return 1
   for k in ${R2_LITS[@]+"${R2_LITS[@]}"}; do
@@ -412,9 +419,12 @@ r2_grep_anchored() {
   read -ra ws <<< "$R2_BARE"
   for w in ${ws[@]+"${ws[@]}"}; do
     case "$w" in
-      --regexp|--regexp=*) e=$((e + 1)) ;;
-      --file|--file=*|--fixed-strings|--invert-match) return 1 ;;
-      --*) ;;
+      --*)
+        o="${w#--}"; o="${o%%=*}"
+        for k in fixed-strings invert-match file; do
+          [ "${k#"$o"}" = "$k" ] || return 1
+        done
+        k=regexp; [ "${k#"$o"}" = "$k" ] || e=$((e + 1)) ;;
       -*[fFv]*) return 1 ;;
       -*e) e=$((e + 1)) ;;
       -*e*) return 1 ;;
@@ -495,12 +505,13 @@ r2_captures() {
   return 0
 }
 
-# r2_greps <text> — pass 2, every grep outside quotes, read where it stands: R2_AA counts the anchored
+# r2_greps <text> — pass 2, every grep outside quotes — `egrep` and `fgrep` too, the second never
+# anchored —, read where it stands: R2_AA counts the anchored
 # ones, R2_G those whose herestring is a tainted name, R2_A the anchored among these, R2_HSREFS the
 # tainted reads they account for.
 r2_greps() {
   local LC_ALL=C
-  local t="$1" n="${#1}" i=0 c sq=0 st='' name ok
+  local t="$1" n="${#1}" i=0 c sq=0 st='' name ok k
   while [ "$i" -lt "$n" ]; do
     c="${t:i:1}"
     if [ "$sq" -eq 1 ]; then
@@ -521,10 +532,13 @@ r2_greps() {
       '"') st="${st}D" ;;
       '(') st="${st}P" ;;
       ')') st="${st%?}" ;;
-      g)
-        if [ "${t:i:4}" = grep ] && r2_bounded "$t" "$i"; then
-          r2_grep_at "$t" $((i + 4))
-          ok=0; if r2_grep_anchored; then ok=1; R2_AA=$((R2_AA + 1)); fi
+      g|e|f)
+        k=0
+        if [ "${t:i:4}" = grep ]; then k=4
+        elif [ "${t:i:5}" = egrep ] || [ "${t:i:5}" = fgrep ]; then k=5; fi
+        if [ "$k" -gt 0 ] && r2_bounded "$t" "$i" "$k"; then
+          r2_grep_at "$t" $((i + k))
+          ok=0; if [ "$c" != f ] && r2_grep_anchored; then ok=1; R2_AA=$((R2_AA + 1)); fi
           for name in ${R2_TAINTED[@]+"${R2_TAINTED[@]}"}; do
             [ "$R2_HS" = "$name" ] || continue
             R2_G=$((R2_G + 1)); R2_HSREFS=$((R2_HSREFS + 1)); R2_A=$((R2_A + ok))
@@ -1000,7 +1014,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=118
+PROBE_FLOOR=128
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1247,6 +1261,42 @@ selftest() {
   r2="$box/r2-invert-long.md"; cp_head "$r2"
   cp_row "$r2" I1 "\`bash t.sh > out 2>&1; grep --invert-match -c '${OK_ANCHOR}x' out\` → \`3\`"
   probe 'the cell rule refuses --invert-match too' 1 '0 of 1 pattern(s) anchored' "$r2"
+  # GNU grep takes an unambiguous PREFIX of a long option as the option (Codex on PR #267, fourth
+  # round, measured on grep 3.11): `--fixed` is `--fixed-strings`, `--inv` is `--invert-match`.
+  r2="$box/r2-fixed-abbr.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep --fixed -c '^ ✓ caso' <<< \"\$o\"\` → \`0\`"
+  probe 'an abbreviated --fixed-strings anchors nothing' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-invert-abbr.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1); grep --inv -c '${OK_ANCHOR}x' <<< \"\$o\"\` → \`3\`"
+  probe 'an abbreviated --invert-match anchors nothing' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-file-abbr.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1); grep --file=pats.txt -c '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a --file= pattern rides on no anchor' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-regexp-abbr.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep -c --reg='caso' -e '^ ✓ a' <<< \"\$o\"\` → \`1\`"
+  probe 'an abbreviated --regexp counts as a pattern' 1 '0 of 1 pattern(s) anchored' "$r2"
+  # The controls: a long option that is no prefix of those four, and the `--` that ends the options
+  # (7 real Check cells write it), still let an anchored pattern anchor.
+  r2="$box/r2-long-count.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep --count '^ ✓ pass' <<< \"\$o\"\` → \`1\`"
+  probe 'a harmless long option leaves the anchor alone' 0 '1 under the anchor rule' "$r2"
+  r2="$box/r2-dashdash.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep -c -- '^ ✓ pass' <<< \"\$o\"\` → \`1\`"
+  probe 'the -- that ends the options leaves the anchor alone' 0 '1 under the anchor rule' "$r2"
+  # egrep is grep -E and fgrep is grep -F: read like the grep they spell, not left to the substring
+  # count of the cell rule, which counted them while the reader did not (Codex, same round).
+  r2="$box/r2-egrep.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); egrep -c '^ ✓ pass' <<< \"\$o\"\` → \`1\`"
+  probe 'an anchored egrep anchors' 0 '1 under the anchor rule' "$r2"
+  r2="$box/r2-egrep-blind.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); egrep -c 'caso' <<< \"\$o\"\` → \`1\`"
+  probe 'a blind egrep is refused' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-fgrep.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); fgrep -c '^ ✓ pass' <<< \"\$o\"\` → \`0\`"
+  probe 'an fgrep anchors nothing' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-egrep-cell.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`npm test > out.log 2>&1; egrep -c '^ ✓ a' out.log\` → \`1\`"
+  probe 'the cell rule reads an anchored egrep as anchored' 0 '1 under the anchor rule' "$r2"
   # An ANSI-C quote can hold a newline, and grep reads one pattern per line of its pattern (Codex on
   # PR #267, third round): the anchor of the first line rode for the second.
   r2="$box/r2-ansi.md"; cp_head "$r2"
