@@ -85,6 +85,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o boot da rodada lista o commit que não fecha `R<n>`, e o platô compara a classe do achado, não só a letra.
   — descoberto por `sdd-reviewer` na missão `20261013-amep-alignment-review` (2026-10-14)
 
+- [ ] **Recado ao planner rodando chega depois da devolução** — `commands/sdd-plan.md:97` (`SendMessage`) —
+  a regra "nada retoma o planner com pergunta pendente" supõe que o relay sabe que há pergunta: no grill da 0.4.0
+  do `lighthouse_project`, um recado mandado com o planner rodando voltou `Resuming agent`, e não `queued`, porque
+  ele já tinha devolvido a Pergunta 2, que voltou revista e com a recomendação invertida. Falha aberta: o relay
+  mostraria a versão velha ao humano. Direção: ler o retorno do `SendMessage`; com `Resuming`, esperar a nova
+  devolução e descartar a anterior sem mostrá-la.
+  Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
+
 ### Saída humana e cosmética
 
 - [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1839` (`gate-qa-e2e`) —
@@ -105,6 +113,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Comentário e registro
 
 ### Idioma
+
+- [ ] **A devolução do planner ao relay não tem regra de idioma** — `agents/sdd-planner.md:273` (`OUTPUT_LANG`) —
+  o `## Language` cobre só os três artefatos e o parágrafo do relay (`:67`) não fala de idioma; só o
+  `commands/sdd-plan.md:89` pede `OUTPUT_LANG`. No grill da 0.4.0 do `lighthouse_project` (`pt-BR`), a 1ª
+  devolução veio inteira em inglês apesar do prompt de delegação em pt-BR, e outra abriu em inglês depois de um
+  lembrete: o relay teria de traduzir, e traduzir é parafrasear. Causa não verificada. Direção: o `## Language`
+  estende o `OUTPUT_LANG` às devoluções, com um caso que o meça.
+  Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
 
 ### Custo e escala
 
