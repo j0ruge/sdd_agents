@@ -32,9 +32,12 @@ writes the artifacts from memory, and their headings are the contract the gates 
    neither. So, before writing any artifact:
    - create the worktree beside this checkout, on the branch the mission will declare in
      `branch:`, cut from the remote's `DEFAULT_BRANCH` — `git fetch`, then
-     `git worktree add ../<repo>-<slug> -b <branch> origin/<DEFAULT_BRANCH>` — or reuse it, when
-     it already exists on that branch. Never `git pull` here to freshen the base: a fetch moves no
-     `HEAD`, a pull moves the very one the kit guard compares;
+     `git worktree add ../<repo>-<slug> --no-track -b <branch> origin/<DEFAULT_BRANCH>` — or
+     reuse it, when it already exists on that branch. Never `git pull` here to freshen the base: a
+     fetch moves no `HEAD`, a pull moves the very one the kit guard compares. `--no-track` keeps the
+     mission branch off `origin/<DEFAULT_BRANCH>`: without it, a `git pull` in the worktree brings
+     the base in silently and `git status` counts ahead/behind against it (measured with git
+     2.43.0, 2026-10-15);
    - take the worktree as the repository root for every step below: the config, `HANDOFF_DIR`,
      the artifacts, `sdd why` and `sdd approve` all run from there, and this checkout stays on
      `DEFAULT_BRANCH`, clean. Inside it, `health`, `preflight` and `install` run as `./bin/sdd`:

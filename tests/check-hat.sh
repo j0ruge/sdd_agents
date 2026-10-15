@@ -564,6 +564,14 @@ command_worktree_probes() {
   else
     fail "command: /sdd-plan no longer moves a mission of the kit sdd runs from into a linked worktree before writing it (the PATH check, the worktree, the root switch, ./bin/sdd inside it, or the line to the human)"
   fi
+  # Its own pair, so a red names this flag: without it the branch tracks origin/<DEFAULT_BRANCH>, a
+  # `git pull` in the worktree brings the base in silently, and `git status` counts ahead/behind
+  # against it (measured with git 2.43.0 in the lote 8 worktree, 2026-10-15).
+  if grep -qF 'git worktree add ../<repo>-<slug> --no-track -b <branch> origin/<DEFAULT_BRANCH>' <<< "$sec"; then
+    pass "command: /sdd-plan cuts the mission branch with --no-track, so it never tracks the base"
+  else
+    fail "command: /sdd-plan cuts the mission branch without --no-track, and it tracks the base"
+  fi
 }
 
 # The same step tells the human what comes back BEFORE the worktree goes (retro of batch 5; Codex on
