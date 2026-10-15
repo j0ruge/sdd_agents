@@ -112,9 +112,6 @@
 # `rg` / `awk /.../`. The rule is keyed on the shape people actually write in a checkpoint cell,
 # which is a literal single-quoted pattern handed to `grep`. Widening it needs a shell parser, and
 # every generalisation tried on the neighbouring sensors fired on legitimate lines first.
-# Nor are two grep options that change what an anchored pattern means: `-v` inverts it, so the count
-# reads every other line, FAIL included; `-F` makes the `^` a literal. Both pass as anchored, and no
-# checkpoint writes either (the final review of lote 8, 2026-10-15).
 #
 # DECLARED LIMITS of rule 2's reader (issue #258), both CLOSED: a merged variable assigned again in
 # the same cell stays tainted, so a grep of the new value still owes the anchor; and a herestring
@@ -124,7 +121,8 @@
 # never sees written — `${!v}`, a nameref (`declare`, `typeset`, `local`), an `eval` — keeps the cell
 # rule too: the three read the stream with no rule at all until the final review of lote 8.
 # One grep is anchored by r2_grep_anchored, on both paths: an anchored quoted pattern, as many of
-# them as `-e`/`--regexp` it names, no `-f`, no unquoted pattern glued to `-e`. Its words are read
+# them as `-e`/`--regexp` it names, no `-f`, no unquoted pattern glued to `-e`, and no `-F` or `-v`,
+# which turn the caret into a literal or count every other line (Codex on PR #267). Its words are read
 # past the herestring, since grep takes options anywhere; the herestring's own operand is skipped.
 # A quoted word that is no pattern (the file it reads) owes nothing, so a quoted FILE named like an
 # anchor beside a blind `-e` would pass — no world but a contrived one, and no probe.
@@ -182,6 +180,8 @@
 # second pattern riding on one grep's anchor) and the fix added 18 more sabotages, all dead. Four
 # first survived and became probes: the unquoted `-e` glued to its pattern, the herestring's operand
 # read as a pattern and as an option, and the words past the herestring left unread.
+# Codex on PR #267 reproduced a third, `-F` (and `-v` with it, declared until then): four more
+# sabotages, one per spelling, all dead.
 #
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
@@ -392,7 +392,8 @@ r2_anchored() {
 
 # r2_grep_anchored — the grep r2_grep_at just read is anchored: a quoted word before its herestring
 # opens with an anchor, and as many do as it names patterns with `-e`/`--regexp`; a pattern behind
-# `-f`, or glued to `-e` with no quote, is never anchored. A quoted word that is no pattern (the file
+# `-f`, or glued to `-e` with no quote, is never anchored, nor is any pattern of a grep that reads its
+# caret as a literal (`-F`) or counts the other lines (`-v`). A quoted word that is no pattern (the file
 # a grep reads) needs no anchor. One definition for both paths: the final review of lote 8 measured
 # a second pattern riding on the first one's anchor in each.
 r2_grep_anchored() {
@@ -405,9 +406,9 @@ r2_grep_anchored() {
   for w in ${ws[@]+"${ws[@]}"}; do
     case "$w" in
       --regexp|--regexp=*) e=$((e + 1)) ;;
-      --file|--file=*) return 1 ;;
+      --file|--file=*|--fixed-strings|--invert-match) return 1 ;;
       --*) ;;
-      -*f*) return 1 ;;
+      -*[fFv]*) return 1 ;;
       -*e) e=$((e + 1)) ;;
       -*e*) return 1 ;;
     esac
@@ -992,7 +993,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=109
+PROBE_FLOOR=113
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1225,6 +1226,20 @@ selftest() {
   r2="$box/r2-after-hs-pat.md"; cp_head "$r2"
   cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1); grep -c <<< \"\$o\" '${OK_ANCHOR}x'\` → \`1\`"
   probe 'an anchored pattern after the herestring anchors' 0 '1 under the anchor rule' "$r2"
+  # Two options change what an anchored pattern means (Codex on PR #267): `-F` reads the caret as a
+  # literal, so the count is 0 whether the case passed or failed; `-v` counts every other line.
+  r2="$box/r2-fixed.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep -cF '^ ✓ caso' <<< \"\$o\"\` → \`0\`"
+  probe 'a -F pattern anchors nothing' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-fixed-long.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep --fixed-strings -c '^ ✓ caso' <<< \"\$o\"\` → \`0\`"
+  probe 'a --fixed-strings pattern anchors nothing' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-invert.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1); grep -vc '${OK_ANCHOR}x' <<< \"\$o\"\` → \`3\`"
+  probe 'an inverted match anchors nothing' 1 '0 of 1 pattern(s) anchored' "$r2"
+  r2="$box/r2-invert-long.md"; cp_head "$r2"
+  cp_row "$r2" I1 "\`bash t.sh > out 2>&1; grep --invert-match -c '${OK_ANCHOR}x' out\` → \`3\`"
+  probe 'the cell rule refuses --invert-match too' 1 '0 of 1 pattern(s) anchored' "$r2"
   r2="$box/r2-two-anchored.md"; cp_head "$r2"
   cp_row "$r2" I1 "\`o=\$(npm test 2>&1); grep -c -e '^ ✓ a' -e '^ ✓ b' <<< \"\$o\"\` → \`2\`"
   probe 'every -e anchored passes' 0 '1 under the anchor rule' "$r2"
