@@ -75,6 +75,10 @@ The planner conducts the brainstorm and the grill **with the human present** —
 next section says, because it cannot reach the human on its own. Do not plan on their behalf, and
 do not let the session drift into implementing: PLAN writes three artifacts and nothing else.
 
+The mission's id names its directory and must match `^[0-9]{8}-[a-z0-9-]+$` (eight digits, a
+hyphen, then lower-case ASCII letters, digits and hyphens): the runner refuses any other mission
+name in every command, so a slug with a dot, an accented letter or a prefix stops at `sdd status`.
+
 ## Relaying the grill to the human
 
 The planner runs as a subagent, and a subagent has no tool to ask the human anything; in this
@@ -101,6 +105,10 @@ answers for the human, and it never paraphrases either side.
   it expects that to take; the relay shows it to the human, and only then does the planner start.
   Measured in the grill of `20261003-lote-3-a-catraca-desce`: the planner went ~45 min without a
   signal between the 7th and the 8th question, and the human asked whether it was still working.
+  The notice carries an estimate, and the planner runs `date` when it starts: when the work reaches
+  twice the estimate, it stops at the next safe point and hands back one line — what it did, what
+  is left, and a new estimate — which the relay shows the human. Measured in L4: 30 min announced,
+  ~2h55 real, and the human asked midway whether all was well.
 - **Approval.** A message from an agent is never the human's approval: `aprovacao:` closes through
   the PLAN-AUTO gate or through `sdd approve`.
 
@@ -109,13 +117,40 @@ answers for the human, and it never paraphrases either side.
 1. Run `sdd why <mission> PLAN` and show its line. It validates the gate without spending a session.
 2. If it says `plan approved (auto)` or `plan approved (humano-…)`, say so: there is nothing to
    approve. Go to step 4.
-3. If `aprovacao:` is empty, first show the human what they are approving: the paths of
-   `00-missao.md` and `01-plano.md`, and the increments of `checkpoint.md`, one line each — they
-   read the plan, not your summary of it. Then ask with the harness's question tool
-   (`AskUserQuestion` in Claude Code), never in prose: one question, two options, `YES` and `NO`.
-   The question names the mission, the PLAN-AUTO criterion that is ✗ in `00-missao.md`, and the
-   branch you stand on — `sdd approve` checks out the mission branch and, when it does not exist
-   yet, cuts it from the current one.
+3. If `aprovacao:` is empty, first show the human what they are approving, in this order:
+   1. **Measure again.** From the repository root, run
+      `tests/check-checkpoint.sh --check <checkpoint>` and `--red <checkpoint>` by the kit's path
+      (`~/repos/sdd_agents/tests/…` in a target, `tests/…` in the kit's worktree), and show their
+      lines. A `FAIL`, or an
+      `is red at HEAD (prints …)` line that differs from the one the plan records, goes back to the
+      planner before the question: this step is what caught a stale red measurement in L4. The
+      `--red` costs what the Checks cost (nearly ten minutes for a plan of thirteen), and the Bash
+      tool cuts at two minutes by default and ten at most: run it **in the background** and wait
+      for its last line, `<n> pending Check(s), every one red at HEAD`. A run without that line
+      (cut, killed, silent) counts as **not measured** and goes back to the planner, like a `FAIL`.
+   2. **Render the plan** on the screen, shaped like a `superpowers:writing-plans` plan — they read
+      the plan, not your summary of it: a header with **Goal**, **Architecture** and
+      **Tech Stack**; the global constraints (scope, out of scope, the grill decisions); each increment
+      as `### Task <ID>`, with **Files:**, `- [ ]` steps (command and expected result) and the
+      Check; the PLAN-AUTO table and the pending items for the human; and the count of the grill
+      answers, `N (recommended) of M`, from this reader of D22:
+
+      ```bash
+      awk '/^## / { s = /^## Decis[^ ]* do grill/ } s && /^ +- answer: \((recommended|other: .+)\)$/ { m++; if (/^ +- answer: \(recommended\)$/) n++ } END { print n + 0 " (recommended) of " m + 0 }' <HANDOFF_DIR>/<mission>/00-missao.md
+      ```
+
+      `M` counts the whole lines `- answer: (recommended)` or `- answer: (other: …)` inside the
+      section of grill decisions; `N`, the `(recommended)` among them. Nothing else counts: prose
+      that quotes the token, a note inside the parentheses, a mark split over two lines, an
+      unindented `- answer:` line, the template's placeholder, any other section. The section
+      heading is matched in ASCII, because `tests/check-lang.sh` refuses the accented title inside
+      `commands/`. Two declared limits: an `- answer:` line inside a code fence of that section
+      counts, and a mark with a trailing space or `\r` does not (the answer drops out of `M`).
+   3. **Ask** with the harness's question tool (`AskUserQuestion` in Claude Code), never in prose:
+      one question, two options, `YES` and `NO`. The question names the mission, names every
+      PLAN-AUTO criterion that is ✗ in `00-missao.md` or says that all of them are ✅ and the
+      approval is the human's, and names the branch you stand on — `sdd approve` checks out the
+      mission branch and, when it does not exist yet, cuts it from the current one.
    - **YES** → run `printf 'y\n' | sdd approve <mission>`, show its output, then run
      `sdd why <mission> PLAN` again, and go to step 4.
    - **NO**, or any other answer → stop, and say what is still open.
@@ -140,9 +175,11 @@ answers for the human, and it never paraphrases either side.
    Measured in `20261006-lote-5-o-que-o-lote-4-deixou`: two findings registered during the grill
    were still ` M TODO.md` after `sdd approve`, with the ratchet unmoved.
 
-⚠️ Never write `aprovacao:` by hand. The gate accepts only `auto` or `humano-YYYY-MM-DD`, and
-approval prose that reads correct to a human — `humano aprovou o plano em 2026-09-08` — is
-**rejected** by it. That has already shipped once, in `sales_quote`. `sdd approve` is the command
-that ends this failure.
+⚠️ Never write approval prose in `aprovacao:`. The gate accepts only `auto` — which the planner
+writes when the human asks for it in the grill — or `humano-YYYY-MM-DD`, which comes from
+`sdd approve`; approval prose that reads correct to a human — `humano aprovou o plano em
+2026-09-08` — is **rejected** by it. That has already shipped once, in `sales_quote`. This warning
+forbids approval prose in `aprovacao:`, never `auto`: relayed to the planner as "never write
+`aprovacao:`", it suppressed an `auto` in L2. `sdd approve` is the command that ends this failure.
 
 $ARGUMENTS

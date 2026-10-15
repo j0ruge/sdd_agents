@@ -38,6 +38,12 @@ Do not force `status: skipped` just because there is no browser. `skipped` is fo
 **does not reach the user** (§2). A command-line project has journeys — they are walked in the
 terminal.
 
+There is a third case, on the **with interface** path: the plan declares `qa: skipped` in the
+frontmatter of `00-missao.md`, because the grill decided the diff does not reach the user. The
+runner then sends the phase straight to you, with no `qa-report` and no `qa-execution` session
+before you, and the `docs/qa/` tree may hold nothing of this mission. Your job there is to
+**confirm** that declaration against the real diff (§2), never to walk.
+
 ## 1. Load the state
 
 1. `docs/handoffs/<mission>/00-missao.md` and `01-plano.md` — what the mission promised.
@@ -62,6 +68,22 @@ It happens and it is legitimate (internal refactor, types, build, docs). In that
 The runner recognises `status: skipped` and moves on to the review. That is expected behaviour,
 not a failure.
 
+When the plan declares `qa: skipped` (the third case of §0), the decision was the grill's, and
+you check it:
+
+1. read its justification in the grill decisions of `00-missao.md`;
+2. compare it with the real diff (`git diff <base>...HEAD --stat`, then the files it lists);
+3. nothing in the diff reaches the user → `status: skipped`, citing the plan's decision and the
+   files you read;
+4. something reaches the user → `status: blocked`, naming the files, with the whole remedy for the
+   human: remove `qa: skipped` from `00-missao.md` **and delete this handoff**
+   (`git rm docs/handoffs/<mission>/30-handoff-qa.md`), commit, then `sdd run`. A blocked handoff
+   left in place is read again by the gate, which stops the line after every session, so each
+   launch pays one more session before the close that rewrites it; without the handoff the next
+   run walks `plan` → `exec` → `close` in one launch.
+
+Under the declaration never walk, never create `docs/qa/`, and never write `status: done`.
+
 ## 3. A confirmed journey finding → a Playwright spec
 
 This is the heart of the phase. Every **confirmed** finding that goes through a browser journey
@@ -73,6 +95,14 @@ becomes a permanent sensor in CI:
   point, acts through the same verbs, checks the same observable;
 - run `E2E_CMD` and **watch the spec fail** while the bug is present. A spec that passes with the
   bug in place is not a sensor, it is decoration.
+
+A bug no agent here closes (`Closable by: human` or `deferred`, § 5.1) still gets its spec, which
+reproduces the finding — but a red spec would take `E2E_CMD` down in the gate and spend
+`QA_MAX_ITER` on a bug nobody in this pipeline can fix. Call Playwright's `test.fail()`
+**after the preconditions**, right before the step that exposes the bug: the preconditions fail
+red when the setup breaks, the spec passes while the bug is there, and it fails the day the fix
+lands, which is the day to remove the marker. `test.fixme()` and `test.skip()` do not run the spec at all, so
+they are decoration. Name the bug file in a comment beside the marker.
 
 A finding that is **not** about a journey (pure logic, a calculation edge, a contract) becomes a
 unit/integration test in the `TEST_CMD` suite, not an e2e spec. The criterion is where the defect
@@ -101,6 +131,11 @@ the QA⇄EXEC loop. It repeats until no **agent-closable** bug is left `open`, c
 the phase (§ 5.1). The two are not the same silence: `human` passes without a word because nobody
 here can act on it, while `deferred` is NAMED in the gate's own passing reason on every evaluation,
 because somebody will act on it in a mission that has not opened yet.
+
+After an `F<n>` is done, the runner sends the QA back to `qa-execution` (`QA:exec`), which retests
+the fixed bugs and moves their `Status:`, and then back to this session, to rewrite the handoff
+(§ 6). The route is the runner's: **this session never invokes the `qa-*` skills, not even through
+the `Skill` tool.**
 
 ## 5. What does NOT become a fix increment
 
@@ -196,6 +231,11 @@ installs the agents and the config there but never the templates:
 - **Decisions for a Human**, **risks and not-dones**, **out-of-scope findings**.
 
 Commit everything: specs, updated checkpoint, handoff.
+
+The handoff is rewritten and committed after every `F<n>` that is done: the gate refuses a handoff
+older than the last fix, because it still says the fix is pending and it is the file the DOCS
+phase and the PR body read. When the runner boots you after a fix, rewrite it with what the retest
+saw.
 
 ## 7. Findings outside the mission's scope
 
