@@ -168,6 +168,15 @@
 # here (the substring test before it read `2>&10` as a merge by accident). The null device is the
 # exact word `/dev/null` before a blank, `;`, `&`, `)`, a backtick or the end of the text; quoted
 # (`"/dev/null"`) or as the head of a longer path it is a file, and a merge.
+# The stderr redirected onto a path of the stdout (Codex on PR #274) is read only for the three
+# paths written in full (`/dev/stdout`, `/dev/fd/1`, `/proc/self/fd/1`), quotes removed, before a
+# blank, `;`, `&`, `)`, `|`, a backtick or the end of the text. Not followed, and OPEN: a target
+# known only at run time (`2>$f`, `2>"$log"`), which no reader of the text decides; another
+# process's or thread's descriptor (`/proc/<pid>/fd/1`, `/proc/thread-self/fd/1`); and any other
+# path or spelling that resolves to the stdout (a symlink, `/dev/./stdout`, a backslash, `$'…'`).
+# A `2` after a digit (`12>/dev/stdout`) is another descriptor and merges nothing, while `12>&1`
+# still reads as a merge (CLOSED). `2>|` and a `|` after the path reach no cell, because a `|`
+# splits the row before rule 2 reads it, so their probes call r2_merges in process.
 #
 # DECLARED LIMITS of the zero pair (issue #272, lote 9). The exemption is admitted positively: the
 # grep's count has to be what its pair prints, and every condition r2_greps and r2_counts_zero name
@@ -280,6 +289,15 @@
 # survived and changed a fixture: the backtick that opens a span was tested only behind a `;` of
 # the prose between two pairs, which opened the command all by itself.
 #
+# Codex on PR #274 (round 1) reproduced one more merge, the stderr onto a path of the stdout
+# (`o=$(sensor 2>/dev/stdout)`), which the cheap filter of r2_merges turned away. The fix added 39
+# sabotages: each path, operator and terminator, the quotes, the `2` and the digit before it, the
+# filter, mg_merges and its negative control, one probe of each kind. 37 died (one by the
+# selftest's rc 91 alone). The two alive cannot die: the floor lowered on its own, a minimum, and
+# the negative control's test forced false, which decides something only once mg_merges is broken.
+# One first survived and moved a control: `1>/dev/stdout` alone never passed the filter, so `1>`
+# read beside `2>` went unseen.
+#
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
 #   89  no temp dir (probes never ran)      90/91/92  a selftest probe failed
@@ -360,6 +378,8 @@ R2_NAME_RE='(^|[[:space:];&|(`!{])([A-Za-z_][A-Za-z0-9_]*)$'
 R2_INDIRECT_RE='(^|[^A-Za-z0-9_])(eval|declare|typeset|local)([[:space:]]|$)'
 R2_FD_ONE_RE='^0*1([^0-9]|$)'
 R2_NULL_RE='^/dev/null([[:space:];&)`]|$)'
+# The stderr onto a path of the stdout, read on the text with its quotes removed (PR #274).
+R2_STDOUT_RE='[^0-9]2(>>|>[|]|<>|>)[[:blank:]]*(/dev/stdout|/dev/fd/1|/proc/self/fd/1)([[:space:];&)|`]|$)'
 # A redirection operator with the descriptor before it, if any (`&>` takes none). POSIX matching is
 # leftmost-longest, so `<<<` wins over `<`. A here-document's `<<` reads as two `<`, and `&>>` as `&>`
 # and `>`: the same words, the same stdout.
@@ -373,13 +393,17 @@ R2_REDIR_RE='^([0-9]*)(<<<|<>|<&|<|>>|>&|>[|]|>)'
 #     does a target that is no descriptor at all (`"1"`, `$one`): known only at run time;
 #   - `&>` and `&>>` send both streams to their file, whatever its name (`&>1` writes a file `1`);
 #     `>&` and `1>&` do the same when the target is no descriptor (`>&f`, never `>&2` or `>&-`);
-#   - those four except into the null device, spelt exactly `/dev/null`: no grep reads it.
-# The leading blank makes the character before the operator safe to read at index 0.
+#   - those four except into the null device, spelt exactly `/dev/null`: no grep reads it;
+#   - `2>`, `2>>`, `2>|` or `2<>` onto a path of the stdout (`/dev/stdout`, `/dev/fd/1`,
+#     `/proc/self/fd/1`), the `2` after no digit, quotes removed, the path exact (R2_STDOUT_RE).
+# The leading blank makes the character before the operator safe to read at index 0. The case below
+# is the cheap filter: it names an operator of every form, or the form escapes it (PR #274).
 r2_merges() {
   local LC_ALL=C
   local t=" $1" n i j op w
   n="${#t}"
-  case "$t" in *'>&'* | *'<&'* | *'&>'*) ;; *) return 1 ;; esac
+  case "$t" in *'>&'* | *'<&'* | *'&>'* | *'2>'* | *'2<>'*) ;; *) return 1 ;; esac
+  [[ "${t//[\"\']/}" =~ $R2_STDOUT_RE ]] && return 0
   for ((i = 1; i + 1 < n; i++)); do
     op="${t:i:2}"
     case "$op" in '>&' | '<&' | '&>') ;; *) continue ;; esac
@@ -1478,7 +1502,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=316
+PROBE_FLOOR=341
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1519,6 +1543,18 @@ cp_head() {
 
 cp_row() { # cp_row <file> <id> <check cell> [status, default done]
   printf '| %s | slice | %s | %s | abc1234 |\n' "$2" "$3" "${4-done}" >> "$1"
+}
+
+# mg_merges <want rc> <text> — r2_merges's answer on one text. IN-PROCESS on purpose, like wd_tok:
+# a `|` splits the row before rule 2 reads the cell (rule 1), so `2>|` and a `|` after the stdout's
+# path reach r2_merges from no checkpoint today, and only a direct call shows whether they are read.
+mg_merges() {
+  local rc=0
+  PROBES=$((PROBES + 1))
+  r2_merges "$2" || rc=1
+  [ "$rc" = "$1" ] && return 0
+  printf 'SENSOR-BROKEN: r2_merges on "%s" — wanted rc %s, got %s\n' "$2" "$1" "$rc" >&2
+  FAILS=$((FAILS + 1)); fail_rc 91
 }
 
 # wd_tok <text after the grep> <want> — the words r2_grep_at publishes, each as class[value|prefix]
@@ -1993,6 +2029,52 @@ selftest() {
   mg="$box/mg-null-capture.md"; cp_head "$mg"
   cp_row "$mg" I1 "\`o=\$(bash t.sh 2>&1); q=\$(bash u.sh &>/dev/null); grep -c '${OK_ANCHOR}x' <<< \"\$o\"; grep -c 'caso' <<< \"\$q\"\` → \`1 1\`"
   probe 'a capture silenced into the null device taints nothing' 0 '1 under the anchor rule' "$mg"
+  # The stderr redirected onto a path of the stdout merges too (Codex on PR #274, round 1; measured
+  # on bash 5.2.21): `/dev/stdout`, `/dev/fd/1` or `/proc/self/fd/1` behind `2>`, `2>>`, `2>|` or
+  # `2<>`, blanks before the path, quotes around it.
+  for mg_g in '2>/dev/stdout' '2>>/dev/stdout' '2<>/dev/stdout' '2> /dev/stdout' '2>/dev/fd/1' \
+    '2>/proc/self/fd/1' '2>"/dev/stdout"' "2>'/dev/fd/1'"; do
+    mg_k=$((mg_k + 1)); mg="$box/mg-capture$mg_k.md"; cp_head "$mg"
+    cp_row "$mg" I1 "\`o=\$(bash t.sh $mg_g); grep -c 'alpha' <<< \"\$o\"\` → \`1\`"
+    probe "a capture merged with '$mg_g' owes the anchor" 1 '0 of 1 pattern(s) anchored' "$mg"
+  done
+  # The path ends at a `)` (above), at the end of a capture's own text (the taint below), and at a
+  # `;`, a blank, a `&` or a backtick.
+  for mg_g in '2>/dev/stdout;' '2>/dev/stdout &&' '2>/dev/stdout&&'; do
+    mg_k=$((mg_k + 1)); mg="$box/mg-file$mg_k.md"; cp_head "$mg"
+    cp_row "$mg" I1 "\`bash t.sh $mg_g grep -c 'alpha' f\` → \`1\`"
+    probe "a merge onto the stdout with '$mg_g' reaches the cell rule" 1 '0 of 1 pattern(s) anchored' "$mg"
+  done
+  mg="$box/mg-stdout-tick.md"; cp_head "$mg"
+  cp_row "$mg" I1 "\`grep -c 'alpha' f\`; \`bash t.sh 2>/dev/stdout\` → \`1\`"
+  probe "'2>/dev/stdout' before a backtick merges" 1 '0 of 1 pattern(s) anchored' "$mg"
+  mg="$box/mg-stdout-taint.md"; cp_head "$mg"
+  cp_row "$mg" I1 "\`o=\$(bash t.sh 2>/dev/stdout); a=\$(grep -c '${OK_ANCHOR}alpha' <<< \"\$o\"); b=\$(grep -c 'beta' f); echo \"\$a \$b\"\` → \`1 0\`"
+  probe "a capture merged with '2>/dev/stdout' taints its name, and the anchor holds" \
+    0 '1 under the anchor rule' "$mg"
+  # Any other path is a file or another stream: the stderr's own, a terminal, a descriptor spelt
+  # with a zero (`/dev/fd/01` does not open, measured), a longer path. So is the stdout sent onto
+  # itself, beside a `2>` that takes the text past the cheap filter, and a descriptor that only
+  # ends in `2` (`12>`).
+  for mg_g in '2>/dev/stderr' '2>/dev/fd/2' '2>/dev/tty' '2>/dev/fd/01' '2>/dev/stdout.log' \
+    '1>/dev/stdout 2>/dev/null' '>/dev/stdout 2>/dev/null' '12>/dev/stdout'; do
+    mg_k=$((mg_k + 1)); mg="$box/mg-none$mg_k.md"; cp_head "$mg"
+    cp_row "$mg" I1 "\`o=\$(bash t.sh $mg_g); grep -c 'alpha' <<< \"\$o\"\` → \`1\`"
+    probe "'$mg_g' merges nothing a grep reads" 0 '0 under the anchor rule' "$mg"
+  done
+  # A `|` splits the row (rule 1), so `2>|` and the `|` after the path are read in process.
+  mg_merges 0 'o=$(bash t.sh 2>|/dev/stdout)'
+  mg_merges 0 'bash t.sh 2>/dev/stdout| grep -c alpha'
+  mg_merges 1 'o=$(bash t.sh 2>|/dev/stdout.log)'
+  # The negative control, as wd_tok's: mg_merges has to SAY a mismatch.
+  local mg_fs="$FAILS" mg_rc="$SELFTEST_RC"
+  mg_merges 1 'bash t.sh 2>&1' 2>/dev/null
+  if [ "$FAILS" -eq "$mg_fs" ]; then
+    printf 'SENSOR-BROKEN: mg_merges passed an answer it was not given — its probes measure nothing\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  else
+    FAILS="$mg_fs"; SELFTEST_RC="$mg_rc"
+  fi
   [ "$FAILS" -eq "$mg_f0" ] && \
     rule_ok "every spelling that merges stderr into stdout puts the cell under the anchor rule ($((PROBES - mg_p0)) probe(s))"
 
