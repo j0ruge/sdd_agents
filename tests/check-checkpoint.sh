@@ -43,6 +43,9 @@
 #      variable a clean `NAME=$(… 2>&1)` captured, so a grep of a file owes nothing. A cell the
 #      reader cannot follow keeps the cell rule: every grep anchored. A test runner's pass mark at
 #      the start of the pattern (`'^ *✓ '`, issue #249) anchors like the ok prefix, on both paths.
+#      And a counting grep (`-c`) of a pair `command` → `expected` whose expected value is only
+#      zeros owes no anchor, on both paths (issue #272): it is green only when no line matches, so
+#      never over a FAIL line its pattern matches. r2_greps decides it, grep by grep.
 #   3. the rule is written where the next mission will meet it — templates/checkpoint.md and
 #      agents/sdd-planner.md — so a checkpoint born tomorrow does not have to rediscover it.
 #      Contract in three places, the house rule from CLAUDE.md.
@@ -166,6 +169,21 @@
 # exact word `/dev/null` before a blank, `;`, `&`, `)`, a backtick or the end of the text; quoted
 # (`"/dev/null"`) or as the head of a longer path it is a file, and a merge.
 #
+# DECLARED LIMITS of the zero pair (issue #272, lote 9). The exemption is admitted positively: the
+# grep's count has to be what its pair prints, and every condition r2_greps and r2_counts_zero name
+# has to hold, the options by a list of what enters (R2_ZERO_OPTS). Refused, CLOSED: a pair whose
+# expected value mixes a count and a zero (`echo "$a $b"` → `3 0`: following the `$(…)` up to the
+# `echo` would grow the reader again; decision 3 of that mission); a count captured and printed
+# again (`echo "$(grep -c a <<< "$o")"` → `0`), which is no grep at the top of the command; a grep
+# after a redirection or an assignment (`>f grep`, `LC_ALL=C grep`), and every grep of a command
+# past a word of its top level that opens a compound command or is `exec`, wherever that command
+# ends. Exempt and harmless: a command that prints something besides the count (`grep -c a <<< "$o";
+# echo 0` prints two lines, never the `0` alone). Not followed, and OPEN, as for every grep this
+# rule reads: a name that renames grep before it (a PATH, or a function whose body is a subshell,
+# `grep () (echo 0)`), which no Check of the kit or of the two target repos writes. The code spans
+# are read backtick to backtick, as the cells write them; a span opened by two backticks reads as
+# two empty ones (one Check cell of the corpus writes one, in its prose, around a literal).
+#
 # DECLARED LIMITS of the pass mark (issue #249, lote 8). Only U+2713 counts, the mark the two
 # measured runners print (see PASS_MARK); `✔` (U+2714) and every fail mark do not. A runner that
 # printed `✓` at the start of a FAILURE line would fool the rule, and none measured does. The
@@ -250,6 +268,17 @@
 # not by a sabotage: `--fixed-regexp`, a hidden synonym of `-F`; `-z`, under which `.*` crosses
 # lines; and `-X fgrep`, refused before by accident, the reader taking its `fgrep` for a second
 # grep.
+#
+# The zero pair (issue #272, lote 9) added 84 more, each anchored on code with its count: the pair
+# read for the whole cell, "only zeros" read as "some zero", each condition of the exemption dropped
+# (the top, the redirected stdout, `-c`, `lit`, the first word and each way into it, the compound
+# words), the list turned into "any option but `v`", every entry of R2_ZERO_OPTS dropped and seven
+# admitted, the exemption on one path only (each path), each keyword dropped, read inside a capture,
+# mid-word, as a prefix or up to a blank, each branch of r2_pairs and r2_zero_pair, zr_opts's
+# comparison and negative control, the message, the four fixtures back to `0`, the `ok rule:` line
+# and one probe. 83 died; the live one is the probe floor lowered on its own, a minimum. One first
+# survived and changed a fixture: the backtick that opens a span was tested only behind a `;` of
+# the prose between two pairs, which opened the command all by itself.
 #
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
@@ -778,6 +807,64 @@ r2_grep_anchored() {
   return 0
 }
 
+# The options that leave a counting grep's count alone (issue #272), ONE definition, written by
+# what enters: a predicate of admission is written positively (CLAUDE.md), so an option the table
+# gains tomorrow stays out until someone writes it here. In: the count itself; case and syntax
+# (`-i`, `-y`, `--no-ignore-case`, `-E`, `-G`, `-P`, `-w`, `-x`); the pattern (`-e`); and what `-c`
+# ignores or prints beside the count (`-s`, `-a`, `-h`, `-H`, `-n`, `-b`, `-o`, `-T`, `-U`, `-u`,
+# `-Z`, `--label`, `--color`, `--line-buffered`). Out by omission, among the rest: `-v` (it counts
+# every other line), `-q` (it prints nothing), `-m` (`-m 0` prints `0` whatever the input), the `-F`
+# family, `-X`, `-f`, `-z`, `-l`, `-L`, `-r`, the context and the file filters.
+R2_ZERO_OPTS=' c i y no-ignore-case E G P w x e s a h H n b o T U u Z label color line-buffered '
+
+# r2_counts_zero — the grep r2_grep_at and r2_grep_anchored just read prints a count and nothing
+# moves it: its stdout is not redirected (R2_RDOUT), it counts (`-c`), every option is on
+# R2_ZERO_OPTS (an argv that does not read leaves a `?` in R2_OPTS, which the list never holds), and
+# every pattern is `lit` (R2_PLIT). Whether that count is what the pair prints is r2_greps' half.
+r2_counts_zero() {
+  local o
+  local -a os=()
+  [ "$R2_RDOUT" -eq 0 ] && [ "$R2_PLIT" -eq 1 ] || return 1
+  case "$R2_OPTS" in *' c '*) ;; *) return 1 ;; esac
+  read -ra os <<< "$R2_OPTS"
+  for o in ${os[@]+"${os[@]}"}; do
+    case "$R2_ZERO_OPTS" in *" $o "*) ;; *) return 1 ;; esac
+  done
+  return 0
+}
+
+# r2_pairs <text> — the cell's pairs `command` → `expected` (issue #272). Its code spans are read
+# backtick to backtick (a span holds no backtick); a span followed by `→` and the next span, blanks
+# allowed around the arrow, is the command of a pair whose expected value is that next span.
+# R2_CS and R2_CE hold the first index inside each command and the index of its closing backtick,
+# and R2_CZ is 1 when its expected value is only zeros: at least one word, every word exactly `0`.
+R2_CS=(); R2_CE=(); R2_CZ=()
+r2_pairs() {
+  local LC_ALL=C
+  local t="$1" n="${#1}" i k g z x
+  local -a b=() w=()
+  R2_CS=(); R2_CE=(); R2_CZ=()
+  for ((i = 0; i < n; i++)); do [ "${t:i:1}" != '`' ] || b+=("$i"); done
+  for ((k = 0; k + 3 < ${#b[@]}; k += 2)); do
+    g="${t:b[k+1]+1:b[k+2]-b[k+1]-1}"
+    g="${g#"${g%%[![:blank:]]*}"}"; g="${g%"${g##*[![:blank:]]}"}"
+    [ "$g" = '→' ] || continue
+    read -ra w <<< "${t:b[k+2]+1:b[k+3]-b[k+2]-1}"
+    z=0; [ "${#w[@]}" -eq 0 ] || z=1
+    for x in ${w[@]+"${w[@]}"}; do [ "$x" = 0 ] || z=0; done
+    R2_CS+=("$((b[k] + 1))"); R2_CE+=("${b[k+1]}"); R2_CZ+=("$z")
+  done
+}
+
+# r2_zero_pair <i> — the index i sits inside the command of a pair that expects only zeros.
+r2_zero_pair() {
+  local k
+  for k in ${R2_CS[@]+"${!R2_CS[@]}"}; do
+    [ "${R2_CZ[k]}" -eq 1 ] && [ "$1" -ge "${R2_CS[k]}" ] && [ "$1" -lt "${R2_CE[k]}" ] && return 0
+  done
+  return 1
+}
+
 # rule2 <check cell> — R2_STRICT=1 asks for the cell rule, where R2_AA of the cell's greps are
 # anchored; otherwise R2_G greps read a merged variable and R2_A of them are anchored.
 rule2() {
@@ -854,10 +941,19 @@ r2_captures() {
 # and `grep -F` —, read where it stands and then skipped up to R2_END, so a word of its argv named
 # `grep` (a FILE, the matcher of `-X fgrep`) is no second grep: R2_AA counts the anchored
 # ones, R2_G those whose herestring is a tainted name, R2_A the anchored among these, R2_HSREFS the
-# tainted reads they account for.
+# tainted reads they account for. A grep that does not anchor counts as anchored all the same, on
+# both paths, when it is the counting grep of a pair that expects only zeros (issue #272): its count
+# is what the pair prints (r2_counts_zero, and r2_zero_pair for the pair), and it opens a command at
+# the top of that pair's command — inside no `$(…)` or `(…)` (st), at the start of the span or
+# after a `;` or a `&&` (cs: a redirection or an assignment before it is the closed side), and past
+# no word of the top level — its letters, or a `{`, after no letter, digit or `_` — that opens a
+# compound command or is `exec` (cx: `{ …; } >f`, `if …; fi >f` and `exec >f` send the stdout of
+# what follows where this reader does not follow). Both start over at every backtick: each span is
+# its own command.
 r2_greps() {
   local LC_ALL=C
-  local t="$1" n="${#1}" i=0 c sq=0 st='' name ok k
+  local t="$1" n="${#1}" i=0 c sq=0 st='' name ok k cs=0 cx=0 at p w
+  r2_pairs "$t"
   while [ "$i" -lt "$n" ]; do
     c="${t:i:1}"
     if [ "$sq" -eq 1 ]; then
@@ -873,6 +969,20 @@ r2_greps() {
       i=$((i + 1)); continue
     fi
     case "$c" in
+      ' '|$'\t') i=$((i + 1)); continue ;;
+      '`') cs=1; cx=0; i=$((i + 1)); continue ;;
+      ';') cs=1; i=$((i + 1)); continue ;;
+      '&') if [ "${t:i+1:1}" = '&' ]; then cs=1; i=$((i + 2)); continue; fi ;;
+    esac
+    if [ -z "$st" ]; then
+      p=' '; [ "$i" -eq 0 ] || p="${t:i-1:1}"
+      if [[ "$p" != [A-Za-z0-9_] ]]; then
+        w="${t:i}"; w="${w%%[!A-Za-z{]*}"
+        case "$w" in '{'|if|while|until|for|case|select|function|coproc|exec) cx=1 ;; esac
+      fi
+    fi
+    at="$cs"; cs=0
+    case "$c" in
       '\') i=$((i + 2)); continue ;;
       "'") sq=1 ;;
       '"') st="${st}D" ;;
@@ -885,7 +995,13 @@ r2_greps() {
         if [ "$k" -gt 0 ] && r2_bounded "$t" "$i" "$k"; then
           r2_grep_at "$t" $((i + k))
           case "$c" in f) c=F ;; *) c='' ;; esac
-          ok=0; if r2_grep_anchored "$c"; then ok=1; R2_AA=$((R2_AA + 1)); fi
+          ok=0
+          if r2_grep_anchored "$c"; then
+            ok=1
+          elif [ -z "$st" ] && [ "$at" -eq 1 ] && [ "$cx" -eq 0 ] && r2_zero_pair "$i" && r2_counts_zero; then
+            ok=1
+          fi
+          R2_AA=$((R2_AA + ok))
           for name in ${R2_TAINTED[@]+"${R2_TAINTED[@]}"}; do
             [ "$R2_HS" = "$name" ] || continue
             R2_G=$((R2_G + 1)); R2_HSREFS=$((R2_HSREFS + 1)); R2_A=$((R2_A + ok))
@@ -1031,7 +1147,7 @@ scan_file() {
     fi
     N_RULED=$((N_RULED + 1))
     if [ "$a" -lt "$g" ]; then
-      fail "$label: the Check of $id greps a sensor's merged output with $a of $g pattern(s) anchored on the ok prefix or on a pass mark ('^ *${PASS_MARK}') — FAIL prints the same text as ok, so this cell answers 'the assertion exists', never 'the assertion passed'"
+      fail "$label: the Check of $id greps a sensor's merged output with $a of $g pattern(s) anchored on the ok prefix or on a pass mark ('^ *${PASS_MARK}') — FAIL prints the same text as ok, so this cell answers 'the assertion exists', never 'the assertion passed'; a counting grep (-c) whose pair expects only zeros owes none"
       V_ANCHOR=$((V_ANCHOR + 1))
     fi
   done <<< "$rows"
@@ -1362,7 +1478,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=275
+PROBE_FLOOR=316
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1374,7 +1490,7 @@ fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
 # selftest green (the sabotage pass of lote 8, 2026-10-15). Tight, like PROBE_FLOOR, and the same
 # shape as rule_end in check-todo.sh.
 RULE_LINES=0
-RULE_FLOOR=7
+RULE_FLOOR=8
 rule_ok() { pass "rule: $1"; RULE_LINES=$((RULE_LINES + 1)); }
 
 probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode]
@@ -1440,6 +1556,31 @@ gt_argv() {
   got+=" plit=${R2_PLIT-} rc=$rc"
   [ "$got" = "$2" ] && return 0
   printf 'SENSOR-BROKEN: the argv of "grep%s" — wanted %s, got %s\n' "$1" "$2" "$got" >&2
+  FAILS=$((FAILS + 1)); fail_rc 91
+}
+
+# zr_opts <want> — the identities r2_counts_zero admits, each read beside `-c`, with a `lit` pattern
+# and the stdout left alone: every letter of the table, then every identity no letter spells, then
+# the `?` of an argv that does not read. IN-PROCESS, like gt_argv: the list is one definition, and
+# a child process shows only the identities its fixtures happen to write.
+zr_opts() {
+  local got='' id e k
+  local -a all=()
+  PROBES=$((PROBES + 1))
+  for ((k = 0; k < ${#R2_SHORT_NONE}; k++)); do all+=("${R2_SHORT_NONE:k:1}"); done
+  for ((k = 0; k < ${#R2_SHORT_ARG}; k++)); do all+=("${R2_SHORT_ARG:k:1}"); done
+  for e in "${R2_LONG[@]}"; do
+    id="${e##*:}"
+    [ "${#id}" -gt 1 ] || continue
+    case " ${all[*]} " in *" $id "*) ;; *) all+=("$id") ;; esac
+  done
+  all+=('?')
+  for id in "${all[@]}"; do
+    R2_OPTS=" c $id "; R2_PLIT=1; R2_RDOUT=0
+    if r2_counts_zero; then got+="${got:+ }$id"; fi
+  done
+  [ "$got" = "$1" ] && return 0
+  printf 'SENSOR-BROKEN: the options a zero pair admits — wanted %s, got %s\n' "$1" "$got" >&2
   FAILS=$((FAILS + 1)); fail_rc 91
 }
 
@@ -1554,7 +1695,7 @@ selftest() {
   probe 'a grep that reads a file owes no anchor beside one that reads the merged output' \
     0 '1 under the anchor rule' "$r2"
   r2="$box/r2-blind.md"; cp_head "$r2"
-  cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'beta' <<< \"\$o\"; grep -c '${OK_ANCHOR}x' f\` → \`0\`"
+  cp_row "$r2" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'beta' <<< \"\$o\"; grep -c '${OK_ANCHOR}x' f\` → \`1 1\`"
   probe 'the unanchored grep of the merged output is caught, whatever anchor another grep carries' \
     1 '0 of 1 pattern(s) anchored' "$r2"
   r2="$box/r2-loose.md"; cp_head "$r2"
@@ -1717,7 +1858,7 @@ selftest() {
   cp_row "$r2" I1 "\`npm test > out.log 2>&1; grep -c -e '^ ✓ a' -e 'caso' out.log\` → \`1\`"
   probe 'the cell rule reads every pattern of a grep too' 1 '0 of 1 pattern(s) anchored' "$r2"
   r2="$box/r2-loose-echo.md"; cp_head "$r2"
-  cp_row "$r2" I1 "\`bash t.sh > out 2>&1; echo '${OK_ANCHOR}x'; grep -c 'y' out\` → \`0\`"
+  cp_row "$r2" I1 "\`bash t.sh > out 2>&1; echo '${OK_ANCHOR}x'; grep -c 'y' out\` → \`1\`"
   probe 'the cell rule counts an anchor only inside a grep' 1 '0 of 1 pattern(s) anchored' "$r2"
   # The control the kit's own checkpoints hold (F1 of the 2026-08-16 mission): a quoted FILE beside
   # the anchored pattern is no pattern, and owes no anchor.
@@ -1756,7 +1897,7 @@ selftest() {
   cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^ x ✓ caso' <<< \"\$o\"\` → \`1\`"
   probe 'a pass mark past the start of the pattern is caught' 1 '0 of 1 pattern(s) anchored' "$r3"
   r3="$box/r3-failmarks.md"; cp_head "$r3"
-  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^ × caso' <<< \"\$o\"; grep -c '^  ✘ caso' <<< \"\$o\"\` → \`0 0\`"
+  cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^ × caso' <<< \"\$o\"; grep -c '^  ✘ caso' <<< \"\$o\"\` → \`1 1\`"
   probe 'the fail marks of vitest and Playwright anchor nothing' 1 '0 of 2 pattern(s) anchored' "$r3"
   r3="$box/r3-heavy.md"; cp_head "$r3"
   cp_row "$r3" I1 "\`o=\$(npm test 2>&1); grep -c '^ ✔ caso' <<< \"\$o\"\` → \`1\`"
@@ -1787,7 +1928,7 @@ selftest() {
   # A caret alone is no anchor on this path either: the sabotage pass found the count taking every
   # `'^` while the reader's predicate went unasked.
   r3="$box/r3-loose-caret.md"; cp_head "$r3"
-  cp_row "$r3" I1 "\`bash t.sh > out.log 2>&1; grep -c '^  ok   a' out.log; grep -c '^ x ✓ b' out.log\` → \`0 0\`"
+  cp_row "$r3" I1 "\`bash t.sh > out.log 2>&1; grep -c '^  ok   a' out.log; grep -c '^ x ✓ b' out.log\` → \`1 1\`"
   probe 'the cell rule asks the same predicate of every caret' 1 '0 of 2 pattern(s) anchored' "$r3"
   [ "$FAILS" -eq "$r3_f0" ] && \
     rule_ok "a pass mark of a test runner at the start of a line anchors like the ok prefix ($((PROBES - r3_p0)) probe(s))"
@@ -2157,6 +2298,132 @@ ARGV
   fi
   [ "$FAILS" -eq "$gt_f0" ] && \
     rule_ok "grep's argv is read as getopt_long reads it, and only a pattern owes the anchor ($((PROBES - gt_p0)) probe(s))"
+
+  # ── a counting grep whose pair expects only zeros owes no anchor (issue #272) ──
+  # A `grep -c` whose pair expects `0` turns green only when no line matches, so it is never green
+  # over a FAIL line its pattern matches: the anchor buys it nothing. The cell is read as pairs
+  # `command` → `expected`, and a grep of a command whose expected value is only zeros is exempt
+  # when its count is what the pair prints: it opens a command at the top of the pair's command
+  # (past no `$(…)` or `(…)`, no compound command and no exec), its stdout goes nowhere else, it
+  # counts (`-c`), every option it has is on R2_ZERO_OPTS and every pattern is `lit`. Each rc-1
+  # probe breaks one of those; the `-F`, fgrep and ANSI-C fixtures of the groups above, which
+  # expect `0` too, stay refused by the list and by the `lit`.
+  local zr_p0="$PROBES" zr_f0="$FAILS" zr zr_w
+  # Copied from the source, row I8 of the LH-4 checkpoint under lighthouse_project/docs/handoffs/
+  # (the mission of 2026-09-27): five pairs, and the build's count of a warning expects zero.
+  zr="$box/zr-lh4.md"; cp_head "$zr"
+  cp_row "$zr" I8 "\`o=\$(npm run test -w packages/frontend 2>&1); grep -c '^ ✓ src/test/em-ingles-admin.test.tsx > ' <<< \"\$o\"\` → \`3\`; \`grep -c '^ ✓ src/test/texto-cru-fora-do-dicionario.test.ts > ' <<< \"\$o\"\` → \`5\`; \`grep -c 'const PENDENTES: readonly string\\[\\] = \\[\\];' packages/frontend/src/test/texto-cru-fora-do-dicionario.test.ts\` → \`1\`; \`b=\$(npm run build -w packages/frontend 2>&1); grep -ci 'chunks larger than' <<< \"\$b\"\` → \`0\`; \`npm run lint -w packages/frontend && npm run typecheck && npm run knip -w packages/frontend && echo FG-OK\` → \`FG-OK\`"
+  probe 'a count of a merged build warning whose pair expects zero owes no anchor' 0 '1 under the anchor rule' "$zr"
+  zr="$box/zr-two-pairs.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(npm test 2>&1); grep -c '^ ✓ a' <<< \"\$o\"\` → \`3\`; \`b=\$(npm run build 2>&1); grep -ci 'chunks' <<< \"\$b\"\` → \`0\`"
+  probe 'the zero pair beside an anchored pair owes no anchor' 0 '1 under the anchor rule' "$zr"
+  zr="$box/zr-zeros.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'a' <<< \"\$o\"; grep -c 'b' <<< \"\$o\"\` → \`0 0\`"
+  probe 'two counting greps of a pair that expects two zeros owe no anchor' 0 '1 under the anchor rule' "$zr"
+  zr="$box/zr-mixed.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'a' <<< \"\$o\"; grep -c 'b' <<< \"\$o\"\` → \`3 0\`"
+  probe 'a pair that expects a zero beside a count owes the anchor' 1 '0 of 2 pattern(s) anchored' "$zr"
+  probe 'the message names what owes no anchor' 1 'a counting grep (-c) whose pair expects only zeros owes none' "$zr"
+  zr="$box/zr-ten.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\"\` → \`10\`"
+  probe 'a count that ends in zero is no zero' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-blank.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\"\` → \` \`"
+  probe 'an expected value with no word is no zero' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-invert.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -vc 'caso' <<< \"\$o\"\` → \`0\`"
+  probe 'an inverted count counts every other line' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-quiet.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -qc 'caso' <<< \"\$o\"; echo 0\` → \`0\`"
+  probe 'a quiet grep prints no count' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-max.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c -m 0 'caso' <<< \"\$o\"\` → \`0\`"
+  probe 'a grep that stops at zero matches counts nothing' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-captured.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); n=\$(grep -c 'caso' <<< \"\$o\"); [ \"\$n\" -gt 0 ]; echo \$?\` → \`0\`"
+  probe 'a count captured into a variable is not what the pair prints' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-redirected.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\" > /dev/null; echo 0\` → \`0\`"
+  probe 'a count sent to the null device is not what the pair prints' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-no-count.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep 'caso' <<< \"\$o\"\` → \`0\`"
+  probe 'a grep without -c prints lines, no count' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-after-zero.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`true\` → \`0\`; \`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\"\` → \`1\`"
+  probe 'a zero pair before the grep exempts nothing either' 1 '0 of 1 pattern(s) anchored' "$zr"
+  # The pairs are the cell's own: a zero pair of one row exempts nothing in the next.
+  zr="$box/zr-reset.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\"\` → \`0\`"
+  cp_row "$zr" I2 "\`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\"\` → \`1\`"
+  probe "a zero pair of one row exempts nothing in the next" 1 'the Check of I2 greps' "$zr"
+  zr="$box/zr-other-pair.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\"\` → \`1\`; \`true; echo \$?\` → \`0\`"
+  probe 'the zero of another pair exempts nothing' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-unquoted.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\"\` → 0 matches"
+  probe 'an expected value outside a code span makes no pair' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-prose.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\"\` prints \`0\`"
+  probe 'two code spans with no arrow between them make no pair' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-cell.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`bash t.sh > out 2>&1; grep -c 'caso' out\` → \`0\`"
+  probe 'the cell rule exempts the counting grep of a zero pair too' 0 '1 under the anchor rule' "$zr"
+  zr="$box/zr-dq.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c \"\$p\" <<< \"\$o\"\` → \`0\`"
+  probe 'a pattern the reader cannot see whole is no count it can vouch for' 1 '0 of 1 pattern(s) anchored' "$zr"
+  # The top of the pair's command, each way into it: a grep that opens a span (prose before it, no
+  # `;`), or follows `&&`.
+  zr="$box/zr-span-head.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`bash t.sh > out 2>&1\` → \`0\`, and \`grep -c 'caso' out\` → \`0\`"
+  probe 'a counting grep that opens the span of a zero pair owes no anchor' 0 '1 under the anchor rule' "$zr"
+  zr="$box/zr-and.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`bash t.sh > out 2>&1 && grep -c 'caso' out\` → \`0\`"
+  probe 'a counting grep after && owes no anchor' 0 '1 under the anchor rule' "$zr"
+  zr="$box/zr-prefix.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); >/dev/null grep -c 'caso' <<< \"\$o\"; echo 0\` → \`0\`"
+  probe 'a redirection before the grep sends its count elsewhere' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-group.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); { true; grep -c 'caso' <<< \"\$o\"; } > /dev/null; echo 0\` → \`0\`"
+  probe 'a grep inside a group whose stdout goes elsewhere owes the anchor' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-subshell.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); (true; grep -c 'caso' <<< \"\$o\") > /dev/null; echo 0\` → \`0\`"
+  probe 'a grep inside a subshell whose stdout goes elsewhere owes the anchor' 1 '0 of 1 pattern(s) anchored' "$zr"
+  zr="$box/zr-for-paren.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); for((k=0;k<1;k++)); do true; grep -c 'caso' <<< \"\$o\"; done > /dev/null; echo 0\` → \`0\`"
+  probe 'a keyword glued to what follows it is a keyword' 1 '0 of 1 pattern(s) anchored' "$zr"
+  for zr_w in if while until for case select function coproc exec; do
+    zr="$box/zr-kw-$zr_w.md"; cp_head "$zr"
+    cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); $zr_w x; grep -c 'caso' <<< \"\$o\"\` → \`0\`"
+    probe "a grep past '$zr_w' owes the anchor" 1 '0 of 1 pattern(s) anchored' "$zr"
+  done
+  # The controls: a word that opens with a keyword, and a brace expansion, are no compound command.
+  zr="$box/zr-iffor.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); iffor x; grep -c 'caso' <<< \"\$o\"\` → \`0\`"
+  probe 'a word that holds a keyword is no keyword' 0 '1 under the anchor rule' "$zr"
+  # A compound command inside a capture, or in another pair's command, leaves the top of this one.
+  zr="$box/zr-kw-capture.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(for f in a; do bash t.sh; done 2>&1); grep -c 'caso' <<< \"\$o\"\` → \`0\`"
+  probe 'a loop inside the capture leaves the top alone' 0 '1 under the anchor rule' "$zr"
+  zr="$box/zr-kw-span.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`for f in a; do true; done\` → \`0\`; \`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\"\` → \`0\`"
+  probe "a loop in another pair's command leaves this one alone" 0 '1 under the anchor rule' "$zr"
+  zr="$box/zr-brace.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); echo {a,b}; grep -c 'caso' <<< \"\$o\"\` → \`0\`"
+  probe 'a brace expansion is no group' 0 '1 under the anchor rule' "$zr"
+  # The list of options that leave the count alone, read in-process: every identity of the table,
+  # each beside `-c`, and the ones the exemption admits, in the table's order.
+  zr_opts 'a b c E G h H i n o P s T u U w x y Z e label color line-buffered no-ignore-case'
+  # The negative control, as gt_argv's: zr_opts has to SAY a mismatch.
+  local zr_fs="$FAILS" zr_rc="$SELFTEST_RC"
+  zr_opts 'c' 2>/dev/null
+  if [ "$FAILS" -eq "$zr_fs" ]; then
+    printf 'SENSOR-BROKEN: zr_opts passed a list it was not given — its probe measures nothing\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  else
+    FAILS="$zr_fs"; SELFTEST_RC="$zr_rc"
+  fi
+  [ "$FAILS" -eq "$zr_f0" ] && \
+    rule_ok "a counting grep whose pair expects only zeros owes no anchor ($((PROBES - zr_p0)) probe(s))"
   # GFM makes the leading pipe optional, so a row written without it renders like the rest of the
   # table — and a reader of `|`-led lines skipped it whole (CodeRabbit review of PR #222). The
   # control is the same line below a blank line: a paragraph, which is no row and stays out.
