@@ -170,12 +170,13 @@
 # here (the substring test before it read `2>&10` as a merge by accident). The null device is the
 # exact word `/dev/null` before a blank, `;`, `&`, `)`, a backtick or the end of the text; quoted
 # (`"/dev/null"`) or as the head of a longer path it is a file, and a merge.
-# The stderr redirected onto a path of the stdout (Codex on PR #274) is read only for the three
-# paths written in full (`/dev/stdout`, `/dev/fd/1`, `/proc/self/fd/1`), quotes removed, before a
-# blank, `;`, `&`, `)`, `|`, a backtick or the end of the text. Not followed, and OPEN: a target
-# known only at run time (`2>$f`, `2>"$log"`), which no reader of the text decides; another
-# process's or thread's descriptor (`/proc/<pid>/fd/1`, `/proc/thread-self/fd/1`); and any other
-# path or spelling that resolves to the stdout (a symlink, `/dev/./stdout`, a backslash, `$'…'`).
+# The stderr redirected onto a path of the stdout (Codex on PR #274) is read for `/dev/stdout`,
+# `/dev/fd/1` and descriptor 1 of any entry of /proc (`/proc/<anything with no blank>/fd/1`: self,
+# thread-self, `$$`, a pid, a task; round 3), quotes removed, before a blank, `;`, `&`, `)`, `|`, a
+# backtick or the end of the text. A pid that is not the stdout's still reads as a merge: CLOSED.
+# Not followed, and OPEN: a target known only at run time (`2>$f`, `2>"$log"`), which no reader of
+# the text decides; and any other path or spelling that resolves to the stdout (a symlink,
+# `/dev/./stdout`, a backslash, `$'…'`). The TODO.md item of round 3 lists them with the rest.
 # A `2` after a digit (`12>/dev/stdout`) is another descriptor and merges nothing, while `12>&1`
 # still reads as a merge (CLOSED). `2>|` and a `|` after the path reach no cell, because a `|`
 # splits the row before rule 2 reads it, so their probes call r2_merges in process.
@@ -186,21 +187,26 @@
 # (Codex on PR #274, round 2): every command at the top of its command is a counting grep or one
 # assignment (a name, `=` and one word), each ending at a `;`, a `&&`, a `||` or the span's end, and
 # the expected value holds exactly one zero per counting grep. A grep that fails (`grep -c '['`)
-# prints no count, so the pair's output is then a word short of it, and red. Refused, CLOSED: a pair
-# whose expected value mixes a count and a zero (`echo "$a $b"` → `3 0`: following the `$(…)` up to
-# the `echo` would grow the reader again; decision 3 of that mission); a count captured and printed
+# prints no count, so the pair's output is then a word short of it, and red. Nothing the pair holds
+# runs a command either (round 3, r2_quiet): the value of each assignment, and each word and each
+# redirection target of each counting grep, is `lit`, or free of `$`, backticks, `<(` and `>(`, or
+# one name read whole, or one `$(…)` alone with no `/proc/`, `<(` or `>(` inside — `x=>(echo 0)`, a
+# FILE `>(echo 0)` and `x=$(echo 0 >/proc/$$/fd/1)` printed the zero. Refused, CLOSED: a pair whose
+# expected value mixes a count and a zero (`echo "$a $b"` → `3 0`: following the `$(…)` up to the
+# `echo` would grow the reader again; decision 3 of that mission); a count captured and printed
 # again (`echo "$(grep -c a <<< "$o")"` → `0`), which is no grep at the top of the command; every
 # other command at the top — `echo`, `printf`, `cd` (it prints the directory CDPATH resolves), a
 # command whose stdout goes to a file (`bash t.sh > out 2>&1`: telling that path from a spelling of
 # the stdout is the open reading the merge paragraph above declares), a redirection or an assignment
-# before the grep (`>f grep`, `LC_ALL=C grep`), a compound command, `exec` —; and a command a lone
-# `&` sends to the background (an assignment there never reaches the grep after it). A `||` reaches
-# no cell (rule 1), so its probes call rule2 in process; a cell holds no newline, so none is read as
-# an end. Not followed, and OPEN, as for every grep this rule reads: a name that renames grep before
-# it (a PATH, or a function whose body is a subshell, `grep () (echo 0)`), which no Check of the kit
-# or of the two target repos writes. The code spans are read backtick to backtick, as the cells
-# write them; a span opened by two backticks reads as two empty ones (one Check cell of the corpus
-# writes one, in its prose, around a literal).
+# before the grep (`>f grep`, `LC_ALL=C grep`), a compound command, `exec` —; a command a lone `&`
+# sends to the background (an assignment there never reaches the grep after it); and every value
+# r2_quiet does not name, harmless or not (`${y:-0}`, `$((1+2))`, `"$(…)"`, text around a `$(…)`). A
+# `||` reaches no cell (rule 1), so its probes call rule2 in process; a cell holds no newline, so
+# none is read as an end. Not followed, and OPEN, as for every grep this rule reads: a name that
+# renames grep before it (a PATH, or a function whose body is a subshell, `grep () (echo 0)`), which
+# no Check of the kit or of the two target repos writes. The code spans are read backtick to
+# backtick, as the cells write them; a span opened by two backticks reads as two empty ones (one
+# Check cell of the corpus writes one, in its prose, around a literal).
 #
 # DECLARED LIMITS of the pass mark (issue #249, lote 8). Only U+2713 counts, the mark the two
 # measured runners print (see PASS_MARK); `✔` (U+2714) and every fail mark do not. A runner that
@@ -325,6 +331,18 @@
 # targets 105 → 106: the R1 of breadcrumb-numero-cotacao (sales_quote) reads two counting greps
 # against one `0`.
 #
+# Codex on PR #274 (round 3) reproduced two more. A stderr sent to `/proc/thread-self/fd/1` merges
+# like `/proc/self/fd/1`, and the regex knew only the second: now descriptor 1 of any /proc entry is
+# a merge, the closed side. And `x=>(echo 0)` was a pure assignment by its form (round 2) while its
+# process substitution printed the zero; so did `x=$(echo 0 >/proc/$$/fd/1)`, and a FILE `>(echo 0)`
+# of the counting grep itself. r2_quiet now names, positively, the words that run nothing, and both
+# the value of an assignment and every word and target of a counting grep have to be one. On the 36
+# targets the --check output stayed byte for byte the same (106). 34 sabotages, each anchored on
+# code with its count: 31 died. Alive: the floor lowered on its own; the negative control's test of
+# zr_quiet forced false; and `+` read as `*` in the /proc path, which adds only `/proc//fd/1`, a
+# path that names no file. One first survived and became a word of zr_quiet: the shape test of (c),
+# which alone tells `a$(echo 0))` from a capture.
+#
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
 #   89  no temp dir (probes never ran)      90/91/92  a selftest probe failed
@@ -406,7 +424,7 @@ R2_INDIRECT_RE='(^|[^A-Za-z0-9_])(eval|declare|typeset|local)([[:space:]]|$)'
 R2_FD_ONE_RE='^0*1([^0-9]|$)'
 R2_NULL_RE='^/dev/null([[:space:];&)`]|$)'
 # The stderr onto a path of the stdout, read on the text with its quotes removed (PR #274).
-R2_STDOUT_RE='[^0-9]2(>>|>[|]|<>|>)[[:blank:]]*(/dev/stdout|/dev/fd/1|/proc/self/fd/1)([[:space:];&)|`]|$)'
+R2_STDOUT_RE='[^0-9]2(>>|>[|]|<>|>)[[:blank:]]*(/dev/stdout|/dev/fd/1|/proc/[^[:space:]]+/fd/1)([[:space:];&)|`]|$)'
 # A redirection operator with the descriptor before it, if any (`&>` takes none). POSIX matching is
 # leftmost-longest, so `<<<` wins over `<`. A here-document's `<<` reads as two `<`, and `&>>` as `&>`
 # and `>`: the same words, the same stdout.
@@ -421,8 +439,8 @@ R2_REDIR_RE='^([0-9]*)(<<<|<>|<&|<|>>|>&|>[|]|>)'
 #   - `&>` and `&>>` send both streams to their file, whatever its name (`&>1` writes a file `1`);
 #     `>&` and `1>&` do the same when the target is no descriptor (`>&f`, never `>&2` or `>&-`);
 #   - those four except into the null device, spelt exactly `/dev/null`: no grep reads it;
-#   - `2>`, `2>>`, `2>|` or `2<>` onto a path of the stdout (`/dev/stdout`, `/dev/fd/1`,
-#     `/proc/self/fd/1`), the `2` after no digit, quotes removed, the path exact (R2_STDOUT_RE).
+#   - `2>`, `2>>`, `2>|` or `2<>` onto a path of the stdout (`/dev/stdout`, `/dev/fd/1`, or
+#     `/proc/<anything with no blank>/fd/1`), the `2` after no digit, quotes removed (R2_STDOUT_RE).
 # The leading blank makes the character before the operator safe to read at index 0. The case below
 # is the cheap filter: it names an operator of every form, or the form escapes it (PR #274).
 r2_merges() {
@@ -600,6 +618,26 @@ r2_word() {
   R2_W_V="$v"; R2_W_K="$k"; R2_W_E="$i"
 }
 
+# r2_quiet <word> <class> — the shell word, as written, runs no command when bash expands it (PR
+# #274, round 3), so nothing it holds prints to the stdout the pair is read from. Written by what
+# enters: its class is `lit` (r2_word: literal parts only, a `$` inside single quotes too), or its
+# text (a) holds no `$`, backtick, `<(` or `>(`; (b) is one name read whole, `$name` or `"$name"`;
+# or (c) is one `$(…)` and nothing around it, whose text holds no `/proc/` (`>/proc/$$/fd/1` in a
+# capture writes to the shell outside it), `<(` or `>(`, and is no arithmetic `$((…))`. The rest is
+# the closed side: `${…}`, a second substitution or text around one, `"$(…)"`, a process
+# substitution anywhere. r2_close publishes R2_END on the way: a caller reads its own after.
+R2_QUIET_NAME_RE='^([$][A-Za-z_][A-Za-z0-9_]*|"[$][A-Za-z_][A-Za-z0-9_]*")$'
+r2_quiet() {
+  local w="$1"
+  [ "$2" != lit ] || return 0
+  case "$w" in *'$'* | *'`'* | *'<('* | *'>('*) ;; *) return 0 ;; esac
+  [[ "$w" =~ $R2_QUIET_NAME_RE ]] && return 0
+  case "$w" in '$(('*) return 1 ;; '$('*')') ;; *) return 1 ;; esac
+  case "$w" in *'/proc/'* | *'<('* | *'>('*) return 1 ;; esac
+  r2_close "$w" 2
+  [ "$R2_END" -eq $((${#w} - 1)) ]
+}
+
 # r2_grep_at <text> <i> — the grep command whose words start at i, read the way bash hands them
 # over: where it ends (R2_END: the first `;`, `&`, `|`, newline or backtick outside a word, or the
 # `)` closing the paren it sits in), its words in order — each one's value (R2_WV), the literal
@@ -608,11 +646,12 @@ r2_word() {
 # anything else, empty when there is none), and whether a redirection sends grep's STDOUT elsewhere
 # (R2_RDOUT: `>`, `>>`, `>|`, `>&`, `&>`, or any operator on descriptor 1). A redirection —
 # its descriptor, its operator and its target, glued or in the next word — is no word: grep never
-# sees it. Called, never read through `$(…)`, like every reader here.
+# sees it. R2_QUIET is 1 when every word and every target runs nothing (r2_quiet). Called, never
+# read through `$(…)`, like every reader here.
 r2_grep_at() {
   local LC_ALL=C
   local t="$1" i="$2" n="${#1}" c fd op w end="${#1}"
-  R2_WV=(); R2_WP=(); R2_WK=(); R2_HS=''; R2_RDOUT=0
+  R2_WV=(); R2_WP=(); R2_WK=(); R2_HS=''; R2_RDOUT=0; R2_QUIET=1
   while [ "$i" -lt "$n" ]; do
     c="${t:i:1}"
     case "$c" in
@@ -629,12 +668,14 @@ r2_grep_at() {
     fi
     if [ -z "$op" ]; then
       r2_word "$t" "$i"
+      r2_quiet "${t:i:R2_W_E-i}" "$R2_W_K" || R2_QUIET=0
       R2_WV+=("$R2_W_V"); R2_WP+=("${R2_W_V%%"$R2_MARK"*}"); R2_WK+=("$R2_W_K")
       i="$R2_W_E"; continue
     fi
     i=$((i + ${#fd} + ${#op}))
     while [[ "${t:i:1}" == [[:blank:]] ]]; do i=$((i + 1)); done
     r2_word "$t" "$i"
+    r2_quiet "${t:i:R2_W_E-i}" "$R2_W_K" || R2_QUIET=0
     if [ "$op" = '<<<' ]; then
       w="${t:i:R2_W_E-i}"
       case "$w" in \"*\") w="${w#\"}"; w="${w%\"}" ;; esac
@@ -870,12 +911,14 @@ R2_ZERO_OPTS=' c i y no-ignore-case E G P w x e s a h H n b o T U u Z label colo
 
 # r2_counts_zero — the grep r2_grep_at and r2_grep_anchored just read prints a count and nothing
 # moves it: its stdout is not redirected (R2_RDOUT), it counts (`-c`), every option is on
-# R2_ZERO_OPTS (an argv that does not read leaves a `?` in R2_OPTS, which the list never holds), and
-# every pattern is `lit` (R2_PLIT). Whether that count is what the pair prints is r2_greps' half.
+# R2_ZERO_OPTS (an argv that does not read leaves a `?` in R2_OPTS, which the list never holds),
+# every pattern is `lit` (R2_PLIT), and no word or target of it runs a command (R2_QUIET; a FILE
+# `>(echo 0)` prints the zero a failed grep never did, PR #274, round 3). Whether that count is
+# what the pair prints is r2_greps' half.
 r2_counts_zero() {
   local o
   local -a os=()
-  [ "$R2_RDOUT" -eq 0 ] && [ "$R2_PLIT" -eq 1 ] || return 1
+  [ "$R2_RDOUT" -eq 0 ] && [ "$R2_PLIT" -eq 1 ] && [ "$R2_QUIET" -eq 1 ] || return 1
   case "$R2_OPTS" in *' c '*) ;; *) return 1 ;; esac
   read -ra os <<< "$R2_OPTS"
   for o in ${os[@]+"${os[@]}"}; do
@@ -941,11 +984,16 @@ r2_ends_clean() {
 }
 
 # r2_assign_at <text> <i> — the command at i is one assignment and nothing else (PR #274, round 2):
-# a name and `=` open it, r2_grep_at reads one word there (a second word is a command the
-# assignment only prefixes, `x=1 echo 0`), and it ends where r2_ends_clean says. It prints nothing.
+# a name and `=` open it, its value runs nothing (r2_quiet: `x=>(echo 0)` printed the zero, round
+# 3), r2_grep_at reads one word there (a second word is a command the assignment only prefixes,
+# `x=1 echo 0`), and it ends where r2_ends_clean says. It prints nothing.
 R2_ASSIGN_RE='^[A-Za-z_][A-Za-z0-9_]*='
 r2_assign_at() {
+  local v
   [[ "${1:$2}" =~ $R2_ASSIGN_RE ]] || return 1
+  r2_word "$1" "$2"
+  v="${1:$2:R2_W_E-$2}"
+  r2_quiet "${v#*=}" "$R2_W_K" || return 1
   r2_grep_at "$1" "$2"
   [ "${#R2_WV[@]}" -eq 1 ] && r2_ends_clean "$1"
 }
@@ -1575,7 +1623,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=361
+PROBE_FLOOR=384
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1668,10 +1716,10 @@ gt_argv() {
   FAILS=$((FAILS + 1)); fail_rc 91
 }
 
-# zr_opts <want> — the identities r2_counts_zero admits, each read beside `-c`, with a `lit` pattern
-# and the stdout left alone: every letter of the table, then every identity no letter spells, then
-# the `?` of an argv that does not read. IN-PROCESS, like gt_argv: the list is one definition, and
-# a child process shows only the identities its fixtures happen to write.
+# zr_opts <want> — the identities r2_counts_zero admits, each read beside `-c`, with a `lit`
+# pattern, quiet words and the stdout left alone: every letter of the table, then every identity no
+# letter spells, then the `?` of an argv that does not read. IN-PROCESS, like gt_argv: the list is
+# one definition, and a child process shows only the identities its fixtures happen to write.
 zr_opts() {
   local got='' id e k
   local -a all=()
@@ -1685,11 +1733,35 @@ zr_opts() {
   done
   all+=('?')
   for id in "${all[@]}"; do
-    R2_OPTS=" c $id "; R2_PLIT=1; R2_RDOUT=0
+    R2_OPTS=" c $id "; R2_PLIT=1; R2_RDOUT=0; R2_QUIET=1
     if r2_counts_zero; then got+="${got:+ }$id"; fi
   done
   [ "$got" = "$1" ] && return 0
   printf 'SENSOR-BROKEN: the options a zero pair admits — wanted %s, got %s\n' "$1" "$got" >&2
+  FAILS=$((FAILS + 1)); fail_rc 91
+}
+
+# zr_quiet <want> — the words r2_quiet admits out of ZR_QUIET_WORDS, each with the class r2_word
+# gives it, shown as [word]. IN-PROCESS, like zr_opts: a backtick never reaches a word from a cell
+# (it ends the code span), so only a direct call shows that a double-quoted one is refused, and the
+# list reads every clause of the rule in one place (PR #274, round 3). The last word is a syntax
+# error bash refuses to run; it is there because only the shape test of (c), and not r2_close, tells
+# it from a capture.
+ZR_QUIET_WORDS=(
+  '3' 'if' '{a,b}' "'caso\$'" '$o' '"$o"' '$(bash t.sh 2>&1)'
+  '"`echo 0`"' '>(echo 0)' '<(echo 0)' '$(echo 0 >/proc/$$/fd/1)' '${y:-0}' 'a$(echo 0)'
+  '$(a)$(b)' '$((1+2))' '"$(echo 0)"' '$(cat <(echo 0))' '$(tee >(cat))' '$o$(echo 0)'
+  '$(echo 0)$o' '"$o' 'a$(echo 0))'
+)
+zr_quiet() {
+  local got='' w
+  PROBES=$((PROBES + 1))
+  for w in "${ZR_QUIET_WORDS[@]}"; do
+    r2_word "$w" 0
+    if r2_quiet "$w" "$R2_W_K"; then got+="[$w]"; fi
+  done
+  [ "$got" = "$1" ] && return 0
+  printf 'SENSOR-BROKEN: the words r2_quiet admits — wanted %s, got %s\n' "$1" "$got" >&2
   FAILS=$((FAILS + 1)); fail_rc 91
 }
 
@@ -2119,9 +2191,11 @@ selftest() {
   probe 'a capture silenced into the null device taints nothing' 0 '1 under the anchor rule' "$mg"
   # The stderr redirected onto a path of the stdout merges too (Codex on PR #274, round 1; measured
   # on bash 5.2.21): `/dev/stdout`, `/dev/fd/1` or `/proc/self/fd/1` behind `2>`, `2>>`, `2>|` or
-  # `2<>`, blanks before the path, quotes around it.
+  # `2<>`, blanks before the path, quotes around it. And descriptor 1 of any entry of /proc (round
+  # 3): another thread's, the shell's own by `$$`, a pid, a task.
   for mg_g in '2>/dev/stdout' '2>>/dev/stdout' '2<>/dev/stdout' '2> /dev/stdout' '2>/dev/fd/1' \
-    '2>/proc/self/fd/1' '2>"/dev/stdout"' "2>'/dev/fd/1'"; do
+    '2>/proc/self/fd/1' '2>"/dev/stdout"' "2>'/dev/fd/1'" '2>/proc/thread-self/fd/1' \
+    '2>/proc/$$/fd/1' '2>/proc/1234/fd/1' '2>/proc/self/task/77/fd/1'; do
     mg_k=$((mg_k + 1)); mg="$box/mg-capture$mg_k.md"; cp_head "$mg"
     cp_row "$mg" I1 "\`o=\$(bash t.sh $mg_g); grep -c 'alpha' <<< \"\$o\"\` → \`1\`"
     probe "a capture merged with '$mg_g' owes the anchor" 1 '0 of 1 pattern(s) anchored' "$mg"
@@ -2145,7 +2219,8 @@ selftest() {
   # itself, beside a `2>` that takes the text past the cheap filter, and a descriptor that only
   # ends in `2` (`12>`).
   for mg_g in '2>/dev/stderr' '2>/dev/fd/2' '2>/dev/tty' '2>/dev/fd/01' '2>/dev/stdout.log' \
-    '1>/dev/stdout 2>/dev/null' '>/dev/stdout 2>/dev/null' '12>/dev/stdout'; do
+    '1>/dev/stdout 2>/dev/null' '>/dev/stdout 2>/dev/null' '12>/dev/stdout' '2>/proc/self/fd/2' \
+    '2>/proc/self/fd/10'; do
     mg_k=$((mg_k + 1)); mg="$box/mg-none$mg_k.md"; cp_head "$mg"
     cp_row "$mg" I1 "\`o=\$(bash t.sh $mg_g); grep -c 'alpha' <<< \"\$o\"\` → \`1\`"
     probe "'$mg_g' merges nothing a grep reads" 0 '0 under the anchor rule' "$mg"
@@ -2479,7 +2554,7 @@ ARGV
   # command at its top is one assignment, and the expected value holds one zero per counting grep
   # (PR #274, round 2). Each rc-1 probe breaks one of those; the `-F`, fgrep and ANSI-C fixtures of
   # the groups above, which expect `0` too, stay refused by the list and by the `lit`.
-  local zr_p0="$PROBES" zr_f0="$FAILS" zr zr_w
+  local zr_p0="$PROBES" zr_f0="$FAILS" zr zr_w zr_k=0
   # Copied from the source, row I8 of the LH-4 checkpoint under lighthouse_project/docs/handoffs/
   # (the mission of 2026-09-27): five pairs, and the build's count of a warning expects zero.
   zr="$box/zr-lh4.md"; cp_head "$zr"
@@ -2647,6 +2722,50 @@ ARGV
   zr="$box/zr-pgrep.md"; cp_head "$zr"
   cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); pgrep -c '${OK_ANCHOR}a' <<< \"\$o\"\` → \`1\`"
   probe 'a word that ends in grep is no grep' 1 '0 of 1 pattern(s) anchored' "$zr"
+  # A word that runs a command prints to the stdout the pair is read from (PR #274, round 3): the
+  # value of an assignment runs nothing (r2_quiet), and neither does any word or target of the
+  # counting grep. Each fixture's grep fails, so the zero would be the command's.
+  for zr_w in 'x=>(echo 0)' 'x=<(echo 0)' 'x=$(echo 0 >/proc/$$/fd/1)' 'x=${y:-0}' 'x=a$(echo 0)' \
+    'x=$(a)$(b)' 'x=$((1+2))'; do
+    zr_k=$((zr_k + 1)); zr="$box/zr-value$zr_k.md"; cp_head "$zr"
+    cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); $zr_w; grep -c '[' <<< \"\$o\"\` → \`0\`"
+    probe "the value of '$zr_w' is no quiet assignment" 1 '0 of 1 pattern(s) anchored' "$zr"
+  done
+  # A backtick inside a span opened by two reads as spans of its own, so the grep is in no pair.
+  zr="$box/zr-value-tick.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`\` o=\$(bash t.sh 2>&1); x=\`echo 0\`; grep -c '[' <<< \"\$o\" \`\` → \`0\`"
+  probe 'a command substitution in backticks exempts nothing' 1 '0 of 1 pattern(s) anchored' "$zr"
+  for zr_w in '>(echo 0)' '<(echo 0 >/proc/$$/fd/1)'; do
+    zr_k=$((zr_k + 1)); zr="$box/zr-file$zr_k.md"; cp_head "$zr"
+    cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c '[' <<< \"\$o\" $zr_w\` → \`0\`"
+    probe "a FILE '$zr_w' of the counting grep runs a command" 1 '0 of 1 pattern(s) anchored' "$zr"
+  done
+  zr="$box/zr-label.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c --label=\"\$(echo 0 >/proc/\$\$/fd/1)\" '[' <<< \"\$o\"\` → \`0\`"
+  probe "an option's argument of the counting grep runs a command" 1 '0 of 1 pattern(s) anchored' "$zr"
+  # The values that run nothing: a literal, one name read whole (`p=$o` is above), and a `$` inside
+  # single quotes, which is a literal.
+  for zr_w in 'n=3' 'p="$o"'; do
+    zr_k=$((zr_k + 1)); zr="$box/zr-quiet$zr_k.md"; cp_head "$zr"
+    cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); $zr_w; grep -c 'caso' <<< \"\$o\"\` → \`0\`"
+    probe "the value of '$zr_w' runs nothing" 0 '1 under the anchor rule' "$zr"
+  done
+  zr="$box/zr-dollar-lit.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'caso\$' <<< \"\$o\"\` → \`0\`"
+  probe 'a dollar inside single quotes runs nothing' 0 '1 under the anchor rule' "$zr"
+  zr="$box/zr-target.md"; cp_head "$zr"
+  cp_row "$zr" I1 "\`o=\$(bash t.sh 2>&1); grep -c '[' < <(echo 0 >/proc/\$\$/fd/1) <<< \"\$o\"\` → \`0\`"
+  probe 'a redirection target of the counting grep runs a command' 1 '0 of 1 pattern(s) anchored' "$zr"
+  # Every clause of r2_quiet, in process, and its negative control.
+  zr_quiet "[3][if][{a,b}]['caso\$'][\$o][\"\$o\"][\$(bash t.sh 2>&1)]"
+  local zr_uf="$FAILS" zr_urc="$SELFTEST_RC"
+  zr_quiet '[3]' 2>/dev/null
+  if [ "$FAILS" -eq "$zr_uf" ]; then
+    printf 'SENSOR-BROKEN: zr_quiet passed a list it was not given — its probe measures nothing\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  else
+    FAILS="$zr_uf"; SELFTEST_RC="$zr_urc"
+  fi
   # `||` reaches no cell (rule 1), so its two probes are in-process: the command after it is one
   # of the pair's, and a grep may end at it.
   zr_rule2 '0 of 1' "\`o=\$(bash t.sh 2>&1); grep -c 'caso' <<< \"\$o\" || echo 0\` → \`0\`"
