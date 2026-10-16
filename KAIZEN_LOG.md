@@ -4,6 +4,61 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-16 — Lote 9: o papel de cada palavra
+
+**Missão:** `20261016-lote-9-o-papel-de-cada-palavra`, a leva dos três itens do backlog cujo conserto
+mora só em `tests/check-checkpoint.sh` (#269, #270 e #272, todos na regra 2) e que por isso não parte a
+janela do juiz do lote 7 (`./bin/sdd kaizen --series` às 11:42: `latest.kit_sha: bad6168`, `missions: 1`).
+
+**Antes** (o sensor da `9c13855`, remedido no fecho às 11:41 com `lighthouse_project` em `3531a42` e
+`sales_quote` em `a1ad4b74`): o `--check` sobre os 36 checkpoints dos dois alvos recusava **114**
+células pela regra 2 (16 + 98), **2** delas na LH-4. A regra via 2 das 13 grafias que mesclam a
+stderr na stdout (`2>&1` e `2>&1-`): `&>`, `>&` e `&>>` passavam calados. Guardava as palavras do grep em
+duas listas soltas, então um argumento de opção (`--label='^  ok    x'`) ou um FILE com nome de âncora
+contava como padrão, e não lia a opção entre aspas (`'-v'`, `"-F"`), o `--fixed-regexp` nem o `-z`: seis
+falhas abertas, 0 de 6 recusadas, e dois fechados por acidente (o padrão ancorado escrito com escape e o
+FILE chamado `grep`), 0 de 2 aceitos. E recusava o `grep -c` de esperado `0` sobre a saída mesclada de
+um build, que nunca fica verde sobre uma linha `FAIL` que o padrão casa (a I8 da LH-4).
+
+**Depois** (os mesmos comandos, na mesma hora, sensor do HEAD): **105** células (15 + 90) e **1** na
+LH-4, a I9, que lê `^Total:` sem marca de "passou". As 9 células liberadas são todas do I4: a I8 da LH-4 e
+oito do `sales_quote`. O I1, o I2 e o I3 deixaram a saída do `--check` idêntica byte a byte nos 36 alvos e
+a varredura do kit igual: os fail-opens e os fechados por acidente do #270 não ocorrem no corpus. O
+protótipo do planner previa 103; as I10 e I11 de `papeis-consultor-admin` têm o grep do par de zero
+isento, mas caem na regra da célula pela captura que mescla. A varredura do kit segue limpa (197 células
+sob a regra, 262 linhas em 31 arquivos), e os 30 checkpoints de missão do kit não têm recusa nenhuma, com
+o sensor da base e com o do HEAD. Quatro linhas `ok` novas, uma por incremento (`RULE_FLOOR` 4 → 8):
+
+- `rule: every spelling that merges stderr into stdout puts the cell under the anchor rule`;
+- `rule: each word of a grep is read by its value, quotes and escapes removed`;
+- `rule: grep's argv is read as getopt_long reads it, and only a pattern owes the anchor`;
+- `rule: a counting grep whose pair expects only zeros owes no anchor`.
+
+`grep -c '^  ok    rule: '` dá **9**, não os 8 do plano: a linha da proibição do `|` também abre assim.
+O selftest foi de **128 para 316 probes** (+31, +65, +51, +41), com a tabela do GNU grep 3.11 medida no
+`/usr/bin/grep` (427 prefixos longos, 62 letras e 7 matchers, 0 divergências) e o golden das 50 opções
+longas e das 48 letras escrito como probe. **321 sabotagens** (34, 130, 73 e 84), cada uma ancorada em
+código com a contagem exata e aplicada numa cópia privada; no fim só sobrevive o piso baixado sozinho,
+que é um mínimo por construção. Oito sobreviveram primeiro: no I1 duas, que viraram probe (o branco
+depois do `/dev/null` e o operador no índice 0); no I2 três (o ANSI-C que deixou de recusar virou
+probe; um probe e uma linha da tabela apagados passavam sob o piso de 200, que subiu para 224); no I3
+duas (o argv ilegível depois de um `-e`, que virou probe, e um `amb=0` inalcançável, que saiu); no I4
+uma (o `cs` do backtick, escondido por um `;` na prosa de um fixture, que virou `, and`). Listar as
+degradações antes de rodá-las pediu mais 9 probes (4 no I2, 5 no I4), e a 1ª rodada do I4, mais 2.
+
+**Por que um modelo e não um remendo:** na regra 2, a revisão final do lote 8 achou a indireção e o
+segundo padrão, e o Codex no PR #267 achou mais quatro em quatro das seis rodadas (o `-F` com o `-v`, o
+ANSI-C, o `--fixed` e, na 6ª, o argumento de opção contado como padrão). O lote 8 já tinha parado de
+remendar uma vez, modelando a abreviação do getopt_long; a 6ª rodada mostrou que faltava o resto do
+estado. O lote 9 o modelou: a palavra (o valor, com aspas e escapes removidos, e o redirecionamento fora
+dela) e o papel dela (o argv lido como o getopt_long o lê, com a tabela do GNU grep 3.11), e só o padrão
+deve a âncora.
+
+**Achados:** nenhum novo no EXEC; a catraca segue em 15 (o achado de `commands/` registrado depois do
+aceite, `6e20c92`). O #271 ganhou uma linha com as regras do lote 9 que a prosa congelada não sabe.
+
+---
+
 ## 2026-10-15 — Lote 8: a leva que não parte a janela
 
 **Missão:** `20261015-lote-8-a-leva-que-nao-parte-a-janela`, a leva do backlog que só toca `tests/` e

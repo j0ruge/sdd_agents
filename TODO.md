@@ -43,7 +43,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   a pré-condição é o literal: `bash tests/check-a.sh &> out.log; grep -c 'alpha holds' out.log` → `1` sai
   `0 under the anchor rule` (medido em 2026-10-15) e responde "a asserção existe" como a forma que a regra
   recusa; `>&` e `&>>` passam igual. Falha aberta, sem limite declarado no cabeçalho. Direção: a pré-condição
-  lê toda grafia de mescla da stderr na stdout, com um probe por grafia.
+  lê toda grafia de mescla da stderr na stdout, com um probe por grafia. RESOLVED by 61bc9e9.
   — descoberto pelo `sdd-executor` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
 - [ ] **A regra 2 do check-checkpoint não sabe o papel de cada palavra do grep** — `tests/check-checkpoint.sh:795`
@@ -51,7 +51,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`grep --label='^  ok    x' -H -c 'caso' <<< "$o"` sai "none blind" e imprime `^  ok    x:1` com FAIL ou
   com ok) ou um FILE com nome de âncora ao lado de um `-e` cego passam. Falha aberta; a do FILE já estava
   declarada no cabeçalho. Direção: ler o argv do grep como o getopt_long (opções com argumento, posição do
-  padrão, arquivos) e cobrar a âncora só do padrão.
+  padrão, arquivos) e cobrar a âncora só do padrão. RESOLVED by 3de6c5c.
   — descoberto pelo `codex` no PR #267, missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
 ### Contrato e configuração
@@ -69,13 +69,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `^  ok    `, e o `templates/todo.pt-BR.md:24`, o `templates/todo.md:24` e o `agents/sdd-executor.md:127`,
   "nenhuma linha passa de 120". Não falha aberta, mas a saída só aparece na mensagem de FAIL. Direção: as
   cinco frases dizem a regra nova quando o congelamento cair.
+  Lote 9 (`20261016-lote-9-o-papel-de-cada-palavra`): toda mescla, só o padrão deve âncora (getopt_long), par de zeros.
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 - [ ] **A regra 2 recusa o grep de esperado `0` na saída mesclada de um build** — `tests/check-checkpoint.sh:1141`
   (`rule2`) — a I8 da LH-4 do `lighthouse_project` faz `b=$(npm run build … 2>&1)` e
   `grep -ci 'chunks larger than' <<< "$b"` → `0`, uma das 2 recusas da LH-4 depois do lote 8; o mesmo molde
   (`grep -c 'error TS'` → `0`) está em 29 das 98 recusas do `sales_quote`. Um grep de esperado `0` fica
-  vermelho, nunca verde, sobre texto que ok e FAIL dividem. Falha fechada, com consumidor fora da suíte
-  (D15). Direção: medir se o grep de esperado `0` pode sair da regra, com probes, ou declarar o limite.
+  vermelho, nunca verde, sobre texto que ok e FAIL dividem. Falha fechada, com consumidor fora da suíte (D15).
+  Direção: medir se o grep de esperado `0` pode sair da regra, com probes, ou declarar o limite. RESOLVED by c48623d.
   — descoberto pelo `sdd-executor` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 - [ ] **O veredito da QA não é revalidado depois de um R<n>** — `docs/pipeline.md:99` (`R<n>`) — o REVIEW
   vem depois da QA e um `R<n>` muda o código sem reabri-la: o reteste do lote 7 só lê `F<n>`, e o `skipped`
