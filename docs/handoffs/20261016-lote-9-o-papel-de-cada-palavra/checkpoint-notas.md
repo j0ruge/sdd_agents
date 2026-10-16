@@ -20,6 +20,7 @@
 
 - 2026-10-16 08:13 · `PLAN` · Planejado pelo `sdd-planner` com o humano (relay do `/sdd-plan`, 02:39–08:13), 6 decisões, todas a recomendada, mais a instrução de consultar a `todo-to-github-issues` antes de editar o `TODO.md`. O gemba achou quatro membros novos da família do #270, todos dentro do modelo da decisão 2: a opção entre aspas (`'-v'`, `"-F"`), o `--fixed-regexp`, o `-z` com `.*` e o `-X fgrep`. E corrigiu uma suposição do grill: o argumento de opção entre aspas (`-m '1'`) nunca causou falso positivo, só os fail-opens.
 - 2026-10-16 08:18 · `PLAN` · Decisão 8 (pergunta 7, a recomendada): as duas leituras do gemba valem — padrão recusado é o que começa por expansão, e a isenção do par de zeros exige topo, stdout não redirecionada, padrões literais e lista positiva de opções. Artefatos prontos para o aceite.
+- 2026-10-16 09:04 · `PLAN` · Aprovado pelo humano (`a4eaa89`). Depois do aceite, o relay registrou um achado de `commands/` combinado com o humano no grill (o passo 2 do `/sdd-plan` pede a branch antes de o id existir), `6e20c92`, catraca 14 → 15, consultando antes a `todo-to-github-issues` (`--audit` auto=0 manual=0). Com ele o backlog vai de 15 para 12 no chore pós-merge, não de 14 para 11 como o `00-missao.md` diz; o Check do I5 lê a contagem do sensor e não muda.
 
 > **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
 > `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É a **narrativa** do que o
