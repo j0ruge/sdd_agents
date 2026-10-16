@@ -39,20 +39,42 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
   — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
 
-- [ ] **A regra 2 do check-checkpoint só vê a mescla escrita `2>&1`** — `tests/check-checkpoint.sh:672` (`2>&1`) —
+- [ ] **A regra 2 do check-checkpoint só vê a mescla escrita `2>&1`** — `tests/check-checkpoint.sh:1314` (`r2_merges`) —
   a pré-condição é o literal: `bash tests/check-a.sh &> out.log; grep -c 'alpha holds' out.log` → `1` sai
   `0 under the anchor rule` (medido em 2026-10-15) e responde "a asserção existe" como a forma que a regra
   recusa; `>&` e `&>>` passam igual. Falha aberta, sem limite declarado no cabeçalho. Direção: a pré-condição
-  lê toda grafia de mescla da stderr na stdout, com um probe por grafia.
+  lê toda grafia de mescla da stderr na stdout, com um probe por grafia. RESOLVED by 61bc9e9.
   — descoberto pelo `sdd-executor` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
-- [ ] **A regra 2 do check-checkpoint não sabe o papel de cada palavra do grep** — `tests/check-checkpoint.sh:412`
+- [ ] **A regra 2 do check-checkpoint não sabe o papel de cada palavra do grep** — `tests/check-checkpoint.sh:917`
   (`r2_grep_anchored`) — toda palavra entre aspas fora do herestring conta como padrão: um argumento de opção
   (`grep --label='^  ok    x' -H -c 'caso' <<< "$o"` sai "none blind" e imprime `^  ok    x:1` com FAIL ou
   com ok) ou um FILE com nome de âncora ao lado de um `-e` cego passam. Falha aberta; a do FILE já estava
   declarada no cabeçalho. Direção: ler o argv do grep como o getopt_long (opções com argumento, posição do
-  padrão, arquivos) e cobrar a âncora só do padrão.
+  padrão, arquivos) e cobrar a âncora só do padrão. RESOLVED by 3de6c5c.
   — descoberto pelo `codex` no PR #267, missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
+
+- [ ] **A regra 2 do check-checkpoint deixa abertos os casos que só o runtime decide** —
+  `tests/check-checkpoint.sh:444` (`R2_STDOUT_RE`) — falha aberta declarada no cabeçalho depois da rodada 3: a mescla
+  por terceiro descritor (`3>&1 2>&3`), o alvo de runtime (`2>$f`), grafias da stdout (symlink, `/dev/./stdout`,
+  `$'…'`), a palavra que abre com expansão lida como operando (`"$l"`), `POSIXLY_CORRECT` ou outro grep, e o nome que
+  substitui o grep (`grep () (echo 0)`). Um leitor de texto não decide o que só o runtime resolve. Direção: outra
+  peça (o Check medido em execução), não mais uma grafia. Fonte: o `checkpoint-notas.md` da missão (rodada 3)
+  — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
+
+- [ ] **A regra 2 não lê a substituição de processo da stderr como mescla** — `tests/check-checkpoint.sh:463`
+  (`r2_merges`) — `o=$(sensor 2> >(cat))` leva a stderr para dentro da captura (medido no bash 5.2.21: o FAIL e o
+  ok no mesmo `$o`), mas o `2>` só mescla quando o alvo é um caminho da stdout, e um grep cego de `$o` sai
+  "0 under the anchor rule". Falha aberta, decidível pelo texto. Direção: `2>`, `2>>`, `2>|` ou `2<>` seguido de
+  `>(` conta como mescla, no lado fechado.
+  — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
+
+- [ ] **A regra 2 aceita a âncora seguida de uma expansão no padrão** — `tests/check-checkpoint.sh:925`
+  (`r2_anchored`) — um padrão entre aspas duplas que começa pela âncora passa pelo prefixo literal, mas o resto
+  pode expandir em outro ramo: com `alt` valendo `\|  FAIL  case`, `grep -c "^  ok    case$alt"` conta 1 com o ok
+  e com o FAIL (medido). Falha aberta. Direção: padrão `dq` com expansão depois da âncora é ilegível, salvo prova
+  de que a expansão não acrescenta padrão nem alternância.
+  — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
 
 ### Contrato e configuração
 
@@ -69,13 +91,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `^  ok    `, e o `templates/todo.pt-BR.md:24`, o `templates/todo.md:24` e o `agents/sdd-executor.md:127`,
   "nenhuma linha passa de 120". Não falha aberta, mas a saída só aparece na mensagem de FAIL. Direção: as
   cinco frases dizem a regra nova quando o congelamento cair.
+  Lote 9 (`20261016-lote-9-o-papel-de-cada-palavra`): toda mescla, só o padrão deve âncora (getopt_long), par de zeros.
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
-- [ ] **A regra 2 recusa o grep de esperado `0` na saída mesclada de um build** — `tests/check-checkpoint.sh:677`
+- [ ] **A regra 2 recusa o grep de esperado `0` na saída mesclada de um build** — `tests/check-checkpoint.sh:1319`
   (`rule2`) — a I8 da LH-4 do `lighthouse_project` faz `b=$(npm run build … 2>&1)` e
   `grep -ci 'chunks larger than' <<< "$b"` → `0`, uma das 2 recusas da LH-4 depois do lote 8; o mesmo molde
   (`grep -c 'error TS'` → `0`) está em 29 das 98 recusas do `sales_quote`. Um grep de esperado `0` fica
-  vermelho, nunca verde, sobre texto que ok e FAIL dividem. Falha fechada, com consumidor fora da suíte
-  (D15). Direção: medir se o grep de esperado `0` pode sair da regra, com probes, ou declarar o limite.
+  vermelho, nunca verde, sobre texto que ok e FAIL dividem. Falha fechada, com consumidor fora da suíte (D15).
+  Direção: medir se o grep de esperado `0` pode sair da regra, com probes, ou declarar o limite. RESOLVED by c48623d.
   — descoberto pelo `sdd-executor` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 - [ ] **O veredito da QA não é revalidado depois de um R<n>** — `docs/pipeline.md:99` (`R<n>`) — o REVIEW
   vem depois da QA e um `R<n>` muda o código sem reabri-la: o reteste do lote 7 só lê `F<n>`, e o `skipped`
@@ -106,6 +129,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   e o `docs/pipeline.md:1477` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
   `/sdd-plan` porque o `bin/` está congelado até o veredito. Direção: `--no-track` no motivo e nas duas citações.
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
+
+- [ ] **O passo 2 do `/sdd-plan` pede a branch da missão antes de o grill decidir o id** — `commands/sdd-plan.md:35`
+  (`git worktree add`) — o worktree nasce "on the branch the mission will declare in `branch:`" antes de todo
+  artefato, mas a branch sai do id, decidido no grill (decisão 4 do lote 8, 5 do lote 9), e o grill já pode
+  registrar achado no `TODO.md`: o relay chuta o nome ou abre o worktree depois do grill. No lote 9 ele cortou
+  `fix/lote-9` provisória, e o planner a renomeou (`git branch -m`) na decisão 5, sem atrito e sem upstream.
+  Direção: o passo 2 manda cortar a branch provisória e renomeá-la na decisão do id, enquanto não há upstream.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
 
 ### Saída humana e cosmética
 
