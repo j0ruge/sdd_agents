@@ -39,26 +39,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
   — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
 
-- [ ] **A regra 2 do check-checkpoint deixa abertos os casos que só o runtime decide** —
-  `tests/check-checkpoint.sh:444` (`R2_STDOUT_RE`) — falha aberta declarada no cabeçalho depois da rodada 3: a mescla
-  por terceiro descritor (`3>&1 2>&3`), o alvo de runtime (`2>$f`), grafias da stdout (symlink, `/dev/./stdout`,
-  `$'…'`), a palavra que abre com expansão lida como operando (`"$l"`), `POSIXLY_CORRECT` ou outro grep, e o nome que
-  substitui o grep (`grep () (echo 0)`). Um leitor de texto não decide o que só o runtime resolve. Direção: outra
-  peça (o Check medido em execução), não mais uma grafia. Fonte: o `checkpoint-notas.md` da missão (rodada 3)
-  — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
-
 - [ ] **A regra 2 não lê a substituição de processo da stderr como mescla** — `tests/check-checkpoint.sh:463`
   (`r2_merges`) — `o=$(sensor 2> >(cat))` leva a stderr para dentro da captura (medido no bash 5.2.21: o FAIL e o
   ok no mesmo `$o`), mas o `2>` só mescla quando o alvo é um caminho da stdout, e um grep cego de `$o` sai
   "0 under the anchor rule". Falha aberta, decidível pelo texto. Direção: `2>`, `2>>`, `2>|` ou `2<>` seguido de
   `>(` conta como mescla, no lado fechado.
-  — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
-
-- [ ] **A regra 2 aceita a âncora seguida de uma expansão no padrão** — `tests/check-checkpoint.sh:925`
-  (`r2_anchored`) — um padrão entre aspas duplas que começa pela âncora passa pelo prefixo literal, mas o resto
-  pode expandir em outro ramo: com `alt` valendo `\|  FAIL  case`, `grep -c "^  ok    case$alt"` conta 1 com o ok
-  e com o FAIL (medido). Falha aberta. Direção: padrão `dq` com expansão depois da âncora é ilegível, salvo prova
-  de que a expansão não acrescenta padrão nem alternância.
   — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
 
 ### Contrato e configuração
@@ -200,3 +185,5 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - **Drift de comentário em código não teria dono: nem a DOCS nem a EXEC** — decidido: comentário de código é do código — a REVIEW o manda para um lote R<n> da EXEC, a DOCS marca ⛔ com o texto proposto (o bin/sdd fica fora do writes: dela, e o gate só recusa ⛔ em documento que ela pode escrever), ou ele vai para o TODO_FILE quando o carimbo não compensa; o caminho estreito "a DOCS edita só hunk de comentário" falharia aberto, porque o bin/sdd tem 6 heredocs e # dentro de string, awk e jq; 0 hat-crossed por código em 15 sessões DOCS desde 2026-09-12 — `agents/sdd-docs.md:104` (2026-10-04)
 - **A entrada do índice na árvore do kit leva vírgula inicial (`@,100644:…`)** — decidido (D15): o mawk avalia o lado esquerdo de `ix[q] = (q in ix) ? … : e` antes do `in`, então toda entrada nasce com `,`; é representação interna, igual nas duas amostras que a guarda compara, e o motivo do `kit-touched` não a imprime — sem consumidor, não é achado — `bin/sdd:4003` (`kit_guard_tree`), revisão final de `20261008-lote-6-as-quatro-que-faltam` (2026-10-08)
 - **`kit_checkout_targets_run` com `REPO_ROOT` vazio responderia "recusado"** — decidido (D15): inalcançável, a recusa de identidade do `cmd_kaizen` vem antes e o `load_config` sempre publica a raiz; reabre se a função ganhar outro chamador — `bin/sdd:10963` (`kit_checkout_targets_run`), revisão final de `20261008-lote-6-as-quatro-que-faltam` (2026-10-08)
+- **A regra 2 do check-checkpoint deixa abertos os casos que só o runtime decide** — decidido sem conserto (decisão 1 do lote 10): um leitor de texto não decide o terceiro descritor, o alvo de runtime (`2>$f`), a grafia da stdout que o sistema resolve, a palavra que abre com expansão lida como operando, o `POSIXLY_CORRECT` ou outro grep, nem o nome que substitui o grep; a peça que mediria a Check em execução não tem dono (no PLAN a asserção ainda não existe, e gate não executa texto de modelo); 0 de 67 checkpoints escrevem uma dessas grafias, e o cabeçalho do sensor as declara; reabre quando uma Check real escrever uma delas — `docs/handoffs/20261016-lote-10-as-cinco-livres/00-missao.md` (2026-10-16)
+- **A regra 2 aceita a âncora seguida de uma expansão no padrão** — decidido sem conserto (decisão 1 do lote 10), confirmando a decisão 8(a) do lote 9: o padrão `dq` ancora pelo prefixo literal antes da 1ª expansão, limite declarado no cabeçalho do sensor; recusá-lo deixaria vermelha a varredura do kit em 2 checkpoints fechados (a I10 de 20261002-onde-o-comando-do-humano-escreve e a I20 de 20261003-lote-3-a-catraca-desce, cuja expansão é uma contagem da catraca), e nenhum texto prova que a expansão não acrescenta padrão nem alternância; reabre quando uma Check real escrever, depois da âncora, uma expansão que possa trazê-los — `docs/handoffs/20261016-lote-10-as-cinco-livres/00-missao.md` (2026-10-16)

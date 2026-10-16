@@ -152,7 +152,10 @@
 # DECLARED, lote 9: a word that opens with an expansion, or holds an unquoted one, a glob, a brace
 # expansion or a leading `~`, never anchors (bash may split or rename it); a double-quoted pattern
 # anchors on its literal prefix before the first expansion (`"^  ok    $k finding(s)"`, the shape
-# two of the kit's checkpoints write), although the expansion could carry a newline or a `\|`. A
+# two of the kit's checkpoints write), although the expansion could carry a newline or a `\|`.
+# Decided, not open (lote 10; Codex on PR #274, round 5): refusing it would redden two closed
+# checkpoints of the kit whose expansion is a count, and no text proves an expansion harmless; the
+# decided record of TODO.md reopens it when a real Check writes one that could add a pattern. A
 # word that opens with an expansion is an operand, although its value could be an option, and that
 # fails OPEN: the kit's own control reads a FILE that way (`grep -c '^  ok    x' "$l"`, F1 of
 # 2026-08-16). The table is GNU grep 3.11 with no POSIXLY_CORRECT in the environment: with it set,
@@ -176,7 +179,9 @@
 # backtick or the end of the text. A pid that is not the stdout's still reads as a merge: CLOSED.
 # Not followed, and OPEN: a target known only at run time (`2>$f`, `2>"$log"`), which no reader of
 # the text decides; and any other path or spelling that resolves to the stdout (a symlink,
-# `/dev/./stdout`, a backslash, `$'…'`). The TODO.md item of round 3 lists them with the rest.
+# `/dev/./stdout`, a backslash, `$'…'`). They and the rest of round 3's list are DECIDED, not open
+# (lote 10): only the run time decides them, no Check of the 67 checkpoints measured writes one,
+# and the decided record of TODO.md reopens them when a real Check does.
 # A `2` after a digit (`12>/dev/stdout`) is another descriptor and merges nothing, while `12>&1`
 # still reads as a merge (CLOSED). `2>|` and a `|` after the path reach no cell, because a `|`
 # splits the row before rule 2 reads it, so their probes call r2_merges in process.
