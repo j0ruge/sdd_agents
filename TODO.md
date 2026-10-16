@@ -39,14 +39,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
   — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
 
-- [ ] **A regra 2 do check-checkpoint só vê a mescla escrita `2>&1`** — `tests/check-checkpoint.sh:672` (`2>&1`) —
+- [ ] **A regra 2 do check-checkpoint só vê a mescla escrita `2>&1`** — `tests/check-checkpoint.sh:725` (`r2_merges`) —
   a pré-condição é o literal: `bash tests/check-a.sh &> out.log; grep -c 'alpha holds' out.log` → `1` sai
   `0 under the anchor rule` (medido em 2026-10-15) e responde "a asserção existe" como a forma que a regra
   recusa; `>&` e `&>>` passam igual. Falha aberta, sem limite declarado no cabeçalho. Direção: a pré-condição
   lê toda grafia de mescla da stderr na stdout, com um probe por grafia.
   — descoberto pelo `sdd-executor` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
-- [ ] **A regra 2 do check-checkpoint não sabe o papel de cada palavra do grep** — `tests/check-checkpoint.sh:412`
+- [ ] **A regra 2 do check-checkpoint não sabe o papel de cada palavra do grep** — `tests/check-checkpoint.sh:465`
   (`r2_grep_anchored`) — toda palavra entre aspas fora do herestring conta como padrão: um argumento de opção
   (`grep --label='^  ok    x' -H -c 'caso' <<< "$o"` sai "none blind" e imprime `^  ok    x:1` com FAIL ou
   com ok) ou um FILE com nome de âncora ao lado de um `-e` cego passam. Falha aberta; a do FILE já estava
@@ -70,7 +70,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   "nenhuma linha passa de 120". Não falha aberta, mas a saída só aparece na mensagem de FAIL. Direção: as
   cinco frases dizem a regra nova quando o congelamento cair.
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
-- [ ] **A regra 2 recusa o grep de esperado `0` na saída mesclada de um build** — `tests/check-checkpoint.sh:677`
+- [ ] **A regra 2 recusa o grep de esperado `0` na saída mesclada de um build** — `tests/check-checkpoint.sh:730`
   (`rule2`) — a I8 da LH-4 do `lighthouse_project` faz `b=$(npm run build … 2>&1)` e
   `grep -ci 'chunks larger than' <<< "$b"` → `0`, uma das 2 recusas da LH-4 depois do lote 8; o mesmo molde
   (`grep -c 'error TS'` → `0`) está em 29 das 98 recusas do `sales_quote`. Um grep de esperado `0` fica

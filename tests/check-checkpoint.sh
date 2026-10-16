@@ -35,9 +35,10 @@
 #      pipe has a herestring form that is plainly better, and because the rejoin is a safety net for
 #      what target repos write, not a licence for what this repo writes. Stricter and loud is the
 #      one direction that costs nothing: the row fails, it never passes unmeasured.
-#   2. a Check cell that merges stderr (`2>&1`) AND greps must carry the `^  ok    ` anchor on
+#   2. a Check cell that merges stderr into stdout (`2>&1`, or any other spelling: `&>f`, `>&f`,
+#      `2<&1`…, read by r2_merges, issue #269) AND greps must carry the `^  ok    ` anchor on
 #      every grep that reads the merged output. Both halves of the precondition matter: without
-#      `2>&1` there is no FAIL text in the stream to confuse, and without `grep` nothing is being
+#      a merge there is no FAIL text in the stream to confuse, and without `grep` nothing is being
 #      read. Which grep reads it is rule2()'s answer (issue #258): the one whose herestring is a
 #      variable a clean `NAME=$(… 2>&1)` captured, so a grep of a file owes nothing. A cell the
 #      reader cannot follow keeps the cell rule: every grep anchored. A test runner's pass mark at
@@ -134,6 +135,14 @@
 # FAIL-OPEN, in TODO.md: a quoted word that is no pattern counts as one, so a FILE beside a blind `-e`
 # or an option's argument (`--label='^  ok    x'`, Codex on PR #267) named like an anchor passes.
 #
+# DECLARED LIMITS of the merge (issue #269, lote 9). r2_merges reads the text raw, so a `&>` or a
+# `>&` inside quotes counts as a merge, and so does `>/dev/null 2>&1`, which sends both streams to
+# the null device: both CLOSED. A merge through a third descriptor (`3>&1 2>&3`, or `2>&10` after an
+# `exec 10>&1`) is not followed, and fails OPEN: `2>&` onto any descriptor but 1 merges nothing
+# here (the substring test before it read `2>&10` as a merge by accident). The null device is the
+# exact word `/dev/null` before a blank, `;`, `&`, `)`, a backtick or the end of the text; quoted
+# (`"/dev/null"`) or as the head of a longer path it is a file, and a merge.
+#
 # DECLARED LIMITS of the pass mark (issue #249, lote 8). Only U+2713 counts, the mark the two
 # measured runners print (see PASS_MARK); `✔` (U+2714) and every fail mark do not. A runner that
 # printed `✓` at the start of a FAILURE line would fool the rule, and none measured does. The
@@ -190,6 +199,12 @@
 # Codex on PR #267 reproduced a third, `-F` (and `-v` with it, declared until then): four more
 # sabotages, one per spelling, all dead.
 #
+# The merge spellings (issue #269, lote 9) added 34 more, all dead: each branch of r2_merges, each
+# terminator of the null device, each of its three call sites back to the `2>&1` literal, the
+# `ok rule:` line and one probe deleted. Two first survived and became probes: the blank after the
+# null device, and an operator at the first character of the text, which bash's offset -1 would
+# read as preceded by the text's last character.
+#
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
 #   89  no temp dir (probes never ran)      90/91/92  a selftest probe failed
@@ -243,14 +258,15 @@ count_occ() {
 
 # ── rule 2's reader: which greps read the merged output (issue #258) ───────────────────────────
 #
-# A `2>&1` in the cell used to put EVERY grep of it under the anchor, the one that reads a file the
-# sensor never wrote to included. The reader below asks the narrower question the rule is about:
-# which grep reads the variable the merged output went into? A NAMED capture `NAME=$(…)` (or
-# `NAME="$(…)"`) whose text merges and carries no `grep` taints NAME; a grep whose herestring is
-# exactly `$NAME` or `${NAME}` (quoted or not) of a tainted name owes the anchor, and no other does.
+# A merge in the cell (any spelling, r2_merges) used to put EVERY grep of it under the anchor, the
+# one that reads a file the sensor never wrote to included. The reader below asks the narrower
+# question the rule is about: which grep reads the variable the merged output went into? A NAMED
+# capture `NAME=$(…)` (or `NAME="$(…)"`) whose text merges and carries no `grep` taints NAME; a
+# grep whose herestring is exactly `$NAME` or `${NAME}` (quoted or not) of a tainted name owes the
+# anchor, and no other does.
 #
 # It is no shell parser, so it falls back to the cell rule — every grep anchored, which is closed —
-# whenever it cannot follow the stream: a `2>&1` left outside the clean captures (a file, a `<(…)`,
+# whenever it cannot follow the stream: a merge left outside the clean captures (a file, a `<(…)`,
 # an anonymous `$(…)`, a capture that also greps), a tainted name read anywhere but a grep
 # herestring, or a quote or a capture that never closes. Each fallback has a probe in the selftest.
 # Results are published in R2_* and never through a command substitution (see the counters below).
@@ -264,6 +280,43 @@ R2_VAR_RE='^[$]([A-Za-z_][A-Za-z0-9_]*)$'
 R2_BRACED_RE='^[$][{]([A-Za-z_][A-Za-z0-9_]*)[}]$'
 R2_NAME_RE='(^|[[:space:];&|(`!{])([A-Za-z_][A-Za-z0-9_]*)$'
 R2_INDIRECT_RE='(^|[^A-Za-z0-9_])(eval|declare|typeset|local)([[:space:]]|$)'
+R2_FD_ONE_RE='^0*1([^0-9]|$)'
+R2_NULL_RE='^/dev/null([[:space:];&)`]|$)'
+
+# r2_merges <text> — rc 0 when the text sends stderr where the stdout goes, in any spelling bash
+# takes (issue #269: twelve besides `2>&1`, measured on bash 5.2.21). Called, never read through
+# `$(…)`. The text is read raw, quotes not honoured, like the literal it replaced: a `&>` inside
+# quotes counts, which is the closed side.
+#   - `2>&` or `2<&` onto a descriptor merges when the descriptor is 1 (`1`, `01`, `1-`), and so
+#     does a target that is no descriptor at all (`"1"`, `$one`): known only at run time;
+#   - `&>` and `&>>` send both streams to their file, whatever its name (`&>1` writes a file `1`);
+#     `>&` and `1>&` do the same when the target is no descriptor (`>&f`, never `>&2` or `>&-`);
+#   - those four except into the null device, spelt exactly `/dev/null`: no grep reads it.
+# The leading blank makes the character before the operator safe to read at index 0.
+r2_merges() {
+  local LC_ALL=C
+  local t=" $1" n i j op w
+  n="${#t}"
+  case "$t" in *'>&'* | *'<&'* | *'&>'*) ;; *) return 1 ;; esac
+  for ((i = 1; i + 1 < n; i++)); do
+    op="${t:i:2}"
+    case "$op" in '>&' | '<&' | '&>') ;; *) continue ;; esac
+    j=$((i + 2))
+    [ "$op" = '&>' ] && [ "${t:j:1}" = '>' ] && j=$((j + 1))
+    while [[ "${t:j:1}" == [[:blank:]] ]]; do j=$((j + 1)); done
+    w="${t:j}"
+    if [ "$op" = '&>' ]; then
+      [[ "$w" =~ $R2_NULL_RE ]] || return 0
+    elif [[ "${w:0:1}" == [0-9-] ]]; then
+      [ "${t:i-1:1}" = 2 ] && [[ "$w" =~ $R2_FD_ONE_RE ]] && return 0
+    elif [ "${t:i-1:1}" = 2 ]; then
+      return 0
+    elif [ "$op" = '>&' ]; then
+      [[ "$w" =~ $R2_NULL_RE ]] || return 0
+    fi
+  done
+  return 1
+}
 
 # r2_close <text> <i> — the index of the `)` closing the `$(` whose `(` sits at i-1, with quotes
 # and nested parens honoured; -1 when it never closes. Published in R2_END.
@@ -457,7 +510,7 @@ rule2() {
 
 # r2_captures <text> — pass 1, the captures. Each `$(` outside single quotes is skipped whole; the
 # named clean ones taint their name (R2_TAINTED) and leave the residue. R2_STRICT=1 when a capture
-# or a quote never closes, or when a `2>&1` is left outside the clean captures.
+# or a quote never closes, or when a merge (any spelling) is left outside the clean captures.
 r2_captures() {
   local LC_ALL=C
   local t="$1" n="${#1}" i=0 c sq=0 dq=0 from=0 res='' pre inner name k
@@ -487,7 +540,7 @@ r2_captures() {
           else
             name=''
           fi
-          if [ -n "$name" ] && [ "${inner#*2>&1}" != "$inner" ] && [ "${inner#*grep}" = "$inner" ]; then
+          if [ -n "$name" ] && r2_merges "$inner" && [ "${inner#*grep}" = "$inner" ]; then
             case " ${R2_TAINTED[*]-} " in *" $name "*) ;; *) R2_TAINTED+=("$name") ;; esac
             k=$(( ${#pre} - ${#name} ))
             res="${res}${t:from:k-from}"
@@ -499,7 +552,7 @@ r2_captures() {
     i=$((i + 1))
   done
   res="${res}${t:from}"
-  if [ "$sq" -eq 1 ] || [ "$dq" -eq 1 ] || [ "${res#*2>&1}" != "$res" ]; then
+  if [ "$sq" -eq 1 ] || [ "$dq" -eq 1 ] || r2_merges "$res"; then
     R2_STRICT=1
   fi
   return 0
@@ -667,9 +720,9 @@ scan_file() {
       done <<< "$(tested_paths "$chk")"
     fi
 
-    # Rule 2 — precondition: the cell merges stderr AND greps. Either half missing and there is
-    # no FAIL text in the stream being read.
-    case "$chk" in *'2>&1'*) ;; *) continue ;; esac
+    # Rule 2 — precondition: the cell merges stderr into stdout, in any spelling (r2_merges), AND
+    # greps. Either half missing and there is no FAIL text in the stream being read.
+    r2_merges "$chk" || continue
     g="$(count_occ 'grep' "$chk")"
     [ "$g" -gt 0 ] || continue
     # Then the reader (issue #258): only a grep whose herestring reads the variable the merged
@@ -1014,7 +1067,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=128
+PROBE_FLOOR=159
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1026,7 +1079,7 @@ fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
 # selftest green (the sabotage pass of lote 8, 2026-10-15). Tight, like PROBE_FLOOR, and the same
 # shape as rule_end in check-todo.sh.
 RULE_LINES=0
-RULE_FLOOR=4
+RULE_FLOOR=5
 rule_ok() { pass "rule: $1"; RULE_LINES=$((RULE_LINES + 1)); }
 
 probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode]
@@ -1405,6 +1458,69 @@ selftest() {
   probe 'the cell rule asks the same predicate of every caret' 1 '0 of 2 pattern(s) anchored' "$r3"
   [ "$FAILS" -eq "$r3_f0" ] && \
     rule_ok "a pass mark of a test runner at the start of a line anchors like the ok prefix ($((PROBES - r3_p0)) probe(s))"
+
+  # ── every spelling that merges stderr into stdout puts the cell under the rule (issue #269) ──
+  # Measured on bash 5.2.21: twelve spellings besides `2>&1` send the FAIL text where the stdout
+  # goes, and the precondition read only that literal. A merge inside a capture taints its name;
+  # one into a file (`&>f`, `>&f`) reaches the cell rule. The controls reach no grep: the null
+  # device, a duplication onto another descriptor, a closed stderr. No expected value here is a
+  # zero, so no fixture rides on the exemption of a pair that expects only zeros.
+  local mg_p0="$PROBES" mg_f0="$FAILS" mg mg_g mg_k=0
+  # A word after `2>&` or `2<&` is a descriptor known only at run time (`2<&$one` merges, measured).
+  for mg_g in '2>& 1' '2>&1-' '2<&1' '2>&01' '2>&"1"' '2>&$one' '2<&$one'; do
+    mg_k=$((mg_k + 1)); mg="$box/mg-capture$mg_k.md"; cp_head "$mg"
+    cp_row "$mg" I1 "\`o=\$(bash t.sh $mg_g); grep -c 'alpha' <<< \"\$o\"\` → \`1\`"
+    probe "a capture merged with '$mg_g' owes the anchor" 1 '0 of 1 pattern(s) anchored' "$mg"
+  done
+  # `&>1` and `&>-` name files (measured: both streams land in them); only `>&` reads a digit or a
+  # `-` as a descriptor. And the null device is the exact word, never a path that opens with it.
+  for mg_g in '&>f' '&> f' '&>>f' '>&f' '>& f' '1>&f' '&>1' '&>/dev/null.log'; do
+    mg_k=$((mg_k + 1)); mg="$box/mg-file$mg_k.md"; cp_head "$mg"
+    cp_row "$mg" I1 "\`bash t.sh $mg_g; grep -c 'alpha' f\` → \`1\`"
+    probe "a merge into a file with '$mg_g' reaches the cell rule" 1 '0 of 1 pattern(s) anchored' "$mg"
+  done
+  # A new spelling taints the name the way `2>&1` does, so the grep of a file beside it owes nothing:
+  # read only as a merge left outside the captures, the cell would fall back and refuse `b`.
+  mg="$box/mg-taint.md"; cp_head "$mg"
+  cp_row "$mg" I1 "\`o=\$(bash t.sh 2<&1); a=\$(grep -c '${OK_ANCHOR}alpha' <<< \"\$o\"); b=\$(grep -c 'beta' f); echo \"\$a \$b\"\` → \`1 0\`"
+  probe "a capture merged with '2<&1' taints its name like '2>&1'" 0 '1 under the anchor rule' "$mg"
+  # The same with the operator as the first character of the capture's text (`&>f cmd` is valid).
+  mg="$box/mg-taint-head.md"; cp_head "$mg"
+  cp_row "$mg" I1 "\`o=\$(&>f bash t.sh; cat f); a=\$(grep -c '${OK_ANCHOR}alpha' <<< \"\$o\"); b=\$(grep -c 'beta' g); echo \"\$a \$b\"\` → \`1 0\`"
+  probe 'a merge at the first character of a capture taints its name' 0 '1 under the anchor rule' "$mg"
+  # There is no character before it, so the last one of the text (`2`) is never read in its place:
+  # `>&1` sends stdout onto itself, and `o` stays clean.
+  mg="$box/mg-head-nothing.md"; cp_head "$mg"
+  cp_row "$mg" I1 "\`o=\$(>&1 bash t.sh 2); p=\$(bash u.sh 2>&1); a=\$(grep -c '${OK_ANCHOR}x' <<< \"\$p\"); b=\$(grep -c 'y' <<< \"\$o\"); echo \"\$a \$b\"\` → \`1 1\`"
+  probe 'an operator at the first character reads no descriptor before it' 0 '1 under the anchor rule' "$mg"
+  # `2>&3` and `2>&10` duplicate onto a third descriptor, which this reader does not follow (a
+  # declared limit); `&> /dev/null` checks the blanks before the target are skipped.
+  for mg_g in '&>/dev/null' '&> /dev/null' '>&2' '1>&2' '2>&-' '2>&3' '2>&10' '3>&1'; do
+    mg_k=$((mg_k + 1)); mg="$box/mg-none$mg_k.md"; cp_head "$mg"
+    cp_row "$mg" I1 "\`bash t.sh $mg_g; grep -c 'alpha' f\` → \`1\`"
+    probe "'$mg_g' merges nothing a grep reads" 0 '0 under the anchor rule' "$mg"
+  done
+  # The word after the null device ends at a `;` (above), a `&`, a backtick, a blank or a `)`, and
+  # at the end of a capture's own text.
+  mg="$box/mg-null-amp.md"; cp_head "$mg"
+  cp_row "$mg" I1 "\`bash t.sh &>>/dev/null&& grep -c 'alpha' f\` → \`1\`"
+  probe "'&>>/dev/null' before a '&' merges nothing" 0 '0 under the anchor rule' "$mg"
+  mg="$box/mg-null-tick.md"; cp_head "$mg"
+  cp_row "$mg" I1 "\`grep -c 'alpha' f\`; \`bash t.sh >&/dev/null\` → \`1\`"
+  probe "'>&/dev/null' before a backtick merges nothing" 0 '0 under the anchor rule' "$mg"
+  mg="$box/mg-null-blank.md"; cp_head "$mg"
+  cp_row "$mg" I1 "\`bash t.sh &>/dev/null && grep -c 'alpha' f\` → \`1\`"
+  probe "'&>/dev/null' before a blank merges nothing" 0 '0 under the anchor rule' "$mg"
+  # Modelled on the gates lighthouse_project silences inside a capture in its AMEP missions. The
+  # capture is read by no grep, so it pins the null device only through the precondition.
+  mg="$box/mg-null-lh.md"; cp_head "$mg"
+  cp_row "$mg" I1 "\`q=\$(npm run lint &>/dev/null && echo OK); o=\$(npm test 2>/dev/null); grep -c 'caso' <<< \"\$o\"\` → \`1\`"
+  probe 'a capture of gates silenced into the null device merges nothing' 0 '0 under the anchor rule' "$mg"
+  mg="$box/mg-null-capture.md"; cp_head "$mg"
+  cp_row "$mg" I1 "\`o=\$(bash t.sh 2>&1); q=\$(bash u.sh &>/dev/null); grep -c '${OK_ANCHOR}x' <<< \"\$o\"; grep -c 'caso' <<< \"\$q\"\` → \`1 1\`"
+  probe 'a capture silenced into the null device taints nothing' 0 '1 under the anchor rule' "$mg"
+  [ "$FAILS" -eq "$mg_f0" ] && \
+    rule_ok "every spelling that merges stderr into stdout puts the cell under the anchor rule ($((PROBES - mg_p0)) probe(s))"
   # GFM makes the leading pipe optional, so a row written without it renders like the rest of the
   # table — and a reader of `|`-led lines skipped it whole (CodeRabbit review of PR #222). The
   # control is the same line below a blank line: a paragraph, which is no row and stays out.
