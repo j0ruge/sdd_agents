@@ -30,14 +30,17 @@ writes the artifacts from memory, and their headings are the contract the gates 
    before and after each phase. One untracked `00-missao.md` written here while a target's EXEC
    runs stops that run with `KIT-TOUCHED` (rc 3); a linked worktree, dirty or with commits, moves
    neither. So, before writing any artifact:
-   - create the worktree beside this checkout, on the branch the mission will declare in
-     `branch:`, cut from the remote's `DEFAULT_BRANCH` — `git fetch`, then
-     `git worktree add ../<repo>-<slug> --no-track -b <branch> origin/<DEFAULT_BRANCH>` — or
-     reuse it, when it already exists on that branch. Never `git pull` here to freshen the base: a
-     fetch moves no `HEAD`, a pull moves the very one the kit guard compares. `--no-track` keeps the
-     mission branch off `origin/<DEFAULT_BRANCH>`: without it, a `git pull` in the worktree brings
-     the base in silently and `git status` counts ahead/behind against it (measured with git
-     2.43.0, 2026-10-15);
+   - create the worktree beside this checkout, on a provisional branch cut from the remote's
+     `DEFAULT_BRANCH` — `git fetch`, then
+     `git worktree add ../<repo>-<slug> --no-track -b <provisional> origin/<DEFAULT_BRANCH>` — or
+     reuse it, when it already exists for this mission. Provisional, because the mission's id, and
+     with it the name `branch:` declares, comes out of the grill, and the worktree has to exist
+     before the grill writes anything: the planner renames the branch when the grill decides the
+     id (see *Then*), and the directory keeps its provisional name. Never `git pull` here to
+     freshen the base: a fetch moves no `HEAD`, a pull moves the very one the kit guard compares.
+     `--no-track` keeps the mission branch off `origin/<DEFAULT_BRANCH>`: without it, a `git pull`
+     in the worktree brings the base in silently and `git status` counts ahead/behind against it
+     (measured with git 2.43.0, 2026-10-15);
    - take the worktree as the repository root for every step below: the config, `HANDOFF_DIR`,
      the artifacts, `sdd why` and `sdd approve` all run from there, and this checkout stays on
      `DEFAULT_BRANCH`, clean. Inside it, `health`, `preflight` and `install` run as `./bin/sdd`:
@@ -73,6 +76,22 @@ Delegate to the `sdd-planner` subagent, handing it: the mission topic the user g
 command came with no argument), the repository root it writes under (the worktree, when step 2 moved
 you), the config values from step 3, and the absolute template paths from step 4 — stated as *the*
 templates to start from, never as examples.
+
+When step 2 moved you, hand the planner two more orders, and hold it to them:
+
+- **The branch.** When the grill decides the mission's id, the planner renames the branch inside
+  the worktree with `git branch -m <provisional> <branch>`, while the branch has no upstream, and
+  writes that name in `branch:`. From then on the worktree is on the branch `sdd approve` reads,
+  and no provisional branch is left behind (batches 9 and 10 renamed `fix/lote-N` this way).
+- **The working directory.** The planner inherits this session's cwd, which is the main checkout.
+  It runs every command as `cd <worktree> && …`, and writes scratch files only to an absolute path
+  outside the main checkout. Before you delegate, record
+  `git -C <main checkout> status --porcelain` and `git -C <main checkout> rev-parse HEAD`; run
+  both again at every hand-back, before you relay the question. If either changed, stop: show the
+  human the paths and the `HEAD` that changed, and never delete or reset anything there yourself —
+  a path in that checkout may belong to another writer. In batch 9 a relative `2>e` of the
+  planner left `?? e` in the main checkout, and a target's `sdd run` in flight would have stopped
+  with `KIT-TOUCHED` (rc 3).
 
 The planner conducts the brainstorm and the grill **with the human present** — through you, as the
 next section says, because it cannot reach the human on its own. Do not plan on their behalf, and

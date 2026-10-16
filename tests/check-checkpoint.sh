@@ -152,7 +152,10 @@
 # DECLARED, lote 9: a word that opens with an expansion, or holds an unquoted one, a glob, a brace
 # expansion or a leading `~`, never anchors (bash may split or rename it); a double-quoted pattern
 # anchors on its literal prefix before the first expansion (`"^  ok    $k finding(s)"`, the shape
-# two of the kit's checkpoints write), although the expansion could carry a newline or a `\|`. A
+# two of the kit's checkpoints write), although the expansion could carry a newline or a `\|`.
+# Decided, not open (lote 10; Codex on PR #274, round 5): refusing it would redden two closed
+# checkpoints of the kit whose expansion is a count, and no text proves an expansion harmless; the
+# decided record of TODO.md reopens it when a real Check writes one that could add a pattern. A
 # word that opens with an expansion is an operand, although its value could be an option, and that
 # fails OPEN: the kit's own control reads a FILE that way (`grep -c '^  ok    x' "$l"`, F1 of
 # 2026-08-16). The table is GNU grep 3.11 with no POSIXLY_CORRECT in the environment: with it set,
@@ -176,10 +179,18 @@
 # backtick or the end of the text. A pid that is not the stdout's still reads as a merge: CLOSED.
 # Not followed, and OPEN: a target known only at run time (`2>$f`, `2>"$log"`), which no reader of
 # the text decides; and any other path or spelling that resolves to the stdout (a symlink,
-# `/dev/./stdout`, a backslash, `$'…'`). The TODO.md item of round 3 lists them with the rest.
+# `/dev/./stdout`, a backslash, `$'…'`). They and the rest of round 3's list are DECIDED, not open
+# (lote 10): only the run time decides them, no Check of the 67 checkpoints measured writes one,
+# and the decided record of TODO.md reopens them when a real Check does.
 # A `2` after a digit (`12>/dev/stdout`) is another descriptor and merges nothing, while `12>&1`
 # still reads as a merge (CLOSED). `2>|` and a `|` after the path reach no cell, because a `|`
 # splits the row before rule 2 reads it, so their probes call r2_merges in process.
+# A process substitution behind `2>`, `2>>`, `2>|` or `2<>` (`2> >(cat)`, blanks before the `>(`
+# or none) merges too (Codex on PR #274, round 5; issue #278, lote 10; measured on bash 5.2.21):
+# the process writes where the shell's stdout was, the capture included. Every `>(…)` there
+# counts, even one that merges nothing (`>(cat >/dev/null)`, `>(cat >&2)`), and so does
+# `2>>(cat)`, a syntax error: CLOSED. It is read on the raw text, the `2` after no digit
+# (R2_PROCSUB_RE): a quote between the `2` and the `>(` leaves the stderr on another target.
 #
 # DECLARED LIMITS of the zero pair (issue #272, lote 9). The exemption is admitted positively: the
 # grep's count has to be what its pair prints, and every condition r2_greps and r2_counts_zero name
@@ -360,6 +371,15 @@
 # own, a minimum. The round 2 sabotages the moved fixtures used to kill (the pair index, q) still
 # die.
 #
+# Codex on PR #274 (round 5) reproduced one more merge, the stderr into a process substitution
+# (`o=$(sensor 2> >(cat))`, issue #278), which the cheap filter let in and no test read. The fix
+# (lote 10) added 16 sabotages, each anchored on code with its count: 13 died. Alive: the two floors
+# lowered on their own, minimums; and the group's guard read as `-ge`, which decides something
+# only once the rule is broken (measured: with the test deleted the `ok rule:` line prints under
+# `-ge` and not under `-eq`, rc 90 both ways). The raw text became a control before any sabotage
+# ran: `2>"" >(cat)` tells it from the quote-stripped one. On the 37 targets the --check output
+# stayed byte for byte the same (106).
+#
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
 #   89  no temp dir (probes never ran)      90/91/92  a selftest probe failed
@@ -442,6 +462,8 @@ R2_FD_ONE_RE='^0*1([^0-9]|$)'
 R2_NULL_RE='^/dev/null([[:space:];&)`]|$)'
 # The stderr onto a path of the stdout, read on the text with its quotes removed (PR #274).
 R2_STDOUT_RE='[^0-9]2(>>|>[|]|<>|>)[[:blank:]]*(/dev/stdout|/dev/fd/1|/proc/[^[:space:]]+/fd/1)([[:space:];&)|`]|$)'
+# The stderr into a process substitution, read on the raw text (issue #278).
+R2_PROCSUB_RE='[^0-9]2(>>|>[|]|<>|>)[[:blank:]]*>[(]'
 # A redirection operator with the descriptor before it, if any (`&>` takes none). POSIX matching is
 # leftmost-longest, so `<<<` wins over `<`. A here-document's `<<` reads as two `<`, and `&>>` as `&>`
 # and `>`: the same words, the same stdout.
@@ -457,7 +479,9 @@ R2_REDIR_RE='^([0-9]*)(<<<|<>|<&|<|>>|>&|>[|]|>)'
 #     `>&` and `1>&` do the same when the target is no descriptor (`>&f`, never `>&2` or `>&-`);
 #   - those four except into the null device, spelt exactly `/dev/null`: no grep reads it;
 #   - `2>`, `2>>`, `2>|` or `2<>` onto a path of the stdout (`/dev/stdout`, `/dev/fd/1`, or
-#     `/proc/<anything with no blank>/fd/1`), the `2` after no digit, quotes removed (R2_STDOUT_RE).
+#     `/proc/<anything with no blank>/fd/1`), the `2` after no digit, quotes removed (R2_STDOUT_RE);
+#   - the same four into a process substitution (`2> >(cat)`, blanks optional), the `2` after no
+#     digit, on the raw text (R2_PROCSUB_RE, issue #278): every `>(…)` counts, the closed side.
 # The leading blank makes the character before the operator safe to read at index 0. The case below
 # is the cheap filter: it names an operator of every form, or the form escapes it (PR #274).
 r2_merges() {
@@ -466,6 +490,7 @@ r2_merges() {
   n="${#t}"
   case "$t" in *'>&'* | *'<&'* | *'&>'* | *'2>'* | *'2<>'*) ;; *) return 1 ;; esac
   [[ "${t//[\"\']/}" =~ $R2_STDOUT_RE ]] && return 0
+  [[ "$t" =~ $R2_PROCSUB_RE ]] && return 0
   for ((i = 1; i + 1 < n; i++)); do
     op="${t:i:2}"
     case "$op" in '>&' | '<&' | '&>') ;; *) continue ;; esac
@@ -1656,7 +1681,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=398
+PROBE_FLOOR=412
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1668,7 +1693,7 @@ fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
 # selftest green (the sabotage pass of lote 8, 2026-10-15). Tight, like PROBE_FLOOR, and the same
 # shape as rule_end in check-todo.sh.
 RULE_LINES=0
-RULE_FLOOR=8
+RULE_FLOOR=9
 rule_ok() { pass "rule: $1"; RULE_LINES=$((RULE_LINES + 1)); }
 
 probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode]
@@ -2273,6 +2298,35 @@ selftest() {
   fi
   [ "$FAILS" -eq "$mg_f0" ] && \
     rule_ok "every spelling that merges stderr into stdout puts the cell under the anchor rule ($((PROBES - mg_p0)) probe(s))"
+
+  # ── a process substitution that takes stderr is a merge (issue #278, lote 10) ──
+  # Measured on bash 5.2.21 (Codex on PR #274, round 5): behind `2>`, `2>>`, `2>|` or `2<>`, blanks
+  # before it or none, a `>(…)` writes where the shell's stdout was, the capture included. Every
+  # `>(…)` there counts, even one that merges nothing (`>(cat >/dev/null)`) and `2>>(cat)`, a syntax
+  # error: the closed side. The controls send no stderr into one: the stdout's own, descriptor 1, a
+  # descriptor that ends in `2`, a `>(…)` that is only an argument, and a quote between the `2` and
+  # the `>(`, which leaves the stderr on another target (measured: none of them reaches the capture).
+  local ps_p0="$PROBES" ps_f0="$FAILS" ps ps_g ps_k=0
+  for ps_g in '2> >(cat)' '2>> >(cat)' '2<> >(cat)' '2>  >(tee x)' '2> >(cat >/dev/null)' '2>>(cat)'; do
+    ps_k=$((ps_k + 1)); ps="$box/ps-capture$ps_k.md"; cp_head "$ps"
+    cp_row "$ps" I1 "\`o=\$(bash t.sh $ps_g); grep -c 'alpha' <<< \"\$o\"\` → \`1\`"
+    probe "a capture merged with '$ps_g' owes the anchor" 1 '0 of 1 pattern(s) anchored' "$ps"
+  done
+  ps="$box/ps-file.md"; cp_head "$ps"
+  cp_row "$ps" I1 "\`bash t.sh 2> >(cat); grep -c 'alpha' f\` → \`1\`"
+  probe "a merge into '>(cat)' outside a capture reaches the cell rule" 1 '0 of 1 pattern(s) anchored' "$ps"
+  ps="$box/ps-anchor.md"; cp_head "$ps"
+  cp_row "$ps" I1 "\`o=\$(bash t.sh 2> >(cat)); grep -c '${OK_ANCHOR}alpha' <<< \"\$o\"\` → \`1\`"
+  probe "a capture merged with '2> >(cat)' holds the anchor" 0 '1 under the anchor rule' "$ps"
+  # A `|` splits the row (rule 1), so `2>|` is read in process.
+  mg_merges 0 'o=$(bash t.sh 2>| >(cat))'
+  for ps_g in '> >(cat)' '1> >(cat)' '12> >(cat)' '2>/dev/null >(cat)' '2>"" >(cat)'; do
+    ps_k=$((ps_k + 1)); ps="$box/ps-none$ps_k.md"; cp_head "$ps"
+    cp_row "$ps" I1 "\`o=\$(bash t.sh $ps_g); grep -c 'alpha' <<< \"\$o\"\` → \`1\`"
+    probe "'$ps_g' merges nothing a grep reads" 0 '0 under the anchor rule' "$ps"
+  done
+  [ "$FAILS" -eq "$ps_f0" ] && \
+    rule_ok "a process substitution that takes stderr counts as a merge ($((PROBES - ps_p0)) probe(s))"
 
   # ── each word of a grep is read by its value, quotes and escapes removed (issue #270, half 1) ──
   # grep receives what bash hands it: quotes and escapes gone, glued parts joined, redirections

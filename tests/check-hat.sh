@@ -566,11 +566,12 @@ command_worktree_probes() {
   fi
   # Its own pair, so a red names this flag: without it the branch tracks origin/<DEFAULT_BRANCH>, a
   # `git pull` in the worktree brings the base in silently, and `git status` counts ahead/behind
-  # against it (measured with git 2.43.0 in the lote 8 worktree, 2026-10-15).
-  if grep -qF 'git worktree add ../<repo>-<slug> --no-track -b <branch> origin/<DEFAULT_BRANCH>' <<< "$sec"; then
+  # against it (measured with git 2.43.0 in the lote 8 worktree, 2026-10-15). Since #280 the same
+  # literal also demands `-b <provisional>`, so the red names both causes: one literal, two flags.
+  if grep -qF 'git worktree add ../<repo>-<slug> --no-track -b <provisional> origin/<DEFAULT_BRANCH>' <<< "$sec"; then
     pass "command: /sdd-plan cuts the mission branch with --no-track, so it never tracks the base"
   else
-    fail "command: /sdd-plan cuts the mission branch without --no-track, and it tracks the base"
+    fail "command: /sdd-plan cuts the mission branch without --no-track (the branch tracks the base) or without <provisional> (the recipe names the branch before the grill decides the id)"
   fi
 }
 
@@ -589,6 +590,41 @@ command_worktree_return_probes() {
     pass "command: /sdd-plan tells the human the killer map, and the stamp when line 6 is red, come back before the worktree is removed"
   else
     fail "command: /sdd-plan no longer tells the human what comes back before the worktree is removed (the killer map always, the stamp when line 6 of health --release is red, the failure-modes pointer)"
+  fi
+}
+
+# --- /sdd-plan: the provisional branch and the planner's working directory (#280, #281) ----------
+# #280: step 2 created the worktree "on the branch the mission will declare in `branch:`", but that
+# name comes from the mission's id, and only the grill decides the id, after the worktree has to
+# exist. In batches 9 and 10 the relay cut `fix/lote-N` and the planner renamed it with
+# `git branch -m` once the id was decided. Without the rename, ensure_mission_branch (bin/sdd) checks
+# out the declared branch from the provisional one and the provisional one is left behind.
+# #281: the planner is a subagent and inherits this session's cwd, the main checkout. In batch 9 a
+# relative `2>e` of the planner left `?? e` there at 08:02; a target's `sdd run` in flight would have
+# stopped with KIT-TOUCHED (rc 3), since kit_guard_check compares that checkout's HEAD and
+# `git status --porcelain`. "Then" makes the relay demand `cd <worktree> &&` of every command and
+# compare both at every hand-back. Two pairs, so a red names which order went missing; each phrase is
+# read in its own section, like the neighbours above, because a rule moved out of it is a rule lost.
+command_branch_cwd_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" before_sec then_sec
+  before_sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  then_sec="$(awk '/^## Then/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  if grep -qF 'on a provisional branch' <<< "$before_sec" \
+     && grep -qF 'the directory keeps its provisional name' <<< "$before_sec" \
+     && grep -qF 'git branch -m <provisional> <branch>' <<< "$then_sec" \
+     && grep -qF 'while the branch has no upstream' <<< "$then_sec"; then
+    pass "command: /sdd-plan cuts a provisional branch and has the planner rename it when the grill decides the id"
+  else
+    fail "command: /sdd-plan no longer cuts a provisional branch, or no longer has the planner rename it with git branch -m while it has no upstream"
+  fi
+  if grep -qF 'cd <worktree> &&' <<< "$then_sec" \
+     && grep -qF 'git -C <main checkout> status --porcelain' <<< "$then_sec" \
+     && grep -qF 'git -C <main checkout> rev-parse HEAD' <<< "$then_sec" \
+     && grep -qF 'at every hand-back' <<< "$then_sec" \
+     && grep -qF 'never delete or reset anything there yourself' <<< "$then_sec"; then
+    pass "command: /sdd-plan keeps the planner out of the main checkout and compares that checkout at every hand-back"
+  else
+    fail "command: /sdd-plan no longer keeps the planner out of the main checkout (cd <worktree> &&), or no longer compares its status and HEAD at every hand-back without touching them"
   fi
 }
 
@@ -788,6 +824,7 @@ command_approval_probes
 command_relay_probes
 command_worktree_probes
 command_worktree_return_probes
+command_branch_cwd_probes
 publisher_stamp_probes
 boot_probes
 release_probes
