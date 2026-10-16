@@ -50,3 +50,4 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+- 2026-10-16 18:56 · `I1` · Red às 18:54:19 `0 0 17 0`; Green às 18:56:00 `1 1 15 1` (commit d8a6290). #277 e #279 na seção decidida com o texto do plano (`cmp` idêntico às linhas 183–184 do `01-plano.md`), baseline `todo-findings 15`, cabeçalho do sensor +5 linhas, só comentário; o `r2_merges` foi de :463 para :468 e a âncora do #278 segue a 5 linhas (`check-todo.sh` verde, sem reancorar — o I2 reancora se precisar). `check-todo`, `check-lang`, `check-pipefail` e `shellcheck -S warning` verdes; `--audit` da skill `auto=0 manual=0` (com `SDD_HOME` no worktree). `tests/run-all.sh` não rodou antes nem depois, por ordem do relay (é do I4).
