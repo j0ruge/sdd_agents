@@ -566,11 +566,12 @@ command_worktree_probes() {
   fi
   # Its own pair, so a red names this flag: without it the branch tracks origin/<DEFAULT_BRANCH>, a
   # `git pull` in the worktree brings the base in silently, and `git status` counts ahead/behind
-  # against it (measured with git 2.43.0 in the lote 8 worktree, 2026-10-15).
+  # against it (measured with git 2.43.0 in the lote 8 worktree, 2026-10-15). Since #280 the same
+  # literal also demands `-b <provisional>`, so the red names both causes: one literal, two flags.
   if grep -qF 'git worktree add ../<repo>-<slug> --no-track -b <provisional> origin/<DEFAULT_BRANCH>' <<< "$sec"; then
     pass "command: /sdd-plan cuts the mission branch with --no-track, so it never tracks the base"
   else
-    fail "command: /sdd-plan cuts the mission branch without --no-track, and it tracks the base"
+    fail "command: /sdd-plan cuts the mission branch without --no-track (the branch tracks the base) or without <provisional> (the recipe names the branch before the grill decides the id)"
   fi
 }
 
