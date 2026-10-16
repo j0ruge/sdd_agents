@@ -1,6 +1,6 @@
 ---
 missao: 20261016-lote-9-o-papel-de-cada-palavra
-atualizado: 2026-10-16 11:32
+atualizado: 2026-10-16 11:52
 ---
 
 # Checkpoint — o lote 9: o papel de cada palavra
@@ -52,7 +52,7 @@ atualizado: 2026-10-16 11:32
 | I2 | cada palavra do grep é lida pelo valor (#270, metade 1): tokenizador de partes, redirecionamento fora das palavras, a regra de hoje sobre valores | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: each word of a grep is read by its value, quotes and escapes removed' <<< "$o"` → `1` | done | 5c5596a |
 | I3 | o argv do grep é lido como o getopt_long (#270, metade 2): a tabela do GNU grep 3.11, só o padrão deve a âncora, os desarmadores, o `r2_greps` pula o argv | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c "^  ok    rule: grep's argv is read as getopt_long reads it, and only a pattern owes the anchor" <<< "$o"` → `1` | done | 3de6c5c |
 | I4 | o grep contador de um par que espera só zeros não deve âncora (#272): pares da célula, lista positiva, quatro fixtures com esperado não-zero | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: a counting grep whose pair expects only zeros owes no anchor' <<< "$o"` → `1` | done | c48623d |
-| I5 | fecho: medida final nos alvos, `RESOLVED by` nos três e a linha do #271 (com a skill), `KAIZEN_LOG.md`, gaveta F3, `20-handoff-exec.md` e a suíte inteira | `a=$(grep -c '^## [0-9-]* — Lote 9: o papel de cada palavra$' KAIZEN_LOG.md); b=$(grep -q '20261016-lote-9-o-papel-de-cada-palavra' KAIZEN_LOG.md; echo $?); c=$(awk '/<!-- sdd:open -->/{o=1} /<!-- sdd:decided -->/{o=0} o && /RESOLVED by [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/{n++} END{print n+0}' TODO.md); n=$(bash tests/check-todo.sh --count TODO.md 2>/dev/null); d=$(grep -cx "todo-findings $n" tests/health-baseline.txt); e=$(test -f docs/handoffs/20261016-lote-9-o-papel-de-cada-palavra/20-handoff-exec.md; echo $?); echo "$a $b $c $d $e"` → `1 0 3 1 0` | pending | — |
+| I5 | fecho: medida final nos alvos, `RESOLVED by` nos três e a linha do #271 (com a skill), `KAIZEN_LOG.md`, gaveta F3, `20-handoff-exec.md` e a suíte inteira | `a=$(grep -c '^## [0-9-]* — Lote 9: o papel de cada palavra$' KAIZEN_LOG.md); b=$(grep -q '20261016-lote-9-o-papel-de-cada-palavra' KAIZEN_LOG.md; echo $?); c=$(awk '/<!-- sdd:open -->/{o=1} /<!-- sdd:decided -->/{o=0} o && /RESOLVED by [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/{n++} END{print n+0}' TODO.md); n=$(bash tests/check-todo.sh --count TODO.md 2>/dev/null); d=$(grep -cx "todo-findings $n" tests/health-baseline.txt); e=$(test -f docs/handoffs/20261016-lote-9-o-papel-de-cada-palavra/20-handoff-exec.md; echo $?); echo "$a $b $c $d $e"` → `1 0 3 1 0` | done | 680e91d |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
