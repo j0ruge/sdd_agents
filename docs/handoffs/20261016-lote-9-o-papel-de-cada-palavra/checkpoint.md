@@ -1,6 +1,6 @@
 ---
 missao: 20261016-lote-9-o-papel-de-cada-palavra
-atualizado: 2026-10-16 08:13
+atualizado: 2026-10-16 09:25
 ---
 
 # Checkpoint — o lote 9: o papel de cada palavra
@@ -48,7 +48,7 @@ atualizado: 2026-10-16 08:13
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | toda grafia de mescla põe a célula sob a regra (#269): `r2_merges` nos três sítios do literal `2>&1`, com a exceção do `/dev/null` | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: every spelling that merges stderr into stdout puts the cell under the anchor rule' <<< "$o"` → `1` | pending | — |
+| I1 | toda grafia de mescla põe a célula sob a regra (#269): `r2_merges` nos três sítios do literal `2>&1`, com a exceção do `/dev/null` | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: every spelling that merges stderr into stdout puts the cell under the anchor rule' <<< "$o"` → `1` | done | 61bc9e9 |
 | I2 | cada palavra do grep é lida pelo valor (#270, metade 1): tokenizador de partes, redirecionamento fora das palavras, a regra de hoje sobre valores | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: each word of a grep is read by its value, quotes and escapes removed' <<< "$o"` → `1` | pending | — |
 | I3 | o argv do grep é lido como o getopt_long (#270, metade 2): a tabela do GNU grep 3.11, só o padrão deve a âncora, os desarmadores, o `r2_greps` pula o argv | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c "^  ok    rule: grep's argv is read as getopt_long reads it, and only a pattern owes the anchor" <<< "$o"` → `1` | pending | — |
 | I4 | o grep contador de um par que espera só zeros não deve âncora (#272): pares da célula, lista positiva, quatro fixtures com esperado não-zero | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: a counting grep whose pair expects only zeros owes no anchor' <<< "$o"` → `1` | pending | — |
