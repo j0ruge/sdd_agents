@@ -622,7 +622,7 @@ ordem do `>/dev/null 2>&1`; o carimbo.
 Com todos os incrementos `done`:
 
 ```bash
-o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: ' <<< "$o"      # 8
+o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: ' <<< "$o"      # 9: 8 rule_ok + a linha de doc (rule: the ban on '|')
 grep -c '^  ok    no checkpoint Check reads a red assertion as green' <<< "$o"      # 1
 bash tests/check-checkpoint.sh --check /home/joruge/repos/lighthouse_project/docs/handoffs/20260927-idioma-da-spa-pelo-idp/checkpoint.md 2>&1 | grep -c 'pattern(s) anchored'   # 1
 bash tests/check-todo.sh --anchors TODO.md                                        # 0 off target
