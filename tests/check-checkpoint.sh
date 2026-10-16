@@ -109,31 +109,42 @@
 # but it is correct by the redirection it omits rather than by the anchor, so a later edit adding
 # `2>&1` for convenience turns it blind and this file catches it only from that moment on.
 #
-# NOT measured either: a grep whose pattern is built from a variable, or one spelled `rg` /
-# `awk /.../`. `egrep` is read as `grep -E` and `fgrep` as `grep -F`, never anchored: the cell rule
-# counted both by substring while the reader saw neither, and refused an anchored `egrep` the base
-# accepted (Codex on PR #267, fourth round). The rule is keyed on the shape people actually write
-# in a checkpoint cell, which is a literal single-quoted pattern handed to `grep`. Widening it
-# needs a shell parser, and every generalisation tried on the neighbouring sensors fired on
-# legitimate lines first.
+# NOT measured either: a grep spelled `rg` or `awk /.../`. `egrep` is read as `grep -E` and `fgrep`
+# as `grep -F`, never anchored: the cell rule counted both by substring while the reader saw
+# neither, and refused an anchored `egrep` the base accepted (Codex on PR #267, fourth round). A
+# grep's words are read the way bash hands them over (r2_word, issue #270), which is as much of a
+# shell parser as the rule needs: every generalisation tried on the neighbouring sensors by regex
+# fired on legitimate lines first.
 #
 # DECLARED LIMITS of rule 2's reader (issue #258), both CLOSED: a merged variable assigned again in
 # the same cell stays tainted, so a grep of the new value still owes the anchor; and a herestring
 # that is not exactly one variable (`<<< "$o$p"`) sends the whole cell back to the cell rule. The
-# reader honours quotes, nested parens and `\` escapes and nothing else of the shell grammar: every
-# shape it does not follow reads as a leak of the stream, and the cell keeps the cell rule. A name it
-# never sees written — `${!v}`, a nameref (`declare`, `typeset`, `local`), an `eval` — keeps the cell
-# rule too: the three read the stream with no rule at all until the final review of lote 8.
-# One grep is anchored by r2_grep_anchored, on both paths: an anchored quoted pattern, as many of
-# them as `-e`/`--regexp` it names, no `-f`, no unquoted pattern glued to `-e`, and no `-F` or `-v`,
-# which turn the caret into a literal or count every other line (Codex on PR #267), and no ANSI-C quote
-# `$'…'`, whose `\n` hands grep a second pattern (the same PR, third round; an escaped `\$'` is
-# refused with it, the safe side). A long option counts by grep's own rule, any unambiguous prefix
-# (`--fixed`, `--inv`, `--reg=`, measured on GNU grep 3.11; the fourth round), and an ambiguous
-# prefix is refused with them, since grep refuses it too. Its words are read
-# past the herestring, since grep takes options anywhere; the herestring's own operand is skipped.
-# FAIL-OPEN, in TODO.md: a quoted word that is no pattern counts as one, so a FILE beside a blind `-e`
-# or an option's argument (`--label='^  ok    x'`, Codex on PR #267) named like an anchor passes.
+# capture pass honours quotes, nested parens and `\` escapes and nothing else of the shell grammar:
+# every shape it does not follow reads as a leak of the stream, and the cell keeps the cell rule. A
+# name it never sees written — `${!v}`, a nameref (`declare`, `typeset`, `local`), an `eval` — keeps
+# the cell rule too: the three read the stream with no rule at all until the final review of lote 8.
+# One grep is anchored by r2_grep_anchored, on both paths, over the WORDS r2_grep_at reads (issue
+# #270, lote 9): each word's value with quotes and escapes removed and its glued parts joined, so a
+# quoted option is the option it spells (`'-v'`, `"-F"`), an option's glued argument
+# (`--label='^  ok    x'`) is no pattern, and an anchor written with escapes (`^\ \ ok…`) anchors.
+# A redirection and its target are no word, and none of grep's argv: a target named like an anchor
+# was a pattern to the reader before (`2>'^  ok    x'`, found by its sabotage pass). The anchored
+# words must cover as many patterns as `-e`/`--regexp` name, with no `-f` and no `-F` or `-v`, which
+# turn the caret into a literal or count every other line (Codex on PR #267), and no ANSI-C quote
+# `$'…'`, whose `\n` hands grep a second pattern (the same PR, third round). An escaped `\$'` is a
+# literal dollar before a plain quote, and anchors since lote 9: it was refused with the ANSI-C quote.
+# A long option counts by grep's own rule, any unambiguous prefix (`--fixed`, `--inv`, `--reg=`,
+# measured on GNU grep 3.11; the fourth round), and an ambiguous prefix is refused with them, since
+# grep refuses it too. A pattern glued to `-e` or `--regexp=` is read and owes the anchor (`-ec`'s
+# pattern is `c`); an option word whose name or letters hold an expansion is refused, unreadable.
+# Words are read past the herestring, since grep takes options anywhere; its own operand is no word.
+# DECLARED, lote 9: a word that opens with an expansion, or holds an unquoted one, a glob, a brace
+# expansion or a leading `~`, never anchors (bash may split or rename it); a double-quoted pattern
+# anchors on its literal prefix before the first expansion (`"^  ok    $k finding(s)"`, the shape
+# two of the kit's checkpoints write), although the expansion could carry a newline or a `\|`.
+# FAIL-OPEN, in TODO.md: a word in its own place that is no pattern still counts as one, so a FILE
+# beside a blind `-e`, or an option's argument in the next word (`--label '^  ok    x'`), named like
+# an anchor passes. The words know their value; the role each one plays in grep's argv is next.
 #
 # DECLARED LIMITS of the merge (issue #269, lote 9). r2_merges reads the text raw, so a `&>` or a
 # `>&` inside quotes counts as a merge, and so does `>/dev/null 2>&1`, which sends both streams to
@@ -205,6 +216,16 @@
 # null device, and an operator at the first character of the text, which bash's offset -1 would
 # read as preceded by the text's last character.
 #
+# The words (issue #270, lote 9) added 130 more, all dead: each branch of r2_dollar, r2_word,
+# r2_grep_at, r2_grep_anchored and r2_glued_anchored, the `ok rule:` line, one probe, one line of
+# the word table, and wd_tok's comparison and negative control. Two die by the suite's deadline
+# (rc 124), not by a probe: with `<` or `>` read as no operator the reader stops advancing. One
+# first survived and became a probe: the ANSI-C quote that no longer refused, which only a quoted
+# word that is no pattern shows (`$'-v'`). Listing them first found four holes, closed the same way
+# (R2_END in no probe, wd_tok without a negative control, a glued `dq` or `raw` pattern, a second
+# `--regexp` in its own word), and a probe found one defect of the reader before any sabotage ran:
+# an expansion left open inside double quotes ended its word one character in.
+#
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
 #   89  no temp dir (probes never ran)      90/91/92  a selftest probe failed
@@ -272,8 +293,11 @@ count_occ() {
 # Results are published in R2_* and never through a command substitution (see the counters below).
 # Byte-wise on purpose (`LC_ALL=C`): every character it acts on is ASCII, and indexing a UTF-8
 # string costs a walk from its start.
-R2_STRICT=0; R2_G=0; R2_A=0; R2_AA=0; R2_HSREFS=0; R2_END=-1; R2_HS=''; R2_BARE=''; R2_ANSI=0
-R2_LITS=(); R2_TAINTED=()
+R2_STRICT=0; R2_G=0; R2_A=0; R2_AA=0; R2_HSREFS=0; R2_END=-1; R2_HS=''; R2_RDOUT=0
+R2_TAINTED=(); R2_WV=(); R2_WP=(); R2_WK=()
+R2_W_V=''; R2_W_K=lit; R2_W_E=0; R2_X=0
+# What stands for an expansion inside a word's value: U+0001, which no checkpoint cell writes.
+R2_MARK=$'\001'
 # Regexes live in variables: written inline, `[[ =~ ]]` would hand regcomp a backslash per quoted
 # character, and inside a bracket expression that backslash is one more literal.
 R2_VAR_RE='^[$]([A-Za-z_][A-Za-z0-9_]*)$'
@@ -282,6 +306,10 @@ R2_NAME_RE='(^|[[:space:];&|(`!{])([A-Za-z_][A-Za-z0-9_]*)$'
 R2_INDIRECT_RE='(^|[^A-Za-z0-9_])(eval|declare|typeset|local)([[:space:]]|$)'
 R2_FD_ONE_RE='^0*1([^0-9]|$)'
 R2_NULL_RE='^/dev/null([[:space:];&)`]|$)'
+# A redirection operator with the descriptor before it, if any (`&>` takes none). POSIX matching is
+# leftmost-longest, so `<<<` wins over `<`. A here-document's `<<` reads as two `<`, and `&>>` as `&>`
+# and `>`: the same words, the same stdout.
+R2_REDIR_RE='^([0-9]*)(<<<|<>|<&|<|>>|>&|>[|]|>)'
 
 # r2_merges <text> — rc 0 when the text sends stderr where the stdout goes, in any spelling bash
 # takes (issue #269: twelve besides `2>&1`, measured on bash 5.2.21). Called, never read through
@@ -350,63 +378,175 @@ r2_close() {
   return 0
 }
 
-# r2_grep_at <text> <i> — the grep command that starts at i: where it ends (R2_END: the first `;`,
-# `&`, `|`, newline or backtick outside quotes and parens, or a `)` closing the paren it sits in),
-# the quoted literals among its words (R2_LITS) and the rest of those words with each quoted part
-# read as a blank (R2_BARE) — every word but the herestring's operand, since grep takes its options
-# and its pattern anywhere —, whether one of those words holds an ANSI-C quote `$'…'` (R2_ANSI), and
-# its herestring (R2_HS: the variable name when it is exactly one variable, `?` when it is anything
-# else, empty when there is none).
-r2_grep_at() {
+# r2_dollar <text> <i> — the `$` at i outside single quotes: R2_X is the index past the expansion it
+# opens (`$(…)`, `${…}`, `$name`, `$1`, `$?`…), i+1 when it opens none (a literal dollar), and -1
+# when the expansion never closes. `$'…'` and `$"…"` are the caller's: only an unquoted one is a quote.
+r2_dollar() {
   local LC_ALL=C
-  local t="$1" i="$2" n="${#1}" c sq=0 st='' from=0 hs=-1 hw=0 hseen=0 w
-  R2_LITS=(); R2_HS=''; R2_END="$n"; R2_BARE=''; R2_ANSI=0
+  local t="$1" i="$2" n="${#1}" j depth=1 r
+  case "${t:i+1:1}" in
+    '(') r2_close "$t" $((i + 2)); R2_X=-1; [ "$R2_END" -lt 0 ] || R2_X=$((R2_END + 1)) ;;
+    '{') j=$((i + 2))
+         while [ "$j" -lt "$n" ]; do
+           case "${t:j:1}" in
+             '{') depth=$((depth + 1)) ;;
+             '}') depth=$((depth - 1)); [ "$depth" -eq 0 ] && break ;;
+           esac
+           j=$((j + 1))
+         done
+         R2_X=-1; [ "$j" -ge "$n" ] || R2_X=$((j + 1)) ;;
+    [A-Za-z_]) r="${t:i+1}"; r="${r%%[!A-Za-z0-9_]*}"; R2_X=$((i + 1 + ${#r})) ;;
+    [0-9@*#?\$!-]) R2_X=$((i + 2)) ;;
+    *) R2_X=$((i + 1)) ;;
+  esac
+}
+
+# r2_word <text> <i> — the shell word that starts at i, read as bash hands it to the command: its
+# value (R2_W_V: quotes and escapes removed, R2_MARK for each expansion), its class (R2_W_K) and the
+# index past it (R2_W_E). It ends at an unquoted blank, `;`, `&`, `|`, newline, backtick or `)`, or
+# at the `<` or `>` of a redirection. The classes, strongest first:
+#   ansi  an ANSI-C quote `$'…'`, whose `\n` hands grep a second pattern (Codex on PR #267);
+#   raw   an unquoted expansion (`$x`, `${x}`, `$(…)`), a glob (`*`, `?`, `[`), a brace expansion
+#         (a `{` with `,` or `..` before its `}`), a leading `~`, a process substitution `<(…)`,
+#         a bare `(…)`, or a quote or expansion that never closes: bash may split or rename it;
+#   dq    an expansion inside double quotes (`"$x"`, `"${x}"`, `"$(…)"`, a backtick): one word,
+#         whose value is known up to it;
+#   lit   only literal parts: unquoted text with `\x` read as `x`, `'…'` verbatim, and the text of
+#         `"…"` with `\$`, `` \` ``, `\"` and `\\` read as the character they escape.
+r2_word() {
+  local LC_ALL=C
+  local t="$1" i="$2" s="$2" n="${#1}" c d v='' k=lit
   while [ "$i" -lt "$n" ]; do
     c="${t:i:1}"
-    if [ "$sq" -eq 1 ]; then
-      if [ "$c" = "'" ]; then
-        sq=0; [ -z "$st" ] && [ "$hw" -ne 1 ] && R2_LITS+=("${t:from:i-from}")
-      fi
-      i=$((i + 1)); continue
-    fi
-    if [ "${st: -1}" = D ]; then
-      case "$c" in
-        '\') i=$((i + 2)); continue ;;
-        '"') st="${st%?}"; [ -z "$st" ] && [ "$hw" -ne 1 ] && R2_LITS+=("${t:from:i-from}") ;;
-        '$') if [ "${t:i+1:1}" = '(' ]; then st="${st}P"; i=$((i + 2)); continue; fi ;;
-      esac
-      i=$((i + 1)); continue
-    fi
-    # hw: 0 before the herestring, 1 inside its operand (the blanks before it included), 2 after.
-    if [ -z "$st" ]; then
-      if [ "$hw" -eq 1 ]; then
-        case "$c" in ' '|$'\t') [ "$hseen" -eq 1 ] && hw=2 ;; *) hseen=1 ;; esac
-      fi
-      if [ "$hw" -ne 1 ]; then
-        case "$c" in "'"|'"') R2_BARE+=' ' ;; '\') R2_BARE+="${t:i:2}" ;; *) R2_BARE+="$c" ;; esac
-      fi
-    fi
     case "$c" in
-      '\') i=$((i + 2)); continue ;;
-      "'") sq=1; [ -z "$st" ] && from=$((i + 1))
-           [ "$hw" -ne 1 ] && [ "${t:i-1:1}" = '$' ] && R2_ANSI=1 ;;
-      '"') [ -z "$st" ] && from=$((i + 1)); st="${st}D" ;;
-      '(') st="${st}P" ;;
-      ')') if [ -z "$st" ]; then R2_END="$i"; break; fi; st="${st%?}" ;;
-      ';'|'&'|'|'|$'\n'|'`') if [ -z "$st" ]; then R2_END="$i"; break; fi ;;
-      '<') if [ -z "$st" ] && [ "${t:i:3}" = '<<<' ]; then hs=$((i + 3)); hw=1; i=$((i + 3)); continue; fi ;;
+      ' '|$'\t'|';'|'&'|'|'|$'\n'|'`'|')') break ;;
+      '<'|'>')
+        [ "${t:i+1:1}" = '(' ] || break
+        r2_close "$t" $((i + 2)); v+="$R2_MARK"; [ "$k" = ansi ] || k=raw
+        if [ "$R2_END" -lt 0 ]; then i="$n"; break; fi
+        i=$((R2_END + 1)) ;;
+      '\')
+        d="${t:i+1:1}"; v+="${d:-\\}"; i=$((i + 2)) ;;
+      "'")
+        d="${t:i+1}"
+        case "$d" in
+          *"'"*) d="${d%%"'"*}"; v+="$d"; i=$((i + ${#d} + 2)) ;;
+          *) v+="$R2_MARK"; [ "$k" = ansi ] || k=raw; i="$n"; break ;;
+        esac ;;
+      '"')
+        i=$((i + 1))
+        while :; do
+          if [ "$i" -ge "$n" ]; then v+="$R2_MARK"; [ "$k" = ansi ] || k=raw; break 2; fi
+          c="${t:i:1}"
+          case "$c" in
+            '"') i=$((i + 1)); break ;;
+            '\') d="${t:i+1:1}"
+                 case "$d" in
+                   '$'|'`'|'"'|'\') v+="$d"; i=$((i + 2)) ;;
+                   *) v+='\'; i=$((i + 1)) ;;
+                 esac ;;
+            '`') d="${t:i+1}"
+                 case "$d" in
+                   *'`'*) d="${d%%'`'*}"; v+="$R2_MARK"; [ "$k" = lit ] && k=dq; i=$((i + ${#d} + 2)) ;;
+                   *) v+="$R2_MARK"; [ "$k" = ansi ] || k=raw; break 2 ;;
+                 esac ;;
+            '$') r2_dollar "$t" "$i"
+                 if [ "$R2_X" -lt 0 ]; then v+="$R2_MARK"; [ "$k" = ansi ] || k=raw; i="$n"; break 2; fi
+                 if [ "$R2_X" -eq $((i + 1)) ]; then v+='$'; else v+="$R2_MARK"; [ "$k" = lit ] && k=dq; fi
+                 i="$R2_X" ;;
+            *) v+="$c"; i=$((i + 1)) ;;
+          esac
+        done ;;
+      '$')
+        case "${t:i+1:1}" in
+          "'") v+="$R2_MARK"; k=ansi; i=$((i + 2))
+               while [ "$i" -lt "$n" ]; do
+                 case "${t:i:1}" in '\') i=$((i + 2)) ;; "'") break ;; *) i=$((i + 1)) ;; esac
+               done
+               i=$((i + 1)) ;;
+          '"') i=$((i + 1)) ;;
+          *) r2_dollar "$t" "$i"
+             if [ "$R2_X" -lt 0 ]; then v+="$R2_MARK"; [ "$k" = ansi ] || k=raw; i="$n"; break; fi
+             if [ "$R2_X" -eq $((i + 1)) ]; then v+='$'; else v+="$R2_MARK"; [ "$k" = ansi ] || k=raw; fi
+             i="$R2_X" ;;
+        esac ;;
+      '*'|'?'|'[')
+        v+="$R2_MARK"; [ "$k" = ansi ] || k=raw; i=$((i + 1)) ;;
+      '{')
+        d="${t:i+1}"; d="${d%%[[:blank:];&|)\`<>]*}"
+        case "$d" in
+          *'}'*) d="${d%%'}'*}" ;;
+          *) d='' ;;
+        esac
+        case "$d" in
+          *,*|*..*) v+="$R2_MARK"; [ "$k" = ansi ] || k=raw; i=$((i + ${#d} + 2)) ;;
+          *) v+='{'; i=$((i + 1)) ;;
+        esac ;;
+      '~')
+        if [ "$i" -eq "$s" ]; then v+="$R2_MARK"; [ "$k" = ansi ] || k=raw; else v+='~'; fi
+        i=$((i + 1)) ;;
+      '(')
+        r2_close "$t" $((i + 1)); v+="$R2_MARK"; [ "$k" = ansi ] || k=raw
+        if [ "$R2_END" -lt 0 ]; then i="$n"; break; fi
+        i=$((R2_END + 1)) ;;
+      *) v+="$c"; i=$((i + 1)) ;;
     esac
-    i=$((i + 1))
   done
-  [ "$hs" -ge 0 ] || return 0
-  w="${t:hs:R2_END-hs}"
-  w="${w#"${w%%[! 	]*}"}"; w="${w%%[ 	]*}"
-  case "$w" in \"*\") w="${w#\"}"; w="${w%\"}" ;; esac
-  if [[ "$w" =~ $R2_VAR_RE ]] || [[ "$w" =~ $R2_BRACED_RE ]]; then
-    R2_HS="${BASH_REMATCH[1]}"
-  else
-    R2_HS='?'
-  fi
+  R2_W_V="$v"; R2_W_K="$k"; R2_W_E="$i"
+}
+
+# r2_grep_at <text> <i> — the grep command whose words start at i, read the way bash hands them
+# over: where it ends (R2_END: the first `;`, `&`, `|`, newline or backtick outside a word, or the
+# `)` closing the paren it sits in), its words in order — each one's value (R2_WV), the literal
+# prefix of that value before its first expansion (R2_WP) and its class (R2_WK, see r2_word) —, its
+# herestring (R2_HS: the variable name when the operand is exactly one variable, `?` when it is
+# anything else, empty when there is none), and whether a redirection sends grep's STDOUT elsewhere
+# (R2_RDOUT: `>`, `>>`, `>|`, `>&`, `&>`, or any operator on descriptor 1). A redirection —
+# its descriptor, its operator and its target, glued or in the next word — is no word: grep never
+# sees it. Called, never read through `$(…)`, like every reader here.
+r2_grep_at() {
+  local LC_ALL=C
+  local t="$1" i="$2" n="${#1}" c fd op w end="${#1}"
+  R2_WV=(); R2_WP=(); R2_WK=(); R2_HS=''; R2_RDOUT=0
+  while [ "$i" -lt "$n" ]; do
+    c="${t:i:1}"
+    case "$c" in
+      ' '|$'\t') i=$((i + 1)); continue ;;
+      ';'|'|'|$'\n'|'`'|')') end="$i"; break ;;
+      '&') if [ "${t:i+1:1}" != '>' ]; then end="$i"; break; fi ;;
+    esac
+    fd=''; op=''
+    if [ "${t:i:2}" = '&>' ]; then
+      op='&>'
+    elif [[ "${t:i}" =~ $R2_REDIR_RE ]]; then
+      fd="${BASH_REMATCH[1]}"; op="${BASH_REMATCH[2]}"
+      case "$fd$op" in '<'|'>') [ "${t:i+1:1}" = '(' ] && op='' ;; esac
+    fi
+    if [ -z "$op" ]; then
+      r2_word "$t" "$i"
+      R2_WV+=("$R2_W_V"); R2_WP+=("${R2_W_V%%"$R2_MARK"*}"); R2_WK+=("$R2_W_K")
+      i="$R2_W_E"; continue
+    fi
+    i=$((i + ${#fd} + ${#op}))
+    while [[ "${t:i:1}" == [[:blank:]] ]]; do i=$((i + 1)); done
+    r2_word "$t" "$i"
+    if [ "$op" = '<<<' ]; then
+      w="${t:i:R2_W_E-i}"
+      case "$w" in \"*\") w="${w#\"}"; w="${w%\"}" ;; esac
+      if [[ "$w" =~ $R2_VAR_RE ]] || [[ "$w" =~ $R2_BRACED_RE ]]; then
+        R2_HS="${BASH_REMATCH[1]}"
+      else
+        R2_HS='?'
+      fi
+    fi
+    if [ -n "$fd" ]; then
+      [[ "$fd" =~ ^0*1$ ]] && R2_RDOUT=1
+    else
+      case "$op" in '>'|'>>'|'>|'|'>&'|'&>') R2_RDOUT=1 ;; esac
+    fi
+    i="$R2_W_E"
+  done
+  R2_END="$end"
   return 0
 }
 
@@ -452,38 +592,69 @@ r2_anchored() {
   return 1
 }
 
-# r2_grep_anchored — the grep r2_grep_at just read is anchored: a quoted word before its herestring
-# opens with an anchor, and as many do as it names patterns with `-e`/`--regexp`; a pattern behind
-# `-f`, or glued to `-e` with no quote, is never anchored, nor is any pattern of a grep that reads its
-# caret as a literal (`-F`) or counts the other lines (`-v`), nor of one with an ANSI-C quote among its
-# words: `$'…\n…'` hands grep two patterns, and the anchor of the first rode for the second (Codex on
-# PR #267, third round). A long option is read as GNU grep reads it, by prefix: a prefix of
-# `fixed-strings`, `invert-match` or `file` is that option, a prefix of `regexp` names a pattern, and
-# `--` alone ends the options (the same PR, fourth round). A quoted word that is no pattern (the file
-# a grep reads) needs no anchor. One definition for both paths: the final review of lote 8 measured
-# a second pattern riding on the first one's anchor in each.
+# r2_grep_anchored — the grep r2_grep_at just read is anchored, read word by word by VALUE, so a
+# quoted option is the option it spells (`'-v'`, `"-F"`) and an option's glued argument
+# (`--label='^  ok    x'`) is no pattern. A word whose value opens with `-` and goes on is an option:
+#   - a long one (`--x`, `--x=v`) counts by grep's own rule, any unambiguous prefix (Codex on PR #267,
+#     fourth round, measured on GNU grep 3.11): a prefix of `fixed-strings`, `invert-match` or `file`
+#     refuses — the caret becomes a literal, the other lines are counted, the patterns come from a
+#     file —, a prefix of `regexp` names one pattern, glued after its `=` or in a word to come;
+#   - a short cluster is read letter by letter: `f`, `F` or `v` refuses, and an `e` names one pattern,
+#     the rest of the word when there is one (`-e'^  ok    x'`, and `-ec`, whose pattern is `c`), a
+#     word to come otherwise;
+#   - a name or a letter the reader cannot see (an expansion, R2_MARK) refuses.
+# Every other word may be the pattern; it anchors when it is `lit` or `dq` and its value anchors. In a
+# `dq` value R2_MARK stands where the literal prefix ends, and every anchor is a prefix of literal
+# bytes, so the value anchors exactly when the prefix before the first expansion does (a declared
+# limit: the expansion could carry a newline or a `\|`). A glued pattern that does not anchor
+# refuses, a word with an ANSI-C quote refuses wherever it stands (`$'…\n…'` hands grep two
+# patterns; Codex on PR #267, third round), and the anchored words must cover every pattern an `-e`
+# or a `--regexp` names. One definition for both paths: the final review of lote 8 measured a second
+# pattern riding on the first one's anchor in each.
 r2_grep_anchored() {
-  local k w o e=0 a=0
-  local -a ws
-  [ "$R2_ANSI" -eq 0 ] || return 1
-  for k in ${R2_LITS[@]+"${R2_LITS[@]}"}; do
-    if r2_anchored "$k"; then a=$((a + 1)); fi
-  done
-  read -ra ws <<< "$R2_BARE"
-  for w in ${ws[@]+"${ws[@]}"}; do
-    case "$w" in
+  local LC_ALL=C
+  local k v w o j c e=0 a=0
+  for k in ${R2_WV[@]+"${!R2_WV[@]}"}; do
+    v="${R2_WV[k]}"; w="${R2_WK[k]}"
+    [ "$w" != ansi ] || return 1
+    case "$v" in
       --*)
-        o="${w#--}"; o="${o%%=*}"
-        for k in fixed-strings invert-match file; do
-          [ "${k#"$o"}" = "$k" ] || return 1
+        o="${v#--}"; o="${o%%=*}"
+        case "$o" in *"$R2_MARK"*) return 1 ;; esac
+        for c in fixed-strings invert-match file; do
+          [ "${c#"$o"}" = "$c" ] || return 1
         done
-        k=regexp; [ "${k#"$o"}" = "$k" ] || e=$((e + 1)) ;;
-      -*[fFv]*) return 1 ;;
-      -*e) e=$((e + 1)) ;;
-      -*e*) return 1 ;;
+        c=regexp; [ "${c#"$o"}" != "$c" ] || continue
+        e=$((e + 1))
+        [ "${v#*=}" != "$v" ] || continue
+        j=$((${#o} + 3))
+        r2_glued_anchored "$v" "$w" "$j" || return 1
+        a=$((a + 1)) ;;
+      -?*)
+        for ((j = 1; j < ${#v}; j++)); do
+          case "${v:j:1}" in
+            "$R2_MARK"|f|F|v) return 1 ;;
+            e) e=$((e + 1))
+               [ $((j + 1)) -lt "${#v}" ] || break
+               r2_glued_anchored "$v" "$w" $((j + 1)) || return 1
+               a=$((a + 1)); break ;;
+          esac
+        done ;;
+      *)
+        case "$w" in lit|dq) r2_anchored "$v" && a=$((a + 1)) ;; esac ;;
     esac
   done
   [ "$a" -ge 1 ] && [ "$a" -ge "$e" ]
+}
+
+# r2_glued_anchored <value> <class> <j> — the pattern glued to an option from byte j of its word
+# anchors: a `lit` or `dq` word by its value, any other class never.
+r2_glued_anchored() {
+  local LC_ALL=C
+  case "$2" in
+    lit|dq) r2_anchored "${1:$3}" ;;
+    *) return 1 ;;
+  esac
 }
 
 # rule2 <check cell> — R2_STRICT=1 asks for the cell rule, where R2_AA of the cell's greps are
@@ -1067,7 +1238,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=159
+PROBE_FLOOR=224
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1079,7 +1250,7 @@ fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
 # selftest green (the sabotage pass of lote 8, 2026-10-15). Tight, like PROBE_FLOOR, and the same
 # shape as rule_end in check-todo.sh.
 RULE_LINES=0
-RULE_FLOOR=5
+RULE_FLOOR=6
 rule_ok() { pass "rule: $1"; RULE_LINES=$((RULE_LINES + 1)); }
 
 probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode]
@@ -1108,6 +1279,25 @@ cp_head() {
 
 cp_row() { # cp_row <file> <id> <check cell> [status, default done]
   printf '| %s | slice | %s | %s | abc1234 |\n' "$2" "$3" "${4-done}" >> "$1"
+}
+
+# wd_tok <text after the grep> <want> — the words r2_grep_at publishes, each as class[value|prefix]
+# with R2_MARK shown as <M>, then the stdout mark, the herestring's name and the text from where the
+# grep ends (R2_END, which the argv reader will skip to). IN-PROCESS on purpose,
+# like the red_norm assertion below: the words are a contract the argv reader and the zero pair
+# read (issue #270, #272), and until they do, a value no rule reads yet (an unescaped `\$` inside
+# double quotes, the redirected stdout) reaches no verdict a child process could print.
+wd_tok() {
+  local got='' k t="grep$1"
+  PROBES=$((PROBES + 1))
+  r2_grep_at "$t" 4
+  for k in ${R2_WV[@]+"${!R2_WV[@]}"}; do
+    got+="${R2_WK[k]}[${R2_WV[k]//"$R2_MARK"/<M>}|${R2_WP[k]}]"
+  done
+  got+=" out=${R2_RDOUT-} hs=$R2_HS rest=${t:R2_END}"
+  [ "$got" = "$2" ] && return 0
+  printf 'SENSOR-BROKEN: the words of "grep%s" — wanted %s, got %s\n' "$1" "$2" "$got" >&2
+  FAILS=$((FAILS + 1)); fail_rc 91
 }
 
 # pipe_banner — the `|` ban in the shape both real documents write it: the mechanism that cannot
@@ -1521,6 +1711,158 @@ selftest() {
   probe 'a capture silenced into the null device taints nothing' 0 '1 under the anchor rule' "$mg"
   [ "$FAILS" -eq "$mg_f0" ] && \
     rule_ok "every spelling that merges stderr into stdout puts the cell under the anchor rule ($((PROBES - mg_p0)) probe(s))"
+
+  # ── each word of a grep is read by its value, quotes and escapes removed (issue #270, half 1) ──
+  # grep receives what bash hands it: quotes and escapes gone, glued parts joined, redirections
+  # taken out. The reader kept the quoted literals and the unquoted skeleton of the words apart, so
+  # a quoted option (`'-v'`, `"-F"`) was no option, an option's quoted argument (`--label=…`) and a
+  # redirection's target were patterns, and an anchor written with escapes was none. No expected
+  # value here is a zero, so no fixture rides on the exemption of a pair that expects only zeros.
+  local wd_p0="$PROBES" wd_f0="$FAILS" wd wd_t wd_w
+  wd="$box/wd-sq-v.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep '-v' -c '${OK_ANCHOR}x' <<< \"\$o\"\` → \`3\`"
+  probe 'a quoted -v is the option it spells' 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-dq-f.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(npm test 2>&1); grep \"-F\" -c '^ ✓ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'a double-quoted -F is the option it spells' 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-sq-inv.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep '--inv' -c '${OK_ANCHOR}x' <<< \"\$o\"\` → \`3\`"
+  probe 'a quoted --inv is the option it abbreviates' 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-label.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep --label='${OK_ANCHOR}x' -H -c 'caso' <<< \"\$o\"\` → \`1\`"
+  probe "an option's glued argument is no pattern" 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-escaped.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c ^\\ \\ ok\\ \\ \\ \\ x <<< \"\$o\"\` → \`1\`"
+  probe 'an anchor written with escapes anchors' 0 '1 under the anchor rule' "$wd"
+  wd="$box/wd-glued.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c '^  ok'\"    x\" <<< \"\$o\"\` → \`1\`"
+  probe 'an anchor written in glued parts anchors' 0 '1 under the anchor rule' "$wd"
+  wd="$box/wd-redir.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c '${OK_ANCHOR}x' 2>/dev/null <<< \"\$o\"\` → \`1\`"
+  probe 'a redirection beside an anchored pattern leaves it anchored' 0 '1 under the anchor rule' "$wd"
+  wd="$box/wd-redir-blank.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c '${OK_ANCHOR}x' 2> /dev/null <<< \"\$o\"\` → \`1\`"
+  probe 'a redirection whose target is the next word leaves it anchored' 0 '1 under the anchor rule' "$wd"
+  # The kit's own shape (I20 of 20261003-lote-3-a-catraca-desce): the anchor is literal, the rest
+  # expands. Decision 8 (a) of lote 9: a pattern that OPENS with an expansion is refused.
+  wd="$box/wd-dq-tail.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c \"${OK_ANCHOR}\$k x\" <<< \"\$o\"\` → \`1\`"
+  probe 'a literal anchor before an expansion inside double quotes anchors' 0 '1 under the anchor rule' "$wd"
+  wd="$box/wd-dq-head.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c \"\$p\" <<< \"\$o\"\` → \`1\`"
+  probe 'a quoted pattern that opens with an expansion anchors nothing' 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-raw-head.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c \$p <<< \"\$o\"\` → \`1\`"
+  probe 'an unquoted expansion anchors nothing' 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-glob.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c '${OK_ANCHOR}'* <<< \"\$o\"\` → \`1\`"
+  probe 'an unquoted glob glued to an anchor anchors nothing' 1 '0 of 1 pattern(s) anchored' "$wd"
+  # A redirection's target is no word of grep's argv, whatever it is named.
+  wd="$box/wd-redir-target.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'caso' 2>'${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe "a redirection's target is no pattern" 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-redir-target-next.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c 'caso' 2> '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe "a redirection's target in the next word is no pattern either" 1 '0 of 1 pattern(s) anchored' "$wd"
+  # Read by value, the pattern glued to -e or to --regexp= is the pattern it is, quoted or not; the
+  # base read the quoted ones, and refused `-ec` (whose pattern is `c`) by the shape of the word.
+  # `five` holds an `f`, a `v` and an `e`: the letters of the pattern are no options of the cluster.
+  wd="$box/wd-e-glued.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c -e'${OK_ANCHOR}five' <<< \"\$o\"\` → \`1\`"
+  probe 'an anchored pattern glued to -e anchors' 0 '1 under the anchor rule' "$wd"
+  wd="$box/wd-regexp-glued.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c --regexp='${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'an anchored pattern glued to --regexp= anchors' 0 '1 under the anchor rule' "$wd"
+  wd="$box/wd-e-glued-dq.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c -e\"${OK_ANCHOR}\$k\" <<< \"\$o\"\` → \`1\`"
+  probe 'a double-quoted pattern glued to -e anchors on its literal prefix' 0 '1 under the anchor rule' "$wd"
+  wd="$box/wd-e-glued-raw.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c -e'${OK_ANCHOR}x'* <<< \"\$o\"\` → \`1\`"
+  probe 'a glob glued to the pattern of -e anchors nothing' 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-regexp-next-blind.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c --regexp '${OK_ANCHOR}x' --regexp caso <<< \"\$o\"\` → \`1\`"
+  probe 'a second --regexp whose pattern is the next word rides on no anchor' 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-regexp-glued-blind.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c --regexp=caso '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a blind pattern glued to --regexp= is refused beside an anchored word' 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-regexp-next.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c --regexp '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a --regexp whose pattern is the next word anchors' 0 '1 under the anchor rule' "$wd"
+  # An option the reader cannot see whole is refused: an expansion could spell `-F` or `--file`.
+  wd="$box/wd-opt-name.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep --\"\$x\" -c '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a long option whose name is an expansion is refused' 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-opt-letters.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c\$f '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a short cluster holding an expansion is refused' 1 '0 of 1 pattern(s) anchored' "$wd"
+  wd="$box/wd-e-cluster.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -ec '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a pattern glued to -e inside a cluster is read, and owes the anchor' 1 '0 of 1 pattern(s) anchored' "$wd"
+  # The value of an ANSI-C quote is not decoded, so the word is refused wherever it stands: grep
+  # receives `-v` here, and the anchored word beside it would count every other line.
+  wd="$box/wd-ansi-option.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep \$'-v' -c '${OK_ANCHOR}x' <<< \"\$o\"\` → \`3\`"
+  probe 'an ANSI-C quoted word is refused wherever it stands' 1 '0 of 1 pattern(s) anchored' "$wd"
+  # An escaped `\$` is a literal dollar, and the `'…'` after it a plain quote: no ANSI-C quote.
+  wd="$box/wd-escaped-ansi.md"; cp_head "$wd"
+  cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c '${OK_ANCHOR}x'\\\$'y' <<< \"\$o\"\` → \`1\`"
+  probe "an escaped dollar before a quote is no ANSI-C quote" 0 '1 under the anchor rule' "$wd"
+  # The words themselves, read in-process (see wd_tok): text after `grep`, TAB, the words wanted.
+  while IFS=$'\t' read -r wd_t wd_w; do
+    wd_tok "$wd_t" "$wd_w"
+  done <<'WORDS'
+ -c 'a b'"c\$d"e\ f	lit[-c|-c]lit[a bc$de f|a bc$de f] out=0 hs= rest=
+ "a\"b\\c\$d\e\`" "a$ b"	lit[a"b\c$d\e`|a"b\c$d\e`]lit[a$ b|a$ b] out=0 hs= rest=
+ -c "a`b	lit[-c|-c]raw[a<M>|a] out=0 hs= rest=`b
+ -c "${a	lit[-c|-c]raw[<M>|] out=0 hs= rest=
+ -c "$(a	lit[-c|-c]raw[<M>|] out=0 hs= rest=
+ "^x$k y" "${k}" "$(c d)" "`c`" "$1"	dq[^x<M> y|^x]dq[<M>|]dq[<M>|]dq[<M>|]dq[<M>|] out=0 hs= rest=
+ $p ${p} $(c d) $1 '^'* ?x [x] ~/f a~ {a,b} {a..c} {a}	raw[<M>|]raw[<M>|]raw[<M>|]raw[<M>|]raw[^<M>|^]raw[<M>x|]raw[<M>x]|]raw[<M>/f|]lit[a~|a~]raw[<M>|]raw[<M>|]lit[{a}|{a}] out=0 hs= rest=
+ $'z' "a"$'\n' \$'z' $'a\'b' c $"x" $ a$	ansi[<M>|]ansi[a<M>|a]lit[$z|$z]ansi[<M>|]lit[c|c]lit[x|x]lit[$|$]lit[a$|a$] out=0 hs= rest=
+ {a b,c} {a,b	lit[{a|{a]lit[b,c}|b,c}]lit[{a,b|{a,b] out=0 hs= rest=
+ ${a:-${b}}x $ab.c (x) y	raw[<M>x|]raw[<M>.c|]raw[<M>|]lit[y|y] out=0 hs= rest=
+ -c (x	lit[-c|-c]raw[<M>|] out=0 hs= rest=
+ -c <(x	lit[-c|-c]raw[<M>|] out=0 hs= rest=
+ -c ${a	lit[-c|-c]raw[<M>|] out=0 hs= rest=
+ a\	lit[a\|a\] out=0 hs= rest=
+ -c x 2>/dev/null 2> e <f <<< "$o" -v	lit[-c|-c]lit[x|x]lit[-v|-v] out=0 hs=o rest=
+ -c x <<<${o} >o	lit[-c|-c]lit[x|x] out=1 hs=o rest=
+ -c x <<< "$o$p" 1>f	lit[-c|-c]lit[x|x] out=1 hs=? rest=
+ -c x &>/dev/null -v	lit[-c|-c]lit[x|x]lit[-v|-v] out=1 hs= rest=
+ -c x &>>f	lit[-c|-c]lit[x|x] out=1 hs= rest=
+ -c x >&2 -v	lit[-c|-c]lit[x|x]lit[-v|-v] out=1 hs= rest=
+ -c x >>f	lit[-c|-c]lit[x|x] out=1 hs= rest=
+ -c x >|f -v	lit[-c|-c]lit[x|x]lit[-v|-v] out=1 hs= rest=
+ -c x 01>f	lit[-c|-c]lit[x|x] out=1 hs= rest=
+ -c x 2>&1 3>f 10>f 21>f 2>>e <&0 <>f <<w -v	lit[-c|-c]lit[x|x]lit[-v|-v] out=0 hs= rest=
+ -c x>f a2>g '2'>h 2>i	lit[-c|-c]lit[x|x]lit[a2|a2]lit[2|2] out=1 hs= rest=
+ -c x <(bash t.sh 2>&1) >(cat)	lit[-c|-c]lit[x|x]raw[<M>|]raw[<M>|] out=0 hs= rest=
+ -c 'a;b' "c|d" e; grep y	lit[-c|-c]lit[a;b|a;b]lit[c|d|c|d]lit[e|e] out=0 hs= rest=; grep y
+ -c x && y	lit[-c|-c]lit[x|x] out=0 hs= rest=&& y
+ -c x) y	lit[-c|-c]lit[x|x] out=0 hs= rest=) y
+ -c x | y	lit[-c|-c]lit[x|x] out=0 hs= rest=| y
+ -c x&& y	lit[-c|-c]lit[x|x] out=0 hs= rest=&& y
+ -c x&>f -v	lit[-c|-c]lit[x|x]lit[-v|-v] out=1 hs= rest=
+ -c x|y	lit[-c|-c]lit[x|x] out=0 hs= rest=|y
+ -c x` y	lit[-c|-c]lit[x|x] out=0 hs= rest=` y
+ -c ab'x	lit[-c|-c]raw[ab<M>|ab] out=0 hs= rest=
+ -c "ab	lit[-c|-c]raw[ab<M>|ab] out=0 hs= rest=
+WORDS
+  # The two blanks a table line cannot hold: a TAB inside the text, and a newline that ends it.
+  wd_tok $' -c\tx' 'lit[-c|-c]lit[x|x] out=0 hs= rest='
+  wd_tok $' -c x\ny' $'lit[-c|-c]lit[x|x] out=0 hs= rest=\ny'
+  # The negative control: wd_tok has to SAY a mismatch, or every line above passes unread. Its
+  # failure is the expected one, so the counters it moved are put back; a silent wd_tok is the red.
+  local wd_fs="$FAILS" wd_rc="$SELFTEST_RC"
+  wd_tok ' -c x' 'lit[-c|-c] out=0 hs= rest=' 2>/dev/null
+  if [ "$FAILS" -eq "$wd_fs" ]; then
+    printf 'SENSOR-BROKEN: wd_tok passed words it was not given — its probes measure nothing\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  else
+    FAILS="$wd_fs"; SELFTEST_RC="$wd_rc"
+  fi
+  [ "$FAILS" -eq "$wd_f0" ] && \
+    rule_ok "each word of a grep is read by its value, quotes and escapes removed ($((PROBES - wd_p0)) probe(s))"
   # GFM makes the leading pipe optional, so a row written without it renders like the rest of the
   # table — and a reader of `|`-led lines skipped it whole (CodeRabbit review of PR #222). The
   # control is the same line below a blank line: a paragraph, which is no row and stays out.
