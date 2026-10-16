@@ -46,6 +46,22 @@ duas (o argv ilegível depois de um `-e`, que virou probe, e um `amb=0` inalcan�
 uma (o `cs` do backtick, escondido por um `;` na prosa de um fixture, que virou `, and`). Listar as
 degradações antes de rodá-las pediu mais 9 probes (4 no I2, 5 no I4), e a 1ª rodada do I4, mais 2.
 
+**Rodada 2 do Codex no PR #274** (13:43, `lighthouse_project` em `fdaab6f`, `sales_quote` em
+`a1ad4b74`; nos mesmos 36 checkpoints o sensor da base dá **114** e o da `a25cba6`, **105**): **106**
+células (15 + 91), e **1** na LH-4, ainda a I9. O par de zeros isentava o grep contador sem ler o resto
+do comando, e um `grep -c '['` que falha não imprime contagem: em `grep -c '[' <<< "$o"; echo 0` → `0`
+quem imprimia o zero era o `echo`. Agora todo comando no topo do par é um grep contador ou uma
+atribuição, e o esperado tem um zero por grep, então um grep que falha deixa a saída uma palavra mais
+curta, e vermelha. A célula que voltou é a R1 de `20260927-breadcrumb-numero-cotacao` (`sales_quote`):
+`grep -c ' failed'` e `grep -cE '[0-9]+ passed'` no mesmo comando contra um `0` só. O `1` do segundo
+está fora do par, na prosa (`` → `0` e `1` ``), então o grep que conta passes era isento sem esperar
+zero. As células liberadas pelo I4 caem de 9 para 8. A varredura do kit segue limpa (197 células, 262
+linhas, 31 arquivos). O selftest foi de 341 para **361 probes** (o grupo do par de zeros, de 41 para 61),
+e o leitor de palavras compostas saiu: com a regra nova, apagá-lo deixava todo probe verde. **60
+sabotagens**, 56 mortas; as 4 vivas só decidem com outra peça quebrada (o piso baixado sozinho, o teste
+do controle negativo, a guarda da regra da célula no `zr_rule2`) ou repõem as mesmas linhas (o teste
+do grep que o `r2_grep_word` guarda).
+
 **Por que um modelo e não um remendo:** na regra 2, a revisão final do lote 8 achou a indireção e o
 segundo padrão, e o Codex no PR #267 achou mais quatro em quatro das seis rodadas (o `-F` com o `-v`, o
 ANSI-C, o `--fixed` e, na 6ª, o argumento de opção contado como padrão). O lote 8 já tinha parado de
