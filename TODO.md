@@ -54,6 +54,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   padrão, arquivos) e cobrar a âncora só do padrão. RESOLVED by 3de6c5c.
   — descoberto pelo `codex` no PR #267, missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
+- [ ] **A regra 2 do check-checkpoint deixa abertos os casos que só o runtime decide** —
+  `tests/check-checkpoint.sh:427` (`R2_STDOUT_RE`) — falha aberta declarada no cabeçalho depois da rodada 3: a mescla
+  por terceiro descritor (`3>&1 2>&3`), o alvo de runtime (`2>$f`), grafias da stdout (symlink, `/dev/./stdout`,
+  `$'…'`), a palavra que abre com expansão lida como operando (`"$l"`), `POSIXLY_CORRECT` ou outro grep, e o nome que
+  substitui o grep (`grep () (echo 0)`). Um leitor de texto não decide o que só o runtime resolve. Direção: outra
+  peça (o Check medido em execução), não mais uma grafia. Fonte: o `checkpoint-notas.md` da missão (rodada 3)
+  — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
