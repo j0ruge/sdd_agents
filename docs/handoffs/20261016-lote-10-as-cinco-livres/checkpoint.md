@@ -1,6 +1,6 @@
 ---
 missao: 20261016-lote-10-as-cinco-livres
-atualizado: 2026-10-16 18:56
+atualizado: 2026-10-16 19:12
 ---
 
 # Checkpoint — o lote 10: as cinco livres
@@ -49,7 +49,7 @@ atualizado: 2026-10-16 18:56
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | #277 e #279 para a seção decidida (decisão 1): dois registros de uma linha com o evento que os reabre, catraca 17 → 15, o cabeçalho do sensor aponta o registro | `a=$(awk '/<!-- sdd:decided -->/{d=1} d && /^- \*\*A regra 2 do check-checkpoint deixa abertos os casos que só o runtime decide\*\* — /{c++} END{print c+0}' TODO.md); b=$(awk '/<!-- sdd:decided -->/{d=1} d && /^- \*\*A regra 2 aceita a âncora seguida de uma expansão no padrão\*\* — /{c++} END{print c+0}' TODO.md); n=$(bash tests/check-todo.sh --count TODO.md 2>/dev/null); k=$(grep -cx 'todo-findings 15' tests/health-baseline.txt); echo "$a $b $n $k"` → `1 1 15 1` | done | d8a6290 |
-| I2 | a substituição de processo da stderr é mescla (#278): toda grafia do `2>` seguida de `>(` no `r2_merges`, grupo de probes com o seu `rule_ok`, `RULE_FLOOR` 8 → 9, sabotagem, 106 → 106 nos alvos | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: a process substitution that takes stderr counts as a merge' <<< "$o"` → `1` | pending | — |
+| I2 | a substituição de processo da stderr é mescla (#278): toda grafia do `2>` seguida de `>(` no `r2_merges`, grupo de probes com o seu `rule_ok`, `RULE_FLOOR` 8 → 9, sabotagem, 106 → 106 nos alvos | `o=$(bash tests/check-checkpoint.sh 2>&1); grep -c '^  ok    rule: a process substitution that takes stderr counts as a merge' <<< "$o"` → `1` | done | c462a1b |
 | I3 | o `/sdd-plan` corta uma branch provisória e o planner a renomeia na decisão do id (#280); o relay exige `cd <worktree> &&` e confere status e HEAD do checkout principal a cada devolução (#281); dois pares no `check-hat.sh` | `o=$(bash tests/check-hat.sh 2>&1); a=$(grep -c '^  ok    command: /sdd-plan cuts a provisional branch and has the planner rename it' <<< "$o"); b=$(grep -c '^  ok    command: /sdd-plan keeps the planner out of the main checkout' <<< "$o"); echo "$a $b"` → `1 1` | pending | — |
 | I4 | fecho: `RESOLVED by` no #278, #280 e #281 (com a skill), medida final nos alvos, `KAIZEN_LOG.md`, gaveta F3, `20-handoff-exec.md` e a suíte inteira | `a=$(grep -c '^## [0-9-]* — Lote 10: as cinco livres$' KAIZEN_LOG.md); b=$(grep -q '20261016-lote-10-as-cinco-livres' KAIZEN_LOG.md; echo $?); c=$(awk '/<!-- sdd:open -->/{o=1} /<!-- sdd:decided -->/{o=0} o && /RESOLVED by [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/{n++} END{print n+0}' TODO.md); d=$(test -f docs/handoffs/20261016-lote-10-as-cinco-livres/20-handoff-exec.md; echo $?); echo "$a $b $c $d"` → `1 0 3 0` | pending | — |
 
