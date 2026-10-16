@@ -39,13 +39,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
   — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
 
-- [ ] **A regra 2 não lê a substituição de processo da stderr como mescla** — `tests/check-checkpoint.sh:463`
-  (`r2_merges`) — `o=$(sensor 2> >(cat))` leva a stderr para dentro da captura (medido no bash 5.2.21: o FAIL e o
-  ok no mesmo `$o`), mas o `2>` só mescla quando o alvo é um caminho da stdout, e um grep cego de `$o` sai
-  "0 under the anchor rule". Falha aberta, decidível pelo texto. Direção: `2>`, `2>>`, `2>|` ou `2<>` seguido de
-  `>(` conta como mescla, no lado fechado. RESOLVED by c462a1b.
-  — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
-
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
@@ -99,23 +92,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   e o `docs/pipeline.md:1477` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
   `/sdd-plan` porque o `bin/` está congelado até o veredito. Direção: `--no-track` no motivo e nas duas citações.
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
-
-- [ ] **O passo 2 do `/sdd-plan` pede a branch da missão antes de o grill decidir o id** — `commands/sdd-plan.md:35`
-  (`git worktree add`) — o worktree nasce "on the branch the mission will declare in `branch:`" antes de todo
-  artefato, mas a branch sai do id, decidido no grill (decisão 4 do lote 8, 5 do lote 9), e o grill já pode
-  registrar achado no `TODO.md`: o relay chuta o nome ou abre o worktree depois do grill. No lote 9 ele cortou
-  `fix/lote-9` provisória, e o planner a renomeou (`git branch -m`) na decisão 5, sem atrito e sem upstream.
-  Direção: o passo 2 manda cortar a branch provisória e renomeá-la na decisão do id, enquanto não há
-  upstream. RESOLVED by 6cb8a12.
-  — descoberto pelo relay do `/sdd-plan` na missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
-
-- [ ] **O `/sdd-plan` passa ao planner a raiz do worktree, mas o subagente segue no checkout principal** —
-  `commands/sdd-plan.md:72` (`sdd-planner`) — o subagente herda o cwd da sessão, que é o checkout que o `sdd` do
-  PATH executa. No lote 9 um redirecionamento relativo de medição do planner gravou `?? e` ali às 08:02, e um
-  `sdd run` de alvo em voo teria parado com `KIT-TOUCHED` (rc 3): consumidor fora da suíte (D15). O passo 2 só
-  muda a raiz que o relay usa. Direção: o "Then" manda o relay exigir `cd <worktree> &&` em todo comando do
-  subagente e conferir o `git status --porcelain` do checkout principal a cada devolução. RESOLVED by 6cb8a12.
-  — descoberto pelo relay do `/sdd-plan` na missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
 
 ### Saída humana e cosmética
 
