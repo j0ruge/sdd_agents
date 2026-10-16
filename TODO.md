@@ -107,6 +107,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `/sdd-plan` porque o `bin/` está congelado até o veredito. Direção: `--no-track` no motivo e nas duas citações.
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
+- [ ] **O passo 2 do `/sdd-plan` pede a branch da missão antes de o grill decidir o id** — `commands/sdd-plan.md:35`
+  (`git worktree add`) — o worktree nasce "on the branch the mission will declare in `branch:`" antes de todo
+  artefato, mas a branch sai do id, decidido no grill (decisão 4 do lote 8, 5 do lote 9), e o grill já pode
+  registrar achado no `TODO.md`: o relay chuta o nome ou abre o worktree depois do grill. No lote 9 ele cortou
+  `fix/lote-9` provisória, e o planner a renomeou (`git branch -m`) na decisão 5, sem atrito e sem upstream.
+  Direção: o passo 2 manda cortar a branch provisória e renomeá-la na decisão do id, enquanto não há upstream.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
+
 ### Saída humana e cosmética
 
 - [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1839` (`gate-qa-e2e`) —
