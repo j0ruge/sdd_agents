@@ -43,7 +43,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`r2_merges`) — `o=$(sensor 2> >(cat))` leva a stderr para dentro da captura (medido no bash 5.2.21: o FAIL e o
   ok no mesmo `$o`), mas o `2>` só mescla quando o alvo é um caminho da stdout, e um grep cego de `$o` sai
   "0 under the anchor rule". Falha aberta, decidível pelo texto. Direção: `2>`, `2>>`, `2>|` ou `2<>` seguido de
-  `>(` conta como mescla, no lado fechado.
+  `>(` conta como mescla, no lado fechado. RESOLVED by c462a1b.
   — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
 
 ### Contrato e configuração
@@ -105,7 +105,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   artefato, mas a branch sai do id, decidido no grill (decisão 4 do lote 8, 5 do lote 9), e o grill já pode
   registrar achado no `TODO.md`: o relay chuta o nome ou abre o worktree depois do grill. No lote 9 ele cortou
   `fix/lote-9` provisória, e o planner a renomeou (`git branch -m`) na decisão 5, sem atrito e sem upstream.
-  Direção: o passo 2 manda cortar a branch provisória e renomeá-la na decisão do id, enquanto não há upstream.
+  Direção: o passo 2 manda cortar a branch provisória e renomeá-la na decisão do id, enquanto não há
+  upstream. RESOLVED by 6cb8a12.
   — descoberto pelo relay do `/sdd-plan` na missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
 
 - [ ] **O `/sdd-plan` passa ao planner a raiz do worktree, mas o subagente segue no checkout principal** —
@@ -113,7 +114,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   PATH executa. No lote 9 um redirecionamento relativo de medição do planner gravou `?? e` ali às 08:02, e um
   `sdd run` de alvo em voo teria parado com `KIT-TOUCHED` (rc 3): consumidor fora da suíte (D15). O passo 2 só
   muda a raiz que o relay usa. Direção: o "Then" manda o relay exigir `cd <worktree> &&` em todo comando do
-  subagente e conferir o `git status --porcelain` do checkout principal a cada devolução.
+  subagente e conferir o `git status --porcelain` do checkout principal a cada devolução. RESOLVED by 6cb8a12.
   — descoberto pelo relay do `/sdd-plan` na missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
 
 ### Saída humana e cosmética
@@ -138,11 +139,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Idioma
 
 - [ ] **A devolução do planner ao relay não tem regra de idioma** — `agents/sdd-planner.md:273` (`OUTPUT_LANG`) —
-  o `## Language` cobre só os três artefatos e o parágrafo do relay (`:67`) não fala de idioma; só o
-  `commands/sdd-plan.md:89` pede `OUTPUT_LANG`. No grill da 0.4.0 do `lighthouse_project` (`pt-BR`), a 1ª
-  devolução veio inteira em inglês apesar do prompt de delegação em pt-BR, e outra abriu em inglês depois de um
-  lembrete: o relay teria de traduzir, e traduzir é parafrasear. Causa não verificada. Direção: o `## Language`
-  estende o `OUTPUT_LANG` às devoluções, com um caso que o meça.
+  o `## Language` cobre só os três artefatos e o parágrafo do relay (`:67`) não fala de idioma; só a seção
+  `## Relaying the grill to the human` do `commands/sdd-plan.md` pede a devolução "written in `OUTPUT_LANG`". No grill
+  da 0.4.0 do `lighthouse_project` (`pt-BR`), a 1ª devolução veio inteira em inglês apesar do prompt de delegação em
+  pt-BR, e outra abriu em inglês depois de um lembrete: o relay teria de traduzir, e traduzir é parafrasear. Causa não
+  verificada. Direção: o `## Language` estende o `OUTPUT_LANG` às devoluções, com um caso que o meça.
   Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
 
 ### Custo e escala
