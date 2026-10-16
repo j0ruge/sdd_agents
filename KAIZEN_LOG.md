@@ -4,6 +4,59 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-16 — Lote 10: as cinco livres
+
+**Missão:** `20261016-lote-10-as-cinco-livres`, a leva dos cinco itens do backlog que só tocam `tests/` e
+`commands/` (#277, #278, #279, #280 e #281) e por isso não partem a janela do juiz do lote 7
+(`./bin/sdd kaizen --series` às 20:01: `latest.kit_sha: bad6168`, `missions: 1`, `guard.sufficient: false`,
+`window_broken: false`). Três saem por conserto (#278, #280, #281) e dois por decisão (#277, #279).
+
+**Antes** (remedido no fecho): a família da regra 2 do `tests/check-checkpoint.sh` não convergia sob revisão
+adversária. O Codex fez **6 rodadas** no PR #267 (lote 8; 6 P2 e 1 P1) e **5** no PR #274 (lote 9; 7 P2, todos
+grafias novas da regra 2), contadas pela API do GitHub às 20:00. O sensor foi de **1811** linhas e
+`PROBE_FLOOR=128` (`9c13855`) para **3254** e `398` (`3208161`). No corpus de **67** checkpoints (30 do kit, sem o
+desta missão, e 37 dos alvos: `lighthouse_project` em `3794fc9`, `sales_quote` em `a1ad4b74`), **0** linhas de
+tabela escrevem uma grafia aberta da família (`>(`, terceiro descritor, `2>$f`, `/dev/./stdout`, `/dev/stdout`,
+`/proc/…/fd/1`, `grep () `, `POSIXLY_CORRECT`, `exec N>&1`; grep às 20:00), e a forma do #279 (padrão entre aspas
+duplas com expansão depois da âncora) só aparece na I10 de `20261002-onde-o-comando-do-humano-escreve` e na I20
+de `20261003-lote-3-a-catraca-desce`, ambas fechadas. A substituição de processo da stderr (#278) passava calada:
+com o sensor da `3208161`, a célula `` `o=$(bash tests/check-a.sh 2> >(cat)); grep -c 'caso' <<< "$o"` → `1` ``
+sai `0 under the anchor rule` com rc 0, e o mesmo com `2>>`, `2<>` e `2>  >(tee /dev/null)` (fixtures no
+`--check` às 20:00); o `2>|` só se mede em processo, porque o `|` cru na célula já é recusado pela regra do
+pipe, nos dois sensores. O passo 2 do `/sdd-plan` mandava abrir o worktree "on the branch the mission will
+declare in `branch:`" antes de o grill decidir o id (#280), e o planner herdava o cwd do checkout principal: no
+lote 9 um `2>e` relativo gravou `?? e` ali (#281). `check-hat.sh`: **11** linhas `command:`;
+`check-checkpoint.sh --selftest`: **8** linhas `rule:` (as duas da `3208161` num `git archive`, às 19:30).
+Catraca **17**.
+
+**Depois** (sensor do HEAD, mesmos comandos): as quatro grafias que cabem numa célula saem rc 1 com
+`0 of 1 pattern(s) anchored`, e o `2>|` fica vermelho em processo (`mg_merges`, nota do I2): **0 de 5 → 5 de 5**.
+Os controles (`> >(cat)`, `1> >(cat)`, `12> >(cat)`, `2>/dev/null`) seguem `0 under the anchor rule`. Nos alvos,
+**106 → 106** recusas (sensor da base e do HEAD na mesma corrida, 19:29:18–19:29:29, 37 checkpoints, mesmos
+shas), com a saída do `--check` idêntica byte a byte; a varredura do kit segue limpa (`199 cell(s) under the
+rule, 266 row(s) in 32 file(s)`, já com o checkpoint desta missão). Linha nova `rule: a process substitution
+that takes stderr counts as a merge`: `--selftest` **8 → 9** linhas `rule:`, `RULE_FLOOR` 8 → 9, `PROBE_FLOOR`
+398 → 412, o sensor 3254 → 3308 linhas. No I2, 16 sabotagens e 13 mortas; as vivas são os pisos baixados
+sozinhos e a guarda do grupo em `-ge`, que só decide com a regra quebrada, declaradas no cabeçalho (nota do
+I2). O `/sdd-plan` corta `-b <provisional>` e o planner a renomeia com `git branch -m` na decisão do id,
+enquanto ela não tem upstream; o relay exige `cd <worktree> &&` em todo comando do planner e confere
+`status --porcelain` e `HEAD` do checkout principal a cada devolução: `check-hat.sh` **11 → 13** linhas
+`command:`, 12 sabotagens no I3, 12 mortas (nota do I3). O FAIL do par `--no-track` passou a nomear as duas
+causas que o literal mede (`fbe202e`). A catraca vai a **15** na branch (#277 e #279 viram registros
+decididos, `d8a6290`) e a **12** depois do chore pós-merge, que apaga #278, #280 e #281 pelo `RESOLVED by`.
+
+**Por que parar de remendar:** o critério que fecha a família é uma Check real do corpus (decisões 1 e 5 do
+grill). O #278 é barato e decidível pelo texto. O #277 (o que só o runtime decide) não tem dono: no PLAN a
+asserção ainda não existe, o gate não executa texto de modelo e o planner está congelado. Recusar o #279
+deixaria vermelhos 2 checkpoints fechados do kit. Grafia nova da regra 2 achada no PR vai para os limites
+declarados no cabeçalho, sem item; da 4ª rodada em diante vai ao `TODO.md`, e o humano decide o merge.
+
+**Achados:** nenhum novo. O item congelado "A devolução do planner ao relay não tem regra de idioma" citava
+`commands/sdd-plan.md:89`, que já era a `:92` na `3208161` e é a `:111` desde o I3; a citação passou a nomear a
+seção pelo título, com o literal (`31cfc09`).
+
+---
+
 ## 2026-10-16 — Lote 9: o papel de cada palavra
 
 **Missão:** `20261016-lote-9-o-papel-de-cada-palavra`, a leva dos três itens do backlog cujo conserto
