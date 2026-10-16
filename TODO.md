@@ -62,6 +62,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   peça (o Check medido em execução), não mais uma grafia. Fonte: o `checkpoint-notas.md` da missão (rodada 3)
   — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
 
+- [ ] **A regra 2 não lê a substituição de processo da stderr como mescla** — `tests/check-checkpoint.sh:463`
+  (`r2_merges`) — `o=$(sensor 2> >(cat))` leva a stderr para dentro da captura (medido no bash 5.2.21: o FAIL e o
+  ok no mesmo `$o`), mas o `2>` só mescla quando o alvo é um caminho da stdout, e um grep cego de `$o` sai
+  "0 under the anchor rule". Falha aberta, decidível pelo texto. Direção: `2>`, `2>>`, `2>|` ou `2<>` seguido de
+  `>(` conta como mescla, no lado fechado.
+  — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
+
+- [ ] **A regra 2 aceita a âncora seguida de uma expansão no padrão** — `tests/check-checkpoint.sh:925`
+  (`r2_anchored`) — um padrão entre aspas duplas que começa pela âncora passa pelo prefixo literal, mas o resto
+  pode expandir em outro ramo: com `alt` valendo `\|  FAIL  case`, `grep -c "^  ok    case$alt"` conta 1 com o ok
+  e com o FAIL (medido). Falha aberta. Direção: padrão `dq` com expansão depois da âncora é ilegível, salvo prova
+  de que a expansão não acrescenta padrão nem alternância.
+  — descoberto pelo `codex` no PR #274, missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
