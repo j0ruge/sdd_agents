@@ -116,6 +116,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: o passo 2 manda cortar a branch provisória e renomeá-la na decisão do id, enquanto não há upstream.
   — descoberto pelo relay do `/sdd-plan` na missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
 
+- [ ] **O `/sdd-plan` passa ao planner a raiz do worktree, mas o subagente segue no checkout principal** —
+  `commands/sdd-plan.md:72` (`sdd-planner`) — o subagente herda o cwd da sessão, que é o checkout que o `sdd` do
+  PATH executa. No lote 9 um redirecionamento relativo de medição do planner gravou `?? e` ali às 08:02, e um
+  `sdd run` de alvo em voo teria parado com `KIT-TOUCHED` (rc 3): consumidor fora da suíte (D15). O passo 2 só
+  muda a raiz que o relay usa. Direção: o "Then" manda o relay exigir `cd <worktree> &&` em todo comando do
+  subagente e conferir o `git status --porcelain` do checkout principal a cada devolução.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261016-lote-9-o-papel-de-cada-palavra` (2026-10-16)
+
 ### Saída humana e cosmética
 
 - [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1839` (`gate-qa-e2e`) —
