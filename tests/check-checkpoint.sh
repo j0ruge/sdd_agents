@@ -125,26 +125,38 @@
 # the cell rule too: the three read the stream with no rule at all until the final review of lote 8.
 # One grep is anchored by r2_grep_anchored, on both paths, over the WORDS r2_grep_at reads (issue
 # #270, lote 9): each word's value with quotes and escapes removed and its glued parts joined, so a
-# quoted option is the option it spells (`'-v'`, `"-F"`), an option's glued argument
-# (`--label='^  ok    x'`) is no pattern, and an anchor written with escapes (`^\ \ ok…`) anchors.
-# A redirection and its target are no word, and none of grep's argv: a target named like an anchor
-# was a pattern to the reader before (`2>'^  ok    x'`, found by its sabotage pass). The anchored
-# words must cover as many patterns as `-e`/`--regexp` name, with no `-f` and no `-F` or `-v`, which
-# turn the caret into a literal or count every other line (Codex on PR #267), and no ANSI-C quote
-# `$'…'`, whose `\n` hands grep a second pattern (the same PR, third round). An escaped `\$'` is a
-# literal dollar before a plain quote, and anchors since lote 9: it was refused with the ANSI-C quote.
-# A long option counts by grep's own rule, any unambiguous prefix (`--fixed`, `--inv`, `--reg=`,
-# measured on GNU grep 3.11; the fourth round), and an ambiguous prefix is refused with them, since
-# grep refuses it too. A pattern glued to `-e` or `--regexp=` is read and owes the anchor (`-ec`'s
-# pattern is `c`); an option word whose name or letters hold an expansion is refused, unreadable.
-# Words are read past the herestring, since grep takes options anywhere; its own operand is no word.
+# quoted option is the option it spells (`'-v'`, `"-F"`) and an anchor written with escapes
+# (`^\ \ ok…`) anchors. A redirection and its target are no word, and none of grep's argv: a target
+# named like an anchor was a pattern to the reader before (`2>'^  ok    x'`, found by its sabotage
+# pass). An escaped `\$'` is a literal dollar before a plain quote, and anchors since lote 9: it was
+# refused with the ANSI-C quote. Over the words, the argv is read as GNU grep 3.11's getopt_long
+# reads it (r2_argv), by a table copied from the binary (R2_LONG and its neighbours): an option
+# anywhere before `--`, a long one by any prefix that resolves (`--fixed`, `--inv`, `--reg=`; Codex
+# on PR #267, fourth round), an option's argument glued or in the next word; the patterns are the
+# arguments of `-e`/`--regexp` or, with none, the first operand, and every other operand is a FILE.
+# Only a pattern owes the anchor, and every pattern does. Refused, as unreadable: a letter or a name
+# the table lacks, an ambiguous prefix, an argument missing or given to an option that takes none,
+# and a `-X` matcher that is not literally one grep knows (grep refuses all four), and an option
+# whose name or letters hold an expansion (the reader cannot see it). Four identities disarm the
+# caret, refused with it: `F` (`-F`, `--fixed-strings`, `--fixed-regexp`, `-X fgrep`, the fgrep
+# command: a literal caret; Codex on PR #267), `v` (every other line counts), `z` (one record, so
+# `^` opens only the input and `.` crosses lines) and `f` (patterns from a file). A pattern holding
+# an ANSI-C quote `$'…'` never anchors, since its `\n` hands grep a second pattern (the same PR,
+# third round), and an operand holding one is refused, pattern or FILE: it is never decoded, and
+# `$'-v'` is an option to grep (measured).
 # DECLARED, lote 9: a word that opens with an expansion, or holds an unquoted one, a glob, a brace
 # expansion or a leading `~`, never anchors (bash may split or rename it); a double-quoted pattern
 # anchors on its literal prefix before the first expansion (`"^  ok    $k finding(s)"`, the shape
-# two of the kit's checkpoints write), although the expansion could carry a newline or a `\|`.
-# FAIL-OPEN, in TODO.md: a word in its own place that is no pattern still counts as one, so a FILE
-# beside a blind `-e`, or an option's argument in the next word (`--label '^  ok    x'`), named like
-# an anchor passes. The words know their value; the role each one plays in grep's argv is next.
+# two of the kit's checkpoints write), although the expansion could carry a newline or a `\|`. A
+# word that opens with an expansion is an operand, although its value could be an option, and that
+# fails OPEN: the kit's own control reads a FILE that way (`grep -c '^  ok    x' "$l"`, F1 of
+# 2026-08-16). The table is GNU grep 3.11 with no POSIXLY_CORRECT in the environment: with it set,
+# the options end at the first operand, and another grep (BSD, busybox, ugrep) reads its argv by
+# its own rules. A grep's words are skipped once read, so a FILE or a matcher named `grep` is no
+# second grep; a grep that runs inside one of those words is read by nobody, and when it reads the
+# merged stream the cell falls back to the cell rule, whose count takes `grep` by substring and
+# still owes it the anchor. That count is the closed side: a FILE named `grep` in a cell the reader
+# cannot follow is one more grep to anchor.
 #
 # DECLARED LIMITS of the merge (issue #269, lote 9). r2_merges reads the text raw, so a `&>` or a
 # `>&` inside quotes counts as a merge, and so does `>/dev/null 2>&1`, which sends both streams to
@@ -225,6 +237,19 @@
 # (R2_END in no probe, wd_tok without a negative control, a glued `dq` or `raw` pattern, a second
 # `--regexp` in its own word), and a probe found one defect of the reader before any sabotage ran:
 # an expansion left open inside double quotes ended its word one character in.
+#
+# The argv (issue #270, lote 9) added 73 more over two rounds, each anchored on code with its count:
+# each branch of r2_long, r2_opt, r2_argv and r2_grep_anchored, each of the four disarming
+# identities, the skip in r2_greps, the `F` that fgrep and `-X fgrep` imply, twelve entries of the
+# table, gt_argv's comparison and negative control, the `ok rule:` line and one probe. In the last
+# round 71 of 72 died; the live one is the probe floor lowered on its own, which no floor sees,
+# being a minimum (the probe deleted beside it dies, rc 92). Two first survived: an option the
+# reader cannot read after an `-e` had already given a pattern, which became a probe, and the reset
+# of the ambiguity when the exact name wins, which no order of the table reaches, and was removed:
+# the failure it decided is the closed one. Three members of the family were found while planning,
+# not by a sabotage: `--fixed-regexp`, a hidden synonym of `-F`; `-z`, under which `.*` crosses
+# lines; and `-X fgrep`, refused before by accident, the reader taking its `fgrep` for a second
+# grep.
 #
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
@@ -592,69 +617,165 @@ r2_anchored() {
   return 1
 }
 
-# r2_grep_anchored — the grep r2_grep_at just read is anchored, read word by word by VALUE, so a
-# quoted option is the option it spells (`'-v'`, `"-F"`) and an option's glued argument
-# (`--label='^  ok    x'`) is no pattern. A word whose value opens with `-` and goes on is an option:
-#   - a long one (`--x`, `--x=v`) counts by grep's own rule, any unambiguous prefix (Codex on PR #267,
-#     fourth round, measured on GNU grep 3.11): a prefix of `fixed-strings`, `invert-match` or `file`
-#     refuses — the caret becomes a literal, the other lines are counted, the patterns come from a
-#     file —, a prefix of `regexp` names one pattern, glued after its `=` or in a word to come;
-#   - a short cluster is read letter by letter: `f`, `F` or `v` refuses, and an `e` names one pattern,
-#     the rest of the word when there is one (`-e'^  ok    x'`, and `-ec`, whose pattern is `c`), a
-#     word to come otherwise;
-#   - a name or a letter the reader cannot see (an expansion, R2_MARK) refuses.
-# Every other word may be the pattern; it anchors when it is `lit` or `dq` and its value anchors. In a
-# `dq` value R2_MARK stands where the literal prefix ends, and every anchor is a prefix of literal
-# bytes, so the value anchors exactly when the prefix before the first expansion does (a declared
-# limit: the expansion could carry a newline or a `\|`). A glued pattern that does not anchor
-# refuses, a word with an ANSI-C quote refuses wherever it stands (`$'…\n…'` hands grep two
-# patterns; Codex on PR #267, third round), and the anchored words must cover every pattern an `-e`
-# or a `--regexp` names. One definition for both paths: the final review of lote 8 measured a second
-# pattern riding on the first one's anchor in each.
-r2_grep_anchored() {
-  local LC_ALL=C
-  local k v w o j c e=0 a=0
-  for k in ${R2_WV[@]+"${!R2_WV[@]}"}; do
-    v="${R2_WV[k]}"; w="${R2_WK[k]}"
-    [ "$w" != ansi ] || return 1
-    case "$v" in
-      --*)
-        o="${v#--}"; o="${o%%=*}"
-        case "$o" in *"$R2_MARK"*) return 1 ;; esac
-        for c in fixed-strings invert-match file; do
-          [ "${c#"$o"}" = "$c" ] || return 1
-        done
-        c=regexp; [ "${c#"$o"}" != "$c" ] || continue
-        e=$((e + 1))
-        [ "${v#*=}" != "$v" ] || continue
-        j=$((${#o} + 3))
-        r2_glued_anchored "$v" "$w" "$j" || return 1
-        a=$((a + 1)) ;;
-      -?*)
-        for ((j = 1; j < ${#v}; j++)); do
-          case "${v:j:1}" in
-            "$R2_MARK"|f|F|v) return 1 ;;
-            e) e=$((e + 1))
-               [ $((j + 1)) -lt "${#v}" ] || break
-               r2_glued_anchored "$v" "$w" $((j + 1)) || return 1
-               a=$((a + 1)); break ;;
-          esac
-        done ;;
-      *)
-        case "$w" in lit|dq) r2_anchored "$v" && a=$((a + 1)) ;; esac ;;
-    esac
+# ── the argv of GNU grep 3.11, ONE definition (issue #270, lote 9) ─────────────────────────────
+# Copied from `/usr/bin/grep --help` and from getopt_long's own messages, GNU grep 3.11, measured
+# on 2026-10-16: each letter alone as the last word (`option requires an argument`, `invalid
+# option`), each long name alone and with `=v` (`requires an argument`, `doesn't allow an
+# argument`), the 50 names the ambiguity messages of `--a` … `--z` list, and every prefix of every
+# name run through the binary and compared with r2_long. Read by r2_argv, r2_long and r2_opt only.
+#   R2_SHORT_ARG   the letters that take an argument: the rest of the word, or the next word;
+#   R2_SHORT_NONE  the letters that take none; a digit is a context length (`-5`, `--context=5`);
+#   R2_LONG        name:argument:identity. The argument is r (required: after `=`, or the next word
+#                  whatever it is), o (optional: after `=` only, so `--color never` makes `never` an
+#                  operand) or n (none: `=` refused). The identity is what getopt_long compares when
+#                  a prefix names several options: the short letter when there is one, the name
+#                  otherwise. `fixed-regexp` is a hidden synonym of `-F`, so `--fixed` resolves, and
+#                  so does `--col` (color, colour);
+#   R2_MATCHERS    the names `-X` takes, exactly; `-X fgrep` is `-F`.
+# A letter or a name absent from it is refused: the closed side.
+R2_SHORT_ARG='ABCdDefmX'
+R2_SHORT_NONE='abcEFGhHiIlLnoPqrRsTuUvVwxyzZ0123456789'
+R2_LONG=(
+  after-context:r:A before-context:r:B binary-files:r:binary-files context:r:C devices:r:D
+  directories:r:d exclude:r:exclude exclude-dir:r:exclude-dir exclude-from:r:exclude-from file:r:f
+  group-separator:r:group-separator include:r:include label:r:label max-count:r:m regexp:r:e
+  color:o:color colour:o:color
+  basic-regexp:n:G binary:n:U byte-offset:n:b count:n:c dereference-recursive:n:R
+  extended-regexp:n:E files-with-matches:n:l files-without-match:n:L fixed-regexp:n:F
+  fixed-strings:n:F help:n:help ignore-case:n:i initial-tab:n:T invert-match:n:v
+  line-buffered:n:line-buffered line-number:n:n line-regexp:n:x no-filename:n:h
+  no-group-separator:n:no-group-separator no-ignore-case:n:no-ignore-case no-messages:n:s
+  null:n:Z null-data:n:z only-matching:n:o perl-regexp:n:P quiet:n:q recursive:n:r silent:n:q
+  text:n:a unix-byte-offsets:n:u version:n:V with-filename:n:H word-regexp:n:w
+)
+R2_MATCHERS=(grep egrep fgrep awk gawk posixawk perl)
+R2_OPTS=' '; R2_PV=(); R2_PK=(); R2_PLIT=0; R2_LT=''; R2_LI=''
+
+# r2_long <name> — the long option a name spells, as getopt_long resolves it: the exact name, or
+# else a prefix whose candidates all share one identity (and one argument). R2_LT is its argument
+# and R2_LI its identity; rc 1 when the name is unknown or the prefix ambiguous, which grep refuses.
+r2_long() {
+  local e nm hit='' amb=0
+  for e in "${R2_LONG[@]}"; do
+    nm="${e%%:*}"
+    [ "${nm#"$1"}" != "$nm" ] || continue
+    if [ "$nm" = "$1" ]; then hit="${e#*:}"; break; fi
+    if [ -z "$hit" ]; then hit="${e#*:}"; elif [ "$hit" != "${e#*:}" ]; then amb=1; fi
   done
-  [ "$a" -ge 1 ] && [ "$a" -ge "$e" ]
+  [ -n "$hit" ] && [ "$amb" -eq 0 ] || return 1
+  R2_LT="${hit%%:*}"; R2_LI="${hit#*:}"
 }
 
-# r2_glued_anchored <value> <class> <j> — the pattern glued to an option from byte j of its word
-# anchors: a `lit` or `dq` word by its value, any other class never.
-r2_glued_anchored() {
-  local LC_ALL=C
-  case "$2" in
-    lit|dq) r2_anchored "${1:$3}" ;;
-    *) return 1 ;;
+# r2_opt <identity> <argument> <its class> — an option read with its argument: R2_OPTS gains the
+# identity, an `e` adds its pattern, and an `X` takes only a name of R2_MATCHERS (rc 1 otherwise; a
+# value that is not `lit` holds R2_MARK, and names none); `-X fgrep` adds `F` too.
+r2_opt() {
+  local m
+  R2_OPTS+="$1 "
+  case "$1" in
+    e) R2_PV+=("$2"); R2_PK+=("$3") ;;
+    X) for m in "${R2_MATCHERS[@]}"; do
+         [ "$m" = "$2" ] || continue
+         [ "$m" != fgrep ] || R2_OPTS+='F '
+         return 0
+       done
+       return 1 ;;
   esac
+  return 0
+}
+
+# r2_argv [identity] — grep's argv, read from the words r2_grep_at published the way getopt_long
+# reads it: options anywhere before `--` (GNU grep permutes), a cluster letter by letter, a long
+# option by its name or by any prefix r2_long resolves; `--` ends the options and a lone `-` is an
+# operand. The identity given is the option the command name implies (`F` for fgrep). R2_OPTS gets
+# the identity of every option read, each followed by a blank; R2_PV and R2_PK the value and class
+# of every pattern: each argument of `-e`/`--regexp`, or, with none, the first operand (past an
+# `-f` that one is a FILE to grep, and the `-f` disarms the grep whatever it is). Every other
+# operand is a FILE. A word whose value opens with R2_MARK (an expansion) is an operand, a declared
+# limit: its value could be an option. An ANSI-C word is never decoded, so an operand holding one
+# is refused, pattern or FILE (`$'-v'` is an option to grep, measured); as an option's argument it
+# is that argument. R2_PLIT is 1 when there is a pattern and every one is `lit`. rc 1 when the argv
+# cannot be read.
+r2_argv() {
+  local LC_ALL=C
+  local n="${#R2_WV[@]}" k=0 dd=0 j v w c
+  local -a ov=() ow=()
+  R2_OPTS=' '; R2_PV=(); R2_PK=(); R2_PLIT=0
+  [ -z "${1-}" ] || R2_OPTS+="$1 "
+  while [ "$k" -lt "$n" ]; do
+    v="${R2_WV[k]}"; w="${R2_WK[k]}"; k=$((k + 1))
+    if [ "$dd" -eq 0 ]; then
+      case "$v" in
+        --) dd=1; continue ;;
+        --*)
+          c="${v#--}"; c="${c%%=*}"
+          r2_long "$c" || return 1
+          if [ "${v#*=}" != "$v" ]; then
+            [ "$R2_LT" != n ] || return 1
+            r2_opt "$R2_LI" "${v#*=}" "$w" || return 1
+          elif [ "$R2_LT" = r ]; then
+            [ "$k" -lt "$n" ] || return 1
+            r2_opt "$R2_LI" "${R2_WV[k]}" "${R2_WK[k]}" || return 1
+            k=$((k + 1))
+          else
+            R2_OPTS+="$R2_LI "
+          fi
+          continue ;;
+        -?*)
+          for ((j = 1; j < ${#v}; j++)); do
+            c="${v:j:1}"
+            case "$R2_SHORT_ARG" in
+              *"$c"*)
+                if [ $((j + 1)) -lt "${#v}" ]; then
+                  r2_opt "$c" "${v:j+1}" "$w" || return 1
+                else
+                  [ "$k" -lt "$n" ] || return 1
+                  r2_opt "$c" "${R2_WV[k]}" "${R2_WK[k]}" || return 1
+                  k=$((k + 1))
+                fi
+                continue 2 ;;
+            esac
+            case "$R2_SHORT_NONE" in *"$c"*) R2_OPTS+="$c " ;; *) return 1 ;; esac
+          done
+          continue ;;
+      esac
+    fi
+    [ "$w" != ansi ] || return 1
+    ov+=("$v"); ow+=("$w")
+  done
+  if [ "${#R2_PV[@]}" -eq 0 ] && [ "${#ov[@]}" -gt 0 ]; then
+    R2_PV=("${ov[0]}"); R2_PK=("${ow[0]}")
+  fi
+  [ "${#R2_PV[@]}" -gt 0 ] || return 0
+  for w in "${R2_PK[@]}"; do [ "$w" = lit ] || return 0; done
+  R2_PLIT=1
+}
+
+# r2_grep_anchored [identity] — the grep r2_grep_at just read is anchored: its argv reads
+# (r2_argv, given the option its command name implies; R2_OPTS ends in `?` when it does not), no
+# option disarms the caret, and it has a pattern and every pattern anchors. Disarm, by identity:
+# `F` (`-F`, `--fixed-strings`, the hidden `--fixed-regexp`, `-X fgrep`, fgrep: the caret is a
+# literal; Codex on PR #267), `v` (every other line counts), `z` (the input is one record, so `^`
+# opens only it and `.` crosses lines) and `f` (patterns from a file). A pattern anchors when it is
+# `lit` or `dq` and its value anchors: in a `dq` value R2_MARK stands where the literal prefix ends,
+# and every anchor is a literal prefix, so the value anchors exactly when the prefix before the
+# first expansion does (a declared limit: the expansion could carry a newline or a `\|`). An `ansi`
+# or `raw` pattern never anchors (`$'…\n…'` hands grep two patterns; Codex on PR #267, third
+# round). One definition for both paths: the final review of lote 8 measured a second pattern
+# riding on the first one's anchor in each.
+r2_grep_anchored() {
+  local LC_ALL=C
+  local k
+  r2_argv "${1-}" || { R2_OPTS+='? '; return 1; }
+  case "$R2_OPTS" in *' F '* | *' v '* | *' z '* | *' f '*) return 1 ;; esac
+  [ "${#R2_PV[@]}" -gt 0 ] || return 1
+  for k in "${!R2_PV[@]}"; do
+    case "${R2_PK[k]}" in
+      lit | dq) r2_anchored "${R2_PV[k]}" || return 1 ;;
+      *) return 1 ;;
+    esac
+  done
+  return 0
 }
 
 # rule2 <check cell> — R2_STRICT=1 asks for the cell rule, where R2_AA of the cell's greps are
@@ -729,8 +850,9 @@ r2_captures() {
   return 0
 }
 
-# r2_greps <text> — pass 2, every grep outside quotes — `egrep` and `fgrep` too, the second never
-# anchored —, read where it stands: R2_AA counts the anchored
+# r2_greps <text> — pass 2, every grep outside quotes — `egrep` and `fgrep` too, read as `grep -E`
+# and `grep -F` —, read where it stands and then skipped up to R2_END, so a word of its argv named
+# `grep` (a FILE, the matcher of `-X fgrep`) is no second grep: R2_AA counts the anchored
 # ones, R2_G those whose herestring is a tainted name, R2_A the anchored among these, R2_HSREFS the
 # tainted reads they account for.
 r2_greps() {
@@ -762,12 +884,14 @@ r2_greps() {
         elif [ "${t:i:5}" = egrep ] || [ "${t:i:5}" = fgrep ]; then k=5; fi
         if [ "$k" -gt 0 ] && r2_bounded "$t" "$i" "$k"; then
           r2_grep_at "$t" $((i + k))
-          ok=0; if [ "$c" != f ] && r2_grep_anchored; then ok=1; R2_AA=$((R2_AA + 1)); fi
+          case "$c" in f) c=F ;; *) c='' ;; esac
+          ok=0; if r2_grep_anchored "$c"; then ok=1; R2_AA=$((R2_AA + 1)); fi
           for name in ${R2_TAINTED[@]+"${R2_TAINTED[@]}"}; do
             [ "$R2_HS" = "$name" ] || continue
             R2_G=$((R2_G + 1)); R2_HSREFS=$((R2_HSREFS + 1)); R2_A=$((R2_A + ok))
             break
           done
+          i="$R2_END"; continue
         fi ;;
     esac
     i=$((i + 1))
@@ -1238,7 +1362,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=224
+PROBE_FLOOR=275
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1250,7 +1374,7 @@ fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
 # selftest green (the sabotage pass of lote 8, 2026-10-15). Tight, like PROBE_FLOOR, and the same
 # shape as rule_end in check-todo.sh.
 RULE_LINES=0
-RULE_FLOOR=6
+RULE_FLOOR=7
 rule_ok() { pass "rule: $1"; RULE_LINES=$((RULE_LINES + 1)); }
 
 probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode]
@@ -1297,6 +1421,25 @@ wd_tok() {
   got+=" out=${R2_RDOUT-} hs=$R2_HS rest=${t:R2_END}"
   [ "$got" = "$2" ] && return 0
   printf 'SENSOR-BROKEN: the words of "grep%s" — wanted %s, got %s\n' "$1" "$2" "$got" >&2
+  FAILS=$((FAILS + 1)); fail_rc 91
+}
+
+# gt_argv <text after the grep> <want> — what the argv reader publishes (R2_OPTS, each pattern as
+# class[value] with R2_MARK shown as <M>, R2_PLIT) and r2_grep_anchored's rc. IN-PROCESS on purpose,
+# like wd_tok: the identities and R2_PLIT are what the zero pair of issue #272 reads, and no verdict
+# shows them yet.
+gt_argv() {
+  local got k rc=0 t="grep$1"
+  PROBES=$((PROBES + 1))
+  r2_grep_at "$t" 4
+  r2_grep_anchored || rc=1
+  got="opts=[${R2_OPTS-}] pats="
+  for k in ${R2_PV[@]+"${!R2_PV[@]}"}; do
+    got+="${R2_PK[k]}[${R2_PV[k]//"$R2_MARK"/<M>}]"
+  done
+  got+=" plit=${R2_PLIT-} rc=$rc"
+  [ "$got" = "$2" ] && return 0
+  printf 'SENSOR-BROKEN: the argv of "grep%s" — wanted %s, got %s\n' "$1" "$2" "$got" >&2
   FAILS=$((FAILS + 1)); fail_rc 91
 }
 
@@ -1798,11 +1941,11 @@ selftest() {
   wd="$box/wd-e-cluster.md"; cp_head "$wd"
   cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -ec '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
   probe 'a pattern glued to -e inside a cluster is read, and owes the anchor' 1 '0 of 1 pattern(s) anchored' "$wd"
-  # The value of an ANSI-C quote is not decoded, so the word is refused wherever it stands: grep
-  # receives `-v` here, and the anchored word beside it would count every other line.
+  # The value of an ANSI-C quote is not decoded, so an operand holding one is refused: grep receives
+  # `-v` here, and the anchored word beside it would count every other line.
   wd="$box/wd-ansi-option.md"; cp_head "$wd"
   cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep \$'-v' -c '${OK_ANCHOR}x' <<< \"\$o\"\` → \`3\`"
-  probe 'an ANSI-C quoted word is refused wherever it stands' 1 '0 of 1 pattern(s) anchored' "$wd"
+  probe 'an ANSI-C quoted operand is refused, whatever it spells' 1 '0 of 1 pattern(s) anchored' "$wd"
   # An escaped `\$` is a literal dollar, and the `'…'` after it a plain quote: no ANSI-C quote.
   wd="$box/wd-escaped-ansi.md"; cp_head "$wd"
   cp_row "$wd" I1 "\`o=\$(bash t.sh 2>&1); grep -c '${OK_ANCHOR}x'\\\$'y' <<< \"\$o\"\` → \`1\`"
@@ -1863,6 +2006,157 @@ WORDS
   fi
   [ "$FAILS" -eq "$wd_f0" ] && \
     rule_ok "each word of a grep is read by its value, quotes and escapes removed ($((PROBES - wd_p0)) probe(s))"
+
+  # ── grep's argv is read as getopt_long reads it, and only a pattern owes the anchor (issue #270,
+  # half 2) ──
+  # The words know their value; the role of each one comes from GNU grep 3.11's own table (R2_LONG
+  # and its neighbours): an option, an option's argument, a pattern or a FILE. A word in its own
+  # place that was no pattern counted as one, so a FILE beside a blind `-e`, or an option's argument
+  # in the next word, named like an anchor passed; three spellings that disarm the caret were never
+  # read (`--fixed-regexp`, `-z`, `-X fgrep`), and a FILE or an argument named `grep` was one more
+  # grep. Three rows of the plan's table are probes of the groups above and are not repeated:
+  # `-ec` (wd-e-cluster), `--regexp '…'` (wd-regexp-next) and `--fixed` (r2-fixed-abbr). No
+  # expected value is a zero.
+  local gt_p0="$PROBES" gt_f0="$FAILS" gt gt_t gt_w
+  gt="$box/gt-label-next.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep --label '${OK_ANCHOR}x' -H -c 'caso' <<< \"\$o\"\` → \`1\`"
+  probe "an option's argument in the next word is no pattern" 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-e-file.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c -e 'caso' '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'with an -e, every operand is a FILE, whatever it is named' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-fixed-regexp.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(npm test 2>&1); grep --fixed-regexp -c '^ ✓ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'the hidden --fixed-regexp is -F' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-fixed-r.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(npm test 2>&1); grep --fixed-r -c '^ ✓ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'a prefix of --fixed-regexp is -F' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-z.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -cz '${OK_ANCHOR}a.*b' <<< \"\$o\"\` → \`1\`"
+  probe 'a -z pattern anchors only the start of the whole input' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-null-data.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep --null-data -c '${OK_ANCHOR}a.*b' <<< \"\$o\"\` → \`1\`"
+  probe 'a --null-data pattern anchors nothing either' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-x-fgrep.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(npm test 2>&1); grep -X fgrep -c '^ ✓ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'the fgrep matcher of -X is -F, and no second grep' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-x-fgrep-glued.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(npm test 2>&1); grep -Xfgrep -c '^ ✓ caso' <<< \"\$o\"\` → \`1\`"
+  probe 'the fgrep matcher glued to -X is -F' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-x-egrep.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(npm test 2>&1); grep -X egrep -c '^ ✓ a' <<< \"\$o\"\` → \`1\`"
+  probe 'the egrep matcher of -X leaves the anchor alone' 0 '1 under the anchor rule' "$gt"
+  gt="$box/gt-x-bad.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(npm test 2>&1); grep -X nope -c '^ ✓ a' <<< \"\$o\"\` → \`1\`"
+  probe 'a matcher grep does not know is refused' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-x-dq.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(npm test 2>&1); grep -X \"\$m\" -c '^ ✓ a' <<< \"\$o\"\` → \`1\`"
+  probe 'a matcher the reader cannot see is refused' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-file-grep.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c -- '${OK_ANCHOR}x' grep <<< \"\$o\"\` → \`1\`"
+  probe 'a FILE named grep is no second grep' 0 '1 under the anchor rule' "$gt"
+  gt="$box/gt-ambiguous.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep --e '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'an ambiguous prefix is refused, as grep refuses it' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-unknown.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -K -c '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a letter grep does not know is refused' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-colo.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c --colo=never '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a prefix of two spellings of one option resolves' 0 '1 under the anchor rule' "$gt"
+  gt="$box/gt-color-next.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c --color never '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'an optional argument takes no next word: that word is the pattern' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-ce.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -ce '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'the -e at the end of a cluster takes the next word' 0 '1 under the anchor rule' "$gt"
+  gt="$box/gt-reg.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c --reg '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a prefix of --regexp takes the next word as the pattern' 0 '1 under the anchor rule' "$gt"
+  gt="$box/gt-context.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c -5 '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a digit is a context length' 0 '1 under the anchor rule' "$gt"
+  gt="$box/gt-m-next.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c -m 1 '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe "an option's argument in the next word is no FILE either" 0 '1 under the anchor rule' "$gt"
+  gt="$box/gt-dd-e.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c -- -e <<< \"\$o\"\` → \`1\`"
+  probe 'after --, a -e is the pattern' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-dd-v.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c -- '${OK_ANCHOR}x' -v <<< \"\$o\"\` → \`1\`"
+  probe 'after --, a -v is a FILE' 0 '1 under the anchor rule' "$gt"
+  gt="$box/gt-dash.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c - '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a lone - is an operand, here the pattern' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-dq-first.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c \"\$p\" '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a pattern that opens with an expansion is not saved by an anchored FILE' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-count-twice.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c --count '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'a long option and its letter read twice are one option' 0 '1 under the anchor rule' "$gt"
+  gt="$box/gt-none-eq.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep --count=1 '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'an argument to an option that takes none is refused' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-null-exact.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c --null '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe 'an exact name wins over the longer names it is a prefix of' 0 '1 under the anchor rule' "$gt"
+  gt="$box/gt-m-last.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c '${OK_ANCHOR}x' <<< \"\$o\" -m\` → \`1\`"
+  probe 'a letter whose argument is missing is refused' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-max-count-last.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c '${OK_ANCHOR}x' <<< \"\$o\" --max-count\` → \`1\`"
+  probe 'a long option whose argument is missing is refused' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-e-then-unknown.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c -e '${OK_ANCHOR}x' -K <<< \"\$o\"\` → \`1\`"
+  probe 'an unreadable option after an anchored -e is refused' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-f-beside-e.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c -e '${OK_ANCHOR}x' -f pats.txt <<< \"\$o\"\` → \`1\`"
+  probe 'patterns from -f ride on no anchored -e' 1 '0 of 1 pattern(s) anchored' "$gt"
+  # An ANSI-C quote is never decoded: an operand holding one may be an option to grep (`$'-v'`,
+  # measured), so it is refused, pattern or FILE; as an option's argument it is that argument.
+  gt="$box/gt-ansi-file.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c '${OK_ANCHOR}x' \$'-v' <<< \"\$o\"\` → \`1\`"
+  probe 'an ANSI-C quoted FILE is refused' 1 '0 of 1 pattern(s) anchored' "$gt"
+  gt="$box/gt-ansi-arg.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep --label=\$'x' -c '${OK_ANCHOR}x' <<< \"\$o\"\` → \`1\`"
+  probe "an ANSI-C quoted argument of an option is no pattern" 0 '1 under the anchor rule' "$gt"
+  # The words of a grep are skipped once read, and the grep a word of its argv runs is read by
+  # nobody: the cell rule's count still owes it the anchor, the closed side.
+  gt="$box/gt-nested.md"; cp_head "$gt"
+  cp_row "$gt" I1 "\`o=\$(bash t.sh 2>&1); grep -c '${OK_ANCHOR}x' <<< \"\$o\" \"\$(grep -l y <<< \"\$o\")\"\` → \`1\`"
+  probe 'a grep inside a word of another grep still owes the anchor' 1 '1 of 2 pattern(s) anchored' "$gt"
+  # What the argv reader publishes, read in-process (see gt_argv): text after `grep`, TAB, wanted.
+  # The two long lines run every name and every letter of the table by its exact spelling.
+  while IFS=$'\t' read -r gt_t gt_w; do
+    gt_argv "$gt_t" "$gt_w"
+  done <<'ARGV'
+ -ci a -e '^  ok    x' --label=y -H	opts=[ c i e label H ] pats=lit[^  ok    x] plit=1 rc=0
+ -X fgrep -c x	opts=[ X F c ] pats=lit[x] plit=1 rc=1
+ -Xegrep -c '^  ok    x'	opts=[ X c ] pats=lit[^  ok    x] plit=1 rc=0
+ -c "$p" x	opts=[ c ] pats=dq[<M>] plit=0 rc=1
+ -m1 -e x -e"^  ok    $k" y	opts=[ m e e ] pats=lit[x]dq[^  ok    <M>] plit=0 rc=1
+ -c -- -v x	opts=[ c ] pats=lit[-v] plit=1 rc=1
+ -e a -e '^  ok    b' c	opts=[ e e ] pats=lit[a]lit[^  ok    b] plit=1 rc=1
+ -c '^  ok    x' $f	opts=[ c ] pats=lit[^  ok    x] plit=1 rc=0
+ --label $'x' -c '^  ok    x'	opts=[ label c ] pats=lit[^  ok    x] plit=1 rc=0
+ -c --color=never --colour '^  ok    x'	opts=[ c color color ] pats=lit[^  ok    x] plit=1 rc=0
+ -c $'^  ok    x'	opts=[ c ? ] pats= plit=0 rc=1
+ --fi x	opts=[ ? ] pats= plit=0 rc=1
+ -ce	opts=[ c ? ] pats= plit=0 rc=1
+ -c	opts=[ c ] pats= plit=0 rc=1
+ --after-context=1 --before-context=1 --binary-files=text --context=1 --devices=read --directories=read --exclude=a --exclude-dir=a --exclude-from=a --file=a --group-separator=a --include=a --label=a --max-count=1 --regexp=a --color --colour --basic-regexp --binary --byte-offset --count --dereference-recursive --extended-regexp --files-with-matches --files-without-match --fixed-regexp --fixed-strings --help --ignore-case --initial-tab --invert-match --line-buffered --line-number --line-regexp --no-filename --no-group-separator --no-ignore-case --no-messages --null --null-data --only-matching --perl-regexp --quiet --recursive --silent --text --unix-byte-offsets --version --with-filename --word-regexp	opts=[ A B binary-files C D d exclude exclude-dir exclude-from f group-separator include label m e color color G U b c R E l L F F help i T v line-buffered n x h no-group-separator no-ignore-case s Z z o P q r q a u V H w ] pats=lit[a] plit=1 rc=1
+ -abcEFGhHiIlLnoPqrRsTuUvVwxyzZ0123456789 -A1 -B1 -C1 -d1 -D1 -e1 -f1 -m1 -Xgrep	opts=[ a b c E F G h H i I l L n o P q r R s T u U v V w x y z Z 0 1 2 3 4 5 6 7 8 9 A B C d D e f m X ] pats=lit[1] plit=1 rc=1
+ARGV
+  # The negative control, as wd_tok's: gt_argv has to SAY a mismatch.
+  local gt_fs="$FAILS" gt_rc="$SELFTEST_RC"
+  gt_argv ' -c x' 'opts=[ ] pats=lit[x] plit=1 rc=1' 2>/dev/null
+  if [ "$FAILS" -eq "$gt_fs" ]; then
+    printf 'SENSOR-BROKEN: gt_argv passed an argv it was not given — its probes measure nothing\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  else
+    FAILS="$gt_fs"; SELFTEST_RC="$gt_rc"
+  fi
+  [ "$FAILS" -eq "$gt_f0" ] && \
+    rule_ok "grep's argv is read as getopt_long reads it, and only a pattern owes the anchor ($((PROBES - gt_p0)) probe(s))"
   # GFM makes the leading pipe optional, so a row written without it renders like the rest of the
   # table — and a reader of `|`-led lines skipped it whole (CodeRabbit review of PR #222). The
   # control is the same line below a blank line: a paragraph, which is no row and stays out.
