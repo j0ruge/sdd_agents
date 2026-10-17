@@ -96,8 +96,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O planner chama a base de `main`, e o alvo pode ter outra** — `agents/sdd-planner.md:260`
   (`kaizen_log:`) — a exceção do `branch:` diz "naming the base branch itself (`main`)", e o `k8_base_refusal`
   (`bin/sdd:2183`) compara com o `$DEFAULT_BRANCH`. No `sales_quote`, cuja base é a `develop`, o planner pode deixar
-  `kaizen_log` sem `skipped` numa missão na base, e só o `gate_PLAN` recusa: falha fechada, mas o consumidor está
-  fora da suíte do kit (D15). Direção: a frase nomeia o `DEFAULT_BRANCH` do alvo, e não o literal `main`.
+  `kaizen_log` sem `skipped` numa missão na base, e quem recusa é o `gate_PLAN` (ou o `gate_DOCS` de um `--phase`
+  forçado): falha fechada, mas o consumidor está fora da suíte do kit (D15). Direção: a frase nomeia o
+  `DEFAULT_BRANCH` do alvo, e não o literal `main`.
   — descoberto pelo Codex no yokoten `JRC-Brasil/sales_quote#484`, sobre a cópia do `bad6168` (2026-10-15)
 
 ### Saída humana e cosmética
