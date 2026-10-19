@@ -47,6 +47,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   avisa nomeando o descendente que sobrou, e o failure-modes lista as flags de toolchain.
   — descoberto por `sdd preflight` na instalação do kit no `dotp-remake` (2026-10-19)
 
+- [ ] **A prosa que a DOCS escreve depois da REVIEW não passa por revisão nenhuma** — `bin/sdd:2695` (`PHASES`) —
+  a ordem é `REVIEW DOCS PR`: o `gate_REVIEW` aceita B na prosa (`REVIEW_PROSE_MIN_GRADE`), o achado de prosa vai
+  ao `TODO_FILE` e quem reescreve a prosa é a DOCS, cujo gate lê a checklist, não a prosa. Na 3.2a do `dotp-remake`
+  uma r2 extra do `/codereview:codereview` achou 1 MEDIUM na prosa da DOCS (`3044b3c`): o ponteiro novo diz que
+  toda condição do filtro está na linha do `Add`, e faltava o `FE_NUM_COLOURS` (consertado em `3a57106`).
+  Direção: a REVIEW revê o diff da DOCS antes do PR, ou o corpo do PR diz que essa prosa ninguém revisou.
+  Fonte: PR `j0ruge/dotp-remake#10`, Evidências (r2 e r3) — descoberto por `/codereview:codereview` (r2) na
+  missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
@@ -166,6 +175,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `"isPrivate": false`; quem instala pode concluir que precisa de acesso concedido ou de token. Direção: tirar
   o comentário, ou trocá-lo pelo que for verdade, com a data.
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
+
+- [ ] **O corpo do PR promete CI para os sensores novos, e o alvo pode não ter CI** — `templates/pr-body.md:26`
+  (`Sensores novos`) — a frase "rodam no CI a partir deste PR" é fixa no template, o `agents/sdd-publisher.md:61`
+  manda listar o que "start running in CI", e nada confere o alvo. O `dotp-remake` não tem `.github/workflows`
+  (os checks do PR #10 são só GitGuardian e CodeRabbit), e o corpo saiu com a frase, corrigida à mão para
+  "rodam na suíte local, `dotnet test`; o repositório não tem CI". Direção: o publisher só afirma CI com um
+  workflow em `.github/workflows/`; sem ele, diz onde a suíte rodou: localmente, pelo `TEST_CMD` do passo 2.
+  — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
+
+- [ ] **A menção `@codex review` no corpo do PR não pede a revisão do Codex** — `agents/sdd-publisher.md:62`
+  (`decisions for a human`) — o publisher copia as pendências dos handoffs para o corpo; na 3.2a do `dotp-remake`
+  uma delas era "`@codex review` (conferir o Reviewed commit)", do `00-missao.md:190`. O bot respondeu à menção
+  só com "create an environment", 10 s depois de o PR #10 abrir (o mesmo aviso no #9; nenhum nos #5–#8, sem a
+  menção), e a revisão só veio com o comentário `@codex review` do dono. Direção: o publisher posta o comentário
+  quando uma pendência pede o Codex, e no corpo cita o pedido sem o `@`, sem contar com a menção.
+  — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
 
 ### Comentário e registro
 
