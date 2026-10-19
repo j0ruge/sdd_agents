@@ -58,6 +58,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **O `/sdd-plan` não diz o que fazer quando o tipo do planner não está na sessão** — `commands/sdd-plan.md:75`
+  (`sdd-planner`) — o passo manda delegar ao subagente, e só. Na 3.2b do `dotp-remake` a sessão abriu no diretório
+  pai do alvo (`~/repos/rea-projects`), e a lista de tipos do `Agent` não trazia o `sdd-planner`, embora o symlink
+  do `sdd link-agents` estivesse em `.claude/agents/` do alvo. O relay lançou um `general-purpose` com ordem de ler
+  `agents/sdd-planner.md` como papel, e o grill correu no formato. Sem o passo escrito, a sessão planeja inline ou
+  improvisa. Direção: o passo diz o fallback, ou manda abrir a sessão na raiz do alvo antes do `/sdd-plan`.
+  — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-b-campo-fichas-e-alvos` (2026-10-19)
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
   (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
   squash, e o item fica preso para sempre; no `sales_quote` os PRs #405 e #406 entraram por squash e
