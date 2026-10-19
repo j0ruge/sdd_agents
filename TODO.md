@@ -39,6 +39,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
   — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
 
+- [ ] **O `sdd preflight` diz "preflight ok" com um `TEST_CMD` que deixa servidor vivo** — `bin/sdd-coordination.py:359`
+  (`left running`) — o aviso do supervisor só sai depois do "ok", e todo comando que roda o `TEST_CMD` fora
+  de um `sdd run` repete a espera. No `dotp-remake` (.NET) o `dotnet build` deixou 7 nós do MSBuild e o
+  `VBCSCompiler`: o preflight ficou preso em "8 processes it left running hold the checkout" até um
+  `dotnet build-server shutdown`; com `--disable-build-servers` nenhum sobra. Direção: o probe do `TEST_CMD`
+  avisa nomeando o descendente que sobrou, e o failure-modes lista as flags de toolchain.
+  — descoberto por `sdd preflight` na instalação do kit no `dotp-remake` (2026-10-19)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
