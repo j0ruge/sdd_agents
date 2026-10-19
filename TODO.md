@@ -46,6 +46,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   vez por processo quando o `SDD_HOME` não está no `DEFAULT_BRANCH` ou está atrás do upstream já buscado.
   — descoberto por `retrofit-watch` na sessão do `ui24_agent` que planejou a S9 (2026-10-17)
 
+- [ ] **O `sdd preflight` diz "preflight ok" com um `TEST_CMD` que deixa servidor vivo** — `bin/sdd-coordination.py:359`
+  (`left running`) — o aviso do supervisor só sai depois do "ok", e todo comando que roda o `TEST_CMD` fora
+  de um `sdd run` repete a espera. No `dotp-remake` (.NET) o `dotnet build` deixou 7 nós do MSBuild e o
+  `VBCSCompiler`: o preflight ficou preso em "8 processes it left running hold the checkout" até um
+  `dotnet build-server shutdown`; com `--disable-build-servers` nenhum sobra. Direção: o probe do `TEST_CMD`
+  avisa nomeando o descendente que sobrou, e o failure-modes lista as flags de toolchain.
+  — descoberto por `sdd preflight` na instalação do kit no `dotp-remake` (2026-10-19)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
@@ -108,6 +116,34 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `DEFAULT_BRANCH` do alvo, e não o literal `main`.
   — descoberto pelo Codex no yokoten `JRC-Brasil/sales_quote#484`, sobre a cópia do `bad6168` (2026-10-15)
 
+- [ ] **O `sdd install` adota a branch atual como base quando falta `origin/HEAD`** — `bin/sdd:5790`
+  (`--show-current`) — sem `refs/remotes/origin/HEAD` o install grava a branch em que está, e instalar numa
+  branch de trabalho, para não mexer na base, é o caso comum: no `dotp-remake` saiu `DEFAULT_BRANCH="plano-3-2"`,
+  e o "confirm it" da saída foi a única defesa. Direção: tentar `git ls-remote --symref origin HEAD` antes da
+  branch atual, e dizer que a branch atual é palpite quando for ela.
+  — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
+
+- [ ] **A primeira instalação semeia o `TODO.md` em inglês, qualquer que seja o idioma** — `bin/sdd:5856`
+  (`inst_lang`) — o install lê o `OUTPUT_LANG` da config que acabou de gerar do `starter.conf`, onde ele vem
+  vazio, e cai no `templates/todo.md` (`:5877`). Ajustar o idioma depois não troca a semente: no `dotp-remake`
+  (`pt-BR`) foi preciso apagar o `TODO.md` intocado e rodar o `sdd install` de novo. Direção: um `--lang` no
+  install, ou a saída nomear o reinstall quando o `TODO_FILE` ainda é a semente de outro idioma.
+  — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
+
+- [ ] **Nada instala nem confere o `/sdd-plan` que o `link-agents` manda rodar** — `bin/sdd:11500`
+  (`/sdd-plan`) — a saída termina em "Next: $ /sdd-plan", mas o comando só existe onde alguém criou o link
+  `~/.claude/commands/sdd-plan.md`, descrito só na ADR 0016 (máquina do operador); o README (`:45`) não o cita
+  e o `sdd preflight` não o mede. Numa máquina nova o `~/.claude/commands` nem existia. Direção: o `link-agents`
+  cria esse link, idempotente como os dos agentes, ou o README o põe nos passos de instalação.
+  — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
+
+- [ ] **O `/sdd-plan` delega ao `sdd-planner` sem saída para o agente não registrado** — `commands/sdd-plan.md:75`
+  (`sdd-planner`) — na sessão aberta em `rea-projects/` antes do `sdd link-agents`, a lista de tipos de agente
+  não tinha o `sdd-planner` (causa não verificada: a hora do link ou o cwd acima do alvo). Um agente genérico que
+  leu `agents/sdd-planner.md` por caminho absoluto conduziu o grill e devolveu a 1ª pergunta no formato.
+  Direção: o comando nomeia esse caminho de reserva, ou manda reabrir a sessão no alvo.
+  — descoberto pelo relay do `/sdd-plan` na missão da 3.2 do `dotp-remake` (2026-10-19)
+
 ### Saída humana e cosmética
 
 - [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1839` (`gate-qa-e2e`) —
@@ -131,6 +167,19 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   travamento, e o erro de missão ausente não cita o `--no-gates`, que lê só o disco. Direção: uma linha
   "rodando o TEST_CMD (<cmd>)…" antes do gate que a chama, e o `--no-gates` na mensagem de uso.
   — descoberto por `retrofit-watch` na sessão do `ui24_agent` que planejou a S9 (2026-10-17)
+
+- [ ] **O fim da corrida diz que só falta o merge, e o `sdd close` some** — `bin/sdd:8817` (`pipeline complete`) —
+  o `sdd run` e o `sdd status` (`:7341`) fecham com "only the merge is left", e nenhum template, chapéu ou comando
+  cita o `sdd close <missão>` pós-merge (`docs/pipeline.md` § "After the PR"). Medido no `sales_quote`: os 7
+  cartões da campanha (SQ-156 a SQ-162) seguiram "Em andamento" depois do merge, até o operador fechá-los à mão
+  em 2026-10-18. Direção: com `JIRA_ENABLED=true`, a mensagem final e o corpo do PR nomeiam o `sdd close`.
+  — descoberto por `sessão coordenadora` na missão `20261018-silencios-do-formulario-e-dos-dialogos` (2026-10-18)
+
+- [ ] **O README chama o repositório de privado, e ele é público** — `README.md:45` (`PRIVATE`) — o
+  comentário do `git clone` diz "PRIVATE repository", e `gh repo view j0ruge/sdd_agents` responde
+  `"isPrivate": false`; quem instala pode concluir que precisa de acesso concedido ou de token. Direção: tirar
+  o comentário, ou trocá-lo pelo que for verdade, com a data.
+  — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
 
 ### Comentário e registro
 
