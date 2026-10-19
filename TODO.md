@@ -186,17 +186,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O corpo do PR promete CI para os sensores novos, e o alvo pode não ter CI** — `templates/pr-body.md:26`
   (`Sensores novos`) — a frase "rodam no CI a partir deste PR" é fixa no template, o `agents/sdd-publisher.md:61`
   manda listar o que "start running in CI", e nada confere o alvo. O `dotp-remake` não tem `.github/workflows`
-  (os checks do PR #10 são só GitGuardian e CodeRabbit), e o corpo saiu com a frase, corrigida à mão para
-  "rodam na suíte local, `dotnet test`; o repositório não tem CI". Direção: o publisher só afirma CI com um
-  workflow em `.github/workflows/`; sem ele, diz onde a suíte rodou: localmente, pelo `TEST_CMD` do passo 2.
-  — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
-
-- [ ] **A menção `@codex review` no corpo do PR não pede a revisão do Codex** — `agents/sdd-publisher.md:62`
-  (`decisions for a human`) — o publisher copia as pendências dos handoffs para o corpo; na 3.2a do `dotp-remake`
-  uma delas era "`@codex review` (conferir o Reviewed commit)", do `00-missao.md:190`. O bot respondeu à menção
-  só com "create an environment", 10 s depois de o PR #10 abrir (o mesmo aviso no #9; nenhum nos #5–#8, sem a
-  menção), e a revisão só veio com o comentário `@codex review` do dono. Direção: o publisher posta o comentário
-  quando uma pendência pede o Codex, e no corpo cita o pedido sem o `@`, sem contar com a menção.
+  (os checks dos PRs são só GitGuardian e CodeRabbit), e o corpo saiu com a frase no #10 e no #11 (3.2b),
+  corrigida à mão para "rodam na suíte local, `dotnet test`; o repositório não tem CI". Direção: o publisher
+  só afirma CI com um workflow em `.github/workflows/`; sem ele, diz onde a suíte rodou: pelo `TEST_CMD`.
   — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
 
 ### Comentário e registro
@@ -253,3 +245,4 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - **`kit_checkout_targets_run` com `REPO_ROOT` vazio responderia "recusado"** — decidido (D15): inalcançável, a recusa de identidade do `cmd_kaizen` vem antes e o `load_config` sempre publica a raiz; reabre se a função ganhar outro chamador — `bin/sdd:10963` (`kit_checkout_targets_run`), revisão final de `20261008-lote-6-as-quatro-que-faltam` (2026-10-08)
 - **A regra 2 do check-checkpoint deixa abertos os casos que só o runtime decide** — decidido sem conserto (decisão 1 do lote 10): um leitor de texto não decide o terceiro descritor, o alvo de runtime (`2>$f`), a grafia da stdout que o sistema resolve, a palavra que abre com expansão lida como operando, o `POSIXLY_CORRECT` ou outro grep, nem o nome que substitui o grep; a peça que mediria a Check em execução não tem dono (no PLAN a asserção ainda não existe, e gate não executa texto de modelo); 0 de 67 checkpoints escrevem uma dessas grafias, e o cabeçalho do sensor as declara; reabre quando uma Check real escrever uma delas — `docs/handoffs/20261016-lote-10-as-cinco-livres/00-missao.md` (2026-10-16)
 - **A regra 2 aceita a âncora seguida de uma expansão no padrão** — decidido sem conserto (decisão 1 do lote 10), confirmando a decisão 8(a) do lote 9: o padrão `dq` ancora pelo prefixo literal antes da 1ª expansão, limite declarado no cabeçalho do sensor; recusá-lo deixaria vermelha a varredura do kit em 2 checkpoints fechados (a I10 de 20261002-onde-o-comando-do-humano-escreve e a I20 de 20261003-lote-3-a-catraca-desce, cuja expansão é uma contagem da catraca), e nenhum texto prova que a expansão não acrescenta padrão nem alternância; reabre quando uma Check real escrever, depois da âncora, uma expansão que possa trazê-los — `docs/handoffs/20261016-lote-10-as-cinco-livres/00-missao.md` (2026-10-16)
+- **A menção `@codex review` no corpo do PR não pediria a revisão do Codex** — refutado: no PR `j0ruge/dotp-remake#11`, aberto às 22:34:17Z com a menção no corpo, o Codex abriu o Code Review de `d959395` 14 s depois ("Manual request" no resumo do bot), sem o aviso "create an environment" dos #9 e #10 — `j0ruge/dotp-remake#11` (2026-10-19)
