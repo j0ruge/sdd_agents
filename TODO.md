@@ -66,14 +66,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
-- [ ] **O `sdd install` grava o branch atual como base quando o clone não tem `origin/HEAD`** —
-  `bin/sdd:5790` (`show-current`) — instalado do branch `chore/sdd-install` do `magic_tutor`, clone sem
-  `refs/remotes/origin/HEAD` local mas com `origin/main`, o config saiu com `DEFAULT_BRANCH="chore/sdd-install"`,
-  sob o comentário "Detected from origin/HEAD" do `config/starter.conf`: missões e PRs iriam contra o branch de
-  trabalho. Direção: antes do `git branch --show-current`, perguntar ao remoto (`git ls-remote --symref origin
-  HEAD`) ou aceitar um `origin/main`/`origin/master` que exista. — descoberto por `retrofit-watch` no
-  `magic_tutor` (2026-10-20)
-
 - [ ] **O `/sdd-plan` delega ao `sdd-planner`, que não existe na sessão que acabou de rodar o `sdd install`** —
   `commands/sdd-plan.md:75` (`sdd-planner`) — o harness monta a lista de agentes no início da sessão: logo
   depois do `sdd install` no `magic_tutor`, `Agent(subagent_type: "sdd-planner")` falhou com `Agent type
@@ -143,10 +135,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O `sdd install` adota a branch atual como base quando falta `origin/HEAD`** — `bin/sdd:5790`
   (`--show-current`) — sem `refs/remotes/origin/HEAD` o install grava a branch em que está, e instalar numa
-  branch de trabalho, para não mexer na base, é o caso comum: no `dotp-remake` saiu `DEFAULT_BRANCH="plano-3-2"`,
-  e o "confirm it" da saída foi a única defesa. Direção: tentar `git ls-remote --symref origin HEAD` antes da
-  branch atual, e dizer que a branch atual é palpite quando for ela.
-  — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
+  branch de trabalho é o caso comum: saiu `DEFAULT_BRANCH="plano-3-2"` no `dotp-remake` e `"chore/sdd-install"`
+  no `magic_tutor` (este com `origin/main` no clone), sob o "Detected from origin/HEAD" do `config/starter.conf`;
+  o "confirm it" da saída foi a única defesa. Direção: tentar `git ls-remote --symref origin HEAD` e um
+  `origin/main`/`origin/master` existente antes da branch atual, e dizer que ela é palpite quando for ela.
+  — descoberto por `retrofit-watch` no `dotp-remake` (2026-10-19) e no `magic_tutor` (2026-10-20)
 
 - [ ] **A primeira instalação semeia o `TODO.md` em inglês, qualquer que seja o idioma** — `bin/sdd:5856`
   (`inst_lang`) — o install lê o `OUTPUT_LANG` da config que acabou de gerar do `starter.conf`, onde ele vem
