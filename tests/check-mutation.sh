@@ -2764,6 +2764,16 @@ mut_RUN_harness_env_inherited() {
   sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$prompt"$|  local -a cmd=(claude -p "$prompt"|' "$1"
 }
 
+# ADR 0019 §1: the phase session loses the kit's read-only rule — run_phase stops appending the
+# lines of kit_read_rules after the --allowedTools value, and every phase is back to a Read of
+# $SDD_HOME/templates/ that the harness denies (measured in 2.1.296 and 2.1.304). Scoped to
+# run_phase, so the other doors that read the same function are not what this mutant measures.
+# Caught by "every phase may read the kit templates, and only read them" (check-dry-run.sh), which
+# reads the projected argv per block: five `no-rule`.
+mut_RUN_templates_read_rule_dropped() {
+  sed -i '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" "${read_rules\[@\]}"$|    --allowedTools "$ALLOWED_TOOLS"|' "$1"
+}
+
 # Issue #51, part 1: the phase session no longer carries its git label. Its commits land in the
 # reflog as `commit: …`, which is exactly what a concurrent writer's look like — so the guard that
 # reads the label (hat_guard_check) would read the session's own work as someone else's. The
@@ -6486,6 +6496,7 @@ CATALOG=(
   RUN_turn_rule_background_dropped
   RUN_turn_rule_no_clock
   RUN_harness_env_inherited
+  RUN_templates_read_rule_dropped
   RUN_git_label_unexported
   RUN_close_git_label_unexported
   RUN_intervention_unwritten_on_phase

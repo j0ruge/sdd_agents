@@ -5225,6 +5225,34 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
   -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID
   -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT)
 
+# kit_read_rules — the read-only permission rules every session the runner opens receives, one per
+# line (ADR 0019 §1). ONE definition: each door that assembles a `claude -p` appends every line as
+# one more argument of `--allowedTools`, right after "$ALLOWED_TOOLS", and no door copies a rule.
+# The boot prompt orders every phase to start from $SDD_HOME/templates/ (boot_prompt, item 6), and
+# under `acceptEdits --allowedTools Bash` the harness DENIES a Read outside the target repo; the
+# session then reads it through Bash, works from memory, or stops — all three seen in the window
+# of bad6168, where 13 of the 47 lighthouse session logs carry a Read denied outside the repo.
+#
+# The shape is the MEASURED one, in Claude Code 2.1.296 (2026-10-20 11:41–11:42) and 2.1.304
+# (16:24–16:25): `Read(/` + the absolute path + `/**)` — two slashes in the literal spelling, since
+# the path starts with one; three were never measured — handed as an argument OF ITS OWN after the
+# --allowedTools value. The one-argument form (`--allowedTools "Bash Read(…)"`) was not measured.
+# It reads and does not write: a Write under the same directory stayed DENIED. `--add-dir` reads
+# too, and lets the session WRITE the kit under acceptEdits, which is why it is not used here.
+# The harness checks the path asked for AND the resolved one (a symlinked skill needed both rules),
+# so a directory whose `readlink -f` differs gets the resolved target's rule too. No fixture here
+# symlinks templates/ (SDD_HOME is physical, `cd -P`), so that branch has no probe of its own yet.
+#
+# It only PRINTS, and is read by substitution (`mapfile -t … < <(kit_read_rules)`): no `die`, no
+# global — either would be lost in the subshell. Validation of anything it reads lives in
+# load_config. The sensor is tests/check-dry-run.sh, on the projected argv of every phase.
+kit_read_rules() {
+  local dir="$SDD_HOME/templates" real=""
+  printf 'Read(/%s/**)\n' "$dir"
+  real="$(readlink -f -- "$dir" 2>/dev/null)" || real=""
+  if [ -n "$real" ] && [ "$real" != "$dir" ]; then printf 'Read(/%s/**)\n' "$real"; fi
+}
+
 # session_git_label <step> <sid> — THE one spelling of a session's git label, `sdd:<step>:<sid8>`
 # (issue #51, ADR 0012). run_phase and cmd_close hand it to claude as GIT_REFLOG_ACTION, so every
 # commit, amend, checkout or reset the session makes lands in the reflog carrying who made it —
@@ -5297,6 +5325,9 @@ Fix exactly that. Do not restart the phase: read what is already on disk, comple
 missing and write the artifacts. The gate will be re-evaluated."
   fi
 
+  # The kit's read-only rules ride as arguments of their own after the --allowedTools value.
+  local -a read_rules=()
+  mapfile -t read_rules < <(kit_read_rules)
   # The label rides between the last `-u` and claude: `env` takes assignments only AFTER its
   # options, and `env NAME=v -u X cmd` would run `-u` as the command.
   local -a cmd=(env "${HARNESS_ENV_UNSET[@]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$prompt"
@@ -5304,7 +5335,7 @@ missing and write the artifacts. The gate will be re-evaluated."
     --permission-mode "$PERMISSION_MODE"
     --output-format stream-json --verbose
     --setting-sources "user,project,local"
-    --allowedTools "$ALLOWED_TOOLS"
+    --allowedTools "$ALLOWED_TOOLS" "${read_rules[@]}"
     --disallowedTools "$disallowed"
     --max-budget-usd "$(phase_budget_usd "$phase")")
   if [ -n "$agent" ]; then cmd+=(--agent "$agent"); fi

@@ -45,6 +45,14 @@ só o executor edita código. Ferramenta a mais é superfície de erro que nenhu
 (`config/starter.conf`), teto `acceptEdits`, `bypassPermissions` recusado por `load_config`;
 `phase_hat()` é a única tabela passo → chapéu, `hat_disallowed()`/`hat_mcp()` montam as flags em
 `run_phase()`, `HAT_DENY_BASE` é o que nenhuma fase usou, e `sdd census <missão>` mede o depois.
+Desde `20261020-a-sessao-le-o-que-o-boot-manda` o `run_phase` soma ao `--allowedTools`, cada uma
+como argumento próprio logo depois do valor, as regras só de leitura do `kit_read_rules` (ADR 0019
+§1) — hoje uma, `Read(/$SDD_HOME/templates/**)`, com duas barras na grafia literal: o boot manda
+toda fase partir dos templates do kit, e sob `acceptEdits --allowedTools Bash` o harness nega o
+`Read` fora do repo do alvo (medido em 2.1.296 e 2.1.304). O `--add-dir` foi recusado porque libera
+também a escrita no kit. A ADR nomeia três portas (`run_phase`, `cmd_close`, a sonda do
+`sdd preflight`); cada porta que recebe a regra tem o seu probe — a do `run_phase` é o
+`tests/check-dry-run.sh`, bloco a bloco, com o mutante `mut_RUN_templates_read_rule_dropped`.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`
@@ -238,6 +246,11 @@ do `load_config`. Re-exec do `bin/sdd` entre voltas foi recusado: o runner não 
 julgaria a própria REVIEW. Limites no comentário do `config_reload`: o que o `cmd_run` derivou antes
 do laço (branch da missão, `MISSION_DIR`) fica com o valor do lançamento; edição feita durante a
 sessão chega ao gate da volta **seguinte**; `sdd retry`, `sdd close` e `sdd kaizen` leem uma vez só.
+Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §1) a permissão que o runner pede ao
+harness para fora do repo do alvo é **só de leitura**: a regra do `kit_read_rules` nos templates do
+kit. Com ela, um `Write` no mesmo diretório continuou `DENIED` (medido em 2.1.296 e 2.1.304), e o
+`--add-dir`, que o liberaria, não é passado. O `Bash` da fase continua escrevendo onde quiser — a
+regra não estreita nada —, e quem para a linha se o kit for escrito continua sendo a guarda de kit.
 
 **Dívida declarada.** O `HAT_WRITES_EXTRA` **alarga** permissão e seu valor vira glob de shell no
 `case` do `hat_path_allowed`, então toda frouxidão da guarda falha **aberta** — por isso ela é

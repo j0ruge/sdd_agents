@@ -1007,6 +1007,16 @@ an allow, so `Bash` stays allowed while `Bash(git push:*)` is denied to every ha
 publisher. `sdd run --dry-run` prints a `boundary:` line per phase with exactly what will be
 passed; `tests/check-dry-run.sh` asserts it.
 
+Since `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §1) every phase session also gets **one
+read-only rule**: `kit_read_rules` prints `Read(/$SDD_HOME/templates/**)` (two slashes in its
+literal spelling, because the path starts with one), and `run_phase` hands each line as an
+argument of its own right after the `--allowedTools` value. The boot prompt orders every phase to
+start from those templates, and under `acceptEdits --allowedTools Bash` the harness denies a `Read`
+outside the target repo — measured in Claude Code 2.1.296 and 2.1.304. The rule reads and does not
+write: a `Write` in the same directory stayed denied. `--add-dir` is not used, because it lets the
+session write the kit too. The dry-run prints the rule in each phase's argv, and
+`tests/check-dry-run.sh` asserts it per block, along with the absence of `--add-dir`.
+
 ⚠️ **Two keys for one list, and the split is measured (2026-09-06, Claude Code 2.1.263).** The
 harness reads the agent file's `disallowedTools:` as tool names — the documented contract, names
 plus `mcp__<server>` patterns — so a permission rule written there removes the tool **whole**:

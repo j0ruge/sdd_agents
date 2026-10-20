@@ -310,6 +310,43 @@ assert_eq "every projected phase is handed a resolvable templates path in its bo
 assert_eq "and no phase is left on the single-blob format" "0" \
   "$(grep -c -- '--output-format json' <<< "$argv")"
 
+# --- every phase may read the kit templates, and only read them -------------
+# The boot prompt above orders every phase to start from $SDD_HOME/templates/, and under
+# `--permission-mode acceptEdits --allowedTools Bash` the harness DENIES a Read outside the target
+# repo — measured 2026-10-20 in Claude Code 2.1.296 and again in 2.1.304 (ADR 0019): the session
+# either reads it through Bash, works from memory, or stops. The runner appends a read-only rule,
+# `Read(/<physical SDD_HOME>/templates/**)`, as arguments of their own right after the
+# `--allowedTools` value. `--add-dir` would read too, and would also let the session WRITE the kit.
+#
+# Per block, so a red names the phase. Three things in one verdict: the first argument after the
+# value is the rule; every further argument of the list is a `Read(` rule (never Edit/Write); and
+# the line carries no --add-dir. The path is the PHYSICAL kit home, as _resolve_self computes it
+# (`cd -P`), never $ROOT, which is logical. The argv is printed through `%q`, so the rule is
+# compared escaped — and read through ENVIRON, because `awk -v` would eat the backslashes.
+# The scan starts at the LAST `--model` field: the boot prompt rides on the same line, word by word
+# inside its `$'…'`, and a prompt that ever said "--add-dir" must not answer for the flags.
+echo "== every phase may read the kit templates, and only read them =="
+kit_home_phys="$(CDPATH='' cd -P "$ROOT" && pwd)"
+read_rules_of() { # read_rules_of <argv> — <phase>=ok|no-rule|not-read-only:<arg>|add-dir per block
+  want="$(printf '%q' "Read(/$kit_home_phys/templates/**)")" awk '
+    /^--- DRY RUN: phase .* ---$/ { blk = $5; next }
+    blk != "" && / claude -p / {
+      k = 0; for (i = 1; i <= NF; i++) if ($i == "--model") k = i
+      v = "no-allowedTools"
+      for (i = k; k && i <= NF; i++) if ($i == "--allowedTools") {
+        v = ($(i + 2) == ENVIRON["want"]) ? "ok" : "no-rule"
+        for (j = i + 2; j <= NF && substr($j, 1, 2) != "--"; j++)
+          if (index($j, "Read\\(") != 1) v = "not-read-only:" $j
+        break
+      }
+      for (i = k; k && i <= NF; i++) if ($i == "--add-dir") v = "add-dir"
+      print blk "=" v; blk = ""
+    }
+  ' <<< "$1"
+}
+assert_eq "every phase may read the kit templates, and only read them" \
+  "$(printf '%s\n' EXEC=ok QA:close=ok REVIEW=ok DOCS=ok PR=ok)" "$(read_rules_of "$argv")"
+
 # --- the damage cap is per phase -------------------------------------------
 # One global ceiling priced every phase as if they cost the same. They do not: a REVIEW round with
 # the `codereview` skill and a QA walk are the expensive ones, and a PR body assembled from
