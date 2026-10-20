@@ -54,7 +54,9 @@ também a escrita no kit. A ADR nomeia três portas (`run_phase`, `cmd_close`, a
 `sdd preflight`); cada porta que recebe a regra tem o seu probe — a do `run_phase` é o
 `tests/check-dry-run.sh`, bloco a bloco, com o mutante `mut_RUN_templates_read_rule_dropped`; a do
 `cmd_close`, que não passa pelo `run_phase` e lê a mesma função à mão, é o `tests/check-gates.sh`
-sobre o argv da sessão de fechamento, com o `mut_RUN_close_templates_read_rule_dropped`.
+sobre o argv da sessão de fechamento, com o `mut_RUN_close_templates_read_rule_dropped`; a da sonda
+dos templates do `sdd preflight` (§4) é o `tests/check-preflight.sh`, que lê o argv dessa sessão,
+com o `mut_PRE_template_probe_rule_dropped` e o `mut_PRE_template_probe_reads_settings`.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`
@@ -152,6 +154,16 @@ E o `gate_DOCS` passou a ler o plano: sem o literal `kaizen_log: skipped` no fro
 `00-missao.md` (a linha K8 do checklist é prosa), a branch tem de acrescentar ao `KAIZEN_LOG.md` uma
 entrada — um bloco `## ` cujo título e uma linha que cita o id inteiro da missão são novos no diff
 de cada merge-base (ADR 0018 §4); o dono é o `sdd-docs`.
+Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §3) o `sdd preflight` abre uma segunda
+sessão, a sonda dos templates: `--setting-sources ""`, cwd num `mktemp -d`, o env do harness limpo,
+as flags das fases mais as linhas do `kit_read_rules`, pedindo o `Read` de
+`$SDD_HOME/templates/handoff.md`. O veredito lê o artefato do stream, nunca a resposta: o template
+no `permission_denials` (casado pelo caminho) é `_fail`; um `tool_result` sem `is_error` para o
+`Read` dele é `ok`; sem init nem `result` é o "did not answer" da sonda do `Bash`, que não conta
+duas vezes; o resto é `warn`. O isolamento é o ponto: com as settings do ambiente, um
+`additionalDirectories` ou um `Read(*)` lê o template sem regra nenhuma, e a sonda ficaria verde
+nesta máquina sobre uma regra que não faz nada. É também o sensor do dia em que o harness mudar a
+sintaxe da regra. Custa uma sessão haiku por preflight (US$ 0,0005 a 0,002, medido em 2.1.304).
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas

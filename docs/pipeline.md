@@ -690,8 +690,8 @@ unbounded) or a diverged branch each leave the sha where it was and **warn** —
 succeeded, and nothing is forced. Before this the base stayed behind the PR just merged, and the
 next mission was cut from it (SQ-145, SQ-146).
 
-`sdd close` is the only invocation of `claude` outside `run_phase()` besides the `sdd preflight`
-probe — neither of them runs a phase. It carries the kit guard anyway, for the reason below, and
+`sdd close` is the only invocation of `claude` outside `run_phase()` besides the two `sdd preflight`
+probes — none of them runs a phase. It carries the kit guard anyway, for the reason below, and
 the kit's read-only rule (see "Permissions").
 
 ## ADR traceability
@@ -1019,6 +1019,17 @@ session write the kit too. The dry-run prints the rule in each phase's argv, and
 `tests/check-dry-run.sh` asserts it per block, along with the absence of `--add-dir`. `sdd close`
 does not go through `run_phase`, so it reads the same function by hand and hands the same lines to
 its session; `tests/check-gates.sh` asserts that argv the same way.
+
+No argv assertion says whether the **harness** honours the rule, so `sdd preflight` asks (ADR 0019
+§3). Next to the `Bash` probe it opens a second session, isolated: `--setting-sources ""` (no
+settings at all), cwd in a `mktemp -d`, the harness environment unset as `run_phase` unsets it, and
+the phase flags plus the lines of `kit_read_rules`. It asks for a `Read` of
+`$SDD_HOME/templates/handoff.md` and reads the stream, never the answer: the template in the result
+line's `permission_denials` (matched by path) fails the preflight, with the remedy; a `tool_result`
+without `is_error` for that `Read` is `ok`; a session that never tried is a warning. The isolation is
+the point: with the settings loaded, an `additionalDirectories` or a `Read(*)` on the operator's
+machine reads the template with no rule at all, and the probe would be green over a rule that does
+nothing. `tests/check-preflight.sh` asserts the verdict both ways and the argv of that session.
 
 ⚠️ **Two keys for one list, and the split is measured (2026-09-06, Claude Code 2.1.263).** The
 harness reads the agent file's `disallowedTools:` as tool names — the documented contract, names

@@ -2538,6 +2538,26 @@ mut_PREFLIGHT_num_turns_unchecked() {
   sed -i 's/^\(      if jq -e '"'"'(\.total_cost_usd | type) == "number"\) and (\.num_turns | type) == "number"\('"'"' <<< "\$probe_result"\)/\1\2/' "$1"
 }
 
+# ADR 0019 §3, the third door: the template probe of preflight, one mutant per thing it owes.
+# TEMPLATE_READ_UNCHECKED: the refusal is printed by the ok arm, so a harness that denies the kit's
+# read rule leaves preflight green — caught by "preflight fails when the kit rule alone cannot read
+# the templates" (check-preflight.sh), whose needles carry the arm's prefix. The other two change
+# only what the session is HANDED, and the argv assertion, "the template probe runs with no settings
+# and carries the kit rule", is the one that owns them: READS_SETTINGS loads the user's settings
+# again (where an additionalDirectories reads the template with no rule) — the verdict goes red too,
+# only because the stub recognises the probe by its empty --setting-sources; RULE_DROPPED stops
+# calling kit_read_rules, the session gets no rule at all, and ONLY the argv assertion sees it,
+# since the stub answers whatever the fixture says. Measured one by one on a copy of the kit.
+mut_PRE_template_read_unchecked() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^        _fail "a session with NO settings, under the flags|        ok "a session with NO settings, under the flags|' "$1"
+}
+mut_PRE_template_probe_reads_settings() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools "$ALLOWED_TOOLS" ${tpl_rules|--setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" ${tpl_rules|' "$1"
+}
+mut_PRE_template_probe_rule_dropped() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    mapfile -t tpl_rules < <(kit_read_rules)$|    :|' "$1"
+}
+
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
 # session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
 # undone and the boot bill goes on reporting the cut, because the fallback arm it lands in is the
@@ -6480,6 +6500,9 @@ CATALOG=(
   PREFLIGHT_bash_in_init_unchecked
   PREFLIGHT_money_keys_unchecked
   PREFLIGHT_num_turns_unchecked
+  PRE_template_read_unchecked
+  PRE_template_probe_reads_settings
+  PRE_template_probe_rule_dropped
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA

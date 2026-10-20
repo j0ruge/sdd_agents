@@ -352,6 +352,136 @@ out_money_noturns="$( "$SDD" preflight 2>&1 )"
 assert_has "a result line without num_turns is named by preflight" \
   "has no numeric total_cost_usd or num_turns" "$out_money_noturns"
 
+# --- the template probe: a session with NO settings reads the kit templates -
+# ADR 0019 §3. The boot prompt orders every phase to start from $SDD_HOME/templates/, and the runner
+# hands every session a read-only rule for it (kit_read_rules). Whether the HARNESS honours that rule
+# is the one fact no argv assertion can see, so preflight asks a second, ISOLATED session to Read a
+# template: `--setting-sources ""` (no settings at all — with them, an `additionalDirectories` or a
+# `Read(*)` on the operator's machine reads the template with no rule, measured in ADR 0019), cwd in
+# a scratch dir, the harness env unset, the phase flags plus the rule. Two assertions, and they own
+# different mutants:
+#   - the VERDICT, differentially: a stream whose result line denies the template gives the fail
+#     line and no ok line; a stream whose Read came back without is_error gives the ok line and no
+#     fail; neither warns. The rc is no witness: the gh stub makes every preflight here exit non-zero;
+#   - the ARGV of that session, because the stub answers whatever the fixture tells it to: a probe
+#     that dropped the rule, or read the settings, would be handed the same canned stream. So the
+#     stub records the argv (one argument per line) and the env of the call it recognises as the
+#     template probe — the one whose --setting-sources is followed by an EMPTY argument — and answers
+#     every other call the way the stubs above do. The witness variable proves the caller's env got
+#     through at all, so "no CLAUDECODE" is the unset and not an `env -i`.
+# The stubs above (A, B, money) answer the template probe too, with no tool_use: there it warns, and
+# no assert_lacks of theirs names that warning.
+#
+# PROVENANCE: the tool_use and tool_result lines are one REAL pair of sessions, captured on
+# 2026-10-20 19:43 in Claude Code 2.1.304, cwd in a mktemp -d, SDD_HOME exported as the mission
+# worktree of ADR 0019 (/home/joruge/repos/sdd_agents-f9):
+#     env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION \
+#       -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT \
+#       claude -p "<the probe's prompt, bin/sdd>" --model haiku --permission-mode acceptEdits \
+#       --setting-sources "" --strict-mcp-config --output-format stream-json --verbose \
+#       --max-budget-usd 0.2 --allowedTools "Bash" ["<the one line kit_read_rules printed>"]
+# With the rule: result "---", permission_denials []. Without it: result "DENIED", the template
+# named in permission_denials. Pasted VERBATIM but for ONE cut: the read tool_result's two copies of
+# the file body are cut to its first line (`1\t---`, `---`) — the body is pt-BR template text that
+# tests/check-lang.sh refuses here, and nothing the verdict reads. The tool_use's file_path is
+# swapped with jq for this fixture's physical SDD_HOME. The result lines are DERIVED with jq from
+# result-real.jsonl above: `[]`, or the template entry of a real denial (a TICKET session of
+# 2026-10-16 20:16 in a target repo, Claude Code 2.1.296, named in the verified context of the
+# mission plan of ADR 0019), path swapped. Its tool_use_id matches NO captured line, on purpose: the
+# verdict matches a denial by path, and a verdict that matched by id goes red here.
+echo "== the template probe reads the kit templates with no settings =="
+TPL_HOME="$(CDPATH='' cd -P "$ROOT" && pwd)"
+TPL_PATH="$TPL_HOME/templates/handoff.md"
+cat > "$FIX/.stub/tpl-read-use.jsonl" <<'EOF'
+{"type":"assistant","message":{"model":"claude-haiku-5-5","id":"msg_011CgEJGF9qbgKQY95q3kpVV","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_012EX8ZXNLatZLadPXiD7wJb","name":"Read","input":{"file_path":"/home/joruge/repos/sdd_agents-f9/templates/handoff.md"},"caller":{"type":"direct"}}],"container":null,"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":{"input_tokens":2,"cache_creation_input_tokens":6662,"cache_read_input_tokens":11228,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":6662},"output_tokens":16,"service_tier":"standard","inference_geo":"global","speed":"standard"},"input_transformations":[],"diagnostics":null,"context_management":null},"parent_tool_use_id":null,"session_id":"04f0c8ae-c126-40f8-8327-d230904a4526","uuid":"a9e920a2-a011-4a9b-bf9d-60a1c27f59d6","timestamp":"2026-10-20T22:44:00.333Z","request_id":"req_011CgEJGEtxrr5RZXhGbARHj","wire_tool_inputs":{"toolu_012EX8ZXNLatZLadPXiD7wJb":{"file_path":"/home/joruge/repos/sdd_agents-f9/templates/handoff.md"}}}
+EOF
+cat > "$FIX/.stub/tpl-read-result.jsonl" <<'EOF'
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_012EX8ZXNLatZLadPXiD7wJb","type":"tool_result","content":"1\t---"}]},"parent_tool_use_id":null,"session_id":"04f0c8ae-c126-40f8-8327-d230904a4526","uuid":"d3132065-4a2c-4fa7-b285-25b6e3212fe0","timestamp":"2026-10-20T22:44:00.349Z","tool_use_result":{"type":"text","file":{"filePath":"/home/joruge/repos/sdd_agents-f9/templates/handoff.md","content":"---","numLines":76,"startLine":1,"totalLines":76}},"tool_result_meta":[{"id":"toolu_012EX8ZXNLatZLadPXiD7wJb","permission_decision":{"decision":"accept","source":"config","reason_type":"rule"}}]}
+EOF
+cat > "$FIX/.stub/tpl-deny-use.jsonl" <<'EOF'
+{"type":"assistant","message":{"model":"claude-haiku-5-5","id":"msg_011CgEJGk3exBRhxqoGyrWqa","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01MDELeMNnxY93rh1hk2gera","name":"Read","input":{"file_path":"/home/joruge/repos/sdd_agents-f9/templates/handoff.md"},"caller":{"type":"direct"}}],"container":null,"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":17890,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"output_tokens":16,"service_tier":"standard","inference_geo":"global","speed":"standard"},"input_transformations":[],"diagnostics":null,"context_management":null},"parent_tool_use_id":null,"session_id":"95ae6f0a-5b40-4351-b8b2-83581c0ce0f0","uuid":"1c46d6c1-2c53-4a59-8e09-a098165ca454","timestamp":"2026-10-20T22:44:07.049Z","request_id":"req_011CgEJGjp23zqF9VHZLMR6b","wire_tool_inputs":{"toolu_01MDELeMNnxY93rh1hk2gera":{"file_path":"/home/joruge/repos/sdd_agents-f9/templates/handoff.md"}}}
+EOF
+cat > "$FIX/.stub/tpl-deny-result.jsonl" <<'EOF'
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"Claude requested permissions to read from /home/joruge/repos/sdd_agents-f9/templates/handoff.md, but you haven't granted it yet.","is_error":true,"tool_use_id":"toolu_01MDELeMNnxY93rh1hk2gera"}]},"parent_tool_use_id":null,"session_id":"95ae6f0a-5b40-4351-b8b2-83581c0ce0f0","uuid":"62009e13-66ff-4899-9893-e1d3af64d396","timestamp":"2026-10-20T22:44:07.069Z","tool_use_result":"Error: Claude requested permissions to read from /home/joruge/repos/sdd_agents-f9/templates/handoff.md, but you haven't granted it yet.","tool_result_meta":[{"id":"toolu_01MDELeMNnxY93rh1hk2gera","non_execution_kind":"user-rejected","permission_decision":{"decision":"reject","source":"config"}}]}
+EOF
+tpl_swap() { jq -c --arg p "$TPL_PATH" '(.message.content[]? | select(.type == "tool_use") | .input.file_path) |= $p' "$1"; }
+{ tpl_swap "$FIX/.stub/tpl-read-use.jsonl"; cat "$FIX/.stub/tpl-read-result.jsonl"
+  jq -c '.permission_denials = [] | .result = "---"' "$FIX/.stub/result-real.jsonl"
+} > "$FIX/.stub/tpl-stream-read.jsonl"
+{ tpl_swap "$FIX/.stub/tpl-deny-use.jsonl"; cat "$FIX/.stub/tpl-deny-result.jsonl"
+  jq -c --arg p "$TPL_PATH" '.permission_denials = [{"tool_name":"Read","tool_use_id":"toolu_014J3i9bJz2vEo2L4ivXyL4Z","tool_input":{"file_path":$p}}] | .result = "DENIED"' \
+    "$FIX/.stub/result-real.jsonl"
+} > "$FIX/.stub/tpl-stream-denied.jsonl"
+
+# tpl_stub <stream> — the template probe gets <stream>, its argv and env recorded; any other call
+# gets the healthy Bash-probe stream of stub A.
+tpl_stub() {
+  cat > "$FIX/.stub/claude" <<STUB
+#!/bin/sh
+iso=0; prev=""
+for a in "\$@"; do
+  if [ "\$prev" = "--setting-sources" ] && [ -z "\$a" ]; then iso=1; fi
+  prev="\$a"
+done
+if [ "\$iso" = 1 ]; then
+  : > "$FIX/.stub/tpl-argv"
+  for a in "\$@"; do printf '%s\n' "\$a" >> "$FIX/.stub/tpl-argv"; done
+  env > "$FIX/.stub/tpl-env"
+  cat "$FIX/.stub/init-with-bash.jsonl" "$1"
+  exit 0
+fi
+cat "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/result-ok.jsonl"
+STUB
+  rm -f "$FIX/.stub/tpl-argv" "$FIX/.stub/tpl-env"
+}
+# Each needle carries the runner's own prefix (`ok   `, `fail  `, `warn  `, as the ok/bad/warn of
+# bin/sdd print them): a verdict is told by the arm that printed it, so the refusal's sentence
+# printed by the ok arm counts as no fail here — the sentence alone would have counted it as one.
+TPL_OK="ok   a session with no settings reads the kit templates under the phase flags"
+TPL_FAIL="fail  a session with NO settings, under the flags the runner gives every phase, was DENIED"
+TPL_WARN="warn  the template probe answered without trying to Read"
+tpl_verdict() { # <preflight output> → fail=N,ok=N,warn=N
+  printf 'fail=%s,ok=%s,warn=%s' "$(grep -cF -- "$TPL_FAIL" <<< "$1")" \
+    "$(grep -cF -- "$TPL_OK" <<< "$1")" "$(grep -cF -- "$TPL_WARN" <<< "$1")"
+}
+tpl_stub "$FIX/.stub/tpl-stream-denied.jsonl"
+out_tpl_denied="$( CLAUDECODE=1 SDD_FIXTURE_ENV_WITNESS=armed "$SDD" preflight 2>&1 )"
+tpl_stub "$FIX/.stub/tpl-stream-read.jsonl"
+out_tpl_read="$( CLAUDECODE=1 SDD_FIXTURE_ENV_WITNESS=armed "$SDD" preflight 2>&1 )"
+assert_eq "preflight fails when the kit rule alone cannot read the templates" \
+  "denied:fail=1,ok=0,warn=0 read:fail=0,ok=1,warn=0" \
+  "denied:$(tpl_verdict "$out_tpl_denied") read:$(tpl_verdict "$out_tpl_read")"
+
+# The argv of the read run's template session. Lines are matched WHOLE, and the scan starts at the
+# `--model` line: the prompt rides before it and names the templates too, and a prompt line must not
+# answer for a flag. The rule is the first argument after the --allowedTools value, spelled with the
+# PHYSICAL SDD_HOME (`cd -P`, as _resolve_self computes it), never $ROOT, which is logical. An argv
+# the stub never wrote reads `no-argv`, so a probe that was never recognised cannot pass.
+tpl_argv_of() { # <argv file> → settings:… rule:… add-dir:N agent:N
+  [ -f "$1" ] || { printf 'no-argv'; return 0; }
+  want="Read(/$TPL_HOME/templates/**)" awk '
+    { a[NR] = $0 }
+    END {
+      k = 0; for (i = 1; i <= NR; i++) if (a[i] == "--model") { k = i; break }
+      s = (k ? "absent" : "no-model"); r = "no-allowedTools"; d = 0; g = 0
+      for (i = k; k && i <= NR; i++) {
+        if (a[i] == "--setting-sources") s = (i < NR && a[i + 1] == "") ? "empty" : "[" a[i + 1] "]"
+        if (a[i] == "--allowedTools") r = (a[i + 2] == ENVIRON["want"]) ? "ok" : "no-rule"
+        if (a[i] == "--add-dir") d++
+        if (a[i] == "--agent") g++
+      }
+      printf "settings:%s rule:%s add-dir:%d agent:%d", s, r, d, g
+    }' "$1"
+}
+tpl_env_of() { # <env file> → witness=N,claudecode=N
+  [ -f "$1" ] || { printf 'no-env'; return 0; }
+  printf 'witness=%s,claudecode=%s' "$(grep -c '^SDD_FIXTURE_ENV_WITNESS=armed$' "$1")" \
+    "$(grep -c '^CLAUDECODE=' "$1")"
+}
+assert_eq "the template probe runs with no settings and carries the kit rule" \
+  "settings:empty rule:ok add-dir:0 agent:0 env:witness=1,claudecode=0" \
+  "$(tpl_argv_of "$FIX/.stub/tpl-argv") env:$(tpl_env_of "$FIX/.stub/tpl-env")"
+
 # Back to the dead stub every later section assumes ("claude and gh are stubbed to fail").
 printf '#!/bin/sh\nexit 1\n' > "$FIX/.stub/claude"
 chmod +x "$FIX/.stub/claude"
