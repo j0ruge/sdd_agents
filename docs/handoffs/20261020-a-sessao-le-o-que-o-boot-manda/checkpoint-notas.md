@@ -22,6 +22,9 @@
 - 2026-10-20 12:02 · `PLAN` · no HEAD `4068f7e`: `check-checkpoint.sh --check` → 7 linhas, 5 sob a regra da âncora, nenhuma cega; `--red` → 7 de 7 vermelhos, rc 0, 453 s com `SDD_STATE_DIR` temporário
 - 2026-10-20 12:02 · `PLAN` · sondas reais em 2.1.296 (11:41 e 11:42): sob `--allowedTools Bash` o `Read` de `$SDD_HOME/templates` é negado; a regra `Read(//dir/**)` libera só a leitura; o `--add-dir` libera também a escrita
 - 2026-10-20 12:02 · `PLAN` · o I2 vem antes de qualquer mudança em `bin/`, porque as âncoras dos três itens são as do `4068f7e`; depois dele, todo commit em `bin/` reancora o `TODO.md` pelo símbolo
+- 2026-10-20 17:38 · `PLAN` · grill do `/sdd-plan` com o humano por relay (15:59–): seis decisões no `00-missao.md`, todas `(recommended)`; ADR 0019 alocada por `./bin/sdd adr new` e escrita no PLAN; o antigo I1 (a ADR) e o antigo I2 (os três achados, agora chore do relay) saíram do checkpoint, e o `READ_EXTRA` se partiu em I5 e I6
+- 2026-10-20 17:38 · `PLAN` · sondas reais em 2.1.304 (16:24–16:25, 13 sessões haiku, US$ 0,026): a regra continua só de leitura; `--setting-sources user,project,local` com `Read(*)` lê o template sem regra (o P2 do Codex); `--setting-sources ""` isola; symlink pede a regra do caminho e a do alvo (`~/.claude/skills/ticket`)
+- 2026-10-20 18:11 · `PLAN` · grill fechado com sete decisões, todas `(recommended)`; o I6 ganhou o aviso da skill achada e não declarada (decisão 7); `--check` → 6 linhas, 6 sob a regra da âncora; `--red` → 6 de 6 vermelhos (o I6 remedido sozinho, `0 0`); o chore dos três achados já está na `origin/main` (#309, `b96f3d3`), e o passo "Antes do I1" do plano faz o merge
 
 > **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
 > `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É a **narrativa** do que o
