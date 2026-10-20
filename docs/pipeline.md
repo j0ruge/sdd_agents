@@ -691,7 +691,8 @@ succeeded, and nothing is forced. Before this the base stayed behind the PR just
 next mission was cut from it (SQ-145, SQ-146).
 
 `sdd close` is the only invocation of `claude` outside `run_phase()` besides the `sdd preflight`
-probe — neither of them runs a phase. It carries the kit guard anyway, for the reason below.
+probe — neither of them runs a phase. It carries the kit guard anyway, for the reason below, and
+the kit's read-only rule (see "Permissions").
 
 ## ADR traceability
 
@@ -1015,7 +1016,9 @@ start from those templates, and under `acceptEdits --allowedTools Bash` the harn
 outside the target repo — measured in Claude Code 2.1.296 and 2.1.304. The rule reads and does not
 write: a `Write` in the same directory stayed denied. `--add-dir` is not used, because it lets the
 session write the kit too. The dry-run prints the rule in each phase's argv, and
-`tests/check-dry-run.sh` asserts it per block, along with the absence of `--add-dir`.
+`tests/check-dry-run.sh` asserts it per block, along with the absence of `--add-dir`. `sdd close`
+does not go through `run_phase`, so it reads the same function by hand and hands the same lines to
+its session; `tests/check-gates.sh` asserts that argv the same way.
 
 ⚠️ **Two keys for one list, and the split is measured (2026-09-06, Claude Code 2.1.263).** The
 harness reads the agent file's `disallowedTools:` as tool names — the documented contract, names

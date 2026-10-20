@@ -2774,6 +2774,15 @@ mut_RUN_templates_read_rule_dropped() {
   sed -i '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" "${read_rules\[@\]}"$|    --allowedTools "$ALLOWED_TOOLS"|' "$1"
 }
 
+# ADR 0019 §1, the second door: the `sdd close` session loses the kit's read-only rule — cmd_close
+# stops appending the lines of kit_read_rules after its --allowedTools value. It does not go through
+# run_phase, so the mutant above cannot reach it and check-dry-run.sh cannot see it. Scoped to
+# cmd_close. Caught by "close: the session may read the kit templates, and only read them"
+# (check-gates.sh), which reads the close session's argv: `no-rule`.
+mut_RUN_close_templates_read_rule_dropped() {
+  sed -i '/^cmd_close() {/,/^}/ s|--allowedTools "$ALLOWED_TOOLS" "${close_read_rules\[@\]}" \\$|--allowedTools "$ALLOWED_TOOLS" \\|' "$1"
+}
+
 # Issue #51, part 1: the phase session no longer carries its git label. Its commits land in the
 # reflog as `commit: …`, which is exactly what a concurrent writer's look like — so the guard that
 # reads the label (hat_guard_check) would read the session's own work as someone else's. The
@@ -6497,6 +6506,7 @@ CATALOG=(
   RUN_turn_rule_no_clock
   RUN_harness_env_inherited
   RUN_templates_read_rule_dropped
+  RUN_close_templates_read_rule_dropped
   RUN_git_label_unexported
   RUN_close_git_label_unexported
   RUN_intervention_unwritten_on_phase

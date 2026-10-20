@@ -5866,6 +5866,37 @@ assert_eq "close: the CLOSE journal row records the effort the session ran at" \
   "unset:settings set:low" \
   "unset:$(grep -oE ' effort=[^ ]*' <<< "$CLOSE_JOURNAL_UNSET" | cut -d= -f2 | grep . || echo -) set:$(grep -oE ' effort=[^ ]*' <<< "$CLOSE_JOURNAL_SET" | cut -d= -f2 | grep . || echo -)"
 
+# The close session gets the kit's read-only rule too (ADR 0019 §1): it is the third door that
+# assembles a `claude -p`, and it does not go through run_phase, so tests/check-dry-run.sh — which
+# reads the projected argv of every PHASE — cannot see it. Same three things in one verdict, read
+# off the argv of the unset-effort run above (one argument per line): the first argument after the
+# --allowedTools value is `Read(/<physical SDD_HOME>/templates/**)`; every further argument of that
+# list is a `Read(` rule (never Edit/Write); and no line is `--add-dir`, which would read the kit
+# and also let the session WRITE it. SDD_HOME is physical (`cd -P`, as _resolve_self computes it),
+# never $ROOT, which is logical. Lines are matched WHOLE, and the scan starts at the `--model` line:
+# the prompt rides before it, and a prompt line must not answer for the flags. An argv the stub
+# never wrote reads `no-allowedTools`, so a session that was not spent cannot pass.
+close_kit_home="$(CDPATH='' cd -P "$ROOT" && pwd)"
+close_rules_of() { # <argv, one per line> → ok|no-allowedTools|no-rule|not-read-only:<arg>|add-dir
+  want="Read(/$close_kit_home/templates/**)" awk '
+    { a[NR] = $0 }
+    END {
+      k = 0; for (i = 1; i <= NR; i++) if (a[i] == "--model") { k = i; break }
+      v = "no-allowedTools"
+      for (i = k; k && i <= NR; i++) if (a[i] == "--allowedTools") {
+        v = (a[i + 2] == ENVIRON["want"]) ? "ok" : "no-rule"
+        for (j = i + 2; j <= NR && substr(a[j], 1, 2) != "--"; j++)
+          if (index(a[j], "Read(") != 1) v = "not-read-only:" a[j]
+        break
+      }
+      for (i = k; k && i <= NR; i++) if (a[i] == "--add-dir") v = "add-dir"
+      print v
+    }
+  ' <<< "$1"
+}
+assert_eq "close: the session may read the kit templates, and only read them" \
+  "ok" "$(close_rules_of "$CLOSE_ARGV_TEXT")"
+
 # CLOSE_HOME is READ from the fixture's own config, never written twice: a literal here and a
 # literal in the heredoc at the top of this file would be two spellings of one fact, and the day
 # someone changes the fixture's DEFAULT_BRANCH the assertion below would go on checking the old

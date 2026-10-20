@@ -5245,7 +5245,7 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
 #
 # It only PRINTS, and is read by substitution (`mapfile -t … < <(kit_read_rules)`): no `die`, no
 # global — either would be lost in the subshell. Validation of anything it reads lives in
-# load_config. The sensor is tests/check-dry-run.sh, on the projected argv of every phase.
+# load_config. Sensors: tests/check-dry-run.sh (every phase's argv), check-gates.sh (sdd close's).
 kit_read_rules() {
   local dir="$SDD_HOME/templates" real=""
   printf 'Read(/%s/**)\n' "$dir"
@@ -11983,12 +11983,15 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   # through run_phase, so it gets neither the flag nor the env -u of the two inherited effort
   # variables for free. Only that pair is unset here — the rest of HARNESS_ENV_UNSET is about the
   # nested-session teardown of a long phase, and widening it for this call is a separate decision.
-  local -a close_effort=()
+  # The kit's read-only rules are threaded by hand for the same reason (ADR 0019 §1): read from the
+  # one definition run_phase reads, never copied, as arguments of their own after the value.
+  local -a close_effort=() close_read_rules=()
   if [ -n "$EFFORT_TICKET" ]; then close_effort=(--effort "$EFFORT_TICKET"); fi
+  mapfile -t close_read_rules < <(kit_read_rules)
   ( cd "$REPO_ROOT" && env -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$close_prompt" \
       --model "$MODEL_TICKET" ${close_effort[@]+"${close_effort[@]}"} --permission-mode "$PERMISSION_MODE" \
       --output-format stream-json --verbose \
-      --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
+      --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" "${close_read_rules[@]}" \
       --disallowedTools "$(hat_disallowed "$phase")" --strict-mcp-config \
       --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$streamfile" 2>"$errfile" || rc=$?
   ended=$(date +%s)

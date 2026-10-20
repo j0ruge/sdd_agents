@@ -52,7 +52,9 @@ toda fase partir dos templates do kit, e sob `acceptEdits --allowedTools Bash` o
 `Read` fora do repo do alvo (medido em 2.1.296 e 2.1.304). O `--add-dir` foi recusado porque libera
 também a escrita no kit. A ADR nomeia três portas (`run_phase`, `cmd_close`, a sonda do
 `sdd preflight`); cada porta que recebe a regra tem o seu probe — a do `run_phase` é o
-`tests/check-dry-run.sh`, bloco a bloco, com o mutante `mut_RUN_templates_read_rule_dropped`.
+`tests/check-dry-run.sh`, bloco a bloco, com o mutante `mut_RUN_templates_read_rule_dropped`; a do
+`cmd_close`, que não passa pelo `run_phase` e lê a mesma função à mão, é o `tests/check-gates.sh`
+sobre o argv da sessão de fechamento, com o `mut_RUN_close_templates_read_rule_dropped`.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`
