@@ -64,6 +64,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: PR `j0ruge/dotp-remake#10`, Evidências (r2 e r3) — descoberto por `/codereview:codereview` (r2) na
   missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
 
+- [ ] **O `writes:` do `sdd-kaizen` não é cobrado, e o boot manda escrever fora dele** — `agents/sdd-kaizen.md:11`
+  (`writes:`) — o chapéu declara `$HANDOFF_DIR/**, KAIZEN_LOG.md`, o boot do `sdd kaizen` manda o achado ao
+  `TODO.md` e o `cmd_kaizen` não chama o `hat_guard_check`. O juiz de 2026-10-12 commitou `TODO.md` e a catraca
+  sem parada; o de 2026-10-20 seguiu o `writes:` e levou os achados ao plano nascido. Direção: o `writes:`
+  ganha `$TODO_FILE` e a catraca e o `cmd_kaizen` passa pela guarda, ou o boot deixa de mandar ao `TODO.md`.
+  — descoberto por `sdd-kaizen` na missão `20261020-a-sessao-le-o-que-o-boot-manda` (2026-10-20)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
@@ -170,6 +177,19 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   isso, o plano cita uma base que não é o HEAD da aprovação. Direção: gravar `status` e `rev-parse` a cada hand-back
   vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte.
   — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
+- [ ] **A guarda do kit para a corrida do alvo por um merge só de docs no checkout do kit** — `bin/sdd:4331`
+  (`kit_guard_check`) — compara o par cru (HEAD e sujeira) e não lê o rótulo `sdd:` do reflog (anatomia §6). No
+  lighthouse o operador puxou o #246 e o #254 (só `docs/`, `TODO.md` e catraca) para o checkout principal do kit
+  com a corrida viva: `kit-touched` 2×, 2 células `refez` e 2 das 6 intervenções da missão; o reflog dizia
+  `merge origin/main: Fast-forward`, sem rótulo. Direção: com ADR, o movimento sem o rótulo da sessão que não
+  toca `bin agents templates config` vira aviso no journal, e o resto continua parando a linha.
+  — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
+- [ ] **A REVIEW aprovada não vê o código que entrou depois dela** — `bin/sdd:1907` (`gate_REVIEW`) — o gate lê
+  a nota da última rodada e não compara o commit que ela revisou com o HEAD. No lighthouse o F5–F8 (emenda E1–E6)
+  e o R3 (P2 do Codex no PR #29) entraram depois da r2 em A, e o humano forçou a r3 e a r4 com `--phase REVIEW`:
+  2 das 6 intervenções da missão. É o espelho do D21, em que só `F<n>` reabre a QA. Direção: a rodada grava o
+  commit revisado, e código commitado depois dele reabre a REVIEW ou é nomeado no motivo do gate.
+  — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
 
 ### Saída humana e cosmética
 
