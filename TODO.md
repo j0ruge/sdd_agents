@@ -182,8 +182,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`kit_guard_check`) — compara o par cru (HEAD e sujeira) e não lê o rótulo `sdd:` do reflog (anatomia §6). No
   lighthouse o operador puxou o #246 e o #254 (só `docs/`, `TODO.md` e catraca) para o checkout principal do kit
   com a corrida viva: `kit-touched` 2×, 2 células `refez` e 2 das 6 intervenções da missão; o reflog dizia
-  `merge origin/main: Fast-forward`, sem rótulo. Direção: com ADR, o movimento sem o rótulo da sessão que não
-  toca `bin agents templates config` vira aviso no journal, e o resto continua parando a linha.
+  `merge origin/main: Fast-forward`, sem rótulo. Direção: com ADR, só o HEAD movido por entrada do reflog sem o
+  rótulo da sessão (alheia, como esse fast-forward) e que não toca `bin agents templates config` vira aviso no
+  journal; a sujeira não commitada, que não deixa reflog, e o resto continuam parando a linha.
   — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
 - [ ] **A REVIEW aprovada não vê o código que entrou depois dela** — `bin/sdd:1907` (`gate_REVIEW`) — o gate lê
   a nota da última rodada e não compara o commit que ela revisou com o HEAD. No lighthouse o F5–F8 (emenda E1–E6)
