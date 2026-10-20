@@ -192,6 +192,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   2 das 6 intervenções da missão. É o espelho do D21, em que só `F<n>` reabre a QA. Direção: a rodada grava o
   commit revisado, e código commitado depois dele reabre a REVIEW ou é nomeado no motivo do gate.
   — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
+- [ ] **O `/sdd-plan` só manda para worktree no checkout do kit, não com outra missão em voo no alvo** —
+  `commands/sdd-plan.md:30` (`KIT-TOUCHED`) — no `lighthouse_project` a M2 (`sdd run`, LH-8) rodava no checkout
+  principal quando o humano pediu o plano da peça C. Pelo passo 2 o planner escreveria ali, e o `hat_guard_check`
+  (`bin/sdd:4616`) acusaria o `00-missao.md` alheio na fase em curso (`HAT-CROSSED`); e a regra do relay de parar
+  quando o `HEAD` do checkout muda dispara à toa, porque a corrida commita lá. O relay abriu um worktree e vigiou só
+  o que não era da M2: o `pipeline.log` dela fechou sem `HAT-CROSSED` nem `FOREIGN-COMMIT`. Direção: o passo 2
+  vale com `sdd run` vivo no alvo, e a checagem do relay nomeia o que a corrida pode mudar.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261020-amep-anexo-na-demanda` (2026-10-20)
 
 ### Saída humana e cosmética
 
@@ -237,6 +245,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   corrigida à mão para "rodam na suíte local, `dotnet test`; o repositório não tem CI". Direção: o publisher
   só afirma CI com um workflow em `.github/workflows/`; sem ele, diz onde a suíte rodou: pelo `TEST_CMD`.
   — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
+- [ ] **O `sdd run` diz que commita na base quando a TICKET vai cortar o branch antes** — `bin/sdd:6015`
+  (`warn_if_on_base_branch`) — compara só o branch atual com o `DEFAULT_BRANCH`. No `lighthouse_project` (LH-8,
+  `JIRA_ENABLED=true`, `branch:` no placeholder) o `sdd run` de `develop` avisou "commits straight into it", e o
+  `8f6b46f` da TICKET já nasceu no branch da missão: o `develop` local ficou no `e03583a` do approve, cujo aviso
+  era verdadeiro. Aviso que grita lobo ensina a não ler. Direção: o `cmd_run` cala com `mission_branch_declared`
+  vazio e a TICKET pendente, com caso nos dois lados.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261016-lighthouse-instala-object-storage` (2026-10-20)
 
 ### Comentário e registro
 
