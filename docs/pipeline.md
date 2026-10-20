@@ -1056,7 +1056,13 @@ id, exit code, duration, cost in USD) and two files alongside it, in the same
 `<ts>  PHASE  <X>  reason="<the gate's sentence>"` — written before the session is paid for:
 the session line says only `rc=0`, which reads as success over a session that had nothing to do
 (issue #56, `20260922-o-motivo-da-fase`). A phase forced with `--phase` gets no `PHASE` line —
-nothing was derived. The two files:
+nothing was derived. Every call the harness **denied** the session gets one too, right above the
+session line: `<ts>  DENIED  <X>  tool=<name>  path=<path>`, one per distinct pair of the result's
+`permission_denials`, the `sdd close` session included (`DENIED  CLOSE`). The path is the call's
+`file_path` or `path`; a call with neither (`Bash`, an MCP tool) gets the tool name alone, never
+its input, and every space or control character in a path becomes `?`, so a path cannot add a
+line or a `cost_usd=` field to the journal (ADR 0019). The ledger's `denials` stays the raw count.
+The two files:
 
 That journal is also where the **mission ceiling** is read. Before opening any phase the runner
 sums the `cost_usd=` field of every session line (`?` counts as nothing) and compares it with

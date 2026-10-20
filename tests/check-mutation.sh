@@ -2803,6 +2803,44 @@ mut_RUN_close_templates_read_rule_dropped() {
   sed -i '/^cmd_close() {/,/^}/ s|--allowedTools "$ALLOWED_TOOLS" "${close_read_rules\[@\]}" \\$|--allowedTools "$ALLOWED_TOOLS" \\|' "$1"
 }
 
+# ADR 0019, the journal half: run_phase stops naming what the harness denied its session — the
+# journal_denials call after hat_init_facts goes, and a phase that could not read the templates or
+# a skill's references is back to an `ok`-looking journal. Scoped to run_phase, so the close door
+# below is not what this mutant measures. Caught by "every tool call the harness denied is named in
+# the journal" (check-autonomy.sh): start:0 campos:0 bash:0.
+mut_RUN_denials_not_journaled() {
+  sed -i '/^run_phase() {/,/^}/ { /^  journal_denials "\$phase" "\$logfile"$/d }' "$1"
+}
+
+# The same call removed from the other door: cmd_close reads its session through the same
+# hat_init_facts and names nothing the harness refused it. The mutant above cannot reach it.
+# Caught by "close: every tool call the harness denied is named in the journal" (check-autonomy.sh).
+mut_RUN_close_denials_not_journaled() {
+  sed -i '/^cmd_close() {/,/^}/ { /^  journal_denials "\$phase" "\$logfile"$/d }' "$1"
+}
+
+# The path the session chose reaches the journal raw: a newline writes a line of its own and a
+# space a field of its own, and mission_cost_usd sums every `cost_usd=<number>` field it finds.
+# Caught by "denied: a path the session chose cannot forge a field or a line of the journal"
+# (named:1 forged-fields:2), and first by the line count beside it: the newline makes lines:7.
+mut_RUN_denials_path_unsanitized() {
+  sed -i '/^journal_denials() {/,/^}/ s|^      def safe: tostring .*;$|      def safe: tostring;|' "$1"
+}
+
+# The path loses its `path=` key, so a path that IS `cost_usd=<number>` becomes that field whole —
+# no space or newline needed. Caught by the same assertion as the mutant above, through the one
+# forged path the sanitising alone cannot neutralise.
+mut_RUN_denials_path_unprefixed() {
+  sed -i '/^journal_denials() {/,/^}/ s|"  path=\\(\.\[1\])"|"  \\(.[1])"|' "$1"
+}
+
+# Every denial becomes a line, repeats included: a model that asked twice for one file writes it
+# twice, and a REVIEW that retries the same reference fills the journal with copies. Caught by
+# "denied: a call denied twice is one journal line, and the ledger still counts every denial".
+mut_RUN_denials_not_distinct() {
+  sed -i '/^journal_denials() {/,/^}/ s|if any(\.\[\]; \. == \$d) then \. else \. + \[\$d\] end|. + [$d]|' "$1"
+}
+
 # Issue #51, part 1: the phase session no longer carries its git label. Its commits land in the
 # reflog as `commit: …`, which is exactly what a concurrent writer's look like — so the guard that
 # reads the label (hat_guard_check) would read the session's own work as someone else's. The
@@ -6530,6 +6568,11 @@ CATALOG=(
   RUN_harness_env_inherited
   RUN_templates_read_rule_dropped
   RUN_close_templates_read_rule_dropped
+  RUN_denials_not_journaled
+  RUN_close_denials_not_journaled
+  RUN_denials_path_unsanitized
+  RUN_denials_path_unprefixed
+  RUN_denials_not_distinct
   RUN_git_label_unexported
   RUN_close_git_label_unexported
   RUN_intervention_unwritten_on_phase

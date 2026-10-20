@@ -62,6 +62,40 @@ structural defect the kit found in itself, in the fixture mission `20260814-dry-
 
 ---
 
+## The phase cannot read what the boot names
+
+**Symptom:** the mission journal carries `DENIED  <PHASE>  tool=Read  path=…` lines; a TICKET ends
+`handoff-blocked` saying it could not read a template or the `ticket` skill's references; a REVIEW
+grades without the references of the `codereview` skill. The `permission_denials` of the session's
+`.json` names the same files.
+
+**Cause:** the boot orders every phase to start from `$SDD_HOME/templates/`, and a skill keeps its
+references under `~/.claude/` — both outside the target repo. Under `--permission-mode acceptEdits
+--allowedTools Bash` the harness denies a `Read` outside the repo, and the session then reads it
+through Bash, works from memory, or stops. Measured in the window of `bad6168`: 13 of 47 lighthouse
+session logs and 4 of 23 jrc-libs ones; one TICKET stopped, and the operator unblocked it by hand.
+
+**How the kit reacts:** every session the runner opens carries a read-only rule for the kit's
+templates (`kit_read_rules`, ADR 0019 §1); `sdd preflight` proves that rule in a session with no
+settings at all and fails when it does not read; and every call the harness denied is one `DENIED`
+line in the journal, right above the session's own line, so `tail -F` shows it without opening the
+session's `.json`.
+
+**What you do:**
+- **a template denied:** run `sdd preflight`. Its template probe says whether the kit's rule still
+  reads under this harness; red there right after a harness bump means the rule's syntax changed
+  (the ledger's session rows carry `harness:`).
+- **a skill's references denied:** declare the skill's directory in the target's `READ_EXTRA`,
+  written with `$HOME` (`config/schema.md`). The runner adds the rule of a symlinked entry's
+  resolved target too; declare the skill's own directory, never a parent above a symlink.
+- **a denial under `/tmp`:** the session's own scratch, not something the boot named. Nothing to do.
+
+**Do not:** put the kit in the settings' `additionalDirectories`, or `--add-dir` it: under
+`acceptEdits` both let the session **write** the kit, and the kit guard only acts after the fact.
+`Read(*)` in a target's settings reads, but it lets every phase read anything on the machine.
+
+---
+
 ## A `blocked` increment
 
 **Symptom:** `sdd run` exits with code 3 and "BLOCKED in EXEC" straight away, without opening a

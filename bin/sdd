@@ -5169,6 +5169,39 @@ LAST_PHASE_DENIALS=""
 LAST_PHASE_LEAK_NAMES=""
 LAST_PHASE_HARNESS=""
 
+# journal_denials <phase> <result json> — every call the harness DENIED the session, named in the
+# mission journal, one `DENIED  <phase>  tool=<name>[  path=<path>]` line per distinct pair (ADR
+# 0019). LAST_PHASE_DENIALS above says how many and never which, and the journal is what the
+# person on `tail -F` reads: in the window of bad6168 a REVIEW of the lighthouse ran through 30
+# denied Reads of its skill's references, and a TICKET of jrc-libs stopped as handoff-blocked over
+# three, with nothing in the journal saying so. CALLED right after hat_init_facts at its two sites
+# (run_phase, cmd_close), so each session's lines sit just above that session's own journal line.
+#
+# The path is `tool_input.file_path` (Read, Edit, Write) or `tool_input.path` (Grep, Glob); a call
+# with neither — Bash, an MCP tool — gets the tool name ALONE, never its input: a command can carry
+# a credential, and `sdd status` prints the journal's tail to a terminal. The lines are the
+# distinct pairs in first-seen order (a model asks twice); the ledger's count stays the raw one.
+#
+# The path is the SESSION's choice, so it reaches the journal unable to forge anything there:
+# every space and control character becomes `?`, and both values ride behind a `key=`. A newline
+# would write a journal line of its own, and mission_cost_usd sums every whitespace-separated
+# `cost_usd=<number>` field of this file — a path that became such a field would stop the line as
+# budget-exhausted for money nobody spent. A result without `permission_denials` writes nothing
+# (unmeasured is not zero, and there is nothing to name), and so does a machine without jq.
+journal_denials() {
+  local phase="$1" result="$2" line
+  autonomy_have_jq || return 0
+  while IFS= read -r line; do
+    pipeline_log_line "$(date -Iseconds)  DENIED  $phase  $line"
+  done < <( jq -r '
+      def safe: tostring | gsub("[[:space:][:cntrl:]]"; "?");
+      reduce ((.permission_denials // [])[]
+              | [ (.tool_name // "?" | safe), ((.tool_input.file_path? // .tool_input.path? // "") | safe) ]) as $d
+        ([]; if any(.[]; . == $d) then . else . + [$d] end)
+      | .[] | "tool=\(.[0])" + (if .[1] == "" then "" else "  path=\(.[1])" end)
+    ' "$result" 2>/dev/null )
+}
+
 # The stream closed the blind spot for whoever runs `tail -f` on the file; this closes it for the
 # person watching the run. `> "$streamfile"` takes claude's stdout off the terminal, so a phase
 # used to print its banner and then nothing for the ten to thirty minutes it lasts.
@@ -5408,6 +5441,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   # the multi-line string — the ledger going quiet about money with nothing going red.
   stream_summary "$streamfile" > "$logfile"
   hat_init_facts "$streamfile" "$logfile" "$disallowed" "$mcp"
+  journal_denials "$phase" "$logfile"
 
   # The `|| echo "?"` covers a jq that FAILS; it does not cover a jq that succeeds silently, and
   # that is the case stream_summary() produces most: over an EMPTY $logfile — a session killed
@@ -12041,6 +12075,7 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   ended=$(date +%s)
   stream_summary "$streamfile" > "$logfile"
   hat_init_facts "$streamfile" "$logfile" "$(hat_disallowed "$phase")" "$(hat_mcp "$phase")"
+  journal_denials "$phase" "$logfile"
   # Same `|| echo` guard and same `// ""` as run_phase, for the two reasons written there: the jq
   # that FAILS, and the jq that succeeds over an empty summary having printed nothing.
   local close_cost close_turns close_cache

@@ -366,7 +366,10 @@ motivo nomeia primeiro"; rc 3 em
 `no-progress`, `budget-exhausted`, e desde `20260922-o-motivo-da-fase` `no_work_escalation`
 (`kind: "no-work"`) — a única que para a linha **antes** da sessão, quando a célula do checkpoint
 é ilegível ou o mesmo passo volta com o mesmo motivo; o journal ganhou a linha
-`PHASE <X> reason="…"` por fase derivada, que é o que o humano no `tail -F` lê; `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
+`PHASE <X> reason="…"` por fase derivada, que é o que o humano no `tail -F` lê, e desde
+`20261020-a-sessao-le-o-que-o-boot-manda` uma linha `DENIED <X> tool=… path=…` por chamada distinta
+que o harness negou à sessão (`journal_denials`, logo depois do `hat_init_facts` no `run_phase` e no
+`cmd_close`; o caminho sem espaço nem controle, nunca o comando); `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
 fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria: teto por missão
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
 `ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos
