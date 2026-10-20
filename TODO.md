@@ -55,6 +55,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   avisa nomeando o descendente que sobrou, e o failure-modes lista as flags de toolchain.
   — descoberto por `sdd preflight` na instalação do kit no `dotp-remake` (2026-10-19)
 
+- [ ] **A prosa que a DOCS escreve depois da REVIEW não passa por revisão nenhuma** — `bin/sdd:2695` (`PHASES`) —
+  a ordem é `REVIEW DOCS PR`: o `gate_REVIEW` aceita B na prosa (`REVIEW_PROSE_MIN_GRADE`), o achado de prosa vai
+  ao `TODO_FILE` e quem reescreve a prosa é a DOCS, cujo gate lê a checklist, não a prosa. Na 3.2a do `dotp-remake`
+  uma r2 extra do `/codereview:codereview` achou 1 MEDIUM na prosa da DOCS (`3044b3c`): o ponteiro novo diz que
+  toda condição do filtro está na linha do `Add`, e faltava o `FE_NUM_COLOURS` (consertado em `3a57106`).
+  Direção: a REVIEW revê o diff da DOCS antes do PR, ou o corpo do PR diz que essa prosa ninguém revisou.
+  Fonte: PR `j0ruge/dotp-remake#10`, Evidências (r2 e r3) — descoberto por `/codereview:codereview` (r2) na
+  missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
@@ -139,11 +148,26 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
 
 - [ ] **O `/sdd-plan` delega ao `sdd-planner` sem saída para o agente não registrado** — `commands/sdd-plan.md:75`
-  (`sdd-planner`) — na sessão aberta em `rea-projects/` antes do `sdd link-agents`, a lista de tipos de agente
-  não tinha o `sdd-planner` (causa não verificada: a hora do link ou o cwd acima do alvo). Um agente genérico que
-  leu `agents/sdd-planner.md` por caminho absoluto conduziu o grill e devolveu a 1ª pergunta no formato.
-  Direção: o comando nomeia esse caminho de reserva, ou manda reabrir a sessão no alvo.
+  (`sdd-planner`) — na sessão aberta em `rea-projects/`, pai do alvo, a lista de tipos de agente não tinha o
+  `sdd-planner`. Na 3.2b e na 3.2c o link já estava em `.claude/agents/` do alvo e o tipo faltou do mesmo jeito: a
+  causa é o cwd acima do alvo, não a hora do link. Um agente genérico que leu `agents/sdd-planner.md` por caminho
+  absoluto conduziu o grill nas duas. Direção: o comando nomeia esse caminho de reserva, ou manda reabrir a sessão
+  no alvo.
   — descoberto pelo relay do `/sdd-plan` na missão da 3.2 do `dotp-remake` (2026-10-19)
+- [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:104`
+  (`Relaying the grill`) — na 3.2c do `dotp-remake` a sessão caiu com uma pergunta pendente, e a chamada voltou "the
+  session ended before this call's result was recorded, so its outcome is unknown". Na sessão nova, o `SendMessage` ao
+  id do planner antigo voltou `Resuming agent`, e os artefatos saíram com as 10 decisões do grill intactas. Sem o passo
+  escrito, o relay abre um planner novo e perde o grill, ou dá por respondida a pergunta de resultado desconhecido.
+  Direção: o passo manda perguntar de novo o que estava pendente e retomar o mesmo agente pelo id.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
+- [ ] **Commit do relay no meio do grill muda o HEAD que o planner mediu, e só o worktree é vigiado** —
+  `commands/sdd-plan.md:89` (`rev-parse HEAD`) — na 3.2c do `dotp-remake` (sem worktree: o `sdd` fica fora do alvo) o
+  dono pediu no grill uma linha no roadmap, e o relay commitou `b674421` na branch da missão depois de o planner medir
+  a suíte em `d6d6cf8`. O relay mandou o HEAD novo junto da resposta seguinte, e o plano registrou a base certa. Sem
+  isso, o plano cita uma base que não é o HEAD da aprovação. Direção: gravar `status` e `rev-parse` a cada hand-back
+  vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
 
 ### Saída humana e cosmética
 
@@ -181,6 +205,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `"isPrivate": false`; quem instala pode concluir que precisa de acesso concedido ou de token. Direção: tirar
   o comentário, ou trocá-lo pelo que for verdade, com a data.
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
+
+- [ ] **O corpo do PR promete CI para os sensores novos, e o alvo pode não ter CI** — `templates/pr-body.md:26`
+  (`Sensores novos`) — a frase "rodam no CI a partir deste PR" é fixa no template, o `agents/sdd-publisher.md:61`
+  manda listar o que "start running in CI", e nada confere o alvo. O `dotp-remake` não tem `.github/workflows`
+  (os checks dos PRs são só GitGuardian e CodeRabbit), e o corpo saiu com a frase no #10 e no #11 (3.2b),
+  corrigida à mão para "rodam na suíte local, `dotnet test`; o repositório não tem CI". Direção: o publisher
+  só afirma CI com um workflow em `.github/workflows/`; sem ele, diz onde a suíte rodou: pelo `TEST_CMD`.
+  — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
 
 ### Comentário e registro
 
@@ -236,3 +268,4 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - **`kit_checkout_targets_run` com `REPO_ROOT` vazio responderia "recusado"** — decidido (D15): inalcançável, a recusa de identidade do `cmd_kaizen` vem antes e o `load_config` sempre publica a raiz; reabre se a função ganhar outro chamador — `bin/sdd:10963` (`kit_checkout_targets_run`), revisão final de `20261008-lote-6-as-quatro-que-faltam` (2026-10-08)
 - **A regra 2 do check-checkpoint deixa abertos os casos que só o runtime decide** — decidido sem conserto (decisão 1 do lote 10): um leitor de texto não decide o terceiro descritor, o alvo de runtime (`2>$f`), a grafia da stdout que o sistema resolve, a palavra que abre com expansão lida como operando, o `POSIXLY_CORRECT` ou outro grep, nem o nome que substitui o grep; a peça que mediria a Check em execução não tem dono (no PLAN a asserção ainda não existe, e gate não executa texto de modelo); 0 de 67 checkpoints escrevem uma dessas grafias, e o cabeçalho do sensor as declara; reabre quando uma Check real escrever uma delas — `docs/handoffs/20261016-lote-10-as-cinco-livres/00-missao.md` (2026-10-16)
 - **A regra 2 aceita a âncora seguida de uma expansão no padrão** — decidido sem conserto (decisão 1 do lote 10), confirmando a decisão 8(a) do lote 9: o padrão `dq` ancora pelo prefixo literal antes da 1ª expansão, limite declarado no cabeçalho do sensor; recusá-lo deixaria vermelha a varredura do kit em 2 checkpoints fechados (a I10 de 20261002-onde-o-comando-do-humano-escreve e a I20 de 20261003-lote-3-a-catraca-desce, cuja expansão é uma contagem da catraca), e nenhum texto prova que a expansão não acrescenta padrão nem alternância; reabre quando uma Check real escrever, depois da âncora, uma expansão que possa trazê-los — `docs/handoffs/20261016-lote-10-as-cinco-livres/00-missao.md` (2026-10-16)
+- **A menção `@codex review` no corpo do PR não pediria a revisão do Codex** — refutado: no PR `j0ruge/dotp-remake#11`, aberto às 22:34:17Z com a menção no corpo, o Codex abriu o Code Review de `d959395` 14 s depois ("Manual request" no resumo do bot), sem o aviso "create an environment" dos #9 e #10 — `j0ruge/dotp-remake#11` (2026-10-19)
