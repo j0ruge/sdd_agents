@@ -128,10 +128,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O `sdd install` adota a branch atual como base quando falta `origin/HEAD`** — `bin/sdd:5790`
   (`--show-current`) — sem `refs/remotes/origin/HEAD` o install grava a branch em que está, e instalar numa
-  branch de trabalho, para não mexer na base, é o caso comum: no `dotp-remake` saiu `DEFAULT_BRANCH="plano-3-2"`,
-  e o "confirm it" da saída foi a única defesa. Direção: tentar `git ls-remote --symref origin HEAD` antes da
-  branch atual, e dizer que a branch atual é palpite quando for ela.
-  — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
+  branch de trabalho é o caso comum: saiu `DEFAULT_BRANCH="plano-3-2"` no `dotp-remake` e `"chore/sdd-install"`
+  no `magic_tutor` (este com `origin/main` no clone), sob o "Detected from origin/HEAD" do `config/starter.conf`;
+  o "confirm it" da saída foi a única defesa. Direção: tentar `git ls-remote --symref origin HEAD` e um
+  `origin/main`/`origin/master` existente antes da branch atual, e dizer que ela é palpite quando for ela.
+  — descoberto por `retrofit-watch` no `dotp-remake` (2026-10-19) e no `magic_tutor` (2026-10-20)
 
 - [ ] **A primeira instalação semeia o `TODO.md` em inglês, qualquer que seja o idioma** — `bin/sdd:5856`
   (`inst_lang`) — o install lê o `OUTPUT_LANG` da config que acabou de gerar do `starter.conf`, onde ele vem
@@ -148,12 +149,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
 
 - [ ] **O `/sdd-plan` delega ao `sdd-planner` sem saída para o agente não registrado** — `commands/sdd-plan.md:75`
-  (`sdd-planner`) — na sessão aberta em `rea-projects/`, pai do alvo, a lista de tipos de agente não tinha o
-  `sdd-planner`. Na 3.2b e na 3.2c o link já estava em `.claude/agents/` do alvo e o tipo faltou do mesmo jeito: a
-  causa é o cwd acima do alvo, não a hora do link. Um agente genérico que leu `agents/sdd-planner.md` por caminho
-  absoluto conduziu o grill nas duas. Direção: o comando nomeia esse caminho de reserva, ou manda reabrir a sessão
-  no alvo.
-  — descoberto pelo relay do `/sdd-plan` na missão da 3.2 do `dotp-remake` (2026-10-19)
+  (`sdd-planner`) — a lista de tipos de agente sai de quando a sessão abriu, e pode não ter o `sdd-planner`. No
+  `dotp-remake` a sessão estava em `rea-projects/`, pai do alvo, e na 3.2b e na 3.2c o tipo faltou com o link já em
+  `.claude/agents/`; no `magic_tutor` ela abriu antes do `sdd install` (`Agent type 'sdd-planner' not found`). Nos
+  dois, um agente genérico mandado ler o `sdd-planner.md` como contrato conduziu o grill. Direção: o comando nomeia
+  esse caminho de reserva, ou manda reabrir a sessão no alvo, depois do install.
+  — descoberto pelo relay do `/sdd-plan` na 3.2 do `dotp-remake` (2026-10-19) e por `retrofit-watch` no
+  `magic_tutor` (2026-10-20)
 - [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:104`
   (`Relaying the grill`) — na 3.2c do `dotp-remake` a sessão caiu com uma pergunta pendente, e a chamada voltou "the
   session ended before this call's result was recorded, so its outcome is unknown". Na sessão nova, o `SendMessage` ao
