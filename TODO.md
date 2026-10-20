@@ -64,11 +64,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: PR `j0ruge/dotp-remake#10`, Evidências (r2 e r3) — descoberto por `/codereview:codereview` (r2) na
   missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
 
-- [ ] **O `writes:` do `sdd-kaizen` não é cobrado, e o boot manda escrever fora dele** — `agents/sdd-kaizen.md:11`
-  (`writes:`) — o chapéu declara `$HANDOFF_DIR/**, KAIZEN_LOG.md`, o boot do `sdd kaizen` manda o achado ao
-  `TODO.md` e o `cmd_kaizen` não chama o `hat_guard_check`. O juiz de 2026-10-12 commitou `TODO.md` e a catraca
-  sem parada; o de 2026-10-20 seguiu o `writes:` e levou os achados ao plano nascido. Direção: o `writes:`
-  ganha `$TODO_FILE` e a catraca e o `cmd_kaizen` passa pela guarda, ou o boot deixa de mandar ao `TODO.md`.
+- [ ] **O `writes:` do `sdd-kaizen` não é cobrado: o `cmd_kaizen` não passa pela guarda do chapéu** —
+  `agents/sdd-kaizen.md:11` (`writes:`) — o chapéu declara `$HANDOFF_DIR/**, KAIZEN_LOG.md`, somado como em todo
+  chapéu ao `HAT_WRITES_BASE` (`$TODO_FILE` e a catraca), mas o `cmd_kaizen` não chama o `hat_guard_check`: uma
+  escrita do juiz fora disso passa sem parada. O chapéu também não diz que a base inclui o `TODO.md`: o juiz de
+  2026-10-20 leu o `writes:` ao pé da letra e levou os achados ao plano nascido; o de 2026-10-12 os commitou no
+  `TODO.md`, como a base permite. Direção: o `cmd_kaizen` passa pela guarda, com probe, e o chapéu nomeia a base.
   — descoberto por `sdd-kaizen` na missão `20261020-a-sessao-le-o-que-o-boot-manda` (2026-10-20)
 
 ### Contrato e configuração
