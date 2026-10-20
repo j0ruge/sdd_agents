@@ -1,6 +1,6 @@
 ---
 missao: 20261020-a-sessao-le-o-que-o-boot-manda
-atualizado: 2026-10-20 18:46
+atualizado: 2026-10-20 19:02
 ---
 
 # Checkpoint — a sessão lê o que o boot manda ler
@@ -49,7 +49,7 @@ atualizado: 2026-10-20 18:46
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | Uma definição da regra de leitura dos templates, e toda fase a recebe | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    every phase may read the kit templates, and only read them' <<< "$o"` → `1` | done | 7098b92 |
-| I2 | O sdd close recebe a mesma regra | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    close: the session may read the kit templates, and only read them' <<< "$o"` → `1` | pending | — |
+| I2 | O sdd close recebe a mesma regra | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    close: the session may read the kit templates, and only read them' <<< "$o"` → `1` | done | 7e2353d |
 | I3 | O preflight prova a regra do kit numa sessão isolada, e reprova quando ela não lê | `o=$(bash tests/check-preflight.sh 2>&1); a=$(grep -c '^  ok    preflight fails when the kit rule alone cannot read the templates' <<< "$o"); b=$(grep -c '^  ok    the template probe runs with no settings and carries the kit rule' <<< "$o"); echo "$a $b"` → `1 1` | pending | — |
 | I4 | Toda negativa do harness é nomeada no journal | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    every tool call the harness denied is named in the journal' <<< "$o"` → `1` | pending | — |
 | I5 | READ_EXTRA: o projeto declara os diretórios das skills, só para leitura | `o=$(bash tests/check-dry-run.sh 2>&1); p=$(bash tests/check-gates.sh 2>&1); a=$(grep -c '^  ok    READ_EXTRA reaches every phase as a read-only rule, symlink resolved' <<< "$o"); b=$(grep -c '^  ok    READ_EXTRA that is not a literal absolute directory is refused, and the reason names it' <<< "$p"); echo "$a $b"` → `1 1` | pending | — |
