@@ -66,6 +66,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **O `sdd install` grava o branch atual como base quando o clone não tem `origin/HEAD`** —
+  `bin/sdd:5790` (`show-current`) — instalado do branch `chore/sdd-install` do `magic_tutor`, clone sem
+  `refs/remotes/origin/HEAD` local mas com `origin/main`, o config saiu com `DEFAULT_BRANCH="chore/sdd-install"`,
+  sob o comentário "Detected from origin/HEAD" do `config/starter.conf`: missões e PRs iriam contra o branch de
+  trabalho. Direção: antes do `git branch --show-current`, perguntar ao remoto (`git ls-remote --symref origin
+  HEAD`) ou aceitar um `origin/main`/`origin/master` que exista. — descoberto por `retrofit-watch` no
+  `magic_tutor` (2026-10-20)
+
+- [ ] **O `/sdd-plan` delega ao `sdd-planner`, que não existe na sessão que acabou de rodar o `sdd install`** —
+  `commands/sdd-plan.md:75` (`sdd-planner`) — o harness monta a lista de agentes no início da sessão: logo
+  depois do `sdd install` no `magic_tutor`, `Agent(subagent_type: "sdd-planner")` falhou com `Agent type
+  'sdd-planner' not found`, e a sessão seguiu com um `general-purpose` mandado ler
+  `.claude/agents/sdd-planner.md` como contrato. Direção: o comando diz esse caminho de reserva, ou manda
+  reiniciar a sessão depois do install. — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-20)
+
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
   (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
   squash, e o item fica preso para sempre; no `sales_quote` os PRs #405 e #406 entraram por squash e
