@@ -66,13 +66,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
-- [ ] **O `/sdd-plan` não diz o que fazer quando o tipo do planner não está na sessão** — `commands/sdd-plan.md:75`
-  (`sdd-planner`) — o passo manda delegar ao subagente, e só. Na 3.2b do `dotp-remake` a sessão abriu no diretório
-  pai do alvo (`~/repos/rea-projects`), e a lista de tipos do `Agent` não trazia o `sdd-planner`, embora o symlink
-  do `sdd link-agents` estivesse em `.claude/agents/` do alvo. O relay lançou um `general-purpose` com ordem de ler
-  `agents/sdd-planner.md` como papel, e o grill correu no formato. Sem o passo escrito, a sessão planeja inline ou
-  improvisa. Direção: o passo diz o fallback, ou manda abrir a sessão na raiz do alvo antes do `/sdd-plan`.
-  — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-b-campo-fichas-e-alvos` (2026-10-19)
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
   (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
   squash, e o item fica preso para sempre; no `sales_quote` os PRs #405 e #406 entraram por squash e
@@ -155,11 +148,26 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
 
 - [ ] **O `/sdd-plan` delega ao `sdd-planner` sem saída para o agente não registrado** — `commands/sdd-plan.md:75`
-  (`sdd-planner`) — na sessão aberta em `rea-projects/` antes do `sdd link-agents`, a lista de tipos de agente
-  não tinha o `sdd-planner` (causa não verificada: a hora do link ou o cwd acima do alvo). Um agente genérico que
-  leu `agents/sdd-planner.md` por caminho absoluto conduziu o grill e devolveu a 1ª pergunta no formato.
-  Direção: o comando nomeia esse caminho de reserva, ou manda reabrir a sessão no alvo.
+  (`sdd-planner`) — na sessão aberta em `rea-projects/`, pai do alvo, a lista de tipos de agente não tinha o
+  `sdd-planner`. Na 3.2b e na 3.2c o link já estava em `.claude/agents/` do alvo e o tipo faltou do mesmo jeito: a
+  causa é o cwd acima do alvo, não a hora do link. Um agente genérico que leu `agents/sdd-planner.md` por caminho
+  absoluto conduziu o grill nas duas. Direção: o comando nomeia esse caminho de reserva, ou manda reabrir a sessão
+  no alvo.
   — descoberto pelo relay do `/sdd-plan` na missão da 3.2 do `dotp-remake` (2026-10-19)
+- [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:104`
+  (`Relaying the grill`) — na 3.2c do `dotp-remake` a sessão caiu com uma pergunta pendente, e a chamada voltou "the
+  session ended before this call's result was recorded, so its outcome is unknown". Na sessão nova, o `SendMessage` ao
+  id do planner antigo voltou `Resuming agent`, e os artefatos saíram com as 10 decisões do grill intactas. Sem o passo
+  escrito, o relay abre um planner novo e perde o grill, ou dá por respondida a pergunta de resultado desconhecido.
+  Direção: o passo manda perguntar de novo o que estava pendente e retomar o mesmo agente pelo id.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
+- [ ] **Commit do relay no meio do grill muda o HEAD que o planner mediu, e só o worktree é vigiado** —
+  `commands/sdd-plan.md:89` (`rev-parse HEAD`) — na 3.2c do `dotp-remake` (sem worktree: o `sdd` fica fora do alvo) o
+  dono pediu no grill uma linha no roadmap, e o relay commitou `b674421` na branch da missão depois de o planner medir
+  a suíte em `d6d6cf8`. O relay mandou o HEAD novo junto da resposta seguinte, e o plano registrou a base certa. Sem
+  isso, o plano cita uma base que não é o HEAD da aprovação. Direção: gravar `status` e `rev-parse` a cada hand-back
+  vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
 
 ### Saída humana e cosmética
 
