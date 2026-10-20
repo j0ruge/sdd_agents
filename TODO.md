@@ -64,6 +64,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: PR `j0ruge/dotp-remake#10`, Evidências (r2 e r3) — descoberto por `/codereview:codereview` (r2) na
   missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
 
+- [ ] **O `writes:` do `sdd-kaizen` não é cobrado: o `cmd_kaizen` não passa pela guarda do chapéu** —
+  `agents/sdd-kaizen.md:11` (`writes:`) — o chapéu declara `$HANDOFF_DIR/**, KAIZEN_LOG.md`, somado como em todo
+  chapéu ao `HAT_WRITES_BASE` (`$TODO_FILE` e a catraca), mas o `cmd_kaizen` não chama o `hat_guard_check`: uma
+  escrita do juiz fora disso passa sem parada. O chapéu também não diz que a base inclui o `TODO.md`: o juiz de
+  2026-10-20 leu o `writes:` ao pé da letra e levou os achados ao plano nascido; o de 2026-10-12 os commitou no
+  `TODO.md`, como a base permite. Direção: o `cmd_kaizen` passa pela guarda, com probe, e o chapéu nomeia a base.
+  — descoberto por `sdd-kaizen` na missão `20261020-a-sessao-le-o-que-o-boot-manda` (2026-10-20)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
@@ -170,6 +178,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   isso, o plano cita uma base que não é o HEAD da aprovação. Direção: gravar `status` e `rev-parse` a cada hand-back
   vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte.
   — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
+- [ ] **A guarda do kit para a corrida do alvo por um merge só de docs no checkout do kit** — `bin/sdd:4331`
+  (`kit_guard_check`) — compara o par cru (HEAD e sujeira) e não lê o rótulo `sdd:` do reflog (anatomia §6). No
+  lighthouse o operador puxou o #246 e o #254 (só `docs/`, `TODO.md` e catraca) para o checkout principal do kit
+  com a corrida viva: `kit-touched` 2×, 2 células `refez` e 2 das 6 intervenções da missão; o reflog dizia
+  `merge origin/main: Fast-forward`, sem rótulo. Direção: com ADR, só o HEAD movido por entrada do reflog sem o
+  rótulo da sessão (alheia, como esse fast-forward) e que não toca `bin agents templates config` vira aviso no
+  journal; a sujeira não commitada, que não deixa reflog, e o resto continuam parando a linha.
+  — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
+- [ ] **A REVIEW aprovada não vê o código que entrou depois dela** — `bin/sdd:1907` (`gate_REVIEW`) — o gate lê
+  a nota da última rodada e não compara o commit que ela revisou com o HEAD. No lighthouse o F5–F8 (emenda E1–E6)
+  e o R3 (P2 do Codex no PR #29) entraram depois da r2 em A, e o humano forçou a r3 e a r4 com `--phase REVIEW`:
+  2 das 6 intervenções da missão. É o espelho do D21, em que só `F<n>` reabre a QA. Direção: a rodada grava o
+  commit revisado, e código commitado depois dele reabre a REVIEW ou é nomeado no motivo do gate.
+  — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
 
 ### Saída humana e cosmética
 
