@@ -4,6 +4,50 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-20 — O veredito da janela do lote 7: `melhorou` sobre `bad6168`
+
+**O que foi julgado:** o lote 7 (PR #252, ADR 0018), a única versão de comportamento desde `0270727`.
+Foi medido em quatro missões reais de três repositórios (`sales_quote` 2, `jrc-libs` 1 e
+`lighthouse_project` 1), todas em harness 2.1.296. A janela absorveu sete merges do kit que não
+tocaram `bin agents templates config` (os lotes 8, 9 e 10 e os chores), sem partir: é a ADR 0014
+funcionando.
+
+**Antes → depois** (`sdd kaizen --series`, `previous` = `0270727` → `latest` = `bad6168`):
+- `advance_rate` 0,98 → 0,97;
+- `outcomes` 65/1/0 → 99/2/1 (advanced/churned/idle), sobre 66 → 102 sessões;
+- rótulos 25/0/2 → 20/0/4 (ok/leve/refez);
+- escaladas `handoff-blocked` + `hat-crossed` → `handoff-blocked` + `increment-blocked` +
+  `kit-touched` ×2;
+- custo US$ 192,06 → 353,08;
+- intervenções (`sdd autonomy --all-repos --by-mission`) 5 em 5 missões → 8 em 4 (6, 2, 0, 0).
+
+**Por que `melhorou` com agregados parados:** a fonte de intervenção que o lote atacou secou. As
+linhas `manual` de QA foram de 3 a 0. A missão com `qa: skipped` fechou a QA em uma sessão de
+US$ 1,44 e um lançamento só. O reteste depois de `F<n>` rodou três vezes pela rota nova, e as
+chamadas a `Skill` nas 15 sessões de QA são 0. Os 19 carimbos `data:` caem dentro da janela da
+sessão. As duas missões do `sales_quote`, o pedaço comparável, fecharam com 0 intervenções e 12
+células `ok`.
+
+Os quatro `refez` têm causa fora do lote:
+- `kit-touched` ×2: o operador puxou merges só de docs para o checkout do kit no meio da corrida;
+- `handoff-blocked`: o harness negou ao TICKET a leitura dos templates;
+- `increment-blocked`: um Jidoka bom, que achou um defeito real do driver.
+
+**Limites declarados:** mistura diferente (dois projetos novos); harness diferente entre as fatias
+(2.1.291 × 2.1.296); o eixo não lê `commands/`; o comparável repo com repo são duas missões.
+Veredito e análise em `docs/handoffs/20261020-a-sessao-le-o-que-o-boot-manda/05-verdict.md`.
+
+**O que a janela ensinou e virou plano:** o `boot_prompt` manda toda fase ler `$SDD_HOME/templates/`,
+e sob as flags do `run_phase` (`--allowedTools Bash`) o `Read` fora do repo é negado. Reproduzido
+às 11:41, em 2.1.296. Nos logs de sessão, 13 de 47 no lighthouse e 4 de 23 no jrc-libs têm `Read`
+negado, com 54 negativas só nas referências da `codereview`. No `sales_quote` são 0 de 33, porque ele
+tem `"Read(*)"` posto à mão. A missão nascida na mesma pasta dá à sessão uma regra só de leitura
+(medida às 11:42: a escrita continua negada, e o `--add-dir` a liberaria), nomeia toda negativa no
+journal e põe o `sdd preflight` para ler um template. Os três achados que não cabem nela vão ao
+`TODO.md` pelo I2 da própria missão.
+
+---
+
 ## 2026-10-16 — Lote 10: as cinco livres
 
 **Missão:** `20261016-lote-10-as-cinco-livres`, a leva dos cinco itens do backlog que só tocam `tests/` e
