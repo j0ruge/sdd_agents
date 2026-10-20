@@ -43,7 +43,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o runner grava o SHA e a sujeira do `SDD_HOME` no journal, mas nada os compara com o upstream, e as seis
   linhas do `sdd health --release` também não. No `ui24_agent`, o `~/repos/sdd_agents` estava numa branch
   já mergeada, 382 commits atrás da `main`, e todo alvo rodou o kit velho sem saber. Direção: avisar uma
-  vez por processo quando o `SDD_HOME` não está no `DEFAULT_BRANCH` ou está atrás do upstream já buscado.
+  vez por processo quando o `SDD_HOME` não está na branch padrão do remoto do próprio kit (o `origin/HEAD`
+  dele, nunca o `DEFAULT_BRANCH` do alvo: `develop` no `sales_quote`) ou está atrás do upstream já buscado.
   — descoberto por `retrofit-watch` na sessão do `ui24_agent` que planejou a S9 (2026-10-17)
 
 - [ ] **O `sdd preflight` diz "preflight ok" com um `TEST_CMD` que deixa servidor vivo** — `bin/sdd-coordination.py:359`
