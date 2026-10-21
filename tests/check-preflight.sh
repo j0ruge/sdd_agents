@@ -933,6 +933,121 @@ assert_has "codereview is asked for whatever the config says" "codereview" "$out
 rm -f .jira-project
 mv .sdd/config.sh.bak .sdd/config.sh
 
+# --- what the phases will not be able to read (ADR 0019 §2) ----------------
+# Two warnings, neither a failure and neither a session. READ_EXTRA is empty by default and accepts
+# a directory this machine does not have, so without them a target learns that its phases cannot
+# read a skill's references from the DENIED line of a run already paid for:
+#   - an entry that does not exist: named, and only it — an entry that exists is never named;
+#   - a skill preflight finds (skill_findable, which publishes SKILL_FOUND_DIR) whose directory, or
+#     whose `readlink -f` target, no read rule of the sessions covers: named, with the entry to add.
+#     The rules are kit_read_rules' own, the repo is the session's cwd, and a rule covers its
+#     directory and what is under `<dir>/` — never a sibling that only starts with the same letters.
+# HOME is set for every run here, so the `$HOME/…` spelling of the entry is asserted both ways
+# whatever the machine's TMPDIR is, and so no run reads this machine's real skills. The rc is a
+# weak witness — the gh stub fails every preflight here —, so the count of `fail` lines rides
+# beside it: a warning turned into a failure moves that count and not the rc.
+echo "== READ_EXTRA against what this machine holds =="
+cd "$FIX" || exit 1
+# Its own scratch, OUTSIDE the fixture repo: everything under $FIX is the repo, the session's cwd,
+# which the sessions read anyway — a skill root there is covered by construction and warns about
+# nothing, whatever the rules say.
+RXF="$(mktemp -d "${TMPDIR:-/tmp}/sdd-preflight-rx-XXXXXX")"
+trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$PROBE" "$ORIGIN" "$RXF"' EXIT
+# rx_run <home> <skills root> <READ_EXTRA> → the preflight's output, then `rc=N` on a line of its own
+rx_run() {
+  local o rc=0
+  o="$( HOME="$1" SDD_SKILLS_ROOT="$2" READ_EXTRA="$3" "$SDD" preflight 2>&1 )" || rc=$?
+  printf '%s\nrc=%s\n' "$o" "$rc"
+}
+# rx_same <output A> <output B> → `same`, or what differs: the rc line and the count of fail lines
+rx_same() {
+  local ra rb fa fb
+  ra="$(grep -E '^rc=[0-9]+$' <<< "$1" | tail -1)"; rb="$(grep -E '^rc=[0-9]+$' <<< "$2" | tail -1)"
+  fa="$(grep -c '^  fail  ' <<< "$1")"; fb="$(grep -c '^  fail  ' <<< "$2")"
+  if [ -n "$ra" ] && [ "$ra" = "$rb" ] && [ "$fa" = "$fb" ]; then printf 'same'
+  else printf '%s/%s,fails=%s/%s' "${ra:-no-rc}" "${rb:-no-rc}" "$fa" "$fb"; fi
+}
+# rx_skill <output> → missing=N,warned=N,link=N,entry=<the entries to add, comma-joined> for
+# codereview. `missing` is the witness that the skill was FOUND at all — a run that lost it reads no
+# warning too —, and `link` counts the warnings that say the directory found is a symlink.
+rx_skill() {
+  printf 'missing=%s,warned=%s,link=%s,entry=%s' "$(grep -c '^  warn  skills not found:' <<< "$1")" \
+    "$(grep -c '^  warn  skill codereview is found in ' <<< "$1")" \
+    "$(grep -c '^  warn  skill codereview is found in .* (a symlink to ' <<< "$1")" \
+    "$(sed -n 's/^ *READ_EXTRA entry to add: //p' <<< "$1" | paste -sd, -)"
+}
+
+# The entry that does not exist, beside one that does. Names that are not prefixes of each other,
+# so a count of the present one cannot be fed by the absent one's line.
+RX_HOME="$RXF/home"
+RX_PRESENT="$RXF/present"
+RX_ABSENT="$RXF/absent"
+mkdir -p "$RX_HOME" "$RX_PRESENT"
+out_rx_none="$(rx_run "$RX_HOME" "$EMPTY_SKILLS" "")"
+out_rx_both="$(rx_run "$RX_HOME" "$EMPTY_SKILLS" "$RX_PRESENT $RX_ABSENT")"
+assert_eq "preflight warns about a READ_EXTRA directory that does not exist, and only about it" \
+  "absent:1 present:0 same:same reached:1" \
+  "absent:$(grep -cF "  warn  READ_EXTRA names $RX_ABSENT, which does not exist on this machine" <<< "$out_rx_both") present:$(grep -cF -- "$RX_PRESENT" <<< "$out_rx_both") same:$(rx_same "$out_rx_both" "$out_rx_none") reached:$(grep -c '^  ok   git present$' <<< "$out_rx_both")"
+
+# The skill nobody declared. The codereview plugin sits in the cache with its version below it, and
+# `find` meets the plugin's own directory first (it walks a parent before its children), so the
+# directory found IS the parent without the version: declared, it is covered by equality.
+RX_SK1_HOME="$RXF/sk1"
+RX_SK1_ROOT="$RX_SK1_HOME/.claude"
+mkdir -p "$RX_SK1_ROOT/plugins/cache/mk/codereview/1.0.0/skills/codereview"
+out_sk1_bare="$(rx_run "$RX_SK1_HOME" "$RX_SK1_ROOT" "")"
+out_sk1_decl="$(rx_run "$RX_SK1_HOME" "$RX_SK1_ROOT" "$RX_SK1_ROOT/plugins/cache/mk/codereview")"
+assert_eq "preflight names a skill it finds that READ_EXTRA does not declare, with the entry to add" \
+  'undeclared:missing=0,warned=1,link=0,entry=$HOME/.claude/plugins/cache/mk/codereview declared:missing=0,warned=0,link=0,entry= same:same' \
+  "undeclared:$(rx_skill "$out_sk1_bare") declared:$(rx_skill "$out_sk1_decl") same:$(rx_same "$out_sk1_bare" "$out_sk1_decl")"
+
+# Found BELOW the version: a plugin whose name is not the skill's. The entry is still the plugin's
+# directory, the parent without the version (two components under the cache), and it covers the
+# skill through `<entry>/`. A sibling whose name only starts with the same letters covers nothing —
+# the slash of `<entry>/` is what tells `codereview-x` from `codereview`. HOME is elsewhere here, so
+# the entry comes back absolute.
+RX_SK2_ROOT="$RXF/sk2/.claude"
+RX_SK2_PLUGIN="$RX_SK2_ROOT/plugins/cache/mk/codereview-x"
+mkdir -p "$RX_SK2_PLUGIN/2.0.0/skills/codereview"
+out_sk2_bare="$(rx_run "$RX_HOME" "$RX_SK2_ROOT" "")"
+out_sk2_parent="$(rx_run "$RX_HOME" "$RX_SK2_ROOT" "$RX_SK2_PLUGIN")"
+out_sk2_sibling="$(rx_run "$RX_HOME" "$RX_SK2_ROOT" "$RX_SK2_ROOT/plugins/cache/mk/codereview")"
+assert_eq "a plugin skill is covered by the directory above its version, and never by a sibling that shares a prefix" \
+  "bare:missing=0,warned=1,link=0,entry=$RX_SK2_PLUGIN parent:missing=0,warned=0,link=0,entry= sibling:missing=0,warned=1,link=0,entry=$RX_SK2_PLUGIN" \
+  "bare:$(rx_skill "$out_sk2_bare") parent:$(rx_skill "$out_sk2_parent") sibling:$(rx_skill "$out_sk2_sibling")"
+
+# Reached through a symlink, as `ticket` is on the machine this was written on. The harness checks
+# the path asked for AND the resolved one (p7, p10, p12 of ADR 0019), so the skill is covered only
+# when both are: by its own entry, whose target kit_read_rules grants too; never by the parent above
+# the link, nor by the target alone. Found inside the repo, it is the session's cwd: nothing to add.
+RX_SK3_HOME="$RXF/sk3"
+RX_SK3_ROOT="$RX_SK3_HOME/.claude"
+RX_SK3_TARGET="$RXF/target/codereview-real"
+mkdir -p "$RX_SK3_ROOT/skills" "$RX_SK3_TARGET"
+ln -s "$RX_SK3_TARGET" "$RX_SK3_ROOT/skills/codereview"
+out_sk3_above="$(rx_run "$RX_SK3_HOME" "$RX_SK3_ROOT" "$RX_SK3_ROOT/skills")"
+out_sk3_target="$(rx_run "$RX_SK3_HOME" "$RX_SK3_ROOT" "$RX_SK3_TARGET")"
+out_sk3_link="$(rx_run "$RX_SK3_HOME" "$RX_SK3_ROOT" "$RX_SK3_ROOT/skills/codereview")"
+mkdir -p "$FIX/.claude/skills/codereview"
+out_sk3_repo="$(rx_run "$RX_HOME" "$EMPTY_SKILLS" "")"
+rm -rf "$FIX/.claude/skills"
+assert_eq "a skill reached through a symlink is covered only with its target, and a skill in the repo needs no entry" \
+  'above:missing=0,warned=1,link=1,entry=$HOME/.claude/skills/codereview target:missing=0,warned=1,link=1,entry=$HOME/.claude/skills/codereview link:missing=0,warned=0,link=0,entry= repo:missing=0,warned=0,link=0,entry=' \
+  "above:$(rx_skill "$out_sk3_above") target:$(rx_skill "$out_sk3_target") link:$(rx_skill "$out_sk3_link") repo:$(rx_skill "$out_sk3_repo")"
+
+# The edges of the entry's spelling. A skill directory met one level under the cache has no version
+# above it, so the entry is the directory itself, never a second copy of its name. `$HOME` is written
+# only under a real HOME: one with a trailing slash still counts, and an EMPTY one would make every
+# absolute path look like it is under it.
+RX_SK4_HOME="$RXF/sk4"
+RX_SK4_DIR="$RX_SK4_HOME/.claude/plugins/cache/codereview"
+mkdir -p "$RX_SK4_DIR"
+out_sk4_slash="$(rx_run "$RX_SK4_HOME/" "$RX_SK4_HOME/.claude" "")"
+out_sk4_nohome="$(rx_run "" "$RX_SK4_HOME/.claude" "")"
+assert_eq "the entry is the directory found when no version sits above it, and \$HOME is written only under a real HOME" \
+  "slash:missing=0,warned=1,link=0,entry=\$HOME/.claude/plugins/cache/codereview nohome:missing=0,warned=1,link=0,entry=$RX_SK4_DIR" \
+  "slash:$(rx_skill "$out_sk4_slash") nohome:$(rx_skill "$out_sk4_nohome")"
+
 # --- is anything listening where APP_URL points? ----------------------------
 # preflight ran fifteen checks and never once touched APP_URL, so the one thing that costs a whole
 # opus session to discover — the app is not up — was the one thing it could not say. Measured on

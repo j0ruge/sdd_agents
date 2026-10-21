@@ -64,7 +64,12 @@ ganha também a regra do alvo resolvido, porque o harness confere os dois caminh
 numa definição (`read_extra_each`), a guarda em outra (`read_extra_dir_ok`, positiva, no molde do
 `hat_extra_path_ok`), e a recusa no `load_config`; o probe é o `tests/check-dry-run.sh` (as regras,
 diferencial com e sem a chave) e o `tests/check-gates.sh` (cada recusa nomeando a entrada), com sete
-mutantes `mut_RUN_read_extra_*` — três na regra, quatro na guarda.
+mutantes `mut_RUN_read_extra_*` — três na regra, quatro na guarda. O `sdd preflight` avisa, sem
+sessão e nunca com `_fail`, a entrada que não existe nesta máquina e a skill que ele acha
+(`skill_findable`, que publica `SKILL_FOUND_DIR`) e que nenhuma regra das sessões cobre — o
+diretório achado e o alvo do `readlink -f` dele, julgados pelas próprias linhas do `kit_read_rules`
+(`read_rules_cover`) —, com a entrada a declarar (`skill_read_entry`: para plugin, o pai sem versão,
+escrito `$HOME/…`); o probe é o `tests/check-preflight.sh`, com seis mutantes `mut_PRE_*`.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`

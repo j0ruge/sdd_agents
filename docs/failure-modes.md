@@ -88,7 +88,9 @@ session's `.json`.
 - **a skill's references denied:** declare the skill's directory in the target's `READ_EXTRA`,
   absolute and separated by spaces, written with `$HOME` (`config/schema.md`). The runner adds the
   rule of a symlinked entry's resolved target too; declare the skill's own directory (for a
-  plugin, the parent without the version), never a parent above a symlink.
+  plugin, the parent without the version), never a parent above a symlink. `sdd preflight` names,
+  before any run, each skill it finds that no entry covers, with the entry to add, and each entry
+  this machine does not have.
 - **a denial under `/tmp`:** the session's own scratch, not something the boot named. Nothing to do.
 
 **Do not:** put the kit in the settings' `additionalDirectories`, or `--add-dir` it: under

@@ -1026,6 +1026,8 @@ read-only rule, and an entry that is a symlink also gets its resolved target's r
 harness checks both paths. `load_config` refuses an entry that is not a literal absolute directory,
 before any session; the kit itself grants nothing beyond its templates. `tests/check-dry-run.sh`
 asserts the rules per block, with and without the key, and `tests/check-gates.sh` each refusal.
+`sdd preflight` warns, with no session, about an entry this machine does not have and about a skill
+it finds that no rule covers, naming the entry to add; `tests/check-preflight.sh` asserts both.
 
 No argv assertion says whether the **harness** honours the rule, so `sdd preflight` asks (ADR 0019
 §3). Next to the `Bash` probe it opens a second session, isolated: `--setting-sources ""` (no

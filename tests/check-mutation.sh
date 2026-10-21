@@ -2558,6 +2558,45 @@ mut_PRE_template_probe_rule_dropped() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^    mapfile -t tpl_rules < <(kit_read_rules)$|    :|' "$1"
 }
 
+# ADR 0019 §2, what the phases will not be able to read — the two warnings of preflight, and the four
+# rules that decide them. A warning that goes quiet fails OPEN: the target meets the denial in a run
+# already paid for. MISSING_SILENT: the READ_EXTRA entry absent from this machine is no longer named —
+# caught by "preflight warns about a READ_EXTRA directory that does not exist, and only about it"
+# (check-preflight.sh), `absent:0`. UNDECLARED_SILENT: a skill found and covered by no rule is never
+# named — caught by "preflight names a skill it finds that READ_EXTRA does not declare, with the entry
+# to add", `warned=0`. Both measured one by one on a copy of the kit.
+mut_PRE_read_extra_missing_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^      || warn "READ_EXTRA names \$_rx_dir, which does not exist.*$#      || :#' "$1"
+}
+mut_PRE_undeclared_skill_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && read_rules_cover "\$sk_real"; then continue; fi$#    continue#' "$1"
+}
+# COVER_UNSLASHED: a rule covers what merely BEGINS with its directory, so `…/codereview` covers
+# `…/codereview-x` — caught by "a plugin skill is covered by the directory above its version, and
+# never by a sibling that shares a prefix", `sibling:…warned=0`. COVER_UNRESOLVED: the target of a
+# symlinked skill is never held to the rules, and the parent above the link reads as enough, which
+# the harness denies (p10 of ADR 0019) — caught by "a skill reached through a symlink is covered only
+# with its target, and a skill in the repo needs no entry", `above:…warned=0`.
+mut_PRE_skill_cover_unslashed() {
+  sed -i '/^read_rules_cover() {/,/^}/ s#^    case "\$p" in "\$dir"|"\$dir"/\*) return 0 ;; esac$#    case "$p" in "$dir"*) return 0 ;; esac#' "$1"
+}
+mut_PRE_skill_cover_unresolved() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^    sk_real="\$(readlink -f -- "\$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="\$SKILL_FOUND_DIR"$#    sk_real="$SKILL_FOUND_DIR"#' "$1"
+}
+# The entry the warning hands over. ENTRY_VERSIONED: the plugin's entry keeps its version directory,
+# which the next update orphans and which never covers the plugin directory `find` meets first — the
+# warning would outlive its own advice. Caught first by the undeclared-skill assertion, where the
+# plugin directory found gets a second copy of its name (`…/codereview/codereview`), and then by the
+# plugin-below one, `bare:…entry=…/2.0.0`.
+# ENTRY_HOME_UNWRITTEN: the entry comes back absolute under $HOME, and the tracked .sdd/config.sh would
+# name the user — caught by the undeclared-skill assertion, whose entry is spelled `$HOME/…`.
+mut_PRE_skill_entry_versioned() {
+  sed -i '/^skill_read_entry() {/,/^}/ s#entry="\$entry/\${rel%%/\*}" ;;$#entry="$entry/${rel%%/*}"; rel="${rel\#*/}"; entry="$entry/${rel%%/*}" ;;#' "$1"
+}
+mut_PRE_skill_entry_home_unwritten() {
+  sed -i '/^skill_read_entry() {/,/^}/ { /^    case "\$entry" in "\$home"\/\*) entry=/ s/.*/    :/ }' "$1"
+}
+
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
 # session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
 # undone and the boot bill goes on reporting the cut, because the fallback arm it lands in is the
@@ -6582,6 +6621,12 @@ CATALOG=(
   PRE_template_read_unchecked
   PRE_template_probe_reads_settings
   PRE_template_probe_rule_dropped
+  PRE_read_extra_missing_silent
+  PRE_undeclared_skill_silent
+  PRE_skill_cover_unslashed
+  PRE_skill_cover_unresolved
+  PRE_skill_entry_versioned
+  PRE_skill_entry_home_unwritten
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA

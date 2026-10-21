@@ -276,7 +276,8 @@ load_config() {
   # the door an empty list. A NEWLINE is refused before the parser for HAT_WRITES_EXTRA's reason —
   # `read -r -a` consumes one line, so a second line would vanish with rc 0. A missing directory is
   # NOT refused: a plugin absent on another machine must not stop the line, and a read under it is
-  # only denied, which the journal names (DENIED). Grammar: read_extra_each; guard: read_extra_dir_ok.
+  # only denied, which the journal names (DENIED) — and `sdd preflight` warns about it before any run.
+  # Grammar: read_extra_each; guard: read_extra_dir_ok.
   : "${READ_EXTRA:=}"
   case "$READ_EXTRA" in
     *$'\n'*) die "READ_EXTRA contains a newline — directories are separated by spaces, on one line" ;;
@@ -5653,15 +5654,63 @@ state_fingerprint() {
 #
 # SDD_SKILLS_ROOT exists so this is testable at all — with no injectable root the only worlds
 # available to a sensor are "this developer's machine" and nothing.
+#
+# It also publishes WHERE, in the global SKILL_FOUND_DIR (empty when not found), which the preflight
+# holds against the read rules of the sessions (read_rules_cover, ADR 0019 §2). A global, so the
+# function is CALLED and never read by `$( )`: the assignment would die in the subshell (CLAUDE.md).
+# Reset on entry, so a miss never hands on the previous skill's directory; no probe sees the reset,
+# because the one caller reads the global only after an rc 0 — it decides what a caller that read
+# it after a miss would get.
 skill_findable() {
-  local name="${1:-}" root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
+  local name="${1:-}" root="${SDD_SKILLS_ROOT:-$HOME/.claude}" hit=""
+  SKILL_FOUND_DIR=""
   [ -n "$name" ] || return 1
-  [ -d "$root/skills/$name" ] && return 0
-  [ -d "$REPO_ROOT/.claude/skills/$name" ] && return 0
-  # `-quit` on the first hit: the cache holds every version of every plugin, and this question is
-  # "is it anywhere", not "where". `|| true` because `find` on a missing directory returns 1 and
-  # pipefail would carry that into the caller's assignment.
-  [ -n "$( find "$root/plugins/cache" -maxdepth 6 -type d -name "$name" -print -quit 2>/dev/null || true )" ]
+  if [ -d "$root/skills/$name" ]; then SKILL_FOUND_DIR="$root/skills/$name"; return 0; fi
+  if [ -d "$REPO_ROOT/.claude/skills/$name" ]; then SKILL_FOUND_DIR="$REPO_ROOT/.claude/skills/$name"; return 0; fi
+  # `-quit` on the first hit: the cache holds every version of every plugin. `find` walks a parent
+  # before its children, so a plugin named after its skill is met at its own directory, above every
+  # version. `|| true` because `find` on a missing directory returns 1 and pipefail would carry that
+  # into the assignment.
+  hit="$( find "$root/plugins/cache" -maxdepth 6 -type d -name "$name" -print -quit 2>/dev/null || true )"
+  [ -n "$hit" ] || return 1
+  SKILL_FOUND_DIR="$hit"
+}
+
+# read_rules_cover <path> → 0 when a session the runner opens may Read <path>: it is the repo (the
+# session's cwd) or under it, or it is a directory one of kit_read_rules' rules names, or under it.
+# The rules are read back off kit_read_rules itself, so an entry that is a symlink covers its target
+# exactly when the runner grants it, and no second copy of that decision exists. A directory covers
+# itself and what is under `<dir>/`, never a sibling that only begins with the same letters
+# (`…/codereview-x` is not under `…/codereview`). Pure: rc only. Sensor: tests/check-preflight.sh.
+read_rules_cover() {
+  local p="${1:-}" rule dir
+  case "$p" in "$REPO_ROOT"|"$REPO_ROOT"/*) return 0 ;; esac
+  while IFS= read -r rule; do
+    dir="${rule#"Read(/"}"; dir="${dir%"/**)"}"
+    case "$p" in "$dir"|"$dir"/*) return 0 ;; esac
+  done < <(kit_read_rules)
+  return 1
+}
+
+# skill_read_entry <dir> <skills root> → the READ_EXTRA entry that lets the phases read a skill found
+# in <dir>, spelled as it goes into the tracked .sdd/config.sh. In the plugin cache it is the plugin's
+# directory, the parent WITHOUT the version (`<root>/plugins/cache/<marketplace>/<plugin>`): the
+# version changes with every update, and the parent covers them all (p13 of ADR 0019). Anywhere else
+# it is <dir> itself, which for a symlink is the entry kit_read_rules resolves. A path under $HOME
+# comes back written `$HOME/…`, literally, as decision 2 of ADR 0019 asks; any other, absolute. The
+# entry is not held to read_extra_dir_ok here: one that fails it is refused by load_config, by name.
+skill_read_entry() {
+  local entry="${1:-}" cache="${2:-}/plugins/cache" rel home="${HOME:-}"
+  case "$entry" in
+    "$cache"/*/*)
+      rel="${entry#"$cache"/}"
+      entry="$cache/${rel%%/*}"; rel="${rel#*/}"; entry="$entry/${rel%%/*}" ;;
+  esac
+  home="${home%/}"
+  if [ -n "$home" ]; then
+    case "$entry" in "$home"/*) entry="\$HOME/${entry#"$home"/}" ;; esac
+  fi
+  printf '%s\n' "$entry"
 }
 
 # node_gate_scripts → the package.json scripts that belong INSIDE TEST_CMD, one per line, in the
@@ -6324,6 +6373,17 @@ cmd_preflight() {
         previous one, and the runner escalates phases that were in fact making progress."
   fi
 
+  # --- READ_EXTRA entries this machine does not have (ADR 0019 §2) ---
+  # load_config accepts a directory that does not exist — a plugin missing on another machine must not
+  # stop the line —, and the rule it becomes reads nothing: a phase that boots the skill is denied its
+  # references and says so in a DENIED line of a run already paid for. Named here, before any session;
+  # `warn`, never `_fail`, and an entry that exists is never named. Sensor: tests/check-preflight.sh.
+  local _rx_dir
+  while IFS= read -r _rx_dir; do
+    [ -d "$_rx_dir" ] \
+      || warn "READ_EXTRA names $_rx_dir, which does not exist on this machine — the phases cannot read it; install the skill or remove the entry"
+  done < <(read_extra_each)
+
   # --- authentication + the hat's shell ---
   # Sanity, permission and the hat in one shot. "claude -p answers" does NOT cover the failure
   # mode that matters: the phase session has to EXECUTE (run the suite, commit); `acceptEdits`
@@ -6584,8 +6644,24 @@ cmd_preflight() {
   for sk in "${wanted[@]}"; do
     case " $KIT_THIRD_PARTY_SKILLS " in *" $sk "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
   done
+  # A skill found is not a skill the phases can READ: its references live outside the repo, and the
+  # session gets only kit_read_rules' rules (ADR 0019 §2). The harness checks the path asked for AND
+  # the resolved one, so the directory found and its `readlink -f` must both be covered; a skill
+  # either misses is named with the entry to add (skill_read_entry). `warn`, never `_fail`, no
+  # session, and nothing granted — the permission still comes only from READ_EXTRA. The `||` after
+  # readlink has no probe: it never fails on a directory just found, and it decides only that a race
+  # costs a warning about that directory instead of killing preflight under `set -e`.
+  local sk_real sk_entry sk_via
   for sk in "${wanted[@]}"; do
-    skill_findable "$sk" || missing_skills="$missing_skills $sk"
+    if ! skill_findable "$sk"; then missing_skills="$missing_skills $sk"; continue; fi
+    sk_real="$(readlink -f -- "$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="$SKILL_FOUND_DIR"
+    if read_rules_cover "$SKILL_FOUND_DIR" && read_rules_cover "$sk_real"; then continue; fi
+    sk_entry="$(skill_read_entry "$SKILL_FOUND_DIR" "$skills_root")"
+    sk_via=""; [ "$sk_real" = "$SKILL_FOUND_DIR" ] || sk_via=" (a symlink to $sk_real)"
+    warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, and no read rule
+        of the sessions covers it — READ_EXTRA does not declare it, so every phase that loads it is
+        denied its references outside the repo (a DENIED line in the journal). In .sdd/config.sh:
+        READ_EXTRA entry to add: $sk_entry"
   done
   if [ -z "$missing_skills" ]; then
     ok "third-party skills present (${wanted[*]})"
