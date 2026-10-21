@@ -1018,7 +1018,12 @@ write: a `Write` in the same directory stayed denied. `--add-dir` is not used, b
 session write the kit too. The dry-run prints the rule in each phase's argv, and
 `tests/check-dry-run.sh` asserts it per block, along with the absence of `--add-dir`. `sdd close`
 does not go through `run_phase`, so it reads the same function by hand and hands the same lines to
-its session; `tests/check-gates.sh` asserts that argv the same way.
+its session; `tests/check-gates.sh` asserts that argv the same way. The templates' path is held to
+the grammar `READ_EXTRA` is held to (below): the harness reads the rule as a pattern, so a kit at
+`/opt/sdd*` would grant `/opt/sdd-secret/templates/**` too. A kit whose path the grammar refuses gets
+no templates rule in any session — closed, never widened —, and `sdd preflight` fails once, naming
+the path, with the remedy (move the kit to a literal path) and no probe session;
+`tests/check-preflight.sh` asserts the refusal, the probe's argv and the phases' projection.
 
 The **project** adds its own after the templates' rule (ADR 0019 §2): each entry of `READ_EXTRA`
 (`config/schema.md`), the directories of the skills its phases depend on, becomes the same
@@ -1032,9 +1037,12 @@ literal absolute directory, before any session; the kit itself grants nothing be
 it finds that no rule covers, naming the entry to add — or, when only the skill's symlink target is
 uncovered because the grammar refuses the target's name, naming that target and the remedy (move or
 rename it) instead, since no entry reaches it. A plugin skill is the copy whose `installPath` the
-harness's registry (`installed_plugins.json`) records, the first copy in the cache only when it
-records none, and a warning about a directory under the cache names that file, since the cache may
-hold more than one copy; `tests/check-preflight.sh` asserts each.
+harness's registry (`installed_plugins.json`) records under the plugin's own key
+(`<skill>@<marketplace>`, never another plugin that ships a skill of the same name), the first copy
+in the cache only when it records none, and a warning about a directory under the cache names that
+file, since the cache may hold more than one copy. The registry has one reader,
+`plugin_install_paths`, which `sdd health` shares for the grade table, so the two name one copy;
+`tests/check-preflight.sh` asserts each, and `tests/check-health.sh` the table's side.
 
 No argv assertion says whether the **harness** honours the rule, so `sdd preflight` asks (ADR 0019
 §3). Next to the `Bash` probe it opens a second session, isolated: `--setting-sources ""` (no
@@ -1042,7 +1050,8 @@ settings at all), cwd in a `mktemp -d`, the harness environment unset as `run_ph
 an `--allowedTools` that carries the lines of `kit_read_rules` and nothing else. `ALLOWED_TOOLS`
 stays off it: a broad `Read` there would read the template by itself and turn the probe green over
 an empty or broken rule, and a `kit_read_rules` that printed nothing fails by name, with no session.
-It asks for a `Read` of
+A kit whose path the grammar refuses never reaches the probe: it is named once, above, and there is
+no rule to measure. It asks for a `Read` of
 `$SDD_HOME/templates/handoff.md` and reads the stream, never the answer: the template in the result
 line's `permission_denials` (matched by path) fails the preflight, with the remedy; a `tool_result`
 without `is_error` for that `Read` is `ok`; a session that answered and never tried is a warning; and

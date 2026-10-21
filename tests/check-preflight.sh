@@ -522,11 +522,13 @@ assert_eq "the template probe carries only the kit read rules, never ALLOWED_TOO
 
 # With nothing but the rules on it, a kit_read_rules that printed NOTHING would leave --allowedTools
 # with no argument, and the harness would take the next flag for its value. No config reaches that
-# world — the templates' rule is printed unconditionally —, so it is built: a copy of the kit whose
-# kit_read_rules returns at once (agents/ linked, the coordination helper copied, bin/sdd a real
-# file because _resolve_self follows symlinks), proved sabotaged before anything is concluded. The
-# probe fails by name, both lines of its sentence, opens no session, and leaves no mktemp dir
-# (`tmp.*`) in the TMPDIR it was given — Node writes its compile cache there too, hence the name.
+# arm — the templates' rule is printed whenever the kit's path passes the grammar, and a kit whose
+# path does not is answered before it (the block after the next) —, so it is built: a copy of the
+# kit whose kit_read_rules returns at once (agents/ linked, the coordination helper copied, bin/sdd
+# a real file because _resolve_self follows symlinks), proved sabotaged before anything is
+# concluded. The probe fails by name, both lines of its sentence, opens no session, and leaves no
+# mktemp dir (`tmp.*`) in the TMPDIR it was given — Node writes its compile cache there too, hence
+# the name.
 TPL_NORULE="$(CDPATH='' cd -P "$FIX/.stub" && pwd)/kit-no-rule"
 mkdir -p "$TPL_NORULE/bin" "$TPL_NORULE/tmp"
 sed 's/^kit_read_rules() {$/kit_read_rules() { return 0/' "$SDD" > "$TPL_NORULE/bin/sdd"
@@ -623,6 +625,100 @@ r4_bashdead="fails=$(r4_n "$R4_BASHDEAD" "$o"),ok=$(r4_n "$TPL_OK" "$o"),warn=$(
 assert_eq "a template probe that emits no init and no result fails by name, and a dead CLI fails once" \
   "empty:named=1,flags=1,why=1,err=1,cut=0,second=0,ctl=0,others=0 garbage:unlinked=1,named=1,none=1,noise=0,others=0 dead:fails=1,warn=1,why=1,err=1,named=0 bash-dead:fails=1,ok=1,warn=0" \
   "empty:$r4_empty garbage:$r4_garbage dead:$r4_dead bash-dead:$r4_bashdead"
+
+# A kit whose path the grammar of the read rules refuses (Codex r3 #2 on PR #315). The harness reads
+# `Read(/<path>/**)` as a gitignore-style pattern, so a kit at `/opt/sdd*` would grant
+# `/opt/sdd-secret/templates/**` too, and the template probe stays green over it: it proves the
+# session reads, never that it reads only what it should. So the templates' path is held to the
+# grammar READ_EXTRA is held to (read_extra_dir_ok): refused, no session gets a rule naming the kit —
+# not the template probe, and not the phases, whose projection still carries every READ_EXTRA rule —,
+# and preflight fails ONCE, by name, with the remedy. The template probe is not opened, since there
+# is no rule to measure, so neither the sentence of a kit_read_rules that printed nothing nor the
+# probe's denial ("the harness refused them") speaks for a cause that is the path. Two worlds,
+# READ_EXTRA empty and with one entry, each against the real kit under the same stub and config:
+# exactly one fail line more. The copy is built like the one above (bin/sdd and the coordination
+# helper copied, agents/ linked), here unsabotaged, in a directory whose name carries a `*`; the stub
+# records the argv of EVERY call, and the projection is a `sdd run --dry-run` from that copy over a
+# mission of its own, its argv printed with `%q` and matched with the same escape.
+KP_KIT="$(CDPATH='' cd -P "$FIX/.stub" && pwd)/sdd*kit"
+KP_RX="$(CDPATH='' cd -P "$FIX/.stub" && pwd)/kp-rx"
+mkdir -p "$KP_KIT/bin" "$KP_KIT/tmp" "$KP_RX"
+cp "$SDD" "$ROOT/bin/sdd-coordination.py" "$KP_KIT/bin/"
+ln -s "$ROOT/agents" "$KP_KIT/agents"
+kp_stub() {
+  cat > "$FIX/.stub/claude" <<STUB
+#!/bin/sh
+iso=0; prev=""
+for a in "\$@"; do
+  if [ "\$prev" = "--setting-sources" ] && [ -z "\$a" ]; then iso=1; fi
+  prev="\$a"
+done
+for a in "\$@"; do printf '%s\n' "\$a" >> "$FIX/.stub/kp-argv"; done
+if [ "\$iso" = 1 ]; then
+  : > "$FIX/.stub/kp-iso"
+  cat "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/tpl-stream-read.jsonl"
+  exit 0
+fi
+cat "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/result-ok.jsonl"
+STUB
+  chmod +x "$FIX/.stub/claude"
+  rm -f "$FIX/.stub/kp-argv" "$FIX/.stub/kp-iso"
+}
+KP_NAMED="fail  the kit's templates are at $KP_KIT/templates, a path the grammar of the read rules refuses"
+KP_REMEDY="grant every directory it matches. Move the kit to a literal path."
+# The message's middle lines, one needle each, so a line that lost its words is named: `body=111`.
+KP_BODY1="kit_read_rules gives no session a rule for"
+KP_BODY2="so the phases will read the templates through Bash, work from memory, or stop"
+KP_BODY3="template probe is not opened — there is no rule to measure"
+KP_SKIP="template probe not opened: "
+# kp_world <sdd> <READ_EXTRA> → named,remedy,body,r3,denied,r4,skip,session,rule,scratch,refusal,
+# fails — this world's fail line, its remedy and middle lines, the three other sentences that could
+# speak for the cause, the probe's skip line, whether the template probe was opened, the rules
+# naming the kit in ANY call's argv, the mktemp dirs (`tmp.*`) left in the TMPDIR it was given, the
+# refusal's clause whatever kit it names (the real kit's runs must print none), and the count of
+# fail lines
+kp_world() {
+  local o session=0 rule=0
+  kp_stub
+  o="$( TMPDIR="$KP_KIT/tmp" READ_EXTRA="$2" "$1" preflight 2>&1 )"
+  [ ! -f "$FIX/.stub/kp-iso" ] || session=1
+  [ ! -f "$FIX/.stub/kp-argv" ] || rule="$(grep -cF -- "Read(/$KP_KIT" "$FIX/.stub/kp-argv")"
+  printf 'named=%s,remedy=%s,body=%s%s%s,r3=%s,denied=%s,r4=%s,skip=%s,session=%s,rule=%s,scratch=%s,refusal=%s,fails=%s' \
+    "$(grep -cF -- "$KP_NAMED" <<< "$o")" "$(grep -cF -- "$KP_REMEDY" <<< "$o")" \
+    "$(grep -cF -- "$KP_BODY1" <<< "$o")" "$(grep -cF -- "$KP_BODY2" <<< "$o")" "$(grep -cF -- "$KP_BODY3" <<< "$o")" \
+    "$(grep -cF -- "kit_read_rules printed no read rule" <<< "$o")" "$(grep -cF -- "$TPL_FAIL" <<< "$o")" \
+    "$(grep -cF -- "$R4_NAMED" <<< "$o")" "$(grep -cF -- "$KP_SKIP" <<< "$o")" "$session" "$rule" \
+    "$(find "$KP_KIT/tmp" -mindepth 1 -maxdepth 1 -name 'tmp.*' | wc -l)" \
+    "$(grep -cF -- ", a path the grammar of the read rules refuses" <<< "$o")" "$(grep -c '^  fail  ' <<< "$o")"
+}
+kp_fails() { sed 's/.*,fails=//' <<< "$1"; }
+kp_refusal() { sed 's/.*,refusal=\([0-9]*\),.*/\1/' <<< "$1"; }
+kp_empty="$(kp_world "$KP_KIT/bin/sdd" "")"
+kp_entry="$(kp_world "$KP_KIT/bin/sdd" "$KP_RX")"
+kp_ctl_empty="$(kp_world "$SDD" "")"
+kp_ctl_entry="$(kp_world "$SDD" "$KP_RX")"
+# The projection: a repo of its own (the fixture's tree stays as the later sections expect it), one
+# pending increment, and the dry-run's five blocks. The READ_EXTRA rule riding in every block is the
+# witness that the argv was read at all.
+KP_REPO="$FIX/.stub/kp-repo"
+mkdir -p "$KP_REPO/.sdd" "$KP_REPO/docs/handoffs/20260101-kitpath"
+( cd "$KP_REPO" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" ) >/dev/null 2>&1
+printf 'PROJECT_NAME="fixture"\nDEFAULT_BRANCH="main"\nTEST_CMD="true"\nE2E_CMD=""\nHANDOFF_DIR="docs/handoffs"\nQA_DOCS_PATH="docs/qa"\nJIRA_ENABLED=false\n' \
+  > "$KP_REPO/.sdd/config.sh"
+printf -- '---\nmissao: 20260101-kitpath\nbranch: main\naprovacao: auto\n---\n# Mission\n' \
+  > "$KP_REPO/docs/handoffs/20260101-kitpath/00-missao.md"
+: > "$KP_REPO/docs/handoffs/20260101-kitpath/01-plano.md"
+printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n|---|---|---|---|---|\n| I1 | slice | `true` → 0 | pending | — |\n' \
+  > "$KP_REPO/docs/handoffs/20260101-kitpath/checkpoint.md"
+( cd "$KP_REPO" && git add -A && git commit -qm "chore: fixture mission" ) >/dev/null 2>&1
+kp_proj="$( cd "$KP_REPO" && SDD_STATE_DIR="$FIX/.stub/kp-state" READ_EXTRA="$KP_RX" "$KP_KIT/bin/sdd" run 20260101-kitpath --dry-run 2>&1 )"
+kp_blocks="$(grep -c '^--- DRY RUN: phase ' <<< "$kp_proj")"
+kp_kitrule="$(grep -oF -- "$(printf '%q' "Read(/$KP_KIT")" <<< "$kp_proj" | wc -l)"
+kp_rxrule="$(grep -oF -- "$(printf '%q' "Read(/$KP_RX/**)")" <<< "$kp_proj" | wc -l)"
+assert_eq "a kit path the read-rule grammar refuses gets no template rule, and preflight names it" \
+  "empty:named=1,remedy=1,body=111,r3=0,denied=0,r4=0,skip=1,session=0,rule=0,scratch=0,refusal=1 entry:named=1,remedy=1,body=111,r3=0,denied=0,r4=0,skip=1,session=0,rule=0,scratch=0,refusal=1 more:1/1 ctl:refusal=0/0 projection:blocks=5,kit=0,rx=5" \
+  "empty:${kp_empty%,fails=*} entry:${kp_entry%,fails=*} more:$(( $(kp_fails "$kp_empty") - $(kp_fails "$kp_ctl_empty") ))/$(( $(kp_fails "$kp_entry") - $(kp_fails "$kp_ctl_entry") )) ctl:refusal=$(kp_refusal "$kp_ctl_empty")/$(kp_refusal "$kp_ctl_entry") projection:blocks=$kp_blocks,kit=$kp_kitrule,rx=$kp_rxrule"
 
 # Back to the dead stub every later section assumes ("claude and gh are stubbed to fail").
 printf '#!/bin/sh\nexit 1\n' > "$FIX/.stub/claude"
@@ -1288,6 +1384,33 @@ rx_where() { grep -cF "  warn  skill codereview is found in $2, and no read rule
 assert_eq "the copy installed_plugins.json records is the one held to the rules, and an unreadable registry falls back to the cache" \
   "bare:where=1|missing=0,warned=1,link=0,entry=$RX_SK8_CACHE/aa-mk/codereview decl:missing=0,warned=0,link=0,entry= bad:where=1|missing=0,warned=1,link=0,entry=$RX_SK9_ROOT/plugins/cache/mk/codereview same:same noise=0 odd:where=1" \
   "bare:where=$(rx_where "$out_sk8_bare" "$RX_SK8_CACHE/aa-mk/codereview/2.0.0/skills/codereview")|$(rx_skill "$out_sk8_bare") decl:$(rx_skill "$out_sk8_decl") bad:where=$(rx_where "$out_sk9_bad" "$RX_SK9_ROOT/plugins/cache/mk/codereview")|$(rx_skill "$out_sk9_bad") same:$(rx_same "$out_sk9_bad" "$out_sk8_bare") noise=$(grep -c 'jq: ' <<< "$out_sk9_bad") odd:where=$(rx_where "$out_sk10_odd" "$RX_SK10_COPY/skills/codereview")"
+
+# WHOSE copy: the codereview plugin's (Codex r3 #1 on PR #315). The REVIEW phase loads
+# `/codereview:codereview`, the skill of the plugin named codereview, so a registry entry counts only
+# under that plugin's own key, `codereview@<marketplace>` — the call health_provenance makes for the
+# grade table, through the same reader. Two worlds, each listing a user-scope plugin that ALSO holds
+# a `skills/codereview` before `codereview@mk`: OTHER is another plugin (`other@mk`), PREFIX one whose
+# name only starts with the same letters (`codereview-x@mk`), which a key prefix without its `@`
+# would take. In both the directory found, the warning and its entry are codereview@mk's, and
+# declared, that copy's parent covers it and nothing is said. `find` meets a plugin's own directory
+# before its versions, so a reader that fell back to the cache names `…/mk/<plugin>`, never the
+# copy's `…/2.0.0/skills/codereview`: the needle tells the registry from the fallback in any order.
+RX_SK11_ROOT="$RXF/sk11/.claude"
+RX_SK11_CACHE="$RX_SK11_ROOT/plugins/cache"
+mkdir -p "$RX_SK11_CACHE/mk/other/1.0.0/skills/codereview" "$RX_SK11_CACHE/mk/codereview/2.0.0/skills/codereview"
+printf '{"version":2,"plugins":{"other@mk":[{"scope":"user","installPath":"%s"}],"codereview@mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RX_SK11_CACHE/mk/other/1.0.0" "$RX_SK11_CACHE/mk/codereview/2.0.0" > "$RX_SK11_ROOT/plugins/installed_plugins.json"
+out_sk11_bare="$(rx_run "$RX_HOME" "$RX_SK11_ROOT" "")"
+out_sk11_decl="$(rx_run "$RX_HOME" "$RX_SK11_ROOT" "$RX_SK11_CACHE/mk/codereview")"
+RX_SK12_ROOT="$RXF/sk12/.claude"
+RX_SK12_CACHE="$RX_SK12_ROOT/plugins/cache"
+mkdir -p "$RX_SK12_CACHE/mk/codereview-x/1.0.0/skills/codereview" "$RX_SK12_CACHE/mk/codereview/2.0.0/skills/codereview"
+printf '{"version":2,"plugins":{"codereview-x@mk":[{"scope":"user","installPath":"%s"}],"codereview@mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RX_SK12_CACHE/mk/codereview-x/1.0.0" "$RX_SK12_CACHE/mk/codereview/2.0.0" > "$RX_SK12_ROOT/plugins/installed_plugins.json"
+out_sk12_bare="$(rx_run "$RX_HOME" "$RX_SK12_ROOT" "")"
+assert_eq "a plugin skill is looked up in the registry only under its own plugin key, never another plugin" \
+  "other:where=1|missing=0,warned=1,link=0,entry=$RX_SK11_CACHE/mk/codereview decl:missing=0,warned=0,link=0,entry= prefix:where=1|missing=0,warned=1,link=0,entry=$RX_SK12_CACHE/mk/codereview" \
+  "other:where=$(rx_where "$out_sk11_bare" "$RX_SK11_CACHE/mk/codereview/2.0.0/skills/codereview")|$(rx_skill "$out_sk11_bare") decl:$(rx_skill "$out_sk11_decl") prefix:where=$(rx_where "$out_sk12_bare" "$RX_SK12_CACHE/mk/codereview/2.0.0/skills/codereview")|$(rx_skill "$out_sk12_bare")"
 
 # --- is anything listening where APP_URL points? ----------------------------
 # preflight ran fifteen checks and never once touched APP_URL, so the one thing that costs a whole

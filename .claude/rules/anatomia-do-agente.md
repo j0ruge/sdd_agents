@@ -57,7 +57,14 @@ também a escrita no kit. A ADR nomeia três portas (`run_phase`, `cmd_close`, a
 sobre o argv da sessão de fechamento, com o `mut_RUN_close_templates_read_rule_dropped`; a da sonda
 dos templates do `sdd preflight` (§4) é o `tests/check-preflight.sh`, que lê o argv dessa sessão,
 com o `mut_PRE_template_probe_rule_dropped`, o `mut_PRE_template_probe_reads_settings` e o
-`mut_PRE_template_probe_allowlist_widened`.
+`mut_PRE_template_probe_allowlist_widened`. O caminho dos templates passa pela mesma gramática do
+`READ_EXTRA` (`read_extra_dir_ok`; r3 #2 do Codex no #315): o harness lê a regra como padrão, e um kit
+em `/opt/sdd*` daria leitura a `/opt/sdd-secret/templates/**`, com a sonda verde, porque ela prova que
+a sessão lê, não que lê só o que devia. O kit cujo caminho a gramática recusa não ganha regra dos
+templates em sessão nenhuma (falha fechada) e o `sdd preflight` reprova uma vez, nomeando o caminho,
+sem abrir a sonda; o probe é o `tests/check-preflight.sh`, sobre uma cópia do kit num diretório com
+`*` (o argv das sondas e a projeção das fases), com o `mut_RUN_kit_path_unchecked`, o
+`mut_PRE_kit_path_unnamed` e o `mut_PRE_kit_path_probe_opened`.
 Depois da regra dos templates vêm as do **projeto** (ADR 0019 §2): a chave `READ_EXTRA`, de default
 vazio, declara os diretórios das skills de que as fases dependem, escritos com `$HOME` no
 `.sdd/config.sh` rastreado; cada entrada vira a mesma regra só de leitura, e a entrada que é symlink
@@ -73,8 +80,11 @@ diretório achado e o alvo do `readlink -f` dele, julgados pelas próprias linha
 escrito `$HOME/…`); quando o diretório achado está coberto e só o alvo não, porque a gramática recusa
 o nome do alvo, o aviso nomeia o alvo e o remédio (mover ou renomear), sem entrada a declarar, já que
 nenhuma o alcança; skill de plugin é a cópia cujo `installPath` o registro do harness
-(`installed_plugins.json`) grava, e o aviso sobre diretório sob o cache nomeia esse arquivo, porque o
-cache pode ter mais de uma cópia; o probe é o `tests/check-preflight.sh`, com nove mutantes `mut_PRE_*`.
+(`installed_plugins.json`) grava sob a chave do próprio plugin (`<skill>@<marketplace>`; outro plugin
+que traz um `skills/<skill>` não conta, r3 #1 do Codex no #315), lida por `plugin_install_paths`, o
+leitor que o `sdd health` divide com ele para a tabela de notas, e o aviso sobre diretório sob o cache
+nomeia esse arquivo, porque o cache pode ter mais de uma cópia; o probe é o
+`tests/check-preflight.sh`, com onze mutantes `mut_PRE_*`, e o `tests/check-health.sh` do lado da tabela.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`
@@ -176,7 +186,8 @@ Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §3) o `sdd preflight`
 sessão, a sonda dos templates: `--setting-sources ""`, cwd num `mktemp -d`, o env do harness limpo,
 um `--allowedTools` só com as linhas do `kit_read_rules` — nunca o `ALLOWED_TOOLS`, onde um `Read`
 largo leria o template sozinho e deixaria a sonda verde sobre uma regra vazia ou quebrada (P3 do
-Codex no #315); `kit_read_rules` sem linha nenhuma é `_fail` sem sessão —, pedindo o `Read` de
+Codex no #315); `kit_read_rules` sem linha nenhuma é `_fail` sem sessão, e o kit cujo caminho a
+gramática recusa nem chega a ela: é nomeado uma vez, antes, sem sessão —, pedindo o `Read` de
 `$SDD_HOME/templates/handoff.md`. O veredito lê o artefato do stream, nunca a resposta, e é
 exaustivo (a cadeia termina num `else`): o template no `permission_denials` (casado pelo caminho) é
 `_fail`; um `tool_result` sem `is_error` para o `Read` dele é `ok`; respondeu sem tentar o `Read` é
@@ -305,7 +316,10 @@ O `READ_EXTRA` também **alarga** permissão, só de leitura: o valor vira regra
 padrão de gitignore, então a guarda é literal-only e escrita positivamente, e a passada de
 sabotagem foi feita antes do commit (notas da missão). O runner resolve só a entrada declarada:
 um symlink **abaixo** dela continua negado, e o alvo resolvido cujo nome não é literal não ganha
-regra — os dois saem como `DENIED` no journal.
+regra — os dois saem como `DENIED` no journal. O mesmo vale para o próprio kit: instalado num
+caminho que a gramática recusa (espaço, glob, `+`), ele não ganha a regra dos templates, as fases
+leem `DENIED` e o `sdd preflight` reprova nomeando o caminho; o `load_config` não o recusa, porque
+mataria todo comando do kit por uma leitura que só custa os templates.
 A gramática segura o nome, não o alcance: uma entrada igual a `$HOME`, ou um symlink cujo alvo é a
 home, passa e vira `Read(//home/<usuário>/**)`, e toda fase lê a home inteira — só leitura, e a
 fase já tem `Bash`, então é higiene, não fronteira. O `readlink -f` roda na montagem do argv, uma

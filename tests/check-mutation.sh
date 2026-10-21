@@ -2646,6 +2646,34 @@ mut_PRE_skill_cache_registry_unnamed() {
 mut_PRE_skill_registry_ignored() {
   sed -i '/^skill_findable() {/,/^}/ s#^    \[ -d "\$p/skills/\$name" \] || continue$#    continue#' "$1"
 }
+# Codex r3 #1 on PR #315: the registry counts only under the key of the plugin named after the skill
+# (plugin_install_paths, the reader skill_findable and health_provenance share). REGISTRY_ANY_PLUGIN:
+# the key filter comes off, and the first user-scope install of ANY plugin that ships a
+# `skills/<name>` is the copy held to the rules — caught by "a plugin skill is looked up in the
+# registry only under its own plugin key, never another plugin" (check-preflight.sh), `other:where=0`.
+# REGISTRY_PREFIX_UNBOUNDED: the prefix loses its `@`, and `codereview-x@mk` reads as codereview's —
+# the same assertion, `prefix:where=0` alone. The grade table's world in check-health.sh lists one
+# plugin only, so neither moves it; the preflight's worlds are the ones that list two.
+mut_PRE_registry_any_plugin() {
+  sed -i '/^plugin_install_paths() {/,/^}/ s#to_entries\[\] | select(.key | startswith($k)) | .value\[\]?#to_entries[] | .value[]?#' "$1"
+}
+mut_PRE_registry_prefix_unbounded() {
+  sed -i '/^plugin_install_paths() {/,/^}/ s#--arg k "\${2:-}@"#--arg k "${2:-}"#' "$1"
+}
+# Codex r3 #2 on PR #315, the preflight's half: a kit whose path the grammar of the read rules refuses
+# is named once and the template probe is not opened. KIT_PATH_UNNAMED: the refusal never fires —
+# with READ_EXTRA empty the probe's own arm for an empty rule list speaks for the cause with the
+# wrong reason, with entries the probe opens over the READ_EXTRA rules alone; caught by "a kit path
+# the read-rule grammar refuses gets no template rule, and preflight names it" (check-preflight.sh),
+# `empty:named=0,…,r3=1`. KIT_PATH_PROBE_OPENED: the refusal is named but the probe's chain forgets
+# it, and lands on the scratch arm, whose warning says the rule was not measured for a reason that is
+# not this one — the same assertion, `skip=0`.
+mut_PRE_kit_path_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^  if ! read_extra_dir_ok "\$SDD_HOME/templates"; then$#  if false; then#' "$1"
+}
+mut_PRE_kit_path_probe_opened() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^    if \[ -n "\$kit_tpl_refused" \]; then$#    if false; then#' "$1"
+}
 
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
 # session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
@@ -2911,6 +2939,15 @@ mut_RUN_read_extra_symlink_unresolved() {
 # harness reads as a bracket expression. Caught by the same assertion: a rule for `odd[1]` appears.
 mut_RUN_read_extra_target_unchecked() {
   sed -i '/^kit_read_rules() {/,/^}/ s| [&][&] read_extra_dir_ok "\$real"; then$|; then|' "$1"
+}
+
+# Codex r3 #2 on PR #315: the templates' own path is emitted unchecked again, so a kit under
+# `/opt/sdd*` grants `/opt/sdd-secret/templates/**` to every session. Caught by "a kit path the
+# read-rule grammar refuses gets no template rule, and preflight names it" (check-preflight.sh),
+# `projection:…kit=5` alone: the preflight's refusal reads the grammar on its own and still skips the
+# probe, so only the phases' projection shows the rule — which is why the assertion reads it.
+mut_RUN_kit_path_unchecked() {
+  sed -i '/^kit_read_rules() {/,/^}/ { /^    read_extra_dir_ok "\$dir" || continue$/d }' "$1"
 }
 
 # The guard of READ_EXTRA, one mutant per refusal class — the key WIDENS a permission, so a refusal
@@ -6684,6 +6721,10 @@ CATALOG=(
   PRE_skill_target_refused_undeclared
   PRE_skill_cache_registry_unnamed
   PRE_skill_registry_ignored
+  PRE_registry_any_plugin
+  PRE_registry_prefix_unbounded
+  PRE_kit_path_unnamed
+  PRE_kit_path_probe_opened
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA
@@ -6714,6 +6755,7 @@ CATALOG=(
   RUN_read_extra_ignored
   RUN_read_extra_symlink_unresolved
   RUN_read_extra_target_unchecked
+  RUN_kit_path_unchecked
   RUN_read_extra_relative_accepted
   RUN_read_extra_dotdot_accepted
   RUN_read_extra_metachar_accepted

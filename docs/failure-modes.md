@@ -87,15 +87,20 @@ line, so `tail -F` shows it without opening the session's `.json`.
   (the ledger's session rows carry `harness:`). A `Read` in `ALLOWED_TOOLS` does not turn it green:
   the probe never carries that key. A probe that fails with "got no init line and no result line"
   never measured the rule: the CLI refused one of the probe's flags, and the first line of its
-  stderr, printed in the failure, names which one.
+  stderr, printed in the failure, names which one. A failure that says "the kit's templates are at
+  … a path the grammar of the read rules refuses" means the kit lives under a path with a space, a
+  glob character or anything but letters, digits, `.`, `_` and `-` in a component: no session gets
+  the templates' rule there, since a glob would widen it, and the probe is not opened. Move the kit
+  to a literal path.
 - **a skill's references denied:** declare the skill's directory in the target's `READ_EXTRA`,
   absolute and separated by spaces, written with `$HOME` (`config/schema.md`). The runner adds the
   rule of a symlinked entry's resolved target too; declare the skill's own directory (for a
   plugin, the parent without the version), never a parent above a symlink. `sdd preflight` names,
   before any run, each skill it finds that no entry covers, with the entry to add, and each entry
-  this machine does not have. For a plugin it holds the copy the registry records
-  (`~/.claude/plugins/installed_plugins.json`), and a warning about a directory under the plugin
-  cache names that file: the cache may hold more than one copy. A declared skill whose symlink
+  this machine does not have. For a plugin it holds the copy the registry records under the
+  plugin's own key (`~/.claude/plugins/installed_plugins.json`, `codereview@<marketplace>` for the
+  REVIEW's skill; another plugin that ships a `skills/codereview` does not count), and a warning
+  about a directory under the plugin cache names that file: the cache may hold more than one copy. A declared skill whose symlink
   target has a name the grammar refuses (anything but letters, digits, `.`, `_` and `-`) is named
   as such, with no entry to add: no entry reaches that target, so move or rename it.
 - **a denial under `/tmp`:** the session's own scratch, not something the boot named. Nothing to do.

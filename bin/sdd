@@ -5301,18 +5301,24 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
 # which `sdd preflight` names beforehand, with no entry to add, when a skill it finds resolves there.
 # The resolved branch is measured through a symlinked READ_EXTRA entry (check-dry-run.sh); no
 # fixture symlinks templates/, since SDD_HOME is physical (`cd -P`), and both go through this loop.
-# The templates' own path is NOT held to the grammar: a SDD_HOME with a space or a metacharacter
-# enters the rule as it is, and the preflight's isolated probe is what says whether it reads.
+# The templates' own path is held to the same grammar (Codex r3 #2 on PR #315): the harness reads the
+# rule as a pattern, so a kit at `/opt/sdd*` would grant `/opt/sdd-secret/templates/**` too, and the
+# preflight's isolated probe stays green over it — it proves the session reads, never that it reads
+# only what it should. A path the grammar refuses gets NO rule, its resolved target none either
+# (the harness wants both, so the target's alone reads nothing), and the READ_EXTRA rules still
+# follow: closed, never widened. `sdd preflight` names that path, with the remedy, and does not open
+# the template probe. For a READ_EXTRA entry the check never fires — load_config refused it by name.
 #
 # It only PRINTS, and is read by substitution (`mapfile -t … < <(kit_read_rules)`): no `die`, no
 # global — either would be lost in the subshell. Validation of anything it reads lives in load_config.
 # Sensors (tests/): check-dry-run.sh (phases, READ_EXTRA), check-gates.sh (sdd close, the READ_EXTRA
-# guard), check-preflight.sh (probe).
+# guard), check-preflight.sh (probe; a kit path the grammar refuses, in the probe and the projection).
 kit_read_rules() {
   local dir real=""
   local -a dirs=("$SDD_HOME/templates")
   mapfile -t -O 1 dirs < <(read_extra_each)
   for dir in "${dirs[@]}"; do
+    read_extra_dir_ok "$dir" || continue
     printf 'Read(/%s/**)\n' "$dir"
     real="$(readlink -f -- "$dir" 2>/dev/null)" || real=""
     # An empty `real` — readlink failed, which `-f` does when a parent of the entry is missing — is
@@ -5642,6 +5648,23 @@ state_fingerprint() {
     "$( cat "$MISSION_DIR/checkpoint.md" 2>/dev/null | md5sum 2>/dev/null | cut -d' ' -f1 )"
 }
 
+# plugin_install_paths <registry> <plugin> → the installPath of every `user`-scope install of
+# <plugin> that <registry> records, one per line, in file order. The registry is Claude Code's
+# `installed_plugins.json`, whose keys are `<plugin>@<marketplace>`: the prefix carries the `@`, so
+# `codereview-x@mk` is another plugin, and so is any plugin that merely ships a skill by the same
+# name — the REVIEW phase loads `/codereview:codereview`, the skill OF the codereview plugin, and
+# another plugin's tree is a copy no session of it loads (Codex r3 #1 on PR #315). Only `user` scope:
+# a `project`-scope pin loads another version in one repo, and which repo is not this reader's to
+# decide. ONE definition, two readers that must agree on which copy is "the installed one":
+# skill_findable (the copy the preflight holds to the read rules) and health_provenance (the copy
+# the grade table is compared against). No registry, an unreadable one, or no jq prints nothing,
+# with jq's complaint kept here; a value jq cannot iterate is skipped, and an install with no path
+# is never a path. Its rc is jq's, and both readers take it where `set -e` cannot see it: a process
+# substitution, and a capture guarded with `|| true`. Sensors: check-preflight.sh, check-health.sh.
+plugin_install_paths() {
+  jq -r --arg k "${2:-}@" '.plugins | to_entries[] | select(.key | startswith($k)) | .value[]? | select(.scope == "user") | .installPath // empty' "${1:-}" 2>/dev/null
+}
+
 # skill_findable <name> → 0 when a skill by that name can be found where skills live.
 #
 # Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
@@ -5676,15 +5699,16 @@ skill_findable() {
   # back the first in DIRECTORY order: with two marketplaces side by side, the warning named a copy
   # no session loads and asked to declare it, with the right one declared. The harness's registry,
   # `<root>/plugins/installed_plugins.json`, records the installPath of each install; the copy is the
-  # first `user`-scope one, in file order, that holds `skills/<name>`. Only `user` scope, the call
-  # health_provenance makes for the grade table: a `project`-scope pin loads another version in one
-  # repo. No registry, an unreadable one, or no jq reads as no registry — jq's rc and stderr stay in
-  # the process substitution, so nothing fails and `set -e` kills nothing —, and one that jq stops
-  # reading where it breaks hands over what came before the break.
+  # first one plugin_install_paths hands back that holds `skills/<name>` — `user` scope, and only
+  # under the key of the plugin named after the skill (Codex r3 #1 on PR #315): another plugin listed
+  # first that also ships a `skills/<name>` is not the copy the phase loads. health_provenance reads
+  # the registry through the same function, so the preflight and the grade table name one copy. No
+  # registry, an unreadable one, no jq, or no key of the plugin reads as no registry: nothing is
+  # handed back, nothing fails, and `set -e` kills nothing.
   while IFS= read -r p; do
     [ -d "$p/skills/$name" ] || continue
     SKILL_FOUND_DIR="$p/skills/$name"; return 0
-  done < <(jq -r '.plugins[][] | select(.scope == "user") | .installPath' "$root/plugins/installed_plugins.json" 2>/dev/null)
+  done < <(plugin_install_paths "$root/plugins/installed_plugins.json" "$name")
   # With no copy recorded, the cache is walked. `-quit` on the first hit: the cache holds every
   # version of every plugin. `find` walks a parent before its children, so a plugin named after its
   # skill is met at its own directory, above every version. `|| true` because `find` on a missing
@@ -6402,6 +6426,28 @@ cmd_preflight() {
       || warn "READ_EXTRA names $_rx_dir, which does not exist on this machine — the phases cannot read it; install the skill or remove the entry"
   done < <(read_extra_each)
 
+  # --- the kit's own path, against the grammar of the read rules (ADR 0019 §1) ---
+  # kit_read_rules holds $SDD_HOME/templates to read_extra_dir_ok, the grammar READ_EXTRA is held to
+  # (Codex r3 #2 on PR #315): the harness reads a rule as a pattern, so a glob character in the kit's
+  # path would grant every directory it matches. A refused path gets no rule at all, in every session
+  # the runner opens — the phases are denied the templates the boot names. Named here, ONCE, before
+  # any session and whether or not claude is installed, since the cause is the path. The template
+  # probe below is then not opened: there is no rule to measure, and opening it would add a second
+  # failure for the same cause with the wrong reason — "kit_read_rules printed no read rule" with
+  # READ_EXTRA empty, "the harness refused them" with entries. The same predicate on the same path
+  # as the rule's own: the sensor asks both in one world (no rule naming the kit in the probe's argv
+  # nor in the phases' projection, and this line printed), so a drift between them is red there.
+  # Sensor: tests/check-preflight.sh.
+  local kit_tpl_refused=""
+  if ! read_extra_dir_ok "$SDD_HOME/templates"; then
+    kit_tpl_refused=1
+    _fail "the kit's templates are at $SDD_HOME/templates, a path the grammar of the read rules refuses
+        (every component letters, digits, \`.\`, \`_\` and \`-\`): kit_read_rules gives no session a rule for
+        it, so the phases will read the templates through Bash, work from memory, or stop, and the
+        template probe is not opened — there is no rule to measure. A glob character in the rule would
+        grant every directory it matches. Move the kit to a literal path. See kit_read_rules and ADR 0019 §1."
+  fi
+
   # --- authentication + the hat's shell ---
   # Sanity, permission and the hat in one shot. "claude -p answers" does NOT cover the failure
   # mode that matters: the phase session has to EXECUTE (run the suite, commit); `acceptEdits`
@@ -6482,11 +6528,14 @@ cmd_preflight() {
     # Bash probe above keeps it, since the phase's flags are what that one proves. With nothing else
     # on it, the rules cannot be absent — an --allowedTools with no argument takes the next flag for
     # its value —, so a kit_read_rules that printed nothing fails by name and opens no session. No
-    # config reaches that branch, since the templates' rule is printed unconditionally; the sensor
-    # builds it on a sabotaged copy of the kit. The verdict reads the stream's artifacts, never the
-    # answer, and it is EXHAUSTIVE — the chain ends in an `else`, so every stream lands in exactly one
-    # of four arms: (1) the template named in the result line's permission_denials (matched by path,
-    # never by tool_use_id) is a refusal, `_fail`; (2) a Read of that path whose tool_result carries
+    # config reaches that branch: the templates' rule is printed whenever the kit's path passes the
+    # grammar, and a kit whose path does not is answered by the arm before it — named once, above,
+    # and no session opened, since there is no rule to measure (Codex r3 #2 on PR #315). The sensor
+    # builds the empty world on a sabotaged copy of the kit. The verdict reads the stream's
+    # artifacts, never the answer, and it is EXHAUSTIVE — the chain ends in an `else`, so every
+    # stream lands in exactly one of four arms: (1) the template named in the result line's
+    # permission_denials (matched by path, never by tool_use_id) is a refusal, `_fail`; (2) a Read
+    # of that path whose tool_result carries
     # no is_error is the rule working, `ok`; (3) an init or a result line with neither of those is a
     # session that never tried the Read, `warn`, because not measured is not zero; (4) no init line
     # and no result line jq can read — an empty stream, or one that is not JSON lines — is a CLI that
@@ -6508,8 +6557,10 @@ cmd_preflight() {
     local tpl_path="$SDD_HOME/templates/handoff.md" tpl_dir="" tpl_stream="" tpl_err=""
     local -a tpl_rules=()
     mapfile -t tpl_rules < <(kit_read_rules)
-    tpl_dir="$(mktemp -d 2>/dev/null)" || tpl_dir=""
-    if [ -z "$tpl_dir" ]; then
+    [ -n "$kit_tpl_refused" ] || tpl_dir="$(mktemp -d 2>/dev/null)" || tpl_dir=""
+    if [ -n "$kit_tpl_refused" ]; then
+      dim "  ---  template probe not opened: the kit's path is refused above, so no session carries a rule to measure"
+    elif [ -z "$tpl_dir" ]; then
       warn "could not create a scratch directory for the template probe — the kit's read rule was not measured"
     elif [ "${#tpl_rules[@]}" -eq 0 ]; then
       rm -rf -- "$tpl_dir" 2>/dev/null || true
@@ -7500,10 +7551,15 @@ health_provenance() {
   # read — a `project`-scope pin (the registry has them, with `projectPath`) loads another version
   # in one repo, and which repo this health speaks for is not this function's to decide; and the
   # fallback below, for a machine with no registry or no jq, still orders the WHOLE path with
-  # `sort -V`, so a marketplace's name outranks a version there.
+  # `sort -V`, so a marketplace's name outranks a version there. The registry is read through
+  # plugin_install_paths, the reader skill_findable uses for the preflight (Codex r3 #1 on PR #315):
+  # the first `user`-scope install under a `codereview@` key, so the copy the grade table is
+  # compared against and the copy the preflight holds to the read rules are one copy. `head -n 1`
+  # is the `first` this line used to ask jq for, and the `|| true` keeps jq's rc — an unreadable
+  # registry, or a SIGPIPE from `head` — out of set -e under pipefail.
   local reg="$HOME/.claude/plugins/installed_plugins.json" pinned=""
   if [ -f "$reg" ] && command -v jq >/dev/null 2>&1; then
-    pinned="$(jq -r '[(.plugins // {}) | to_entries[] | select(.key | startswith("codereview@")) | .value[]? | select(.scope == "user") | .installPath // empty] | first // empty' "$reg" 2>/dev/null || true)"
+    pinned="$(plugin_install_paths "$reg" codereview | head -n 1 || true)"
   fi
   #
   # The fallback: `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after

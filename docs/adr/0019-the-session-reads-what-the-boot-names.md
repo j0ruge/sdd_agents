@@ -63,6 +63,19 @@ probe hands the lines with nothing before them (§3); and no door copies the rul
 shape is the measured one: the rule as an argument of its own, two slashes in its literal
 spelling. Three slashes were never measured.
 
+The templates' own path is held to the grammar of §2 (`read_extra_dir_ok`; the Codex r3 #2 on PR
+#315, decided by the human). The harness reads the rule as a pattern, so a kit at `/opt/sdd*` would
+grant `/opt/sdd-secret/templates/**` as well, and the isolated probe of §3 stays green over it: it
+proves that the session reads, never that it reads only what it should. A path the grammar refuses
+gets no rule, and neither does its resolved target, since the harness wants both and the target's
+alone reads nothing. The project's rules still follow: the read fails closed and is never widened.
+`sdd preflight` fails once, naming the path and the grammar, saying that the phases will not read
+the templates, and telling the operator to move the kit to a literal path. It does not open the
+probe of §3, because there is no rule to measure: a probe over the project's rules alone, or over
+no rule, would fail a second time for the same cause and give the wrong reason. `load_config` does
+not refuse that path. Refusing would kill every kit command, and the missing read costs the phases
+only the templates.
+
 ### §2 — The project declares the skill directories in `READ_EXTRA`
 
 `READ_EXTRA` is a config key, empty by default, validated in `load_config` and never at the point
@@ -83,8 +96,14 @@ another machine must not stop the line. The kit grants nothing beyond its own te
 target declares its skills. `sdd preflight` names, with no session and never as a failure, each
 skill it finds that no rule covers, with the entry to add (for a plugin, the parent without the
 version; the copy it holds to the rules is the `installPath` that `installed_plugins.json`
-records, and the first copy in the cache only when it records none), and a declared skill whose
-symlink target the grammar refuses, with no entry to add, since no entry reaches that target.
+records under the plugin's own key, and the first copy in the cache only when it records none), and
+a declared skill whose symlink target the grammar refuses, with no entry to add, since no entry
+reaches that target. The plugin's own key is `<plugin>@<marketplace>`, with the plugin named after
+the skill: the REVIEW phase loads `/codereview:codereview`, and another plugin listed first that
+also ships a `skills/codereview`, or one whose name only starts with the same letters, is a copy no
+session of it loads (the Codex r3 #1 on PR #315, decided by the human). `plugin_install_paths` is
+the one reader of the registry, shared with `sdd health`, which compares the grade table against
+the same copy.
 
 ### §3 — The preflight proves the kit's rule in a session of its own, with no settings
 
@@ -122,7 +141,9 @@ project key, and a broad `Read` in it reads the template on its own, so the prob
 over a rule that is empty or that the harness no longer honours; the question is whether the kit's
 rule reads, not whether this target's phases do. With nothing else on the flag the rules cannot be
 absent, since an `--allowedTools` with no argument takes the next flag for its value: a
-`kit_read_rules` that printed nothing fails by name, before any session.
+`kit_read_rules` that printed nothing fails by name, before any session. No configuration reaches
+that arm. A kit whose path the grammar refuses is answered before it: named once, with no session
+(§1).
 
 `tests/check-preflight.sh` holds the verdict with a stub pair that differs in one thing, and holds
 the argv separately: the session carries an empty `--setting-sources` and, as its whole
@@ -151,6 +172,18 @@ dead.
   Granting a permission from that convention, plus the plugin cache's internal layout (the
   marketplace, a plugin name that is not the skill's, the versions), was the most fragile of the
   options.
+- **§1: let a non-literal `$SDD_HOME` into the rule and leave it to the probe**, as first written.
+  No kit is denied its templates, but a glob in the path widens the rule to every directory it
+  matches, and the probe is green over the widening.
+- **§1: escape the metacharacters of `$SDD_HOME` in the rule.** The kit would keep its templates
+  wherever it lives, but the escape syntax of the harness's pattern was never measured, and a wrong
+  escape fails open.
+- **§1: refuse the path in `load_config`.** The refusal would be loud, and it would also kill every
+  kit command, `sdd status` and `sdd preflight` included, over a read that costs only the templates.
+- **§2: read the registry by skill, under any plugin's key**, as the preflight first did. One jq
+  filter fewer, but a plugin listed before codereview that ships its own `skills/codereview` is
+  the copy held to the rules while the REVIEW phase loads the other one, and `sdd health` already
+  read only the `codereview@` keys, so the two disagreed about which copy is installed.
 - **§2: leave the skills to the human's settings and only measure.** No key and no validation, but
   the symlink trap stays with whoever writes the setting by hand, and a new machine meets the
   blocked TICKET again.
@@ -196,9 +229,12 @@ dead.
   does not, and its probe is red anyway, because the probe measures the kit's rule. The
   single-argument form (`--allowedTools "Bash Read(…)"`) was not measured. A symlink below a declared directory, as
   opposed to the directory itself, is not resolved. An `$SDD_HOME` that is not a literal path (a
-  glob character, a space) goes into the rule as it is: that spelling was not measured, and the
-  isolated probe of §3 is what says whether the harness reads it. `load_config` does not refuse it,
-  because refusing would kill every kit command on a machine that works today without the read.
+  glob character, a space, a `+`) gets no rule (§1), and its phases are denied the templates, which
+  `sdd preflight` says by name. This line used to say that such a path entered the rule as it was
+  and that the isolated probe of §3 would tell whether the harness read it. The probe cannot tell:
+  it proves that the session reads, and a glob that widens the rule reads too (the Codex r3 #2 on PR
+  #315). The suite runs from the checkout it lives in, so a checkout under such a path turns the
+  assertions that expect the templates' rule red there.
 - Declared limits of the reach and of the probe. The grammar holds the name, not the reach: an
   entry equal to `$HOME`, or a symlink whose target is the home, passes it and becomes
   `Read(//home/<user>/**)` (`/home` itself becomes `Read(//home/**)`), so every phase may read the
