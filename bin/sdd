@@ -5277,8 +5277,10 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
   -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT)
 
 # kit_read_rules — the read-only permission rules every session the runner opens receives, one per
-# line (ADR 0019 §1). ONE definition: each door that assembles a `claude -p` appends every line as
-# one more argument of `--allowedTools`, right after "$ALLOWED_TOOLS", and no door copies a rule.
+# line (ADR 0019 §1). ONE definition: each door that assembles a `claude -p` hands every line as one
+# more argument of `--allowedTools` — right after "$ALLOWED_TOOLS" in run_phase and cmd_close, and
+# with nothing before it in the preflight's isolated probe, which asks whether these rules read on
+# their own (§3) —, and no door copies a rule.
 # The boot prompt orders every phase to start from $SDD_HOME/templates/ (boot_prompt, item 6), and
 # under `acceptEdits --allowedTools Bash` the harness DENIES a Read outside the target repo; the
 # session then reads it through Bash, works from memory, or stops — all three seen in the window
@@ -6472,8 +6474,15 @@ cmd_preflight() {
     # `additionalDirectories` or a `Read(*)` there reads the template with no rule at all (measured in
     # 2.1.304, ADR 0019) — on the operator's machine it would be green over a rule that does nothing,
     # and a target's machine is not the operator's. So a SECOND session, isolated: `--setting-sources
-    # ""` loads no settings, cwd in a scratch dir, the harness env unset as run_phase unsets it, the
-    # phase flags plus the lines of kit_read_rules and nothing else. The verdict reads the stream's
+    # ""` loads no settings, cwd in a scratch dir, the harness env unset as run_phase unsets it, and an
+    # --allowedTools that carries the lines of kit_read_rules and NOTHING else. Never "$ALLOWED_TOOLS":
+    # it is a project key, and a broad `Read` there reads the template by itself, so the probe would
+    # print that the kit's rule works over a rule that was empty or broken (Codex P3 on PR #315); the
+    # Bash probe above keeps it, since the phase's flags are what that one proves. With nothing else
+    # on it, the rules cannot be absent — an --allowedTools with no argument takes the next flag for
+    # its value —, so a kit_read_rules that printed nothing fails by name and opens no session. No
+    # config reaches that branch, since the templates' rule is printed unconditionally; the sensor
+    # builds it on a sabotaged copy of the kit. The verdict reads the stream's
     # artifacts, never the answer: the template named in the result line's permission_denials (matched
     # by path, never by tool_use_id) is a refusal; a Read of that path whose tool_result carries no
     # is_error is the rule working; no init and no result line is the Bash probe's "did not answer",
@@ -6487,22 +6496,26 @@ cmd_preflight() {
     tpl_dir="$(mktemp -d 2>/dev/null)" || tpl_dir=""
     if [ -z "$tpl_dir" ]; then
       warn "could not create a scratch directory for the template probe — the kit's read rule was not measured"
+    elif [ "${#tpl_rules[@]}" -eq 0 ]; then
+      rm -rf -- "$tpl_dir" 2>/dev/null || true
+      _fail "kit_read_rules printed no read rule, so the template probe was not opened — every session
+        the runner opens gets no rule for $SDD_HOME/templates/. See kit_read_rules and ADR 0019 §3."
     else
       tpl_stream="$( cd "$tpl_dir" && env "${HARNESS_ENV_UNSET[@]}" claude -p "Use the Read tool (never Bash) to read $tpl_path and reply with ONLY its first line. If the Read is refused, reply DENIED and try nothing else." \
           --model haiku --permission-mode "$PERMISSION_MODE" --output-format stream-json --verbose \
-          --setting-sources "" --allowedTools "$ALLOWED_TOOLS" ${tpl_rules[@]+"${tpl_rules[@]}"} \
+          --setting-sources "" --allowedTools "${tpl_rules[@]}" \
           --strict-mcp-config --max-budget-usd 1 </dev/null 2>/dev/null || true )"
       rm -rf -- "$tpl_dir" 2>/dev/null || true
       if jq -se --arg p "$tpl_path" '[ .[] | select(.type == "result") | .permission_denials[]? | select(.tool_input.file_path == $p) ] | length > 0' <<< "$tpl_stream" >/dev/null 2>&1; then
-        _fail "a session with NO settings, under the flags the runner gives every phase, was DENIED reading
+        _fail "a session with NO settings and the kit read rules alone on its --allowedTools was DENIED reading
         $tpl_path — the phases will read the templates through Bash, work from memory, or stop.
-        The kit's read rule was on its --allowedTools: ${tpl_rules[*]:-(none)}
-        and the harness refused it, so its rule syntax may have changed (the ledger's session rows carry
+        The kit's read rules were all its --allowedTools carried: ${tpl_rules[*]}
+        and the harness refused them, so their syntax may have changed (the ledger's session rows carry
         harness:). See kit_read_rules and ADR 0019. This machine's settings do not count here: a
         target's may not carry them."
       elif jq -se --arg p "$tpl_path" '[ .[] | select(.type == "assistant") | .message.content[]? | select(.type == "tool_use" and .name == "Read" and .input.file_path == $p) | .id ] as $ids
           | [ .[] | select(.type == "user") | .message.content[]? | select(.type == "tool_result" and .is_error != true and (.tool_use_id as $t | $ids | index($t)) != null) ] | length > 0' <<< "$tpl_stream" >/dev/null 2>&1; then
-        ok "a session with no settings reads the kit templates under the phase flags (the kit's read rule works)"
+        ok "a session with no settings and the kit read rules alone on its --allowedTools reads the kit templates"
       elif jq -se '[ .[] | select(.type == "result" or (.type == "system" and .subtype == "init")) ] | length > 0' <<< "$tpl_stream" >/dev/null 2>&1; then
         warn "the template probe answered without trying to Read $tpl_path — the kit's read rule was not
         measured, and not measured is not zero"

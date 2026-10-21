@@ -63,9 +63,10 @@ leaves them alone.
 stale one: the harness loads `.claude/agents/`, so a corrected source proves nothing on its own.
 
 ⚠️ `sdd preflight` fires **two real headless sessions** (each capped at US$ 1): one proves the phase
-sessions can actually execute a command, the other, with no settings at all, that they can read the
-kit's templates ([ADR 0019](docs/adr/0019-the-session-reads-what-the-boot-names.md)) — that is what
-makes it valuable, and what makes it cost money. Do not run it in a loop.
+sessions can actually execute a command, the other, with no settings at all and nothing but the
+kit's read rules on its allowlist, that they can read the kit's templates
+([ADR 0019](docs/adr/0019-the-session-reads-what-the-boot-names.md)) — that is what makes it
+valuable, and what makes it cost money. Do not run it in a loop.
 
 The kit is English. The **artifacts** of a mission — handoffs, checkpoint, commit messages, PR
 body — are written in whatever the target repo declares in `OUTPUT_LANG`; leave it empty and the

@@ -56,7 +56,8 @@ também a escrita no kit. A ADR nomeia três portas (`run_phase`, `cmd_close`, a
 `cmd_close`, que não passa pelo `run_phase` e lê a mesma função à mão, é o `tests/check-gates.sh`
 sobre o argv da sessão de fechamento, com o `mut_RUN_close_templates_read_rule_dropped`; a da sonda
 dos templates do `sdd preflight` (§4) é o `tests/check-preflight.sh`, que lê o argv dessa sessão,
-com o `mut_PRE_template_probe_rule_dropped` e o `mut_PRE_template_probe_reads_settings`.
+com o `mut_PRE_template_probe_rule_dropped`, o `mut_PRE_template_probe_reads_settings` e o
+`mut_PRE_template_probe_allowlist_widened`.
 Depois da regra dos templates vêm as do **projeto** (ADR 0019 §2): a chave `READ_EXTRA`, de default
 vazio, declara os diretórios das skills de que as fases dependem, escritos com `$HOME` no
 `.sdd/config.sh` rastreado; cada entrada vira a mesma regra só de leitura, e a entrada que é symlink
@@ -173,7 +174,9 @@ entrada — um bloco `## ` cujo título e uma linha que cita o id inteiro da mis
 de cada merge-base (ADR 0018 §4); o dono é o `sdd-docs`.
 Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §3) o `sdd preflight` abre uma segunda
 sessão, a sonda dos templates: `--setting-sources ""`, cwd num `mktemp -d`, o env do harness limpo,
-as flags das fases mais as linhas do `kit_read_rules`, pedindo o `Read` de
+um `--allowedTools` só com as linhas do `kit_read_rules` — nunca o `ALLOWED_TOOLS`, onde um `Read`
+largo leria o template sozinho e deixaria a sonda verde sobre uma regra vazia ou quebrada (P3 do
+Codex no #315); `kit_read_rules` sem linha nenhuma é `_fail` sem sessão —, pedindo o `Read` de
 `$SDD_HOME/templates/handoff.md`. O veredito lê o artefato do stream, nunca a resposta: o template
 no `permission_denials` (casado pelo caminho) é `_fail`; um `tool_result` sem `is_error` para o
 `Read` dele é `ok`; sem init nem `result` é o "did not answer" da sonda do `Bash`, que não conta

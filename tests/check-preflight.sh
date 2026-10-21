@@ -358,8 +358,8 @@ assert_has "a result line without num_turns is named by preflight" \
 # is the one fact no argv assertion can see, so preflight asks a second, ISOLATED session to Read a
 # template: `--setting-sources ""` (no settings at all — with them, an `additionalDirectories` or a
 # `Read(*)` on the operator's machine reads the template with no rule, measured in ADR 0019), cwd in
-# a scratch dir, the harness env unset, the phase flags plus the rule. Two assertions, and they own
-# different mutants:
+# a scratch dir, the harness env unset, and the kit's read rules as ALL its --allowedTools carries.
+# The assertions own different mutants:
 #   - the VERDICT, differentially: a stream whose result line denies the template gives the fail
 #     line and no ok line; a stream whose Read came back without is_error gives the ok line and no
 #     fail; neither warns. The rc is no witness: the gh stub makes every preflight here exit non-zero;
@@ -437,8 +437,8 @@ STUB
 # Each needle carries the runner's own prefix (`ok   `, `fail  `, `warn  `, as the ok/bad/warn of
 # bin/sdd print them): a verdict is told by the arm that printed it, so the refusal's sentence
 # printed by the ok arm counts as no fail here — the sentence alone would have counted it as one.
-TPL_OK="ok   a session with no settings reads the kit templates under the phase flags"
-TPL_FAIL="fail  a session with NO settings, under the flags the runner gives every phase, was DENIED"
+TPL_OK="ok   a session with no settings and the kit read rules alone on its --allowedTools reads the kit templates"
+TPL_FAIL="fail  a session with NO settings and the kit read rules alone on its --allowedTools was DENIED reading"
 TPL_WARN="warn  the template probe answered without trying to Read"
 tpl_verdict() { # <preflight output> → fail=N,ok=N,warn=N
   printf 'fail=%s,ok=%s,warn=%s' "$(grep -cF -- "$TPL_FAIL" <<< "$1")" \
@@ -451,12 +451,21 @@ out_tpl_read="$( CLAUDECODE=1 SDD_FIXTURE_ENV_WITNESS=armed "$SDD" preflight 2>&
 assert_eq "preflight fails when the kit rule alone cannot read the templates" \
   "denied:fail=1,ok=0,warn=0 read:fail=0,ok=1,warn=0" \
   "denied:$(tpl_verdict "$out_tpl_denied") read:$(tpl_verdict "$out_tpl_read")"
+# The refusal names what the session was handed, and says the harness refused THAT: the rules are
+# the whole --allowedTools list, and a sentence that lost either line would leave the operator no
+# rule to compare with the `harness:` version on the ledger's session rows.
+tpl_handed="The kit's read rules were all its --allowedTools carried: Read(/$TPL_HOME/templates/**)"
+tpl_refused="and the harness refused them, so their syntax may have changed"
+assert_eq "the template probe's refusal names every rule it handed and says the harness refused them" \
+  "rules:1 refused:1" \
+  "rules:$(grep -cF -- "$tpl_handed" <<< "$out_tpl_denied") refused:$(grep -cF -- "$tpl_refused" <<< "$out_tpl_denied")"
 
 # The argv of the read run's template session. Lines are matched WHOLE, and the scan starts at the
 # `--model` line: the prompt rides before it and names the templates too, and a prompt line must not
-# answer for a flag. The rule is the first argument after the --allowedTools value, spelled with the
-# PHYSICAL SDD_HOME (`cd -P`, as _resolve_self computes it), never $ROOT, which is logical. An argv
-# the stub never wrote reads `no-argv`, so a probe that was never recognised cannot pass.
+# answer for a flag. The rule is the first argument of --allowedTools — nothing else rides there,
+# and the assertion after this one holds the whole list —, spelled with the PHYSICAL SDD_HOME
+# (`cd -P`, as _resolve_self computes it), never $ROOT, which is logical. An argv the stub never
+# wrote reads `no-argv`, so a probe that was never recognised cannot pass.
 tpl_argv_of() { # <argv file> → settings:… rule:… add-dir:N agent:N
   [ -f "$1" ] || { printf 'no-argv'; return 0; }
   want="Read(/$TPL_HOME/templates/**)" awk '
@@ -466,7 +475,7 @@ tpl_argv_of() { # <argv file> → settings:… rule:… add-dir:N agent:N
       s = (k ? "absent" : "no-model"); r = "no-allowedTools"; d = 0; g = 0
       for (i = k; k && i <= NR; i++) {
         if (a[i] == "--setting-sources") s = (i < NR && a[i + 1] == "") ? "empty" : "[" a[i + 1] "]"
-        if (a[i] == "--allowedTools") r = (a[i + 2] == ENVIRON["want"]) ? "ok" : "no-rule"
+        if (a[i] == "--allowedTools") r = (a[i + 1] == ENVIRON["want"]) ? "ok" : "no-rule"
         if (a[i] == "--add-dir") d++
         if (a[i] == "--agent") g++
       }
@@ -481,6 +490,61 @@ tpl_env_of() { # <env file> → witness=N,claudecode=N
 assert_eq "the template probe runs with no settings and carries the kit rule" \
   "settings:empty rule:ok add-dir:0 agent:0 env:witness=1,claudecode=0" \
   "$(tpl_argv_of "$FIX/.stub/tpl-argv") env:$(tpl_env_of "$FIX/.stub/tpl-env")"
+
+# ...and the rules are ALL its --allowedTools carries (Codex P3 on PR #315). ALLOWED_TOOLS is a
+# project key, and a broad `Read` there reads the template on its own: the probe used to print that
+# the kit's rule works over a rule that was empty, or spelled in a syntax the harness no longer
+# honours. So this run hands the probe ALLOWED_TOOLS="Bash Read" and one READ_EXTRA entry — two
+# rule lines, so every line of kit_read_rules is measured and not only the first —, and the
+# arguments between --allowedTools and the next flag must be those lines, in order: no `Bash Read`,
+# no bare `Read`, no `Bash`. Each argument is printed in brackets, so an empty one shows. The entry
+# is physical (`cd -P`), so kit_read_rules prints one rule for it and not two.
+TPL_RX="$(CDPATH='' cd -P "$FIX/.stub" && pwd)/tpl-rx"
+mkdir -p "$TPL_RX"
+tpl_allow_of() { # <argv file> → [arg],[arg]… between --allowedTools and the next flag
+  [ -f "$1" ] || { printf 'no-argv'; return 0; }
+  awk '
+    { a[NR] = $0 }
+    END {
+      k = 0; for (i = 1; i <= NR; i++) if (a[i] == "--model") { k = i; break }
+      if (!k) { printf "no-model"; exit }
+      for (i = k; i <= NR; i++) if (a[i] == "--allowedTools") break
+      if (i > NR) { printf "no-allowedTools"; exit }
+      n = 0; out = ""
+      for (j = i + 1; j <= NR && substr(a[j], 1, 2) != "--"; j++) out = out (n++ ? "," : "") "[" a[j] "]"
+      printf "%s", (n ? out : "none")
+    }' "$1"
+}
+tpl_stub "$FIX/.stub/tpl-stream-read.jsonl"
+ALLOWED_TOOLS="Bash Read" READ_EXTRA="$TPL_RX" "$SDD" preflight >/dev/null 2>&1
+assert_eq "the template probe carries only the kit read rules, never ALLOWED_TOOLS" \
+  "[Read(/$TPL_HOME/templates/**)],[Read(/$TPL_RX/**)]" "$(tpl_allow_of "$FIX/.stub/tpl-argv")"
+
+# With nothing but the rules on it, a kit_read_rules that printed NOTHING would leave --allowedTools
+# with no argument, and the harness would take the next flag for its value. No config reaches that
+# world — the templates' rule is printed unconditionally —, so it is built: a copy of the kit whose
+# kit_read_rules returns at once (agents/ linked, the coordination helper copied, bin/sdd a real
+# file because _resolve_self follows symlinks), proved sabotaged before anything is concluded. The
+# probe fails by name, both lines of its sentence, opens no session, and leaves no mktemp dir
+# (`tmp.*`) in the TMPDIR it was given — Node writes its compile cache there too, hence the name.
+TPL_NORULE="$(CDPATH='' cd -P "$FIX/.stub" && pwd)/kit-no-rule"
+mkdir -p "$TPL_NORULE/bin" "$TPL_NORULE/tmp"
+sed 's/^kit_read_rules() {$/kit_read_rules() { return 0/' "$SDD" > "$TPL_NORULE/bin/sdd"
+chmod +x "$TPL_NORULE/bin/sdd"
+cp "$ROOT/bin/sdd-coordination.py" "$TPL_NORULE/bin/sdd-coordination.py"
+ln -s "$ROOT/agents" "$TPL_NORULE/agents"
+tpl_stub "$FIX/.stub/tpl-stream-read.jsonl"
+out_tpl_norule="$( TMPDIR="$TPL_NORULE/tmp" "$TPL_NORULE/bin/sdd" preflight 2>&1 )"
+nr_sab="$(grep -c '^kit_read_rules() { return 0$' "$TPL_NORULE/bin/sdd")"
+nr_named="$(grep -cF -- "fail  kit_read_rules printed no read rule, so the template probe was not opened" \
+  <<< "$out_tpl_norule")"
+nr_cons="$(grep -cF -- "the runner opens gets no rule for $TPL_NORULE/templates/" <<< "$out_tpl_norule")"
+nr_ok="$(grep -cF -- "$TPL_OK" <<< "$out_tpl_norule")"
+nr_session=0; [ ! -f "$FIX/.stub/tpl-argv" ] || nr_session=1
+nr_scratch="$(find "$TPL_NORULE/tmp" -mindepth 1 -maxdepth 1 -name 'tmp.*' | wc -l)"
+assert_eq "a kit_read_rules that prints no rule fails the template probe by name, with no session" \
+  "sabotaged:1 named:1 consequence:1 ok:0 session:0 scratch:0" \
+  "sabotaged:$nr_sab named:$nr_named consequence:$nr_cons ok:$nr_ok session:$nr_session scratch:$nr_scratch"
 
 # Back to the dead stub every later section assumes ("claude and gh are stubbed to fail").
 printf '#!/bin/sh\nexit 1\n' > "$FIX/.stub/claude"

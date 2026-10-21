@@ -2541,21 +2541,35 @@ mut_PREFLIGHT_num_turns_unchecked() {
 # ADR 0019 §3, the third door: the template probe of preflight, one mutant per thing it owes.
 # TEMPLATE_READ_UNCHECKED: the refusal is printed by the ok arm, so a harness that denies the kit's
 # read rule leaves preflight green — caught by "preflight fails when the kit rule alone cannot read
-# the templates" (check-preflight.sh), whose needles carry the arm's prefix. The other two change
-# only what the session is HANDED, and the argv assertion, "the template probe runs with no settings
-# and carries the kit rule", is the one that owns them: READS_SETTINGS loads the user's settings
-# again (where an additionalDirectories reads the template with no rule) — the verdict goes red too,
-# only because the stub recognises the probe by its empty --setting-sources; RULE_DROPPED stops
-# calling kit_read_rules, the session gets no rule at all, and ONLY the argv assertion sees it,
-# since the stub answers whatever the fixture says. Measured one by one on a copy of the kit.
+# the templates" (check-preflight.sh), whose needles carry the arm's prefix. The others change only
+# what the session is HANDED, and the argv assertions own them, since the stub answers whatever the
+# fixture says: READS_SETTINGS loads the user's settings again (where an additionalDirectories reads
+# the template with no rule) — "the template probe runs with no settings and carries the kit rule";
+# the verdict goes red too, only because the stub recognises the probe by its empty
+# --setting-sources. ALLOWLIST_WIDENED puts "$ALLOWED_TOOLS" back in front of the rules, where a
+# broad `Read` of the target answers for them (Codex P3 on PR #315) — both argv assertions, the one
+# above (`rule:no-rule`) and "the template probe carries only the kit read rules, never
+# ALLOWED_TOOLS", with `[Bash Read]` first. RULE_DROPPED stops calling kit_read_rules: since R3 the
+# probe then fails by name and opens no session, so the verdict, the refusal's sentence and both
+# argv assertions go red (`no-argv`); the no-rule assertion stays green there, since its copy fails
+# by the same guard. EMPTY_UNGUARDED drops that guard, and the probe opens a session whose
+# --allowedTools takes the next flag for its value — caught only on the sensor's sabotaged copy of
+# the kit, by "a kit_read_rules that prints no rule fails the template probe by name, with no
+# session", `named:0 … session:1`. Measured one by one on a copy of the kit.
 mut_PRE_template_read_unchecked() {
-  sed -i '/^cmd_preflight() {/,/^}/ s|^        _fail "a session with NO settings, under the flags|        ok "a session with NO settings, under the flags|' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s|^        _fail "a session with NO settings and the kit read rules alone|        ok "a session with NO settings and the kit read rules alone|' "$1"
 }
 mut_PRE_template_probe_reads_settings() {
-  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools "$ALLOWED_TOOLS" ${tpl_rules|--setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" ${tpl_rules|' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools "${tpl_rules|--setting-sources "user,project,local" --allowedTools "${tpl_rules|' "$1"
+}
+mut_PRE_template_probe_allowlist_widened() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools "${tpl_rules|--setting-sources "" --allowedTools "$ALLOWED_TOOLS" "${tpl_rules|' "$1"
 }
 mut_PRE_template_probe_rule_dropped() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^    mapfile -t tpl_rules < <(kit_read_rules)$|    :|' "$1"
+}
+mut_PRE_template_probe_empty_unguarded() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    elif \[ "${#tpl_rules\[@\]}" -eq 0 \]; then$|    elif false; then|' "$1"
 }
 
 # ADR 0019 §2, what the phases will not be able to read — the two warnings of preflight, and the four
@@ -6643,7 +6657,9 @@ CATALOG=(
   PREFLIGHT_num_turns_unchecked
   PRE_template_read_unchecked
   PRE_template_probe_reads_settings
+  PRE_template_probe_allowlist_widened
   PRE_template_probe_rule_dropped
+  PRE_template_probe_empty_unguarded
   PRE_read_extra_missing_silent
   PRE_undeclared_skill_silent
   PRE_skill_cover_unslashed

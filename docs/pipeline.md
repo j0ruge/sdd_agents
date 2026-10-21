@@ -1039,13 +1039,17 @@ hold more than one copy; `tests/check-preflight.sh` asserts each.
 No argv assertion says whether the **harness** honours the rule, so `sdd preflight` asks (ADR 0019
 §3). Next to the `Bash` probe it opens a second session, isolated: `--setting-sources ""` (no
 settings at all), cwd in a `mktemp -d`, the harness environment unset as `run_phase` unsets it, and
-the phase flags plus the lines of `kit_read_rules`. It asks for a `Read` of
+an `--allowedTools` that carries the lines of `kit_read_rules` and nothing else. `ALLOWED_TOOLS`
+stays off it: a broad `Read` there would read the template by itself and turn the probe green over
+an empty or broken rule, and a `kit_read_rules` that printed nothing fails by name, with no session.
+It asks for a `Read` of
 `$SDD_HOME/templates/handoff.md` and reads the stream, never the answer: the template in the result
 line's `permission_denials` (matched by path) fails the preflight, with the remedy; a `tool_result`
 without `is_error` for that `Read` is `ok`; a session that never tried is a warning. The isolation is
 the point: with the settings loaded, an `additionalDirectories` or a `Read(*)` on the operator's
 machine reads the template with no rule at all, and the probe would be green over a rule that does
-nothing. `tests/check-preflight.sh` asserts the verdict both ways and the argv of that session.
+nothing. `tests/check-preflight.sh` asserts the verdict both ways and the argv of that session,
+the rules as its whole `--allowedTools` under an `ALLOWED_TOOLS` that carries `Read`.
 Both preflight probes are capped in money (`--max-budget-usd 1` each) and not in time.
 
 ⚠️ **Two keys for one list, and the split is measured (2026-09-06, Claude Code 2.1.263).** The

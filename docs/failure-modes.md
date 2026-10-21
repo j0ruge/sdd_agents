@@ -77,14 +77,15 @@ session logs and 4 of 23 jrc-libs ones; one TICKET stopped, and the operator unb
 
 **How the kit reacts:** every session the runner opens carries a read-only rule for the kit's
 templates (`kit_read_rules`, ADR 0019 §1); `sdd preflight` proves that rule in a session with no
-settings at all and fails when it does not read; and every call the harness denied is one `DENIED`
-line in the journal, right above the session's own line, so `tail -F` shows it without opening the
-session's `.json`.
+settings at all and the rule alone on its `--allowedTools`, and fails when it does not read; and
+every call the harness denied is one `DENIED` line in the journal, right above the session's own
+line, so `tail -F` shows it without opening the session's `.json`.
 
 **What you do:**
 - **a template denied:** run `sdd preflight`. Its template probe says whether the kit's rule still
   reads under this harness; red there right after a harness bump means the rule's syntax changed
-  (the ledger's session rows carry `harness:`).
+  (the ledger's session rows carry `harness:`). A `Read` in `ALLOWED_TOOLS` does not turn it green:
+  the probe never carries that key.
 - **a skill's references denied:** declare the skill's directory in the target's `READ_EXTRA`,
   absolute and separated by spaces, written with `$HOME` (`config/schema.md`). The runner adds the
   rule of a symlinked entry's resolved target too; declare the skill's own directory (for a
