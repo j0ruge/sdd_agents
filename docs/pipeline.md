@@ -1052,19 +1052,25 @@ stays off it: a broad `Read` there would read the template by itself and turn th
 an empty or broken rule, and a `kit_read_rules` that printed nothing fails by name, with no session.
 A kit whose path the grammar refuses never reaches the probe: it is named once, above, and there is
 no rule to measure. It asks for a `Read` of
-`$SDD_HOME/templates/handoff.md` and reads the stream, never the answer: the template in the result
+`$SDD_HOME/templates/handoff.md` and reads the stream, never the answer: one jq names the outcome of
+that `Read` once, and a `case` sends it to its arm. In precedence order: the template in the result
 line's `permission_denials` (matched by path) fails the preflight, with the remedy; a `tool_result`
-without `is_error` for that `Read` is `ok`; a session that answered and never tried is a warning; and
-a stream with no init line and no result line jq can read fails too, naming the first line of the
-session's stderr, because a CLI that refuses one of this probe's flags exits before its init line
-while it answers the `Bash` probe. The chain ends in an `else`, so no stream goes unnamed. When the
+without `is_error` for that `Read` is `ok`; a `tool_result` with `is_error` and no denial naming the
+path fails, with the first line of the error, since the phases will meet the same error (the
+template missing or unreadable, or a harness that reports a refusal only in the `tool_result`); a
+session that answered and never tried is a warning; and a stream with no init line and no result
+line jq can read fails too, naming the first line of the session's stderr, because a CLI that
+refuses one of this probe's flags exits before its init line while it answers the `Bash` probe. An
+outcome the `case` does not know fails as well, so no stream goes unnamed and none lands in an arm
+by elimination. When the
 `Bash` probe got no answer either, that is one cause and one failure: the template probe only warns
 that it measured nothing. The isolation is
 the point: with the settings loaded, an `additionalDirectories` or a `Read(*)` on the operator's
 machine reads the template with no rule at all, and the probe would be green over a rule that does
-nothing. `tests/check-preflight.sh` asserts the verdict both ways, the stream with no init and no
-result in four worlds, and the argv of that session, the rules as its whole `--allowedTools` under
-an `ALLOWED_TOOLS` that carries `Read`.
+nothing. `tests/check-preflight.sh` asserts the verdict both ways, every outcome in worlds of its
+own (the stream with no init and no result in four), the precedence in two worlds of two outcomes,
+the default on a sabotaged copy of the kit, and the argv of that session, the rules as its whole
+`--allowedTools` under an `ALLOWED_TOOLS` that carries `Read`.
 Both preflight probes are capped in money (`--max-budget-usd 1` each) and not in time.
 
 ⚠️ **Two keys for one list, and the split is measured (2026-09-06, Claude Code 2.1.263).** The

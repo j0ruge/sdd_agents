@@ -115,25 +115,43 @@ an `--allowedTools` that carries the lines of `kit_read_rules` and nothing else,
 `--strict-mcp-config`, and asks for a `Read` of `$SDD_HOME/templates/handoff.md`. It runs under
 `--output-format stream-json --verbose`, because the `tool_use` and `tool_result` lines the
 verdict reads exist only there, and with the environment cleared as `run_phase` clears it. The verdict reads the session's
-artifact, never the model's answer, and it is exhaustive: the chain ends in an `else`, so every
-stream lands in exactly one of four arms.
+artifact, never the model's answer, and it names the outcome of the `Read` once: one jq over the
+whole stream prints exactly one of five outcomes, and a `case` sends each to its arm, with a
+default that fails. In precedence order:
 
-- a denial naming the template in `permission_denials` → `_fail`, with the remedy;
-- a `Read` `tool_use` of that path with a `tool_result` that is not an error → `ok`;
-- an init line or a result line, and no attempt → `warn`, because unmeasured is not zero;
-- no init line and no result line that jq can read → `_fail`, saying that the CLI did not answer
+- `denied`: a denial naming the template in a result line's `permission_denials` → `_fail`, with
+  the remedy;
+- `read`: a `Read` `tool_use` of that path with a `tool_result` that is not an error → `ok`;
+- `errored`: a `tool_result` with `is_error` for that `Read`, none without it, and no denial naming
+  the path → `_fail`, naming the path and the first line of the error (the content's string or its
+  first text block, read like the stderr below), and saying that the phases will meet the same
+  error: the template is missing or unreadable, or the harness reports a refusal only in the
+  `tool_result` (the Codex P2 in the fourth round on PR #315, decided by the human);
+- `not-tried`: an init line or a result line, and no `tool_result` for a `Read` of that path →
+  `warn`, because unmeasured is not zero. Another tool, another path or another call's result never
+  stands for that `Read`;
+- `no-session`: no init line and no result line that jq can read → `_fail`, saying that the CLI did not answer
   this probe's flags and that the kit's rule was not measured, with the first line of the
   session's stderr (200 characters at most, control characters dropped, `(none)` when it is empty).
   A CLI that refuses `--setting-sources ""` or the rule's syntax exits before its init line while
   it answers the `Bash` probe, so this stream does not mean the CLI is dead (the Codex P2 in the
   second round on PR #315, decided by the human). One exception: when the `Bash` probe got no
   answer either, the cause is the same, and one cause is one failure. That probe has already
-  failed, and this one only warns that it measured nothing.
+  failed, and this one only warns that it measured nothing;
+- any other outcome → `_fail`: the classifier and the `case` drifted apart, and an outcome no arm
+  knows is never green.
+
+The verdict used to be a chain whose last two arms were defined by elimination, so an outcome it
+did not name fell into the first arm left: a `Read` that came back with an error, its path in no
+denial, warned that the session never tried, and the preflight stayed green over a template the
+session had failed to read. The precedence keeps every decision the chain made: a denial wins, and
+a `Read` retried after an error and then read is the rule working. The outcome is the first line jq
+prints and the error the second, so a text with a newline is never read as an outcome.
 
 The denial is matched by the template's path, never by `tool_use_id`. The session is opened even
 when the `Bash` probe got no answer: the exception reads what both probes returned, so a CLI that
 refuses only the `Bash` probe's flags still has the kit's rule measured. jq reads the stream as a
-whole (`-s`), so one line it cannot parse sends the stream to the fourth arm whatever else it
+whole (`-s`), so one line it cannot parse sends the stream to `no-session` whatever else it
 holds. That makes the preflight red, never green.
 
 `"$ALLOWED_TOOLS"` stays off that flag (the Codex P3 on PR #315, decided by the human). It is a
@@ -150,9 +168,11 @@ the argv separately: the session carries an empty `--setting-sources` and, as it
 `--allowedTools` list, the rules, under an `ALLOWED_TOOLS` that carries `Read`. Without the argv
 assertions a mutant that hands the probe something other than the rules — the user's settings,
 `"$ALLOWED_TOOLS"` in front of them — would survive, because the stub answers what the fixture
-says. The fourth arm is held in four worlds: the template probe prints nothing (with a long
+says. `no-session` is held in four worlds: the template probe prints nothing (with a long
 stderr line), it prints lines jq cannot parse, both probes are dead, and only the `Bash` probe is
-dead.
+dead. `errored` is held in three (the content a string, a list of blocks, and none), `not-tried`
+against a denied `Bash` call, a `Read` of another path, another tool and a session line alone, the
+precedence in two worlds of two outcomes, and the default on a sabotaged copy of the kit.
 
 ## Discarded
 
@@ -202,6 +222,11 @@ dead.
   always die together.
 - **§3: a second failure for a dead CLI.** Each probe would say what it saw, but the operator
   would read two failures for one cause. The human decided on one cause, one failure.
+- **§3: one more `elif` for the `Read` that came back with an error.** The smallest diff, but it
+  keeps the shape behind the third finding in a row in this probe (the Codex P3, then the P2 of the
+  second and of the fourth round on PR #315): arms defined by elimination, where the next
+  outcome a harness invents falls into the first arm left. The human decided on naming the outcome
+  once, with a default that fails.
 - **§3: only an argv assertion in the suite.** Zero cost per preflight, but the preflight of a
   machine whose settings already grant the read stays green whatever the kit passes. This
   operator's `additionalDirectories` lists the templates directory, so the day the harness changes

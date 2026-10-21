@@ -6532,29 +6532,44 @@ cmd_preflight() {
     # grammar, and a kit whose path does not is answered by the arm before it — named once, above,
     # and no session opened, since there is no rule to measure (Codex r3 #2 on PR #315). The sensor
     # builds the empty world on a sabotaged copy of the kit. The verdict reads the stream's
-    # artifacts, never the answer, and it is EXHAUSTIVE — the chain ends in an `else`, so every
-    # stream lands in exactly one of four arms: (1) the template named in the result line's
-    # permission_denials (matched by path, never by tool_use_id) is a refusal, `_fail`; (2) a Read
-    # of that path whose tool_result carries
-    # no is_error is the rule working, `ok`; (3) an init or a result line with neither of those is a
-    # session that never tried the Read, `warn`, because not measured is not zero; (4) no init line
-    # and no result line jq can read — an empty stream, or one that is not JSON lines — is a CLI that
-    # did not answer THIS probe: one that refuses `--setting-sources ""` or the rule's syntax exits
-    # before its init line while it answers the Bash probe (Codex P2 in the second round on PR #315),
-    # so it is a `_fail` with the first line of its stderr, cut at 200 characters, its control
-    # characters dropped, `(none)` when empty. Arm 4 has one exception: when the Bash probe got no
-    # answer either (probe_silent, armed by its "did not answer" arm), the cause is one and so is the
-    # failure, and the probe only warns that it measured nothing. The exception reads both probes'
-    # evidence and never the Bash probe's alone — the session is opened anyway, so a CLI that refuses
-    # only the Bash probe's flags still gets the kit's rule measured. jq slurps the stream (`-s`), so
-    # one line it cannot parse sends a stream to arm 4 whatever else it holds: red, never green, and
-    # the message says "could read". The stderr is read with `read || true`: an empty file returns
-    # non-zero, and that is the common case (a file the CLI removed fails the redirect, and reads
-    # `(none)` too). stdin is closed: without it the CLI waits 3 s (2.1.304). Sensor:
-    # tests/check-preflight.sh — the verdict differentially, arm 4 in four worlds (the template probe
-    # empty, unparseable, both probes dead, and the Bash probe alone dead), and this session's argv,
-    # since its stub answers whatever the fixture says.
+    # artifacts, never the answer, and it names the outcome of the Read ONCE: one jq over the
+    # slurped stream prints exactly one of five outcomes, and a `case` sends each to its arm. The
+    # chain it replaced defined its last two arms by elimination, so an outcome it did not name fell
+    # into the first arm left: a Read that came back with an error, its path in no denial, warned
+    # that the session never tried (Codex P2 in the fourth round on PR #315). In precedence order:
+    # `denied`, the template named in the result line's permission_denials (matched by path, never by
+    # tool_use_id), `_fail`; `read`, a tool_result with no is_error for a Read of that path, `ok` —
+    # below a denial, so a denied path is never read, and above an error, so a Read retried after
+    # one is the rule working; `errored`, a tool_result with is_error for that Read, none without
+    # it and no denial naming the path — the template missing or unreadable, or a harness that
+    # reports a refusal only in the tool_result —, `_fail` with the first line of the error, from
+    # the content's string or its first text block; `not-tried`, an init or a result line and no
+    # tool_result for a Read of that path — another tool, another path or another call's result never
+    # stands for it —, `warn`, because not measured is not zero; `no-session`, no init line and no
+    # result line jq can read — an empty stream, or one that is not JSON lines, since a jq that
+    # fails is read as this outcome —, a CLI that did not answer THIS probe: one that refuses
+    # `--setting-sources ""` or the rule's syntax exits before its init line while it answers the
+    # Bash probe (Codex P2 in the second round on PR #315), so it is a `_fail` with the first line of
+    # its stderr. That arm has one exception: when the Bash probe got no answer either (probe_silent,
+    # armed by its "did not answer" arm), the cause is one and so is the failure, and the probe only
+    # warns that it measured nothing. The exception reads both probes' evidence and never the Bash
+    # probe's alone — the session is opened anyway, so a CLI that refuses only the Bash probe's flags
+    # still gets the kit's rule measured. The `case` ends in a default that fails: an outcome with no
+    # arm is a classifier and a `case` that drifted apart, never green. The outcome is the first line
+    # jq prints and the error the second, so a text with a newline is never read as an outcome. The
+    # error and the stderr are read alike: their first line, cut at 200 characters, their control
+    # characters dropped, `(none)` when empty. jq slurps the stream (`-s`), so one line it cannot
+    # parse sends a stream to no-session whatever else it holds: red, never green, and the message
+    # says "could read". The stderr is read with `read || true`: an empty file returns non-zero, and
+    # that is the common case (a file the CLI removed fails the redirect, and reads `(none)` too).
+    # stdin is closed: without it the CLI waits 3 s (2.1.304). Sensor: tests/check-preflight.sh — the
+    # verdict differentially (errored as a string, as blocks and with no content; not-tried as Bash
+    # denied instead, another path, another tool, an init line alone and a result line alone;
+    # no-session empty, unparseable, both probes dead, and the Bash probe alone dead), the precedence
+    # in two worlds of two outcomes, the default on a sabotaged copy of the kit, and this session's
+    # argv, since its stub answers whatever the fixture says.
     local tpl_path="$SDD_HOME/templates/handoff.md" tpl_dir="" tpl_stream="" tpl_err=""
+    local tpl_class="" tpl_outcome="" tpl_why=""
     local -a tpl_rules=()
     mapfile -t tpl_rules < <(kit_read_rules)
     [ -n "$kit_tpl_refused" ] || tpl_dir="$(mktemp -d 2>/dev/null)" || tpl_dir=""
@@ -6574,29 +6589,58 @@ cmd_preflight() {
       read -r -n 200 tpl_err 2>/dev/null < "$tpl_dir/stderr" || true
       tpl_err="${tpl_err//[[:cntrl:]]/}"; tpl_err="${tpl_err:-(none)}"
       rm -rf -- "$tpl_dir" 2>/dev/null || true
-      if jq -se --arg p "$tpl_path" '[ .[] | select(.type == "result") | .permission_denials[]? | select(.tool_input.file_path == $p) ] | length > 0' <<< "$tpl_stream" >/dev/null 2>&1; then
-        _fail "a session with NO settings and the kit read rules alone on its --allowedTools was DENIED reading
+      tpl_class="$( jq -rs --arg p "$tpl_path" '
+          def text_of: if type == "string" then . else [ .[]? | select(.type == "text") | .text ][0] end;
+          . as $s
+          | [ $s[] | select(.type == "assistant") | .message.content[]?
+              | select(.type == "tool_use" and .name == "Read" and .input.file_path == $p) | .id ] as $ids
+          | [ $s[] | select(.type == "user") | .message.content[]?
+              | select(.type == "tool_result" and (.tool_use_id as $t | $ids | index($t)) != null) ] as $results
+          | if any($s[] | select(.type == "result") | .permission_denials[]?; .tool_input.file_path == $p) then "denied"
+            elif any($results[]; .is_error != true) then "read"
+            elif ($results | length) > 0 then ("errored", ($results[0].content | text_of // ""))
+            elif any($s[]; .type == "result" or (.type == "system" and .subtype == "init")) then "not-tried"
+            else "no-session" end' <<< "$tpl_stream" 2>/dev/null )" || tpl_class="no-session"
+      { read -r tpl_outcome; read -r -n 200 tpl_why || true; } <<< "$tpl_class"
+      tpl_why="${tpl_why//[[:cntrl:]]/}"; tpl_why="${tpl_why:-(none)}"
+      case "$tpl_outcome" in
+        denied)
+          _fail "a session with NO settings and the kit read rules alone on its --allowedTools was DENIED reading
         $tpl_path — the phases will read the templates through Bash, work from memory, or stop.
         The kit's read rules were all its --allowedTools carried: ${tpl_rules[*]}
         and the harness refused them, so their syntax may have changed (the ledger's session rows carry
         harness:). See kit_read_rules and ADR 0019. This machine's settings do not count here: a
         target's may not carry them."
-      elif jq -se --arg p "$tpl_path" '[ .[] | select(.type == "assistant") | .message.content[]? | select(.type == "tool_use" and .name == "Read" and .input.file_path == $p) | .id ] as $ids
-          | [ .[] | select(.type == "user") | .message.content[]? | select(.type == "tool_result" and .is_error != true and (.tool_use_id as $t | $ids | index($t)) != null) ] | length > 0' <<< "$tpl_stream" >/dev/null 2>&1; then
-        ok "a session with no settings and the kit read rules alone on its --allowedTools reads the kit templates"
-      elif jq -se '[ .[] | select(.type == "result" or (.type == "system" and .subtype == "init")) ] | length > 0' <<< "$tpl_stream" >/dev/null 2>&1; then
-        warn "the template probe answered without trying to Read $tpl_path — the kit's read rule was not
+          ;;
+        read)
+          ok "a session with no settings and the kit read rules alone on its --allowedTools reads the kit templates"
+          ;;
+        errored)
+          _fail "the template probe's Read of $tpl_path came back with an error, and no permission_denials entry names it,
+        so the phases will meet the same error. First line of the error: $tpl_why
+        The template is missing or unreadable, or the harness now reports a refusal only in the tool_result
+        (the ledger's session rows carry harness:). See kit_read_rules and ADR 0019 §3."
+          ;;
+        not-tried)
+          warn "the template probe answered without trying to Read $tpl_path — the kit's read rule was not
         measured, and not measured is not zero"
-      elif [ -n "$probe_silent" ]; then
-        warn "the template probe got no init line and no result line either: claude -p did not answer the Bash probe above, and
+          ;;
+        no-session)
+          if [ -n "$probe_silent" ]; then
+            warn "the template probe got no init line and no result line either: claude -p did not answer the Bash probe above, and
         one cause is one failure — the kit's read rule was not measured, and the probe measures it once the CLI answers.
         First line of its stderr: $tpl_err"
-      else
-        _fail "the template probe got no init line and no result line it could read: claude -p did not answer this probe's flags
+          else
+            _fail "the template probe got no init line and no result line it could read: claude -p did not answer this probe's flags
         (--setting-sources \"\" and the kit read rules alone on --allowedTools),
         though it answered the Bash probe above, so the kit's read rule was NOT measured.
         A CLI that refuses one of these flags exits before its init line. First line of its stderr: $tpl_err"
-      fi
+          fi
+          ;;
+        *)
+          _fail "the template probe's verdict got an outcome it does not know: $tpl_outcome — the kit's read rule was not measured (ADR 0019 §3)"
+          ;;
+      esac
     fi
   fi
   if gh auth status >/dev/null 2>&1; then ok "gh authenticated"

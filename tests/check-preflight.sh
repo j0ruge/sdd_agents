@@ -609,22 +609,178 @@ r4_others() { # <output> → the count of every other verdict line the template 
 rm -f "$FIX/.stub/r4-unlinked"
 r4_stub "$FIX/.stub/r4-none" "$FIX/.stub/r4-empty.err" healthy
 o="$( "$SDD" preflight 2>&1 )"
+r6_o_empty="$o"
 r4_empty="named=$(r4_n "$R4_NAMED" "$o"),flags=$(r4_n "$R4_FLAGS" "$o"),why=$(r4_n "$R4_WHY" "$o"),err=$(r4_n "$R4_EXITS $r4_want" "$o")"
 r4_empty="$r4_empty,cut=$(r4_n "${r4_want}x" "$o"),second=$(r4_n R4-SECOND-STDERR-LINE "$o"),ctl=$(grep -c $'[\033\r]' <<< "$o"),others=$(r4_others "$o")"
 r4_stub "$FIX/.stub/r4-garbage.out" "$FIX/.stub/r4-none" healthy unlink
 o="$( "$SDD" preflight 2>&1 )"
+r6_o_garbage="$o"
 r4_unlinked=0; [ ! -f "$FIX/.stub/r4-unlinked" ] || r4_unlinked=1
 r4_garbage="unlinked=$r4_unlinked,named=$(r4_n "$R4_NAMED" "$o"),none=$(r4_n "$R4_EXITS (none)" "$o"),noise=$(r4_n /stderr: "$o"),others=$(r4_others "$o")"
 r4_stub "$FIX/.stub/r4-none" "$FIX/.stub/r4-dead.err" dead
 o="$( "$SDD" preflight 2>&1 )"
+r6_o_dead="$o"
 r4_dead="fails=$(grep -c '^  fail  .*did not answer' <<< "$o"),warn=$(r4_n "$R4_DEADWARN" "$o"),why=$(r4_n "$R4_DEADWHY" "$o")"
 r4_dead="$r4_dead,err=$(r4_n "First line of its stderr: r4-dead-cli: not logged in" "$o"),named=$(r4_n "$R4_NAMED" "$o")"
 r4_stub "$FIX/.stub/r4-read.out" "$FIX/.stub/r4-none" dead
 o="$( "$SDD" preflight 2>&1 )"
+r6_o_bashdead="$o"
 r4_bashdead="fails=$(r4_n "$R4_BASHDEAD" "$o"),ok=$(r4_n "$TPL_OK" "$o"),warn=$(r4_n "$R4_DEADWARN" "$o")"
 assert_eq "a template probe that emits no init and no result fails by name, and a dead CLI fails once" \
   "empty:named=1,flags=1,why=1,err=1,cut=0,second=0,ctl=0,others=0 garbage:unlinked=1,named=1,none=1,noise=0,others=0 dead:fails=1,warn=1,why=1,err=1,named=0 bash-dead:fails=1,ok=1,warn=0" \
   "empty:$r4_empty garbage:$r4_garbage dead:$r4_dead bash-dead:$r4_bashdead"
+
+# The verdict names the outcome of the Read ONCE (Codex P2 in the fourth round on PR #315). It was a
+# chain whose third and fourth arms were defined by ELIMINATION — "an init or a result line, and
+# neither a denial nor a clean Read" —, so an outcome the chain did not name fell into the first arm
+# left: a Read whose tool_result came back with is_error, its path in no permission_denials entry
+# (the template missing or unreadable, or a harness that reports a refusal only in the tool_result),
+# warned "answered without trying to Read" — preflight green over a template the session tried and
+# failed to read, with a message that says the opposite of the stream. One jq now prints one outcome
+# per stream (denied, read, errored, not-tried, no-session), and a `case` sends each to its arm, with
+# a default that fails. One assertion, three properties:
+#   - ERRORED, in three worlds, each the new arm's fail line and no other arm's, with the first line
+#     of the error and one failure more than a read world (the summary line counts `_fail`, and the
+#     rc is no witness here). STRING is the REAL refused Read of the captured pair above with its
+#     denial entry dropped from the result line: the harness that reports a refusal only in the
+#     tool_result, verbatim. BLOCKS is the real Read's tool_use with a tool_result whose content is a
+#     list of blocks — the shape of real sessions: `[{"type":"text","text":…}]` in a jrc-libs REVIEW
+#     of 2026-10-17 (Claude Code 2.1.296), `[{"type":"tool_reference","tool_name":"TaskStop"}]` in a
+#     lighthouse EXEC of 2026-09-21 (2.1.278), which rides first, so a text block is told from the
+#     rest. Its text is the real missing-file error of a sales_quote TICKET of 2026-09-06 (2.1.263,
+#     `File does not exist. Note: your current working directory is …`) behind an ESC, with a TAB,
+#     padded past 200 characters, then a second line, then a second text block: the first block
+#     only, its first line only, the cut at 200 and the control characters dropped are each a count,
+#     and the expected text is computed from the line written, never typed. EMPTY has no content at
+#     all, `(none)`;
+#   - the PRECEDENCE, denied > read > errored, in two worlds of two outcomes each: the real denied
+#     stream (its tool_result carries is_error: true too) is still the denial, and a Read that came
+#     back with an error and was then retried and read is the rule working;
+#   - only the template's Read speaks for it, so each of these did not try: a session that tried
+#     Bash instead and was denied (its stream holds an error and a denial — three lines REAL and
+#     VERBATIM, a jrc-libs EXEC session of 2026-10-16 21:06 on Claude Code 2.1.296: the tool_use,
+#     the permission_denied event and the tool_result; the result line's denial DERIVED with jq from
+#     that tool_use, as the session's .json recorded it), one whose real Read named another file
+#     of the kit (path swapped with jq), and one whose real refused call is an Edit of the template
+#     (name swapped with jq) — the id, the path and the name of the tool_use are each a count;
+#   - a session line alone is a session that answered: an init line with no result line, and a
+#     result line with no init line (the real lines above, each alone), did not try;
+#   - the worlds that had an arm before keep it: denied, read, not-tried (an init and a result, no
+#     Read), and the four of R4 — empty and garbage the no-session failure, both probes dead its
+#     warning, the Bash probe alone dead a Read; and jq, which reads garbage, says nothing about it.
+R6_NAMED="fail  the template probe's Read of $TPL_PATH came back with an error, and no permission_denials entry names it,"
+R6_SAME="so the phases will meet the same error. First line of the error:"
+R6_CAUSE="The template is missing or unreadable, or the harness now reports a refusal only in the tool_result"
+R6_REMEDY="(the ledger's session rows carry harness:). See kit_read_rules and ADR 0019 §3."
+R6_UNKNOWN="fail  the template probe's verdict got an outcome it does not know:"
+# r6_arm <preflight output> → every arm of the verdict whose line the run printed, `+`-joined, `xN`
+# when one printed N times, `none` when none did: one arm per world is the property.
+r6_arm() {
+  local out="" name needle n
+  for name in denied read errored not-tried no-session no-session-warn unknown; do
+    case "$name" in
+      denied)          needle="$TPL_FAIL" ;;
+      read)            needle="$TPL_OK" ;;
+      errored)         needle="$R6_NAMED" ;;
+      not-tried)       needle="$TPL_WARN" ;;
+      no-session)      needle="$R4_NAMED" ;;
+      no-session-warn) needle="$R4_DEADWARN" ;;
+      unknown)         needle="$R6_UNKNOWN" ;;
+    esac
+    n="$(grep -cF -- "$needle" <<< "$1")"
+    [ "$n" = 0 ] || out="${out:+$out+}$name$([ "$n" = 1 ] || printf 'x%s' "$n")"
+  done
+  printf '%s' "${out:-none}"
+}
+r6_failed() { local n; n="$(sed -n 's/^\([0-9][0-9]*\) check(s) failed$/\1/p' <<< "$1")"; printf '%s' "${n:-0}"; }
+r6_result() { jq -c --arg r "$1" '.permission_denials = [] | .result = $r' "$FIX/.stub/result-real.jsonl"; }
+# r6_errored <content JSON, or null for none> — the real Read's tool_use, its tool_result an error
+r6_errored() {
+  tpl_swap "$FIX/.stub/tpl-read-use.jsonl"
+  jq -c --argjson c "$1" '.message.content[0] |= (.is_error = true
+    | if $c == null then del(.content) else .content = $c end)' "$FIX/.stub/tpl-read-result.jsonl"
+}
+{ tpl_swap "$FIX/.stub/tpl-deny-use.jsonl"; cat "$FIX/.stub/tpl-deny-result.jsonl"; r6_result DENIED
+} > "$FIX/.stub/r6-string.jsonl"
+r6_string_want="$(jq -r '.message.content[0].content' "$FIX/.stub/tpl-deny-result.jsonl")"
+R6_LINE1="$(printf '\033[31mFile does not exist.\tNote: your current working directory is /home/joruge/repos/sales_quote.'
+  head -c 200 /dev/zero | tr '\0' y)"
+r6_blocks_want="$(printf '%s' "${R6_LINE1:0:200}" | tr -d '\033\t')"
+r6_blocks="$(jq -cn --arg t "$R6_LINE1"$'\n'"R6-SECOND-LINE" \
+  '[{"type":"tool_reference","tool_name":"TaskStop"},{"type":"text","text":$t},{"type":"text","text":"R6-SECOND-BLOCK"}]')"
+{ r6_errored "$r6_blocks"; r6_result DENIED; } > "$FIX/.stub/r6-blocks.jsonl"
+{ r6_errored null; r6_result DENIED; } > "$FIX/.stub/r6-empty.jsonl"
+{ tpl_swap "$FIX/.stub/tpl-deny-use.jsonl"; cat "$FIX/.stub/tpl-deny-result.jsonl"
+  tpl_swap "$FIX/.stub/tpl-read-use.jsonl"; cat "$FIX/.stub/tpl-read-result.jsonl"; r6_result "---"
+} > "$FIX/.stub/r6-error-then-read.jsonl"
+cat > "$FIX/.stub/r6-bash-denied-raw.jsonl" <<'EOF'
+{"type":"assistant","message":{"model":"claude-opus-5-5","id":"msg_011Cg6qyZrD69vM94pB8jnWJ","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01MPuyzfvhXsKLua7i8zAM8f","name":"Bash","input":{"command":"grep -E 'package/(README|AGENTS|CHANGELOG)' /tmp/gate-i5.log | sort | uniq -c; bash -c 'o=$(cd packages/object-storage && npx --no-install vitest run readme-contrato --reporter=json 2>/dev/null); npm run -s typecheck -w packages/object-storage >/dev/null 2>/dev/null; t=$?; c=$(grep -c '\"'\"'^## \\[1\\.0\\.0\\]'\"'\"' packages/object-storage/CHANGELOG.md 2>/dev/null); node -e '\"'\"'let r={};try{r=JSON.parse(process.argv[1])}catch(e){};console.log(r.numFailedTests===0 && (r.numPassedTests ?? 0)>=3, process.argv[2], Number(process.argv[3]))'\"'\"' \"$o\" \"$t\" \"$c\"'; d=$(mktemp -d); npm pack -w packages/object-storage --pack-destination \"$d\" 2>/dev/null | tail -1; ls -l \"$d\"/*.tgz | awk '{print $5}'; tar tzf \"$d\"/*.tgz | wc -l; rm -rf \"$d\"; git status --short","description":"Run the I5 Check and measure the tarball","timeout":300000},"caller":{"type":"direct"}}],"container":null,"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":{"input_tokens":2,"cache_creation_input_tokens":823,"cache_read_input_tokens":146268,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":823},"output_tokens":8,"service_tier":"standard","inference_geo":"global","speed":"standard"},"input_transformations":[],"diagnostics":null,"context_management":null},"parent_tool_use_id":null,"session_id":"191e4ed1-dd78-4a43-b5cf-f933fa1ecc99","uuid":"d8ad21f0-b9ef-4bd0-a85a-7639a3c31058","timestamp":"2026-10-17T00:15:12.407Z","request_id":"req_011Cg6qyZYrGMuqMu9DVTieu","wire_tool_inputs":{"toolu_01MPuyzfvhXsKLua7i8zAM8f":{"command":"cd /home/joruge/repos/jrc-libs && grep -E 'package/(README|AGENTS|CHANGELOG)' /tmp/gate-i5.log | sort | uniq -c; bash -c 'o=$(cd packages/object-storage && npx --no-install vitest run readme-contrato --reporter=json 2>/dev/null); npm run -s typecheck -w packages/object-storage >/dev/null 2>/dev/null; t=$?; c=$(grep -c '\"'\"'^## \\[1\\.0\\.0\\]'\"'\"' packages/object-storage/CHANGELOG.md 2>/dev/null); node -e '\"'\"'let r={};try{r=JSON.parse(process.argv[1])}catch(e){};console.log(r.numFailedTests===0 && (r.numPassedTests ?? 0)>=3, process.argv[2], Number(process.argv[3]))'\"'\"' \"$o\" \"$t\" \"$c\"'; d=$(mktemp -d); npm pack -w packages/object-storage --pack-destination \"$d\" 2>/dev/null | tail -1; ls -l \"$d\"/*.tgz | awk '{print $5}'; tar tzf \"$d\"/*.tgz | wc -l; rm -rf \"$d\"; git status --short","description":"Run the I5 Check and measure the tarball","timeout":300000}},"wire_ingest_context":{"toolu_01MPuyzfvhXsKLua7i8zAM8f":{"cwd":"/home/joruge/repos/jrc-libs"}}}
+{"type":"system","subtype":"permission_denied","tool_name":"Bash","tool_use_id":"toolu_01MPuyzfvhXsKLua7i8zAM8f","decision_reason_type":"safetyCheck","decision_reason":"This shell -c script runs rm and could not be checked","message":"This command passes a shell -c script that runs rm, and Claude Code could not check the script for dangerous removals. Approve only if you have read the script.","uuid":"b25188b6-a5e4-49fd-92c8-0bce9972dacc","session_id":"191e4ed1-dd78-4a43-b5cf-f933fa1ecc99"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"This command passes a shell -c script that runs rm, and Claude Code could not check the script for dangerous removals. Approve only if you have read the script.","is_error":true,"tool_use_id":"toolu_01MPuyzfvhXsKLua7i8zAM8f"}]},"parent_tool_use_id":null,"session_id":"191e4ed1-dd78-4a43-b5cf-f933fa1ecc99","uuid":"876a7610-a131-4093-93ca-f9811d6b833a","timestamp":"2026-10-17T00:15:12.424Z","tool_use_result":"Error: This command passes a shell -c script that runs rm, and Claude Code could not check the script for dangerous removals. Approve only if you have read the script.","tool_result_meta":[{"id":"toolu_01MPuyzfvhXsKLua7i8zAM8f","non_execution_kind":"user-rejected","permission_decision":{"decision":"reject","source":"config"}}]}
+EOF
+{ cat "$FIX/.stub/r6-bash-denied-raw.jsonl"
+  jq -c --slurpfile u <(head -1 "$FIX/.stub/r6-bash-denied-raw.jsonl") '.permission_denials = [$u[0].message.content[0]
+    | {"tool_name": .name, "tool_use_id": .id, "tool_input": .input}] | .result = "DENIED"' "$FIX/.stub/result-real.jsonl"
+} > "$FIX/.stub/r6-bash-denied.jsonl"
+{ jq -c --arg p "$TPL_HOME/templates/checkpoint.md" '(.message.content[]? | select(.type == "tool_use") | .input.file_path) |= $p' \
+    "$FIX/.stub/tpl-read-use.jsonl"; cat "$FIX/.stub/tpl-read-result.jsonl"; r6_result "---"
+} > "$FIX/.stub/r6-other-path.jsonl"
+{ tpl_swap "$FIX/.stub/tpl-deny-use.jsonl" | jq -c '(.message.content[]? | select(.type == "tool_use") | .name) |= "Edit"'
+  cat "$FIX/.stub/tpl-deny-result.jsonl"; r6_result DENIED
+} > "$FIX/.stub/r6-other-tool.jsonl"
+tpl_stub "$FIX/.stub/tpl-stream-read.jsonl"
+r6_o_read="$( "$SDD" preflight 2>&1 )"
+tpl_stub "$FIX/.stub/r6-string.jsonl"
+o="$( "$SDD" preflight 2>&1 )"
+r6_string="arm=$(r6_arm "$o"),same=$(r4_n "$R6_SAME $r6_string_want" "$o"),cause=$(r4_n "$R6_CAUSE" "$o"),remedy=$(r4_n "$R6_REMEDY" "$o")"
+r6_string="$r6_string,more=$(( $(r6_failed "$o") - $(r6_failed "$r6_o_read") ))"
+tpl_stub "$FIX/.stub/r6-blocks.jsonl"
+o="$( "$SDD" preflight 2>&1 )"
+r6_blocks="arm=$(r6_arm "$o"),err=$(r4_n "$R6_SAME $r6_blocks_want" "$o"),cut=$(r4_n "${r6_blocks_want}y" "$o")"
+r6_blocks="$r6_blocks,line=$(r4_n R6-SECOND-LINE "$o"),block=$(r4_n R6-SECOND-BLOCK "$o"),ctl=$(grep -c $'[\033\t\r]' <<< "$o")"
+r6_blocks="$r6_blocks,more=$(( $(r6_failed "$o") - $(r6_failed "$r6_o_read") ))"
+tpl_stub "$FIX/.stub/r6-empty.jsonl"
+o="$( "$SDD" preflight 2>&1 )"
+r6_empty="arm=$(r6_arm "$o"),none=$(r4_n "$R6_SAME (none)" "$o"),more=$(( $(r6_failed "$o") - $(r6_failed "$r6_o_read") ))"
+tpl_stub "$FIX/.stub/r6-error-then-read.jsonl"
+r6_retried="$(r6_arm "$( "$SDD" preflight 2>&1 )")"
+tpl_stub "$FIX/.stub/r6-bash-denied.jsonl"
+r6_elsewhere="bash=$(r6_arm "$( "$SDD" preflight 2>&1 )")"
+tpl_stub "$FIX/.stub/r6-other-path.jsonl"
+r6_elsewhere="$r6_elsewhere,path=$(r6_arm "$( "$SDD" preflight 2>&1 )")"
+tpl_stub "$FIX/.stub/r6-other-tool.jsonl"
+r6_elsewhere="$r6_elsewhere,tool=$(r6_arm "$( "$SDD" preflight 2>&1 )")"
+r4_stub "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/r4-none" healthy
+r6_alone="init=$(r6_arm "$( "$SDD" preflight 2>&1 )")"
+r4_stub "$FIX/.stub/result-ok.jsonl" "$FIX/.stub/r4-none" healthy
+r6_alone="$r6_alone,result=$(r6_arm "$( "$SDD" preflight 2>&1 )")"
+tpl_stub "$FIX/.stub/result-ok.jsonl"
+r6_nottried="$(r6_arm "$( "$SDD" preflight 2>&1 )")"
+r6_before="denied=$(r6_arm "$out_tpl_denied") read=$(r6_arm "$out_tpl_read") not-tried=$r6_nottried"
+r6_before="$r6_before empty=$(r6_arm "$r6_o_empty") garbage=$(r6_arm "$r6_o_garbage") dead=$(r6_arm "$r6_o_dead")"
+r6_before="$r6_before bash-dead=$(r6_arm "$r6_o_bashdead") jq=$(r4_n 'jq: ' "$r6_o_garbage")"
+assert_eq "the template probe names the outcome of its Read once, and a Read that comes back with an error fails by name" \
+  "string:arm=errored,same=1,cause=1,remedy=1,more=1 blocks:arm=errored,err=1,cut=0,line=0,block=0,ctl=0,more=1 empty:arm=errored,none=1,more=1 precedence:denied=denied,retried=read elsewhere:bash=not-tried,path=not-tried,tool=not-tried alone:init=not-tried,result=not-tried before:denied=denied read=read not-tried=not-tried empty=no-session garbage=no-session dead=no-session-warn bash-dead=read jq=0" \
+  "string:$r6_string blocks:$r6_blocks empty:$r6_empty precedence:denied=$(r6_arm "$out_tpl_denied"),retried=$r6_retried elsewhere:$r6_elsewhere alone:$r6_alone before:$r6_before"
+
+# ...and the default: an outcome the classifier prints and the `case` does not know is never green.
+# No stream reaches it — every outcome jq can print has an arm —, so it is built: a copy of the kit
+# whose classifier spells the not-tried outcome as a word the `case` does not know (built like the
+# copy of the no-rule world above), proved sabotaged, under the not-tried stream. Exactly one arm
+# prints, the default's fail line, naming the word it got, with one failure more than the real kit
+# under the same stream.
+TPL_UNKNOWN="$(CDPATH='' cd -P "$FIX/.stub" && pwd)/kit-r6-unknown"
+mkdir -p "$TPL_UNKNOWN/bin"
+sed 's/ then "not-tried"$/ then "r6-unknown-outcome"/' "$SDD" > "$TPL_UNKNOWN/bin/sdd"
+chmod +x "$TPL_UNKNOWN/bin/sdd"
+cp "$ROOT/bin/sdd-coordination.py" "$TPL_UNKNOWN/bin/sdd-coordination.py"
+ln -s "$ROOT/agents" "$TPL_UNKNOWN/agents"
+tpl_stub "$FIX/.stub/result-ok.jsonl"
+o="$( "$SDD" preflight 2>&1 )"
+o_unknown="$( "$TPL_UNKNOWN/bin/sdd" preflight 2>&1 )"
+assert_eq "an outcome the template probe's verdict does not know fails by name, never green" \
+  "sabotaged:1 arm:unknown named:1 more:1" \
+  "sabotaged:$(grep -c ' then "r6-unknown-outcome"$' "$TPL_UNKNOWN/bin/sdd") arm:$(r6_arm "$o_unknown") named:$(r4_n "$R6_UNKNOWN r6-unknown-outcome" "$o_unknown") more:$(( $(r6_failed "$o_unknown") - $(r6_failed "$o") ))"
 
 # A kit whose path the grammar of the read rules refuses (Codex r3 #2 on PR #315). The harness reads
 # `Read(/<path>/**)` as a gitignore-style pattern, so a kit at `/opt/sdd*` would grant

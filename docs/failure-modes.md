@@ -87,7 +87,11 @@ line, so `tail -F` shows it without opening the session's `.json`.
   (the ledger's session rows carry `harness:`). A `Read` in `ALLOWED_TOOLS` does not turn it green:
   the probe never carries that key. A probe that fails with "got no init line and no result line"
   never measured the rule: the CLI refused one of the probe's flags, and the first line of its
-  stderr, printed in the failure, names which one. A failure that says "the kit's templates are at
+  stderr, printed in the failure, names which one. A probe that fails with "came back with an
+  error" did try the `Read`: the first line of the error, printed in the failure, says whether the
+  template is missing or unreadable in the kit (restore the kit's checkout) or the harness refused
+  it and reported the refusal only in the `tool_result`, which after a harness bump is the rule's
+  syntax again. A failure that says "the kit's templates are at
   … a path the grammar of the read rules refuses" means the kit lives under a path with a space, a
   glob character or anything but letters, digits, `.`, `_` and `-` in a component: no session gets
   the templates' rule there, since a glob would widen it, and the probe is not opened. Move the kit

@@ -188,15 +188,22 @@ um `--allowedTools` só com as linhas do `kit_read_rules` — nunca o `ALLOWED_T
 largo leria o template sozinho e deixaria a sonda verde sobre uma regra vazia ou quebrada (P3 do
 Codex no #315); `kit_read_rules` sem linha nenhuma é `_fail` sem sessão, e o kit cujo caminho a
 gramática recusa nem chega a ela: é nomeado uma vez, antes, sem sessão —, pedindo o `Read` de
-`$SDD_HOME/templates/handoff.md`. O veredito lê o artefato do stream, nunca a resposta, e é
-exaustivo (a cadeia termina num `else`): o template no `permission_denials` (casado pelo caminho) é
-`_fail`; um `tool_result` sem `is_error` para o `Read` dele é `ok`; respondeu sem tentar o `Read` é
-`warn`; sem init nem `result` que o jq leia é `_fail` nomeado com a 1ª linha do stderr da sessão —
-a CLI que recusa uma flag desta sonda sai antes do init enquanto responde à do `Bash` (P2 do Codex
-na r2 do #315) —, salvo quando a sonda do `Bash` também não respondeu: uma causa, uma falha, e a
-dos templates só avisa (`mut_PRE_template_probe_silent_unnamed`,
-`mut_PRE_template_probe_dead_counted_twice`). O isolamento é o ponto: com as settings do ambiente, um
-`additionalDirectories` ou um `Read(*)` lê o template sem regra nenhuma, e a sonda ficaria verde
+`$SDD_HOME/templates/handoff.md`. O veredito lê o artefato do stream, nunca a resposta, e dá nome
+uma vez ao desfecho do `Read`: um jq só imprime um de cinco desfechos, e um `case` despacha, com
+default que reprova (P2 do Codex na r4 do #315 — a cadeia de antes definia os dois últimos braços
+por eliminação, e o `Read` que voltava com erro caía no aviso de que a sessão não tentou). Em ordem
+de precedência (`mut_PRE_template_outcome_error_over_denied`, `mut_PRE_template_outcome_error_over_read`):
+o template no `permission_denials` (casado pelo caminho) é `_fail`; um `tool_result` sem `is_error`
+para o `Read` dele é `ok`; um `tool_result` com `is_error`, sem negativa para o caminho, é `_fail`
+com a 1ª linha do erro (template ausente ou ilegível, ou harness que reporta a recusa só no
+`tool_result`; `mut_PRE_template_outcome_error_warned`); respondeu sem tentar o `Read` é `warn`;
+sem init nem `result` que o jq leia é `_fail` nomeado com a 1ª linha do stderr da sessão — a CLI que
+recusa uma flag desta sonda sai antes do init enquanto responde à do `Bash` (P2 do Codex na r2 do
+#315) —, salvo quando a sonda do `Bash` também não respondeu: uma causa, uma falha, e a dos templates
+só avisa (`mut_PRE_template_probe_silent_unnamed`, `mut_PRE_template_probe_dead_counted_twice`); e o
+desfecho que o `case` não conhece é `_fail` (`mut_PRE_template_outcome_default_green`). O
+isolamento é o ponto: com as settings do ambiente, um `additionalDirectories` ou um `Read(*)` lê o
+template sem regra nenhuma, e a sonda ficaria verde
 nesta máquina sobre uma regra que não faz nada. É também o sensor do dia em que o harness mudar a
 sintaxe da regra. Custa uma sessão haiku por preflight: US$ 0,002 (US$ 0,00197 medidos em
 2026-10-20 às 22:59, Claude Code 2.1.304, com a regra lendo o template) e uns 6 s (as sondas p5 e p6

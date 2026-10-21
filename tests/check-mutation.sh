@@ -2557,7 +2557,7 @@ mut_PREFLIGHT_num_turns_unchecked() {
 # the kit, by "a kit_read_rules that prints no rule fails the template probe by name, with no
 # session", `named:0 … session:1`. Measured one by one on a copy of the kit.
 mut_PRE_template_read_unchecked() {
-  sed -i '/^cmd_preflight() {/,/^}/ s|^        _fail "a session with NO settings and the kit read rules alone|        ok "a session with NO settings and the kit read rules alone|' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "a session with NO settings and the kit read rules alone|          ok "a session with NO settings and the kit read rules alone|' "$1"
 }
 mut_PRE_template_probe_reads_settings() {
   sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools "${tpl_rules|--setting-sources "user,project,local" --allowedTools "${tpl_rules|' "$1"
@@ -2572,17 +2572,42 @@ mut_PRE_template_probe_empty_unguarded() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^    elif \[ "${#tpl_rules\[@\]}" -eq 0 \]; then$|    elif false; then|' "$1"
 }
 # Codex P2 in the second round on PR #315, one mutant per arm R4 gave the template probe's verdict.
-# SILENT_UNNAMED: the `_fail` of arm 4 becomes a no-op, the shape before R4 — a stream with no init
+# SILENT_UNNAMED: the `_fail` of the no-session arm becomes a no-op, the shape before R4 — a stream with no init
 # line and no result line ends the chain saying nothing, and preflight is green over a rule it never
 # measured; caught by "a template probe that emits no init and no result fails by name, and a dead
 # CLI fails once" (check-preflight.sh), `empty:named=0` and `garbage:named=0`. DEAD_COUNTED_TWICE:
 # the exception of the dead CLI comes off, and a CLI that answers neither probe fails twice for one
 # cause — the same assertion, `dead:fails=2`.
 mut_PRE_template_probe_silent_unnamed() {
-  sed -i '/^cmd_preflight() {/,/^}/ s|^        _fail "the template probe got no init line and no result line it could read|        : "the template probe got no init line and no result line it could read|' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s|^            _fail "the template probe got no init line and no result line it could read|            : "the template probe got no init line and no result line it could read|' "$1"
 }
 mut_PRE_template_probe_dead_counted_twice() {
-  sed -i '/^cmd_preflight() {/,/^}/ s|^      elif \[ -n "\$probe_silent" \]; then$|      elif false; then|' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          if \[ -n "\$probe_silent" \]; then$|          if false; then|' "$1"
+}
+# Codex P2 in the fourth round on PR #315: the verdict names the outcome of the Read once, and one
+# mutant per rule R6 gave it. ERROR_WARNED: the errored arm prints a warning instead of a failure, so
+# a Read that came back with an error leaves preflight green again, only louder than before R6 —
+# caught by "the template probe names the outcome of its Read once, and a Read that comes back with
+# an error fails by name" (check-preflight.sh), `string:arm=none,…,more=0`. DEFAULT_GREEN: the
+# default of the `case` prints `ok`, so an outcome the classifier prints and no arm knows reads as
+# the rule working — caught only on the sensor's sabotaged copy of the kit, by "an outcome the
+# template probe's verdict does not know fails by name, never green", `arm:none … more:0`.
+# ERROR_OVER_READ: the precedence is inverted below `read`, and a Read retried after an error is an
+# error — the first assertion, `retried=errored`. ERROR_OVER_DENIED: inverted above `denied`, and the
+# real denied stream, whose tool_result carries is_error too, is an error with no denial — the first
+# assertion, `denied=errored`, and "preflight fails when the kit rule alone cannot read the
+# templates", whose denial needle no longer prints.
+mut_PRE_template_outcome_error_warned() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s Read of|          warn "the template probe'"'"'s Read of|' "$1"
+}
+mut_PRE_template_outcome_default_green() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
+}
+mut_PRE_template_outcome_error_over_read() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^            elif any(\$results\[\]; .is_error != true) then "read"$#            elif any($results[]; .is_error != true) and (any($results[]; .is_error == true) | not) then "read"#' "$1"
+}
+mut_PRE_template_outcome_error_over_denied() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#\.tool_input\.file_path == \$p) then "denied"$#.tool_input.file_path == $p) and (any($results[]; .is_error == true) | not) then "denied"#' "$1"
 }
 
 # ADR 0019 §2, what the phases will not be able to read — the two warnings of preflight, and the four
@@ -6712,6 +6737,10 @@ CATALOG=(
   PRE_template_probe_empty_unguarded
   PRE_template_probe_silent_unnamed
   PRE_template_probe_dead_counted_twice
+  PRE_template_outcome_error_warned
+  PRE_template_outcome_default_green
+  PRE_template_outcome_error_over_read
+  PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent
   PRE_undeclared_skill_silent
   PRE_skill_cover_unslashed
