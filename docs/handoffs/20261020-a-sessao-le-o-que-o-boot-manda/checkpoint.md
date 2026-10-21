@@ -1,6 +1,6 @@
 ---
 missao: 20261020-a-sessao-le-o-que-o-boot-manda
-atualizado: 2026-10-21 08:51
+atualizado: 2026-10-21 10:12
 ---
 
 # Checkpoint — a sessão lê o que o boot manda ler
@@ -58,6 +58,7 @@ atualizado: 2026-10-21 08:51
 | R2 | revisão final lote #2 e #8 — o aviso da skill achada no cache de plugins nomeia o installed_plugins.json (o cache pode ter mais de uma cópia), e o comentário da sonda do Bash deixa de dizer que ela leva as flags inteiras do run_phase | `o=$(bash tests/check-preflight.sh 2>&1); a=$(grep -c '^  ok    a skill found in the plugin cache is warned with installed_plugins.json named, since the cache may hold more than one copy' <<< "$o"); b=$(grep -c 'minus the read rules (ADR 0019 §3)' bin/sdd); echo "$a $b"` → `1 1` | done | 5f05cf4 |
 | R3 | Codex P3 do #315 — a sonda isolada do preflight leva só as linhas do kit_read_rules no --allowedTools, nunca o ALLOWED_TOOLS base, que com um Read largo a deixava verde sobre uma regra vazia ou quebrada | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    the template probe carries only the kit read rules, never ALLOWED_TOOLS' <<< "$o"` → `1` | done | b96afd8 |
 | R4 | Codex P2 da r2 do #315 — a sonda dos templates que sai sem init e sem result falha nomeada, em vez de calar e deixar o preflight verde sem medir a regra; a CLI morta continua sendo uma falha só, a da sonda do Bash | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    a template probe that emits no init and no result fails by name, and a dead CLI fails once' <<< "$o"` → `1` | done | 8c72cfb |
+| R5 | Codex r3 do #315, lote #1 e #2 — o registro de plugins só conta a chave do próprio plugin da skill (como o health_provenance), e um caminho do kit que a gramática das regras recusa não ganha regra dos templates, com o preflight nomeando o caminho | `o=$(bash tests/check-preflight.sh 2>&1); a=$(grep -c '^  ok    a plugin skill is looked up in the registry only under its own plugin key, never another plugin' <<< "$o"); b=$(grep -c '^  ok    a kit path the read-rule grammar refuses gets no template rule, and preflight names it' <<< "$o"); echo "$a $b"` → `1 1` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
