@@ -5277,10 +5277,14 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
   -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT)
 
 # kit_read_rules — the read-only permission rules every session the runner opens receives, one per
-# line (ADR 0019 §1). ONE definition: each door that assembles a `claude -p` hands every line as one
-# more argument of `--allowedTools` — right after "$ALLOWED_TOOLS" in run_phase and cmd_close, and
-# with nothing before it in the preflight's isolated probe, which asks whether these rules read on
-# their own (§3) —, and no door copies a rule.
+# line (ADR 0019 §1): the templates' rules (kit_template_rules), then one rule per READ_EXTRA entry,
+# each directory through dir_read_rules. ONE definition: each door that assembles a `claude -p`
+# hands every line as one more argument of `--allowedTools`, right after "$ALLOWED_TOOLS" in
+# run_phase and cmd_close, and no door copies a rule. The preflight's isolated probe is the one door
+# that takes kit_template_rules alone, with nothing before it, since it asks whether the rule it
+# names reads on its own (§3): a READ_EXTRA entry that covers the kit (`$HOME`, with SDD_HOME below
+# it, which the grammar accepts) reads the template by itself, and on the probe's list it would
+# answer for a templates rule that was sabotaged or broken (Codex P3 in the fifth round on PR #315).
 # The boot prompt orders every phase to start from $SDD_HOME/templates/ (boot_prompt, item 6), and
 # under `acceptEdits --allowedTools Bash` the harness DENIES a Read outside the target repo; the
 # session then reads it through Bash, works from memory, or stops — all three seen in the window
@@ -5300,7 +5304,7 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
 # directory. A target skipped that way is denied, and the denial is a DENIED line in the journal —
 # which `sdd preflight` names beforehand, with no entry to add, when a skill it finds resolves there.
 # The resolved branch is measured through a symlinked READ_EXTRA entry (check-dry-run.sh); no
-# fixture symlinks templates/, since SDD_HOME is physical (`cd -P`), and both go through this loop.
+# fixture symlinks templates/, since SDD_HOME is physical (`cd -P`), and both go through dir_read_rules.
 # The templates' own path is held to the same grammar (Codex r3 #2 on PR #315): the harness reads the
 # rule as a pattern, so a kit at `/opt/sdd*` would grant `/opt/sdd-secret/templates/**` too, and the
 # preflight's isolated probe stays green over it — it proves the session reads, never that it reads
@@ -5309,26 +5313,43 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
 # follow: closed, never widened. `sdd preflight` names that path, with the remedy, and does not open
 # the template probe. For a READ_EXTRA entry the check never fires — load_config refused it by name.
 #
-# It only PRINTS, and is read by substitution (`mapfile -t … < <(kit_read_rules)`): no `die`, no
-# global — either would be lost in the subshell. Validation of anything it reads lives in load_config.
+# The three only PRINT, and are read by substitution (`mapfile -t … < <(kit_read_rules)`): no `die`,
+# no global — either would be lost in the subshell. Validation of anything they read lives in
+# load_config. The lines kit_read_rules prints, and their order, are the ones it printed before the
+# split: the templates' rule and its target's, then each entry's and its target's.
 # Sensors (tests/): check-dry-run.sh (phases, READ_EXTRA), check-gates.sh (sdd close, the READ_EXTRA
-# guard), check-preflight.sh (probe; a kit path the grammar refuses, in the probe and the projection).
+# guard), check-preflight.sh (probe; a kit path the grammar refuses, in the probe and the projection;
+# the probe's list against the phases' under an entry that covers the kit).
 kit_read_rules() {
-  local dir real=""
-  local -a dirs=("$SDD_HOME/templates")
-  mapfile -t -O 1 dirs < <(read_extra_each)
-  for dir in "${dirs[@]}"; do
-    read_extra_dir_ok "$dir" || continue
-    printf 'Read(/%s/**)\n' "$dir"
-    real="$(readlink -f -- "$dir" 2>/dev/null)" || real=""
-    # An empty `real` — readlink failed, which `-f` does when a parent of the entry is missing — is
-    # refused by the grammar too, so no probe can make the `-n` red while that check stands. It stays
-    # because it decides which failure a dropped check produces: without it, an entry under a missing
-    # parent would print `Read(//**)`, the whole filesystem (CLAUDE.md, the corollary's counter-example).
-    if [ -n "$real" ] && [ "$real" != "$dir" ] && read_extra_dir_ok "$real"; then
-      printf 'Read(/%s/**)\n' "$real"
-    fi
-  done
+  local dir
+  kit_template_rules
+  while IFS= read -r dir; do
+    dir_read_rules "$dir"
+  done < <(read_extra_each)
+}
+
+# kit_template_rules — the rules for the kit's own templates, the ones the boot names: the rule for
+# $SDD_HOME/templates and its resolved target's, or none when the grammar refuses the path.
+kit_template_rules() {
+  dir_read_rules "$SDD_HOME/templates"
+}
+
+# dir_read_rules <dir> — the read rules for ONE directory, the one definition both lists above are
+# made of: nothing when the grammar refuses <dir> (read_extra_dir_ok), else `Read(/<dir>/**)`, and
+# `Read(/<target>/**)` too when `readlink -f` resolves <dir> elsewhere and the target passes the
+# same grammar. rc 0 either way: a refused directory is a directory with no rule, never an error.
+dir_read_rules() {
+  local dir="$1" real=""
+  read_extra_dir_ok "$dir" || return 0
+  printf 'Read(/%s/**)\n' "$dir"
+  real="$(readlink -f -- "$dir" 2>/dev/null)" || real=""
+  # An empty `real` — readlink failed, which `-f` does when a parent of the entry is missing — is
+  # refused by the grammar too, so no probe can make the `-n` red while that check stands. It stays
+  # because it decides which failure a dropped check produces: without it, an entry under a missing
+  # parent would print `Read(//**)`, the whole filesystem (CLAUDE.md, the corollary's counter-example).
+  if [ -n "$real" ] && [ "$real" != "$dir" ] && read_extra_dir_ok "$real"; then
+    printf 'Read(/%s/**)\n' "$real"
+  fi
 }
 
 # READ_EXTRA — the directories THIS project's phases read beyond the repo, parsed in ONE place
@@ -6427,16 +6448,17 @@ cmd_preflight() {
   done < <(read_extra_each)
 
   # --- the kit's own path, against the grammar of the read rules (ADR 0019 §1) ---
-  # kit_read_rules holds $SDD_HOME/templates to read_extra_dir_ok, the grammar READ_EXTRA is held to
-  # (Codex r3 #2 on PR #315): the harness reads a rule as a pattern, so a glob character in the kit's
-  # path would grant every directory it matches. A refused path gets no rule at all, in every session
-  # the runner opens — the phases are denied the templates the boot names. Named here, ONCE, before
-  # any session and whether or not claude is installed, since the cause is the path. The template
-  # probe below is then not opened: there is no rule to measure, and opening it would add a second
-  # failure for the same cause with the wrong reason — "kit_read_rules printed no read rule" with
-  # READ_EXTRA empty, "the harness refused them" with entries. The same predicate on the same path
-  # as the rule's own: the sensor asks both in one world (no rule naming the kit in the probe's argv
-  # nor in the phases' projection, and this line printed), so a drift between them is red there.
+  # kit_template_rules holds $SDD_HOME/templates to read_extra_dir_ok, the grammar READ_EXTRA is held
+  # to (Codex r3 #2 on PR #315): the harness reads a rule as a pattern, so a glob character in the
+  # kit's path would grant every directory it matches. A refused path gets no rule at all, in every
+  # session the runner opens — the phases are denied the templates the boot names. Named here, ONCE,
+  # before any session and whether or not claude is installed, since the cause is the path. The
+  # template probe below is then not opened: there is no rule to measure, and opening it would add a
+  # second failure for the same cause with the wrong reason — "kit_template_rules printed no read
+  # rule", with READ_EXTRA empty or not, since the probe carries no entry's rule. The same predicate
+  # on the same path as the rule's own: the sensor asks both in one world (no rule naming the kit in
+  # the probe's argv nor in the phases' projection, and this line printed), so a drift between them
+  # is red there.
   # Sensor: tests/check-preflight.sh.
   local kit_tpl_refused=""
   if ! read_extra_dir_ok "$SDD_HOME/templates"; then
@@ -6515,24 +6537,30 @@ cmd_preflight() {
     fi
 
     # --- the template probe (ADR 0019 §3) ---
-    # The boot prompt orders every phase to start from $SDD_HOME/templates/, and kit_read_rules is the
-    # read-only rule every session gets for it. Whether the HARNESS honours that rule is a fact no argv
-    # shows, and the session above cannot measure it: it loads the user's settings, and an
-    # `additionalDirectories` or a `Read(*)` there reads the template with no rule at all (measured in
-    # 2.1.304, ADR 0019) — on the operator's machine it would be green over a rule that does nothing,
-    # and a target's machine is not the operator's. So a SECOND session, isolated: `--setting-sources
-    # ""` loads no settings, cwd in a scratch dir, the harness env unset as run_phase unsets it, and an
-    # --allowedTools that carries the lines of kit_read_rules and NOTHING else. Never "$ALLOWED_TOOLS":
-    # it is a project key, and a broad `Read` there reads the template by itself, so the probe would
-    # print that the kit's rule works over a rule that was empty or broken (Codex P3 on PR #315); the
-    # Bash probe above keeps it, since the phase's flags are what that one proves. With nothing else
-    # on it, the rules cannot be absent — an --allowedTools with no argument takes the next flag for
-    # its value —, so a kit_read_rules that printed nothing fails by name and opens no session. No
-    # config reaches that branch: the templates' rule is printed whenever the kit's path passes the
-    # grammar, and a kit whose path does not is answered by the arm before it — named once, above,
-    # and no session opened, since there is no rule to measure (Codex r3 #2 on PR #315). The sensor
-    # builds the empty world on a sabotaged copy of the kit. The verdict reads the stream's
-    # artifacts, never the answer, and it names the outcome of the Read ONCE: one jq over the
+    # The boot prompt orders every phase to start from $SDD_HOME/templates/, and kit_template_rules is
+    # the read-only rule every session gets for it (kit_read_rules hands it first). Whether the HARNESS
+    # honours that rule is a fact no argv shows, and the session above cannot measure it: it loads the
+    # user's settings, and an `additionalDirectories` or a `Read(*)` there reads the template with no
+    # rule at all (measured in 2.1.304, ADR 0019) — on the operator's machine it would be green over a
+    # rule that does nothing, and a target's machine is not the operator's. So a SECOND session,
+    # isolated: `--setting-sources ""` loads no settings, cwd in a scratch dir, the harness env unset
+    # as run_phase unsets it, and an --allowedTools that carries the lines of kit_template_rules and
+    # NOTHING else. Never "$ALLOWED_TOOLS": it is a project key, and a broad `Read` there reads the
+    # template by itself, so the probe would print that the kit's rule works over a rule that was
+    # empty or broken (Codex P3 on PR #315); the Bash probe above keeps it, since the phase's flags
+    # are what that one proves. Never the READ_EXTRA rules kit_read_rules adds after the templates'
+    # either, for the same reason with a second source: an entry that covers the kit (`$HOME`, with
+    # SDD_HOME below it — the grammar accepts it, a limit declared in ADR 0019) reads the template by
+    # itself, and the probe certified a templates rule that was sabotaged or broken (Codex P3 in the
+    # fifth round on PR #315). The entries are not measured here: the warnings above (READ_EXTRA
+    # names a directory that does not exist; a skill no read rule covers) read kit_read_rules whole.
+    # With nothing else on it, the rules cannot be absent — an --allowedTools with no argument takes
+    # the next flag for its value —, so a kit_template_rules that printed nothing fails by name and
+    # opens no session. No config reaches that branch: the templates' rule is printed whenever the
+    # kit's path passes the grammar, and a kit whose path does not is answered by the arm before it —
+    # named once, above, and no session opened, since there is no rule to measure (Codex r3 #2 on PR
+    # #315). The sensor builds the empty world on a sabotaged copy of the kit. The verdict reads the
+    # stream's artifacts, never the answer, and it names the outcome of the Read ONCE: one jq over the
     # slurped stream prints exactly one of five outcomes, and a `case` sends each to its arm. The
     # chain it replaced defined its last two arms by elimination, so an outcome it did not name fell
     # into the first arm left: a Read that came back with an error, its path in no denial, warned
@@ -6567,11 +6595,13 @@ cmd_preflight() {
     # denied instead, another path, another tool, an init line alone and a result line alone;
     # no-session empty, unparseable, both probes dead, and the Bash probe alone dead), the precedence
     # in two worlds of two outcomes, the default on a sabotaged copy of the kit, and this session's
-    # argv, since its stub answers whatever the fixture says.
+    # argv, since its stub answers whatever the fixture says — and, under an entry that covers the
+    # kit, that argv against the phases' with a stub that answers as the harness would: the real kit
+    # reads, and a copy whose templates rule is broken is denied.
     local tpl_path="$SDD_HOME/templates/handoff.md" tpl_dir="" tpl_stream="" tpl_err=""
     local tpl_class="" tpl_outcome="" tpl_why=""
     local -a tpl_rules=()
-    mapfile -t tpl_rules < <(kit_read_rules)
+    mapfile -t tpl_rules < <(kit_template_rules)
     [ -n "$kit_tpl_refused" ] || tpl_dir="$(mktemp -d 2>/dev/null)" || tpl_dir=""
     if [ -n "$kit_tpl_refused" ]; then
       dim "  ---  template probe not opened: the kit's path is refused above, so no session carries a rule to measure"
@@ -6579,8 +6609,8 @@ cmd_preflight() {
       warn "could not create a scratch directory for the template probe — the kit's read rule was not measured"
     elif [ "${#tpl_rules[@]}" -eq 0 ]; then
       rm -rf -- "$tpl_dir" 2>/dev/null || true
-      _fail "kit_read_rules printed no read rule, so the template probe was not opened — every session
-        the runner opens gets no rule for $SDD_HOME/templates/. See kit_read_rules and ADR 0019 §3."
+      _fail "kit_template_rules printed no read rule, so the template probe was not opened — every session
+        the runner opens gets no rule for $SDD_HOME/templates/. See kit_template_rules and ADR 0019 §3."
     else
       tpl_stream="$( cd "$tpl_dir" && env "${HARNESS_ENV_UNSET[@]}" claude -p "Use the Read tool (never Bash) to read $tpl_path and reply with ONLY its first line. If the Read is refused, reply DENIED and try nothing else." \
           --model haiku --permission-mode "$PERMISSION_MODE" --output-format stream-json --verbose \

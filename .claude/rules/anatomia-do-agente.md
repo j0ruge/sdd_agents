@@ -47,17 +47,20 @@ só o executor edita código. Ferramenta a mais é superfície de erro que nenhu
 `run_phase()`, `HAT_DENY_BASE` é o que nenhuma fase usou, e `sdd census <missão>` mede o depois.
 Desde `20261020-a-sessao-le-o-que-o-boot-manda` o `run_phase` soma ao `--allowedTools`, cada uma
 como argumento próprio logo depois do valor, as regras só de leitura do `kit_read_rules` (ADR 0019
-§1) — a dos templates, `Read(/$SDD_HOME/templates/**)`, com duas barras na grafia literal: o boot manda
-toda fase partir dos templates do kit, e sob `acceptEdits --allowedTools Bash` o harness nega o
-`Read` fora do repo do alvo (medido em 2.1.296 e 2.1.304). O `--add-dir` foi recusado porque libera
-também a escrita no kit. A ADR nomeia três portas (`run_phase`, `cmd_close`, a sonda do
-`sdd preflight`); cada porta que recebe a regra tem o seu probe — a do `run_phase` é o
-`tests/check-dry-run.sh`, bloco a bloco, com o mutante `mut_RUN_templates_read_rule_dropped`; a do
-`cmd_close`, que não passa pelo `run_phase` e lê a mesma função à mão, é o `tests/check-gates.sh`
-sobre o argv da sessão de fechamento, com o `mut_RUN_close_templates_read_rule_dropped`; a da sonda
-dos templates do `sdd preflight` (§4) é o `tests/check-preflight.sh`, que lê o argv dessa sessão,
-com o `mut_PRE_template_probe_rule_dropped`, o `mut_PRE_template_probe_reads_settings` e o
-`mut_PRE_template_probe_allowlist_widened`. O caminho dos templates passa pela mesma gramática do
+§1), feitas por uma definição só por diretório (`dir_read_rules`: a gramática, a regra e a do alvo
+resolvido) — primeiro as dos templates (`kit_template_rules`), `Read(/$SDD_HOME/templates/**)`,
+com duas barras na grafia literal: o boot manda toda fase partir dos templates do kit, e sob
+`acceptEdits --allowedTools Bash` o harness nega o `Read` fora do repo do alvo (medido em 2.1.296 e
+2.1.304). O `--add-dir` foi recusado porque libera também a escrita no kit. A ADR nomeia três
+portas (`run_phase`, `cmd_close`, a sonda do `sdd preflight`); cada porta que recebe a regra tem o
+seu probe — a do `run_phase` é o `tests/check-dry-run.sh`, bloco a bloco, com o mutante
+`mut_RUN_templates_read_rule_dropped` (e o `mut_RUN_read_rules_templates_dropped`, quando o
+`kit_read_rules` deixa de compor as dos templates); a do `cmd_close`, que não passa pelo
+`run_phase` e lê a mesma função à mão, é o `tests/check-gates.sh` sobre o argv da sessão de fechamento, com o `mut_RUN_close_templates_read_rule_dropped`; a da sonda
+dos templates do `sdd preflight` (§4), que recebe só o `kit_template_rules`, é o
+`tests/check-preflight.sh`, que lê o argv dessa sessão, com o `mut_PRE_template_probe_rule_dropped`,
+o `mut_PRE_template_probe_reads_settings`, o `mut_PRE_template_probe_allowlist_widened` e o
+`mut_PRE_template_probe_reads_every_rule`. O caminho dos templates passa pela mesma gramática do
 `READ_EXTRA` (`read_extra_dir_ok`; r3 #2 do Codex no #315): o harness lê a regra como padrão, e um kit
 em `/opt/sdd*` daria leitura a `/opt/sdd-secret/templates/**`, com a sonda verde, porque ela prova que
 a sessão lê, não que lê só o que devia. O kit cujo caminho a gramática recusa não ganha regra dos
@@ -184,10 +187,15 @@ entrada — um bloco `## ` cujo título e uma linha que cita o id inteiro da mis
 de cada merge-base (ADR 0018 §4); o dono é o `sdd-docs`.
 Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §3) o `sdd preflight` abre uma segunda
 sessão, a sonda dos templates: `--setting-sources ""`, cwd num `mktemp -d`, o env do harness limpo,
-um `--allowedTools` só com as linhas do `kit_read_rules` — nunca o `ALLOWED_TOOLS`, onde um `Read`
-largo leria o template sozinho e deixaria a sonda verde sobre uma regra vazia ou quebrada (P3 do
-Codex no #315); `kit_read_rules` sem linha nenhuma é `_fail` sem sessão, e o kit cujo caminho a
-gramática recusa nem chega a ela: é nomeado uma vez, antes, sem sessão —, pedindo o `Read` de
+um `--allowedTools` só com as linhas do `kit_template_rules` (a regra dos templates e a do alvo
+resolvido) — nunca o `ALLOWED_TOOLS`, onde um `Read` largo leria o template sozinho e deixaria a
+sonda verde sobre uma regra vazia ou quebrada (P3 do Codex no #315), nem as regras do `READ_EXTRA`
+que o `kit_read_rules` soma depois delas, onde uma entrada que cubra o kit (`$HOME`, com o
+`SDD_HOME` abaixo, que a gramática aceita) faria o mesmo, e a sonda certificaria a regra dos
+templates sabotada ou quebrada (P3 do Codex na r5 do #315, `mut_PRE_template_probe_reads_every_rule`);
+as entradas seguem cobertas pelos avisos do preflight, que leem o `kit_read_rules` inteiro;
+`kit_template_rules` sem linha nenhuma é `_fail` sem sessão, e o kit cujo caminho a gramática recusa
+nem chega a ela: é nomeado uma vez, antes, sem sessão —, pedindo o `Read` de
 `$SDD_HOME/templates/handoff.md`. O veredito lê o artefato do stream, nunca a resposta, e dá nome
 uma vez ao desfecho do `Read`: um jq só imprime um de cinco desfechos, e um `case` despacha, com
 default que reprova (P2 do Codex na r4 do #315 — a cadeia de antes definia os dois últimos braços

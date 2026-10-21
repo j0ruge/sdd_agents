@@ -64,7 +64,7 @@ stale one: the harness loads `.claude/agents/`, so a corrected source proves not
 
 ⚠️ `sdd preflight` fires **two real headless sessions** (each capped at US$ 1): one proves the phase
 sessions can actually execute a command, the other, with no settings at all and nothing but the
-kit's read rules on its allowlist, that they can read the kit's templates
+read rule for the kit's templates on its allowlist, that they can read the kit's templates
 ([ADR 0019](docs/adr/0019-the-session-reads-what-the-boot-names.md)) — that is what makes it
 valuable, and what makes it cost money. Do not run it in a loop.
 

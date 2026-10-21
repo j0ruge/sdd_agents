@@ -1009,9 +1009,11 @@ publisher. `sdd run --dry-run` prints a `boundary:` line per phase with exactly 
 passed; `tests/check-dry-run.sh` asserts it.
 
 Since `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §1) every phase session also gets **one
-read-only rule**: `kit_read_rules` prints `Read(/$SDD_HOME/templates/**)` (two slashes in its
-literal spelling, because the path starts with one), and `run_phase` hands each line as an
-argument of its own right after the `--allowedTools` value. The boot prompt orders every phase to
+read-only rule**: `kit_template_rules` prints `Read(/$SDD_HOME/templates/**)` (two slashes in its
+literal spelling, because the path starts with one), `kit_read_rules` hands it first, and
+`run_phase` hands each line of `kit_read_rules` as an argument of its own right after the
+`--allowedTools` value. One definition, `dir_read_rules`, builds the rules of every directory:
+the templates' and each `READ_EXTRA` entry's. The boot prompt orders every phase to
 start from those templates, and under `acceptEdits --allowedTools Bash` the harness denies a `Read`
 outside the target repo — measured in Claude Code 2.1.296 and 2.1.304. The rule reads and does not
 write: a `Write` in the same directory stayed denied. `--add-dir` is not used, because it lets the
@@ -1047,9 +1049,13 @@ file, since the cache may hold more than one copy. The registry has one reader,
 No argv assertion says whether the **harness** honours the rule, so `sdd preflight` asks (ADR 0019
 §3). Next to the `Bash` probe it opens a second session, isolated: `--setting-sources ""` (no
 settings at all), cwd in a `mktemp -d`, the harness environment unset as `run_phase` unsets it, and
-an `--allowedTools` that carries the lines of `kit_read_rules` and nothing else. `ALLOWED_TOOLS`
+an `--allowedTools` that carries the lines of `kit_template_rules` and nothing else. `ALLOWED_TOOLS`
 stays off it: a broad `Read` there would read the template by itself and turn the probe green over
-an empty or broken rule, and a `kit_read_rules` that printed nothing fails by name, with no session.
+an empty or broken rule. The `READ_EXTRA` rules stay off it for the same reason: an entry that
+covers the kit (`$HOME`, with `$SDD_HOME` below it, which the grammar accepts) reads the template by
+itself, and the probe certified a templates rule that was sabotaged or broken (the Codex P3 in the
+fifth round on PR #315); the entries keep the warnings above, which read `kit_read_rules` whole. A
+`kit_template_rules` that printed nothing fails by name, with no session.
 A kit whose path the grammar refuses never reaches the probe: it is named once, above, and there is
 no rule to measure. It asks for a `Read` of
 `$SDD_HOME/templates/handoff.md` and reads the stream, never the answer: one jq names the outcome of
@@ -1069,8 +1075,10 @@ the point: with the settings loaded, an `additionalDirectories` or a `Read(*)` o
 machine reads the template with no rule at all, and the probe would be green over a rule that does
 nothing. `tests/check-preflight.sh` asserts the verdict both ways, every outcome in worlds of its
 own (the stream with no init and no result in four), the precedence in two worlds of two outcomes,
-the default on a sabotaged copy of the kit, and the argv of that session, the rules as its whole
-`--allowedTools` under an `ALLOWED_TOOLS` that carries `Read`.
+the default on a sabotaged copy of the kit, and the argv of that session, the templates' rule as
+its whole `--allowedTools` under an `ALLOWED_TOOLS` that carries `Read` — and, under an entry that
+covers the kit, with a stub that answers as the harness would, the real kit's probe reading and a
+copy with a broken templates rule denied, while the phases carry the templates' rule and the entry's.
 Both preflight probes are capped in money (`--max-budget-usd 1` each) and not in time.
 
 ⚠️ **Two keys for one list, and the split is measured (2026-09-06, Claude Code 2.1.263).** The

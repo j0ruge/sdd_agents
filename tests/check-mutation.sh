@@ -2549,13 +2549,18 @@ mut_PREFLIGHT_num_turns_unchecked() {
 # --setting-sources. ALLOWLIST_WIDENED puts "$ALLOWED_TOOLS" back in front of the rules, where a
 # broad `Read` of the target answers for them (Codex P3 on PR #315) — both argv assertions, the one
 # above (`rule:no-rule`) and "the template probe carries only the kit read rules, never
-# ALLOWED_TOOLS", with `[Bash Read]` first. RULE_DROPPED stops calling kit_read_rules: since R3 the
-# probe then fails by name and opens no session, so the verdict, the refusal's sentence and both
+# ALLOWED_TOOLS", with `[Bash Read]` first. RULE_DROPPED stops calling kit_template_rules: since R3
+# the probe then fails by name and opens no session, so the verdict, the refusal's sentence and both
 # argv assertions go red (`no-argv`); the no-rule assertion stays green there, since its copy fails
 # by the same guard. EMPTY_UNGUARDED drops that guard, and the probe opens a session whose
 # --allowedTools takes the next flag for its value — caught only on the sensor's sabotaged copy of
-# the kit, by "a kit_read_rules that prints no rule fails the template probe by name, with no
-# session", `named:0 … session:1`. Measured one by one on a copy of the kit.
+# the kit, by "a kit_template_rules that prints no rule fails the template probe by name, with no
+# session", `named:0 … session:1`. READS_EVERY_RULE hands the probe kit_read_rules whole again, the
+# shape before R7 (Codex P3 in the fifth round on PR #315): a READ_EXTRA entry that covers the kit
+# reads the template in place of the templates' rule — caught by "the template probe carries the
+# templates rule alone, never a READ_EXTRA rule that covers the kit", `covering:probe=` with the
+# entry's rule second, and `sabotaged:…ok=1` over a broken templates rule. Measured one by one on a
+# copy of the kit.
 mut_PRE_template_read_unchecked() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "a session with NO settings and the kit read rules alone|          ok "a session with NO settings and the kit read rules alone|' "$1"
 }
@@ -2566,7 +2571,10 @@ mut_PRE_template_probe_allowlist_widened() {
   sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools "${tpl_rules|--setting-sources "" --allowedTools "$ALLOWED_TOOLS" "${tpl_rules|' "$1"
 }
 mut_PRE_template_probe_rule_dropped() {
-  sed -i '/^cmd_preflight() {/,/^}/ s|^    mapfile -t tpl_rules < <(kit_read_rules)$|    :|' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    mapfile -t tpl_rules < <(kit_template_rules)$|    :|' "$1"
+}
+mut_PRE_template_probe_reads_every_rule() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    mapfile -t tpl_rules < <(kit_template_rules)$|    mapfile -t tpl_rules < <(kit_read_rules)|' "$1"
 }
 mut_PRE_template_probe_empty_unguarded() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^    elif \[ "${#tpl_rules\[@\]}" -eq 0 \]; then$|    elif false; then|' "$1"
@@ -2687,8 +2695,8 @@ mut_PRE_registry_prefix_unbounded() {
 }
 # Codex r3 #2 on PR #315, the preflight's half: a kit whose path the grammar of the read rules refuses
 # is named once and the template probe is not opened. KIT_PATH_UNNAMED: the refusal never fires —
-# with READ_EXTRA empty the probe's own arm for an empty rule list speaks for the cause with the
-# wrong reason, with entries the probe opens over the READ_EXTRA rules alone; caught by "a kit path
+# the probe's own arm for an empty rule list speaks for the cause with the wrong reason, with
+# READ_EXTRA empty or not, since R7 the probe carries no entry's rule; caught by "a kit path
 # the read-rule grammar refuses gets no template rule, and preflight names it" (check-preflight.sh),
 # `empty:named=0,…,r3=1`. KIT_PATH_PROBE_OPENED: the refusal is named but the probe's chain forgets
 # it, and lands on the scratch arm, whose warning says the rule was not measured for a reason that is
@@ -2950,20 +2958,28 @@ mut_RUN_close_templates_read_rule_dropped() {
 # Caught by "READ_EXTRA reaches every phase as a read-only rule, symlink resolved" (check-dry-run.sh):
 # the run with the key prints the templates' rule alone.
 mut_RUN_read_extra_ignored() {
-  sed -i '/^kit_read_rules() {/,/^}/ { /^  mapfile -t -O 1 dirs < <(read_extra_each)$/d }' "$1"
+  sed -i '/^kit_read_rules() {/,/^}/ s|^    dir_read_rules "\$dir"$|    :|' "$1"
+}
+
+# Codex P3 in the fifth round on PR #315: kit_read_rules stops composing kit_template_rules, so the
+# phases lose the templates' rule while the preflight's probe, which reads kit_template_rules alone,
+# still has it. Caught by "every phase may read the kit templates, and only read them"
+# (check-dry-run.sh), five `no-rule` — and by R7's `phases=0/5` behind it.
+mut_RUN_read_rules_templates_dropped() {
+  sed -i '/^kit_read_rules() {/,/^}/ { /^  kit_template_rules$/d }' "$1"
 }
 
 # The resolved target's rule goes: a symlinked skill keeps the rule of the path asked for only, and
 # the harness, which checks the resolved path too, denies it (measured in 2.1.304, ADR 0019).
 # Caught by the same assertion: `target` missing after `link`.
 mut_RUN_read_extra_symlink_unresolved() {
-  sed -i '/^kit_read_rules() {/,/^}/ { /^      printf .*"\$real"$/ s/.*/      :/ }' "$1"
+  sed -i '/^dir_read_rules() {/,/^}/ { /^    printf .*"\$real"$/ s/.*/    :/ }' "$1"
 }
 
 # The resolved target is emitted unchecked: a name the machine chose, `odd[1]`, enters a rule the
 # harness reads as a bracket expression. Caught by the same assertion: a rule for `odd[1]` appears.
 mut_RUN_read_extra_target_unchecked() {
-  sed -i '/^kit_read_rules() {/,/^}/ s| [&][&] read_extra_dir_ok "\$real"; then$|; then|' "$1"
+  sed -i '/^dir_read_rules() {/,/^}/ s| [&][&] read_extra_dir_ok "\$real"; then$|; then|' "$1"
 }
 
 # Codex r3 #2 on PR #315: the templates' own path is emitted unchecked again, so a kit under
@@ -2972,7 +2988,7 @@ mut_RUN_read_extra_target_unchecked() {
 # `projection:…kit=5` alone: the preflight's refusal reads the grammar on its own and still skips the
 # probe, so only the phases' projection shows the rule — which is why the assertion reads it.
 mut_RUN_kit_path_unchecked() {
-  sed -i '/^kit_read_rules() {/,/^}/ { /^    read_extra_dir_ok "\$dir" || continue$/d }' "$1"
+  sed -i '/^dir_read_rules() {/,/^}/ { /^  read_extra_dir_ok "\$dir" || return 0$/d }' "$1"
 }
 
 # The guard of READ_EXTRA, one mutant per refusal class — the key WIDENS a permission, so a refusal
@@ -6734,6 +6750,7 @@ CATALOG=(
   PRE_template_probe_reads_settings
   PRE_template_probe_allowlist_widened
   PRE_template_probe_rule_dropped
+  PRE_template_probe_reads_every_rule
   PRE_template_probe_empty_unguarded
   PRE_template_probe_silent_unnamed
   PRE_template_probe_dead_counted_twice
@@ -6782,6 +6799,7 @@ CATALOG=(
   RUN_templates_read_rule_dropped
   RUN_close_templates_read_rule_dropped
   RUN_read_extra_ignored
+  RUN_read_rules_templates_dropped
   RUN_read_extra_symlink_unresolved
   RUN_read_extra_target_unchecked
   RUN_kit_path_unchecked

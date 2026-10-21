@@ -54,14 +54,17 @@ scratch repositories, with the environment cleared as `HARNESS_ENV_UNSET` clears
 
 ### §1 — A read-only rule, built once, at every door that opens a session
 
-`kit_read_rules` prints the rules every session the runner opens receives, one per line:
-`Read(/$SDD_HOME/templates/**)`, which with an absolute `$SDD_HOME` is
-`Read(//home/…/templates/**)`, then the project's (§2). The three doors that assemble a
-`claude -p` call it: `run_phase`, the preflight probe and `cmd_close`. `run_phase` and `cmd_close`
-append every line as one more argument of `--allowedTools`, after `"$ALLOWED_TOOLS"`; the preflight
-probe hands the lines with nothing before them (§3); and no door copies the rule. The
-shape is the measured one: the rule as an argument of its own, two slashes in its literal
-spelling. Three slashes were never measured.
+`kit_read_rules` prints the rules every session the runner opens receives, one per line: the
+templates' rules first, `Read(/$SDD_HOME/templates/**)`, which with an absolute `$SDD_HOME` is
+`Read(//home/…/templates/**)`, then the project's (§2). One definition builds the rules of a
+directory, `dir_read_rules`: the grammar, the rule, and the resolved target's rule when that target
+passes the grammar too. `kit_template_rules` is that definition applied to the templates, and
+`kit_read_rules` is `kit_template_rules` followed by one `dir_read_rules` per `READ_EXTRA` entry.
+The three doors that assemble a `claude -p` read them: `run_phase` and `cmd_close` append every
+line of `kit_read_rules` as one more argument of `--allowedTools`, after `"$ALLOWED_TOOLS"`; the
+preflight probe hands the lines of `kit_template_rules` alone, with nothing before them (§3); and no
+door copies a rule. The shape is the measured one: the rule as an argument of its own, two slashes
+in its literal spelling. Three slashes were never measured.
 
 The templates' own path is held to the grammar of §2 (`read_extra_dir_ok`; the Codex r3 #2 on PR
 #315, decided by the human). The harness reads the rule as a pattern, so a kit at `/opt/sdd*` would
@@ -71,10 +74,10 @@ gets no rule, and neither does its resolved target, since the harness wants both
 alone reads nothing. The project's rules still follow: the read fails closed and is never widened.
 `sdd preflight` fails once, naming the path and the grammar, saying that the phases will not read
 the templates, and telling the operator to move the kit to a literal path. It does not open the
-probe of §3, because there is no rule to measure: a probe over the project's rules alone, or over
-no rule, would fail a second time for the same cause and give the wrong reason. `load_config` does
-not refuse that path. Refusing would kill every kit command, and the missing read costs the phases
-only the templates.
+probe of §3, because there is no rule to measure: a probe over no rule (it never carries the
+project's, §3) would fail a second time for the same cause and give the wrong reason.
+`load_config` does not refuse that path. Refusing would kill every kit command, and the missing
+read costs the phases only the templates.
 
 ### §2 — The project declares the skill directories in `READ_EXTRA`
 
@@ -111,7 +114,7 @@ The existing probe (the executor hat and `Bash`, under `user,project,local`) sta
 parity with the phase is what it proves — the phase's flags minus the read rules, which the second
 session proves. A second haiku session runs with `--setting-sources ""`, its working directory in a
 `mktemp -d`, `--permission-mode "$PERMISSION_MODE"`,
-an `--allowedTools` that carries the lines of `kit_read_rules` and nothing else, and
+an `--allowedTools` that carries the lines of `kit_template_rules` and nothing else, and
 `--strict-mcp-config`, and asks for a `Read` of `$SDD_HOME/templates/handoff.md`. It runs under
 `--output-format stream-json --verbose`, because the `tool_use` and `tool_result` lines the
 verdict reads exist only there, and with the environment cleared as `run_phase` clears it. The verdict reads the session's
@@ -157,20 +160,32 @@ holds. That makes the preflight red, never green.
 `"$ALLOWED_TOOLS"` stays off that flag (the Codex P3 on PR #315, decided by the human). It is a
 project key, and a broad `Read` in it reads the template on its own, so the probe would be green
 over a rule that is empty or that the harness no longer honours; the question is whether the kit's
-rule reads, not whether this target's phases do. With nothing else on the flag the rules cannot be
-absent, since an `--allowedTools` with no argument takes the next flag for its value: a
-`kit_read_rules` that printed nothing fails by name, before any session. No configuration reaches
-that arm. A kit whose path the grammar refuses is answered before it: named once, with no session
-(§1).
+rule reads, not whether this target's phases do.
+
+The project's rules stay off it too (the Codex P3 in the fifth round on PR #315, decided by the
+human: probe only the kit's rule). It is the same class with a second source of a broad rule: the
+grammar accepts an entry that covers the kit (`$HOME`, with `$SDD_HOME` below it, a limit declared
+under Consequences), and that entry reads the template by itself, so the probe certified a templates
+rule that was sabotaged or broken. The probe measures exactly the rule it names. The `READ_EXTRA`
+entries are covered by the preflight's warnings (an entry that does not exist, a skill no read rule
+covers), which read `kit_read_rules` whole.
+
+With nothing else on the flag the rules cannot be absent, since an `--allowedTools` with no argument
+takes the next flag for its value: a `kit_template_rules` that printed nothing fails by name,
+before any session. No configuration reaches that arm. A kit whose path the grammar refuses is
+answered before it: named once, with no session (§1).
 
 `tests/check-preflight.sh` holds the verdict with a stub pair that differs in one thing, and holds
 the argv separately: the session carries an empty `--setting-sources` and, as its whole
-`--allowedTools` list, the rules, under an `ALLOWED_TOOLS` that carries `Read`. Without the argv
-assertions a mutant that hands the probe something other than the rules — the user's settings,
-`"$ALLOWED_TOOLS"` in front of them — would survive, because the stub answers what the fixture
-says. `no-session` is held in four worlds: the template probe prints nothing (with a long
-stderr line), it prints lines jq cannot parse, both probes are dead, and only the `Bash` probe is
-dead. `errored` is held in three (the content a string, a list of blocks, and none), `not-tried`
+`--allowedTools` list, the templates' rule, under an `ALLOWED_TOOLS` that carries `Read`. Without the
+argv assertions a mutant that hands the probe something other than that rule — the user's settings,
+`"$ALLOWED_TOOLS"` in front of it — would survive, because the stub answers what the fixture
+says. Under a `READ_EXTRA` entry that covers the kit, the stub answers as the harness would (a
+`Read(/<dir>/**)` argument reads what is under `<dir>`): the real kit's probe carries the templates'
+rule alone and reads, a copy of the kit whose templates rule is broken is denied, and in both the
+phases' projection carries the templates' rule and then the entry's, as before. `no-session` is
+held in four worlds: the template probe prints nothing (with a long stderr line), it prints lines
+jq cannot parse, both probes are dead, and only the `Bash` probe is dead. `errored` is held in three (the content a string, a list of blocks, and none), `not-tried`
 against a denied `Bash` call, a `Read` of another path, another tool and a session line alone, the
 precedence in two worlds of two outcomes, and the default on a sabotaged copy of the kit.
 
@@ -213,6 +228,10 @@ precedence in two worlds of two outcomes, and the default on a sabotaged copy of
   written. Parity with the phase, but a broad `Read` in a target's `ALLOWED_TOOLS` reads the
   template with no rule, and the probe printed that the kit's rule works over one that was empty or
   broken (the Codex P3 on PR #315).
+- **§3: the probe under every line of `kit_read_rules`**, as written until the fifth round. One
+  list for every door, but a `READ_EXTRA` entry that covers the kit reads the template in place of
+  the templates' rule, and the probe certified a rule that was sabotaged or broken (the Codex P3 in
+  the fifth round on PR #315). The human decided on probing only the kit's rule.
 - **§3: no verdict for a stream with no init line and no result line**, as first written. The
   `Bash` probe's "did not answer" was meant to cover it, which holds only when the whole CLI is
   dead. A CLI that refused one of this probe's flags left the preflight green over a rule it never
@@ -250,10 +269,11 @@ precedence in two worlds of two outcomes, and the default on a sabotaged copy of
   decides to replace them.
 - Declared limits: a `deny` rule in a target's settings blocks the real phase and not the isolated
   probe, and only the journal's `DENIED` line names it, during the run. The converse holds for a
-  broad `Read` in a target's `ALLOWED_TOOLS`: its phases read the templates even when the kit's rule
-  does not, and its probe is red anyway, because the probe measures the kit's rule. The
-  single-argument form (`--allowedTools "Bash Read(…)"`) was not measured. A symlink below a declared directory, as
-  opposed to the directory itself, is not resolved. An `$SDD_HOME` that is not a literal path (a
+  broad `Read` in a target's `ALLOWED_TOOLS`, or a `READ_EXTRA` entry that covers the kit: its
+  phases read the templates even when the kit's rule does not, and its probe is red anyway, because
+  the probe measures the kit's rule. The single-argument form (`--allowedTools "Bash Read(…)"`)
+  was not measured. A symlink below a declared directory, as opposed to the directory itself, is
+  not resolved. An `$SDD_HOME` that is not a literal path (a
   glob character, a space, a `+`) gets no rule (§1), and its phases are denied the templates, which
   `sdd preflight` says by name. This line used to say that such a path entered the rule as it was
   and that the isolated probe of §3 would tell whether the harness read it. The probe cannot tell:
@@ -264,7 +284,8 @@ precedence in two worlds of two outcomes, and the default on a sabotaged copy of
   entry equal to `$HOME`, or a symlink whose target is the home, passes it and becomes
   `Read(//home/<user>/**)` (`/home` itself becomes `Read(//home/**)`), so every phase may read the
   whole home. That is read only, and a phase already has `Bash`, which reads whatever the user can,
-  so it is hygiene, not a boundary.
+  so it is hygiene, not a boundary. Such an entry no longer answers for the kit's rule in the probe
+  of §3, which carries the templates' rules alone.
   `readlink -f` runs when the argv is assembled, once per session: a symlink retargeted during the
   session fails closed, its new target denied and named by a `DENIED` line in the journal. The two
   paid probes of `sdd preflight` carry a cost cap (`--max-budget-usd 1` each) and no time cap:

@@ -354,11 +354,12 @@ assert_has "a result line without num_turns is named by preflight" \
 
 # --- the template probe: a session with NO settings reads the kit templates -
 # ADR 0019 §3. The boot prompt orders every phase to start from $SDD_HOME/templates/, and the runner
-# hands every session a read-only rule for it (kit_read_rules). Whether the HARNESS honours that rule
-# is the one fact no argv assertion can see, so preflight asks a second, ISOLATED session to Read a
-# template: `--setting-sources ""` (no settings at all — with them, an `additionalDirectories` or a
-# `Read(*)` on the operator's machine reads the template with no rule, measured in ADR 0019), cwd in
-# a scratch dir, the harness env unset, and the kit's read rules as ALL its --allowedTools carries.
+# hands every session a read-only rule for it (kit_template_rules, which kit_read_rules hands first).
+# Whether the HARNESS honours that rule is the one fact no argv assertion can see, so preflight asks
+# a second, ISOLATED session to Read a template: `--setting-sources ""` (no settings at all — with
+# them, an `additionalDirectories` or a `Read(*)` on the operator's machine reads the template with
+# no rule, measured in ADR 0019), cwd in a scratch dir, the harness env unset, and the templates'
+# rules as ALL its --allowedTools carries.
 # The assertions own different mutants:
 #   - the VERDICT, differentially: a stream whose result line denies the template gives the fail
 #     line and no ok line; a stream whose Read came back without is_error gives the ok line and no
@@ -404,14 +405,20 @@ EOF
 cat > "$FIX/.stub/tpl-deny-result.jsonl" <<'EOF'
 {"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"Claude requested permissions to read from /home/joruge/repos/sdd_agents-f9/templates/handoff.md, but you haven't granted it yet.","is_error":true,"tool_use_id":"toolu_01MDELeMNnxY93rh1hk2gera"}]},"parent_tool_use_id":null,"session_id":"95ae6f0a-5b40-4351-b8b2-83581c0ce0f0","uuid":"62009e13-66ff-4899-9893-e1d3af64d396","timestamp":"2026-10-20T22:44:07.069Z","tool_use_result":"Error: Claude requested permissions to read from /home/joruge/repos/sdd_agents-f9/templates/handoff.md, but you haven't granted it yet.","tool_result_meta":[{"id":"toolu_01MDELeMNnxY93rh1hk2gera","non_execution_kind":"user-rejected","permission_decision":{"decision":"reject","source":"config"}}]}
 EOF
-tpl_swap() { jq -c --arg p "$TPL_PATH" '(.message.content[]? | select(.type == "tool_use") | .input.file_path) |= $p' "$1"; }
-{ tpl_swap "$FIX/.stub/tpl-read-use.jsonl"; cat "$FIX/.stub/tpl-read-result.jsonl"
-  jq -c '.permission_denials = [] | .result = "---"' "$FIX/.stub/result-real.jsonl"
-} > "$FIX/.stub/tpl-stream-read.jsonl"
-{ tpl_swap "$FIX/.stub/tpl-deny-use.jsonl"; cat "$FIX/.stub/tpl-deny-result.jsonl"
-  jq -c --arg p "$TPL_PATH" '.permission_denials = [{"tool_name":"Read","tool_use_id":"toolu_014J3i9bJz2vEo2L4ivXyL4Z","tool_input":{"file_path":$p}}] | .result = "DENIED"' \
-    "$FIX/.stub/result-real.jsonl"
-} > "$FIX/.stub/tpl-stream-denied.jsonl"
+# tpl_swap <file> [path] — the tool_use's file_path swapped for [path], this fixture's template by default
+tpl_swap() { jq -c --arg p "${2:-$TPL_PATH}" '(.message.content[]? | select(.type == "tool_use") | .input.file_path) |= $p' "$1"; }
+# tpl_streams <template path> <prefix> — <prefix>-read.jsonl and <prefix>-denied.jsonl, the read and
+# the denied stream of a template probe that asked for <template path>
+tpl_streams() {
+  { tpl_swap "$FIX/.stub/tpl-read-use.jsonl" "$1"; cat "$FIX/.stub/tpl-read-result.jsonl"
+    jq -c '.permission_denials = [] | .result = "---"' "$FIX/.stub/result-real.jsonl"
+  } > "$2-read.jsonl"
+  { tpl_swap "$FIX/.stub/tpl-deny-use.jsonl" "$1"; cat "$FIX/.stub/tpl-deny-result.jsonl"
+    jq -c --arg p "$1" '.permission_denials = [{"tool_name":"Read","tool_use_id":"toolu_014J3i9bJz2vEo2L4ivXyL4Z","tool_input":{"file_path":$p}}] | .result = "DENIED"' \
+      "$FIX/.stub/result-real.jsonl"
+  } > "$2-denied.jsonl"
+}
+tpl_streams "$TPL_PATH" "$FIX/.stub/tpl-stream"
 
 # tpl_stub <stream> — the template probe gets <stream>, its argv and env recorded; any other call
 # gets the healthy Bash-probe stream of stub A.
@@ -494,13 +501,11 @@ assert_eq "the template probe runs with no settings and carries the kit rule" \
 # ...and the rules are ALL its --allowedTools carries (Codex P3 on PR #315). ALLOWED_TOOLS is a
 # project key, and a broad `Read` there reads the template on its own: the probe used to print that
 # the kit's rule works over a rule that was empty, or spelled in a syntax the harness no longer
-# honours. So this run hands the probe ALLOWED_TOOLS="Bash Read" and one READ_EXTRA entry — two
-# rule lines, so every line of kit_read_rules is measured and not only the first —, and the
-# arguments between --allowedTools and the next flag must be those lines, in order: no `Bash Read`,
-# no bare `Read`, no `Bash`. Each argument is printed in brackets, so an empty one shows. The entry
-# is physical (`cd -P`), so kit_read_rules prints one rule for it and not two.
-TPL_RX="$(CDPATH='' cd -P "$FIX/.stub" && pwd)/tpl-rx"
-mkdir -p "$TPL_RX"
+# honours. So this run hands the probe ALLOWED_TOOLS="Bash Read", and the arguments between
+# --allowedTools and the next flag must be the templates' rule alone (kit_template_rules): no
+# `Bash Read`, no bare `Read`, no `Bash`. Each argument is printed in brackets, so an empty one
+# shows. The READ_EXTRA rules are the other source of a broad rule, and their world is the block
+# after the kit path's (Codex P3 in the fifth round on PR #315).
 tpl_allow_of() { # <argv file> → [arg],[arg]… between --allowedTools and the next flag
   [ -f "$1" ] || { printf 'no-argv'; return 0; }
   awk '
@@ -516,35 +521,35 @@ tpl_allow_of() { # <argv file> → [arg],[arg]… between --allowedTools and the
     }' "$1"
 }
 tpl_stub "$FIX/.stub/tpl-stream-read.jsonl"
-ALLOWED_TOOLS="Bash Read" READ_EXTRA="$TPL_RX" "$SDD" preflight >/dev/null 2>&1
+ALLOWED_TOOLS="Bash Read" "$SDD" preflight >/dev/null 2>&1
 assert_eq "the template probe carries only the kit read rules, never ALLOWED_TOOLS" \
-  "[Read(/$TPL_HOME/templates/**)],[Read(/$TPL_RX/**)]" "$(tpl_allow_of "$FIX/.stub/tpl-argv")"
+  "[Read(/$TPL_HOME/templates/**)]" "$(tpl_allow_of "$FIX/.stub/tpl-argv")"
 
-# With nothing but the rules on it, a kit_read_rules that printed NOTHING would leave --allowedTools
-# with no argument, and the harness would take the next flag for its value. No config reaches that
-# arm — the templates' rule is printed whenever the kit's path passes the grammar, and a kit whose
-# path does not is answered before it (the block after the next) —, so it is built: a copy of the
-# kit whose kit_read_rules returns at once (agents/ linked, the coordination helper copied, bin/sdd
-# a real file because _resolve_self follows symlinks), proved sabotaged before anything is
-# concluded. The probe fails by name, both lines of its sentence, opens no session, and leaves no
-# mktemp dir (`tmp.*`) in the TMPDIR it was given — Node writes its compile cache there too, hence
-# the name.
+# With nothing but the rules on it, a kit_template_rules that printed NOTHING would leave
+# --allowedTools with no argument, and the harness would take the next flag for its value. No config
+# reaches that arm — the templates' rule is printed whenever the kit's path passes the grammar, and a
+# kit whose path does not is answered before it (the block after the next) —, so it is built: a copy
+# of the kit whose kit_template_rules returns at once (agents/ linked, the coordination helper
+# copied, bin/sdd a real file because _resolve_self follows symlinks), proved sabotaged before
+# anything is concluded. The probe fails by name, both lines of its sentence, opens no session, and
+# leaves no mktemp dir (`tmp.*`) in the TMPDIR it was given — Node writes its compile cache there
+# too, hence the name.
 TPL_NORULE="$(CDPATH='' cd -P "$FIX/.stub" && pwd)/kit-no-rule"
 mkdir -p "$TPL_NORULE/bin" "$TPL_NORULE/tmp"
-sed 's/^kit_read_rules() {$/kit_read_rules() { return 0/' "$SDD" > "$TPL_NORULE/bin/sdd"
+sed 's/^kit_template_rules() {$/kit_template_rules() { return 0/' "$SDD" > "$TPL_NORULE/bin/sdd"
 chmod +x "$TPL_NORULE/bin/sdd"
 cp "$ROOT/bin/sdd-coordination.py" "$TPL_NORULE/bin/sdd-coordination.py"
 ln -s "$ROOT/agents" "$TPL_NORULE/agents"
 tpl_stub "$FIX/.stub/tpl-stream-read.jsonl"
 out_tpl_norule="$( TMPDIR="$TPL_NORULE/tmp" "$TPL_NORULE/bin/sdd" preflight 2>&1 )"
-nr_sab="$(grep -c '^kit_read_rules() { return 0$' "$TPL_NORULE/bin/sdd")"
-nr_named="$(grep -cF -- "fail  kit_read_rules printed no read rule, so the template probe was not opened" \
+nr_sab="$(grep -c '^kit_template_rules() { return 0$' "$TPL_NORULE/bin/sdd")"
+nr_named="$(grep -cF -- "fail  kit_template_rules printed no read rule, so the template probe was not opened" \
   <<< "$out_tpl_norule")"
 nr_cons="$(grep -cF -- "the runner opens gets no rule for $TPL_NORULE/templates/" <<< "$out_tpl_norule")"
 nr_ok="$(grep -cF -- "$TPL_OK" <<< "$out_tpl_norule")"
 nr_session=0; [ ! -f "$FIX/.stub/tpl-argv" ] || nr_session=1
 nr_scratch="$(find "$TPL_NORULE/tmp" -mindepth 1 -maxdepth 1 -name 'tmp.*' | wc -l)"
-assert_eq "a kit_read_rules that prints no rule fails the template probe by name, with no session" \
+assert_eq "a kit_template_rules that prints no rule fails the template probe by name, with no session" \
   "sabotaged:1 named:1 consequence:1 ok:0 session:0 scratch:0" \
   "sabotaged:$nr_sab named:$nr_named consequence:$nr_cons ok:$nr_ok session:$nr_session scratch:$nr_scratch"
 
@@ -789,7 +794,7 @@ assert_eq "an outcome the template probe's verdict does not know fails by name, 
 # grammar READ_EXTRA is held to (read_extra_dir_ok): refused, no session gets a rule naming the kit —
 # not the template probe, and not the phases, whose projection still carries every READ_EXTRA rule —,
 # and preflight fails ONCE, by name, with the remedy. The template probe is not opened, since there
-# is no rule to measure, so neither the sentence of a kit_read_rules that printed nothing nor the
+# is no rule to measure, so neither the sentence of a kit_template_rules that printed nothing nor the
 # probe's denial ("the harness refused them") speaks for a cause that is the path. Two worlds,
 # READ_EXTRA empty and with one entry, each against the real kit under the same stub and config:
 # exactly one fail line more. The copy is built like the one above (bin/sdd and the coordination
@@ -842,7 +847,7 @@ kp_world() {
   printf 'named=%s,remedy=%s,body=%s%s%s,r3=%s,denied=%s,r4=%s,skip=%s,session=%s,rule=%s,scratch=%s,refusal=%s,fails=%s' \
     "$(grep -cF -- "$KP_NAMED" <<< "$o")" "$(grep -cF -- "$KP_REMEDY" <<< "$o")" \
     "$(grep -cF -- "$KP_BODY1" <<< "$o")" "$(grep -cF -- "$KP_BODY2" <<< "$o")" "$(grep -cF -- "$KP_BODY3" <<< "$o")" \
-    "$(grep -cF -- "kit_read_rules printed no read rule" <<< "$o")" "$(grep -cF -- "$TPL_FAIL" <<< "$o")" \
+    "$(grep -cF -- "kit_template_rules printed no read rule" <<< "$o")" "$(grep -cF -- "$TPL_FAIL" <<< "$o")" \
     "$(grep -cF -- "$R4_NAMED" <<< "$o")" "$(grep -cF -- "$KP_SKIP" <<< "$o")" "$session" "$rule" \
     "$(find "$KP_KIT/tmp" -mindepth 1 -maxdepth 1 -name 'tmp.*' | wc -l)" \
     "$(grep -cF -- ", a path the grammar of the read rules refuses" <<< "$o")" "$(grep -c '^  fail  ' <<< "$o")"
@@ -875,6 +880,111 @@ kp_rxrule="$(grep -oF -- "$(printf '%q' "Read(/$KP_RX/**)")" <<< "$kp_proj" | wc
 assert_eq "a kit path the read-rule grammar refuses gets no template rule, and preflight names it" \
   "empty:named=1,remedy=1,body=111,r3=0,denied=0,r4=0,skip=1,session=0,rule=0,scratch=0,refusal=1 entry:named=1,remedy=1,body=111,r3=0,denied=0,r4=0,skip=1,session=0,rule=0,scratch=0,refusal=1 more:1/1 ctl:refusal=0/0 projection:blocks=5,kit=0,rx=5" \
   "empty:${kp_empty%,fails=*} entry:${kp_entry%,fails=*} more:$(( $(kp_fails "$kp_empty") - $(kp_fails "$kp_ctl_empty") ))/$(( $(kp_fails "$kp_entry") - $(kp_fails "$kp_ctl_entry") )) ctl:refusal=$(kp_refusal "$kp_ctl_empty")/$(kp_refusal "$kp_ctl_entry") projection:blocks=$kp_blocks,kit=$kp_kitrule,rx=$kp_rxrule"
+
+# The template probe carries the templates' rules alone (Codex P3 in the fifth round on PR #315).
+# R3 took ALLOWED_TOOLS off its --allowedTools, and the READ_EXTRA rules stayed: the probe carried
+# every line of kit_read_rules, so an entry that covers the kit — `$HOME`, with SDD_HOME below it,
+# which the grammar accepts (a limit declared in ADR 0019) — read the template by itself, and
+# preflight certified a templates rule that was sabotaged or broken. The probe now reads
+# kit_template_rules, the one definition kit_read_rules composes with the READ_EXTRA rules; the
+# entries keep the warnings of their own above. Here the stub plays the harness: it answers the
+# template probe with the read stream when an argument of its --allowedTools covers the template in
+# the shape ADR 0019 measured — `Read(/<dir>/**)`, the template under <dir> — and with the denied
+# stream otherwise, so the world where a broad rule answers for a broken one is built, not
+# described. Two worlds, each under an entry that covers its kit (the kit's parent directory):
+#   - COVERING, the real kit: the probe's --allowedTools is the templates' rule alone, the Bash probe
+#     beside it keeps its own (`[Bash]`, no read rule), and the verdict is `ok` — the positive
+#     control of the stub. The phases of a `sdd run --dry-run` carry kit_read_rules as they did
+#     before: the templates' rule, then the entry's. The differential is the two lists against
+#     each other: the probe's is the phases' less the entry's rule;
+#   - SABOTAGED, a copy of the kit whose kit_template_rules prints the rule without its `/**`,
+#     proved sabotaged: the probe carries that rule alone and is DENIED, never green, while the
+#     copy's phases carry the broken rule and then the entry's — the one that, on the probe's list,
+#     read the template in its place.
+# r7_stub <template path> <stream prefix> — the template probe answered as above, its argv in
+# r7-tpl-argv; every other `-p` call (the Bash probe) gets stub A's stream, its argv in r7-bash-argv.
+r7_stub() {
+  cat > "$FIX/.stub/claude" <<STUB
+#!/bin/sh
+iso=0; prev=""; p=0
+for a in "\$@"; do
+  if [ "\$prev" = "--setting-sources" ] && [ -z "\$a" ]; then iso=1; fi
+  [ "\$a" != "-p" ] || p=1
+  prev="\$a"
+done
+if [ "\$iso" = 1 ]; then
+  : > "$FIX/.stub/r7-tpl-argv"
+  for a in "\$@"; do printf '%s\n' "\$a" >> "$FIX/.stub/r7-tpl-argv"; done
+  cov=0; on=0
+  for a in "\$@"; do
+    case "\$a" in --allowedTools) on=1; continue ;; --*) on=0 ;; esac
+    [ "\$on" = 1 ] || continue
+    case "\$a" in
+      'Read(/'*'/**)') d="\${a#'Read(/'}"; d="\${d%'/**)'}"
+        case "$1" in "\$d"/*) cov=1 ;; esac ;;
+    esac
+  done
+  if [ "\$cov" = 1 ]; then cat "$FIX/.stub/init-with-bash.jsonl" "$2-read.jsonl"
+  else cat "$FIX/.stub/init-with-bash.jsonl" "$2-denied.jsonl"; fi
+  exit 0
+fi
+if [ "\$p" = 1 ]; then
+  : > "$FIX/.stub/r7-bash-argv"
+  for a in "\$@"; do printf '%s\n' "\$a" >> "$FIX/.stub/r7-bash-argv"; done
+fi
+cat "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/result-ok.jsonl"
+STUB
+  chmod +x "$FIX/.stub/claude"
+  rm -f "$FIX/.stub/r7-tpl-argv" "$FIX/.stub/r7-bash-argv"
+}
+# r7_want <rule>... — the rules as the projection prints them (`%q`), space-joined
+r7_want() { local w="" r; for r in "$@"; do w="${w:+$w }$(printf '%q' "$r")"; done; printf '%s' "$w"; }
+# r7_lists <projection> <want> → <blocks whose arguments after the --allowedTools value are <want>>/<blocks>.
+# The scan starts at the LAST `--model` field, as in check-dry-run.sh: the prompt rides on the line.
+r7_lists() {
+  want="$2" awk '
+    /^--- DRY RUN: phase .* ---$/ { n++; blk = 1; next }
+    blk && / claude -p / {
+      k = 0; for (i = 1; i <= NF; i++) if ($i == "--model") k = i
+      v = ""
+      for (i = k; k && i <= NF; i++) if ($i == "--allowedTools") {
+        for (j = i + 2; j <= NF && substr($j, 1, 2) != "--"; j++) v = v (v == "" ? "" : " ") $j
+        break
+      }
+      if (v == ENVIRON["want"]) m++
+      blk = 0
+    }
+    END { printf "%d/%d", m, n }' <<< "$1"
+}
+# r7_proj <sdd> <READ_EXTRA> — that kit's `sdd run --dry-run` over the mission of the block above,
+# its arguments one space apart (the projection pads them, and check-dry-run.sh squeezes them too)
+r7_proj() {
+  ( cd "$KP_REPO" && SDD_STATE_DIR="$FIX/.stub/r7-state" ALLOWED_TOOLS=Bash READ_EXTRA="$2" "$1" run 20260101-kitpath --dry-run 2>&1 ) \
+    | tr -s ' '
+}
+R7_RX="$(dirname "$TPL_HOME")"
+r7_stub "$TPL_PATH" "$FIX/.stub/tpl-stream"
+r7_cov_out="$( ALLOWED_TOOLS=Bash READ_EXTRA="$R7_RX" "$SDD" preflight 2>&1 )"
+r7_cov="probe=$(tpl_allow_of "$FIX/.stub/r7-tpl-argv"),bash=$(tpl_allow_of "$FIX/.stub/r7-bash-argv"),$(tpl_verdict "$r7_cov_out")"
+r7_cov="$r7_cov,phases=$(r7_lists "$(r7_proj "$SDD" "$R7_RX")" \
+  "$(r7_want "Read(/$TPL_HOME/templates/**)" "Read(/$R7_RX/**)")")"
+R7_KIT="$(CDPATH='' cd -P "$FIX/.stub" && pwd)/r7-kit"
+R7_KIT_RX="$(dirname "$R7_KIT")"
+R7_BROKEN='  printf "Read(/%s)\n" "$SDD_HOME/templates"'
+mkdir -p "$R7_KIT/bin"
+sed 's|^  dir_read_rules "\$SDD_HOME/templates"$|  printf "Read(/%s)\\n" "$SDD_HOME/templates"|' "$SDD" > "$R7_KIT/bin/sdd"
+chmod +x "$R7_KIT/bin/sdd"
+cp "$ROOT/bin/sdd-coordination.py" "$R7_KIT/bin/sdd-coordination.py"
+ln -s "$ROOT/agents" "$R7_KIT/agents"
+tpl_streams "$R7_KIT/templates/handoff.md" "$FIX/.stub/r7-stream"
+r7_stub "$R7_KIT/templates/handoff.md" "$FIX/.stub/r7-stream"
+r7_sab_out="$( ALLOWED_TOOLS=Bash READ_EXTRA="$R7_KIT_RX" "$R7_KIT/bin/sdd" preflight 2>&1 )"
+r7_sab="applied=$(grep -cxF -- "$R7_BROKEN" "$R7_KIT/bin/sdd"),probe=$(tpl_allow_of "$FIX/.stub/r7-tpl-argv"),$(tpl_verdict "$r7_sab_out")"
+r7_sab="$r7_sab,phases=$(r7_lists "$(r7_proj "$R7_KIT/bin/sdd" "$R7_KIT_RX")" \
+  "$(r7_want "Read(/$R7_KIT/templates)" "Read(/$R7_KIT_RX/**)")")"
+assert_eq "the template probe carries the templates rule alone, never a READ_EXTRA rule that covers the kit" \
+  "covering:probe=[Read(/$TPL_HOME/templates/**)],bash=[Bash],fail=0,ok=1,warn=0,phases=5/5 sabotaged:applied=1,probe=[Read(/$R7_KIT/templates)],fail=1,ok=0,warn=0,phases=5/5" \
+  "covering:$r7_cov sabotaged:$r7_sab"
 
 # Back to the dead stub every later section assumes ("claude and gh are stubbed to fail").
 printf '#!/bin/sh\nexit 1\n' > "$FIX/.stub/claude"

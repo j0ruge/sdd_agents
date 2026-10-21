@@ -76,16 +76,17 @@ through Bash, works from memory, or stops. Measured in the window of `bad6168`: 
 session logs and 4 of 23 jrc-libs ones; one TICKET stopped, and the operator unblocked it by hand.
 
 **How the kit reacts:** every session the runner opens carries a read-only rule for the kit's
-templates (`kit_read_rules`, ADR 0019 §1); `sdd preflight` proves that rule in a session with no
-settings at all and the rule alone on its `--allowedTools`, and fails when it does not read; and
+templates (`kit_template_rules`, which `kit_read_rules` hands first, ADR 0019 §1); `sdd preflight`
+proves that rule in a session with no settings at all and the rule alone on its `--allowedTools`,
+and fails when it does not read; and
 every call the harness denied is one `DENIED` line in the journal, right above the session's own
 line, so `tail -F` shows it without opening the session's `.json`.
 
 **What you do:**
 - **a template denied:** run `sdd preflight`. Its template probe says whether the kit's rule still
   reads under this harness; red there right after a harness bump means the rule's syntax changed
-  (the ledger's session rows carry `harness:`). A `Read` in `ALLOWED_TOOLS` does not turn it green:
-  the probe never carries that key. A probe that fails with "got no init line and no result line"
+  (the ledger's session rows carry `harness:`). A `Read` in `ALLOWED_TOOLS` does not turn it green,
+  nor does a `READ_EXTRA` entry that covers the kit (`$HOME`, say): the probe carries neither. A probe that fails with "got no init line and no result line"
   never measured the rule: the CLI refused one of the probe's flags, and the first line of its
   stderr, printed in the failure, names which one. A probe that fails with "came back with an
   error" did try the `Read`: the first line of the error, printed in the failure, says whether the
