@@ -1045,11 +1045,17 @@ an empty or broken rule, and a `kit_read_rules` that printed nothing fails by na
 It asks for a `Read` of
 `$SDD_HOME/templates/handoff.md` and reads the stream, never the answer: the template in the result
 line's `permission_denials` (matched by path) fails the preflight, with the remedy; a `tool_result`
-without `is_error` for that `Read` is `ok`; a session that never tried is a warning. The isolation is
+without `is_error` for that `Read` is `ok`; a session that answered and never tried is a warning; and
+a stream with no init line and no result line jq can read fails too, naming the first line of the
+session's stderr, because a CLI that refuses one of this probe's flags exits before its init line
+while it answers the `Bash` probe. The chain ends in an `else`, so no stream goes unnamed. When the
+`Bash` probe got no answer either, that is one cause and one failure: the template probe only warns
+that it measured nothing. The isolation is
 the point: with the settings loaded, an `additionalDirectories` or a `Read(*)` on the operator's
 machine reads the template with no rule at all, and the probe would be green over a rule that does
-nothing. `tests/check-preflight.sh` asserts the verdict both ways and the argv of that session,
-the rules as its whole `--allowedTools` under an `ALLOWED_TOOLS` that carries `Read`.
+nothing. `tests/check-preflight.sh` asserts the verdict both ways, the stream with no init and no
+result in four worlds, and the argv of that session, the rules as its whole `--allowedTools` under
+an `ALLOWED_TOOLS` that carries `Read`.
 Both preflight probes are capped in money (`--max-budget-usd 1` each) and not in time.
 
 ⚠️ **Two keys for one list, and the split is measured (2026-09-06, Claude Code 2.1.263).** The

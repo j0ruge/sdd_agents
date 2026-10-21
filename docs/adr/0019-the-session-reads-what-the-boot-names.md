@@ -96,15 +96,26 @@ an `--allowedTools` that carries the lines of `kit_read_rules` and nothing else,
 `--strict-mcp-config`, and asks for a `Read` of `$SDD_HOME/templates/handoff.md`. It runs under
 `--output-format stream-json --verbose`, because the `tool_use` and `tool_result` lines the
 verdict reads exist only there, and with the environment cleared as `run_phase` clears it. The verdict reads the session's
-artifact, never the model's answer:
+artifact, never the model's answer, and it is exhaustive: the chain ends in an `else`, so every
+stream lands in exactly one of four arms.
 
 - a denial naming the template in `permission_denials` → `_fail`, with the remedy;
 - a `Read` `tool_use` of that path with a `tool_result` that is not an error → `ok`;
-- no attempt → `warn`, because unmeasured is not zero;
-- no init line and no result line → nothing new: the `Bash` probe has already said "did not
-  answer", and one failure is never counted twice.
+- an init line or a result line, and no attempt → `warn`, because unmeasured is not zero;
+- no init line and no result line that jq can read → `_fail`, saying that the CLI did not answer
+  this probe's flags and that the kit's rule was not measured, with the first line of the
+  session's stderr (200 characters at most, control characters dropped, `(none)` when it is empty).
+  A CLI that refuses `--setting-sources ""` or the rule's syntax exits before its init line while
+  it answers the `Bash` probe, so this stream does not mean the CLI is dead (the Codex P2 in the
+  second round on PR #315, decided by the human). One exception: when the `Bash` probe got no
+  answer either, the cause is the same, and one cause is one failure. That probe has already
+  failed, and this one only warns that it measured nothing.
 
-The denial is matched by the template's path, never by `tool_use_id`.
+The denial is matched by the template's path, never by `tool_use_id`. The session is opened even
+when the `Bash` probe got no answer: the exception reads what both probes returned, so a CLI that
+refuses only the `Bash` probe's flags still has the kit's rule measured. jq reads the stream as a
+whole (`-s`), so one line it cannot parse sends the stream to the fourth arm whatever else it
+holds. That makes the preflight red, never green.
 
 `"$ALLOWED_TOOLS"` stays off that flag (the Codex P3 on PR #315, decided by the human). It is a
 project key, and a broad `Read` in it reads the template on its own, so the probe would be green
@@ -118,7 +129,9 @@ the argv separately: the session carries an empty `--setting-sources` and, as it
 `--allowedTools` list, the rules, under an `ALLOWED_TOOLS` that carries `Read`. Without the argv
 assertions a mutant that hands the probe something other than the rules — the user's settings,
 `"$ALLOWED_TOOLS"` in front of them — would survive, because the stub answers what the fixture
-says.
+says. The fourth arm is held in four worlds: the template probe prints nothing (with a long
+stderr line), it prints lines jq cannot parse, both probes are dead, and only the `Bash` probe is
+dead.
 
 ## Discarded
 
@@ -147,6 +160,15 @@ says.
   written. Parity with the phase, but a broad `Read` in a target's `ALLOWED_TOOLS` reads the
   template with no rule, and the probe printed that the kit's rule works over one that was empty or
   broken (the Codex P3 on PR #315).
+- **§3: no verdict for a stream with no init line and no result line**, as first written. The
+  `Bash` probe's "did not answer" was meant to cover it, which holds only when the whole CLI is
+  dead. A CLI that refused one of this probe's flags left the preflight green over a rule it never
+  measured (the Codex P2 in the second round on PR #315).
+- **§3: skip the template probe when the `Bash` probe got no answer.** One session less on a dead
+  CLI, but it repeats the assumption that P2 refuted, in the other direction: that the two probes
+  always die together.
+- **§3: a second failure for a dead CLI.** Each probe would say what it saw, but the operator
+  would read two failures for one cause. The human decided on one cause, one failure.
 - **§3: only an argv assertion in the suite.** Zero cost per preflight, but the preflight of a
   machine whose settings already grant the read stays green whatever the kit passes. This
   operator's `additionalDirectories` lists the templates directory, so the day the harness changes
@@ -160,7 +182,8 @@ says.
 - `sdd preflight` pays one more haiku session — US$ 0.002 (US$ 0.00197 measured on 2026-10-20 at
   22:59, Claude Code 2.1.304, with the rule reading the template) and about 6 s (the grill's p5 and
   p6, 16:24) —, and it turns red the day the harness stops honouring the rule's syntax: the class
-  of the 2.1.263 bump that stripped `Bash` from every hat.
+  of the 2.1.263 bump that stripped `Bash` from every hat. It turns red too, naming the first line
+  of the CLI's stderr, the day the CLI stops accepting one of this probe's flags.
 - Every `Read`, `Edit` or `Write` the harness denied becomes a `DENIED` line in the mission's
   journal, which is what a human on `tail -F` reads. What stays denied (a skill no project
   declared, a scratch file) is named instead of counted. The ledger's `denials` count is unchanged.

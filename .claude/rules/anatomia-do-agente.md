@@ -177,10 +177,14 @@ sessão, a sonda dos templates: `--setting-sources ""`, cwd num `mktemp -d`, o e
 um `--allowedTools` só com as linhas do `kit_read_rules` — nunca o `ALLOWED_TOOLS`, onde um `Read`
 largo leria o template sozinho e deixaria a sonda verde sobre uma regra vazia ou quebrada (P3 do
 Codex no #315); `kit_read_rules` sem linha nenhuma é `_fail` sem sessão —, pedindo o `Read` de
-`$SDD_HOME/templates/handoff.md`. O veredito lê o artefato do stream, nunca a resposta: o template
-no `permission_denials` (casado pelo caminho) é `_fail`; um `tool_result` sem `is_error` para o
-`Read` dele é `ok`; sem init nem `result` é o "did not answer" da sonda do `Bash`, que não conta
-duas vezes; o resto é `warn`. O isolamento é o ponto: com as settings do ambiente, um
+`$SDD_HOME/templates/handoff.md`. O veredito lê o artefato do stream, nunca a resposta, e é
+exaustivo (a cadeia termina num `else`): o template no `permission_denials` (casado pelo caminho) é
+`_fail`; um `tool_result` sem `is_error` para o `Read` dele é `ok`; respondeu sem tentar o `Read` é
+`warn`; sem init nem `result` que o jq leia é `_fail` nomeado com a 1ª linha do stderr da sessão —
+a CLI que recusa uma flag desta sonda sai antes do init enquanto responde à do `Bash` (P2 do Codex
+na r2 do #315) —, salvo quando a sonda do `Bash` também não respondeu: uma causa, uma falha, e a
+dos templates só avisa (`mut_PRE_template_probe_silent_unnamed`,
+`mut_PRE_template_probe_dead_counted_twice`). O isolamento é o ponto: com as settings do ambiente, um
 `additionalDirectories` ou um `Read(*)` lê o template sem regra nenhuma, e a sonda ficaria verde
 nesta máquina sobre uma regra que não faz nada. É também o sensor do dia em que o harness mudar a
 sintaxe da regra. Custa uma sessão haiku por preflight: US$ 0,002 (US$ 0,00197 medidos em

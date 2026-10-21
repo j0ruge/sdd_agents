@@ -2571,6 +2571,19 @@ mut_PRE_template_probe_rule_dropped() {
 mut_PRE_template_probe_empty_unguarded() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^    elif \[ "${#tpl_rules\[@\]}" -eq 0 \]; then$|    elif false; then|' "$1"
 }
+# Codex P2 in the second round on PR #315, one mutant per arm R4 gave the template probe's verdict.
+# SILENT_UNNAMED: the `_fail` of arm 4 becomes a no-op, the shape before R4 — a stream with no init
+# line and no result line ends the chain saying nothing, and preflight is green over a rule it never
+# measured; caught by "a template probe that emits no init and no result fails by name, and a dead
+# CLI fails once" (check-preflight.sh), `empty:named=0` and `garbage:named=0`. DEAD_COUNTED_TWICE:
+# the exception of the dead CLI comes off, and a CLI that answers neither probe fails twice for one
+# cause — the same assertion, `dead:fails=2`.
+mut_PRE_template_probe_silent_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^        _fail "the template probe got no init line and no result line it could read|        : "the template probe got no init line and no result line it could read|' "$1"
+}
+mut_PRE_template_probe_dead_counted_twice() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^      elif \[ -n "\$probe_silent" \]; then$|      elif false; then|' "$1"
+}
 
 # ADR 0019 §2, what the phases will not be able to read — the two warnings of preflight, and the four
 # rules that decide them. A warning that goes quiet fails OPEN: the target meets the denial in a run
@@ -6660,6 +6673,8 @@ CATALOG=(
   PRE_template_probe_allowlist_widened
   PRE_template_probe_rule_dropped
   PRE_template_probe_empty_unguarded
+  PRE_template_probe_silent_unnamed
+  PRE_template_probe_dead_counted_twice
   PRE_read_extra_missing_silent
   PRE_undeclared_skill_silent
   PRE_skill_cover_unslashed

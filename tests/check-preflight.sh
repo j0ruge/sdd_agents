@@ -546,6 +546,84 @@ assert_eq "a kit_read_rules that prints no rule fails the template probe by name
   "sabotaged:1 named:1 consequence:1 ok:0 session:0 scratch:0" \
   "sabotaged:$nr_sab named:$nr_named consequence:$nr_cons ok:$nr_ok session:$nr_session scratch:$nr_scratch"
 
+# The verdict is exhaustive (Codex P2 in the second round on PR #315): a stream with no init line and
+# no result line used to fall off the end of the chain, and preflight stayed green over a rule it
+# never measured. A CLI that refuses one of this probe's flags (`--setting-sources ""`, the rule's
+# syntax) exits before its init line while it answers the Bash probe, so that stream now fails by
+# name, with the first line of its stderr; only when the Bash probe got no answer either is it the
+# same cause, and one cause is one failure. Four worlds, one stub that tells the template probe
+# from every other call by its empty --setting-sources, and the runner never reads the rc:
+#   - EMPTY: the Bash probe answers, the template probe prints nothing and two stderr lines. The
+#     first is 260+ characters long and carries an ESC, a CR and a backslash, so the cut at 200, the
+#     first line only, the control characters dropped and the backslash kept (`read -r`) are each a
+#     count here; the expected text is computed from the line written, never typed. One needle per
+#     line of the message, so a line that lost its words is named;
+#   - GARBAGE: the template probe prints lines jq cannot parse, no stderr, and UNLINKS the stderr
+#     file the shell opened for it — the one world where the redirect of the read fails, so the
+#     guard after it, the empty default and the `2>/dev/null` before it are each a count (`noise`
+#     reads the shell's own complaint about the path). `unlinked` proves the world was built;
+#   - DEAD: every call dies, with a stderr line. Exactly one fail line says "did not answer" — the
+#     Bash probe's —, and the template probe warns that it measured nothing, with its stderr;
+#   - BASH-DEAD: the Bash probe dies and the template probe READS. The exception reads the evidence
+#     of both probes, never the Bash one alone: the kit's rule was measured, so it is `ok`.
+# r4_stub <stdout of the template probe> <stderr of the template probe> <healthy|dead> [unlink]
+r4_stub() {
+  cat > "$FIX/.stub/claude" <<STUB
+#!/bin/sh
+iso=0; prev=""
+for a in "\$@"; do
+  if [ "\$prev" = "--setting-sources" ] && [ -z "\$a" ]; then iso=1; fi
+  prev="\$a"
+done
+if [ "\$iso" = 1 ]; then
+  cat "$1"; cat "$2" >&2
+  if [ "${4:-}" = unlink ] && [ -f stderr ]; then rm -f stderr && : > "$FIX/.stub/r4-unlinked"; fi
+  exit 1
+fi
+[ "$3" = healthy ] || { echo "r4-dead-cli: not logged in" >&2; exit 1; }
+cat "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/result-ok.jsonl"
+STUB
+  chmod +x "$FIX/.stub/claude"
+}
+R4_NAMED="fail  the template probe got no init line and no result line it could read: claude -p did not answer this probe's flags"
+R4_FLAGS='(--setting-sources "" and the kit read rules alone on --allowedTools),'
+R4_WHY="though it answered the Bash probe above, so the kit's read rule was NOT measured."
+R4_EXITS="A CLI that refuses one of these flags exits before its init line. First line of its stderr:"
+R4_DEADWARN="warn  the template probe got no init line and no result line either: claude -p did not answer the Bash probe above"
+R4_DEADWHY="one cause is one failure — the kit's read rule was not measured, and the probe measures it once the CLI answers."
+R4_BASHDEAD="fail  claude -p did not answer — expired session?"
+R4_ERR1="$(printf '\033[31merror: bad rule Read(//a\\b/**) for --setting-sources\r'; head -c 260 /dev/zero | tr '\0' x)"
+printf '%s\nR4-SECOND-STDERR-LINE\n' "$R4_ERR1" > "$FIX/.stub/r4-empty.err"
+r4_want="$(printf '%s' "${R4_ERR1:0:200}" | tr -d '\033\r')"
+: > "$FIX/.stub/r4-none"
+printf 'usage: claude [options]\n{"type":\n' > "$FIX/.stub/r4-garbage.out"
+printf 'r4-dead-cli: not logged in\n' > "$FIX/.stub/r4-dead.err"
+cat "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/tpl-stream-read.jsonl" > "$FIX/.stub/r4-read.out"
+r4_n() { grep -cF -- "$1" <<< "$2"; }
+r4_others() { # <output> → the count of every other verdict line the template probe could print
+  printf '%s' "$(( $(r4_n "$TPL_OK" "$1") + $(r4_n "$TPL_FAIL" "$1") + $(r4_n "$TPL_WARN" "$1") \
+    + $(r4_n "$R4_DEADWARN" "$1") + $(r4_n "$R4_BASHDEAD" "$1") ))"
+}
+rm -f "$FIX/.stub/r4-unlinked"
+r4_stub "$FIX/.stub/r4-none" "$FIX/.stub/r4-empty.err" healthy
+o="$( "$SDD" preflight 2>&1 )"
+r4_empty="named=$(r4_n "$R4_NAMED" "$o"),flags=$(r4_n "$R4_FLAGS" "$o"),why=$(r4_n "$R4_WHY" "$o"),err=$(r4_n "$R4_EXITS $r4_want" "$o")"
+r4_empty="$r4_empty,cut=$(r4_n "${r4_want}x" "$o"),second=$(r4_n R4-SECOND-STDERR-LINE "$o"),ctl=$(grep -c $'[\033\r]' <<< "$o"),others=$(r4_others "$o")"
+r4_stub "$FIX/.stub/r4-garbage.out" "$FIX/.stub/r4-none" healthy unlink
+o="$( "$SDD" preflight 2>&1 )"
+r4_unlinked=0; [ ! -f "$FIX/.stub/r4-unlinked" ] || r4_unlinked=1
+r4_garbage="unlinked=$r4_unlinked,named=$(r4_n "$R4_NAMED" "$o"),none=$(r4_n "$R4_EXITS (none)" "$o"),noise=$(r4_n /stderr: "$o"),others=$(r4_others "$o")"
+r4_stub "$FIX/.stub/r4-none" "$FIX/.stub/r4-dead.err" dead
+o="$( "$SDD" preflight 2>&1 )"
+r4_dead="fails=$(grep -c '^  fail  .*did not answer' <<< "$o"),warn=$(r4_n "$R4_DEADWARN" "$o"),why=$(r4_n "$R4_DEADWHY" "$o")"
+r4_dead="$r4_dead,err=$(r4_n "First line of its stderr: r4-dead-cli: not logged in" "$o"),named=$(r4_n "$R4_NAMED" "$o")"
+r4_stub "$FIX/.stub/r4-read.out" "$FIX/.stub/r4-none" dead
+o="$( "$SDD" preflight 2>&1 )"
+r4_bashdead="fails=$(r4_n "$R4_BASHDEAD" "$o"),ok=$(r4_n "$TPL_OK" "$o"),warn=$(r4_n "$R4_DEADWARN" "$o")"
+assert_eq "a template probe that emits no init and no result fails by name, and a dead CLI fails once" \
+  "empty:named=1,flags=1,why=1,err=1,cut=0,second=0,ctl=0,others=0 garbage:unlinked=1,named=1,none=1,noise=0,others=0 dead:fails=1,warn=1,why=1,err=1,named=0 bash-dead:fails=1,ok=1,warn=0" \
+  "empty:$r4_empty garbage:$r4_garbage dead:$r4_dead bash-dead:$r4_bashdead"
+
 # Back to the dead stub every later section assumes ("claude and gh are stubbed to fail").
 printf '#!/bin/sh\nexit 1\n' > "$FIX/.stub/claude"
 chmod +x "$FIX/.stub/claude"

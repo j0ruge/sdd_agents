@@ -85,7 +85,9 @@ line, so `tail -F` shows it without opening the session's `.json`.
 - **a template denied:** run `sdd preflight`. Its template probe says whether the kit's rule still
   reads under this harness; red there right after a harness bump means the rule's syntax changed
   (the ledger's session rows carry `harness:`). A `Read` in `ALLOWED_TOOLS` does not turn it green:
-  the probe never carries that key.
+  the probe never carries that key. A probe that fails with "got no init line and no result line"
+  never measured the rule: the CLI refused one of the probe's flags, and the first line of its
+  stderr, printed in the failure, names which one.
 - **a skill's references denied:** declare the skill's directory in the target's `READ_EXTRA`,
   absolute and separated by spaces, written with `$HOME` (`config/schema.md`). The runner adds the
   rule of a symlinked entry's resolved target too; declare the skill's own directory (for a
