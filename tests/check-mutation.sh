@@ -2565,10 +2565,10 @@ mut_PRE_template_read_unchecked() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "a session with NO settings and the kit read rules alone|          ok "a session with NO settings and the kit read rules alone|' "$1"
 }
 mut_PRE_template_probe_reads_settings() {
-  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools "${tpl_rules|--setting-sources "user,project,local" --allowedTools "${tpl_rules|' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools ${tpl_rules|--setting-sources "user,project,local" --allowedTools ${tpl_rules|' "$1"
 }
 mut_PRE_template_probe_allowlist_widened() {
-  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools "${tpl_rules|--setting-sources "" --allowedTools "$ALLOWED_TOOLS" "${tpl_rules|' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools ${tpl_rules|--setting-sources "" --allowedTools "$ALLOWED_TOOLS" ${tpl_rules|' "$1"
 }
 mut_PRE_template_probe_rule_dropped() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^    mapfile -t tpl_rules < <(kit_template_rules)$|    :|' "$1"
@@ -2941,7 +2941,7 @@ mut_RUN_harness_env_inherited() {
 # Caught by "every phase may read the kit templates, and only read them" (check-dry-run.sh), which
 # reads the projected argv per block: five `no-rule`.
 mut_RUN_templates_read_rule_dropped() {
-  sed -i '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" "${read_rules\[@\]}"$|    --allowedTools "$ALLOWED_TOOLS"|' "$1"
+  sed -i '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" ${read_rules\[@\]+"${read_rules\[@\]}"}$|    --allowedTools "$ALLOWED_TOOLS"|' "$1"
 }
 
 # ADR 0019 §1, the second door: the `sdd close` session loses the kit's read-only rule — cmd_close
@@ -2950,7 +2950,37 @@ mut_RUN_templates_read_rule_dropped() {
 # cmd_close. Caught by "close: the session may read the kit templates, and only read them"
 # (check-gates.sh), which reads the close session's argv: `no-rule`.
 mut_RUN_close_templates_read_rule_dropped() {
-  sed -i '/^cmd_close() {/,/^}/ s|--allowedTools "$ALLOWED_TOOLS" "${close_read_rules\[@\]}" \\$|--allowedTools "$ALLOWED_TOOLS" \\|' "$1"
+  sed -i '/^cmd_close() {/,/^}/ s|--allowedTools "$ALLOWED_TOOLS" ${close_read_rules\[@\]+"${close_read_rules\[@\]}"} \\$|--allowedTools "$ALLOWED_TOOLS" \\|' "$1"
+}
+
+# CodeRabbit on PR #315: a door's list of read rules goes back to the bare `"${list[@]}"`, which
+# bash 4.0 to 4.3 abort on under `set -u` when the list is empty (a kit path the grammar refuses,
+# READ_EXTRA empty), and the kit accepts bash 4. One mutant per door — run_phase, sdd close, the
+# template probe. Under bash 5 the bare form expands an empty list to nothing, so no behaviour on
+# this machine tells the two apart; each is caught by "every read-rule array reaches claude through
+# an expansion that set -u accepts on bash 4.0 too" (check-dry-run.sh), `<list>: bare expansion`.
+mut_RUN_read_rules_bare_expansion() {
+  sed -i '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" ${read_rules\[@\]+"${read_rules\[@\]}"}$|    --allowedTools "$ALLOWED_TOOLS" "${read_rules[@]}"|' "$1"
+}
+mut_RUN_close_read_rules_bare_expansion() {
+  sed -i '/^cmd_close() {/,/^}/ s|--allowedTools "$ALLOWED_TOOLS" ${close_read_rules\[@\]+"${close_read_rules\[@\]}"} \\$|--allowedTools "$ALLOWED_TOOLS" "${close_read_rules[@]}" \\|' "$1"
+}
+mut_PRE_template_probe_rules_bare_expansion() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools ${tpl_rules\[@\]+"${tpl_rules\[@\]}"} \\$|--setting-sources "" --allowedTools "${tpl_rules[@]}" \\|' "$1"
+}
+# The two rules of that scan the three above cannot measure alone, each in a world bash 5 runs the
+# same argv. BESIDE_GUARDED: run_phase's own line, guarded, gains a second use of the list spelled
+# bare, a zero-length slice — the three above go red through the scan's "no expansion of it found"
+# line as well, so only this one is red by the bare rule alone (a bare pattern that never matches
+# leaves the three red and this one green). LIST_UNSCANNED: run_phase fills its list with
+# `readarray`, the same builtin under another name the scan does not look for, and expands it bare;
+# the scan finds two lists, and only its floor of three says so. Both caught by the same assertion.
+mut_RUN_read_rules_bare_beside_guarded() {
+  sed -i '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" ${read_rules\[@\]+"${read_rules\[@\]}"}$|& "${read_rules[@]:0:0}"|' "$1"
+}
+mut_RUN_read_rules_list_unscanned() {
+  sed -i -e '/^run_phase() {/,/^}/ s|^  mapfile -t read_rules < <(kit_read_rules)$|  readarray -t read_rules < <(kit_read_rules)|' \
+    -e '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" ${read_rules\[@\]+"${read_rules\[@\]}"}$|    --allowedTools "$ALLOWED_TOOLS" "${read_rules[@]}"|' "$1"
 }
 
 # ADR 0019 §2: kit_read_rules stops reading READ_EXTRA — the key is validated and then dropped, and
@@ -6752,6 +6782,7 @@ CATALOG=(
   PRE_template_probe_rule_dropped
   PRE_template_probe_reads_every_rule
   PRE_template_probe_empty_unguarded
+  PRE_template_probe_rules_bare_expansion
   PRE_template_probe_silent_unnamed
   PRE_template_probe_dead_counted_twice
   PRE_template_outcome_error_warned
@@ -6798,6 +6829,10 @@ CATALOG=(
   RUN_harness_env_inherited
   RUN_templates_read_rule_dropped
   RUN_close_templates_read_rule_dropped
+  RUN_read_rules_bare_expansion
+  RUN_close_read_rules_bare_expansion
+  RUN_read_rules_bare_beside_guarded
+  RUN_read_rules_list_unscanned
   RUN_read_extra_ignored
   RUN_read_rules_templates_dropped
   RUN_read_extra_symlink_unresolved

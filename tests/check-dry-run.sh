@@ -415,6 +415,44 @@ $(rx_want)" \
 ---
 $(rx_rules_of "$argv")"
 
+# --- the read-rule lists survive `set -u` on bash 4.0 to 4.3 ----------------
+# A door's list of read rules may be EMPTY: a kit path the grammar refuses, with READ_EXTRA empty
+# (R5). Under `set -u`, bash 4.0 to 4.3 abort on `"${list[@]}"` of an empty array with `unbound
+# variable`, and the kit accepts bash 4 (the version check at the top of bin/sdd). So every door
+# expands its list through the `+` guard cmd_preflight already gives probe_agent, and the bare form
+# is refused here wherever it reaches the runner (CodeRabbit on PR #315).
+#
+# STATIC, and that is a limit, not a choice: the world in which the bare form fails — a bash 4.0
+# to 4.3 running the runner over an empty list — was not built, because this machine has bash 5.2
+# only, which expands an empty list to nothing under either spelling; no dry-run here can go red on
+# it. The lists are FOUND, never named: every array a `mapfile -t <list> < <(…_rules)` fills, so a
+# fourth door's list is held with no edit here. Comments are read too, so a comment that spells a
+# list bare is red, which is the safe side. Loud when the scan reads nothing: fewer than the three
+# lists (run_phase, the template probe, sdd close), or a list of which neither spelling is found,
+# is red by name, never a vacuous green.
+echo "== every read-rule array reaches claude through an expansion that set -u accepts on bash 4.0 too =="
+rule_expansions="$(awk '
+  { line[NR] = $0 }
+  match($0, /mapfile -t [A-Za-z_][A-Za-z0-9_]* < <\([a-z_]+_rules\)/) {
+    s = substr($0, RSTART + 11); lists[substr(s, 1, index(s, " ") - 1)] = 1
+  }
+  END {
+    for (n in lists) {
+      found++; guarded = 0; bare = 0
+      g = "${" n "[@]+\"${" n "[@]}\"}"; b = "${" n "[@]"
+      for (i = 1; i <= NR; i++) {
+        t = line[i]
+        while ((p = index(t, g)) > 0) { guarded++; t = substr(t, 1, p - 1) substr(t, p + length(g)) }
+        if (index(t, b) > 0) { bare++; print n ": bare expansion at bin/sdd:" i }
+      }
+      if (guarded + bare == 0) print n ": no expansion of it found, guarded or bare, so the site this scan reads is gone"
+    }
+    if (found < 3) print "only " found + 0 " read-rule list(s) found, want 3 (run_phase, the template probe, sdd close)"
+  }
+' "$ROOT/bin/sdd" | sort)"
+assert_eq "every read-rule array reaches claude through an expansion that set -u accepts on bash 4.0 too" \
+  "" "$rule_expansions"
+
 # --- the damage cap is per phase -------------------------------------------
 # One global ceiling priced every phase as if they cost the same. They do not: a REVIEW round with
 # the `codereview` skill and a QA walk are the expensive ones, and a PR body assembled from

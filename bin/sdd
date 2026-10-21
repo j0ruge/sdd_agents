@@ -5317,6 +5317,13 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
 # no global — either would be lost in the subshell. Validation of anything they read lives in
 # load_config. The lines kit_read_rules prints, and their order, are the ones it printed before the
 # split: the templates' rule and its target's, then each entry's and its target's.
+# The list a door reads may be EMPTY — a kit path the grammar refuses, with READ_EXTRA empty — and
+# under `set -u` bash 4.0 to 4.3 abort on `"${list[@]}"` of an empty array (`unbound variable`),
+# with the kit accepting bash 4 (the check at the top). So every door expands it as
+# `${list[@]+"${list[@]}"}`, the guard probe_agent has in cmd_preflight; the template probe's too,
+# which never opens on an empty list, so the spelling is one. The world that shows the bare form
+# failing — a bash 4.0 to 4.3 under the runner — was not built: this machine has bash 5.2 only,
+# which expands an empty list to nothing either way, so check-dry-run.sh holds it statically.
 # Sensors (tests/): check-dry-run.sh (phases, READ_EXTRA), check-gates.sh (sdd close, the READ_EXTRA
 # guard), check-preflight.sh (probe; a kit path the grammar refuses, in the probe and the projection;
 # the probe's list against the phases' under an entry that covers the kit).
@@ -5471,7 +5478,7 @@ missing and write the artifacts. The gate will be re-evaluated."
     --permission-mode "$PERMISSION_MODE"
     --output-format stream-json --verbose
     --setting-sources "user,project,local"
-    --allowedTools "$ALLOWED_TOOLS" "${read_rules[@]}"
+    --allowedTools "$ALLOWED_TOOLS" ${read_rules[@]+"${read_rules[@]}"}
     --disallowedTools "$disallowed"
     --max-budget-usd "$(phase_budget_usd "$phase")")
   if [ -n "$agent" ]; then cmd+=(--agent "$agent"); fi
@@ -6614,7 +6621,7 @@ cmd_preflight() {
     else
       tpl_stream="$( cd "$tpl_dir" && env "${HARNESS_ENV_UNSET[@]}" claude -p "Use the Read tool (never Bash) to read $tpl_path and reply with ONLY its first line. If the Read is refused, reply DENIED and try nothing else." \
           --model haiku --permission-mode "$PERMISSION_MODE" --output-format stream-json --verbose \
-          --setting-sources "" --allowedTools "${tpl_rules[@]}" \
+          --setting-sources "" --allowedTools ${tpl_rules[@]+"${tpl_rules[@]}"} \
           --strict-mcp-config --max-budget-usd 1 </dev/null 2>"$tpl_dir/stderr" || true )"
       read -r -n 200 tpl_err 2>/dev/null < "$tpl_dir/stderr" || true
       tpl_err="${tpl_err//[[:cntrl:]]/}"; tpl_err="${tpl_err:-(none)}"
@@ -12432,7 +12439,7 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   ( cd "$REPO_ROOT" && env -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$close_prompt" \
       --model "$MODEL_TICKET" ${close_effort[@]+"${close_effort[@]}"} --permission-mode "$PERMISSION_MODE" \
       --output-format stream-json --verbose \
-      --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" "${close_read_rules[@]}" \
+      --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" ${close_read_rules[@]+"${close_read_rules[@]}"} \
       --disallowedTools "$(hat_disallowed "$phase")" --strict-mcp-config \
       --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$streamfile" 2>"$errfile" || rc=$?
   ended=$(date +%s)

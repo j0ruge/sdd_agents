@@ -67,7 +67,12 @@ a sessão lê, não que lê só o que devia. O kit cujo caminho a gramática rec
 templates em sessão nenhuma (falha fechada) e o `sdd preflight` reprova uma vez, nomeando o caminho,
 sem abrir a sonda; o probe é o `tests/check-preflight.sh`, sobre uma cópia do kit num diretório com
 `*` (o argv das sondas e a projeção das fases), com o `mut_RUN_kit_path_unchecked`, o
-`mut_PRE_kit_path_unnamed` e o `mut_PRE_kit_path_probe_opened`.
+`mut_PRE_kit_path_unnamed` e o `mut_PRE_kit_path_probe_opened`. Desde o R8 (CodeRabbit no #315) as
+três listas chegam ao `claude` por `${lista[@]+"${lista[@]}"}`, a guarda que o `probe_agent` já
+tinha: a lista pode ser vazia (o kit recusado com o `READ_EXTRA` vazio), e o bash 4.0 a 4.3, que o
+kit aceita, aborta na forma crua sob `set -u`. O probe é estático (`tests/check-dry-run.sh`), porque
+nesta máquina só há bash 5.2 e o mundo da falha não se constrói; um mutante por porta e dois para
+as regras da varredura (`mut_RUN_read_rules_bare_beside_guarded`, `mut_RUN_read_rules_list_unscanned`).
 Depois da regra dos templates vêm as do **projeto** (ADR 0019 §2): a chave `READ_EXTRA`, de default
 vazio, declara os diretórios das skills de que as fases dependem, escritos com `$HOME` no
 `.sdd/config.sh` rastreado; cada entrada vira a mesma regra só de leitura, e a entrada que é symlink
