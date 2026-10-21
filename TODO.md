@@ -74,6 +74,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
+  `config/schema.md:145` (`claude -p`) — no I6 da missão `20261020-narracao-com-dicas` do `magic_tutor`
+  (`49d2c89`) o "Onde" listava `.claude/skills/revisar-partida/`; o `Edit` foi recusado e o executor trocou o
+  texto por um script Python via Bash, a rota que o `schema.md:144-148` fecha ao `sdd-docs` em `.claude/rules/**`.
+  O planner aceitou o I6 sem aviso, e o `check-checkpoint.sh --check`/`--red` não olham caminhos. Direção: o
+  planner (ou o `--check`) avisa o incremento EXEC que toca `.claude/`, e o executor deixa o texto proposto ao
+  humano no PR, como o `sdd-docs`. Fonte: `20-handoff-exec.md:167` da missão.
+  — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-20)
+
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
   (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
   squash, e o item fica preso para sempre; no `sales_quote` os PRs #405 e #406 entraram por squash e
@@ -178,6 +187,29 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   isso, o plano cita uma base que não é o HEAD da aprovação. Direção: gravar `status` e `rev-parse` a cada hand-back
   vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte.
   — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
+- [ ] **O aceite do `/sdd-plan` mede de novo os Checks, nunca os fatos do contexto verificado** —
+  `commands/sdd-plan.md:150` (`Measure again`) — o passo roda `--check` e `--red`, e a contagem que o plano cita passa
+  sem medida: "22 `MutableEvents.Add` em 12 arquivos" (`01-plano.md`, `00-missao.md` e ADR 0007 da 3.3a do
+  `dotp-remake`) eram 10 arquivos, e o relay só pegou porque conferiu por amostra com `grep -rc`. Na 3.2c, dois fatos
+  sem medida (a Lobotomy, a 701.8) chegaram ao EXEC. Direção: o aceite reconfere por amostra as contagens e âncoras do
+  contexto, ou o planner grava ao lado de cada contagem o comando que a mediu.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
+- [ ] **Sob `aprovacao: auto` o `/sdd-plan` deixa a missão sem commit na base e cala o passo seguinte** —
+  `commands/sdd-plan.md:201` (`Anywhere else`) — no `magic_tutor` o `sdd why` deu `plan approved (auto)` com a
+  pasta da missão em `??` na `main`: sem `sdd approve` ninguém corta a branch nem commita, e o passo 4 só diz
+  "commit nothing". O planner supôs que o `sdd run` levaria a pasta sem rastreio; o relay leu o
+  `ensure_mission_branch`, cortou a branch e commitou à mão, e o `sdd preflight` deu "working tree clean". Direção:
+  um ramo `auto` no passo 4 (cortar o `branch:` e commitar a pasta antes do `sdd run`), ou o `sdd approve` aceitar
+  `auto` e fazer só isso.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261020-lote-de-consertos` do `magic_tutor` (2026-10-20)
+- [ ] **Num subcomando, `-l` escolhe a missão que tem `-l` no nome, e `--help` vira "mission not found"** —
+  `bin/sdd:323` (`resolve_mission`) — o argumento casa por substring (`-name "*${want}*"`), e `close`, `approve`,
+  `phase`, `why`, `boot` e `census` passam o `$1` cru (`run` e `retry` recusam `-*`). No `magic_tutor`,
+  `sdd close --help` deu `mission '--help' not found`, e com as missões reais `-n` casa só a
+  `20261020-narracao-com-dicas` e `-l` só a `20261020-lote-de-consertos`: com JIRA ligado, `sdd close -l`
+  fecharia o ticket dela, que tem o PR mesclado. Direção: `-h`/`--help` num subcomando imprime o uso dele, e o
+  `resolve_mission` recusa argumento que começa com `-`.
+  — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-20)
 - [ ] **A guarda do kit para a corrida do alvo por um merge só de docs no checkout do kit** — `bin/sdd:4331`
   (`kit_guard_check`) — compara o par cru (HEAD e sujeira) e não lê o rótulo `sdd:` do reflog (anatomia §6). No
   lighthouse o operador puxou o #246 e o #254 (só `docs/`, `TODO.md` e catraca) para o checkout principal do kit
@@ -202,6 +234,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay do `/sdd-plan` na missão `20261020-amep-anexo-na-demanda` (2026-10-20)
 
 ### Saída humana e cosmética
+
+- [ ] **O `sdd preflight` reprova a árvore suja sem dizer os caminhos, nem que eram só não versionados** —
+  `bin/sdd:6496` (`git status --porcelain`) — no `magic_tutor` o preflight disse só "working tree dirty", e o
+  porcelain tinha só `??`: 4 `partidas/*.md` que o app grava e o repo deixa fora do git de propósito (nomes de
+  oponentes) e a `.claude/worktrees/` do harness. Foi preciso rodar o `git status` à mão e pôr os dois no
+  `.git/info/exclude`. Direção: a falha lista os caminhos (até uns 10) e, quando todos são `??`, nomeia o
+  `.git/info/exclude` como saída para dado do app fora do git.
+  — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-20)
 
 - [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1839` (`gate-qa-e2e`) —
   um caso intermitente anterior à missão devolve a fase ao `sdd-qa`, que gasta o começo descobrindo isso:
@@ -244,7 +284,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (os checks dos PRs são só GitGuardian e CodeRabbit), e o corpo saiu com a frase no #10 e no #11 (3.2b),
   corrigida à mão para "rodam na suíte local, `dotnet test`; o repositório não tem CI". Direção: o publisher
   só afirma CI com um workflow em `.github/workflows/`; sem ele, diz onde a suíte rodou: pelo `TEST_CMD`.
-  — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
+  — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19) e por
+  `retrofit-watch` no PR #25 do `magic_tutor`, também sem `.github/workflows` (2026-10-20)
+
 - [ ] **O `sdd run` diz que commita na base quando a TICKET vai cortar o branch antes** — `bin/sdd:6015`
   (`warn_if_on_base_branch`) — compara só o branch atual com o `DEFAULT_BRANCH`. No `lighthouse_project` (LH-8,
   `JIRA_ENABLED=true`, `branch:` no placeholder) o `sdd run` de `develop` avisou "commits straight into it", e o
@@ -252,6 +294,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   era verdadeiro. Aviso que grita lobo ensina a não ler. Direção: o `cmd_run` cala com `mission_branch_declared`
   vazio e a TICKET pendente, com caso nos dois lados.
   — descoberto pelo relay do `/sdd-plan` na missão `20261016-lighthouse-instala-object-storage` (2026-10-20)
+
+- [ ] **O corpo do PR copia pendência do plano que a revisão já fechou** — `agents/sdd-publisher.md:62`
+  (`decisions for a human`) — a união das perguntas abertas dos handoffs traz as do `00-missao.md`, escritas antes da
+  corrida, sem conferir o desfecho. No PR #13 do `dotp-remake` (3.3a) saiu "Decidir sobre a diferença entre a nota B
+  da REVIEW do kit e a nota A do Fluxo de entrega", e o `40-review-r1.md` deu A em todo critério; o relay corrigiu o
+  corpo à mão. Direção: a pendência do plano que um handoff posterior responde sai, ou vai junto da resposta.
+  — descoberto pelo relay do `sdd run` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
 
 ### Comentário e registro
 
