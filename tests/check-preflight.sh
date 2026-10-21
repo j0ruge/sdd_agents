@@ -1405,11 +1405,16 @@ echo "== third-party skills =="
 cd "$FIX" || exit 1
 EMPTY_SKILLS="$FIX/.skills-empty"
 FULL_SKILLS="$FIX/.skills-full"
+# Each skill where the harness loads it from for the form a phase invokes it by: the three invoked
+# plain in the skills directory, and codereview, which REVIEW invokes as `codereview:codereview`, in
+# the codereview plugin's tree under the cache (no registry here, so the cache is where it is found).
+FULL_CR="$FULL_SKILLS/plugins/cache/mk/codereview/1.0.0/skills/codereview"
 mkdir -p "$EMPTY_SKILLS" "$FULL_SKILLS/skills/ticket" "$FULL_SKILLS/skills/qa-report" \
-         "$FULL_SKILLS/skills/qa-execution" "$FULL_SKILLS/skills/codereview"
-for s in ticket qa-report qa-execution codereview; do
+         "$FULL_SKILLS/skills/qa-execution" "$FULL_CR"
+for s in ticket qa-report qa-execution; do
   printf -- '---\nname: %s\n---\n' "$s" > "$FULL_SKILLS/skills/$s/SKILL.md"
 done
+printf -- '---\nname: codereview\n---\n' > "$FULL_CR/SKILL.md"
 
 # JIRA on and an interface declared, so all four skills are in play.
 cp .sdd/config.sh .sdd/config.sh.bak
@@ -1420,11 +1425,35 @@ out_noskills="$( SDD_SKILLS_ROOT="$EMPTY_SKILLS" "$SDD" preflight 2>&1 )"
 assert_has "preflight warns about a ticket skill it cannot find" "ticket" "$out_noskills"
 assert_has "the warning names where it looked" "$EMPTY_SKILLS" "$out_noskills"
 assert_has "the warning says what the absence costs" "boots the skill" "$out_noskills"
+# And where it looked for each FORM (Codex r7 on PR #315): a plain skill in the skills directories, a
+# plugin:skill one in the installs the registry records — the two places skill_findable reads.
+assert_eq "the not-found warning says where it looked for a plain skill and for a plugin:skill one" \
+  "plain:1 plugin:1" \
+  "plain:$(grep -cF "A skill a phase invokes plain was looked for in $EMPTY_SKILLS/skills/," <<< "$out_noskills") plugin:$(grep -cF "$EMPTY_SKILLS/plugins/installed_plugins.json records for the plugin" <<< "$out_noskills")"
 
 # The differential, one root apart: the SAME config with the skills present says nothing. Without
 # it, a preflight that printed the warning unconditionally would satisfy every assertion above.
 out_skills="$( SDD_SKILLS_ROOT="$FULL_SKILLS" "$SDD" preflight 2>&1 )"
 assert_lacks "with the skills installed the warning is silent" "boots the skill" "$out_skills"
+
+# The FORM each skill is asked for is the form a phase invokes it by (Codex r7 on PR #315): the
+# harness resolves `/codereview:codereview` through the install its registry records for the
+# codereview plugin, and a plain `/ticket` through the skills directories, so a preflight that asked
+# for `codereview` plain would look where the REVIEW never loads from. Two spellings of one decision —
+# the list the preflight asks for, and the invocations the kit writes — compared with EACH OTHER,
+# never with a literal, so either side that moves alone turns this red. The preflight's side is the
+# list it printed with all four skills in play; the kit's side is every `/[<plugin>:]<skill>` a hat
+# writes in backticks, and every one phase_slash prints, for a skill the preflight names. The count
+# is the floor: with the ok line gone both sides are empty, and empty equals empty.
+pf_forms="$(sed -n 's/^  ok   third-party skills present (\(.*\))$/\1/p' <<< "$out_skills" | tr ' ' '\n' | sed '/^$/d' | sort -u)"
+pf_names="$(sed 's/.*://' <<< "$pf_forms")"
+kit_forms="$( { grep -ohE '`/[a-z0-9-]+(:[a-z0-9-]+)?[` ]' "$ROOT"/agents/*.md | sed 's/^`\///; s/.$//'
+                sed -n "/^phase_slash() {/,/^}/ s#.*printf '/\([a-z0-9:-]*\) .*#\1#p" "$SDD"; } \
+              | while IFS= read -r f; do grep -qxF -- "${f##*:}" <<< "$pf_names" && printf '%s\n' "$f"; done \
+              | sort -u)"
+assert_eq "preflight asks for each third-party skill in the form a phase invokes it, read off the hats and phase_slash" \
+  "forms:4 $(paste -sd' ' - <<< "$pf_forms")" \
+  "forms:$(grep -c . <<< "$kit_forms") $(paste -sd' ' - <<< "$kit_forms")"
 
 # And the trigger is the CONFIG, not the calendar: with JIRA off, `ticket` is not asked for.
 sed -i 's|^JIRA_ENABLED=true|JIRA_ENABLED=false|; s|^E2E_CMD="npm run e2e"|E2E_CMD=""|' .sdd/config.sh
@@ -1475,14 +1504,31 @@ rx_same() {
   if [ -n "$ra" ] && [ "$ra" = "$rb" ] && [ "$fa" = "$fb" ]; then printf 'same'
   else printf '%s/%s,fails=%s/%s' "${ra:-no-rc}" "${rb:-no-rc}" "$fa" "$fb"; fi
 }
-# rx_skill <output> → missing=N,warned=N,link=N,entry=<the entries to add, comma-joined> for
-# codereview. `missing` is the witness that the skill was FOUND at all — a run that lost it reads no
-# warning too —, and `link` counts the warnings that say the directory found is a symlink.
+# rx_skill <output> [<form>] → missing=N,warned=N,link=N,entry=<the entries to add, comma-joined>
+# for the skill a phase invokes as <form>, `codereview:codereview` by default — the REVIEW's, the one
+# skill every config asks for. `missing` is the witness that the skill was FOUND at all — a run that
+# lost it reads no warning too —, counted on the not-found line that lists <form> itself, so a world
+# that misses another skill does not feed it; `link` counts the warnings that say the directory found
+# is a symlink. The entries are every one the output hands over, whichever skill it is for.
 rx_skill() {
-  printf 'missing=%s,warned=%s,link=%s,entry=%s' "$(grep -c '^  warn  skills not found:' <<< "$1")" \
-    "$(grep -c '^  warn  skill codereview is found in ' <<< "$1")" \
-    "$(grep -c '^  warn  skill codereview is found in .* (a symlink to ' <<< "$1")" \
+  local f="${2:-codereview:codereview}"
+  printf 'missing=%s,warned=%s,link=%s,entry=%s' "$(grep -cE "^  warn  skills not found:.* $f( |\$)" <<< "$1")" \
+    "$(grep -c "^  warn  skill $f is found in " <<< "$1")" \
+    "$(grep -c "^  warn  skill $f is found in .* (a symlink to " <<< "$1")" \
     "$(sed -n 's/^ *READ_EXTRA entry to add: //p' <<< "$1" | paste -sd, -)"
+}
+# rx_run_jira <home> <skills root> <READ_EXTRA> → rx_run with JIRA on, so `ticket`, which TICKET
+# invokes plain (`/ticket open …`), is asked for beside `codereview:codereview`. The config is put
+# back, and the .jira-project taken away, before it returns: every other world here runs JIRA off.
+rx_run_jira() {
+  local o
+  cp .sdd/config.sh "$RXF/config.sh.bak"
+  sed -i 's|^JIRA_ENABLED=false|JIRA_ENABLED=true|' .sdd/config.sh
+  printf 'PROJECT=FX\nBOARD=1\n' > .jira-project
+  o="$(rx_run "$@")"
+  mv "$RXF/config.sh.bak" .sdd/config.sh
+  rm -f .jira-project
+  printf '%s\n' "$o"
 }
 
 # The entry that does not exist, beside one that does. Names that are not prefixes of each other,
@@ -1524,24 +1570,27 @@ assert_eq "a plugin skill is covered by the directory above its version, and nev
   "bare:missing=0,warned=1,link=0,entry=$RX_SK2_PLUGIN parent:missing=0,warned=0,link=0,entry= sibling:missing=0,warned=1,link=0,entry=$RX_SK2_PLUGIN" \
   "bare:$(rx_skill "$out_sk2_bare") parent:$(rx_skill "$out_sk2_parent") sibling:$(rx_skill "$out_sk2_sibling")"
 
-# Reached through a symlink, as `ticket` is on the machine this was written on. The harness checks
-# the path asked for AND the resolved one (p7, p10, p12 of ADR 0019), so the skill is covered only
-# when both are: by its own entry, whose target kit_read_rules grants too; never by the parent above
-# the link, nor by the target alone. Found inside the repo, it is the session's cwd: nothing to add.
+# Reached through a symlink, as `ticket` is on the machine this was written on — so this world is
+# `ticket`'s, a skill a phase invokes plain and finds in a skills directory (a plain directory is never
+# where `codereview:codereview` is loaded from). The harness checks the path asked for AND the
+# resolved one (p7, p10, p12 of ADR 0019), so the skill is covered only when both are: by its own
+# entry, whose target kit_read_rules grants too; never by the parent above the link, nor by the target
+# alone. Found inside the repo, it is the session's cwd: nothing to add. codereview:codereview is
+# missing from every world of this one, which is why `missing` is counted for `ticket` alone.
 RX_SK3_HOME="$RXF/sk3"
 RX_SK3_ROOT="$RX_SK3_HOME/.claude"
-RX_SK3_TARGET="$RXF/target/codereview-real"
+RX_SK3_TARGET="$RXF/target/ticket-real"
 mkdir -p "$RX_SK3_ROOT/skills" "$RX_SK3_TARGET"
-ln -s "$RX_SK3_TARGET" "$RX_SK3_ROOT/skills/codereview"
-out_sk3_above="$(rx_run "$RX_SK3_HOME" "$RX_SK3_ROOT" "$RX_SK3_ROOT/skills")"
-out_sk3_target="$(rx_run "$RX_SK3_HOME" "$RX_SK3_ROOT" "$RX_SK3_TARGET")"
-out_sk3_link="$(rx_run "$RX_SK3_HOME" "$RX_SK3_ROOT" "$RX_SK3_ROOT/skills/codereview")"
-mkdir -p "$FIX/.claude/skills/codereview"
-out_sk3_repo="$(rx_run "$RX_HOME" "$EMPTY_SKILLS" "")"
+ln -s "$RX_SK3_TARGET" "$RX_SK3_ROOT/skills/ticket"
+out_sk3_above="$(rx_run_jira "$RX_SK3_HOME" "$RX_SK3_ROOT" "$RX_SK3_ROOT/skills")"
+out_sk3_target="$(rx_run_jira "$RX_SK3_HOME" "$RX_SK3_ROOT" "$RX_SK3_TARGET")"
+out_sk3_link="$(rx_run_jira "$RX_SK3_HOME" "$RX_SK3_ROOT" "$RX_SK3_ROOT/skills/ticket")"
+mkdir -p "$FIX/.claude/skills/ticket"
+out_sk3_repo="$(rx_run_jira "$RX_HOME" "$EMPTY_SKILLS" "")"
 rm -rf "$FIX/.claude/skills"
 assert_eq "a skill reached through a symlink is covered only with its target, and a skill in the repo needs no entry" \
-  'above:missing=0,warned=1,link=1,entry=$HOME/.claude/skills/codereview target:missing=0,warned=1,link=1,entry=$HOME/.claude/skills/codereview link:missing=0,warned=0,link=0,entry= repo:missing=0,warned=0,link=0,entry=' \
-  "above:$(rx_skill "$out_sk3_above") target:$(rx_skill "$out_sk3_target") link:$(rx_skill "$out_sk3_link") repo:$(rx_skill "$out_sk3_repo")"
+  'above:missing=0,warned=1,link=1,entry=$HOME/.claude/skills/ticket target:missing=0,warned=1,link=1,entry=$HOME/.claude/skills/ticket link:missing=0,warned=0,link=0,entry= repo:missing=0,warned=0,link=0,entry=' \
+  "above:$(rx_skill "$out_sk3_above" ticket) target:$(rx_skill "$out_sk3_target" ticket) link:$(rx_skill "$out_sk3_link" ticket) repo:$(rx_skill "$out_sk3_repo" ticket)"
 
 # The declared skill whose target no rule can name (r1 #1 of the final review). The entry is the link
 # itself, so the directory found is covered by equality — but its target is `odd[1]`, which the
@@ -1550,26 +1599,27 @@ assert_eq "a skill reached through a symlink is covered only with its target, an
 # out: the warning names the refused target and the remedy (move or rename it), and no entry to add.
 # Undeclared, the same world keeps the warning of the skill nobody declared, entry and all. The rc and
 # the `warn` prefix are shared by both branches, so each needle is one branch's own text, and the
-# absence of `entry to add` is counted over the whole output, not only on the entry's line.
+# absence of `entry to add` is counted over the whole output, not only on the entry's line. A symlink
+# in a skills directory is a plain skill's, so the world is `ticket`'s, as the one above.
 RX_SK5_HOME="$RXF/sk5"
 RX_SK5_ROOT="$RX_SK5_HOME/.claude"
 RX_SK5_TARGET="$RX_SK5_ROOT/skills/odd[1]"
 mkdir -p "$RX_SK5_TARGET"
-ln -s 'odd[1]' "$RX_SK5_ROOT/skills/codereview"
-out_sk5_bare="$(rx_run "$RX_SK5_HOME" "$RX_SK5_ROOT" "")"
-out_sk5_decl="$(rx_run "$RX_SK5_HOME" "$RX_SK5_ROOT" "$RX_SK5_ROOT/skills/codereview")"
+ln -s 'odd[1]' "$RX_SK5_ROOT/skills/ticket"
+out_sk5_bare="$(rx_run_jira "$RX_SK5_HOME" "$RX_SK5_ROOT" "")"
+out_sk5_decl="$(rx_run_jira "$RX_SK5_HOME" "$RX_SK5_ROOT" "$RX_SK5_ROOT/skills/ticket")"
 # rx_refused <output> → refused=N,remedy=N,undeclared=N,add=N — the new branch's first line, its
 # remedy, the old branch's clause, and every `entry to add` anywhere in the output.
 rx_refused() {
   printf 'refused=%s,remedy=%s,undeclared=%s,add=%s' \
-    "$(grep -cF "  warn  skill codereview is found in $RX_SK5_ROOT/skills/codereview (a symlink to $RX_SK5_TARGET), whose target no read rule can cover:" <<< "$1")" \
+    "$(grep -cF "  warn  skill ticket is found in $RX_SK5_ROOT/skills/ticket (a symlink to $RX_SK5_TARGET), whose target no read rule can cover:" <<< "$1")" \
     "$(grep -c 'move or rename the target to a name the grammar accepts' <<< "$1")" \
     "$(grep -c 'READ_EXTRA does not declare it' <<< "$1")" \
     "$(grep -c 'entry to add' <<< "$1")"
 }
 assert_eq "a declared skill whose symlink target the grammar refuses is named as such, never as undeclared" \
-  'bare:refused=0,remedy=0,undeclared=1,add=1|missing=0,warned=1,link=1,entry=$HOME/.claude/skills/codereview decl:refused=1,remedy=1,undeclared=0,add=0|missing=0,warned=1,link=1,entry= same:same' \
-  "bare:$(rx_refused "$out_sk5_bare")|$(rx_skill "$out_sk5_bare") decl:$(rx_refused "$out_sk5_decl")|$(rx_skill "$out_sk5_decl") same:$(rx_same "$out_sk5_bare" "$out_sk5_decl")"
+  'bare:refused=0,remedy=0,undeclared=1,add=1|missing=0,warned=1,link=1,entry=$HOME/.claude/skills/ticket decl:refused=1,remedy=1,undeclared=0,add=0|missing=0,warned=1,link=1,entry= same:same' \
+  "bare:$(rx_refused "$out_sk5_bare")|$(rx_skill "$out_sk5_bare" ticket) decl:$(rx_refused "$out_sk5_decl")|$(rx_skill "$out_sk5_decl" ticket) same:$(rx_same "$out_sk5_bare" "$out_sk5_decl")"
 
 # The edges of the entry's spelling. A skill directory met one level under the cache has no version
 # above it, so the entry is the directory itself, never a second copy of its name. `$HOME` is written
@@ -1590,11 +1640,13 @@ assert_eq "the entry is the directory found when no version sits above it, and \
 # says the cache may hold more than one copy and names `<root>/plugins/installed_plugins.json`. One
 # about a directory outside the cache says neither: `<root>/skills/` here, and a copy the registry
 # records under a sibling that only starts with the same letters (`plugins/cachex`), which is what
-# the slash of `cache/` tells apart. SK1 is the cache world, with no registry at all.
+# the slash of `cache/` tells apart. SK1 is the cache world, with no registry at all. The skills
+# directory is a plain skill's, so SK6 is `ticket`'s; its run misses codereview:codereview, whose
+# not-found warning names the registry too, which is why `file` reads the note's own clause.
 RX_SK6_HOME="$RXF/sk6"
 RX_SK6_ROOT="$RX_SK6_HOME/.claude"
-mkdir -p "$RX_SK6_ROOT/skills/codereview"
-out_sk6_skills="$(rx_run "$RX_SK6_HOME" "$RX_SK6_ROOT" "")"
+mkdir -p "$RX_SK6_ROOT/skills/ticket"
+out_sk6_skills="$(rx_run_jira "$RX_SK6_HOME" "$RX_SK6_ROOT" "")"
 RX_SK7_ROOT="$RXF/sk7/.claude"
 RX_SK7_COPY="$RX_SK7_ROOT/plugins/cachex/mk/codereview/1.0.0"
 mkdir -p "$RX_SK7_COPY/skills/codereview"
@@ -1602,15 +1654,15 @@ printf '{"version":2,"plugins":{"codereview@mk":[{"scope":"user","installPath":"
   "$RX_SK7_COPY" > "$RX_SK7_ROOT/plugins/installed_plugins.json"
 out_sk7_cachex="$(rx_run "$RX_HOME" "$RX_SK7_ROOT" "")"
 # rx_cache <output> <skills root> → copies=N,file=N,which=N — the phrase, that root's registry
-# named, and the line that says which copy the warning names
+# named by the note, and the line that says which copy the warning names
 rx_cache() {
   printf 'copies=%s,file=%s,which=%s' "$(grep -c 'may hold more than one copy' <<< "$1")" \
-    "$(grep -cF "$2/plugins/installed_plugins.json" <<< "$1")" \
+    "$(grep -cF "the installPath recorded in $2/plugins/installed_plugins.json: the copy named" <<< "$1")" \
     "$(grep -c 'the first copy found when it does not' <<< "$1")"
 }
 assert_eq "a skill found in the plugin cache is warned with installed_plugins.json named, since the cache may hold more than one copy" \
-  "cache:copies=1,file=1,which=1|missing=0,warned=1,link=0,entry=\$HOME/.claude/plugins/cache/mk/codereview skills:copies=0,file=0,which=0|missing=0,warned=1,link=0,entry=\$HOME/.claude/skills/codereview cachex:copies=0,file=0,which=0|missing=0,warned=1,link=0,entry=$RX_SK7_COPY/skills/codereview" \
-  "cache:$(rx_cache "$out_sk1_bare" "$RX_SK1_ROOT")|$(rx_skill "$out_sk1_bare") skills:$(rx_cache "$out_sk6_skills" "$RX_SK6_ROOT")|$(rx_skill "$out_sk6_skills") cachex:$(rx_cache "$out_sk7_cachex" "$RX_SK7_ROOT")|$(rx_skill "$out_sk7_cachex")"
+  "cache:copies=1,file=1,which=1|missing=0,warned=1,link=0,entry=\$HOME/.claude/plugins/cache/mk/codereview skills:copies=0,file=0,which=0|missing=0,warned=1,link=0,entry=\$HOME/.claude/skills/ticket cachex:copies=0,file=0,which=0|missing=0,warned=1,link=0,entry=$RX_SK7_COPY/skills/codereview" \
+  "cache:$(rx_cache "$out_sk1_bare" "$RX_SK1_ROOT")|$(rx_skill "$out_sk1_bare") skills:$(rx_cache "$out_sk6_skills" "$RX_SK6_ROOT")|$(rx_skill "$out_sk6_skills" ticket) cachex:$(rx_cache "$out_sk7_cachex" "$RX_SK7_ROOT")|$(rx_skill "$out_sk7_cachex")"
 
 # WHICH copy: the one the registry records (the same finding). Two marketplaces ship the plugin, and
 # the registry lists, in this order: a user-scope plugin that holds no `codereview` skill; the `zz-mk`
@@ -1645,8 +1697,9 @@ mkdir -p "$RX_SK10_COPY/skills/codereview"
 jq -n --arg p "$RX_SK10_COPY" '{version: 2, plugins: {"codereview@mk": [{scope: "user", installPath: $p}]}}' \
   > "$RX_SK10_ROOT/plugins/installed_plugins.json"
 out_sk10_odd="$(rx_run "$RX_HOME" "$RX_SK10_ROOT" "")"
-# rx_where <output> <dir> → 1 when the warning names <dir> as the directory found, else 0
-rx_where() { grep -cF "  warn  skill codereview is found in $2, and no read rule" <<< "$1"; }
+# rx_where <output> <dir> [<form>] → 1 when the warning about <form> (codereview:codereview by
+# default) names <dir> as the directory found, else 0
+rx_where() { grep -cF "  warn  skill ${3:-codereview:codereview} is found in $2, and no read rule" <<< "$1"; }
 assert_eq "the copy installed_plugins.json records is the one held to the rules, and an unreadable registry falls back to the cache" \
   "bare:where=1|missing=0,warned=1,link=0,entry=$RX_SK8_CACHE/aa-mk/codereview decl:missing=0,warned=0,link=0,entry= bad:where=1|missing=0,warned=1,link=0,entry=$RX_SK9_ROOT/plugins/cache/mk/codereview same:same noise=0 odd:where=1" \
   "bare:where=$(rx_where "$out_sk8_bare" "$RX_SK8_CACHE/aa-mk/codereview/2.0.0/skills/codereview")|$(rx_skill "$out_sk8_bare") decl:$(rx_skill "$out_sk8_decl") bad:where=$(rx_where "$out_sk9_bad" "$RX_SK9_ROOT/plugins/cache/mk/codereview")|$(rx_skill "$out_sk9_bad") same:$(rx_same "$out_sk9_bad" "$out_sk8_bare") noise=$(grep -c 'jq: ' <<< "$out_sk9_bad") odd:where=$(rx_where "$out_sk10_odd" "$RX_SK10_COPY/skills/codereview")"
@@ -1677,6 +1730,84 @@ out_sk12_bare="$(rx_run "$RX_HOME" "$RX_SK12_ROOT" "")"
 assert_eq "a plugin skill is looked up in the registry only under its own plugin key, never another plugin" \
   "other:where=1|missing=0,warned=1,link=0,entry=$RX_SK11_CACHE/mk/codereview decl:missing=0,warned=0,link=0,entry= prefix:where=1|missing=0,warned=1,link=0,entry=$RX_SK12_CACHE/mk/codereview" \
   "other:where=$(rx_where "$out_sk11_bare" "$RX_SK11_CACHE/mk/codereview/2.0.0/skills/codereview")|$(rx_skill "$out_sk11_bare") decl:$(rx_skill "$out_sk11_decl") prefix:where=$(rx_where "$out_sk12_bare" "$RX_SK12_CACHE/mk/codereview/2.0.0/skills/codereview")|$(rx_skill "$out_sk12_bare")"
+
+# HOW the phase invokes it (Codex r7 #1 on PR #315). REVIEW invokes `/codereview:codereview`, which
+# the harness resolves through the install the registry records for the codereview plugin — so a
+# plain `<root>/skills/codereview` beside it is a directory no phase loads, and neither the copy held
+# to the rules nor an entry that covers it. One world, JIRA on, holding both: the plain directory, and
+# the plugin registered with its `skills/codereview`; and `ticket`, which TICKET invokes plain, in the
+# plain skills directory too. Bare, the codereview warning names the plugin's copy and never the plain
+# directory, while ticket's names its plain directory: the same root, two forms, two places. Declaring
+# the two plain directories silences ticket and NOT codereview, whose entry is still the plugin's;
+# declaring the plugin's parent silences codereview. The plain directory's path is not a prefix of the
+# copy's, so its count is fed by nothing else.
+RX_SK13_ROOT="$RXF/sk13/.claude"
+RX_SK13_CACHE="$RX_SK13_ROOT/plugins/cache"
+RX_SK13_COPY="$RX_SK13_CACHE/mk/codereview/2.0.0"
+mkdir -p "$RX_SK13_ROOT/skills/codereview" "$RX_SK13_ROOT/skills/ticket" "$RX_SK13_COPY/skills/codereview"
+printf '{"version":2,"plugins":{"codereview@mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RX_SK13_COPY" > "$RX_SK13_ROOT/plugins/installed_plugins.json"
+out_sk13_bare="$(rx_run_jira "$RX_HOME" "$RX_SK13_ROOT" "")"
+out_sk13_plain="$(rx_run_jira "$RX_HOME" "$RX_SK13_ROOT" "$RX_SK13_ROOT/skills/codereview $RX_SK13_ROOT/skills/ticket")"
+out_sk13_plugin="$(rx_run_jira "$RX_HOME" "$RX_SK13_ROOT" "$RX_SK13_CACHE/mk/codereview $RX_SK13_ROOT/skills/ticket")"
+# rx_form <output> → cr=<where the plugin copy>/<where the plain dir>,tk=<ticket where its plain dir>
+rx_form() {
+  printf 'cr=%s/%s,tk=%s' "$(rx_where "$1" "$RX_SK13_COPY/skills/codereview")" \
+    "$(grep -cF "is found in $RX_SK13_ROOT/skills/codereview" <<< "$1")" \
+    "$(rx_where "$1" "$RX_SK13_ROOT/skills/ticket" ticket)"
+}
+assert_eq "a skill the phase invokes as plugin:skill is looked up in the plugin registry before any plain skills directory" \
+  "bare:cr=1/0,tk=1|missing=0,warned=1,link=0,entry=$RX_SK13_CACHE/mk/codereview,$RX_SK13_ROOT/skills/ticket plain:cr=1/0,tk=0|missing=0,warned=1,link=0,entry=$RX_SK13_CACHE/mk/codereview plugin:cr=0/0,tk=0|missing=0,warned=0,link=0,entry=" \
+  "bare:$(rx_form "$out_sk13_bare")|$(rx_skill "$out_sk13_bare") plain:$(rx_form "$out_sk13_plain")|$(rx_skill "$out_sk13_plain") plugin:$(rx_form "$out_sk13_plugin")|$(rx_skill "$out_sk13_plugin")"
+
+# A registry that records the plugin and no install of it that holds the skill (Codex r7 #2 on PR
+# #315) — a partial clean of the cache took the recorded `mk/codereview/2.0.0` away and left an older
+# copy under another marketplace. The harness keeps resolving the plugin by the recorded install, so
+# the skill is not where it loads it from: a BROKEN install, warned by name — the registry and the
+# installPath, and the remedy —, never the cache copy held to the rules in its place, and not reported
+# present either. The differential, the same cache with no key of the plugin in the registry: the cache
+# copy is found, as before. Two more worlds, JIRA on. RESET: the broken world with `ticket` absent,
+# where ticket is not found and reads as such, not as the broken reason of the skill before it. PLAIN:
+# `ticket`, invoked plain, whose own key records an install without the skill, still goes on to the
+# cache, as it always did — the broken install is the plugin form's, and the plain path is not
+# narrowed; codereview's own install is registered and whole there. Every stale copy sits under
+# `old-mk`, a name nothing else in these worlds carries. The broken world records the plugin under two
+# marketplaces, so the warning has to name both installs, in file order and apart.
+RX_SK14_ROOT="$RXF/sk14/.claude"
+RX_SK14_CACHE="$RX_SK14_ROOT/plugins/cache"
+RX_SK14_REC="$RX_SK14_CACHE/mk/codereview/2.0.0"
+RX_SK14_REC2="$RX_SK14_CACHE/mk2/codereview/3.0.0"
+mkdir -p "$RX_SK14_CACHE/old-mk/codereview/1.0.0/skills/codereview"
+printf '{"version":2,"plugins":{"codereview@mk":[{"scope":"user","installPath":"%s"}],"codereview@mk2":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RX_SK14_REC" "$RX_SK14_REC2" > "$RX_SK14_ROOT/plugins/installed_plugins.json"
+out_sk14_broken="$(rx_run "$RX_HOME" "$RX_SK14_ROOT" "")"
+out_sk14_reset="$(rx_run_jira "$RX_HOME" "$RX_SK14_ROOT" "")"
+RX_SK15_ROOT="$RXF/sk15/.claude"
+RX_SK15_CACHE="$RX_SK15_ROOT/plugins/cache"
+mkdir -p "$RX_SK15_CACHE/old-mk/codereview/1.0.0/skills/codereview" "$RX_SK15_CACHE/mk/other/1.0.0"
+printf '{"version":2,"plugins":{"other@mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RX_SK15_CACHE/mk/other/1.0.0" > "$RX_SK15_ROOT/plugins/installed_plugins.json"
+out_sk15_nokey="$(rx_run "$RX_HOME" "$RX_SK15_ROOT" "")"
+RX_SK16_ROOT="$RXF/sk16/.claude"
+RX_SK16_CACHE="$RX_SK16_ROOT/plugins/cache"
+mkdir -p "$RX_SK16_CACHE/mk/codereview/2.0.0/skills/codereview" "$RX_SK16_CACHE/old-mk/ticket/1.0.0/skills/ticket"
+printf '{"version":2,"plugins":{"codereview@mk":[{"scope":"user","installPath":"%s"}],"ticket@mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RX_SK16_CACHE/mk/codereview/2.0.0" "$RX_SK16_CACHE/mk/ticket/2.0.0" > "$RX_SK16_ROOT/plugins/installed_plugins.json"
+out_sk16_plain="$(rx_run_jira "$RX_HOME" "$RX_SK16_ROOT" "")"
+# rx_broken <output> <skills root> <recorded installs> → broken=N,any=N,remedy=N,stale=N,present=N —
+# the broken warning naming that registry and those installs, every broken warning, the remedy, every
+# line that names a stale copy, and the line that reports every skill present
+rx_broken() {
+  printf 'broken=%s,any=%s,remedy=%s,stale=%s,present=%s' \
+    "$(grep -cF "  warn  skill codereview:codereview is not where the harness loads it: $2/plugins/installed_plugins.json records the codereview plugin installed at $3, and no such install holds skills/codereview" <<< "$1")" \
+    "$(grep -c 'is not where the harness loads it' <<< "$1")" \
+    "$(grep -c 'Reinstall the codereview plugin' <<< "$1")" \
+    "$(grep -c 'old-mk' <<< "$1")" \
+    "$(grep -c '^  ok   third-party skills present' <<< "$1")"
+}
+assert_eq "a recorded plugin install that lacks the skill is warned as broken, never replaced by a cache copy" \
+  "broken:broken=1,any=1,remedy=1,stale=0,present=0|missing=0,warned=0,link=0,entry= nokey:where=1|missing=0,warned=1,link=0,entry=$RX_SK15_CACHE/old-mk/codereview reset:broken=1,any=1|missing=1,warned=0,link=0,entry=|missing=0,warned=0,link=0,entry= plain:any=0,where=1|missing=0,warned=1,link=0,entry=$RX_SK16_CACHE/mk/codereview,$RX_SK16_CACHE/old-mk/ticket" \
+  "broken:$(rx_broken "$out_sk14_broken" "$RX_SK14_ROOT" "$RX_SK14_REC, $RX_SK14_REC2")|$(rx_skill "$out_sk14_broken") nokey:where=$(rx_where "$out_sk15_nokey" "$RX_SK15_CACHE/old-mk/codereview")|$(rx_skill "$out_sk15_nokey") reset:$(rx_broken "$out_sk14_reset" "$RX_SK14_ROOT" "$RX_SK14_REC, $RX_SK14_REC2" | cut -d, -f1-2)|$(rx_skill "$out_sk14_reset" ticket)|$(rx_skill "$out_sk14_reset") plain:any=$(grep -c 'is not where the harness loads it' <<< "$out_sk16_plain"),where=$(rx_where "$out_sk16_plain" "$RX_SK16_CACHE/old-mk/ticket" ticket)|$(rx_skill "$out_sk16_plain" ticket)"
 
 # --- is anything listening where APP_URL points? ----------------------------
 # preflight ran fifteen checks and never once touched APP_URL, so the one thing that costs a whole

@@ -102,10 +102,15 @@ line, so `tail -F` shows it without opening the session's `.json`.
   rule of a symlinked entry's resolved target too; declare the skill's own directory (for a
   plugin, the parent without the version), never a parent above a symlink. `sdd preflight` names,
   before any run, each skill it finds that no entry covers, with the entry to add, and each entry
-  this machine does not have. For a plugin it holds the copy the registry records under the
-  plugin's own key (`~/.claude/plugins/installed_plugins.json`, `codereview@<marketplace>` for the
-  REVIEW's skill; another plugin that ships a `skills/codereview` does not count), and a warning
-  about a directory under the plugin cache names that file: the cache may hold more than one copy. A declared skill whose symlink
+  this machine does not have. It looks each skill up by the form its phase invokes it by, so the
+  REVIEW's `codereview:codereview` is never a plain `~/.claude/skills/codereview`: it holds the copy
+  the registry records under the plugin's own key (`~/.claude/plugins/installed_plugins.json`,
+  `codereview@<marketplace>`; another plugin that ships a `skills/codereview` does not count), and a
+  warning about a directory under the plugin cache names that file: the cache may hold more than one
+  copy. For `codereview:codereview`, a **broken install** (the registry records the plugin, and no
+  `installPath` of it holds the skill, after a partial clean of the cache) is warned with the
+  registry and the `installPath`, and never replaced by an older copy from the cache: reinstall the
+  plugin. A declared skill whose symlink
   target has a name the grammar refuses (anything but letters, digits, `.`, `_` and `-`) is named
   as such, with no entry to add: no entry reaches that target, so move or rename it.
 - **a denial under `/tmp`:** the session's own scratch, not something the boot named. Nothing to do.

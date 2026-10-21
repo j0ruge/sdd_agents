@@ -2671,11 +2671,11 @@ mut_PRE_skill_target_refused_undeclared() {
 mut_PRE_skill_cache_registry_unnamed() {
   sed -i '/^cmd_preflight() {/,/^}/ s#^\(        denied its references outside the repo (a DENIED line in the journal)\.\)\$sk_cache In #\1 In #' "$1"
 }
-# REGISTRY_IGNORED: skill_findable skips every copy installed_plugins.json records and falls back to
-# the first copy `find` meets in directory order — with two marketplaces side by side, the warning
-# names a copy no session loads, and fires with the right one declared (r1 #2 of the final review).
-# Caught by "the copy installed_plugins.json records is the one held to the rules, and an unreadable
-# registry falls back to the cache" (check-preflight.sh), `bare:where=0`.
+# REGISTRY_IGNORED: skill_findable skips every copy installed_plugins.json records — the plain form
+# falls back to the first copy `find` meets in directory order, and since Codex r7 the plugin form
+# reads the install as broken; either way the warning stops naming the copy the harness loads (r1 #2
+# of the final review). Caught by "the copy installed_plugins.json records is the one held to the
+# rules, and an unreadable registry falls back to the cache" (check-preflight.sh), `bare:where=0`.
 mut_PRE_skill_registry_ignored() {
   sed -i '/^skill_findable() {/,/^}/ s#^    \[ -d "\$p/skills/\$name" \] || continue$#    continue#' "$1"
 }
@@ -2692,6 +2692,48 @@ mut_PRE_registry_any_plugin() {
 }
 mut_PRE_registry_prefix_unbounded() {
   sed -i '/^plugin_install_paths() {/,/^}/ s#--arg k "\${2:-}@"#--arg k "${2:-}"#' "$1"
+}
+# Codex r7 on PR #315: the skill is looked up by the FORM its phase invokes it by. All seven are
+# caught by check-preflight.sh. PLUGIN_FORM_PLAIN_DIRS_FIRST: skill_findable reads the plain skills
+# directories for `<plugin>:<skill>` too, ahead of the registry, and a plain `<root>/skills/codereview`
+# is taken for the copy REVIEW loads (#1) — caught by "a skill the phase invokes as plugin:skill is
+# looked up in the plugin registry before any plain skills directory", `bare:cr=0/1`.
+# PLUGIN_FORM_ASKED_PLAIN: the preflight asks for `codereview` plain, so the plain path runs — caught
+# by the same assertion, and by "preflight asks for each third-party skill in the form a phase
+# invokes it, read off the hats and phase_slash", whose two sides then differ.
+# BROKEN_INSTALL_TO_CACHE: a registry that records the plugin with no install holding the skill falls
+# through to the cache, which hands back a stale copy (#2) — caught by "a recorded plugin install that
+# lacks the skill is warned as broken, never replaced by a cache copy", `broken:broken=0,…,stale=2`.
+# BROKEN_INSTALL_UNNAMED: the broken install reads as a skill not found, and its own warning, with the
+# registry, the installPath and the remedy, never prints — the same assertion, `broken=0,any=0`.
+# BROKEN_REASON_NOT_RESET: SKILL_BROKEN_WHY keeps the last broken skill's reason, and `ticket`, missing
+# after it, is warned as broken too — the same assertion, `reset:broken=1,any=2`. Defined and not
+# reset, never deleted: with no assignment at all `set -u` kills the first miss, a red that measures
+# the unbound variable and not the reset.
+# PLAIN_FORM_MARKED_BROKEN: the broken install is no longer the plugin form's alone, and `ticket`, whose
+# own key records an install without the skill, stops reaching the cache — `plain:any=1`.
+# BROKEN_REPORTED_PRESENT: the "present" line prints with a broken install among the skills —
+# `broken:…,present=1`.
+mut_PRE_plugin_form_plain_dirs_first() {
+  sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" = "\$form" \]; then$#  if :; then#' "$1"
+}
+mut_PRE_plugin_form_asked_plain() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^  local -a wanted=(codereview:codereview)#  local -a wanted=(codereview)#' "$1"
+}
+mut_PRE_broken_install_to_cache() {
+  sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" != "\$form" \] && \[ -n "\$recorded" \]; then$#  if false; then#' "$1"
+}
+mut_PRE_broken_install_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^      if \[ -n "\$SKILL_BROKEN_WHY" \]; then$#      if false; then#' "$1"
+}
+mut_PRE_broken_reason_not_reset() {
+  sed -i '/^skill_findable() {/,/^}/ s#^  SKILL_FOUND_DIR=""; SKILL_BROKEN_WHY=""$#  SKILL_FOUND_DIR=""; : "${SKILL_BROKEN_WHY:=}"#' "$1"
+}
+mut_PRE_plain_form_marked_broken() {
+  sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" != "\$form" \] && \[ -n "\$recorded" \]; then$#  if [ -n "$recorded" ]; then#' "$1"
+}
+mut_PRE_broken_reported_present() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^  elif \[ -z "\$broken_skills" \]; then$#  else#' "$1"
 }
 # Codex r3 #2 on PR #315, the preflight's half: a kit whose path the grammar of the read rules refuses
 # is named once and the template probe is not opened. KIT_PATH_UNNAMED: the refusal never fires —
@@ -6800,6 +6842,13 @@ CATALOG=(
   PRE_skill_registry_ignored
   PRE_registry_any_plugin
   PRE_registry_prefix_unbounded
+  PRE_plugin_form_plain_dirs_first
+  PRE_plugin_form_asked_plain
+  PRE_broken_install_to_cache
+  PRE_broken_install_unnamed
+  PRE_broken_reason_not_reset
+  PRE_plain_form_marked_broken
+  PRE_broken_reported_present
   PRE_kit_path_unnamed
   PRE_kit_path_probe_opened
   CENSUS_templates_count_plan

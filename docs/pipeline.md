@@ -1038,11 +1038,16 @@ literal absolute directory, before any session; the kit itself grants nothing be
 `sdd preflight` warns, with no session, about an entry this machine does not have and about a skill
 it finds that no rule covers, naming the entry to add — or, when only the skill's symlink target is
 uncovered because the grammar refuses the target's name, naming that target and the remedy (move or
-rename it) instead, since no entry reaches it. A plugin skill is the copy whose `installPath` the
-harness's registry (`installed_plugins.json`) records under the plugin's own key
-(`<skill>@<marketplace>`, never another plugin that ships a skill of the same name), the first copy
-in the cache only when it records none, and a warning about a directory under the cache names that
-file, since the cache may hold more than one copy. The registry has one reader,
+rename it) instead, since no entry reaches it. Each skill is looked up by the form its phase
+invokes it by: plain (`ticket`, `qa-report`, `qa-execution`) in the skills directories first, and
+`codereview:codereview`, the REVIEW's, in the harness's registry (`installed_plugins.json`) and
+never in a plain directory. A plugin skill is the copy whose `installPath` the registry records
+under the plugin's own key (`<plugin>@<marketplace>`, never another plugin that ships a skill of the
+same name), the first copy in the cache only when no recorded install holds it, and a warning about
+a directory under the cache names that file, since the cache may hold more than one copy. For
+`codereview:codereview`, a registry that records the plugin with no install holding the skill is a
+broken install, warned by name with the registry, the `installPath` and the remedy (reinstall the
+plugin), and never replaced by a copy from the cache. The registry has one reader,
 `plugin_install_paths`, which `sdd health` shares for the grade table, so the two name one copy;
 `tests/check-preflight.sh` asserts each, and `tests/check-health.sh` the table's side.
 

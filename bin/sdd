@@ -5693,7 +5693,8 @@ plugin_install_paths() {
   jq -r --arg k "${2:-}@" '.plugins | to_entries[] | select(.key | startswith($k)) | .value[]? | select(.scope == "user") | .installPath // empty' "${1:-}" 2>/dev/null
 }
 
-# skill_findable <name> → 0 when a skill by that name can be found where skills live.
+# skill_findable <form> → 0 when the skill a phase invokes as <form> can be found where the harness
+# loads it from.
 #
 # Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
 # sub-steps boot `qa-report` and `qa-execution`, and REVIEW loads `codereview`. A missing one is not
@@ -5702,41 +5703,63 @@ plugin_install_paths() {
 #
 # HEURISTIC, and therefore a warn and never a fail. The roots below are a CONVENTION of the harness,
 # not a contract the kit can enforce, and a rule that fails on a heuristic is the rule the next
-# author deletes (the ddd/kaizen plugin check one screen down makes the same call). Three roots,
-# the two `health_provenance` already walks plus the project's own: a plain `skills/<name>/`
-# directory, and the plugin cache, where a skill arrives inside a versioned plugin tree — the copy
-# the registry records first, the first one `find` meets only when it records none.
+# author deletes (the ddd/kaizen plugin check one screen down makes the same call).
+#
+# The FORM is the identity, not the name (Codex r7 on PR #315, decided by the human): a phase does
+# not invoke a name, it invokes a spelling, and the harness resolves each spelling in its own place.
+# The name alone left both doors open, the third failure in a row in this neighbourhood: a plain
+# `<root>/skills/codereview` was taken for the copy REVIEW loads, and a registry whose install had
+# lost the skill fell through to whatever stale copy the cache still held. Two forms:
+#   - `<skill>`, invoked plain (`/ticket open …`, the `/qa-report …` line phase_slash writes): a plain
+#     `<root>/skills/<skill>/` directory, then the project's own `.claude/skills/<skill>/`, then the
+#     plugin path below under the key of the plugin named after the skill — the path this function
+#     always walked, not narrowed;
+#   - `<plugin>:<skill>`, invoked through a plugin (`/codereview:codereview`): the plugin path ONLY,
+#     under `<plugin>`'s key, and no plain directory before it or after it — the harness never loads
+#     a plugin's skill from one.
+# The plugin path. The cache keeps every copy ever fetched, under every marketplace that shipped the
+# plugin, and a `find` hands back the first in DIRECTORY order — so the copy is the one the harness's
+# registry, `<root>/plugins/installed_plugins.json`, records (r1 #2 of the final review): the first
+# installPath plugin_install_paths hands back that holds `skills/<skill>`, `user` scope, and only
+# under the plugin's own key (Codex r3 #1 on PR #315; another plugin that ships a `skills/<skill>` is
+# not the copy the phase loads). health_provenance reads the registry through the same function, so
+# the preflight and the grade table name one copy. When the registry records an install of the plugin
+# and none holds the skill, the plugin form is a BROKEN install (Codex r7 #2): not found, the reason in
+# SKILL_BROKEN_WHY, and never the cache, because the harness keeps resolving the plugin by the
+# recorded install and any other copy is one no phase loads. Only a registry that records no install
+# of the plugin — no file, an unreadable one, no jq, no `user` install under its key — sends either
+# form on to the cache walk; nothing there fails, and `set -e` kills nothing. The plain form keeps
+# what it always did when its own key records an install without the skill: the cache walk.
 #
 # SDD_SKILLS_ROOT exists so this is testable at all — with no injectable root the only worlds
 # available to a sensor are "this developer's machine" and nothing.
 #
 # It also publishes WHERE, in the global SKILL_FOUND_DIR (empty when not found), which the preflight
-# holds against the read rules of the sessions (read_rules_cover, ADR 0019 §2). A global, so the
-# function is CALLED and never read by `$( )`: the assignment would die in the subshell (CLAUDE.md).
-# Reset on entry, so a miss never hands on the previous skill's directory; no probe sees the reset,
-# because the one caller reads the global only after an rc 0 — it decides what a caller that read
-# it after a miss would get.
+# holds against the read rules of the sessions (read_rules_cover, ADR 0019 §2), and WHY a plugin form
+# is a broken install, in SKILL_BROKEN_WHY (empty otherwise), which the preflight warns with. Globals,
+# so the function is CALLED and never read by `$( )`: the assignment would die in the subshell
+# (CLAUDE.md). Both reset on entry. No probe sees SKILL_FOUND_DIR's reset, because the one caller
+# reads it only after an rc 0 — it decides what a caller that read it after a miss would get;
+# SKILL_BROKEN_WHY's has one, since the caller reads it after every miss, and without the reset a
+# skill missing after a broken one would be warned with the broken one's reason.
 skill_findable() {
-  local name="${1:-}" root="${SDD_SKILLS_ROOT:-$HOME/.claude}" hit="" p
-  SKILL_FOUND_DIR=""
+  local form="${1:-}" root="${SDD_SKILLS_ROOT:-$HOME/.claude}" name plugin hit="" p recorded=""
+  SKILL_FOUND_DIR=""; SKILL_BROKEN_WHY=""
+  name="${form#*:}"; plugin="${form%%:*}"
   [ -n "$name" ] || return 1
-  if [ -d "$root/skills/$name" ]; then SKILL_FOUND_DIR="$root/skills/$name"; return 0; fi
-  if [ -d "$REPO_ROOT/.claude/skills/$name" ]; then SKILL_FOUND_DIR="$REPO_ROOT/.claude/skills/$name"; return 0; fi
-  # The copy the harness loads, before any guess (r1 #2 of the final review). The cache keeps every
-  # copy ever fetched, under every marketplace that shipped the plugin, and the `find` below hands
-  # back the first in DIRECTORY order: with two marketplaces side by side, the warning named a copy
-  # no session loads and asked to declare it, with the right one declared. The harness's registry,
-  # `<root>/plugins/installed_plugins.json`, records the installPath of each install; the copy is the
-  # first one plugin_install_paths hands back that holds `skills/<name>` — `user` scope, and only
-  # under the key of the plugin named after the skill (Codex r3 #1 on PR #315): another plugin listed
-  # first that also ships a `skills/<name>` is not the copy the phase loads. health_provenance reads
-  # the registry through the same function, so the preflight and the grade table name one copy. No
-  # registry, an unreadable one, no jq, or no key of the plugin reads as no registry: nothing is
-  # handed back, nothing fails, and `set -e` kills nothing.
+  if [ "$plugin" = "$form" ]; then
+    if [ -d "$root/skills/$name" ]; then SKILL_FOUND_DIR="$root/skills/$name"; return 0; fi
+    if [ -d "$REPO_ROOT/.claude/skills/$name" ]; then SKILL_FOUND_DIR="$REPO_ROOT/.claude/skills/$name"; return 0; fi
+  fi
   while IFS= read -r p; do
+    recorded="$recorded${recorded:+, }$p"
     [ -d "$p/skills/$name" ] || continue
     SKILL_FOUND_DIR="$p/skills/$name"; return 0
-  done < <(plugin_install_paths "$root/plugins/installed_plugins.json" "$name")
+  done < <(plugin_install_paths "$root/plugins/installed_plugins.json" "$plugin")
+  if [ "$plugin" != "$form" ] && [ -n "$recorded" ]; then
+    SKILL_BROKEN_WHY="$root/plugins/installed_plugins.json records the $plugin plugin installed at $recorded, and no such install holds skills/$name"
+    return 1
+  fi
   # With no copy recorded, the cache is walked. `-quit` on the first hit: the cache holds every
   # version of every plugin. `find` walks a parent before its children, so a plugin named after its
   # skill is met at its own directory, above every version. `|| true` because `find` on a missing
@@ -6826,12 +6849,19 @@ cmd_preflight() {
   local sk skills_root missing_skills=""
   skills_root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
   # The subset of KIT_THIRD_PARTY_SKILLS this config boots headless (the planner's three are
-  # interactive); the full list is what `sdd health --release` line 2 asks an origin for.
-  local -a wanted=(codereview)   # REVIEW runs in every mission
+  # interactive); the full list is what `sdd health --release` line 2 asks an origin for. Each one in
+  # the FORM its phase invokes it by, which is where skill_findable looks (Codex r7 on PR #315):
+  # REVIEW invokes `/codereview:codereview` (agents/sdd-reviewer.md), the skill of the codereview
+  # plugin; TICKET invokes `/ticket` (agents/sdd-ticket.md) and the QA sub-steps `/qa-report` and
+  # `/qa-execution` (phase_slash), all three plain. That is a second spelling of what the hats and
+  # phase_slash write, and no comment makes it the same one: check-preflight.sh compares the list
+  # preflight prints with the invocations it reads off those files. KIT_THIRD_PARTY_SKILLS lists
+  # names, so the check below holds it to the part after the `:`.
+  local -a wanted=(codereview:codereview)   # REVIEW runs in every mission
   [ "$JIRA_ENABLED" = "true" ] && wanted+=(ticket)
   { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && wanted+=(qa-report qa-execution)
   for sk in "${wanted[@]}"; do
-    case " $KIT_THIRD_PARTY_SKILLS " in *" $sk "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
+    case " $KIT_THIRD_PARTY_SKILLS " in *" ${sk#*:} "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
   done
   # A skill found is not a skill the phases can READ: its references live outside the repo, and the
   # session gets only kit_read_rules' rules (ADR 0019 §2). The harness checks the path asked for AND
@@ -6851,11 +6881,27 @@ cmd_preflight() {
   # warning and its entry, and the refused one at the next preflight — two steps, never a loop.
   # A directory found under the plugin cache also names the registry (r1 #2 of the final review):
   # the cache may hold more than one copy, skill_findable holds to the rules the one the registry
-  # records and falls back to the first `find` meets, and the warning says which file decides. The
-  # slash of `cache/` keeps a sibling such as `plugins/cachex` out.
-  local sk_real sk_entry sk_via sk_cache
+  # records and falls back to the first `find` meets when the registry records no install of the
+  # plugin (for a skill invoked plain, also when no recorded install holds it), and the warning says
+  # which file decides. The slash of `cache/` keeps a sibling such as `plugins/cachex` out.
+  # A skill invoked through a plugin whose recorded install does not hold it is neither missing nor
+  # found (Codex r7 #2 on PR #315): the harness loads the plugin from that install, so the phase boots
+  # without the skill whatever else the cache holds. Its own warning, with skill_findable's reason —
+  # the registry and the installPath — and the remedy, and it keeps the "present" line from printing.
+  local sk_real sk_entry sk_via sk_cache broken_skills=""
   for sk in "${wanted[@]}"; do
-    if ! skill_findable "$sk"; then missing_skills="$missing_skills $sk"; continue; fi
+    if ! skill_findable "$sk"; then
+      if [ -n "$SKILL_BROKEN_WHY" ]; then
+        broken_skills="$broken_skills $sk"
+        warn "skill $sk is not where the harness loads it: $SKILL_BROKEN_WHY.
+        The harness loads a plugin's skill from the install its registry records, so every phase that
+        invokes $sk boots without it; no other copy in the plugin cache stands in for it,
+        and none is held to the read rules. Reinstall the ${sk%%:*} plugin."
+      else
+        missing_skills="$missing_skills $sk"
+      fi
+      continue
+    fi
     sk_real="$(readlink -f -- "$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="$SKILL_FOUND_DIR"
     if read_rules_cover "$SKILL_FOUND_DIR" && read_rules_cover "$sk_real"; then continue; fi
     sk_via=""; [ "$sk_real" = "$SKILL_FOUND_DIR" ] || sk_via=" (a symlink to $sk_real)"
@@ -6880,14 +6926,16 @@ cmd_preflight() {
         denied its references outside the repo (a DENIED line in the journal).$sk_cache In .sdd/config.sh:
         READ_EXTRA entry to add: $sk_entry"
   done
-  if [ -z "$missing_skills" ]; then
-    ok "third-party skills present (${wanted[*]})"
-  else
+  if [ -n "$missing_skills" ]; then
     warn "skills not found:$missing_skills
-        Looked in $skills_root/skills/, $skills_root/plugins/cache/ and
-        $REPO_ROOT/.claude/skills/ — those roots are a convention, so this is a warning and not a
-        failure. The phase boots the skill by name anyway: if it really is absent, the session
-        improvises and spends the phase budget producing something no gate can read."
+        A skill a phase invokes plain was looked for in $skills_root/skills/, $REPO_ROOT/.claude/skills/
+        and $skills_root/plugins/cache/; one it invokes as plugin:skill, in the installs
+        $skills_root/plugins/installed_plugins.json records for the plugin, and in the cache only when
+        that file records none. Those roots are a convention, so this is a warning and not a failure.
+        The phase boots the skill by name anyway: if it really is absent, the session improvises and
+        spends the phase budget producing something no gate can read."
+  elif [ -z "$broken_skills" ]; then
+    ok "third-party skills present (${wanted[*]})"
   fi
 
   # --- target repo plugins ---

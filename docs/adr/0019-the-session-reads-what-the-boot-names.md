@@ -98,13 +98,23 @@ A directory that does not exist is a `warn` of `sdd preflight`, never a `die`: a
 another machine must not stop the line. The kit grants nothing beyond its own templates, and each
 target declares its skills. `sdd preflight` names, with no session and never as a failure, each
 skill it finds that no rule covers, with the entry to add (for a plugin, the parent without the
-version; the copy it holds to the rules is the `installPath` that `installed_plugins.json`
-records under the plugin's own key, and the first copy in the cache only when it records none), and
-a declared skill whose symlink target the grammar refuses, with no entry to add, since no entry
-reaches that target. The plugin's own key is `<plugin>@<marketplace>`, with the plugin named after
-the skill: the REVIEW phase loads `/codereview:codereview`, and another plugin listed first that
-also ships a `skills/codereview`, or one whose name only starts with the same letters, is a copy no
-session of it loads (the Codex r3 #1 on PR #315, decided by the human). `plugin_install_paths` is
+version), and a declared skill whose symlink target the grammar refuses, with no entry to add, since
+no entry reaches that target. It looks each skill up by the form its phase invokes it by, never by
+the name alone (the Codex r7 on PR #315, decided by the human). `ticket`, `qa-report` and
+`qa-execution` are invoked plain, and are looked up in the skills directories, then in the registry
+and the cache under the key of the plugin named after the skill. The REVIEW phase invokes
+`/codereview:codereview`, which the harness resolves through the install its registry records for
+the codereview plugin, so that form is looked up there and in no plain directory: a plain
+`~/.claude/skills/codereview` is a directory no phase loads. The copy held to the rules is the
+`installPath` that `installed_plugins.json` records under the plugin's own key,
+`<plugin>@<marketplace>`; another plugin listed first that also ships a `skills/codereview`, or one
+whose name only starts with the same letters, is a copy no session of it loads (the Codex r3 #1 on
+PR #315, decided by the human). For the `<plugin>:<skill>` form, a registry that records the plugin
+and no install of it that holds the skill is a **broken install**. It is warned by name, with the
+registry, the `installPath` and the remedy (reinstall the plugin), and never replaced by a copy from
+the cache, since the harness keeps loading the recorded install. For that form the cache is walked
+only when the registry records no install of the plugin (no file, unreadable, no `jq`, no `user`
+install under its key), and then the first copy found is the one named. `plugin_install_paths` is
 the one reader of the registry, shared with `sdd health`, which compares the grade table against
 the same copy.
 
@@ -203,7 +213,8 @@ precedence in two worlds of two outcomes, and the default on a sabotaged copy of
 - **§2: `reads: <skill>` in the hat's frontmatter, resolved by the runner.** No configuration, since
   the kit knows which hat calls which skill. `sdd preflight` already looks for these skills under
   `$HOME/.claude/skills/`, `$HOME/.claude/plugins/cache/` and the repo's `.claude/skills/`
-  (`skill_findable`), and only warns when it misses them, because those roots are a convention.
+  (`skill_findable`; and in the registry, for a skill invoked as `<plugin>:<skill>`), and only warns
+  when it misses them, because those roots are a convention.
   Granting a permission from that convention, plus the plugin cache's internal layout (the
   marketplace, a plugin name that is not the skill's, the versions), was the most fragile of the
   options.
@@ -219,6 +230,13 @@ precedence in two worlds of two outcomes, and the default on a sabotaged copy of
   filter fewer, but a plugin listed before codereview that ships its own `skills/codereview` is
   the copy held to the rules while the REVIEW phase loads the other one, and `sdd health` already
   read only the `codereview@` keys, so the two disagreed about which copy is installed.
+- **§2: look a skill up by its name, whatever form its phase invokes it by**, as the preflight did
+  until the Codex r7 on PR #315. One list of names, shared with `KIT_THIRD_PARTY_SKILLS`, but it left
+  two doors open: a plain `~/.claude/skills/codereview` was held to the rules while the REVIEW phase
+  invokes `/codereview:codereview`, which the harness never loads from a plain directory, and a
+  registry whose install had lost the skill fell through to whatever older copy the cache held. It
+  was the third failure in a row in this lookup, and the state it was missing was the form of the
+  call.
 - **§2: leave the skills to the human's settings and only measure.** No key and no validation, but
   the symlink trap stays with whoever writes the setting by hand, and a new machine meets the
   blocked TICKET again.

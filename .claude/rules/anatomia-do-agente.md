@@ -88,12 +88,18 @@ diretório achado e o alvo do `readlink -f` dele, julgados pelas próprias linha
 (`read_rules_cover`) —, com a entrada a declarar (`skill_read_entry`: para plugin, o pai sem versão,
 escrito `$HOME/…`); quando o diretório achado está coberto e só o alvo não, porque a gramática recusa
 o nome do alvo, o aviso nomeia o alvo e o remédio (mover ou renomear), sem entrada a declarar, já que
-nenhuma o alcança; skill de plugin é a cópia cujo `installPath` o registro do harness
-(`installed_plugins.json`) grava sob a chave do próprio plugin (`<skill>@<marketplace>`; outro plugin
-que traz um `skills/<skill>` não conta, r3 #1 do Codex no #315), lida por `plugin_install_paths`, o
-leitor que o `sdd health` divide com ele para a tabela de notas, e o aviso sobre diretório sob o cache
-nomeia esse arquivo, porque o cache pode ter mais de uma cópia; o probe é o
-`tests/check-preflight.sh`, com onze mutantes `mut_PRE_*`, e o `tests/check-health.sh` do lado da tabela.
+nenhuma o alcança; a skill é procurada pela forma como a fase a chama (r7 do Codex no #315): as
+simples (`ticket`, `qa-report`, `qa-execution`) nos diretórios de skills primeiro, e a
+`codereview:codereview` da REVIEW nunca num diretório simples; skill de plugin é a cópia cujo
+`installPath` o registro do harness (`installed_plugins.json`) grava sob a chave do próprio plugin
+(`<plugin>@<marketplace>`; outro plugin que traz um `skills/<skill>` não conta, r3 #1 do Codex no
+#315), lida por `plugin_install_paths`, o leitor que o `sdd health` divide com ele para a tabela de
+notas; na forma com plugin, o registro que grava o plugin sem nenhuma instalação que tenha a skill é
+instalação quebrada, avisada pelo nome (o registro, o `installPath` e o remédio, reinstalar o
+plugin) e nunca trocada por uma cópia do cache, que só é varrido quando o registro não grava
+instalação do plugin; e o aviso sobre diretório sob o cache nomeia esse arquivo, porque o cache pode
+ter mais de uma cópia; o probe é o `tests/check-preflight.sh`, com dezoito mutantes `mut_PRE_*`, e
+o `tests/check-health.sh` do lado da tabela.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`
