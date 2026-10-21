@@ -19,7 +19,8 @@ Os seis incrementos estão `done`. Toda sessão do runner (fase, `sdd close`, so
 `DENIED` no journal; o preflight prova a regra numa sessão isolada e avisa, sem sessão, a entrada do `READ_EXTRA`
 que não existe e a skill achada que nenhuma regra cobre. Suíte verde em ``e8fe91c``. Próximo: QA, que no kit
 não tem interface (sub-etapa `close`), e a verificação end-to-end do `01-plano.md`. A revisão final da branch pediu
-R1 e R2, feitos (seção "Rodada de conserto"); a suíte inteira depois deles é do relay.
+R1 e R2, feitos (seção "Rodada de conserto"), e o Codex no PR #315 o R3, feito; a suíte inteira depois deles é do
+relay.
 
 ## Estado do repo
 
@@ -53,6 +54,11 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   `<raiz>/plugins/cache/` diz que o cache pode ter mais de uma cópia e nomeia o registro. (Minor #8): o comentário
   da sonda do `Bash` diz `minus the read rules (ADR 0019 §3)`. Check → `1 1`, e uma segunda asserção para a cópia
   do registro. Mutantes `mut_PRE_skill_cache_registry_unnamed` e `mut_PRE_skill_registry_ignored`.
+- `b96afd8` — R3 (P3 do Codex no PR #315, `bin/sdd:6493`, decisão humana "só a regra do kit"): a sonda dos
+  templates leva no `--allowedTools` só as linhas do `kit_read_rules`, nunca o `ALLOWED_TOOLS` (com um `Read` largo
+  ali ela lia o template sem a regra e dizia que a regra funciona); `kit_read_rules` vazio é `_fail` sem sessão, e o
+  `(none)` da recusa sumiu. Check: `the template probe carries only the kit read rules, never ALLOWED_TOOLS` → `1`.
+  Mutantes `mut_PRE_template_probe_allowlist_widened` e `mut_PRE_template_probe_empty_unguarded`.
 
 ## Artefatos
 
