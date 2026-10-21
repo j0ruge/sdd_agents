@@ -21,7 +21,7 @@
 | F6 | O worker (W1–W7) | estacionada por decisão; **coleta de campo aberta em 2026-10-09** ([caderno](2026-10-09-o-worker-caderno-de-campo.md), [linha de base](2026-10-09-o-worker-linha-de-base.md): 21 missões, 4 sem toque humano) | uma linha do caderno por missão do `sales_quote` | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
 | F8 | O plano mede contra a base, não contra os incrementos anteriores | **fechada** pelo I4 de `20261008-lote-6-as-quatro-que-faltam`: o parágrafo no § 4 do `sdd-planner`, segurado pelo probe `hat:` do `tests/check-hat.sh` | nada | — |
-| F9 | A sessão lê o que o boot manda ler | plano nascido do `sdd kaizen` em 2026-10-20 e levado ao grill do `/sdd-plan` no mesmo dia (7 decisões, todas no recomendado; ADR 0019), aprovado `humano-2026-10-20` (`c7f9ad8`): `docs/handoffs/20261020-a-sessao-le-o-que-o-boot-manda/`, 6 incrementos (a regra só de leitura dos templates no `run_phase` e no `sdd close`, a sessão isolada do preflight, a negativa nomeada no journal, o `READ_EXTRA` e os avisos do preflight); os três achados da janela saíram para o `TODO.md` pelo #309 | a execução interativa no worktree `~/repos/sdd_agents-f9` (nunca por `sdd run` do checkout principal), depois o PR e o `./bin/sdd health` | a execução do I1 ao I6 |
+| F9 | A sessão lê o que o boot manda ler | plano nascido do `sdd kaizen` em 2026-10-20 e levado ao grill do `/sdd-plan` no mesmo dia (7 decisões, todas no recomendado; ADR 0019), aprovado `humano-2026-10-20` (`c7f9ad8`): `docs/handoffs/20261020-a-sessao-le-o-que-o-boot-manda/`, 6 incrementos (a regra só de leitura dos templates no `run_phase` e no `sdd close`, a sessão isolada do preflight, a negativa nomeada no journal, o `READ_EXTRA` e os avisos do preflight); os três achados da janela saíram para o `TODO.md` pelo #309. **Executada** de forma interativa no worktree `~/repos/sdd_agents-f9`: os seis incrementos e a rodada de conserto da revisão final (R1 `f9f3b34`, R2 `5f05cf4`) feitos, suíte verde em `259222b` (2027 `ok`), catálogo 716 → 742 mutantes (`--anchors`); a sonda isolada lê o template com a regra e é `DENIED` sem ela (2026-10-20 22:59, 2.1.304), e o preflight fica vermelho com o `kit_read_rules` sabotado; a DOCS escreveu a entrada do `KAIZEN_LOG.md` | o PR com `@codex review`, os consertos da revisão numa leva, depois o `./bin/sdd health` (carimbo) e o merge humano; depois do merge, o yokoten do `READ_EXTRA` no lighthouse e no jrc-libs | o PR e a revisão dele |
 
 Fechados, para ninguém reabrir: o laço do fingerprint (#54–#56 → missão
 `20260922-o-motivo-da-fase`, PR #57, merge `2258e53`); o fluxo `develop → staging → main` com o
@@ -232,7 +232,8 @@ e os limites estão escritos nele. A triagem leu os 26 itens abertos do `TODO.md
 plano nascido é a F9: as fases não conseguem ler `$SDD_HOME/templates` nem as referências das skills,
 e no `lighthouse_project` e no `jrc-libs` isso custou um TICKET parado e REVIEWs sem referência. O kit
 descongela no merge do PR #302, e a frente F1 deixa de esperar. O #302 mergeou (`45a16a6`), a F9 passou
-pelo grill e foi aprovada no mesmo dia, e está em execução num worktree ligado. Os três achados que o
+pelo grill e foi aprovada no mesmo dia, e foi executada num worktree ligado (2026-10-21: seis
+incrementos e a rodada de conserto da revisão final; o próximo passo é o PR). Os três achados que o
 juiz deixou só no plano entraram no `TODO.md` pelo #309 (catraca 29), e zerar a catraca é o lote
 seguinte à F9, por decisão humana.
 
