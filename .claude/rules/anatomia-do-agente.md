@@ -71,7 +71,9 @@ diretório achado e o alvo do `readlink -f` dele, julgados pelas próprias linha
 (`read_rules_cover`) —, com a entrada a declarar (`skill_read_entry`: para plugin, o pai sem versão,
 escrito `$HOME/…`); quando o diretório achado está coberto e só o alvo não, porque a gramática recusa
 o nome do alvo, o aviso nomeia o alvo e o remédio (mover ou renomear), sem entrada a declarar, já que
-nenhuma o alcança; o probe é o `tests/check-preflight.sh`, com sete mutantes `mut_PRE_*`.
+nenhuma o alcança; skill de plugin é a cópia cujo `installPath` o registro do harness
+(`installed_plugins.json`) grava, e o aviso sobre diretório sob o cache nomeia esse arquivo, porque o
+cache pode ter mais de uma cópia; o probe é o `tests/check-preflight.sh`, com nove mutantes `mut_PRE_*`.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`

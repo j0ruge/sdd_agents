@@ -2603,6 +2603,22 @@ mut_PRE_skill_entry_home_unwritten() {
 mut_PRE_skill_target_refused_undeclared() {
   sed -i '/^cmd_preflight() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && ! read_extra_dir_ok "\$sk_real"; then$#    if false; then#' "$1"
 }
+# CACHE_REGISTRY_UNNAMED: the warning about a skill found under the plugin cache stops saying the
+# cache may hold more than one copy and that installed_plugins.json names the one the harness loads
+# (r1 #2 of the final review). Caught by "a skill found in the plugin cache is warned with
+# installed_plugins.json named, since the cache may hold more than one copy" (check-preflight.sh),
+# `cache:copies=0,file=0,which=0`.
+mut_PRE_skill_cache_registry_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^\(        denied its references outside the repo (a DENIED line in the journal)\.\)\$sk_cache In #\1 In #' "$1"
+}
+# REGISTRY_IGNORED: skill_findable skips every copy installed_plugins.json records and falls back to
+# the first copy `find` meets in directory order — with two marketplaces side by side, the warning
+# names a copy no session loads, and fires with the right one declared (r1 #2 of the final review).
+# Caught by "the copy installed_plugins.json records is the one held to the rules, and an unreadable
+# registry falls back to the cache" (check-preflight.sh), `bare:where=0`.
+mut_PRE_skill_registry_ignored() {
+  sed -i '/^skill_findable() {/,/^}/ s#^    \[ -d "\$p/skills/\$name" \] || continue$#    continue#' "$1"
+}
 
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
 # session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
@@ -6635,6 +6651,8 @@ CATALOG=(
   PRE_skill_entry_versioned
   PRE_skill_entry_home_unwritten
   PRE_skill_target_refused_undeclared
+  PRE_skill_cache_registry_unnamed
+  PRE_skill_registry_ignored
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA

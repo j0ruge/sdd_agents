@@ -941,7 +941,9 @@ mv .sdd/config.sh.bak .sdd/config.sh
 #   - a skill preflight finds (skill_findable, which publishes SKILL_FOUND_DIR) whose directory, or
 #     whose `readlink -f` target, no read rule of the sessions covers: named, with the entry to add —
 #     unless the directory is covered and the grammar refuses the target's name, which no entry can
-#     reach: named as such, with the remedy (move or rename the target) and no entry.
+#     reach: named as such, with the remedy (move or rename the target) and no entry;
+#   - a plugin skill is the copy the registry (`installed_plugins.json`) records, else the first one
+#     the cache holds, and a warning about a directory under the cache names that registry.
 #     The rules are kit_read_rules' own, the repo is the session's cwd, and a rule covers its
 #     directory and what is under `<dir>/` — never a sibling that only starts with the same letters.
 # HOME is set for every run here, so the `$HOME/…` spelling of the entry is asserted both ways
@@ -1077,6 +1079,73 @@ out_sk4_nohome="$(rx_run "" "$RX_SK4_HOME/.claude" "")"
 assert_eq "the entry is the directory found when no version sits above it, and \$HOME is written only under a real HOME" \
   "slash:missing=0,warned=1,link=0,entry=\$HOME/.claude/plugins/cache/codereview nohome:missing=0,warned=1,link=0,entry=$RX_SK4_DIR" \
   "slash:$(rx_skill "$out_sk4_slash") nohome:$(rx_skill "$out_sk4_nohome")"
+
+# A skill found in the plugin cache (r1 #2 of the final review). The cache keeps every copy ever
+# fetched, under every marketplace that shipped the plugin, and the copy the harness loads is the
+# installPath its registry records — so a warning about a directory under `<root>/plugins/cache/`
+# says the cache may hold more than one copy and names `<root>/plugins/installed_plugins.json`. One
+# about a directory outside the cache says neither: `<root>/skills/` here, and a copy the registry
+# records under a sibling that only starts with the same letters (`plugins/cachex`), which is what
+# the slash of `cache/` tells apart. SK1 is the cache world, with no registry at all.
+RX_SK6_HOME="$RXF/sk6"
+RX_SK6_ROOT="$RX_SK6_HOME/.claude"
+mkdir -p "$RX_SK6_ROOT/skills/codereview"
+out_sk6_skills="$(rx_run "$RX_SK6_HOME" "$RX_SK6_ROOT" "")"
+RX_SK7_ROOT="$RXF/sk7/.claude"
+RX_SK7_COPY="$RX_SK7_ROOT/plugins/cachex/mk/codereview/1.0.0"
+mkdir -p "$RX_SK7_COPY/skills/codereview"
+printf '{"version":2,"plugins":{"codereview@mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RX_SK7_COPY" > "$RX_SK7_ROOT/plugins/installed_plugins.json"
+out_sk7_cachex="$(rx_run "$RX_HOME" "$RX_SK7_ROOT" "")"
+# rx_cache <output> <skills root> → copies=N,file=N,which=N — the phrase, that root's registry
+# named, and the line that says which copy the warning names
+rx_cache() {
+  printf 'copies=%s,file=%s,which=%s' "$(grep -c 'may hold more than one copy' <<< "$1")" \
+    "$(grep -cF "$2/plugins/installed_plugins.json" <<< "$1")" \
+    "$(grep -c 'the first copy found when it does not' <<< "$1")"
+}
+assert_eq "a skill found in the plugin cache is warned with installed_plugins.json named, since the cache may hold more than one copy" \
+  "cache:copies=1,file=1,which=1|missing=0,warned=1,link=0,entry=\$HOME/.claude/plugins/cache/mk/codereview skills:copies=0,file=0,which=0|missing=0,warned=1,link=0,entry=\$HOME/.claude/skills/codereview cachex:copies=0,file=0,which=0|missing=0,warned=1,link=0,entry=$RX_SK7_COPY/skills/codereview" \
+  "cache:$(rx_cache "$out_sk1_bare" "$RX_SK1_ROOT")|$(rx_skill "$out_sk1_bare") skills:$(rx_cache "$out_sk6_skills" "$RX_SK6_ROOT")|$(rx_skill "$out_sk6_skills") cachex:$(rx_cache "$out_sk7_cachex" "$RX_SK7_ROOT")|$(rx_skill "$out_sk7_cachex")"
+
+# WHICH copy: the one the registry records (the same finding). Two marketplaces ship the plugin, and
+# the registry lists, in this order: a user-scope plugin that holds no `codereview` skill; the `zz-mk`
+# copy under PROJECT scope — another repo's pin, which this preflight does not speak for, the call
+# health makes for the grade table; and the `aa-mk` copy under user scope, the one held to the rules.
+# `find` meets each plugin's own directory first, above its versions, so falling back to it names
+# `…/<mk>/codereview` and never the copy's `…/2.0.0/skills/codereview`, whichever marketplace the
+# directory order puts first: the needle tells the readers apart in every order. Declared, the right
+# copy's parent covers it and nothing is said — the reviewer's world, where the warning fired with
+# the right copy declared and asked for the other. HOME is elsewhere, so a registry read off $HOME
+# instead of the skills root reads nothing. A registry jq cannot read is no registry: the copy `find`
+# meets, the rc and fail count of a readable one, and none of jq's complaints in the output.
+RX_SK8_ROOT="$RXF/sk8/.claude"
+RX_SK8_CACHE="$RX_SK8_ROOT/plugins/cache"
+mkdir -p "$RX_SK8_CACHE/zz-mk/codereview/1.0.0/skills/codereview" \
+         "$RX_SK8_CACHE/aa-mk/codereview/2.0.0/skills/codereview" "$RX_SK8_CACHE/aa-mk/other/1.0.0/skills/other"
+printf '{"version":2,"plugins":{"other@aa-mk":[{"scope":"user","installPath":"%s"}],"codereview@zz-mk":[{"scope":"project","projectPath":"/elsewhere","installPath":"%s"}],"codereview@aa-mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RX_SK8_CACHE/aa-mk/other/1.0.0" "$RX_SK8_CACHE/zz-mk/codereview/1.0.0" "$RX_SK8_CACHE/aa-mk/codereview/2.0.0" \
+  > "$RX_SK8_ROOT/plugins/installed_plugins.json"
+out_sk8_bare="$(rx_run "$RX_HOME" "$RX_SK8_ROOT" "")"
+out_sk8_decl="$(rx_run "$RX_HOME" "$RX_SK8_ROOT" "$RX_SK8_CACHE/aa-mk/codereview")"
+RX_SK9_ROOT="$RXF/sk9/.claude"
+mkdir -p "$RX_SK9_ROOT/plugins/cache/mk/codereview/1.0.0/skills/codereview"
+printf '{' > "$RX_SK9_ROOT/plugins/installed_plugins.json"
+out_sk9_bad="$(rx_run "$RX_HOME" "$RX_SK9_ROOT" "")"
+# The registry's line is read whole: a copy whose last component carries a backslash and ends in a
+# space is still that copy, never a mangled path that falls back to the cache. The JSON is built
+# by jq, so the backslash is escaped as the harness would escape it.
+RX_SK10_ROOT="$RXF/sk10/.claude"
+RX_SK10_COPY="$RX_SK10_ROOT/plugins/cache/mk/codereview/v\\1 "
+mkdir -p "$RX_SK10_COPY/skills/codereview"
+jq -n --arg p "$RX_SK10_COPY" '{version: 2, plugins: {"codereview@mk": [{scope: "user", installPath: $p}]}}' \
+  > "$RX_SK10_ROOT/plugins/installed_plugins.json"
+out_sk10_odd="$(rx_run "$RX_HOME" "$RX_SK10_ROOT" "")"
+# rx_where <output> <dir> → 1 when the warning names <dir> as the directory found, else 0
+rx_where() { grep -cF "  warn  skill codereview is found in $2, and no read rule" <<< "$1"; }
+assert_eq "the copy installed_plugins.json records is the one held to the rules, and an unreadable registry falls back to the cache" \
+  "bare:where=1|missing=0,warned=1,link=0,entry=$RX_SK8_CACHE/aa-mk/codereview decl:missing=0,warned=0,link=0,entry= bad:where=1|missing=0,warned=1,link=0,entry=$RX_SK9_ROOT/plugins/cache/mk/codereview same:same noise=0 odd:where=1" \
+  "bare:where=$(rx_where "$out_sk8_bare" "$RX_SK8_CACHE/aa-mk/codereview/2.0.0/skills/codereview")|$(rx_skill "$out_sk8_bare") decl:$(rx_skill "$out_sk8_decl") bad:where=$(rx_where "$out_sk9_bad" "$RX_SK9_ROOT/plugins/cache/mk/codereview")|$(rx_skill "$out_sk9_bad") same:$(rx_same "$out_sk9_bad" "$out_sk8_bare") noise=$(grep -c 'jq: ' <<< "$out_sk9_bad") odd:where=$(rx_where "$out_sk10_odd" "$RX_SK10_COPY/skills/codereview")"
 
 # --- is anything listening where APP_URL points? ----------------------------
 # preflight ran fifteen checks and never once touched APP_URL, so the one thing that costs a whole

@@ -5651,7 +5651,8 @@ state_fingerprint() {
 # not a contract the kit can enforce, and a rule that fails on a heuristic is the rule the next
 # author deletes (the ddd/kaizen plugin check one screen down makes the same call). Three roots,
 # the two `health_provenance` already walks plus the project's own: a plain `skills/<name>/`
-# directory, and the plugin cache, where a skill arrives inside a versioned plugin tree.
+# directory, and the plugin cache, where a skill arrives inside a versioned plugin tree — the copy
+# the registry records first, the first one `find` meets only when it records none.
 #
 # SDD_SKILLS_ROOT exists so this is testable at all — with no injectable root the only worlds
 # available to a sensor are "this developer's machine" and nothing.
@@ -5663,15 +5664,29 @@ state_fingerprint() {
 # because the one caller reads the global only after an rc 0 — it decides what a caller that read
 # it after a miss would get.
 skill_findable() {
-  local name="${1:-}" root="${SDD_SKILLS_ROOT:-$HOME/.claude}" hit=""
+  local name="${1:-}" root="${SDD_SKILLS_ROOT:-$HOME/.claude}" hit="" p
   SKILL_FOUND_DIR=""
   [ -n "$name" ] || return 1
   if [ -d "$root/skills/$name" ]; then SKILL_FOUND_DIR="$root/skills/$name"; return 0; fi
   if [ -d "$REPO_ROOT/.claude/skills/$name" ]; then SKILL_FOUND_DIR="$REPO_ROOT/.claude/skills/$name"; return 0; fi
-  # `-quit` on the first hit: the cache holds every version of every plugin. `find` walks a parent
-  # before its children, so a plugin named after its skill is met at its own directory, above every
-  # version. `|| true` because `find` on a missing directory returns 1 and pipefail would carry that
-  # into the assignment.
+  # The copy the harness loads, before any guess (r1 #2 of the final review). The cache keeps every
+  # copy ever fetched, under every marketplace that shipped the plugin, and the `find` below hands
+  # back the first in DIRECTORY order: with two marketplaces side by side, the warning named a copy
+  # no session loads and asked to declare it, with the right one declared. The harness's registry,
+  # `<root>/plugins/installed_plugins.json`, records the installPath of each install; the copy is the
+  # first `user`-scope one, in file order, that holds `skills/<name>`. Only `user` scope, the call
+  # health_provenance makes for the grade table: a `project`-scope pin loads another version in one
+  # repo. No registry, an unreadable one, or no jq reads as no registry — jq's rc and stderr stay in
+  # the process substitution, so nothing fails and `set -e` kills nothing —, and one that jq stops
+  # reading where it breaks hands over what came before the break.
+  while IFS= read -r p; do
+    [ -d "$p/skills/$name" ] || continue
+    SKILL_FOUND_DIR="$p/skills/$name"; return 0
+  done < <(jq -r '.plugins[][] | select(.scope == "user") | .installPath' "$root/plugins/installed_plugins.json" 2>/dev/null)
+  # With no copy recorded, the cache is walked. `-quit` on the first hit: the cache holds every
+  # version of every plugin. `find` walks a parent before its children, so a plugin named after its
+  # skill is met at its own directory, above every version. `|| true` because `find` on a missing
+  # directory returns 1 and pipefail would carry that into the assignment.
   hit="$( find "$root/plugins/cache" -maxdepth 6 -type d -name "$name" -print -quit 2>/dev/null || true )"
   [ -n "$hit" ] || return 1
   SKILL_FOUND_DIR="$hit"
@@ -6394,8 +6409,10 @@ cmd_preflight() {
   # three TICKET sessions and US$ 3,39 on Claude Code 2.1.263, which reads the hat's
   # `disallowedTools:` and strips `Bash` for a rule written there (see hat_disallowed). A comment
   # that asserts parity is not parity, so the probe now fires the executor hat under the flags
-  # run_phase composes for it — the mirror in .claude/agents/ when installed, because that is the
-  # copy the harness loads — and reads two artifacts here: `Bash` on the stream's init line (the tool
+  # run_phase composes for it minus the read rules (ADR 0019 §3): the isolated session below proves
+  # those with no settings, and this one boots with the settings a phase boots with. The hat is the
+  # mirror in .claude/agents/ when installed, because that is the copy the harness loads, and the
+  # probe reads two artifacts here: `Bash` on the stream's init line (the tool
   # list the session actually got) and the marker in the result (the permission to run it), plus a
   # third below it, the money keys of the result line (issue 87). No
   # init line and no answer is the old "did not answer"; an init line without Bash names the hat.
@@ -6661,7 +6678,11 @@ cmd_preflight() {
   # link, and the harness wants both rules (ADR 0019: link alone DENIED, target alone DENIED).
   # Declared limit: an UNcovered directory whose target the grammar refuses gets the undeclared
   # warning and its entry, and the refused one at the next preflight — two steps, never a loop.
-  local sk_real sk_entry sk_via
+  # A directory found under the plugin cache also names the registry (r1 #2 of the final review):
+  # the cache may hold more than one copy, skill_findable holds to the rules the one the registry
+  # records and falls back to the first `find` meets, and the warning says which file decides. The
+  # slash of `cache/` keeps a sibling such as `plugins/cachex` out.
+  local sk_real sk_entry sk_via sk_cache
   for sk in "${wanted[@]}"; do
     if ! skill_findable "$sk"; then missing_skills="$missing_skills $sk"; continue; fi
     sk_real="$(readlink -f -- "$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="$SKILL_FOUND_DIR"
@@ -6676,9 +6697,16 @@ cmd_preflight() {
       continue
     fi
     sk_entry="$(skill_read_entry "$SKILL_FOUND_DIR" "$skills_root")"
+    sk_cache=""
+    case "$SKILL_FOUND_DIR" in
+      "$skills_root/plugins/cache"/*) sk_cache="
+        The plugin cache may hold more than one copy of a plugin, and the one the harness loads is
+        the installPath recorded in $skills_root/plugins/installed_plugins.json: the copy named
+        above when that file records one, the first copy found when it does not." ;;
+    esac
     warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, and no read rule
         of the sessions covers it — READ_EXTRA does not declare it, so every phase that loads it is
-        denied its references outside the repo (a DENIED line in the journal). In .sdd/config.sh:
+        denied its references outside the repo (a DENIED line in the journal).$sk_cache In .sdd/config.sh:
         READ_EXTRA entry to add: $sk_entry"
   done
   if [ -z "$missing_skills" ]; then

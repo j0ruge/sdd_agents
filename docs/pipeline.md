@@ -1029,7 +1029,10 @@ asserts the rules per block, with and without the key, and `tests/check-gates.sh
 `sdd preflight` warns, with no session, about an entry this machine does not have and about a skill
 it finds that no rule covers, naming the entry to add — or, when only the skill's symlink target is
 uncovered because the grammar refuses the target's name, naming that target and the remedy (move or
-rename it) instead, since no entry reaches it; `tests/check-preflight.sh` asserts each.
+rename it) instead, since no entry reaches it. A plugin skill is the copy whose `installPath` the
+harness's registry (`installed_plugins.json`) records, the first copy in the cache only when it
+records none, and a warning about a directory under the cache names that file, since the cache may
+hold more than one copy; `tests/check-preflight.sh` asserts each.
 
 No argv assertion says whether the **harness** honours the rule, so `sdd preflight` asks (ADR 0019
 §3). Next to the `Bash` probe it opens a second session, isolated: `--setting-sources ""` (no
