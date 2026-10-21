@@ -67,18 +67,30 @@ spelling. Three slashes were never measured.
 `READ_EXTRA` is a config key, empty by default, validated in `load_config` and never at the point
 of use, because a `die` there would land in a subshell (the `HAT_WRITES_EXTRA` lesson). Its
 entries are absolute directories after expansion: written `$HOME/…` in the tracked
-`.sdd/config.sh`, so the file names no user, or exported in the environment like every key. A
-glob character, `..`, a newline or a relative path dies with the reason named. `kit_read_rules`
-emits `Read(/<dir>/**)` per entry and, when `readlink -f <dir>` differs, the rule for the
-resolved target as well. A directory that does not exist is a `warn` of `sdd preflight`, never a
-`die`: a plugin missing on another machine must not stop the line. The kit grants nothing beyond
-its own templates, and each target declares its skills.
+`.sdd/config.sh`, so the file names no user, or exported in the environment like every key. The
+grammar is literal and admitted positively (`read_extra_dir_ok`, after `hat_extra_path_ok`): an
+absolute path whose every component is a plain name of letters, digits, `.`, `_` and `-`. Every
+other entry dies with its name in the reason: a relative path (a `~` inside quotes is not
+expanded), a trailing `/`, an empty, `.` or `..` component, and any other character in a name —
+the glob characters and brackets, `\`, `{`, a parenthesis that would close the rule, `@`, an
+accented letter alike. A value that holds a newline dies too. `kit_read_rules` emits
+`Read(/<dir>/**)` per entry and, when `readlink -f <dir>` differs, the rule for the resolved target
+as well, but only when that target passes the same grammar: the machine chose its name, not the
+config. A target that fails it gets no rule, and a read there is denied and named in the journal.
+A directory that does not exist is a `warn` of `sdd preflight`, never a `die`: a plugin missing on
+another machine must not stop the line. The kit grants nothing beyond its own templates, and each
+target declares its skills. `sdd preflight` names, with no session and never as a failure, each
+skill it finds that no rule covers, with the entry to add (for a plugin, the parent without the
+version; the copy it holds to the rules is the `installPath` that `installed_plugins.json`
+records, and the first copy in the cache only when it records none), and a declared skill whose
+symlink target the grammar refuses, with no entry to add, since no entry reaches that target.
 
 ### §3 — The preflight proves the kit's rule in a session of its own, with no settings
 
 The existing probe (the executor hat and `Bash`, under `user,project,local`) stays as it is: its
-parity with the phase is what it proves. A second haiku session runs with `--setting-sources ""`,
-its working directory in a `mktemp -d`, `--permission-mode "$PERMISSION_MODE"`,
+parity with the phase is what it proves — the phase's flags minus the read rules, which the second
+session proves. A second haiku session runs with `--setting-sources ""`, its working directory in a
+`mktemp -d`, `--permission-mode "$PERMISSION_MODE"`,
 `--allowedTools "$ALLOWED_TOOLS"` plus the lines of `kit_read_rules`, and `--strict-mcp-config`,
 and asks for a `Read` of `$SDD_HOME/templates/handoff.md`. It runs under
 `--output-format stream-json --verbose`, because the `tool_use` and `tool_result` lines the
@@ -131,9 +143,10 @@ answers what the fixture says.
 - Every phase, `sdd close` and the preflight probe read the templates the boot names with no help
   from the settings. A write there is still denied, and the kit guard still stops the line if one
   happens.
-- `sdd preflight` pays one more haiku session (US$ 0.0018–0.0023 and about 6 s, measured), and it
-  turns red the day the harness stops honouring the rule's syntax: the class of the 2.1.263 bump
-  that stripped `Bash` from every hat.
+- `sdd preflight` pays one more haiku session — US$ 0.002 (US$ 0.00197 measured on 2026-10-20 at
+  22:59, Claude Code 2.1.304, with the rule reading the template) and about 6 s (the grill's p5 and
+  p6, 16:24) —, and it turns red the day the harness stops honouring the rule's syntax: the class
+  of the 2.1.263 bump that stripped `Bash` from every hat.
 - Every `Read`, `Edit` or `Write` the harness denied becomes a `DENIED` line in the mission's
   journal, which is what a human on `tail -F` reads. What stays denied (a skill no project
   declared, a scratch file) is named instead of counted. The ledger's `denials` count is unchanged.
@@ -147,3 +160,12 @@ answers what the fixture says.
   glob character, a space) goes into the rule as it is: that spelling was not measured, and the
   isolated probe of §3 is what says whether the harness reads it. `load_config` does not refuse it,
   because refusing would kill every kit command on a machine that works today without the read.
+- Declared limits of the reach and of the probe. The grammar holds the name, not the reach: an
+  entry equal to `$HOME`, or a symlink whose target is the home, passes it and becomes
+  `Read(//home/<user>/**)` (`/home` itself becomes `Read(//home/**)`), so every phase may read the
+  whole home. That is read only, and a phase already has `Bash`, which reads whatever the user can,
+  so it is hygiene, not a boundary.
+  `readlink -f` runs when the argv is assembled, once per session: a symlink retargeted during the
+  session fails closed, its new target denied and named by a `DENIED` line in the journal. The two
+  paid probes of `sdd preflight` carry a cost cap (`--max-budget-usd 1` each) and no time cap:
+  nothing in the runner ends a probe session that does not answer.

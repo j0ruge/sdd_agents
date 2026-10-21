@@ -1023,9 +1023,11 @@ its session; `tests/check-gates.sh` asserts that argv the same way.
 The **project** adds its own after the templates' rule (ADR 0019 §2): each entry of `READ_EXTRA`
 (`config/schema.md`), the directories of the skills its phases depend on, becomes the same
 read-only rule, and an entry that is a symlink also gets its resolved target's rule, because the
-harness checks both paths. `load_config` refuses an entry that is not a literal absolute directory,
-before any session; the kit itself grants nothing beyond its templates. `tests/check-dry-run.sh`
-asserts the rules per block, with and without the key, and `tests/check-gates.sh` each refusal.
+harness checks both paths — when the target's own name passes the same grammar; a target that does
+not gets no rule, and a read there is a `DENIED` line. `load_config` refuses an entry that is not a
+literal absolute directory, before any session; the kit itself grants nothing beyond its templates.
+`tests/check-dry-run.sh` asserts the rules per block, with and without the key, and
+`tests/check-gates.sh` each refusal.
 `sdd preflight` warns, with no session, about an entry this machine does not have and about a skill
 it finds that no rule covers, naming the entry to add — or, when only the skill's symlink target is
 uncovered because the grammar refuses the target's name, naming that target and the remedy (move or
@@ -1044,6 +1046,7 @@ without `is_error` for that `Read` is `ok`; a session that never tried is a warn
 the point: with the settings loaded, an `additionalDirectories` or a `Read(*)` on the operator's
 machine reads the template with no rule at all, and the probe would be green over a rule that does
 nothing. `tests/check-preflight.sh` asserts the verdict both ways and the argv of that session.
+Both preflight probes are capped in money (`--max-budget-usd 1` each) and not in time.
 
 ⚠️ **Two keys for one list, and the split is measured (2026-09-06, Claude Code 2.1.263).** The
 harness reads the agent file's `disallowedTools:` as tool names — the documented contract, names
@@ -1056,8 +1059,9 @@ harness reads; `hat_disallowed` joins both onto the flag, where a rule is a perm
 `Bash`. `tests/check-hat.sh` R3/R4 refuse the two mix-ups.
 
 `sdd preflight` proves this by firing a real headless session **as the executor hat**, under the
-flags `run_phase` composes for it, and reading three artifacts: `Bash` on the stream's `init` line,
-the marker in the answer, and a numeric `total_cost_usd` and `num_turns` on the `result` line — the
+flags `run_phase` composes for it minus the read rules (the isolated probe above proves those), and
+reading three artifacts: `Bash` on the stream's `init` line, the marker in the answer, and a numeric
+`total_cost_usd` and `num_turns` on the `result` line — the
 keys `run_phase`, `sdd census`, `sdd close` and the mission budget read, so a CLI that renamed one
 is caught before a session is paid for blind. "claude answers" does not cover this failure mode, and neither did
 a probe without `--agent` — it was green on the day every hat had no shell.
