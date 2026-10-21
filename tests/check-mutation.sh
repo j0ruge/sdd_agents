@@ -2596,6 +2596,13 @@ mut_PRE_skill_entry_versioned() {
 mut_PRE_skill_entry_home_unwritten() {
   sed -i '/^skill_read_entry() {/,/^}/ { /^    case "\$entry" in "\$home"\/\*) entry=/ s/.*/    :/ }' "$1"
 }
+# TARGET_REFUSED_UNDECLARED: the declared skill whose symlink target the grammar refuses falls back
+# to the undeclared warning, which hands back the very entry already declared — the loop with no way
+# out of r1 #1 of the final review. Caught by "a declared skill whose symlink target the grammar
+# refuses is named as such, never as undeclared" (check-preflight.sh), `decl:refused=0,…,add=1`.
+mut_PRE_skill_target_refused_undeclared() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && ! read_extra_dir_ok "\$sk_real"; then$#    if false; then#' "$1"
+}
 
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
 # session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
@@ -6627,6 +6634,7 @@ CATALOG=(
   PRE_skill_cover_unresolved
   PRE_skill_entry_versioned
   PRE_skill_entry_home_unwritten
+  PRE_skill_target_refused_undeclared
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA

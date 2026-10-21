@@ -1027,7 +1027,9 @@ harness checks both paths. `load_config` refuses an entry that is not a literal 
 before any session; the kit itself grants nothing beyond its templates. `tests/check-dry-run.sh`
 asserts the rules per block, with and without the key, and `tests/check-gates.sh` each refusal.
 `sdd preflight` warns, with no session, about an entry this machine does not have and about a skill
-it finds that no rule covers, naming the entry to add; `tests/check-preflight.sh` asserts both.
+it finds that no rule covers, naming the entry to add — or, when only the skill's symlink target is
+uncovered because the grammar refuses the target's name, naming that target and the remedy (move or
+rename it) instead, since no entry reaches it; `tests/check-preflight.sh` asserts each.
 
 No argv assertion says whether the **harness** honours the rule, so `sdd preflight` asks (ADR 0019
 §3). Next to the `Bash` probe it opens a second session, isolated: `--setting-sources ""` (no

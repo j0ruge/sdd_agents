@@ -5295,7 +5295,8 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
 # measured in 2.1.304, ADR 0019), so a directory whose `readlink -f` differs gets the resolved target's rule
 # too — but only when the target passes the same grammar as an entry: the machine chose that name,
 # not the config, and `odd[1]` would be a bracket expression granting `odd1/` and still denying the
-# directory. A target skipped that way is denied, and the denial is a DENIED line in the journal.
+# directory. A target skipped that way is denied, and the denial is a DENIED line in the journal —
+# which `sdd preflight` names beforehand, with no entry to add, when a skill it finds resolves there.
 # The resolved branch is measured through a symlinked READ_EXTRA entry (check-dry-run.sh); no
 # fixture symlinks templates/, since SDD_HOME is physical (`cd -P`), and both go through this loop.
 # The templates' own path is NOT held to the grammar: a SDD_HOME with a space or a metacharacter
@@ -6651,13 +6652,30 @@ cmd_preflight() {
   # session, and nothing granted — the permission still comes only from READ_EXTRA. The `||` after
   # readlink has no probe: it never fails on a directory just found, and it decides only that a race
   # costs a warning about that directory instead of killing preflight under `set -e`.
+  # One miss hands NO entry: the directory found is covered and only its target is not, because the
+  # grammar refuses the target's name (read_extra_dir_ok, the guard kit_read_rules holds a resolved
+  # target to). No entry reaches that target, so handing back the one already declared was a loop
+  # with no way out (r1 #1 of the final review); the remedy is the target's name. A covered directory
+  # whose target passes the grammar keeps the entry to add, and the entry is the directory found,
+  # never the target: kit_read_rules resolves an entry at every session, so it follows a retargeted
+  # link, and the harness wants both rules (ADR 0019: link alone DENIED, target alone DENIED).
+  # Declared limit: an UNcovered directory whose target the grammar refuses gets the undeclared
+  # warning and its entry, and the refused one at the next preflight — two steps, never a loop.
   local sk_real sk_entry sk_via
   for sk in "${wanted[@]}"; do
     if ! skill_findable "$sk"; then missing_skills="$missing_skills $sk"; continue; fi
     sk_real="$(readlink -f -- "$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="$SKILL_FOUND_DIR"
     if read_rules_cover "$SKILL_FOUND_DIR" && read_rules_cover "$sk_real"; then continue; fi
-    sk_entry="$(skill_read_entry "$SKILL_FOUND_DIR" "$skills_root")"
     sk_via=""; [ "$sk_real" = "$SKILL_FOUND_DIR" ] || sk_via=" (a symlink to $sk_real)"
+    if read_rules_cover "$SKILL_FOUND_DIR" && ! read_extra_dir_ok "$sk_real"; then
+      warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, whose target no read rule can cover:
+        the grammar of the rules refuses its name (every component letters, digits, \`.\`, \`_\` and
+        \`-\`), so kit_read_rules grants it nothing, whatever READ_EXTRA declares, and every phase that
+        loads the skill is denied its references (a DENIED line in the journal). No READ_EXTRA entry
+        reaches it: move or rename the target to a name the grammar accepts."
+      continue
+    fi
+    sk_entry="$(skill_read_entry "$SKILL_FOUND_DIR" "$skills_root")"
     warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, and no read rule
         of the sessions covers it — READ_EXTRA does not declare it, so every phase that loads it is
         denied its references outside the repo (a DENIED line in the journal). In .sdd/config.sh:

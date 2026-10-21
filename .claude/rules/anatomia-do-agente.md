@@ -69,7 +69,9 @@ sessão e nunca com `_fail`, a entrada que não existe nesta máquina e a skill 
 (`skill_findable`, que publica `SKILL_FOUND_DIR`) e que nenhuma regra das sessões cobre — o
 diretório achado e o alvo do `readlink -f` dele, julgados pelas próprias linhas do `kit_read_rules`
 (`read_rules_cover`) —, com a entrada a declarar (`skill_read_entry`: para plugin, o pai sem versão,
-escrito `$HOME/…`); o probe é o `tests/check-preflight.sh`, com seis mutantes `mut_PRE_*`.
+escrito `$HOME/…`); quando o diretório achado está coberto e só o alvo não, porque a gramática recusa
+o nome do alvo, o aviso nomeia o alvo e o remédio (mover ou renomear), sem entrada a declarar, já que
+nenhuma o alcança; o probe é o `tests/check-preflight.sh`, com sete mutantes `mut_PRE_*`.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`

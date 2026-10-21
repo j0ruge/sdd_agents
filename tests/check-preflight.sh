@@ -939,7 +939,9 @@ mv .sdd/config.sh.bak .sdd/config.sh
 # read a skill's references from the DENIED line of a run already paid for:
 #   - an entry that does not exist: named, and only it — an entry that exists is never named;
 #   - a skill preflight finds (skill_findable, which publishes SKILL_FOUND_DIR) whose directory, or
-#     whose `readlink -f` target, no read rule of the sessions covers: named, with the entry to add.
+#     whose `readlink -f` target, no read rule of the sessions covers: named, with the entry to add —
+#     unless the directory is covered and the grammar refuses the target's name, which no entry can
+#     reach: named as such, with the remedy (move or rename the target) and no entry.
 #     The rules are kit_read_rules' own, the repo is the session's cwd, and a rule covers its
 #     directory and what is under `<dir>/` — never a sibling that only starts with the same letters.
 # HOME is set for every run here, so the `$HOME/…` spelling of the entry is asserted both ways
@@ -1034,6 +1036,34 @@ rm -rf "$FIX/.claude/skills"
 assert_eq "a skill reached through a symlink is covered only with its target, and a skill in the repo needs no entry" \
   'above:missing=0,warned=1,link=1,entry=$HOME/.claude/skills/codereview target:missing=0,warned=1,link=1,entry=$HOME/.claude/skills/codereview link:missing=0,warned=0,link=0,entry= repo:missing=0,warned=0,link=0,entry=' \
   "above:$(rx_skill "$out_sk3_above") target:$(rx_skill "$out_sk3_target") link:$(rx_skill "$out_sk3_link") repo:$(rx_skill "$out_sk3_repo")"
+
+# The declared skill whose target no rule can name (r1 #1 of the final review). The entry is the link
+# itself, so the directory found is covered by equality — but its target is `odd[1]`, which the
+# grammar refuses (a bracket expression to the harness), so kit_read_rules grants the target nothing
+# and the phase is still DENIED. Handing back the entry the human already has is a loop with no way
+# out: the warning names the refused target and the remedy (move or rename it), and no entry to add.
+# Undeclared, the same world keeps the warning of the skill nobody declared, entry and all. The rc and
+# the `warn` prefix are shared by both branches, so each needle is one branch's own text, and the
+# absence of `entry to add` is counted over the whole output, not only on the entry's line.
+RX_SK5_HOME="$RXF/sk5"
+RX_SK5_ROOT="$RX_SK5_HOME/.claude"
+RX_SK5_TARGET="$RX_SK5_ROOT/skills/odd[1]"
+mkdir -p "$RX_SK5_TARGET"
+ln -s 'odd[1]' "$RX_SK5_ROOT/skills/codereview"
+out_sk5_bare="$(rx_run "$RX_SK5_HOME" "$RX_SK5_ROOT" "")"
+out_sk5_decl="$(rx_run "$RX_SK5_HOME" "$RX_SK5_ROOT" "$RX_SK5_ROOT/skills/codereview")"
+# rx_refused <output> → refused=N,remedy=N,undeclared=N,add=N — the new branch's first line, its
+# remedy, the old branch's clause, and every `entry to add` anywhere in the output.
+rx_refused() {
+  printf 'refused=%s,remedy=%s,undeclared=%s,add=%s' \
+    "$(grep -cF "  warn  skill codereview is found in $RX_SK5_ROOT/skills/codereview (a symlink to $RX_SK5_TARGET), whose target no read rule can cover:" <<< "$1")" \
+    "$(grep -c 'move or rename the target to a name the grammar accepts' <<< "$1")" \
+    "$(grep -c 'READ_EXTRA does not declare it' <<< "$1")" \
+    "$(grep -c 'entry to add' <<< "$1")"
+}
+assert_eq "a declared skill whose symlink target the grammar refuses is named as such, never as undeclared" \
+  'bare:refused=0,remedy=0,undeclared=1,add=1|missing=0,warned=1,link=1,entry=$HOME/.claude/skills/codereview decl:refused=1,remedy=1,undeclared=0,add=0|missing=0,warned=1,link=1,entry= same:same' \
+  "bare:$(rx_refused "$out_sk5_bare")|$(rx_skill "$out_sk5_bare") decl:$(rx_refused "$out_sk5_decl")|$(rx_skill "$out_sk5_decl") same:$(rx_same "$out_sk5_bare" "$out_sk5_decl")"
 
 # The edges of the entry's spelling. A skill directory met one level under the cache has no version
 # above it, so the entry is the directory itself, never a second copy of its name. `$HOME` is written
