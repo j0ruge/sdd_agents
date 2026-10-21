@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 1f921771-01eb-471d-b867-0c307054b548
 data: 2026-10-20 22:46
-gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024 linhas `ok`, eram 2019 na base de `aea4522`; nenhum `FAIL`); Check do I6 → `1 1`; `tests/check-checkpoint.sh --check` → `6 row(s), 6 under the anchor rule, none blind`; os seis incrementos `done`; rodada de conserto da revisão final: R1 `f9f3b34` (Check → `1`) e R2 `5f05cf4` (Check → `1 1`), com `check-preflight.sh` 146 `ok` e rc 0, `check-mutation.sh --anchors` 742 de 742, `check-todo.sh` e `--anchors` verdes; R3 `b96afd8` e R4 `8c72cfb` (Check → `1`), com `check-preflight.sh` 150 `ok` e rc 0, `check-mutation.sh --anchors` 746 de 746, os dois mutantes novos pegos com `--only`; R5 `4426c94` (Check → `1 1`), com `check-preflight.sh` 152 `ok`, `check-health.sh` 56, `check-dry-run.sh` 86 e `check-gates.sh` 479, todos rc 0, `check-mutation.sh --anchors` 751 de 751, os cinco mutantes novos pegos com `--only`; R6 `df5bdb6` (Check → `1`), com `check-preflight.sh` 154 `ok` e rc 0, `check-adr.sh` 81, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (33 achados, 0 fora do alvo) verdes, `check-mutation.sh --anchors` 755 de 755, os quatro mutantes novos e os três de âncora movida pegos com `--only`; R7 `0b8c140` (Check → `1`), com `check-preflight.sh` 155 `ok`, `check-dry-run.sh` 86, `check-gates.sh` 479, `check-health.sh` 56 e `check-adr.sh` 81, todos rc 0, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (34 achados, 0 fora do alvo) verdes, `check-mutation.sh --anchors` 757 de 757, os dois mutantes novos e os oito tocados pegos com `--only`; a suíte inteira depois da rodada é do relay
+gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024 linhas `ok`, eram 2019 na base de `aea4522`; nenhum `FAIL`); Check do I6 → `1 1`; `tests/check-checkpoint.sh --check` → `6 row(s), 6 under the anchor rule, none blind`; os seis incrementos `done`; rodada de conserto da revisão final: R1 `f9f3b34` (Check → `1`) e R2 `5f05cf4` (Check → `1 1`), com `check-preflight.sh` 146 `ok` e rc 0, `check-mutation.sh --anchors` 742 de 742, `check-todo.sh` e `--anchors` verdes; R3 `b96afd8` e R4 `8c72cfb` (Check → `1`), com `check-preflight.sh` 150 `ok` e rc 0, `check-mutation.sh --anchors` 746 de 746, os dois mutantes novos pegos com `--only`; R5 `4426c94` (Check → `1 1`), com `check-preflight.sh` 152 `ok`, `check-health.sh` 56, `check-dry-run.sh` 86 e `check-gates.sh` 479, todos rc 0, `check-mutation.sh --anchors` 751 de 751, os cinco mutantes novos pegos com `--only`; R6 `df5bdb6` (Check → `1`), com `check-preflight.sh` 154 `ok` e rc 0, `check-adr.sh` 81, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (33 achados, 0 fora do alvo) verdes, `check-mutation.sh --anchors` 755 de 755, os quatro mutantes novos e os três de âncora movida pegos com `--only`; R7 `0b8c140` (Check → `1`), com `check-preflight.sh` 155 `ok`, `check-dry-run.sh` 86, `check-gates.sh` 479, `check-health.sh` 56 e `check-adr.sh` 81, todos rc 0, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (34 achados, 0 fora do alvo) verdes, `check-mutation.sh --anchors` 757 de 757, os dois mutantes novos e os oito tocados pegos com `--only`; R8 `6b70968` e `f6ce468` (Check → `1 1 0 1`; o do R2 → `1 1 1`), com `check-dry-run.sh` 87 `ok`, `check-gates.sh` 479 e `check-preflight.sh` 155, todos rc 0, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (38 achados, 0 fora do alvo) verdes, `check-checkpoint.sh --check` 14 linhas sem cega, `check-mutation.sh --anchors` 762 de 762, os cinco mutantes novos e os quatro de âncora movida pegos com `--only`; a suíte inteira depois da rodada é do relay
 ---
 
 # Handoff — EXEC — a sessão lê o que o boot manda ler
@@ -25,10 +25,10 @@ CodeRabbit o lote R8, todos feitos (seção "Rodada de conserto"); a suíte inte
 ## Estado do repo
 
 - **Branch:** `kaizen/20261020-a-sessao-le-o-que-o-boot-manda`, no worktree `/home/joruge/repos/sdd_agents-f9`. Não empurrada (nenhum `git push` nesta fase).
-- **Último commit:** `chore(checkpoint): R7 done (0b8c140)`, e antes dele o commit desta atualização do handoff
+- **Último commit:** `chore(checkpoint): R8 done (6b70968)`, e antes dele o commit desta atualização do handoff
 - **Working tree:** limpo
 - **Suíte:** `tests/run-all.sh` → verde em `e8fe91c`: `suite green`, rc 0, 2024 linhas `ok`, nenhum `FAIL`. Depois
-  de R1 a R7 só rodaram os sensores tocados (abaixo); a suíte inteira é do relay
+  de R1 a R8 só rodaram os sensores tocados (abaixo); a suíte inteira é do relay
 - **E2E:** sem `E2E_CMD` nem `APP_URL` no kit; não se aplica. A métrica de ponta a ponta é a sonda de rascunho do `01-plano.md`, § Verificação end-to-end, que gasta sessão real e fica para o relay.
 
 ## O que foi feito
@@ -102,6 +102,18 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   (um stub que responde como o harness: o kit real lê, a cópia com a regra quebrada é negada, as fases carregam as
   duas regras nos dois mundos). Mutantes `mut_PRE_template_probe_reads_every_rule` e
   `mut_RUN_read_rules_templates_dropped`; quatro mutantes do corpo antigo reancorados.
+- `6b70968` e `f6ce468` — R8 (CodeRabbit no PR #315, o lote dos baratos, decisão humana "Lote R8 pelo executor"):
+  (1) as três listas de regras (`read_rules` no `run_phase`, `close_read_rules` no `cmd_close`, `tpl_rules` na sonda
+  dos templates) chegam ao `claude` por `${lista[@]+"${lista[@]}"}`, a guarda do `probe_agent`: desde o R5 a lista
+  pode ser vazia, e o bash 4.0 a 4.3, que o kit aceita, aborta na forma crua sob `set -u`. Probe estático, porque
+  aqui só há bash 5.2: `every read-rule array reaches claude through an expansion that set -u accepts on bash 4.0
+  too` (`tests/check-dry-run.sh`), que acha as listas pelos `mapfile` e morre alto com menos de três ou com uma sem
+  expansão. Mutantes `mut_RUN_read_rules_bare_expansion`, `mut_RUN_close_read_rules_bare_expansion`,
+  `mut_PRE_template_probe_rules_bare_expansion`, `mut_RUN_read_rules_bare_beside_guarded` e
+  `mut_RUN_read_rules_list_unscanned`; quatro reancorados. (2) a (6), em `f6ce468`: o Check do R2 lê também a
+  asserção do registro (`1 1 1`); o decidido "refutado" da sonda do `Bash` saiu do `TODO.md`, e o sobrevivente é o
+  item aberto do `6c182cc`; a anatomia §2 nomeia o `mut_PRE_template_probe_empty_unguarded`; o TL;DR e a Interface
+  qualificam a regra dos templates e o aviso do R1. Check → `1 1 0 1`.
 
 ## Artefatos
 
@@ -109,7 +121,7 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
 |---|---|
 | `bin/sdd` | `kit_read_rules`, `kit_template_rules`, `dir_read_rules`, `read_extra_each`, `read_extra_dir_ok`, `journal_denials`, `read_rules_cover`, `skill_read_entry`, `plugin_install_paths`, a sonda dos templates, os dois avisos e a recusa do caminho do kit no `cmd_preflight` |
 | `tests/check-dry-run.sh`, `tests/check-gates.sh`, `tests/check-preflight.sh`, `tests/check-autonomy.sh` | as asserções dos seis Checks |
-| `tests/check-mutation.sh` | os mutantes novos da missão, catálogo em 757 depois do R7 (`--anchors`: todos se aplicam) |
+| `tests/check-mutation.sh` | os mutantes novos da missão, catálogo em 762 depois do R8 (`--anchors`: todos se aplicam) |
 | `config/schema.md`, `config/starter.conf`, `docs/pipeline.md`, `docs/failure-modes.md`, `.claude/rules/anatomia-do-agente.md` | a regra, a chave e os avisos documentados |
 | `docs/adr/0019-the-session-reads-what-the-boot-names.md` | o porquê de cada forma (escrita no PLAN) |
 | `checkpoint-notas.md` | Checks, sensores, passadas de sabotagem e Rulings de cada incremento |
@@ -184,12 +196,17 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   antigo ao `kit_read_rules` dá duas definições que imprimem o mesmo; quem o vê é o termo `phases` do mundo
   sabotado do R7 (as fases levam a regra boa, a sonda a quebrada) e o `--anchors` (dois mutantes deixam de se
   aplicar), nunca a saída da função.
+- R8: o bash 4.0 a 4.3 não rodou; a guarda é a grafia que o kit já usava, e quem a cobra é uma leitura estática do
+  `bin/sdd`, não uma corrida. Ela acha as listas pelo `mapfile -t <lista> < <(…_rules)`: uma lista enchida por
+  outra forma (`readarray`, um laço) sai da varredura, e só o piso de três a nota quando ela é uma das três de hoje.
+  O `"${tpl_rules[*]}"` da mensagem da sonda segue sem guarda: ela só roda no braço da lista não vazia.
 
 ## Achados fora de escopo
 
-- Nenhum desta missão: o `TODO.md` tem 34 achados (`tests/check-todo.sh`), os 29 do início mais os quatro que os merges
-  da `origin/main` trouxeram (`8c02d4e`) e o da sonda do `Bash` que o relay registrou (`6c182cc`), com nove âncoras reancoradas pelo I6, 16 pelo R1, 16 pelo R2, 17 pelo R3,
+- Nenhum desta missão: o `TODO.md` tem 38 achados (`tests/check-todo.sh`), os 29 do início, os quatro que o merge
+  `8c02d4e` da `origin/main` trouxe, o da sonda do `Bash` que o relay registrou (`6c182cc`) e os quatro do merge
+  `dadeb61`, com nove âncoras reancoradas pelo I6, 16 pelo R1, 16 pelo R2, 17 pelo R3,
   nove pelo R4 (sete do `bin/sdd` e duas citações cruzadas de docs), 21 pelo R5 (17 do `bin/sdd`, quatro delas
   citações curtas `:N`, e quatro cruzadas de docs), 13 pelo R6 (dez do `bin/sdd` e três cruzadas de docs) e 18 pelo
-  R7 (14 do `bin/sdd`, três cruzadas de docs e uma da anatomia) — número velho + deslocamento do diff, a mesma linha
-  de código.
+  R7 (14 do `bin/sdd`, três cruzadas de docs e uma da anatomia) e 16 pelo R8 (15 do `bin/sdd` e a da anatomia, que
+  andou duas vezes) — número velho + deslocamento do diff, a mesma linha de código.
