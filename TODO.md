@@ -39,7 +39,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
   — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
 
-- [ ] **Nada avisa que o clone do kit está velho ou fora da `main`** — `bin/sdd:4115` (`autonomy_kit_stamp`) —
+- [ ] **Nada avisa que o clone do kit está velho ou fora da `main`** — `bin/sdd:4116` (`autonomy_kit_stamp`) —
   o runner grava o SHA e a sujeira do `SDD_HOME` no journal, mas nada os compara com o upstream, e as seis
   linhas do `sdd health --release` também não. No `ui24_agent`, o `~/repos/sdd_agents` estava numa branch
   já mergeada, 382 commits atrás da `main`, e todo alvo rodou o kit velho sem saber. Direção: avisar uma
@@ -55,7 +55,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   avisa nomeando o descendente que sobrou, e o failure-modes lista as flags de toolchain.
   — descoberto por `sdd preflight` na instalação do kit no `dotp-remake` (2026-10-19)
 
-- [ ] **A prosa que a DOCS escreve depois da REVIEW não passa por revisão nenhuma** — `bin/sdd:2712` (`PHASES`) —
+- [ ] **A prosa que a DOCS escreve depois da REVIEW não passa por revisão nenhuma** — `bin/sdd:2713` (`PHASES`) —
   a ordem é `REVIEW DOCS PR`: o `gate_REVIEW` aceita B na prosa (`REVIEW_PROSE_MIN_GRADE`), o achado de prosa vai
   ao `TODO_FILE` e quem reescreve a prosa é a DOCS, cujo gate lê a checklist, não a prosa. Na 3.2a do `dotp-remake`
   uma r2 extra do `/codereview:codereview` achou 1 MEDIUM na prosa da DOCS (`3044b3c`): o ponteiro novo diz que
@@ -112,23 +112,23 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o boot da rodada lista o commit que não fecha `R<n>`, e o platô compara a classe do achado, não só a letra.
   — descoberto por `sdd-reviewer` na missão `20261013-amep-alignment-review` (2026-10-14)
 - [ ] **`sdd install --help` instala o kit, e `sdd link-agents --help` liga os agentes** — `bin/sdd:5976`
-  (`--force`) — o `cmd_install` só compara o 1º argumento com `--force`, e o `cmd_link_agents` (`:11444`)
+  (`--force`) — o `cmd_install` só compara o 1º argumento com `--force`, e o `cmd_link_agents` (`:11747`)
   não lê nenhum: o `--help` depois do subcomando executa. Num repo de rascunho, o 1º gravou `.sdd/config.sh`,
-  `docs/handoffs/`, `TODO.md` e os agentes; o 2º, 8 symlinks e o `.gitignore`. O `main()` (`:11595`) só trata
+  `docs/handoffs/`, `TODO.md` e os agentes; o 2º, 8 symlinks e o `.gitignore`. O `main()` (`:11898`) só trata
   `--help` na 1ª posição; `run`, `retry`, `status` e `health` recusam opção desconhecida. Direção: todo
   subcomando recusa opção desconhecida e lê `-h/--help` como a própria ajuda, com um caso por efeito colateral.
   — descoberto por `sessão coordenadora` no `lighthouse_project`, ao ler o uso do `link-agents` (2026-10-16)
 
 - [ ] **O remédio do `sdd kaizen` recusado ensina a mesma receita sem `--no-track`** — `bin/sdd:11544`
   (`shared_why`) — o motivo manda `worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>`, e a
-  branch do juiz nasce rastreando a `main` (git 2.43, medido em repo de rascunho); o `docs/failure-modes.md:628`
-  e o `docs/pipeline.md:1482` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
+  branch do juiz nasce rastreando a `main` (git 2.43, medido em repo de rascunho); o `docs/failure-modes.md:665`
+  e o `docs/pipeline.md:1525` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
   `/sdd-plan` porque o `bin/` está congelado até o veredito. Direção: `--no-track` no motivo e nas duas citações.
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
 - [ ] **O planner chama a base de `main`, e o alvo pode ter outra** — `agents/sdd-planner.md:260`
   (`kaizen_log:`) — a exceção do `branch:` diz "naming the base branch itself (`main`)", e o `k8_base_refusal`
-  (`bin/sdd:2183`) compara com o `$DEFAULT_BRANCH`. No `sales_quote`, cuja base é a `develop`, o planner pode deixar
+  (`bin/sdd:2201`) compara com o `$DEFAULT_BRANCH`. No `sales_quote`, cuja base é a `develop`, o planner pode deixar
   `kaizen_log` sem `skipped` numa missão na base, e quem recusa é o `gate_PLAN` (ou o `gate_DOCS` de um `--phase`
   forçado): falha fechada, mas o consumidor está fora da suíte do kit (D15). Direção: a frase nomeia o
   `DEFAULT_BRANCH` do alvo, e não o literal `main`.
@@ -144,7 +144,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **A primeira instalação semeia o `TODO.md` em inglês, qualquer que seja o idioma** — `bin/sdd:6058`
   (`inst_lang`) — o install lê o `OUTPUT_LANG` da config que acabou de gerar do `starter.conf`, onde ele vem
-  vazio, e cai no `templates/todo.md` (`:5877`). Ajustar o idioma depois não troca a semente: no `dotp-remake`
+  vazio, e cai no `templates/todo.md` (`:6079`). Ajustar o idioma depois não troca a semente: no `dotp-remake`
   (`pt-BR`) foi preciso apagar o `TODO.md` intocado e rodar o `sdd install` de novo. Direção: um `--lang` no
   install, ou a saída nomear o reinstall quando o `TODO_FILE` ainda é a semente de outro idioma.
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
@@ -178,7 +178,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   isso, o plano cita uma base que não é o HEAD da aprovação. Direção: gravar `status` e `rev-parse` a cada hand-back
   vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte.
   — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
-- [ ] **A guarda do kit para a corrida do alvo por um merge só de docs no checkout do kit** — `bin/sdd:4348`
+- [ ] **A guarda do kit para a corrida do alvo por um merge só de docs no checkout do kit** — `bin/sdd:4349`
   (`kit_guard_check`) — compara o par cru (HEAD e sujeira) e não lê o rótulo `sdd:` do reflog (anatomia §6). No
   lighthouse o operador puxou o #246 e o #254 (só `docs/`, `TODO.md` e catraca) para o checkout principal do kit
   com a corrida viva: `kit-touched` 2×, 2 células `refez` e 2 das 6 intervenções da missão; o reflog dizia
@@ -186,7 +186,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   rótulo da sessão (alheia, como esse fast-forward) e que não toca `bin agents templates config` vira aviso no
   journal; a sujeira não commitada, que não deixa reflog, e o resto continuam parando a linha.
   — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
-- [ ] **A REVIEW aprovada não vê o código que entrou depois dela** — `bin/sdd:1924` (`gate_REVIEW`) — o gate lê
+- [ ] **A REVIEW aprovada não vê o código que entrou depois dela** — `bin/sdd:1925` (`gate_REVIEW`) — o gate lê
   a nota da última rodada e não compara o commit que ela revisou com o HEAD. No lighthouse o F5–F8 (emenda E1–E6)
   e o R3 (P2 do Codex no PR #29) entraram depois da r2 em A, e o humano forçou a r3 e a r4 com `--phase REVIEW`:
   2 das 6 intervenções da missão. É o espelho do D21, em que só `F<n>` reabre a QA. Direção: a rodada grava o
@@ -195,7 +195,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Saída humana e cosmética
 
-- [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1856` (`gate-qa-e2e`) —
+- [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1857` (`gate-qa-e2e`) —
   um caso intermitente anterior à missão devolve a fase ao `sdd-qa`, que gasta o começo descobrindo isso:
   no alvo, o `frete-ipi.spec.ts:319` já tinha caído duas vezes, com os logs de gate em disco. Direção: o
   `GATE_WHY` cita quantas vezes cada caso vermelho já caiu nos logs `gate-qa-e2e` anteriores.
@@ -204,8 +204,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O `sdd status` manda `sdd run` com o app fora do ar, e a fase fechada volta a pendente** — `bin/sdd:7648`
   (`run: sdd run`) — com o `30-handoff-qa.md` em `done`, o `gate_QA` refaz a e2e ao vivo; app caído vira `· QA`,
-  `next phase: QA` e `run: sdd run`, embora o motivo diga "no session can start it" (`:1849`). Esse `sdd run`
-  compra uma sessão `QA:close` (opus no alvo) antes de escalar `app-down` (`tests/check-autonomy.sh:2528`), e cada
+  `next phase: QA` e `run: sdd run`, embora o motivo diga "no session can start it" (`:1867`). Esse `sdd run`
+  compra uma sessão `QA:close` (opus no alvo) antes de escalar `app-down` (`tests/check-autonomy.sh:2557`), e cada
   leitura roda a e2e, que no `lighthouse_project` grava uma demanda e gasta um número da sequência. Direção: o
   status lê o `GATE_APP_DOWN` e diz "fechada, e2e não re-verificável agora: app fora", com o remédio da escalada.
   — descoberto por `sessão coordenadora` na missão `20261013-amep-alignment-review` (2026-10-14)
@@ -218,7 +218,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` na sessão do `ui24_agent` que planejou a S9 (2026-10-17)
 
 - [ ] **O fim da corrida diz que só falta o merge, e o `sdd close` some** — `bin/sdd:9120` (`pipeline complete`) —
-  o `sdd run` e o `sdd status` (`:7341`) fecham com "only the merge is left", e nenhum template, chapéu ou comando
+  o `sdd run` e o `sdd status` (`:7644`) fecham com "only the merge is left", e nenhum template, chapéu ou comando
   cita o `sdd close <missão>` pós-merge (`docs/pipeline.md` § "After the PR"). Medido no `sales_quote`: os 7
   cartões da campanha (SQ-156 a SQ-162) seguiram "Em andamento" depois do merge, até o operador fechá-los à mão
   em 2026-10-18. Direção: com `JIRA_ENABLED=true`, a mensagem final e o corpo do PR nomeiam o `sdd close`.
