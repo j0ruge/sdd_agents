@@ -22,6 +22,10 @@ SDD="$ROOT/bin/sdd"
 FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-dryrun-XXXXXX")"
 MISSION="20260101-fixture"
 fails=0
+# Every key may arrive exported, and load_config keeps an exported value when the file sets none.
+# The READ_EXTRA block below compares a run WITH the key against the runs without it, so a value in
+# the caller's environment would be read as the runner adding rules nobody declared.
+unset READ_EXTRA
 
 # This file exercises the REAL (non-dry) blocked-escalation path below, which writes an autonomy
 # ledger row. run-all.sh already exports SDD_STATE_DIR for every test it runs, but a standalone
@@ -346,6 +350,70 @@ read_rules_of() { # read_rules_of <argv> — <phase>=ok|no-rule|not-read-only:<a
 }
 assert_eq "every phase may read the kit templates, and only read them" \
   "$(printf '%s\n' EXEC=ok QA:close=ok REVIEW=ok DOCS=ok PR=ok)" "$(read_rules_of "$argv")"
+
+# --- READ_EXTRA: the project declares the skill directories, read-only ------
+# A skill keeps its references under ~/.claude/, outside the target repo, and the kit cannot know
+# where (ADR 0019 §2). The project declares the directories in READ_EXTRA; kit_read_rules turns each
+# into the same read-only rule as the templates' and, when `readlink -f` differs, adds the resolved
+# target's rule too — the harness checks the path asked for AND the resolved one (a symlinked skill
+# needed both rules, 2.1.304). It also measures the resolved branch of the templates' rule, which is
+# the same line of kit_read_rules and had no fixture that symlinks.
+#
+# Three entries, four rules expected: a real directory, a symlink to a real one, and a symlink to
+# a directory whose name is not literal. The last one keeps its own rule (its name IS literal) and
+# gets no rule for its target: `odd[1]` is a bracket expression to the harness, and its rule would
+# grant `odd1/` while still denying `odd[1]/`. The whole list is compared, in order, so a target
+# emitted unchecked is a red here too.
+#
+# A DIFFERENTIAL over two runs: with the key, the templates' rule and the four; without it (the
+# projection at the top of this file), the templates' rule alone. A runner that stamps the same
+# rules on every run satisfies neither half. The value is written `$SDD_RX_FIX/…` in the config and
+# the variable is exported, the way a target writes `$HOME/…`: what load_config validates and
+# kit_read_rules prints is the EXPANDED value. The fixture root is physical (`cd -P`), or a TMPDIR
+# behind a symlink would add a resolved rule to every entry.
+echo "== READ_EXTRA reaches every phase as a read-only rule, symlink resolved =="
+rx_root="$(CDPATH='' cd -P "$SDD_STATE_FIX" && pwd)/rx"
+mkdir -p "$rx_root/real" "$rx_root/target" "$rx_root/odd[1]"
+# RELATIVE targets, the way `ln -s` is usually typed: a plain `readlink` answers `target`, which is
+# no absolute path, and only `readlink -f` gives the rule the harness checks.
+ln -s target "$rx_root/link"
+ln -s 'odd[1]' "$rx_root/oddlink"
+rx_rules_of() { # rx_rules_of <argv> — <phase>=<every argument after the --allowedTools value> per block
+  awk '
+    /^--- DRY RUN: phase .* ---$/ { blk = $5; next }
+    blk != "" && / claude -p / {
+      k = 0; for (i = 1; i <= NF; i++) if ($i == "--model") k = i
+      v = ""
+      for (i = k; k && i <= NF; i++) if ($i == "--allowedTools") {
+        for (j = i + 2; j <= NF && substr($j, 1, 2) != "--"; j++) v = v (v == "" ? "" : " ") $j
+        break
+      }
+      print blk "=" v; blk = ""
+    }
+  ' <<< "$1"
+}
+rx_want() { # rx_want <dir>... — the five blocks, each carrying the templates rule then one per dir
+  local ph d line
+  for ph in EXEC QA:close REVIEW DOCS PR; do
+    line="$(printf '%q' "Read(/$kit_home_phys/templates/**)")"
+    for d in "$@"; do line="$line $(printf '%q' "Read(/$d/**)")"; done
+    printf '%s=%s\n' "$ph" "$line"
+  done
+}
+case "$rx_root" in
+  /*[!A-Za-z0-9._/-]*) fail "the READ_EXTRA fixture root is a literal path" "letters, digits, . _ - and /" "$rx_root" ;;
+esac
+# shellcheck disable=SC2016 # the config must carry the variable, not its value
+printf 'READ_EXTRA="$SDD_RX_FIX/real $SDD_RX_FIX/link $SDD_RX_FIX/oddlink"\n' >> .sdd/config.sh
+rx_argv="$(tr -s ' ' <<< "$( SDD_RX_FIX="$rx_root" "$SDD" run "$MISSION" --dry-run 2>&1 )")"
+sed -i '/^READ_EXTRA=/d' .sdd/config.sh
+assert_eq "READ_EXTRA reaches every phase as a read-only rule, symlink resolved" \
+  "$(rx_want "$rx_root/real" "$rx_root/link" "$rx_root/target" "$rx_root/oddlink")
+---
+$(rx_want)" \
+  "$(rx_rules_of "$rx_argv")
+---
+$(rx_rules_of "$argv")"
 
 # --- the damage cap is per phase -------------------------------------------
 # One global ceiling priced every phase as if they cost the same. They do not: a REVIEW round with

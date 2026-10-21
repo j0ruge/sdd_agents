@@ -174,6 +174,37 @@ and an entry for such a hat is accepted and **ignored** rather than narrowing it
 says so. Narrowing would turn the widest hat in the pipeline into the narrowest; refusing would
 make the key a trap for an operator declaring an exception that was never needed.
 
+## What the phases read beyond the repo
+
+| Key | Required | Default | What it is |
+|---|---|---|---|
+| `READ_EXTRA` | no | empty | Directories **this project's** phases read outside the repo — the references of a skill they depend on (`ticket`, `codereview`, `qa-*`). Absolute directories separated by spaces, on **one line**, written `$HOME/…` so the tracked `.sdd/config.sh` names no user (the file is sourced, and the value is validated expanded). Each entry becomes the read-only rule the kit's templates already get, `Read(/<dir>/**)`, which `kit_read_rules` hands to every session the runner opens — the phases, `sdd close` and the template probe of `sdd preflight`; writing there stays denied. An entry that is a symlink also gets the rule of its `readlink -f` target, because the harness checks the path asked for and the resolved one. `load_config` refuses the run, naming the entry, when an entry is not a literal absolute directory — relative (a `~` inside quotes is not expanded, so it is relative), a trailing `/`, an empty, `.` or `..` component, or any character but letters, digits, `.`, `_` and `-` in a name — and when the value holds a newline. A directory that does not exist is **not** refused: a plugin missing on another machine must not stop the line. Empty ⇒ the phases read the repo and the kit's templates, nothing else. |
+
+```sh
+# the skills a JIRA + e2e target's phases depend on; for a plugin, the parent WITHOUT the version
+READ_EXTRA="$HOME/.claude/skills/ticket $HOME/.claude/skills/qa-report $HOME/.claude/skills/qa-execution $HOME/.claude/plugins/cache/<marketplace>/codereview"
+```
+
+The skill's references live under `~/.claude/`, outside the target repo, and under
+`--permission-mode acceptEdits --allowedTools Bash` the harness denies a `Read` there. Measured in
+the window of `bad6168`: the REVIEW of one target had 30 `Read`s of the `codereview` skill's
+references denied, and a TICKET stopped `blocked` until the operator widened the settings by hand. The kit cannot
+know where a machine keeps its skills, so it grants nothing beyond its own templates (ADR 0019 §2),
+and each project declares what its phases need.
+
+Declare the **skill's own directory**, and for a plugin the **parent without the version**
+(`…/plugins/cache/<marketplace>/<plugin>`): the cache path carries the version, and it changed from
+`2.15.3` to `2.17.0` in two days. Never declare a parent **above** a symlink: the runner resolves
+the entry it is given, not what lies below it, so a symlinked skill under a declared parent is still
+denied — and the denial is a `DENIED` line in the mission's journal. A symlink target whose own name
+is not literal gets no rule either (the machine chose that name, not this file).
+
+⚠️ This key **widens a permission** — for reading only, but the value goes into a rule the harness
+reads as a gitignore-style pattern, where `*`, `?`, the brackets and `\` are globs and a `(` or `)`
+closes the rule. So the value is literal-only and admitted positively, like `HAT_WRITES_EXTRA` above.
+`--add-dir`, or the settings' `additionalDirectories`, would read too — and they let the session
+**write** there under `acceptEdits`, which is why the kit does not use them.
+
 ## ADR traceability
 
 | Key | Required | Default | What it is |
@@ -258,7 +289,7 @@ carry it.
 | `ON_ESCALATION_CMD` | *(empty)* | The pager. After attempting the durable ledger write, the runner executes this shell command — `bash -c`, stdin closed, output to stderr — on **every escalation that ends the run with rc 3**: `increment-blocked`, `dirty-tree`, `handoff-blocked`, `app-down`, `session-died`, `budget-exhausted`, `no-progress`, `no-work`, `retry-gate-red`, `hat-crossed`, `foreign-commit`, `kit-touched`. A hook can therefore read its corresponding row when persistence succeeded; the existing ledger warning remains authoritative when it did not. Its environment carries `SDD_REASON` (the ledger `kind`), `SDD_PHASE`, `SDD_MISSION`, `SDD_PROJECT` and `SDD_GATE_WHY` (the gate's sentence). Empty ⇒ the line stops in silence, as it did before L6 of the 2026-09-03 audit — which measured zero notification sites in the runner and a human learning the line had stopped by watching `tail -F`. The projection (`--dry-run`) never runs it. The entire hook family gets five seconds, then TERM, then KILL after one more second; a local subreaper adopts and cancels background children even after `setsid`, and checkout ownership remains held until they are reaped; failure or timeout warns without replacing the escalation's rc. If `timeout(1)` is unavailable, the runner warns and skips the hook instead of running it without a bound. `review-to-draft` is a `degraded` row, not an rc 3, and gets no pager. Example: `ON_ESCALATION_CMD='notify-send "sdd $SDD_MISSION" "$SDD_PHASE stopped: $SDD_REASON"'`. |
 | `RELEASE_FORBIDDEN_WORDS` | *(empty)* | Space-separated words that must not appear on the kit's surface (`bin agents docs/adr docs/pipeline.md docs/failure-modes.md README.md config templates tests`) — client and target identifiers. Read by `sdd health --release` line 5 (ADR 0007). Empty ⇒ line 5 checks only `LICENSE`. Set it in the **kit's** `.sdd/config.sh`; a target repo never needs it. |
 | `PERMISSION_MODE` | `acceptEdits` | The ceiling. `bypassPermissions` is **never** the kit's default. |
-| `ALLOWED_TOOLS` | `Bash` | Goes into `--allowedTools`, as a **single argument**. **Required in practice**: `acceptEdits` auto-approves file edits, but **not** `Bash` — without this key the phase session cannot run the suite nor commit, and the EXEC phase becomes unsatisfiable. Verified in the fixture mission `20260814-dry-run-completo`. The kit has only exercised the default; if you need more than one tool, check the format your `claude` accepts before trusting the gate. Since 2026-09-03 the runner also passes `--disallowedTools` (the hat's `disallowedTools:` line plus `HAT_DENY_BASE`) and `--strict-mcp-config` (unless the hat's `mcp:` names servers); a deny beats this allow, so `Bash` stays on while `Bash(git push:*)` is off for every hat but the publisher. The `writes:` globs accept `$HANDOFF_DIR`, `$MISSION`, `$TODO_FILE`, `$QA_DOCS_PATH` and `$E2E_DIR`, expanded from this file. Since ADR 0019 the runner appends, right after this value and as arguments of their own, the read-only rules of `kit_read_rules` — today `Read(/$SDD_HOME/templates/**)` — so a phase may read the kit templates its boot prompt names and still may not write them; `--add-dir` is not used, because it grants writing too. The `sdd close` session, which does not go through `run_phase`, gets the same lines from the same function, and so does the template probe of `sdd preflight`, which runs with no settings and fails when the harness still denies the read. |
+| `ALLOWED_TOOLS` | `Bash` | Goes into `--allowedTools`, as a **single argument**. **Required in practice**: `acceptEdits` auto-approves file edits, but **not** `Bash` — without this key the phase session cannot run the suite nor commit, and the EXEC phase becomes unsatisfiable. Verified in the fixture mission `20260814-dry-run-completo`. The kit has only exercised the default; if you need more than one tool, check the format your `claude` accepts before trusting the gate. Since 2026-09-03 the runner also passes `--disallowedTools` (the hat's `disallowedTools:` line plus `HAT_DENY_BASE`) and `--strict-mcp-config` (unless the hat's `mcp:` names servers); a deny beats this allow, so `Bash` stays on while `Bash(git push:*)` is off for every hat but the publisher. The `writes:` globs accept `$HANDOFF_DIR`, `$MISSION`, `$TODO_FILE`, `$QA_DOCS_PATH` and `$E2E_DIR`, expanded from this file. Since ADR 0019 the runner appends, right after this value and as arguments of their own, the read-only rules of `kit_read_rules` — `Read(/$SDD_HOME/templates/**)`, then one per `READ_EXTRA` entry — so a phase may read the kit templates its boot prompt names and still may not write them; `--add-dir` is not used, because it grants writing too. The `sdd close` session, which does not go through `run_phase`, gets the same lines from the same function, and so does the template probe of `sdd preflight`, which runs with no settings and fails when the harness still denies the read. |
 
 ⚠️ Trade-off, declared: raising `BUDGET_PER_PHASE_USD` does **not** raise EXEC, QA or REVIEW —
 they read their own key. One number for every phase was either too low for REVIEW, where the

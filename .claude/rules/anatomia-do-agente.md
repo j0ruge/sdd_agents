@@ -47,7 +47,7 @@ só o executor edita código. Ferramenta a mais é superfície de erro que nenhu
 `run_phase()`, `HAT_DENY_BASE` é o que nenhuma fase usou, e `sdd census <missão>` mede o depois.
 Desde `20261020-a-sessao-le-o-que-o-boot-manda` o `run_phase` soma ao `--allowedTools`, cada uma
 como argumento próprio logo depois do valor, as regras só de leitura do `kit_read_rules` (ADR 0019
-§1) — hoje uma, `Read(/$SDD_HOME/templates/**)`, com duas barras na grafia literal: o boot manda
+§1) — a dos templates, `Read(/$SDD_HOME/templates/**)`, com duas barras na grafia literal: o boot manda
 toda fase partir dos templates do kit, e sob `acceptEdits --allowedTools Bash` o harness nega o
 `Read` fora do repo do alvo (medido em 2.1.296 e 2.1.304). O `--add-dir` foi recusado porque libera
 também a escrita no kit. A ADR nomeia três portas (`run_phase`, `cmd_close`, a sonda do
@@ -57,6 +57,14 @@ também a escrita no kit. A ADR nomeia três portas (`run_phase`, `cmd_close`, a
 sobre o argv da sessão de fechamento, com o `mut_RUN_close_templates_read_rule_dropped`; a da sonda
 dos templates do `sdd preflight` (§4) é o `tests/check-preflight.sh`, que lê o argv dessa sessão,
 com o `mut_PRE_template_probe_rule_dropped` e o `mut_PRE_template_probe_reads_settings`.
+Depois da regra dos templates vêm as do **projeto** (ADR 0019 §2): a chave `READ_EXTRA`, de default
+vazio, declara os diretórios das skills de que as fases dependem, escritos com `$HOME` no
+`.sdd/config.sh` rastreado; cada entrada vira a mesma regra só de leitura, e a entrada que é symlink
+ganha também a regra do alvo resolvido, porque o harness confere os dois caminhos. A gramática mora
+numa definição (`read_extra_each`), a guarda em outra (`read_extra_dir_ok`, positiva, no molde do
+`hat_extra_path_ok`), e a recusa no `load_config`; o probe é o `tests/check-dry-run.sh` (as regras,
+diferencial com e sem a chave) e o `tests/check-gates.sh` (cada recusa nomeando a entrada), com sete
+mutantes `mut_RUN_read_extra_*` — três na regra, quatro na guarda.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`
@@ -260,17 +268,23 @@ do `load_config`. Re-exec do `bin/sdd` entre voltas foi recusado: o runner não 
 julgaria a própria REVIEW. Limites no comentário do `config_reload`: o que o `cmd_run` derivou antes
 do laço (branch da missão, `MISSION_DIR`) fica com o valor do lançamento; edição feita durante a
 sessão chega ao gate da volta **seguinte**; `sdd retry`, `sdd close` e `sdd kaizen` leem uma vez só.
-Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §1) a permissão que o runner pede ao
-harness para fora do repo do alvo é **só de leitura**: a regra do `kit_read_rules` nos templates do
-kit. Com ela, um `Write` no mesmo diretório continuou `DENIED` (medido em 2.1.296 e 2.1.304), e o
-`--add-dir`, que o liberaria, não é passado. O `Bash` da fase continua escrevendo onde quiser — a
-regra não estreita nada —, e quem para a linha se o kit for escrito continua sendo a guarda de kit.
+Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §1 e §2) a permissão que o runner pede ao
+harness para fora do repo do alvo é **só de leitura**: as regras do `kit_read_rules` nos templates do
+kit e nos diretórios que o `READ_EXTRA` do projeto declara. Com a regra, um `Write` no mesmo
+diretório continuou `DENIED` (medido em 2.1.296 e 2.1.304), e o `--add-dir`, que o liberaria, não é
+passado. O `Bash` da fase continua escrevendo onde quiser — as regras não estreitam nada —, e quem
+para a linha se o kit for escrito continua sendo a guarda de kit.
 
 **Dívida declarada.** O `HAT_WRITES_EXTRA` **alarga** permissão e seu valor vira glob de shell no
 `case` do `hat_path_allowed`, então toda frouxidão da guarda falha **aberta** — por isso ela é
 literal-only, e por isso a passada de sabotagem é obrigatória antes do merge. Chapéu cujo `writes:`
 é vazio (`sdd-executor`) já escreve em qualquer lugar: a entrada é aceita e **ignorada**, com aviso
 do `sdd preflight` — estreitar viraria regressão, recusar viraria armadilha.
+O `READ_EXTRA` também **alarga** permissão, só de leitura: o valor vira regra que o harness lê como
+padrão de gitignore, então a guarda é literal-only e escrita positivamente, e a passada de
+sabotagem foi feita antes do commit (notas da missão). O runner resolve só a entrada declarada:
+um symlink **abaixo** dela continua negado, e o alvo resolvido cujo nome não é literal não ganha
+regra — os dois saem como `DENIED` no journal.
 As fases rodam **no checkout do humano**, com `.env.idp`, Jira e push reais;
 a guarda de kit **para a linha** desde `20260903-a-fronteira-do-chapeu` (`kind: kit-touched`), e o
 chapéu que escreve fora de `writes:` também (`hat-crossed`) — as duas pela mesma porta,

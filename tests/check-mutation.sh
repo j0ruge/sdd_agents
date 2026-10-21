@@ -2803,6 +2803,47 @@ mut_RUN_close_templates_read_rule_dropped() {
   sed -i '/^cmd_close() {/,/^}/ s|--allowedTools "$ALLOWED_TOOLS" "${close_read_rules\[@\]}" \\$|--allowedTools "$ALLOWED_TOOLS" \\|' "$1"
 }
 
+# ADR 0019 §2: kit_read_rules stops reading READ_EXTRA — the key is validated and then dropped, and
+# every phase is back to a skill's references the harness denies, with a config that says otherwise.
+# Caught by "READ_EXTRA reaches every phase as a read-only rule, symlink resolved" (check-dry-run.sh):
+# the run with the key prints the templates' rule alone.
+mut_RUN_read_extra_ignored() {
+  sed -i '/^kit_read_rules() {/,/^}/ { /^  mapfile -t -O 1 dirs < <(read_extra_each)$/d }' "$1"
+}
+
+# The resolved target's rule goes: a symlinked skill keeps the rule of the path asked for only, and
+# the harness, which checks the resolved path too, denies it (measured in 2.1.304, ADR 0019).
+# Caught by the same assertion: `target` missing after `link`.
+mut_RUN_read_extra_symlink_unresolved() {
+  sed -i '/^kit_read_rules() {/,/^}/ { /^      printf .*"\$real"$/ s/.*/      :/ }' "$1"
+}
+
+# The resolved target is emitted unchecked: a name the machine chose, `odd[1]`, enters a rule the
+# harness reads as a bracket expression. Caught by the same assertion: a rule for `odd[1]` appears.
+mut_RUN_read_extra_target_unchecked() {
+  sed -i '/^kit_read_rules() {/,/^}/ s| [&][&] read_extra_dir_ok "\$real"; then$|; then|' "$1"
+}
+
+# The guard of READ_EXTRA, one mutant per refusal class — the key WIDENS a permission, so a refusal
+# that turns into an acceptance fails open. All four caught by "READ_EXTRA that is not a literal
+# absolute directory is refused, and the reason names it" (check-gates.sh), each in its own term.
+# A relative entry is accepted: `relative:lived|0`.
+mut_RUN_read_extra_relative_accepted() {
+  sed -i '/^read_extra_dir_ok() {/,/^}/ s|^  case "\$p" in /\*) ;; \*) return 1 ;; esac$|  case "$p" in /*) ;; *) ;; esac|' "$1"
+}
+# `..` as a component is accepted (`.` and the empty one still refused): `dotdot:lived|0`.
+mut_RUN_read_extra_dotdot_accepted() {
+  sed -i "/^read_extra_dir_ok() {/,/^}/ s/^      ''|\.|\.\.) return 1 ;;\$/      ''|.) return 1 ;;/" "$1"
+}
+# The character rule goes, and every glob and parenthesis reaches the rule: `star:lived|0` and on.
+mut_RUN_read_extra_metachar_accepted() {
+  sed -i '/^read_extra_dir_ok() {/,/^}/ { /^      \*\[!A-Za-z0-9._-\]\*) return 1 ;;$/d }' "$1"
+}
+# A newline is accepted, and the parser's one `read` drops the second line with rc 0: `newline:lived|0`.
+mut_RUN_read_extra_newline_accepted() {
+  sed -i '/^load_config() {/,/^}/ { /die "READ_EXTRA contains a newline/d }' "$1"
+}
+
 # ADR 0019, the journal half: run_phase stops naming what the harness denied its session — the
 # journal_denials call after hat_init_facts goes, and a phase that could not read the templates or
 # a skill's references is back to an `ok`-looking journal. Scoped to run_phase, so the close door
@@ -6568,6 +6609,13 @@ CATALOG=(
   RUN_harness_env_inherited
   RUN_templates_read_rule_dropped
   RUN_close_templates_read_rule_dropped
+  RUN_read_extra_ignored
+  RUN_read_extra_symlink_unresolved
+  RUN_read_extra_target_unchecked
+  RUN_read_extra_relative_accepted
+  RUN_read_extra_dotdot_accepted
+  RUN_read_extra_metachar_accepted
+  RUN_read_extra_newline_accepted
   RUN_denials_not_journaled
   RUN_close_denials_not_journaled
   RUN_denials_path_unsanitized

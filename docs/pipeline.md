@@ -1020,6 +1020,13 @@ session write the kit too. The dry-run prints the rule in each phase's argv, and
 does not go through `run_phase`, so it reads the same function by hand and hands the same lines to
 its session; `tests/check-gates.sh` asserts that argv the same way.
 
+The **project** adds its own after the templates' rule (ADR 0019 §2): each entry of `READ_EXTRA`
+(`config/schema.md`), the directories of the skills its phases depend on, becomes the same
+read-only rule, and an entry that is a symlink also gets its resolved target's rule, because the
+harness checks both paths. `load_config` refuses an entry that is not a literal absolute directory,
+before any session; the kit itself grants nothing beyond its templates. `tests/check-dry-run.sh`
+asserts the rules per block, with and without the key, and `tests/check-gates.sh` each refusal.
+
 No argv assertion says whether the **harness** honours the rule, so `sdd preflight` asks (ADR 0019
 §3). Next to the `Bash` probe it opens a second session, isolated: `--setting-sources ""` (no
 settings at all), cwd in a `mktemp -d`, the harness environment unset as `run_phase` unsets it, and

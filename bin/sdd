@@ -270,6 +270,23 @@ load_config() {
       || die "HAT_WRITES_EXTRA path '$_hwx_path' (hat $_hwx_hat) is not a literal path inside the repo — relative, no '..', and no metacharacter except a trailing '/**' on a named directory"
   done < <(hat_writes_extra_each)
 
+  # The directories THIS project's phases read beyond the repo — a skill's references (ADR 0019 §2).
+  # EMPTY is the default: the kit grants nothing beyond its own templates. Validated HERE and never
+  # in kit_read_rules, which is read by substitution: a die there would die in the subshell and hand
+  # the door an empty list. A NEWLINE is refused before the parser for HAT_WRITES_EXTRA's reason —
+  # `read -r -a` consumes one line, so a second line would vanish with rc 0. A missing directory is
+  # NOT refused: a plugin absent on another machine must not stop the line, and a read under it is
+  # only denied, which the journal names (DENIED). Grammar: read_extra_each; guard: read_extra_dir_ok.
+  : "${READ_EXTRA:=}"
+  case "$READ_EXTRA" in
+    *$'\n'*) die "READ_EXTRA contains a newline — directories are separated by spaces, on one line" ;;
+  esac
+  local _rx_dir
+  while IFS= read -r _rx_dir; do
+    read_extra_dir_ok "$_rx_dir" \
+      || die "READ_EXTRA entry '$_rx_dir' is not a literal absolute directory — write it absolute (\$HOME/… in .sdd/config.sh), with no trailing '/', no empty, '.' or '..' component, and only letters, digits, '.', '_' and '-' in each name"
+  done < <(read_extra_each)
+
   # The PATH keys become `writes:` globs (hat_expand), and hat_path_allowed matches those as shell
   # GLOBS, so a raw value fails both ways (issue 127): `./TODO.md` matches no path git reports — a
   # false hat-crossed that stops the target's line — and `TODO_FILE='*'` matches bin/sdd, widening
@@ -5272,18 +5289,73 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
 # --allowedTools value. The one-argument form (`--allowedTools "Bash Read(…)"`) was not measured.
 # It reads and does not write: a Write under the same directory stayed DENIED. `--add-dir` reads
 # too, and lets the session WRITE the kit under acceptEdits, which is why it is not used here.
-# The harness checks the path asked for AND the resolved one (a symlinked skill needed both rules),
-# so a directory whose `readlink -f` differs gets the resolved target's rule too. No fixture here
-# symlinks templates/ (SDD_HOME is physical, `cd -P`), so that branch has no probe of its own yet.
+# After the templates come the project's own directories, one rule per READ_EXTRA entry (§2).
+# The harness checks the path asked for AND the resolved one (a symlinked skill needed both rules,
+# measured in 2.1.304, ADR 0019), so a directory whose `readlink -f` differs gets the resolved target's rule
+# too — but only when the target passes the same grammar as an entry: the machine chose that name,
+# not the config, and `odd[1]` would be a bracket expression granting `odd1/` and still denying the
+# directory. A target skipped that way is denied, and the denial is a DENIED line in the journal.
+# The resolved branch is measured through a symlinked READ_EXTRA entry (check-dry-run.sh); no
+# fixture symlinks templates/, since SDD_HOME is physical (`cd -P`), and both go through this loop.
+# The templates' own path is NOT held to the grammar: a SDD_HOME with a space or a metacharacter
+# enters the rule as it is, and the preflight's isolated probe is what says whether it reads.
 #
 # It only PRINTS, and is read by substitution (`mapfile -t … < <(kit_read_rules)`): no `die`, no
 # global — either would be lost in the subshell. Validation of anything it reads lives in load_config.
-# Sensors (tests/): check-dry-run.sh (phases), check-gates.sh (sdd close), check-preflight.sh (probe).
+# Sensors (tests/): check-dry-run.sh (phases, READ_EXTRA), check-gates.sh (sdd close, the READ_EXTRA
+# guard), check-preflight.sh (probe).
 kit_read_rules() {
-  local dir="$SDD_HOME/templates" real=""
-  printf 'Read(/%s/**)\n' "$dir"
-  real="$(readlink -f -- "$dir" 2>/dev/null)" || real=""
-  if [ -n "$real" ] && [ "$real" != "$dir" ]; then printf 'Read(/%s/**)\n' "$real"; fi
+  local dir real=""
+  local -a dirs=("$SDD_HOME/templates")
+  mapfile -t -O 1 dirs < <(read_extra_each)
+  for dir in "${dirs[@]}"; do
+    printf 'Read(/%s/**)\n' "$dir"
+    real="$(readlink -f -- "$dir" 2>/dev/null)" || real=""
+    # An empty `real` — readlink failed, which `-f` does when a parent of the entry is missing — is
+    # refused by the grammar too, so no probe can make the `-n` red while that check stands. It stays
+    # because it decides which failure a dropped check produces: without it, an entry under a missing
+    # parent would print `Read(//**)`, the whole filesystem (CLAUDE.md, the corollary's counter-example).
+    if [ -n "$real" ] && [ "$real" != "$dir" ] && read_extra_dir_ok "$real"; then
+      printf 'Read(/%s/**)\n' "$real"
+    fi
+  done
+}
+
+# READ_EXTRA — the directories THIS project's phases read beyond the repo, parsed in ONE place
+# (ADR 0019 §2). Absolute directories separated by spaces, on one line; written `$HOME/…` in the
+# tracked .sdd/config.sh, which is sourced, so the value arrives here expanded. ONE parser, two
+# callers: load_config validates every entry, kit_read_rules turns every entry into a rule.
+read_extra_each() {   # read_extra_each — one READ_EXTRA entry per line, in declared order
+  local -a entries=()
+  read -r -a entries <<< "${READ_EXTRA:-}"
+  # An empty or all-blank value splits into nothing, and printf with no argument would print one
+  # empty line — an entry load_config would refuse, killing every run of a repo without the key.
+  [ "${#entries[@]}" -gt 0 ] || return 0
+  printf '%s\n' "${entries[@]}"
+}
+
+# read_extra_dir_ok <path> — 0 when the path is an absolute directory written LITERALLY.
+#
+# The value becomes `Read(/<path>/**)`, a rule the harness reads as a gitignore-style pattern, where
+# `*`, `?`, `[`, `]` and `\` are globs and a `(` or `)` closes the rule early. The key WIDENS a
+# permission, so every looseness here fails OPEN. Written POSITIVELY, after hat_extra_path_ok
+# and adr_dir_ok: every component after the leading `/` is a plain name of
+# letters, digits, `.`, `_` and `-`, so a metacharacter nobody listed is refused by construction,
+# and `/` alone, `//`, a trailing `/`, `.` and `..` are refused as components rather than by being
+# remembered. Pure: rc only, never a message — load_config names the entry, kit_read_rules skips.
+read_extra_dir_ok() {
+  local p="$1" rest comp
+  case "$p" in /*) ;; *) return 1 ;; esac
+  rest="${p#/}"
+  while :; do
+    comp="${rest%%/*}"
+    case "$comp" in
+      ''|.|..) return 1 ;;
+      *[!A-Za-z0-9._-]*) return 1 ;;
+    esac
+    [ "$comp" != "$rest" ] || return 0
+    rest="${rest#*/}"
+  done
 }
 
 # session_git_label <step> <sid> — THE one spelling of a session's git label, `sdd:<step>:<sid8>`

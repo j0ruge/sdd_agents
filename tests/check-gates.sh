@@ -6381,6 +6381,42 @@ assert_eq "an entry for a hat that already writes anywhere neither refuses nor n
 hwx_set ''
 
 # ---------------------------------------------------------------------------
+# READ_EXTRA — the directories THIS project's phases read beyond the repo (a skill's references,
+# ADR 0019 §2), and its guard. kit_read_rules turns each entry into `Read(/<dir>/**)`, so the value
+# is dropped into a permission rule the harness reads as a gitignore-style pattern: `*`, `?` and the
+# brackets are globs there, and a `(` or `)` would close the rule early. The key WIDENS a permission
+# (read-only), so every looseness here fails OPEN — the HAT_WRITES_EXTRA lesson above.
+#
+# ONE assertion over every refusal, each value carrying the bad entry SECOND, after a valid one, so
+# a validator that looks at the first entry only is red too. Each needle is the message's own
+# `entry '<value>'`, never a fragment the boilerplate could carry. The last term is the positive
+# control, and the half that makes the refusals mean something: a guard that refuses everything
+# satisfies all of them. Its directories do not exist — a missing directory is the preflight's
+# warning, never a death (a plugin missing on another machine must not stop the line).
+rx_probe() { # rx_probe <value> <needle> — "died|<n>" or "lived|<n>", over one call
+  local out rc=0
+  cp "$HWX_CFG_BASE" .sdd/config.sh
+  printf 'READ_EXTRA=%s\n' "$1" >> .sdd/config.sh
+  out="$( "$SDD" status "$MISSION" --no-gates 2>&1 )" || rc=$?
+  cp "$HWX_CFG_BASE" .sdd/config.sh
+  printf '%s|%s' "$( [ "$rc" -ne 0 ] && echo died || echo lived )" "$( grep -cF -- "$2" <<< "$out" | head -1 )"
+}
+rx_got=""
+for rx_case in 'relative:rx/rel' 'tilde:~/.claude/skills/x' 'dotdot:/rx/../etc' 'dot:/rx/./x' \
+               'root:/' 'empty:/rx//x' 'trailing:/rx/x/' 'star:/rx/a*b' 'qmark:/rx/a?b' \
+               'lbracket:/rx/a[b' 'rbracket:/rx/a]b' 'lparen:/rx/a(b' 'rparen:/rx/a)b' \
+               'backslash:/rx/a\b' 'brace:/rx/a{b'; do
+  rx_bad="${rx_case#*:}"
+  rx_got="$rx_got ${rx_case%%:*}:$(rx_probe "\"/rx/ok $rx_bad\"" "READ_EXTRA entry '$rx_bad'")"
+done
+rx_got="$rx_got newline:$(rx_probe '"/rx/ok
+/rx/b"' 'READ_EXTRA contains a newline')"
+rx_got="$rx_got ok:$(rx_probe '"/rx/home/.claude/skills/qa-report /rx/home/.claude/plugins/cache/mk-1/codereview"' 'READ_EXTRA')"
+assert_eq "READ_EXTRA that is not a literal absolute directory is refused, and the reason names it" \
+  " relative:died|1 tilde:died|1 dotdot:died|1 dot:died|1 root:died|1 empty:died|1 trailing:died|1 star:died|1 qmark:died|1 lbracket:died|1 rbracket:died|1 lparen:died|1 rparen:died|1 backslash:died|1 brace:died|1 newline:died|1 ok:lived|0" \
+  "$rx_got"
+
+# ---------------------------------------------------------------------------
 # The PATH keys — TODO_FILE, HANDOFF_DIR, QA_DOCS_PATH, E2E_DIR — become `writes:` globs through
 # hat_expand, and hat_path_allowed matches those as shell GLOBS (issue 127). Raw, a value fails both
 # ways: `./TODO.md` matches no path git reports, a false hat-crossed that stops a target's line, and

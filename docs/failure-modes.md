@@ -86,8 +86,9 @@ session's `.json`.
   reads under this harness; red there right after a harness bump means the rule's syntax changed
   (the ledger's session rows carry `harness:`).
 - **a skill's references denied:** declare the skill's directory in the target's `READ_EXTRA`,
-  written with `$HOME` (`config/schema.md`). The runner adds the rule of a symlinked entry's
-  resolved target too; declare the skill's own directory, never a parent above a symlink.
+  absolute and separated by spaces, written with `$HOME` (`config/schema.md`). The runner adds the
+  rule of a symlinked entry's resolved target too; declare the skill's own directory (for a
+  plugin, the parent without the version), never a parent above a symlink.
 - **a denial under `/tmp`:** the session's own scratch, not something the boot named. Nothing to do.
 
 **Do not:** put the kit in the settings' `additionalDirectories`, or `--add-dir` it: under
