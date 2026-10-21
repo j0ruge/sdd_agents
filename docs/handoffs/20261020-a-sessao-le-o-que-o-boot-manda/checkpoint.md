@@ -1,6 +1,6 @@
 ---
 missao: 20261020-a-sessao-le-o-que-o-boot-manda
-atualizado: 2026-10-21 12:32
+atualizado: 2026-10-21 16:02
 ---
 
 # Checkpoint — a sessão lê o que o boot manda ler
@@ -60,7 +60,7 @@ atualizado: 2026-10-21 12:32
 | R4 | Codex P2 da r2 do #315 — a sonda dos templates que sai sem init e sem result falha nomeada, em vez de calar e deixar o preflight verde sem medir a regra; a CLI morta continua sendo uma falha só, a da sonda do Bash | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    a template probe that emits no init and no result fails by name, and a dead CLI fails once' <<< "$o"` → `1` | done | 8c72cfb |
 | R5 | Codex r3 do #315, lote #1 e #2 — o registro de plugins só conta a chave do próprio plugin da skill (como o health_provenance), e um caminho do kit que a gramática das regras recusa não ganha regra dos templates, com o preflight nomeando o caminho | `o=$(bash tests/check-preflight.sh 2>&1); a=$(grep -c '^  ok    a plugin skill is looked up in the registry only under its own plugin key, never another plugin' <<< "$o"); b=$(grep -c '^  ok    a kit path the read-rule grammar refuses gets no template rule, and preflight names it' <<< "$o"); echo "$a $b"` → `1 1` | done | 4426c94 |
 | R6 | Codex P2 da r4 do #315 — o veredito da sonda dos templates dá nome uma vez ao desfecho do Read do template (negado, lido, deu erro, não tentou, sem sessão) e despacha por ele, com default que reprova; o Read que volta com erro e sem entrada em permission_denials reprova nomeado, em vez de cair no aviso de que a sessão não tentou ler | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    the template probe names the outcome of its Read once, and a Read that comes back with an error fails by name' <<< "$o"` → `1` | done | df5bdb6 |
-| R7 | Codex P3 da r5 do #315 — a sonda dos templates leva no --allowedTools só as regras dos templates (a regra e a do alvo resolvido), de uma definição própria que o kit_read_rules compõe com as do READ_EXTRA; uma entrada do READ_EXTRA que cubra o kit, como $HOME, deixa de ler o template no lugar da regra que a sonda nomeia | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    the template probe carries the templates rule alone, never a READ_EXTRA rule that covers the kit' <<< "$o"` → `1` | pending | — |
+| R7 | Codex P3 da r5 do #315 — a sonda dos templates leva no --allowedTools só as regras dos templates (a regra e a do alvo resolvido), de uma definição própria que o kit_read_rules compõe com as do READ_EXTRA; uma entrada do READ_EXTRA que cubra o kit, como $HOME, deixa de ler o template no lugar da regra que a sonda nomeia | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    the template probe carries the templates rule alone, never a READ_EXTRA rule that covers the kit' <<< "$o"` → `1` | done | 0b8c140 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
