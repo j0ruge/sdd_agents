@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 1f921771-01eb-471d-b867-0c307054b548
 data: 2026-10-20 22:46
-gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024 linhas `ok`, eram 2019 na base de `aea4522`; nenhum `FAIL`); Check do I6 → `1 1`; `tests/check-checkpoint.sh --check` → `6 row(s), 6 under the anchor rule, none blind`; os seis incrementos `done`
+gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024 linhas `ok`, eram 2019 na base de `aea4522`; nenhum `FAIL`); Check do I6 → `1 1`; `tests/check-checkpoint.sh --check` → `6 row(s), 6 under the anchor rule, none blind`; os seis incrementos `done`; rodada de conserto da revisão final: R1 `f9f3b34` (Check → `1`) e R2 `5f05cf4` (Check → `1 1`), com `check-preflight.sh` 146 `ok` e rc 0, `check-mutation.sh --anchors` 742 de 742, `check-todo.sh` e `--anchors` verdes; a suíte inteira depois da rodada é do relay
 ---
 
 # Handoff — EXEC — a sessão lê o que o boot manda ler
@@ -18,14 +18,16 @@ Os seis incrementos estão `done`. Toda sessão do runner (fase, `sdd close`, so
 `Read(/$SDD_HOME/templates/**)` mais as regras do `READ_EXTRA`, só de leitura; cada negativa do harness vira
 `DENIED` no journal; o preflight prova a regra numa sessão isolada e avisa, sem sessão, a entrada do `READ_EXTRA`
 que não existe e a skill achada que nenhuma regra cobre. Suíte verde em ``e8fe91c``. Próximo: QA, que no kit
-não tem interface (sub-etapa `close`), e a verificação end-to-end do `01-plano.md`.
+não tem interface (sub-etapa `close`), e a verificação end-to-end do `01-plano.md`. A revisão final da branch pediu
+R1 e R2, feitos (seção "Rodada de conserto"); a suíte inteira depois deles é do relay.
 
 ## Estado do repo
 
 - **Branch:** `kaizen/20261020-a-sessao-le-o-que-o-boot-manda`, no worktree `/home/joruge/repos/sdd_agents-f9`. Não empurrada (nenhum `git push` nesta fase).
-- **Último commit:** ``3e0420f` `chore(checkpoint): I6 done (e8fe91c)`, e depois dele o commit deste handoff`
+- **Último commit:** `chore(checkpoint): R2 done (5f05cf4)`, e antes dele o commit desta atualização do handoff
 - **Working tree:** limpo
-- **Suíte:** `tests/run-all.sh` → verde em `e8fe91c`: `suite green`, rc 0, 2024 linhas `ok`, nenhum `FAIL`
+- **Suíte:** `tests/run-all.sh` → verde em `e8fe91c`: `suite green`, rc 0, 2024 linhas `ok`, nenhum `FAIL`. Depois
+  de R1 e R2 só rodaram os sensores tocados (abaixo); a suíte inteira é do relay
 - **E2E:** sem `E2E_CMD` nem `APP_URL` no kit; não se aplica. A métrica de ponta a ponta é a sonda de rascunho do `01-plano.md`, § Verificação end-to-end, que gasta sessão real e fica para o relay.
 
 ## O que foi feito
@@ -37,13 +39,28 @@ não tem interface (sub-etapa `close`), e a verificação end-to-end do `01-plan
 - `52f9fdf` — I5: a chave `READ_EXTRA` (default vazio), gramática `read_extra_each`, guarda positiva `read_extra_dir_ok`, recusa no `load_config`; o `kit_read_rules` emite uma regra por entrada e a do alvo de `readlink -f` (`tests/check-dry-run.sh`, `tests/check-gates.sh`).
 - `e8fe91c` — I6: dois avisos do `sdd preflight`, `warn` e nunca `_fail`, sem sessão: a entrada do `READ_EXTRA` que não é diretório nesta máquina, e a skill achada (o `skill_findable` publica `SKILL_FOUND_DIR`) cujo diretório ou alvo do `readlink -f` nenhuma regra cobre (`read_rules_cover`, que lê as próprias linhas do `kit_read_rules`), com a entrada a declarar (`skill_read_entry`: para plugin, o pai sem versão, escrita `$HOME/…`). `tests/check-preflight.sh` 138 → 143 `ok`, seis mutantes `mut_PRE_*`.
 
+## Rodada de conserto — revisão final da branch (R1, R2)
+
+Revisor de contexto novo, só leitura, sobre `b96f3d3..d8ef2aa`: "With fixes", 0 Critical, 1 Important, 8 Minor.
+O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6, #7, #9) ficou com o relay.
+
+- `f9f3b34` — R1 (Important #1): com a entrada declarada coberta e só o alvo do symlink dela recusado pela
+  gramática, o aviso mandava declarar a própria entrada já declarada, um laço sem saída. Agora nomeia o alvo e o
+  remédio (mover ou renomear), sem `entry to add`. Check: `a declared skill whose symlink target the grammar
+  refuses is named as such, never as undeclared` → `1`. Mutante `mut_PRE_skill_target_refused_undeclared`.
+- `5f05cf4` — R2 (Minor #2): o `skill_findable` lê o `installed_plugins.json` antes do `find` (primeiro
+  `installPath` de escopo `user` com `skills/<nome>`; registro ausente ou ilegível = sem registro), e o aviso sob
+  `<raiz>/plugins/cache/` diz que o cache pode ter mais de uma cópia e nomeia o registro. (Minor #8): o comentário
+  da sonda do `Bash` diz `minus the read rules (ADR 0019 §3)`. Check → `1 1`, e uma segunda asserção para a cópia
+  do registro. Mutantes `mut_PRE_skill_cache_registry_unnamed` e `mut_PRE_skill_registry_ignored`.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
 | `bin/sdd` | `kit_read_rules`, `read_extra_each`, `read_extra_dir_ok`, `journal_denials`, `read_rules_cover`, `skill_read_entry`, a sonda dos templates e os dois avisos do `cmd_preflight` |
 | `tests/check-dry-run.sh`, `tests/check-gates.sh`, `tests/check-preflight.sh`, `tests/check-autonomy.sh` | as asserções dos seis Checks |
-| `tests/check-mutation.sh` | os mutantes novos da missão, catálogo em 739 (`--anchors`: todos se aplicam) |
+| `tests/check-mutation.sh` | os mutantes novos da missão, catálogo em 742 depois de R1 e R2 (`--anchors`: todos se aplicam) |
 | `config/schema.md`, `config/starter.conf`, `docs/pipeline.md`, `docs/failure-modes.md`, `.claude/rules/anatomia-do-agente.md` | a regra, a chave e os avisos documentados |
 | `docs/adr/0019-the-session-reads-what-the-boot-names.md` | o porquê de cada forma (escrita no PLAN) |
 | `checkpoint-notas.md` | Checks, sensores, passadas de sabotagem e Rulings de cada incremento |
@@ -58,8 +75,10 @@ não tem interface (sub-etapa `close`), e a verificação end-to-end do `01-plan
   `READ_EXTRA names <dir>, which does not exist on this machine…` e `skill <nome> is found in <dir>…` seguida de
   `READ_EXTRA entry to add: <entrada>`.
 - **Nesta máquina:** o `READ_EXTRA` do kit é vazio, e a `codereview` está no cache do plugin, então o
-  `./bin/sdd preflight` passa a avisar `READ_EXTRA entry to add: $HOME/.claude/plugins/cache/chewiesoft-marketplace/codereview`
-  (o `find` acha o diretório do plugin, acima das versões; medido). O mesmo vale para todo alvo sem a chave; é o
+  `./bin/sdd preflight` passa a avisar `READ_EXTRA entry to add: $HOME/.claude/plugins/cache/chewiesoft-marketplace/codereview`.
+  Desde o R2 o diretório achado é a cópia do `installed_plugins.json`,
+  `…/chewiesoft-marketplace/codereview/2.26.0/skills/codereview` (medido em 2026-10-21 00:05, o `skill_findable`
+  isolado), e o aviso ganha a frase do cache; a entrada não muda. O mesmo vale para todo alvo sem a chave; é o
   yokoten das Pendências que o cala.
 - **Ambiente:** worktree `/home/joruge/repos/sdd_agents-f9`; dentro dele, `./bin/sdd`. Nunca `sdd run` a partir do
   checkout principal. O `./bin/sdd preflight` roda o `TEST_CMD` inteiro (~7,5 min) e abre duas sessões `haiku`.
@@ -81,9 +100,14 @@ não tem interface (sub-etapa `close`), e a verificação end-to-end do `01-plan
 - O limite "symlink abaixo de uma entrada declarada" da ADR 0019 continua: o runner não resolve o que está abaixo
   da entrada. O que mudou é que o preflight agora o **nomeia** quando a skill achada é esse symlink (a entrada
   é o pai, o alvo fica descoberto), com a entrada certa a declarar.
+- O registro do R2 lê só o escopo `user`, como o `health_provenance`: uma skill instalada só em escopo `project`
+  cai no `find` de antes. Um registro que o jq para de ler no meio (entrada que não é objeto) entrega o que veio
+  antes da quebra e o resto cai no `find`. Sem jq não há probe: o `2>/dev/null` que o probe do registro ilegível
+  segura é o mesmo que cala o `command not found`.
 - O catálogo de mutação não rodou (é o `sdd health`, último passo da missão); só o `--anchors` e o `--only` de cada
   mutante novo.
 
 ## Achados fora de escopo
 
-- Nenhum: o `TODO.md` segue com os 29 achados do início da missão (`tests/check-todo.sh`), com nove âncoras reancoradas pelo I6.
+- Nenhum: o `TODO.md` segue com os 29 achados do início da missão (`tests/check-todo.sh`), com nove âncoras reancoradas pelo I6,
+  16 pelo R1 e 16 pelo R2 (número velho + deslocamento do diff, a mesma linha de código).
