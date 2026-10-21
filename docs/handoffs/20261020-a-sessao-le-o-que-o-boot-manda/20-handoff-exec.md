@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 1f921771-01eb-471d-b867-0c307054b548
 data: 2026-10-20 22:46
-gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024 linhas `ok`, eram 2019 na base de `aea4522`; nenhum `FAIL`); Check do I6 → `1 1`; `tests/check-checkpoint.sh --check` → `6 row(s), 6 under the anchor rule, none blind`; os seis incrementos `done`; rodada de conserto da revisão final: R1 `f9f3b34` (Check → `1`) e R2 `5f05cf4` (Check → `1 1`), com `check-preflight.sh` 146 `ok` e rc 0, `check-mutation.sh --anchors` 742 de 742, `check-todo.sh` e `--anchors` verdes; R3 `b96afd8` e R4 `8c72cfb` (Check → `1`), com `check-preflight.sh` 150 `ok` e rc 0, `check-mutation.sh --anchors` 746 de 746, os dois mutantes novos pegos com `--only`; R5 `4426c94` (Check → `1 1`), com `check-preflight.sh` 152 `ok`, `check-health.sh` 56, `check-dry-run.sh` 86 e `check-gates.sh` 479, todos rc 0, `check-mutation.sh --anchors` 751 de 751, os cinco mutantes novos pegos com `--only`; a suíte inteira depois da rodada é do relay
+gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024 linhas `ok`, eram 2019 na base de `aea4522`; nenhum `FAIL`); Check do I6 → `1 1`; `tests/check-checkpoint.sh --check` → `6 row(s), 6 under the anchor rule, none blind`; os seis incrementos `done`; rodada de conserto da revisão final: R1 `f9f3b34` (Check → `1`) e R2 `5f05cf4` (Check → `1 1`), com `check-preflight.sh` 146 `ok` e rc 0, `check-mutation.sh --anchors` 742 de 742, `check-todo.sh` e `--anchors` verdes; R3 `b96afd8` e R4 `8c72cfb` (Check → `1`), com `check-preflight.sh` 150 `ok` e rc 0, `check-mutation.sh --anchors` 746 de 746, os dois mutantes novos pegos com `--only`; R5 `4426c94` (Check → `1 1`), com `check-preflight.sh` 152 `ok`, `check-health.sh` 56, `check-dry-run.sh` 86 e `check-gates.sh` 479, todos rc 0, `check-mutation.sh --anchors` 751 de 751, os cinco mutantes novos pegos com `--only`; R6 `df5bdb6` (Check → `1`), com `check-preflight.sh` 154 `ok` e rc 0, `check-adr.sh` 81, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (33 achados, 0 fora do alvo) verdes, `check-mutation.sh --anchors` 755 de 755, os quatro mutantes novos e os três de âncora movida pegos com `--only`; a suíte inteira depois da rodada é do relay
 ---
 
 # Handoff — EXEC — a sessão lê o que o boot manda ler
@@ -19,16 +19,16 @@ Os seis incrementos estão `done`. Toda sessão do runner (fase, `sdd close`, so
 `DENIED` no journal; o preflight prova a regra numa sessão isolada e avisa, sem sessão, a entrada do `READ_EXTRA`
 que não existe e a skill achada que nenhuma regra cobre. Suíte verde em ``e8fe91c``. Próximo: QA, que no kit
 não tem interface (sub-etapa `close`), e a verificação end-to-end do `01-plano.md`. A revisão final da branch pediu
-R1 e R2, feitos (seção "Rodada de conserto"), e o Codex no PR #315 o R3, na r2 o R4 e na r3 o lote R5, feitos; a
-suíte inteira depois deles é do relay.
+R1 e R2, feitos (seção "Rodada de conserto"), e o Codex no PR #315 o R3, na r2 o R4, na r3 o lote R5 e na r4 o
+R6, feitos; a suíte inteira depois deles é do relay.
 
 ## Estado do repo
 
 - **Branch:** `kaizen/20261020-a-sessao-le-o-que-o-boot-manda`, no worktree `/home/joruge/repos/sdd_agents-f9`. Não empurrada (nenhum `git push` nesta fase).
-- **Último commit:** `chore(checkpoint): R5 done (4426c94)`, e antes dele o commit desta atualização do handoff
+- **Último commit:** `chore(checkpoint): R6 done (df5bdb6)`, e antes dele o commit desta atualização do handoff
 - **Working tree:** limpo
 - **Suíte:** `tests/run-all.sh` → verde em `e8fe91c`: `suite green`, rc 0, 2024 linhas `ok`, nenhum `FAIL`. Depois
-  de R1 a R5 só rodaram os sensores tocados (abaixo); a suíte inteira é do relay
+  de R1 a R6 só rodaram os sensores tocados (abaixo); a suíte inteira é do relay
 - **E2E:** sem `E2E_CMD` nem `APP_URL` no kit; não se aplica. A métrica de ponta a ponta é a sonda de rascunho do `01-plano.md`, § Verificação end-to-end, que gasta sessão real e fica para o relay.
 
 ## O que foi feito
@@ -81,6 +81,17 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   argv de toda chamada e a projeção do `--dry-run`). Mutantes `mut_PRE_registry_any_plugin`,
   `mut_PRE_registry_prefix_unbounded`, `mut_PRE_kit_path_unnamed`, `mut_PRE_kit_path_probe_opened` e
   `mut_RUN_kit_path_unchecked`.
+- `df5bdb6` — R6 (P2 do Codex na r4 do PR #315, `bin/sdd:6587`, decisão humana "Classificar o Read uma vez"): o
+  `Read` do template que voltava com `is_error` e sem entrada em `permission_denials` caía no aviso de que a sessão
+  não tentou, e o preflight ficava verde. Terceiro achado seguido na mesma sonda; o estado que faltava era o
+  desfecho do `Read`. Um jq só imprime um de cinco (`denied` > `read` > `errored` > `not-tried` > `no-session`) e um
+  `case` despacha, com default que reprova; os quatro de antes caem no braço e na mensagem de antes, e o `errored` é
+  `_fail` com o caminho e a 1ª linha do erro (string ou 1º bloco de texto, 200 caracteres, sem controle, `(none)`).
+  Check: `the template probe names the outcome of its Read once, and a Read that comes back with an error fails by
+  name` → `1` (errored em três mundos, precedência em dois, `not-tried` em cinco, os mundos de antes), mais `an
+  outcome the template probe's verdict does not know fails by name, never green` numa cópia sabotada. Mutantes
+  `mut_PRE_template_outcome_error_warned`, `mut_PRE_template_outcome_default_green`,
+  `mut_PRE_template_outcome_error_over_read` e `mut_PRE_template_outcome_error_over_denied`.
 
 ## Artefatos
 
@@ -143,14 +154,20 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   O leitor do registro agora pula um valor que o jq não itera em vez de parar ali (antes o `skill_findable` parava
   e caía no `find`); o health já pulava.
 - R4: o jq lê o stream da sonda dos templates inteiro (`-s`), então uma linha que ele não entende manda o stream
-  para o 4º destino mesmo com a negativa ou a leitura nele: vermelho falso, nunca verde falso, e a frase diz "could
+  para o `no-session` (o 4º destino até o R6) mesmo com a negativa ou a leitura nele: vermelho falso, nunca verde falso, e a frase diz "could
   read". A sonda do `Bash` (anterior a esta missão) segue jogando o stderr em `/dev/null` e lê o stream linha a
   linha; quando ela cala por um motivo só dela e a dos templates cala por outro, o preflight mostra uma falha e um
   aviso, e a segunda causa só aparece depois do conserto da primeira (dois passos, nunca verde).
+- R6: o filtro `select(.type == "result")` da negativa (anterior à missão) segue sem probe: nenhuma linha real de
+  stream além do `result` carrega `permission_denials` (o evento `permission_denied` da 2.1.296 nomeia a chamada
+  pelo `tool_use_id`), e o mundo que o distinguiria seria inventado. A negativa casa pelo caminho e não pelo nome da
+  ferramenta, como antes: um `Write` negado do template sai como "DENIED reading". O default do `case` só é
+  alcançável numa cópia sabotada do kit, que é onde o sensor o prova.
 
 ## Achados fora de escopo
 
 - Nenhum desta missão: o `TODO.md` tem 33 achados (`tests/check-todo.sh`), os 29 do início mais os quatro que os merges
   da `origin/main` trouxeram (`8c02d4e`), com nove âncoras reancoradas pelo I6, 16 pelo R1, 16 pelo R2, 17 pelo R3,
-  nove pelo R4 (sete do `bin/sdd` e duas citações cruzadas de docs) e 21 pelo R5 (17 do `bin/sdd`, quatro delas
-  citações curtas `:N`, e quatro cruzadas de docs) — número velho + deslocamento do diff, a mesma linha de código.
+  nove pelo R4 (sete do `bin/sdd` e duas citações cruzadas de docs), 21 pelo R5 (17 do `bin/sdd`, quatro delas
+  citações curtas `:N`, e quatro cruzadas de docs) e 13 pelo R6 (dez do `bin/sdd` e três cruzadas de docs) — número
+  velho + deslocamento do diff, a mesma linha de código.
