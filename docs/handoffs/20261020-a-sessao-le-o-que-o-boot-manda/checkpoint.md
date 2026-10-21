@@ -1,6 +1,6 @@
 ---
 missao: 20261020-a-sessao-le-o-que-o-boot-manda
-atualizado: 2026-10-20 23:42
+atualizado: 2026-10-21 00:06
 ---
 
 # Checkpoint — a sessão lê o que o boot manda ler
@@ -55,7 +55,7 @@ atualizado: 2026-10-20 23:42
 | I5 | READ_EXTRA: o projeto declara os diretórios das skills, só para leitura | `o=$(bash tests/check-dry-run.sh 2>&1); p=$(bash tests/check-gates.sh 2>&1); a=$(grep -c '^  ok    READ_EXTRA reaches every phase as a read-only rule, symlink resolved' <<< "$o"); b=$(grep -c '^  ok    READ_EXTRA that is not a literal absolute directory is refused, and the reason names it' <<< "$p"); echo "$a $b"` → `1 1` | done | 52f9fdf |
 | I6 | O preflight avisa o que as fases não vão conseguir ler: a entrada que não existe e a skill que ninguém declarou | `o=$(bash tests/check-preflight.sh 2>&1); a=$(grep -c '^  ok    preflight warns about a READ_EXTRA directory that does not exist, and only about it' <<< "$o"); b=$(grep -c '^  ok    preflight names a skill it finds that READ_EXTRA does not declare, with the entry to add' <<< "$o"); echo "$a $b"` → `1 1` | done | e8fe91c |
 | R1 | revisão final #1 — o aviso do preflight manda declarar a entrada já declarada quando só o alvo do symlink dela reprova na gramática | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    a declared skill whose symlink target the grammar refuses is named as such, never as undeclared' <<< "$o"` → `1` | done | f9f3b34 |
-| R2 | revisão final lote #2 e #8 — o aviso da skill achada no cache de plugins nomeia o installed_plugins.json (o cache pode ter mais de uma cópia), e o comentário da sonda do Bash deixa de dizer que ela leva as flags inteiras do run_phase | `o=$(bash tests/check-preflight.sh 2>&1); a=$(grep -c '^  ok    a skill found in the plugin cache is warned with installed_plugins.json named, since the cache may hold more than one copy' <<< "$o"); b=$(grep -c 'minus the read rules (ADR 0019 §3)' bin/sdd); echo "$a $b"` → `1 1` | pending | — |
+| R2 | revisão final lote #2 e #8 — o aviso da skill achada no cache de plugins nomeia o installed_plugins.json (o cache pode ter mais de uma cópia), e o comentário da sonda do Bash deixa de dizer que ela leva as flags inteiras do run_phase | `o=$(bash tests/check-preflight.sh 2>&1); a=$(grep -c '^  ok    a skill found in the plugin cache is warned with installed_plugins.json named, since the cache may hold more than one copy' <<< "$o"); b=$(grep -c 'minus the read rules (ADR 0019 §3)' bin/sdd); echo "$a $b"` → `1 1` | done | 5f05cf4 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
