@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 1f921771-01eb-471d-b867-0c307054b548
 data: 2026-10-20 22:46
-gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024 linhas `ok`, eram 2019 na base de `aea4522`; nenhum `FAIL`); Check do I6 → `1 1`; `tests/check-checkpoint.sh --check` → `6 row(s), 6 under the anchor rule, none blind`; os seis incrementos `done`; rodada de conserto da revisão final: R1 `f9f3b34` (Check → `1`) e R2 `5f05cf4` (Check → `1 1`), com `check-preflight.sh` 146 `ok` e rc 0, `check-mutation.sh --anchors` 742 de 742, `check-todo.sh` e `--anchors` verdes; a suíte inteira depois da rodada é do relay
+gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024 linhas `ok`, eram 2019 na base de `aea4522`; nenhum `FAIL`); Check do I6 → `1 1`; `tests/check-checkpoint.sh --check` → `6 row(s), 6 under the anchor rule, none blind`; os seis incrementos `done`; rodada de conserto da revisão final: R1 `f9f3b34` (Check → `1`) e R2 `5f05cf4` (Check → `1 1`), com `check-preflight.sh` 146 `ok` e rc 0, `check-mutation.sh --anchors` 742 de 742, `check-todo.sh` e `--anchors` verdes; R3 `b96afd8` e R4 `8c72cfb` (Check → `1`), com `check-preflight.sh` 150 `ok` e rc 0, `check-mutation.sh --anchors` 746 de 746, os dois mutantes novos pegos com `--only`; a suíte inteira depois da rodada é do relay
 ---
 
 # Handoff — EXEC — a sessão lê o que o boot manda ler
@@ -19,16 +19,16 @@ Os seis incrementos estão `done`. Toda sessão do runner (fase, `sdd close`, so
 `DENIED` no journal; o preflight prova a regra numa sessão isolada e avisa, sem sessão, a entrada do `READ_EXTRA`
 que não existe e a skill achada que nenhuma regra cobre. Suíte verde em ``e8fe91c``. Próximo: QA, que no kit
 não tem interface (sub-etapa `close`), e a verificação end-to-end do `01-plano.md`. A revisão final da branch pediu
-R1 e R2, feitos (seção "Rodada de conserto"), e o Codex no PR #315 o R3, feito; a suíte inteira depois deles é do
-relay.
+R1 e R2, feitos (seção "Rodada de conserto"), e o Codex no PR #315 o R3 e, na r2, o R4, feitos; a suíte inteira
+depois deles é do relay.
 
 ## Estado do repo
 
 - **Branch:** `kaizen/20261020-a-sessao-le-o-que-o-boot-manda`, no worktree `/home/joruge/repos/sdd_agents-f9`. Não empurrada (nenhum `git push` nesta fase).
-- **Último commit:** `chore(checkpoint): R2 done (5f05cf4)`, e antes dele o commit desta atualização do handoff
+- **Último commit:** `chore(checkpoint): R4 done (8c72cfb)`, e antes dele o commit desta atualização do handoff
 - **Working tree:** limpo
 - **Suíte:** `tests/run-all.sh` → verde em `e8fe91c`: `suite green`, rc 0, 2024 linhas `ok`, nenhum `FAIL`. Depois
-  de R1 e R2 só rodaram os sensores tocados (abaixo); a suíte inteira é do relay
+  de R1 a R4 só rodaram os sensores tocados (abaixo); a suíte inteira é do relay
 - **E2E:** sem `E2E_CMD` nem `APP_URL` no kit; não se aplica. A métrica de ponta a ponta é a sonda de rascunho do `01-plano.md`, § Verificação end-to-end, que gasta sessão real e fica para o relay.
 
 ## O que foi feito
@@ -59,6 +59,15 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   ali ela lia o template sem a regra e dizia que a regra funciona); `kit_read_rules` vazio é `_fail` sem sessão, e o
   `(none)` da recusa sumiu. Check: `the template probe carries only the kit read rules, never ALLOWED_TOOLS` → `1`.
   Mutantes `mut_PRE_template_probe_allowlist_widened` e `mut_PRE_template_probe_empty_unguarded`.
+- `8c72cfb` — R4 (P2 do Codex na r2 do PR #315, `bin/sdd:6522`, decisão humana "falhar nomeado"): a cadeia de
+  veredito da sonda dos templates termina num `else` e cobre os quatro destinos. Um stream sem init e sem `result`
+  que o jq leia (vazio, ou que não é JSON) é `_fail` que diz que a CLI não respondeu às flags desta sonda e que a
+  regra não foi medida, com a 1ª linha do stderr (antes jogado em `/dev/null`; até 200 caracteres, controles fora,
+  `(none)` se vazio). Quando a sonda do `Bash` também não respondeu (`probe_silent`), é uma causa e uma falha, e a
+  dos templates só avisa. A sessão abre mesmo assim, e a exceção lê as duas sondas. Check: `a template probe that
+  emits no init and no result fails by name, and a dead CLI fails once` → `1`, em quatro mundos (vazio com stderr
+  longo, lixo com o stderr desligado, as duas mortas, só a do `Bash` morta). Mutantes
+  `mut_PRE_template_probe_silent_unnamed` e `mut_PRE_template_probe_dead_counted_twice`.
 
 ## Artefatos
 
@@ -112,8 +121,14 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   segura é o mesmo que cala o `command not found`.
 - O catálogo de mutação não rodou (é o `sdd health`, último passo da missão); só o `--anchors` e o `--only` de cada
   mutante novo.
+- R4: o jq lê o stream da sonda dos templates inteiro (`-s`), então uma linha que ele não entende manda o stream
+  para o 4º destino mesmo com a negativa ou a leitura nele: vermelho falso, nunca verde falso, e a frase diz "could
+  read". A sonda do `Bash` (anterior a esta missão) segue jogando o stderr em `/dev/null` e lê o stream linha a
+  linha; quando ela cala por um motivo só dela e a dos templates cala por outro, o preflight mostra uma falha e um
+  aviso, e a segunda causa só aparece depois do conserto da primeira (dois passos, nunca verde).
 
 ## Achados fora de escopo
 
 - Nenhum: o `TODO.md` segue com os 29 achados do início da missão (`tests/check-todo.sh`), com nove âncoras reancoradas pelo I6,
-  16 pelo R1 e 16 pelo R2 (número velho + deslocamento do diff, a mesma linha de código).
+  16 pelo R1, 16 pelo R2, 17 pelo R3 e nove pelo R4 (sete do `bin/sdd` e duas citações cruzadas de docs) — número velho
+  + deslocamento do diff, a mesma linha de código.
