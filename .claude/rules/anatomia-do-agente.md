@@ -180,7 +180,9 @@ no `permission_denials` (casado pelo caminho) é `_fail`; um `tool_result` sem `
 duas vezes; o resto é `warn`. O isolamento é o ponto: com as settings do ambiente, um
 `additionalDirectories` ou um `Read(*)` lê o template sem regra nenhuma, e a sonda ficaria verde
 nesta máquina sobre uma regra que não faz nada. É também o sensor do dia em que o harness mudar a
-sintaxe da regra. Custa uma sessão haiku por preflight (US$ 0,0005 a 0,002, medido em 2.1.304).
+sintaxe da regra. Custa uma sessão haiku por preflight: US$ 0,002 (US$ 0,00197 medidos em
+2026-10-20 às 22:59, Claude Code 2.1.304, com a regra lendo o template) e uns 6 s (as sondas p5 e p6
+do grill, 16:24).
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
@@ -191,6 +193,9 @@ de `REVIEW_PROSE_CRITERIA` (prosa) e exige A em todo o resto, nome desconhecido 
 outra missão pôs na ponta da base só conta com o checkpoint desta missão movido pelo commit que o
 adicionou (ADR 0015 §3) e deixado num blob que a própria missão escreveu (ADR 0016 §1, #225).
 Resíduo: outra missão que reescreve o checkpoint byte a byte igual a uma versão da branch passa.
+As duas sondas pagas do `sdd preflight` (a do `Bash` e a dos templates) têm teto de custo
+(`--max-budget-usd 1` cada) e nenhum de tempo: nada no runner encerra uma sessão de sonda que não
+responde (ADR 0019, Consequences).
 
 ## 5. Memória — o que persiste entre sessões
 
@@ -294,6 +299,11 @@ padrão de gitignore, então a guarda é literal-only e escrita positivamente, e
 sabotagem foi feita antes do commit (notas da missão). O runner resolve só a entrada declarada:
 um symlink **abaixo** dela continua negado, e o alvo resolvido cujo nome não é literal não ganha
 regra — os dois saem como `DENIED` no journal.
+A gramática segura o nome, não o alcance: uma entrada igual a `$HOME`, ou um symlink cujo alvo é a
+home, passa e vira `Read(//home/<usuário>/**)`, e toda fase lê a home inteira — só leitura, e a
+fase já tem `Bash`, então é higiene, não fronteira. O `readlink -f` roda na montagem do argv, uma
+vez por sessão: um symlink redirecionado durante a sessão falha fechado, com o alvo novo negado e
+nomeado pelo `DENIED` (ADR 0019, Consequences).
 As fases rodam **no checkout do humano**, com `.env.idp`, Jira e push reais;
 a guarda de kit **para a linha** desde `20260903-a-fronteira-do-chapeu` (`kind: kit-touched`), e o
 chapéu que escreve fora de `writes:` também (`hat-crossed`) — as duas pela mesma porta,

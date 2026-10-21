@@ -204,6 +204,9 @@ reads as a gitignore-style pattern, where `*`, `?`, the brackets and `\` are glo
 closes the rule. So the value is literal-only and admitted positively, like `HAT_WRITES_EXTRA` above.
 `--add-dir`, or the settings' `additionalDirectories`, would read too — and they let the session
 **write** there under `acceptEdits`, which is why the kit does not use them.
+The grammar holds the name, not the reach: an entry equal to `$HOME`, or a symlink pointing there,
+passes it and lets every phase read the whole home — for reading only, and the phases already have
+`Bash`, so it is hygiene, not a boundary (ADR 0019).
 
 ## ADR traceability
 
