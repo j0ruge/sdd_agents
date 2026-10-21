@@ -14,13 +14,13 @@ gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024
 
 ## TL;DR
 
-Os seis incrementos estão `done`. As fases e o `sdd close` recebem `Read(/$SDD_HOME/templates/**)` mais as regras
-do `READ_EXTRA`, só de leitura, e a sonda do `sdd preflight` só a dos templates; cada negativa do harness vira
-`DENIED` no journal; o preflight prova a regra numa sessão isolada e avisa, sem sessão, a entrada do `READ_EXTRA`
-que não existe e a skill achada que nenhuma regra cobre. Suíte verde em ``e8fe91c``. Próximo: QA, que no kit
-não tem interface (sub-etapa `close`), e a verificação end-to-end do `01-plano.md`. A revisão final pediu R1 e R2,
-e o Codex no PR #315 o R3, na r2 o R4, na r3 o lote R5, na r4 o R6 e na r5 o R7, todos feitos (seção "Rodada de
-conserto"); a suíte inteira depois deles é do relay.
+Os seis incrementos estão `done`. As fases e o `sdd close` recebem `Read(/$SDD_HOME/templates/**)` quando o caminho
+do kit passa na gramática (desde o R5 o recusado não ganha a regra, e a sonda não abre), mais as regras do
+`READ_EXTRA`, só de leitura, e a sonda do `sdd preflight` só a dos templates; cada negativa do harness vira `DENIED`
+no journal; o preflight prova a regra numa sessão isolada e avisa, sem sessão, a entrada do `READ_EXTRA` que não
+existe e a skill achada que nenhuma regra cobre. Suíte verde em ``e8fe91c``. Próximo: QA (sub-etapa `close`) e a
+verificação end-to-end do `01-plano.md`. A revisão final pediu R1 e R2, o Codex no PR #315 do R3 ao R7 e o
+CodeRabbit o lote R8, todos feitos (seção "Rodada de conserto"); a suíte inteira depois deles é do relay.
 
 ## Estado do repo
 
@@ -121,8 +121,11 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   humano vê está na CLI: o argv de cada fase no `./bin/sdd run <missão> --dry-run` (as regras `Read(…)` depois do
   `"$ALLOWED_TOOLS"`), as linhas `DENIED` no `pipeline.log`, as recusas do `load_config` diante de um
   `READ_EXTRA` inválido, e três linhas novas do `./bin/sdd preflight`: a sonda dos templates (`ok`/`fail`/`warn`),
-  `READ_EXTRA names <dir>, which does not exist on this machine…` e `skill <nome> is found in <dir>…` seguida de
-  `READ_EXTRA entry to add: <entrada>`. Desde o R5, num kit cujo caminho a gramática recusa, um `fail` a mais
+  `READ_EXTRA names <dir>, which does not exist on this machine…` e `skill <nome> is found in <dir>…`, em duas
+  formas. A skill que nenhuma regra cobre (`…, and no read rule …`) vem seguida de `READ_EXTRA entry to add:
+  <entrada>`. Desde o R1, a skill declarada cujo alvo de symlink a gramática recusa (`… (a symlink to <alvo>), whose
+  target no read rule can cover:`) nomeia o alvo e o remédio, mover ou renomear o alvo, sem `entry to add`: nenhuma
+  entrada o alcança. Desde o R5, num kit cujo caminho a gramática recusa, um `fail` a mais
   (`the kit's templates are at <caminho>/templates, a path the grammar of the read rules refuses`) e a linha
   `template probe not opened` no lugar do veredito da sonda; nesta máquina o caminho é literal e nada disso aparece.
 - **Nesta máquina:** o `READ_EXTRA` do kit é vazio, e a `codereview` está no cache do plugin, então o

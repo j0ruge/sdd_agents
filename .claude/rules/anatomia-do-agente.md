@@ -59,8 +59,9 @@ seu probe — a do `run_phase` é o `tests/check-dry-run.sh`, bloco a bloco, com
 `run_phase` e lê a mesma função à mão, é o `tests/check-gates.sh` sobre o argv da sessão de fechamento, com o `mut_RUN_close_templates_read_rule_dropped`; a da sonda
 dos templates do `sdd preflight` (§4), que recebe só o `kit_template_rules`, é o
 `tests/check-preflight.sh`, que lê o argv dessa sessão, com o `mut_PRE_template_probe_rule_dropped`,
-o `mut_PRE_template_probe_reads_settings`, o `mut_PRE_template_probe_allowlist_widened` e o
-`mut_PRE_template_probe_reads_every_rule`. O caminho dos templates passa pela mesma gramática do
+o `mut_PRE_template_probe_reads_settings`, o `mut_PRE_template_probe_allowlist_widened`, o
+`mut_PRE_template_probe_reads_every_rule` e o `mut_PRE_template_probe_empty_unguarded` (a lista
+vazia, que reprova sem abrir sessão). O caminho dos templates passa pela mesma gramática do
 `READ_EXTRA` (`read_extra_dir_ok`; r3 #2 do Codex no #315): o harness lê a regra como padrão, e um kit
 em `/opt/sdd*` daria leitura a `/opt/sdd-secret/templates/**`, com a sonda verde, porque ela prova que
 a sessão lê, não que lê só o que devia. O kit cujo caminho a gramática recusa não ganha regra dos
