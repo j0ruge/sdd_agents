@@ -217,6 +217,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   2 das 6 intervenções da missão. É o espelho do D21, em que só `F<n>` reabre a QA. Direção: a rodada grava o
   commit revisado, e código commitado depois dele reabre a REVIEW ou é nomeado no motivo do gate.
   — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
+- [ ] **O chapéu não pode declarar MCP, e o executor fica sem o REA** — `bin/sdd:5290` (`--strict-mcp-config`) —
+  toda fase roda sem servidor MCP, e um `mcp:` no chapéu para o runner ("carving those servers into a
+  --mcp-config is not implemented"). No `dotp-remake`, ler o `DotP_D14.exe` pelo MCP `rea` só cabe no PLAN: na
+  3.3d o planner levantou no REA o que o EXEC precisaria ler, e o dono pediu o REA também no `sdd run`. Direção:
+  montar um `--mcp-config` com só os servidores que o chapéu declara, tirados da config do humano (o `rea` traz
+  frida, gdb e adb: o recorte é a fronteira), e o `hat_init_facts` já compara o declarado com o visto.
+  Fonte: grill da 3.3d do `dotp-remake` (2026-10-21) — descoberto por `sdd-plan` (relay) no `dotp-remake` (2026-10-21)
 
 ### Saída humana e cosmética
 
