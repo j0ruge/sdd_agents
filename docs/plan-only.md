@@ -52,9 +52,9 @@ In PLAN-only mode only these keys matter — leave the rest as `sdd install` shi
 Then add the pointer block to the target's `CLAUDE.md` (model at the end of this document), and the
 repository is ready.
 
-⚠️ **Do not run `sdd preflight` in this mode.** It fires a real headless session (capped at US$ 1)
-to prove that *headless phases* can execute a command — which is exactly the half this mode does
-not use. Its other job, comparing the installed agents against the kit byte for byte, is moot once
+⚠️ **Do not run `sdd preflight` in this mode.** It fires two real headless sessions (each capped at
+US$ 1) to prove that *headless phases* can execute a command and read the kit's templates — which is
+exactly the half this mode does not use. Its other job, comparing the installed agents against the kit byte for byte, is moot once
 they are symlinks.
 
 ## Per mission

@@ -270,6 +270,24 @@ load_config() {
       || die "HAT_WRITES_EXTRA path '$_hwx_path' (hat $_hwx_hat) is not a literal path inside the repo — relative, no '..', and no metacharacter except a trailing '/**' on a named directory"
   done < <(hat_writes_extra_each)
 
+  # The directories THIS project's phases read beyond the repo — a skill's references (ADR 0019 §2).
+  # EMPTY is the default: the kit grants nothing beyond its own templates. Validated HERE and never
+  # in kit_read_rules, which is read by substitution: a die there would die in the subshell and hand
+  # the door an empty list. A NEWLINE is refused before the parser for HAT_WRITES_EXTRA's reason —
+  # `read -r -a` consumes one line, so a second line would vanish with rc 0. A missing directory is
+  # NOT refused: a plugin absent on another machine must not stop the line, and a read under it is
+  # only denied, which the journal names (DENIED) — and `sdd preflight` warns about it before any run.
+  # Grammar: read_extra_each; guard: read_extra_dir_ok.
+  : "${READ_EXTRA:=}"
+  case "$READ_EXTRA" in
+    *$'\n'*) die "READ_EXTRA contains a newline — directories are separated by spaces, on one line" ;;
+  esac
+  local _rx_dir
+  while IFS= read -r _rx_dir; do
+    read_extra_dir_ok "$_rx_dir" \
+      || die "READ_EXTRA entry '$_rx_dir' is not a literal absolute directory — write it absolute (\$HOME/… in .sdd/config.sh), with no trailing '/', no empty, '.' or '..' component, and only letters, digits, '.', '_' and '-' in each name"
+  done < <(read_extra_each)
+
   # The PATH keys become `writes:` globs (hat_expand), and hat_path_allowed matches those as shell
   # GLOBS, so a raw value fails both ways (issue 127): `./TODO.md` matches no path git reports — a
   # false hat-crossed that stops the target's line — and `TODO_FILE='*'` matches bin/sdd, widening
@@ -5169,6 +5187,39 @@ LAST_PHASE_DENIALS=""
 LAST_PHASE_LEAK_NAMES=""
 LAST_PHASE_HARNESS=""
 
+# journal_denials <phase> <result json> — every call the harness DENIED the session, named in the
+# mission journal, one `DENIED  <phase>  tool=<name>[  path=<path>]` line per distinct pair (ADR
+# 0019). LAST_PHASE_DENIALS above says how many and never which, and the journal is what the
+# person on `tail -F` reads: in the window of bad6168 a REVIEW of the lighthouse ran through 30
+# denied Reads of its skill's references, and a TICKET of jrc-libs stopped as handoff-blocked over
+# three, with nothing in the journal saying so. CALLED right after hat_init_facts at its two sites
+# (run_phase, cmd_close), so each session's lines sit just above that session's own journal line.
+#
+# The path is `tool_input.file_path` (Read, Edit, Write) or `tool_input.path` (Grep, Glob); a call
+# with neither — Bash, an MCP tool — gets the tool name ALONE, never its input: a command can carry
+# a credential, and `sdd status` prints the journal's tail to a terminal. The lines are the
+# distinct pairs in first-seen order (a model asks twice); the ledger's count stays the raw one.
+#
+# The path is the SESSION's choice, so it reaches the journal unable to forge anything there:
+# every space and control character becomes `?`, and both values ride behind a `key=`. A newline
+# would write a journal line of its own, and mission_cost_usd sums every whitespace-separated
+# `cost_usd=<number>` field of this file — a path that became such a field would stop the line as
+# budget-exhausted for money nobody spent. A result without `permission_denials` writes nothing
+# (unmeasured is not zero, and there is nothing to name), and so does a machine without jq.
+journal_denials() {
+  local phase="$1" result="$2" line
+  autonomy_have_jq || return 0
+  while IFS= read -r line; do
+    pipeline_log_line "$(date -Iseconds)  DENIED  $phase  $line"
+  done < <( jq -r '
+      def safe: tostring | gsub("[[:space:][:cntrl:]]"; "?");
+      reduce ((.permission_denials // [])[]
+              | [ (.tool_name // "?" | safe), ((.tool_input.file_path? // .tool_input.path? // "") | safe) ]) as $d
+        ([]; if any(.[]; . == $d) then . else . + [$d] end)
+      | .[] | "tool=\(.[0])" + (if .[1] == "" then "" else "  path=\(.[1])" end)
+    ' "$result" 2>/dev/null )
+}
+
 # The stream closed the blind spot for whoever runs `tail -f` on the file; this closes it for the
 # person watching the run. `> "$streamfile"` takes claude's stdout off the terminal, so a phase
 # used to print its banner and then nothing for the ten to thirty minutes it lasts.
@@ -5224,6 +5275,126 @@ stream_watch() { # stream_watch <stream.jsonl> — background; killed by run_pha
 HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET
   -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID
   -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT)
+
+# kit_read_rules — the read-only permission rules every session the runner opens receives, one per
+# line (ADR 0019 §1): the templates' rules (kit_template_rules), then one rule per READ_EXTRA entry,
+# each directory through dir_read_rules. ONE definition: each door that assembles a `claude -p`
+# hands every line as one more argument of `--allowedTools`, right after "$ALLOWED_TOOLS" in
+# run_phase and cmd_close, and no door copies a rule. The preflight's isolated probe is the one door
+# that takes kit_template_rules alone, with nothing before it, since it asks whether the rule it
+# names reads on its own (§3): a READ_EXTRA entry that covers the kit (`$HOME`, with SDD_HOME below
+# it, which the grammar accepts) reads the template by itself, and on the probe's list it would
+# answer for a templates rule that was sabotaged or broken (Codex P3 in the fifth round on PR #315).
+# The boot prompt orders every phase to start from $SDD_HOME/templates/ (boot_prompt, item 6), and
+# under `acceptEdits --allowedTools Bash` the harness DENIES a Read outside the target repo; the
+# session then reads it through Bash, works from memory, or stops — all three seen in the window
+# of bad6168, where 13 of the 47 lighthouse session logs carry a Read denied outside the repo.
+#
+# The shape is the MEASURED one, in Claude Code 2.1.296 (2026-10-20 11:41–11:42) and 2.1.304
+# (16:24–16:25): `Read(/` + the absolute path + `/**)` — two slashes in the literal spelling, since
+# the path starts with one; three were never measured — handed as an argument OF ITS OWN after the
+# --allowedTools value. The one-argument form (`--allowedTools "Bash Read(…)"`) was not measured.
+# It reads and does not write: a Write under the same directory stayed DENIED. `--add-dir` reads
+# too, and lets the session WRITE the kit under acceptEdits, which is why it is not used here.
+# After the templates come the project's own directories, one rule per READ_EXTRA entry (§2).
+# The harness checks the path asked for AND the resolved one (a symlinked skill needed both rules,
+# measured in 2.1.304, ADR 0019), so a directory whose `readlink -f` differs gets the resolved target's rule
+# too — but only when the target passes the same grammar as an entry: the machine chose that name,
+# not the config, and `odd[1]` would be a bracket expression granting `odd1/` and still denying the
+# directory. A target skipped that way is denied, and the denial is a DENIED line in the journal —
+# which `sdd preflight` names beforehand, with no entry to add, when a skill it finds resolves there.
+# The resolved branch is measured through a symlinked READ_EXTRA entry (check-dry-run.sh); no
+# fixture symlinks templates/, since SDD_HOME is physical (`cd -P`), and both go through dir_read_rules.
+# The templates' own path is held to the same grammar (Codex r3 #2 on PR #315): the harness reads the
+# rule as a pattern, so a kit at `/opt/sdd*` would grant `/opt/sdd-secret/templates/**` too, and the
+# preflight's isolated probe stays green over it — it proves the session reads, never that it reads
+# only what it should. A path the grammar refuses gets NO rule, its resolved target none either
+# (the harness wants both, so the target's alone reads nothing), and the READ_EXTRA rules still
+# follow: closed, never widened. `sdd preflight` names that path, with the remedy, and does not open
+# the template probe. For a READ_EXTRA entry the check never fires — load_config refused it by name.
+#
+# The three only PRINT, and are read by substitution (`mapfile -t … < <(kit_read_rules)`): no `die`,
+# no global — either would be lost in the subshell. Validation of anything they read lives in
+# load_config. The lines kit_read_rules prints, and their order, are the ones it printed before the
+# split: the templates' rule and its target's, then each entry's and its target's.
+# The list a door reads may be EMPTY — a kit path the grammar refuses, with READ_EXTRA empty — and
+# under `set -u` bash 4.0 to 4.3 abort on `"${list[@]}"` of an empty array (`unbound variable`),
+# with the kit accepting bash 4 (the check at the top). So every door expands it as
+# `${list[@]+"${list[@]}"}`, the guard probe_agent has in cmd_preflight; the template probe's too,
+# which never opens on an empty list, so the spelling is one. The world that shows the bare form
+# failing — a bash 4.0 to 4.3 under the runner — was not built: this machine has bash 5.2 only,
+# which expands an empty list to nothing either way, so check-dry-run.sh holds it statically.
+# Sensors (tests/): check-dry-run.sh (phases, READ_EXTRA), check-gates.sh (sdd close, the READ_EXTRA
+# guard), check-preflight.sh (probe; a kit path the grammar refuses, in the probe and the projection;
+# the probe's list against the phases' under an entry that covers the kit).
+kit_read_rules() {
+  local dir
+  kit_template_rules
+  while IFS= read -r dir; do
+    dir_read_rules "$dir"
+  done < <(read_extra_each)
+}
+
+# kit_template_rules — the rules for the kit's own templates, the ones the boot names: the rule for
+# $SDD_HOME/templates and its resolved target's, or none when the grammar refuses the path.
+kit_template_rules() {
+  dir_read_rules "$SDD_HOME/templates"
+}
+
+# dir_read_rules <dir> — the read rules for ONE directory, the one definition both lists above are
+# made of: nothing when the grammar refuses <dir> (read_extra_dir_ok), else `Read(/<dir>/**)`, and
+# `Read(/<target>/**)` too when `readlink -f` resolves <dir> elsewhere and the target passes the
+# same grammar. rc 0 either way: a refused directory is a directory with no rule, never an error.
+dir_read_rules() {
+  local dir="$1" real=""
+  read_extra_dir_ok "$dir" || return 0
+  printf 'Read(/%s/**)\n' "$dir"
+  real="$(readlink -f -- "$dir" 2>/dev/null)" || real=""
+  # An empty `real` — readlink failed, which `-f` does when a parent of the entry is missing — is
+  # refused by the grammar too, so no probe can make the `-n` red while that check stands. It stays
+  # because it decides which failure a dropped check produces: without it, an entry under a missing
+  # parent would print `Read(//**)`, the whole filesystem (CLAUDE.md, the corollary's counter-example).
+  if [ -n "$real" ] && [ "$real" != "$dir" ] && read_extra_dir_ok "$real"; then
+    printf 'Read(/%s/**)\n' "$real"
+  fi
+}
+
+# READ_EXTRA — the directories THIS project's phases read beyond the repo, parsed in ONE place
+# (ADR 0019 §2). Absolute directories separated by spaces, on one line; written `$HOME/…` in the
+# tracked .sdd/config.sh, which is sourced, so the value arrives here expanded. ONE parser, two
+# callers: load_config validates every entry, kit_read_rules turns every entry into a rule.
+read_extra_each() {   # read_extra_each — one READ_EXTRA entry per line, in declared order
+  local -a entries=()
+  read -r -a entries <<< "${READ_EXTRA:-}"
+  # An empty or all-blank value splits into nothing, and printf with no argument would print one
+  # empty line — an entry load_config would refuse, killing every run of a repo without the key.
+  [ "${#entries[@]}" -gt 0 ] || return 0
+  printf '%s\n' "${entries[@]}"
+}
+
+# read_extra_dir_ok <path> — 0 when the path is an absolute directory written LITERALLY.
+#
+# The value becomes `Read(/<path>/**)`, a rule the harness reads as a gitignore-style pattern, where
+# `*`, `?`, `[`, `]` and `\` are globs and a `(` or `)` closes the rule early. The key WIDENS a
+# permission, so every looseness here fails OPEN. Written POSITIVELY, after hat_extra_path_ok
+# and adr_dir_ok: every component after the leading `/` is a plain name of
+# letters, digits, `.`, `_` and `-`, so a metacharacter nobody listed is refused by construction,
+# and `/` alone, `//`, a trailing `/`, `.` and `..` are refused as components rather than by being
+# remembered. Pure: rc only, never a message — load_config names the entry, kit_read_rules skips.
+read_extra_dir_ok() {
+  local p="$1" rest comp
+  case "$p" in /*) ;; *) return 1 ;; esac
+  rest="${p#/}"
+  while :; do
+    comp="${rest%%/*}"
+    case "$comp" in
+      ''|.|..) return 1 ;;
+      *[!A-Za-z0-9._-]*) return 1 ;;
+    esac
+    [ "$comp" != "$rest" ] || return 0
+    rest="${rest#*/}"
+  done
+}
 
 # session_git_label <step> <sid> — THE one spelling of a session's git label, `sdd:<step>:<sid8>`
 # (issue #51, ADR 0012). run_phase and cmd_close hand it to claude as GIT_REFLOG_ACTION, so every
@@ -5297,6 +5468,9 @@ Fix exactly that. Do not restart the phase: read what is already on disk, comple
 missing and write the artifacts. The gate will be re-evaluated."
   fi
 
+  # The kit's read-only rules ride as arguments of their own after the --allowedTools value.
+  local -a read_rules=()
+  mapfile -t read_rules < <(kit_read_rules)
   # The label rides between the last `-u` and claude: `env` takes assignments only AFTER its
   # options, and `env NAME=v -u X cmd` would run `-u` as the command.
   local -a cmd=(env "${HARNESS_ENV_UNSET[@]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$prompt"
@@ -5304,7 +5478,7 @@ missing and write the artifacts. The gate will be re-evaluated."
     --permission-mode "$PERMISSION_MODE"
     --output-format stream-json --verbose
     --setting-sources "user,project,local"
-    --allowedTools "$ALLOWED_TOOLS"
+    --allowedTools "$ALLOWED_TOOLS" ${read_rules[@]+"${read_rules[@]}"}
     --disallowedTools "$disallowed"
     --max-budget-usd "$(phase_budget_usd "$phase")")
   if [ -n "$agent" ]; then cmd+=(--agent "$agent"); fi
@@ -5377,6 +5551,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   # the multi-line string — the ledger going quiet about money with nothing going red.
   stream_summary "$streamfile" > "$logfile"
   hat_init_facts "$streamfile" "$logfile" "$disallowed" "$mcp"
+  journal_denials "$phase" "$logfile"
 
   # The `|| echo "?"` covers a jq that FAILS; it does not cover a jq that succeeds silently, and
   # that is the case stream_summary() produces most: over an EMPTY $logfile — a session killed
@@ -5501,7 +5676,25 @@ state_fingerprint() {
     "$( cat "$MISSION_DIR/checkpoint.md" 2>/dev/null | md5sum 2>/dev/null | cut -d' ' -f1 )"
 }
 
-# skill_findable <name> → 0 when a skill by that name can be found where skills live.
+# plugin_install_paths <registry> <plugin> → the installPath of every `user`-scope install of
+# <plugin> that <registry> records, one per line, in file order. The registry is Claude Code's
+# `installed_plugins.json`, whose keys are `<plugin>@<marketplace>`: the prefix carries the `@`, so
+# `codereview-x@mk` is another plugin, and so is any plugin that merely ships a skill by the same
+# name — the REVIEW phase loads `/codereview:codereview`, the skill OF the codereview plugin, and
+# another plugin's tree is a copy no session of it loads (Codex r3 #1 on PR #315). Only `user` scope:
+# a `project`-scope pin loads another version in one repo, and which repo is not this reader's to
+# decide. ONE definition, two readers that must agree on which copy is "the installed one":
+# skill_findable (the copy the preflight holds to the read rules) and health_provenance (the copy
+# the grade table is compared against). No registry, an unreadable one, or no jq prints nothing,
+# with jq's complaint kept here; a value jq cannot iterate is skipped, and an install with no path
+# is never a path. Its rc is jq's, and both readers take it where `set -e` cannot see it: a process
+# substitution, and a capture guarded with `|| true`. Sensors: check-preflight.sh, check-health.sh.
+plugin_install_paths() {
+  jq -r --arg k "${2:-}@" '.plugins | to_entries[] | select(.key | startswith($k)) | .value[]? | select(.scope == "user") | .installPath // empty' "${1:-}" 2>/dev/null
+}
+
+# skill_findable <form> → 0 when the skill a phase invokes as <form> can be found where the harness
+# loads it from.
 #
 # Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
 # sub-steps boot `qa-report` and `qa-execution`, and REVIEW loads `codereview`. A missing one is not
@@ -5510,21 +5703,127 @@ state_fingerprint() {
 #
 # HEURISTIC, and therefore a warn and never a fail. The roots below are a CONVENTION of the harness,
 # not a contract the kit can enforce, and a rule that fails on a heuristic is the rule the next
-# author deletes (the ddd/kaizen plugin check one screen down makes the same call). Three roots,
-# the two `health_provenance` already walks plus the project's own: a plain `skills/<name>/`
-# directory, and the plugin cache, where a skill arrives inside a versioned plugin tree.
+# author deletes (the ddd/kaizen plugin check one screen down makes the same call).
+#
+# The FORM is the identity, not the name (Codex r7 on PR #315, decided by the human): a phase does
+# not invoke a name, it invokes a spelling, and the harness resolves each spelling in its own place.
+# The name alone left both doors open, the third failure in a row in this neighbourhood: a plain
+# `<root>/skills/codereview` was taken for the copy REVIEW loads, and a registry whose install had
+# lost the skill fell through to whatever stale copy the cache still held. Two forms:
+#   - `<skill>`, invoked plain (`/ticket open …`, the `/qa-report …` line phase_slash writes): a plain
+#     `<root>/skills/<skill>/` directory, then the project's own `.claude/skills/<skill>/`, then the
+#     plugin path below under the key of the plugin named after the skill — the path this function
+#     always walked, not narrowed;
+#   - `<plugin>:<skill>`, invoked through a plugin (`/codereview:codereview`): the plugin path ONLY,
+#     under `<plugin>`'s key, and no plain directory before it or after it — the harness never loads
+#     a plugin's skill from one.
+# The plugin path. The cache keeps every copy ever fetched, under every marketplace that shipped the
+# plugin, and a `find` hands back the first in DIRECTORY order — so the copy is the one the harness's
+# registry, `<root>/plugins/installed_plugins.json`, records (r1 #2 of the final review): the first
+# installPath plugin_install_paths hands back that holds `skills/<skill>`, `user` scope, and only
+# under the plugin's own key (Codex r3 #1 on PR #315; another plugin that ships a `skills/<skill>` is
+# not the copy the phase loads). health_provenance reads the registry through the same function, so
+# the preflight and the grade table name one copy. When the registry records an install of the plugin
+# and none holds the skill, the plugin form is a BROKEN install (Codex r7 #2): not found, the reason in
+# SKILL_BROKEN_WHY, and never the cache, because the harness keeps resolving the plugin by the
+# recorded install and any other copy is one no phase loads. Only a registry that records no install
+# of the plugin — no file, an unreadable one, no jq, no `user` install under its key — sends either
+# form on to the cache; nothing there fails, and `set -e` kills nothing. Each form walks it its own
+# way (Codex r8 on PR #315, decided by the human). The plugin form walks only the plugin's own tree,
+# `<root>/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>`, any marketplace and any
+# version: a plugin's skill is namespaced by its plugin, and another plugin's `skills/<skill>`, which
+# a walk by name met first, is a copy no `/<plugin>:<skill>` loads — the fourth failure in a row in
+# this lookup, and the state it was missing was which plugin a cache path belongs to. The plain form
+# walks the cache by name, as it always did, also when its own key records an install without the
+# skill.
 #
 # SDD_SKILLS_ROOT exists so this is testable at all — with no injectable root the only worlds
 # available to a sensor are "this developer's machine" and nothing.
+#
+# It also publishes WHERE, in the global SKILL_FOUND_DIR (empty when not found), which the preflight
+# holds against the read rules of the sessions (read_rules_cover, ADR 0019 §2), and WHY a plugin form
+# is a broken install, in SKILL_BROKEN_WHY (empty otherwise), which the preflight warns with. Globals,
+# so the function is CALLED and never read by `$( )`: the assignment would die in the subshell
+# (CLAUDE.md). Both reset on entry. No probe sees SKILL_FOUND_DIR's reset, because the one caller
+# reads it only after an rc 0 — it decides what a caller that read it after a miss would get;
+# SKILL_BROKEN_WHY's has one, since the caller reads it after every miss, and without the reset a
+# skill missing after a broken one would be warned with the broken one's reason.
 skill_findable() {
-  local name="${1:-}" root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
+  local form="${1:-}" root="${SDD_SKILLS_ROOT:-$HOME/.claude}" name plugin hit="" p recorded=""
+  SKILL_FOUND_DIR=""; SKILL_BROKEN_WHY=""
+  name="${form#*:}"; plugin="${form%%:*}"
   [ -n "$name" ] || return 1
-  [ -d "$root/skills/$name" ] && return 0
-  [ -d "$REPO_ROOT/.claude/skills/$name" ] && return 0
-  # `-quit` on the first hit: the cache holds every version of every plugin, and this question is
-  # "is it anywhere", not "where". `|| true` because `find` on a missing directory returns 1 and
-  # pipefail would carry that into the caller's assignment.
-  [ -n "$( find "$root/plugins/cache" -maxdepth 6 -type d -name "$name" -print -quit 2>/dev/null || true )" ]
+  if [ "$plugin" = "$form" ]; then
+    if [ -d "$root/skills/$name" ]; then SKILL_FOUND_DIR="$root/skills/$name"; return 0; fi
+    if [ -d "$REPO_ROOT/.claude/skills/$name" ]; then SKILL_FOUND_DIR="$REPO_ROOT/.claude/skills/$name"; return 0; fi
+  fi
+  while IFS= read -r p; do
+    recorded="$recorded${recorded:+, }$p"
+    [ -d "$p/skills/$name" ] || continue
+    SKILL_FOUND_DIR="$p/skills/$name"; return 0
+  done < <(plugin_install_paths "$root/plugins/installed_plugins.json" "$plugin")
+  if [ "$plugin" != "$form" ] && [ -n "$recorded" ]; then
+    SKILL_BROKEN_WHY="$root/plugins/installed_plugins.json records the $plugin plugin installed at $recorded, and no such install holds skills/$name"
+    return 1
+  fi
+  # With no copy recorded, the cache is walked. The plugin form walks its own plugin's tree and no
+  # other (Codex r8 on PR #315): the glob is literal but for the marketplace and the version, so a
+  # directory named after the skill elsewhere — another plugin's `skills/<skill>`, or the plugin's
+  # own directory with no such skill below it — is never the skill. The directory published is the
+  # plugin's, above every version: the one the walk by name met for the right plugin, so the entry
+  # skill_read_entry hands over is the one it always was. An unmatched glob is the pattern itself,
+  # which `-d` turns away, and nothing after the loop serves this form.
+  if [ "$plugin" != "$form" ]; then
+    for p in "$root/plugins/cache"/*/"$plugin"/*/skills/"$name"; do
+      [ -d "$p" ] || continue
+      SKILL_FOUND_DIR="${p%/*/skills/"$name"}"; return 0
+    done
+    return 1
+  fi
+  # The plain form walks the cache by name, as it always did. `-quit` on the first hit: the cache
+  # holds every version of every plugin. `find` walks a parent before its children, so a plugin named
+  # after its skill is met at its own directory, above every version. `|| true` because `find` on a
+  # missing directory returns 1 and pipefail would carry that into the assignment.
+  hit="$( find "$root/plugins/cache" -maxdepth 6 -type d -name "$name" -print -quit 2>/dev/null || true )"
+  [ -n "$hit" ] || return 1
+  SKILL_FOUND_DIR="$hit"
+}
+
+# read_rules_cover <path> → 0 when a session the runner opens may Read <path>: it is the repo (the
+# session's cwd) or under it, or it is a directory one of kit_read_rules' rules names, or under it.
+# The rules are read back off kit_read_rules itself, so an entry that is a symlink covers its target
+# exactly when the runner grants it, and no second copy of that decision exists. A directory covers
+# itself and what is under `<dir>/`, never a sibling that only begins with the same letters
+# (`…/codereview-x` is not under `…/codereview`). Pure: rc only. Sensor: tests/check-preflight.sh.
+read_rules_cover() {
+  local p="${1:-}" rule dir
+  case "$p" in "$REPO_ROOT"|"$REPO_ROOT"/*) return 0 ;; esac
+  while IFS= read -r rule; do
+    dir="${rule#"Read(/"}"; dir="${dir%"/**)"}"
+    case "$p" in "$dir"|"$dir"/*) return 0 ;; esac
+  done < <(kit_read_rules)
+  return 1
+}
+
+# skill_read_entry <dir> <skills root> → the READ_EXTRA entry that lets the phases read a skill found
+# in <dir>, spelled as it goes into the tracked .sdd/config.sh. In the plugin cache it is the plugin's
+# directory, the parent WITHOUT the version (`<root>/plugins/cache/<marketplace>/<plugin>`): the
+# version changes with every update, and the parent covers them all (p13 of ADR 0019). Anywhere else
+# it is <dir> itself, which for a symlink is the entry kit_read_rules resolves. A path under $HOME
+# comes back written `$HOME/…`, literally, as decision 2 of ADR 0019 asks; any other, absolute. The
+# entry is not held to read_extra_dir_ok here: one that fails it is refused by load_config, by name.
+skill_read_entry() {
+  local entry="${1:-}" cache="${2:-}/plugins/cache" rel home="${HOME:-}"
+  case "$entry" in
+    "$cache"/*/*)
+      rel="${entry#"$cache"/}"
+      entry="$cache/${rel%%/*}"; rel="${rel#*/}"; entry="$entry/${rel%%/*}" ;;
+  esac
+  home="${home%/}"
+  if [ -n "$home" ]; then
+    case "$entry" in "$home"/*) entry="\$HOME/${entry#"$home"/}" ;; esac
+  fi
+  printf '%s\n' "$entry"
 }
 
 # node_gate_scripts → the package.json scripts that belong INSIDE TEST_CMD, one per line, in the
@@ -6187,6 +6486,40 @@ cmd_preflight() {
         previous one, and the runner escalates phases that were in fact making progress."
   fi
 
+  # --- READ_EXTRA entries this machine does not have (ADR 0019 §2) ---
+  # load_config accepts a directory that does not exist — a plugin missing on another machine must not
+  # stop the line —, and the rule it becomes reads nothing: a phase that boots the skill is denied its
+  # references and says so in a DENIED line of a run already paid for. Named here, before any session;
+  # `warn`, never `_fail`, and an entry that exists is never named. Sensor: tests/check-preflight.sh.
+  local _rx_dir
+  while IFS= read -r _rx_dir; do
+    [ -d "$_rx_dir" ] \
+      || warn "READ_EXTRA names $_rx_dir, which does not exist on this machine — the phases cannot read it; install the skill or remove the entry"
+  done < <(read_extra_each)
+
+  # --- the kit's own path, against the grammar of the read rules (ADR 0019 §1) ---
+  # kit_template_rules holds $SDD_HOME/templates to read_extra_dir_ok, the grammar READ_EXTRA is held
+  # to (Codex r3 #2 on PR #315): the harness reads a rule as a pattern, so a glob character in the
+  # kit's path would grant every directory it matches. A refused path gets no rule at all, in every
+  # session the runner opens — the phases are denied the templates the boot names. Named here, ONCE,
+  # before any session and whether or not claude is installed, since the cause is the path. The
+  # template probe below is then not opened: there is no rule to measure, and opening it would add a
+  # second failure for the same cause with the wrong reason — "kit_template_rules printed no read
+  # rule", with READ_EXTRA empty or not, since the probe carries no entry's rule. The same predicate
+  # on the same path as the rule's own: the sensor asks both in one world (no rule naming the kit in
+  # the probe's argv nor in the phases' projection, and this line printed), so a drift between them
+  # is red there.
+  # Sensor: tests/check-preflight.sh.
+  local kit_tpl_refused=""
+  if ! read_extra_dir_ok "$SDD_HOME/templates"; then
+    kit_tpl_refused=1
+    _fail "the kit's templates are at $SDD_HOME/templates, a path the grammar of the read rules refuses
+        (every component letters, digits, \`.\`, \`_\` and \`-\`): kit_read_rules gives no session a rule for
+        it, so the phases will read the templates through Bash, work from memory, or stop, and the
+        template probe is not opened — there is no rule to measure. A glob character in the rule would
+        grant every directory it matches. Move the kit to a literal path. See kit_read_rules and ADR 0019 §1."
+  fi
+
   # --- authentication + the hat's shell ---
   # Sanity, permission and the hat in one shot. "claude -p answers" does NOT cover the failure
   # mode that matters: the phase session has to EXECUTE (run the suite, commit); `acceptEdits`
@@ -6196,8 +6529,10 @@ cmd_preflight() {
   # three TICKET sessions and US$ 3,39 on Claude Code 2.1.263, which reads the hat's
   # `disallowedTools:` and strips `Bash` for a rule written there (see hat_disallowed). A comment
   # that asserts parity is not parity, so the probe now fires the executor hat under the flags
-  # run_phase composes for it — the mirror in .claude/agents/ when installed, because that is the
-  # copy the harness loads — and reads two artifacts here: `Bash` on the stream's init line (the tool
+  # run_phase composes for it minus the read rules (ADR 0019 §3): the isolated session below proves
+  # those with no settings, and this one boots with the settings a phase boots with. The hat is the
+  # mirror in .claude/agents/ when installed, because that is the copy the harness loads, and the
+  # probe reads two artifacts here: `Bash` on the stream's init line (the tool
   # list the session actually got) and the marker in the result (the permission to run it), plus a
   # third below it, the money keys of the result line (issue 87). No
   # init line and no answer is the old "did not answer"; an init line without Bash names the hat.
@@ -6205,7 +6540,7 @@ cmd_preflight() {
   # seven declare the same key shape, and tests/check-hat.sh R3 refuses the mix-up in every file;
   # what this probe adds is the harness's reading of it, which no sensor on the declaration can see.
   if command -v claude >/dev/null 2>&1; then
-    local hat probe_stream probe_init probe_answer probe_tools probe_result
+    local hat probe_stream probe_init probe_answer probe_tools probe_result probe_silent=""
     local -a probe_agent=()
     hat="$(phase_hat EXEC)"
     if [ -n "$hat" ] && [ -f "$REPO_ROOT/.claude/agents/$hat.md" ]; then probe_agent=(--agent "$hat"); fi
@@ -6221,6 +6556,7 @@ cmd_preflight() {
     # Herestrings for the same reason as the Jidoka in cmd_run: `printf | grep -q` returns 141
     # under `pipefail` when the grep MATCHES, so the success branch is the one that loses the race.
     if [ -z "$probe_init" ] && [ -z "$probe_answer" ]; then
+      probe_silent=1
       _fail "claude -p did not answer — expired session? run 'claude login'"
     elif [ -n "$probe_init" ] && ! jq -e '.tools // [] | index("Bash") != null' <<< "$probe_init" >/dev/null 2>&1; then
       _fail "the headless session under the ${hat:-<no>} hat has NO Bash — the phases cannot run the suite
@@ -6248,6 +6584,143 @@ cmd_preflight() {
         _fail "the session's result line has no numeric total_cost_usd or num_turns — run_phase, sdd census,
         sdd close and the mission budget read them, and would go blind. Keys it got: $(jq -r 'keys | join(" ")' <<< "$probe_result" 2>/dev/null | head -c 300)"
       fi
+    fi
+
+    # --- the template probe (ADR 0019 §3) ---
+    # The boot prompt orders every phase to start from $SDD_HOME/templates/, and kit_template_rules is
+    # the read-only rule every session gets for it (kit_read_rules hands it first). Whether the HARNESS
+    # honours that rule is a fact no argv shows, and the session above cannot measure it: it loads the
+    # user's settings, and an `additionalDirectories` or a `Read(*)` there reads the template with no
+    # rule at all (measured in 2.1.304, ADR 0019) — on the operator's machine it would be green over a
+    # rule that does nothing, and a target's machine is not the operator's. So a SECOND session,
+    # isolated: `--setting-sources ""` loads no settings, cwd in a scratch dir, the harness env unset
+    # as run_phase unsets it, and an --allowedTools that carries the lines of kit_template_rules and
+    # NOTHING else. Never "$ALLOWED_TOOLS": it is a project key, and a broad `Read` there reads the
+    # template by itself, so the probe would print that the kit's rule works over a rule that was
+    # empty or broken (Codex P3 on PR #315); the Bash probe above keeps it, since the phase's flags
+    # are what that one proves. Never the READ_EXTRA rules kit_read_rules adds after the templates'
+    # either, for the same reason with a second source: an entry that covers the kit (`$HOME`, with
+    # SDD_HOME below it — the grammar accepts it, a limit declared in ADR 0019) reads the template by
+    # itself, and the probe certified a templates rule that was sabotaged or broken (Codex P3 in the
+    # fifth round on PR #315). The entries are not measured here: the warnings above (READ_EXTRA
+    # names a directory that does not exist; a skill no read rule covers) read kit_read_rules whole.
+    # With nothing else on it, the rules cannot be absent — an --allowedTools with no argument takes
+    # the next flag for its value —, so a kit_template_rules that printed nothing fails by name and
+    # opens no session. No config reaches that branch: the templates' rule is printed whenever the
+    # kit's path passes the grammar, and a kit whose path does not is answered by the arm before it —
+    # named once, above, and no session opened, since there is no rule to measure (Codex r3 #2 on PR
+    # #315). The sensor builds the empty world on a sabotaged copy of the kit. The verdict reads the
+    # stream's artifacts, never the answer, and it names the outcome of the Read ONCE: one jq over the
+    # slurped stream prints exactly one of five outcomes, and a `case` sends each to its arm. The
+    # chain it replaced defined its last two arms by elimination, so an outcome it did not name fell
+    # into the first arm left: a Read that came back with an error, its path in no denial, warned
+    # that the session never tried (Codex P2 in the fourth round on PR #315). In precedence order:
+    # `denied`, the template named in the result line's permission_denials (matched by path, never by
+    # tool_use_id), `_fail`; `read`, a tool_result with no is_error for a Read of that path, `ok` —
+    # below a denial, so a denied path is never read, and above an error, so a Read retried after
+    # one is the rule working; `errored`, a tool_result with is_error for that Read, none without
+    # it and no denial naming the path — the template missing or unreadable, or a harness that
+    # reports a refusal only in the tool_result —, `_fail` with the first line of the error, from
+    # the content's string or its first text block; `not-tried`, an init or a result line and no
+    # tool_result for a Read of that path — another tool, another path or another call's result never
+    # stands for it —, `warn`, because not measured is not zero; `no-session`, no init line and no
+    # result line jq can read — an empty stream, or one that is not JSON lines, since a jq that
+    # fails is read as this outcome —, a CLI that did not answer THIS probe: one that refuses
+    # `--setting-sources ""` or the rule's syntax exits before its init line while it answers the
+    # Bash probe (Codex P2 in the second round on PR #315), so it is a `_fail` with the first line of
+    # its stderr. That arm has one exception: when the Bash probe got no answer either (probe_silent,
+    # armed by its "did not answer" arm), the cause is one and so is the failure, and the probe only
+    # warns that it measured nothing. The exception reads both probes' evidence and never the Bash
+    # probe's alone — the session is opened anyway, so a CLI that refuses only the Bash probe's flags
+    # still gets the kit's rule measured. The `case` ends in a default that fails: an outcome with no
+    # arm is a classifier and a `case` that drifted apart, never green. The outcome is the first line
+    # jq prints and the error the second, so a text with a newline is never read as an outcome. The
+    # error and the stderr are read alike: their first line, cut at 200 characters, their control
+    # characters dropped, `(none)` when empty. jq slurps the stream (`-s`), so one line it cannot
+    # parse sends a stream to no-session whatever else it holds: red, never green, and the message
+    # says "could read". The stderr is read with `read || true`: an empty file returns non-zero, and
+    # that is the common case (a file the CLI removed fails the redirect, and reads `(none)` too).
+    # stdin is closed: without it the CLI waits 3 s (2.1.304). Sensor: tests/check-preflight.sh — the
+    # verdict differentially (errored as a string, as blocks and with no content; not-tried as Bash
+    # denied instead, another path, another tool, an init line alone and a result line alone;
+    # no-session empty, unparseable, both probes dead, and the Bash probe alone dead), the precedence
+    # in two worlds of two outcomes, the default on a sabotaged copy of the kit, and this session's
+    # argv, since its stub answers whatever the fixture says — and, under an entry that covers the
+    # kit, that argv against the phases' with a stub that answers as the harness would: the real kit
+    # reads, and a copy whose templates rule is broken is denied.
+    local tpl_path="$SDD_HOME/templates/handoff.md" tpl_dir="" tpl_stream="" tpl_err=""
+    local tpl_class="" tpl_outcome="" tpl_why=""
+    local -a tpl_rules=()
+    mapfile -t tpl_rules < <(kit_template_rules)
+    [ -n "$kit_tpl_refused" ] || tpl_dir="$(mktemp -d 2>/dev/null)" || tpl_dir=""
+    if [ -n "$kit_tpl_refused" ]; then
+      dim "  ---  template probe not opened: the kit's path is refused above, so no session carries a rule to measure"
+    elif [ -z "$tpl_dir" ]; then
+      warn "could not create a scratch directory for the template probe — the kit's read rule was not measured"
+    elif [ "${#tpl_rules[@]}" -eq 0 ]; then
+      rm -rf -- "$tpl_dir" 2>/dev/null || true
+      _fail "kit_template_rules printed no read rule, so the template probe was not opened — every session
+        the runner opens gets no rule for $SDD_HOME/templates/. See kit_template_rules and ADR 0019 §3."
+    else
+      tpl_stream="$( cd "$tpl_dir" && env "${HARNESS_ENV_UNSET[@]}" claude -p "Use the Read tool (never Bash) to read $tpl_path and reply with ONLY its first line. If the Read is refused, reply DENIED and try nothing else." \
+          --model haiku --permission-mode "$PERMISSION_MODE" --output-format stream-json --verbose \
+          --setting-sources "" --allowedTools ${tpl_rules[@]+"${tpl_rules[@]}"} \
+          --strict-mcp-config --max-budget-usd 1 </dev/null 2>"$tpl_dir/stderr" || true )"
+      read -r -n 200 tpl_err 2>/dev/null < "$tpl_dir/stderr" || true
+      tpl_err="${tpl_err//[[:cntrl:]]/}"; tpl_err="${tpl_err:-(none)}"
+      rm -rf -- "$tpl_dir" 2>/dev/null || true
+      tpl_class="$( jq -rs --arg p "$tpl_path" '
+          def text_of: if type == "string" then . else [ .[]? | select(.type == "text") | .text ][0] end;
+          . as $s
+          | [ $s[] | select(.type == "assistant") | .message.content[]?
+              | select(.type == "tool_use" and .name == "Read" and .input.file_path == $p) | .id ] as $ids
+          | [ $s[] | select(.type == "user") | .message.content[]?
+              | select(.type == "tool_result" and (.tool_use_id as $t | $ids | index($t)) != null) ] as $results
+          | if any($s[] | select(.type == "result") | .permission_denials[]?; .tool_input.file_path == $p) then "denied"
+            elif any($results[]; .is_error != true) then "read"
+            elif ($results | length) > 0 then ("errored", ($results[0].content | text_of // ""))
+            elif any($s[]; .type == "result" or (.type == "system" and .subtype == "init")) then "not-tried"
+            else "no-session" end' <<< "$tpl_stream" 2>/dev/null )" || tpl_class="no-session"
+      { read -r tpl_outcome; read -r -n 200 tpl_why || true; } <<< "$tpl_class"
+      tpl_why="${tpl_why//[[:cntrl:]]/}"; tpl_why="${tpl_why:-(none)}"
+      case "$tpl_outcome" in
+        denied)
+          _fail "a session with NO settings and the kit read rules alone on its --allowedTools was DENIED reading
+        $tpl_path — the phases will read the templates through Bash, work from memory, or stop.
+        The kit's read rules were all its --allowedTools carried: ${tpl_rules[*]}
+        and the harness refused them, so their syntax may have changed (the ledger's session rows carry
+        harness:). See kit_read_rules and ADR 0019. This machine's settings do not count here: a
+        target's may not carry them."
+          ;;
+        read)
+          ok "a session with no settings and the kit read rules alone on its --allowedTools reads the kit templates"
+          ;;
+        errored)
+          _fail "the template probe's Read of $tpl_path came back with an error, and no permission_denials entry names it,
+        so the phases will meet the same error. First line of the error: $tpl_why
+        The template is missing or unreadable, or the harness now reports a refusal only in the tool_result
+        (the ledger's session rows carry harness:). See kit_read_rules and ADR 0019 §3."
+          ;;
+        not-tried)
+          warn "the template probe answered without trying to Read $tpl_path — the kit's read rule was not
+        measured, and not measured is not zero"
+          ;;
+        no-session)
+          if [ -n "$probe_silent" ]; then
+            warn "the template probe got no init line and no result line either: claude -p did not answer the Bash probe above, and
+        one cause is one failure — the kit's read rule was not measured, and the probe measures it once the CLI answers.
+        First line of its stderr: $tpl_err"
+          else
+            _fail "the template probe got no init line and no result line it could read: claude -p did not answer this probe's flags
+        (--setting-sources \"\" and the kit read rules alone on --allowedTools),
+        though it answered the Bash probe above, so the kit's read rule was NOT measured.
+        A CLI that refuses one of these flags exits before its init line. First line of its stderr: $tpl_err"
+          fi
+          ;;
+        *)
+          _fail "the template probe's verdict got an outcome it does not know: $tpl_outcome — the kit's read rule was not measured (ADR 0019 §3)"
+          ;;
+      esac
     fi
   fi
   if gh auth status >/dev/null 2>&1; then ok "gh authenticated"
@@ -6396,24 +6869,97 @@ cmd_preflight() {
   local sk skills_root missing_skills=""
   skills_root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
   # The subset of KIT_THIRD_PARTY_SKILLS this config boots headless (the planner's three are
-  # interactive); the full list is what `sdd health --release` line 2 asks an origin for.
-  local -a wanted=(codereview)   # REVIEW runs in every mission
+  # interactive); the full list is what `sdd health --release` line 2 asks an origin for. Each one in
+  # the FORM its phase invokes it by, which is where skill_findable looks (Codex r7 on PR #315):
+  # REVIEW invokes `/codereview:codereview` (agents/sdd-reviewer.md), the skill of the codereview
+  # plugin; TICKET invokes `/ticket` (agents/sdd-ticket.md) and the QA sub-steps `/qa-report` and
+  # `/qa-execution` (phase_slash), all three plain. That is a second spelling of what the hats and
+  # phase_slash write, and no comment makes it the same one: check-preflight.sh compares the list
+  # preflight prints with the invocations it reads off those files. KIT_THIRD_PARTY_SKILLS lists
+  # names, so the check below holds it to the part after the `:`.
+  local -a wanted=(codereview:codereview)   # REVIEW runs in every mission
   [ "$JIRA_ENABLED" = "true" ] && wanted+=(ticket)
   { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && wanted+=(qa-report qa-execution)
   for sk in "${wanted[@]}"; do
-    case " $KIT_THIRD_PARTY_SKILLS " in *" $sk "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
+    case " $KIT_THIRD_PARTY_SKILLS " in *" ${sk#*:} "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
   done
+  # A skill found is not a skill the phases can READ: its references live outside the repo, and the
+  # session gets only kit_read_rules' rules (ADR 0019 §2). The harness checks the path asked for AND
+  # the resolved one, so the directory found and its `readlink -f` must both be covered; a skill
+  # either misses is named with the entry to add (skill_read_entry). `warn`, never `_fail`, no
+  # session, and nothing granted — the permission still comes only from READ_EXTRA. The `||` after
+  # readlink has no probe: it never fails on a directory just found, and it decides only that a race
+  # costs a warning about that directory instead of killing preflight under `set -e`.
+  # One miss hands NO entry: the directory found is covered and only its target is not, because the
+  # grammar refuses the target's name (read_extra_dir_ok, the guard kit_read_rules holds a resolved
+  # target to). No entry reaches that target, so handing back the one already declared was a loop
+  # with no way out (r1 #1 of the final review); the remedy is the target's name. A covered directory
+  # whose target passes the grammar keeps the entry to add, and the entry is the directory found,
+  # never the target: kit_read_rules resolves an entry at every session, so it follows a retargeted
+  # link, and the harness wants both rules (ADR 0019: link alone DENIED, target alone DENIED).
+  # Declared limit: an UNcovered directory whose target the grammar refuses gets the undeclared
+  # warning and its entry, and the refused one at the next preflight — two steps, never a loop.
+  # A directory found under the plugin cache also names the registry (r1 #2 of the final review):
+  # the cache may hold more than one copy, skill_findable holds to the rules the one the registry
+  # records and falls back to the cache when the registry records no install of the plugin — for a
+  # skill invoked through a plugin, the first copy in that plugin's own tree (Codex r8 on PR #315);
+  # for one invoked plain, the first directory of its name `find` meets, also when no recorded
+  # install holds it —, and the warning says which file decides. The slash of `cache/` keeps a
+  # sibling such as `plugins/cachex` out.
+  # A skill invoked through a plugin whose recorded install does not hold it is neither missing nor
+  # found (Codex r7 #2 on PR #315): the harness loads the plugin from that install, so the phase boots
+  # without the skill whatever else the cache holds. Its own warning, with skill_findable's reason —
+  # the registry and the installPath — and the remedy, and it keeps the "present" line from printing.
+  local sk_real sk_entry sk_via sk_cache broken_skills=""
   for sk in "${wanted[@]}"; do
-    skill_findable "$sk" || missing_skills="$missing_skills $sk"
+    if ! skill_findable "$sk"; then
+      if [ -n "$SKILL_BROKEN_WHY" ]; then
+        broken_skills="$broken_skills $sk"
+        warn "skill $sk is not where the harness loads it: $SKILL_BROKEN_WHY.
+        The harness loads a plugin's skill from the install its registry records, so every phase that
+        invokes $sk boots without it; no other copy in the plugin cache stands in for it,
+        and none is held to the read rules. Reinstall the ${sk%%:*} plugin."
+      else
+        missing_skills="$missing_skills $sk"
+      fi
+      continue
+    fi
+    sk_real="$(readlink -f -- "$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="$SKILL_FOUND_DIR"
+    if read_rules_cover "$SKILL_FOUND_DIR" && read_rules_cover "$sk_real"; then continue; fi
+    sk_via=""; [ "$sk_real" = "$SKILL_FOUND_DIR" ] || sk_via=" (a symlink to $sk_real)"
+    if read_rules_cover "$SKILL_FOUND_DIR" && ! read_extra_dir_ok "$sk_real"; then
+      warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, whose target no read rule can cover:
+        the grammar of the rules refuses its name (every component letters, digits, \`.\`, \`_\` and
+        \`-\`), so kit_read_rules grants it nothing, whatever READ_EXTRA declares, and every phase that
+        loads the skill is denied its references (a DENIED line in the journal). No READ_EXTRA entry
+        reaches it: move or rename the target to a name the grammar accepts."
+      continue
+    fi
+    sk_entry="$(skill_read_entry "$SKILL_FOUND_DIR" "$skills_root")"
+    sk_cache=""
+    case "$SKILL_FOUND_DIR" in
+      "$skills_root/plugins/cache"/*) sk_cache="
+        The plugin cache may hold more than one copy of a plugin, and the one the harness loads is
+        the installPath recorded in $skills_root/plugins/installed_plugins.json: the copy named
+        above when that file records one, the first copy found when it does not." ;;
+    esac
+    warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, and no read rule
+        of the sessions covers it — READ_EXTRA does not declare it, so every phase that loads it is
+        denied its references outside the repo (a DENIED line in the journal).$sk_cache In .sdd/config.sh:
+        READ_EXTRA entry to add: $sk_entry"
   done
-  if [ -z "$missing_skills" ]; then
-    ok "third-party skills present (${wanted[*]})"
-  else
+  if [ -n "$missing_skills" ]; then
     warn "skills not found:$missing_skills
-        Looked in $skills_root/skills/, $skills_root/plugins/cache/ and
-        $REPO_ROOT/.claude/skills/ — those roots are a convention, so this is a warning and not a
-        failure. The phase boots the skill by name anyway: if it really is absent, the session
-        improvises and spends the phase budget producing something no gate can read."
+        A skill a phase invokes plain was looked for in $skills_root/skills/, $REPO_ROOT/.claude/skills/
+        and $skills_root/plugins/cache/; one it invokes as plugin:skill, in the installs
+        $skills_root/plugins/installed_plugins.json records for the plugin and, only when that file
+        records none, in the cache under that plugin's own tree alone:
+        $skills_root/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>.
+        Those roots are a convention, so this is a warning and not a failure.
+        The phase boots the skill by name anyway: if it really is absent, the session improvises and
+        spends the phase budget producing something no gate can read."
+  elif [ -z "$broken_skills" ]; then
+    ok "third-party skills present (${wanted[*]})"
   fi
 
   # --- target repo plugins ---
@@ -7158,10 +7704,15 @@ health_provenance() {
   # read — a `project`-scope pin (the registry has them, with `projectPath`) loads another version
   # in one repo, and which repo this health speaks for is not this function's to decide; and the
   # fallback below, for a machine with no registry or no jq, still orders the WHOLE path with
-  # `sort -V`, so a marketplace's name outranks a version there.
+  # `sort -V`, so a marketplace's name outranks a version there. The registry is read through
+  # plugin_install_paths, the reader skill_findable uses for the preflight (Codex r3 #1 on PR #315):
+  # the first `user`-scope install under a `codereview@` key, so the copy the grade table is
+  # compared against and the copy the preflight holds to the read rules are one copy. `head -n 1`
+  # is the `first` this line used to ask jq for, and the `|| true` keeps jq's rc — an unreadable
+  # registry, or a SIGPIPE from `head` — out of set -e under pipefail.
   local reg="$HOME/.claude/plugins/installed_plugins.json" pinned=""
   if [ -f "$reg" ] && command -v jq >/dev/null 2>&1; then
-    pinned="$(jq -r '[(.plugins // {}) | to_entries[] | select(.key | startswith("codereview@")) | .value[]? | select(.scope == "user") | .installPath // empty] | first // empty' "$reg" 2>/dev/null || true)"
+    pinned="$(plugin_install_paths "$reg" codereview | head -n 1 || true)"
   fi
   #
   # The fallback: `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after
@@ -11952,17 +12503,21 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   # through run_phase, so it gets neither the flag nor the env -u of the two inherited effort
   # variables for free. Only that pair is unset here — the rest of HARNESS_ENV_UNSET is about the
   # nested-session teardown of a long phase, and widening it for this call is a separate decision.
-  local -a close_effort=()
+  # The kit's read-only rules are threaded by hand for the same reason (ADR 0019 §1): read from the
+  # one definition run_phase reads, never copied, as arguments of their own after the value.
+  local -a close_effort=() close_read_rules=()
   if [ -n "$EFFORT_TICKET" ]; then close_effort=(--effort "$EFFORT_TICKET"); fi
+  mapfile -t close_read_rules < <(kit_read_rules)
   ( cd "$REPO_ROOT" && env -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$close_prompt" \
       --model "$MODEL_TICKET" ${close_effort[@]+"${close_effort[@]}"} --permission-mode "$PERMISSION_MODE" \
       --output-format stream-json --verbose \
-      --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
+      --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" ${close_read_rules[@]+"${close_read_rules[@]}"} \
       --disallowedTools "$(hat_disallowed "$phase")" --strict-mcp-config \
       --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$streamfile" 2>"$errfile" || rc=$?
   ended=$(date +%s)
   stream_summary "$streamfile" > "$logfile"
   hat_init_facts "$streamfile" "$logfile" "$(hat_disallowed "$phase")" "$(hat_mcp "$phase")"
+  journal_denials "$phase" "$logfile"
   # Same `|| echo` guard and same `// ""` as run_phase, for the two reasons written there: the jq
   # that FAILS, and the jq that succeeds over an empty summary having printed nothing.
   local close_cost close_turns close_cache

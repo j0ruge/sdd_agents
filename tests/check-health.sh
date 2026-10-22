@@ -630,6 +630,35 @@ else
        "pin: rc $RC_CR_PIN · $(digest "$OUT_CR_PIN") // free: rc $RC_CR_FREE · $(digest "$OUT_CR_FREE") // gone: rc $RC_CR_GONE · $(digest "$OUT_CR_GONE")"
 fi
 
+# WHICH entry of the registry, when it lists more than one (Codex r3 #1 on PR #315). The registry is
+# read through plugin_install_paths, the reader skill_findable shares, so the grade table and the
+# preflight name one copy; this world pins what the table's reader asked jq for before it was shared
+# — the FIRST `user`-scope install that names a path, under a `codereview@` key. Four keys, in
+# order: one whose value is not a list (skipped, never the end of the read), one install with no
+# installPath (never the path `null`), the pinned 1.13.0 with the criterion the fixture does not
+# cover, and the newer 1.19.0 that matches (a second line, never glued to the first). Each of the
+# three spoiled — the read stopped, `null` taken, both lines taken — reads the drift as absent.
+clear_skills
+install_codereview_skill "| $UNKNOWN_CRITERION | A | fixture |"
+install_codereview_newer_match
+mkdir -p "$FIX/home/.claude/plugins"
+jq -n --arg ip "$FIX/home/.claude/plugins/cache/fixture-marketplace/codereview" \
+  '{version: 2, plugins: {"codereview@z": "not-a-list", "codereview@a": [{scope: "user"}],
+    "codereview@fixture-marketplace": [{scope: "user", installPath: ($ip + "/1.13.0")}],
+    "codereview@b": [{scope: "user", installPath: ($ip + "/1.19.0")}]}}' \
+  > "$FIX/home/.claude/plugins/installed_plugins.json"
+health_run
+OUT_CR_FIRST="$HEALTH_OUT"; RC_CR_FIRST="$HEALTH_RC"
+if [ "$RC_CR_FIRST" -ne 0 ] \
+   && grep -qF "grade table has a criterion the fixture does not cover: '$UNKNOWN_CRITERION'" <<< "$OUT_CR_FIRST" \
+   && ! grep -q 'the installed codereview has no references/report-template.md' <<< "$OUT_CR_FIRST"; then
+  pass "covered: the grade table reads the first user-scope codereview install that names a path, whatever else the registry lists"
+else
+  fail "covered: the grade table reads the first user-scope codereview install that names a path, whatever else the registry lists" \
+       "rc != 0 with the pinned 1.13.0's drift found, and no pinned path refused" \
+       "rc $RC_CR_FIRST · $(digest "$OUT_CR_FIRST")"
+fi
+
 
 # ---------------------------------------------------------------------------
 # 5 — the floor: a kit with nothing wrong reaches `kit healthy`

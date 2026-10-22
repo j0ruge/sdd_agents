@@ -62,6 +62,67 @@ structural defect the kit found in itself, in the fixture mission `20260814-dry-
 
 ---
 
+## The phase cannot read what the boot names
+
+**Symptom:** the mission journal carries `DENIED  <PHASE>  tool=Read  path=…` lines; a TICKET ends
+`handoff-blocked` saying it could not read a template or the `ticket` skill's references; a REVIEW
+grades without the references of the `codereview` skill. The `permission_denials` of the session's
+`.json` names the same files.
+
+**Cause:** the boot orders every phase to start from `$SDD_HOME/templates/`, and a skill keeps its
+references under `~/.claude/` — both outside the target repo. Under `--permission-mode acceptEdits
+--allowedTools Bash` the harness denies a `Read` outside the repo, and the session then reads it
+through Bash, works from memory, or stops. Measured in the window of `bad6168`: 13 of 47 lighthouse
+session logs and 4 of 23 jrc-libs ones; one TICKET stopped, and the operator unblocked it by hand.
+
+**How the kit reacts:** every session the runner opens carries a read-only rule for the kit's
+templates (`kit_template_rules`, which `kit_read_rules` hands first, ADR 0019 §1); `sdd preflight`
+proves that rule in a session with no settings at all and the rule alone on its `--allowedTools`,
+and fails when it does not read; and
+every call the harness denied is one `DENIED` line in the journal, right above the session's own
+line, so `tail -F` shows it without opening the session's `.json`.
+
+**What you do:**
+- **a template denied:** run `sdd preflight`. Its template probe says whether the kit's rule still
+  reads under this harness; red there right after a harness bump means the rule's syntax changed
+  (the ledger's session rows carry `harness:`). A `Read` in `ALLOWED_TOOLS` does not turn it green,
+  nor does a `READ_EXTRA` entry that covers the kit (`$HOME`, say): the probe carries neither. A probe that fails with "got no init line and no result line"
+  never measured the rule: the CLI refused one of the probe's flags, and the first line of its
+  stderr, printed in the failure, names which one. A probe that fails with "came back with an
+  error" did try the `Read`: the first line of the error, printed in the failure, says whether the
+  template is missing or unreadable in the kit (restore the kit's checkout) or the harness refused
+  it and reported the refusal only in the `tool_result`, which after a harness bump is the rule's
+  syntax again. A failure that says "the kit's templates are at
+  … a path the grammar of the read rules refuses" means the kit lives under a path with a space, a
+  glob character or anything but letters, digits, `.`, `_` and `-` in a component: no session gets
+  the templates' rule there, since a glob would widen it, and the probe is not opened. Move the kit
+  to a literal path.
+- **a skill's references denied:** declare the skill's directory in the target's `READ_EXTRA`,
+  absolute and separated by spaces, written with `$HOME` (`config/schema.md`). The runner adds the
+  rule of a symlinked entry's resolved target too; declare the skill's own directory (for a
+  plugin, the parent without the version), never a parent above a symlink. `sdd preflight` names,
+  before any run, each skill it finds that no entry covers, with the entry to add, and each entry
+  this machine does not have. It looks each skill up by the form its phase invokes it by, so the
+  REVIEW's `codereview:codereview` is never a plain `~/.claude/skills/codereview`: it holds the copy
+  the registry records under the plugin's own key (`~/.claude/plugins/installed_plugins.json`,
+  `codereview@<marketplace>`; another plugin that ships a `skills/codereview` does not count) and,
+  with no install of the plugin recorded, a copy from the codereview plugin's own tree in the cache
+  alone (`…/plugins/cache/<marketplace>/codereview/<version>/skills/codereview`); a warning about a
+  directory under the plugin cache names that file: the cache may hold more than one copy. For
+  `codereview:codereview`, a **broken install** (the registry records the plugin, and no
+  `installPath` of it holds the skill, after a partial clean of the cache) is warned with the
+  registry and the `installPath`, and never replaced by an older copy from the cache: reinstall the
+  plugin. A declared skill whose symlink
+  target has a name the grammar refuses (anything but letters, digits, `.`, `_` and `-`) is named
+  as such, with no entry to add: no entry reaches that target, so move or rename it.
+- **a denial under `/tmp`:** the session's own scratch, not something the boot named. Nothing to do.
+
+**Do not:** put the kit in the settings' `additionalDirectories`, or `--add-dir` it: under
+`acceptEdits` both let the session **write** the kit, and the kit guard only acts after the fact.
+`Read(*)` in a target's settings reads, but it lets every phase read anything on the machine.
+
+---
+
 ## A `blocked` increment
 
 **Symptom:** `sdd run` exits with code 3 and "BLOCKED in EXEC" straight away, without opening a
