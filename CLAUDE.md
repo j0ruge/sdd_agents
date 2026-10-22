@@ -199,8 +199,9 @@ correspondente **no mesmo commit**; a auditoria que a fundou, com os números, �
   `--allowedTools "$ALLOWED_TOOLS"` junto, ou a sessão não roda `TEST_CMD`, não faz `git add`, e
   a fase EXEC fica insatisfazível por construção. Detalhe em [`config/schema.md`](config/schema.md).
 - Toda invocação de `claude -p` **que roda uma fase** passa por `run_phase()`, que loga JSON em
-  `.sdd/logs/`. As duas exceções são deliberadas e não rodam fase: o probe do `sdd preflight` e o
-  `sdd close`. Se você está acrescentando uma terceira, provavelmente ela devia ser uma fase.
+  `.sdd/logs/`. As exceções são deliberadas e não rodam fase: as duas sondas do `sdd preflight` (a
+  do `Bash` e, desde a ADR 0019, a dos templates, isolada) e o `sdd close`. Se você está
+  acrescentando outra, provavelmente ela devia ser uma fase.
 - Mudou o contrato de artefato? Atualize `templates/`, `docs/pipeline.md` e o agente afetado no
   **mesmo commit** — contrato quebrado em três lugares é o modo de falha mais caro do kit.
 - **Enum lido em mais de um ponto vira UMA definição por programa.** `blocked` e `degraded` são os

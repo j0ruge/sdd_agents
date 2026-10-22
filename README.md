@@ -29,7 +29,7 @@ Coordinated commands require **Linux 5.3+ with readable `/proc`, Python 3.9+ (st
 Bash 4+ and the GNU userland**. The helper checks the kernel's `flock` and child-subreaper
 capabilities before starting the command, including pidfd syscall availability under seccomp
 and procfs task children enumeration (`CONFIG_PROC_CHILDREN`),
-and before the paid preflight probe. No Python packages, daemon or service are required. macOS is not supported for coordinated execution.
+and before the paid preflight probes. No Python packages, daemon or service are required. macOS is not supported for coordinated execution.
 
 One physical checkout has one execution owner. A competing command exits immediately with
 **75 / `CHECKOUT-BUSY`**, before config, gates, branch changes or sessions. Symlinks share
@@ -62,9 +62,11 @@ leaves them alone.
 `sdd preflight` compares the installed copies with the kit source **byte for byte** and fails on a
 stale one: the harness loads `.claude/agents/`, so a corrected source proves nothing on its own.
 
-⚠️ `sdd preflight` fires a **real headless session** (capped at US$ 1) to prove the phase sessions
-can actually execute a command — that is what makes it valuable, and what makes it cost money.
-Do not run it in a loop.
+⚠️ `sdd preflight` fires **two real headless sessions** (each capped at US$ 1): one proves the phase
+sessions can actually execute a command, the other, with no settings at all and nothing but the
+read rule for the kit's templates on its allowlist, that they can read the kit's templates
+([ADR 0019](docs/adr/0019-the-session-reads-what-the-boot-names.md)) — that is what makes it
+valuable, and what makes it cost money. Do not run it in a loop.
 
 The kit is English. The **artifacts** of a mission — handoffs, checkpoint, commit messages, PR
 body — are written in whatever the target repo declares in `OUTPUT_LANG`; leave it empty and the

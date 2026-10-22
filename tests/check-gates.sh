@@ -5866,6 +5866,37 @@ assert_eq "close: the CLOSE journal row records the effort the session ran at" \
   "unset:settings set:low" \
   "unset:$(grep -oE ' effort=[^ ]*' <<< "$CLOSE_JOURNAL_UNSET" | cut -d= -f2 | grep . || echo -) set:$(grep -oE ' effort=[^ ]*' <<< "$CLOSE_JOURNAL_SET" | cut -d= -f2 | grep . || echo -)"
 
+# The close session gets the kit's read-only rule too (ADR 0019 §1): it is the third door that
+# assembles a `claude -p`, and it does not go through run_phase, so tests/check-dry-run.sh — which
+# reads the projected argv of every PHASE — cannot see it. Same three things in one verdict, read
+# off the argv of the unset-effort run above (one argument per line): the first argument after the
+# --allowedTools value is `Read(/<physical SDD_HOME>/templates/**)`; every further argument of that
+# list is a `Read(` rule (never Edit/Write); and no line is `--add-dir`, which would read the kit
+# and also let the session WRITE it. SDD_HOME is physical (`cd -P`, as _resolve_self computes it),
+# never $ROOT, which is logical. Lines are matched WHOLE, and the scan starts at the `--model` line:
+# the prompt rides before it, and a prompt line must not answer for the flags. An argv the stub
+# never wrote reads `no-allowedTools`, so a session that was not spent cannot pass.
+close_kit_home="$(CDPATH='' cd -P "$ROOT" && pwd)"
+close_rules_of() { # <argv, one per line> → ok|no-allowedTools|no-rule|not-read-only:<arg>|add-dir
+  want="Read(/$close_kit_home/templates/**)" awk '
+    { a[NR] = $0 }
+    END {
+      k = 0; for (i = 1; i <= NR; i++) if (a[i] == "--model") { k = i; break }
+      v = "no-allowedTools"
+      for (i = k; k && i <= NR; i++) if (a[i] == "--allowedTools") {
+        v = (a[i + 2] == ENVIRON["want"]) ? "ok" : "no-rule"
+        for (j = i + 2; j <= NR && substr(a[j], 1, 2) != "--"; j++)
+          if (index(a[j], "Read(") != 1) v = "not-read-only:" a[j]
+        break
+      }
+      for (i = k; k && i <= NR; i++) if (a[i] == "--add-dir") v = "add-dir"
+      print v
+    }
+  ' <<< "$1"
+}
+assert_eq "close: the session may read the kit templates, and only read them" \
+  "ok" "$(close_rules_of "$CLOSE_ARGV_TEXT")"
+
 # CLOSE_HOME is READ from the fixture's own config, never written twice: a literal here and a
 # literal in the heredoc at the top of this file would be two spellings of one fact, and the day
 # someone changes the fixture's DEFAULT_BRANCH the assertion below would go on checking the old
@@ -6348,6 +6379,42 @@ hwx_set '"sdd-executor: x.md"'
 assert_eq "an entry for a hat that already writes anywhere neither refuses nor narrows" "<anywhere>" \
   "$(hwx_writes EXEC)"
 hwx_set ''
+
+# ---------------------------------------------------------------------------
+# READ_EXTRA — the directories THIS project's phases read beyond the repo (a skill's references,
+# ADR 0019 §2), and its guard. kit_read_rules turns each entry into `Read(/<dir>/**)`, so the value
+# is dropped into a permission rule the harness reads as a gitignore-style pattern: `*`, `?` and the
+# brackets are globs there, and a `(` or `)` would close the rule early. The key WIDENS a permission
+# (read-only), so every looseness here fails OPEN — the HAT_WRITES_EXTRA lesson above.
+#
+# ONE assertion over every refusal, each value carrying the bad entry SECOND, after a valid one, so
+# a validator that looks at the first entry only is red too. Each needle is the message's own
+# `entry '<value>'`, never a fragment the boilerplate could carry. The last term is the positive
+# control, and the half that makes the refusals mean something: a guard that refuses everything
+# satisfies all of them. Its directories do not exist — a missing directory is the preflight's
+# warning, never a death (a plugin missing on another machine must not stop the line).
+rx_probe() { # rx_probe <value> <needle> — "died|<n>" or "lived|<n>", over one call
+  local out rc=0
+  cp "$HWX_CFG_BASE" .sdd/config.sh
+  printf 'READ_EXTRA=%s\n' "$1" >> .sdd/config.sh
+  out="$( "$SDD" status "$MISSION" --no-gates 2>&1 )" || rc=$?
+  cp "$HWX_CFG_BASE" .sdd/config.sh
+  printf '%s|%s' "$( [ "$rc" -ne 0 ] && echo died || echo lived )" "$( grep -cF -- "$2" <<< "$out" | head -1 )"
+}
+rx_got=""
+for rx_case in 'relative:rx/rel' 'tilde:~/.claude/skills/x' 'dotdot:/rx/../etc' 'dot:/rx/./x' \
+               'root:/' 'empty:/rx//x' 'trailing:/rx/x/' 'star:/rx/a*b' 'qmark:/rx/a?b' \
+               'lbracket:/rx/a[b' 'rbracket:/rx/a]b' 'lparen:/rx/a(b' 'rparen:/rx/a)b' \
+               'backslash:/rx/a\b' 'brace:/rx/a{b'; do
+  rx_bad="${rx_case#*:}"
+  rx_got="$rx_got ${rx_case%%:*}:$(rx_probe "\"/rx/ok $rx_bad\"" "READ_EXTRA entry '$rx_bad'")"
+done
+rx_got="$rx_got newline:$(rx_probe '"/rx/ok
+/rx/b"' 'READ_EXTRA contains a newline')"
+rx_got="$rx_got ok:$(rx_probe '"/rx/home/.claude/skills/qa-report /rx/home/.claude/plugins/cache/mk-1/codereview"' 'READ_EXTRA')"
+assert_eq "READ_EXTRA that is not a literal absolute directory is refused, and the reason names it" \
+  " relative:died|1 tilde:died|1 dotdot:died|1 dot:died|1 root:died|1 empty:died|1 trailing:died|1 star:died|1 qmark:died|1 lbracket:died|1 rbracket:died|1 lparen:died|1 rparen:died|1 backslash:died|1 brace:died|1 newline:died|1 ok:lived|0" \
+  "$rx_got"
 
 # ---------------------------------------------------------------------------
 # The PATH keys — TODO_FILE, HANDOFF_DIR, QA_DOCS_PATH, E2E_DIR — become `writes:` globs through

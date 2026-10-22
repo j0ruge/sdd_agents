@@ -22,6 +22,10 @@ SDD="$ROOT/bin/sdd"
 FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-dryrun-XXXXXX")"
 MISSION="20260101-fixture"
 fails=0
+# Every key may arrive exported, and load_config keeps an exported value when the file sets none.
+# The READ_EXTRA block below compares a run WITH the key against the runs without it, so a value in
+# the caller's environment would be read as the runner adding rules nobody declared.
+unset READ_EXTRA
 
 # This file exercises the REAL (non-dry) blocked-escalation path below, which writes an autonomy
 # ledger row. run-all.sh already exports SDD_STATE_DIR for every test it runs, but a standalone
@@ -309,6 +313,145 @@ assert_eq "every projected phase is handed a resolvable templates path in its bo
 # above while handing the CLI two conflicting --output-format values.
 assert_eq "and no phase is left on the single-blob format" "0" \
   "$(grep -c -- '--output-format json' <<< "$argv")"
+
+# --- every phase may read the kit templates, and only read them -------------
+# The boot prompt above orders every phase to start from $SDD_HOME/templates/, and under
+# `--permission-mode acceptEdits --allowedTools Bash` the harness DENIES a Read outside the target
+# repo — measured 2026-10-20 in Claude Code 2.1.296 and again in 2.1.304 (ADR 0019): the session
+# either reads it through Bash, works from memory, or stops. The runner appends a read-only rule,
+# `Read(/<physical SDD_HOME>/templates/**)`, as arguments of their own right after the
+# `--allowedTools` value. `--add-dir` would read too, and would also let the session WRITE the kit.
+#
+# Per block, so a red names the phase. Three things in one verdict: the first argument after the
+# value is the rule; every further argument of the list is a `Read(` rule (never Edit/Write); and
+# the line carries no --add-dir. The path is the PHYSICAL kit home, as _resolve_self computes it
+# (`cd -P`), never $ROOT, which is logical. The argv is printed through `%q`, so the rule is
+# compared escaped — and read through ENVIRON, because `awk -v` would eat the backslashes.
+# The scan starts at the LAST `--model` field: the boot prompt rides on the same line, word by word
+# inside its `$'…'`, and a prompt that ever said "--add-dir" must not answer for the flags.
+echo "== every phase may read the kit templates, and only read them =="
+kit_home_phys="$(CDPATH='' cd -P "$ROOT" && pwd)"
+read_rules_of() { # read_rules_of <argv> — <phase>=ok|no-rule|not-read-only:<arg>|add-dir per block
+  want="$(printf '%q' "Read(/$kit_home_phys/templates/**)")" awk '
+    /^--- DRY RUN: phase .* ---$/ { blk = $5; next }
+    blk != "" && / claude -p / {
+      k = 0; for (i = 1; i <= NF; i++) if ($i == "--model") k = i
+      v = "no-allowedTools"
+      for (i = k; k && i <= NF; i++) if ($i == "--allowedTools") {
+        v = ($(i + 2) == ENVIRON["want"]) ? "ok" : "no-rule"
+        for (j = i + 2; j <= NF && substr($j, 1, 2) != "--"; j++)
+          if (index($j, "Read\\(") != 1) v = "not-read-only:" $j
+        break
+      }
+      for (i = k; k && i <= NF; i++) if ($i == "--add-dir") v = "add-dir"
+      print blk "=" v; blk = ""
+    }
+  ' <<< "$1"
+}
+assert_eq "every phase may read the kit templates, and only read them" \
+  "$(printf '%s\n' EXEC=ok QA:close=ok REVIEW=ok DOCS=ok PR=ok)" "$(read_rules_of "$argv")"
+
+# --- READ_EXTRA: the project declares the skill directories, read-only ------
+# A skill keeps its references under ~/.claude/, outside the target repo, and the kit cannot know
+# where (ADR 0019 §2). The project declares the directories in READ_EXTRA; kit_read_rules turns each
+# into the same read-only rule as the templates' and, when `readlink -f` differs, adds the resolved
+# target's rule too — the harness checks the path asked for AND the resolved one (a symlinked skill
+# needed both rules, 2.1.304). It also measures the resolved branch of the templates' rule, which is
+# the same line of kit_read_rules and had no fixture that symlinks.
+#
+# Three entries, four rules expected: a real directory, a symlink to a real one, and a symlink to
+# a directory whose name is not literal. The last one keeps its own rule (its name IS literal) and
+# gets no rule for its target: `odd[1]` is a bracket expression to the harness, and its rule would
+# grant `odd1/` while still denying `odd[1]/`. The whole list is compared, in order, so a target
+# emitted unchecked is a red here too.
+#
+# A DIFFERENTIAL over two runs: with the key, the templates' rule and the four; without it (the
+# projection at the top of this file), the templates' rule alone. A runner that stamps the same
+# rules on every run satisfies neither half. The value is written `$SDD_RX_FIX/…` in the config and
+# the variable is exported, the way a target writes `$HOME/…`: what load_config validates and
+# kit_read_rules prints is the EXPANDED value. The fixture root is physical (`cd -P`), or a TMPDIR
+# behind a symlink would add a resolved rule to every entry.
+echo "== READ_EXTRA reaches every phase as a read-only rule, symlink resolved =="
+rx_root="$(CDPATH='' cd -P "$SDD_STATE_FIX" && pwd)/rx"
+mkdir -p "$rx_root/real" "$rx_root/target" "$rx_root/odd[1]"
+# RELATIVE targets, the way `ln -s` is usually typed: a plain `readlink` answers `target`, which is
+# no absolute path, and only `readlink -f` gives the rule the harness checks.
+ln -s target "$rx_root/link"
+ln -s 'odd[1]' "$rx_root/oddlink"
+rx_rules_of() { # rx_rules_of <argv> — <phase>=<every argument after the --allowedTools value> per block
+  awk '
+    /^--- DRY RUN: phase .* ---$/ { blk = $5; next }
+    blk != "" && / claude -p / {
+      k = 0; for (i = 1; i <= NF; i++) if ($i == "--model") k = i
+      v = ""
+      for (i = k; k && i <= NF; i++) if ($i == "--allowedTools") {
+        for (j = i + 2; j <= NF && substr($j, 1, 2) != "--"; j++) v = v (v == "" ? "" : " ") $j
+        break
+      }
+      print blk "=" v; blk = ""
+    }
+  ' <<< "$1"
+}
+rx_want() { # rx_want <dir>... — the five blocks, each carrying the templates rule then one per dir
+  local ph d line
+  for ph in EXEC QA:close REVIEW DOCS PR; do
+    line="$(printf '%q' "Read(/$kit_home_phys/templates/**)")"
+    for d in "$@"; do line="$line $(printf '%q' "Read(/$d/**)")"; done
+    printf '%s=%s\n' "$ph" "$line"
+  done
+}
+case "$rx_root" in
+  /*[!A-Za-z0-9._/-]*) fail "the READ_EXTRA fixture root is a literal path" "letters, digits, . _ - and /" "$rx_root" ;;
+esac
+# shellcheck disable=SC2016 # the config must carry the variable, not its value
+printf 'READ_EXTRA="$SDD_RX_FIX/real $SDD_RX_FIX/link $SDD_RX_FIX/oddlink"\n' >> .sdd/config.sh
+rx_argv="$(tr -s ' ' <<< "$( SDD_RX_FIX="$rx_root" "$SDD" run "$MISSION" --dry-run 2>&1 )")"
+sed -i '/^READ_EXTRA=/d' .sdd/config.sh
+assert_eq "READ_EXTRA reaches every phase as a read-only rule, symlink resolved" \
+  "$(rx_want "$rx_root/real" "$rx_root/link" "$rx_root/target" "$rx_root/oddlink")
+---
+$(rx_want)" \
+  "$(rx_rules_of "$rx_argv")
+---
+$(rx_rules_of "$argv")"
+
+# --- the read-rule lists survive `set -u` on bash 4.0 to 4.3 ----------------
+# A door's list of read rules may be EMPTY: a kit path the grammar refuses, with READ_EXTRA empty
+# (R5). Under `set -u`, bash 4.0 to 4.3 abort on `"${list[@]}"` of an empty array with `unbound
+# variable`, and the kit accepts bash 4 (the version check at the top of bin/sdd). So every door
+# expands its list through the `+` guard cmd_preflight already gives probe_agent, and the bare form
+# is refused here wherever it reaches the runner (CodeRabbit on PR #315).
+#
+# STATIC, and that is a limit, not a choice: the world in which the bare form fails — a bash 4.0
+# to 4.3 running the runner over an empty list — was not built, because this machine has bash 5.2
+# only, which expands an empty list to nothing under either spelling; no dry-run here can go red on
+# it. The lists are FOUND, never named: every array a `mapfile -t <list> < <(…_rules)` fills, so a
+# fourth door's list is held with no edit here. Comments are read too, so a comment that spells a
+# list bare is red, which is the safe side. Loud when the scan reads nothing: fewer than the three
+# lists (run_phase, the template probe, sdd close), or a list of which neither spelling is found,
+# is red by name, never a vacuous green.
+echo "== every read-rule array reaches claude through an expansion that set -u accepts on bash 4.0 too =="
+rule_expansions="$(awk '
+  { line[NR] = $0 }
+  match($0, /mapfile -t [A-Za-z_][A-Za-z0-9_]* < <\([a-z_]+_rules\)/) {
+    s = substr($0, RSTART + 11); lists[substr(s, 1, index(s, " ") - 1)] = 1
+  }
+  END {
+    for (n in lists) {
+      found++; guarded = 0; bare = 0
+      g = "${" n "[@]+\"${" n "[@]}\"}"; b = "${" n "[@]"
+      for (i = 1; i <= NR; i++) {
+        t = line[i]
+        while ((p = index(t, g)) > 0) { guarded++; t = substr(t, 1, p - 1) substr(t, p + length(g)) }
+        if (index(t, b) > 0) { bare++; print n ": bare expansion at bin/sdd:" i }
+      }
+      if (guarded + bare == 0) print n ": no expansion of it found, guarded or bare, so the site this scan reads is gone"
+    }
+    if (found < 3) print "only " found + 0 " read-rule list(s) found, want 3 (run_phase, the template probe, sdd close)"
+  }
+' "$ROOT/bin/sdd" | sort)"
+assert_eq "every read-rule array reaches claude through an expansion that set -u accepts on bash 4.0 too" \
+  "" "$rule_expansions"
 
 # --- the damage cap is per phase -------------------------------------------
 # One global ceiling priced every phase as if they cost the same. They do not: a REVIEW round with
