@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 1f921771-01eb-471d-b867-0c307054b548
 data: 2026-10-20 22:46
-gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024 linhas `ok`, eram 2019 na base de `aea4522`; nenhum `FAIL`); Check do I6 → `1 1`; `tests/check-checkpoint.sh --check` → `6 row(s), 6 under the anchor rule, none blind`; os seis incrementos `done`; rodada de conserto da revisão final: R1 `f9f3b34` (Check → `1`) e R2 `5f05cf4` (Check → `1 1`), com `check-preflight.sh` 146 `ok` e rc 0, `check-mutation.sh --anchors` 742 de 742, `check-todo.sh` e `--anchors` verdes; R3 `b96afd8` e R4 `8c72cfb` (Check → `1`), com `check-preflight.sh` 150 `ok` e rc 0, `check-mutation.sh --anchors` 746 de 746, os dois mutantes novos pegos com `--only`; R5 `4426c94` (Check → `1 1`), com `check-preflight.sh` 152 `ok`, `check-health.sh` 56, `check-dry-run.sh` 86 e `check-gates.sh` 479, todos rc 0, `check-mutation.sh --anchors` 751 de 751, os cinco mutantes novos pegos com `--only`; R6 `df5bdb6` (Check → `1`), com `check-preflight.sh` 154 `ok` e rc 0, `check-adr.sh` 81, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (33 achados, 0 fora do alvo) verdes, `check-mutation.sh --anchors` 755 de 755, os quatro mutantes novos e os três de âncora movida pegos com `--only`; R7 `0b8c140` (Check → `1`), com `check-preflight.sh` 155 `ok`, `check-dry-run.sh` 86, `check-gates.sh` 479, `check-health.sh` 56 e `check-adr.sh` 81, todos rc 0, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (34 achados, 0 fora do alvo) verdes, `check-mutation.sh --anchors` 757 de 757, os dois mutantes novos e os oito tocados pegos com `--only`; R8 `6b70968` e `f6ce468` (Check → `1 1 0 1`; o do R2 → `1 1 1`), com `check-dry-run.sh` 87 `ok`, `check-gates.sh` 479 e `check-preflight.sh` 155, todos rc 0, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (38 achados, 0 fora do alvo) verdes, `check-checkpoint.sh --check` 14 linhas sem cega, `check-mutation.sh --anchors` 762 de 762, os cinco mutantes novos e os quatro de âncora movida pegos com `--only`; R9 `8f94a3a` (Check → `1 1`; os de I3, I6 e R1 a R7 conferidos sobre a mesma saída, cada um no esperado), com `check-preflight.sh` 159 `ok`, `check-dry-run.sh` 87 e `check-health.sh` 56, todos rc 0, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (38 achados, 0 fora do alvo) verdes, `check-checkpoint.sh --check` 15 linhas sem cega, `check-mutation.sh --anchors` 769 de 769, os sete mutantes novos pegos com `--only`; a suíte inteira depois da rodada é do relay
+gate: `tests/run-all.sh` em `e8fe91c` → `suite green`, rc 0 (10 min 50 s; 2024 linhas `ok`, eram 2019 na base de `aea4522`; nenhum `FAIL`); Check do I6 → `1 1`; `tests/check-checkpoint.sh --check` → `6 row(s), 6 under the anchor rule, none blind`; os seis incrementos `done`; rodada de conserto da revisão final: R1 `f9f3b34` (Check → `1`) e R2 `5f05cf4` (Check → `1 1`), com `check-preflight.sh` 146 `ok` e rc 0, `check-mutation.sh --anchors` 742 de 742, `check-todo.sh` e `--anchors` verdes; R3 `b96afd8` e R4 `8c72cfb` (Check → `1`), com `check-preflight.sh` 150 `ok` e rc 0, `check-mutation.sh --anchors` 746 de 746, os dois mutantes novos pegos com `--only`; R5 `4426c94` (Check → `1 1`), com `check-preflight.sh` 152 `ok`, `check-health.sh` 56, `check-dry-run.sh` 86 e `check-gates.sh` 479, todos rc 0, `check-mutation.sh --anchors` 751 de 751, os cinco mutantes novos pegos com `--only`; R6 `df5bdb6` (Check → `1`), com `check-preflight.sh` 154 `ok` e rc 0, `check-adr.sh` 81, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (33 achados, 0 fora do alvo) verdes, `check-mutation.sh --anchors` 755 de 755, os quatro mutantes novos e os três de âncora movida pegos com `--only`; R7 `0b8c140` (Check → `1`), com `check-preflight.sh` 155 `ok`, `check-dry-run.sh` 86, `check-gates.sh` 479, `check-health.sh` 56 e `check-adr.sh` 81, todos rc 0, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (34 achados, 0 fora do alvo) verdes, `check-mutation.sh --anchors` 757 de 757, os dois mutantes novos e os oito tocados pegos com `--only`; R8 `6b70968` e `f6ce468` (Check → `1 1 0 1`; o do R2 → `1 1 1`), com `check-dry-run.sh` 87 `ok`, `check-gates.sh` 479 e `check-preflight.sh` 155, todos rc 0, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (38 achados, 0 fora do alvo) verdes, `check-checkpoint.sh --check` 14 linhas sem cega, `check-mutation.sh --anchors` 762 de 762, os cinco mutantes novos e os quatro de âncora movida pegos com `--only`; R9 `8f94a3a` (Check → `1 1`; os de I3, I6 e R1 a R7 conferidos sobre a mesma saída, cada um no esperado), com `check-preflight.sh` 159 `ok`, `check-dry-run.sh` 87 e `check-health.sh` 56, todos rc 0, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (38 achados, 0 fora do alvo) verdes, `check-checkpoint.sh --check` 15 linhas sem cega, `check-mutation.sh --anchors` 769 de 769, os sete mutantes novos pegos com `--only`; R10 `981fd82` (Check → `1 1`), com `check-preflight.sh` 160 `ok` em 51 s, `check-health.sh` 56 e `check-dry-run.sh` 87, todos rc 0, `check-lang.sh`, `check-pipefail.sh`, `check-todo.sh` e `--anchors` (38 achados, 0 fora do alvo) verdes, `check-checkpoint.sh --check` 16 linhas sem cega, `check-mutation.sh --anchors` 775 de 775, os seis mutantes novos pegos com `--only`; a suíte inteira depois da rodada é do relay
 ---
 
 # Handoff — EXEC — a sessão lê o que o boot manda ler
@@ -20,16 +20,16 @@ do kit passa na gramática (desde o R5 o recusado não ganha a regra, e a sonda 
 no journal; o preflight prova a regra numa sessão isolada e avisa, sem sessão, a entrada do `READ_EXTRA` que não
 existe e a skill achada (pela forma como a fase a chama) que nenhuma regra cobre. Suíte verde em ``e8fe91c``. Próximo:
 QA (sub-etapa `close`) e a verificação end-to-end do `01-plano.md`. A revisão final pediu R1 e R2, o Codex no PR #315
-do R3 ao R7 e o R9, e o CodeRabbit o lote R8, todos feitos ("Rodada de conserto"); a suíte depois deles é do relay.
+do R3 ao R7, o R9 e o R10, e o CodeRabbit o lote R8, todos feitos ("Rodada de conserto"); a suíte depois é do relay.
 
 ## Estado do repo
 
 - **Branch:** `kaizen/20261020-a-sessao-le-o-que-o-boot-manda`, no worktree `/home/joruge/repos/sdd_agents-f9`. Não empurrada (nenhum `git push` nesta fase).
-- **Último commit:** o commit de checkpoint do R9, cuja mensagem é `chore(checkpoint): R9 done (8f94a3a)` (o hash
+- **Último commit:** o commit de checkpoint do R10, cuja mensagem é `chore(checkpoint): R10 done (981fd82)` (o hash
   entre parênteses é o do conserto, não o dele), e antes dele o commit desta atualização do handoff
 - **Working tree:** limpo
 - **Suíte:** `tests/run-all.sh` → verde em `e8fe91c`: `suite green`, rc 0, 2024 linhas `ok`, nenhum `FAIL`. Depois
-  de R1 a R9 só rodaram os sensores tocados (abaixo); a suíte inteira é do relay
+  de R1 a R10 só rodaram os sensores tocados (abaixo); a suíte inteira é do relay
 - **E2E:** sem `E2E_CMD` nem `APP_URL` no kit; não se aplica. A métrica de ponta a ponta é a sonda de rascunho do `01-plano.md`, § Verificação end-to-end, que gasta sessão real e fica para o relay.
 
 ## O que foi feito
@@ -126,6 +126,14 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   cache copy`, mais a paridade entre a lista do preflight e as invocações dos chapéus e do `phase_slash`, e o aviso
   de não achado. Os mundos de symlink, de alvo recusado e de diretório de skills passaram de `codereview` para
   `ticket`, porque o valor esperado deles era o defeito #1. Sete mutantes `mut_PRE_*` novos.
+- `981fd82` — R10 (o P2 do Codex na r8 do PR #315, `bin/sdd:5767`, decisão humana "Cache só na árvore do plugin", e o
+  prazo do passo, decisão humana "Subir para 600 s"): quarta falha seguida da vizinhança (R2, R5, R9, R10), e o
+  estado que faltava era a que plugin pertence um caminho do cache. Sem a chave no registro, a forma com plugin anda
+  só em `cache/<marketplace>/<plugin>/<versão>/skills/<skill>` e publica o diretório do plugin, acima das versões; a
+  forma simples segue no `find` por nome. Check → `1 1`: `a plugin skill missing from the registry is looked for in
+  the cache only under its own plugin tree` (OTHER com o piso do `find` de hoje, BOTH sob `mk2`, HOLLOW) e o
+  `"preflight and the install guard") echo 600`. O SK2 e o SK4 passaram a mundos do `ticket`. Seis mutantes
+  `mut_PRE_plugin_cache_*` novos.
 
 ## Artefatos
 
@@ -133,7 +141,7 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
 |---|---|
 | `bin/sdd` | `kit_read_rules`, `kit_template_rules`, `dir_read_rules`, `read_extra_each`, `read_extra_dir_ok`, `journal_denials`, `read_rules_cover`, `skill_read_entry`, `plugin_install_paths`, a sonda dos templates, os dois avisos e a recusa do caminho do kit no `cmd_preflight` |
 | `tests/check-dry-run.sh`, `tests/check-gates.sh`, `tests/check-preflight.sh`, `tests/check-autonomy.sh` | as asserções dos seis Checks |
-| `tests/check-mutation.sh` | os mutantes novos da missão, catálogo em 769 depois do R9 (`--anchors`: todos se aplicam) |
+| `tests/check-mutation.sh` | os mutantes novos da missão, catálogo em 775 depois do R10 (`--anchors`: todos se aplicam) |
 | `config/schema.md`, `config/starter.conf`, `docs/pipeline.md`, `docs/failure-modes.md`, `.claude/rules/anatomia-do-agente.md` | a regra, a chave e os avisos documentados |
 | `docs/adr/0019-the-session-reads-what-the-boot-names.md` | o porquê de cada forma (escrita no PLAN) |
 | `checkpoint-notas.md` | Checks, sensores, passadas de sabotagem e Rulings de cada incremento |
@@ -149,7 +157,9 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   formas, com a skill nomeada pela forma como a fase a chama (`codereview:codereview`, `ticket`; desde o R9). Desde o
   R9 também `skill codereview:codereview is not where the harness loads it: <registro> records the codereview plugin
   installed at <installPath>…`, com o remédio (reinstalar o plugin), quando o registro grava o plugin e nenhuma
-  instalação tem a skill, e o `skills not found` diz onde procurou para cada forma. A skill que nenhuma regra cobre (`…, and no read rule …`) vem seguida de `READ_EXTRA entry to add:
+  instalação tem a skill, e o `skills not found` diz onde procurou para cada forma (desde o R10, para a forma com
+  plugin, a árvore do próprio plugin no cache, `<raiz>/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>`,
+  numa linha própria). A skill que nenhuma regra cobre (`…, and no read rule …`) vem seguida de `READ_EXTRA entry to add:
   <entrada>`. Desde o R1, a skill declarada cujo alvo de symlink a gramática recusa (`… (a symlink to <alvo>), whose
   target no read rule can cover:`) nomeia o alvo e o remédio, mover ou renomear o alvo, sem `entry to add`: nenhuma
   entrada o alcança. Desde o R5, num kit cujo caminho a gramática recusa, um `fail` a mais
@@ -223,6 +233,12 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   com ele a classe do #2: um `ticket` cuja chave grava uma instalação sem a skill continua indo ao cache. A paridade
   lê as invocações em crase dos `agents/*.md` e os `printf` do `phase_slash`; uma invocação escrita fora desses dois
   lugares ou sem crase sai da comparação.
+- R10: a forma simples segue no `find` por nome por decisão, então um `ticket` sem chave no registro ainda pode ser
+  o `skills/ticket` de outro plugin, a classe do R10 para a forma simples. O glob da árvore do plugin sai em ordem
+  de nome, não de diretório: com o plugin em dois marketplaces, sem registro, o aviso nomeia o primeiro por nome. O
+  mundo BOTH não distingue o `find` antigo nesta máquina (ele achou o `mk2` primeiro); quem prova o defeito é o
+  OTHER, com o piso, e o HOLLOW. O prazo de 600 s não tem sensor na suíte, só o Check: um sensor que lesse o número
+  repetiria a constante.
 
 ## Achados fora de escopo
 
@@ -232,5 +248,5 @@ O Important virou o R1; os Minor baratos #2 e #8, o lote R2; a prosa (#3, #4, #6
   nove pelo R4 (sete do `bin/sdd` e duas citações cruzadas de docs), 21 pelo R5 (17 do `bin/sdd`, quatro delas
   citações curtas `:N`, e quatro cruzadas de docs), 13 pelo R6 (dez do `bin/sdd` e três cruzadas de docs) e 18 pelo
   R7 (14 do `bin/sdd`, três cruzadas de docs e uma da anatomia), 16 pelo R8 (15 do `bin/sdd` e a da anatomia, que
-  andou duas vezes) e 19 pelo R9 (15 do `bin/sdd`, três cruzadas de docs e a da anatomia) — número velho +
-  deslocamento do diff, a mesma linha de código.
+  andou duas vezes), 19 pelo R9 e 19 pelo R10 (15 do `bin/sdd`, três cruzadas de docs e a da anatomia, nos dois) —
+  número velho + deslocamento do diff, a mesma linha de código.
