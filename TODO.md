@@ -232,6 +232,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o que não era da M2: o `pipeline.log` dela fechou sem `HAT-CROSSED` nem `FOREIGN-COMMIT`. Direção: o passo 2
   vale com `sdd run` vivo no alvo, e a checagem do relay nomeia o que a corrida pode mudar.
   — descoberto pelo relay do `/sdd-plan` na missão `20261020-amep-anexo-na-demanda` (2026-10-20)
+- [ ] **Numa worktree sem o `.venv`, o gate do EXEC lê o `TEST_CMD` que não rodou como suíte vermelha** —
+  `bin/sdd:1490` (`run_check_cmd`) — o `.venv` é ignorado pelo git, então a worktree nasce sem ele, e o
+  `.venv/bin/python` relativo do `TEST_CMD` não existe. No `magic_tutor` (missão `20261021-dica-mais-rapida`,
+  worktree `~/.wt/mt-19`) o log `gate-exec-test-20261021-195209-*.log` traz só `.venv/bin/python: No such file or
+  directory` (rc 127), e o `GATE_WHY` dizia `TEST_CMD failed`, como se a suíte tivesse reprovado. O contorno foi um
+  link `.venv` para o venv do checkout principal e a linha `.venv` no `.git/info/exclude`. Direção: o rc 127 ganha
+  um `GATE_WHY` próprio ("o `TEST_CMD` nem rodou"), que nomeia o que faltou na árvore.
+  — descoberto pelo relay da missão `20261021-dica-mais-rapida` do `magic_tutor` (2026-10-21)
+- [ ] **O `sdd-executor` lançado como subagente fecha o último incremento e volta sem o `20-handoff-exec.md`** —
+  `agents/sdd-executor.md:175` (`20-handoff-exec.md`) — o §6 manda escrever o handoff quando nenhuma linha fica
+  `pending`. No `magic_tutor` (missão `20261021-dica-mais-rapida`), o relay lançou como subagente o executor do I11,
+  o último: ele commitou o `I11 done` (`508c4c9`, 19:48) e devolveu o relatório sem o handoff, que só veio quando o
+  relay pediu (`ae3cc8e`, 19:52). Pelo `sdd run`, o gate do EXEC acusa a falta; fora dele, nada acusa. Direção: o
+  §5 avisa que, sem linha `pending`, o §6 faz parte do mesmo incremento, e o relatório final do executor diz se o
+  handoff foi escrito.
+  — descoberto pelo relay da missão `20261021-dica-mais-rapida` do `magic_tutor` (2026-10-21)
 
 ### Saída humana e cosmética
 
@@ -315,6 +331,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
 
 ### Custo e escala
+
+- [ ] **Um incremento que roda por quase 1 h não cabe no `sdd-executor`, que não tem `Monitor`** —
+  `agents/sdd-executor.md:7` (`disallowedTools`) — a fronteira do chapéu
+  (`docs/superpowers/specs/2026-09-03-a-fronteira-do-chapeu-design.md`) tira o `Monitor` e o `ScheduleWakeup` do
+  executor, e o Bash em primeiro plano para em 10 min. No `magic_tutor` (missão `20261021-dica-mais-rapida`), o I8 a
+  I10 eram a bancada real (7 rodadas do coach, de 45 min a 1 h em segundo plano), e a sessão do relay os rodou à mão
+  ("rodados pela sessão do relay", `checkpoint-notas.md`). Direção: o `/sdd-plan` marca como do operador o
+  incremento cujo comando passa de 10 min, com o comando e o critério no plano, e o runner não o entrega ao executor.
+  — descoberto pelo relay da missão `20261021-dica-mais-rapida` do `magic_tutor` (2026-10-21)
 
 ### Sem seção — chegaram depois da última classificação
 
