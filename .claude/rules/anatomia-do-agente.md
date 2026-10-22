@@ -97,9 +97,11 @@ simples (`ticket`, `qa-report`, `qa-execution`) nos diretórios de skills primei
 notas; na forma com plugin, o registro que grava o plugin sem nenhuma instalação que tenha a skill é
 instalação quebrada, avisada pelo nome (o registro, o `installPath` e o remédio, reinstalar o
 plugin) e nunca trocada por uma cópia do cache, que só é varrido quando o registro não grava
-instalação do plugin; e o aviso sobre diretório sob o cache nomeia esse arquivo, porque o cache pode
-ter mais de uma cópia; o probe é o `tests/check-preflight.sh`, com dezoito mutantes `mut_PRE_*`, e
-o `tests/check-health.sh` do lado da tabela.
+instalação do plugin, e então só na árvore do próprio plugin
+(`cache/<marketplace>/<plugin>/<versão>/skills/<skill>`; o `skills/<skill>` de outro plugin nunca
+conta, r8 do Codex no #315); e o aviso sobre diretório sob o cache nomeia esse arquivo, porque o
+cache pode ter mais de uma cópia; o probe é o `tests/check-preflight.sh`, com vinte e quatro
+mutantes `mut_PRE_*`, e o `tests/check-health.sh` do lado da tabela.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`

@@ -1043,8 +1043,12 @@ invokes it by: plain (`ticket`, `qa-report`, `qa-execution`) in the skills direc
 `codereview:codereview`, the REVIEW's, in the harness's registry (`installed_plugins.json`) and
 never in a plain directory. A plugin skill is the copy whose `installPath` the registry records
 under the plugin's own key (`<plugin>@<marketplace>`, never another plugin that ships a skill of the
-same name), the first copy in the cache only when no recorded install holds it, and a warning about
-a directory under the cache names that file, since the cache may hold more than one copy. For
+same name), else a copy from the cache: for `codereview:codereview` only when the registry records no
+install of the plugin, and only from the plugin's own tree
+(`…/plugins/cache/<marketplace>/codereview/<version>/skills/codereview`; another plugin's
+`skills/codereview` never counts); for a skill invoked plain, the first directory of its name, also
+when no recorded install holds it. A warning about a directory under the cache names that file,
+since the cache may hold more than one copy. For
 `codereview:codereview`, a registry that records the plugin with no install holding the skill is a
 broken install, warned by name with the registry, the `installPath` and the remedy (reinstall the
 plugin), and never replaced by a copy from the cache. The registry has one reader,

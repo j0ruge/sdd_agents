@@ -1476,7 +1476,8 @@ mv .sdd/config.sh.bak .sdd/config.sh
 #     unless the directory is covered and the grammar refuses the target's name, which no entry can
 #     reach: named as such, with the remedy (move or rename the target) and no entry;
 #   - a plugin skill is the copy the registry (`installed_plugins.json`) records, else the first one
-#     the cache holds, and a warning about a directory under the cache names that registry.
+#     the cache holds under the plugin's own tree (for a skill invoked plain, the first directory of
+#     its name), and a warning about a directory under the cache names that registry.
 #     The rules are kit_read_rules' own, the repo is the session's cwd, and a rule covers its
 #     directory and what is under `<dir>/` — never a sibling that only starts with the same letters.
 # HOME is set for every run here, so the `$HOME/…` spelling of the entry is asserted both ways
@@ -1543,9 +1544,10 @@ assert_eq "preflight warns about a READ_EXTRA directory that does not exist, and
   "absent:1 present:0 same:same reached:1" \
   "absent:$(grep -cF "  warn  READ_EXTRA names $RX_ABSENT, which does not exist on this machine" <<< "$out_rx_both") present:$(grep -cF -- "$RX_PRESENT" <<< "$out_rx_both") same:$(rx_same "$out_rx_both" "$out_rx_none") reached:$(grep -c '^  ok   git present$' <<< "$out_rx_both")"
 
-# The skill nobody declared. The codereview plugin sits in the cache with its version below it, and
-# `find` meets the plugin's own directory first (it walks a parent before its children), so the
-# directory found IS the parent without the version: declared, it is covered by equality.
+# The skill nobody declared. The codereview plugin sits in the cache with its version below it, no
+# registry records it, and the walk of the plugin's own tree names the plugin's own directory, above
+# its versions, so the directory found IS the parent without the version: declared, it is covered by
+# equality.
 RX_SK1_HOME="$RXF/sk1"
 RX_SK1_ROOT="$RX_SK1_HOME/.claude"
 mkdir -p "$RX_SK1_ROOT/plugins/cache/mk/codereview/1.0.0/skills/codereview"
@@ -1558,17 +1560,19 @@ assert_eq "preflight names a skill it finds that READ_EXTRA does not declare, wi
 # Found BELOW the version: a plugin whose name is not the skill's. The entry is still the plugin's
 # directory, the parent without the version (two components under the cache), and it covers the
 # skill through `<entry>/`. A sibling whose name only starts with the same letters covers nothing —
-# the slash of `<entry>/` is what tells `codereview-x` from `codereview`. HOME is elsewhere here, so
-# the entry comes back absolute.
+# the slash of `<entry>/` is what tells `ticket-x` from `ticket`. HOME is elsewhere here, so the
+# entry comes back absolute. The world is `ticket`'s, JIRA on: a skill invoked plain is the one the
+# cache answers by name wherever it sits, while `codereview:codereview` is looked for in the
+# codereview plugin's own tree alone (Codex r8 on PR #315), where no other plugin's copy counts.
 RX_SK2_ROOT="$RXF/sk2/.claude"
-RX_SK2_PLUGIN="$RX_SK2_ROOT/plugins/cache/mk/codereview-x"
-mkdir -p "$RX_SK2_PLUGIN/2.0.0/skills/codereview"
-out_sk2_bare="$(rx_run "$RX_HOME" "$RX_SK2_ROOT" "")"
-out_sk2_parent="$(rx_run "$RX_HOME" "$RX_SK2_ROOT" "$RX_SK2_PLUGIN")"
-out_sk2_sibling="$(rx_run "$RX_HOME" "$RX_SK2_ROOT" "$RX_SK2_ROOT/plugins/cache/mk/codereview")"
+RX_SK2_PLUGIN="$RX_SK2_ROOT/plugins/cache/mk/ticket-x"
+mkdir -p "$RX_SK2_PLUGIN/2.0.0/skills/ticket"
+out_sk2_bare="$(rx_run_jira "$RX_HOME" "$RX_SK2_ROOT" "")"
+out_sk2_parent="$(rx_run_jira "$RX_HOME" "$RX_SK2_ROOT" "$RX_SK2_PLUGIN")"
+out_sk2_sibling="$(rx_run_jira "$RX_HOME" "$RX_SK2_ROOT" "$RX_SK2_ROOT/plugins/cache/mk/ticket")"
 assert_eq "a plugin skill is covered by the directory above its version, and never by a sibling that shares a prefix" \
   "bare:missing=0,warned=1,link=0,entry=$RX_SK2_PLUGIN parent:missing=0,warned=0,link=0,entry= sibling:missing=0,warned=1,link=0,entry=$RX_SK2_PLUGIN" \
-  "bare:$(rx_skill "$out_sk2_bare") parent:$(rx_skill "$out_sk2_parent") sibling:$(rx_skill "$out_sk2_sibling")"
+  "bare:$(rx_skill "$out_sk2_bare" ticket) parent:$(rx_skill "$out_sk2_parent" ticket) sibling:$(rx_skill "$out_sk2_sibling" ticket)"
 
 # Reached through a symlink, as `ticket` is on the machine this was written on — so this world is
 # `ticket`'s, a skill a phase invokes plain and finds in a skills directory (a plain directory is never
@@ -1624,15 +1628,16 @@ assert_eq "a declared skill whose symlink target the grammar refuses is named as
 # The edges of the entry's spelling. A skill directory met one level under the cache has no version
 # above it, so the entry is the directory itself, never a second copy of its name. `$HOME` is written
 # only under a real HOME: one with a trailing slash still counts, and an EMPTY one would make every
-# absolute path look like it is under it.
+# absolute path look like it is under it. `ticket`'s world, JIRA on, as the one above: a directory
+# one level under the cache is no plugin's tree, so only a skill invoked plain is found there.
 RX_SK4_HOME="$RXF/sk4"
-RX_SK4_DIR="$RX_SK4_HOME/.claude/plugins/cache/codereview"
+RX_SK4_DIR="$RX_SK4_HOME/.claude/plugins/cache/ticket"
 mkdir -p "$RX_SK4_DIR"
-out_sk4_slash="$(rx_run "$RX_SK4_HOME/" "$RX_SK4_HOME/.claude" "")"
-out_sk4_nohome="$(rx_run "" "$RX_SK4_HOME/.claude" "")"
+out_sk4_slash="$(rx_run_jira "$RX_SK4_HOME/" "$RX_SK4_HOME/.claude" "")"
+out_sk4_nohome="$(rx_run_jira "" "$RX_SK4_HOME/.claude" "")"
 assert_eq "the entry is the directory found when no version sits above it, and \$HOME is written only under a real HOME" \
-  "slash:missing=0,warned=1,link=0,entry=\$HOME/.claude/plugins/cache/codereview nohome:missing=0,warned=1,link=0,entry=$RX_SK4_DIR" \
-  "slash:$(rx_skill "$out_sk4_slash") nohome:$(rx_skill "$out_sk4_nohome")"
+  "slash:missing=0,warned=1,link=0,entry=\$HOME/.claude/plugins/cache/ticket nohome:missing=0,warned=1,link=0,entry=$RX_SK4_DIR" \
+  "slash:$(rx_skill "$out_sk4_slash" ticket) nohome:$(rx_skill "$out_sk4_nohome" ticket)"
 
 # A skill found in the plugin cache (r1 #2 of the final review). The cache keeps every copy ever
 # fetched, under every marketplace that shipped the plugin, and the copy the harness loads is the
@@ -1668,13 +1673,13 @@ assert_eq "a skill found in the plugin cache is warned with installed_plugins.js
 # the registry lists, in this order: a user-scope plugin that holds no `codereview` skill; the `zz-mk`
 # copy under PROJECT scope — another repo's pin, which this preflight does not speak for, the call
 # health makes for the grade table; and the `aa-mk` copy under user scope, the one held to the rules.
-# `find` meets each plugin's own directory first, above its versions, so falling back to it names
-# `…/<mk>/codereview` and never the copy's `…/2.0.0/skills/codereview`, whichever marketplace the
-# directory order puts first: the needle tells the readers apart in every order. Declared, the right
+# The cache walk names the plugin's own directory, above its versions, so falling back to it names
+# `…/<mk>/codereview` and never the copy's `…/2.0.0/skills/codereview`, whichever marketplace comes
+# first: the needle tells the readers apart in every order. Declared, the right
 # copy's parent covers it and nothing is said — the reviewer's world, where the warning fired with
 # the right copy declared and asked for the other. HOME is elsewhere, so a registry read off $HOME
-# instead of the skills root reads nothing. A registry jq cannot read is no registry: the copy `find`
-# meets, the rc and fail count of a readable one, and none of jq's complaints in the output.
+# instead of the skills root reads nothing. A registry jq cannot read is no registry: the copy the
+# cache walk meets, the rc and fail count of a readable one, and none of jq's complaints in the output.
 RX_SK8_ROOT="$RXF/sk8/.claude"
 RX_SK8_CACHE="$RX_SK8_ROOT/plugins/cache"
 mkdir -p "$RX_SK8_CACHE/zz-mk/codereview/1.0.0/skills/codereview" \
@@ -1711,9 +1716,10 @@ assert_eq "the copy installed_plugins.json records is the one held to the rules,
 # a `skills/codereview` before `codereview@mk`: OTHER is another plugin (`other@mk`), PREFIX one whose
 # name only starts with the same letters (`codereview-x@mk`), which a key prefix without its `@`
 # would take. In both the directory found, the warning and its entry are codereview@mk's, and
-# declared, that copy's parent covers it and nothing is said. `find` meets a plugin's own directory
-# before its versions, so a reader that fell back to the cache names `…/mk/<plugin>`, never the
-# copy's `…/2.0.0/skills/codereview`: the needle tells the registry from the fallback in any order.
+# declared, that copy's parent covers it and nothing is said. The cache walk names a plugin's own
+# directory, above its versions, so a reader that fell back to the cache names `…/mk/codereview`,
+# never the copy's `…/2.0.0/skills/codereview`: the needle tells the registry from the fallback in
+# any order.
 RX_SK11_ROOT="$RXF/sk11/.claude"
 RX_SK11_CACHE="$RX_SK11_ROOT/plugins/cache"
 mkdir -p "$RX_SK11_CACHE/mk/other/1.0.0/skills/codereview" "$RX_SK11_CACHE/mk/codereview/2.0.0/skills/codereview"
@@ -1808,6 +1814,42 @@ rx_broken() {
 assert_eq "a recorded plugin install that lacks the skill is warned as broken, never replaced by a cache copy" \
   "broken:broken=1,any=1,remedy=1,stale=0,present=0|missing=0,warned=0,link=0,entry= nokey:where=1|missing=0,warned=1,link=0,entry=$RX_SK15_CACHE/old-mk/codereview reset:broken=1,any=1|missing=1,warned=0,link=0,entry=|missing=0,warned=0,link=0,entry= plain:any=0,where=1|missing=0,warned=1,link=0,entry=$RX_SK16_CACHE/mk/codereview,$RX_SK16_CACHE/old-mk/ticket" \
   "broken:$(rx_broken "$out_sk14_broken" "$RX_SK14_ROOT" "$RX_SK14_REC, $RX_SK14_REC2")|$(rx_skill "$out_sk14_broken") nokey:where=$(rx_where "$out_sk15_nokey" "$RX_SK15_CACHE/old-mk/codereview")|$(rx_skill "$out_sk15_nokey") reset:$(rx_broken "$out_sk14_reset" "$RX_SK14_ROOT" "$RX_SK14_REC, $RX_SK14_REC2" | cut -d, -f1-2)|$(rx_skill "$out_sk14_reset" ticket)|$(rx_skill "$out_sk14_reset") plain:any=$(grep -c 'is not where the harness loads it' <<< "$out_sk16_plain"),where=$(rx_where "$out_sk16_plain" "$RX_SK16_CACHE/old-mk/ticket" ticket)|$(rx_skill "$out_sk16_plain" ticket)"
+
+# WHOSE tree, when the registry records no install of the plugin (Codex r8 on PR #315). A plugin's
+# skill is namespaced by its plugin, so the cache answers `/codereview:codereview` only from the
+# codereview plugin's own tree, `<root>/plugins/cache/<marketplace>/codereview/<version>/skills/codereview`,
+# and another plugin's `skills/codereview` is a copy no session of it loads. The walk by name took the
+# first directory called codereview it met. Three worlds, each with no codereview key in the registry:
+#   OTHER  — the registry records `other@mk`, whose tree ships a `skills/codereview`, and no codereview
+#            tree exists. The floor is the walk by name itself, run here: it meets the other plugin's
+#            copy first (the only directory of that name), so the world is armed. The skill is missing,
+#            the not-found warning says the cache was walked under the plugin's own tree, and the
+#            other plugin is named nowhere;
+#   BOTH   — the same, and the codereview plugin's tree under `mk2`, since a marketplace is any
+#            component: found at the plugin's own directory, above its version, as the walk by name
+#            found it for the right plugin, with the same entry; the other plugin named nowhere;
+#   HOLLOW — a codereview plugin whose version holds another skill only (`skills/coderabbit-pr`, as
+#            the real plugin ships beside it): a directory named codereview is not the skill, and the
+#            walk by name took the plugin's own directory for it.
+RX_SK17_ROOT="$RXF/sk17/.claude"
+RX_SK17_CACHE="$RX_SK17_ROOT/plugins/cache"
+mkdir -p "$RX_SK17_CACHE/mk/other/1.0.0/skills/codereview"
+printf '{"version":2,"plugins":{"other@mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RX_SK17_CACHE/mk/other/1.0.0" > "$RX_SK17_ROOT/plugins/installed_plugins.json"
+sk17_floor="$(find "$RX_SK17_CACHE" -maxdepth 6 -type d -name codereview -print -quit 2>/dev/null || true)"
+out_sk17_other="$(rx_run "$RX_HOME" "$RX_SK17_ROOT" "")"
+RX_SK18_ROOT="$RXF/sk18/.claude"
+RX_SK18_CACHE="$RX_SK18_ROOT/plugins/cache"
+mkdir -p "$RX_SK18_CACHE/mk/other/1.0.0/skills/codereview" "$RX_SK18_CACHE/mk2/codereview/2.0.0/skills/codereview"
+printf '{"version":2,"plugins":{"other@mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RX_SK18_CACHE/mk/other/1.0.0" > "$RX_SK18_ROOT/plugins/installed_plugins.json"
+out_sk18_both="$(rx_run "$RX_HOME" "$RX_SK18_ROOT" "")"
+RX_SK19_ROOT="$RXF/sk19/.claude"
+mkdir -p "$RX_SK19_ROOT/plugins/cache/mk/codereview/1.0.0/skills/coderabbit-pr"
+out_sk19_hollow="$(rx_run "$RX_HOME" "$RX_SK19_ROOT" "")"
+assert_eq "a plugin skill missing from the registry is looked for in the cache only under its own plugin tree" \
+  "other:floor=1,named=0,tree=1|missing=1,warned=0,link=0,entry= both:where=1,named=0|missing=0,warned=1,link=0,entry=$RX_SK18_CACHE/mk2/codereview hollow:missing=1,warned=0,link=0,entry=" \
+  "other:floor=$([ "$sk17_floor" = "$RX_SK17_CACHE/mk/other/1.0.0/skills/codereview" ] && echo 1 || echo 0),named=$(grep -cF "$RX_SK17_CACHE/mk/other" <<< "$out_sk17_other"),tree=$(grep -cxF "        $RX_SK17_CACHE/<marketplace>/<plugin>/<version>/skills/<skill>." <<< "$out_sk17_other")|$(rx_skill "$out_sk17_other") both:where=$(rx_where "$out_sk18_both" "$RX_SK18_CACHE/mk2/codereview"),named=$(grep -cF "$RX_SK18_CACHE/mk/other" <<< "$out_sk18_both")|$(rx_skill "$out_sk18_both") hollow:$(rx_skill "$out_sk19_hollow")"
 
 # --- is anything listening where APP_URL points? ----------------------------
 # preflight ran fifteen checks and never once touched APP_URL, so the one thing that costs a whole

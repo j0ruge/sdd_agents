@@ -105,9 +105,11 @@ line, so `tail -F` shows it without opening the session's `.json`.
   this machine does not have. It looks each skill up by the form its phase invokes it by, so the
   REVIEW's `codereview:codereview` is never a plain `~/.claude/skills/codereview`: it holds the copy
   the registry records under the plugin's own key (`~/.claude/plugins/installed_plugins.json`,
-  `codereview@<marketplace>`; another plugin that ships a `skills/codereview` does not count), and a
-  warning about a directory under the plugin cache names that file: the cache may hold more than one
-  copy. For `codereview:codereview`, a **broken install** (the registry records the plugin, and no
+  `codereview@<marketplace>`; another plugin that ships a `skills/codereview` does not count) and,
+  with no install of the plugin recorded, a copy from the codereview plugin's own tree in the cache
+  alone (`…/plugins/cache/<marketplace>/codereview/<version>/skills/codereview`); a warning about a
+  directory under the plugin cache names that file: the cache may hold more than one copy. For
+  `codereview:codereview`, a **broken install** (the registry records the plugin, and no
   `installPath` of it holds the skill, after a partial clean of the cache) is warned with the
   registry and the `installPath`, and never replaced by an older copy from the cache: reinstall the
   plugin. A declared skill whose symlink

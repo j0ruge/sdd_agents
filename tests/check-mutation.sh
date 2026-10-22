@@ -2631,9 +2631,9 @@ mut_PRE_read_extra_missing_silent() {
 mut_PRE_undeclared_skill_silent() {
   sed -i '/^cmd_preflight() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && read_rules_cover "\$sk_real"; then continue; fi$#    continue#' "$1"
 }
-# COVER_UNSLASHED: a rule covers what merely BEGINS with its directory, so `…/codereview` covers
-# `…/codereview-x` — caught by "a plugin skill is covered by the directory above its version, and
-# never by a sibling that shares a prefix", `sibling:…warned=0`. COVER_UNRESOLVED: the target of a
+# COVER_UNSLASHED: a rule covers what merely BEGINS with its directory, so `…/ticket` covers
+# `…/ticket-x` — caught by "a plugin skill is covered by the directory above its version, and never
+# by a sibling that shares a prefix", `sibling:…warned=0`. COVER_UNRESOLVED: the target of a
 # symlinked skill is never held to the rules, and the parent above the link reads as enough, which
 # the harness denies (p10 of ADR 0019) — caught by "a skill reached through a symlink is covered only
 # with its target, and a skill in the repo needs no entry", `above:…warned=0`.
@@ -2644,8 +2644,8 @@ mut_PRE_skill_cover_unresolved() {
   sed -i '/^cmd_preflight() {/,/^}/ s#^    sk_real="\$(readlink -f -- "\$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="\$SKILL_FOUND_DIR"$#    sk_real="$SKILL_FOUND_DIR"#' "$1"
 }
 # The entry the warning hands over. ENTRY_VERSIONED: the plugin's entry keeps its version directory,
-# which the next update orphans and which never covers the plugin directory `find` meets first — the
-# warning would outlive its own advice. Caught first by the undeclared-skill assertion, where the
+# which the next update orphans and which never covers the plugin directory the cache walk names —
+# the warning would outlive its own advice. Caught first by the undeclared-skill assertion, where the
 # plugin directory found gets a second copy of its name (`…/codereview/codereview`), and then by the
 # plugin-below one, `bare:…entry=…/2.0.0`.
 # ENTRY_HOME_UNWRITTEN: the entry comes back absolute under $HOME, and the tracked .sdd/config.sh would
@@ -2734,6 +2734,38 @@ mut_PRE_plain_form_marked_broken() {
 }
 mut_PRE_broken_reported_present() {
   sed -i '/^cmd_preflight() {/,/^}/ s#^  elif \[ -z "\$broken_skills" \]; then$#  else#' "$1"
+}
+# Codex r8 on PR #315: with no install of the plugin recorded, the plugin form walks the cache only
+# under its own plugin's tree, `<root>/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>`.
+# All six are caught by "a plugin skill missing from the registry is looked for in the cache only
+# under its own plugin tree" (check-preflight.sh). PLUGIN_CACHE_BY_NAME: the plugin form goes back to
+# the walk by name, and another plugin's `skills/codereview` is the REVIEW's — `other:…named=2,…
+# missing=0`. PLUGIN_CACHE_ANY_PLUGIN: the tree takes any plugin's name — the same, `named=2`.
+# PLUGIN_CACHE_ANY_SKILL: any skill below the plugin's version stands for the one asked for —
+# `hollow:missing=0`. PLUGIN_CACHE_MARKETPLACE_FIXED: the marketplace is one name and not any
+# component, and the codereview tree under `mk2` is missed — `both:where=0,…missing=1`, and first
+# R9's "a recorded plugin install that lacks the skill…", `nokey:where=0`, whose copy is `old-mk`'s.
+# PLUGIN_CACHE_UNCHECKED: the glob's match is never held to `-d`, and the unmatched pattern itself is
+# published as the skill found — `other:…missing=0`, and first every world with no codereview tree,
+# which hands `…/plugins/cache/*/codereview` over as an entry to add. PLUGIN_CACHE_FALLS_THROUGH: the
+# plugin form, missing from its own tree, goes on to the walk by name below it — `other:…named=2`.
+mut_PRE_plugin_cache_by_name() {
+  sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" != "\$form" \]; then$#  if false; then#' "$1"
+}
+mut_PRE_plugin_cache_any_plugin() {
+  sed -i '/^skill_findable() {/,/^}/ s#^    for p in "\$root/plugins/cache"/\*/"\$plugin"/\*/skills/"\$name"; do$#    for p in "$root/plugins/cache"/*/*/*/skills/"$name"; do#' "$1"
+}
+mut_PRE_plugin_cache_any_skill() {
+  sed -i '/^skill_findable() {/,/^}/ s#^    for p in "\$root/plugins/cache"/\*/"\$plugin"/\*/skills/"\$name"; do$#    for p in "$root/plugins/cache"/*/"$plugin"/*/skills/*; do#' "$1"
+}
+mut_PRE_plugin_cache_marketplace_fixed() {
+  sed -i '/^skill_findable() {/,/^}/ s#^    for p in "\$root/plugins/cache"/\*/"\$plugin"/\*/skills/"\$name"; do$#    for p in "$root/plugins/cache"/mk/"$plugin"/*/skills/"$name"; do#' "$1"
+}
+mut_PRE_plugin_cache_unchecked() {
+  sed -i '/^skill_findable() {/,/^}/ s#^      \[ -d "\$p" \] || continue$#      :#' "$1"
+}
+mut_PRE_plugin_cache_falls_through() {
+  sed -i '\#^    for p in "\$root/plugins/cache"/\*/"\$plugin"/\*/skills/"\$name"; do$#,/^  fi$/ s#^    return 1$#    :#' "$1"
 }
 # Codex r3 #2 on PR #315, the preflight's half: a kit whose path the grammar of the read rules refuses
 # is named once and the template probe is not opened. KIT_PATH_UNNAMED: the refusal never fires —
@@ -6849,6 +6881,12 @@ CATALOG=(
   PRE_broken_reason_not_reset
   PRE_plain_form_marked_broken
   PRE_broken_reported_present
+  PRE_plugin_cache_by_name
+  PRE_plugin_cache_any_plugin
+  PRE_plugin_cache_any_skill
+  PRE_plugin_cache_marketplace_fixed
+  PRE_plugin_cache_unchecked
+  PRE_plugin_cache_falls_through
   PRE_kit_path_unnamed
   PRE_kit_path_probe_opened
   CENSUS_templates_count_plan

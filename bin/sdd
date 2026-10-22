@@ -5728,8 +5728,14 @@ plugin_install_paths() {
 # SKILL_BROKEN_WHY, and never the cache, because the harness keeps resolving the plugin by the
 # recorded install and any other copy is one no phase loads. Only a registry that records no install
 # of the plugin — no file, an unreadable one, no jq, no `user` install under its key — sends either
-# form on to the cache walk; nothing there fails, and `set -e` kills nothing. The plain form keeps
-# what it always did when its own key records an install without the skill: the cache walk.
+# form on to the cache; nothing there fails, and `set -e` kills nothing. Each form walks it its own
+# way (Codex r8 on PR #315, decided by the human). The plugin form walks only the plugin's own tree,
+# `<root>/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>`, any marketplace and any
+# version: a plugin's skill is namespaced by its plugin, and another plugin's `skills/<skill>`, which
+# a walk by name met first, is a copy no `/<plugin>:<skill>` loads — the fourth failure in a row in
+# this lookup, and the state it was missing was which plugin a cache path belongs to. The plain form
+# walks the cache by name, as it always did, also when its own key records an install without the
+# skill.
 #
 # SDD_SKILLS_ROOT exists so this is testable at all — with no injectable root the only worlds
 # available to a sensor are "this developer's machine" and nothing.
@@ -5760,10 +5766,24 @@ skill_findable() {
     SKILL_BROKEN_WHY="$root/plugins/installed_plugins.json records the $plugin plugin installed at $recorded, and no such install holds skills/$name"
     return 1
   fi
-  # With no copy recorded, the cache is walked. `-quit` on the first hit: the cache holds every
-  # version of every plugin. `find` walks a parent before its children, so a plugin named after its
-  # skill is met at its own directory, above every version. `|| true` because `find` on a missing
-  # directory returns 1 and pipefail would carry that into the assignment.
+  # With no copy recorded, the cache is walked. The plugin form walks its own plugin's tree and no
+  # other (Codex r8 on PR #315): the glob is literal but for the marketplace and the version, so a
+  # directory named after the skill elsewhere — another plugin's `skills/<skill>`, or the plugin's
+  # own directory with no such skill below it — is never the skill. The directory published is the
+  # plugin's, above every version: the one the walk by name met for the right plugin, so the entry
+  # skill_read_entry hands over is the one it always was. An unmatched glob is the pattern itself,
+  # which `-d` turns away, and nothing after the loop serves this form.
+  if [ "$plugin" != "$form" ]; then
+    for p in "$root/plugins/cache"/*/"$plugin"/*/skills/"$name"; do
+      [ -d "$p" ] || continue
+      SKILL_FOUND_DIR="${p%/*/skills/"$name"}"; return 0
+    done
+    return 1
+  fi
+  # The plain form walks the cache by name, as it always did. `-quit` on the first hit: the cache
+  # holds every version of every plugin. `find` walks a parent before its children, so a plugin named
+  # after its skill is met at its own directory, above every version. `|| true` because `find` on a
+  # missing directory returns 1 and pipefail would carry that into the assignment.
   hit="$( find "$root/plugins/cache" -maxdepth 6 -type d -name "$name" -print -quit 2>/dev/null || true )"
   [ -n "$hit" ] || return 1
   SKILL_FOUND_DIR="$hit"
@@ -6881,9 +6901,11 @@ cmd_preflight() {
   # warning and its entry, and the refused one at the next preflight — two steps, never a loop.
   # A directory found under the plugin cache also names the registry (r1 #2 of the final review):
   # the cache may hold more than one copy, skill_findable holds to the rules the one the registry
-  # records and falls back to the first `find` meets when the registry records no install of the
-  # plugin (for a skill invoked plain, also when no recorded install holds it), and the warning says
-  # which file decides. The slash of `cache/` keeps a sibling such as `plugins/cachex` out.
+  # records and falls back to the cache when the registry records no install of the plugin — for a
+  # skill invoked through a plugin, the first copy in that plugin's own tree (Codex r8 on PR #315);
+  # for one invoked plain, the first directory of its name `find` meets, also when no recorded
+  # install holds it —, and the warning says which file decides. The slash of `cache/` keeps a
+  # sibling such as `plugins/cachex` out.
   # A skill invoked through a plugin whose recorded install does not hold it is neither missing nor
   # found (Codex r7 #2 on PR #315): the harness loads the plugin from that install, so the phase boots
   # without the skill whatever else the cache holds. Its own warning, with skill_findable's reason —
@@ -6930,8 +6952,10 @@ cmd_preflight() {
     warn "skills not found:$missing_skills
         A skill a phase invokes plain was looked for in $skills_root/skills/, $REPO_ROOT/.claude/skills/
         and $skills_root/plugins/cache/; one it invokes as plugin:skill, in the installs
-        $skills_root/plugins/installed_plugins.json records for the plugin, and in the cache only when
-        that file records none. Those roots are a convention, so this is a warning and not a failure.
+        $skills_root/plugins/installed_plugins.json records for the plugin and, only when that file
+        records none, in the cache under that plugin's own tree alone:
+        $skills_root/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>.
+        Those roots are a convention, so this is a warning and not a failure.
         The phase boots the skill by name anyway: if it really is absent, the session improvises and
         spends the phase budget producing something no gate can read."
   elif [ -z "$broken_skills" ]; then
