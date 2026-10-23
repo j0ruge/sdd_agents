@@ -32,9 +32,9 @@ registrado" (`TODO.md:175` do kit, na `1e49e30`).
    - a retro pedida pelo `retrofit-watch`;
    - a triagem manual dos LOW de PR.
 5. **Migrar as voltas que já existem escritas à mão.** No kit são três itens (linhas na `1e49e30`):
-   - `TODO.md:155-159`, "O `sdd install` adota a branch atual…";
+   - `TODO.md:153-159`, "O `sdd install` adota a branch atual…";
    - `TODO.md:175-182`, o do `/sdd-plan` acima;
-   - `TODO.md:296-302`, "O corpo do PR promete CI…".
+   - `TODO.md:295-302`, "O corpo do PR promete CI…".
 
    Nos alvos desta máquina com `.sdd` (`dotp-remake` e `magic_tutor`), o revisor não achou nenhuma. Os outros
    alvos (`sales_quote`, `lighthouse_project`, `ui24_agent`, as missões `amep-*`) não estão aqui e não são
