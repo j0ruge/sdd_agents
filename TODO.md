@@ -316,6 +316,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   corpo à mão. Direção: a pendência do plano que um handoff posterior responde sai, ou vai junto da resposta.
   — descoberto pelo relay do `sdd run` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
 
+- [ ] **O `sdd preflight` imprime "printf: erro de escrita: Pipe quebrado" com a `READ_EXTRA` preenchida** —
+  `bin/sdd:5804` (`kit_read_rules`) — o `read_rules_cover` sai do `while` no 1º casamento e o produtor segue
+  escrevendo num pipe sem leitor (`:5351`, `:5358`). No `lighthouse_project` foram 7 linhas antes do "third-party
+  skills present", com veredito `ok`. As funções reais, extraídas, repetem o ruído sob SIGPIPE ignorado (como num
+  pai Node) e calam com a ação padrão; quem o ignorava naquela corrida não foi achado. Erro de escrita num preflight
+  verde se lê como falha. Direção: ler a lista inteira (`mapfile -t`) antes de casar, com caso sob `SIG_IGN`.
+  — descoberto por `claude` no `lighthouse_project`, ao preencher a `READ_EXTRA` (2026-10-23)
+
 ### Comentário e registro
 
 ### Idioma
