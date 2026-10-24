@@ -378,10 +378,10 @@ incremento.
 
 ## F11 — Vários kits ao mesmo tempo
 
-Pedido do dono em 2026-10-24: rodar vários kits ao mesmo tempo. Hoje toda corrida executa o mesmo
-checkout, o `~/repos/sdd_agents` (o `sdd` do PATH), e a guarda do kit é armada a cada fase (no
-`bin/sdd`, o `kit_guard_arm` antes de cada sessão de fase e o `kit_guard_check` depois). Duas
-consequências, medidas no mesmo dia:
+Pedido do dono em 2026-10-24: rodar vários kits ao mesmo tempo. Hoje toda corrida de alvo
+(`sdd run`) executa o mesmo checkout, o `~/repos/sdd_agents` (o `sdd` do PATH), e a guarda do kit
+é armada a cada fase (no `bin/sdd`, o `kit_guard_arm` antes de cada sessão de fase e o
+`kit_guard_check` depois). Duas consequências, medidas no mesmo dia:
 
 - **O kit não avança com corrida em voo.** Se o HEAD ou a árvore do kit mudam dentro de uma fase, a
   corrida para (a escalada `kit-touched`). Se mudam entre duas fases, a guarda, rearmada no começo
@@ -391,8 +391,10 @@ consequências, medidas no mesmo dia:
   diferente do lançado. Por isso, na 3.4b do `dotp-remake`, só o `git merge --ff-only` do checkout
   esperou o fim da corrida: o PR #322 foi mergeado no GitHub com ela em voo (`64114d2`), e o #321
   não foi mergeado durante ela.
-- **Duas corridas não rodam versões diferentes do kit.** Para começar uma corrida numa versão nova é
-  preciso avançar o checkout, e isso cai sobre as que estão em voo.
+- **Nenhuma corrida consegue ficar na sua versão do kit.** O runner de cada processo fica no sha do
+  lançamento (o `AUTONOMY_RUNNER_SHA`), mas os agentes e os templates vêm do disco comum: para
+  começar uma corrida numa versão nova é preciso avançar o checkout, e isso muda o que leem as que
+  estão em voo.
 
 O que o desenho tem de responder, com o dono: o que cada corrida fixa no início (um checkout ou uma
 cópia do kit por corrida, ou só o sha); como o `kit_sha` e o `kit_rev` do ledger (ADR 0014) e a

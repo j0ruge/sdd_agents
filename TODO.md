@@ -265,11 +265,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **A linha `kit:` do handoff não tem quem a transporte** — `agents/sdd-publisher.md:69` (`TODO_FILE`) — o
   `templates/handoff.md:63-65` manda o achado do kit numa missão de alvo morar no handoff, marcado `kit:`, levado por
-  "um humano ou a triagem do `sdd kaizen`"; mas nem o `sdd-kaizen` nem o publisher leem `kit:`, e o corpo do PR cita
-  só o que foi para o `TODO_FILE`. Na 3.4b do `dotp-remake`, o `kit:` do `45-docs.md:187` (o item "O `sdd approve`
-  commita o ADR do `adr:` sem tirar o `proposed`") não chegou ao PR #19 nem a este arquivo até o relay ler o
-  handoff. Direção: o publisher copia cada `kit:` dos handoffs para o corpo do PR, numa lista para o humano levar,
-  e o `gate_PR` confere a contagem.
+  "um humano ou a triagem do `sdd kaizen`"; mas o publisher lê todo handoff (`:25`) e o contrato dele só chama de
+  achado fora de escopo o que foi para o `TODO_FILE`, sem falar de `kit:`, e o `sdd-kaizen` só tria o `TODO.md` do kit
+  (`agents/sdd-kaizen.md:209-211`). Na 3.4b do `dotp-remake`, o `kit:` do `45-docs.md:187` (o item "O `sdd approve`
+  commita o ADR do `adr:` sem tirar o `proposed`") não chegou ao PR #19 nem a este arquivo até o relay ler o handoff.
+  Direção: o publisher lista os `kit:` dos handoffs no PR, para o humano levar, e o `gate_PR` confere a contagem.
   — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
 
 - [ ] **A DOCS deixa a lição reincidente só no `KAIZEN_LOG.md`** — `agents/sdd-docs.md:53` (`KAIZEN_LOG.md`) — a
