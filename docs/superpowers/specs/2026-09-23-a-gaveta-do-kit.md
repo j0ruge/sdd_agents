@@ -22,6 +22,7 @@
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
 | F8 | O plano mede contra a base, não contra os incrementos anteriores | **fechada** pelo I4 de `20261008-lote-6-as-quatro-que-faltam`: o parágrafo no § 4 do `sdd-planner`, segurado pelo probe `hat:` do `tests/check-hat.sh` | nada | — |
 | F9 | A sessão lê o que o boot manda ler | plano nascido do `sdd kaizen` em 2026-10-20 e levado ao grill do `/sdd-plan` no mesmo dia (7 decisões, todas no recomendado; ADR 0019), aprovado `humano-2026-10-20` (`c7f9ad8`): `docs/handoffs/20261020-a-sessao-le-o-que-o-boot-manda/`, 6 incrementos (a regra só de leitura dos templates no `run_phase` e no `sdd close`, a sessão isolada do preflight, a negativa nomeada no journal, o `READ_EXTRA` e os avisos do preflight); os três achados da janela saíram para o `TODO.md` pelo #309. **Executada** de forma interativa no worktree `~/repos/sdd_agents-f9`: os seis incrementos e a rodada de conserto da revisão final (R1 `f9f3b34`, R2 `5f05cf4`) feitos, suíte verde em `259222b` (2027 `ok`), catálogo 716 → 742 mutantes (`--anchors`); a sonda isolada lê o template com a regra e é `DENIED` sem ela (2026-10-20 22:59, 2.1.304), e o preflight fica vermelho com o `kit_read_rules` sabotado; a DOCS escreveu a entrada do `KAIZEN_LOG.md` | o PR com `@codex review`, os consertos da revisão numa leva, depois o `./bin/sdd health` (carimbo) e o merge humano; depois do merge, o yokoten do `READ_EXTRA` no lighthouse e no jrc-libs | o PR e a revisão dele |
+| F11 | Vários kits ao mesmo tempo | nasceu de um pedido do dono em 2026-10-24, no fim da 3.4b do `dotp-remake`; desenho não iniciado ([§ F11](#f11--vários-kits-ao-mesmo-tempo)) | planejar com o dono pelo `/sdd-plan`: o que cada corrida fixa, e o que muda no ledger, na guarda do kit e na janela do juiz | **decisão humana** |
 
 Fechados, para ninguém reabrir: o laço do fingerprint (#54–#56 → missão
 `20260922-o-motivo-da-fase`, PR #57, merge `2258e53`); o fluxo `develop → staging → main` com o
@@ -372,6 +373,34 @@ against the disk the earlier ones leave` do `tests/check-hat.sh` a lê como seç
 lição foi paga pela segunda vez no planejamento do próprio lote 6: os quatro consertos editam
 exatamente os quatro símbolos designados do `TODO.md`, e o plano trouxe a tabela de âncoras por
 incremento.
+
+---
+
+## F11 — Vários kits ao mesmo tempo
+
+Pedido do dono em 2026-10-24: rodar vários kits ao mesmo tempo. Hoje toda corrida de alvo
+(`sdd run`) executa o mesmo checkout, o `~/repos/sdd_agents` (o `sdd` do PATH), e a guarda do kit
+é armada a cada fase (no `bin/sdd`, o `kit_guard_arm` antes de cada sessão de fase e o
+`kit_guard_check` depois). Duas consequências, medidas no mesmo dia:
+
+- **O kit não avança com corrida em voo.** Se o HEAD ou a árvore do kit mudam dentro de uma fase, a
+  corrida para (a escalada `kit-touched`). Se mudam entre duas fases, a guarda, rearmada no começo
+  da seguinte, não vê: essa fase lê os agentes e os templates do disco novo, mas o runner já
+  carregado segue o antigo, e o journal só ganha a linha `RUNNER` com os dois shas uma vez por
+  processo (`AUTONOMY_RUNNER_NOTED`), na primeira linha do ledger que sai com o HEAD do kit
+  diferente do lançado. Por isso, na 3.4b do `dotp-remake`, só o `git merge --ff-only` do checkout
+  esperou o fim da corrida: o PR #322 foi mergeado no GitHub com ela em voo (`64114d2`), e o #321
+  não foi mergeado durante ela.
+- **Nenhuma corrida consegue ficar na sua versão do kit.** O runner de cada processo fica no sha do
+  lançamento (o `AUTONOMY_RUNNER_SHA`), mas os agentes e os templates vêm do disco comum: para
+  começar uma corrida numa versão nova é preciso avançar o checkout, e isso muda o que leem as que
+  estão em voo.
+
+O que o desenho tem de responder, com o dono: o que cada corrida fixa no início (um checkout ou uma
+cópia do kit por corrida, ou só o sha); como o `kit_sha` e o `kit_rev` do ledger (ADR 0014) e a
+janela do juiz (F3) contam corridas de versões diferentes; e o que vira o `sdd` do PATH. Não
+confundir com a **Y2** do `CONTEXT.md` (duas missões no mesmo repo-alvo, por `git worktree`), que
+segue adiada: as duas podem acabar no mesmo desenho, e quem planejar decide.
 
 ---
 
