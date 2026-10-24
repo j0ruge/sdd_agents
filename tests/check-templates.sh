@@ -466,9 +466,10 @@ check pr-body.md '^## Riscos e não-feitos'    "section 'Riscos e não-feitos'"
 # The TODO.md seed ships one variant per OUTPUT_LANG (templates/todo.<lang>.md, English as
 # templates/todo.md). The prose differs by language and must; the skeleton must not, because the
 # shape sensor and the agents read every variant the same way. So each variant carries the two
-# markers and the English token RESOLVED by, has the same structural lines in the same order as
-# the English one, and passes the shape sensor itself — the seed is the first file a target owns,
-# and a seed that fails its own sensor would teach the wrong shape on day one.
+# markers and the English tokens RESOLVED by and RECURRED (rule 6 of tests/check-todo.sh), has the
+# same structural lines in the same order as the English one, and passes the shape sensor itself —
+# the seed is the first file a target owns, and a seed that fails its own sensor would teach the
+# wrong shape on day one.
 todo_shape() { # the lines a parser or the eye navigates by, one token each; prose is free
   sed -nE -e 's/^(#+) .*/\1/p' \
           -e '/^<!-- sdd:[a-z]+ -->$/p' \
@@ -483,6 +484,7 @@ for v in "$T"/todo.md "$T"/todo.*.md; do
   check "$vn" '^<!-- sdd:open -->$'    "the open-section marker, alone on its line"
   check "$vn" '^<!-- sdd:decided -->$' "the decided-section marker, alone on its line"
   check "$vn" 'RESOLVED by'           "the kit token for a finding fixed by a commit"
+  check "$vn" 'RECURRED'              "the kit token for a finding seen again"
   CHECKS_RUN=$((CHECKS_RUN + 1))
   if [ "$(todo_shape "$v")" = "$(todo_shape "$T/todo.md")" ] && [ -n "$(todo_shape "$v")" ]; then
     pass "$vn: the same skeleton as todo.md, line for line"
