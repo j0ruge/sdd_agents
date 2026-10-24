@@ -55,9 +55,10 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > próprio descoberto-por, não soma nada. O `<onde>` tem letras ASCII, dígitos e `._/-`, começa por
 > letra ou dígito, não tem espaço, crase nem `#`, e nomeia a volta como `<projeto>/<missão>`
 > (`dotp-remake/3.4b`), `<projeto>/pr<N>` (`magic_tutor/pr25`) ou, sem missão nem PR,
-> `<projeto>/<YYYYMMDD>` do dia da sessão; `<projeto>` sozinho só na primeira volta dele sem missão
-> nem PR. Bem formada, a linha não conta no teto nem na largura. Achado que está nos decididos não
-> ganha linha: avise o humano, que decide se reabre.
+> `<projeto>/<YYYYMMDD>` do dia da sessão, com `-2`, `-3`… para as sessões seguintes desse dia
+> (`magic_tutor/20261020-2`); `<projeto>` sozinho só na primeira volta dele sem missão nem PR. Bem
+> formada, a linha não conta no teto nem na largura. Achado que está nos decididos não ganha linha:
+> avise o humano, que decide se reabre.
 
 ## Aberto
 <!-- sdd:open -->

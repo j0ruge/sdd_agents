@@ -55,10 +55,10 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > listed, or from those of the found-by itself, adds nothing. `<where>` holds ASCII letters, digits
 > and `._/-`, opens with a letter or digit, has no blank, backtick or `#`, and names the return as
 > `<project>/<mission>` (`dotp-remake/3.4b`), `<project>/pr<N>` (`magic_tutor/pr25`) or, with
-> neither mission nor PR, `<project>/<YYYYMMDD>` of the session's day; a bare `<project>` only for
-> that project's first return with neither. Well formed, the line counts toward neither the cap nor
-> the width. A finding that is among the decided records gains no line: tell the human, who decides
-> whether to reopen it.
+> neither mission nor PR, `<project>/<YYYYMMDD>` of the session's day, with `-2`, `-3`… for the next
+> sessions of that day (`magic_tutor/20261020-2`); a bare `<project>` only for that project's first
+> return with neither. Well formed, the line counts toward neither the cap nor the width. A finding
+> that is among the decided records gains no line: tell the human, who decides whether to reopen it.
 
 ## Open
 <!-- sdd:open -->
