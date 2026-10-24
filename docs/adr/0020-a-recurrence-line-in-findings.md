@@ -8,8 +8,9 @@
 A finding that comes back, named again by another project or by another mission or session, is
 the strongest sign that the pain is real. The findings format (`templates/todo.md`) had no place
 for a return. A writer who met an open finding again could only append prose to its found-by, and
-the only rule `tests/check-todo.sh` applies there is a `(YYYY-MM-DD)` on the item's last line
-(rule 4).
+nothing in `tests/check-todo.sh` reads a return there: the found-by is checked only for a code span
+in its tail, which must not open with one (rule 3), and for a `(YYYY-MM-DD)` on the item's last
+line (rule 4), and the item it closes is held to the cap and the width (rule 5).
 
 Measured at `1e49e30` over this kit's `TODO.md`:
 
