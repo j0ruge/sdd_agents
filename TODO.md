@@ -79,6 +79,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: ler o artefato, como a sonda dos templates desde o R6 (o `tool_result` do `Bash` com o marcador).
   — descoberto na varredura do R6 da missão `20261020-a-sessao-le-o-que-o-boot-manda` (2026-10-21)
 
+- [ ] **A sessão que morre junto com o runner some do journal, e a sobra dela não aparece no `sdd status`** —
+  `bin/sdd:5620` (`pipeline_log_line`) — a linha da sessão só é escrita no fim; com o host travado, o `pipeline.log`
+  acaba no `PHASE` e o `<FASE>-…-<sid>.stream.jsonl` fica sem linha. As duas faces do `sdd status` (`:7832`) não
+  leem a árvore, e o `gate_EXEC` só olha a sujeira com todo incremento `done` (`:1515`): com um `pending`, o run
+  seguinte abre outra sessão sobre o trabalho sem commit, sem aviso no boot. Pior caso: morrer no meio da sabotagem
+  de um `R<n>` (`agents/sdd-executor.md:88`) deixa a linha degradada para a próxima commitar. Direção: o status e o
+  boot citam o stream órfão e a árvore suja. Medido no `dotp-remake`: a sessão `7e4567fd` do I8, 10 entradas.
+  — descoberto por `retrofit-watch` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
