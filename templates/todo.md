@@ -35,21 +35,29 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > every language) and the item stays until `git merge-base --is-ancestor <hash> <DEFAULT_BRANCH>`
 > holds; then it is **deleted**, never ticked. Refuted, decided, won't-fix or accepted risk: there
 > is nothing to commit, so it leaves the open section and becomes a decided record in the same
-> commit. A duplicate is deleted, naming the survivor. Before filing, read the decided records and
-> the open findings: a decided one does not come back, and an open one gains an entry on its
-> `RECURRED` line.
+> commit. A duplicate is deleted, naming the survivor; one that came from another project or
+> mission is first folded into the survivor's `RECURRED` line, as a new entry (below). Before
+> filing, read the decided records and the open findings: a decided one does not come back, and an
+> open one gains an entry on its `RECURRED` line.
 >
 > **Where `RESOLVED by` goes.** At the end of the body's last line, or inside the `Source:` line
 > before `— found by`; never on a line of its own, which on an item at the cap becomes its 9th line
-> (`9 content lines, cap is 8`), nor after the found-by, which has to be the last field. With no
-> room in the 120 characters, shorten the body.
+> (`9 content lines, cap is 8`), nor after the found-by, which has to be the last field, nor on the
+> `RECURRED` line. With no room in the 120 characters, shorten the body.
 >
 > **Recurrence.** A finding that comes back (another project, mission or session) gains an entry,
-> never a new item: the item's last line becomes `RECURRED <n>: <where> (YYYY-MM-DD); …` (a kit
-> token, the same in every language), oldest first, one entry per project and mission, `<where>`
-> with no blank (`dotp-remake/3.4b`). The first sighting stays in the found-by, and `<n>` counts the
-> returns. The line counts toward neither the cap nor the width, and the found-by moves to the line
-> above it. A finding that is among the decided records gains no line: tell the human, who decides
+> never a new item. The entries sit on one line, `RECURRED <n>: <where> (YYYY-MM-DD); …` (a kit
+> token, the same in every language), indented two spaces like the rest of the item. On the first
+> return it is appended as the item's new last line, under the found-by, which keeps its text and
+> so moves to the line above it; on the next ones the return is one more entry on that line, and
+> `<n>` goes up by one. The first sighting stays in the found-by, and `<n>` counts the returns.
+> Oldest first, one entry per project and mission: a return from a project and mission already
+> listed, or from those of the found-by itself, adds nothing. `<where>` holds ASCII letters, digits
+> and `._/-`, opens with a letter or digit, has no blank, backtick or `#`, and names the return as
+> `<project>/<mission>` (`dotp-remake/3.4b`), `<project>/pr<N>` (`magic_tutor/pr25`) or, with
+> neither mission nor PR, `<project>/<YYYYMMDD>` of the session's day; a bare `<project>` only for
+> that project's first return with neither. Well formed, the line counts toward neither the cap nor
+> the width. A finding that is among the decided records gains no line: tell the human, who decides
 > whether to reopen it.
 
 ## Open

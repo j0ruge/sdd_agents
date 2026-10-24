@@ -469,7 +469,9 @@ check pr-body.md '^## Riscos e não-feitos'    "section 'Riscos e não-feitos'"
 # markers and the English tokens RESOLVED by and RECURRED (rule 6 of tests/check-todo.sh), has the
 # same structural lines in the same order as the English one, and passes the shape sensor itself —
 # the seed is the first file a target owns, and a seed that fails its own sensor would teach the
-# wrong shape on day one.
+# wrong shape on day one. RECURRED is matched as `RECURRED <n>: `, the opening of the grammar its
+# paragraph gives: the bare word also sits in the sentences around that paragraph, and it kept the
+# check green with the paragraph deleted.
 todo_shape() { # the lines a parser or the eye navigates by, one token each; prose is free
   sed -nE -e 's/^(#+) .*/\1/p' \
           -e '/^<!-- sdd:[a-z]+ -->$/p' \
@@ -484,7 +486,7 @@ for v in "$T"/todo.md "$T"/todo.*.md; do
   check "$vn" '^<!-- sdd:open -->$'    "the open-section marker, alone on its line"
   check "$vn" '^<!-- sdd:decided -->$' "the decided-section marker, alone on its line"
   check "$vn" 'RESOLVED by'           "the kit token for a finding fixed by a commit"
-  check "$vn" 'RECURRED'              "the kit token for a finding seen again"
+  check "$vn" 'RECURRED <n>: '        "the kit token for a finding seen again, in the grammar of its paragraph"
   CHECKS_RUN=$((CHECKS_RUN + 1))
   if [ "$(todo_shape "$v")" = "$(todo_shape "$T/todo.md")" ] && [ -n "$(todo_shape "$v")" ]; then
     pass "$vn: the same skeleton as todo.md, line for line"
