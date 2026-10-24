@@ -144,3 +144,5 @@ Na próxima vez que uma retro, um planner ou uma triagem cruzar um achado que j�
 - o `check-todo.sh --check` e o `--anchors` ficam verdes;
 - o próximo `--apply` do espelho põe a label `reincidente` sem pedir leitura;
 - o item do `/sdd-plan` acima mostra as voltas da 3.4a e da 3.4b.
+
+**ADR**: docs/adr/0020-a-recurrence-line-in-findings.md
