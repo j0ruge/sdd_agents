@@ -35,8 +35,9 @@
 #      the item's anchor rather than an anchor-shaped token; but no blank of any kind, a URL scheme
 #      or a non-ASCII byte fits in the span, so no prose rides on it. A non-ASCII path loses the
 #      exemption (fail-safe). A refused line that carries a path-shaped span is told that exit.
-#      The line of rule 6 is the other exception, to both halves: the first one of an item is not
-#      a content line of the cap, and when it parses it has no width cap either.
+#      The line of rule 6 is the other exception, to both halves, each with its own reach: the
+#      FIRST token line of an item, whatever its shape, is not a content line of the cap, and EVERY
+#      token line that parses has no width cap.
 #   6. at most ONE line of returns, `RECURRED <n>: <where> (YYYY-MM-DD)[; <where> (YYYY-MM-DD)]*`,
 #      indented, and the item's LAST physical content line. It lists the times the finding came
 #      BACK — from another project, mission or session — and only those: the first sighting stays
@@ -52,9 +53,11 @@
 #      fails on the RECURRED message, and counting the line again would only stack messages on the
 #      same defect. Every token line after the first IS a content line of the cap: the message for
 #      a second one carries no count, and it was the cap message, which does, that had to bound
-#      them under `--baseline`. With two or more, only the last is parsed. The messages name the
-#      line the item OPENS on, as rules 1, 3, 4 and the cap do, so a `--baseline` key does not move
-#      when the line of returns changes.
+#      them under `--baseline`. With two or more, only the last is parsed for the RECURRED
+#      messages; the width still parses every one, so each that parses is exempt from it and each
+#      that does not is held to 120. A `<where>` has no length limit. The messages name the line the
+#      item OPENS on, as rules 1, 3, 4 and the cap do, so a `--baseline` key does not move when the
+#      line of returns changes.
 #
 # And per decided record: `- **<title>** — …`, one physical line, a code span after the title (the
 # pointer to the evidence) and a `(YYYY-MM-DD)` at the end. Records are not counted as findings.
@@ -199,16 +202,18 @@
 #     entry is a real return rather than a mission re-reading its own finding (the inflation the
 #     design names as an anti-goal), whether it repeats the project or mission of the found-by,
 #     whether a date is a real day (2026-02-31 passes) or no older than the first sighting. Two
-#     `<where>` that differ only in case are two. The line has no width cap and no limit on its
-#     entries; its grammar admits no blank, so it carries names and dates, never a sentence. Under
-#     `--baseline`, an item that inherited a RECURRED message can have its token lines edited with
-#     no new violation while the messages stay the same. The bound is the cap and the width: every
-#     token line after the first counts as a content line, so the item holds at most CAP content
-#     lines plus ONE token line — or, when it inherited a cap message, the number that message
-#     carries, which any added line moves — and a token line that does not parse is held to 120
-#     characters.
-#     With two or more token lines only the last is parsed; the others answer to that bound and to
-#     the one-line message, never to the grammar. Each is judgement on the diff or fails closed.
+#     `<where>` that differ only in case are two. A token line that parses has no width cap and no
+#     limit on its entries, and a `<where>` has no length limit: the grammar admits no blank, but a
+#     sentence joined by hyphens is one `<where>` and passes. Under `--baseline`, an item that
+#     inherited a RECURRED message can have its token lines edited with no new violation while the
+#     messages stay the same. The bound is the cap and the width: every token line after the first
+#     counts as a content line, so the item holds at most CAP content lines plus ONE token line —
+#     or, when it inherited a cap message, the number that message carries, which any added line
+#     moves — and a token line that does not parse is held to 120 characters.
+#     With two or more token lines only the last is parsed for the RECURRED messages; the others
+#     answer to that bound, to the one-line message, and to the grammar only through the width:
+#     each that parses has no width cap, each that does not is held to 120 characters. Each is
+#     judgement on the diff or fails closed.
 #     Decided in the design of docs/superpowers/specs/2026-10-23-reincidencia-no-todo-design.md
 #     (2026-10-23); the bound was measured false in its task review (30 extra lines, rc 0) and is
 #     the cap since then.
@@ -680,10 +685,11 @@ todo_awk() {
     # bytes are not a space, and a negated class admits them): Codex on PR #267. A refused line that
     # carries a path-shaped span is told that exit. ASCII classes only, safe in mawk.
     # The line of returns (rule 6) is exempt too, and only when recurred_err accepts it: its grammar
-    # lets no blank into an entry, so no sentence rides on it, while a line that merely opens with
-    # the token is held to the width like any other. This is the one exemption that asks for the
-    # grammar; rule 4 sets aside any line that opens with the token, and the cap the first one of an
-    # item (see the item rules).
+    # lets no blank into an entry (a sentence joined by hyphens still passes as one WHERE, declared
+    # in the header), while a line that merely opens with the token is held to the width like any
+    # other. This is the one exemption that asks for the grammar, and it asks every token line;
+    # rule 4 sets aside any line that opens with the token, and the cap the first one of an item
+    # (see the item rules).
     sect == 1 && mode == "lint" {
       w = $0; gsub(/[\200-\277]/, "", w)
       if (length(w) > wcap) {

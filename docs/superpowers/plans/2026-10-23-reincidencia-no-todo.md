@@ -331,7 +331,10 @@ ganha a label `reincidente`.
   - o `update_kind` (`:603-619`) e o plano (`:579-585`);
   - os labels do apply (`:795-811`) e o resumo (`:784`).
 - Modify: `SKILL.md`, a tabela "Como ler o plano" (`:70-82`).
-- Test: `scripts/test_todo_issues.py`.
+- Modify: `scripts/todo_format.py`, o `wrap_long_lines` (`:309-335`). Hoje ele quebra nos espaços toda linha física
+  de item aberto acima do `WIDTH_CAP` do kit, e a `RECURRED` tem espaços: uma de mais de 120 caracteres sai em duas,
+  e o sensor do kit recusa o arquivo (ADR 0020, Consequences; medido na 2.8.1 sobre a `:183` do `TODO.md` do kit).
+- Test: `scripts/test_todo_issues.py`, e `scripts/test_todo_format.py` na seção de wrapping (`:121-165`).
 
 **Interfaces:**
 - Produces:
@@ -354,8 +357,18 @@ ganha a label `reincidente`.
     montado com `as_issues(..., labels=("todo", sec))`;
   - `check("todo: prefixed cleanup keeps reincidente", "reincidente" not in label_edits(it_rec, ["todo", "todo: velha", "reincidente"])[1])`.
 
+  No `scripts/test_todo_format.py`, depois do `check("wrapping never leaves the box alone on its line", …)` (`:165`):
+  - a fixture
+    `rec = STANDARD.replace(GOOD, GOOD + "  RECURRED 6: " + "; ".join(f"projeto-{k}/m{k} (2026-10-1{k})" for k in range(6)) + "\n")`,
+    cuja linha `RECURRED` tem 174 caracteres;
+  - `check("...the fixture RECURRED line passes the kit's sensor and the width", sensor_rc(rec) == 0 and any(l.startswith("  RECURRED ") and len(l) > W for l in rec.split("\n")))`;
+  - `new_r, auto_r, _ = fix(rec)` e
+    `check("wrap leaves a long RECURRED line alone", new_r == rec and not any("wrapped" in a for a in auto_r))`.
+
   O TODO.md real do teste é o do kit depois do Task 4, que tem `RECURRED`. Rode
-  `python3 scripts/test_todo_issues.py ~/repos/sdd_agents/TODO.md`: espera-se FAIL nos sete.
+  `python3 scripts/test_todo_issues.py ~/repos/sdd_agents/TODO.md`: espera-se FAIL nos sete. Rode
+  `python3 scripts/test_todo_format.py`: espera-se FAIL só em `wrap leaves a long RECURRED line alone`, com a
+  fixture verde (o sensor do kit a aceita).
 - [ ] **Step 2: Implementar.**
   - **O `parse`:** separa a `RECURRED` antes de achatar as linhas.
   - **O `render_body`:** emite a linha como parágrafo próprio, depois do parágrafo `— …` da atribuição.
@@ -365,13 +378,20 @@ ganha a label `reincidente`.
     `reincidente`, com cor `d93f0b` e a descrição "Achado que voltou (linha RECURRED do TODO.md)".
   - **O que fica igual:** o `written` continua `k == "text"`, porque o teste de `:350` exige a string literal.
   - **O resumo:** `update=N (anchor A, recurrence R, labels L)`.
+  - **O `wrap_long_lines`:** pula a linha cujo texto sem recuo começa com `RECURRED ` (o token que o
+    `recurred_token` do Task 6 lê do sensor, mais um espaço). O recuo sai como o sensor o tira, com
+    `line.lstrip(" \t")`, e nunca com o `strip()` sem argumento, que come também o NBSP. Bem formada, a linha não
+    tem largura no kit; malformada, quebrá-la não a conserta, e o sensor a recusa pelo nome no MANUAL.
   - **O `SKILL.md`:** duas linhas na tabela, `UPDATE (recurrence)` e `UPDATE (labels)`, ambas "`--apply` sem mais
     prova".
 - [ ] **Step 3: Ver verde.** Rode `python3 scripts/test_todo_issues.py ~/repos/sdd_agents/TODO.md` e
   `python3 scripts/test_todo_format.py`: espera-se 0 FAIL nos dois.
 - [ ] **Step 4: Ver o plano real, sem `--apply`.** Rode
   `python3 scripts/todo_issues.py --file ~/repos/sdd_agents/TODO.md --repo j0ruge/sdd_agents`. Espera-se: 3 linhas
-  `UPDATE (recurrence)`, para os três itens do Task 4, e nenhuma `UPDATE (text)` nova.
+  `UPDATE (recurrence)`, para os três itens do Task 4, e nenhuma `UPDATE (text)` nova. Rode também
+  `python3 scripts/todo_issues.py --fix --file ~/repos/sdd_agents/TODO.md`, que só mostra o diff. Espera-se nenhuma
+  linha `AUTO … wrapped` e `sensor: before clean → after the AUTO fixes clean`; na 2.8.1 a `:183` (131 caracteres)
+  é quebrada e o mesmo comando dá `after the AUTO fixes 2 violation(s)`.
 - [ ] **Step 5: Commit, sem trailers.** `feat(todo-to-github-issues): a linha RECURRED vira a label reincidente`.
 
 ### Task 8: O `retrofit-watch` manda somar a volta

@@ -54,23 +54,28 @@ allowed the cap to rise.
 2. **The line counts the returns only.** The first sighting stays in the found-by, and `<n>` is the
    number of times the finding came back (the owner's decision). The item is recurrent when the
    line exists. A mission or session that re-reads its own finding is not a return.
-3. **The first well-formed line is outside the cap and the width.** It is not one of the CAP (8)
-   content lines, and it has no 120-character width cap. Rule 4 reads the last line that is not a
-   token line, so the dates of the returns never stand in for the date of the found-by; the
-   found-by moves to the line above. The precedent is the long anchor line of issue #257, exempt
-   from the width because its grammar admits no blank: no sentence rides on either line.
+3. **The line is outside the cap, the width and rule 4, each with its own reach.** The cap exempts
+   the item's FIRST token line, whatever its shape: it is not one of the CAP (8) content lines.
+   The width exempts EVERY token line that parses: it has no 120-character width cap. No token
+   line, well formed or not, is part of the body or read by rule 4: rule 4 reads the last line that
+   is not a token line, so the dates of the returns never stand in for the date of the found-by;
+   the found-by moves to the line above. The precedent is the long anchor line of issue #257,
+   exempt from the width because its grammar admits no blank.
 4. **A malformed token line is refused by name and keeps no width exemption.** A line that opens
-   with the token and a blank but breaks the grammar is held to 120 characters and fails with the
-   message of its first violation. Like a well-formed line it stays out of the body (the anchor and
-   the found-by cut never see it) and out of rule 4, and the first such line stays out of the cap
-   too: the item already fails on the RECURRED message, and counting the line again would only
-   stack messages on the same defect.
+   with the token and a blank but breaks the grammar is held to 120 characters, like any line that
+   does not parse, and when it is the line the sensor parses for the messages (the only one, or the
+   last of several, Decision 5) the item fails with the message of its first violation. The other
+   two exemptions never ask for the grammar: like a well-formed line it stays out of the body (the
+   anchor and the found-by cut never see it) and out of rule 4, and when it is the item's first
+   token line it stays out of the cap too: the item already fails on the RECURRED message, and
+   counting the line again would only stack messages on the same defect.
 5. **From the second token line on, each one counts toward the cap.** An item carries one token
-   line at most, and with two or more only the last is parsed. The message for a second line
-   carries no count, so under `--baseline` an item that inherited it kept the same key while token
-   lines piled up unseen: the task review of this mission reproduced it with 30 extra lines, rc 0
-   (fixed in `5745b51`). Every token line after the first is a content line now, and the cap
-   message, which carries the number, bounds the item.
+   line at most, and with two or more only the last is parsed for the messages (the width still
+   parses each one, Decision 3). The message for a second line carries no count, so under
+   `--baseline` an item that inherited it kept the same key while token lines piled up unseen: the
+   task review of this mission reproduced it with 30 extra lines, rc 0 (fixed in `5745b51`). Every
+   token line after the first is a content line now, and the cap message, which carries the
+   number, bounds the item.
 6. **The messages, verbatim.** Each names the line the item OPENS on, as rules 1, 3, 4 and the cap
    do, so a `--baseline` key does not move when the line of returns changes:
    - `RECURRED opens with "RECURRED <n>: "`
@@ -134,9 +139,22 @@ allowed the cap to rise.
 - **The mirror requires the token.** `todo-to-github-issues` (Part 2 of the plan) reads the
   declaration with `^RECURRED_TOKEN="([A-Z]+)"[ \t]*$` and refuses, with rc 3, a kit that lacks it,
   like the other kit requirements of its `SKILL.md`, instead of carrying a copy of the token. The
-  declaration is therefore a contract: moving it off column 0, dropping the quotes or spelling the
-  word inside the awk program breaks the mirror, not the sensor. A change on that line alone is an
-  `UPDATE (recurrence)` of the mirror's plan, never the `UPDATE (text)` that asks for a human read.
+  declaration is therefore a contract: moving it off column 0 or dropping the quotes breaks the
+  mirror, not the sensor. Spelling the word inside the awk program breaks the single source: the
+  declaration would become a copy the sensor no longer reads, and the mirror would go on trusting
+  it. A change on that line alone is an `UPDATE (recurrence)` of the mirror's plan, never the
+  `UPDATE (text)` that asks for a human read.
+- **The mirror's format fixer must never wrap the line.** `todo_issues.py --fix` of
+  `todo-to-github-issues` (`scripts/todo_format.py`, `wrap_long_lines`) wraps at blanks every
+  physical line of an open item longer than the kit's `WIDTH_CAP`. A `RECURRED` line has a blank
+  after the colon and inside every entry, so one longer than 120 characters is cut in two and the
+  sensor then refuses the item (`RECURRED is the last line of the item`,
+  `RECURRED entry <k> is not <where> (YYYY-MM-DD)`). Measured at `a48f7f4` with the installed
+  2.8.1 over this kit's `TODO.md`, whose `:183` is a 131-character line: sensor clean before, 2
+  violations after the AUTO fixes. The obligation: the mirror's `--fix` never wraps a `RECURRED`
+  line, which is width-exempt when it parses (Part 2 of the plan, Task 7). Until Part 2 ships,
+  `--fix --write` must not run on a `TODO.md` carrying a `RECURRED` line longer than 120
+  characters, and this kit's own carries one.
 - **The mirror strips the indent the same way and accepts trailing blanks.** The sensor recognises
   the line after cutting `[ \t]+` at its start and tolerates `[ \t]+` at its end. The mirror must
   cut exactly that, no more and no less, and accept the trailing blanks, or the label `reincidente`
@@ -144,14 +162,22 @@ allowed the cap to rise.
 - **From the second token line on, each counts toward the cap**, so an item holds at most CAP
   content lines plus ONE token line; under `--baseline`, an item that inherited a cap message holds
   the number that message carries, and any added line moves it.
-- **Declared limits** (the Declared debt block of the header of `tests/check-todo.sh`, D15). Rule 6
-  measures the shape of the line, never its truth: nothing reads whether an entry is a real return
-  rather than a mission re-reading its own finding, whether it repeats the project of the found-by,
-  whether a date is a real day (2026-02-31 passes) or no older than the first sighting. Two
-  `<where>` that differ only in case are two. The well-formed line has no width cap and no limit on
-  its entries; its grammar admits no blank, so it carries names and dates, never a sentence. Under
-  `--baseline`, an item that inherited a RECURRED message can have its token lines edited with no
-  new violation while the messages stay the same. Each is judgement on the diff.
+- **Declared limits** (the Declared debt block of the header of `tests/check-todo.sh`, D15, copied).
+  Rule 6 measures the SHAPE of the line of returns, never its truth. Nothing reads whether an entry
+  is a real return rather than a mission re-reading its own finding (the inflation the design names
+  as an anti-goal), whether it repeats the project or mission of the found-by, whether a date is a
+  real day (2026-02-31 passes) or no older than the first sighting. Two `<where>` that differ only
+  in case are two. A token line that parses has no width cap and no limit on its entries, and a
+  `<where>` has no length limit: the grammar admits no blank, but a sentence joined by hyphens is
+  one `<where>` and passes. Under `--baseline`, an item that inherited a RECURRED message can have
+  its token lines edited with no new violation while the messages stay the same. The bound is the
+  cap and the width: every token line after the first counts as a content line, so the item holds
+  at most CAP content lines plus ONE token line — or, when it inherited a cap message, the number
+  that message carries, which any added line moves — and a token line that does not parse is held
+  to 120 characters. With two or more token lines only the last is parsed for the RECURRED
+  messages; the others answer to that bound, to the one-line message, and to the grammar only
+  through the width: each that parses has no width cap, each that does not is held to 120
+  characters. Each is judgement on the diff or fails closed.
 - **What this version does not do.** The kit reorders nothing by the count (the planner does not
   pull recurrent items first), there is no composite weight, and nothing detects a duplicate by
   text similarity. The priority is to see and to filter: the count on the item, and the label
