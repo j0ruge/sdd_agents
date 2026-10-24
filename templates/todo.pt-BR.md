@@ -44,7 +44,7 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > espaço nos 120 caracteres, encurte o corpo.
 >
 > **Reincidência.** Achado que volta (outro projeto, missão ou sessão) ganha uma entrada, nunca um
-> item novo: a última linha do item vira `RECURRED <n>: <onde> (AAAA-MM-DD); …` (token do kit, igual
+> item novo: a última linha do item vira `RECURRED <n>: <onde> (YYYY-MM-DD); …` (token do kit, igual
 > em todo idioma), da mais velha para a mais nova, uma entrada por projeto e missão, `<onde>` sem
 > espaço (`dotp-remake/3.4b`). A primeira ocorrência fica no descoberto-por, e o `<n>` conta as
 > voltas. A linha não conta no teto nem na largura, e o descoberto-por passa para a linha de cima.
