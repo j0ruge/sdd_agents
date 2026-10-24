@@ -258,6 +258,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Saída humana e cosmética
 
+- [ ] **O "Como verificar" do PR copia o `$SDD_HOME` do `TEST_CMD`, e o comando falha fora do runner** —
+  `agents/sdd-publisher.md:59` (`how to verify`) — o publisher monta "the commands, in order" pelos handoffs e
+  troca `$TODO_FILE` e `$DEFAULT_BRANCH` pelo valor, mas deixa o `$SDD_HOME`, que só existe dentro do `sdd`
+  (`bin/sdd:68`). No PR #72 do `magic_tutor`, a linha do `check-todo.sh` colada numa shell deu rc 127
+  (`/tests/check-todo.sh`), e o `sdd preflight`, que roda o mesmo `TEST_CMD` com o ambiente do runner, deu ok.
+  Direção: o "how to verify" manda rodar o gate por `sdd preflight`, ou só usa o que a shell do leitor tem.
+  — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-23)
+
 - [ ] **O `sdd preflight` reprova a árvore suja sem dizer os caminhos, nem que eram só não versionados** —
   `bin/sdd:7042` (`git status --porcelain`) — no `magic_tutor` o preflight disse só "working tree dirty", e o
   porcelain tinha só `??`: 4 `partidas/*.md` que o app grava e o repo deixa fora do git de propósito (nomes de
