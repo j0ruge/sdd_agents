@@ -256,6 +256,29 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   frida, gdb e adb: o recorte é a fronteira), e o `hat_init_facts` já compara o declarado com o visto.
   Fonte: grill da 3.3d do `dotp-remake` (2026-10-21) — descoberto por `sdd-plan` (relay) no `dotp-remake` (2026-10-21)
 
+- [ ] **O `sdd approve` commita o ADR do `adr:` sem tirar o `proposed`** — `bin/sdd:8553` (`proposed`) — o `sdd adr new`
+  escreve `proposed`, e o `cmd_approve` (`:8833`) só põe o arquivo do `adr:` no commit da aprovação. O status final
+  depende de quem escreveu o ADR: no `dotp-remake`, o 0011 nasceu `accepted` à mão (`02c19f5`) e o 0012 ficou
+  `proposed` (`a81c28f`) até a REVIEW r1 da 3.4b achar e a DOCS mudar à mão. Direção: o `sdd approve` troca o
+  `proposed` do ADR do `adr:` por `accepted` no mesmo commit, com probe.
+  — descoberto por `sdd-reviewer` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
+
+- [ ] **A linha `kit:` do handoff não tem quem a transporte** — `agents/sdd-publisher.md:69` (`TODO_FILE`) — o
+  `templates/handoff.md:63-65` manda o achado do kit numa missão de alvo morar no handoff, marcado `kit:`, levado por
+  "um humano ou a triagem do `sdd kaizen`"; mas nem o `sdd-kaizen` nem o publisher leem `kit:`, e o corpo do PR cita
+  só o que foi para o `TODO_FILE`. Na 3.4b do `dotp-remake`, o `kit:` do `45-docs.md:187` (o item acima) não chegou
+  ao PR #19 nem a este arquivo até o relay ler o handoff. Direção: o publisher copia cada `kit:` dos handoffs para o
+  corpo do PR, numa lista para o humano levar, e o `gate_PR` confere a contagem.
+  — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
+
+- [ ] **A DOCS deixa a lição reincidente só no `KAIZEN_LOG.md`** — `agents/sdd-docs.md:53` (`KAIZEN_LOG.md`) — a
+  entrada traz o que se aprendeu, e nada manda cruzar a lição com o que já foi padronizado. Na 3.4b do `dotp-remake`
+  ela mesma dizia "terceira vez em três fatias" (o estado novo sem os leitores antigos) e não virou linha ⛔ com texto
+  proposto para `.claude/rules/`, que a DOCS só escreve como proposta. Só a rodada `/codereview` sobre a DOCS pegou
+  (MEDIUM), e o relay padronizou à mão (`859acf9` no alvo). Direção: lição que o próprio log chama de reincidente vira
+  linha ⛔ com texto proposto, ou leva o motivo escrito de não virar.
+  — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
+
 ### Saída humana e cosmética
 
 - [ ] **O `sdd preflight` reprova a árvore suja sem dizer os caminhos, nem que eram só não versionados** —
