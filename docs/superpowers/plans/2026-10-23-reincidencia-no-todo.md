@@ -107,7 +107,7 @@ ganha a label `reincidente`.
     - `RECURRED entry <k> is not <where> (YYYY-MM-DD)`
     - `RECURRED dates go oldest first`
     - `RECURRED names <where> twice: one entry per project and mission`
-    - `RECURRED is the item's last line`
+    - `RECURRED is the last line of the item` (sem apóstrofo: o programa awk vem entre aspas simples)
     - `one RECURRED line per item`
 
 - [ ] **Step 1: Escrever os probes vermelhos** num grupo `rule_begin`/`rule_end` novo (o 13º). Use o `assert_clean`
@@ -128,7 +128,7 @@ ganha a label `reincidente`.
     - `recurred-bad-date`: com `RECURRED 1: magic_tutor (2026-13-40)`, diz a mesma mensagem;
     - `recurred-order`: com `RECURRED 2: a (2026-10-22); b (2026-10-20)`, diz `RECURRED dates go oldest first`;
     - `recurred-dup`: com `RECURRED 2: a (2026-10-20); a (2026-10-22)`, diz `RECURRED names a twice`;
-    - `recurred-not-last`: com uma linha de corpo depois da `RECURRED`, diz `RECURRED is the item's last line`;
+    - `recurred-not-last`: com uma linha de corpo depois da `RECURRED`, diz `RECURRED is the last line of the item`;
     - `recurred-two`: com duas linhas `RECURRED`, diz `one RECURRED line per item`;
     - `recurred-rule4`: com uma `RECURRED` válida e a linha de cima sem data, diz `last line carries no (YYYY-MM-DD)`.
       Esse fecha o fail-open de as datas da `RECURRED` satisfazerem a regra 4;
@@ -153,9 +153,12 @@ ganha a label `reincidente`.
       incremente o `nlines`;
     - se for qualquer outra linha, ponha `rlast = 0` e atualize o `last`, que passa a ser a última linha que não é
       `RECURRED`.
+    - **Nota (o que foi construído):** desde o `5745b51`, só a 1ª linha `RECURRED` fica fora do `nlines`; cada uma
+      depois dela conta no teto (`if (++rseen > 1) nlines++`), e só a última é lida para as mensagens (ADR 0020,
+      decisões 3 a 5).
   - **No `flush()`:**
     - `rseen > 1` dá `one RECURRED line per item`;
-    - `rseen == 1 && !rlast` dá `RECURRED is the item's last line`;
+    - `rseen == 1 && !rlast` dá `RECURRED is the last line of the item`;
     - se o `recurred_err` da linha guardada não for `""`, imprima a mensagem;
     - a regra 4 continua lendo o `last`.
   - **A data das entradas:** valide mês 01–12 e dia 01–31 por comparação de string, sem calendário.
@@ -318,7 +321,7 @@ ganha a label `reincidente`.
 - [ ] **Step 2: Implementar.** No `preflight(need_kit=True)`, `None` acrescenta a falha
   `the kit at {root} predates the recurrence line (tests/check-todo.sh declares no RECURRED_TOKEN) —\n      update it: git -C {root} pull`,
   com o rc 3 de sempre. Acrescente à tabela do `SKILL.md` a linha
-  ``| kit com `RECURRED_TOKEN` no sensor | espelho | kit anterior à linha de reincidência: `git -C "$SDD_HOME" pull` |``.
+  ``| kit com `RECURRED_TOKEN` no sensor | espelho, `--audit`, `--fix` | kit anterior à linha de reincidência: `git -C "$SDD_HOME" pull` |``.
 - [ ] **Step 3: Ver verde.** Rode `python3 scripts/test_todo_format.py`: espera-se 0 FAIL.
 - [ ] **Step 4: Commit, sem trailers.** `feat(todo-to-github-issues): exige o kit com a linha RECURRED`.
 
@@ -379,16 +382,19 @@ ganha a label `reincidente`.
   - **O que fica igual:** o `written` continua `k == "text"`, porque o teste de `:350` exige a string literal.
   - **O resumo:** `update=N (anchor A, recurrence R, labels L)`.
   - **O `wrap_long_lines`:** pula a linha cujo texto sem recuo começa com `RECURRED ` (o token que o
-    `recurred_token` do Task 6 lê do sensor, mais um espaço). O recuo sai como o sensor o tira, com
-    `line.lstrip(" \t")`, e nunca com o `strip()` sem argumento, que come também o NBSP. Bem formada, a linha não
-    tem largura no kit; malformada, quebrá-la não a conserta, e o sensor a recusa pelo nome no MANUAL.
+    `recurred_token` do Task 6 lê do sensor, mais um espaço). O token é lido uma vez, no `fix_text`, ao lado do
+    `width` (como o `kit.width_cap(kit_root)`), e guardado no `Fixer`, como o `self.width`. O recuo sai como o
+    sensor o tira, com `line.lstrip(" \t")`, e nunca com o `strip()` sem argumento, que come também o NBSP. Bem
+    formada, a linha não tem largura no kit; malformada, quebrá-la não a conserta, e o sensor a recusa pelo nome no
+    MANUAL.
   - **O `SKILL.md`:** duas linhas na tabela, `UPDATE (recurrence)` e `UPDATE (labels)`, ambas "`--apply` sem mais
     prova".
 - [ ] **Step 3: Ver verde.** Rode `python3 scripts/test_todo_issues.py ~/repos/sdd_agents/TODO.md` e
   `python3 scripts/test_todo_format.py`: espera-se 0 FAIL nos dois.
 - [ ] **Step 4: Ver o plano real, sem `--apply`.** Rode
   `python3 scripts/todo_issues.py --file ~/repos/sdd_agents/TODO.md --repo j0ruge/sdd_agents`. Espera-se: 3 linhas
-  `UPDATE (recurrence)`, para os três itens do Task 4, e nenhuma `UPDATE (text)` nova. Rode também
+  `UPDATE (text)`, para os três itens do Task 4, porque o `a48f7f4` mudou também o descoberto-por e o corpo deles.
+  Leia os três antes do `--apply`; depois dele, um plano novo dá `create=0 update=0`. Rode também
   `python3 scripts/todo_issues.py --fix --file ~/repos/sdd_agents/TODO.md`, que só mostra o diff. Espera-se nenhuma
   linha `AUTO … wrapped` e `sensor: before clean → after the AUTO fixes clean`; na 2.8.1 a `:183` (131 caracteres)
   é quebrada e o mesmo comando dá `after the AUTO fixes 2 violation(s)`.
