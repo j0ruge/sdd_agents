@@ -35,8 +35,8 @@
 #      the item's anchor rather than an anchor-shaped token; but no blank of any kind, a URL scheme
 #      or a non-ASCII byte fits in the span, so no prose rides on it. A non-ASCII path loses the
 #      exemption (fail-safe). A refused line that carries a path-shaped span is told that exit.
-#      The line of rule 6 is the other exception, to both halves: it is not a content line of the
-#      cap, and when it parses it has no width cap either.
+#      The line of rule 6 is the other exception, to both halves: the first one of an item is not
+#      a content line of the cap, and when it parses it has no width cap either.
 #   6. at most ONE line of returns, `RECURRED <n>: <where> (YYYY-MM-DD)[; <where> (YYYY-MM-DD)]*`,
 #      indented, and the item's LAST physical content line. It lists the times the finding came
 #      BACK — from another project, mission or session — and only those: the first sighting stays
@@ -48,10 +48,13 @@
 #      other spelling (`Recurred`, a translation) is ordinary prose and counts toward the cap.
 #      Exempt from the width only when the grammar holds: a line that opens with the token and a
 #      blank and breaks it is held to 120 characters and refused by name. Either way such a line is
-#      kept out of the body, the cap and rule 4 — the item already fails on the RECURRED message,
-#      and counting the line again would only stack messages on the same defect. The messages name
-#      the line the item OPENS on, as rules 1, 3, 4 and the cap do, so a `--baseline` key does not
-#      move when the line of returns changes.
+#      kept out of the body and of rule 4, and the FIRST one out of the cap too — the item already
+#      fails on the RECURRED message, and counting the line again would only stack messages on the
+#      same defect. Every token line after the first IS a content line of the cap: the message for
+#      a second one carries no count, and it was the cap message, which does, that had to bound
+#      them under `--baseline`. With two or more, only the last is parsed. The messages name the
+#      line the item OPENS on, as rules 1, 3, 4 and the cap do, so a `--baseline` key does not move
+#      when the line of returns changes.
 #
 # And per decided record: `- **<title>** — …`, one physical line, a code span after the title (the
 # pointer to the evidence) and a `(YYYY-MM-DD)` at the end. Records are not counted as findings.
@@ -198,10 +201,17 @@
 #     whether a date is a real day (2026-02-31 passes) or no older than the first sighting. Two
 #     `<where>` that differ only in case are two. The line has no width cap and no limit on its
 #     entries; its grammar admits no blank, so it carries names and dates, never a sentence. Under
-#     `--baseline`, a malformed line an item inherited can be edited with no new violation while its
-#     message stays the same — bounded by the width, which a malformed line never escapes, and by
-#     the one-line rule. Each is judgement on the diff or fails closed. Decided in the design of
-#     docs/superpowers/specs/2026-10-23-reincidencia-no-todo-design.md (2026-10-23).
+#     `--baseline`, an item that inherited a RECURRED message can have its token lines edited with
+#     no new violation while the messages stay the same. The bound is the cap and the width: every
+#     token line after the first counts as a content line, so the item holds at most CAP content
+#     lines plus ONE token line — or, when it inherited a cap message, the number that message
+#     carries, which any added line moves — and a token line that does not parse is held to 120
+#     characters.
+#     With two or more token lines only the last is parsed; the others answer to that bound and to
+#     the one-line message, never to the grammar. Each is judgement on the diff or fails closed.
+#     Decided in the design of docs/superpowers/specs/2026-10-23-reincidencia-no-todo-design.md
+#     (2026-10-23); the bound was measured false in its task review (30 extra lines, rc 0) and is
+#     the cap since then.
 #
 # TWO measured weaknesses, stated rather than hidden. The first is the header: nothing here
 # models a fence, so a stray or unbalanced fence in the header — which makes GitHub render the
@@ -672,7 +682,8 @@ todo_awk() {
     # The line of returns (rule 6) is exempt too, and only when recurred_err accepts it: its grammar
     # lets no blank into an entry, so no sentence rides on it, while a line that merely opens with
     # the token is held to the width like any other. This is the one exemption that asks for the
-    # grammar; the cap and rule 4 set aside any line that opens with the token (see the item rules).
+    # grammar; rule 4 sets aside any line that opens with the token, and the cap the first one of an
+    # item (see the item rules).
     sect == 1 && mode == "lint" {
       w = $0; gsub(/[\200-\277]/, "", w)
       if (length(w) > wcap) {
@@ -708,14 +719,19 @@ todo_awk() {
       flush(); next
     }
     # Rule 6 holds the line of returns OUT of the item: it never reaches the anchor or the found-by
-    # cut, it is not one of the content lines the cap counts, and it is never the last line rule 4
-    # reads, which stays the last line that is not one. That holds for any line that opens with the
-    # token and a blank, well formed or not: a malformed one is refused by name in flush(), so the
-    # item fails either way, and counting it again would only pile messages on the same defect.
-    # rlast says whether the line of returns is still the last one seen; any other line clears it.
+    # cut, the FIRST one is not one of the content lines the cap counts, and none is ever the last
+    # line rule 4 reads, which stays the last line that is not one. That holds for any line that
+    # opens with the token and a blank, well formed or not: a malformed one is refused by name in
+    # flush(), so the item fails either way, and counting it again would only pile messages on the
+    # same defect. Every token line AFTER the first is a content line of the cap. The message for a
+    # second one carries no count, so under --baseline an item that inherited it kept the same key
+    # while token lines piled up without end, none of them seen by the cap (task review of the
+    # mission that added rule 6, reproduced with 30 prose lines, rc 0); the cap message carries the
+    # number, and it bounds them. rlast says whether the line of returns is still the last one seen;
+    # any other line clears it.
     initem && NF && /^[ \t]/  {
       r = $0; sub(/^[ \t]+/, "", r)
-      if (substr(r, 1, length(rtok) + 1) == rtok " ") { rseen++; rlast = 1; rline = r; next }
+      if (substr(r, 1, length(rtok) + 1) == rtok " ") { if (++rseen > 1) nlines++; rlast = 1; rline = r; next }
       body = body " " $0; last = $0; nlines++; rlast = 0; next
     }
     # Refused like everything else off the whitelist, but named for what it is: calling an
@@ -2292,8 +2308,12 @@ EOF
     "recurred-dup: the same <where> twice"
   rec_item 3 "$rok" '  and a body line after it.' > "$box/rec-notlast.md"
   assert_says "$box/rec-notlast.md" 8 'line 4: RECURRED is the last line of the item' "recurred-not-last: a body line after RECURRED"
-  rec_item 3 "$rok" '  RECURRED 1: dotp-remake/3.4b (2026-10-23)' > "$box/rec-two.md"
+  # At the cap on purpose: the second token line is a content line, the ninth, while the first is
+  # not. Its own message carries no count, so it is the cap that bounds how many can follow.
+  rec_item 8 "$rok" '  RECURRED 1: dotp-remake/3.4b (2026-10-23)' > "$box/rec-two.md"
   assert_says "$box/rec-two.md" 8 'line 4: one RECURRED line per item' "recurred-two: two RECURRED lines"
+  assert_says "$box/rec-two.md" 8 'line 4: 9 content lines, cap is 8' \
+    "recurred-two-counts: the second RECURRED line is a content line of the cap"
   # The fail-open this rule could open: the dates of RECURRED answering for the found-by.
   { printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Undated above** — `bin/sdd:1` (`bsym`) — it matters.\n'
     printf '  — found by `sdd-qa` in mission `y`\n%s\n' "$rok"; } > "$box/rec-rule4.md"
@@ -2338,7 +2358,26 @@ EOF
       "$rrrc" "$rrout" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
-  rule_end 30 'a RECURRED line is measured, and outside the cap and the width when it parses'
+  # The case of the task review: an item that inherited `one RECURRED line per item` grows by prose
+  # token lines put BETWEEN its two valid ones, so the last line, the one parsed, stays valid and
+  # that message keeps its key. While no token line counted, this read `0 new shape violation(s)
+  # against HEAD~1 (1 inherited)`, rc 0. Every token line after the first is a content line now:
+  # 3 + 30 + 1 = 34, and the cap message, which carries the number, is the new violation.
+  { rec_item 3 "$rok" '  RECURRED 1: dotp-remake/3.4b (2026-10-23)'; printf '\n## Decided\n<!-- sdd:decided -->\n'; } \
+    > "$rr/TODO.md"; rr_commit two
+  { rec_item 3 "$rok"
+    for l in $(seq 1 30); do printf '  RECURRED free prose line %d of an analysis that belongs in the handoff\n' "$l"; done
+    printf '  RECURRED 1: dotp-remake/3.4b (2026-10-23)\n\n## Decided\n<!-- sdd:decided -->\n'; } > "$rr/TODO.md"
+  rr_commit grown
+  PROBES=$((PROBES + 1))
+  rrout="$(cd / && bash "$SELF" --check "$rr/TODO.md" --baseline HEAD~1 2>&1)"; rrrc=$?
+  if [ "$rrrc" -ne 1 ] || ! grep -qF 'TODO.md: 1 new shape violation(s) against HEAD~1 (1 inherited)' <<< "$rrout" \
+    || ! grep -qF 'line 4: 34 content lines, cap is 8' <<< "$rrout"; then
+    printf '  SELFTEST FAIL  recurred-baseline-extra-lines: token lines added to an inherited item are no new violation — rc %s: %s\n' \
+      "$rrrc" "$rrout" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  rule_end 32 'a RECURRED line is measured, and outside the cap and the width when it parses'
 
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
@@ -2379,8 +2418,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 227 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 227\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 229 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 229\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
