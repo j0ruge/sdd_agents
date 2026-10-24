@@ -138,7 +138,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O remédio do `sdd kaizen` recusado ensina a mesma receita sem `--no-track`** — `bin/sdd:11792`
   (`shared_why`) — o motivo manda `worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>`, e a
   branch do juiz nasce rastreando a `main` (git 2.43, medido em repo de rascunho); o `docs/failure-modes.md:685`
-  e o `docs/pipeline.md:1567` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
+  e o `docs/pipeline.md:1569` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
   `/sdd-plan` porque o `bin/` está congelado até o veredito. Direção: `--no-track` no motivo e nas duas citações.
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
@@ -156,7 +156,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   no `magic_tutor` (este com `origin/main` no clone), sob o "Detected from origin/HEAD" do `config/starter.conf`;
   o "confirm it" da saída foi a única defesa. Direção: tentar `git ls-remote --symref origin HEAD` e um
   `origin/main`/`origin/master` existente antes da branch atual, e dizer que ela é palpite quando for ela.
-  — descoberto por `retrofit-watch` no `dotp-remake` (2026-10-19) e no `magic_tutor` (2026-10-20)
+  — descoberto por `retrofit-watch` no `dotp-remake` (2026-10-19)
+  RECURRED 1: magic_tutor (2026-10-20)
 
 - [ ] **A primeira instalação semeia o `TODO.md` em inglês, qualquer que seja o idioma** — `bin/sdd:6155`
   (`inst_lang`) — o install lê o `OUTPUT_LANG` da config que acabou de gerar do `starter.conf`, onde ele vem
@@ -178,8 +179,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `.claude/agents/`; no `magic_tutor` ela abriu antes do `sdd install` (`Agent type 'sdd-planner' not found`). Nos
   dois, um agente genérico mandado ler o `sdd-planner.md` como contrato conduziu o grill. Direção: o comando nomeia
   esse caminho de reserva, ou manda reabrir a sessão no alvo, depois do install.
-  — descoberto pelo relay do `/sdd-plan` na 3.2 do `dotp-remake` (2026-10-19) e por `retrofit-watch` no
-  `magic_tutor` (2026-10-20)
+  — descoberto pelo relay do `/sdd-plan` na 3.2b do `dotp-remake` (2026-10-19)
+  RECURRED 4: dotp-remake/3.2c (2026-10-19); magic_tutor (2026-10-20); dotp-remake/3.4a (2026-10-22); dotp-remake/3.4b (2026-10-23)
 - [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:104`
   (`Relaying the grill`) — na 3.2c do `dotp-remake` a sessão caiu com uma pergunta pendente, e a chamada voltou "the
   session ended before this call's result was recorded, so its outcome is unknown". Na sessão nova, o `SendMessage` ao
@@ -296,10 +297,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`Sensores novos`) — a frase "rodam no CI a partir deste PR" é fixa no template, o `agents/sdd-publisher.md:61`
   manda listar o que "start running in CI", e nada confere o alvo. O `dotp-remake` não tem `.github/workflows`
   (os checks dos PRs são só GitGuardian e CodeRabbit), e o corpo saiu com a frase no #10 e no #11 (3.2b),
-  corrigida à mão para "rodam na suíte local, `dotnet test`; o repositório não tem CI". Direção: o publisher
-  só afirma CI com um workflow em `.github/workflows/`; sem ele, diz onde a suíte rodou: pelo `TEST_CMD`.
-  — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19) e por
-  `retrofit-watch` no PR #25 do `magic_tutor`, também sem `.github/workflows` (2026-10-20)
+  corrigida à mão para "rodam na suíte local, `dotnet test`; o repositório não tem CI". O `magic_tutor` também
+  não tem `.github/workflows`. Direção: o publisher só afirma CI com um workflow em `.github/workflows/`; sem
+  ele, diz onde a suíte rodou: pelo `TEST_CMD`.
+  — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
+  RECURRED 1: magic_tutor/pr25 (2026-10-20)
 
 - [ ] **O `sdd run` diz que commita na base quando a TICKET vai cortar o branch antes** — `bin/sdd:6314`
   (`warn_if_on_base_branch`) — compara só o branch atual com o `DEFAULT_BRANCH`. No `lighthouse_project` (LH-8,
