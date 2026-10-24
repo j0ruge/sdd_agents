@@ -255,6 +255,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   montar um `--mcp-config` com só os servidores que o chapéu declara, tirados da config do humano (o `rea` traz
   frida, gdb e adb: o recorte é a fronteira), e o `hat_init_facts` já compara o declarado com o visto.
   Fonte: grill da 3.3d do `dotp-remake` (2026-10-21) — descoberto por `sdd-plan` (relay) no `dotp-remake` (2026-10-21)
+- [ ] **Com o passo 2 pulado, o `/sdd-plan` não olha o branch antes de o planner ler o repo** —
+  `commands/sdd-plan.md:56` (`skip this step`)
+  — com o kit fora do alvo, o branch atual só aparece na pergunta de aprovação, e o `sdd approve` corta dele a
+  branch da missão. No `ui24_agent` o checkout estava em `retrofit-ui24-operator-mcp-vivo`, com a PR #83 aberta:
+  o planner leria um checkout que não é a base, e a missão nasceria com commits de outra PR. Direção: no passo
+  3, comparar `git branch --show-current` com o `DEFAULT_BRANCH` e, se divergir, perguntar a base ao humano
+  antes de delegar.
+  — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
+- [ ] **O relay não prevê que o job em background do planner repete a pergunta já feita** —
+  `commands/sdd-plan.md:119` (`Nothing else resumes the planner`)
+  — a regra cobre a mensagem do relay que não responde nada, não o fim de um job que o próprio planner lançou. No
+  grill do `ui24_agent` a suíte em background terminou depois da hand-back, e o planner devolveu a pergunta 1 de
+  novo, com a resposta do humano já com o relay. Sem dano, porque a resposta nomeou a opção pelo texto. Direção:
+  o relay responde uma vez e cita a primeira pergunta; o planner não fecha turno de job repetindo pergunta aberta.
+  — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
 
 ### Saída humana e cosmética
 
