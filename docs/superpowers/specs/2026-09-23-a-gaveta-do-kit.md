@@ -379,21 +379,26 @@ incremento.
 ## F11 — Vários kits ao mesmo tempo
 
 Pedido do dono em 2026-10-24: rodar vários kits ao mesmo tempo. Hoje toda corrida executa o mesmo
-checkout, o `~/repos/sdd_agents` (o `sdd` do PATH), e a guarda do kit é armada a cada fase
-(`kit_guard_arm` e `kit_guard_check`, ADR 0014). Duas consequências, medidas no mesmo dia:
+checkout, o `~/repos/sdd_agents` (o `sdd` do PATH), e a guarda do kit é armada a cada fase (no
+`bin/sdd`, o `kit_guard_arm` antes de cada sessão de fase e o `kit_guard_check` depois). Duas
+consequências, medidas no mesmo dia:
 
 - **O kit não avança com corrida em voo.** Se o HEAD ou a árvore do kit mudam dentro de uma fase, a
-  corrida para (a escalada `kit-touched`); se mudam entre duas fases, a fase seguinte roda no kit
-  novo e o journal só ganha a linha `RUNNER` com os dois shas. Por isso os merges dos PRs #321 e #322
-  esperaram a 3.4b do `dotp-remake` terminar para o `git merge --ff-only` do checkout.
+  corrida para (a escalada `kit-touched`). Se mudam entre duas fases, a guarda, rearmada no começo
+  da seguinte, não vê: essa fase lê os agentes e os templates do disco novo, mas o runner já
+  carregado segue o antigo, e o journal só ganha a linha `RUNNER` com os dois shas uma vez por
+  processo (`AUTONOMY_RUNNER_NOTED`), na primeira linha do ledger que sai com o HEAD do kit
+  diferente do lançado. Por isso, na 3.4b do `dotp-remake`, só o `git merge --ff-only` do checkout
+  esperou o fim da corrida: o PR #322 foi mergeado no GitHub com ela em voo (`64114d2`), e o #321
+  não foi mergeado durante ela.
 - **Duas corridas não rodam versões diferentes do kit.** Para começar uma corrida numa versão nova é
   preciso avançar o checkout, e isso cai sobre as que estão em voo.
 
 O que o desenho tem de responder, com o dono: o que cada corrida fixa no início (um checkout ou uma
-cópia do kit por corrida, ou só o sha); como o `kit_sha` e o `kit_rev` do ledger e a janela do juiz
-(F3) contam corridas de versões diferentes; e o que vira o `sdd` do PATH. Não confundir com a **Y2**
-do `CONTEXT.md` (duas missões no mesmo repo-alvo, por `git worktree`), que segue adiada: as duas
-podem acabar no mesmo desenho, e quem planejar decide.
+cópia do kit por corrida, ou só o sha); como o `kit_sha` e o `kit_rev` do ledger (ADR 0014) e a
+janela do juiz (F3) contam corridas de versões diferentes; e o que vira o `sdd` do PATH. Não
+confundir com a **Y2** do `CONTEXT.md` (duas missões no mesmo repo-alvo, por `git worktree`), que
+segue adiada: as duas podem acabar no mesmo desenho, e quem planejar decide.
 
 ---
 
