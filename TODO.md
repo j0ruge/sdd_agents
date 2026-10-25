@@ -276,7 +276,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   checkpoint e os handoffs citam hashes, e o `gate_EXEC` exige cada `Commit` na história do `HEAD`
   (`bin/sdd:1456`). Depois do rebase, o run seguinte para no EXEC (`no_work_check`, forma b), e o humano
   reescreve 9 células (pelo código, não medido). Lá, o merge da base destravou (`c6f043c`). Direção: o
-  contrato indica `git merge origin/<base>`, e o `BLOCKED` do PR diz o mesmo sem depender da prosa da sessão.
+  contrato passa a indicar `git merge origin/<base>`, e o `BLOCKED` do PR diz o mesmo sem depender da sessão.
   — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
 
 ### Saída humana e cosmética
@@ -361,6 +361,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
 
 ### Custo e escala
+
+- [ ] **O mapa de tempos do catálogo de mutação mora no checkout, e o worktree de cada branch roda sem ele** —
+  `tests/check-mutation.sh:7550` (`KILLERS_FILE`) — o mapa (`.sdd/cache/`, fora do git) põe primeiro o passo que
+  matou cada mutante e lança os mais longos antes (40 mutantes: 4796 s → 1959 s, no comentário do mapa). Ele é
+  gravado no fim do catálogo, no `.sdd/cache/` daquele checkout, e o trabalho do kit roda num worktree por branch:
+  em 2026-10-25, nenhum dos 8 checkouts do kit nesta máquina tinha o mapa, e o `sdd health` do
+  `sdd_agents-gate-sem-saida` fez 299 de 775 mutantes em ~152 min (238 s cada, em média). Direção: o mapa mora
+  no `git rev-parse --git-common-dir`, que os worktrees dividem, ou o `sdd health` avisa o custo de rodar sem ele.
+  — descoberto por `sessão coordenadora` no `magic_tutor` (2026-10-25)
 
 ### Sem seção — chegaram depois da última classificação
 
