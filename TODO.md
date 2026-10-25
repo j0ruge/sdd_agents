@@ -87,6 +87,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sem aviso no boot. Hipótese, não medida: morrer no meio da sabotagem de um `R<n>` (`agents/sdd-executor.md:88`) deixa
   a linha degradada para a próxima commitar. Direção: status e boot citam o stream órfão e a árvore suja.
   — descoberto por `retrofit-watch` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
+- [ ] **O `sdd run` paga a REVIEW sem avisar que o `READ_EXTRA` não cobre o `codereview`** — `bin/sdd:6949`
+  (`sk_entry`) — o aviso com a entrada a acrescentar só sai no `sdd preflight`, que é opcional: o `sdd run` não o
+  repete e abre a REVIEW assim mesmo. No `magic_tutor`, as três últimas missões tiveram Reads negados nas
+  `references/` do `codereview` (5, 2 e 3 no `pipeline.log`). Na `20261024-dica-na-hora`, 3 dos 5 agentes da
+  Fase B pararam sem revisar, numa REVIEW de US$ 5,61. Com a entrada (`j0ruge/magic_tutor#104`), um subagente
+  headless lê a reference. Direção: o `sdd run` faz a mesma busca de skills, sem sessão, e avisa ou para.
+  — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
 
 ### Contrato e configuração
 
@@ -255,6 +262,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   montar um `--mcp-config` com só os servidores que o chapéu declara, tirados da config do humano (o `rea` traz
   frida, gdb e adb: o recorte é a fronteira), e o `hat_init_facts` já compara o declarado com o visto.
   Fonte: grill da 3.3d do `dotp-remake` (2026-10-21) — descoberto por `sdd-plan` (relay) no `dotp-remake` (2026-10-21)
+- [ ] **O `gate_PR` não lê o `status: blocked` do `50-pr.md`, e o runner compra outra sessão do publisher** —
+  `bin/sdd:2614` (`gate_PR`) — só o `gate_TICKET` e o `gate_QA` armam o `GATE_HANDOFF_BLOCKED`. Na
+  `20261024-dica-na-hora` do `magic_tutor`, o publisher parou num conflito com a base e commitou o `50-pr.md`
+  com `status: blocked`. O commit contou como avanço ("carrying on"), e uma 2ª sessão (`e5ab0aaf`, US$ 0,12)
+  reconferiu o mesmo conflito antes do `BLOCKED`. O `templates/review.md` também declara `blocked`, e o
+  `gate_REVIEW` não o lê: lá, a sessão repetida seria a da REVIEW (não medido). Direção: os dois gates armam o
+  marcador, pelo contrato escrito acima do `GATE_HANDOFF_BLOCKED`.
+  — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
+- [ ] **O publisher bloqueado manda o humano fazer `git rebase`, e o rebase tira os hashes dos handoffs da história** —
+  `agents/sdd-publisher.md:48` (`Conflict`) — o contrato manda parar no conflito com a base, sem dizer qual saída
+  indicar, e na `20261024-dica-na-hora` do `magic_tutor` as duas sessões indicaram `git rebase origin/main`. O
+  checkpoint e os handoffs citam hashes, e o `gate_EXEC` exige cada `Commit` na história do `HEAD`
+  (`bin/sdd:1456`). Depois do rebase, o run seguinte para no EXEC (`no_work_check`, forma b), e o humano
+  reescreve 9 células (pelo código, não medido). Lá, o merge da base destravou (`c6f043c`). Direção: o
+  contrato indica `git merge origin/<base>`, e o `BLOCKED` do PR diz o mesmo sem depender da prosa da sessão.
+  — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
 
 ### Saída humana e cosmética
 
