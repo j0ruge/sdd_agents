@@ -25,10 +25,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O `sdd health` refaz o catálogo inteiro mesmo com o carimbo valendo para o conteúdo** — `bin/sdd:7311`
   (`--with-mutation`) — o carimbo prova o verde sobre `bin/ tests/ templates/ config/ agents/`, mas só o
-  `gate_PR` o lê: o `cmd_health` roda os 775 mutantes sempre, até num diff só de `TODO.md` e catraca. O mapa
-  dos matadores some com a worktree, e nenhum dos 8 checkouts do kit nesta máquina o tinha: o `sdd health`
-  deste achado ia em 464 de 775 após 5 h. Direção: chave igual à do carimbo pula o catálogo e roda a suíte
-  rápida e a catraca; o mapa e o carimbo voltam ao checkout principal sem passo manual. Prioridade do dono.
+  `gate_PR` o cobra: o `cmd_health` não o consulta e roda os 775 mutantes sempre, até num diff só de `TODO.md`
+  e catraca. O mapa dos matadores some com a worktree, e nenhum checkout do kit nesta máquina o tinha: o
+  `sdd health` deste achado ia em 464 de 775 logs (8 ainda rodando) após 5 h 13 min. Direção: a chave igual à
+  do carimbo pula o catálogo e roda a suíte rápida e a catraca; o mapa e o carimbo voltam ao checkout principal
+  sem passo manual. Prioridade do dono.
   — descoberto pelo relay da sessão coordenadora da 3.5b do `dotp-remake` (2026-10-25)
 
 ### Sensores que faltam
