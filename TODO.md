@@ -21,6 +21,16 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ## Aberto
 <!-- sdd:open -->
 
+### Prioridade — resolver logo
+
+- [ ] **O `sdd health` refaz o catálogo inteiro mesmo com o carimbo valendo para o conteúdo** — `bin/sdd:7311`
+  (`--with-mutation`) — o carimbo prova o verde sobre `bin/ tests/ templates/ config/ agents/`, mas só o
+  `gate_PR` o lê: o `cmd_health` roda os 775 mutantes sempre, até num diff só de `TODO.md` e catraca. O mapa
+  dos matadores some com a worktree, e nenhum dos 8 checkouts do kit nesta máquina o tinha: o `sdd health`
+  deste achado ia em 464 de 775 após 5 h. Direção: chave igual à do carimbo pula o catálogo e roda a suíte
+  rápida e a catraca; o mapa e o carimbo voltam ao checkout principal sem passo manual. Prioridade do dono.
+  — descoberto pelo relay da sessão coordenadora da 3.5b do `dotp-remake` (2026-10-25)
+
 ### Sensores que faltam
 
 - [ ] **O `sdd preflight` não mede a forma do `TODO_FILE`, e nada avisa o alvo sem o opt-in** —
@@ -128,6 +138,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   gate de novo e republicou o `local/ci`. Direção: o contrato diz onde o registro mora e, se ele entra no PR,
   que a verificação do passo 2 corre de novo na cabeça final.
   — descoberto por `sessão coordenadora` na missão `20261013-amep-alignment-review` (2026-10-14)
+- [ ] **O `gate:` cita saídas que a pasta de evidência da fase não guarda** — `templates/handoff.md:7` (`gate:`)
+  — o template pede "comando + saída resumida" e não diz onde fica a saída inteira. Na DOCS da 3.5b do
+  `dotp-remake`, o `gate:` do `45-docs.md` cita os três modos do `check-todo.sh` e um `grep -c 'RESOLVED by'`,
+  medidos no `d343861`, e fecha com "Saídas em ~/.wt/docs-3-5b/"; a pasta não tem nenhum dos quatro (o
+  `measure.sh` dela não os roda). O `/codereview` lê a pasta como a evidência da fase e mediu de novo no
+  `34aa349` (mesmos valores). Direção: cada medida citada salva a saída onde o `gate:` diz, ou o `gate:` a exclui.
+  — descoberto pelo relay do `sdd run` na missão `20261024-plano-3-5-b-auras-e-equipamento` (2026-10-25)
 - [ ] **O platô da REVIEW lê só as letras, e pararia um laço que converge** — `agents/sdd-reviewer.md:62`
   (`Overall Grade`) — "as mesmas letras da rodada anterior" é platô, mas não separa o achado que a rodada
   não fechou do material que entrou entre as rodadas sem ser `R<n>`, nem da classe que a varredura pulou. No
