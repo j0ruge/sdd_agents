@@ -115,7 +115,9 @@ it** and **do not lose it**. Record it in the repo's `TODO.md` (the `TODO_FILE` 
 
 1. `grep -n '^## \|<!-- sdd:' <TODO_FILE>` shows the skeleton. The preamble carries the item grammar
    in the repo's language; the section under `<!-- sdd:decided -->` lists what was refuted or
-   decided — a finding already recorded there is **not** filed again.
+   decided — a finding already recorded there is **not** filed again, and your handoff's *Decisions
+   for a Human* names it, for the human to decide whether to reopen it. A finding already open
+   gains an entry on the item's `RECURRED` line (`$SDD_HOME/templates/todo.md`), never a new item.
 2. Append **one item to the section under `<!-- sdd:open -->`**, inside the `###` category that
    fits — never in the preamble, never below the decided marker:
 

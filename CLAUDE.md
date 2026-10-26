@@ -82,6 +82,9 @@ o escopo; nunca perder o achado. Formato, esqueleto e ciclo de vida: `templates/
 deste repo). Duas seções, cada uma com seu marcador na linha abaixo do `##`: a dos achados abertos
 (`<!-- sdd:open -->`) e a dos registros **decididos, que não se reabrem** (`<!-- sdd:decided -->`).
 O texto do heading segue o idioma do repo; o marcador é contrato, em inglês, e é o que o sensor lê.
+Achado que já está aberto ganha uma entrada na linha `RECURRED` do item (`templates/todo.md`), nunca
+um item novo; o que está nos decididos não ganha linha, e quem o achou avisa o humano, que decide se
+reabre.
 
 ⚠️ **A rota depende de quem é o repo da missão, e dizer só o DESTINO não bastou.** Missão cujo
 repo é o kit escreve aqui, como sempre. Missão de repo-alvo **nunca escreve, commita ou entra** no
@@ -148,7 +151,10 @@ mora no handoff da missão citada — duplicá-la aqui foi o que levou este arqu
 Consertado por commit, o corpo ganha `RESOLVED by <hash>` (token do kit, igual em todo idioma) e o
 item **é apagado** depois do merge, provado por `git merge-base --is-ancestor`, nunca pelo rótulo do
 PR; refutado ou decidido, vira uma linha na seção decidida, porque não há commit que o feche e a
-próxima QA o registraria de novo. A regra inteira mora no template; aqui fica o porquê.
+próxima QA o registraria de novo. Achado que volta, de outro projeto, missão ou sessão, ganha uma
+entrada na linha `RECURRED`, medida e fora do teto: a volta é o sinal mais forte de que a dor é real,
+e se perdia, porque o item no teto não tinha onde somá-la e o "e por" em prosa ninguém contava. A
+regra inteira mora no template; aqui fica o porquê.
 
 **Nem tudo que é verdade é achado — a régua de admissão (D15).** Um achado entra no `TODO.md`
 quando **o sensor afirma medir o que não mede** (fail-open) ou quando **o defeito tem consumidor
