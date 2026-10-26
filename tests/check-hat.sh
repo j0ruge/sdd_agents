@@ -761,6 +761,37 @@ census_probes() {
 # = red. They never run the suite — line 6 reads the mutation stamp, the suite's own artifact.
 rel_green() { grep -cE "ok[^ ]*[[:space:]]+line $2 ·" <<< "$1"; }   # rel_green <out> <n>
 rel_red()   { grep -E "line $2 ·" <<< "$1" | grep -vcE "ok[^ ]*[[:space:]]+line $2 ·"; }
+# The place line 6 reads the key from, <git common dir>/sdd-mutation/stamps (ADR 0021), spelled
+# HERE and never sourced or copied from bin/sdd (git_common_dir_abs): a writer that moves the place
+# is then contradicted by the green half of the line-6 probe instead of followed by it. Prints that
+# place for <repo>, absolute, or NOTHING and rc 1.
+#
+# ⚠️ The one-shot `--path-format=absolute` is the fast path, not the only one (CodeRabbit Minor,
+# outside the diff, on d426c68 of PR #330). A git older than 2.31, where the flag was born (Ubuntu
+# 20.04 ships 2.25), echoes it back and exits 0, so its answer is two lines, the flag and a common
+# dir still relative. The first spelling took that answer whole: mkdir read it as an option, no key
+# was stored, and the green half went red on a git the writer serves right. It also read a git that
+# FAILS as an empty answer, so the place became `/sdd-mutation/stamps` and the probe would write at
+# the root. That answer is now resolved the old way, from git's plain answer, which is relative to
+# where git ran: cd into <repo>, then into the answer (`.git` at a root, `../.git` in a
+# subdirectory), then `pwd -P`, both cds with an emptied CDPATH. Refused there, with rc 1 and
+# nothing printed: a git that fails, an empty answer (`cd ""` stays put, and the working tree would
+# pass for the place), a cd that cannot land, and a path that spans two lines, which on that git
+# cannot be told from a leak. On a refusal the caller fails line 6 by its own message and stores
+# nothing. release_stamps_probes, after release_probes, holds the agreement, each refusal and that
+# guard.
+release_stamps() { # release_stamps <repo>
+  local common
+  common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  case "$common" in
+    /*) ;;
+    *)  common="$(git -C "$1" rev-parse --git-common-dir 2>/dev/null)" || return 1
+        [ -n "$common" ] || return 1
+        common="$(CDPATH='' cd "$1" && CDPATH='' cd "$common" && pwd -P)" || return 1
+        case "$common" in *$'\n'*) return 1 ;; esac ;;
+  esac
+  printf '%s/sdd-mutation/stamps\n' "$common"
+}
 release_probes() {
   local box ledger out rc
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-release-XXXXXX")"
@@ -815,12 +846,90 @@ EOF
            | LC_ALL=C sort -zu | xargs -0 -r md5sum | md5sum | cut -d' ' -f1 )"
   mkdir -p "$box/.sdd/logs"; printf '%s\n' "$rkey" > "$box/.sdd/logs/mutation-stamp"
   red6="$(rel_red "$(release)" 6)"
-  rstamps="$(git -C "$box" rev-parse --path-format=absolute --git-common-dir)/sdd-mutation/stamps"
+  rstamps="$(release_stamps "$box")" || { fail "release: line 6 has no place to store the key — git named no absolute common dir for the box, so no key was stored and line 6 went unmeasured"; return; }
   mkdir -p "$rstamps"; printf '%s\n' "$rkey" > "$rstamps/$rkey"
   green6="$(rel_green "$(release)" 6)"
   if [ "$red6|$green6" = "1|1" ]; then pass "release: line 6 reads the key from the git common dir — red before the key is stored, green after"
   else fail "release: line 6 reads the key from the git common dir — red before the key is stored, green after (expected red 1 and green 1, got red $red6 and green $green6)"; fi
   rm -rf "$box"
+}
+
+# The old-git path of release_stamps, measured and not trusted (CodeRabbit Minor on PR #330). The
+# line-6 probe runs on the suite's own git, so on a 2.31 or later a broken fallback stays green there
+# and comes back only on the gits it exists for. A shim stands in for such a git, in the form of the
+# pre-2.31 pair in tests/check-autonomy.sh and of i4_oldgit in tests/check-gates.sh: rev-parse
+# echoes any --path-format=* back and hands the rest to the git it found, and HAT_OLDGIT_PLAIN makes
+# the PLAIN rev-parse answer nothing (mute), fail with an answer on stdout (fail), or name a
+# directory that is not there (gone). Every call runs from `/`, so a relative answer resolves only
+# through the cd into <repo>.
+#
+# rel_old prints <rc>:<plain questions the shim heard>:<answer>. The middle field is INTERCEPTION:
+# a 1 says the call got past the flagged question and reached the fallback, so no refusal can be
+# the first `|| return 1` answering for a fallback that never ran; outside any repo (`nogit`) it
+# must be 0, that first refusal answering. `armed` is the FLOOR: the shim answers the flagged
+# question in two lines, the flag first, or a modern git answering for it would leave every other
+# term measuring nothing. `same` and `sub` are the AGREEMENT with the suite's git, at the root of a
+# repo and two levels down (`../../.git`). `nl` is a repo whose path holds a newline: it, `mute`,
+# `fail` and `gone` must name no place. `guard` runs release_probes again with release_stamps
+# refusing, outside the mutant because it calls fail() on purpose: line 6 must fail by its own
+# message, and neither the store nor the green half may run.
+release_stamps_probes() {
+  local d shim new o t s u l m f g n v
+  d="$(mktemp -d "${TMPDIR:-/tmp}/sdd-relstamps-XXXXXX")"
+  PROBE_BOXES+=("$d")
+  shim="$d/oldgit"; mkdir -p "$shim" "$d/drv" "$d/nogit"
+  { printf '#!/usr/bin/env bash\nreal=%q\n' "$(command -v git)"
+    cat <<'SHIM'
+is_rp=0; for a in "$@"; do [ "$a" = rev-parse ] && is_rp=1; done
+if [ "$is_rp" = 1 ]; then
+  [ -z "${HAT_OLDGIT_TRACE:-}" ] || printf '%s\n' "$*" >> "$HAT_OLDGIT_TRACE"
+  keep=(); echoed=()
+  for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a") ;; *) keep+=("$a") ;; esac; done
+  if [ "${#echoed[@]}" -gt 0 ]; then printf '%s\n' "${echoed[@]}"; exec "$real" "${keep[@]}"; fi
+  case "${HAT_OLDGIT_PLAIN:-}" in
+    mute) exit 0 ;;
+    fail) printf '.git\n'; exit 128 ;;
+    gone) printf '.git-gone\n'; exit 0 ;;
+  esac
+fi
+exec "$real" "$@"
+SHIM
+  } > "$shim/git"
+  chmod +x "$shim/git"
+  git init -q "$d/repo" >/dev/null 2>&1; mkdir -p "$d/repo/a/b"
+  git init -q "$d/nl"$'\n'"repo" >/dev/null 2>&1
+  # stderr is dropped: `gone` makes the cd of the fallback say why it could not land, and that line
+  # is the refusal working, not noise to read in the suite's log.
+  rel_old() { # rel_old <HAT_OLDGIT_PLAIN mode, '' for none> <dir>
+    local out rc
+    : > "$shim/trace"
+    out="$( cd / && PATH="$shim:$PATH" HAT_OLDGIT_PLAIN="$1" HAT_OLDGIT_TRACE="$shim/trace" \
+            release_stamps "$2" 2>/dev/null )"; rc=$?
+    printf '%s:%s:%s' "$rc" "$(grep -c -- 'rev-parse --git-common-dir$' "$shim/trace")" "$out"
+  }
+  o="$( PATH="$shim:$PATH" git -C "$d/repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )"
+  if [ "$(grep -c . <<< "$o")" = 2 ] && [ "$(head -1 <<< "$o")" = --path-format=absolute ]; then t=armed
+  else t="unarmed:$o"; fi
+  new="$( cd / && release_stamps "$d/repo" )"
+  o="$(rel_old '' "$d/repo")";     if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then s=same; else s="split:$o|$new"; fi
+  o="$(rel_old '' "$d/repo/a/b")"; if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then u=sub;  else u="sub:$o|$new"; fi
+  o="$(rel_old '' "$d/nl"$'\n'"repo")"; if [ "$o" = "1:1:" ]; then l=nl; else l="nl:$o"; fi
+  o="$(rel_old mute "$d/repo")";   if [ "$o" = "1:1:" ]; then m=mute; else m="mute:$o"; fi
+  o="$(rel_old fail "$d/repo")";   if [ "$o" = "1:1:" ]; then f=fail; else f="fail:$o"; fi
+  o="$(rel_old gone "$d/repo")";   if [ "$o" = "1:1:" ]; then g=gone; else g="gone:$o"; fi
+  o="$(GIT_CEILING_DIRECTORIES="$d" rel_old '' "$d/nogit")"; if [ "$o" = "1:0:" ]; then n=nogit; else n="nogit:$o"; fi
+  o="$( unset SDD_MUTANT
+        release_stamps() { : > "$d/drv/asked"; return 1; }
+        TMPDIR="$d/drv" release_probes 2>&1 )"
+  if [ -e "$d/drv/asked" ] && [ "$(grep -c '^  FAIL  release: line 6 has no place to store the key' <<< "$o")" = 1 ] \
+     && [ "$(grep -c 'release: line 6 reads the key from the git common dir' <<< "$o")" = 0 ]; then v=guard
+  else v="guard:$(grep -E 'line 6|FAIL|mkdir' <<< "$o" | tr '\n' '|' | cut -c1-240)"; fi
+  if [ "$t $s $u $l $m $f $g $n $v" = "armed same sub nl mute fail gone nogit guard" ]; then
+    pass "release: on a git older than 2.31 the line-6 probe stores the key in the SAME place, and a git that names no place fails line 6 by its own message"
+  else
+    fail "release: on a git older than 2.31 the line-6 probe stores the key in the SAME place, and a git that names no place fails line 6 by its own message (expected 'armed same sub nl mute fail gone nogit guard', got '$t $s $u $l $m $f $g $n $v')"
+  fi
+  rm -rf "$d"
 }
 
 case "${1:-}" in
@@ -850,6 +959,7 @@ command_branch_cwd_probes
 publisher_stamp_probes
 boot_probes
 release_probes
+release_stamps_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2
