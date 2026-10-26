@@ -101,6 +101,11 @@ The batch row is not laziness: booting an EXEC session costs about US$ 1–2, so
 LOW findings cost more than the fixes. One CRITICAL per row for the opposite reason — a fix that has
 to be reverted must be revertible alone.
 
+A finding already open in `TODO_FILE` gains an entry on the item's `RECURRED` line
+(`$SDD_HOME/templates/todo.md`), never a new item; one already under `<!-- sdd:decided -->` gains
+nothing, and the report's "Decisions for a Human" names it, for the human to decide whether to
+reopen it.
+
 ### The shape of the row
 
 Append it to the increment table of `checkpoint.md`, in the same columns as every other row:

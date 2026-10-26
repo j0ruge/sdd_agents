@@ -66,10 +66,12 @@ Part of your job: are the entries the other agents created in `TODO_FILE` during
 **well formed**? Each one needs: a bold title + where (`file:line`, then a `<symbol>` in parentheses that
 occurs in that file within 10 lines of the line) + why it matters + `Direction:` + `Source:`
 pointing at the handoff that holds the analysis + found by (agent/mission/date), and it sits in
-the section under `<!-- sdd:open -->`. Complete the
-half-written ones. A finding this mission refuted or decided leaves the open section and becomes
-a one-line record under `<!-- sdd:decided -->`, with the pointer to its evidence — never a ticked
-box. Grammar: `$SDD_HOME/templates/todo.md`; shape: `tests/check-todo.sh --check <TODO_FILE>`.
+the section under `<!-- sdd:open -->`. A finding that was already open before this mission is not a
+second item but an entry on that item's `RECURRED` line, which is part of the shape you check: fold
+a duplicate into it. Complete the half-written ones. A finding this mission refuted or decided
+leaves the open section and becomes a one-line record under `<!-- sdd:decided -->`, with the
+pointer to its evidence — never a ticked box. Grammar: `$SDD_HOME/templates/todo.md`; shape:
+`tests/check-todo.sh --check <TODO_FILE>`.
 
 ## 5. Write the drift checklist
 

@@ -20,7 +20,9 @@
 #      somewhere" is satisfied by the attribution alone and an anchorless wish would pass.
 #   4. a `(YYYY-MM-DD)` on the item's LAST content line — the found-by field the DOCS phase
 #      audits every mission. Anchoring on the last line rather than anywhere in the body is
-#      deliberate: a date buried mid-item is a measurement, not attribution.
+#      deliberate: a date buried mid-item is a measurement, not attribution. The line of rule 6 is
+#      never that line: under it, rule 4 reads the last line that is not one, so the dates of the
+#      returns cannot stand in for the found-by.
 #   5. at most CAP content lines; the long analysis lives in the handoff the item cites. The cap
 #      counts PHYSICAL lines, so it carries a width: no physical line of the findings section holds
 #      more than WIDTH_CAP (120) CHARACTERS. Without it, 1794 characters on one line passed as one.
@@ -33,9 +35,34 @@
 #      the item's anchor rather than an anchor-shaped token; but no blank of any kind, a URL scheme
 #      or a non-ASCII byte fits in the span, so no prose rides on it. A non-ASCII path loses the
 #      exemption (fail-safe). A refused line that carries a path-shaped span is told that exit.
+#      The line of rule 6 is the other exception, to both halves, each with its own reach: the
+#      FIRST token line of an item, whatever its shape, is not a content line of the cap, and EVERY
+#      token line that parses has no width cap.
+#   6. at most ONE line of returns, `RECURRED <n>: <where> (YYYY-MM-DD)[; <where> (YYYY-MM-DD)]*`,
+#      indented, and the item's LAST physical content line. It lists the times the finding came
+#      BACK — from another project, mission or session — and only those: the first sighting stays
+#      in the found-by. `<n>` is decimal with no leading zero, at least 1, and the number of
+#      entries; `<where>` is `[A-Za-z0-9][A-Za-z0-9._/-]*` (ASCII, so no blank, no `#` and no
+#      backtick); no `<where>` twice; the dates go oldest first, a tie allowed, with month 01-12 and
+#      day 01-31 compared as strings, no calendar. Trailing blanks are tolerated. The token is
+#      RECURRED_TOKEN below, a contract the issue mirror reads, English in every OUTPUT_LANG; any
+#      other spelling (`Recurred`, a translation) is ordinary prose and counts toward the cap.
+#      Exempt from the width only when the grammar holds: a line that opens with the token and a
+#      blank and breaks it is held to 120 characters and refused by name. Either way such a line is
+#      kept out of the body and of rule 4, and the FIRST one out of the cap too — the item already
+#      fails on the RECURRED message, and counting the line again would only stack messages on the
+#      same defect. Every token line after the first IS a content line of the cap: the message for
+#      a second one carries no count, and it was the cap message, which does, that had to bound
+#      them under `--baseline`. With two or more, only the last is parsed for the RECURRED
+#      messages; the width still parses every one, so each that parses is exempt from it and each
+#      that does not is held to 120. A `<where>` has no length limit. The messages name the line the
+#      item OPENS on, as rules 1, 3, 4 and the cap do, so a `--baseline` key does not move when the
+#      line of returns changes.
 #
 # And per decided record: `- **<title>** — …`, one physical line, a code span after the title (the
 # pointer to the evidence) and a `(YYYY-MM-DD)` at the end. Records are not counted as findings.
+# A record carries no line of returns: one under it is refused as a continuation, because a decided
+# finding that comes back goes to the owner, who decides whether to reopen it, and is not counted.
 #
 # What it deliberately does NOT measure: whether the prose is any good — human judgement on the
 # diff. Whether the anchor still points at real code USED to sit in this sentence too, and 63 of 85
@@ -65,10 +92,11 @@
 # and no exclusion from check-lang's surface(): TODO.md is content in OUTPUT_LANG, so a sensor
 # keyed on the Portuguese words of the found-by field would both break in an English target repo
 # and widen the exact coverage hole that TODO.md already records against check-lang's surface().
-# The two section markers are the only WORDS this file reads, and they are English on purpose —
-# the same rule that keeps status tokens English inside a pt-BR checkpoint. The previous version
-# found the section by `^## Aberto`, a Portuguese heading, and was the one exception to this
-# paragraph: in a target whose findings sat under another heading it read the whole file.
+# The two section markers and the token of rule 6 are the only WORDS this file reads, and they are
+# English on purpose — the same rule that keeps status tokens English inside a pt-BR checkpoint.
+# The previous version found the section by `^## Aberto`, a Portuguese heading, and was the one
+# exception to this paragraph: in a target whose findings sat under another heading it read the
+# whole file.
 #
 # Usage: tests/check-todo.sh                (selftest, then check TODO.md — what run-all.sh calls)
 #        tests/check-todo.sh --selftest     (probes only)
@@ -170,6 +198,25 @@
 #     already accepts a found-by that is not an agent: 3 live items carry a prose tail (a session,
 #     a triage) whose only span is a branch, a slug or a command. ⚠️ DECLARED LIMIT (D15), moved
 #     here from TODO.md in 20261003-lote-3-a-catraca-desce.
+#   - Rule 6 measures the SHAPE of the line of returns, never its truth. Nothing reads whether an
+#     entry is a real return rather than a mission re-reading its own finding (the inflation the
+#     design names as an anti-goal), whether it repeats the project or mission of the found-by,
+#     whether a date is a real day (2026-02-31 passes) or no older than the first sighting. Two
+#     `<where>` that differ only in case are two. A token line that parses has no width cap and no
+#     limit on its entries, and a `<where>` has no length limit: the grammar admits no blank, but a
+#     sentence joined by hyphens is one `<where>` and passes. Under `--baseline`, an item that
+#     inherited a RECURRED message can have its token lines edited with no new violation while the
+#     messages stay the same. The bound is the cap and the width: every token line after the first
+#     counts as a content line, so the item holds at most CAP content lines plus ONE token line —
+#     or, when it inherited a cap message, the number that message carries, which any added line
+#     moves — and a token line that does not parse is held to 120 characters.
+#     With two or more token lines only the last is parsed for the RECURRED messages; the others
+#     answer to that bound, to the one-line message, and to the grammar only through the width:
+#     each that parses has no width cap, each that does not is held to 120 characters. Each is
+#     judgement on the diff or fails closed.
+#     Decided in the design of docs/superpowers/specs/2026-10-23-reincidencia-no-todo-design.md
+#     (2026-10-23); the bound was measured false in its task review (30 extra lines, rc 0) and is
+#     the cap since then.
 #
 # TWO measured weaknesses, stated rather than hidden. The first is the header: nothing here
 # models a fence, so a stray or unbalanced fence in the header — which makes GitHub render the
@@ -217,12 +264,19 @@ CAP="${SDD_TODO_CAP:-8}"
 # The width half of rule 5: a physical line of the findings section holds at most this many
 # CHARACTERS. Not an env knob on purpose — the line cap is tunable per target, the shortcut is not.
 WIDTH_CAP=120
-# The two section markers are the ONLY words this sensor reads, and they are English on purpose:
-# the heading above each one is content in OUTPUT_LANG (`## Aberto`, `## Open`, anything), so a
-# sensor keyed on the heading text would work in one language and go quietly blind in every other
-# one. That is what happened: the previous version located the section by `^## Aberto`, and in a
-# target whose findings live under another heading it fell back to "the whole file is findings"
-# and reported thousands of violations about prose it was never meant to read.
+# The token of rule 6, the line that counts the returns of a finding. A contract, English in every
+# OUTPUT_LANG like the two markers below, and this declaration is read by the issue mirror
+# (todo-to-github-issues) with `^RECURRED_TOKEN="([A-Z]+)"[ \t]*$`: keep it at column 0, in double
+# quotes, alone on its line. The sensor hands it to awk as `rtok`, and the awk program never spells
+# the word itself.
+RECURRED_TOKEN="RECURRED"
+# Beside that token, the two section markers are the ONLY words this sensor reads, and they are
+# English on purpose: the heading above each one is content in OUTPUT_LANG (`## Aberto`, `## Open`,
+# anything), so a sensor keyed on the heading text would work in one language and go quietly blind
+# in every other one. That is what happened: the previous version located the section by
+# `^## Aberto`, and in a target whose findings live under another heading it fell back to "the
+# whole file is findings" and reported thousands of violations about prose it was never meant to
+# read.
 OPEN_MARKER='<!-- sdd:open -->'
 DECIDED_MARKER='<!-- sdd:decided -->'
 OPEN_MARKER_ERE='^<!-- sdd:open -->[[:space:]]*$'
@@ -307,7 +361,7 @@ todo_awk() {
   # LC_ALL=C: every awk reads this program the way mawk does, byte by byte. gawk in a UTF-8 locale
   # refuses the byte class of rule 5 at PARSE time ("Invalid collation character: /[\200/"), and
   # every run of this sensor died — measured with gawk 5.2.1 under C.UTF-8 (PR #167 review).
-  LC_ALL=C awk -v cap="$2" -v wcap="$WIDTH_CAP" -v mode="$3" -v marked="$marked" -v omark="$OPEN_MARKER" -v dmark="$DECIDED_MARKER" '
+  LC_ALL=C awk -v cap="$2" -v wcap="$WIDTH_CAP" -v rtok="$RECURRED_TOKEN" -v mode="$3" -v marked="$marked" -v omark="$OPEN_MARKER" -v dmark="$DECIDED_MARKER" '
     # How many backticks occur in text. Byte-based like everything else here, and that is safe:
     # a backtick is ASCII, so no multibyte character can contain one as a byte.
     BEGIN { sect = marked ? 0 : 1 }   # 0 preamble, 1 open, 2 decided, 3 under a stray H2
@@ -366,6 +420,42 @@ todo_awk() {
         rest = substr(rest, q + 1)
       }
       return out
+    }
+    # Rule 6, the line that counts the returns of a finding: the token, a blank, the number, a colon
+    # and a blank, then entries of the shape WHERE (YYYY-MM-DD) separated by a semicolon and a blank.
+    # Handed the line WITHOUT its indent. The answer is empty for a well-formed line, the message of
+    # its FIRST violation otherwise, and not-recurred for a line that does not open with the token
+    # and a blank, which is prose and never measured here. index() and substr() cut the line and
+    # ASCII classes judge the pieces: no split, no match, no interval braces, the mawk rule above.
+    # Trailing blanks are dropped, as at the end of every other line this program reads. A date is
+    # judged by STRING comparison, month 01 to 12 and day 01 to 31, never by a calendar; the dates go
+    # oldest first with a tie allowed, since two missions can meet the same finding on one day. The
+    # number is checked last: an entry that does not parse leaves nothing to count.
+    function recurred_err(s,   rest, p, n, k, q, e, where, d, mm, dd, prev, seen) {
+      if (substr(s, 1, length(rtok) + 1) != rtok " ") return "not-recurred"
+      sub(/[ \t]+$/, "", s)
+      rest = substr(s, length(rtok) + 2)
+      p = index(rest, ": ")
+      n = (p > 0) ? substr(rest, 1, p - 1) : ""
+      if (n !~ /^[1-9][0-9]*$/) return rtok " opens with \"" rtok " <n>: \""
+      rest = substr(rest, p + 2); k = 0; prev = ""; seen = "\034"
+      do {
+        k++
+        if ((q = index(rest, "; ")) > 0) { e = substr(rest, 1, q - 1); rest = substr(rest, q + 2) }
+        else { e = rest; rest = "" }
+        if (e !~ /^[A-Za-z0-9][A-Za-z0-9._\/-]* \([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)$/)
+          return rtok " entry " k " is not <where> (YYYY-MM-DD)"
+        where = substr(e, 1, length(e) - 13); d = substr(e, length(e) - 10, 10)
+        mm = substr(d, 6, 2); dd = substr(d, 9, 2)
+        if (mm < "01" || mm > "12" || dd < "01" || dd > "31")
+          return rtok " entry " k " is not <where> (YYYY-MM-DD)"
+        if (index(seen, "\034" where "\034") > 0)
+          return rtok " names " where " twice: one entry per project and mission"
+        if (d < prev) return rtok " dates go oldest first"
+        seen = seen where "\034"; prev = d
+      } while (q > 0)
+      if (n + 0 != k) return rtok " says " n ", lists " k
+      return ""
     }
     function nomarker(at) {
       if (mode == "lint")
@@ -429,6 +519,16 @@ todo_awk() {
           print "  line " start ": last line carries no (YYYY-MM-DD) — the found-by field is the tail"
         if (nlines > cap)
           print "  line " start ": " nlines " content lines, cap is " cap
+        # Rule 6. Its messages name the line the item opens on, like every message of this block:
+        # that is the key --baseline reads, and it does not move when the line of returns changes.
+        # The last date above was read from the last line that is NOT the line of returns, so its
+        # dates never answer for the found-by.
+        if (rseen > 1)
+          print "  line " start ": one " rtok " line per item"
+        if (rseen == 1 && !rlast)
+          print "  line " start ": " rtok " is the last line of the item"
+        if (rseen && (rerr = recurred_err(rline)) != "")
+          print "  line " start ": " rerr
       }
       initem = 0
     }
@@ -584,11 +684,17 @@ todo_awk() {
     # or a slash with no space" exempted a URL, a TAB-separated sentence and a no-break space (its
     # bytes are not a space, and a negated class admits them): Codex on PR #267. A refused line that
     # carries a path-shaped span is told that exit. ASCII classes only, safe in mawk.
+    # The line of returns (rule 6) is exempt too, and only when recurred_err accepts it: its grammar
+    # lets no blank into an entry (a sentence joined by hyphens still passes as one WHERE, declared
+    # in the header), while a line that merely opens with the token is held to the width like any
+    # other. This is the one exemption that asks for the grammar, and it asks every token line;
+    # rule 4 sets aside any line that opens with the token, and the cap the first one of an item
+    # (see the item rules).
     sect == 1 && mode == "lint" {
       w = $0; gsub(/[\200-\277]/, "", w)
       if (length(w) > wcap) {
         a = $0; sub(/^[ \t]+/, "", a)
-        if (a !~ /^`[!-9;-_a-~]*[.\/][!-9;-_a-~]*:[0-9]+([-,][0-9,-]*)?`[ \t]*$/) {
+        if (a !~ /^`[!-9;-_a-~]*[.\/][!-9;-_a-~]*:[0-9]+([-,][0-9,-]*)?`[ \t]*$/ && recurred_err(a) != "") {
           m = "  line " NR ": " length(w) " characters on one physical line, cap is " wcap " — the long analysis lives in the handoff"
           if ($0 ~ /`[^` ]*[.\/][^` ]*`/)
             m = m " — a line holding only the anchor `path:N` is exempt: write it alone and (`symbol`) on the next line"
@@ -608,7 +714,7 @@ todo_awk() {
     }
     /^- \[ \]/ {
       flush(); initem = 1; start = NR
-      first = $0; body = $0; last = $0; nlines = 1; next
+      first = $0; body = $0; last = $0; nlines = 1; rseen = 0; rlast = 0; rline = ""; next
     }
     # Every OTHER shape GitHub renders as an unchecked task item. The ticked rule was wide and this
     # one was `^[-*+] \[ \]` — column 0, one space — so the same line was "a closed finding" when
@@ -618,7 +724,22 @@ todo_awk() {
         print "  line " NR ": a finding must open with `- [ ] **<title>**` at column 0"
       flush(); next
     }
-    initem && NF && /^[ \t]/  { body = body " " $0; last = $0; nlines++; next }
+    # Rule 6 holds the line of returns OUT of the item: it never reaches the anchor or the found-by
+    # cut, the FIRST one is not one of the content lines the cap counts, and none is ever the last
+    # line rule 4 reads, which stays the last line that is not one. That holds for any line that
+    # opens with the token and a blank, well formed or not: a malformed one is refused by name in
+    # flush(), so the item fails either way, and counting it again would only pile messages on the
+    # same defect. Every token line AFTER the first is a content line of the cap. The message for a
+    # second one carries no count, so under --baseline an item that inherited it kept the same key
+    # while token lines piled up without end, none of them seen by the cap (task review of the
+    # mission that added rule 6, reproduced with 30 prose lines, rc 0); the cap message carries the
+    # number, and it bounds them. rlast says whether the line of returns is still the last one seen;
+    # any other line clears it.
+    initem && NF && /^[ \t]/  {
+      r = $0; sub(/^[ \t]+/, "", r)
+      if (substr(r, 1, length(rtok) + 1) == rtok " ") { if (++rseen > 1) nlines++; rlast = 1; rline = r; next }
+      body = body " " $0; last = $0; nlines++; rlast = 0; next
+    }
     # Refused like everything else off the whitelist, but named for what it is: calling an
     # indented line "prose at column 0" sends the reader to look for something that is not there.
     NF && /^[ \t]/ {
@@ -701,7 +822,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=12
+RULES_FLOOR=13
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -2109,6 +2230,161 @@ EOF
     "an old item without the slot is inherited, a new one is not" --baseline legacy
   rule_end 8 'a --baseline run fails only on what the ref did not have'
 
+  # ── Rule 6: the RECURRED line, measured, outside the cap and the width ─────────────────────────
+  # A finding that comes back from another project, mission or session gains ONE line, the item's
+  # last: `RECURRED <n>: <where> (YYYY-MM-DD)[; <where> (YYYY-MM-DD)]*`, the returns only — the first
+  # sighting stays in the found-by. When it parses it counts neither toward the cap nor toward the
+  # width, and rule 4 reads the line above it; when it does not parse it is exempt from no width and
+  # is a violation of its own. Every label carries the name of its case. Each probe was seen red
+  # against the sensor before the rule existed or against the sabotaged copy that its commit names.
+  rule_begin
+  rec_item() { # rec_item <content lines> [<line>...] — one finding of <content lines> (>= 2) physical
+    # lines, anchored on a real file of $box and closed by its dated found-by, then each <line> as is
+    local n="$1" i l; shift
+    printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Recurring finding** — `bin/sdd:1` (`bsym`) — it matters.\n'
+    for ((i = 2; i < n; i++)); do printf '  body line %d of the finding.\n' "$i"; done
+    printf '  — found by `sdd-qa` in mission `y` (2026-10-15)\n'
+    for l in "$@"; do printf '%s\n' "$l"; done
+  }
+  local rok='  RECURRED 1: magic_tutor (2026-10-20)' l
+  # The clean shapes. The second item of the first fixture has a continuation line of its own, so
+  # any RECURRED state the first item leaves behind would accuse it.
+  { rec_item 8 "$rok"
+    printf '\n- [ ] **Plain finding** — `bin/sdd:1` (`bsym`) — it never came back.\n'
+    printf '  — found by `sdd-qa` in mission `y` (2026-10-15)\n'; } > "$box/rec-cap.md"
+  assert_clean "$(with_decided "$box/rec-cap.md")" 8 "recurred-at-cap: 8 content lines plus RECURRED pass"
+  # Six entries, two of them on the same day: oldest first allows a tie. Witness first, so a line
+  # that drifted under the width would not pass for one the exemption carried.
+  local rwide='  RECURRED 6: dotp-remake/3.2c (2026-10-19); magic_tutor/pr25 (2026-10-20); sales_quote/20261020-lote (2026-10-20); dotp-remake/3.4a (2026-10-22); dotp-remake/3.4b (2026-10-23); amep-core (2026-10-23)'
+  PROBES=$((PROBES + 1))
+  [ "${#rwide}" -eq 200 ] || { FAILS=$((FAILS + 1)); fail_rc 92
+    printf '  SELFTEST FAIL  the recurred-wide fixture is %d characters, not 200\n' "${#rwide}" >&2; }
+  rec_item 3 "$rwide" > "$box/rec-wide.md"
+  assert_clean "$(with_decided "$box/rec-wide.md")" 8 "recurred-wide: a 200-character RECURRED line passes the width"
+  # The found-by wraps, and its date sits on its SECOND line only: rule 4 must read the line right
+  # above RECURRED, not the RECURRED itself and not the line where the found-by opens.
+  { printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Wrapped found-by** — `bin/sdd:1` (`bsym`) — it matters.\n'
+    for l in 2 3 4 5 6; do printf '  body line %d of the finding.\n' "$l"; done
+    printf '  — found by the relay of `/sdd-plan` in the 3.2 of `dotp-remake` and by `retrofit-watch`\n'
+    printf '  in `magic_tutor` (2026-10-20)\n'
+    printf '  RECURRED 2: dotp-remake/3.4a (2026-10-22); dotp-remake/3.4b (2026-10-23)\n'; } > "$box/rec-wrap.md"
+  assert_clean "$(with_decided "$box/rec-wrap.md")" 8 "recurred-wrapped-found-by: a found-by on two lines at the cap, then RECURRED"
+  # Trailing blanks are tolerated, as at the end of every other line this file reads.
+  rec_item 2 "$rok  " > "$box/rec-trail.md"
+  assert_clean "$(with_decided "$box/rec-trail.md")" 8 "recurred-trailing-blank: blanks after the last entry"
+  # The reporting path, not only the parser: an item at the cap plus RECURRED, through --check.
+  rec_item 8 "$rok" > "$box/rec-path.md"
+  PROBES=$((PROBES + 1))
+  local recout; recout="$(bash "$SELF" --check "$(with_decided "$box/rec-path.md")" 2>&1)"
+  if ! grep -q '^  ok    1 finding(s)' <<< "$recout"; then
+    printf '  SELFTEST FAIL  recurred-check-path: --check does not pass an item at the cap plus RECURRED — got: %s\n' \
+      "$recout" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  # The refused shapes. Every message names the line the item opens on (line 4 here), which is
+  # what --baseline keys it by.
+  local ropen='line 4: RECURRED opens with "RECURRED <n>: "' rentry='RECURRED entry 1 is not <where> (YYYY-MM-DD)'
+  rec_item 3 '  RECURRED 2: magic_tutor (2026-10-20)' > "$box/rec-count.md"
+  assert_says "$box/rec-count.md" 8 'line 4: RECURRED says 2, lists 1' "recurred-count: the number disagrees with the entries"
+  rec_item 3 '  RECURRED 1: dotp remake (2026-10-19)' > "$box/rec-blank.md"
+  assert_says "$box/rec-blank.md" 8 "line 4: $rentry" "recurred-blank: a blank inside <where>"
+  rec_item 3 '  RECURRED 1: magic_tutor#25 (2026-10-20)' > "$box/rec-hash.md"
+  assert_says "$box/rec-hash.md" 8 "line 4: $rentry" "recurred-hash: a # inside <where>"
+  rec_item 3 '  RECURRED 1: magic_tutor (2026-13-40)' > "$box/rec-baddate.md"
+  assert_says "$box/rec-baddate.md" 8 "line 4: $rentry" "recurred-bad-date: month 13, day 40"
+  # One bound of the date at a time, in the SECOND entry: 2026-13-40 breaks two bounds at once, so a
+  # loosened month (or day) alone would still be caught by the other, and the probe would prove one.
+  local rd
+  for rd in 2026-00-10 2026-13-01 2026-10-00 2026-10-32; do
+    rec_item 3 "  RECURRED 2: a (2026-10-01); b ($rd)" > "$box/rec-date.md"
+    assert_says "$box/rec-date.md" 8 'line 4: RECURRED entry 2 is not <where> (YYYY-MM-DD)' \
+      "recurred-bad-date-bound: the second entry dated $rd"
+  done
+  rec_item 3 '  RECURRED 1: -x (2026-10-20)' > "$box/rec-lead.md"
+  assert_says "$box/rec-lead.md" 8 "line 4: $rentry" "recurred-where-lead: <where> opens with a letter or a digit"
+  local ro
+  for ro in 'RECURRED 01: a (2026-10-20)' 'RECURRED 0: a (2026-10-20)' 'RECURRED : a (2026-10-20)' 'RECURRED 1 a (2026-10-20)'; do
+    rec_item 3 "  $ro" > "$box/rec-opens.md"
+    assert_says "$box/rec-opens.md" 8 "$ropen" "recurred-opens: $ro"
+  done
+  rec_item 3 '  RECURRED 2: a (2026-10-22); b (2026-10-20)' > "$box/rec-order.md"
+  assert_says "$box/rec-order.md" 8 'line 4: RECURRED dates go oldest first' "recurred-order: a newer date before an older one"
+  rec_item 3 '  RECURRED 2: a (2026-10-20); a (2026-10-22)' > "$box/rec-dup.md"
+  assert_says "$box/rec-dup.md" 8 'line 4: RECURRED names a twice: one entry per project and mission' \
+    "recurred-dup: the same <where> twice"
+  rec_item 3 "$rok" '  and a body line after it.' > "$box/rec-notlast.md"
+  assert_says "$box/rec-notlast.md" 8 'line 4: RECURRED is the last line of the item' "recurred-not-last: a body line after RECURRED"
+  # At the cap on purpose: the second token line is a content line, the ninth, while the first is
+  # not. Its own message carries no count, so it is the cap that bounds how many can follow.
+  rec_item 8 "$rok" '  RECURRED 1: dotp-remake/3.4b (2026-10-23)' > "$box/rec-two.md"
+  assert_says "$box/rec-two.md" 8 'line 4: one RECURRED line per item' "recurred-two: two RECURRED lines"
+  assert_says "$box/rec-two.md" 8 'line 4: 9 content lines, cap is 8' \
+    "recurred-two-counts: the second RECURRED line is a content line of the cap"
+  # The fail-open this rule could open: the dates of RECURRED answering for the found-by.
+  { printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Undated above** — `bin/sdd:1` (`bsym`) — it matters.\n'
+    printf '  — found by `sdd-qa` in mission `y`\n%s\n' "$rok"; } > "$box/rec-rule4.md"
+  assert_says "$box/rec-rule4.md" 8 'line 4: last line carries no (YYYY-MM-DD)' "recurred-rule4: RECURRED does not date the found-by"
+  # Prose behind the token is not exempt from the width, and it is refused by name.
+  local rprose; rprose="  RECURRED often; see the handoff $(rep 'e' 95)"$'\xe2\x80\xa6'
+  rec_item 2 "$rprose" > "$box/rec-prose.md"
+  assert_says "$box/rec-prose.md" 8 'line 6: 130 characters on one physical line' "recurred-prose-wide: no width exemption"
+  assert_says "$box/rec-prose.md" 8 "$ropen" "recurred-prose-wide: refused by name"
+  # A malformed line is refused by name and ONLY by name. Held out of the cap, of rule 4 and of the
+  # found-by cut, it stacks no second message on the same defect: here an item at the cap whose bad
+  # line carries a separator and a code span, which inside the body would become the found-by tail.
+  rec_item 8 '  RECURRED see the handoff — `x.sh`' > "$box/rec-alone.md"
+  PROBES=$((PROBES + 1))
+  local ralone; ralone="$(lint_todo "$(with_decided "$box/rec-alone.md")" 8)"
+  if [ "$ralone" != "  $ropen" ]; then
+    printf '  SELFTEST FAIL  recurred-no-cascade: a malformed RECURRED line says more than its own message — got: %s\n' \
+      "${ralone:-<nothing>}" >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  fi
+  # Another spelling of the token is prose: a ninth content line.
+  rec_item 8 '  Recurred 1: magic_tutor (2026-10-20)' > "$box/rec-case.md"
+  assert_says "$box/rec-case.md" 8 'line 4: 9 content lines, cap is 8' "recurred-wrong-case: Recurred is prose"
+  { rec_item 2; printf '\n## Decided\n<!-- sdd:decided -->\n- **A decided record** — `bin/sdd:1` — refuted (2026-10-15)\n%s\n' "$rok"; } \
+    > "$box/rec-decided.md"
+  assert_says "$box/rec-decided.md" 8 'line 10: a decided record is one line' "recurred-under-decided: a decided record gains no RECURRED"
+  # A target at the cap already (the TEST_CMD of magic_tutor runs --baseline): a RECURRED added to an
+  # inherited 9-line item is no new violation, because the line does not count and the key, the
+  # message plus the text of the line the item opens on, does not move. `(1 inherited)` is the
+  # witness that the base really carried the violation.
+  local rr="$box/recurrepo"
+  mkdir -p "$rr/bin" && git -C "$rr" init -q 2>/dev/null && cp "$box/bin/sdd" "$rr/bin/sdd"
+  rr_commit() { git -C "$rr" add -A && git -C "$rr" -c user.email=probe@sdd -c user.name=probe \
+    -c commit.gpgsign=false commit -qm "$1"; }
+  { rec_item 9; printf '\n## Decided\n<!-- sdd:decided -->\n'; } > "$rr/TODO.md"; rr_commit base
+  { rec_item 9 "$rok"; printf '\n## Decided\n<!-- sdd:decided -->\n'; } > "$rr/TODO.md"; rr_commit recurred
+  PROBES=$((PROBES + 1))
+  local rrout rrrc
+  rrout="$(cd / && bash "$SELF" --check "$rr/TODO.md" --baseline HEAD~1 2>&1)"; rrrc=$?
+  if [ "$rrrc" -ne 0 ] || ! grep -qF 'TODO.md: 0 new shape violation(s) against HEAD~1 (1 inherited)' <<< "$rrout"; then
+    printf '  SELFTEST FAIL  recurred-baseline-inherited: RECURRED on an inherited item is new — rc %s: %s\n' \
+      "$rrrc" "$rrout" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  # The case of the task review: an item that inherited `one RECURRED line per item` grows by prose
+  # token lines put BETWEEN its two valid ones, so the last line, the one parsed, stays valid and
+  # that message keeps its key. While no token line counted, this read `0 new shape violation(s)
+  # against HEAD~1 (1 inherited)`, rc 0. Every token line after the first is a content line now:
+  # 3 + 30 + 1 = 34, and the cap message, which carries the number, is the new violation.
+  { rec_item 3 "$rok" '  RECURRED 1: dotp-remake/3.4b (2026-10-23)'; printf '\n## Decided\n<!-- sdd:decided -->\n'; } \
+    > "$rr/TODO.md"; rr_commit two
+  { rec_item 3 "$rok"
+    for l in $(seq 1 30); do printf '  RECURRED free prose line %d of an analysis that belongs in the handoff\n' "$l"; done
+    printf '  RECURRED 1: dotp-remake/3.4b (2026-10-23)\n\n## Decided\n<!-- sdd:decided -->\n'; } > "$rr/TODO.md"
+  rr_commit grown
+  PROBES=$((PROBES + 1))
+  rrout="$(cd / && bash "$SELF" --check "$rr/TODO.md" --baseline HEAD~1 2>&1)"; rrrc=$?
+  if [ "$rrrc" -ne 1 ] || ! grep -qF 'TODO.md: 1 new shape violation(s) against HEAD~1 (1 inherited)' <<< "$rrout" \
+    || ! grep -qF 'line 4: 34 content lines, cap is 8' <<< "$rrout"; then
+    printf '  SELFTEST FAIL  recurred-baseline-extra-lines: token lines added to an inherited item are no new violation — rc %s: %s\n' \
+      "$rrrc" "$rrout" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  rule_end 32 'a RECURRED line is measured, and outside the cap and the width when it parses'
+
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
   assert_rc 96 "an unknown option must exit 96" bash "$SELF" --bogus
@@ -2148,8 +2424,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 192 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 192\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 229 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 229\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
