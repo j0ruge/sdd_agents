@@ -575,21 +575,27 @@ command_worktree_probes() {
   fi
 }
 
-# The same step tells the human what comes back BEFORE the worktree goes (retro of batch 5; Codex on
-# PR #242): `.sdd/cache/` and `.sdd/logs/` are ignored and per worktree, so `git worktree remove`
-# deletes the killer map the mission's health taught and the stamp it wrote — 676 mutants against
-# 619 in the main checkout, measured. The map always returns; the stamp only when line 6 of
-# `./bin/sdd health --release` is red, or a valid stamp of the main checkout is overwritten. Its own
-# probe, so a red names this sentence and not the creation step's.
+# The same step says that nothing of the catalogue comes back BEFORE the worktree goes. Until
+# 20261026-health-pula-catalogo it said the opposite (retro of batch 5; Codex on PR #242):
+# `.sdd/cache/` and `.sdd/logs/` are ignored and per worktree, so `git worktree remove` deleted the
+# killer map the mission's health taught and the stamp it wrote — 676 mutants against 619 in the
+# main checkout, measured — and the human brought the map back, and the stamp when line 6 of
+# `./bin/sdd health --release` was red. ADR 0021 moved both to `<git-common-dir>/sdd-mutation/`,
+# which a linked worktree shares with the main checkout: the removal keeps them, and no copy goes
+# in either. So the presence is read in the step, like the neighbour above, and the absence of the
+# two old orders in the whole command: an order to bring them back, anywhere in it, sends the human
+# after a file that is already there. Its own probe, so a red names this sentence and not the
+# creation step's.
 command_worktree_return_probes() {
   local cmd="$ROOT/commands/sdd-plan.md" sec
   sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
-  if grep -qF 'before `git worktree remove`, its killer map comes back to this checkout' <<< "$sec" \
-     && grep -qF 'its stamp too when line 6 of `./bin/sdd health --release` here is red' <<< "$sec" \
-     && grep -qF '`docs/failure-modes.md`' <<< "$sec"; then
-    pass "command: /sdd-plan tells the human the killer map, and the stamp when line 6 is red, come back before the worktree is removed"
+  if grep -qF 'outlive `git worktree remove`' <<< "$sec" \
+     && grep -qF '`<git-common-dir>/sdd-mutation/`' <<< "$sec" \
+     && ! grep -qF 'its killer map comes back to this checkout' "$cmd" \
+     && ! grep -qF 'its stamp too when line 6' "$cmd"; then
+    pass "command: /sdd-plan says the killer map and the stamp outlive git worktree remove"
   else
-    fail "command: /sdd-plan no longer tells the human what comes back before the worktree is removed (the killer map always, the stamp when line 6 of health --release is red, the failure-modes pointer)"
+    fail "command: /sdd-plan no longer says the killer map and the stamp outlive git worktree remove in <git-common-dir>/sdd-mutation/, or still orders the map (or the stamp, when line 6 is red) back to the main checkout"
   fi
 }
 
