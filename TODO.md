@@ -29,7 +29,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   e catraca. O mapa dos matadores some com a worktree, e nenhum checkout do kit nesta máquina o tinha: o
   `sdd health` deste achado ia em 464 de 775 logs (8 ainda rodando) após 5 h 13 min. Direção: a chave igual à
   do carimbo pula o catálogo e roda a suíte rápida e a catraca; o mapa e o carimbo voltam ao checkout principal
-  sem passo manual. Prioridade do dono.
+  sem passo manual. Prioridade do dono. RESOLVED by 6dbd63c e `11fe1fe`.
   — descoberto pelo relay da sessão coordenadora da 3.5b do `dotp-remake` (2026-10-25)
 
 ### Sensores que faltam
@@ -502,10 +502,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O mapa de tempos do catálogo de mutação mora no checkout, e o worktree de cada branch roda sem ele** —
   `tests/check-mutation.sh:7769` (`KILLERS_FILE`) — o mapa (`.sdd/cache/`, fora do git) põe primeiro o passo que
   matou cada mutante e lança os mais longos antes (40 mutantes: 4796 s → 1959 s, no comentário do mapa). Ele é
-  gravado no fim do catálogo, no `.sdd/cache/` daquele checkout, e o trabalho do kit roda num worktree por branch:
-  em 2026-10-25, nenhum dos 8 checkouts do kit nesta máquina tinha o mapa, e o `sdd health` do
-  `sdd_agents-gate-sem-saida` fez 299 de 775 mutantes em ~152 min (238 s cada, em média). Direção: o mapa mora
-  no `git rev-parse --git-common-dir`, que os worktrees dividem, ou o `sdd health` avisa o custo de rodar sem ele.
+  gravado no fim do catálogo, no `.sdd/cache/` daquele checkout, e o trabalho do kit roda num worktree por branch: em
+  2026-10-25, nenhum dos 8 checkouts do kit nesta máquina tinha o mapa, e o `sdd health` do `sdd_agents-gate-sem-saida`
+  fez 299 de 775 mutantes em ~152 min (238 s cada, em média). Direção: o mapa mora no `git rev-parse --git-common-dir`,
+  que os worktrees dividem, ou o `sdd health` avisa o custo de rodar sem ele. RESOLVED by 4ae37c9 e `3e728d6`.
   — descoberto por `sessão coordenadora` no `magic_tutor` (2026-10-25)
 
 - [ ] **Um incremento que roda por quase 1 h não cabe no `sdd-executor`, que não tem `Monitor`** —
