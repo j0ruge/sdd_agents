@@ -145,23 +145,34 @@ trap 'rm -rf "$WORK"' EXIT
 # ---------------------------------------------------------------------------
 declare -A KILLER=() SECS=()
 
-# load_killer_map <tsv> — fills KILLER[slug]=<step> and SECS[slug]=<seconds>. A line of two columns
-# (the map before 2026-09-25) is read with no time; a time that is not digits is dropped, never
-# guessed. A missing file is an empty map, and the catalogue runs in its usual order.
+# load_killer_map <tsv> [seed] — fills KILLER[slug]=<step> and SECS[slug]=<seconds>. A line of two
+# columns (the map before 2026-09-25) is read with no time; a time that is not digits is dropped,
+# never guessed. A missing file is an empty map, and the catalogue runs in its usual order. With
+# `seed`, a slug KILLER already holds keeps its whole line: the map read first wins.
 load_killer_map() {
   local k v s
   [ -r "$1" ] || return 0
   while IFS=$'\t' read -r k v s; do
     [ -n "$k" ] && [ -n "$v" ] || continue
+    [ "${2:-}" = seed ] && [ -n "${KILLER[$k]+set}" ] && continue
     KILLER["$k"]="$v"
     case "$s" in ''|*[!0-9]*) ;; *) SECS["$k"]="$s" ;; esac
   done < "$1"
 }
 
+# load_killer_maps — the map as its three readers (--only, --touched, the catalogue) see it, ADR 0021
+# decision 5: KILLERS_FILE first, then LEGACY_KILLERS_FILE for the slugs it does not know. Outside
+# git the two are one file (killers_paths), read twice to the same answer.
+load_killer_maps() {
+  load_killer_map "$KILLERS_FILE"
+  load_killer_map "$LEGACY_KILLERS_FILE" seed
+}
+
 # launch_order — stdin: <slug> TAB <seconds or empty>, in catalogue order; stdout: the slugs in
 # launch order. The ones with no recorded time come first (new mutants and survivors run the whole
-# suite), in catalogue order; then the longest first, ties in catalogue order. A pool that starts
-# its longest jobs last ends with one slot busy and the rest idle.
+# suite; a survivor the .sdd/cache seed knows has its old time instead, write_killer_map), in
+# catalogue order; then the longest first, ties in catalogue order. A pool that starts its longest
+# jobs last ends with one slot busy and the rest idle.
 launch_order() {
   awk -F'\t' '{ s = ($2 ~ /^[0-9]+$/) ? $2 : 999999; printf "%s\t%d\t%s\n", s, NR, $1 }' \
     | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2n | cut -f3
@@ -406,6 +417,82 @@ touched_selftest() {
   rc=0; out="$(touched_verdict "$d" S1 S3 2>&1)" || rc=$?
   { [ "$rc" = 0 ] && grep -qF 'touched: 2 of 2 selected mutant(s) still caught by their killer' <<< "$out"; } \
     || { echo "  SELFTEST FAIL  touched: two caught mutants did not read as 2 of 2 (rc $rc): $out" >&2; return 1; }
+  return 0
+}
+
+# killers_selftest — where the killer map lives and how it is read and written (ADR 0021, decisions 1
+# and 5), over a fixture repo with a linked worktree, a directory outside git and a shim of a git
+# older than 2.31. (a) The root and the worktree resolve ONE map inside the git common dir, on the
+# old git too, each with its own .sdd/cache map as the seed; a directory outside git keeps its
+# .sdd/cache map. (b) The shared line wins over the seed's, and the seed fills the slugs the shared
+# map does not know. (c) A write is a union read at write time: a slug of CATALOG takes this run's
+# line or leaves the file, one outside it keeps the shared line or, failing it, the seed's; the seed
+# is never rewritten. (d) The two names every reader uses were published for $ROOT before any mode
+# reads them. KILLERS_FILE and LEGACY_KILLERS_FILE are locals below that, and every path (a)-(c)
+# touches is under $WORK, so it never reads or writes the real map. Called beside touched_selftest,
+# in every mode. Declared, not probed: that the --only, --touched and catalogue readers call
+# load_killer_maps — they are mode code that runs after this, over the real map; the catalogue's
+# `== killer map: N mutant(s) run their last killer first ==` line says what it read.
+killers_selftest() {
+  local real_map="$KILLERS_FILE" real_seed="$LEGACY_KILLERS_FILE"
+  local d="$WORK/killers-selftest" repo wt plain common root_map got seed
+  local KILLERS_FILE='' LEGACY_KILLERS_FILE=''
+  local -A KILLER=() SECS=()
+  local -a CATALOG=(A C)
+  repo="$d/repo" wt="$d/wt" plain="$d/plain"
+  mkdir -p "$repo" "$plain" "$d/oldgit" "$d/run"
+  { git -C "$repo" init -q \
+      && git -C "$repo" -c user.email=probe@sdd -c user.name=probe -c commit.gpgsign=false commit -q --allow-empty -m base \
+      && git -C "$repo" worktree add -q "$wt"; } >/dev/null 2>&1 \
+    || { echo "  SELFTEST FAIL  killers: the fixture repo and its linked worktree could not be built" >&2; return 1; }
+  common="$(CDPATH='' cd "$repo/.git" && pwd -P)/sdd-mutation/killers.tsv"
+  # (a)
+  killers_paths "$repo"; root_map="$KILLERS_FILE"
+  killers_paths "$wt"
+  [ "$root_map|$KILLERS_FILE" = "$common|$common" ] \
+    || { echo "  SELFTEST FAIL  killers: the root and its linked worktree resolved '$root_map' and '$KILLERS_FILE', expected one map in the git common dir, $common" >&2; return 1; }
+  [ "$LEGACY_KILLERS_FILE" = "$wt/.sdd/cache/mutation-killers.tsv" ] \
+    || { echo "  SELFTEST FAIL  killers: the worktree's seed resolved '$LEGACY_KILLERS_FILE', expected its own .sdd/cache map" >&2; return 1; }
+  GIT_CEILING_DIRECTORIES="$d" killers_paths "$plain"
+  [ "$KILLERS_FILE|$LEGACY_KILLERS_FILE" = "$plain/.sdd/cache/mutation-killers.tsv|$plain/.sdd/cache/mutation-killers.tsv" ] \
+    || { echo "  SELFTEST FAIL  killers: a directory outside git resolved '$KILLERS_FILE' (seed '$LEGACY_KILLERS_FILE'), expected its own .sdd/cache map" >&2; return 1; }
+  # The shim answers rev-parse the way a git older than 2.31 does — it echoes --path-format back and
+  # exits 0 — and writes every rev-parse it answers to a trace, so the fallback is proven REACHED
+  # (the plain --git-common-dir question), not only agreed with.
+  { printf '#!/usr/bin/env bash\n'
+    printf 'case " $* " in *" rev-parse "*) printf "%%s\\n" "$*" >> %q ;; esac\n' "$d/oldgit.trace"
+    printf 'keep=(); echoed=()\n'
+    printf 'for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a") ;; *) keep+=("$a") ;; esac; done\n'
+    printf 'for e in ${echoed[@]+"${echoed[@]}"}; do printf "%%s\\n" "$e"; done\n'
+    printf 'exec %q "${keep[@]}"\n' "$(command -v git)"
+  } > "$d/oldgit/git" && chmod +x "$d/oldgit/git"
+  got="$( PATH="$d/oldgit:$PATH"; killers_paths "$repo"; printf '%s|' "$KILLERS_FILE"; killers_paths "$wt"; printf '%s' "$KILLERS_FILE" )"
+  { [ "$got" = "$common|$common" ] && grep -qE 'rev-parse --git-common-dir$' "$d/oldgit.trace" 2>/dev/null; } \
+    || { echo "  SELFTEST FAIL  killers: a git older than 2.31 resolved '$got' for the root and the worktree, expected '$common' twice through the fallback (trace: $(tr '\n' ';' < "$d/oldgit.trace" 2>/dev/null))" >&2; return 1; }
+  # (b)
+  killers_paths "$wt"
+  mkdir -p "${KILLERS_FILE%/*}" "${LEGACY_KILLERS_FILE%/*}"
+  printf 'A\tstep1\t10\n' > "$KILLERS_FILE"
+  printf 'A\tstep9\t99\nB\tstep2\t20\n' > "$LEGACY_KILLERS_FILE"
+  load_killer_maps
+  got="${KILLER[A]:-}/${SECS[A]:-} ${KILLER[B]:-}/${SECS[B]:-}"
+  [ "$got" = 'step1/10 step2/20' ] \
+    || { echo "  SELFTEST FAIL  killers: shared {A step1 10} over the seed {A step9 99, B step2 20} read '$got', expected 'step1/10 step2/20'" >&2; return 1; }
+  # (c) CATALOG=(A C): C killed by step3 in 30 s, A by nothing; the map before holds A and Z.
+  printf 'A\tstep1\t10\nZ\tstep7\t70\n' > "$KILLERS_FILE"
+  seed="$(cat "$LEGACY_KILLERS_FILE")"
+  printf 'step3\n' > "$d/run/C.killer"; printf '30\n' > "$d/run/C.secs"
+  write_killer_map "$d/run" \
+    || { echo "  SELFTEST FAIL  killers: the union could not be written to $KILLERS_FILE" >&2; return 1; }
+  got="$(LC_ALL=C sort "$KILLERS_FILE" 2>/dev/null | tr '\t\n' ' ;')"
+  [ "$got" = 'B step2 20;C step3 30;Z step7 70;' ] \
+    || { echo "  SELFTEST FAIL  killers: the write left '$got', expected 'B step2 20;C step3 30;Z step7 70;' — C from this run, A gone, Z from the shared map, B from the seed" >&2; return 1; }
+  [ "$(cat "$LEGACY_KILLERS_FILE")" = "$seed" ] \
+    || { echo "  SELFTEST FAIL  killers: the write rewrote the seed $LEGACY_KILLERS_FILE" >&2; return 1; }
+  # (d)
+  killers_paths "$ROOT"
+  [ "$real_map|$real_seed" = "$KILLERS_FILE|$ROOT/.sdd/cache/mutation-killers.tsv" ] \
+    || { echo "  SELFTEST FAIL  killers: the readers were handed '$real_map' (seed '$real_seed'), expected the resolution of $ROOT, '$KILLERS_FILE'" >&2; return 1; }
   return 0
 }
 
@@ -1621,9 +1708,122 @@ mut_HEALTH_stamp_tree_blind() {
 # the catalogue would go on reading 100%. One sabotage per site.
 # The stamp stops asking whether the measured tree moved WHILE the catalogue ran — a window twenty
 # to fifty minutes wide, opened by the very phase that also commits, at the end of which the key
-# would describe whatever is on disk rather than what was measured.
+# would describe whatever is on disk rather than what was measured. Re-anchored by ADR 0021 §4: the
+# window is now the FIRST question of check 2c, because no verdict below it is about this content.
 mut_HEALTH_stamp_window_blind() {
-  sed -i '/^cmd_health()/,/^}/ s|elif \[ "\$stamp_key" != "\$stamp_key_before" \]; then|elif false; then|' "$1"
+  sed -i '/^cmd_health()/,/^}/ s|^  if \[ "\$stamp_key" != "\$stamp_key_before" \]; then$|  if false; then|' "$1"
+}
+
+# The stamps go back to living per checkout (ADR 0021): the git dir of the checkout instead of the
+# common dir every linked worktree of the clone shares, so what a mission worktree measured never
+# reaches the main checkout and dies with `git worktree remove`. Every world run inside one checkout
+# still agrees with itself. Caught by `stamp: gate_PR reads the key a linked worktree stamped, …`
+# in check-gates.sh (world 14), which reads PR|PR.
+mut_PR_stamp_dir_per_worktree() {
+  sed -i '/^mutation_stamp_dir() {/,/^}/ s@^  common="\$(git_common_dir_abs "\$1")" || return 1$@  common="$(git -C "$1" rev-parse --path-format=absolute --absolute-git-dir 2>/dev/null)" || return 1@' "$1"
+}
+# The question stops being about THIS key: any file in the stamps directory answers yes, so a key
+# measured green once keeps every later content stamped. World 4 of check-gates.sh (`a stamped repo
+# whose tests/ moved is unstamped again`) reads DONE, inside `gate_PR: the mutation stamp is demanded
+# only where the catalogue lives`; the first assertion to die in a run is world 4b's `run stops at
+# the stamp: rc 2, …`, and 11b's `stamp-key: a commit touching only agents/ moves the key` dies too.
+mut_PR_stamp_valid_any_key() {
+  sed -i '/^mutation_stamp_valid() {/,/^}/ s@^  stamp="\$(head -n 1 -- "\$dir/\$2" 2>/dev/null)" || return 1$@  [ -n "$(ls -A "$dir" 2>/dev/null)" ] || return 1; stamp="$2"@' "$1"
+}
+# Line 6 of `sdd health --release` stops asking the stamps and says green for any content. Caught
+# by `release: line 6 reads the key from the git common dir — red before the key is stored, green
+# after` in check-hat.sh, its red half.
+mut_HEALTH_release_line6_blind() {
+  sed -i '/^health_release() {/,/^}/ s@if mutation_stamp_valid "\$kit" "\$key"; then line 6 ok@if true; then line 6 ok@' "$1"
+}
+
+# THE SKIP (ADR 0021 §3, mission 20261026-health-pula-catalogo, I2). Seven sabotages, one per rule
+# the skip added to cmd_health; each names the `skip:` assertion of check-health.sh that kills it.
+#
+# The skip is never taken: every call pays the whole catalogue again, the 10 h 58 min of PR #327 over
+# a key already measured. `skip: a key measured green runs the suite without the catalogue…` and
+# `skip: a linked worktree skips…` read --with-mutation in the argv the stub recorded.
+mut_HEALTH_skip_never() {
+  sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$full" != 1 \] && mutation_stamp_valid "\$kit" "\$stamp_key_before"; then$@  if false; then@' "$1"
+}
+# `--full` is parsed and then ignored: a stamp the operator distrusts can no longer be measured
+# again, short of an `rm` inside .git/. `skip: --full runs the catalogue over a key already
+# measured…` reads no --with-mutation in the argv; world 7 of check-gates.sh skips and reads DONE.
+mut_HEALTH_full_ignored() {
+  sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$full" != 1 \] && mutation_stamp_valid@  if mutation_stamp_valid@' "$1"
+}
+# `--full` beside `--release` is accepted, and the request to measure is dropped in silence for a
+# scoreboard that never runs the suite. `skip: --full runs the catalogue … and --full beside
+# --release is refused` reads no refusal.
+mut_HEALTH_full_with_release_accepted() {
+  sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$full" = 1 \] && \[ "\$release" = 1 \]; then$@  if false; then@' "$1"
+}
+# The skip skips the SUITE too: rc 0 and nothing run, so a red fast suite — TODO.md, docs/, the
+# machine — reads as a skip and never as red. `skip: a red suite over a measured key fails health…`
+# reads the argv file absent and no 'suite red'. Braced, so `cd` keeps its `&&` and only the call
+# is guarded; `2>\&1`, because a bare `&` in a sed replacement is the whole match.
+mut_HEALTH_skip_without_suite() {
+  sed -i '/^cmd_health() {/,/^}/ s@tests/run-all.sh \${suite_flag:+"\$suite_flag"} 2>&1 )@{ [ "$skip" = 1 ] || tests/run-all.sh ${suite_flag:+"$suite_flag"} 2>\&1; } )@' "$1"
+}
+# The old rule comes back inside the skip: a red fast suite over a key already measured is counted
+# as the catalogue's verdict and takes the key away, so a red that comes from outside the key costs
+# every checkout of the same content the catalogue again. `skip: a red suite over a measured key
+# fails health and keeps the key` finds the key gone; so does world 6 of check-gates.sh (PR).
+mut_HEALTH_skip_red_drops_key() {
+  sed -i '/^cmd_health() {/,/^}/ s@^    ok "mutation: catalogue skipped@    [ "$rc" -eq 0 ] || catalogue_against=suite; ok "mutation: catalogue skipped@' "$1"
+}
+# The same old rule inside a catalogue run: a red suite over a CLEAN score takes the key away. Only
+# a catalogue run reaches this line, so the skip's own world does not see it; `skip: only the
+# catalogue's verdict takes a key away …`, its `--full` with rc 1 half, finds the key gone.
+mut_HEALTH_red_suite_drops_key() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "\$rc" -eq 0 \]; then catalogue_green=1; fi@if [ "$rc" -eq 0 ]; then catalogue_green=1; else catalogue_against=suite; fi@' "$1"
+}
+# A survivor stops speaking against the key: the catalogue says `103 caught … of 104` over this
+# content and the stamp stays, opening gate_PR over a live mutant. `skip: only the catalogue's
+# verdict takes a key away — a survivor does …` finds the key kept; world 7 of check-gates.sh reads DONE.
+mut_HEALTH_survivor_keeps_key() {
+  sed -i '/^cmd_health() {/,/^}/ s@^      catalogue_against=survivor$@      :@' "$1"
+}
+# The SUITE half of the write rule goes blind (I2 fix round 1): a catalogue run whose suite came back
+# red over a clean score is stamped as green, against ADR 0021 §2 (the suite AND the score), and
+# from then on every health over that content skips the catalogue. Caught by `skip: only the
+# catalogue's verdict takes a key away …`, whose `--full` with rc 1 half demands that nothing is stamped.
+mut_HEALTH_red_suite_stamps() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "\$rc" -eq 0 \]; then catalogue_green=1; fi@catalogue_green=1@' "$1"
+}
+# The skip stops asking whether the tree moved while its suite ran (I2 fix round 1): health stays
+# green over a fast suite that measured content no longer here. The catalogue path keeps its window,
+# so world 8 stays green; caught by `stamp: a tree that moved while the suite of a skip ran …` in
+# check-gates.sh (world 8b).
+mut_HEALTH_skip_window_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$stamp_key" != "\$stamp_key_before" \]; then$@  if [ "$skip" != 1 ] \&\& [ "$stamp_key" != "$stamp_key_before" ]; then@' "$1"
+}
+# The skip WRITES the stamp (final review of the mission): `catalogue_green=1` on the line that
+# takes the skip, and check 2c rewrites stamps/<key> on every skip, with a `measured:` of now and an
+# empty `score:` line, so the next skip's line announces a catalogue measurement that never
+# happened. No false stamp opens, since the key was already valid; what lies is the provenance.
+# Caught by `skip: a key measured green runs the suite without the catalogue…` and by `skip: a red
+# suite over a measured key fails health and keeps the key`, both demanding that nothing is stamped.
+mut_HEALTH_skip_writes() {
+  sed -i '/^cmd_health() {/,/^}/ s@^    skip=1; suite_flag=""; measuring=suite$@    skip=1; suite_flag=""; measuring=suite; catalogue_green=1@' "$1"
+}
+# The line of the skip stops carrying the provenance of the key it trusts (final review of the
+# mission): it still says the catalogue was skipped, and no longer when, where or over which score
+# that key was measured. Caught by `skip: a key measured green runs the suite without the
+# catalogue…`, which demands ONE skip line, and that line carrying `(measured: `.
+mut_HEALTH_skip_line_unsourced() {
+  sed -i '/^cmd_health() {/,/^}/ s@ was measured green\${stamp_prov:+ (\$stamp_prov)}; @ was measured green; @' "$1"
+}
+# The skip starts to need a `score:` line (QA-2 of the mission): the shape a refactor of the score
+# chain writes without meaning to. The fast suite the skip calls never prints `score:` — only
+# --with-mutation does (tests/run-all.sh) — so with this every real skip falls to `health went
+# blind to the mutation`, rc 1 over a green suite. It lived while the stubs printed `score:` with no
+# flag; now that the stub of check-health.sh answers the score only under --with-mutation, as the
+# real suite does, it is caught by `skip: a key measured green runs the suite without the
+# catalogue…`, and by the red-suite and the linked-worktree `skip:` worlds, which no longer read
+# the skip line.
+mut_HEALTH_skip_needs_score() {
+  sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$skip" = 1 \]; then$@  if [ "$skip" = 1 ] \&\& [ -n "$score_line" ]; then@' "$1"
 }
 
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
@@ -1720,6 +1920,23 @@ mut_PRE_path_format_warn_silent() {
 }
 mut_PRE_path_format_probe_inverted() {
   sed -i '/^cmd_preflight()/,/^}/ s@grep -c [.] )" = 1 \]; then@grep -c . )" = 99 ]; then@' "$1"
+}
+# The same warning's sentence about the KIT's stamps and killer map, unscoped again: the shape the
+# fix wave 291d9af shipped, where a target repo on a git older than 2.31 was told about a
+# tests/check-mutation.sh it does not have (QA-1 of mission 20261026-health-pula-catalogo).
+# Anchored on the scope question inside cmd_preflight, so gate_PR's own has_mutation_catalogue is
+# never touched. Caught by "an old git in a repo without the catalogue is not told about the
+# mutation stamps or the killer map" in check-preflight.sh.
+mut_PRE_path_format_kit_note_unscoped() {
+  sed -i '/^cmd_preflight()/,/^}/ s@^    if has_mutation_catalogue "$REPO_ROOT"; then$@    if true; then@' "$1"
+}
+# The other side of the same scope: the sentence is never said, not even in the kit, where it is
+# true — the shape of a fix that deleted it everywhere instead of scoping it; the assertion that
+# kills the mutant above stays green over this one. Caught by the positive control of
+# check-preflight.sh, "an old git in a repo that carries the catalogue is still told the stamps and
+# the killer map share the fallback".
+mut_PRE_path_format_kit_note_never() {
+  sed -i '/^cmd_preflight()/,/^}/ s@^    if has_mutation_catalogue "$REPO_ROOT"; then$@    if false; then@' "$1"
 }
 
 # Not a gate: `sdd approve` goes back to announcing the next step unconditionally, the way it did
@@ -2002,9 +2219,11 @@ mut_KAIZEN_mission_key_slug_only() {
 # received `CDPATH= cd`). The second time `ledger_repo_root` dropped the two `cd`s entirely for
 # `--path-format=absolute`, and the whole anchored line ceased to exist. It is single-quoted again
 # now that no apostrophe is in it. The lesson both times: a mutant anchored on a line a refactor
-# can delete has to be re-derived WITH that refactor, in the same commit.
+# can delete has to be re-derived WITH that refactor, in the same commit. A third move, the same
+# lesson: the resolution left for git_common_dir_abs (shared with the mutation stamp, ADR 0021), so
+# this anchor and `_toplevel`'s are the identity's call to it, addressed to ledger_repo_root.
 mut_LEDGER_repo_root_common_parent() {
-  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( dirname "$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" )"; return 0@' "$1"
+  sed -i '/^ledger_repo_root() {/,/^}/ s@^  gitdir="\$( git_common_dir_abs "\$start" )" || return 0$@  printf "%s" "$( dirname "$( git_common_dir_abs "$start" )" )"; return 0@' "$1"
 }
 
 # The ENVIRONMENT gets to answer "which repo is this" again. This mutant puts back the exact
@@ -2030,9 +2249,10 @@ mut_LEDGER_repo_root_common_parent() {
 # Splitting it in two was the other direction the finding offered, and it is the wrong one HERE:
 # a fast-path-only mutant stays neutralised by the fallback no matter which entry it lives under.
 # The property being defended is "no `cd` in this function reads CDPATH", and that property has
-# two sites, so the sabotage has two sites.
+# two sites, so the sabotage has two sites. Both live in git_common_dir_abs since it was extracted
+# for the mutation stamp too (ADR 0021), so the first sed is addressed there and ends in `return 1`.
 mut_LEDGER_repo_root_cdpath_leak() {
-  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  local rel; rel="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )"; gitdir="$( cd "$start" \&\& cd "$rel" \&\& pwd -P 2>/dev/null )" || return 0@' "$1"
+  sed -i '/^git_common_dir_abs() {/,/^}/ s@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 1$@  local rel; rel="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )"; gitdir="$( cd "$start" \&\& cd "$rel" \&\& pwd -P 2>/dev/null )" || return 1@' "$1"
   sed -i 's@CDPATH='"''"' cd "\$start" && CDPATH='"''"' cd "\$common"@cd "$start" \&\& cd "$common"@' "$1"
 }
 
@@ -3566,9 +3786,11 @@ mut_AUTONOMY_shape_not_asked() {
 #
 # Re-anchored with the `--path-format=absolute` rewrite: it used to replace the `common=` line,
 # which that rewrite deleted.
-# The shape guard drops, and a git older than 2.31 gets to name the repository. `rev-parse` ECHOES
-# an option it does not know and still exits 0, so the answer is two lines — the flag, then the
-# relative common dir — and neither `|| return 0` (rc is 0) nor `-n` (not empty) refuses it. Caught
+# The shape guard drops, and a git older than 2.31 gets to name the repository. The guard lives in
+# git_common_dir_abs, the one resolution ledger_repo_root and mutation_stamp_dir both read (ADR
+# 0021). `rev-parse` ECHOES an option it does not know and still exits 0, so the answer is two
+# lines — the flag, then the relative common dir — and neither the `|| return 1` after the capture
+# (rc is 0) nor `-n` (not empty) refuses it. Caught
 # by the pre-2.31 differential pair of check-autonomy.sh, which reads the identity back out of the
 # runner under a shim and demands it be the repo or nothing, never the flag. The `case` and its
 # `esac` go together: removing the opener alone leaves invalid bash, which is a harness failure and
@@ -3584,16 +3806,16 @@ mut_LEDGER_repo_root_shape_blind() {
 # Issue #72, the other direction: the arm that emptied an absolute answer spanning two lines comes
 # back. The only such answer is a repo whose PATH holds a newline, and emptying it is the "not a
 # repo" sentinel for a repo that is one — the round-trip world of check-autonomy.sh reads its own
-# row as "no data".
+# row as "no data". The shape guard lives in git_common_dir_abs, which ledger_repo_root calls.
 mut_LEDGER_repo_root_newline_emptied() {
-  sed -i '/^ledger_repo_root() {/,/^}/ s@^    /\*) ;;$@    /*) [ "$gitdir" = "${gitdir%%$'"'"'\\n'"'"'*}" ] || gitdir="" ;;@' "$1"
+  sed -i '/^git_common_dir_abs() {/,/^}/ s@^    /\*) ;;$@    /*) [ "$gitdir" = "${gitdir%%$'"'"'\\n'"'"'*}" ] || gitdir="" ;;@' "$1"
 }
 mut_LEDGER_repo_root_bypasses_shim() {
   sed -i 's@^  local start="${REPO_ROOT:-$PWD}" gitdir$@  local start="${REPO_ROOT:-$PWD}" gitdir PATH="/usr/bin:/bin:$PATH"@' "$1"
 }
 
 mut_LEDGER_repo_root_toplevel() {
-  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
+  sed -i '/^ledger_repo_root() {/,/^}/ s@^  gitdir="\$( git_common_dir_abs "\$start" )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
 }
 
 # Not a gate: the preflight goes back to asking whether the agent copy EXISTS, which is what it did
@@ -4199,8 +4421,11 @@ mut_HEALTH_catalogue_floor_blind() {
 # passes it and the harness accepts the mutant. It killed the assertion, but as garbage killing ten
 # of them, not as this defect killing one. Red for the wrong reason is the one verdict this
 # catalogue may never take: it certifies an assertion that was never the thing measuring.
+# Re-anchored and ADDRESSED to the body of cmd_health by ADR 0021 §3: the flag now rides in
+# `suite_flag`, empty in the skip, and the one call drops the variable — the catalogue lost in the
+# path that is meant to run it. `skip: --full runs the catalogue …` reads the same empty argv.
 mut_HEALTH_suite_without_mutation() {
-  sed -i 's@tests/run-all.sh --with-mutation 2>\&1@tests/run-all.sh 2>\&1@' "$1"
+  sed -i '/^cmd_health() {/,/^}/ s@tests/run-all.sh \${suite_flag:+"\$suite_flag"} 2>&1 )@tests/run-all.sh 2>\&1 )@' "$1"
 }
 
 # Provenance goes back to dying on a machine that has no plugins cache. `find` on a missing
@@ -6782,6 +7007,21 @@ CATALOG=(
   PR_stamp_why_unreadable_blind
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind
+  PR_stamp_dir_per_worktree
+  PR_stamp_valid_any_key
+  HEALTH_release_line6_blind
+  HEALTH_skip_never
+  HEALTH_full_ignored
+  HEALTH_full_with_release_accepted
+  HEALTH_skip_without_suite
+  HEALTH_skip_red_drops_key
+  HEALTH_red_suite_drops_key
+  HEALTH_survivor_keeps_key
+  HEALTH_red_suite_stamps
+  HEALTH_skip_window_blind
+  HEALTH_skip_writes
+  HEALTH_skip_line_unsourced
+  HEALTH_skip_needs_score
   RUN_inverted_journal
   RUN_phase_log_time_only
   RUN_check_log_time_only
@@ -6791,6 +7031,8 @@ CATALOG=(
   PRE_testcmd_never_run
   PRE_path_format_warn_silent
   PRE_path_format_probe_inverted
+  PRE_path_format_kit_note_unscoped
+  PRE_path_format_kit_note_never
   RUN_approve_next_unconditional
   RUN_e2e_dir_hardcoded
   RUN_autonomy_exclusions_undeclared
@@ -7450,7 +7692,7 @@ census_file_of() { # census_file_of <step title> <joined run-all> — the tests/
 #   TOUCHED_UNMAPPED  slugs of CATALOG with no line in the map
 #   TOUCHED_FILE_OF   slug → the sensor file its killer runs, for every selected slug
 # <rev> goes to `git diff` verbatim: one revision is compared with the working tree, a range with
-# its other end. Reads KILLER (load_killer_map) and RUNALL_JOINED (census_join of run-all.sh). An
+# its other end. Reads KILLER (load_killer_maps) and RUNALL_JOINED (census_join of run-all.sh). An
 # empty map and a revision that does not resolve are refused with rc 2, said — "0 selected, rc 0"
 # would read as "nothing of yours to check" when the truth is "nothing to check WITH".
 touched_select() {
@@ -7543,11 +7785,76 @@ killer_of() {
 # after). It is an ORDER hint and nothing else — a stale or garbled line costs time and changes no
 # step a mutant runs, because run-all.sh still runs every step of a mutant the named one did not kill.
 # That the ORDER moves no verdict is asserted since issue 169: one control per distinct killer of
-# the map, that killer first, has to come back green or the score is refused. It lives in
-# .sdd/cache/, gitignored and OUTSIDE the directories of mutation_stamp_key, so learning it
-# never invalidates a stamp.
+# the map, that killer first, has to come back green or the score is refused.
 # The seconds are the mutant's own suite time; the pool reads them to launch the longest first.
-KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
+#
+# It lives in the git common dir, <common>/sdd-mutation/killers.tsv (ADR 0021): the main checkout
+# and every linked worktree of the clone read and write that one file, so `git worktree remove`
+# takes nothing a catalogue learned, and it sits outside every worktree — outside the directories of
+# mutation_stamp_key too, so learning it never invalidates a stamp. The checkout's own
+# .sdd/cache/mutation-killers.tsv, where the map lived before, is the SEED: read for the slugs the
+# shared map does not know, never written. A root outside git keeps its map there, as before.
+#
+# killers_paths <root> — PUBLISHES KILLERS_FILE (the map read first, and the only one a write
+# touches) and LEGACY_KILLERS_FILE (the seed, <root>/.sdd/cache/mutation-killers.tsv); outside git
+# the two are one file. CALLED, never read through $( ), because it publishes two names. The common
+# dir counts only as an ABSOLUTE answer: a git older than 2.31, where --path-format was born, echoes
+# the flag back and exits 0, and that two-line answer is refused. It is then resolved the old way: cd
+# into <root>, then into git's plain answer (relative at a root, absolute from a linked worktree),
+# then pwd -P. That is the fallback bin/sdd's git_common_dir_abs takes for the stamps (its old-git
+# pair is in tests/check-autonomy.sh), copied because this file never sources bin/sdd, so an old git
+# does not split the map from the stamps. killers_selftest reaches this fallback through a shim of
+# the old git, for a root and its linked worktree, and proves it reached it by the shim's trace.
+killers_paths() { # killers_paths <root>
+  local common
+  LEGACY_KILLERS_FILE="$1/.sdd/cache/mutation-killers.tsv"
+  KILLERS_FILE="$LEGACY_KILLERS_FILE"
+  common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 0
+  case "$common" in
+    /*) ;;
+    *) common="$(git -C "$1" rev-parse --git-common-dir 2>/dev/null)" && [ -n "$common" ] || return 0
+       common="$(CDPATH='' cd "$1" && CDPATH='' cd "$common" && pwd -P)" && [ -n "$common" ] || return 0 ;;
+  esac
+  KILLERS_FILE="$common/sdd-mutation/killers.tsv"
+}
+
+# write_killer_map <dir> — rewrites KILLERS_FILE, atomically, as a union read NOW and not when the
+# run started, since another worktree's catalogue may have written it meanwhile: a slug of CATALOG
+# takes this run's line from <dir>/<slug>.killer and .secs, and leaves the shared file when it has
+# none; every other slug keeps the line load_killer_maps reads for it, the shared map's or, failing
+# it, the seed's — another branch's catalogue holds mutants this one does not. The seed is never
+# written. rc 1 when the map could not be written, and no tmp file outlives the call.
+# Declared, not closed. A slug that left the shared file comes BACK on the next read wherever the
+# seed (.sdd/cache/mutation-killers.tsv) knows it, with the seed's old line, because the seed is
+# read for every slug the shared map does not know (ADR 0021, decision 5). So in a checkout with a
+# seed that knows it, a survivor (a known gap included) or a TIMED-OUT mutant is not launched first
+# with the ones that have no recorded time (launch_order) but by its old time, and it runs its old
+# killer first: time, never a verdict, for as long as that seed is there. A slug no catalogue lists
+# any more keeps its line for good, and a killer step only such a line names adds one control by
+# killer, run in the usual order (run-all.sh runs a name that matches nothing that way): time, never
+# a verdict. Two catalogues writing at the same instant keep the last mv (ADR 0021).
+write_killer_map() { # write_killer_map <dir>
+  local dir="$1" slug k
+  local -A KILLER=() SECS=() listed=()
+  load_killer_maps
+  for slug in "${CATALOG[@]}"; do listed["$slug"]=1; done
+  if mkdir -p "${KILLERS_FILE%/*}" 2>/dev/null \
+     && { for slug in "${CATALOG[@]}"; do
+            [ -s "$dir/$slug.killer" ] || continue
+            printf '%s\t%s\t%s\n' "$slug" "$(cat "$dir/$slug.killer")" "$(cat "$dir/$slug.secs" 2>/dev/null || true)"
+          done
+          for k in ${KILLER[@]+"${!KILLER[@]}"}; do
+            [ -n "${listed[$k]+set}" ] || printf '%s\t%s\t%s\n' "$k" "${KILLER[$k]}" "${SECS[$k]:-}"
+          done | LC_ALL=C sort; } > "$KILLERS_FILE.tmp.$$" \
+     && mv -f "$KILLERS_FILE.tmp.$$" "$KILLERS_FILE"; then
+    return 0
+  fi
+  rm -f "$KILLERS_FILE.tmp.$$"
+  return 1
+}
+
+KILLERS_FILE='' LEGACY_KILLERS_FILE=''
+killers_paths "$ROOT"
 
 # ---------------------------------------------------------------------------
 # The catalogue's own size and membership, checked before ANY mode runs (issue #105). They lived
@@ -7606,6 +7913,12 @@ if touched_selftest; then
   pass "touched: the diff selects the mutants its sensors killed (selftest)"
 else
   echo "the --touched selection does not measure what it claims — refusing to run with it" >&2
+  exit 1
+fi
+if killers_selftest; then
+  pass "killers: the map lives in the git common dir a linked worktree shares, the .sdd/cache map seeds it and the shared line wins, and a write keeps the slugs outside this catalogue (selftest)"
+else
+  echo "the killer map is not resolved, read or written the way every worktree shares it — refusing to run with it" >&2
   exit 1
 fi
 
@@ -7755,7 +8068,7 @@ if [ -n "$ONLY_SLUG" ]; then
   box="$WORK/$ONLY_SLUG"
   if [ -z "$ONLY_SENSOR" ]; then
     what="the suite"
-    load_killer_map "$KILLERS_FILE"
+    load_killer_maps
     echo "== --only $ONLY_SLUG: control and mutant, each a whole suite run (minutes) =="
     CONTROL_FIRST="${KILLER[$ONLY_SLUG]:-}"
     run_control &
@@ -7798,12 +8111,13 @@ fi
 
 # ---------------------------------------------------------------------------
 # --touched <rev> [--list]: the mutants whose last killer is a sensor the diff touched (issue 192).
-# The map is the one `sdd health` writes; SDD_KILLERS_FILE overrides it HERE and nowhere else,
-# because the full catalogue WRITES the map and an override there would overwrite a fixture.
+# The map is the one `sdd health` writes, seeded like every reader's; SDD_KILLERS_FILE overrides
+# both HERE and nowhere else, because the full catalogue WRITES the map and an override there would
+# overwrite a fixture.
 # ---------------------------------------------------------------------------
 if [ -n "$TOUCHED_REV" ]; then
   TOUCHED_MAP="${SDD_KILLERS_FILE:-$KILLERS_FILE}"
-  load_killer_map "$TOUCHED_MAP"
+  if [ -n "${SDD_KILLERS_FILE:-}" ]; then load_killer_map "$TOUCHED_MAP"; else load_killer_maps; fi
   RUNALL_JOINED="$(census_join "$ROOT/tests/run-all.sh")"
   touched_select "$ROOT" "$TOUCHED_REV" || exit $?
   {
@@ -7897,7 +8211,7 @@ fi
 echo "== control (the first job of the pool) =="
 sandbox "$WORK/control"
 
-load_killer_map "$KILLERS_FILE"
+load_killer_maps
 echo "== killer map: ${#KILLER[@]} mutant(s) run their last killer first, ${#SECS[@]} with a recorded time =="
 mapfile -t ORDER < <(for slug in "${CATALOG[@]}"; do printf '%s\t%s\n' "$slug" "${SECS[$slug]:-}"; done | launch_order)
 # One control per distinct killer of the map, that killer first, ahead of every mutant (issue 169).
@@ -7976,18 +8290,12 @@ for slug in "${CATALOG[@]}"; do
   esac
 done
 
-# Rewritten from THIS run only, atomically: a mutant that stopped being caught leaves the map. A
-# map that cannot be written is said and costs the next run its speed, never this run's verdict.
-if mkdir -p "${KILLERS_FILE%/*}" 2>/dev/null \
-   && for slug in "${CATALOG[@]}"; do
-        if [ -s "$WORK/$slug.killer" ]; then
-          printf '%s\t%s\t%s\n' "$slug" "$(cat "$WORK/$slug.killer")" "$(cat "$WORK/$slug.secs" 2>/dev/null || true)"
-        fi
-      done > "$KILLERS_FILE.tmp.$$" \
-   && mv -f "$KILLERS_FILE.tmp.$$" "$KILLERS_FILE"; then
+# Rewritten as a union (write_killer_map): this run's line for every slug of CATALOG, the line the
+# map already had for every other. A map that cannot be written is said and costs the next run its
+# speed, never this run's verdict.
+if write_killer_map "$WORK"; then
   echo "== killer map: $(grep -c . "$KILLERS_FILE" || true) mutant(s) recorded in ${KILLERS_FILE#"$ROOT"/} =="
 else
-  rm -f "$KILLERS_FILE.tmp.$$"
   printf '  warn  the killer map could not be written to %s — the next catalogue runs in the usual order\n' "$KILLERS_FILE" >&2
 fi
 

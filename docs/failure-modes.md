@@ -467,7 +467,10 @@ Debian 11 ships 2.30.
 
 **How the kit reacts:** the function refuses that shape and then **resolves** the identity the old
 way (`cd` + `pwd -P`, both `cd`s with an emptied `CDPATH`), which answers the same string. The
-ledger stays correct; the cost is one extra `rev-parse` per ledger write. The probe is by
+ledger stays correct; the cost is one extra `rev-parse` per ledger write. The mutation stamps and the
+killer map, which live in that same common dir (ADR 0021), take the same fallback, and the warning
+says so only in a tree that carries `tests/check-mutation.sh`: they are the kit's own machinery, and
+a target repo never hears of them. The probe is by
 **behaviour** and not by `git --version`, for the same reason as the GNU userland above: what the
 runner needs is an answer, not a number.
 
@@ -998,13 +1001,17 @@ config/ agents/` (`agents/` since ADR 0015 §1), minus the backlog ratchet
 `tests/health-baseline.txt` (ADR 0014). Three states produce
 this message and only the first is common:
 
-- **nothing was ever stamped** on this tree, or the last stamp was for other content — the ordinary
-  case, and usually it means a commit landed after the last `sdd health`;
-- **the catalogue came back red**, so the stamp was removed rather than left behind;
+- **this content's key was never stamped** in this clone — the ordinary case, and usually it means
+  a commit landed after the last `sdd health`. The stamps live in `<git-common-dir>/sdd-mutation/stamps/`,
+  one file per key, shared by the main checkout and every linked worktree (ADR 0021), so a
+  catalogue run over the same content in any checkout of the clone counts;
+- **the catalogue judged this content against its key** — a census that disagrees, a gap, a survivor
+  or a TIMED-OUT mutant — so the key was removed rather than left behind. A red fast suite alone
+  removes nothing (ADR 0021 §4);
 - **the tree moved while the catalogue was running** — a commit, or an editor swap file, landing
-  during the twenty-to-fifty-minute round. `sdd health` says so out loud
-  (`the measured tree moved WHILE the catalogue was running`) and stamps nothing, because the green
-  it just reported is about content that is no longer there.
+  during the round, which takes hours. `sdd health` says so out loud
+  (`the measured tree moved WHILE the catalogue was running`), stamps nothing and takes no key away,
+  because the green it just reported is about content that is no longer there.
 
 A fourth state has a message of its own: `no mutation stamp is possible for this tree: <reason>,
 then run 'sdd health'`. The key cannot be computed at all — one of the five paths is missing, the
@@ -1022,10 +1029,12 @@ headless`): the publisher never runs `sdd health` (ADR 0015 §1). In the fourth 
 so (`no './bin/sdd health' can stamp this tree as it stands (<kind>)`) and asks for the fix first;
 for a stamp that is merely absent or stale it keeps the review-bot order (#228).
 
-**What you do:** run `./bin/sdd health` from the checkout the mission is in, and run it **after the
-last commit that touches a tracked file under `bin/ tests/ templates/ config/ agents/`**. About eighteen minutes on a laptop since PR #170 (twenty to fifty before it); a
-green round ends with `mutation stamp written` and the gate opens. Two things worth knowing before
-you start it:
+**What you do:** run `./bin/sdd health` from a checkout that holds the content the PR ships — the
+mission's worktree, usually; the key lands where every checkout of the clone reads it — and run it
+**after the last commit that touches a tracked file under `bin/ tests/ templates/ config/
+agents/`**. The catalogue takes hours: 10 h 58 min for 775 mutants with no killer
+map, on 2026-10-25 for PR #327 (ADR 0021). A green round ends with `mutation stamp written` and the
+gate opens. Two things worth knowing before you start it:
 
 - editing `CLAUDE.md`, `CONTEXT.md`, `docs/` or `TODO.md` does **not** invalidate the stamp, so the
   DOCS phase can work freely — and since ADR 0014 neither does `tests/health-baseline.txt`, where
@@ -1083,11 +1092,14 @@ Two things that keep the rule from becoming folklore:
 
   ```bash
   git ls-files -z -c -- bin tests templates config agents ':(exclude)tests/health-baseline.txt' \
-    | LC_ALL=C sort -zu | xargs -0 -r md5sum | md5sum | cut -d' ' -f1   # compare with .sdd/logs/mutation-stamp
+    | LC_ALL=C sort -zu | xargs -0 -r md5sum | md5sum | cut -d' ' -f1   # the key; a file of this name
+  ls "$(git rev-parse --path-format=absolute --git-common-dir)/sdd-mutation/stamps/"   # ...here: measured green
   ```
 
   It is the same listing `mutation_stamp_key` hashes (ADR 0014). The `find` one-liner that stood
   here before measured untracked and ignored files and the ratchet, and answers differently now.
+  And since ADR 0021 a run on suspicion costs the fast suite, not the catalogue: over a key already
+  in that directory, `sdd health` skips the catalogue and says `catalogue skipped`.
 
 - **An open PR carrying a stale stamp is only safe while nobody merges it.** `gate_PR` reads the
   stamp when the gate runs, which for a hand-opened PR is at merge time — so the protection is
@@ -1104,48 +1116,47 @@ line may land before or after the single round.
 ## `sdd health` in the main checkout is slow again after a kit mission
 
 **Symptom:** a kit mission ran in its linked worktree (ADR 0016 §2), went green there, merged, and
-the worktree was removed. The next `./bin/sdd health` in the main checkout takes about twice as long
-as the worktree's did, or `./bin/sdd health --release` says on line 6 that the stamp is absent or
-stale, although the worktree's catalogue went green on the content `main` now carries.
+the worktree was removed. The next `./bin/sdd health` in the main checkout runs the whole catalogue
+instead of saying `catalogue skipped`, or `./bin/sdd health --release` says on line 6 that the stamp
+is absent or stale, although the worktree's catalogue went green on the content `main` now carries.
 
-**Cause:** `.sdd/cache/` and `.sdd/logs/` are ignored, so each worktree has its own. The worktree's
-`sdd health` taught the killer map the mission's mutants and wrote the stamp **there**, and
-`git worktree remove` deletes both. The main checkout keeps the map from before the mission and the
-stamp of the old content. ADR 0016 tells you to copy the map **into** the worktree; nothing told you
-to bring it back.
+**Cause, before ADR 0021:** the stamp lived in `.sdd/logs/` and the killer map in `.sdd/cache/`,
+both ignored and both per checkout, so the worktree's `sdd health` wrote them **there** and
+`git worktree remove` deleted them. Measured on batch 5 (2026-10-07): the worktree held a map of 676
+mutants against 619 in the main checkout, and a stamp whose key was exactly the key of `main` after
+the merge — 64 minutes of catalogue that the removal would have thrown away. The way out was to
+bring both back by hand.
 
-**Measured** on batch 5 (2026-10-07): the worktree held a map of 676 mutants against 619 in the main
-checkout, and a stamp whose key was exactly the key of `main` after the merge — 64 minutes of
-catalogue that the removal would have thrown away.
+**Since ADR 0021** both live in the git common directory the worktree shares with the main checkout,
+`<git-common-dir>/sdd-mutation/stamps/<key>` and `<git-common-dir>/sdd-mutation/killers.tsv`, so the
+removal keeps them and nothing comes back by hand. When the main checkout still pays the catalogue,
+one of these holds:
 
-**What you do** — from the main checkout, after it fast-forwarded to the merge, and **before**
-`git worktree remove`:
+- **the merge carries content the worktree never measured:** another PR moved the key between the
+  stamp and the merge. The catalogue runs, and it should;
+- **the `bin/sdd` that ran predates ADR 0021:** it writes `.sdd/logs/mutation-stamp`, which nothing
+  reads any more, and it never skips. The `sdd` on the `PATH` resolves to the main checkout (ADR 0016
+  §2), so until that checkout reaches the merge that brought ADR 0021, `sdd health` is the old kit:
+  inside a mission's worktree, run `./bin/sdd health`;
+- **there is no shared map yet:** until the first catalogue run after ADR 0021, `killers.tsv` does
+  not exist. Each checkout reads its own `.sdd/cache/mutation-killers.tsv` as a seed, and a worktree
+  without one runs in the plain order, which costs time and never a verdict;
+- **another clone** of the repository does not share the directory, and measures again.
 
-1. `mkdir -p .sdd/cache .sdd/logs` — a checkout that never ran `sdd health` has neither, since only
-   `.sdd/config.sh` is tracked and the writers create them lazily, and a `cp` into a missing
-   directory fails.
-2. Bring the killer map back — always, and as a **union**, never a plain `cp`: the main checkout may
-   know mutants the worktree never saw (content that reached `main` while the mission ran), and a
-   copy would drop them. One line per mutant, keyed by the slug in the first column; the worktree's
-   line wins where both know it:
+**What you do:** read line 6 of `./bin/sdd health --release`, which never runs the suite. Green: the
+key is in the set, and `./bin/sdd health` skips the catalogue. Red: this content was never measured
+green in this clone, and one `./bin/sdd health` pays for it. Copy nothing. The union of the maps and
+the copy of the stamp that this entry used to teach went away with the per-checkout files, and a
+`.sdd/cache/mutation-killers.tsv` left in a checkout is read only for the mutants the shared map does
+not know (ADR 0021 §5).
 
-   ```bash
-   W=<worktree>; M=.sdd/cache/mutation-killers.tsv
-   if [ -f "$M" ]; then awk -F'\t' '!seen[$1]++' "$W/$M" "$M" > "$M.new" && mv "$M.new" "$M"
-   else cp "$W/$M" "$M"; fi
-   ```
-
-   The map is an order hint, never a verdict, so a stale line costs time and never a result.
-3. Read line 6 of `./bin/sdd health --release`, which never runs the suite. Green: leave the stamp
-   alone. Red: copy `<worktree>/.sdd/logs/mutation-stamp` to `.sdd/logs/` and read line 6 again.
-   Green now means the worktree's catalogue measured exactly what `main` carries. Still red means
-   the merge brought content the worktree never measured, and the stamp is paid by a `sdd health`
-   in the main checkout.
-4. Optionally, the gate logs: `cp -Rn <worktree>/.sdd/logs/<mission> .sdd/logs/`. The `-R` because
-   it is a directory (a plain `cp -n` refuses it, and the logs go with the worktree); the `-n` so
-   nothing of the main checkout is overwritten. When `-n` skips a file that already exists here,
-   upstream coreutils 9.2+ exits non-zero; Debian and Ubuntu keep the old exit 0 and print a
-   "non-portable" warning instead (measured on Ubuntu's 9.4). Neither overwrites anything.
+The gate logs are still per worktree. To keep them, before `git worktree remove`, run
+`mkdir -p .sdd/logs && cp -Rn <worktree>/.sdd/logs/<mission> .sdd/logs/` from the main checkout (a
+checkout that never ran the runner has no `.sdd/logs/`, and a `cp` into it fails). The `-R` because it is a
+directory (a plain `cp -n` refuses it, and the logs go with the worktree); the `-n` so nothing of
+the main checkout is overwritten. When `-n` skips a file that already exists here, upstream
+coreutils 9.2+ exits non-zero; Debian and Ubuntu keep the old exit 0 and print a "non-portable"
+warning instead (measured on Ubuntu's 9.4). Neither overwrites anything.
 
 ---
 

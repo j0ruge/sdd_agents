@@ -47,11 +47,10 @@ writes the artifacts from memory, and their headings are the contract the gates 
      the `sdd` on the PATH keeps its `SDD_HOME` in this checkout, and would install this
      checkout's `agents/` over the worktree's;
    - tell the human, in one line, the worktree's path and branch, and that the mission is
-     executed there too — interactively, never by a `sdd run` from this checkout. Add that, after
-     the merge and before `git worktree remove`, its killer map comes back to this checkout, and
-     its stamp too when line 6 of `./bin/sdd health --release` here is red (`docs/failure-modes.md`,
-     "`sdd health` in the main checkout is slow again after a kit mission"): both live in ignored
-     directories, and the removal deletes them.
+     executed there too — interactively, never by a `sdd run` from this checkout. Copy no killer
+     map into the worktree, and ask for nothing to come back after the merge: the map and the
+     stamp live in `<git-common-dir>/sdd-mutation/`, which the worktree shares with this checkout,
+     so both outlive `git worktree remove` (ADR 0021).
 
    When `sdd` is not on the PATH, or resolves outside this root, skip this step: no run of another
    repository executes this checkout.

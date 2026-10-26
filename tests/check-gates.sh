@@ -3160,24 +3160,32 @@ git add -A && git commit -qm "chore: docs, formatter-aligned again"
 # the EVIDENCE that the catalogue ran green over THIS content: a stamp `sdd health` writes and
 # that nothing else in the kit writes.
 #
-# EIGHT worlds, in three pairs plus one, and none of them is decoration:
+# EIGHT worlds in the tally, two pairs, a triple and one, and none of them is decoration:
 #   SCOPE   (1, 2) the requirement exists only where tests/check-mutation.sh does. World 1 is what
 #           keeps every target repo — none of which has that file — behaving exactly as before, and
 #           without it worlds 2-6 are all satisfied by a gate that refuses everything.
 #   CONTENT (3, 4) the stamp keys on the CONTENT of the measured directories, never on the clock
 #           and never on HEAD: the PR phase commits handoff markdown, which would move HEAD and
 #           throw away a stamp that is still perfectly valid.
-#   MEANING (5, 6, 7) the stamp means the catalogue was GREEN, not that the command ran — and
-#           BOTH inputs feed that: a red suite and a green suite whose score carries a survivor
-#           each have to take the stamp away. Without them, a `sdd health` that stamped
-#           unconditionally satisfies worlds 1-4.
+#   MEANING (5, 6, 7) the stamp means the CATALOGUE was green over this content, not that the
+#           command ran — and only the catalogue's own verdict takes it away (ADR 0021 §4). A red
+#           suite over a key already measured is the skip, red, and the stamp stays; `--full` over
+#           a score carrying a survivor removes it. Without them, a `sdd health` that stamped
+#           unconditionally satisfies worlds 1-4. World 7b, right after 7, is the other half of
+#           "only the verdict takes it away", with an assertion of its own: a green catalogue over
+#           the key 7 took away writes it again, because the removal is a verdict and never a lock.
 #   WINDOW  (8) the green has to be about the content that is still here. The real catalogue runs
 #           for twenty to fifty minutes and the phase that starts it is a phase that commits, so a
 #           key read only after the run would stamp whatever the tree happens to be at the end.
-# Six more worlds follow the tally, each with an assertion of its own, because they are about the
-# KEY and not about where the demand applies: PARTIAL ROOT (9), RATCHET (10), IGNORED (11), DELETED
-# (12), UNREADABLE (13) and AGENTS (11b) — the key is the tracked content of the five paths minus
-# the backlog ratchet (ADR 0014, increments I3 and I4; agents/ since ADR 0015 §1).
+# Nine worlds follow the tally, each with an assertion of its own. Seven are about the KEY and the
+# place of its stamp, and not about where the demand applies: PARTIAL ROOT (9), RATCHET (10),
+# IGNORED (11), DELETED (12), UNREADABLE (13), AGENTS (11b) and A LINKED WORKTREE (14) — the key is
+# the tracked content of the five paths minus the backlog ratchet (ADR 0014, increments I3 and I4;
+# agents/ since ADR 0015 §1), and its stamp is a file in the git common dir every worktree of the
+# clone shares (ADR 0021). The other two: 8b, right after the tally, is the WINDOW inside the skip
+# (ADR 0021 §3), and 9b the stop of `sdd run` over a stamp no health can write (#228). Inside the
+# tally's run, 1b (the ⛔ rows reach the PR body), 4b (the stamp is not headless) and 7b carry
+# assertions of their own as well.
 #
 # The key is NEVER computed here. A second spelling of that algorithm would agree with the first by
 # construction and measure nothing, so world 3 drives the real WRITER instead: a LIVE copy of the
@@ -3187,12 +3195,16 @@ git add -A && git commit -qm "chore: docs, formatter-aligned again"
 # invisible while the catalogue went on crediting protection that does not exist.
 #
 # ⚠️ The stub's VERDICT lives outside the measured directories, in a control file under .sdd/logs/,
-# and that is the whole reason worlds 5-7 measure anything. The first version of this block flipped
-# the suite to red by REWRITING tests/run-all.sh — which moved the content key at the same time, so
-# the refusal that followed could not tell "the stamp was taken away" from "the content changed".
-# Measured, not feared: an adversarial pass that deleted the `catalogue_green` condition entirely
-# left this assertion GREEN. The control file changes the answer while every hashed byte stands
-# still, which is the only arrangement in which the removal is the sole suspect.
+# and that is the whole reason worlds 5-7 and 8b measure anything. The first version of this block
+# flipped the suite to red by REWRITING tests/run-all.sh — which moved the content key at the same
+# time, so the answer that followed could not tell what the verdict did from what the new content
+# did. The control file changes the answer while every hashed byte stands still: world 6 is a red
+# suite over the SAME key (so it is a skip, and the stamp stays), world 7 a survivor over it (so the
+# removal is the sole suspect), world 8b a skip whose suite moves the tree. What this block does NOT
+# measure since ADR 0021 is the SUITE half of `catalogue_green` — a red suite over a clean score inside
+# a catalogue run, which must stamp nothing: world 6 no longer runs the catalogue. That half is held
+# by the red half of `skip: only the catalogue's verdict takes a key away …` in check-health.sh, and
+# by mut_HEALTH_red_suite_stamps.
 i4_bad=0
 # Counted and not written in prose — see the note on i3_worlds above.
 i4_worlds=0
@@ -3240,7 +3252,121 @@ i4_why() { # i4_why <world> <regex the reason MUST match> <regex it must NOT mat
 # depends on the developer's machine is not a sensor. rc is ignored on purpose: the fixture kit has
 # no config/schema.md and no baseline, so `sdd health` legitimately fails several other checks —
 # what is under test is the stamp, which the command writes right after the catalogue's verdict.
-i4_health() { ( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health >/dev/null 2>&1 ) || true; }
+# The options are handed on: world 7 asks for `--full`, the catalogue over a key already measured,
+# and world 7b for the same run again over the key 7 took away.
+i4_health() { ( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health "$@" >/dev/null 2>&1 ) || true; }
+
+# WHERE the stamps of <repo> live: one file per key measured green, in the git common directory
+# the main checkout and every linked worktree of one clone share (ADR 0021). Spelled here from the
+# ADR and never borrowed from bin/sdd, so a writer that moves the place is contradicted by this
+# fixture instead of followed by it. Prints NOTHING and returns 1 outside a git checkout, so no
+# caller can turn an unanswered question into `rm -rf /sdd-mutation/stamps`.
+#
+# ⚠️ The one-shot `--path-format=absolute` is the fast path, not the only one. A git older than
+# 2.31, where the flag was born (Ubuntu 20.04 ships 2.25), does not refuse it: rev-parse echoes it
+# back and exits 0, so the answer is two lines, the flag and then a common dir still relative. That
+# answer names no place, and the place is then resolved from git's plain answer, which is relative
+# to where git ran: cd into <repo>, then into that answer (`.git` at a root, `../.git` in a
+# subdirectory, absolute from a linked worktree), then `pwd -P`. Both cds carry an emptied CDPATH,
+# or the environment would pick where they land and echo the path into the capture. Refused on that
+# path, each with rc 1 and nothing printed: a git that fails, an empty answer (`cd ""` stays put, so
+# the working tree of <repo> would pass for the place), a cd that cannot land, and a resolved path
+# that spans two lines, which on that git cannot be told from a leak. So what is printed is always
+# ONE absolute path. The first spelling only refused the old answer, and the i4_place guard below
+# reported SENSOR-BROKEN on those gits while the writer resolved its stamps right (Codex P2 on PR
+# #330). The old-git probe right after that guard holds every refusal and the agreement.
+fixture_stamps() { # fixture_stamps <repo>
+  local common
+  common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  case "$common" in
+    /*) ;;
+    *)  common="$(git -C "$1" rev-parse --git-common-dir 2>/dev/null)" || return 1
+        [ -n "$common" ] || return 1
+        common="$(CDPATH='' cd "$1" && CDPATH='' cd "$common" && pwd -P)" || return 1
+        case "$common" in *$'\n'*) return 1 ;; esac ;;
+  esac
+  printf '%s/sdd-mutation/stamps\n' "$common"
+}
+# Takes every stamp of <repo> away, so what is on disk afterwards was written by the run that follows.
+fixture_unstamp() { local d; d="$(fixture_stamps "$1")" || return 0; rm -rf "${d:?}"; }
+# Whether <repo> carries any stamp at all. Asked right after fixture_unstamp and one run, so a file
+# there can only have been written by that run.
+fixture_stamped() { local d; d="$(fixture_stamps "$1")" || return 1; [ -n "$(ls -A "$d" 2>/dev/null)" ]; }
+# The question every `absent` half below rests on, asked ONCE before any world reads a stamp (review
+# r1 of mission 20261026-health-pula-catalogo, finding #3). fixture_stamped says "not stamped" both
+# when the place holds no stamp AND when fixture_stamps could not name the place — a $FIX outside
+# git, or a git that gives no answer for it — so the absent halves of worlds 8, 8b, 9, 12 and 13, and
+# tree_stamped "$TREE_PLAIN" further down, would pass over a question nobody answered. A git older
+# than 2.31 is not one of those: fixture_stamps resolves its answer the old way, and the probe right
+# below holds that. The form of the wt_dirty guard of world 14, plus the `ok` half. One git answers
+# for every fixture of this file, all of them `git init` checkouts, so the place of $FIX resolving
+# is the place of each of them resolving.
+i4_place="$(fixture_stamps "$FIX" || true)"
+case "$i4_place" in
+  /*) pass "stamp: the fixture resolves the git common dir before a world reads a stamp" ;;
+  *)  fail "SENSOR-BROKEN: stamp: the fixture resolves the git common dir before a world reads a stamp" \
+           "an absolute <git-common-dir>/sdd-mutation/stamps for \$FIX (\$FIX a checkout, and a git that answers)" \
+           "'$i4_place' — every absent half below would measure nothing" ;;
+esac
+
+# The old-git path of fixture_stamps, measured and not trusted (Codex P2 on PR #330). The guard
+# above runs on the suite's own git, so on a 2.31 or later a broken fallback stays green here and
+# comes back as SENSOR-BROKEN only on the gits it exists for. A shim stands in for such a git, in
+# the form of the pre-2.31 pair in tests/check-autonomy.sh: rev-parse echoes any --path-format=*
+# back and hands the rest to the git it found, and I4_OLDGIT_PLAIN makes the PLAIN rev-parse answer
+# nothing (mute), fail with an answer on stdout (fail), or name a directory that is not there (gone).
+# Every call runs from `/`, so a relative answer resolves only through the cd into <repo>, never
+# through this file's cwd, which is $FIX itself.
+#
+# i4_old prints <rc>:<plain questions the shim heard>:<answer>. The middle field is INTERCEPTION:
+# a 1 says the call got past the flagged question and reached the fallback, so no refusal below can
+# be the first `|| return 1` answering for a fallback that never ran. `armed` is the FLOOR: the shim
+# answers the flagged question in two lines, the flag first, or a modern git answering for it would
+# leave every other term measuring nothing. `same` and `sub` are the AGREEMENT with the suite's git,
+# at the root of $FIX and in $MDIR, whose answer is `../../../.git`. `nl` is a repo whose path holds
+# a newline, `mute`, `fail` and `gone` gits that give no place: each must name no place.
+i4_oldgit="$SDD_STATE_FIX/oldgit"; mkdir -p "$i4_oldgit"
+{ printf '#!/usr/bin/env bash\nreal=%q\n' "$(command -v git)"
+  cat <<'SHIM'
+is_rp=0; for a in "$@"; do [ "$a" = rev-parse ] && is_rp=1; done
+if [ "$is_rp" = 1 ]; then
+  [ -z "${I4_OLDGIT_TRACE:-}" ] || printf '%s\n' "$*" >> "$I4_OLDGIT_TRACE"
+  keep=(); echoed=()
+  for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a") ;; *) keep+=("$a") ;; esac; done
+  if [ "${#echoed[@]}" -gt 0 ]; then printf '%s\n' "${echoed[@]}"; exec "$real" "${keep[@]}"; fi
+  case "${I4_OLDGIT_PLAIN:-}" in
+    mute) exit 0 ;;
+    fail) printf '.git\n'; exit 128 ;;
+    gone) printf '.git-gone\n'; exit 0 ;;
+  esac
+fi
+exec "$real" "$@"
+SHIM
+} > "$i4_oldgit/git"
+chmod +x "$i4_oldgit/git"
+i4_nl="$SDD_STATE_FIX/nl"$'\n'"repo"; git init -q "$i4_nl" >/dev/null 2>&1
+# stderr is dropped: `gone` makes the cd of the fallback say why it could not land, and that line
+# is the refusal working, not noise to read in the suite's log.
+i4_old() { # i4_old <I4_OLDGIT_PLAIN mode, '' for none> <dir>
+  local out rc
+  : > "$i4_oldgit/trace"
+  out="$( cd / && PATH="$i4_oldgit:$PATH" I4_OLDGIT_PLAIN="$1" I4_OLDGIT_TRACE="$i4_oldgit/trace" \
+          fixture_stamps "$2" 2>/dev/null )"; rc=$?
+  printf '%s:%s:%s' "$rc" "$(grep -c -- 'rev-parse --git-common-dir$' "$i4_oldgit/trace")" "$out"
+}
+assert_eq "stamp: on a git older than 2.31 the fixture names the SAME place, and no place for a git that gives none" \
+  "armed same sub nl mute fail gone" \
+  "$( a="$( PATH="$i4_oldgit:$PATH" git -C "$FIX" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )"
+      if [ "$(grep -c . <<< "$a")" = 2 ] && [ "$(head -1 <<< "$a")" = --path-format=absolute ]; then t=armed
+      else t="unarmed:$a"; fi
+      new="$( cd / && fixture_stamps "$FIX" )"
+      o="$(i4_old '' "$FIX")";  if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then s=same; else s="split:$o|$new"; fi
+      o="$(i4_old '' "$MDIR")"; if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then u=sub;  else u="sub:$o|$new"; fi
+      o="$(i4_old '' "$i4_nl")"; if [ "$o" = "1:1:" ]; then l=nl;   else l="nl:$o"; fi
+      o="$(i4_old mute "$FIX")"; if [ "$o" = "1:1:" ]; then m=mute; else m="mute:$o"; fi
+      o="$(i4_old fail "$FIX")"; if [ "$o" = "1:1:" ]; then f=fail; else f="fail:$o"; fi
+      o="$(i4_old gone "$FIX")"; if [ "$o" = "1:1:" ]; then g=gone; else g="gone:$o"; fi
+      printf '%s %s %s %s %s %s %s' "$t" "$s" "$u" "$l" "$m" "$f" "$g" )"
 
 # What the stub suite will answer next. It is written into .sdd/logs/, which is gitignored AND
 # outside the five measured directories — so changing the catalogue's verdict changes not one byte
@@ -3257,12 +3383,17 @@ i4_verdict() { # i4_verdict <exit code> <the score line> [move-the-tree]
 # an ignored file there would move nothing. World 8 restores it with `git checkout` right after
 # the run, so the working tree is clean again and the mission does not fall back to the REVIEW
 # gate instead of reaching PR. That combination is the whole of world 8.
+#
+# The score line is answered ONLY under --with-mutation, the flag that makes the real suite run the
+# catalogue (tests/run-all.sh): a skip calls the fast suite, which never prints `score:`, and a stub
+# that printed it always let a skip that had come to need the line close its worlds here while every
+# real skip went blind (QA-2 of mission 20261026-health-pula-catalogo).
 i4_write_suite() {
   cat > "$FIX/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
 # Stub for the twenty-minute catalogue. cmd_health reads the score line off this stdout and the
 # suite's verdict off this exit code; both come from a control file OUTSIDE the hashed paths.
-sed -n 2p "$FIX/.sdd/logs/stub-verdict"
+if [ "\${1:-}" = --with-mutation ]; then sed -n 2p "$FIX/.sdd/logs/stub-verdict"; fi
 if [ "\$(sed -n 3p "$FIX/.sdd/logs/stub-verdict")" = move-the-tree ]; then
   printf 'written while the catalogue was running\n' >> "$FIX/tests/scratch.tracked"
 fi
@@ -3440,24 +3571,41 @@ assert_eq "run stops at the stamp only when the stamp is the only refusal" "yes|
 cp "$SDD_STATE_FIX/50-pr-before-stamp-stop.md" "$MDIR/50-pr.md"
 git add -A && git commit -qm "chore: 50-pr.md gets its pr_url back" >/dev/null
 
-# 5. MEANING — stamp the new content, so worlds 6 and 7 have something to take away.
+# 5. MEANING — stamp the new content, so world 6 has a key to skip over and world 7 one to take away.
 i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
 i4_phase "health over the new content stamps it in turn" "DONE"
 
-# 6. MEANING — the SUITE comes back red, over content that did not move by a single byte. The
-#    stamp has to go: one that survived would mean "sdd health was executed", which is a label,
-#    and the difference between a label and an artifact is the whole mission.
+# 6. MEANING — the SUITE comes back red, over content that did not move by a single byte. The key
+#    is in the set, so health skips the catalogue, runs the fast suite, goes red — and the stamp
+#    stays (ADR 0021 §4). With the key equal the red comes from outside it (TODO.md, docs/) or from
+#    the machine, gate_REVIEW already refuses a red TEST_CMD before gate_PR is read, and one red
+#    in one worktree may not cost every checkout of the same content the catalogue again.
 i4_verdict 1 "$I4_SCORE_GREEN"; i4_health
-i4_phase "a red suite takes the stamp away, so it never means 'the command ran'" "PR"
+i4_phase "a red suite over a measured key leaves the stamp standing — only the catalogue's verdict takes it away" "DONE"
 
-# 7. MEANING — and the OTHER input, because the stamp answers to both checks. Here the suite is
-#    green and the score carries a live survivor: `103 caught … of 104` is not a hypothesis, it is
-#    what this repo's base branch carried for days. The green run in between is not scaffolding
-#    either — it proves the removal is a verdict that can be revised and not a one-way latch.
-i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
-i4_phase "green again, and the stamp comes back" "DONE"
-i4_verdict 0 "$I4_SCORE_SURVIVOR"; i4_health
-i4_phase "a score with a live survivor takes the stamp away too" "PR"
+# 7. MEANING — and the verdict that DOES take it away. `--full` runs the catalogue over the key
+#    world 6 left standing, the suite is green and the score carries a live survivor: `103 caught …
+#    of 104` is not a hypothesis, it is what this repo's base branch carried for days. The removal
+#    is the catalogue's own answer about this content, which is why it is the one that counts.
+#    The place is listed first, for world 7b: the key this run takes away is the name that leaves it.
+restamp_dir="$(fixture_stamps "$FIX" || true)"
+restamp_before="$(ls -A "$restamp_dir" 2>/dev/null || true)"
+i4_verdict 0 "$I4_SCORE_SURVIVOR"; i4_health --full
+i4_phase "a score with a live survivor takes the stamp away" "PR"
+
+# 7b. MEANING — the removal is a verdict and never a lock (review r1 of mission
+#     20261026-health-pula-catalogo, finding #4). The catalogue measures the same content green
+#     again — the survivor's test fixed elsewhere, or the score found wrong — and the key world 7
+#     took away is written back. A writer that refused a key once removed, by a tombstone or by a
+#     stamp file it no longer overwrites, would shut gate_PR on that content in every checkout of
+#     the clone for good, and worlds 1-7 would all stay green over it. Read off the stamp itself and
+#     never off the phase: the key is the one name world 7's run took out of the place, and it has
+#     to be there again with itself on its first line, which is what mutation_stamp_valid compares.
+#     Own assertion, outside the i4 tally. Counts: keys world 7 took away · first line of that file.
+restamp_key="$(grep -vxF -e "$(ls -A "$restamp_dir" 2>/dev/null)" <<< "$restamp_before" || true)"
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health --full
+assert_eq "stamp: a green catalogue after a removal stamps the key again" "1|$restamp_key" \
+  "$(grep -c . <<< "$restamp_key")|$(head -n 1 -- "$restamp_dir/$restamp_key" 2>/dev/null)"
 
 # 8. WINDOW — the catalogue is green AND the measured tree moves while it runs. The real run takes
 #    twenty to fifty minutes, and the phase that types `sdd health` is the phase that also commits,
@@ -3469,11 +3617,12 @@ i4_phase "a score with a live survivor takes the stamp away too" "PR"
 #    stops matching the moment the restore puts the key back, and the gate answers PR whether the
 #    refusal ran or not — mut_HEALTH_stamp_window_blind survived the catalogue (531 of 532). So the
 #    property is read where it lives, BEFORE the restore: no stamp file on disk, and health saying
-#    why. The stamp is taken away first, so its absence is this run's answer and never world 7's.
-rm -f "$FIX/.sdd/logs/mutation-stamp"
+#    why. The stamps are taken away first — world 7b has just written one back —, so their absence
+#    is this run's answer and never a leftover of the worlds before it.
+fixture_unstamp "$FIX"
 i4_verdict 0 "$I4_SCORE_GREEN" move-the-tree
 window_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
-window_stamp=absent; [ -f "$FIX/.sdd/logs/mutation-stamp" ] && window_stamp=written
+window_stamp=absent; fixture_stamped "$FIX" && window_stamp=written
 window_said="$(grep -c 'the measured tree moved WHILE the catalogue was running' <<< "$window_health" || true)"
 i4_worlds=$((i4_worlds + 1))
 if [ "$window_stamp|$window_said" != "absent|1" ]; then
@@ -3491,6 +3640,26 @@ else
        "the $i4_worlds worlds above agreeing" "$i4_bad disagreement(s), listed above"
 fi
 
+# 8b. WINDOW, inside the skip (ADR 0021 §3: the skip refuses the window too). The key is stamped, so
+#     health skips the catalogue, and the tree moves while the FAST suite runs: health has to say so,
+#     keep the key it skipped over — a skip is no verdict of the catalogue — and stamp nothing for the
+#     moved content. World 8 cannot see this: it takes every stamp away first, so its run is a
+#     catalogue run. Own assertion, outside the i4 tally. Counts: the window named for the suite ·
+#     the key skipped over still stamped · stamps other than it.
+fixture_unstamp "$FIX"
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+skipwin_dir="$(fixture_stamps "$FIX" || true)"
+skipwin_key="$(ls -A "$skipwin_dir" 2>/dev/null || true)"
+i4_verdict 0 "$I4_SCORE_GREEN" move-the-tree
+skipwin_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
+skipwin_kept=gone; [ -n "$skipwin_key" ] && [ -f "$skipwin_dir/$skipwin_key" ] && skipwin_kept=kept
+skipwin_other="$(ls -A "$skipwin_dir" 2>/dev/null | grep -vxF "${skipwin_key:-}" | grep -c . || true)"
+git -C "$FIX" checkout -- tests/scratch.tracked
+i4_verdict 0 "$I4_SCORE_GREEN"
+assert_eq "stamp: a tree that moved while the suite of a skip ran is refused by name, and the key it skipped over stays the only stamp" \
+  "1|kept|0" \
+  "$(grep -c 'the measured tree moved WHILE the suite was running' <<< "$skipwin_health" || true)|$skipwin_kept|$skipwin_other"
+
 # 9. PARTIAL ROOT — one of the five measured paths is gone and the other four are all there. Own
 #    assertion, outside the i4 tally: the tally is named for the scope of the demand, and this is a
 #    property of the KEY. The guard used to refuse only a root where all four were absent, so a root
@@ -3500,12 +3669,12 @@ fi
 #    absence afterwards is the answer of THIS run and never a leftover of world 8.
 rm -rf "${FIX:?}/config"
 git add -A && git commit -qm "chore: the kit loses one of its measured paths" >/dev/null
-rm -f "$FIX/.sdd/logs/mutation-stamp"
+fixture_unstamp "$FIX"
 i4_verdict 0 "$I4_SCORE_GREEN"
 # i4_health discards the output; here the output is half of what is measured, so the same call is
 # made with it captured (same HOME redirection, rc ignored for the same reason).
 partial_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
-partial_stamp=absent; [ -f "$FIX/.sdd/logs/mutation-stamp" ] && partial_stamp=written
+partial_stamp=absent; fixture_stamped "$FIX" && partial_stamp=written
 assert_eq "stamp-key: a root missing one of the measured paths is never stamped" "PR|absent" \
   "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$partial_stamp"
 # And neither end refuses in silence. gate_PR used to send the operator to `sdd health` blindly,
@@ -3584,10 +3753,10 @@ assert_eq "stamp-key: a commit touching only agents/ moves the key" "DONE|PR" \
 #     catalogue never ran against as a whole. Both ends name the file, so the refusal carries a
 #     remedy. Own assertion, outside the `stamp-key:` family the increment's Check counts. Counts:
 #     stamp · gate names the file · health names the file.
-rm -f "$FIX/.sdd/logs/mutation-stamp" "$FIX/tests/scratch.tracked"
+fixture_unstamp "$FIX"; rm -f "$FIX/tests/scratch.tracked"
 i4_verdict 0 "$I4_SCORE_GREEN"
 deleted_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
-deleted_stamp=absent; [ -f "$FIX/.sdd/logs/mutation-stamp" ] && deleted_stamp=written
+deleted_stamp=absent; fixture_stamped "$FIX" && deleted_stamp=written
 deleted_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
 assert_eq "gate_PR and sdd health both name a tracked file deleted from the working tree, and nothing is stamped" \
   "absent|1|1" \
@@ -3601,15 +3770,53 @@ git -C "$FIX" checkout -- tests/scratch.tracked
 #     health names it.
 ln -s no-such-target "$FIX/tests/broken-link"
 git add -A && git commit -qm "chore: a tracked symlink whose target is gone" >/dev/null
-rm -f "$FIX/.sdd/logs/mutation-stamp"
+fixture_unstamp "$FIX"
 i4_verdict 0 "$I4_SCORE_GREEN"
 unreadable_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
-unreadable_stamp=absent; [ -f "$FIX/.sdd/logs/mutation-stamp" ] && unreadable_stamp=written
+unreadable_stamp=absent; fixture_stamped "$FIX" && unreadable_stamp=written
 unreadable_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
 assert_eq "gate_PR and sdd health both name a tracked file that cannot be read, and nothing is stamped" \
   "absent|1|1" \
   "$unreadable_stamp|$(grep -c 'no mutation stamp is possible for this tree: a tracked file under .* could not be read' <<< "$unreadable_why")|$(grep -c 'nothing was stamped: a tracked file under .* could not be read' <<< "$unreadable_health")"
 git rm -q "$FIX/tests/broken-link" && git commit -qm "chore: the broken symlink goes" >/dev/null
+
+# 14. A LINKED WORKTREE — the stamp lives in the git common directory (ADR 0021). Kit work runs in
+#     one linked worktree per mission (ADR 0016 §2), and a stamp kept per checkout under .sdd/logs/
+#     was born missing in every new worktree and died with `git worktree remove`: the #327 catalogue
+#     measured a key the main checkout never saw. So the health of a linked worktree has to open
+#     gate_PR in the main checkout of the same clone, and the old file — written by hand, with the
+#     RIGHT key — has to open nothing, because nobody reads it any more. The worktree is a checkout
+#     of the committed $FIX, so its content and its key are the $FIX's, and its stub suite reads the
+#     same verdict file by absolute path. The key of the second half is the recipe of
+#     docs/failure-modes.md, used only to forge the old file: a wrong recipe would make that half
+#     pass for the wrong reason, so it is checked against the name of the stamp the worktree wrote
+#     whenever there is one. `--detach`, so the fixture keeps no branch the sections below never
+#     asked for. Own assertion, outside the i4 tally. Counts: phase after the worktree's health ·
+#     phase with only the old file.
+wt_dirty="$(git -C "$FIX" status --porcelain 2>&1)"
+[ -z "$wt_dirty" ] \
+  || fail "SENSOR-BROKEN: the linked-worktree world starts from a committed fixture" \
+          "an empty git status, so the worktree carries the content and the key of \$FIX" "$wt_dirty"
+WT="$SDD_STATE_FIX/kit-wt"
+git -C "$FIX" worktree add -q --detach "$WT" >/dev/null 2>&1 \
+  || fail "SENSOR-BROKEN: the linked-worktree world could not add a worktree of the fixture" "a worktree at $WT" "none"
+fixture_unstamp "$FIX"
+i4_verdict 0 "$I4_SCORE_GREEN"
+( cd "$WT" && HOME="$i4_home" NO_COLOR=1 ./bin/sdd health >/dev/null 2>&1 ) || true
+wt_after="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+wt_written="$(ls -A "$(fixture_stamps "$FIX" || true)" 2>/dev/null || true)"
+fixture_unstamp "$FIX"
+wt_key="$( CDPATH='' cd "$FIX" && git ls-files -z -c -- bin tests templates config agents ':(exclude)tests/health-baseline.txt' \
+           | LC_ALL=C sort -zu | xargs -0 -r md5sum | md5sum | cut -d' ' -f1 )"
+[ -z "$wt_written" ] || [ "$wt_written" = "$wt_key" ] \
+  || fail "SENSOR-BROKEN: the forged old stamp carries the key bin/sdd computes" \
+          "the recipe of docs/failure-modes.md answering $wt_written" "$wt_key"
+printf '%s\n' "$wt_key" > "$FIX/.sdd/logs/mutation-stamp"
+wt_old="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+rm -f "$FIX/.sdd/logs/mutation-stamp"
+git -C "$FIX" worktree remove --force "$WT" >/dev/null 2>&1 || true
+assert_eq "stamp: gate_PR reads the key a linked worktree stamped, and the old .sdd/logs/mutation-stamp alone opens nothing" \
+  "DONE|PR" "$wt_after|$wt_old"
 
 # --- the two ends of the stamp, and the tree they have to agree on ----------
 #
@@ -3624,8 +3831,9 @@ git rm -q "$FIX/tests/broken-link" && git commit -qm "chore: the broken symlink 
 # to fifty minutes a lap — a refusal with no reachable remedy, which is worse than the label it
 # replaced.
 #
-# Every world of the block above invokes "$FIX/bin/sdd" from inside $FIX, so SDD_HOME == REPO_ROOT
-# holds by construction in all eight and none of them can see this. The three below are the worlds
+# Every world of the block above invokes the bin/sdd of the checkout it stands in — $FIX, or world
+# 14's worktree of it —, so SDD_HOME == REPO_ROOT holds by construction in every one of them and
+# none of them can see this. The three below are the worlds
 # where the two DIVERGE: a second kit, living outside the fixture and never the working directory,
 # is the one whose bin/sdd runs.
 #
@@ -3639,8 +3847,7 @@ tree_note() { # tree_note <world> <what disagreed>
   printf '         world "%s": %s\n' "$1" "$2" >&2
   tree_bad=$((tree_bad + 1))
 }
-TREE_STAMP=".sdd/logs/mutation-stamp"
-tree_stamped() { [ -f "$1/$TREE_STAMP" ]; }
+tree_stamped() { fixture_stamped "$1"; }
 
 # The INSTALLED kit: a second checkout, outside the fixture, whose bin/sdd is the one on the PATH.
 # It carries a catalogue and a stub suite of its own, so that a `sdd health` which measures THIS
@@ -3676,7 +3883,7 @@ chmod +x "$TREE_KIT/tests/run-all.sh"
 chmod +x "$TREE_KIT/tests/check-mutation.sh"
 # A git checkout, committed: the key is the TRACKED content of the five paths, and a root that is
 # not a git checkout gets no key at all (ADR 0014, increment I4) — an installed kit that is a plain
-# copy is never stamped. .sdd/ stays out of the commit; the stamp lands there.
+# copy is never stamped. .sdd/ stays out of the commit; the stamp lands in its .git/ (ADR 0021).
 printf '.sdd/\n' > "$TREE_KIT/.gitignore"
 ( cd "$TREE_KIT" && git init -q -b main && git config user.email "fixture@example.com" \
     && git config user.name "Fixture" && git add -A && git commit -qm "chore: the installed kit" ) >/dev/null
@@ -3695,7 +3902,7 @@ mkdir -p "$TREE_PLAIN"
 tree_health() { # tree_health <cwd>
   # One call, one world — counted here for the reason the note on i3_worlds gives.
   tree_worlds=$((tree_worlds + 1))
-  rm -f "$FIX/$TREE_STAMP" "$TREE_KIT/$TREE_STAMP" "$TREE_PLAIN/$TREE_STAMP"
+  fixture_unstamp "$FIX"; fixture_unstamp "$TREE_KIT"; fixture_unstamp "$TREE_PLAIN"
   ( cd "$1" && HOME="$i4_home" NO_COLOR=1 "$TREE_KIT/bin/sdd" health >/dev/null 2>&1 ) || true
 }
 
@@ -3745,9 +3952,9 @@ tree_stamped "$TREE_KIT" \
 #    rc half is check-health.sh's `stamp:` assertion, over a fixture that is otherwise healthy.
 TREE_COPY="$SDD_STATE_FIX/kit-copy"
 cp -r "$TREE_KIT" "$TREE_COPY"
-rm -rf "${TREE_COPY:?}/.git" "${TREE_COPY:?}/.sdd/logs/mutation-stamp"
+rm -rf "${TREE_COPY:?}/.git"
 copy_out="$( cd "$TREE_PLAIN" && HOME="$i4_home" NO_COLOR=1 "$TREE_COPY/bin/sdd" health 2>&1 )" || true
-copy_stamp=absent; [ -f "$TREE_COPY/$TREE_STAMP" ] && copy_stamp=written
+copy_stamp=absent; [ -n "$(find "$TREE_COPY" \( -name sdd-mutation -o -name mutation-stamp \) -print 2>/dev/null)" ] && copy_stamp=written
 assert_eq "sdd health over a plain-copy kit install warns, stamps nothing, and counts no failure for it" \
   "absent|1|0" \
   "$copy_stamp|$(grep -c 'is not a git checkout — no gate can demand a mutation stamp here; none written' <<< "$copy_out")|$(grep -c 'nothing was stamped' <<< "$copy_out")"
@@ -3764,7 +3971,8 @@ fi
 # `${FIX:?}` and not `$FIX`: with the fixture variable empty this line is `rm -rf /bin /tests` on
 # the machine of whoever ran the suite. The same family check-health.sh records in its own header,
 # where an unguarded `rm -rf` reached `/kit` for real.
-rm -rf "${FIX:?}/bin" "${FIX:?}/tests" "${FIX:?}/templates" "${FIX:?}/config" "${FIX:?}/.stub/gh" "${MDIR:?}/50-pr.md" "${FIX:?}/.sdd/logs/mutation-stamp"
+fixture_unstamp "$FIX"
+rm -rf "${FIX:?}/bin" "${FIX:?}/tests" "${FIX:?}/templates" "${FIX:?}/config" "${FIX:?}/.stub/gh" "${MDIR:?}/50-pr.md"
 git add -A && git commit -qm "chore: drop the stamp fixture" >/dev/null
 assert_phase "with the stamp fixture gone the mission is back at PR" "PR"
 assert_why   "and back to the reason it had before" "PR" "50-pr.md"

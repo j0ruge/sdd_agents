@@ -5,7 +5,8 @@
 - **Amends**: 0015 (§3: the declared fail-open closes — the checkpoint left by the base commit that
   added the report must be a blob the mission's branch already had)
 - **Amended by**: 0017 (§2: the kit's own judge runs in a linked worktree; the runner refuses the
-  shared checkout)
+  shared checkout); 0021 (Consequences: the killer map and the stamp live in the git common
+  directory, so the worktree no longer needs the map copied in or brought back)
 
 ## Context
 
@@ -120,4 +121,7 @@ record does not decide it.
 - The worktree costs one step per kit mission: `.sdd/cache/` is ignored, so the first `sdd health`
   there runs without the killer map (about 2× slower) unless `mutation-killers.tsv` is copied from
   the main checkout. `.sdd/logs/` is per worktree too, so the stamp the health writes lives there.
+  *(Amended by 0021: the map and the stamp live in `<git-common-dir>/sdd-mutation/`, which the
+  worktree shares with the main checkout, so nothing is copied in and nothing is brought back; the
+  worktree's own `.sdd/cache/` map, when there is one, is read only as a seed.)*
 - The anatomy rule §6 says the kit mission runs in a worktree, and keeps saying the loop does not.

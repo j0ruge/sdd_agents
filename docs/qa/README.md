@@ -68,7 +68,8 @@ There is no dev server to start. Every journey begins at a shell prompt:
 
 ```bash
 ./bin/sdd help                     # verb list
-./bin/sdd health                   # kit sensor — runs the mutation catalogue, ~20-50 min
+./bin/sdd health                   # kit sensor — the mutation catalogue, skipped over a key already measured green
+./bin/sdd health --full            # ...the catalogue even over a key already measured (hours)
 ./bin/sdd status <mission>         # where a mission stands, gate by gate
 ./bin/sdd phase <mission>          # the current phase only (for scripts)
 ./bin/sdd why <mission> [PHASE]    # why that phase's gate did not pass
@@ -80,12 +81,16 @@ tests/run-all.sh --with-mutation   # the opt-in mutation catalogue
 
 Two things to know before walking anything:
 
-1. **`sdd health` takes 20 to 50 minutes** and it is the only place the mutation catalogue runs.
-   A charter that includes it needs the 90-minute box, or it must start the run and walk something
-   else while it goes.
-2. **The mutation stamp is content-keyed** on `bin/ tests/ templates/ config/`. Any commit touching
-   those four invalidates it and `gate_PR` starts refusing again. `CLAUDE.md`, `docs/` and `TODO.md`
-   do not. Practical rule: run `sdd health` *after* the last code commit of a mission.
+1. **`sdd health` is the only place the mutation catalogue runs, and the catalogue takes hours**
+   (10 h 58 min for 775 mutants with no killer map, PR #327). Over content whose key is already
+   measured green it skips the catalogue and costs the fast suite (ADR 0021). A charter that needs
+   the catalogue itself cannot fit a box: start `./bin/sdd health --full` and walk something else
+   while it goes, or drive the verdict with a forged stamp in a fixture.
+2. **The mutation stamp is content-keyed** on the tracked `bin/ tests/ templates/ config/ agents/`,
+   minus the ratchet, and lives in `<git-common-dir>/sdd-mutation/stamps/`, shared by every worktree
+   of the clone. Any commit touching those five invalidates it and `gate_PR` starts refusing again.
+   `CLAUDE.md`, `docs/` and `TODO.md` do not. Practical rule: run `sdd health` *after* the last code
+   commit of a mission.
 
 ## Evidence policy
 

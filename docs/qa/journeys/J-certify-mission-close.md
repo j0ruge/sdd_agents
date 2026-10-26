@@ -2,7 +2,9 @@
 
 The mission this cycle covers exists to make this journey stop lying. Before it, `gate_PR` opened
 on the memory that somebody had once run the mutation catalogue; after it, `gate_PR` demands a
-stamp on disk keyed to the content it is about to ship.
+stamp on disk keyed to the content it is about to ship. Since `20261026-health-pula-catalogo` (ADR
+0021) that stamp is one file per key measured green in `<git-common-dir>/sdd-mutation/stamps/`, which
+the mission's worktree shares with the main checkout.
 
 ```mermaid
 flowchart TD
@@ -12,20 +14,20 @@ flowchart TD
     Z1 --> C
     C -->|yes| D{scope: does tests/check-mutation.sh exist here?}
     D -->|no — target repo| P1[Skip the stamp requirement entirely] --> H
-    D -->|yes — the kit| E[key = md5 of bin/ tests/ templates/ config/]
-    E --> F{stamp file == key?}
-    F -->|no stamp, or stale| G1["Refuse: no green mutation catalogue for this content — run sdd health"]
-    G1 --> G2[Operator runs ./bin/sdd health — 20 to 50 min]
+    D -->|yes — the kit| E[key = md5 of the tracked bin/ tests/ templates/ config/ agents/, minus the ratchet]
+    E --> F{"is the key in git-common-dir/sdd-mutation/stamps? (mutation_stamp_valid)"}
+    F -->|no| G1["Refuse: no green mutation catalogue for this content — run sdd health"]
+    G1 --> G2[Operator runs ./bin/sdd health in the mission's worktree — the catalogue, hours]
     G2 --> G3{catalogue green AND tree did not move during the run?}
-    G3 -->|no| G4[Nothing stamped; operator told which half failed] --> G2
-    G3 -->|yes| G5[Side effect: stamp written to .sdd/logs/mutation-stamp]
+    G3 -->|no| G4[Nothing stamped; a catalogue verdict against the key removes it; operator told which half failed] --> G2
+    G3 -->|yes| G5[Side effect: key written to git-common-dir/sdd-mutation/stamps/key, shared by every worktree of the clone]
     G5 --> F
     F -->|yes| H[gate_PR passes]
     H --> I[Side effect: branch pushed, PR opened with each phase's evidence]
-    I --> J[True end: PR is open, and the stamp on disk still matches the content the PR carries — a reviewer can re-derive the key and agree]
+    I --> J[True end: PR is open, and the key of the content the PR carries is in the stamps — a reviewer can re-derive it and agree, and git worktree remove takes nothing away]
 
     G1 -.->|operator concludes the gate is broken| X1[Abandon-A: runs the fast suite, sees green, edits the gate out instead of running health]
-    G2 -.->|20-50 min exceeds a headless turn| X2[Abandon-B: session ends its turn waiting; the phase dies with no stamp and no handoff]
+    G2 -.->|the catalogue's hours exceed a headless turn| X2[Abandon-B: session ends its turn waiting; the phase dies with no stamp and no handoff]
     G5 -.->|next commit touches tests/| X3[Abandon-C: stamp invalidated by the very commit that closed the QA fix; operator loops]
 ```
 
@@ -42,7 +44,7 @@ journey:
       origin: direct
   actions:
     - step: 1
-      verb: Finish the last commit that touches bin/, tests/, templates/ or config/
+      verb: Finish the last commit that touches bin/, tests/, templates/, config/ or agents/
       expected_observable: Working tree clean; sdd status shows every increment done
     - step: 2
       verb: Drive the mission toward the PR phase
@@ -57,12 +59,15 @@ journey:
       verb: Re-run the mission
       expected_observable: gate_PR passes without asking for the stamp again
   goal:
-    observable: gate_PR passes because a stamp on disk equals the content key of the tree being shipped
-    side_effects: [stamp-file-written, branch-pushed, pr-opened]
+    observable: gate_PR passes because the content key of the tree being shipped is in the set of keys measured green
+    side_effects: [key-file-written, branch-pushed, pr-opened]
   true_end_state: >
-    The PR is open, and an independent reader can recompute the md5 of bin/ tests/ templates/
-    config/ in the pushed tree and get the same value sitting in .sdd/logs/mutation-stamp. The
-    green is re-derivable, not reported.
+    The PR is open, and an independent reader can recompute the key of the pushed tree — the
+    recipe of docs/failure-modes.md, over the tracked bin/ tests/ templates/ config/ agents/ minus
+    tests/health-baseline.txt — and find a file of that name in
+    <git-common-dir>/sdd-mutation/stamps/, whose first line is the key. The worktree that stamped
+    it may already be gone, and the main checkout of the same clone reads the same file. The green
+    is re-derivable, not reported.
   exit:
     natural: The operator lands on the PR URL; the mission's next act is a human merge.
   abandonment:
@@ -70,12 +75,12 @@ journey:
       how: The operator reads the refusal, runs the fast suite instead, sees green, and concludes the gate is lying.
       resume: "None — this is the failure mode the sentence's 'since 4c86712 TEST_CMD does not run the catalogue' clause exists to prevent. Verify the clause is still in the message."
     - at_step: 4
-      how: A headless session ends its turn waiting for a 20-50 minute command, which ends the session.
-      resume: The next session re-derives the phase from disk, finds no stamp, and starts the same 20-50 minutes again.
+      how: A headless session ends its turn waiting for a catalogue of hours, which ends the session.
+      resume: The next session re-derives the phase from disk, finds no stamp, and starts the same catalogue again. Since ADR 0015 §1 no session runs it — the operator does, once, after the review bots.
     - at_step: 5
       how: A QA fix increment or a review fix lands after the stamp, touching tests/, invalidating it.
-      resume: Run health again — but nothing warns the operator in advance that the commit they are about to make costs 20-50 minutes.
-  crosses: [gate_PR, cmd_health, mutation_stamp_key, tests/check-mutation.sh, the QA-EXEC fix loop]
+      resume: Run health again — but nothing warns the operator in advance that the commit they are about to make costs a catalogue run.
+  crosses: [gate_PR, cmd_health, mutation_stamp_key, mutation_stamp_valid, git-common-dir/sdd-mutation/stamps, tests/check-mutation.sh, the QA-EXEC fix loop]
 ```
 
 ## Notes

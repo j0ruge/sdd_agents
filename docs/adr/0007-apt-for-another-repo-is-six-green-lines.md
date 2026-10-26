@@ -1,6 +1,6 @@
 # 0007 — "Apt for another repo of the organisation" is six green lines, and a real mission in a second repo is one of them
 
-Date: 2026-09-03 · Status: accepted
+Date: 2026-09-03 · Status: accepted · Amended by: 0021 (line 6 claims only what a stamped key proves)
 
 ## Context
 
@@ -25,9 +25,13 @@ third-party skill the pipeline boots lives in the author's `~/.claude`; every he
 | 3 | the last target mission saw only what its hats declare | `mcp_seen == 0` and `tools_leaked == 0` on every session row of that mission | the runner | mission 1 (the hat's boundary) |
 | 4 | an end-to-end mission in the second repo | a `PR` phase row in ≥ 2 non-kit repos | the human + the pipeline | mission 3 |
 | 5 | a LICENSE, and no client identifier on the surface | `LICENSE` exists; `RELEASE_FORBIDDEN_WORDS` finds nothing under `bin agents docs/adr docs/pipeline.md docs/failure-modes.md README.md config templates tests` | the kit | mission 3 |
-| 6 | suite, ratchet and mutation catalogue green for this content | the mutation stamp matches the tree | `sdd health` | already |
+| 6 | the mutation catalogue measured this content green, over a suite green in that same run | this content's key is among the keys measured green in `<git-common-dir>/sdd-mutation/stamps/` (ADR 0021) | `sdd health` | already |
 
-The command never runs the suite: line 6 reads the stamp, which is the suite's own artifact. It
+The command never runs the suite: line 6 reads the stamp, which is the suite's own artifact. Since
+ADR 0021 it claims only what a stamped key proves: the catalogue run that wrote the key, and the
+suite of that same run. It does not claim the suite of now, since a red fast suite over a stamped key
+leaves the key in place (ADR 0021 §4). Nor does it claim the backlog ratchet, which `sdd health`
+reads only after the stamp is written. It
 is opt-in (`--release`), exits 1 while any line is red, and was born with four red lines on
 purpose — a "ready" that cannot fail is a label.
 

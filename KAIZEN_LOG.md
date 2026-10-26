@@ -4,6 +4,59 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-26 — O `sdd health` pula o catálogo com a chave já medida
+
+**Missão:** `20261026-health-pula-catalogo` (ADR 0021), que fecha dois achados do `TODO.md`: o de
+prioridade (`RESOLVED by 6dbd63c` e `11fe1fe`) e o do mapa no checkout (`RESOLVED by 4ae37c9` e
+`3e728d6`). O carimbo vira um conjunto de chaves medidas verdes, um arquivo por chave em
+`<git-common-dir>/sdd-mutation/stamps/`, e o mapa dos matadores passa a morar em
+`<git-common-dir>/sdd-mutation/killers.tsv`. O checkout principal e toda worktree ligada do clone leem e
+gravam esse lugar. O `sdd health` pula o catálogo quando a chave do conteúdo já está no conjunto, e o
+`--full` força. Executada de forma interativa numa worktree ligada: cinco incrementos, o ciclo de QA 1
+(F1, F2) e o R1 da REVIEW r1.
+
+**Antes** (`00-missao.md` § Problema, medido em 2026-10-25):
+- o `sdd health` rodava os 775 mutantes sempre: **10 h 58 min**, 775 de 775 pegos, sem mapa, para o
+  PR #327, cujo diff era só `TODO.md` e catraca, os dois fora da chave. 34 de 40 commits de primeiro pai
+  da `main` não movem a chave;
+- dos 10 checkouts do kit na máquina, só o principal tinha carimbo, e velho (`b04da602` contra
+  `05dc39fc`), e só ele tinha o mapa;
+- a volta do mapa e do carimbo ao checkout principal era passo **manual**, escrito no
+  `docs/failure-modes.md` e repetido ao humano pelo `/sdd-plan` (`commands/sdd-plan.md:49–54` no
+  `c114e36`);
+- asserções `skip:` no `check-health.sh`: **0**; `stamp: gate_PR reads the key a linked worktree
+  stamped…` no `check-gates.sh`: **0**; `killers:` no `--anchors`: **0**.
+
+**Depois** (suíte do relay no `093a02b`: `tests/run-all.sh` rc 0, 539 s, 2059 `ok`, 0 `FAIL`,
+`anchors: all 792 mutants still apply`):
+- com a chave no conjunto, o `sdd health` chama a suíte **sem** `--with-mutation` e diz
+  `catalogue skipped … ./bin/sdd health --full measures it again`. As asserções `skip:` vão de **0 a
+  5**, e uma delas é a worktree ligada que pula sobre a chave que o checkout principal mediu;
+- o lugar compartilhado: `stamp: gate_PR reads the key a linked worktree stamped, and the old
+  .sdd/logs/mutation-stamp alone opens nothing` (**0 → 1**) e `killers: the map lives in the git common
+  dir a linked worktree shares…` (**0 → 1**);
+- a volta manual vira **nenhuma**: o `/sdd-plan` manda não copiar nada para a worktree e não pede nada
+  de volta (`20ea32e`). A probe `command: /sdd-plan says the killer map and the stamp outlive git
+  worktree remove` segura a frase e a ausência das duas ordens velhas, e o verbete do
+  `docs/failure-modes.md` perdeu a receita da união e da cópia (`3684fdd`);
+- o catálogo vai de 775 a 792 mutantes. A catraca `todo-findings` é a da `main` (62, depois do #329), e
+  a missão não acrescentou item.
+
+**O que fica para medir** (pendente, não medido): a M3. O primeiro `./bin/sdd health` no checkout
+principal depois do merge tem de imprimir a linha do pulo e terminar em **≤ 20 min**, contra as
+10 h 58 do #327. A suíte rápida, que é o que o pulo custa, deu 672 s com a máquina ociosa e 539 s no
+`093a02b`. Antes da M3 vem o carimbo do operador, depois dos bots, que paga o catálogo desta branch com o
+mapa de 775 linhas da worktree como semente. Se outro PR mover a chave entre o carimbo e o merge, a M3
+se mede no merge seguinte que não a mova.
+
+**Limites declarados** (ADR 0021, Consequences): a chave só cobre conteúdo, então troca de máquina ou de
+ferramenta passa sem ser vista, e o remédio é o `--full`; o conjunto nunca é podado; dois catálogos no
+mesmo instante podem perder uma linha do mapa; outro clone mede de novo; a semente traz de volta, com a
+linha velha, um slug que a gravação tirou (tempo, nunca veredito); e até o primeiro catálogo depois da
+branch não há mapa compartilhado.
+
+---
+
 ## 2026-10-21 — A sessão lê o que o boot manda ler
 
 **Missão:** `20261020-a-sessao-le-o-que-o-boot-manda` (F9, ADR 0019), o plano que o veredito de

@@ -89,6 +89,7 @@ sdd close <mission>          # post-merge: close the JIRA issue (a real paid ses
 sdd note-manual <mission> <PHASE>  # record a phase done BY HAND: an intervention note in the checkpoint
                              #   and a `manual` row in the ledger, which grades nothing (PLAN is refused)
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
+sdd health --full            # ...and the mutation catalogue even over content already measured green
 sdd autonomy                 # what the sessions did per kit version (advanced · churned · idle, waste), for THIS repo,
                              #   from the global ledger (~/.sdd/autonomy-log.jsonl)
 sdd autonomy --all-repos     # ...for EVERY repo on this machine (the cross-project question; never the default)
@@ -170,16 +171,25 @@ that stopped being a finding. It spends no paid session and does not need `.sdd/
 
 **In the kit repo it is also a gate, not only a report.** Since the catalogue became opt-in it had
 no automatic owner, and the base branch once carried a live survivor for days because nobody typed
-the command. So a green run now **stamps** `.sdd/logs/mutation-stamp` with the tracked content of
-`bin/ tests/ templates/ config/ agents/` (minus the backlog ratchet), and the `PR` gate refuses while no
-stamp matches that content:
+the command. So a green catalogue now **stamps** the tracked content of
+`bin/ tests/ templates/ config/ agents/` (minus the backlog ratchet): its key joins a set of keys
+measured green, one file per key under `<git-common-dir>/sdd-mutation/stamps/`, which the main
+checkout and every linked worktree of the clone share, so `git worktree remove` takes nothing with
+it. The `PR` gate refuses while this content's key is not in the set:
 `no green mutation catalogue for this content — run 'sdd health'`. The gate never runs the
 catalogue itself — asking a gate to hold the tree for twenty minutes is what made a phase
 unsatisfiable once. The requirement exists only where `tests/check-mutation.sh` does, so a target
 repo sees none of it. Run it **after the last code commit**: editing docs or registering a finding
 (`TODO.md` + `tests/health-baseline.txt`) does not invalidate the stamp, editing tracked files under
-`bin/ tests/ templates/ config/ agents/` does ([ADR 0014](docs/adr/0014-a-identidade-do-kit-e-o-que-ele-executa.md)). Design and discarded alternatives in
-[ADR 0004](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md); the way out of a refusal in
+`bin/ tests/ templates/ config/ agents/` does ([ADR 0014](docs/adr/0014-a-identidade-do-kit-e-o-que-ele-executa.md)).
+Over content whose key is already in the set, `sdd health` **skips the catalogue**: it runs the fast
+suite, the ratchet and every static check, and its `catalogue skipped` line names
+`./bin/sdd health --full`, which measures the catalogue again (`--with-mutation` stays a synonym of
+the default, and `--full` beside `--release` is refused). Only the catalogue's own verdict — a census
+that disagrees, a gap, a survivor, a TIMED-OUT mutant — takes a key away; a red fast suite fails the
+health and leaves the key alone. Design and discarded alternatives in
+[ADR 0004](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md) and, for the place and the skip,
+[ADR 0021](docs/adr/0021-the-stamp-lives-in-the-common-dir.md); the way out of a refusal in
 [`docs/failure-modes.md`](docs/failure-modes.md).
 
 Every one of those checks **says its verdict out loud and the run carries on** — including the one

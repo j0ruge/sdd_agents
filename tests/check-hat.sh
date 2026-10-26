@@ -575,21 +575,27 @@ command_worktree_probes() {
   fi
 }
 
-# The same step tells the human what comes back BEFORE the worktree goes (retro of batch 5; Codex on
-# PR #242): `.sdd/cache/` and `.sdd/logs/` are ignored and per worktree, so `git worktree remove`
-# deletes the killer map the mission's health taught and the stamp it wrote — 676 mutants against
-# 619 in the main checkout, measured. The map always returns; the stamp only when line 6 of
-# `./bin/sdd health --release` is red, or a valid stamp of the main checkout is overwritten. Its own
-# probe, so a red names this sentence and not the creation step's.
+# The same step says that nothing of the catalogue comes back BEFORE the worktree goes. Until
+# 20261026-health-pula-catalogo it said the opposite (retro of batch 5; Codex on PR #242):
+# `.sdd/cache/` and `.sdd/logs/` are ignored and per worktree, so `git worktree remove` deleted the
+# killer map the mission's health taught and the stamp it wrote — 676 mutants against 619 in the
+# main checkout, measured — and the human brought the map back, and the stamp when line 6 of
+# `./bin/sdd health --release` was red. ADR 0021 moved both to `<git-common-dir>/sdd-mutation/`,
+# which a linked worktree shares with the main checkout: the removal keeps them, and no copy goes
+# in either. So the presence is read in the step, like the neighbour above, and the absence of the
+# two old orders in the whole command: an order to bring them back, anywhere in it, sends the human
+# after a file that is already there. Its own probe, so a red names this sentence and not the
+# creation step's.
 command_worktree_return_probes() {
   local cmd="$ROOT/commands/sdd-plan.md" sec
   sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
-  if grep -qF 'before `git worktree remove`, its killer map comes back to this checkout' <<< "$sec" \
-     && grep -qF 'its stamp too when line 6 of `./bin/sdd health --release` here is red' <<< "$sec" \
-     && grep -qF '`docs/failure-modes.md`' <<< "$sec"; then
-    pass "command: /sdd-plan tells the human the killer map, and the stamp when line 6 is red, come back before the worktree is removed"
+  if grep -qF 'outlive `git worktree remove`' <<< "$sec" \
+     && grep -qF '`<git-common-dir>/sdd-mutation/`' <<< "$sec" \
+     && ! grep -qF 'its killer map comes back to this checkout' "$cmd" \
+     && ! grep -qF 'its stamp too when line 6' "$cmd"; then
+    pass "command: /sdd-plan says the killer map and the stamp outlive git worktree remove"
   else
-    fail "command: /sdd-plan no longer tells the human what comes back before the worktree is removed (the killer map always, the stamp when line 6 of health --release is red, the failure-modes pointer)"
+    fail "command: /sdd-plan no longer says the killer map and the stamp outlive git worktree remove in <git-common-dir>/sdd-mutation/, or still orders the map (or the stamp, when line 6 is red) back to the main checkout"
   fi
 }
 
@@ -755,6 +761,37 @@ census_probes() {
 # = red. They never run the suite — line 6 reads the mutation stamp, the suite's own artifact.
 rel_green() { grep -cE "ok[^ ]*[[:space:]]+line $2 ·" <<< "$1"; }   # rel_green <out> <n>
 rel_red()   { grep -E "line $2 ·" <<< "$1" | grep -vcE "ok[^ ]*[[:space:]]+line $2 ·"; }
+# The place line 6 reads the key from, <git common dir>/sdd-mutation/stamps (ADR 0021), spelled
+# HERE and never sourced or copied from bin/sdd (git_common_dir_abs): a writer that moves the place
+# is then contradicted by the green half of the line-6 probe instead of followed by it. Prints that
+# place for <repo>, absolute, or NOTHING and rc 1.
+#
+# ⚠️ The one-shot `--path-format=absolute` is the fast path, not the only one (CodeRabbit Minor,
+# outside the diff, on d426c68 of PR #330). A git older than 2.31, where the flag was born (Ubuntu
+# 20.04 ships 2.25), echoes it back and exits 0, so its answer is two lines, the flag and a common
+# dir still relative. The first spelling took that answer whole: mkdir read it as an option, no key
+# was stored, and the green half went red on a git the writer serves right. It also read a git that
+# FAILS as an empty answer, so the place became `/sdd-mutation/stamps` and the probe would write at
+# the root. That answer is now resolved the old way, from git's plain answer, which is relative to
+# where git ran: cd into <repo>, then into the answer (`.git` at a root, `../.git` in a
+# subdirectory), then `pwd -P`, both cds with an emptied CDPATH. Refused there, with rc 1 and
+# nothing printed: a git that fails, an empty answer (`cd ""` stays put, and the working tree would
+# pass for the place), a cd that cannot land, and a path that spans two lines, which on that git
+# cannot be told from a leak. On a refusal the caller fails line 6 by its own message and stores
+# nothing. release_stamps_probes, after release_probes, holds the agreement, each refusal and that
+# guard.
+release_stamps() { # release_stamps <repo>
+  local common
+  common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  case "$common" in
+    /*) ;;
+    *)  common="$(git -C "$1" rev-parse --git-common-dir 2>/dev/null)" || return 1
+        [ -n "$common" ] || return 1
+        common="$(CDPATH='' cd "$1" && CDPATH='' cd "$common" && pwd -P)" || return 1
+        case "$common" in *$'\n'*) return 1 ;; esac ;;
+  esac
+  printf '%s/sdd-mutation/stamps\n' "$common"
+}
 release_probes() {
   local box ledger out rc
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-release-XXXXXX")"
@@ -776,8 +813,9 @@ release_probes() {
   if [ "$(rel_red "$out" 1)" = 1 ] && grep -qE 'line 1 ·.*0 of 2' <<< "$out"; then pass "release: line 1 red — 0 of 2 target repos in an empty ledger"; else fail "release: line 1 should be red with '0 of 2'"; fi
   if [ "$(rel_red "$out" 3)" = 1 ]; then pass "release: line 3 red with no target mission"; else fail "release: line 3 should be red on an empty ledger"; fi
   if [ "$(rel_red "$out" 5)" = 1 ] && grep -qE 'line 5 ·.*LICENSE' <<< "$out"; then pass "release: line 5 red and wants a LICENSE"; else fail "release: line 5 should name LICENSE"; fi
-  # `sdd health --with-mutation` is a habit written in ten handoffs; the catalogue always runs, so
-  # the flag is accepted as a synonym and never refused as an unknown option.
+  # `sdd health --with-mutation` is a habit written in sixteen handoffs and in CLAUDE.md (ADR 0021);
+  # the flag is a synonym of the default (the catalogue, skipped over a key already measured), so it
+  # is accepted and never refused as an unknown option.
   out="$( cd "$box" && SDD_STATE_DIR="$box/state" "$box/bin/sdd" health --with-mutation --release 2>&1 )" || true
   if ! grep -q 'unknown option' <<< "$out" && grep -qE 'line 1 ·' <<< "$out"; then pass "health: --with-mutation is accepted as a synonym, not refused"
   else fail "health: --with-mutation should be accepted — got: $(head -2 <<< "$out" | tr '\n' '|' | cut -c1-160)"; fi
@@ -798,7 +836,100 @@ EOF
   printf 'the client %s\n' "$forb" >> "$box/README.md"
   out="$(release)"
   if [ "$(rel_red "$out" 5)" = 1 ] && grep -qF "$forb" <<< "$(grep 'line 5 ·' <<< "$out")"; then pass "release: line 5 names the forbidden word it found"; else fail "release: line 5 should name the word — $(grep 'line 5' <<< "$out")"; fi
+  # Line 6 asks the git common directory whether THIS content's key was measured green (ADR 0021):
+  # red while only the old .sdd/logs/mutation-stamp carries the right key, because nobody reads that
+  # file any more; green once the key is stored where every worktree of the clone reads it. The key
+  # is the recipe of docs/failure-modes.md, and a recipe that drifted from bin/sdd leaves the green
+  # half red — this probe cannot pass by storing the wrong key.
+  local rkey rstamps red6 green6
+  rkey="$( CDPATH='' cd "$box" && git ls-files -z -c -- bin tests templates config agents ':(exclude)tests/health-baseline.txt' \
+           | LC_ALL=C sort -zu | xargs -0 -r md5sum | md5sum | cut -d' ' -f1 )"
+  mkdir -p "$box/.sdd/logs"; printf '%s\n' "$rkey" > "$box/.sdd/logs/mutation-stamp"
+  red6="$(rel_red "$(release)" 6)"
+  rstamps="$(release_stamps "$box")" || { fail "release: line 6 has no place to store the key — git named no absolute common dir for the box, so no key was stored and line 6 went unmeasured"; return; }
+  mkdir -p "$rstamps"; printf '%s\n' "$rkey" > "$rstamps/$rkey"
+  green6="$(rel_green "$(release)" 6)"
+  if [ "$red6|$green6" = "1|1" ]; then pass "release: line 6 reads the key from the git common dir — red before the key is stored, green after"
+  else fail "release: line 6 reads the key from the git common dir — red before the key is stored, green after (expected red 1 and green 1, got red $red6 and green $green6)"; fi
   rm -rf "$box"
+}
+
+# The old-git path of release_stamps, measured and not trusted (CodeRabbit Minor on PR #330). The
+# line-6 probe runs on the suite's own git, so on a 2.31 or later a broken fallback stays green there
+# and comes back only on the gits it exists for. A shim stands in for such a git, in the form of the
+# pre-2.31 pair in tests/check-autonomy.sh and of i4_oldgit in tests/check-gates.sh: rev-parse
+# echoes any --path-format=* back and hands the rest to the git it found, and HAT_OLDGIT_PLAIN makes
+# the PLAIN rev-parse answer nothing (mute), fail with an answer on stdout (fail), or name a
+# directory that is not there (gone). Every call runs from `/`, so a relative answer resolves only
+# through the cd into <repo>.
+#
+# rel_old prints <rc>:<plain questions the shim heard>:<answer>. The middle field is INTERCEPTION:
+# a 1 says the call got past the flagged question and reached the fallback, so no refusal can be
+# the first `|| return 1` answering for a fallback that never ran; outside any repo (`nogit`) it
+# must be 0, that first refusal answering. `armed` is the FLOOR: the shim answers the flagged
+# question in two lines, the flag first, or a modern git answering for it would leave every other
+# term measuring nothing. `same` and `sub` are the AGREEMENT with the suite's git, at the root of a
+# repo and two levels down (`../../.git`). `nl` is a repo whose path holds a newline: it, `mute`,
+# `fail` and `gone` must name no place. `guard` runs release_probes again with release_stamps
+# refusing, outside the mutant because it calls fail() on purpose: line 6 must fail by its own
+# message, and neither the store nor the green half may run.
+release_stamps_probes() {
+  local d shim new o t s u l m f g n v
+  d="$(mktemp -d "${TMPDIR:-/tmp}/sdd-relstamps-XXXXXX")"
+  PROBE_BOXES+=("$d")
+  shim="$d/oldgit"; mkdir -p "$shim" "$d/drv" "$d/nogit"
+  { printf '#!/usr/bin/env bash\nreal=%q\n' "$(command -v git)"
+    cat <<'SHIM'
+is_rp=0; for a in "$@"; do [ "$a" = rev-parse ] && is_rp=1; done
+if [ "$is_rp" = 1 ]; then
+  [ -z "${HAT_OLDGIT_TRACE:-}" ] || printf '%s\n' "$*" >> "$HAT_OLDGIT_TRACE"
+  keep=(); echoed=()
+  for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a") ;; *) keep+=("$a") ;; esac; done
+  if [ "${#echoed[@]}" -gt 0 ]; then printf '%s\n' "${echoed[@]}"; exec "$real" "${keep[@]}"; fi
+  case "${HAT_OLDGIT_PLAIN:-}" in
+    mute) exit 0 ;;
+    fail) printf '.git\n'; exit 128 ;;
+    gone) printf '.git-gone\n'; exit 0 ;;
+  esac
+fi
+exec "$real" "$@"
+SHIM
+  } > "$shim/git"
+  chmod +x "$shim/git"
+  git init -q "$d/repo" >/dev/null 2>&1; mkdir -p "$d/repo/a/b"
+  git init -q "$d/nl"$'\n'"repo" >/dev/null 2>&1
+  # stderr is dropped: `gone` makes the cd of the fallback say why it could not land, and that line
+  # is the refusal working, not noise to read in the suite's log.
+  rel_old() { # rel_old <HAT_OLDGIT_PLAIN mode, '' for none> <dir>
+    local out rc
+    : > "$shim/trace"
+    out="$( cd / && PATH="$shim:$PATH" HAT_OLDGIT_PLAIN="$1" HAT_OLDGIT_TRACE="$shim/trace" \
+            release_stamps "$2" 2>/dev/null )"; rc=$?
+    printf '%s:%s:%s' "$rc" "$(grep -c -- 'rev-parse --git-common-dir$' "$shim/trace")" "$out"
+  }
+  o="$( PATH="$shim:$PATH" git -C "$d/repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )"
+  if [ "$(grep -c . <<< "$o")" = 2 ] && [ "$(head -1 <<< "$o")" = --path-format=absolute ]; then t=armed
+  else t="unarmed:$o"; fi
+  new="$( cd / && release_stamps "$d/repo" )"
+  o="$(rel_old '' "$d/repo")";     if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then s=same; else s="split:$o|$new"; fi
+  o="$(rel_old '' "$d/repo/a/b")"; if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then u=sub;  else u="sub:$o|$new"; fi
+  o="$(rel_old '' "$d/nl"$'\n'"repo")"; if [ "$o" = "1:1:" ]; then l=nl; else l="nl:$o"; fi
+  o="$(rel_old mute "$d/repo")";   if [ "$o" = "1:1:" ]; then m=mute; else m="mute:$o"; fi
+  o="$(rel_old fail "$d/repo")";   if [ "$o" = "1:1:" ]; then f=fail; else f="fail:$o"; fi
+  o="$(rel_old gone "$d/repo")";   if [ "$o" = "1:1:" ]; then g=gone; else g="gone:$o"; fi
+  o="$(GIT_CEILING_DIRECTORIES="$d" rel_old '' "$d/nogit")"; if [ "$o" = "1:0:" ]; then n=nogit; else n="nogit:$o"; fi
+  o="$( unset SDD_MUTANT
+        release_stamps() { : > "$d/drv/asked"; return 1; }
+        TMPDIR="$d/drv" release_probes 2>&1 )"
+  if [ -e "$d/drv/asked" ] && [ "$(grep -c '^  FAIL  release: line 6 has no place to store the key' <<< "$o")" = 1 ] \
+     && [ "$(grep -c 'release: line 6 reads the key from the git common dir' <<< "$o")" = 0 ]; then v=guard
+  else v="guard:$(grep -E 'line 6|FAIL|mkdir' <<< "$o" | tr '\n' '|' | cut -c1-240)"; fi
+  if [ "$t $s $u $l $m $f $g $n $v" = "armed same sub nl mute fail gone nogit guard" ]; then
+    pass "release: on a git older than 2.31 the line-6 probe stores the key in the SAME place, and a git that names no place fails line 6 by its own message"
+  else
+    fail "release: on a git older than 2.31 the line-6 probe stores the key in the SAME place, and a git that names no place fails line 6 by its own message (expected 'armed same sub nl mute fail gone nogit guard', got '$t $s $u $l $m $f $g $n $v')"
+  fi
+  rm -rf "$d"
 }
 
 case "${1:-}" in
@@ -828,6 +959,7 @@ command_branch_cwd_probes
 publisher_stamp_probes
 boot_probes
 release_probes
+release_stamps_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2
