@@ -82,11 +82,15 @@
 #   ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in 20261003-lote-3-a-catraca-desce: no rule refuses
 #      the NEXT `sdd health` invocation of a fixture that forgets to pin its `cd`, and the
 #      caller's cwd picks the measured tree (the comment above health_run says why that is
-#      load-bearing). Measured not to fail open today: every invocation pins it — 11 sites by
-#      `grep -n 'sdd" health' tests/*.sh`, this line left out, each inside `( cd "$X" && … )` —
-#      and since #112 a run that wanders into the real catalogue dies at its step deadline
-#      (run-all.sh, step_timeout), red and named; inside a mutant that is rc 124, read as
-#      TIMED-OUT (inconclusive), never as caught.
+#      load-bearing). Measured not to fail open today: every invocation pins it — 13 sites in the
+#      two bash spellings, each inside `( cd "$X" && … )`: `"$X/bin/sdd" health`, 11 lines of
+#      `grep -n 'sdd" health' tests/*.sh` once this comment is left out, and `./bin/sdd health`,
+#      the 2 lines of `grep -n '\./bin/sdd health' tests/*.sh` that run it rather than quote it
+#      (world 14 of check-gates.sh and the linked-worktree `skip:` world of this file; the others
+#      are assertion text and comments). The Python driver of check-coordination.sh is a third
+#      spelling, pinned by `cwd=repo` and left out of the count. And since #112 a run that
+#      wanders into the real catalogue dies at its step deadline (run-all.sh, step_timeout), red
+#      and named; inside a mutant that is rc 124, read as TIMED-OUT (inconclusive), never as caught.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
