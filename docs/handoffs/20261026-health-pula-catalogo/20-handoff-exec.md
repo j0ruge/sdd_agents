@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 4b9c28f8-7152-4e88-aae7-0bf05f85f18c
 data: 2026-10-26 09:20
-gate: `tests/run-all.sh` em `705aa95` (rodada pelo relay) → rc 0, 534 s, 2055 linhas `ok`, 0 `FAIL` (eram 2046 na base `f7f6cc2`); depois dele, `TODO.md`, a pasta da missão e a onda `291d9af`; Checks medidos no HEAD `db5a09a` — I1 → `1` (`check-gates.sh` rc 0, 142 s, 0 FAIL), I2 → `5` (`check-health.sh` rc 0, 48 s), I3 → `1` (`check-mutation.sh --anchors` rc 0, 787 mutantes aplicando), I4 → `1` (`check-hat.sh` rc 0), I5 → `2 0`; `tests/check-checkpoint.sh --check` → `5 row(s), 4 under the anchor rule, none blind`; os cinco incrementos `done`; onda de conserto da revisão final (`291d9af`): `check-health.sh` rc 0 (49 s, 61 ok, 5 `skip:`), `check-gates.sh` rc 0 (148 s, 481 ok, 0 FAIL), `check-hat.sh` rc 0, `check-preflight.sh` rc 0, `check-mutation.sh --anchors` rc 0 (789), `--only HEALTH_skip_writes` e `--only HEALTH_skip_line_unsourced` contra `check-health.sh` → rc 1 antes da asserção e exit 0 depois; `tests/run-all.sh` no `096c625` (o HEAD da onda, rodada pelo relay) → rc 0, 541 s, 2055 `ok`, 0 `FAIL` (`suite-096c625.log`); ciclo de QA 1 (F1 `c0adac8`, F2 `f98846d`): `tests/run-all.sh` no `6233cc2` (F1, rodada pelo relay) → rc 0, 547 s, 2057 `ok`, 0 `FAIL` (`suite-6233cc2.log`); no `f98846d`, `check-health.sh` rc 0 (47 s, 61 ok, I2 → `5`), `check-gates.sh` rc 0 (148 s, 481 ok, 0 FAIL, I1 → `1`), `check-preflight.sh` rc 0 (94 s, 162 ok, F1 → `1`), `check-mutation.sh --anchors` rc 0 (792, I3 → `1`), I4 → `1`, I5 → `2 0`, F2 → `0` (`--only HEALTH_skip_needs_score check-health.sh`: rc 1 antes dos stubs, exit 0 depois), `--only PRE_path_format_kit_note_never check-preflight.sh` → exit 0, `check-checkpoint.sh --check` → `7 row(s), 5 under the anchor rule, none blind`; `tests/run-all.sh` no `8328a7e` (o código do F2, rodada pelo relay) → rc 0, 714 s, 2057 `ok`, 0 `FAIL` (`suite-8328a7e.log`)
+gate: retrato do fecho do EXEC e do ciclo de QA 1, no `fe065d9` (o R1 tem seção própria) — `tests/run-all.sh` em `705aa95` (rodada pelo relay) → rc 0, 534 s, 2055 linhas `ok`, 0 `FAIL` (eram 2046 na base `f7f6cc2`); depois dele, `TODO.md`, a pasta da missão e a onda `291d9af`; Checks medidos no HEAD `db5a09a` — I1 → `1` (`check-gates.sh` rc 0, 142 s, 0 FAIL), I2 → `5` (`check-health.sh` rc 0, 48 s), I3 → `1` (`check-mutation.sh --anchors` rc 0, 787 mutantes aplicando), I4 → `1` (`check-hat.sh` rc 0), I5 → `2 0`; `tests/check-checkpoint.sh --check` → `5 row(s), 4 under the anchor rule, none blind`; os cinco incrementos `done`; onda de conserto da revisão final (`291d9af`): `check-health.sh` rc 0 (49 s, 61 ok, 5 `skip:`), `check-gates.sh` rc 0 (148 s, 481 ok, 0 FAIL), `check-hat.sh` rc 0, `check-preflight.sh` rc 0, `check-mutation.sh --anchors` rc 0 (789), `--only HEALTH_skip_writes` e `--only HEALTH_skip_line_unsourced` contra `check-health.sh` → rc 1 antes da asserção e exit 0 depois; `tests/run-all.sh` no `096c625` (o HEAD da onda, rodada pelo relay) → rc 0, 541 s, 2055 `ok`, 0 `FAIL` (`suite-096c625.log`); ciclo de QA 1 (F1 `c0adac8`, F2 `f98846d`): `tests/run-all.sh` no `6233cc2` (F1, rodada pelo relay) → rc 0, 547 s, 2057 `ok`, 0 `FAIL` (`suite-6233cc2.log`); no `f98846d`, `check-health.sh` rc 0 (47 s, 61 ok, I2 → `5`), `check-gates.sh` rc 0 (148 s, 481 ok, 0 FAIL, I1 → `1`), `check-preflight.sh` rc 0 (94 s, 162 ok, F1 → `1`), `check-mutation.sh --anchors` rc 0 (792, I3 → `1`), I4 → `1`, I5 → `2 0`, F2 → `0` (`--only HEALTH_skip_needs_score check-health.sh`: rc 1 antes dos stubs, exit 0 depois), `--only PRE_path_format_kit_note_never check-preflight.sh` → exit 0, `check-checkpoint.sh --check` → `7 row(s), 5 under the anchor rule, none blind`; `tests/run-all.sh` no `8328a7e` (o código do F2, rodada pelo relay) → rc 0, 714 s, 2057 `ok`, 0 `FAIL` (`suite-8328a7e.log`)
 ---
 
 # Handoff — EXEC — o `sdd health` pula o catálogo com a chave já medida
@@ -14,17 +14,18 @@ gate: `tests/run-all.sh` em `705aa95` (rodada pelo relay) → rc 0, 534 s, 2055 
 
 ## TL;DR
 
-I1–I5 feitos na worktree, com conserto de revisão em I1–I3, a onda da revisão final (`291d9af`) e o ciclo de QA 1.
-O carimbo é um arquivo por chave em `<git-common-dir>/sdd-mutation/stamps/`; o `sdd health` pula o catálogo sobre
-chave já medida, e o `--full` força; o mapa mora em `<git-common-dir>/sdd-mutation/killers.tsv`, semeado pelo `.sdd/cache/`.
+Retrato do fecho do EXEC e do ciclo de QA 1, no `fe065d9`, com a suíte do `8328a7e`; o R1 (`96fd555`) tem seção própria,
+e o que veio depois está no handoff mais novo da pasta (no `a7e3acf`, o `45-docs.md`, e antes dele o `40-review-r2.md`).
+I1–I5 e a onda `291d9af`: o carimbo é um arquivo por chave em `<git-common-dir>/sdd-mutation/stamps/`, e o mapa é o
+`killers.tsv` ao lado, semeado pelo `.sdd/cache/`; o `sdd health` pula o catálogo sobre chave medida, e o `--full` força.
 QA 1: o F1 (`c0adac8`) tira o kit do aviso do git < 2.31 num repo-alvo; o F2 (`f98846d`) mede o pulo sobre a suíte real.
-Próximo: a QA de novo (J-target-repo-ships, J-health-verdict); nunca o `sdd` do PATH nem `./bin/sdd health` na worktree.
 
 ## Ciclo de QA 1 — F1 e F2
 
 A QA (`199105f`, `30-handoff-qa.md`) percorreu três jornadas num clone isolado e devolveu dois achados sanáveis,
-QA-1 → F1 e QA-2 → F2. Os dois estão `done`, cada um com um commit de código e um de checkpoint. As outras seções
-deste handoff contam o estado depois do ciclo: números de linha medidos no `f98846d`, catálogo de 792.
+QA-1 → F1 e QA-2 → F2. Os dois estão `done`, cada um com um commit de código e um de checkpoint. Fora da seção
+*REVIEW r1 — R1*, cujas linhas são do `96fd555`, este handoff conta o fecho do ciclo (`fe065d9`): números de linha
+medidos no `f98846d`, catálogo de 792.
 
 | ID | Commit | O que consertou |
 |---|---|---|
@@ -103,12 +104,12 @@ célula os escreve, deram `1 1 1 1`. O `check-gates.sh` deu rc 0, 149 s, 483 ok 
 e o `check-health.sh` deu rc 0, 52 s, 61 ok. O estado do repo depois do merge `9a7ee1b` segue no `40-review-r1.md`
 § *O estado depois do merge*, e não foi copiado para cá.
 
-| Achado | O que consertou |
+| Achado | O que consertou (linhas do `96fd555`) |
 |---|---|
 | #3 | Uma guarda logo depois do `fixture_stamped` (`tests/check-gates.sh:3274–3288`), antes de qualquer mundo ler um carimbo. Se o `fixture_stamps "$FIX"` não der um caminho absoluto (git < 2.31, que responde relativo, ou `$FIX` fora do git), o sensor cai em `SENSOR-BROKEN: stamp: …`. Se der, imprime o `ok` que o Check lê. Tem a forma do `wt_dirty` do mundo 14 e uma metade `ok`. Sem ela, as metades `absent` dos mundos 8, 8b, 9, 12 e 13 e o `tree_stamped "$TREE_PLAIN"` passavam sem resposta. |
 | #4 | O mundo 7b, logo depois do 7 (`:3515–3527`). O 7 lista o lugar antes da remoção (`:3509–3511`). O 7b pega o único nome que saiu dali, roda `i4_verdict 0 "$I4_SCORE_GREEN"; i4_health --full` e exige que o arquivo dessa chave tenha voltado, com a própria chave na 1ª linha (o que o `mutation_stamp_valid` compara). Lê o artefato, não a fase. A asserção é própria, fora do tally, e não abre sítio novo de `sdd health`. O mundo 8 segue começando pelo `fixture_unstamp`. |
 | #5 | O cabeçalho do bloco (`:3163–3188`) agora conta e lista todos os mundos com asserção própria. Depois do tally são nove: os sete da chave e do lugar, com `A LINKED WORKTREE (14)`, mais o 8b e o 9b. Dentro do tally ficam o 1b, o 4b e o 7b. "three pairs plus one" virou "two pairs, a triple and one", e o "in all eight" da `:3753` virou "every one of them", com o mundo 14. |
-| #6 | O censo (`tests/check-health.sh:82–93`) nomeia as duas grafias e mede `13 sites`: 11 de `"$X/bin/sdd" health` e 2 de `./bin/sdd health` que rodam o comando (`check-gates.sh:3724`, `check-health.sh:1199`). O driver Python do `check-coordination.sh` fica nomeado e fora da conta. Medi de novo depois das edições e deu 13: o R1 não abriu sítio. |
+| #6 | O censo (`tests/check-health.sh:82–93`) nomeia as duas grafias e mede `13 sites`: 11 de `"$X/bin/sdd" health` e 2 de `./bin/sdd health` que rodam o comando (`check-gates.sh:3724`, `check-health.sh:1198`). O driver Python do `check-coordination.sh` fica nomeado e fora da conta. Medi de novo depois das edições e deu 13: o R1 não abriu sítio. |
 
 **Sabotagem.** O diff acrescenta 13 linhas de código. Degradei cada uma, uma por vez, numa cópia da worktree sem
 `.git`: foram 14 sabotagens, e o `esac` só admite erro de sintaxe. Treze deixaram uma probe vermelha. A 14ª tirou o
@@ -129,20 +130,19 @@ ou seja, duas edições, não um sítio só. O mundo de controle "trava" é essa
 `check-mutation.sh` não mudou. Por isso o `--anchors TODO.md` deu `62 measured, 0 off target` sem reancorar nada, e o
 `--audit` da skill deu o mesmo de antes (a `RECURRED 7`, conhecida). A catraca segue em 62.
 
-**Próxima:** a REVIEW r2, que reavalia o R1 sem tê-lo escrito. O boot dela é o do `40-review-r1.md`, e só o
-estado do R1 muda: a tabela de incrementos não tem mais linha `pending`.
-
 ## Estado do repo
+
+Retrato do `fe065d9`, o fecho do ciclo de QA 1; o estado de depois está no handoff mais novo da pasta.
 
 - **Branch:** `fix/health-pula-catalogo`, sem upstream, não empurrada. Até o merge, o `sdd` do PATH não é o desta
   branch: ver *A pendência do operador* (a frase vale para o PR e para tudo que vem antes do merge).
-- **Último commit de conteúdo:** `f98846d` (o F2: os stubs do `check-health.sh` e do `check-gates.sh`, dois mutantes
-  no `check-mutation.sh` e uma âncora do `TODO.md`). Antes dele vieram o `c0adac8` (o F1: `bin/sdd`,
+- **Último commit de conteúdo no retrato:** `f98846d` (o F2: os stubs do `check-health.sh` e do `check-gates.sh`,
+  dois mutantes no `check-mutation.sh` e uma âncora do `TODO.md`). Antes dele vieram o `c0adac8` (o F1: `bin/sdd`,
   `check-preflight.sh`, um mutante e 16 âncoras do `TODO.md`) e o `291d9af` (a onda de conserto da revisão final:
   `bin/sdd`, `check-health.sh`, `check-mutation.sh` e 13 âncoras). Entre eles e depois deles, só commits da pasta da
   missão: `2d5d31a` (este handoff), `096c625` (nota), `199105f` (o handoff da QA e as linhas F1–F2), `6233cc2` e
-  `f72cad4` (checkpoint), `8328a7e` e o commit desta reescrita (este handoff).
-- **Working tree:** limpa antes do commit deste handoff.
+  `f72cad4` (checkpoint), `8328a7e` e o `fe065d9` (a reescrita deste handoff).
+- **Working tree:** limpa antes do `fe065d9`.
 - **Suíte:** `tests/run-all.sh` em `8328a7e` (o código do F2) → rc 0, 714 s, 2057 `ok`, 0 `FAIL`. Por HEAD,
   rodada pelo relay (`/home/pc_admin/.wt/plan-health-pula-catalogo/sdd/suite-<HEAD>.log`):
 
@@ -219,7 +219,7 @@ Os incrementos (a célula Commit, depois o conserto da revisão):
   ``RESOLVED by 4ae37c9 e `3e728d6` `` no do mapa (`TODO.md:508`). O primeiro hash vai nu (o Check do I5 o lê)
   e o segundo com crase (o `MORE_HASH_RE` da skill `todo-to-github-issues` 2.8.2 só lê o segundo assim). Para
   caber, as linhas 505–508 do item do mapa foram refeitas em 4 sem mudar palavra (provado tirando os dois tokens: o
-  texto fica idêntico); o item segue em 8 linhas. A catraca segue 61.
+  texto fica idêntico); o item segue em 8 linhas. A catraca ficou em 61.
 
 A revisão da branch inteira deu "com consertos": nenhum Critical, dois Important e caronas. Uma onda só, fora da
 tabela (nenhuma linha nova no `checkpoint.md`):
@@ -243,7 +243,7 @@ tabela (nenhuma linha nova no `checkpoint.md`):
     suíte de agora, nem a catraca, que o `cmd_health` lê só depois de gravar o carimbo (verificação 3). A frase
     vermelha não repetia a ideia e ficou. Nenhum sensor grepa a frase (a `release_probes` lê só `ok`/vermelho da
     `line 6 ·`), então a carona não recuou e a emenda da ADR 0007 ficou fora da lista da DOCS. A linha 6 da tabela
-    da ADR 0007 (`:28`) ainda descreve o critério com a frase velha.
+    da ADR 0007 (`:28`) ainda descrevia o critério com a frase velha.
   - *Carona 4:* o aviso do `sdd preflight` para git < 2.31 ganhou a frase de que o carimbo (`mutation_stamp_dir`,
     pelo `git_common_dir_abs`) e o mapa (`killers_paths`) usam o mesmo caminho de reserva. O prefixo que o
     `check-preflight.sh:263` e o `mut_PRE_path_format_warn_silent` leem não mudou. Sem escopo, a frase saía também num
@@ -291,13 +291,14 @@ Os commits `chore(checkpoint): …` (`e14a51f`, `0a29c20`, `a70a188`, `1cd00bd`,
 
 ## Boot da próxima fase
 
-Missão do kit: a QA roda **interativa, na worktree**, com todo comando como
+Retrato do boot que o `fe065d9` deu à QA; o boot de depois é o do handoff mais novo da pasta.
+Missão do kit: a QA rodava **interativa, na worktree**, com todo comando como
 `cd /home/pc_admin/repos/sdd_agents-health-pula-catalogo && …`. Nunca rode `sdd run` do checkout principal,
 nem `./bin/sdd status` ou `./bin/sdd run` (eles reavaliam os gates e rodam o `TEST_CMD`). Leia este TL;DR, o
 `00-missao.md` § Decisões do grill e a nota do incremento no `checkpoint-notas.md` quando precisar de um porquê.
 
 **Até o merge, só o `./bin/sdd` da worktree lê `sdd-mutation/`; o `sdd` do PATH é o do checkout principal
-(`c114e36`) e grava o arquivo velho — sempre `./bin/sdd health`, nunca `sdd health`, nesta worktree.** O porquê e o
+e grava o arquivo velho — sempre `./bin/sdd health`, nunca `sdd health`, nesta worktree.** O porquê e o
 custo estão em *A pendência do operador*; vale também para `sdd status`, `sdd why` e `sdd run` do PATH.
 
 **O que é visível ao usuário** (a superfície do operador do kit):
@@ -328,9 +329,9 @@ custo estão em *A pendência do operador*; vale também para `sdd status`, `sdd
    não cita `check-mutation`, `mutation stamp` nem `killer map` (F1, `c0adac8`).
 
 **As jornadas tocadas:** `docs/qa/journeys/J-health-verdict.md` (o fluxo ganha o ramo do pulo e do `--full`; o
-`:24–25` ainda diz "any existing stamp is REMOVED" e `.sdd/logs/mutation-stamp`) e
+`:24–25` ainda dizia "any existing stamp is REMOVED" e `.sdd/logs/mutation-stamp`) e
 `docs/qa/journeys/J-certify-mission-close.md` (`:16` "stamp file == key?", `:21` e `:64` no lugar velho). O texto
-delas fica velho de propósito até a fase DOCS: a QA anda pelo comportamento novo e registra a divergência como
+delas ficava velho de propósito até a fase DOCS: a QA andava pelo comportamento novo e registrava a divergência como
 deriva de doc da DOCS, não como bug do código.
 
 **Como subir o ambiente:** não há app. O ambiente são os sensores e um fixture.
@@ -389,7 +390,7 @@ deriva de doc da DOCS, não como bug do código.
   - o matador velho que volta entra em `distinct_killers` (`check-mutation.sh:7668`, +1 controle);
   - `CATALOGUE-BROKEN`, `missing` e `killer_of` vazio também voltam;
   - o `echo` de `:8215` conta as linhas ressuscitadas;
-  - a ADR 0021:62–63 "(and leaving when they have no killer, as before)" induz à leitura errada.
+  - a ADR 0021:62–63 "(and leaving when they have no killer, as before)" induzia à leitura errada.
 
   O ruling do relay foi o conserto mínimo: o comentário declara a volta, e o código fica. Custa tempo, nunca
   veredito: o sobrevivente novo roda o matador velho primeiro, em vez de ir na frente. As saídas são do dono:
@@ -398,7 +399,7 @@ deriva de doc da DOCS, não como bug do código.
   - declarar e deixar.
 
   O custo, se a escolha estiver errada: os sobreviventes do checkout principal saem ordenados pelo matador velho
-  até alguém apagar a semente. A declaração na *Consequences* da ADR é da DOCS.
+  até alguém apagar a semente. A declaração na *Consequences* da ADR ficou para a DOCS.
 - **A cópia do kit sem `.git` dentro de outro repositório** resolve o `git-common-dir` do **outro** repositório, e
   isso vale para o carimbo (`bin/sdd`) e para o mapa juntos. Ficou fora do escopo por decisão do dono, e não é
   defeito do I3. A pergunta: guardar (exigir que o `--show-toplevel` seja a própria raiz) ou declarar.
@@ -414,10 +415,10 @@ O carimbo da missão, uma vez, depois dos bots (ADR 0015 §1):
 a chave em `/home/pc_admin/repos/sdd_agents/.git/sdd-mutation/stamps/` e lê como semente o mapa de 775 linhas desta
 worktree. O health na worktree tem de imprimir
 `== killer map: 775 mutant(s) run their last killer first, 775 with a recorded time ==`: é a prova do leitor do
-catálogo sobre a semente. Os 17 mutantes novos da missão não têm linha nela (792 no catálogo, 775 na base `c114e36`).
+catálogo sobre a semente. Os 17 mutantes novos da missão não têm linha nela (792 no catálogo, 775 no `c114e36`).
 
 **Até o merge, só o `./bin/sdd` da worktree lê `sdd-mutation/`; o `sdd` do PATH é o do checkout principal
-(`c114e36`) e grava o arquivo velho — sempre `./bin/sdd health`, nunca `sdd health`, nesta worktree.** Medido em
+e grava o arquivo velho — sempre `./bin/sdd health`, nunca `sdd health`, nesta worktree.** Medido em
 2026-10-26: `~/.local/bin/sdd` aponta para `/home/pc_admin/repos/sdd_agents/bin/sdd`, que ainda tem o
 `MUTATION_STAMP_REL` (`:2451`), e o `health_kit_root` velho escolhe a worktree como raiz. Um `sdd health`, ou o hábito
 `sdd health --with-mutation` do `CLAUDE.md:299`, digitado aqui roda o `cmd_health` velho: paga o catálogo inteiro sem
@@ -432,7 +433,7 @@ velho e manda rodar esse mesmo `sdd health` velho. A frase vale para o PR e para
 
 **O chore pós-merge do `TODO.md`**, da `main`, com a `todo-to-github-issues`: o `--fix --write` apaga os dois itens
 quando `6dbd63c`, `11fe1fe`, `4ae37c9` e `3e728d6` estiverem na `main` (o merge tem de ser merge commit: o ciclo de
-vida não sobrevive a squash, `TODO.md:128`). A catraca vai de 61 a 59, e o espelho sincroniza. Os dois itens viram
+vida não sobrevive a squash, `TODO.md:128`). A catraca desce dois, e o espelho sincroniza. Os dois itens viram
 `UPDATE (text)` no plano da branch, por causa do `RESOLVED by` e das linhas refeitas; o título, que é a chave, não
 mudou. É também nesse chore que entram os achados do kit da seção abaixo.
 
@@ -447,13 +448,13 @@ mudou. É também nesse chore que entram os achados do kit da seção abaixo.
 - **Duas rodadas do catálogo gravando o mapa no mesmo instante** podem perder uma linha. Está declarado na ADR 0021
   e custa tempo, nunca veredito.
 - **A chave não vê troca de máquina nem de ferramenta**; está declarado, e o remédio é o `--full`.
-- **A doc conta a regra velha** até a DOCS: as jornadas, o `failure-modes.md`, o `README.md`, o `CLAUDE.md` e o
-  `docs/pipeline.md` (lista abaixo).
+- **No retrato, a doc contava a regra velha**, à espera da DOCS: as jornadas, o `failure-modes.md`, o `README.md`, o
+  `CLAUDE.md` e o `docs/pipeline.md` (lista abaixo).
 - **As âncoras de `commands/sdd-plan.md`** no `TODO.md` (nove itens) estão a um passo do símbolo, dentro da
   tolerância de 10, e não foram reancoradas, porque o sensor não sugeriu. Sete estão a −1, e esse −1 vem do I4, que
   encolheu o passo 2. Duas estão a +1 e não vêm do I4: a `:30` (`KIT-TOUCHED`, em `:31`) já estava a +1 antes dele, e
   a `:201` (`Anywhere else`, em `:202`) estava a +2.
-- **O `sdd` do PATH é o kit velho até o merge** (`c114e36`): um `sdd health` digitado nesta worktree paga o catálogo
+- **O `sdd` do PATH é o kit velho até o merge**: um `sdd health` digitado nesta worktree paga o catálogo
   e grava o lugar velho. A frase e o custo estão em *A pendência do operador*.
 - **O `mut_HEALTH_skip_needs_score` tem um sensor só**, o `check-health.sh`; contra o `check-gates.sh` ele sobrevive
   (*Ciclo de QA 1*, Riscos novos).
@@ -461,7 +462,7 @@ mudou. É também nesse chore que entram os achados do kit da seção abaixo.
 ## Achados fora de escopo
 
 Todos do **kit** (este repositório). Por decisão do relay, **não** entraram no `TODO.md` desta branch, porque a M4
-fixa a catraca em 61. Cada um vai para o **chore pós-merge do `TODO.md`**, com a âncora medida de novo no `f98846d`:
+fixava a catraca em 61. Cada um vai para o **chore pós-merge do `TODO.md`**, com a âncora medida de novo no `f98846d`:
 
 - **Um `sed` de mutante que vira no-op passa calado pelo `--anchors`.** O `apply_mutant`
   (`tests/check-mutation.sh:7611`, o `diff -qr` em `:7614`) só exige que `bin/` mude no todo. Num mutante de vários
@@ -476,8 +477,6 @@ fixa a catraca em 61. Cada um vai para o **chore pós-merge do `TODO.md`**, com 
   partir por expansão. → chore pós-merge.
 - **Pré-existente:** o comentário `tests/check-gates.sh:3787` ("The control file still says `move-the-tree` from
   world 8") já era velho na base. → chore pós-merge.
-- **Pré-existente:** o censo do `tests/check-health.sh:85–86` (`grep -n 'sdd" health' tests/*.sh`) não conta a
-  forma `./bin/sdd health` (`check-gates.sh:3684`, `check-health.sh:1194`). → chore pós-merge.
 - **Lição sem conserto verificado (relay):** o contrato do `sdd-executor` (§2) manda rodar o `TEST_CMD` antes de
   tocar em nada. Só que a suíte leva 531–557 s, e o Bash de um subagente para em 600 s. Por isso o relay rodou a
   suíte por todos os incrementos. → chore pós-merge, como achado do contrato.
@@ -492,12 +491,12 @@ fixa a catraca em 61. Cada um vai para o **chore pós-merge do `TODO.md`**, com 
 
 ## Para a fase DOCS
 
-Do `01-plano.md` § Para a fase DOCS, com o que os incrementos acrescentaram:
+Do `01-plano.md` § Para a fase DOCS, com o que os incrementos acrescentaram (a doc do `fe065d9`, antes da DOCS):
 
 - `README.md:173–182`, `CLAUDE.md:299` e `:311` (o mapa em `.sdd/cache/`), `CONTEXT.md:32` (o verbete "Carimbo de
   mutação") e `docs/pipeline.md:528–545`: o lugar velho.
 - Os mesmos quatro (`README.md`, `docs/pipeline.md`, `CLAUDE.md:299` e `CONTEXT.md`) precisam também do **pulo** e da
-  flag nova **`--full`**, não só do lugar novo: hoje nenhum deles diz que o `sdd health` pula o catálogo sobre chave
+  flag nova **`--full`**, não só do lugar novo: nenhum deles dizia que o `sdd health` pula o catálogo sobre chave
   já medida, nem que o `--full` força. O `CLAUDE.md:299` ensina `sdd health --with-mutation` como "a cara", e o
   `--with-mutation` agora é sinônimo do padrão, pulo incluído.
 - `docs/failure-modes.md`:
@@ -523,11 +522,11 @@ Do `01-plano.md` § Para a fase DOCS, com o que os incrementos acrescentaram:
 - As ADRs 0004 e 0016 já têm o `Amended by: 0021` (`73420e7`).
 - Conferir a convenção do status `proposed` da ADR 0021 (`- **Status**: proposed (—, 2026-10-26)`): a 0020 também
   ficou `proposed`, e o achado do `sdd approve` que commita o ADR sem tirar o `proposed` (`TODO.md:370`) é o mesmo
-  assunto. A DOCS decide se a 0021 sai `accepted` no PR ou segue a 0020.
+  assunto. Ficou para a DOCS decidir se a 0021 sai `accepted` no PR ou segue a 0020.
 
 ## Minor adiados das revisões (para a REVIEW triar)
 
-Nenhum bloqueia; a REVIEW decide se algum vira `R<n>`. Os números de linha foram medidos de novo no `f98846d`,
+Nenhum bloqueia, e a triagem ficou para a REVIEW. Os números de linha foram medidos de novo no `f98846d`,
 cada um pelo conteúdo que o item descreve.
 
 **Triagem da revisão final.** Os marcados **consertado em `291d9af`** saíram na onda de conserto. O resto **pode
