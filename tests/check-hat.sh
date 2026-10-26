@@ -782,9 +782,9 @@ release_probes() {
   if [ "$(rel_red "$out" 1)" = 1 ] && grep -qE 'line 1 ·.*0 of 2' <<< "$out"; then pass "release: line 1 red — 0 of 2 target repos in an empty ledger"; else fail "release: line 1 should be red with '0 of 2'"; fi
   if [ "$(rel_red "$out" 3)" = 1 ]; then pass "release: line 3 red with no target mission"; else fail "release: line 3 should be red on an empty ledger"; fi
   if [ "$(rel_red "$out" 5)" = 1 ] && grep -qE 'line 5 ·.*LICENSE' <<< "$out"; then pass "release: line 5 red and wants a LICENSE"; else fail "release: line 5 should name LICENSE"; fi
-  # `sdd health --with-mutation` is a habit written in ten handoffs; the flag is a synonym of the
-  # default (the catalogue, skipped over a key already measured; ADR 0021), so it is accepted and
-  # never refused as an unknown option.
+  # `sdd health --with-mutation` is a habit written in sixteen handoffs and in CLAUDE.md (ADR 0021);
+  # the flag is a synonym of the default (the catalogue, skipped over a key already measured), so it
+  # is accepted and never refused as an unknown option.
   out="$( cd "$box" && SDD_STATE_DIR="$box/state" "$box/bin/sdd" health --with-mutation --release 2>&1 )" || true
   if ! grep -q 'unknown option' <<< "$out" && grep -qE 'line 1 ·' <<< "$out"; then pass "health: --with-mutation is accepted as a synonym, not refused"
   else fail "health: --with-mutation should be accepted — got: $(head -2 <<< "$out" | tr '\n' '|' | cut -c1-160)"; fi
