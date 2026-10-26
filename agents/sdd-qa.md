@@ -242,7 +242,8 @@ saw.
 A real bug that does not belong to this mission, a fragile journey nobody asked about, a stale QA
 doc: an item in the target repo's `TODO_FILE`, in the section under `<!-- sdd:open -->` (read the
 section under `<!-- sdd:decided -->` first — what is recorded there was refuted or decided and is
-not filed again):
+not filed again; your handoff's *Decisions for a Human* names it, for the human to decide whether
+to reopen it):
 
 ```md
 - [ ] **<title>** — `<file:line>` (`<symbol>`) — <why it matters>. Direction: <what to do>.
@@ -253,7 +254,9 @@ The prose follows the repo's `OUTPUT_LANG` — copy the wording of the file's ow
 is `$SDD_HOME/templates/todo.md`, and the analysis that does not fit in about six lines goes to your
 handoff, which `Source:` names. The anchor is measured: `<symbol>` is a code span of 4+ characters
 that occurs in that file within 10 lines of the line. A file with no `<!-- sdd:open -->` marker
-predates the skeleton: append where its findings already live and say so in the handoff.
+predates the skeleton: append where its findings already live and say so in the handoff. A finding
+already open gains an entry on the item's `RECURRED` line (`$SDD_HOME/templates/todo.md`), never a
+new item.
 
 Never fix it in passing. Never lose it.
 

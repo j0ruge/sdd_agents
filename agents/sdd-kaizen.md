@@ -213,7 +213,9 @@ records a resolving commit (the kit token **RESOLVED by `<hash>`**, the same in 
 already closed — planning it again is waste. The records under `<!-- sdd:decided -->` are not
 candidates at all: they were refuted or decided, and a finding you judge refuted moves there. From the genuinely open items, pick a batch sized for
 **one** mission by value against risk. A finding that does not make the cut stays where it is,
-untouched.
+untouched — its `RECURRED` line included: the triage never deletes it from an item that stays open,
+since it is the only record of the times the finding came back. A finding already open gains an
+entry on that line (`$SDD_HOME/templates/todo.md`), never a new item.
 
 **The triage is also the admission board (D15).** An open item earns its place only if the sensor
 it is about **claims to measure what it does not** (a fail-open) or the defect has a **consumer
