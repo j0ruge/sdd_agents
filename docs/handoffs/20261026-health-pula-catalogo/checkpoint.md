@@ -1,6 +1,6 @@
 ---
 missao: 20261026-health-pula-catalogo
-atualizado: 2026-10-26 01:12
+atualizado: 2026-10-26 02:28
 ---
 
 # Checkpoint — o `sdd health` pula o catálogo com a chave já medida
@@ -49,7 +49,7 @@ atualizado: 2026-10-26 01:12
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | o carimbo mora no `git-common-dir`: um arquivo por chave em `sdd-mutation/stamps/`, lido pelo `gate_PR`, pela linha 6 do `--release` e pelo `cmd_health`; o `.sdd/logs/mutation-stamp` sai | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    stamp: gate_PR reads the key a linked worktree stamped' <<< "$o"` → `1` | done | 956bd24 |
-| I2 | o pulo: chave no conjunto roda a suíte rápida sem o catálogo e cita `--full`; `--full` força; só o veredito do catálogo apaga a chave | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    skip: ' <<< "$o"` → `5` | pending | — |
+| I2 | o pulo: chave no conjunto roda a suíte rápida sem o catálogo e cita `--full`; `--full` força; só o veredito do catálogo apaga a chave | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    skip: ' <<< "$o"` → `5` | done | 6dbd63c |
 | I3 | o mapa dos matadores mora no `git-common-dir`, com o `.sdd/cache/` do checkout como semente e a gravação por união | `o=$(bash tests/check-mutation.sh --anchors 2>&1); grep -c '^  ok    killers: ' <<< "$o"` → `1` | pending | — |
 | I4 | o `/sdd-plan` diz que o mapa e o carimbo sobrevivem ao `git worktree remove`, e para de mandar trazê-los de volta | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan says the killer map and the stamp outlive git worktree remove' <<< "$o"` → `1` | pending | — |
 | I5 | fecho: `RESOLVED by` nos dois achados (`TODO.md:26` e `:502`) e as âncoras medidas de novo | `a=$(awk '/<!-- sdd:open -->/{o=1} /<!-- sdd:decided -->/{o=0} o && /RESOLVED by [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/{n++} END{print n+0}' TODO.md); b=$(bash tests/check-todo.sh --anchors TODO.md >/dev/null 2>&1; echo $?); echo "$a $b"` → `2 0` | pending | — |
