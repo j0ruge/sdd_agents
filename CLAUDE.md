@@ -296,7 +296,9 @@ dez minutos por gate — até tornar uma FASE insatisfazível: três sessões de
 encerraram o turno com as palavras *"waiting for the suite"*, e em `claude -p` encerrar o turno é
 encerrar a sessão. Hoje o catálogo mora no `sdd health`, pelo mesmo argumento que já vale para a
 catraca do backlog. **Nada foi afrouxado** — muda quem cobra e quando: os gates fazem a pergunta
-rápida, `sdd health --with-mutation` faz a cara.
+rápida, `sdd health --with-mutation` faz a cara. Desde a [ADR 0021](docs/adr/0021-the-stamp-lives-in-the-common-dir.md)
+o flag é sinônimo do padrão, e o `sdd health` **pula o catálogo** quando a chave do conteúdo já está
+entre as medidas verdes: roda a suíte rápida e diz `catalogue skipped`. O `--full` força o catálogo.
 ⚠️ **A metade barata do catálogo roda na suíte rápida desde 2026-09-23:** `check-mutation.sh
 --anchors` aplica cada mutante numa cópia do `bin/` sem rodar a suíte (segundos) e reprova o que
 não se aplica mais ou vira código inválido. Medido: um `sdd health` de **3h05** (23:57 → 03:02,
@@ -308,8 +310,9 @@ e depois. Desde 2026-09-25 o **sensor** também para no primeiro `fail()` sob `S
 sensores; o censo do `check-health.sh` os segura), e quem chama a própria primitiva de falha de
 propósito — o controle negativo do `check-coordination.sh`, o filho do selftest do `check-hat.sh` —
 faz essa chamada fora do mutante. Fora de mutante nada para cedo. **E o passo que matou o mutante
-na rodada anterior roda primeiro** (`SDD_MUTANT_FIRST`, mapa em `.sdd/cache/mutation-killers.tsv`, fora da chave do
-carimbo): mesma amostra, relógio 389 s → 171 s, 0 de 40 vereditos diferentes. O mapa é dica de
+na rodada anterior roda primeiro** (`SDD_MUTANT_FIRST`, mapa em `<git-common-dir>/sdd-mutation/killers.tsv`,
+que toda worktree do clone compartilha, com o `.sdd/cache/mutation-killers.tsv` do checkout só de semente; fora da
+chave do carimbo): mesma amostra, relógio 389 s → 171 s, 0 de 40 vereditos diferentes. O mapa é dica de
 ordem, nunca de veredito, e a 1ª rodada sem ele custa como antes. O resto do custo é a coordenação por chamada (`TODO.md`). É a única exceção à regra 4 da superfície (`tests/check-health.sh`): o sensor é invocado
 duas vezes, uma como catálogo e outra como `--anchors`, e a regra conta as duas por ocorrência.
 
@@ -319,7 +322,8 @@ REVIEW e de PR rodaram a suíte rápida, responderam verde, e a `main` carregou
 `score: 103 caught of 104` por dias até alguém digitar o comando. Hoje o `sdd health` **carimba**
 quando o catálogo volta verde, e o `gate_PR` **exige o carimbo**; o gate nunca roda o catálogo, que
 é exatamente o que `4c86712` desfez. Verbete "Carimbo de mutação" no `CONTEXT.md`, desenho e
-alternativas descartadas em [`docs/adr/0004`](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
+alternativas descartadas em [`docs/adr/0004`](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md), e o
+lugar no `git-common-dir` e o pulo em [`docs/adr/0021`](docs/adr/0021-the-stamp-lives-in-the-common-dir.md).
 ⚠️ **Consequência operacional que custa um `sdd health` a mais (50 min para 544 mutantes em 2026-10-02; ~18 min para 406 no PR #170) quando se erra a ordem:** a chave é o conteúdo
 **rastreado** de `bin/ tests/ templates/ config/ agents/` menos a catraca `tests/health-baseline.txt`
 (ADR 0014), então `./bin/sdd health` roda **depois do último commit de código**. `CLAUDE.md`,
