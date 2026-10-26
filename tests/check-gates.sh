@@ -3261,10 +3261,31 @@ i4_health() { ( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health "$
 # ADR and never borrowed from bin/sdd, so a writer that moves the place is contradicted by this
 # fixture instead of followed by it. Prints NOTHING and returns 1 outside a git checkout, so no
 # caller can turn an unanswered question into `rm -rf /sdd-mutation/stamps`.
+#
+# ⚠️ The one-shot `--path-format=absolute` is the fast path, not the only one. A git older than
+# 2.31, where the flag was born (Ubuntu 20.04 ships 2.25), does not refuse it: rev-parse echoes it
+# back and exits 0, so the answer is two lines, the flag and then a common dir still relative. That
+# answer names no place, and the place is then resolved from git's plain answer, which is relative
+# to where git ran: cd into <repo>, then into that answer (`.git` at a root, `../.git` in a
+# subdirectory, absolute from a linked worktree), then `pwd -P`. Both cds carry an emptied CDPATH,
+# or the environment would pick where they land and echo the path into the capture. Refused on that
+# path, each with rc 1 and nothing printed: a git that fails, an empty answer (`cd ""` stays put, so
+# the working tree of <repo> would pass for the place), a cd that cannot land, and a resolved path
+# that spans two lines, which on that git cannot be told from a leak. So what is printed is always
+# ONE absolute path. The first spelling only refused the old answer, and the i4_place guard below
+# reported SENSOR-BROKEN on those gits while the writer resolved its stamps right (Codex P2 on PR
+# #330). The old-git probe right after that guard holds every refusal and the agreement.
 fixture_stamps() { # fixture_stamps <repo>
   local common
   common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
-  case "$common" in /*) printf '%s/sdd-mutation/stamps\n' "$common" ;; *) return 1 ;; esac
+  case "$common" in
+    /*) ;;
+    *)  common="$(git -C "$1" rev-parse --git-common-dir 2>/dev/null)" || return 1
+        [ -n "$common" ] || return 1
+        common="$(CDPATH='' cd "$1" && CDPATH='' cd "$common" && pwd -P)" || return 1
+        case "$common" in *$'\n'*) return 1 ;; esac ;;
+  esac
+  printf '%s/sdd-mutation/stamps\n' "$common"
 }
 # Takes every stamp of <repo> away, so what is on disk afterwards was written by the run that follows.
 fixture_unstamp() { local d; d="$(fixture_stamps "$1")" || return 0; rm -rf "${d:?}"; }
@@ -3273,19 +3294,79 @@ fixture_unstamp() { local d; d="$(fixture_stamps "$1")" || return 0; rm -rf "${d
 fixture_stamped() { local d; d="$(fixture_stamps "$1")" || return 1; [ -n "$(ls -A "$d" 2>/dev/null)" ]; }
 # The question every `absent` half below rests on, asked ONCE before any world reads a stamp (review
 # r1 of mission 20261026-health-pula-catalogo, finding #3). fixture_stamped says "not stamped" both
-# when the place holds no stamp AND when fixture_stamps could not name the place — a git older than
-# 2.31, whose rev-parse has no --path-format and answers a relative path, or a $FIX outside git — so
-# the absent halves of worlds 8, 8b, 9, 12 and 13, and tree_stamped "$TREE_PLAIN" further down,
-# would pass over a question nobody answered. The form of the wt_dirty guard of world 14, plus the
-# `ok` half. One git answers for every fixture of this file, all of them `git init` checkouts, so
-# the place of $FIX resolving is the place of each of them resolving.
+# when the place holds no stamp AND when fixture_stamps could not name the place — a $FIX outside
+# git, or a git that gives no answer for it — so the absent halves of worlds 8, 8b, 9, 12 and 13, and
+# tree_stamped "$TREE_PLAIN" further down, would pass over a question nobody answered. A git older
+# than 2.31 is not one of those: fixture_stamps resolves its answer the old way, and the probe right
+# below holds that. The form of the wt_dirty guard of world 14, plus the `ok` half. One git answers
+# for every fixture of this file, all of them `git init` checkouts, so the place of $FIX resolving
+# is the place of each of them resolving.
 i4_place="$(fixture_stamps "$FIX" || true)"
 case "$i4_place" in
   /*) pass "stamp: the fixture resolves the git common dir before a world reads a stamp" ;;
   *)  fail "SENSOR-BROKEN: stamp: the fixture resolves the git common dir before a world reads a stamp" \
-           "an absolute <git-common-dir>/sdd-mutation/stamps for \$FIX (git 2.31 or later, \$FIX a checkout)" \
+           "an absolute <git-common-dir>/sdd-mutation/stamps for \$FIX (\$FIX a checkout, and a git that answers)" \
            "'$i4_place' — every absent half below would measure nothing" ;;
 esac
+
+# The old-git path of fixture_stamps, measured and not trusted (Codex P2 on PR #330). The guard
+# above runs on the suite's own git, so on a 2.31 or later a broken fallback stays green here and
+# comes back as SENSOR-BROKEN only on the gits it exists for. A shim stands in for such a git, in
+# the form of the pre-2.31 pair in tests/check-autonomy.sh: rev-parse echoes any --path-format=*
+# back and hands the rest to the git it found, and I4_OLDGIT_PLAIN makes the PLAIN rev-parse answer
+# nothing (mute), fail with an answer on stdout (fail), or name a directory that is not there (gone).
+# Every call runs from `/`, so a relative answer resolves only through the cd into <repo>, never
+# through this file's cwd, which is $FIX itself.
+#
+# i4_old prints <rc>:<plain questions the shim heard>:<answer>. The middle field is INTERCEPTION:
+# a 1 says the call got past the flagged question and reached the fallback, so no refusal below can
+# be the first `|| return 1` answering for a fallback that never ran. `armed` is the FLOOR: the shim
+# answers the flagged question in two lines, the flag first, or a modern git answering for it would
+# leave every other term measuring nothing. `same` and `sub` are the AGREEMENT with the suite's git,
+# at the root of $FIX and in $MDIR, whose answer is `../../../.git`. `nl` is a repo whose path holds
+# a newline, `mute`, `fail` and `gone` gits that give no place: each must name no place.
+i4_oldgit="$SDD_STATE_FIX/oldgit"; mkdir -p "$i4_oldgit"
+{ printf '#!/usr/bin/env bash\nreal=%q\n' "$(command -v git)"
+  cat <<'SHIM'
+is_rp=0; for a in "$@"; do [ "$a" = rev-parse ] && is_rp=1; done
+if [ "$is_rp" = 1 ]; then
+  [ -z "${I4_OLDGIT_TRACE:-}" ] || printf '%s\n' "$*" >> "$I4_OLDGIT_TRACE"
+  keep=(); echoed=()
+  for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a") ;; *) keep+=("$a") ;; esac; done
+  if [ "${#echoed[@]}" -gt 0 ]; then printf '%s\n' "${echoed[@]}"; exec "$real" "${keep[@]}"; fi
+  case "${I4_OLDGIT_PLAIN:-}" in
+    mute) exit 0 ;;
+    fail) printf '.git\n'; exit 128 ;;
+    gone) printf '.git-gone\n'; exit 0 ;;
+  esac
+fi
+exec "$real" "$@"
+SHIM
+} > "$i4_oldgit/git"
+chmod +x "$i4_oldgit/git"
+i4_nl="$SDD_STATE_FIX/nl"$'\n'"repo"; git init -q "$i4_nl" >/dev/null 2>&1
+# stderr is dropped: `gone` makes the cd of the fallback say why it could not land, and that line
+# is the refusal working, not noise to read in the suite's log.
+i4_old() { # i4_old <I4_OLDGIT_PLAIN mode, '' for none> <dir>
+  local out rc
+  : > "$i4_oldgit/trace"
+  out="$( cd / && PATH="$i4_oldgit:$PATH" I4_OLDGIT_PLAIN="$1" I4_OLDGIT_TRACE="$i4_oldgit/trace" \
+          fixture_stamps "$2" 2>/dev/null )"; rc=$?
+  printf '%s:%s:%s' "$rc" "$(grep -c -- 'rev-parse --git-common-dir$' "$i4_oldgit/trace")" "$out"
+}
+assert_eq "stamp: on a git older than 2.31 the fixture names the SAME place, and no place for a git that gives none" \
+  "armed same sub nl mute fail gone" \
+  "$( a="$( PATH="$i4_oldgit:$PATH" git -C "$FIX" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )"
+      if [ "$(grep -c . <<< "$a")" = 2 ] && [ "$(head -1 <<< "$a")" = --path-format=absolute ]; then t=armed
+      else t="unarmed:$a"; fi
+      new="$( cd / && fixture_stamps "$FIX" )"
+      o="$(i4_old '' "$FIX")";  if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then s=same; else s="split:$o|$new"; fi
+      o="$(i4_old '' "$MDIR")"; if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then u=sub;  else u="sub:$o|$new"; fi
+      o="$(i4_old '' "$i4_nl")"; if [ "$o" = "1:1:" ]; then l=nl;   else l="nl:$o"; fi
+      o="$(i4_old mute "$FIX")"; if [ "$o" = "1:1:" ]; then m=mute; else m="mute:$o"; fi
+      o="$(i4_old fail "$FIX")"; if [ "$o" = "1:1:" ]; then f=fail; else f="fail:$o"; fi
+      o="$(i4_old gone "$FIX")"; if [ "$o" = "1:1:" ]; then g=gone; else g="gone:$o"; fi
+      printf '%s %s %s %s %s %s %s' "$t" "$s" "$u" "$l" "$m" "$f" "$g" )"
 
 # What the stub suite will answer next. It is written into .sdd/logs/, which is gitignored AND
 # outside the five measured directories — so changing the catalogue's verdict changes not one byte
