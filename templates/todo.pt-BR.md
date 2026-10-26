@@ -10,7 +10,8 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > seção aberta, as categorias `###` são livres (tema, quem destrava, "Bloqueia", "Decisão
 > pendente"). Análise longa e roadmap moram em `docs/`; o item aponta com `Fonte:`.
 >
-> **Achado aberto** — cerca de 6 linhas (teto 8), caixa sempre vazia, atribuição na última linha:
+> **Achado aberto** — cerca de 6 linhas (teto 8), caixa sempre vazia, atribuição na última linha, ou
+> na de cima da `RECURRED`:
 >
 > ```md
 > - [ ] **<título>** — `<arquivo:linha>` (`<símbolo>`) — <por que importa>. Direção: <o que fazer>.
@@ -21,7 +22,8 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > o `<símbolo>` entre parênteses logo depois dele é **obrigatório**: uma crase de 4+ caracteres que
 > ocorre nesse arquivo a até 10 linhas da linha — em qualquer ponto dele para `:1` ou sem linha. É a
 > única crase medida, e a que o relatório de âncora fora do alvo nomeia. Nenhuma linha física da
-> seção aberta passa de 120 caracteres. ([ADR 0011 do kit sdd](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
+> seção aberta passa de 120 caracteres, fora a `RECURRED` bem formada (abaixo).
+> ([ADR 0011 do kit sdd](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
 > **Registro decidido** — uma linha física, sem caixa, apontando a evidência:
 >
@@ -33,12 +35,30 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > em todo idioma) e o item fica até `git merge-base --is-ancestor <hash> <DEFAULT_BRANCH>` valer;
 > então é **apagado**, nunca marcado. Refutado, decidido, wont-fix ou risco aceito: não há o que
 > commitar, então sai da seção aberta e vira registro decidido no mesmo commit. Duplicado é
-> apagado, citando o sobrevivente. Antes de registrar, leia os decididos: o que está lá não volta.
+> apagado, citando o sobrevivente; o que veio de outro projeto ou missão é antes dobrado na
+> `RECURRED` do sobrevivente, como entrada nova (abaixo). Antes de registrar, leia os decididos e os
+> abertos: o que está nos decididos não volta, e o que está nos abertos ganha uma entrada na
+> `RECURRED`.
 >
 > **Onde vai o `RESOLVED by`.** No fim da última linha do corpo, ou dentro da linha `Fonte:` antes
 > do `— descoberto por`; nunca numa linha própria, que num item no teto vira a 9ª linha
-> (`9 content lines, cap is 8`), nem depois do descoberto-por, que tem de ser o último campo. Sem
-> espaço nos 120 caracteres, encurte o corpo.
+> (`9 content lines, cap is 8`), nem depois do descoberto-por, que tem de ser o último campo, nem na
+> linha `RECURRED`. Sem espaço nos 120 caracteres, encurte o corpo.
+>
+> **Reincidência.** Achado que volta (outro projeto, missão ou sessão) ganha uma entrada, nunca um
+> item novo. As entradas ficam numa linha só, `RECURRED <n>: <onde> (YYYY-MM-DD); …` (token do kit,
+> igual em todo idioma), recuada dois espaços como o resto do item. Na primeira volta ela entra como
+> a nova última linha do item, embaixo do descoberto-por, que não muda de texto e assim passa para a
+> linha de cima dela; nas seguintes, a volta é mais uma entrada nessa linha, e o `<n>` sobe um. A
+> primeira ocorrência fica no descoberto-por, e o `<n>` conta as voltas. Da mais velha para a mais
+> nova, uma entrada por projeto e missão: a volta de um projeto e missão já listados, ou dos do
+> próprio descoberto-por, não soma nada. O `<onde>` tem letras ASCII, dígitos e `._/-`, começa por
+> letra ou dígito, não tem espaço, crase nem `#`, e nomeia a volta como `<projeto>/<missão>`
+> (`dotp-remake/3.4b`), `<projeto>/pr<N>` (`magic_tutor/pr25`) ou, sem missão nem PR,
+> `<projeto>/<YYYYMMDD>` do dia da sessão, com `-2`, `-3`… para as sessões seguintes desse dia
+> (`magic_tutor/20261020-2`); `<projeto>` sozinho só na primeira volta dele sem missão nem PR. Bem
+> formada, a linha não conta no teto nem na largura. Achado que está nos decididos não ganha linha:
+> avise o humano, que decide se reabre.
 
 ## Aberto
 <!-- sdd:open -->
