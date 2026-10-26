@@ -1,6 +1,6 @@
 ---
 missao: 20261026-health-pula-catalogo
-atualizado: 2026-10-26 08:26
+atualizado: 2026-10-26 08:55
 ---
 
 # Checkpoint — o `sdd health` pula o catálogo com a chave já medida
@@ -54,7 +54,7 @@ atualizado: 2026-10-26 08:26
 | I4 | o `/sdd-plan` diz que o mapa e o carimbo sobrevivem ao `git worktree remove`, e para de mandar trazê-los de volta | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan says the killer map and the stamp outlive git worktree remove' <<< "$o"` → `1` | done | 20ea32e |
 | I5 | fecho: `RESOLVED by` nos dois achados (`TODO.md:26` e `:502`) e as âncoras medidas de novo | `a=$(awk '/<!-- sdd:open -->/{o=1} /<!-- sdd:decided -->/{o=0} o && /RESOLVED by [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/{n++} END{print n+0}' TODO.md); b=$(bash tests/check-todo.sh --anchors TODO.md >/dev/null 2>&1; echo $?); echo "$a $b"` → `2 0` | done | 7e68e7d |
 | F1 | o aviso do `sdd preflight` para git < 2.31 (`bin/sdd:6482–6488`) para de citar o carimbo e o mapa do kit (`mutation_stamp_dir`, `tests/check-mutation.sh`, `killers_paths`) num repo sem catálogo: a frase da onda `291d9af` só onde `has_mutation_catalogue "$REPO_ROOT"`, ou fora do aviso (achado QA-1 do `30-handoff-qa.md`) | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    an old git in a repo without the catalogue is not told about the mutation stamps or the killer map' <<< "$o"` → `1`, e a J-target-repo-ships percorrida de novo: num repo-alvo instalado pelo `./bin/sdd install` do kit, `sdd preflight` com o shim de git < 2.31 não imprime `check-mutation`, `mutation stamp` nem `killer map` (receita S17b no `30-handoff-qa.md`) | done | c0adac8 |
-| F2 | o pulo ganha sensor sobre a suíte que não imprime `score:`, a única forma da suíte rápida real: os stubs do `check-health.sh` (`write_stub_suite`) e do `check-gates.sh` (`i4_write_suite`) imprimem o `score:` só com `--with-mutation`, como o `tests/run-all.sh`, e o `mut_HEALTH_skip_needs_score` (`if [ "$skip" = 1 ] && [ -n "$score_line" ]; then` no `cmd_health`) entra no `CATALOG` e morre (achado QA-2 do `30-handoff-qa.md`) | `bash tests/check-mutation.sh --only HEALTH_skip_needs_score tests/check-health.sh >/dev/null 2>&1; echo $?` → `0`, e a J-health-verdict percorrida de novo: num clone com o stub realista, a 2ª `./bin/sdd health` pula, sem `went blind`, com rc 0 (receita S1–S2 no `30-handoff-qa.md`) | pending | — |
+| F2 | o pulo ganha sensor sobre a suíte que não imprime `score:`, a única forma da suíte rápida real: os stubs do `check-health.sh` (`write_stub_suite`) e do `check-gates.sh` (`i4_write_suite`) imprimem o `score:` só com `--with-mutation`, como o `tests/run-all.sh`, e o `mut_HEALTH_skip_needs_score` (`if [ "$skip" = 1 ] && [ -n "$score_line" ]; then` no `cmd_health`) entra no `CATALOG` e morre (achado QA-2 do `30-handoff-qa.md`) | `bash tests/check-mutation.sh --only HEALTH_skip_needs_score check-health.sh >/dev/null 2>&1; echo $?` → `0`, e a J-health-verdict percorrida de novo: num clone com o stub realista, a 2ª `./bin/sdd health` pula, sem `went blind`, com rc 0 (receita S1–S2 no `30-handoff-qa.md`) | done | f98846d |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
