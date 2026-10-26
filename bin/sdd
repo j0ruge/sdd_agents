@@ -3435,7 +3435,8 @@ $turn_rule
 Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it reads
 the files and the frontmatter. Your answer in text proves nothing and satisfies no gate. A
 finding that does not fit this mission goes under the <!-- sdd:open --> marker of $TODO_FILE
-(grammar: $SDD_HOME/templates/todo.md), never to the diff.
+(grammar: $SDD_HOME/templates/todo.md), never to the diff; one already open there gains an entry
+on the item's RECURRED line, never a new item.
 EOF
     return 0
   fi
@@ -3460,7 +3461,8 @@ $turn_rule
 Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it runs
 the tests, checks the hashes in the git log, reads the files. Your answer in text proves nothing
 and satisfies no gate. A finding that does not fit this mission goes under the <!-- sdd:open -->
-marker of $TODO_FILE (grammar: $SDD_HOME/templates/todo.md), never to the diff.
+marker of $TODO_FILE (grammar: $SDD_HOME/templates/todo.md), never to the diff; one already open
+there gains an entry on the item's RECURRED line, never a new item.
 EOF
 }
 

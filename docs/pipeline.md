@@ -386,7 +386,9 @@ spelling keeps the route of today.
 read-only over the code: it reproduces, refutes with evidence, grades honestly, and every finding
 that must be fixed becomes an `R<n>` row in the mission's `checkpoint.md` — one per CRITICAL/HIGH,
 one batch row for the cheap MEDIUM/LOW, `TODO_FILE` for the expensive ones, a pendency for whatever
-needs a human. The session commits **only** the round report, the checkpoint and `TODO_FILE`.
+needs a human. The session commits **only** the round report, the checkpoint and `TODO_FILE`. In
+`TODO_FILE`, as for every hat that writes there, a finding already open gains an entry on the item's
+`RECURRED` line (`templates/todo.md`), never a new item, and one already decided goes to the human.
 
 Nothing in the runner had to learn about the prefix. `current_phase()` walks
 `PLAN TICKET EXEC QA REVIEW DOCS PR` and returns the first red gate, so a pending `R<n>` fails

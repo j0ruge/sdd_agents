@@ -84,7 +84,10 @@ exploration the headless session will **not** have to repeat. It is the highest-
 whole plan.
 
 An unverified fact does not go in. "It's probably like this" costs more later than the check costs
-now — and the repo's `TODO.md` may be stale: confirm before planning on top of it.
+now — and the repo's `TODO.md` may be stale: confirm before planning on top of it. A finding the
+grill or the gemba turns up that does not fit this mission goes to `TODO_FILE` (principle 5); one
+already open there gains an entry on the item's `RECURRED` line (the kit's `templates/todo.md`),
+never a new item, and one already decided is the human's to reopen — say so in the grill.
 
 Before you name anything, read the naming and language rules of the target in its `CLAUDE.md` and
 in `.claude/rules/`: identifiers, file names, the test convention. Every new file and symbol of the
