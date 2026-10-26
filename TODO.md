@@ -244,6 +244,30 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   um ramo `auto` no passo 4 (cortar o `branch:` e commitar a pasta antes do `sdd run`), ou o `sdd approve` aceitar
   `auto` e fazer só isso.
   — descoberto pelo relay do `/sdd-plan` na missão `20261020-lote-de-consertos` do `magic_tutor` (2026-10-20)
+- [ ] **A pergunta que o planner devolve com tarefa sua ainda em segundo plano não chega ao relay** —
+  `commands/sdd-plan.md:132` (`Long work between two questions`) — no `magic_tutor`, a Q3, a Q4 e a Q7 foram o fim
+  de turno do planner com subagentes ou um teste dele ainda rodando; o relay só recebeu a volta seguinte ("a Q7
+  continua esperando a resposta do humano") e teve de pedir o texto duas vezes. Direção: o planner não encerra o
+  turno com pergunta enquanto tem tarefa viva, e toda pergunta pendente volta inteira na devolução seguinte; o relay
+  que lê o número de uma pergunta que não repassou pede o texto antes de tudo.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261024-narracao-e-mesa` do `magic_tutor` (2026-10-24)
+
+- [ ] **O planner marca o `- answer:` de pergunta que o humano não viu, e sob `auto` o gate já lê aprovado** —
+  `agents/sdd-planner.md:52` (`Mark each answer`) — no `magic_tutor`, a decisão 7 ("confirmadas em bloco") saiu
+  `- answer: (recommended)` com `aprovacao: auto` antes de a Q7 chegar ao humano, e o `sdd status` leu
+  `plan approved (auto)`; o relay pegou lendo o arquivo. O `gate_PLAN` não lê as respostas (ADR 0018), e sob `auto`
+  o passo 2 de "When the artifacts exist" pula o leitor D22. Direção: o relay roda o D22 a cada devolução e para
+  quando o `M` passa das respostas que entregou; o planner escreve `- answer:` e `auto` só depois da resposta.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261024-narracao-e-mesa` do `magic_tutor` (2026-10-24)
+
+- [ ] **Num repo sem interface, a QA para em `BLOCKED` ao seguir a própria instrução de escrever o teste do achado** —
+  `agents/sdd-qa.md:11` (`writes:`) — o § 3 manda o achado de lógica virar teste da suíte do `TEST_CMD` (linha 107),
+  e o `writes:` não cobre a suíte. No `magic_tutor`, a `QA:close` da `20261024-mesa-e-escolhas` (1522 s, US$ 7,96)
+  commitou o sensor vermelho do F1 em `tests/test_replays.py`: `touched 1 path(s) outside its writes`, rc 3; destravou
+  com `HAT_WRITES_EXTRA="sdd-qa: tests/**"`, que todo repo sem interface repetiria (a lista que o `config/schema.md`
+  diz que a chave substituiu). Direção: decidir de quem é o sensor do achado de lógica (a QA, com a suíte no
+  `writes:`, ou o EXEC do `F<n>`) e alinhar o texto e o `writes:` do chapéu.
+  — descoberto pelo `sdd run` da missão `20261024-mesa-e-escolhas` do `magic_tutor` (2026-10-24)
 - [ ] **Num subcomando, `-l` escolhe a missão que tem `-l` no nome, e `--help` vira "mission not found"** —
   `bin/sdd:341` (`resolve_mission`) — o argumento casa por substring (`-name "*${want}*"`), e `close`, `approve`,
   `phase`, `why`, `boot` e `census` passam o `$1` cru (`run` e `retry` recusam `-*`). No `magic_tutor`,
