@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 4b9c28f8-7152-4e88-aae7-0bf05f85f18c
 data: 2026-10-26 04:20
-gate: `tests/run-all.sh` em `705aa95` (rodada pelo relay) → rc 0, 534 s, 2055 linhas `ok`, 0 `FAIL` (eram 2046 na base `f7f6cc2`); depois dele só `TODO.md` e a pasta da missão; Checks medidos no HEAD `db5a09a` — I1 → `1` (`check-gates.sh` rc 0, 142 s, 0 FAIL), I2 → `5` (`check-health.sh` rc 0, 48 s), I3 → `1` (`check-mutation.sh --anchors` rc 0, 787 mutantes aplicando), I4 → `1` (`check-hat.sh` rc 0), I5 → `2 0`; `tests/check-checkpoint.sh --check` → `5 row(s), 4 under the anchor rule, none blind`; os cinco incrementos `done`
+gate: `tests/run-all.sh` em `705aa95` (rodada pelo relay) → rc 0, 534 s, 2055 linhas `ok`, 0 `FAIL` (eram 2046 na base `f7f6cc2`); depois dele, `TODO.md`, a pasta da missão e a onda `291d9af`; Checks medidos no HEAD `db5a09a` — I1 → `1` (`check-gates.sh` rc 0, 142 s, 0 FAIL), I2 → `5` (`check-health.sh` rc 0, 48 s), I3 → `1` (`check-mutation.sh --anchors` rc 0, 787 mutantes aplicando), I4 → `1` (`check-hat.sh` rc 0), I5 → `2 0`; `tests/check-checkpoint.sh --check` → `5 row(s), 4 under the anchor rule, none blind`; os cinco incrementos `done`; onda de conserto da revisão final (`291d9af`): `check-health.sh` rc 0 (49 s, 61 ok, 5 `skip:`), `check-gates.sh` rc 0 (148 s, 481 ok, 0 FAIL), `check-hat.sh` rc 0, `check-preflight.sh` rc 0, `check-mutation.sh --anchors` rc 0 (789), `--only HEALTH_skip_writes` e `--only HEALTH_skip_line_unsourced` contra `check-health.sh` → rc 1 antes da asserção e exit 0 depois; a suíte inteira do HEAD da onda é rodada pelo controller (ver nota do checkpoint)
 ---
 
 # Handoff — EXEC — o `sdd health` pula o catálogo com a chave já medida
@@ -14,17 +14,20 @@ gate: `tests/run-all.sh` em `705aa95` (rodada pelo relay) → rc 0, 534 s, 2055 
 
 ## TL;DR
 
-I1–I5 feitos, interativos, na worktree, um subagente por incremento e um conserto de revisão em I1, I2 e I3.
+I1–I5 feitos na worktree, com um conserto de revisão em I1, I2 e I3 e a onda da revisão final (`291d9af`).
 O carimbo é um arquivo por chave em `<git-common-dir>/sdd-mutation/stamps/`; o `sdd health` pula o catálogo sobre
 chave já medida, e o `--full` força; o mapa mora em `<git-common-dir>/sdd-mutation/killers.tsv`, semeado pelo
-`.sdd/cache/`; o `/sdd-plan` parou de mandar trazer mapa e carimbo de volta. Suíte verde em `705aa95`.
-Próximo: QA, só com sensores e fixture; **nenhum** `./bin/sdd health` real antes do carimbo do operador.
+`.sdd/cache/`; o `/sdd-plan` parou de mandar trazer mapa e carimbo. Próximo: QA, só com sensores e fixture;
+**nenhum** `./bin/sdd health` real antes do carimbo do operador, e nunca o `sdd` do PATH (o kit velho até o merge).
 
 ## Estado do repo
 
-- **Branch:** `fix/health-pula-catalogo`, sem upstream, não empurrada.
-- **Último commit de conteúdo:** `7e68e7d` (o I5, só `TODO.md`); depois dele, `db5a09a` (checkpoint) e o commit
-  deste handoff, que só tocam a pasta da missão.
+- **Branch:** `fix/health-pula-catalogo`, sem upstream, não empurrada. Até o merge, o `sdd` do PATH não é o desta
+  branch: ver *A pendência do operador* (a frase vale para o PR e para tudo que vem antes do merge).
+- **Último commit de conteúdo:** `291d9af` (a onda de conserto da revisão final: `bin/sdd`, `check-health.sh`,
+  `check-mutation.sh` e 13 âncoras do `TODO.md`). Antes dele vieram o `7e68e7d` (o I5, só `TODO.md`) e três commits
+  só da pasta da missão: `db5a09a` (checkpoint), `cb98bca` e `68b47a2` (este handoff). Depois dele, só o commit que
+  traz esta seção da onda para o handoff.
 - **Working tree:** limpa antes do commit deste handoff.
 - **Suíte:** `tests/run-all.sh` em `705aa95` → rc 0, 534 s, 2055 `ok`, 0 `FAIL`. Por HEAD, rodada pelo relay:
 
@@ -40,10 +43,13 @@ Próximo: QA, só com sensores e fixture; **nenhum** `./bin/sdd health` real ant
   | `705aa95` (I4) | 0 | 534 | 2055 | 0 | Check do I4 = 1 |
 
   O I5 (`7e68e7d`) mudou só o `TODO.md`: `check-todo` rc 0, `--anchors TODO.md` → `0 off target`, `check-lang`,
-  `check-pipefail` e `check-mutation.sh --anchors` rc 0. A suíte inteira sobre o HEAD final é do relay.
+  `check-pipefail` e `check-mutation.sh --anchors` rc 0. A onda da revisão final (`291d9af`) rodou os sensores que
+  tocou (frontmatter `gate:` e *O que foi feito*); a suíte inteira do HEAD da onda é rodada pelo controller (ver nota
+  do checkpoint).
 - **E2E:** não se aplica (sem `E2E_CMD`; o kit não tem interface). A rodada à mão está em *Boot da próxima fase*.
 - **Checkout principal:** `git -C /home/pc_admin/repos/sdd_agents status --porcelain` → vazio, e
-  `/home/pc_admin/repos/sdd_agents/.git/sdd-mutation/` **não existe**: nenhum `sdd health` real rodou no EXEC.
+  `/home/pc_admin/repos/sdd_agents/.git/sdd-mutation/` **não existe**: nenhum `sdd health` real rodou no EXEC
+  (medido de novo depois da onda `291d9af`).
 
 ## O que foi feito
 
@@ -51,7 +57,8 @@ Antes do I1, as duas ordens do `01-plano.md` § Onde e como, mais a aprovação:
 
 - `f4ac7fd`: o `sdd approve` do humano, com a pasta da missão e a ADR 0021
   (`docs/adr/0021-the-stamp-lives-in-the-common-dir.md`), pelo `adr:` do `00-missao.md`. O `approve` commita o
-  arquivo que o `adr:` nomeia (`bin/sdd:8987–8988`).
+  arquivo que o `adr:` nomeia: o `case` sobre o `adr_value` em `bin/sdd:9091–9096` (`paths+=( "$adr_value" )`
+  em `:9093`), e a mensagem `dim` que o diz em `:9005–9006` (medido em `291d9af`).
 - `73420e7`: só o `Amended by: 0021` das ADRs 0004 e 0016, que ficaram fora do commit do `approve`.
 - `f7f6cc2`: a `RECURRED 5 → 6` do achado "O `/sdd-plan` delega ao `sdd-planner` sem saída para o agente não
   registrado" (`TODO.md:218`), pedida pelo humano no grill.
@@ -66,7 +73,8 @@ Os incrementos (a célula Commit, depois o conserto da revisão):
   `check-hat.sh` ganhou a sonda da linha 6. Três mutantes novos.
 - `b7667e4`, **I1 r1**: o `git_common_dir_abs` é uma resolução só do `git-common-dir`, lida pelo
   `ledger_repo_root` e pelo carimbo. Antes, o carimbo tinha uma cópia sem sensor, com o braço do git < 2.31. Medido
-  idêntico byte a byte em 36 casos; mutantes `LEDGER_repo_root_*`.
+  idêntico byte a byte em 36 casos. Nenhum mutante novo: cinco reancorados, quatro `LEDGER_repo_root_*`
+  (`common_parent`, `cdpath_leak`, `newline_emptied`, `toplevel`) e o `PR_stamp_dir_per_worktree`.
 - `19dbe32`, **fora do plano, pedido do dono**: a `RECURRED 6 → 7` do mesmo achado do `/sdd-plan`
   (`TODO.md:225`). A sessão do relay abriu em `rea-projects/`, fora da worktree, e a lista de tipos de agente veio sem
   nenhum `sdd-*`. Por isso o EXEC rodou cada incremento num agente genérico mandado ler `agents/sdd-executor.md`
@@ -97,6 +105,36 @@ Os incrementos (a célula Commit, depois o conserto da revisão):
   caber, as linhas 505–508 do item do mapa foram refeitas em 4 sem mudar palavra (provado tirando os dois tokens: o
   texto fica idêntico); o item segue em 8 linhas. A catraca segue 61.
 
+A revisão da branch inteira deu "com consertos": nenhum Critical, dois Important e caronas. Uma onda só, fora da
+tabela (nenhuma linha nova no `checkpoint.md`):
+
+- `291d9af`, **onda de conserto da revisão final** (código e sensores):
+  - *Important 1, "o pulo não grava" sem sensor.* O `mut_HEALTH_skip_writes` (`catalogue_green=1` na linha que toma
+    o pulo, `bin/sdd:7365`) sobrevivia ao `check-health.sh` e ao `check-gates.sh`. Cada pulo regravaria
+    `stamps/<chave>` com `measured: <agora>` e o `score:` vazio. Agora a `skip: 1` e a `skip: 3` exigem que nada
+    seja carimbado (`! grep -qF "$STAMPED"`, `tests/check-health.sh:1094` e `:1135`). De carona, a `skip: 1` exige
+    uma linha `catalogue skipped` **única** e com a procedência `(measured: …`, segurada pelo
+    `mut_HEALTH_skip_line_unsourced`. Os nomes das asserções não mudaram, e o Check do I2 segue `5`. Os dois mutantes
+    estão no `CATALOG` (789), endereçados a `/^cmd_health() {/,/^}/`. RED: `--only … check-health.sh` → rc 1,
+    `NOT caught`, nos dois. GREEN: exit 0 nos dois (44–45 s).
+  - *Carona 1:* o comentário sobre a `skip: 4` (`tests/check-health.sh:1145–1149`) agora diz a verdade. O mundo
+    `abort:` também roda o catálogo sobre suíte vermelha e score limpo, mas nunca lê o `$STAMPED`.
+  - *Carona 2 (D15):* o comentário do `catalogue_against` (`bin/sdd:7434–7443`) declara os braços `gap` e
+    `census` inalcançáveis sobre chave carimbada, com a razão. Os mutantes `gap_keeps_key` e `census_keeps_key`
+    seriam equivalentes e ficam fora do catálogo.
+  - *Carona 3:* a linha 6 do `--release` (`bin/sdd:7264`) diz "the mutation catalogue measured this content green,
+    over a suite green in that same run (its key is stamped; --release re-runs nothing)". Ela não afirma mais a
+    suíte de agora, nem a catraca, que o `cmd_health` lê só depois de gravar o carimbo (verificação 3). A frase
+    vermelha não repetia a ideia e ficou. Nenhum sensor grepa a frase (a `release_probes` lê só `ok`/vermelho da
+    `line 6 ·`), então a carona não recuou e a emenda da ADR 0007 ficou fora da lista da DOCS. A linha 6 da tabela
+    da ADR 0007 (`:28`) ainda descreve o critério com a frase velha.
+  - *Carona 4:* o aviso do `sdd preflight` para git < 2.31 (`bin/sdd:6482–6488`) diz que o carimbo
+    (`mutation_stamp_dir`, pelo `git_common_dir_abs`) e o mapa (`killers_paths`) usam o mesmo caminho de reserva. O
+    prefixo que o `check-preflight.sh:263` e o `mut_PRE_path_format_warn_silent` leem não mudou.
+  - 13 âncoras da seção aberta do `TODO.md` reancoradas pelas linhas que o diff acrescentou. As três da seção
+    decidida que o diff empurrou (`:533`, `:537`, `:556`) já não apontavam o símbolo antes da onda, e o sensor não as
+    mede: ficaram.
+
 Os commits `chore(checkpoint): …` (`e14a51f`, `0a29c20`, `a70a188`, `1cd00bd`, `b91b9f5`, `629bea5`, `705aa95`,
 `db5a09a`) só fecham a linha do checkpoint ou acrescentam uma nota.
 
@@ -114,14 +152,14 @@ Os commits `chore(checkpoint): …` (`e14a51f`, `0a29c20`, `a70a188`, `1cd00bd`,
 
 | Arquivo | O que contém |
 |---|---|
-| `bin/sdd` | `git_common_dir_abs`, `mutation_stamp_dir`, `mutation_stamp_valid`; `gate_PR`, linha 6 do `--release` e `cmd_health` (opções, pulo, 2c) lendo o lugar novo; a ajuda com `[--full]` |
-| `tests/check-mutation.sh` | `killers_paths`, `load_killer_maps`, `write_killer_map`, `killers_selftest`; os mutantes novos (787 no catálogo) |
-| `tests/check-health.sh` | `health_run` apaga o lugar e o `stub-argv.txt`; `health_run_keep`; as cinco `skip:`; o `CAPTURE_FLOOR` com a linha do registro |
+| `bin/sdd` | `git_common_dir_abs`, `mutation_stamp_dir`, `mutation_stamp_valid`; `gate_PR`, linha 6 do `--release` e `cmd_health` (opções, pulo, 2c) lendo o lugar novo; a ajuda com `[--full]`; na onda `291d9af`, a linha 6 que afirma só o que a chave prova, o D15 do `catalogue_against` e o aviso do `preflight` para git < 2.31 |
+| `tests/check-mutation.sh` | `killers_paths`, `load_killer_maps`, `write_killer_map`, `killers_selftest`; os mutantes novos (789 no catálogo, os dois últimos da onda `291d9af`) |
+| `tests/check-health.sh` | `health_run` apaga o lugar e o `stub-argv.txt`; `health_run_keep`; as cinco `skip:` (a 1 e a 3 exigem, desde `291d9af`, que o pulo não grave); o `CAPTURE_FLOOR` com a linha do registro |
 | `tests/check-gates.sh` | `fixture_stamps`/`fixture_unstamp`; os mundos 6 e 7 reescritos, o 8b e o 14 |
 | `tests/check-hat.sh` | a sonda da linha 6 do `--release`; a `command_worktree_return_probes` reescrita |
 | `commands/sdd-plan.md` | o passo 2 (`:49–53`) sem a volta do mapa e do carimbo |
 | `docs/adr/0021-the-stamp-lives-in-the-common-dir.md` | a decisão; emenda as 0004 e 0016 |
-| `TODO.md` | os dois `RESOLVED by`; a `RECURRED 7` em `:225` |
+| `TODO.md` | os dois `RESOLVED by`; a `RECURRED 7` em `:225`; 13 âncoras reancoradas na onda `291d9af` |
 | `docs/handoffs/20261026-health-pula-catalogo/checkpoint-notas.md` | uma nota por passo: Red, Green, sabotagens, `--only` de cada mutante |
 
 ## Boot da próxima fase
@@ -131,25 +169,33 @@ Missão do kit: a QA roda **interativa, na worktree**, com todo comando como
 nem `./bin/sdd status` ou `./bin/sdd run` (eles reavaliam os gates e rodam o `TEST_CMD`). Leia este TL;DR, o
 `00-missao.md` § Decisões do grill e a nota do incremento no `checkpoint-notas.md` quando precisar de um porquê.
 
+**Até o merge, só o `./bin/sdd` da worktree lê `sdd-mutation/`; o `sdd` do PATH é o do checkout principal
+(`c114e36`) e grava o arquivo velho — sempre `./bin/sdd health`, nunca `sdd health`, nesta worktree.** O porquê e o
+custo estão em *A pendência do operador*; vale também para `sdd status`, `sdd why` e `sdd run` do PATH.
+
 **O que é visível ao usuário** (a superfície do operador do kit):
 
 1. **A linha do pulo.** Com a chave no conjunto: a suíte roda sem `--with-mutation`, e a verificação 2 vira uma linha
    só: `ok    mutation: catalogue skipped — this content (key <k>) was measured green (<procedência>); ./bin/sdd
-   health --full measures it again` (`bin/sdd:7438`). Uma suíte vermelha no pulo dá `suite red (rc N) — run
-   tests/run-all.sh to see it` (`:7376`), as linhas FAIL e rc 1, e a chave fica.
+   health --full measures it again` (`bin/sdd:7455`). Uma suíte vermelha no pulo dá `suite red (rc N) — run
+   tests/run-all.sh to see it` (`:7383`), as linhas FAIL e rc 1, e a chave fica. O pulo não grava nada (desde
+   `291d9af`, a `skip: 1` e a `skip: 3` o exigem).
 2. **O `--full`**, que roda o catálogo sobre chave já medida. Verde regrava a chave; o veredito vermelho do catálogo
    a apaga.
 3. **A recusa `--full --release`:** `sdd health: --full measures the catalogue, and --release never runs the suite —
-   pick one` (`:7312`). A ordem inversa (`--release --full`) não tem teste (Minor adiado). O `die` de opção
-   desconhecida lista as três (`:7305`).
-4. **A ajuda** (`bin/sdd:12004–12006`): a linha do `sdd health` diz que pula o catálogo sobre chave medida, e ganhou
+   pick one` (`:7319`). A ordem inversa (`--release --full`) não tem teste (Minor adiado). O `die` de opção
+   desconhecida lista as três (`:7312`).
+4. **A ajuda** (`bin/sdd:12021–12023`): a linha do `sdd health` diz que pula o catálogo sobre chave medida, e ganhou
    `[--full]      run the catalogue anyway, over a key already measured`.
 5. **A frase do `/sdd-plan`** (`commands/sdd-plan.md:49–53`): "Copy no killer map into the worktree, and ask for
    nothing to come back after the merge: the map and the stamp live in `<git-common-dir>/sdd-mutation/`, which the
    worktree shares with this checkout, so both outlive `git worktree remove` (ADR 0021)."
-6. Menos visível, mas mudou: o `gate_PR` e a linha 6 do `--release` leem o lugar novo, e as frases deles não
-   mudaram; o catálogo imprime `== killer map: N …` lendo o compartilhado mais a semente (`check-mutation.sh:8166`,
-   `:8248`).
+6. **A linha 6 do `--release`** (`bin/sdd:7264`), reescrita na onda `291d9af`: verde, ela diz "the mutation
+   catalogue measured this content green, over a suite green in that same run (its key is stamped; --release re-runs
+   nothing)", e não afirma mais a suíte de agora (um pulo com suíte vermelha mantém a chave). A vermelha não mudou.
+7. Menos visível, mas mudou: o `gate_PR` e a linha 6 leem o lugar novo, e a frase do `gate_PR` não mudou; o
+   catálogo imprime `== killer map: N …` lendo o compartilhado mais a semente (`check-mutation.sh:8184`, `:8266`); o
+   aviso do `sdd preflight` para git < 2.31 (`bin/sdd:6482–6488`) cita o carimbo e o mapa.
 
 **As jornadas tocadas:** `docs/qa/journeys/J-health-verdict.md` (o fluxo ganha o ramo do pulo e do `--full`; o
 `:24–25` ainda diz "any existing stamp is REMOVED" e `.sdd/logs/mutation-stamp`) e
@@ -159,13 +205,14 @@ deriva de doc da DOCS, não como bug do código.
 
 **Como subir o ambiente:** não há app. O ambiente são os sensores e um fixture.
 
-- `bash tests/check-health.sh` (48 s; as cinco `skip:`), `bash tests/check-gates.sh` (142 s; mundos 6, 7, 8b, 14),
-  `bash tests/check-mutation.sh --anchors` (7 s; `killers:` e 787 mutantes aplicando), `bash tests/check-hat.sh`
-  (3 s). O `--only <slug> <sensor>` de cada mutante novo já foi rodado e está nas notas. Rodar de novo custa minutos
-  por mutante.
+- `bash tests/check-health.sh` (46–49 s; as cinco `skip:`), `bash tests/check-gates.sh` (142–148 s; mundos 6, 7,
+  8b, 14), `bash tests/check-mutation.sh --anchors` (7 s; `killers:` e 789 mutantes aplicando),
+  `bash tests/check-hat.sh` (3 s). O `--only <slug> <sensor>` de cada mutante novo já foi rodado e está nas notas.
+  Rodar de novo custa minutos por mutante.
 - **A verificação end-to-end do plano** (§ Verificação end-to-end), a rodada à mão do pulo sem catálogo, num
-  clone isolado. **Ela não rodou no EXEC**, porque o relay proibiu todo `./bin/sdd health` nesta fase. A receita
-  segue o plano, e o stub segue a forma do `write_stub_suite` (`tests/check-health.sh:258`):
+  clone isolado. **Ela não rodou no EXEC**, porque o relay proibiu todo `./bin/sdd health` nesta fase.
+  **Recomendação da revisão final: rode-a na QA.** Custa segundos e é a M1 fora do sensor. A receita segue o plano,
+  e o stub segue a forma do `write_stub_suite` (`tests/check-health.sh:258`):
 
   ```bash
   d="$(mktemp -d)" && cd "$d" && git clone -q /home/pc_admin/repos/sdd_agents-health-pula-catalogo k && cd k
@@ -190,8 +237,9 @@ deriva de doc da DOCS, não como bug do código.
   redirecionado, outras verificações do health podem sair vermelhas; esta rodada mede só o pulo e o argv. O clone
   tem o próprio `.git`, então nada chega ao `git-common-dir` do kit. Isso é a M1 fora do sensor; a M3 de verdade é
   do humano.
-- **Nunca** rode `./bin/sdd health` na worktree nem no checkout principal antes do carimbo do operador. Ele grava em
-  `/home/pc_admin/repos/sdd_agents/.git/sdd-mutation/`, roda o catálogo de 787 mutantes (cerca de metade das 10 h 58
+- **Nunca** rode `./bin/sdd health` na worktree nem no checkout principal antes do carimbo do operador, e nunca o
+  `sdd health` do PATH nesta worktree (a frase em negrito do começo desta seção). O `./bin/sdd health` grava em
+  `/home/pc_admin/repos/sdd_agents/.git/sdd-mutation/`, roda o catálogo de 789 mutantes (cerca de metade das 10 h 58
   com o mapa) e é a pendência dele, depois dos bots.
 
 ## Pendências / Decisions for a Human
@@ -200,9 +248,9 @@ deriva de doc da DOCS, não como bug do código.
   a leitura seguinte o traz de volta com a linha velha, mesmo depois de a gravação o tirar do compartilhado por não
   ter matador. Medido isolado: compartilhado `{A step1 10}`, semente `{A step9 99}`, `CATALOG=(A)` sem matador; a
   gravação deixa o compartilhado vazio, e a leitura seguinte dá `KILLER[A]=step9 SECS[A]=99`. Junto dela:
-  - o matador velho que volta entra em `distinct_killers` (`check-mutation.sh:7619`, +1 controle);
+  - o matador velho que volta entra em `distinct_killers` (`check-mutation.sh:7637`, +1 controle);
   - `CATALOGUE-BROKEN`, `missing` e `killer_of` vazio também voltam;
-  - o `echo` de `:8166` conta as linhas ressuscitadas;
+  - o `echo` de `:8184` conta as linhas ressuscitadas;
   - a ADR 0021:62–63 "(and leaving when they have no killer, as before)" induz à leitura errada.
 
   O ruling do relay foi o conserto mínimo: o comentário declara a volta, e o código fica. Custa tempo, nunca
@@ -228,7 +276,17 @@ O carimbo da missão, uma vez, depois dos bots (ADR 0015 §1):
 a chave em `/home/pc_admin/repos/sdd_agents/.git/sdd-mutation/stamps/` e lê como semente o mapa de 775 linhas desta
 worktree. O health na worktree tem de imprimir
 `== killer map: 775 mutant(s) run their last killer first, 775 with a recorded time ==`: é a prova do leitor do
-catálogo sobre a semente. Os 12 mutantes novos não têm linha (787 no catálogo). Depois:
+catálogo sobre a semente. Os 14 mutantes novos não têm linha (789 no catálogo).
+
+**Até o merge, só o `./bin/sdd` da worktree lê `sdd-mutation/`; o `sdd` do PATH é o do checkout principal
+(`c114e36`) e grava o arquivo velho — sempre `./bin/sdd health`, nunca `sdd health`, nesta worktree.** Medido em
+2026-10-26: `~/.local/bin/sdd` aponta para `/home/pc_admin/repos/sdd_agents/bin/sdd`, que ainda tem o
+`MUTATION_STAMP_REL` (`:2451`), e o `health_kit_root` velho escolhe a worktree como raiz. Um `sdd health`, ou o hábito
+`sdd health --with-mutation` do `CLAUDE.md:299`, digitado aqui roda o `cmd_health` velho: paga o catálogo inteiro sem
+pulo e grava `.sdd/logs/mutation-stamp`, que ninguém mais lê. A linha 6 fica vermelha, a M3 se perde, e o principal
+paga o catálogo de novo depois do merge. Um `sdd status`, `sdd why` ou `sdd run` do PATH sobre a missão lê o lugar
+velho e manda rodar esse mesmo `sdd health` velho. A frase vale para o PR e para tudo que vem antes do merge; o
+`sdd` do PATH só passa a ser o kit novo quando o checkout principal avançar para o merge. Depois do carimbo:
 - `ls /home/pc_admin/repos/sdd_agents/.git/sdd-mutation/stamps/` mostra a chave da branch;
 - `./bin/sdd health --release` na worktree dá a linha 6 verde;
 - **M3:** no principal, já avançado para o merge, `./bin/sdd health` dá a linha do pulo em ≤ 20 min. Se outro PR
@@ -253,18 +311,24 @@ mudou. É também nesse chore que entram os achados do kit da seção abaixo.
 - **A chave não vê troca de máquina nem de ferramenta**; está declarado, e o remédio é o `--full`.
 - **A doc conta a regra velha** até a DOCS: as jornadas, o `failure-modes.md`, o `README.md`, o `CLAUDE.md` e o
   `docs/pipeline.md` (lista abaixo).
-- **As âncoras de `commands/sdd-plan.md`** no `TODO.md` (nove itens) estão a Δ1 do símbolo depois do I4, dentro da
-  tolerância de 10. Não foram reancoradas, porque o sensor não sugeriu.
-- **A suíte inteira no HEAD final** é do relay. A última rodada inteira foi em `705aa95`, e os commits depois dele
-  só tocam `TODO.md` e a pasta da missão.
+- **As âncoras de `commands/sdd-plan.md`** no `TODO.md` (nove itens) estão a um passo do símbolo, dentro da
+  tolerância de 10, e não foram reancoradas, porque o sensor não sugeriu. Sete estão a −1, e esse −1 vem do I4, que
+  encolheu o passo 2. Duas estão a +1 e não vêm do I4: a `:30` (`KIT-TOUCHED`, em `:31`) já estava a +1 antes dele, e
+  a `:201` (`Anywhere else`, em `:202`) estava a +2.
+- **O `sdd` do PATH é o kit velho até o merge** (`c114e36`): um `sdd health` digitado nesta worktree paga o catálogo
+  e grava o lugar velho. A frase e o custo estão em *A pendência do operador*.
+- **A suíte inteira do HEAD da onda** (`291d9af`) é rodada pelo controller (ver nota do checkpoint). A última rodada
+  inteira registrada neste handoff foi em `705aa95`. Depois dele vieram o `TODO.md`, a pasta da missão e a onda
+  `291d9af`, que mexeu no `bin/sdd`, no `check-health.sh`, no `check-mutation.sh` e no `TODO.md`.
 
 ## Achados fora de escopo
 
 Todos do **kit** (este repositório). Por decisão do relay, **não** entraram no `TODO.md` desta branch, porque a M4
-fixa a catraca em 61. Cada um vai para o **chore pós-merge do `TODO.md`**, com a âncora medida no HEAD `db5a09a`:
+fixa a catraca em 61. Cada um vai para o **chore pós-merge do `TODO.md`**, com a âncora medida no HEAD `db5a09a` e,
+onde a onda `291d9af` a empurrou, medida de novo nele:
 
 - **Um `sed` de mutante que vira no-op passa calado pelo `--anchors`.** O `apply_mutant`
-  (`tests/check-mutation.sh:7562`, o `diff -qr` em `:7565`) só exige que `bin/` mude no todo. Num mutante de vários
+  (`tests/check-mutation.sh:7580`, o `diff -qr` em `:7583`) só exige que `bin/` mude no todo. Num mutante de vários
   `sed`, um deles pode não casar mais e ninguém acusa. Foi medido pelo re-revisor no `cdpath_leak`, cujo 1º `sed`
   virou no-op depois da extração do `git_common_dir_abs` (já reancorado no I1 r1). Ficou em aberto se já era assim
   no `19dbe32`. → chore pós-merge.
@@ -276,7 +340,7 @@ fixa a catraca em 61. Cada um vai para o **chore pós-merge do `TODO.md`**, com 
 - **Pré-existente:** o comentário `tests/check-gates.sh:3782` ("The control file still says `move-the-tree` from
   world 8") já era velho na base. → chore pós-merge.
 - **Pré-existente:** o censo do `tests/check-health.sh:85–86` (`grep -n 'sdd" health' tests/*.sh`) não conta a
-  forma `./bin/sdd health` (`check-gates.sh:3679`, `check-health.sh:1181`). → chore pós-merge.
+  forma `./bin/sdd health` (`check-gates.sh:3679`, `check-health.sh:1190`). → chore pós-merge.
 - **Lição sem conserto verificado (relay):** o contrato do `sdd-executor` (§2) manda rodar o `TEST_CMD` antes de
   tocar em nada. Só que a suíte leva 531–557 s, e o Bash de um subagente para em 600 s. Por isso o relay rodou a
   suíte por todos os incrementos. → chore pós-merge, como achado do contrato.
@@ -295,6 +359,10 @@ Do `01-plano.md` § Para a fase DOCS, com o que os incrementos acrescentaram:
 
 - `README.md:173–182`, `CLAUDE.md:299` e `:311` (o mapa em `.sdd/cache/`), `CONTEXT.md:32` (o verbete "Carimbo de
   mutação") e `docs/pipeline.md:528–545`: o lugar velho.
+- Os mesmos quatro (`README.md`, `docs/pipeline.md`, `CLAUDE.md:299` e `CONTEXT.md`) precisam também do **pulo** e da
+  flag nova **`--full`**, não só do lugar novo: hoje nenhum deles diz que o `sdd health` pula o catálogo sobre chave
+  já medida, nem que o `--full` força. O `CLAUDE.md:299` ensina `sdd health --with-mutation` como "a cara", e o
+  `--with-mutation` agora é sinônimo do padrão, pulo incluído.
 - `docs/failure-modes.md`:
   - a receita da chave (`:1085–1086`, `:1086`) compara com `.sdd/logs/mutation-stamp`;
   - a seção `:1104–1150` ("`sdd health` in the main checkout is slow again after a kit mission") perde o motivo:
@@ -310,58 +378,99 @@ Do `01-plano.md` § Para a fase DOCS, com o que os incrementos acrescentaram:
   have no killer, as before").
 - A transição: até o primeiro catálogo depois da branch não há mapa compartilhado, e uma worktree nova sem cópia
   roda sem mapa nesse intervalo (só tempo).
-- O aviso do `sdd preflight` para git < 2.31 só cita o `ledger_repo_root`, mas o carimbo e o mapa agora usam o mesmo
-  caminho de reserva (prosa; também está entre os Minor).
 - A entrada do `KAIZEN_LOG.md` (K8): antes e depois. O catálogo de 10 h 58 vira o pulo; a volta manual vira
   nenhuma.
 - As ADRs 0004 e 0016 já têm o `Amended by: 0021` (`73420e7`).
+- Conferir a convenção do status `proposed` da ADR 0021 (`- **Status**: proposed (—, 2026-10-26)`): a 0020 também
+  ficou `proposed`, e o achado do `sdd approve` que commita o ADR sem tirar o `proposed` (`TODO.md:370`) é o mesmo
+  assunto. A DOCS decide se a 0021 sai `accepted` no PR ou segue a 0020.
 
 ## Minor adiados das revisões (para a REVIEW triar)
 
 Nenhum bloqueia; a REVIEW decide se algum vira `R<n>`. Os números de linha são os do HEAD da revisão de cada
-incremento e podem ter andado: as linhas `== killer map:` do I3, por exemplo, estão hoje em `:8166` e `:8248`.
+incremento e podem ter andado, salvo onde o item diz "medido em `291d9af`": as linhas `== killer map:` do I3, por
+exemplo, estão hoje em `:8184` e `:8266`.
+
+**Triagem da revisão final.** Os marcados **consertado em `291d9af`** saíram na onda de conserto. O resto **pode
+esperar**, e cada item diz por quê.
 
 - **I1:**
-  - nenhum sensor mede a regra "primeira linha igual à chave" do `mutation_stamp_valid` (`bin/sdd:7290–7291`);
-  - a sonda da linha 6 (`check-hat.sh:811`) grafa o lugar à mão, sem a guarda de resposta absoluta;
+  - nenhum sensor mede a regra "primeira linha igual à chave" do `mutation_stamp_valid` (`bin/sdd:7294–7295`, medido
+    em `291d9af`). *Pode esperar:* o nome do arquivo já é a chave, e o runner sempre grava a chave na primeira linha;
+    um arquivo com o nome certo e a primeira linha errada só nasce de edição à mão;
+  - a sonda da linha 6 (`check-hat.sh:811`) grafa o lugar à mão, sem a guarda de resposta absoluta. *Pode esperar:*
+    num git < 2.31 a chave da sonda iria para outro caminho e a metade verde sairia vermelha; ela falha fechada,
+    nunca passa sem medir;
   - `fixture_stamps` dá rc 1 num git < 2.31 e o `fixture_unstamp` vira no-op calado, mas o comentário
-    (`check-gates.sh:3248–3249`) só fala em "fora de git";
-  - o temporário da gravação mora dentro de `stamps/` (`bin/sdd:7547`), e um `<chave>.tmp.<pid>` órfão conta no
-    `fixture_stamped` (`ls -A`);
-  - as âncoras do `TODO.md` foram mexidas antes de a skill `todo-to-github-issues` ser carregada (sem dano);
-  - o aviso do `sdd preflight` para git < 2.31 só cita o `ledger_repo_root` (também na lista da DOCS).
+    (`check-gates.sh:3248–3249`) só fala em "fora de git". *Pode esperar:* é comentário de fixture, e o git < 2.31 já
+    é avisado pelo `sdd preflight`;
+  - o temporário da gravação mora dentro de `stamps/` (`bin/sdd:7606–7615`, medido em `291d9af`), e um
+    `<chave>.tmp.<pid>` órfão conta no `fixture_stamped` (`ls -A`). *Pode esperar:* o órfão só nasce de um kill entre
+    o `printf` e o `mv`, e o `mutation_stamp_valid` lê o arquivo pelo nome exato da chave, então um órfão nunca abre
+    gate; ele só confundiria a contagem de um fixture;
+  - as âncoras do `TODO.md` foram mexidas antes de a skill `todo-to-github-issues` ser carregada (sem dano). *Pode
+    esperar:* é só o registro;
+  - **consertado em `291d9af`:** o aviso do `sdd preflight` para git < 2.31 citava só o `ledger_repo_root`; agora cita
+    o carimbo e o mapa (`bin/sdd:6482–6488`), e saiu da lista da DOCS.
 - **I2:**
-  - "o pulo não grava" não tem asserção. Um mutante `&& [ "$skip" != 1 ]` no `elif` da gravação regravaria a chave
-    com `measured:<agora>` e score vazio (medido por leitura). Conserto: `! grep -qF "$STAMPED"` no `$OUT_SKIP` e no
-    `$OUT_SKIP_RED`;
-  - a `skip: 1` só pede `catalogue skipped.*--full`: não conta a linha como única nem lê a procedência. A ordem
-    `--release --full` não tem teste;
+  - **consertado em `291d9af`:** "o pulo não grava" não tinha asserção. O mutante medido pela revisão final foi o
+    `catalogue_green=1` na linha do pulo (`mut_HEALTH_skip_writes`), e não o `&& [ "$skip" != 1 ]` lido aqui. O
+    conserto é o previsto: `! grep -qF "$STAMPED"` no `$OUT_SKIP` (a `skip: 1`) e no `$OUT_SKIP_RED` (a `skip: 3`);
+  - **consertado em `291d9af`:** a `skip: 1` só pedia `catalogue skipped.*--full`. Agora conta a linha como única e lê
+    a procedência `(measured: …` (`mut_HEALTH_skip_line_unsourced`). Fica a ordem `--release --full`, que não tem
+    teste. *Pode esperar:* a recusa vem depois do parse inteiro, então a ordem não entra nela por construção, e o
+    `mut_HEALTH_full_with_release_accepted` já mata a recusa;
   - o cabeçalho do bloco i4 (`check-gates.sh:3166`) diz que os mundos 2–6 passam com um gate que recusa tudo, mas
-    o 6 agora espera `DONE`;
+    o 6 agora espera `DONE`. *Pode esperar:* é comentário de sensor;
   - as contagens divergem: `check-hat.sh:779` diz "ten handoffs", e `bin/sdd:7297` diz "sixteen handoffs and in
-    CLAUDE.md";
+    CLAUDE.md". *Pode esperar:* são dois comentários, e a DOCS pode alinhar a contagem;
   - as `skip: 3` e `4` forjam a chave pela receita, o que falha fechado. A alternativa é o rc do stub num arquivo de
-    controle não rastreado, como no `check-gates.sh:3186–3196`;
-  - o comentário de `tests/check-health.sh:1138–1140` ("the only world of the kit where a catalogue run meets a red
-    suite over a clean score") é falso: o mundo `abort:` (`:811–814`) também faz isso, só não lê o `$STAMPED`;
+    controle não rastreado, como no `check-gates.sh:3186–3196`. *Pode esperar:* uma receita que derive deixa os
+    mundos vermelhos, nunca verdes;
+  - **consertado em `291d9af`:** o comentário de `tests/check-health.sh:1138–1140` ("the only world of the kit where a
+    catalogue run meets a red suite over a clean score") era falso, porque o mundo `abort:` (`:811–814`) também roda
+    esse catálogo. Agora (`:1145–1149`) ele diz que esta é a única que pergunta se esse catálogo carimba;
   - nit: o comentário do mundo 9 (`check-gates.sh:3543`) diz "never a leftover of world 8", mas o anterior agora é o
-    8b, que deixa a chave K (o `fixture_unstamp` segura a propriedade).
+    8b, que deixa a chave K (o `fixture_unstamp` segura a propriedade). *Pode esperar:* é comentário, e a propriedade
+    tem quem a segure.
 - **I3:**
   - os `load_killer_maps` dos três leitores não têm sensor durável: a sabotagem sobrevive à suíte rápida (fiação de
     modo, falha ruidosa ou única por clone). Um sensor barato seria `--touched <rev> --list` num fixture com o
-    compartilhado ausente e a semente presente (~3 s);
-  - as linhas `== killer map: N …` (`:8160`, `:8242`) passam a contar slugs fora do `CATALOG`;
+    compartilhado ausente e a semente presente (~3 s). *Pode esperar:* o mapa é dica de ordem, e um leitor quebrado
+    custa tempo, nunca veredito (ADR 0021 §5);
+  - as linhas `== killer map: N …` (`:8160`, `:8242`) passam a contar slugs fora do `CATALOG`. *Pode esperar:* é uma
+    linha informativa, que nenhum veredito lê;
   - `bin/sdd:3608–3610` ("ONE resolution … a repair here reaches both") não aponta a cópia do `check-mutation.sh`, e o
     comentário da cópia (`:7754–7756`) diz "copied" sem nomear a recusa de `\n` que ficou de fora
-    (`bin/sdd:3656`);
+    (`bin/sdd:3656`). *Pode esperar:* são dois comentários;
   - em `:7654`, a recusa do `--touched` nomeia só o compartilhado quando faltam os dois; e o `:7776` ("The seed is
-    never written") é falso fora de git, onde os dois são um arquivo só;
+    never written") é falso fora de git, onde os dois são um arquivo só. *Pode esperar:* são uma mensagem e um
+    comentário, e a recusa continua recusando;
   - a frase nova (`check-mutation.sh:7778–7783`) restringe a volta a "checkout com semente". Medido: um catálogo que
     não lista o slug copia a linha da semente para o compartilhado (a união, `:7797–7798`), e ela chega a um
-    checkout sem semente até um catálogo que liste o slug. É raro e custa só tempo; falta uma oração.
+    checkout sem semente até um catálogo que liste o slug. É raro e custa só tempo; falta uma oração. *Pode
+    esperar:* pelo mesmo motivo, e a DOCS pode levar a oração junto da ressurreição na ADR 0021.
 - **I4:**
   - `commands/sdd-plan.md:51` "ask for nothing to come back" diz mais que a justificativa, porque os logs
-    `.sdd/logs/<missão>` seguem por worktree. Sugestão: "ask for neither to come back";
+    `.sdd/logs/<missão>` seguem por worktree. Sugestão: "ask for neither to come back". *Pode esperar:* a ordem que
+    importa (não copiar o mapa, não trazer mapa nem carimbo) está certa;
   - `tests/check-hat.sh:585` diz "the presence is read in the step", mas o `sec` é a seção
-    `## Before anything else` inteira;
+    `## Before anything else` inteira. *Pode esperar:* é comentário de sensor;
   - a probe fixa a grafia `` `<git-common-dir>/sdd-mutation/` `` com a crase (`check-hat.sh:593`); fica só o registro.
+    *Pode esperar:* uma grafia nova deixa a probe vermelha, nunca verde.
+
+### Recusados por julgamento (revisão final)
+
+Levantados pela revisão da branch e recusados, cada um com o motivo. Não voltam como achado sem fato novo.
+
+1. **A janela sob `--full` não apaga a chave.** Decisão do planner (`00-missao.md`, "a janela … não grava nem apaga
+   nada").
+2. **A corrida de carimbos entre duas worktrees na mesma chave.** Vence o último `rm`/`mv`; fora do plano e raríssimo.
+3. **A chave não cobre `commands/`, `CLAUDE.md`, `TODO.md`, `docs/adr` nem `docs/pipeline.md`.** É a confiança herdada
+   do `gate_PR`, que sempre leu a chave assim.
+4. **Não há aviso sobre o `.sdd/logs/mutation-stamp` órfão.** Depois do merge ninguém mais o lê nem o grava (até lá,
+   só o `sdd` do PATH, ver *A pendência do operador*), e ele não abre nenhum gate do kit novo.
+5. **O kit sem git nunca pula.** É o desenho (ADR 0021 §1): fora de git não há carimbo.
+6. **O TOCTOU entre o pulo e um `--full` concorrente.** É uma corrida entre duas rodadas, como a do item 2: fora do
+   plano e raríssima.
+7. **Um `stamps/<chave>` que fosse diretório.** Só aparece por sabotagem manual.
