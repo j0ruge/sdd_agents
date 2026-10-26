@@ -1071,6 +1071,10 @@ forge_stamp() { # forge_stamp — a stamp for the CURRENT content of $FIX, in th
     && printf '%s\n' "$key"
 }
 
+# A skip is not a measurement, so it WRITES nothing: a skip that rewrote stamps/<key> would put a
+# `measured:` of now over an empty `score:` line, and the next skip would announce a catalogue run
+# that never happened (mut_HEALTH_skip_writes). The line is ONE, and it carries the provenance of
+# the key it trusts, the `measured:` the runner wrote under the key (mut_HEALTH_skip_line_unsourced).
 SKIP1_DESC='skip: a key measured green runs the suite without the catalogue, and the line names --full'
 green_world
 health_run
@@ -1079,17 +1083,20 @@ KEY_WRITTEN="$(ls -A "$SKIP_STAMPS" 2>/dev/null || true)"
 KEY_RECIPE="$(fixture_key)"
 health_run_keep
 OUT_SKIP="$HEALTH_OUT"; RC_SKIP="$HEALTH_RC"; ARGV_SKIP="$(stub_argv)"
+SKIP_LINES="$(grep -F "$SKIP_LINE" <<< "$OUT_SKIP" || true)"
+SKIP_LINES_N="$(grep -c . <<< "$SKIP_LINES" || true)"
 if grep -qF "$STAMPED" <<< "$OUT_SKIP_MEASURE" \
    && grep -qF -- '--with-mutation' <<< "$ARGV_SKIP_MEASURE" \
    && ! grep -qF "$SKIP_LINE" <<< "$OUT_SKIP_MEASURE" \
    && [ "$ARGV_SKIP" != ABSENT ] && ! grep -qF -- '--with-mutation' <<< "$ARGV_SKIP" \
    && [ "$RC_SKIP" -eq 0 ] && grep -qF 'kit healthy' <<< "$OUT_SKIP" \
-   && grep -qE "$SKIP_LINE.*--full" <<< "$OUT_SKIP"; then
+   && [ "$SKIP_LINES_N" = 1 ] && grep -qE "$SKIP_LINE.*\(measured: .*--full" <<< "$SKIP_LINES" \
+   && ! grep -qF "$STAMPED" <<< "$OUT_SKIP"; then
   pass "$SKIP1_DESC"
 else
   fail "$SKIP1_DESC" \
-       "the first run measures and stamps (argv --with-mutation); the second calls the suite with no flag, rc 0, 'kit healthy', and one line saying '$SKIP_LINE' and naming --full" \
-       "first: argv '$ARGV_SKIP_MEASURE' · $(digest "$OUT_SKIP_MEASURE") // second: rc $RC_SKIP, argv '$ARGV_SKIP' · $(digest "$OUT_SKIP")"
+       "the first run measures and stamps (argv --with-mutation); the second calls the suite with no flag, rc 0, 'kit healthy', ONE line saying '$SKIP_LINE' with the key's '(measured: …' and naming --full, and '$STAMPED' nowhere" \
+       "first: argv '$ARGV_SKIP_MEASURE' · $(digest "$OUT_SKIP_MEASURE") // second: rc $RC_SKIP, argv '$ARGV_SKIP', $SKIP_LINES_N skip line(s), '$STAMPED' said $(grep -cF "$STAMPED" <<< "$OUT_SKIP" || true)× · $(digest "$OUT_SKIP")"
 fi
 
 # --full over the key the world above left standing, then --full beside --release, which never runs
@@ -1125,19 +1132,21 @@ if [ -n "$KEY_WRITTEN" ] && [ "$KEY_WRITTEN" = "$KEY_RECIPE" ] \
    && [ "$ARGV_SKIP_RED" != ABSENT ] && ! grep -qF -- '--with-mutation' <<< "$ARGV_SKIP_RED" \
    && [ "$RC_SKIP_RED" -eq 1 ] && grep -qF "$SKIP_LINE" <<< "$OUT_SKIP_RED" \
    && grep -qF 'suite red (rc 1) — run tests/run-all.sh to see it' <<< "$OUT_SKIP_RED" \
-   && [ -f "$SKIP_STAMPS/$KEY_RED" ]; then
+   && [ -f "$SKIP_STAMPS/$KEY_RED" ] && ! grep -qF "$STAMPED" <<< "$OUT_SKIP_RED"; then
   pass "$SKIP3_DESC"
 else
   fail "$SKIP3_DESC" \
-       "the recipe answers the key the runner wrote; over the red stub's own key the suite is called with no flag, rc 1, 'suite red (rc 1) — run tests/run-all.sh to see it', and stamps/<that key> is still there" \
+       "the recipe answers the key the runner wrote; over the red stub's own key the suite is called with no flag, rc 1, 'suite red (rc 1) — run tests/run-all.sh to see it', stamps/<that key> is still there, and '$STAMPED' nowhere" \
        "recipe '$KEY_RECIPE' vs written '$KEY_WRITTEN' · red key '$KEY_RED' $( [ -f "$SKIP_STAMPS/$KEY_RED" ] && echo kept || echo gone ) · rc $RC_SKIP_RED, argv '$ARGV_SKIP_RED' · $(digest "$OUT_SKIP_RED")"
 fi
 
 # Under --full the catalogue runs and judges the key: a survivor takes it away, and a red suite over
 # a clean score does not — that red is about the suite, which the key does not describe. Nor does it
 # WRITE one: a stamp is the catalogue green as a whole, the suite and the score (ADR 0021 §2), and
-# this red half is the only world of the kit where a catalogue run meets a red suite over a clean
-# score (world 6 of check-gates.sh is a skip since ADR 0021), so it is where that half is measured.
+# this red half is the only world of the kit that asks whether a catalogue run over a red suite and
+# a clean score stamps. The `abort:` world above runs that same catalogue, but reads only that the
+# red is said and the run carries on, never $STAMPED; and world 6 of check-gates.sh is a skip since
+# ADR 0021. So this is where that half is measured.
 SKIP4_DESC="skip: only the catalogue's verdict takes a key away — a survivor does, a red suite over a clean score does not"
 write_stub_suite with-count with-score 0 "$SCORE_SURVIVOR"
 KEY_SURV="$(forge_stamp || true)"

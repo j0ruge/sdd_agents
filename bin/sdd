@@ -6482,7 +6482,10 @@ cmd_preflight() {
     warn "this git does not know 'rev-parse --path-format' (2.31+, and it does not fail — it
         echoes the flag back and exits 0). 'ledger_repo_root' refuses the echoed shape and falls
         back to resolving the common dir with cd + pwd -P, which answers the same string, so the
-        ledger stays correct. Upgrading git removes the extra rev-parse per ledger write."
+        ledger stays correct. The mutation stamps ('mutation_stamp_dir', through the same
+        'git_common_dir_abs') and the killer map (tests/check-mutation.sh, 'killers_paths') take
+        that same fallback, so both still land in the one common dir every worktree of the clone
+        shares. Upgrading git removes the extra rev-parse."
   fi
 
   if [ -z "$gnu" ]; then
@@ -7252,9 +7255,13 @@ health_release() {   # rc 0 = six green lines
   elif [ ! -f "$kit/LICENSE" ]; then line 5 bad "no LICENSE at the kit root${hits:+; and client identifiers on the surface:$hits}"
   else line 5 bad "client identifiers on the surface:$hits"; fi
   # 6 — the key of this content is among the keys measured green (the suite's artifact; never re-run
-  # here), asked of the git common directory every worktree of this clone shares (ADR 0021)
+  # here), asked of the git common directory every worktree of this clone shares (ADR 0021). The
+  # green sentence claims only what a key proves: the catalogue run that wrote it, and the suite of
+  # that same run. Never the suite of NOW: a red fast suite over a stamped key keeps the key (ADR
+  # 0021 §4), so a health that just said "suite red" is followed here by a green line 6. Nor the
+  # backlog ratchet, which check 3 of cmd_health reads only after the stamp is written.
   key="$(mutation_stamp_key "$kit" || true)"
-  if mutation_stamp_valid "$kit" "$key"; then line 6 ok "suite, ratchet and mutation catalogue green for this content (its key is stamped)"
+  if mutation_stamp_valid "$kit" "$key"; then line 6 ok "the mutation catalogue measured this content green, over a suite green in that same run (its key is stamped; --release re-runs nothing)"
   else line 6 bad "mutation stamp absent or stale — run ./bin/sdd health after the last code commit"; fi
   if [ "$reds" -eq 0 ]; then ok "apt for another repo of the organisation: 6 of 6"; return 0; fi
   bad "apt for another repo: $reds line(s) red — each is a finding with an owner in ADR 0007"
@@ -7424,6 +7431,16 @@ cmd_health() {
   # gap or survivor (where a TIMED-OUT mutant lands) — and it is the ONLY thing check 2c removes a
   # key for (ADR 0021 §4). A red suite over a clean score, a missing score line and one that does
   # not parse leave it empty: none of them is the catalogue saying this content fails.
+  # Of the three, the `gap` and `census` arms are unreachable over a stamped key, the only key whose
+  # removal is observable (D15). A key the runner stamped had 0 gaps, so KNOWN_GAPS=(): a listed gap
+  # that survives lands in the gap arm, and one that is caught is "ALREADY caught", an error, and
+  # lands in the survivor arm (tests/check-mutation.sh, KNOWN_GAPS). And KNOWN_GAPS, CATALOG and the
+  # mut_*() definitions the census compares all sit in the keyed content, so the same key gives the
+  # same gaps and the same census. Over a key not stamped they still speak, and `rm -f` finds
+  # nothing to take, so sabotaging `catalogue_against=gap` or `=census` gives an equivalent mutant,
+  # which is why neither is in the catalogue. `survivor` stays reachable over a stamped key: a
+  # TIMED-OUT mutant lands there, and the same content can lose a mutant on another machine, which
+  # is what `--full` exists to ask.
   local score_line score_nums caught gaps total defined catalogue_against=""
   defined="$(grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' "$kit/tests/check-mutation.sh" 2>/dev/null || true)"
   if [ -z "$defined" ]; then defined=0; fi

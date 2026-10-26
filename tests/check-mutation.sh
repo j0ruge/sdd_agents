@@ -1798,6 +1798,22 @@ mut_HEALTH_red_suite_stamps() {
 mut_HEALTH_skip_window_blind() {
   sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$stamp_key" != "\$stamp_key_before" \]; then$@  if [ "$skip" != 1 ] \&\& [ "$stamp_key" != "$stamp_key_before" ]; then@' "$1"
 }
+# The skip WRITES the stamp (final review of the mission): `catalogue_green=1` on the line that
+# takes the skip, and check 2c rewrites stamps/<key> on every skip, with a `measured:` of now and an
+# empty `score:` line, so the next skip's line announces a catalogue measurement that never
+# happened. No false stamp opens, since the key was already valid; what lies is the provenance.
+# Caught by `skip: a key measured green runs the suite without the catalogue…` and by `skip: a red
+# suite over a measured key fails health and keeps the key`, both demanding that nothing is stamped.
+mut_HEALTH_skip_writes() {
+  sed -i '/^cmd_health() {/,/^}/ s@^    skip=1; suite_flag=""; measuring=suite$@    skip=1; suite_flag=""; measuring=suite; catalogue_green=1@' "$1"
+}
+# The line of the skip stops carrying the provenance of the key it trusts (final review of the
+# mission): it still says the catalogue was skipped, and no longer when, where or over which score
+# that key was measured. Caught by `skip: a key measured green runs the suite without the
+# catalogue…`, which demands ONE skip line, and that line carrying `(measured: `.
+mut_HEALTH_skip_line_unsourced() {
+  sed -i '/^cmd_health() {/,/^}/ s@ was measured green\${stamp_prov:+ (\$stamp_prov)}; @ was measured green; @' "$1"
+}
 
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
 # guard makes the PROJECTION (`--dry-run`) write to the journal while the real path goes mute — a
@@ -6975,6 +6991,8 @@ CATALOG=(
   HEALTH_survivor_keeps_key
   HEALTH_red_suite_stamps
   HEALTH_skip_window_blind
+  HEALTH_skip_writes
+  HEALTH_skip_line_unsourced
   RUN_inverted_journal
   RUN_phase_log_time_only
   RUN_check_log_time_only
