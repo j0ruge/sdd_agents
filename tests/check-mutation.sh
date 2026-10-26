@@ -170,8 +170,9 @@ load_killer_maps() {
 
 # launch_order — stdin: <slug> TAB <seconds or empty>, in catalogue order; stdout: the slugs in
 # launch order. The ones with no recorded time come first (new mutants and survivors run the whole
-# suite), in catalogue order; then the longest first, ties in catalogue order. A pool that starts
-# its longest jobs last ends with one slot busy and the rest idle.
+# suite; a survivor the .sdd/cache seed knows has its old time instead, write_killer_map), in
+# catalogue order; then the longest first, ties in catalogue order. A pool that starts its longest
+# jobs last ends with one slot busy and the rest idle.
 launch_order() {
   awk -F'\t' '{ s = ($2 ~ /^[0-9]+$/) ? $2 : 999999; printf "%s\t%d\t%s\n", s, NR, $1 }' \
     | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2n | cut -f3
@@ -425,8 +426,8 @@ touched_selftest() {
 # old git too, each with its own .sdd/cache map as the seed; a directory outside git keeps its
 # .sdd/cache map. (b) The shared line wins over the seed's, and the seed fills the slugs the shared
 # map does not know. (c) A write is a union read at write time: a slug of CATALOG takes this run's
-# line or leaves, a slug outside it keeps the shared line or, failing it, the seed's, and the seed is
-# never rewritten. (d) The two names every reader uses were published for $ROOT before any mode
+# line or leaves the file, one outside it keeps the shared line or, failing it, the seed's; the seed
+# is never rewritten. (d) The two names every reader uses were published for $ROOT before any mode
 # reads them. KILLERS_FILE and LEGACY_KILLERS_FILE are locals below that, and every path (a)-(c)
 # touches is under $WORK, so it never reads or writes the real map. Called beside touched_selftest,
 # in every mode. Declared, not probed: that the --only, --touched and catalogue readers call
@@ -7770,14 +7771,19 @@ killers_paths() { # killers_paths <root>
 
 # write_killer_map <dir> — rewrites KILLERS_FILE, atomically, as a union read NOW and not when the
 # run started, since another worktree's catalogue may have written it meanwhile: a slug of CATALOG
-# takes this run's line from <dir>/<slug>.killer and .secs, and LEAVES when it has none (a mutant
-# that stopped being caught runs nobody's killer first); every other slug keeps the line
-# load_killer_maps reads for it, the shared map's or, failing it, the seed's — another branch's
-# catalogue holds mutants this one does not. The seed is never written. rc 1 when the map could not
-# be written, and no tmp file outlives the call. Declared, not closed: a slug no catalogue lists any
-# more keeps its line for good, and a killer step only such a line names adds one control by killer,
-# run in the usual order (run-all.sh runs a name that matches nothing that way) — time, never a
-# verdict; and two catalogues writing at the same instant keep the last mv (ADR 0021).
+# takes this run's line from <dir>/<slug>.killer and .secs, and leaves the shared file when it has
+# none; every other slug keeps the line load_killer_maps reads for it, the shared map's or, failing
+# it, the seed's — another branch's catalogue holds mutants this one does not. The seed is never
+# written. rc 1 when the map could not be written, and no tmp file outlives the call.
+# Declared, not closed. A slug that left the shared file comes BACK on the next read wherever the
+# seed (.sdd/cache/mutation-killers.tsv) knows it, with the seed's old line, because the seed is
+# read for every slug the shared map does not know (ADR 0021, decision 5). So in a checkout with a
+# seed that knows it, a survivor (a known gap included) or a TIMED-OUT mutant is not launched first
+# with the ones that have no recorded time (launch_order) but by its old time, and it runs its old
+# killer first: time, never a verdict, for as long as that seed is there. A slug no catalogue lists
+# any more keeps its line for good, and a killer step only such a line names adds one control by
+# killer, run in the usual order (run-all.sh runs a name that matches nothing that way): time, never
+# a verdict. Two catalogues writing at the same instant keep the last mv (ADR 0021).
 write_killer_map() { # write_killer_map <dir>
   local dir="$1" slug k
   local -A KILLER=() SECS=() listed=()
