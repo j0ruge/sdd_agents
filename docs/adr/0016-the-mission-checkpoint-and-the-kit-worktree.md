@@ -5,7 +5,8 @@
 - **Amends**: 0015 (§3: the declared fail-open closes — the checkpoint left by the base commit that
   added the report must be a blob the mission's branch already had)
 - **Amended by**: 0017 (§2: the kit's own judge runs in a linked worktree; the runner refuses the
-  shared checkout)
+  shared checkout); 0021 (Consequences: the killer map and the stamp live in the git common
+  directory, so the worktree no longer needs the map copied in or brought back)
 
 ## Context
 
