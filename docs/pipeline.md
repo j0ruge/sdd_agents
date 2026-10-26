@@ -118,7 +118,12 @@ Two practical consequences for anyone working here:
 
 `sdd health` runs all of that in one go and answers "does the kit still measure what it says it
 measures?". It belongs to the **kit**; `sdd preflight` belongs to the **target repo's
-environment** — do not confuse them.
+environment** — do not confuse them. Over content whose stamp key is already measured green (the
+stamp, below) it **skips the catalogue** and runs the fast suite, the ratchet and every static check:
+one line, `mutation: catalogue skipped — this content (key <key>) was measured green (<provenance>);
+./bin/sdd health --full measures it again`, says so, and `--full` is the way back to the catalogue
+(ADR 0021 §3). `--with-mutation` stays a synonym of the default; `--full` beside `--release` is
+refused by name, because `--release` never runs the suite.
 
 **When the line stops, the runner can page you.** Every escalation that ends the run with rc 3 —
 `increment-blocked`, `dirty-tree`, `handoff-blocked`, `app-down`, `session-died`, `budget-exhausted`,
@@ -525,11 +530,22 @@ reader `gate_DOCS` decides on (one `⛔` cell naming several documents is one ro
 the two gates cannot disagree about which documents are `⛔`.
 
 **In a repo that owns a mutation catalogue there is one more requirement, and it is checked last:**
-a stamp in `.sdd/logs/mutation-stamp` matching the current **tracked** content of `bin/ tests/
-templates/ config/ agents/` minus the ratchet `tests/health-baseline.txt` (ADR 0014), so registering a
-finding no longer invalidates it; a root missing one of the five paths, or not a git checkout, has
-no key (`no mutation stamp is possible for this tree: <reason>`). `sdd health` writes it when the
-catalogue comes back green; nothing else writes it; a red catalogue, or a tree that moved while it ran, **removes** it. The refusal names its own remedy —
+the key of the current **tracked** content of `bin/ tests/ templates/ config/ agents/` minus the
+ratchet `tests/health-baseline.txt` (ADR 0014) has to be among the stamps, so registering a finding
+no longer invalidates it; a root missing one of the five paths, or not a git checkout, has no key
+(`no mutation stamp is possible for this tree: <reason>`). The stamps are a set of keys measured
+green, one file per key in `<git-common-dir>/sdd-mutation/stamps/<key>`, whose first line is the key
+and whose `measured:`, `root:` and `score:` lines are provenance for people (ADR 0021). The main
+checkout and every linked worktree of the clone read and write that one directory, so a key stamped
+in a mission's worktree opens `gate_PR` over the same content in the main checkout, and
+`git worktree remove` keeps it. One
+definition answers "was this key measured green?" (`mutation_stamp_valid`), and `gate_PR`, line 6 of
+`sdd health --release` and the skip of `sdd health` all ask it. `sdd health` writes a key when the
+catalogue comes back green, suite and score, over a key that did not move during the run; nothing
+else writes it. Only the catalogue's own verdict over the key **removes** it: a census that
+disagrees, a gap, a survivor or a TIMED-OUT mutant. A red fast suite (in a skip, or as the control of
+a catalogue run), a missing or unparseable score line and a tree that moved while it ran write
+and remove nothing (ADR 0021 §4). The refusal names its own remedy —
 `no green mutation catalogue for this content — run 'sdd health'` — because a gate that stops the
 line without naming the command sends the operator to run the fast suite, watch it go green, and
 conclude the runner is lying.
