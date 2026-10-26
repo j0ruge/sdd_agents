@@ -122,6 +122,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `#N` só num arquivo que numera os itens, quando N é o número de um item e não vem depois de `PR`, `issue`
   ou `dono/repo`. — descoberto por `claude` no espelho do `TODO.md` do `magic_tutor` (2026-10-26)
 
+- [ ] **A sonda de interrupção do `check-health.sh` mede o grupo antes do `setsid`, e a suíte cai sem defeito** —
+  `tests/check-health.sh:1868` (`INTR_PID`) — o `ps -o pgid=` roda logo depois do `setsid … &`, às vezes antes de
+  o filho chamar o `setsid()`: sai `SENSOR-BROKEN … not the leader of its own process group` e a suíte dá rc 1.
+  Caiu assim na suíte do `6160ae1` (PR `j0ruge/sdd_agents#330`), com o `check-health.sh` igual ao do `d426c68`,
+  verde, e na de um commit só de `TODO.md`; avulso, caiu 1 vez em 4 e passou com `bash -x`. A sonda vem do
+  `a3d3996`. Causa provável, não reproduzida sob controle. Direção: medir o grupo depois da espera pelo passo
+  lento, quando a suíte já roda, e provar por sabotagem (sem o `setsid`) que a sonda acusa. — descoberto pelo
+  relay da missão `20261026-health-pula-catalogo` (2026-10-26)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
