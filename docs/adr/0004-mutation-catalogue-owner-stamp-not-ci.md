@@ -5,8 +5,8 @@ Date: 2026-08-19 · Status: accepted
 Spec: docs/handoffs/20260819-fecho-que-nao-mente/00-missao.md
 
 Amended by: 0015 (§1: the stamp is not headless — the operator stamps after the bots; `agents/` joins the key); 0021 (§4 and
-the red-catalogue consequence: the stamp is a set of keys in the git common directory, and only the
-catalogue's own verdict removes a key)
+the consequence on removal: the stamp is a set of keys in the git common directory, only the
+catalogue's own verdict removes a key, and a tree that moved while it ran removes nothing)
 
 ## Context
 
@@ -41,7 +41,9 @@ exists to keep a specific alternative from being tried again:
    `.sdd/logs/mutation-stamp` when, and only when, the full suite and the `score:` line both came
    back green; `gate_PR` refuses while no stamp matches the current content. Running the catalogue
    inside a gate is precisely what `4c86712` undid, and re-buying it here would re-buy the
-   unsatisfiable phase along with it.
+   unsatisfiable phase along with it. *(Amended by 0021: the stamp is one file per key measured
+   green, in `<git-common-dir>/sdd-mutation/stamps/`; `.sdd/logs/mutation-stamp` is neither read nor
+   written.)*
 
 2. **The key is the CONTENT of `bin/ tests/ templates/ config/`, never `HEAD`.** Those four are
    what decides a mutant's fate: the runner the mutants edit, the assertions that judge them, and
@@ -97,7 +99,9 @@ a preference.
   stopping without naming it.
 - **The stamp is removed, never merely left behind, when the catalogue comes back red** or when the
   tree moved while it ran. A stamp that outlives the green it certifies is the exact label this
-  record exists to replace.
+  record exists to replace. *(Amended by 0021 §4: only the catalogue's own verdict over a key — a
+  census that disagrees, a gap, a survivor, a TIMED-OUT mutant — removes it; a red fast suite and a
+  tree that moved leave it as it was.)*
 - **Nothing changes in a target repo.** No `tests/check-mutation.sh`, no requirement, no new
   message — verified by the differential world that exercises that branch in `tests/check-gates.sh`.
 - The catalogue itself remains opt-in and outside `TEST_CMD`. Every gate still asks the fast

@@ -121,4 +121,7 @@ record does not decide it.
 - The worktree costs one step per kit mission: `.sdd/cache/` is ignored, so the first `sdd health`
   there runs without the killer map (about 2× slower) unless `mutation-killers.tsv` is copied from
   the main checkout. `.sdd/logs/` is per worktree too, so the stamp the health writes lives there.
+  *(Amended by 0021: the map and the stamp live in `<git-common-dir>/sdd-mutation/`, which the
+  worktree shares with the main checkout, so nothing is copied in and nothing is brought back; the
+  worktree's own `.sdd/cache/` map, when there is one, is read only as a seed.)*
 - The anatomy rule §6 says the kit mission runs in a worktree, and keeps saying the loop does not.
