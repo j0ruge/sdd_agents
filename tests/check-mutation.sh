@@ -1814,6 +1814,17 @@ mut_HEALTH_skip_writes() {
 mut_HEALTH_skip_line_unsourced() {
   sed -i '/^cmd_health() {/,/^}/ s@ was measured green\${stamp_prov:+ (\$stamp_prov)}; @ was measured green; @' "$1"
 }
+# The skip starts to need a `score:` line (QA-2 of the mission): the shape a refactor of the score
+# chain writes without meaning to. The fast suite the skip calls never prints `score:` — only
+# --with-mutation does (tests/run-all.sh) — so with this every real skip falls to `health went
+# blind to the mutation`, rc 1 over a green suite. It lived while the stubs printed `score:` with no
+# flag; now that the stub of check-health.sh answers the score only under --with-mutation, as the
+# real suite does, it is caught by `skip: a key measured green runs the suite without the
+# catalogue…`, and by the red-suite and the linked-worktree `skip:` worlds, which no longer read
+# the skip line.
+mut_HEALTH_skip_needs_score() {
+  sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$skip" = 1 \]; then$@  if [ "$skip" = 1 ] \&\& [ -n "$score_line" ]; then@' "$1"
+}
 
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
 # guard makes the PROJECTION (`--dry-run`) write to the journal while the real path goes mute — a
@@ -1918,6 +1929,14 @@ mut_PRE_path_format_probe_inverted() {
 # mutation stamps or the killer map" in check-preflight.sh.
 mut_PRE_path_format_kit_note_unscoped() {
   sed -i '/^cmd_preflight()/,/^}/ s@^    if has_mutation_catalogue "$REPO_ROOT"; then$@    if true; then@' "$1"
+}
+# The other side of the same scope: the sentence is never said, not even in the kit, where it is
+# true — the shape of a fix that deleted it everywhere instead of scoping it; the assertion that
+# kills the mutant above stays green over this one. Caught by the positive control of
+# check-preflight.sh, "an old git in a repo that carries the catalogue is still told the stamps and
+# the killer map share the fallback".
+mut_PRE_path_format_kit_note_never() {
+  sed -i '/^cmd_preflight()/,/^}/ s@^    if has_mutation_catalogue "$REPO_ROOT"; then$@    if false; then@' "$1"
 }
 
 # Not a gate: `sdd approve` goes back to announcing the next step unconditionally, the way it did
@@ -7002,6 +7021,7 @@ CATALOG=(
   HEALTH_skip_window_blind
   HEALTH_skip_writes
   HEALTH_skip_line_unsourced
+  HEALTH_skip_needs_score
   RUN_inverted_journal
   RUN_phase_log_time_only
   RUN_check_log_time_only
@@ -7012,6 +7032,7 @@ CATALOG=(
   PRE_path_format_warn_silent
   PRE_path_format_probe_inverted
   PRE_path_format_kit_note_unscoped
+  PRE_path_format_kit_note_never
   RUN_approve_next_unconditional
   RUN_e2e_dir_hardcoded
   RUN_autonomy_exclusions_undeclared

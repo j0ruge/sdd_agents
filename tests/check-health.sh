@@ -255,12 +255,16 @@ build_fixture() {
 # The fourth switch is the score LINE itself, defaulting to STUB_SCORE so every existing call reads
 # as it did. Assertion 14 needs two worlds that differ in nothing but the two numbers of that line,
 # and a second heredoc here is exactly the drift this one writer was created to prevent.
+# The score is printed ONLY under --with-mutation, the one flag that makes the real suite run the
+# catalogue (tests/run-all.sh): the fast suite a skip calls never prints `score:`, and a stub that
+# printed it always let a skip that had come to need the line read green here and go blind on every
+# real skip (QA-2 of mission 20261026-health-pula-catalogo; mut_HEALTH_skip_needs_score).
 write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-score] [exit code] [score line]
   local count_line="" score_line="" rc="${3:-0}" score="${4:-$STUB_SCORE}"
   [ "$1" = "with-count" ] \
     && count_line="printf '  ok    %d finding(s), all within 8 lines, carrying anchor + date, every anchor on target\\n' $STUB_TODO_COUNT"
   [ "${2:-with-score}" = "with-score" ] \
-    && score_line="printf '%s\\n' '$score'"
+    && score_line="if [ \"\${1:-}\" = --with-mutation ]; then printf '%s\\n' '$score'; fi"
 
   cat > "$FIX/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
@@ -994,7 +998,7 @@ health_run
 OUT_SCORE_TWIST="$HEALTH_OUT"; RC_SCORE_TWIST="$HEALTH_RC"
 green_world
 write_stub_suite with-count with-score 0 "$SCORE_FULL"$'\n'"$SCORE_SURVIVOR"
-[ "$(bash "$FIX/tests/run-all.sh" 2>/dev/null | grep -c '^score: ' || true)" = 2 ] \
+[ "$(bash "$FIX/tests/run-all.sh" --with-mutation 2>/dev/null | grep -c '^score: ' || true)" = 2 ] \
   || broken "the two-score stub was not armed — a verdict over it would be about one line, not two"
 health_run
 OUT_SCORE_TWO="$HEALTH_OUT"; RC_SCORE_TWO="$HEALTH_RC"

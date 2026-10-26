@@ -3280,12 +3280,17 @@ i4_verdict() { # i4_verdict <exit code> <the score line> [move-the-tree]
 # an ignored file there would move nothing. World 8 restores it with `git checkout` right after
 # the run, so the working tree is clean again and the mission does not fall back to the REVIEW
 # gate instead of reaching PR. That combination is the whole of world 8.
+#
+# The score line is answered ONLY under --with-mutation, the flag that makes the real suite run the
+# catalogue (tests/run-all.sh): a skip calls the fast suite, which never prints `score:`, and a stub
+# that printed it always let a skip that had come to need the line close its worlds here while every
+# real skip went blind (QA-2 of mission 20261026-health-pula-catalogo).
 i4_write_suite() {
   cat > "$FIX/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
 # Stub for the twenty-minute catalogue. cmd_health reads the score line off this stdout and the
 # suite's verdict off this exit code; both come from a control file OUTSIDE the hashed paths.
-sed -n 2p "$FIX/.sdd/logs/stub-verdict"
+if [ "\${1:-}" = --with-mutation ]; then sed -n 2p "$FIX/.sdd/logs/stub-verdict"; fi
 if [ "\$(sed -n 3p "$FIX/.sdd/logs/stub-verdict")" = move-the-tree ]; then
   printf 'written while the catalogue was running\n' >> "$FIX/tests/scratch.tracked"
 fi
