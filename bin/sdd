@@ -2444,11 +2444,9 @@ done
 unset _stamp_exclude
 readonly MUTATION_STAMP_PATHSPEC
 
-# Under .sdd/logs/ and not .sdd/: `sdd install` guarantees .sdd/logs/ is gitignored in every repo
-# the kit touches, while .sdd/config.sh right above it is TRACKED. A stamp one directory up would
-# appear in the `git status` of every phase — and a phase that dies with a dirty tree makes the
-# runner re-derive EXEC in a loop, at about US$ 25 a lap.
-readonly MUTATION_STAMP_REL='.sdd/logs/mutation-stamp'
+# WHERE the stamps live — the git common directory, never a directory of one checkout (ADR 0021) —
+# and the one question every reader asks of them are mutation_stamp_dir and mutation_stamp_valid,
+# defined beside cmd_health, their writer.
 
 # "Is this root a tree the catalogue is about?" — asked at BOTH ends, and therefore written once.
 #
@@ -2671,12 +2669,12 @@ gate_PR() {
   # stamp describes a catalogue, so a second clone or a worktree that carries one is a tree it is
   # about (the identity door, cmd_kaizen, stopped misreading a worktree in 188ca87, issue 121).
   if has_mutation_catalogue "$REPO_ROOT"; then
-    local key stamp
+    local key
     key="$(mutation_stamp_key "$REPO_ROOT" || true)"
-    stamp="$(cat "$REPO_ROOT/$MUTATION_STAMP_REL" 2>/dev/null || true)"
-    # The `-z "$key"` disjunct is load-bearing and not decoration: an absent stamp file reads as
-    # the empty string, so an empty KEY would compare EQUAL to it and open the gate — the two ways
-    # of knowing nothing agreeing that everything is fine.
+    # An empty key opens nothing, and mutation_stamp_valid is what says so: it refuses an empty key
+    # before it looks at the disk. The old reader needed a `-z "$key"` here, because an absent stamp
+    # file read as the empty string and an empty KEY compared EQUAL to it — the two ways of knowing
+    # nothing agreeing that everything is fine.
     #
     # An empty key is REACHABLE: the scope condition above proves tests/ holds a file, and says
     # nothing about bin/, templates/ or config/ (ADR 0014, increment I3), nor about whether every
@@ -2699,7 +2697,7 @@ gate_PR() {
         return 1
       fi
     fi
-    if [ -z "$key" ] || [ "$stamp" != "$key" ]; then
+    if ! mutation_stamp_valid "$REPO_ROOT" "$key"; then
       GATE_WHY="no green mutation catalogue for this content — run 'sdd health' (since 4c86712 TEST_CMD does not run the catalogue, so no gate before this one measures it)"
       GATE_PR_STAMP_WHY="$GATE_WHY"
       return 1
@@ -7166,7 +7164,7 @@ skill_origin() {   # skill_origin <skill> — a URL, or `local`
 # suite (the stamp IS the suite's artifact). Red is a finding, and four were red on the day it was
 # born. Every capture below is guarded: a red line has to be a verdict, never an abort.
 health_release() {   # rc 0 = six green lines
-  local kit kit_id ledger reds=0 rows n_repos pr_repos last_ok sk origin bad_origin="" hits="" w key stamp words words_rc
+  local kit kit_id ledger reds=0 rows n_repos pr_repos last_ok sk origin bad_origin="" hits="" w key words words_rc
   kit="$(printf '%s' "$COORDINATION_ROOT" || true)"
   # The kit's identity in the ledger is what ledger_repo_root writes — the common dir, never the
   # cwd's toplevel: from a linked worktree the two differ and the kit's own sessions would count as
@@ -7245,14 +7243,52 @@ health_release() {   # rc 0 = six green lines
   elif [ -f "$kit/LICENSE" ] && [ -z "$hits" ]; then line 5 ok "LICENSE present, surface free of client identifiers"
   elif [ ! -f "$kit/LICENSE" ]; then line 5 bad "no LICENSE at the kit root${hits:+; and client identifiers on the surface:$hits}"
   else line 5 bad "client identifiers on the surface:$hits"; fi
-  # 6 — the mutation stamp matches this content (the suite's artifact; never re-run here)
+  # 6 — the key of this content is among the keys measured green (the suite's artifact; never re-run
+  # here), asked of the git common directory every worktree of this clone shares (ADR 0021)
   key="$(mutation_stamp_key "$kit" || true)"
-  stamp="$(cat "$kit/$MUTATION_STAMP_REL" 2>/dev/null || true)"
-  if [ -n "$key" ] && [ "$stamp" = "$key" ]; then line 6 ok "suite, ratchet and mutation catalogue green for this content (stamp matches)"
+  if mutation_stamp_valid "$kit" "$key"; then line 6 ok "suite, ratchet and mutation catalogue green for this content (its key is stamped)"
   else line 6 bad "mutation stamp absent or stale — run ./bin/sdd health after the last code commit"; fi
   if [ "$reds" -eq 0 ]; then ok "apt for another repo of the organisation: 6 of 6"; return 0; fi
   bad "apt for another repo: $reds line(s) red — each is a finding with an owner in ADR 0007"
   return 1
+}
+
+# WHERE the stamps of <root> live: `<git-common-dir>/sdd-mutation/stamps`, printed, or NOTHING and
+# rc 1 for a root that is not a git checkout (ADR 0021). The COMMON directory, which the main
+# checkout and every linked worktree of one clone share, and never the git dir of one checkout: kit
+# work runs in one linked worktree per mission (ADR 0016 §2), and a stamp kept per checkout was born
+# missing in every new worktree and died with `git worktree remove`, so the catalogue a mission paid
+# for never reached the main checkout. `git status` does not see inside .git/, so the kit guard
+# (autonomy_kit_stamp) answers the same after a write here.
+#
+# The answer has to be ABSOLUTE — the proof ledger_repo_root carries for the same flag: a git older
+# than 2.31 echoes `--path-format=absolute` back and exits 0, so its two-line answer starts with `-`,
+# never with `/`. Such a git takes the old spelling instead, resolved with `cd` + `pwd -P` under an
+# emptied CDPATH, as ledger_repo_root resolves it. No probe reaches that arm here (D15): the pre-2.31
+# pair of check-autonomy.sh measures the ledger's copy of it.
+mutation_stamp_dir() { # mutation_stamp_dir <root>
+  local common
+  common="$( git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 1
+  case "$common" in
+    /*) ;;
+    *)  common="$( git -C "$1" rev-parse --git-common-dir 2>/dev/null )" || return 1
+        [ -n "$common" ] || return 1
+        common="$( CDPATH='' cd "$1" && CDPATH='' cd "$common" && pwd -P )" || return 1
+        [ "$common" = "${common%%$'\n'*}" ] || return 1 ;;
+  esac
+  printf '%s/sdd-mutation/stamps\n' "$common"
+}
+
+# "Was THIS key measured green?" — the one question gate_PR, line 6 of --release and cmd_health ask
+# of the stamps, so the three can never disagree about what a stamp is. rc 0 only for a non-empty key
+# whose file is there AND whose first line is the key itself; the lines under it are provenance for
+# people, and nothing compares them.
+mutation_stamp_valid() { # mutation_stamp_valid <root> <key>
+  local dir stamp
+  [ -n "$2" ] || return 1
+  dir="$(mutation_stamp_dir "$1")" || return 1
+  stamp="$(head -n 1 -- "$dir/$2" 2>/dev/null)" || return 1
+  [ "$stamp" = "$2" ]
 }
 
 cmd_health() {
@@ -7464,13 +7500,20 @@ cmd_health() {
   #
   # Written AFTER the run and never before, and keyed on the content the run measured, so what
   # lands on disk is "this exact tree was measured green" and never "the command was here".
-  local stamp_path="$kit/$MUTATION_STAMP_REL" stamp_key
+  #
+  # ONE file per key, in the stamps directory of the git common dir (ADR 0021): the key read BEFORE
+  # the suite names the file this block writes or takes away. `stamp_path` stays empty when the
+  # directory or the key is unknown, and `rm -f` with no operand then removes nothing, never a
+  # directory.
+  local stamp_dir stamp_path="" stamp_key
+  stamp_dir="$(mutation_stamp_dir "$kit" || true)"
+  if [ -n "$stamp_dir" ] && [ -n "$stamp_key_before" ]; then stamp_path="$stamp_dir/$stamp_key_before"; fi
   stamp_key="$(mutation_stamp_key "$kit" || true)"
   if [ "$catalogue_green" != 1 ]; then
     # REMOVED, not merely left behind. A stamp that outlives the green it certifies is the exact
     # label this block exists to replace: it would go on telling gate_PR that a catalogue which
     # just came back red, over this very content, had been measured and was clean.
-    rm -f "$stamp_path"
+    rm -f ${stamp_path:+"$stamp_path"}
   elif [ -z "$stamp_key" ]; then
     # A green catalogue over a root the key refuses — a measured path absent, not a git checkout,
     # a tracked file deleted (ADR 0014, increments I3 and I4). Said out loud, never a silent
@@ -7492,20 +7535,26 @@ cmd_health() {
       # added without teaching mutation_stamp_why its name. No probe can reach it (D15).
       health_bad "nothing was stamped: ${MUTATION_STAMP_PATHS[*]} hold no file at $kit, so there is no content for a stamp to describe"
     fi
-    rm -f "$stamp_path"
+    rm -f ${stamp_path:+"$stamp_path"}
   elif [ "$stamp_key" != "$stamp_key_before" ]; then
     # The window, closed. Saying it out loud matters as much as refusing: an operator who watched
     # a green catalogue scroll past and then finds gate_PR still asking for a stamp needs to be
     # told that their own commit, not the catalogue, is why.
     health_bad "the measured tree moved WHILE the catalogue was running — nothing was stamped, because the green it just reported is about content that is no longer here. Re-run once the tree stops moving."
-    rm -f "$stamp_path"
-  elif mkdir -p "${stamp_path%/*}" 2>/dev/null && printf '%s\n' "$stamp_key" > "$stamp_path" 2>/dev/null; then
-    # The write is a CONDITION and not a statement, which is what keeps a read-only .sdd/ from
+    rm -f ${stamp_path:+"$stamp_path"}
+  elif [ -n "$stamp_path" ] && mkdir -p "$stamp_dir" 2>/dev/null \
+       && printf '%s\nmeasured: %s\nroot: %s\n%s\n' "$stamp_key" "$(date -Iseconds 2>/dev/null || true)" "$kit" "$score_line" \
+            > "$stamp_path.tmp.$$" 2>/dev/null \
+       && mv -f "$stamp_path.tmp.$$" "$stamp_path" 2>/dev/null; then
+    # The write is a CONDITION and not a statement, which is what keeps a read-only .git/ from
     # killing the command on the very line written to report it — the family every capture in this
-    # region carries a guard against.
-    ok "mutation stamp written — gate_PR can see that THIS content ran green"
+    # region carries a guard against. Through a temporary file and `mv`, so a reader in another
+    # worktree never meets half a stamp. The first line is the key mutation_stamp_valid compares;
+    # the provenance under it is for whoever opens the file.
+    ok "mutation stamp written — gate_PR can see that THIS content ran green ($stamp_path)"
   else
-    health_bad "the mutation stamp could not be written at $stamp_path — gate_PR will go on asking for it"
+    rm -f ${stamp_path:+"$stamp_path.tmp.$$"} 2>/dev/null || true
+    health_bad "the mutation stamp could not be written at ${stamp_path:-the git common directory of $kit} — gate_PR will go on asking for it"
   fi
 
   # --- 3. the TODO.md backlog count, read from the SAME run ----------------

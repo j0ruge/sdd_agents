@@ -2464,7 +2464,12 @@ health_captures() {
 # capture (jq over installed_plugins.json) and the pinned branch's `tpl` (find -quit under it),
 # both guarded inside with `|| true`: a registry jq cannot read is a machine with no pin, and a
 # pin with no template is refused by the line after, out loud, never by set -e.
-CAPTURE_FLOOR=40
+# 40 → 45: the stamp moved to the git common directory (ADR 0021, mission 20261026-health-pula-catalogo,
+# I1). Line 6 of --release lost its `stamp` capture (-1); the two helpers defined beside cmd_health
+# gained five — mutation_stamp_dir's three `common` answers and mutation_stamp_valid's `dir` and
+# `stamp`, all guarded with `|| return 1` — and check 2c gained `stamp_dir`, guarded inside with
+# `|| true`, because a root with no common dir is the branch that says "could not be written".
+CAPTURE_FLOOR=45
 
 capture_report() {
   local out total safe offenders

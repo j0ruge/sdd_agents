@@ -798,6 +798,21 @@ EOF
   printf 'the client %s\n' "$forb" >> "$box/README.md"
   out="$(release)"
   if [ "$(rel_red "$out" 5)" = 1 ] && grep -qF "$forb" <<< "$(grep 'line 5 ·' <<< "$out")"; then pass "release: line 5 names the forbidden word it found"; else fail "release: line 5 should name the word — $(grep 'line 5' <<< "$out")"; fi
+  # Line 6 asks the git common directory whether THIS content's key was measured green (ADR 0021):
+  # red while only the old .sdd/logs/mutation-stamp carries the right key, because nobody reads that
+  # file any more; green once the key is stored where every worktree of the clone reads it. The key
+  # is the recipe of docs/failure-modes.md, and a recipe that drifted from bin/sdd leaves the green
+  # half red — this probe cannot pass by storing the wrong key.
+  local rkey rstamps red6 green6
+  rkey="$( CDPATH='' cd "$box" && git ls-files -z -c -- bin tests templates config agents ':(exclude)tests/health-baseline.txt' \
+           | LC_ALL=C sort -zu | xargs -0 -r md5sum | md5sum | cut -d' ' -f1 )"
+  mkdir -p "$box/.sdd/logs"; printf '%s\n' "$rkey" > "$box/.sdd/logs/mutation-stamp"
+  red6="$(rel_red "$(release)" 6)"
+  rstamps="$(git -C "$box" rev-parse --path-format=absolute --git-common-dir)/sdd-mutation/stamps"
+  mkdir -p "$rstamps"; printf '%s\n' "$rkey" > "$rstamps/$rkey"
+  green6="$(rel_green "$(release)" 6)"
+  if [ "$red6|$green6" = "1|1" ]; then pass "release: line 6 reads the key from the git common dir — red before the key is stored, green after"
+  else fail "release: line 6 reads the key from the git common dir — red before the key is stored, green after (expected red 1 and green 1, got red $red6 and green $green6)"; fi
   rm -rf "$box"
 }
 

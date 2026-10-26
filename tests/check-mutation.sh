@@ -1626,6 +1626,29 @@ mut_HEALTH_stamp_window_blind() {
   sed -i '/^cmd_health()/,/^}/ s|elif \[ "\$stamp_key" != "\$stamp_key_before" \]; then|elif false; then|' "$1"
 }
 
+# The stamps go back to living per checkout (ADR 0021): the git dir of the checkout instead of the
+# common dir every linked worktree of the clone shares, so what a mission worktree measured never
+# reaches the main checkout and dies with `git worktree remove`. Every world run inside one checkout
+# still agrees with itself. Caught by `stamp: gate_PR reads the key a linked worktree stamped, …`
+# in check-gates.sh (world 14), which reads PR|PR.
+mut_PR_stamp_dir_per_worktree() {
+  sed -i '/^mutation_stamp_dir() {/,/^}/ s@--git-common-dir@--absolute-git-dir@' "$1"
+}
+# The question stops being about THIS key: any file in the stamps directory answers yes, so a key
+# measured green once keeps every later content stamped. World 4 of check-gates.sh (`a stamped repo
+# whose tests/ moved is unstamped again`) reads DONE, inside `gate_PR: the mutation stamp is demanded
+# only where the catalogue lives`; the first assertion to die in a run is world 4b's `run stops at
+# the stamp: rc 2, …`, and 11b's `stamp-key: a commit touching only agents/ moves the key` dies too.
+mut_PR_stamp_valid_any_key() {
+  sed -i '/^mutation_stamp_valid() {/,/^}/ s@^  stamp="\$(head -n 1 -- "\$dir/\$2" 2>/dev/null)" || return 1$@  [ -n "$(ls -A "$dir" 2>/dev/null)" ] || return 1; stamp="$2"@' "$1"
+}
+# Line 6 of `sdd health --release` stops asking the stamps and says green for any content. Caught
+# by `release: line 6 reads the key from the git common dir — red before the key is stored, green
+# after` in check-hat.sh, its red half.
+mut_HEALTH_release_line6_blind() {
+  sed -i '/^health_release() {/,/^}/ s@if mutation_stamp_valid "\$kit" "\$key"; then line 6 ok@if true; then line 6 ok@' "$1"
+}
+
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
 # guard makes the PROJECTION (`--dry-run`) write to the journal while the real path goes mute — a
 # read command dirtying the working tree, and an audit trail lying in both directions.
@@ -6782,6 +6805,9 @@ CATALOG=(
   PR_stamp_why_unreadable_blind
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind
+  PR_stamp_dir_per_worktree
+  PR_stamp_valid_any_key
+  HEALTH_release_line6_blind
   RUN_inverted_journal
   RUN_phase_log_time_only
   RUN_check_log_time_only
