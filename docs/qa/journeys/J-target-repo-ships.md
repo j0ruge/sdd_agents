@@ -110,3 +110,11 @@ first two commands.
 Abandonment path X3 recorded "nothing in the kit inspects a target repo's TEST_CMD at all" as the
 reason a trimmed suite was safe. One increment made it false. Abandonment paths are re-read against
 the diff every cycle; they are not standing conclusions.
+
+⚠️ **Update (`20261026-health-pula-catalogo`, F1 `c0adac8`).** That mission moved the mutation stamps
+and the killer map into the git common directory (ADR 0021), and a sentence its EXEC added
+(`291d9af`) made the `sdd preflight` warning for a git older than 2.31 tell every operator that the
+stamps and the map take the slow fallback too — in Priya's repo, kit machinery she does not have. The
+warning now names them only where `tests/check-mutation.sh` exists (`has_mutation_catalogue`, the
+same artifact question `gate_PR` scopes the stamp on); in her repo it speaks of the ledger alone, so
+step 1 still holds: nothing she reads mentions a stamp or the catalogue.
