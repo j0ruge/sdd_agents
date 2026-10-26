@@ -170,6 +170,9 @@ run() { # run <name> <command...>
 # inside it already runs these very steps under these very deadlines. A name missing here is
 # refused by run(), which is what `surface: every step of the suite carries a timeout` measures.
 # Moving a number is a commit with an author, never a deadline someone forgot.
+# Remeasured since, the rule unchanged: 'preflight and the install guard' was ~30 s on 2026-10-02 and
+# took 73 s on 2026-10-21 (ADR 0019's worlds), under a load of 2.09 with another repo's `sdd run`
+# alive, so its line is 8 × 73 ≈ 584, rounded up to 600 by the human's call.
 step_timeout() { # step_timeout <step name> — prints the deadline in seconds; rc 1 when the step has none
   case "$1" in
   "runner syntax (bash -n)") echo 60 ;;
@@ -186,7 +189,7 @@ step_timeout() { # step_timeout <step name> — prints the deadline in seconds; 
   "autonomy ledger") echo 720 ;;
   "kaizen series and gate") echo 120 ;;
   "sdd health discriminates") echo 180 ;;
-  "preflight and the install guard") echo 240 ;;
+  "preflight and the install guard") echo 600 ;;
   "every hat declares its boundary") echo 60 ;;
   "adr allocator and link check") echo 90 ;;
   "one checkout has one execution owner") echo 240 ;;

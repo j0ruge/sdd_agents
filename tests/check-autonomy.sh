@@ -186,6 +186,35 @@ INIT_CLEAN="$OUTSIDE/stream-init-clean.jsonl"
 INIT_LEAK="$OUTSIDE/stream-init-leak.jsonl"
 { jq -c '.mcp_servers = [{"name":"atlassian","status":"connected"}] | .tools += ["WebSearch"]' "$INIT_SAMPLE"; cat "$STREAM_SAMPLE"; } > "$INIT_LEAK"
 
+# What the harness REFUSED a session, for the journal's DENIED lines (ADR 0019). Each object below
+# is pasted VERBATIM, byte for byte, from the summary run_phase itself distilled onto disk:
+#   · the two Reads of the `ticket` skill's references, out of
+#       ~/repos/jrc-libs/.sdd/logs/20261016-object-storage-distribuivel/TICKET-20261016-201644-1924a656.json
+#     — the TICKET that stopped with `status: blocked` rather than read them through Bash;
+#   · one Bash, out of
+#       ~/repos/sales_quote/.sdd/logs/20261018-silencios-do-formulario-e-dos-dialogos/REVIEW-20261018-180237-0bee317a.json
+#     — a denial that carries no path, only a command, which the journal must never carry.
+# Both sessions ran on Claude Code 2.1.296 (the `init` line of their streams). The rest of the
+# result is $STREAM_SAMPLE's: DENIED_SAMPLE is derived from it with jq, never typed. Derived on
+# top, each from a real object: the first Read asked once more (a model asks twice — p2 of the
+# mission's plan asked two Reads of one file), and three paths the session chose, which must not
+# forge a field or a line of the journal.
+DENIALS_REAL="$OUTSIDE/denials-real.jsonl"
+cat > "$DENIALS_REAL" <<'EOF'
+{"tool_name":"Read","tool_use_id":"toolu_01FLvWkCuYTFuBUX4PUGfjbS","tool_input":{"file_path":"/home/joruge/.claude/skills/ticket/references/start.md"}}
+{"tool_name":"Read","tool_use_id":"toolu_016ourfWg7Zu88Tcf5ySp2Pd","tool_input":{"file_path":"/home/joruge/.claude/skills/ticket/references/campos.md"}}
+{"tool_name":"Bash","tool_use_id":"toolu_01LMnS2fSBZzZUvzMGtqutNn","tool_input":{"command":"SK=/home/joruge/.claude/plugins/cache/chewiesoft-marketplace/codereview/2.19.0/skills/codereview; git rev-parse --is-inside-work-tree; git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null; git rev-parse --abbrev-ref HEAD; sed -n 's/^  version: //p' $SK/SKILL.md; grep -o '\"installPath\": *\"[^\"]*codereview[^\"]*\"' ~/.claude/plugins/installed_plugins.json; git merge-base origin/develop HEAD; echo ---; git diff 86d515e9...HEAD --name-only; git diff 86d515e9...HEAD --stat; git log 86d515e9..HEAD --oneline --no-decorate; git status --porcelain","description":"Gather git context for the review"}}
+EOF
+DENIED_SAMPLE="$OUTSIDE/stream-denied.jsonl"
+{ cat "$INIT_SAMPLE"
+  jq -c --slurpfile d "$DENIALS_REAL" '
+      if .type == "result" then
+        .permission_denials = $d + [ $d[0],
+          ($d[0] | .tool_input.file_path = "cost_usd=999"),
+          ($d[0] | .tool_input.file_path = "/tmp/x cost_usd=998"),
+          ($d[0] | .tool_input.file_path = "/tmp/x\ncost_usd=997") ]
+      else . end' "$STREAM_SAMPLE"; } > "$DENIED_SAMPLE"
+
 # The terminal `result` of a session the ENVIRONMENT killed, and the control that separates it
 # from the loop the kit runs on purpose.
 #
@@ -5524,6 +5553,78 @@ exit 97
 STUB
 chmod +x "$OUTSIDE/stub/claude"
 
+# --- every call the harness denied is named in the journal ----------------------------------
+# The ledger's `denials` says HOW MANY calls the harness refused, never WHICH, and the journal —
+# what the person on `tail -F` reads — said nothing at all: in the window of bad6168 a REVIEW of
+# the lighthouse ran without its skill's references through 30 denied Reads, and a TICKET of
+# jrc-libs stopped as handoff-blocked (ADR 0019). Every distinct (tool, path) of the result's
+# `permission_denials` is now one DENIED line, written right after hat_init_facts at both doors;
+# this block probes run_phase's, and the close door has its own probe in the `sdd close` section.
+#
+# The stub serves DENIED_SAMPLE to the FIRST session only and the clean stream to any retry, so the
+# counts below are one session's. The control world replays INIT_CLEAN, the same stream with
+# `permission_denials: []`, so the two worlds differ in that array and in nothing else — and it
+# carries its own floor (its session line is in the journal), because a world whose whole
+# expectation is silence is green when nothing ran at all.
+echo "== every call the harness denied is named in the journal =="
+DEN_PLOG="$FIX/.sdd/logs/$MISSION/pipeline.log"
+DEN_COUNT="$OUTSIDE/denied-count"
+den_stub() {   # den_stub <stream the first session answers with>
+  cat > "$OUTSIDE/stub/claude" <<STUB
+n=\$(( \$(cat "$DEN_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$DEN_COUNT"
+if [ "\$n" -eq 1 ]; then cat "$1"; else cat "$INIT_CLEAN"; fi
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+# den_lines <journal> -> its DENIED lines, timestamp cut off; den_n <journal> <exact line> -> count.
+den_lines() { sed -n 's/^[^ ]*  \(DENIED  .*\)$/\1/p' "$1" 2>/dev/null || true; }
+den_n() { grep -cxF -- "$2" <<< "$(den_lines "$1")" || true; }
+den_world() {   # den_world <stream the first session answers with>
+  rm -f "$DEN_COUNT"; : > "$LEDGER"; : > "$DEN_PLOG" 2>/dev/null || true
+  den_stub "$1"
+  "$SDD" run "$MISSION" >/dev/null 2>&1 || true
+}
+DEN_TICKET="/home/joruge/.claude/skills/ticket/references"
+den_world "$DENIED_SAMPLE"
+# The phase the fixture derives here is whatever the blocks above left it at (QA when this was
+# written), so it is read off the session's own ledger row rather than pinned: the DENIED line has
+# to name the phase that session ran under, and the row is the independent witness of which.
+DEN_PHASE="$(jq -r -s '.[0].phase' "$LEDGER" 2>/dev/null || echo "?")"
+DEN_START="$(den_n "$DEN_PLOG" "DENIED  $DEN_PHASE  tool=Read  path=$DEN_TICKET/start.md")"
+DEN_CAMPOS="$(den_n "$DEN_PLOG" "DENIED  $DEN_PHASE  tool=Read  path=$DEN_TICKET/campos.md")"
+DEN_BARE="$(den_n "$DEN_PLOG" "DENIED  $DEN_PHASE  tool=Bash")"
+DEN_ALL="$(den_lines "$DEN_PLOG" | grep -c . || true)"
+# A substring of the denied Bash command, and of nothing else this journal carries.
+DEN_INPUT="$(grep -c 'installed_plugins.json' "$DEN_PLOG" || true)"
+DEN_FORGED_NAMED=$(( $(den_n "$DEN_PLOG" "DENIED  $DEN_PHASE  tool=Read  path=cost_usd=999") \
+  + $(den_n "$DEN_PLOG" "DENIED  $DEN_PHASE  tool=Read  path=/tmp/x?cost_usd=998") \
+  + $(den_n "$DEN_PLOG" "DENIED  $DEN_PHASE  tool=Read  path=/tmp/x?cost_usd=997") ))
+# mission_cost_usd sums every whitespace-separated `cost_usd=<number>` field of this journal, and
+# reads it to stop the line as budget-exhausted. A path that became such a field — on its own line
+# by a newline, after a space, or as the field itself — would spend money nobody spent.
+DEN_FORGED_FIELDS="$(awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^cost_usd=99[789]$/) n++ } END { print n + 0 }' "$DEN_PLOG" 2>/dev/null || echo "?")"
+DEN_LEDGER="$(jq -r -s '.[0].denials' "$LEDGER" 2>/dev/null || echo "?")"
+den_world "$INIT_CLEAN"
+DEN_CTL="$(den_lines "$DEN_PLOG" | grep -c . || true)"
+DEN_CTL_RAN="$(grep -cF "  $(jq -r -s '.[0].phase' "$LEDGER" 2>/dev/null)  agent=" "$DEN_PLOG" || true)"
+assert_eq "every tool call the harness denied is named in the journal" \
+  "start:1 campos:1 bash:1 control:0 control-ran:1" \
+  "start:$(( DEN_START > 0 )) campos:$(( DEN_CAMPOS > 0 )) bash:$(( DEN_BARE > 0 )) control:$DEN_CTL control-ran:$(( DEN_CTL_RAN > 0 ))"
+assert_eq "denied: a call denied twice is one journal line, and the ledger still counts every denial" \
+  "start-lines:1 lines:6 ledger:7" "start-lines:$DEN_START lines:$DEN_ALL ledger:$DEN_LEDGER"
+assert_eq "denied: a denial with no path names the tool, and never its input" \
+  "bare:1 input:0" "bare:$DEN_BARE input:$DEN_INPUT"
+assert_eq "denied: a path the session chose cannot forge a field or a line of the journal" \
+  "named:3 forged-fields:0" "named:$DEN_FORGED_NAMED forged-fields:$DEN_FORGED_FIELDS"
+rm -f "$DEN_COUNT"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
 # --- the hat's boundary: a session that writes outside its writes: stops the line ------------
 # The reviewer of SQ-115 wrote a scratch test into the code tree three times and the runner only
 # warned (REVIEW-EDITED-CODE). Since the 2026-09-03 spec the runner reads the hat's `writes:` and
@@ -6685,6 +6786,34 @@ assert_eq "close writes a row that is not a session row wearing a CLOSE label" "
 assert_eq "close row carries cost_usd, and the turns, cache and harness beside it" \
   "0.0362104 1 18134 2.1.260 true" \
   "$(rows 'select(.event == "close") | "\(.cost_usd) \(.turns) \(.cache_read) \(.harness) \(.dur_s != null and (.dur_s | type) == "number")"')"
+# The close door's DENIED lines (ADR 0019): cmd_close reads its session through the same
+# hat_init_facts as run_phase and names the denials right after it, as run_phase does — two doors
+# and one probe each, since a call removed from either one is invisible to the other's probe. The
+# same world as above with DENIED_SAMPLE in place of INIT_CLEAN, so only the array differs.
+# `sessions:1` is the floor: no DENIED line is also the answer of a close that never spent one.
+kitguard_reset
+CLWD="$OUTSIDE/close-denied"
+kitguard_world "$CLWD"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$CLWD/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-9\n---\n# TICKET\n' > "$CLWD/docs/handoffs/$MISSION/10-ticket.md"
+cat > "$OUTSIDE/stub/acli" <<'STUB'
+#!/usr/bin/env bash
+printf '[]\n'
+STUB
+chmod +x "$OUTSIDE/stub/acli"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+cat "$DENIED_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+( cd "$CLWD" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ) || true
+CLWD_PLOG="$CLWD/.sdd/logs/$MISSION/pipeline.log"
+assert_eq "close: every tool call the harness denied is named in the journal" \
+  "start:1 bash:1 sessions:1" \
+  "start:$(den_n "$CLWD_PLOG" "DENIED  CLOSE  tool=Read  path=$DEN_TICKET/start.md") bash:$(den_n "$CLWD_PLOG" "DENIED  CLOSE  tool=Bash") sessions:$(kitguard_sessions)"
 # r2 finding #1, and the reason the assertion ABOVE could not see it: no `claude` stub in this file
 # ever wrote a byte to stderr, so "the close row carries the money" was true over a stream that was
 # never dirty. `jq` ABORTS on the first line that is not JSON — it does not skip it — so a single

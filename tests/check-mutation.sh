@@ -2538,6 +2538,250 @@ mut_PREFLIGHT_num_turns_unchecked() {
   sed -i 's/^\(      if jq -e '"'"'(\.total_cost_usd | type) == "number"\) and (\.num_turns | type) == "number"\('"'"' <<< "\$probe_result"\)/\1\2/' "$1"
 }
 
+# ADR 0019 §3, the third door: the template probe of preflight, one mutant per thing it owes.
+# TEMPLATE_READ_UNCHECKED: the refusal is printed by the ok arm, so a harness that denies the kit's
+# read rule leaves preflight green — caught by "preflight fails when the kit rule alone cannot read
+# the templates" (check-preflight.sh), whose needles carry the arm's prefix. The others change only
+# what the session is HANDED, and the argv assertions own them, since the stub answers whatever the
+# fixture says: READS_SETTINGS loads the user's settings again (where an additionalDirectories reads
+# the template with no rule) — "the template probe runs with no settings and carries the kit rule";
+# the verdict goes red too, only because the stub recognises the probe by its empty
+# --setting-sources. ALLOWLIST_WIDENED puts "$ALLOWED_TOOLS" back in front of the rules, where a
+# broad `Read` of the target answers for them (Codex P3 on PR #315) — both argv assertions, the one
+# above (`rule:no-rule`) and "the template probe carries only the kit read rules, never
+# ALLOWED_TOOLS", with `[Bash Read]` first. RULE_DROPPED stops calling kit_template_rules: since R3
+# the probe then fails by name and opens no session, so the verdict, the refusal's sentence and both
+# argv assertions go red (`no-argv`); the no-rule assertion stays green there, since its copy fails
+# by the same guard. EMPTY_UNGUARDED drops that guard, and the probe opens a session whose
+# --allowedTools takes the next flag for its value — caught only on the sensor's sabotaged copy of
+# the kit, by "a kit_template_rules that prints no rule fails the template probe by name, with no
+# session", `named:0 … session:1`. READS_EVERY_RULE hands the probe kit_read_rules whole again, the
+# shape before R7 (Codex P3 in the fifth round on PR #315): a READ_EXTRA entry that covers the kit
+# reads the template in place of the templates' rule — caught by "the template probe carries the
+# templates rule alone, never a READ_EXTRA rule that covers the kit", `covering:probe=` with the
+# entry's rule second, and `sabotaged:…ok=1` over a broken templates rule. Measured one by one on a
+# copy of the kit.
+mut_PRE_template_read_unchecked() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "a session with NO settings and the kit read rules alone|          ok "a session with NO settings and the kit read rules alone|' "$1"
+}
+mut_PRE_template_probe_reads_settings() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools ${tpl_rules|--setting-sources "user,project,local" --allowedTools ${tpl_rules|' "$1"
+}
+mut_PRE_template_probe_allowlist_widened() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools ${tpl_rules|--setting-sources "" --allowedTools "$ALLOWED_TOOLS" ${tpl_rules|' "$1"
+}
+mut_PRE_template_probe_rule_dropped() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    mapfile -t tpl_rules < <(kit_template_rules)$|    :|' "$1"
+}
+mut_PRE_template_probe_reads_every_rule() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    mapfile -t tpl_rules < <(kit_template_rules)$|    mapfile -t tpl_rules < <(kit_read_rules)|' "$1"
+}
+mut_PRE_template_probe_empty_unguarded() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    elif \[ "${#tpl_rules\[@\]}" -eq 0 \]; then$|    elif false; then|' "$1"
+}
+# Codex P2 in the second round on PR #315, one mutant per arm R4 gave the template probe's verdict.
+# SILENT_UNNAMED: the `_fail` of the no-session arm becomes a no-op, the shape before R4 — a stream with no init
+# line and no result line ends the chain saying nothing, and preflight is green over a rule it never
+# measured; caught by "a template probe that emits no init and no result fails by name, and a dead
+# CLI fails once" (check-preflight.sh), `empty:named=0` and `garbage:named=0`. DEAD_COUNTED_TWICE:
+# the exception of the dead CLI comes off, and a CLI that answers neither probe fails twice for one
+# cause — the same assertion, `dead:fails=2`.
+mut_PRE_template_probe_silent_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^            _fail "the template probe got no init line and no result line it could read|            : "the template probe got no init line and no result line it could read|' "$1"
+}
+mut_PRE_template_probe_dead_counted_twice() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          if \[ -n "\$probe_silent" \]; then$|          if false; then|' "$1"
+}
+# Codex P2 in the fourth round on PR #315: the verdict names the outcome of the Read once, and one
+# mutant per rule R6 gave it. ERROR_WARNED: the errored arm prints a warning instead of a failure, so
+# a Read that came back with an error leaves preflight green again, only louder than before R6 —
+# caught by "the template probe names the outcome of its Read once, and a Read that comes back with
+# an error fails by name" (check-preflight.sh), `string:arm=none,…,more=0`. DEFAULT_GREEN: the
+# default of the `case` prints `ok`, so an outcome the classifier prints and no arm knows reads as
+# the rule working — caught only on the sensor's sabotaged copy of the kit, by "an outcome the
+# template probe's verdict does not know fails by name, never green", `arm:none … more:0`.
+# ERROR_OVER_READ: the precedence is inverted below `read`, and a Read retried after an error is an
+# error — the first assertion, `retried=errored`. ERROR_OVER_DENIED: inverted above `denied`, and the
+# real denied stream, whose tool_result carries is_error too, is an error with no denial — the first
+# assertion, `denied=errored`, and "preflight fails when the kit rule alone cannot read the
+# templates", whose denial needle no longer prints.
+mut_PRE_template_outcome_error_warned() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s Read of|          warn "the template probe'"'"'s Read of|' "$1"
+}
+mut_PRE_template_outcome_default_green() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
+}
+mut_PRE_template_outcome_error_over_read() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^            elif any(\$results\[\]; .is_error != true) then "read"$#            elif any($results[]; .is_error != true) and (any($results[]; .is_error == true) | not) then "read"#' "$1"
+}
+mut_PRE_template_outcome_error_over_denied() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#\.tool_input\.file_path == \$p) then "denied"$#.tool_input.file_path == $p) and (any($results[]; .is_error == true) | not) then "denied"#' "$1"
+}
+
+# ADR 0019 §2, what the phases will not be able to read — the two warnings of preflight, and the four
+# rules that decide them. A warning that goes quiet fails OPEN: the target meets the denial in a run
+# already paid for. MISSING_SILENT: the READ_EXTRA entry absent from this machine is no longer named —
+# caught by "preflight warns about a READ_EXTRA directory that does not exist, and only about it"
+# (check-preflight.sh), `absent:0`. UNDECLARED_SILENT: a skill found and covered by no rule is never
+# named — caught by "preflight names a skill it finds that READ_EXTRA does not declare, with the entry
+# to add", `warned=0`. Both measured one by one on a copy of the kit.
+mut_PRE_read_extra_missing_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^      || warn "READ_EXTRA names \$_rx_dir, which does not exist.*$#      || :#' "$1"
+}
+mut_PRE_undeclared_skill_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && read_rules_cover "\$sk_real"; then continue; fi$#    continue#' "$1"
+}
+# COVER_UNSLASHED: a rule covers what merely BEGINS with its directory, so `…/ticket` covers
+# `…/ticket-x` — caught by "a plugin skill is covered by the directory above its version, and never
+# by a sibling that shares a prefix", `sibling:…warned=0`. COVER_UNRESOLVED: the target of a
+# symlinked skill is never held to the rules, and the parent above the link reads as enough, which
+# the harness denies (p10 of ADR 0019) — caught by "a skill reached through a symlink is covered only
+# with its target, and a skill in the repo needs no entry", `above:…warned=0`.
+mut_PRE_skill_cover_unslashed() {
+  sed -i '/^read_rules_cover() {/,/^}/ s#^    case "\$p" in "\$dir"|"\$dir"/\*) return 0 ;; esac$#    case "$p" in "$dir"*) return 0 ;; esac#' "$1"
+}
+mut_PRE_skill_cover_unresolved() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^    sk_real="\$(readlink -f -- "\$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="\$SKILL_FOUND_DIR"$#    sk_real="$SKILL_FOUND_DIR"#' "$1"
+}
+# The entry the warning hands over. ENTRY_VERSIONED: the plugin's entry keeps its version directory,
+# which the next update orphans and which never covers the plugin directory the cache walk names —
+# the warning would outlive its own advice. Caught first by the undeclared-skill assertion, where the
+# plugin directory found gets a second copy of its name (`…/codereview/codereview`), and then by the
+# plugin-below one, `bare:…entry=…/2.0.0`.
+# ENTRY_HOME_UNWRITTEN: the entry comes back absolute under $HOME, and the tracked .sdd/config.sh would
+# name the user — caught by the undeclared-skill assertion, whose entry is spelled `$HOME/…`.
+mut_PRE_skill_entry_versioned() {
+  sed -i '/^skill_read_entry() {/,/^}/ s#entry="\$entry/\${rel%%/\*}" ;;$#entry="$entry/${rel%%/*}"; rel="${rel\#*/}"; entry="$entry/${rel%%/*}" ;;#' "$1"
+}
+mut_PRE_skill_entry_home_unwritten() {
+  sed -i '/^skill_read_entry() {/,/^}/ { /^    case "\$entry" in "\$home"\/\*) entry=/ s/.*/    :/ }' "$1"
+}
+# TARGET_REFUSED_UNDECLARED: the declared skill whose symlink target the grammar refuses falls back
+# to the undeclared warning, which hands back the very entry already declared — the loop with no way
+# out of r1 #1 of the final review. Caught by "a declared skill whose symlink target the grammar
+# refuses is named as such, never as undeclared" (check-preflight.sh), `decl:refused=0,…,add=1`.
+mut_PRE_skill_target_refused_undeclared() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && ! read_extra_dir_ok "\$sk_real"; then$#    if false; then#' "$1"
+}
+# CACHE_REGISTRY_UNNAMED: the warning about a skill found under the plugin cache stops saying the
+# cache may hold more than one copy and that installed_plugins.json names the one the harness loads
+# (r1 #2 of the final review). Caught by "a skill found in the plugin cache is warned with
+# installed_plugins.json named, since the cache may hold more than one copy" (check-preflight.sh),
+# `cache:copies=0,file=0,which=0`.
+mut_PRE_skill_cache_registry_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^\(        denied its references outside the repo (a DENIED line in the journal)\.\)\$sk_cache In #\1 In #' "$1"
+}
+# REGISTRY_IGNORED: skill_findable skips every copy installed_plugins.json records — the plain form
+# falls back to the first copy `find` meets in directory order, and since Codex r7 the plugin form
+# reads the install as broken; either way the warning stops naming the copy the harness loads (r1 #2
+# of the final review). Caught by "the copy installed_plugins.json records is the one held to the
+# rules, and an unreadable registry falls back to the cache" (check-preflight.sh), `bare:where=0`.
+mut_PRE_skill_registry_ignored() {
+  sed -i '/^skill_findable() {/,/^}/ s#^    \[ -d "\$p/skills/\$name" \] || continue$#    continue#' "$1"
+}
+# Codex r3 #1 on PR #315: the registry counts only under the key of the plugin named after the skill
+# (plugin_install_paths, the reader skill_findable and health_provenance share). REGISTRY_ANY_PLUGIN:
+# the key filter comes off, and the first user-scope install of ANY plugin that ships a
+# `skills/<name>` is the copy held to the rules — caught by "a plugin skill is looked up in the
+# registry only under its own plugin key, never another plugin" (check-preflight.sh), `other:where=0`.
+# REGISTRY_PREFIX_UNBOUNDED: the prefix loses its `@`, and `codereview-x@mk` reads as codereview's —
+# the same assertion, `prefix:where=0` alone. The grade table's world in check-health.sh lists one
+# plugin only, so neither moves it; the preflight's worlds are the ones that list two.
+mut_PRE_registry_any_plugin() {
+  sed -i '/^plugin_install_paths() {/,/^}/ s#to_entries\[\] | select(.key | startswith($k)) | .value\[\]?#to_entries[] | .value[]?#' "$1"
+}
+mut_PRE_registry_prefix_unbounded() {
+  sed -i '/^plugin_install_paths() {/,/^}/ s#--arg k "\${2:-}@"#--arg k "${2:-}"#' "$1"
+}
+# Codex r7 on PR #315: the skill is looked up by the FORM its phase invokes it by. All seven are
+# caught by check-preflight.sh. PLUGIN_FORM_PLAIN_DIRS_FIRST: skill_findable reads the plain skills
+# directories for `<plugin>:<skill>` too, ahead of the registry, and a plain `<root>/skills/codereview`
+# is taken for the copy REVIEW loads (#1) — caught by "a skill the phase invokes as plugin:skill is
+# looked up in the plugin registry before any plain skills directory", `bare:cr=0/1`.
+# PLUGIN_FORM_ASKED_PLAIN: the preflight asks for `codereview` plain, so the plain path runs — caught
+# by the same assertion, and by "preflight asks for each third-party skill in the form a phase
+# invokes it, read off the hats and phase_slash", whose two sides then differ.
+# BROKEN_INSTALL_TO_CACHE: a registry that records the plugin with no install holding the skill falls
+# through to the cache, which hands back a stale copy (#2) — caught by "a recorded plugin install that
+# lacks the skill is warned as broken, never replaced by a cache copy", `broken:broken=0,…,stale=2`.
+# BROKEN_INSTALL_UNNAMED: the broken install reads as a skill not found, and its own warning, with the
+# registry, the installPath and the remedy, never prints — the same assertion, `broken=0,any=0`.
+# BROKEN_REASON_NOT_RESET: SKILL_BROKEN_WHY keeps the last broken skill's reason, and `ticket`, missing
+# after it, is warned as broken too — the same assertion, `reset:broken=1,any=2`. Defined and not
+# reset, never deleted: with no assignment at all `set -u` kills the first miss, a red that measures
+# the unbound variable and not the reset.
+# PLAIN_FORM_MARKED_BROKEN: the broken install is no longer the plugin form's alone, and `ticket`, whose
+# own key records an install without the skill, stops reaching the cache — `plain:any=1`.
+# BROKEN_REPORTED_PRESENT: the "present" line prints with a broken install among the skills —
+# `broken:…,present=1`.
+mut_PRE_plugin_form_plain_dirs_first() {
+  sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" = "\$form" \]; then$#  if :; then#' "$1"
+}
+mut_PRE_plugin_form_asked_plain() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^  local -a wanted=(codereview:codereview)#  local -a wanted=(codereview)#' "$1"
+}
+mut_PRE_broken_install_to_cache() {
+  sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" != "\$form" \] && \[ -n "\$recorded" \]; then$#  if false; then#' "$1"
+}
+mut_PRE_broken_install_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^      if \[ -n "\$SKILL_BROKEN_WHY" \]; then$#      if false; then#' "$1"
+}
+mut_PRE_broken_reason_not_reset() {
+  sed -i '/^skill_findable() {/,/^}/ s#^  SKILL_FOUND_DIR=""; SKILL_BROKEN_WHY=""$#  SKILL_FOUND_DIR=""; : "${SKILL_BROKEN_WHY:=}"#' "$1"
+}
+mut_PRE_plain_form_marked_broken() {
+  sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" != "\$form" \] && \[ -n "\$recorded" \]; then$#  if [ -n "$recorded" ]; then#' "$1"
+}
+mut_PRE_broken_reported_present() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^  elif \[ -z "\$broken_skills" \]; then$#  else#' "$1"
+}
+# Codex r8 on PR #315: with no install of the plugin recorded, the plugin form walks the cache only
+# under its own plugin's tree, `<root>/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>`.
+# All six are caught by "a plugin skill missing from the registry is looked for in the cache only
+# under its own plugin tree" (check-preflight.sh). PLUGIN_CACHE_BY_NAME: the plugin form goes back to
+# the walk by name, and another plugin's `skills/codereview` is the REVIEW's — `other:…named=2,…
+# missing=0`. PLUGIN_CACHE_ANY_PLUGIN: the tree takes any plugin's name — the same, `named=2`.
+# PLUGIN_CACHE_ANY_SKILL: any skill below the plugin's version stands for the one asked for —
+# `hollow:missing=0`. PLUGIN_CACHE_MARKETPLACE_FIXED: the marketplace is one name and not any
+# component, and the codereview tree under `mk2` is missed — `both:where=0,…missing=1`, and first
+# R9's "a recorded plugin install that lacks the skill…", `nokey:where=0`, whose copy is `old-mk`'s.
+# PLUGIN_CACHE_UNCHECKED: the glob's match is never held to `-d`, and the unmatched pattern itself is
+# published as the skill found — `other:…missing=0`, and first every world with no codereview tree,
+# which hands `…/plugins/cache/*/codereview` over as an entry to add. PLUGIN_CACHE_FALLS_THROUGH: the
+# plugin form, missing from its own tree, goes on to the walk by name below it — `other:…named=2`.
+mut_PRE_plugin_cache_by_name() {
+  sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" != "\$form" \]; then$#  if false; then#' "$1"
+}
+mut_PRE_plugin_cache_any_plugin() {
+  sed -i '/^skill_findable() {/,/^}/ s#^    for p in "\$root/plugins/cache"/\*/"\$plugin"/\*/skills/"\$name"; do$#    for p in "$root/plugins/cache"/*/*/*/skills/"$name"; do#' "$1"
+}
+mut_PRE_plugin_cache_any_skill() {
+  sed -i '/^skill_findable() {/,/^}/ s#^    for p in "\$root/plugins/cache"/\*/"\$plugin"/\*/skills/"\$name"; do$#    for p in "$root/plugins/cache"/*/"$plugin"/*/skills/*; do#' "$1"
+}
+mut_PRE_plugin_cache_marketplace_fixed() {
+  sed -i '/^skill_findable() {/,/^}/ s#^    for p in "\$root/plugins/cache"/\*/"\$plugin"/\*/skills/"\$name"; do$#    for p in "$root/plugins/cache"/mk/"$plugin"/*/skills/"$name"; do#' "$1"
+}
+mut_PRE_plugin_cache_unchecked() {
+  sed -i '/^skill_findable() {/,/^}/ s#^      \[ -d "\$p" \] || continue$#      :#' "$1"
+}
+mut_PRE_plugin_cache_falls_through() {
+  sed -i '\#^    for p in "\$root/plugins/cache"/\*/"\$plugin"/\*/skills/"\$name"; do$#,/^  fi$/ s#^    return 1$#    :#' "$1"
+}
+# Codex r3 #2 on PR #315, the preflight's half: a kit whose path the grammar of the read rules refuses
+# is named once and the template probe is not opened. KIT_PATH_UNNAMED: the refusal never fires —
+# the probe's own arm for an empty rule list speaks for the cause with the wrong reason, with
+# READ_EXTRA empty or not, since R7 the probe carries no entry's rule; caught by "a kit path
+# the read-rule grammar refuses gets no template rule, and preflight names it" (check-preflight.sh),
+# `empty:named=0,…,r3=1`. KIT_PATH_PROBE_OPENED: the refusal is named but the probe's chain forgets
+# it, and lands on the scratch arm, whose warning says the rule was not measured for a reason that is
+# not this one — the same assertion, `skip=0`.
+mut_PRE_kit_path_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^  if ! read_extra_dir_ok "\$SDD_HOME/templates"; then$#  if false; then#' "$1"
+}
+mut_PRE_kit_path_probe_opened() {
+  sed -i '/^cmd_preflight() {/,/^}/ s#^    if \[ -n "\$kit_tpl_refused" \]; then$#    if false; then#' "$1"
+}
+
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
 # session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
 # undone and the boot bill goes on reporting the cut, because the fallback arm it lands in is the
@@ -2762,6 +3006,151 @@ mut_RUN_turn_rule_no_clock() {
 # prints the command per phase and tests/check-dry-run.sh counts the prefix: 5 expected, 0 found.
 mut_RUN_harness_env_inherited() {
   sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$prompt"$|  local -a cmd=(claude -p "$prompt"|' "$1"
+}
+
+# ADR 0019 §1: the phase session loses the kit's read-only rule — run_phase stops appending the
+# lines of kit_read_rules after the --allowedTools value, and every phase is back to a Read of
+# $SDD_HOME/templates/ that the harness denies (measured in 2.1.296 and 2.1.304). Scoped to
+# run_phase, so the other doors that read the same function are not what this mutant measures.
+# Caught by "every phase may read the kit templates, and only read them" (check-dry-run.sh), which
+# reads the projected argv per block: five `no-rule`.
+mut_RUN_templates_read_rule_dropped() {
+  sed -i '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" ${read_rules\[@\]+"${read_rules\[@\]}"}$|    --allowedTools "$ALLOWED_TOOLS"|' "$1"
+}
+
+# ADR 0019 §1, the second door: the `sdd close` session loses the kit's read-only rule — cmd_close
+# stops appending the lines of kit_read_rules after its --allowedTools value. It does not go through
+# run_phase, so the mutant above cannot reach it and check-dry-run.sh cannot see it. Scoped to
+# cmd_close. Caught by "close: the session may read the kit templates, and only read them"
+# (check-gates.sh), which reads the close session's argv: `no-rule`.
+mut_RUN_close_templates_read_rule_dropped() {
+  sed -i '/^cmd_close() {/,/^}/ s|--allowedTools "$ALLOWED_TOOLS" ${close_read_rules\[@\]+"${close_read_rules\[@\]}"} \\$|--allowedTools "$ALLOWED_TOOLS" \\|' "$1"
+}
+
+# CodeRabbit on PR #315: a door's list of read rules goes back to the bare `"${list[@]}"`, which
+# bash 4.0 to 4.3 abort on under `set -u` when the list is empty (a kit path the grammar refuses,
+# READ_EXTRA empty), and the kit accepts bash 4. One mutant per door — run_phase, sdd close, the
+# template probe. Under bash 5 the bare form expands an empty list to nothing, so no behaviour on
+# this machine tells the two apart; each is caught by "every read-rule array reaches claude through
+# an expansion that set -u accepts on bash 4.0 too" (check-dry-run.sh), `<list>: bare expansion`.
+mut_RUN_read_rules_bare_expansion() {
+  sed -i '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" ${read_rules\[@\]+"${read_rules\[@\]}"}$|    --allowedTools "$ALLOWED_TOOLS" "${read_rules[@]}"|' "$1"
+}
+mut_RUN_close_read_rules_bare_expansion() {
+  sed -i '/^cmd_close() {/,/^}/ s|--allowedTools "$ALLOWED_TOOLS" ${close_read_rules\[@\]+"${close_read_rules\[@\]}"} \\$|--allowedTools "$ALLOWED_TOOLS" "${close_read_rules[@]}" \\|' "$1"
+}
+mut_PRE_template_probe_rules_bare_expansion() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|--setting-sources "" --allowedTools ${tpl_rules\[@\]+"${tpl_rules\[@\]}"} \\$|--setting-sources "" --allowedTools "${tpl_rules[@]}" \\|' "$1"
+}
+# The two rules of that scan the three above cannot measure alone, each in a world bash 5 runs the
+# same argv. BESIDE_GUARDED: run_phase's own line, guarded, gains a second use of the list spelled
+# bare, a zero-length slice — the three above go red through the scan's "no expansion of it found"
+# line as well, so only this one is red by the bare rule alone (a bare pattern that never matches
+# leaves the three red and this one green). LIST_UNSCANNED: run_phase fills its list with
+# `readarray`, the same builtin under another name the scan does not look for, and expands it bare;
+# the scan finds two lists, and only its floor of three says so. Both caught by the same assertion.
+mut_RUN_read_rules_bare_beside_guarded() {
+  sed -i '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" ${read_rules\[@\]+"${read_rules\[@\]}"}$|& "${read_rules[@]:0:0}"|' "$1"
+}
+mut_RUN_read_rules_list_unscanned() {
+  sed -i -e '/^run_phase() {/,/^}/ s|^  mapfile -t read_rules < <(kit_read_rules)$|  readarray -t read_rules < <(kit_read_rules)|' \
+    -e '/^run_phase() {/,/^}/ s|^    --allowedTools "$ALLOWED_TOOLS" ${read_rules\[@\]+"${read_rules\[@\]}"}$|    --allowedTools "$ALLOWED_TOOLS" "${read_rules[@]}"|' "$1"
+}
+
+# ADR 0019 §2: kit_read_rules stops reading READ_EXTRA — the key is validated and then dropped, and
+# every phase is back to a skill's references the harness denies, with a config that says otherwise.
+# Caught by "READ_EXTRA reaches every phase as a read-only rule, symlink resolved" (check-dry-run.sh):
+# the run with the key prints the templates' rule alone.
+mut_RUN_read_extra_ignored() {
+  sed -i '/^kit_read_rules() {/,/^}/ s|^    dir_read_rules "\$dir"$|    :|' "$1"
+}
+
+# Codex P3 in the fifth round on PR #315: kit_read_rules stops composing kit_template_rules, so the
+# phases lose the templates' rule while the preflight's probe, which reads kit_template_rules alone,
+# still has it. Caught by "every phase may read the kit templates, and only read them"
+# (check-dry-run.sh), five `no-rule` — and by R7's `phases=0/5` behind it.
+mut_RUN_read_rules_templates_dropped() {
+  sed -i '/^kit_read_rules() {/,/^}/ { /^  kit_template_rules$/d }' "$1"
+}
+
+# The resolved target's rule goes: a symlinked skill keeps the rule of the path asked for only, and
+# the harness, which checks the resolved path too, denies it (measured in 2.1.304, ADR 0019).
+# Caught by the same assertion: `target` missing after `link`.
+mut_RUN_read_extra_symlink_unresolved() {
+  sed -i '/^dir_read_rules() {/,/^}/ { /^    printf .*"\$real"$/ s/.*/    :/ }' "$1"
+}
+
+# The resolved target is emitted unchecked: a name the machine chose, `odd[1]`, enters a rule the
+# harness reads as a bracket expression. Caught by the same assertion: a rule for `odd[1]` appears.
+mut_RUN_read_extra_target_unchecked() {
+  sed -i '/^dir_read_rules() {/,/^}/ s| [&][&] read_extra_dir_ok "\$real"; then$|; then|' "$1"
+}
+
+# Codex r3 #2 on PR #315: the templates' own path is emitted unchecked again, so a kit under
+# `/opt/sdd*` grants `/opt/sdd-secret/templates/**` to every session. Caught by "a kit path the
+# read-rule grammar refuses gets no template rule, and preflight names it" (check-preflight.sh),
+# `projection:…kit=5` alone: the preflight's refusal reads the grammar on its own and still skips the
+# probe, so only the phases' projection shows the rule — which is why the assertion reads it.
+mut_RUN_kit_path_unchecked() {
+  sed -i '/^dir_read_rules() {/,/^}/ { /^  read_extra_dir_ok "\$dir" || return 0$/d }' "$1"
+}
+
+# The guard of READ_EXTRA, one mutant per refusal class — the key WIDENS a permission, so a refusal
+# that turns into an acceptance fails open. All four caught by "READ_EXTRA that is not a literal
+# absolute directory is refused, and the reason names it" (check-gates.sh), each in its own term.
+# A relative entry is accepted: `relative:lived|0`.
+mut_RUN_read_extra_relative_accepted() {
+  sed -i '/^read_extra_dir_ok() {/,/^}/ s|^  case "\$p" in /\*) ;; \*) return 1 ;; esac$|  case "$p" in /*) ;; *) ;; esac|' "$1"
+}
+# `..` as a component is accepted (`.` and the empty one still refused): `dotdot:lived|0`.
+mut_RUN_read_extra_dotdot_accepted() {
+  sed -i "/^read_extra_dir_ok() {/,/^}/ s/^      ''|\.|\.\.) return 1 ;;\$/      ''|.) return 1 ;;/" "$1"
+}
+# The character rule goes, and every glob and parenthesis reaches the rule: `star:lived|0` and on.
+mut_RUN_read_extra_metachar_accepted() {
+  sed -i '/^read_extra_dir_ok() {/,/^}/ { /^      \*\[!A-Za-z0-9._-\]\*) return 1 ;;$/d }' "$1"
+}
+# A newline is accepted, and the parser's one `read` drops the second line with rc 0: `newline:lived|0`.
+mut_RUN_read_extra_newline_accepted() {
+  sed -i '/^load_config() {/,/^}/ { /die "READ_EXTRA contains a newline/d }' "$1"
+}
+
+# ADR 0019, the journal half: run_phase stops naming what the harness denied its session — the
+# journal_denials call after hat_init_facts goes, and a phase that could not read the templates or
+# a skill's references is back to an `ok`-looking journal. Scoped to run_phase, so the close door
+# below is not what this mutant measures. Caught by "every tool call the harness denied is named in
+# the journal" (check-autonomy.sh): start:0 campos:0 bash:0.
+mut_RUN_denials_not_journaled() {
+  sed -i '/^run_phase() {/,/^}/ { /^  journal_denials "\$phase" "\$logfile"$/d }' "$1"
+}
+
+# The same call removed from the other door: cmd_close reads its session through the same
+# hat_init_facts and names nothing the harness refused it. The mutant above cannot reach it.
+# Caught by "close: every tool call the harness denied is named in the journal" (check-autonomy.sh).
+mut_RUN_close_denials_not_journaled() {
+  sed -i '/^cmd_close() {/,/^}/ { /^  journal_denials "\$phase" "\$logfile"$/d }' "$1"
+}
+
+# The path the session chose reaches the journal raw: a newline writes a line of its own and a
+# space a field of its own, and mission_cost_usd sums every `cost_usd=<number>` field it finds.
+# Caught by "denied: a path the session chose cannot forge a field or a line of the journal"
+# (named:1 forged-fields:2), and first by the line count beside it: the newline makes lines:7.
+mut_RUN_denials_path_unsanitized() {
+  sed -i '/^journal_denials() {/,/^}/ s|^      def safe: tostring .*;$|      def safe: tostring;|' "$1"
+}
+
+# The path loses its `path=` key, so a path that IS `cost_usd=<number>` becomes that field whole —
+# no space or newline needed. Caught by the same assertion as the mutant above, through the one
+# forged path the sanitising alone cannot neutralise.
+mut_RUN_denials_path_unprefixed() {
+  sed -i '/^journal_denials() {/,/^}/ s|"  path=\\(\.\[1\])"|"  \\(.[1])"|' "$1"
+}
+
+# Every denial becomes a line, repeats included: a model that asked twice for one file writes it
+# twice, and a REVIEW that retries the same reference fills the journal with copies. Caught by
+# "denied: a call denied twice is one journal line, and the ledger still counts every denial".
+mut_RUN_denials_not_distinct() {
+  sed -i '/^journal_denials() {/,/^}/ s|if any(\.\[\]; \. == \$d) then \. else \. + \[\$d\] end|. + [$d]|' "$1"
 }
 
 # Issue #51, part 1: the phase session no longer carries its git label. Its commits land in the
@@ -6461,6 +6850,45 @@ CATALOG=(
   PREFLIGHT_bash_in_init_unchecked
   PREFLIGHT_money_keys_unchecked
   PREFLIGHT_num_turns_unchecked
+  PRE_template_read_unchecked
+  PRE_template_probe_reads_settings
+  PRE_template_probe_allowlist_widened
+  PRE_template_probe_rule_dropped
+  PRE_template_probe_reads_every_rule
+  PRE_template_probe_empty_unguarded
+  PRE_template_probe_rules_bare_expansion
+  PRE_template_probe_silent_unnamed
+  PRE_template_probe_dead_counted_twice
+  PRE_template_outcome_error_warned
+  PRE_template_outcome_default_green
+  PRE_template_outcome_error_over_read
+  PRE_template_outcome_error_over_denied
+  PRE_read_extra_missing_silent
+  PRE_undeclared_skill_silent
+  PRE_skill_cover_unslashed
+  PRE_skill_cover_unresolved
+  PRE_skill_entry_versioned
+  PRE_skill_entry_home_unwritten
+  PRE_skill_target_refused_undeclared
+  PRE_skill_cache_registry_unnamed
+  PRE_skill_registry_ignored
+  PRE_registry_any_plugin
+  PRE_registry_prefix_unbounded
+  PRE_plugin_form_plain_dirs_first
+  PRE_plugin_form_asked_plain
+  PRE_broken_install_to_cache
+  PRE_broken_install_unnamed
+  PRE_broken_reason_not_reset
+  PRE_plain_form_marked_broken
+  PRE_broken_reported_present
+  PRE_plugin_cache_by_name
+  PRE_plugin_cache_any_plugin
+  PRE_plugin_cache_any_skill
+  PRE_plugin_cache_marketplace_fixed
+  PRE_plugin_cache_unchecked
+  PRE_plugin_cache_falls_through
+  PRE_kit_path_unnamed
+  PRE_kit_path_probe_opened
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA
@@ -6486,6 +6914,26 @@ CATALOG=(
   RUN_turn_rule_background_dropped
   RUN_turn_rule_no_clock
   RUN_harness_env_inherited
+  RUN_templates_read_rule_dropped
+  RUN_close_templates_read_rule_dropped
+  RUN_read_rules_bare_expansion
+  RUN_close_read_rules_bare_expansion
+  RUN_read_rules_bare_beside_guarded
+  RUN_read_rules_list_unscanned
+  RUN_read_extra_ignored
+  RUN_read_rules_templates_dropped
+  RUN_read_extra_symlink_unresolved
+  RUN_read_extra_target_unchecked
+  RUN_kit_path_unchecked
+  RUN_read_extra_relative_accepted
+  RUN_read_extra_dotdot_accepted
+  RUN_read_extra_metachar_accepted
+  RUN_read_extra_newline_accepted
+  RUN_denials_not_journaled
+  RUN_close_denials_not_journaled
+  RUN_denials_path_unsanitized
+  RUN_denials_path_unprefixed
+  RUN_denials_not_distinct
   RUN_git_label_unexported
   RUN_close_git_label_unexported
   RUN_intervention_unwritten_on_phase

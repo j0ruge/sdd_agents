@@ -4,6 +4,55 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-21 — A sessão lê o que o boot manda ler
+
+**Missão:** `20261020-a-sessao-le-o-que-o-boot-manda` (F9, ADR 0019), o plano que o veredito de
+`bad6168` deixou. Toda sessão que o runner abre (fase, `sdd close` e a sonda do `sdd preflight`)
+recebe `Read(/$SDD_HOME/templates/**)`, só de leitura, mais uma regra por entrada do `READ_EXTRA` do
+projeto; cada negativa do harness vira uma linha `DENIED` no journal; e o preflight prova a regra
+numa sessão sem settings. Executada de forma interativa num worktree ligado: seis incrementos e a
+rodada de conserto da revisão final (R1, R2). Os três achados da janela entraram no `TODO.md` pelo
+chore #309 (decisão 4 do grill), e não pelo I2 que a entrada do veredito, abaixo, previa.
+
+**Antes** (janela de `bad6168`: `05-verdict.md` e `01-plano.md`, § Contexto verificado): `Read`
+negado fora do repo em **13 de 47** logs de sessão do lighthouse e **4 de 23** do jrc-libs; **54**
+leituras negadas nas referências da `codereview` (40 + 14); **6 + 2** negativas nos próprios
+templates; um TICKET parado (`handoff-blocked`) e uma intervenção, destravados à mão com
+`additionalDirectories`. A sonda de rascunho sob as flags do `run_phase` e sem settings respondia
+`DENIED` (11:41 em 2.1.296; remedida no grill em 2.1.304). O `sdd preflight` dizia "ok" nos três
+casos, e nesta máquina o `additionalDirectories` do operador lia o template sem regra nenhuma (p4).
+
+**Depois** (medido pelo relay em 2026-10-20, Claude Code 2.1.304, worktree em `d8ef2aa`, o código
+dos incrementos; R1 e R2 só mudaram avisos do preflight):
+- sonda isolada (`--setting-sources ""`, cwd num `mktemp -d`, haiku), às 22:59: com a regra
+  `Read(//home/joruge/repos/sdd_agents-f9/templates/**)`, o `Read` de `templates/handoff.md`
+  devolveu `---` e `permission_denials: []` (US$ 0,00197); sem a regra, `DENIED`, com a negativa do
+  `Read` (US$ 0,00047); a escrita no mesmo diretório, com a regra, `DENIED`, com a negativa do
+  `Write` e o arquivo não criado (US$ 0,00125). Leitura **`DENIED` → lida**; escrita **`DENIED` →
+  `DENIED`**;
+- `./bin/sdd preflight` no worktree, 23:00–23:07: rc 0 e a linha `ok   a session with no settings
+  reads the kit templates under the phase flags (the kit's read rule works)`, numa máquina cujas
+  settings já liberam os templates; a mesma corrida numa cópia do kit com o `kit_read_rules`
+  sabotado (`return 0`): a projeção perde a regra (`--allowedTools Bash`) e o preflight sai rc 1,
+  `1 check(s) failed`, na linha `fail  a session with NO settings … was DENIED reading
+  …/templates/handoff.md`. Preflight **verde sem a regra → vermelho sem a regra**;
+- `tests/run-all.sh` verde em `259222b`: 2027 linhas `ok`; catálogo de mutação 716 → 742 mutantes
+  (`--anchors`, todos se aplicam). O carimbo (`./bin/sdd health`) fica para depois da revisão do PR.
+
+**O que fica para medir** (pendente, não medido): na próxima janela do juiz, **0** `Read` negados em
+`$SDD_HOME/templates/` nos logs de sessão dos alvos (eram 6 no lighthouse e 2 no jrc-libs), **0**
+TICKET `handoff-blocked` por leitura negada, e toda negativa restante nomeada como `DENIED` no
+`pipeline.log` da missão (item 4 da Verificação end-to-end do `01-plano.md`). As negativas nas
+referências das skills só caem quando cada alvo declarar o `READ_EXTRA` (o yokoten das Pendências);
+até lá o preflight nomeia cada skill descoberta, com a entrada a declarar.
+
+**Limites declarados** (ADR 0019, Consequences): uma regra `deny` nas settings do alvo bloqueia a
+fase e não a sonda isolada; a gramática do `READ_EXTRA` segura o nome e não o alcance (uma entrada
+igual a `$HOME` passa e vira `Read(//home/<usuário>/**)`); um symlink redirecionado durante a sessão
+falha fechado; e as duas sondas pagas do preflight têm teto de custo, nenhum de tempo.
+
+---
+
 ## 2026-10-20 — O veredito da janela do lote 7: `melhorou` sobre `bad6168`
 
 **O que foi julgado:** o lote 7 (PR #252, ADR 0018), a única versão de comportamento desde `0270727`.

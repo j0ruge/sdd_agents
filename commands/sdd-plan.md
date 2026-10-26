@@ -197,7 +197,9 @@ answers for the human, and it never paraphrases either side.
      where `sdd approve` leaves you) → commit what it lists with `git add -- <paths>` and
      `git commit -- <paths>`, never `-a`. Findings in `TODO_FILE` go in their own commit, which
      moves the `todo-findings` line of `tests/health-baseline.txt` in the same diff when the repo
-     carries that ratchet (the kit does).
+     carries that ratchet (the kit does). A finding already open gains an entry on the item's
+     `RECURRED` line (`~/repos/sdd_agents/templates/todo.md`), never a new item, and that entry
+     moves no ratchet: the count of findings stays.
    - **Anywhere else** → commit nothing, and name the paths to the human: a commit on the branch
      you stand on lands the plan or the finding where the mission does not run.
 
