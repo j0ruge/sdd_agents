@@ -386,7 +386,9 @@ spelling keeps the route of today.
 read-only over the code: it reproduces, refutes with evidence, grades honestly, and every finding
 that must be fixed becomes an `R<n>` row in the mission's `checkpoint.md` — one per CRITICAL/HIGH,
 one batch row for the cheap MEDIUM/LOW, `TODO_FILE` for the expensive ones, a pendency for whatever
-needs a human. The session commits **only** the round report, the checkpoint and `TODO_FILE`.
+needs a human. The session commits **only** the round report, the checkpoint and `TODO_FILE`. In
+`TODO_FILE`, as for every hat that writes there, a finding already open gains an entry on the item's
+`RECURRED` line (`templates/todo.md`), never a new item, and one already decided goes to the human.
 
 Nothing in the runner had to learn about the prefix. `current_phase()` walks
 `PLAN TICKET EXEC QA REVIEW DOCS PR` and returns the first red gate, so a pending `R<n>` fails
@@ -690,8 +692,9 @@ unbounded) or a diverged branch each leave the sha where it was and **warn** —
 succeeded, and nothing is forced. Before this the base stayed behind the PR just merged, and the
 next mission was cut from it (SQ-145, SQ-146).
 
-`sdd close` is the only invocation of `claude` outside `run_phase()` besides the `sdd preflight`
-probe — neither of them runs a phase. It carries the kit guard anyway, for the reason below.
+`sdd close` is the only invocation of `claude` outside `run_phase()` besides the two `sdd preflight`
+probes — none of them runs a phase. It carries the kit guard anyway, for the reason below, and
+the kit's read-only rule (see "Permissions").
 
 ## ADR traceability
 
@@ -1007,6 +1010,88 @@ an allow, so `Bash` stays allowed while `Bash(git push:*)` is denied to every ha
 publisher. `sdd run --dry-run` prints a `boundary:` line per phase with exactly what will be
 passed; `tests/check-dry-run.sh` asserts it.
 
+Since `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §1) every phase session also gets **one
+read-only rule**: `kit_template_rules` prints `Read(/$SDD_HOME/templates/**)` (two slashes in its
+literal spelling, because the path starts with one), `kit_read_rules` hands it first, and
+`run_phase` hands each line of `kit_read_rules` as an argument of its own right after the
+`--allowedTools` value. One definition, `dir_read_rules`, builds the rules of every directory:
+the templates' and each `READ_EXTRA` entry's. The boot prompt orders every phase to
+start from those templates, and under `acceptEdits --allowedTools Bash` the harness denies a `Read`
+outside the target repo — measured in Claude Code 2.1.296 and 2.1.304. The rule reads and does not
+write: a `Write` in the same directory stayed denied. `--add-dir` is not used, because it lets the
+session write the kit too. The dry-run prints the rule in each phase's argv, and
+`tests/check-dry-run.sh` asserts it per block, along with the absence of `--add-dir`. `sdd close`
+does not go through `run_phase`, so it reads the same function by hand and hands the same lines to
+its session; `tests/check-gates.sh` asserts that argv the same way. The templates' path is held to
+the grammar `READ_EXTRA` is held to (below): the harness reads the rule as a pattern, so a kit at
+`/opt/sdd*` would grant `/opt/sdd-secret/templates/**` too. A kit whose path the grammar refuses gets
+no templates rule in any session — closed, never widened —, and `sdd preflight` fails once, naming
+the path, with the remedy (move the kit to a literal path) and no probe session;
+`tests/check-preflight.sh` asserts the refusal, the probe's argv and the phases' projection.
+
+The **project** adds its own after the templates' rule (ADR 0019 §2): each entry of `READ_EXTRA`
+(`config/schema.md`), the directories of the skills its phases depend on, becomes the same
+read-only rule, and an entry that is a symlink also gets its resolved target's rule, because the
+harness checks both paths — when the target's own name passes the same grammar; a target that does
+not gets no rule, and a read there is a `DENIED` line. `load_config` refuses an entry that is not a
+literal absolute directory, before any session; the kit itself grants nothing beyond its templates.
+`tests/check-dry-run.sh` asserts the rules per block, with and without the key, and
+`tests/check-gates.sh` each refusal.
+`sdd preflight` warns, with no session, about an entry this machine does not have and about a skill
+it finds that no rule covers, naming the entry to add — or, when only the skill's symlink target is
+uncovered because the grammar refuses the target's name, naming that target and the remedy (move or
+rename it) instead, since no entry reaches it. Each skill is looked up by the form its phase
+invokes it by: plain (`ticket`, `qa-report`, `qa-execution`) in the skills directories first, and
+`codereview:codereview`, the REVIEW's, in the harness's registry (`installed_plugins.json`) and
+never in a plain directory. A plugin skill is the copy whose `installPath` the registry records
+under the plugin's own key (`<plugin>@<marketplace>`, never another plugin that ships a skill of the
+same name), else a copy from the cache: for `codereview:codereview` only when the registry records no
+install of the plugin, and only from the plugin's own tree
+(`…/plugins/cache/<marketplace>/codereview/<version>/skills/codereview`; another plugin's
+`skills/codereview` never counts); for a skill invoked plain, the first directory of its name, also
+when no recorded install holds it. A warning about a directory under the cache names that file,
+since the cache may hold more than one copy. For
+`codereview:codereview`, a registry that records the plugin with no install holding the skill is a
+broken install, warned by name with the registry, the `installPath` and the remedy (reinstall the
+plugin), and never replaced by a copy from the cache. The registry has one reader,
+`plugin_install_paths`, which `sdd health` shares for the grade table, so the two name one copy;
+`tests/check-preflight.sh` asserts each, and `tests/check-health.sh` the table's side.
+
+No argv assertion says whether the **harness** honours the rule, so `sdd preflight` asks (ADR 0019
+§3). Next to the `Bash` probe it opens a second session, isolated: `--setting-sources ""` (no
+settings at all), cwd in a `mktemp -d`, the harness environment unset as `run_phase` unsets it, and
+an `--allowedTools` that carries the lines of `kit_template_rules` and nothing else. `ALLOWED_TOOLS`
+stays off it: a broad `Read` there would read the template by itself and turn the probe green over
+an empty or broken rule. The `READ_EXTRA` rules stay off it for the same reason: an entry that
+covers the kit (`$HOME`, with `$SDD_HOME` below it, which the grammar accepts) reads the template by
+itself, and the probe certified a templates rule that was sabotaged or broken (the Codex P3 in the
+fifth round on PR #315); the entries keep the warnings above, which read `kit_read_rules` whole. A
+`kit_template_rules` that printed nothing fails by name, with no session.
+A kit whose path the grammar refuses never reaches the probe: it is named once, above, and there is
+no rule to measure. It asks for a `Read` of
+`$SDD_HOME/templates/handoff.md` and reads the stream, never the answer: one jq names the outcome of
+that `Read` once, and a `case` sends it to its arm. In precedence order: the template in the result
+line's `permission_denials` (matched by path) fails the preflight, with the remedy; a `tool_result`
+without `is_error` for that `Read` is `ok`; a `tool_result` with `is_error` and no denial naming the
+path fails, with the first line of the error, since the phases will meet the same error (the
+template missing or unreadable, or a harness that reports a refusal only in the `tool_result`); a
+session that answered and never tried is a warning; and a stream with no init line and no result
+line jq can read fails too, naming the first line of the session's stderr, because a CLI that
+refuses one of this probe's flags exits before its init line while it answers the `Bash` probe. An
+outcome the `case` does not know fails as well, so no stream goes unnamed and none lands in an arm
+by elimination. When the
+`Bash` probe got no answer either, that is one cause and one failure: the template probe only warns
+that it measured nothing. The isolation is
+the point: with the settings loaded, an `additionalDirectories` or a `Read(*)` on the operator's
+machine reads the template with no rule at all, and the probe would be green over a rule that does
+nothing. `tests/check-preflight.sh` asserts the verdict both ways, every outcome in worlds of its
+own (the stream with no init and no result in four), the precedence in two worlds of two outcomes,
+the default on a sabotaged copy of the kit, and the argv of that session, the templates' rule as
+its whole `--allowedTools` under an `ALLOWED_TOOLS` that carries `Read` — and, under an entry that
+covers the kit, with a stub that answers as the harness would, the real kit's probe reading and a
+copy with a broken templates rule denied, while the phases carry the templates' rule and the entry's.
+Both preflight probes are capped in money (`--max-budget-usd 1` each) and not in time.
+
 ⚠️ **Two keys for one list, and the split is measured (2026-09-06, Claude Code 2.1.263).** The
 harness reads the agent file's `disallowedTools:` as tool names — the documented contract, names
 plus `mcp__<server>` patterns — so a permission rule written there removes the tool **whole**:
@@ -1018,8 +1103,9 @@ harness reads; `hat_disallowed` joins both onto the flag, where a rule is a perm
 `Bash`. `tests/check-hat.sh` R3/R4 refuse the two mix-ups.
 
 `sdd preflight` proves this by firing a real headless session **as the executor hat**, under the
-flags `run_phase` composes for it, and reading three artifacts: `Bash` on the stream's `init` line,
-the marker in the answer, and a numeric `total_cost_usd` and `num_turns` on the `result` line — the
+flags `run_phase` composes for it minus the read rules (the isolated probe above proves those), and
+reading three artifacts: `Bash` on the stream's `init` line, the marker in the answer, and a numeric
+`total_cost_usd` and `num_turns` on the `result` line — the
 keys `run_phase`, `sdd census`, `sdd close` and the mission budget read, so a CLI that renamed one
 is caught before a session is paid for blind. "claude answers" does not cover this failure mode, and neither did
 a probe without `--agent` — it was green on the day every hat had no shell.
@@ -1032,7 +1118,13 @@ id, exit code, duration, cost in USD) and two files alongside it, in the same
 `<ts>  PHASE  <X>  reason="<the gate's sentence>"` — written before the session is paid for:
 the session line says only `rc=0`, which reads as success over a session that had nothing to do
 (issue #56, `20260922-o-motivo-da-fase`). A phase forced with `--phase` gets no `PHASE` line —
-nothing was derived. The two files:
+nothing was derived. Every call the harness **denied** the session gets one too, right above the
+session line: `<ts>  DENIED  <X>  tool=<name>  path=<path>`, one per distinct pair of the result's
+`permission_denials`, the `sdd close` session included (`DENIED  CLOSE`). The path is the call's
+`file_path` or `path`; a call with neither (`Bash`, an MCP tool) gets the tool name alone, never
+its input, and every space or control character in a path becomes `?`, so a path cannot add a
+line or a `cost_usd=` field to the journal (ADR 0019). The ledger's `denials` stays the raw count.
+The two files:
 
 That journal is also where the **mission ceiling** is read. Before opening any phase the runner
 sums the `cost_usd=` field of every session line (`?` counts as nothing) and compares it with

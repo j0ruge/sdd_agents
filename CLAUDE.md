@@ -82,6 +82,9 @@ o escopo; nunca perder o achado. Formato, esqueleto e ciclo de vida: `templates/
 deste repo). Duas seções, cada uma com seu marcador na linha abaixo do `##`: a dos achados abertos
 (`<!-- sdd:open -->`) e a dos registros **decididos, que não se reabrem** (`<!-- sdd:decided -->`).
 O texto do heading segue o idioma do repo; o marcador é contrato, em inglês, e é o que o sensor lê.
+Achado que já está aberto ganha uma entrada na linha `RECURRED` do item (`templates/todo.md`), nunca
+um item novo; o que está nos decididos não ganha linha, e quem o achou avisa o humano, que decide se
+reabre.
 
 ⚠️ **A rota depende de quem é o repo da missão, e dizer só o DESTINO não bastou.** Missão cujo
 repo é o kit escreve aqui, como sempre. Missão de repo-alvo **nunca escreve, commita ou entra** no
@@ -148,7 +151,10 @@ mora no handoff da missão citada — duplicá-la aqui foi o que levou este arqu
 Consertado por commit, o corpo ganha `RESOLVED by <hash>` (token do kit, igual em todo idioma) e o
 item **é apagado** depois do merge, provado por `git merge-base --is-ancestor`, nunca pelo rótulo do
 PR; refutado ou decidido, vira uma linha na seção decidida, porque não há commit que o feche e a
-próxima QA o registraria de novo. A regra inteira mora no template; aqui fica o porquê.
+próxima QA o registraria de novo. Achado que volta, de outro projeto, missão ou sessão, ganha uma
+entrada na linha `RECURRED`, medida e fora do teto: a volta é o sinal mais forte de que a dor é real,
+e se perdia, porque o item no teto não tinha onde somá-la e o "e por" em prosa ninguém contava. A
+regra inteira mora no template; aqui fica o porquê.
 
 **Nem tudo que é verdade é achado — a régua de admissão (D15).** Um achado entra no `TODO.md`
 quando **o sensor afirma medir o que não mede** (fail-open) ou quando **o defeito tem consumidor
@@ -199,8 +205,9 @@ correspondente **no mesmo commit**; a auditoria que a fundou, com os números, �
   `--allowedTools "$ALLOWED_TOOLS"` junto, ou a sessão não roda `TEST_CMD`, não faz `git add`, e
   a fase EXEC fica insatisfazível por construção. Detalhe em [`config/schema.md`](config/schema.md).
 - Toda invocação de `claude -p` **que roda uma fase** passa por `run_phase()`, que loga JSON em
-  `.sdd/logs/`. As duas exceções são deliberadas e não rodam fase: o probe do `sdd preflight` e o
-  `sdd close`. Se você está acrescentando uma terceira, provavelmente ela devia ser uma fase.
+  `.sdd/logs/`. As exceções são deliberadas e não rodam fase: as duas sondas do `sdd preflight` (a
+  do `Bash` e, desde a ADR 0019, a dos templates, isolada) e o `sdd close`. Se você está
+  acrescentando outra, provavelmente ela devia ser uma fase.
 - Mudou o contrato de artefato? Atualize `templates/`, `docs/pipeline.md` e o agente afetado no
   **mesmo commit** — contrato quebrado em três lugares é o modo de falha mais caro do kit.
 - **Enum lido em mais de um ponto vira UMA definição por programa.** `blocked` e `degraded` são os

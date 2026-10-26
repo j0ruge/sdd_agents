@@ -45,6 +45,63 @@ só o executor edita código. Ferramenta a mais é superfície de erro que nenhu
 (`config/starter.conf`), teto `acceptEdits`, `bypassPermissions` recusado por `load_config`;
 `phase_hat()` é a única tabela passo → chapéu, `hat_disallowed()`/`hat_mcp()` montam as flags em
 `run_phase()`, `HAT_DENY_BASE` é o que nenhuma fase usou, e `sdd census <missão>` mede o depois.
+Desde `20261020-a-sessao-le-o-que-o-boot-manda` o `run_phase` soma ao `--allowedTools`, cada uma
+como argumento próprio logo depois do valor, as regras só de leitura do `kit_read_rules` (ADR 0019
+§1), feitas por uma definição só por diretório (`dir_read_rules`: a gramática, a regra e a do alvo
+resolvido) — primeiro as dos templates (`kit_template_rules`), `Read(/$SDD_HOME/templates/**)`,
+com duas barras na grafia literal: o boot manda toda fase partir dos templates do kit, e sob
+`acceptEdits --allowedTools Bash` o harness nega o `Read` fora do repo do alvo (medido em 2.1.296 e
+2.1.304). O `--add-dir` foi recusado porque libera também a escrita no kit. A ADR nomeia três
+portas (`run_phase`, `cmd_close`, a sonda do `sdd preflight`); cada porta que recebe a regra tem o
+seu probe — a do `run_phase` é o `tests/check-dry-run.sh`, bloco a bloco, com o mutante
+`mut_RUN_templates_read_rule_dropped` (e o `mut_RUN_read_rules_templates_dropped`, quando o
+`kit_read_rules` deixa de compor as dos templates); a do `cmd_close`, que não passa pelo
+`run_phase` e lê a mesma função à mão, é o `tests/check-gates.sh` sobre o argv da sessão de fechamento, com o `mut_RUN_close_templates_read_rule_dropped`; a da sonda
+dos templates do `sdd preflight` (§4), que recebe só o `kit_template_rules`, é o
+`tests/check-preflight.sh`, que lê o argv dessa sessão, com o `mut_PRE_template_probe_rule_dropped`,
+o `mut_PRE_template_probe_reads_settings`, o `mut_PRE_template_probe_allowlist_widened`, o
+`mut_PRE_template_probe_reads_every_rule` e o `mut_PRE_template_probe_empty_unguarded` (a lista
+vazia, que reprova sem abrir sessão). O caminho dos templates passa pela mesma gramática do
+`READ_EXTRA` (`read_extra_dir_ok`; r3 #2 do Codex no #315): o harness lê a regra como padrão, e um kit
+em `/opt/sdd*` daria leitura a `/opt/sdd-secret/templates/**`, com a sonda verde, porque ela prova que
+a sessão lê, não que lê só o que devia. O kit cujo caminho a gramática recusa não ganha regra dos
+templates em sessão nenhuma (falha fechada) e o `sdd preflight` reprova uma vez, nomeando o caminho,
+sem abrir a sonda; o probe é o `tests/check-preflight.sh`, sobre uma cópia do kit num diretório com
+`*` (o argv das sondas e a projeção das fases), com o `mut_RUN_kit_path_unchecked`, o
+`mut_PRE_kit_path_unnamed` e o `mut_PRE_kit_path_probe_opened`. Desde o R8 (CodeRabbit no #315) as
+três listas chegam ao `claude` por `${lista[@]+"${lista[@]}"}`, a guarda que o `probe_agent` já
+tinha: a lista pode ser vazia (o kit recusado com o `READ_EXTRA` vazio), e o bash 4.0 a 4.3, que o
+kit aceita, aborta na forma crua sob `set -u`. O probe é estático (`tests/check-dry-run.sh`), porque
+nesta máquina só há bash 5.2 e o mundo da falha não se constrói; um mutante por porta e dois para
+as regras da varredura (`mut_RUN_read_rules_bare_beside_guarded`, `mut_RUN_read_rules_list_unscanned`).
+Depois da regra dos templates vêm as do **projeto** (ADR 0019 §2): a chave `READ_EXTRA`, de default
+vazio, declara os diretórios das skills de que as fases dependem, escritos com `$HOME` no
+`.sdd/config.sh` rastreado; cada entrada vira a mesma regra só de leitura, e a entrada que é symlink
+ganha também a regra do alvo resolvido, porque o harness confere os dois caminhos. A gramática mora
+numa definição (`read_extra_each`), a guarda em outra (`read_extra_dir_ok`, positiva, no molde do
+`hat_extra_path_ok`), e a recusa no `load_config`; o probe é o `tests/check-dry-run.sh` (as regras,
+diferencial com e sem a chave) e o `tests/check-gates.sh` (cada recusa nomeando a entrada), com sete
+mutantes `mut_RUN_read_extra_*` — três na regra, quatro na guarda. O `sdd preflight` avisa, sem
+sessão e nunca com `_fail`, a entrada que não existe nesta máquina e a skill que ele acha
+(`skill_findable`, que publica `SKILL_FOUND_DIR`) e que nenhuma regra das sessões cobre — o
+diretório achado e o alvo do `readlink -f` dele, julgados pelas próprias linhas do `kit_read_rules`
+(`read_rules_cover`) —, com a entrada a declarar (`skill_read_entry`: para plugin, o pai sem versão,
+escrito `$HOME/…`); quando o diretório achado está coberto e só o alvo não, porque a gramática recusa
+o nome do alvo, o aviso nomeia o alvo e o remédio (mover ou renomear), sem entrada a declarar, já que
+nenhuma o alcança; a skill é procurada pela forma como a fase a chama (r7 do Codex no #315): as
+simples (`ticket`, `qa-report`, `qa-execution`) nos diretórios de skills primeiro, e a
+`codereview:codereview` da REVIEW nunca num diretório simples; skill de plugin é a cópia cujo
+`installPath` o registro do harness (`installed_plugins.json`) grava sob a chave do próprio plugin
+(`<plugin>@<marketplace>`; outro plugin que traz um `skills/<skill>` não conta, r3 #1 do Codex no
+#315), lida por `plugin_install_paths`, o leitor que o `sdd health` divide com ele para a tabela de
+notas; na forma com plugin, o registro que grava o plugin sem nenhuma instalação que tenha a skill é
+instalação quebrada, avisada pelo nome (o registro, o `installPath` e o remédio, reinstalar o
+plugin) e nunca trocada por uma cópia do cache, que só é varrido quando o registro não grava
+instalação do plugin, e então só na árvore do próprio plugin
+(`cache/<marketplace>/<plugin>/<versão>/skills/<skill>`; o `skills/<skill>` de outro plugin nunca
+conta, r8 do Codex no #315); e o aviso sobre diretório sob o cache nomeia esse arquivo, porque o
+cache pode ter mais de uma cópia; o probe é o `tests/check-preflight.sh`, com vinte e quatro
+mutantes `mut_PRE_*`, e o `tests/check-health.sh` do lado da tabela.
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`
@@ -142,6 +199,37 @@ E o `gate_DOCS` passou a ler o plano: sem o literal `kaizen_log: skipped` no fro
 `00-missao.md` (a linha K8 do checklist é prosa), a branch tem de acrescentar ao `KAIZEN_LOG.md` uma
 entrada — um bloco `## ` cujo título e uma linha que cita o id inteiro da missão são novos no diff
 de cada merge-base (ADR 0018 §4); o dono é o `sdd-docs`.
+Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §3) o `sdd preflight` abre uma segunda
+sessão, a sonda dos templates: `--setting-sources ""`, cwd num `mktemp -d`, o env do harness limpo,
+um `--allowedTools` só com as linhas do `kit_template_rules` (a regra dos templates e a do alvo
+resolvido) — nunca o `ALLOWED_TOOLS`, onde um `Read` largo leria o template sozinho e deixaria a
+sonda verde sobre uma regra vazia ou quebrada (P3 do Codex no #315), nem as regras do `READ_EXTRA`
+que o `kit_read_rules` soma depois delas, onde uma entrada que cubra o kit (`$HOME`, com o
+`SDD_HOME` abaixo, que a gramática aceita) faria o mesmo, e a sonda certificaria a regra dos
+templates sabotada ou quebrada (P3 do Codex na r5 do #315, `mut_PRE_template_probe_reads_every_rule`);
+as entradas seguem cobertas pelos avisos do preflight, que leem o `kit_read_rules` inteiro;
+`kit_template_rules` sem linha nenhuma é `_fail` sem sessão, e o kit cujo caminho a gramática recusa
+nem chega a ela: é nomeado uma vez, antes, sem sessão —, pedindo o `Read` de
+`$SDD_HOME/templates/handoff.md`. O veredito lê o artefato do stream, nunca a resposta, e dá nome
+uma vez ao desfecho do `Read`: um jq só imprime um de cinco desfechos, e um `case` despacha, com
+default que reprova (P2 do Codex na r4 do #315 — a cadeia de antes definia os dois últimos braços
+por eliminação, e o `Read` que voltava com erro caía no aviso de que a sessão não tentou). Em ordem
+de precedência (`mut_PRE_template_outcome_error_over_denied`, `mut_PRE_template_outcome_error_over_read`):
+o template no `permission_denials` (casado pelo caminho) é `_fail`; um `tool_result` sem `is_error`
+para o `Read` dele é `ok`; um `tool_result` com `is_error`, sem negativa para o caminho, é `_fail`
+com a 1ª linha do erro (template ausente ou ilegível, ou harness que reporta a recusa só no
+`tool_result`; `mut_PRE_template_outcome_error_warned`); respondeu sem tentar o `Read` é `warn`;
+sem init nem `result` que o jq leia é `_fail` nomeado com a 1ª linha do stderr da sessão — a CLI que
+recusa uma flag desta sonda sai antes do init enquanto responde à do `Bash` (P2 do Codex na r2 do
+#315) —, salvo quando a sonda do `Bash` também não respondeu: uma causa, uma falha, e a dos templates
+só avisa (`mut_PRE_template_probe_silent_unnamed`, `mut_PRE_template_probe_dead_counted_twice`); e o
+desfecho que o `case` não conhece é `_fail` (`mut_PRE_template_outcome_default_green`). O
+isolamento é o ponto: com as settings do ambiente, um `additionalDirectories` ou um `Read(*)` lê o
+template sem regra nenhuma, e a sonda ficaria verde
+nesta máquina sobre uma regra que não faz nada. É também o sensor do dia em que o harness mudar a
+sintaxe da regra. Custa uma sessão haiku por preflight: US$ 0,002 (US$ 0,00197 medidos em
+2026-10-20 às 22:59, Claude Code 2.1.304, com a regra lendo o template) e uns 6 s (as sondas p5 e p6
+do grill, 16:24).
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
@@ -152,6 +240,9 @@ de `REVIEW_PROSE_CRITERIA` (prosa) e exige A em todo o resto, nome desconhecido 
 outra missão pôs na ponta da base só conta com o checkpoint desta missão movido pelo commit que o
 adicionou (ADR 0015 §3) e deixado num blob que a própria missão escreveu (ADR 0016 §1, #225).
 Resíduo: outra missão que reescreve o checkpoint byte a byte igual a uma versão da branch passa.
+As duas sondas pagas do `sdd preflight` (a do `Bash` e a dos templates) têm teto de custo
+(`--max-budget-usd 1` cada) e nenhum de tempo: nada no runner encerra uma sessão de sonda que não
+responde (ADR 0019, Consequences).
 
 ## 5. Memória — o que persiste entre sessões
 
@@ -238,12 +329,31 @@ do `load_config`. Re-exec do `bin/sdd` entre voltas foi recusado: o runner não 
 julgaria a própria REVIEW. Limites no comentário do `config_reload`: o que o `cmd_run` derivou antes
 do laço (branch da missão, `MISSION_DIR`) fica com o valor do lançamento; edição feita durante a
 sessão chega ao gate da volta **seguinte**; `sdd retry`, `sdd close` e `sdd kaizen` leem uma vez só.
+Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §1 e §2) a permissão que o runner pede ao
+harness para fora do repo do alvo é **só de leitura**: as regras do `kit_read_rules` nos templates do
+kit e nos diretórios que o `READ_EXTRA` do projeto declara. Com a regra, um `Write` no mesmo
+diretório continuou `DENIED` (medido em 2.1.296 e 2.1.304), e o `--add-dir`, que o liberaria, não é
+passado. O `Bash` da fase continua escrevendo onde quiser — as regras não estreitam nada —, e quem
+para a linha se o kit for escrito continua sendo a guarda de kit.
 
 **Dívida declarada.** O `HAT_WRITES_EXTRA` **alarga** permissão e seu valor vira glob de shell no
 `case` do `hat_path_allowed`, então toda frouxidão da guarda falha **aberta** — por isso ela é
 literal-only, e por isso a passada de sabotagem é obrigatória antes do merge. Chapéu cujo `writes:`
 é vazio (`sdd-executor`) já escreve em qualquer lugar: a entrada é aceita e **ignorada**, com aviso
 do `sdd preflight` — estreitar viraria regressão, recusar viraria armadilha.
+O `READ_EXTRA` também **alarga** permissão, só de leitura: o valor vira regra que o harness lê como
+padrão de gitignore, então a guarda é literal-only e escrita positivamente, e a passada de
+sabotagem foi feita antes do commit (notas da missão). O runner resolve só a entrada declarada:
+um symlink **abaixo** dela continua negado, e o alvo resolvido cujo nome não é literal não ganha
+regra — os dois saem como `DENIED` no journal. O mesmo vale para o próprio kit: instalado num
+caminho que a gramática recusa (espaço, glob, `+`), ele não ganha a regra dos templates, as fases
+leem `DENIED` e o `sdd preflight` reprova nomeando o caminho; o `load_config` não o recusa, porque
+mataria todo comando do kit por uma leitura que só custa os templates.
+A gramática segura o nome, não o alcance: uma entrada igual a `$HOME`, ou um symlink cujo alvo é a
+home, passa e vira `Read(//home/<usuário>/**)`, e toda fase lê a home inteira — só leitura, e a
+fase já tem `Bash`, então é higiene, não fronteira. O `readlink -f` roda na montagem do argv, uma
+vez por sessão: um symlink redirecionado durante a sessão falha fechado, com o alvo novo negado e
+nomeado pelo `DENIED` (ADR 0019, Consequences).
 As fases rodam **no checkout do humano**, com `.env.idp`, Jira e push reais;
 a guarda de kit **para a linha** desde `20260903-a-fronteira-do-chapeu` (`kind: kit-touched`), e o
 chapéu que escreve fora de `writes:` também (`hat-crossed`) — as duas pela mesma porta,
@@ -339,7 +449,10 @@ motivo nomeia primeiro"; rc 3 em
 `no-progress`, `budget-exhausted`, e desde `20260922-o-motivo-da-fase` `no_work_escalation`
 (`kind: "no-work"`) — a única que para a linha **antes** da sessão, quando a célula do checkpoint
 é ilegível ou o mesmo passo volta com o mesmo motivo; o journal ganhou a linha
-`PHASE <X> reason="…"` por fase derivada, que é o que o humano no `tail -F` lê; `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
+`PHASE <X> reason="…"` por fase derivada, que é o que o humano no `tail -F` lê, e desde
+`20261020-a-sessao-le-o-que-o-boot-manda` uma linha `DENIED <X> tool=… path=…` por chamada distinta
+que o harness negou à sessão (`journal_denials`, logo depois do `hat_init_facts` no `run_phase` e no
+`cmd_close`; o caminho sem espaço nem controle, nunca o comando); `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
 fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria: teto por missão
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
 `ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos
