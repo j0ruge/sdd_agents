@@ -106,6 +106,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   a linha degradada para a próxima commitar. Direção: status e boot citam o stream órfão e a árvore suja.
   — descoberto por `retrofit-watch` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
 
+- [ ] **O `sdd run` paga a REVIEW sem avisar que o `READ_EXTRA` não cobre o `codereview`** — `bin/sdd:6951`
+  (`sk_entry`) — o aviso com a entrada a acrescentar só sai no `sdd preflight`, que é opcional: o `sdd run` não o
+  repete e abre a REVIEW assim mesmo. No `magic_tutor`, as três últimas missões tiveram Reads negados nas
+  `references/` do `codereview` (5, 2 e 3 no `pipeline.log`). Na `20261024-dica-na-hora`, 3 dos 5 agentes da
+  Fase B pararam sem revisar, numa REVIEW de US$ 5,61. Com a entrada (`j0ruge/magic_tutor#104`), um subagente
+  headless lê a reference. Direção: o `sdd run` faz a mesma busca de skills, sem sessão, e avisa ou para.
+  — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
@@ -323,6 +331,25 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   montar um `--mcp-config` com só os servidores que o chapéu declara, tirados da config do humano (o `rea` traz
   frida, gdb e adb: o recorte é a fronteira), e o `hat_init_facts` já compara o declarado com o visto.
   Fonte: grill da 3.3d do `dotp-remake` (2026-10-21) — descoberto por `sdd-plan` (relay) no `dotp-remake` (2026-10-21)
+
+- [ ] **O `gate_PR` não lê o `status: blocked` do `50-pr.md`, e o runner compra outra sessão do publisher** —
+  `bin/sdd:2614` (`gate_PR`) — só o `gate_TICKET` e o `gate_QA` armam o `GATE_HANDOFF_BLOCKED`. Na
+  `20261024-dica-na-hora` do `magic_tutor`, o publisher parou num conflito com a base e commitou o `50-pr.md`
+  com `status: blocked`. O commit contou como avanço ("carrying on"), e uma 2ª sessão (`e5ab0aaf`, US$ 0,12)
+  reconferiu o mesmo conflito antes do `BLOCKED`. O `templates/review.md` também declara `blocked`, e o
+  `gate_REVIEW` não o lê: lá, a sessão repetida seria a da REVIEW (não medido). Direção: os dois gates armam o
+  marcador, pelo contrato escrito acima do `GATE_HANDOFF_BLOCKED`.
+  — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
+
+- [ ] **O publisher bloqueado manda o humano fazer `git rebase`, e o rebase tira os hashes dos handoffs da história** —
+  `agents/sdd-publisher.md:48` (`Conflict`) — o contrato manda parar no conflito com a base, sem dizer qual saída
+  indicar, e na `20261024-dica-na-hora` do `magic_tutor` as duas sessões indicaram `git rebase origin/main`. O
+  checkpoint e os handoffs citam hashes, e o `gate_EXEC` exige cada `Commit` na história do `HEAD`
+  (`bin/sdd:1456`). Depois do rebase, o run seguinte para no EXEC (`no_work_check`, forma b), e o humano
+  reescreve 9 células (pelo código, não medido). Lá, o merge da base destravou (`c6f043c`). Direção: o
+  contrato passa a indicar `git merge origin/<base>`, e o `BLOCKED` do PR diz o mesmo sem depender da sessão.
+  — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
+
 - [ ] **Com o passo 2 pulado, o `/sdd-plan` não olha o branch antes de o planner ler o repo** —
   `commands/sdd-plan.md:56` (`skip this step`)
   — com o kit fora do alvo, o branch atual só aparece na pergunta de aprovação, e o `sdd approve` corta dele a
@@ -471,6 +498,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
 
 ### Custo e escala
+
+- [ ] **O mapa de tempos do catálogo de mutação mora no checkout, e o worktree de cada branch roda sem ele** —
+  `tests/check-mutation.sh:7550` (`KILLERS_FILE`) — o mapa (`.sdd/cache/`, fora do git) põe primeiro o passo que
+  matou cada mutante e lança os mais longos antes (40 mutantes: 4796 s → 1959 s, no comentário do mapa). Ele é
+  gravado no fim do catálogo, no `.sdd/cache/` daquele checkout, e o trabalho do kit roda num worktree por branch:
+  em 2026-10-25, nenhum dos 8 checkouts do kit nesta máquina tinha o mapa, e o `sdd health` do
+  `sdd_agents-gate-sem-saida` fez 299 de 775 mutantes em ~152 min (238 s cada, em média). Direção: o mapa mora
+  no `git rev-parse --git-common-dir`, que os worktrees dividem, ou o `sdd health` avisa o custo de rodar sem ele.
+  — descoberto por `sessão coordenadora` no `magic_tutor` (2026-10-25)
 
 - [ ] **Um incremento que roda por quase 1 h não cabe no `sdd-executor`, que não tem `Monitor`** —
   `agents/sdd-executor.md:7` (`disallowedTools`) — a fronteira do chapéu
