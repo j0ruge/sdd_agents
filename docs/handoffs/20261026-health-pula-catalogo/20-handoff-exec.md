@@ -94,6 +94,44 @@ gate, e um pulo cego mantém a chave. É o desenho, porque o catálogo inteiro r
 `check-health.sh`. Mas é um sensor só. Ninguém mede ainda se outros stubs do kit divergem da suíte real em outra
 linha que o `cmd_health` lê (a contagem do `TODO.md`, o `FAIL`). A QA 1 deixou essa pergunta para a REVIEW.
 
+## REVIEW r1 — R1
+
+A REVIEW r1 (`4a3d412`, `40-review-r1.md`) deu Overall B e juntou os LOW baratos #3–#6 num `R1` de lote, com quatro
+Checks, todos vermelhos no `9a7ee1b` e de novo no `4a3d412` (`0 0 0 0`; `check-gates.sh` rc 0, 140 s, 481 ok). O R1
+está `done` num commit de código, `96fd555`, que só toca `tests/` (checkpoint `500cdf7`). Os quatro Checks, rodados como a
+célula os escreve, deram `1 1 1 1`. O `check-gates.sh` deu rc 0, 149 s, 483 ok (481 + as 2 asserções novas) e 0 FAIL,
+e o `check-health.sh` deu rc 0, 52 s, 61 ok. O estado do repo depois do merge `9a7ee1b` segue no `40-review-r1.md`
+§ *O estado depois do merge*, e não foi copiado para cá.
+
+| Achado | O que consertou |
+|---|---|
+| #3 | Uma guarda logo depois do `fixture_stamped` (`tests/check-gates.sh:3274–3288`), antes de qualquer mundo ler um carimbo. Se o `fixture_stamps "$FIX"` não der um caminho absoluto (git < 2.31, que responde relativo, ou `$FIX` fora do git), o sensor cai em `SENSOR-BROKEN: stamp: …`. Se der, imprime o `ok` que o Check lê. Tem a forma do `wt_dirty` do mundo 14 e uma metade `ok`. Sem ela, as metades `absent` dos mundos 8, 8b, 9, 12 e 13 e o `tree_stamped "$TREE_PLAIN"` passavam sem resposta. |
+| #4 | O mundo 7b, logo depois do 7 (`:3515–3527`). O 7 lista o lugar antes da remoção (`:3509–3511`). O 7b pega o único nome que saiu dali, roda `i4_verdict 0 "$I4_SCORE_GREEN"; i4_health --full` e exige que o arquivo dessa chave tenha voltado, com a própria chave na 1ª linha (o que o `mutation_stamp_valid` compara). Lê o artefato, não a fase. A asserção é própria, fora do tally, e não abre sítio novo de `sdd health`. O mundo 8 segue começando pelo `fixture_unstamp`. |
+| #5 | O cabeçalho do bloco (`:3163–3188`) agora conta e lista todos os mundos com asserção própria. Depois do tally são nove: os sete da chave e do lugar, com `A LINKED WORKTREE (14)`, mais o 8b e o 9b. Dentro do tally ficam o 1b, o 4b e o 7b. "three pairs plus one" virou "two pairs, a triple and one", e o "in all eight" da `:3753` virou "every one of them", com o mundo 14. |
+| #6 | O censo (`tests/check-health.sh:82–93`) nomeia as duas grafias e mede `13 sites`: 11 de `"$X/bin/sdd" health` e 2 de `./bin/sdd health` que rodam o comando (`check-gates.sh:3724`, `check-health.sh:1199`). O driver Python do `check-coordination.sh` fica nomeado e fora da conta. Medi de novo depois das edições e deu 13: o R1 não abriu sítio. |
+
+**Sabotagem.** O diff acrescenta 13 linhas de código. Degradei cada uma, uma por vez, numa cópia da worktree sem
+`.git`: foram 14 sabotagens, e o `esac` só admite erro de sintaxe. Treze deixaram uma probe vermelha. A 14ª tirou o
+`--full` do 7b e é equivalente: depois que o mundo 7 tira a chave não há pulo, e o `cmd_health` roda o mesmo catálogo
+com ou sem a flag. As degradações do tipo sempre-passa só aparecem num mundo defeituoso, e para elas usei três
+mundos de controle. O primeiro é o `fixture_stamps` cego, sem `--path-format`, a resposta relativa do git < 2.31. O
+segundo é uma trava no `bin/sdd`: a remoção deixa `<chave>.removed`, e a gravação recusa enquanto ele existe. O
+terceiro é uma remoção que não acontece, o `mut_HEALTH_survivor_keeps_key`. Sob a trava, o 7b é a única asserção do
+`check-gates.sh` que cai. No mundo cego, o sensor já caía sem a guarda, mas em cinco asserções que culpavam o gate. A
+guarda põe o nome da causa numa linha. Cada sabotagem tem a sua linha no `checkpoint-notas.md`.
+
+**Mutante.** Não entrou mutante no `CATALOG`, porque não existe um natural. A regra de gravação do `cmd_health` não
+guarda estado entre rodadas. A remoção é um `rm -f` que não deixa rastro, e a gravação lê só o veredito desta rodada
+(`catalogue_green`, `catalogue_against`) e a chave. Uma trava precisaria gravar uma lápide num lugar e lê-la em outro,
+ou seja, duas edições, não um sítio só. O mundo de controle "trava" é essa forma de duas edições, e o 7b o pega.
+
+**Âncoras e catraca.** Nenhuma âncora do `TODO.md` aponta para `tests/check-gates.sh` ou `tests/check-health.sh`, e o
+`check-mutation.sh` não mudou. Por isso o `--anchors TODO.md` deu `62 measured, 0 off target` sem reancorar nada, e o
+`--audit` da skill deu o mesmo de antes (a `RECURRED 7`, conhecida). A catraca segue em 62.
+
+**Próxima:** a REVIEW r2, que reavalia o R1 sem tê-lo escrito. O boot dela é o do `40-review-r1.md`, e só o
+estado do R1 muda: a tabela de incrementos não tem mais linha `pending`.
+
 ## Estado do repo
 
 - **Branch:** `fix/health-pula-catalogo`, sem upstream, não empurrada. Até o merge, o `sdd` do PATH não é o desta
