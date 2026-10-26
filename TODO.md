@@ -500,7 +500,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Custo e escala
 
 - [ ] **O mapa de tempos do catálogo de mutação mora no checkout, e o worktree de cada branch roda sem ele** —
-  `tests/check-mutation.sh:7656` (`KILLERS_FILE`) — o mapa (`.sdd/cache/`, fora do git) põe primeiro o passo que
+  `tests/check-mutation.sh:7768` (`KILLERS_FILE`) — o mapa (`.sdd/cache/`, fora do git) põe primeiro o passo que
   matou cada mutante e lança os mais longos antes (40 mutantes: 4796 s → 1959 s, no comentário do mapa). Ele é
   gravado no fim do catálogo, no `.sdd/cache/` daquele checkout, e o trabalho do kit roda num worktree por branch:
   em 2026-10-25, nenhum dos 8 checkouts do kit nesta máquina tinha o mapa, e o `sdd health` do

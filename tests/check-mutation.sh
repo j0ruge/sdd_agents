@@ -145,17 +145,27 @@ trap 'rm -rf "$WORK"' EXIT
 # ---------------------------------------------------------------------------
 declare -A KILLER=() SECS=()
 
-# load_killer_map <tsv> — fills KILLER[slug]=<step> and SECS[slug]=<seconds>. A line of two columns
-# (the map before 2026-09-25) is read with no time; a time that is not digits is dropped, never
-# guessed. A missing file is an empty map, and the catalogue runs in its usual order.
+# load_killer_map <tsv> [seed] — fills KILLER[slug]=<step> and SECS[slug]=<seconds>. A line of two
+# columns (the map before 2026-09-25) is read with no time; a time that is not digits is dropped,
+# never guessed. A missing file is an empty map, and the catalogue runs in its usual order. With
+# `seed`, a slug KILLER already holds keeps its whole line: the map read first wins.
 load_killer_map() {
   local k v s
   [ -r "$1" ] || return 0
   while IFS=$'\t' read -r k v s; do
     [ -n "$k" ] && [ -n "$v" ] || continue
+    [ "${2:-}" = seed ] && [ -n "${KILLER[$k]+set}" ] && continue
     KILLER["$k"]="$v"
     case "$s" in ''|*[!0-9]*) ;; *) SECS["$k"]="$s" ;; esac
   done < "$1"
+}
+
+# load_killer_maps — the map as its three readers (--only, --touched, the catalogue) see it, ADR 0021
+# decision 5: KILLERS_FILE first, then LEGACY_KILLERS_FILE for the slugs it does not know. Outside
+# git the two are one file (killers_paths), read twice to the same answer.
+load_killer_maps() {
+  load_killer_map "$KILLERS_FILE"
+  load_killer_map "$LEGACY_KILLERS_FILE" seed
 }
 
 # launch_order — stdin: <slug> TAB <seconds or empty>, in catalogue order; stdout: the slugs in
@@ -406,6 +416,82 @@ touched_selftest() {
   rc=0; out="$(touched_verdict "$d" S1 S3 2>&1)" || rc=$?
   { [ "$rc" = 0 ] && grep -qF 'touched: 2 of 2 selected mutant(s) still caught by their killer' <<< "$out"; } \
     || { echo "  SELFTEST FAIL  touched: two caught mutants did not read as 2 of 2 (rc $rc): $out" >&2; return 1; }
+  return 0
+}
+
+# killers_selftest — where the killer map lives and how it is read and written (ADR 0021, decisions 1
+# and 5), over a fixture repo with a linked worktree, a directory outside git and a shim of a git
+# older than 2.31. (a) The root and the worktree resolve ONE map inside the git common dir, on the
+# old git too, each with its own .sdd/cache map as the seed; a directory outside git keeps its
+# .sdd/cache map. (b) The shared line wins over the seed's, and the seed fills the slugs the shared
+# map does not know. (c) A write is a union read at write time: a slug of CATALOG takes this run's
+# line or leaves, a slug outside it keeps the shared line or, failing it, the seed's, and the seed is
+# never rewritten. (d) The two names every reader uses were published for $ROOT before any mode
+# reads them. KILLERS_FILE and LEGACY_KILLERS_FILE are locals below that, and every path (a)-(c)
+# touches is under $WORK, so it never reads or writes the real map. Called beside touched_selftest,
+# in every mode. Declared, not probed: that the --only, --touched and catalogue readers call
+# load_killer_maps — they are mode code that runs after this, over the real map; the catalogue's
+# `== killer map: N mutant(s) run their last killer first ==` line says what it read.
+killers_selftest() {
+  local real_map="$KILLERS_FILE" real_seed="$LEGACY_KILLERS_FILE"
+  local d="$WORK/killers-selftest" repo wt plain common root_map got seed
+  local KILLERS_FILE='' LEGACY_KILLERS_FILE=''
+  local -A KILLER=() SECS=()
+  local -a CATALOG=(A C)
+  repo="$d/repo" wt="$d/wt" plain="$d/plain"
+  mkdir -p "$repo" "$plain" "$d/oldgit" "$d/run"
+  { git -C "$repo" init -q \
+      && git -C "$repo" -c user.email=probe@sdd -c user.name=probe -c commit.gpgsign=false commit -q --allow-empty -m base \
+      && git -C "$repo" worktree add -q "$wt"; } >/dev/null 2>&1 \
+    || { echo "  SELFTEST FAIL  killers: the fixture repo and its linked worktree could not be built" >&2; return 1; }
+  common="$(CDPATH='' cd "$repo/.git" && pwd -P)/sdd-mutation/killers.tsv"
+  # (a)
+  killers_paths "$repo"; root_map="$KILLERS_FILE"
+  killers_paths "$wt"
+  [ "$root_map|$KILLERS_FILE" = "$common|$common" ] \
+    || { echo "  SELFTEST FAIL  killers: the root and its linked worktree resolved '$root_map' and '$KILLERS_FILE', expected one map in the git common dir, $common" >&2; return 1; }
+  [ "$LEGACY_KILLERS_FILE" = "$wt/.sdd/cache/mutation-killers.tsv" ] \
+    || { echo "  SELFTEST FAIL  killers: the worktree's seed resolved '$LEGACY_KILLERS_FILE', expected its own .sdd/cache map" >&2; return 1; }
+  GIT_CEILING_DIRECTORIES="$d" killers_paths "$plain"
+  [ "$KILLERS_FILE|$LEGACY_KILLERS_FILE" = "$plain/.sdd/cache/mutation-killers.tsv|$plain/.sdd/cache/mutation-killers.tsv" ] \
+    || { echo "  SELFTEST FAIL  killers: a directory outside git resolved '$KILLERS_FILE' (seed '$LEGACY_KILLERS_FILE'), expected its own .sdd/cache map" >&2; return 1; }
+  # The shim answers rev-parse the way a git older than 2.31 does — it echoes --path-format back and
+  # exits 0 — and writes every rev-parse it answers to a trace, so the fallback is proven REACHED
+  # (the plain --git-common-dir question), not only agreed with.
+  { printf '#!/usr/bin/env bash\n'
+    printf 'case " $* " in *" rev-parse "*) printf "%%s\\n" "$*" >> %q ;; esac\n' "$d/oldgit.trace"
+    printf 'keep=(); echoed=()\n'
+    printf 'for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a") ;; *) keep+=("$a") ;; esac; done\n'
+    printf 'for e in ${echoed[@]+"${echoed[@]}"}; do printf "%%s\\n" "$e"; done\n'
+    printf 'exec %q "${keep[@]}"\n' "$(command -v git)"
+  } > "$d/oldgit/git" && chmod +x "$d/oldgit/git"
+  got="$( PATH="$d/oldgit:$PATH"; killers_paths "$repo"; printf '%s|' "$KILLERS_FILE"; killers_paths "$wt"; printf '%s' "$KILLERS_FILE" )"
+  { [ "$got" = "$common|$common" ] && grep -qE 'rev-parse --git-common-dir$' "$d/oldgit.trace" 2>/dev/null; } \
+    || { echo "  SELFTEST FAIL  killers: a git older than 2.31 resolved '$got' for the root and the worktree, expected '$common' twice through the fallback (trace: $(tr '\n' ';' < "$d/oldgit.trace" 2>/dev/null))" >&2; return 1; }
+  # (b)
+  killers_paths "$wt"
+  mkdir -p "${KILLERS_FILE%/*}" "${LEGACY_KILLERS_FILE%/*}"
+  printf 'A\tstep1\t10\n' > "$KILLERS_FILE"
+  printf 'A\tstep9\t99\nB\tstep2\t20\n' > "$LEGACY_KILLERS_FILE"
+  load_killer_maps
+  got="${KILLER[A]:-}/${SECS[A]:-} ${KILLER[B]:-}/${SECS[B]:-}"
+  [ "$got" = 'step1/10 step2/20' ] \
+    || { echo "  SELFTEST FAIL  killers: shared {A step1 10} over the seed {A step9 99, B step2 20} read '$got', expected 'step1/10 step2/20'" >&2; return 1; }
+  # (c) CATALOG=(A C): C killed by step3 in 30 s, A by nothing; the map before holds A and Z.
+  printf 'A\tstep1\t10\nZ\tstep7\t70\n' > "$KILLERS_FILE"
+  seed="$(cat "$LEGACY_KILLERS_FILE")"
+  printf 'step3\n' > "$d/run/C.killer"; printf '30\n' > "$d/run/C.secs"
+  write_killer_map "$d/run" \
+    || { echo "  SELFTEST FAIL  killers: the union could not be written to $KILLERS_FILE" >&2; return 1; }
+  got="$(LC_ALL=C sort "$KILLERS_FILE" 2>/dev/null | tr '\t\n' ' ;')"
+  [ "$got" = 'B step2 20;C step3 30;Z step7 70;' ] \
+    || { echo "  SELFTEST FAIL  killers: the write left '$got', expected 'B step2 20;C step3 30;Z step7 70;' — C from this run, A gone, Z from the shared map, B from the seed" >&2; return 1; }
+  [ "$(cat "$LEGACY_KILLERS_FILE")" = "$seed" ] \
+    || { echo "  SELFTEST FAIL  killers: the write rewrote the seed $LEGACY_KILLERS_FILE" >&2; return 1; }
+  # (d)
+  killers_paths "$ROOT"
+  [ "$real_map|$real_seed" = "$KILLERS_FILE|$ROOT/.sdd/cache/mutation-killers.tsv" ] \
+    || { echo "  SELFTEST FAIL  killers: the readers were handed '$real_map' (seed '$real_seed'), expected the resolution of $ROOT, '$KILLERS_FILE'" >&2; return 1; }
   return 0
 }
 
@@ -7556,7 +7642,7 @@ census_file_of() { # census_file_of <step title> <joined run-all> — the tests/
 #   TOUCHED_UNMAPPED  slugs of CATALOG with no line in the map
 #   TOUCHED_FILE_OF   slug → the sensor file its killer runs, for every selected slug
 # <rev> goes to `git diff` verbatim: one revision is compared with the working tree, a range with
-# its other end. Reads KILLER (load_killer_map) and RUNALL_JOINED (census_join of run-all.sh). An
+# its other end. Reads KILLER (load_killer_maps) and RUNALL_JOINED (census_join of run-all.sh). An
 # empty map and a revision that does not resolve are refused with rc 2, said — "0 selected, rc 0"
 # would read as "nothing of yours to check" when the truth is "nothing to check WITH".
 touched_select() {
@@ -7649,11 +7735,71 @@ killer_of() {
 # after). It is an ORDER hint and nothing else — a stale or garbled line costs time and changes no
 # step a mutant runs, because run-all.sh still runs every step of a mutant the named one did not kill.
 # That the ORDER moves no verdict is asserted since issue 169: one control per distinct killer of
-# the map, that killer first, has to come back green or the score is refused. It lives in
-# .sdd/cache/, gitignored and OUTSIDE the directories of mutation_stamp_key, so learning it
-# never invalidates a stamp.
+# the map, that killer first, has to come back green or the score is refused.
 # The seconds are the mutant's own suite time; the pool reads them to launch the longest first.
-KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
+#
+# It lives in the git common dir, <common>/sdd-mutation/killers.tsv (ADR 0021): the main checkout
+# and every linked worktree of the clone read and write that one file, so `git worktree remove`
+# takes nothing a catalogue learned, and it sits outside every worktree — outside the directories of
+# mutation_stamp_key too, so learning it never invalidates a stamp. The checkout's own
+# .sdd/cache/mutation-killers.tsv, where the map lived before, is the SEED: read for the slugs the
+# shared map does not know, never written. A root outside git keeps its map there, as before.
+#
+# killers_paths <root> — PUBLISHES KILLERS_FILE (the map read first, and the only one a write
+# touches) and LEGACY_KILLERS_FILE (the seed, <root>/.sdd/cache/mutation-killers.tsv); outside git
+# the two are one file. CALLED, never read through $( ), because it publishes two names. The common
+# dir counts only as an ABSOLUTE answer: a git older than 2.31, where --path-format was born, echoes
+# the flag back and exits 0, and that two-line answer is refused. It is then resolved the old way: cd
+# into <root>, then into git's plain answer (relative at a root, absolute from a linked worktree),
+# then pwd -P. That is the fallback bin/sdd's git_common_dir_abs takes for the stamps (its old-git
+# pair is in tests/check-autonomy.sh), copied because this file never sources bin/sdd, so an old git
+# does not split the map from the stamps. killers_selftest reaches this fallback through a shim of
+# the old git, for a root and its linked worktree, and proves it reached it by the shim's trace.
+killers_paths() { # killers_paths <root>
+  local common
+  LEGACY_KILLERS_FILE="$1/.sdd/cache/mutation-killers.tsv"
+  KILLERS_FILE="$LEGACY_KILLERS_FILE"
+  common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 0
+  case "$common" in
+    /*) ;;
+    *) common="$(git -C "$1" rev-parse --git-common-dir 2>/dev/null)" && [ -n "$common" ] || return 0
+       common="$(CDPATH='' cd "$1" && CDPATH='' cd "$common" && pwd -P)" && [ -n "$common" ] || return 0 ;;
+  esac
+  KILLERS_FILE="$common/sdd-mutation/killers.tsv"
+}
+
+# write_killer_map <dir> — rewrites KILLERS_FILE, atomically, as a union read NOW and not when the
+# run started, since another worktree's catalogue may have written it meanwhile: a slug of CATALOG
+# takes this run's line from <dir>/<slug>.killer and .secs, and LEAVES when it has none (a mutant
+# that stopped being caught runs nobody's killer first); every other slug keeps the line
+# load_killer_maps reads for it, the shared map's or, failing it, the seed's — another branch's
+# catalogue holds mutants this one does not. The seed is never written. rc 1 when the map could not
+# be written, and no tmp file outlives the call. Declared, not closed: a slug no catalogue lists any
+# more keeps its line for good, and a killer step only such a line names adds one control by killer,
+# run in the usual order (run-all.sh runs a name that matches nothing that way) — time, never a
+# verdict; and two catalogues writing at the same instant keep the last mv (ADR 0021).
+write_killer_map() { # write_killer_map <dir>
+  local dir="$1" slug k
+  local -A KILLER=() SECS=() listed=()
+  load_killer_maps
+  for slug in "${CATALOG[@]}"; do listed["$slug"]=1; done
+  if mkdir -p "${KILLERS_FILE%/*}" 2>/dev/null \
+     && { for slug in "${CATALOG[@]}"; do
+            [ -s "$dir/$slug.killer" ] || continue
+            printf '%s\t%s\t%s\n' "$slug" "$(cat "$dir/$slug.killer")" "$(cat "$dir/$slug.secs" 2>/dev/null || true)"
+          done
+          for k in ${KILLER[@]+"${!KILLER[@]}"}; do
+            [ -n "${listed[$k]+set}" ] || printf '%s\t%s\t%s\n' "$k" "${KILLER[$k]}" "${SECS[$k]:-}"
+          done | LC_ALL=C sort; } > "$KILLERS_FILE.tmp.$$" \
+     && mv -f "$KILLERS_FILE.tmp.$$" "$KILLERS_FILE"; then
+    return 0
+  fi
+  rm -f "$KILLERS_FILE.tmp.$$"
+  return 1
+}
+
+KILLERS_FILE='' LEGACY_KILLERS_FILE=''
+killers_paths "$ROOT"
 
 # ---------------------------------------------------------------------------
 # The catalogue's own size and membership, checked before ANY mode runs (issue #105). They lived
@@ -7712,6 +7858,12 @@ if touched_selftest; then
   pass "touched: the diff selects the mutants its sensors killed (selftest)"
 else
   echo "the --touched selection does not measure what it claims — refusing to run with it" >&2
+  exit 1
+fi
+if killers_selftest; then
+  pass "killers: the map lives in the git common dir a linked worktree shares, the .sdd/cache map seeds it and the shared line wins, and a write keeps the slugs outside this catalogue (selftest)"
+else
+  echo "the killer map is not resolved, read or written the way every worktree shares it — refusing to run with it" >&2
   exit 1
 fi
 
@@ -7861,7 +8013,7 @@ if [ -n "$ONLY_SLUG" ]; then
   box="$WORK/$ONLY_SLUG"
   if [ -z "$ONLY_SENSOR" ]; then
     what="the suite"
-    load_killer_map "$KILLERS_FILE"
+    load_killer_maps
     echo "== --only $ONLY_SLUG: control and mutant, each a whole suite run (minutes) =="
     CONTROL_FIRST="${KILLER[$ONLY_SLUG]:-}"
     run_control &
@@ -7904,12 +8056,13 @@ fi
 
 # ---------------------------------------------------------------------------
 # --touched <rev> [--list]: the mutants whose last killer is a sensor the diff touched (issue 192).
-# The map is the one `sdd health` writes; SDD_KILLERS_FILE overrides it HERE and nowhere else,
-# because the full catalogue WRITES the map and an override there would overwrite a fixture.
+# The map is the one `sdd health` writes, seeded like every reader's; SDD_KILLERS_FILE overrides
+# both HERE and nowhere else, because the full catalogue WRITES the map and an override there would
+# overwrite a fixture.
 # ---------------------------------------------------------------------------
 if [ -n "$TOUCHED_REV" ]; then
   TOUCHED_MAP="${SDD_KILLERS_FILE:-$KILLERS_FILE}"
-  load_killer_map "$TOUCHED_MAP"
+  if [ -n "${SDD_KILLERS_FILE:-}" ]; then load_killer_map "$TOUCHED_MAP"; else load_killer_maps; fi
   RUNALL_JOINED="$(census_join "$ROOT/tests/run-all.sh")"
   touched_select "$ROOT" "$TOUCHED_REV" || exit $?
   {
@@ -8003,7 +8156,7 @@ fi
 echo "== control (the first job of the pool) =="
 sandbox "$WORK/control"
 
-load_killer_map "$KILLERS_FILE"
+load_killer_maps
 echo "== killer map: ${#KILLER[@]} mutant(s) run their last killer first, ${#SECS[@]} with a recorded time =="
 mapfile -t ORDER < <(for slug in "${CATALOG[@]}"; do printf '%s\t%s\n' "$slug" "${SECS[$slug]:-}"; done | launch_order)
 # One control per distinct killer of the map, that killer first, ahead of every mutant (issue 169).
@@ -8082,18 +8235,12 @@ for slug in "${CATALOG[@]}"; do
   esac
 done
 
-# Rewritten from THIS run only, atomically: a mutant that stopped being caught leaves the map. A
-# map that cannot be written is said and costs the next run its speed, never this run's verdict.
-if mkdir -p "${KILLERS_FILE%/*}" 2>/dev/null \
-   && for slug in "${CATALOG[@]}"; do
-        if [ -s "$WORK/$slug.killer" ]; then
-          printf '%s\t%s\t%s\n' "$slug" "$(cat "$WORK/$slug.killer")" "$(cat "$WORK/$slug.secs" 2>/dev/null || true)"
-        fi
-      done > "$KILLERS_FILE.tmp.$$" \
-   && mv -f "$KILLERS_FILE.tmp.$$" "$KILLERS_FILE"; then
+# Rewritten as a union (write_killer_map): this run's line for every slug of CATALOG, the line the
+# map already had for every other. A map that cannot be written is said and costs the next run its
+# speed, never this run's verdict.
+if write_killer_map "$WORK"; then
   echo "== killer map: $(grep -c . "$KILLERS_FILE" || true) mutant(s) recorded in ${KILLERS_FILE#"$ROOT"/} =="
 else
-  rm -f "$KILLERS_FILE.tmp.$$"
   printf '  warn  the killer map could not be written to %s — the next catalogue runs in the usual order\n' "$KILLERS_FILE" >&2
 fi
 
