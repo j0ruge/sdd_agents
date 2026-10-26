@@ -83,6 +83,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `TODO.md`, como a base permite. Direção: o `cmd_kaizen` passa pela guarda, com probe, e o chapéu nomeia a base.
   — descoberto por `sdd-kaizen` na missão `20261020-a-sessao-le-o-que-o-boot-manda` (2026-10-20)
 
+- [ ] **O `atualizado:` do checkpoint aceita hora inventada, até no futuro** — `tests/check-checkpoint.sh:1560`
+  (`check_one`) — a regra "todo carimbo sai do `date`" só está no `boot_prompt` (`bin/sdd:3365`), que a sessão
+  interativa não lê, e o `--check` não olha o campo. Na peça C do `lighthouse_project`, as rodadas do `/codereview`
+  gravaram 15:30, 17:10, 18:00 e 18:40 em commits das 12:43 às 12:52 (`-0300`, autor igual a commit), e o
+  `--check` passou. Direção: o `--check` reprova `atualizado:` posterior ao relógio, com probe.
+  — descoberto por `retrofit-watch` na missão `20261020-amep-anexo-na-demanda` do `lighthouse_project` (2026-10-21)
+
 - [ ] **A sonda do `Bash` do `sdd preflight` dá `ok` pela resposta, nunca pelo comando rodado** — `bin/sdd:6567`
   (`sdd-preflight-ok`) — o braço `ok` só faz `grep` do marcador no `result`, e o marcador está literal no prompt:
   um modelo que repita o texto sem chamar o `Bash` fica verde, e sem linha `init` o `ok` ainda afirma "Bash in the
@@ -344,6 +351,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   da REVIEW do kit e a nota A do Fluxo de entrega", e o `40-review-r1.md` deu A em todo critério; o relay corrigiu o
   corpo à mão. Direção: a pendência do plano que um handoff posterior responde sai, ou vai junto da resposta.
   — descoberto pelo relay do `sdd run` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
+
+- [ ] **A ajuda do `sdd run` não diz como soltá-lo da sessão que o dispara** — `bin/sdd:11920`
+  (`sdd run <mission>`) — o run leva horas, e quem o dispara de uma sessão do Claude Code e vai dar `/clear` ou
+  fechar o terminal precisa destacá-lo, sem saber onde ler o progresso depois. Na peça C do `lighthouse_project`
+  funcionou `nohup setsid sdd run <m> > ~/.cache/<log> 2>&1 < /dev/null &`: o pai virou o PID 2140, fora da
+  sessão, e a TICKET (LH-9) e a EXEC seguiram. Direção: a ajuda mostra essa forma e onde ler o log, ou um
+  `--detach` que a faz e imprime o caminho do log.
+  — descoberto por `retrofit-watch` na missão `20261020-amep-anexo-na-demanda` do `lighthouse_project` (2026-10-21)
 
 ### Comentário e registro
 
