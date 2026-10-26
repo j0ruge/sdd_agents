@@ -114,6 +114,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   headless lê a reference. Direção: o `sdd run` faz a mesma busca de skills, sem sessão, e avisa ou para.
   — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
 
+- [ ] **O `check-todo.sh` aceita o `#N` solto que quer dizer "item N"** — `tests/check-todo.sh:768`
+  (`lint_todo`) — o `TODO.md` do `magic_tutor` numera os itens (`**57. …**`), e três deles citavam outros
+  como `#57`, `#26` e `#58`. O `--check` deu rc 0; só a linha `REF?` do espelho (`todo-to-github-issues`)
+  mostrou que o GitHub ligaria cada um à issue ou ao PR de mesmo número, e o conserto pediu um PR próprio
+  (`j0ruge/magic_tutor#115`). Recusar todo `#N` não serve: este arquivo cita PR assim. Direção: acusar o
+  `#N` só num arquivo que numera os itens, quando N é o número de um item e não vem depois de `PR`, `issue`
+  ou `dono/repo`. — descoberto por `claude` no espelho do `TODO.md` do `magic_tutor` (2026-10-26)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
