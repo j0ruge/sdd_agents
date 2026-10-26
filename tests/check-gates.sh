@@ -3178,7 +3178,8 @@ git add -A && git commit -qm "chore: docs, formatter-aligned again"
 # Six more worlds follow the tally, each with an assertion of its own, because they are about the
 # KEY and not about where the demand applies: PARTIAL ROOT (9), RATCHET (10), IGNORED (11), DELETED
 # (12), UNREADABLE (13) and AGENTS (11b) — the key is the tracked content of the five paths minus
-# the backlog ratchet (ADR 0014, increments I3 and I4; agents/ since ADR 0015 §1).
+# the backlog ratchet (ADR 0014, increments I3 and I4; agents/ since ADR 0015 §1). World 8b, right
+# after the tally, is the WINDOW inside the skip (ADR 0021 §3), with an assertion of its own too.
 #
 # The key is NEVER computed here. A second spelling of that algorithm would agree with the first by
 # construction and measure nothing, so world 3 drives the real WRITER instead: a LIVE copy of the
@@ -3188,12 +3189,16 @@ git add -A && git commit -qm "chore: docs, formatter-aligned again"
 # invisible while the catalogue went on crediting protection that does not exist.
 #
 # ⚠️ The stub's VERDICT lives outside the measured directories, in a control file under .sdd/logs/,
-# and that is the whole reason worlds 5-7 measure anything. The first version of this block flipped
-# the suite to red by REWRITING tests/run-all.sh — which moved the content key at the same time, so
-# the refusal that followed could not tell "the stamp was taken away" from "the content changed".
-# Measured, not feared: an adversarial pass that deleted the `catalogue_green` condition entirely
-# left this assertion GREEN. The control file changes the answer while every hashed byte stands
-# still, which is the only arrangement in which the removal is the sole suspect.
+# and that is the whole reason worlds 5-7 and 8b measure anything. The first version of this block
+# flipped the suite to red by REWRITING tests/run-all.sh — which moved the content key at the same
+# time, so the answer that followed could not tell what the verdict did from what the new content
+# did. The control file changes the answer while every hashed byte stands still: world 6 is a red
+# suite over the SAME key (so it is a skip, and the stamp stays), world 7 a survivor over it (so the
+# removal is the sole suspect), world 8b a skip whose suite moves the tree. What this block does NOT
+# measure since ADR 0021 is the SUITE half of `catalogue_green` — a red suite over a clean score inside
+# a catalogue run, which must stamp nothing: world 6 no longer runs the catalogue. That half is held
+# by the red half of `skip: only the catalogue's verdict takes a key away …` in check-health.sh, and
+# by mut_HEALTH_red_suite_stamps.
 i4_bad=0
 # Counted and not written in prose — see the note on i3_worlds above.
 i4_worlds=0
@@ -3508,6 +3513,26 @@ else
   fail "gate_PR: the mutation stamp is demanded only where the catalogue lives" \
        "the $i4_worlds worlds above agreeing" "$i4_bad disagreement(s), listed above"
 fi
+
+# 8b. WINDOW, inside the skip (ADR 0021 §3: the skip refuses the window too). The key is stamped, so
+#     health skips the catalogue, and the tree moves while the FAST suite runs: health has to say so,
+#     keep the key it skipped over — a skip is no verdict of the catalogue — and stamp nothing for the
+#     moved content. World 8 cannot see this: it takes every stamp away first, so its run is a
+#     catalogue run. Own assertion, outside the i4 tally. Counts: the window named for the suite ·
+#     the key skipped over still stamped · stamps other than it.
+fixture_unstamp "$FIX"
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+skipwin_dir="$(fixture_stamps "$FIX" || true)"
+skipwin_key="$(ls -A "$skipwin_dir" 2>/dev/null || true)"
+i4_verdict 0 "$I4_SCORE_GREEN" move-the-tree
+skipwin_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
+skipwin_kept=gone; [ -n "$skipwin_key" ] && [ -f "$skipwin_dir/$skipwin_key" ] && skipwin_kept=kept
+skipwin_other="$(ls -A "$skipwin_dir" 2>/dev/null | grep -vxF "${skipwin_key:-}" | grep -c . || true)"
+git -C "$FIX" checkout -- tests/scratch.tracked
+i4_verdict 0 "$I4_SCORE_GREEN"
+assert_eq "stamp: a tree that moved while the suite of a skip ran is refused by name, and the key it skipped over stays the only stamp" \
+  "1|kept|0" \
+  "$(grep -c 'the measured tree moved WHILE the suite was running' <<< "$skipwin_health" || true)|$skipwin_kept|$skipwin_other"
 
 # 9. PARTIAL ROOT — one of the five measured paths is gone and the other four are all there. Own
 #    assertion, outside the i4 tally: the tally is named for the scope of the demand, and this is a

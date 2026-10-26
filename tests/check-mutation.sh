@@ -1697,6 +1697,20 @@ mut_HEALTH_red_suite_drops_key() {
 mut_HEALTH_survivor_keeps_key() {
   sed -i '/^cmd_health() {/,/^}/ s@^      catalogue_against=survivor$@      :@' "$1"
 }
+# The SUITE half of the write rule goes blind (I2 fix round 1): a catalogue run whose suite came back
+# red over a clean score is stamped as green, against ADR 0021 §2 (the suite AND the score), and
+# from then on every health over that content skips the catalogue. Caught by `skip: only the
+# catalogue's verdict takes a key away …`, whose `--full` with rc 1 half demands that nothing is stamped.
+mut_HEALTH_red_suite_stamps() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "\$rc" -eq 0 \]; then catalogue_green=1; fi@catalogue_green=1@' "$1"
+}
+# The skip stops asking whether the tree moved while its suite ran (I2 fix round 1): health stays
+# green over a fast suite that measured content no longer here. The catalogue path keeps its window,
+# so world 8 stays green; caught by `stamp: a tree that moved while the suite of a skip ran …` in
+# check-gates.sh (world 8b).
+mut_HEALTH_skip_window_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$stamp_key" != "\$stamp_key_before" \]; then$@  if [ "$skip" != 1 ] \&\& [ "$stamp_key" != "$stamp_key_before" ]; then@' "$1"
+}
 
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
 # guard makes the PROJECTION (`--dry-run`) write to the journal while the real path goes mute — a
@@ -6872,6 +6886,8 @@ CATALOG=(
   HEALTH_skip_red_drops_key
   HEALTH_red_suite_drops_key
   HEALTH_survivor_keeps_key
+  HEALTH_red_suite_stamps
+  HEALTH_skip_window_blind
   RUN_inverted_journal
   RUN_phase_log_time_only
   RUN_check_log_time_only

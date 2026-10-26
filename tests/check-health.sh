@@ -82,7 +82,7 @@
 #   ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in 20261003-lote-3-a-catraca-desce: no rule refuses
 #      the NEXT `sdd health` invocation of a fixture that forgets to pin its `cd`, and the
 #      caller's cwd picks the measured tree (the comment above health_run says why that is
-#      load-bearing). Measured not to fail open today: every invocation pins it — 10 sites by
+#      load-bearing). Measured not to fail open today: every invocation pins it — 11 sites by
 #      `grep -n 'sdd" health' tests/*.sh`, this line left out, each inside `( cd "$X" && … )` —
 #      and since #112 a run that wanders into the real catalogue dies at its step deadline
 #      (run-all.sh, step_timeout), red and named; inside a mutant that is rc 124, read as
@@ -1134,7 +1134,10 @@ else
 fi
 
 # Under --full the catalogue runs and judges the key: a survivor takes it away, and a red suite over
-# a clean score does not — that red is about the suite, which the key does not describe.
+# a clean score does not — that red is about the suite, which the key does not describe. Nor does it
+# WRITE one: a stamp is the catalogue green as a whole, the suite and the score (ADR 0021 §2), and
+# this red half is the only world of the kit where a catalogue run meets a red suite over a clean
+# score (world 6 of check-gates.sh is a skip since ADR 0021), so it is where that half is measured.
 SKIP4_DESC="skip: only the catalogue's verdict takes a key away — a survivor does, a red suite over a clean score does not"
 write_stub_suite with-count with-score 0 "$SCORE_SURVIVOR"
 KEY_SURV="$(forge_stamp || true)"
@@ -1150,12 +1153,13 @@ RED_AFTER=gone; [ -n "$KEY_RED_FULL" ] && [ -f "$SKIP_STAMPS/$KEY_RED_FULL" ] &&
 if [ -n "$KEY_WRITTEN" ] && [ "$KEY_WRITTEN" = "$KEY_RECIPE" ] \
    && [ "$SURV_BEFORE|$SURV_AFTER|$RED_AFTER" = "kept|gone|kept" ] \
    && grep -qF -- '--with-mutation' <<< "$ARGV_SURV" && grep -qF 'survivor' <<< "$OUT_SURV" \
-   && grep -qF -- '--with-mutation' <<< "$ARGV_RED_FULL" && grep -qF 'suite red' <<< "$OUT_RED_FULL"; then
+   && grep -qF -- '--with-mutation' <<< "$ARGV_RED_FULL" && grep -qF 'suite red' <<< "$OUT_RED_FULL" \
+   && ! grep -qF "$STAMPED" <<< "$OUT_RED_FULL"; then
   pass "$SKIP4_DESC"
 else
   fail "$SKIP4_DESC" \
-       "kept|gone|kept (the survivor's key before and after --full, the red suite's key after --full), both runs calling the catalogue" \
-       "$SURV_BEFORE|$SURV_AFTER|$RED_AFTER · survivor: argv '$ARGV_SURV' · $(digest "$OUT_SURV") // red: argv '$ARGV_RED_FULL' · $(digest "$OUT_RED_FULL")"
+       "kept|gone|kept (the survivor's key before and after --full, the red suite's key after --full), both runs calling the catalogue, and the red one writing no stamp" \
+       "$SURV_BEFORE|$SURV_AFTER|$RED_AFTER · survivor: argv '$ARGV_SURV' · $(digest "$OUT_SURV") // red: argv '$ARGV_RED_FULL', '$STAMPED' said $(grep -cF "$STAMPED" <<< "$OUT_RED_FULL" || true)× · $(digest "$OUT_RED_FULL")"
 fi
 
 # The place is the git common directory (ADR 0021 §1): the key the main checkout measured is the
