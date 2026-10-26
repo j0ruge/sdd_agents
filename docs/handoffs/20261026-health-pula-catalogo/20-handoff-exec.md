@@ -49,9 +49,10 @@ Próximo: QA, só com sensores e fixture; **nenhum** `./bin/sdd health` real ant
 
 Antes do I1, as duas ordens do `01-plano.md` § Onde e como, mais a aprovação:
 
-- `f4ac7fd`: o `sdd approve` do humano (só a pasta da missão).
-- `73420e7`: a ADR 0021 (`docs/adr/0021-the-stamp-lives-in-the-common-dir.md`) e o `Amended by: 0021` das ADRs
-  0004 e 0016, que o PLAN deixou fora de commit de propósito.
+- `f4ac7fd`: o `sdd approve` do humano, com a pasta da missão e a ADR 0021
+  (`docs/adr/0021-the-stamp-lives-in-the-common-dir.md`), pelo `adr:` do `00-missao.md`. O `approve` commita o
+  arquivo que o `adr:` nomeia (`bin/sdd:8987–8988`).
+- `73420e7`: só o `Amended by: 0021` das ADRs 0004 e 0016, que ficaram fora do commit do `approve`.
 - `f7f6cc2`: a `RECURRED 5 → 6` do achado "O `/sdd-plan` delega ao `sdd-planner` sem saída para o agente não
   registrado" (`TODO.md:218`), pedida pelo humano no grill.
 
@@ -215,8 +216,10 @@ deriva de doc da DOCS, não como bug do código.
 - **A cópia do kit sem `.git` dentro de outro repositório** resolve o `git-common-dir` do **outro** repositório, e
   isso vale para o carimbo (`bin/sdd`) e para o mapa juntos. Ficou fora do escopo por decisão do dono, e não é
   defeito do I3. A pergunta: guardar (exigir que o `--show-toplevel` seja a própria raiz) ou declarar.
-- **As pendências do `00-missao.md`.** Duas já foram feitas no EXEC: o commit da ADR (`73420e7`) e a `RECURRED 6`
-  (`f7f6cc2`). Seguem com o humano o carimbo do operador, a M3 e o chore pós-merge, descritos abaixo.
+- **As pendências do `00-missao.md`.** Duas já foram feitas, antes do I1: as emendas das ADRs (`73420e7`) e a
+  `RECURRED 6` (`f7f6cc2`). A pendência "o que o PLAN deixou fora de commit" foi escrita antes do `approve`: a ADR
+  0021 já entrou pelo próprio `approve` (`f4ac7fd`). Seguem com o humano o carimbo do operador, a M3 e o chore
+  pós-merge, descritos abaixo.
 
 ### A pendência do operador
 
