@@ -2469,7 +2469,10 @@ health_captures() {
 # gained five — mutation_stamp_dir's three `common` answers and mutation_stamp_valid's `dir` and
 # `stamp`, all guarded with `|| return 1` — and check 2c gained `stamp_dir`, guarded inside with
 # `|| true`, because a root with no common dir is the branch that says "could not be written".
-CAPTURE_FLOOR=45
+# 45 → 43: the same mission's fix round 1 moved the resolution of the common dir out of the region,
+# into git_common_dir_abs beside ledger_repo_root, its other reader; mutation_stamp_dir keeps ONE
+# `common` capture, guarded with `|| return 1`, and its other two left with the code.
+CAPTURE_FLOOR=43
 
 capture_report() {
   local out total safe offenders

@@ -1632,7 +1632,7 @@ mut_HEALTH_stamp_window_blind() {
 # still agrees with itself. Caught by `stamp: gate_PR reads the key a linked worktree stamped, …`
 # in check-gates.sh (world 14), which reads PR|PR.
 mut_PR_stamp_dir_per_worktree() {
-  sed -i '/^mutation_stamp_dir() {/,/^}/ s@--git-common-dir@--absolute-git-dir@' "$1"
+  sed -i '/^mutation_stamp_dir() {/,/^}/ s@^  common="\$(git_common_dir_abs "\$1")" || return 1$@  common="$(git -C "$1" rev-parse --path-format=absolute --absolute-git-dir 2>/dev/null)" || return 1@' "$1"
 }
 # The question stops being about THIS key: any file in the stamps directory answers yes, so a key
 # measured green once keeps every later content stamped. World 4 of check-gates.sh (`a stamped repo
@@ -2025,9 +2025,11 @@ mut_KAIZEN_mission_key_slug_only() {
 # received `CDPATH= cd`). The second time `ledger_repo_root` dropped the two `cd`s entirely for
 # `--path-format=absolute`, and the whole anchored line ceased to exist. It is single-quoted again
 # now that no apostrophe is in it. The lesson both times: a mutant anchored on a line a refactor
-# can delete has to be re-derived WITH that refactor, in the same commit.
+# can delete has to be re-derived WITH that refactor, in the same commit. A third move, the same
+# lesson: the resolution left for git_common_dir_abs (shared with the mutation stamp, ADR 0021), so
+# this anchor and `_toplevel`'s are the identity's call to it, addressed to ledger_repo_root.
 mut_LEDGER_repo_root_common_parent() {
-  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( dirname "$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" )"; return 0@' "$1"
+  sed -i '/^ledger_repo_root() {/,/^}/ s@^  gitdir="\$( git_common_dir_abs "\$start" )" || return 0$@  printf "%s" "$( dirname "$( git_common_dir_abs "$start" )" )"; return 0@' "$1"
 }
 
 # The ENVIRONMENT gets to answer "which repo is this" again. This mutant puts back the exact
@@ -2053,9 +2055,10 @@ mut_LEDGER_repo_root_common_parent() {
 # Splitting it in two was the other direction the finding offered, and it is the wrong one HERE:
 # a fast-path-only mutant stays neutralised by the fallback no matter which entry it lives under.
 # The property being defended is "no `cd` in this function reads CDPATH", and that property has
-# two sites, so the sabotage has two sites.
+# two sites, so the sabotage has two sites. Both live in git_common_dir_abs since it was extracted
+# for the mutation stamp too (ADR 0021), so the first sed is addressed there and ends in `return 1`.
 mut_LEDGER_repo_root_cdpath_leak() {
-  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  local rel; rel="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )"; gitdir="$( cd "$start" \&\& cd "$rel" \&\& pwd -P 2>/dev/null )" || return 0@' "$1"
+  sed -i '/^git_common_dir_abs() {/,/^}/ s@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 1$@  local rel; rel="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )"; gitdir="$( cd "$start" \&\& cd "$rel" \&\& pwd -P 2>/dev/null )" || return 1@' "$1"
   sed -i 's@CDPATH='"''"' cd "\$start" && CDPATH='"''"' cd "\$common"@cd "$start" \&\& cd "$common"@' "$1"
 }
 
@@ -3607,16 +3610,16 @@ mut_LEDGER_repo_root_shape_blind() {
 # Issue #72, the other direction: the arm that emptied an absolute answer spanning two lines comes
 # back. The only such answer is a repo whose PATH holds a newline, and emptying it is the "not a
 # repo" sentinel for a repo that is one — the round-trip world of check-autonomy.sh reads its own
-# row as "no data".
+# row as "no data". The shape guard lives in git_common_dir_abs, which ledger_repo_root calls.
 mut_LEDGER_repo_root_newline_emptied() {
-  sed -i '/^ledger_repo_root() {/,/^}/ s@^    /\*) ;;$@    /*) [ "$gitdir" = "${gitdir%%$'"'"'\\n'"'"'*}" ] || gitdir="" ;;@' "$1"
+  sed -i '/^git_common_dir_abs() {/,/^}/ s@^    /\*) ;;$@    /*) [ "$gitdir" = "${gitdir%%$'"'"'\\n'"'"'*}" ] || gitdir="" ;;@' "$1"
 }
 mut_LEDGER_repo_root_bypasses_shim() {
   sed -i 's@^  local start="${REPO_ROOT:-$PWD}" gitdir$@  local start="${REPO_ROOT:-$PWD}" gitdir PATH="/usr/bin:/bin:$PATH"@' "$1"
 }
 
 mut_LEDGER_repo_root_toplevel() {
-  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
+  sed -i '/^ledger_repo_root() {/,/^}/ s@^  gitdir="\$( git_common_dir_abs "\$start" )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
 }
 
 # Not a gate: the preflight goes back to asking whether the agent copy EXISTS, which is what it did

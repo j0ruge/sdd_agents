@@ -3605,6 +3605,61 @@ readonly AUTONOMY_RUNNER_SHA
 
 autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
 
+# The ABSOLUTE git common directory of <dir>, or NOTHING and rc 1 outside a git repository. ONE
+# resolution for its two readers — ledger_repo_root (the identity) and mutation_stamp_dir (the place
+# of the stamps, ADR 0021) — so a repair here reaches both: the four defects below lived here first.
+git_common_dir_abs() { # git_common_dir_abs <dir>
+  local start="$1" gitdir common
+  gitdir="$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 1
+  # ⚠️ AN ABSOLUTE ANSWER, or this is not an answer — and the test is load-bearing on any git older
+  # than 2.31, which is where `--path-format` was born. `git rev-parse` ECHOES a token it does not
+  # recognize as an option straight back to stdout and still exits 0, so a pre-2.31 git answers TWO
+  # lines here: the flag itself, then the common dir, still relative. `|| return 1` never fires (rc
+  # is 0) and `-n` never fires (the string is not empty), so the first spelling of this guard let
+  # `--path-format=absolute\n.git` through as the repository's IDENTITY — stamped into every ledger
+  # row by `--arg repo`, newline and all, matching no reader and never migrated, because the ledger
+  # is append-only.
+  #
+  # ⚠️ REFUSING is not enough, and returning empty here was a second defect wearing the first one's
+  # clothes. Empty is the contract for "not a repo", so on git 2.25 (Ubuntu 20.04) and 2.30 (Debian
+  # 11) EVERY row would be written `repo: ""`, every reader would file it under `no_repo` — a bucket
+  # `--all-repos` deliberately does not admit — and `sdd autonomy` would answer "no data" while
+  # `sdd kaizen` could only ever say `indeterminado`. Silent, permanent, and a REGRESSION: the
+  # `cd`-based spelling this replaced answered CORRECTLY on those same gits.
+  #
+  # So the old spelling is the fallback, not the casualty. It is safe to keep now for the reason
+  # that made it dangerous before: the `CDPATH=''` guards this mission added to the whole repo. The
+  # fast path stays the one-shot `--path-format`; the slow path costs a second `rev-parse` and two
+  # `cd`s, and only on a git that cannot do it in one. The sensor is the pre-2.31 differential pair
+  # in tests/check-autonomy.sh, which asserts the two gits answer the SAME identity — not merely
+  # that the new one does not leak.
+  #
+  # One arm, on the first byte. The old git's answer starts with the echoed flag, never with `/`,
+  # so a leading `/` alone separates the two gits. A newline INSIDE an absolute answer is a repo
+  # whose path holds one, and that path IS its identity: an arm that emptied it returned the
+  # "not a repo" sentinel for a repo that is one — the defect above, again (issue #72, measured:
+  # the repo's own row read "no data"). `jq --arg` carries the newline into the row and back.
+  # Declared limit: on a pre-2.31 git the fallback below still refuses such a path, because there a
+  # second line cannot be told from a leak.
+  case "$gitdir" in
+    /*) ;;
+    *)  gitdir="" ;;
+  esac
+  if [ -z "$gitdir" ]; then
+    common="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )" || return 1
+    [ -n "$common" ] || return 1
+    # Relative at a checkout root (`.git`), relative in a subdirectory (`../.git`), absolute from a
+    # linked worktree — `cd "$start"` first, then `cd "$common"`, resolves all three. Both `cd`s
+    # carry the emptied CDPATH: with a relative operand the environment would otherwise pick where
+    # this lands AND echo the path it found into the capture. That is the CRITICAL of
+    # 20260817-eixo-do-juiz, and it is why this spelling was retired rather than deleted.
+    gitdir="$( CDPATH='' cd "$start" && CDPATH='' cd "$common" && pwd -P )" || return 1
+    [ -n "$gitdir" ] || return 1
+    [ "$gitdir" = "${gitdir%%$'\n'*}" ] || return 1
+  fi
+  printf '%s' "$gitdir"
+}
+
 # The repo a ledger row BELONGS to — one definition for the writer that stamps `repo` and for the
 # three readers that filter on it. Not two spellings of the same question: writer and reader
 # disagreeing about identity is a filter that silently excludes rows born in the repo you are
@@ -3646,54 +3701,7 @@ ledger_repo_root() {
   # parent is the directory that merely contains the repo, shared by every bare repo beside it.
   # `--show-toplevel` got both of those right and only worktrees wrong. The common dir gets all
   # three right, because it is the identity git itself keeps per repository.
-  gitdir="$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0
-  # ⚠️ AN ABSOLUTE ANSWER, or this is not an answer — and the test is load-bearing on any git older
-  # than 2.31, which is where `--path-format` was born. `git rev-parse` ECHOES a token it does not
-  # recognize as an option straight back to stdout and still exits 0, so a pre-2.31 git answers TWO
-  # lines here: the flag itself, then the common dir, still relative. `|| return 0` never fires (rc
-  # is 0) and `-n` never fires (the string is not empty), so the first spelling of this guard let
-  # `--path-format=absolute\n.git` through as the repository's IDENTITY — stamped into every ledger
-  # row by `--arg repo`, newline and all, matching no reader and never migrated, because the ledger
-  # is append-only.
-  #
-  # ⚠️ REFUSING is not enough, and returning empty here was a second defect wearing the first one's
-  # clothes. Empty is the contract for "not a repo", so on git 2.25 (Ubuntu 20.04) and 2.30 (Debian
-  # 11) EVERY row would be written `repo: ""`, every reader would file it under `no_repo` — a bucket
-  # `--all-repos` deliberately does not admit — and `sdd autonomy` would answer "no data" while
-  # `sdd kaizen` could only ever say `indeterminado`. Silent, permanent, and a REGRESSION: the
-  # `cd`-based spelling this replaced answered CORRECTLY on those same gits.
-  #
-  # So the old spelling is the fallback, not the casualty. It is safe to keep now for the reason
-  # that made it dangerous before: the `CDPATH=''` guards this mission added to the whole repo. The
-  # fast path stays the one-shot `--path-format`; the slow path costs a second `rev-parse` and two
-  # `cd`s, and only on a git that cannot do it in one. The sensor is the pre-2.31 differential pair
-  # in tests/check-autonomy.sh, which asserts the two gits answer the SAME identity — not merely
-  # that the new one does not leak.
-  #
-  # One arm, on the first byte. The old git's answer starts with the echoed flag, never with `/`,
-  # so a leading `/` alone separates the two gits. A newline INSIDE an absolute answer is a repo
-  # whose path holds one, and that path IS its identity: an arm that emptied it returned the
-  # "not a repo" sentinel for a repo that is one — the defect above, again (issue #72, measured:
-  # the repo's own row read "no data"). `jq --arg` carries the newline into the row and back.
-  # Declared limit: on a pre-2.31 git the fallback below still refuses such a path, because there a
-  # second line cannot be told from a leak.
-  case "$gitdir" in
-    /*) ;;
-    *)  gitdir="" ;;
-  esac
-  if [ -z "$gitdir" ]; then
-    local common
-    common="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )" || return 0
-    [ -n "$common" ] || return 0
-    # Relative at a checkout root (`.git`), relative in a subdirectory (`../.git`), absolute from a
-    # linked worktree — `cd "$start"` first, then `cd "$common"`, resolves all three. Both `cd`s
-    # carry the emptied CDPATH: with a relative operand the environment would otherwise pick where
-    # this lands AND echo the path it found into the capture. That is the CRITICAL of
-    # 20260817-eixo-do-juiz, and it is why this spelling was retired rather than deleted.
-    gitdir="$( CDPATH='' cd "$start" && CDPATH='' cd "$common" && pwd -P )" || return 0
-    [ -n "$gitdir" ] || return 0
-    [ "$gitdir" = "${gitdir%%$'\n'*}" ] || return 0
-  fi
+  gitdir="$( git_common_dir_abs "$start" )" || return 0
   # Cosmetic, and ONLY cosmetic: `/repo/.git` prints back as `/repo`, so the ledger and the header
   # keep naming the root a human recognizes instead of a path inside `.git`. Injective, therefore
   # safe to collapse: exactly one repository can own `/repo/.git`. Withheld from a bare repo, whose
@@ -7259,23 +7267,12 @@ health_release() {   # rc 0 = six green lines
 # work runs in one linked worktree per mission (ADR 0016 §2), and a stamp kept per checkout was born
 # missing in every new worktree and died with `git worktree remove`, so the catalogue a mission paid
 # for never reached the main checkout. `git status` does not see inside .git/, so the kit guard
-# (autonomy_kit_stamp) answers the same after a write here.
-#
-# The answer has to be ABSOLUTE — the proof ledger_repo_root carries for the same flag: a git older
-# than 2.31 echoes `--path-format=absolute` back and exits 0, so its two-line answer starts with `-`,
-# never with `/`. Such a git takes the old spelling instead, resolved with `cd` + `pwd -P` under an
-# emptied CDPATH, as ledger_repo_root resolves it. No probe reaches that arm here (D15): the pre-2.31
-# pair of check-autonomy.sh measures the ledger's copy of it.
+# (autonomy_kit_stamp) answers the same after a write here. The common dir is git_common_dir_abs,
+# the resolution ledger_repo_root reads too — absolute or nothing, the pre-2.31 arm included — so
+# the pre-2.31 pair of check-autonomy.sh measures the one copy both readers run.
 mutation_stamp_dir() { # mutation_stamp_dir <root>
   local common
-  common="$( git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 1
-  case "$common" in
-    /*) ;;
-    *)  common="$( git -C "$1" rev-parse --git-common-dir 2>/dev/null )" || return 1
-        [ -n "$common" ] || return 1
-        common="$( CDPATH='' cd "$1" && CDPATH='' cd "$common" && pwd -P )" || return 1
-        [ "$common" = "${common%%$'\n'*}" ] || return 1 ;;
-  esac
+  common="$(git_common_dir_abs "$1")" || return 1
   printf '%s/sdd-mutation/stamps\n' "$common"
 }
 
