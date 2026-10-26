@@ -1621,9 +1621,10 @@ mut_HEALTH_stamp_tree_blind() {
 # the catalogue would go on reading 100%. One sabotage per site.
 # The stamp stops asking whether the measured tree moved WHILE the catalogue ran — a window twenty
 # to fifty minutes wide, opened by the very phase that also commits, at the end of which the key
-# would describe whatever is on disk rather than what was measured.
+# would describe whatever is on disk rather than what was measured. Re-anchored by ADR 0021 §4: the
+# window is now the FIRST question of check 2c, because no verdict below it is about this content.
 mut_HEALTH_stamp_window_blind() {
-  sed -i '/^cmd_health()/,/^}/ s|elif \[ "\$stamp_key" != "\$stamp_key_before" \]; then|elif false; then|' "$1"
+  sed -i '/^cmd_health()/,/^}/ s|^  if \[ "\$stamp_key" != "\$stamp_key_before" \]; then$|  if false; then|' "$1"
 }
 
 # The stamps go back to living per checkout (ADR 0021): the git dir of the checkout instead of the
@@ -1647,6 +1648,54 @@ mut_PR_stamp_valid_any_key() {
 # after` in check-hat.sh, its red half.
 mut_HEALTH_release_line6_blind() {
   sed -i '/^health_release() {/,/^}/ s@if mutation_stamp_valid "\$kit" "\$key"; then line 6 ok@if true; then line 6 ok@' "$1"
+}
+
+# THE SKIP (ADR 0021 §3, mission 20261026-health-pula-catalogo, I2). Seven sabotages, one per rule
+# the skip added to cmd_health; each names the `skip:` assertion of check-health.sh that kills it.
+#
+# The skip is never taken: every call pays the whole catalogue again, the 10 h 58 min of PR #327 over
+# a key already measured. `skip: a key measured green runs the suite without the catalogue…` and
+# `skip: a linked worktree skips…` read --with-mutation in the argv the stub recorded.
+mut_HEALTH_skip_never() {
+  sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$full" != 1 \] && mutation_stamp_valid "\$kit" "\$stamp_key_before"; then$@  if false; then@' "$1"
+}
+# `--full` is parsed and then ignored: a stamp the operator distrusts can no longer be measured
+# again, short of an `rm` inside .git/. `skip: --full runs the catalogue over a key already
+# measured…` reads no --with-mutation in the argv; world 7 of check-gates.sh skips and reads DONE.
+mut_HEALTH_full_ignored() {
+  sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$full" != 1 \] && mutation_stamp_valid@  if mutation_stamp_valid@' "$1"
+}
+# `--full` beside `--release` is accepted, and the request to measure is dropped in silence for a
+# scoreboard that never runs the suite. `skip: --full runs the catalogue … and --full beside
+# --release is refused` reads no refusal.
+mut_HEALTH_full_with_release_accepted() {
+  sed -i '/^cmd_health() {/,/^}/ s@^  if \[ "\$full" = 1 \] && \[ "\$release" = 1 \]; then$@  if false; then@' "$1"
+}
+# The skip skips the SUITE too: rc 0 and nothing run, so a red fast suite — TODO.md, docs/, the
+# machine — reads as a skip and never as red. `skip: a red suite over a measured key fails health…`
+# reads the argv file absent and no 'suite red'. Braced, so `cd` keeps its `&&` and only the call
+# is guarded; `2>\&1`, because a bare `&` in a sed replacement is the whole match.
+mut_HEALTH_skip_without_suite() {
+  sed -i '/^cmd_health() {/,/^}/ s@tests/run-all.sh \${suite_flag:+"\$suite_flag"} 2>&1 )@{ [ "$skip" = 1 ] || tests/run-all.sh ${suite_flag:+"$suite_flag"} 2>\&1; } )@' "$1"
+}
+# The old rule comes back inside the skip: a red fast suite over a key already measured is counted
+# as the catalogue's verdict and takes the key away, so a red that comes from outside the key costs
+# every checkout of the same content the catalogue again. `skip: a red suite over a measured key
+# fails health and keeps the key` finds the key gone; so does world 6 of check-gates.sh (PR).
+mut_HEALTH_skip_red_drops_key() {
+  sed -i '/^cmd_health() {/,/^}/ s@^    ok "mutation: catalogue skipped@    [ "$rc" -eq 0 ] || catalogue_against=suite; ok "mutation: catalogue skipped@' "$1"
+}
+# The same old rule inside a catalogue run: a red suite over a CLEAN score takes the key away. Only
+# a catalogue run reaches this line, so the skip's own world does not see it; `skip: only the
+# catalogue's verdict takes a key away …`, its `--full` with rc 1 half, finds the key gone.
+mut_HEALTH_red_suite_drops_key() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "\$rc" -eq 0 \]; then catalogue_green=1; fi@if [ "$rc" -eq 0 ]; then catalogue_green=1; else catalogue_against=suite; fi@' "$1"
+}
+# A survivor stops speaking against the key: the catalogue says `103 caught … of 104` over this
+# content and the stamp stays, opening gate_PR over a live mutant. `skip: only the catalogue's
+# verdict takes a key away — a survivor does …` finds the key kept; world 7 of check-gates.sh reads DONE.
+mut_HEALTH_survivor_keeps_key() {
+  sed -i '/^cmd_health() {/,/^}/ s@^      catalogue_against=survivor$@      :@' "$1"
 }
 
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
@@ -3592,9 +3641,11 @@ mut_AUTONOMY_shape_not_asked() {
 #
 # Re-anchored with the `--path-format=absolute` rewrite: it used to replace the `common=` line,
 # which that rewrite deleted.
-# The shape guard drops, and a git older than 2.31 gets to name the repository. `rev-parse` ECHOES
-# an option it does not know and still exits 0, so the answer is two lines — the flag, then the
-# relative common dir — and neither `|| return 0` (rc is 0) nor `-n` (not empty) refuses it. Caught
+# The shape guard drops, and a git older than 2.31 gets to name the repository. The guard lives in
+# git_common_dir_abs, the one resolution ledger_repo_root and mutation_stamp_dir both read (ADR
+# 0021). `rev-parse` ECHOES an option it does not know and still exits 0, so the answer is two
+# lines — the flag, then the relative common dir — and neither the `|| return 1` after the capture
+# (rc is 0) nor `-n` (not empty) refuses it. Caught
 # by the pre-2.31 differential pair of check-autonomy.sh, which reads the identity back out of the
 # runner under a shim and demands it be the repo or nothing, never the flag. The `case` and its
 # `esac` go together: removing the opener alone leaves invalid bash, which is a harness failure and
@@ -4225,8 +4276,11 @@ mut_HEALTH_catalogue_floor_blind() {
 # passes it and the harness accepts the mutant. It killed the assertion, but as garbage killing ten
 # of them, not as this defect killing one. Red for the wrong reason is the one verdict this
 # catalogue may never take: it certifies an assertion that was never the thing measuring.
+# Re-anchored and ADDRESSED to the body of cmd_health by ADR 0021 §3: the flag now rides in
+# `suite_flag`, empty in the skip, and the one call drops the variable — the catalogue lost in the
+# path that is meant to run it. `skip: --full runs the catalogue …` reads the same empty argv.
 mut_HEALTH_suite_without_mutation() {
-  sed -i 's@tests/run-all.sh --with-mutation 2>\&1@tests/run-all.sh 2>\&1@' "$1"
+  sed -i '/^cmd_health() {/,/^}/ s@tests/run-all.sh \${suite_flag:+"\$suite_flag"} 2>&1 )@tests/run-all.sh 2>\&1 )@' "$1"
 }
 
 # Provenance goes back to dying on a machine that has no plugins cache. `find` on a missing
@@ -6811,6 +6865,13 @@ CATALOG=(
   PR_stamp_dir_per_worktree
   PR_stamp_valid_any_key
   HEALTH_release_line6_blind
+  HEALTH_skip_never
+  HEALTH_full_ignored
+  HEALTH_full_with_release_accepted
+  HEALTH_skip_without_suite
+  HEALTH_skip_red_drops_key
+  HEALTH_red_suite_drops_key
+  HEALTH_survivor_keeps_key
   RUN_inverted_journal
   RUN_phase_log_time_only
   RUN_check_log_time_only

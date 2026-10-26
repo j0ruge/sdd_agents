@@ -37,11 +37,11 @@
 #      effect. Both mutants are caught, so nothing fails open; what is short by one is this
 #      header, and this header is what a reader uses to map mutant onto assertion. Re-derive
 #      before trusting either number: `grep -c '^mut_HEALTH_' tests/check-mutation.sh`.
-#      ⚠️ DECLARED LIMIT (D15), moved here from TODO.md: the stub suite's `stub-argv.txt` is
-#      overwritten by every health_run and never removed between fixture worlds. Measured not to
-#      fail open today — with no call to the suite the file is absent and the `surface:` assertion
-#      accuses correctly. The day cmd_health grows a SECOND path to the suite, the last write
-#      wins in silence; delete the file in green_world then, as the other fixtures do.
+#      The stub suite's `stub-argv.txt` is removed before every run (health_run and
+#      health_run_keep), so the argv read after a run is the argv of that run. It used to be a
+#      declared limit — overwritten, never removed — that held only while cmd_health had one path
+#      to the suite; the skip of assertion 21 is the second path, and with it a leftover file would
+#      answer for a call that never happened.
 #   12. the ratchet policy is written where the next mission meets it — CLAUDE.md and TODO.md. The
 #      one rule here that no mut_HEALTH_* can reach, since none of them can make a document say
 #      less, so it carries probes of its own over all three of its layers.
@@ -73,6 +73,12 @@
 #      aimed at by GIT_DIR and GIT_INDEX_FILE stays as it was through the suite and through
 #      `check-mutation.sh --only`, and both refuse a git that names no GIT_DIR (issue #226). Run
 #      outside a mutant only, because no mutant reaches tests/. Prefixed `surface:`.
+#   21. a key already measured green runs the suite WITHOUT the catalogue and names `--full`;
+#      `--full` runs it anyway and is refused beside `--release`; a red suite over a measured key
+#      fails health and keeps the key, and under `--full` only the catalogue's verdict (a survivor)
+#      takes it away; a linked worktree skips over the key its main checkout measured (ADR 0021).
+#      Every other world runs over NO stamp (health_run clears the place), so each one stays a
+#      first measurement. Prefixed `skip:`.
 #   ⚠️ DECLARED LIMIT (D15), moved here from TODO.md in 20261003-lote-3-a-catraca-desce: no rule refuses
 #      the NEXT `sdd health` invocation of a fixture that forgets to pin its `cd`, and the
 #      caller's cwd picks the measured tree (the comment above health_run says why that is
@@ -352,8 +358,22 @@ HEALTH_RC=0
 # catalogue, so the runner measures it — and when a world removes the catalogue, the fallback is
 # its own $SDD_HOME, which IS the fixture too. A sensor whose answer depends on
 # the caller's cwd is not a sensor, the same reason HOME is redirected on the line below.
+#
+# Every run starts from NO stamp, so every world here is a first measurement and the catalogue
+# runs: `sdd health` skips the catalogue over a key already measured green (ADR 0021 §3), and the
+# fixture keeps one content key across most worlds, so a stamp left by the world before would turn
+# the next one into a skip and answer for a run that never happened. The place is spelled from
+# the ADR — the fixture is a main checkout, so its common dir is its own .git — and never borrowed
+# from bin/sdd. The stub's argv file goes too, so what is read after a run was written BY that run:
+# cmd_health has two paths to the suite now, and a leftover would answer for the one not taken.
+# Only the `skip:` worlds call health_run_keep, which keeps the stamps; both pass their arguments on.
 health_run() {
-  HEALTH_OUT="$( cd "$FIX" && HOME="$FIX/home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )"
+  rm -rf "${FIX:?}/.git/sdd-mutation/stamps"
+  health_run_keep "$@"
+}
+health_run_keep() { # health_run_keep [health option...]
+  rm -f "${FIX:?}/tests/stub-argv.txt"
+  HEALTH_OUT="$( cd "$FIX" && HOME="$FIX/home" NO_COLOR=1 "$FIX/bin/sdd" health "$@" 2>&1 )"
   HEALTH_RC=$?
 }
 
@@ -1017,6 +1037,154 @@ else
   fail "$NOGIT_DESC" \
        "rc 0, 'kit healthy', the 'not a git checkout' warning, no 'nothing was stamped:', no '$STAMPED', and the same fixture with its .git stamped" \
        "rc $RC_NOGIT · $(digest "$OUT_NOGIT")"
+fi
+
+# ---------------------------------------------------------------------------
+# 21 — the skip: a key already measured green runs the fast suite and not the catalogue
+#
+# `sdd health` used to run the whole catalogue on every call, even over content whose key was
+# already measured green: 10 h 58 min for PR #327, a diff of TODO.md and the ratchet alone. Now a
+# key in the set runs the suite WITHOUT --with-mutation and says so, `--full` forces the catalogue,
+# and only the catalogue's own verdict takes a key away (ADR 0021 §3 and §4). Prefixed `skip:`.
+#
+# The skip is read off the CALL, as `surface:` reads it: the argv the stub suite recorded, and the
+# file has to EXIST — a skip that stopped calling the suite would otherwise read as a skip.
+#
+# ⚠️ The key is the CONTENT: a red stub or a survivor score is a tracked file with other bytes, so
+# its key is one no green run of this fixture ever writes. Those states get a stamp forged with the
+# recipe docs/failure-modes.md gives the operator, and the recipe is trusted only because it
+# answers the name of the stamp the runner itself wrote over the green content — a wrong recipe
+# makes those worlds fail closed (no skip), never pass.
+# ---------------------------------------------------------------------------
+SKIP_LINE='catalogue skipped'
+SKIP_STAMPS="$FIX/.git/sdd-mutation/stamps"
+# What the stub suite was handed in the last run, or ABSENT when nothing called it.
+stub_argv() { if [ -e "$FIX/tests/stub-argv.txt" ]; then cat "$FIX/tests/stub-argv.txt"; else printf 'ABSENT'; fi; }
+fixture_key() { # fixture_key — the content key of $FIX as it stands, by the operator's recipe
+  ( CDPATH='' cd "$FIX" && git ls-files -z -c -- bin tests templates config agents ':(exclude)tests/health-baseline.txt' \
+      | LC_ALL=C sort -zu | xargs -0 -r md5sum | md5sum | cut -d' ' -f1 ) 2>/dev/null || true
+}
+forge_stamp() { # forge_stamp — a stamp for the CURRENT content of $FIX, in the runner's format; prints the key
+  local key; key="$(fixture_key)"
+  [ -n "$key" ] || return 1
+  mkdir -p "$SKIP_STAMPS" && printf '%s\nmeasured: forged by tests/check-health.sh\n' "$key" > "$SKIP_STAMPS/$key" \
+    && printf '%s\n' "$key"
+}
+
+SKIP1_DESC='skip: a key measured green runs the suite without the catalogue, and the line names --full'
+green_world
+health_run
+OUT_SKIP_MEASURE="$HEALTH_OUT"; ARGV_SKIP_MEASURE="$(stub_argv)"
+KEY_WRITTEN="$(ls -A "$SKIP_STAMPS" 2>/dev/null || true)"
+KEY_RECIPE="$(fixture_key)"
+health_run_keep
+OUT_SKIP="$HEALTH_OUT"; RC_SKIP="$HEALTH_RC"; ARGV_SKIP="$(stub_argv)"
+if grep -qF "$STAMPED" <<< "$OUT_SKIP_MEASURE" \
+   && grep -qF -- '--with-mutation' <<< "$ARGV_SKIP_MEASURE" \
+   && ! grep -qF "$SKIP_LINE" <<< "$OUT_SKIP_MEASURE" \
+   && [ "$ARGV_SKIP" != ABSENT ] && ! grep -qF -- '--with-mutation' <<< "$ARGV_SKIP" \
+   && [ "$RC_SKIP" -eq 0 ] && grep -qF 'kit healthy' <<< "$OUT_SKIP" \
+   && grep -qE "$SKIP_LINE.*--full" <<< "$OUT_SKIP"; then
+  pass "$SKIP1_DESC"
+else
+  fail "$SKIP1_DESC" \
+       "the first run measures and stamps (argv --with-mutation); the second calls the suite with no flag, rc 0, 'kit healthy', and one line saying '$SKIP_LINE' and naming --full" \
+       "first: argv '$ARGV_SKIP_MEASURE' · $(digest "$OUT_SKIP_MEASURE") // second: rc $RC_SKIP, argv '$ARGV_SKIP' · $(digest "$OUT_SKIP")"
+fi
+
+# --full over the key the world above left standing, then --full beside --release, which never runs
+# the suite: refused by name, before anything is measured.
+SKIP2_DESC='skip: --full runs the catalogue over a key already measured, and --full beside --release is refused'
+health_run_keep --full
+OUT_FULL="$HEALTH_OUT"; RC_FULL="$HEALTH_RC"; ARGV_FULL="$(stub_argv)"
+health_run_keep --full --release
+OUT_FULL_REL="$HEALTH_OUT"; RC_FULL_REL="$HEALTH_RC"; ARGV_FULL_REL="$(stub_argv)"
+if [ -n "$KEY_WRITTEN" ] && [ -f "$SKIP_STAMPS/$KEY_WRITTEN" ] \
+   && grep -qF -- '--with-mutation' <<< "$ARGV_FULL" \
+   && ! grep -qF "$SKIP_LINE" <<< "$OUT_FULL" \
+   && [ "$RC_FULL" -eq 0 ] && grep -qF "$STAMPED" <<< "$OUT_FULL" \
+   && [ "$RC_FULL_REL" -ne 0 ] && [ "$ARGV_FULL_REL" = ABSENT ] \
+   && grep -qF -- '--full measures the catalogue, and --release never runs the suite' <<< "$OUT_FULL_REL"; then
+  pass "$SKIP2_DESC"
+else
+  fail "$SKIP2_DESC" \
+       "--full over a stamped key calls the suite with --with-mutation, rc 0, stamps again; --full --release exits non-zero naming the clash, with no suite called" \
+       "full: rc $RC_FULL, argv '$ARGV_FULL' · $(digest "$OUT_FULL") // full+release: rc $RC_FULL_REL, argv '$ARGV_FULL_REL' · $(head -3 <<< "$OUT_FULL_REL" | tr '\n' ' ')"
+fi
+
+# The red suite comes back over a key in the set. Health is red and says so with the command that
+# reproduces what ran — the fast suite — and the key stays: with the key equal, the red comes from
+# outside it or from the machine, and gate_REVIEW already refuses a red TEST_CMD (ADR 0021 §4).
+SKIP3_DESC='skip: a red suite over a measured key fails health and keeps the key'
+write_stub_suite with-count with-score 1
+KEY_RED="$(forge_stamp || true)"
+health_run_keep
+OUT_SKIP_RED="$HEALTH_OUT"; RC_SKIP_RED="$HEALTH_RC"; ARGV_SKIP_RED="$(stub_argv)"
+if [ -n "$KEY_WRITTEN" ] && [ "$KEY_WRITTEN" = "$KEY_RECIPE" ] \
+   && [ -n "$KEY_RED" ] && [ "$KEY_RED" != "$KEY_WRITTEN" ] \
+   && [ "$ARGV_SKIP_RED" != ABSENT ] && ! grep -qF -- '--with-mutation' <<< "$ARGV_SKIP_RED" \
+   && [ "$RC_SKIP_RED" -eq 1 ] && grep -qF "$SKIP_LINE" <<< "$OUT_SKIP_RED" \
+   && grep -qF 'suite red (rc 1) — run tests/run-all.sh to see it' <<< "$OUT_SKIP_RED" \
+   && [ -f "$SKIP_STAMPS/$KEY_RED" ]; then
+  pass "$SKIP3_DESC"
+else
+  fail "$SKIP3_DESC" \
+       "the recipe answers the key the runner wrote; over the red stub's own key the suite is called with no flag, rc 1, 'suite red (rc 1) — run tests/run-all.sh to see it', and stamps/<that key> is still there" \
+       "recipe '$KEY_RECIPE' vs written '$KEY_WRITTEN' · red key '$KEY_RED' $( [ -f "$SKIP_STAMPS/$KEY_RED" ] && echo kept || echo gone ) · rc $RC_SKIP_RED, argv '$ARGV_SKIP_RED' · $(digest "$OUT_SKIP_RED")"
+fi
+
+# Under --full the catalogue runs and judges the key: a survivor takes it away, and a red suite over
+# a clean score does not — that red is about the suite, which the key does not describe.
+SKIP4_DESC="skip: only the catalogue's verdict takes a key away — a survivor does, a red suite over a clean score does not"
+write_stub_suite with-count with-score 0 "$SCORE_SURVIVOR"
+KEY_SURV="$(forge_stamp || true)"
+SURV_BEFORE=gone; [ -n "$KEY_SURV" ] && [ -f "$SKIP_STAMPS/$KEY_SURV" ] && SURV_BEFORE=kept
+health_run_keep --full
+OUT_SURV="$HEALTH_OUT"; ARGV_SURV="$(stub_argv)"
+SURV_AFTER=gone; [ -n "$KEY_SURV" ] && [ -f "$SKIP_STAMPS/$KEY_SURV" ] && SURV_AFTER=kept
+write_stub_suite with-count with-score 1
+KEY_RED_FULL="$(forge_stamp || true)"
+health_run_keep --full
+OUT_RED_FULL="$HEALTH_OUT"; ARGV_RED_FULL="$(stub_argv)"
+RED_AFTER=gone; [ -n "$KEY_RED_FULL" ] && [ -f "$SKIP_STAMPS/$KEY_RED_FULL" ] && RED_AFTER=kept
+if [ -n "$KEY_WRITTEN" ] && [ "$KEY_WRITTEN" = "$KEY_RECIPE" ] \
+   && [ "$SURV_BEFORE|$SURV_AFTER|$RED_AFTER" = "kept|gone|kept" ] \
+   && grep -qF -- '--with-mutation' <<< "$ARGV_SURV" && grep -qF 'survivor' <<< "$OUT_SURV" \
+   && grep -qF -- '--with-mutation' <<< "$ARGV_RED_FULL" && grep -qF 'suite red' <<< "$OUT_RED_FULL"; then
+  pass "$SKIP4_DESC"
+else
+  fail "$SKIP4_DESC" \
+       "kept|gone|kept (the survivor's key before and after --full, the red suite's key after --full), both runs calling the catalogue" \
+       "$SURV_BEFORE|$SURV_AFTER|$RED_AFTER · survivor: argv '$ARGV_SURV' · $(digest "$OUT_SURV") // red: argv '$ARGV_RED_FULL' · $(digest "$OUT_RED_FULL")"
+fi
+
+# The place is the git common directory (ADR 0021 §1): the key the main checkout measured is the
+# key a linked worktree of the same clone skips over. The worktree checks out the committed $FIX, so
+# its content and key are the main checkout's only while $FIX carries no edit to a tracked file of
+# the five paths — asked first. Its stub writes the argv into $FIX by absolute path, which is why
+# the file is removed between the two runs. It has no baseline (untracked), so its rc is not read.
+SKIP5_DESC='skip: a linked worktree skips over the key its main checkout measured'
+green_world
+SKIP_DIRTY="$(git -C "$FIX" status --porcelain --untracked-files=no -- bin tests templates config agents 2>&1)"
+[ -z "$SKIP_DIRTY" ] \
+  || broken "the linked-worktree skip world starts from a fixture whose tracked content differs from its commit ($SKIP_DIRTY) — the worktree would carry another key"
+health_run
+OUT_WT_MAIN="$HEALTH_OUT"
+SKIP_WT="$WORK/kit-wt"
+git -C "$FIX" worktree add -q --detach "$SKIP_WT" >/dev/null 2>&1 \
+  || broken "the linked-worktree skip world could not add a worktree of the fixture at $SKIP_WT"
+rm -f "$FIX/tests/stub-argv.txt"
+OUT_WT="$( cd "$SKIP_WT" && HOME="$FIX/home" NO_COLOR=1 ./bin/sdd health 2>&1 )" || true
+ARGV_WT="$(stub_argv)"
+git -C "$FIX" worktree remove --force "$SKIP_WT" >/dev/null 2>&1 || true
+if grep -qF "$STAMPED" <<< "$OUT_WT_MAIN" \
+   && [ "$ARGV_WT" != ABSENT ] && ! grep -qF -- '--with-mutation' <<< "$ARGV_WT" \
+   && grep -qE "$SKIP_LINE.*--full" <<< "$OUT_WT"; then
+  pass "$SKIP5_DESC"
+else
+  fail "$SKIP5_DESC" \
+       "the main checkout stamps; the worktree's health calls the suite with no flag and says '$SKIP_LINE'" \
+       "main: $(digest "$OUT_WT_MAIN") // worktree: argv '$ARGV_WT' · $(digest "$OUT_WT")"
 fi
 
 # The third site says nothing on its own — a machine with no plugins cache is not a defect, it is
@@ -2472,7 +2640,11 @@ health_captures() {
 # 45 → 43: the same mission's fix round 1 moved the resolution of the common dir out of the region,
 # into git_common_dir_abs beside ledger_repo_root, its other reader; mutation_stamp_dir keeps ONE
 # `common` capture, guarded with `|| return 1`, and its other two left with the code.
-CAPTURE_FLOOR=43
+# 43 → 44: the skip (ADR 0021 §3, the same mission's I2). The line that announces it reads the
+# provenance under the key's first line — the `stamp_prov` capture, guarded inside with `|| true`,
+# because a stamp with no provenance is still a valid stamp. `stamp_dir` moved up beside the skip,
+# which asks the same directory, and is counted once, where it now lives.
+CAPTURE_FLOOR=44
 
 capture_report() {
   local out total safe offenders

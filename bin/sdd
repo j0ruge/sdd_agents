@@ -7291,17 +7291,26 @@ mutation_stamp_valid() { # mutation_stamp_valid <root> <key>
 cmd_health() {
   # `--release` is the scoreboard of ADR 0007 and ONLY that: it never runs the suite. Parsed before
   # anything else so a typo cannot fall into the fifteen-minute path.
-  local release=0
+  local release=0 full=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --release) release=1 ;;
-      # A habit written in ten handoffs. The catalogue ALWAYS runs here (that is the whole point of
-      # the stamp), so the flag is a synonym for the default, accepted and never refused.
+      # A habit written in sixteen handoffs and in CLAUDE.md, so the flag stays a synonym for the
+      # default, accepted and never refused — and the habit gets the skip below with it (ADR 0021
+      # §3). Making it force the catalogue would have the habit pay the eleven hours again.
       --with-mutation) : ;;
-      *) die "sdd health: unknown option '$1' (accepted: --release, --with-mutation)" ;;
+      # The catalogue over a key already measured: the operator's way to distrust a stamp the key
+      # cannot see through — another machine, another bash — since the key covers content only.
+      --full) full=1 ;;
+      *) die "sdd health: unknown option '$1' (accepted: --release, --with-mutation, --full)" ;;
     esac
     shift
   done
+  # Refused by name, and after the whole parse so the order of the two never matters: --release
+  # never runs the suite, so a --full beside it would be a request this command silently dropped.
+  if [ "$full" = 1 ] && [ "$release" = 1 ]; then
+    die "sdd health: --full measures the catalogue, and --release never runs the suite — pick one"
+  fi
   if [ "$release" = 1 ]; then health_release; return $?; fi
   # `catalogue_green` is the ONE thing check 2c reads out of checks 1 and 2, and it is a variable
   # rather than a re-reading of the output because the stamp has to mean BOTH: a green
@@ -7336,19 +7345,35 @@ cmd_health() {
   local stamp_key_before
   stamp_key_before="$(mutation_stamp_key "$kit" || true)"
 
+  # THE SKIP (ADR 0021 §3). A key already in the set was measured green, and gate_PR has always
+  # trusted exactly that: an equal key means equal measured content. So the catalogue is not run
+  # again over it — 10 h 58 min for PR #327, a diff of TODO.md and the ratchet, both outside the
+  # key — and the suite runs without it, beside the ratchet and every static check below. Asked
+  # through mutation_stamp_valid, the one question gate_PR and line 6 of --release ask too.
+  # `--full` is the way past it. The provenance under the key's first line is read for the line
+  # that announces the skip, guarded inside: a stamp with no provenance is still a valid stamp.
+  local skip=0 suite_flag=--with-mutation measuring=catalogue stamp_dir stamp_prov=""
+  stamp_dir="$(mutation_stamp_dir "$kit" || true)"
+  if [ "$full" != 1 ] && mutation_stamp_valid "$kit" "$stamp_key_before"; then
+    skip=1; suite_flag=""; measuring=suite
+    stamp_prov="$(awk 'NR > 1 { printf "%s%s", sep, $0; sep = "; " }' "$stamp_dir/$stamp_key_before" 2>/dev/null || true)"
+  fi
+
   rc=0
   # `--with-mutation`, and this command is now the ONLY caller that asks for it. The catalogue used
   # to ride inside TEST_CMD, where it held the working tree for over ten minutes per gate and made
   # the REVIEW phase unsatisfiable headless — three sessions ended their turn "waiting for the
   # suite", which in `claude -p` is ending the session. tests/run-all.sh carries the full reasoning.
   # Nothing was loosened: all the assertions are still demanded, here, once, by the command whose
-  # whole job is asking whether the kit still measures what it claims to.
-  out="$( cd "$kit" && tests/run-all.sh --with-mutation 2>&1 )" || rc=$?
+  # whole job is asking whether the kit still measures what it claims to — and the skip asks for
+  # the suite through this SAME line, the flag in a variable, so the two paths can never drift.
+  out="$( cd "$kit" && tests/run-all.sh ${suite_flag:+"$suite_flag"} 2>&1 )" || rc=$?
   if [ "$rc" -eq 0 ]; then ok "suite green"; else
     # The flag is IN the reproduction line. Without it the operator runs the fast suite, sees green
     # over a red the catalogue found, and concludes health is lying — the one thing this command
-    # may never be. The sentence has to name the command that reproduces what was just measured.
-    health_bad "suite red (rc $rc) — run tests/run-all.sh --with-mutation to see it"
+    # may never be. The sentence has to name the command that reproduces what was just measured,
+    # which in the skip is the fast suite: the flag is there exactly when it ran.
+    health_bad "suite red (rc $rc) — run tests/run-all.sh${suite_flag:+ $suite_flag} to see it"
     # Every FAIL line first, then the tail. The tail alone dropped the names: on 2026-09-23 the
     # catalogue answered 387 of 389 after half an hour, the two culprits' lines sat above the last
     # fifteen, and nothing short of a second half-hour run would say which mutants they were.
@@ -7395,7 +7420,11 @@ cmd_health() {
   # counts zero, and unguarded that kills the runner on this line, with every sentence below it
   # dead code. A missing or renamed catalogue lands on 0 and is REFUSED, which is the side of the
   # fence a count that cannot be taken belongs on.
-  local score_line score_nums caught gaps total defined
+  # `catalogue_against` names the verdict of the catalogue that speaks against the key — census,
+  # gap or survivor (where a TIMED-OUT mutant lands) — and it is the ONLY thing check 2c removes a
+  # key for (ADR 0021 §4). A red suite over a clean score, a missing score line and one that does
+  # not parse leave it empty: none of them is the catalogue saying this content fails.
+  local score_line score_nums caught gaps total defined catalogue_against=""
   defined="$(grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' "$kit/tests/check-mutation.sh" 2>/dev/null || true)"
   if [ -z "$defined" ]; then defined=0; fi
   # The LAST `score:` line, never the first: the catalogue prints its verdict once, at the end, and a
@@ -7403,7 +7432,11 @@ cmd_health() {
   # a run whose last line carried a survivor).
   score_line="$(grep '^score: ' <<< "$out" | tail -n 1 || true)"
   score_nums="$(sed -nE 's/^score: ([0-9]+) caught, ([0-9]+) known gap\(s\), of ([0-9]+)$/\1 \2 \3/p' <<< "$score_line" || true)"
-  if [ -z "$score_line" ]; then
+  if [ "$skip" = 1 ]; then
+    # ONE line for the whole check, and it names the way back: the skip is a trust, and trusting it
+    # in silence would make the eleven-hour run unreachable to whoever doubts it.
+    ok "mutation: catalogue skipped — this content (key $stamp_key_before) was measured green${stamp_prov:+ ($stamp_prov)}; ./bin/sdd health --full measures it again"
+  elif [ -z "$score_line" ]; then
     health_bad "the suite did not print the 'score:' line — health went blind to the mutation"
   elif [ -z "$score_nums" ]; then
     # Shape drift is a contract breach, never a green. Without this branch the whole comparison
@@ -7419,12 +7452,15 @@ cmd_health() {
     # survivor, which is the ordinary world both were written for.
     if [ "$total" -ne "$defined" ] || [ "$defined" -lt "$MUTATION_CATALOGUE_FLOOR" ]; then
       health_bad "mutation: the catalogue ran $total of the $defined mutant(s) tests/check-mutation.sh defines (floor $MUTATION_CATALOGUE_FLOOR) — an emptied or narrowed catalogue goes on printing caught == of, and that green is about a loop that ran $total time(s)"
+      catalogue_against=census
     elif [ "$gaps" -ne 0 ]; then
       health_bad "mutation with an open gap — $score_line"
+      catalogue_against=gap
     elif [ "$caught" -ne "$total" ]; then
       # The reproduction command is IN the sentence, the same rule the red-suite line above obeys:
       # without it the operator runs the fast suite, sees green, and concludes health is lying.
       health_bad "mutation: $caught of $total caught — $((total - caught)) survivor(s), assertions the suite does not have — run tests/run-all.sh --with-mutation"
+      catalogue_against=survivor
     else
       ok "mutation: $score_line"
       # An `if` and never `[ … ] && catalogue_green=1`: under this file's `set -e` the `&&` list is
@@ -7501,20 +7537,36 @@ cmd_health() {
   # ONE file per key, in the stamps directory of the git common dir (ADR 0021): the key read BEFORE
   # the suite names the file this block writes or takes away. `stamp_path` stays empty when the
   # directory or the key is unknown, and `rm -f` with no operand then removes nothing, never a
-  # directory.
-  local stamp_dir stamp_path="" stamp_key
-  stamp_dir="$(mutation_stamp_dir "$kit" || true)"
+  # directory. `stamp_dir` was resolved beside the skip, which asks the same directory.
+  local stamp_path="" stamp_key
   if [ -n "$stamp_dir" ] && [ -n "$stamp_key_before" ]; then stamp_path="$stamp_dir/$stamp_key_before"; fi
   stamp_key="$(mutation_stamp_key "$kit" || true)"
-  if [ "$catalogue_green" != 1 ]; then
+  # Only the catalogue's own verdict over a key takes it away, and only a catalogue green as a whole
+  # writes one (ADR 0021 §4). Everything else — the skip, a red suite over a clean score, a score
+  # line missing or unparseable, a tree that moved during the run — writes NOTHING and removes
+  # NOTHING: with the key equal, a red that is not the catalogue's comes from outside the key
+  # (TODO.md, docs/) or from the machine, gate_REVIEW already refuses a red TEST_CMD before gate_PR
+  # is read, and one red in one worktree may not cost every checkout of the same content the
+  # catalogue again. The window comes first because no verdict below it is about this content.
+  if [ "$stamp_key" != "$stamp_key_before" ]; then
+    # The window, closed. Saying it out loud matters as much as refusing: an operator who watched
+    # a green catalogue scroll past and then finds gate_PR still asking for a stamp needs to be
+    # told that their own commit, not the catalogue, is why. The skip refuses it too: the suite it
+    # ran is about content that is no longer here either.
+    health_bad "the measured tree moved WHILE the $measuring was running — nothing was stamped and no key was taken away, because what it just reported is about content that is no longer here. Re-run once the tree stops moving."
+  elif [ -n "$catalogue_against" ]; then
     # REMOVED, not merely left behind. A stamp that outlives the green it certifies is the exact
     # label this block exists to replace: it would go on telling gate_PR that a catalogue which
-    # just came back red, over this very content, had been measured and was clean.
+    # just judged this very content against the key had been measured and was clean.
     rm -f ${stamp_path:+"$stamp_path"}
+  elif [ "$catalogue_green" != 1 ]; then
+    # The skip, a red suite over a clean score, or no score to read: not the catalogue's verdict
+    # about this content, so the key stays exactly as it was — written or absent.
+    :
   elif [ -z "$stamp_key" ]; then
     # A green catalogue over a root the key refuses — a measured path absent, not a git checkout,
     # a tracked file deleted (ADR 0014, increments I3 and I4). Said out loud, never a silent
-    # `rm -f`: gate_PR names the same reason and tells the operator to run this command
+    # refusal: gate_PR names the same reason and tells the operator to run this command
     # afterwards, and a health that went quiet here would be a refusal with no reachable remedy.
     # Same helper as the gate, so the two agree.
     mutation_stamp_why "$kit"
@@ -7532,13 +7584,6 @@ cmd_health() {
       # added without teaching mutation_stamp_why its name. No probe can reach it (D15).
       health_bad "nothing was stamped: ${MUTATION_STAMP_PATHS[*]} hold no file at $kit, so there is no content for a stamp to describe"
     fi
-    rm -f ${stamp_path:+"$stamp_path"}
-  elif [ "$stamp_key" != "$stamp_key_before" ]; then
-    # The window, closed. Saying it out loud matters as much as refusing: an operator who watched
-    # a green catalogue scroll past and then finds gate_PR still asking for a stamp needs to be
-    # told that their own commit, not the catalogue, is why.
-    health_bad "the measured tree moved WHILE the catalogue was running — nothing was stamped, because the green it just reported is about content that is no longer here. Re-run once the tree stops moving."
-    rm -f ${stamp_path:+"$stamp_path"}
   elif [ -n "$stamp_path" ] && mkdir -p "$stamp_dir" 2>/dev/null \
        && printf '%s\nmeasured: %s\nroot: %s\n%s\n' "$stamp_key" "$(date -Iseconds 2>/dev/null || true)" "$kit" "$score_line" \
             > "$stamp_path.tmp.$$" 2>/dev/null \
@@ -11956,7 +12001,9 @@ USAGE
   sdd install [--force]      install the kit into the target repo (.sdd/config.sh + .claude/agents/)
   sdd link-agents            link an installed target's agents to this kit (sdd-link-agents)
   sdd preflight              environment sensor: tools, auth, config, plugins, git
-  sdd health                 KIT sensor: suite, mutation, doc and config drift
+  sdd health                 KIT sensor: suite, mutation, doc and config drift; skips the mutation
+                           catalogue over content whose key is already measured green
+             [--full]      run the catalogue anyway, over a key already measured
              [--release]   the six lines of ADR 0007 — apt for another repo of the organisation? —
                            read from artifacts; never runs the suite
   sdd status <mission>       where the mission stands, gate by gate, and what is missing

@@ -3167,9 +3167,10 @@ git add -A && git commit -qm "chore: docs, formatter-aligned again"
 #   CONTENT (3, 4) the stamp keys on the CONTENT of the measured directories, never on the clock
 #           and never on HEAD: the PR phase commits handoff markdown, which would move HEAD and
 #           throw away a stamp that is still perfectly valid.
-#   MEANING (5, 6, 7) the stamp means the catalogue was GREEN, not that the command ran — and
-#           BOTH inputs feed that: a red suite and a green suite whose score carries a survivor
-#           each have to take the stamp away. Without them, a `sdd health` that stamped
+#   MEANING (5, 6, 7) the stamp means the CATALOGUE was green over this content, not that the
+#           command ran — and only the catalogue's own verdict takes it away (ADR 0021 §4). A red
+#           suite over a key already measured is the skip, red, and the stamp stays; `--full` over
+#           a score carrying a survivor removes it. Without them, a `sdd health` that stamped
 #           unconditionally satisfies worlds 1-4.
 #   WINDOW  (8) the green has to be about the content that is still here. The real catalogue runs
 #           for twenty to fifty minutes and the phase that starts it is a phase that commits, so a
@@ -3240,7 +3241,8 @@ i4_why() { # i4_why <world> <regex the reason MUST match> <regex it must NOT mat
 # depends on the developer's machine is not a sensor. rc is ignored on purpose: the fixture kit has
 # no config/schema.md and no baseline, so `sdd health` legitimately fails several other checks —
 # what is under test is the stamp, which the command writes right after the catalogue's verdict.
-i4_health() { ( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health >/dev/null 2>&1 ) || true; }
+# The options are handed on: world 7 asks for `--full`, the catalogue over a key already measured.
+i4_health() { ( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health "$@" >/dev/null 2>&1 ) || true; }
 
 # WHERE the stamps of <repo> live: one file per key measured green, in the git common directory
 # the main checkout and every linked worktree of one clone share (ADR 0021). Spelled here from the
@@ -3456,24 +3458,24 @@ assert_eq "run stops at the stamp only when the stamp is the only refusal" "yes|
 cp "$SDD_STATE_FIX/50-pr-before-stamp-stop.md" "$MDIR/50-pr.md"
 git add -A && git commit -qm "chore: 50-pr.md gets its pr_url back" >/dev/null
 
-# 5. MEANING — stamp the new content, so worlds 6 and 7 have something to take away.
+# 5. MEANING — stamp the new content, so world 6 has a key to skip over and world 7 one to take away.
 i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
 i4_phase "health over the new content stamps it in turn" "DONE"
 
-# 6. MEANING — the SUITE comes back red, over content that did not move by a single byte. The
-#    stamp has to go: one that survived would mean "sdd health was executed", which is a label,
-#    and the difference between a label and an artifact is the whole mission.
+# 6. MEANING — the SUITE comes back red, over content that did not move by a single byte. The key
+#    is in the set, so health skips the catalogue, runs the fast suite, goes red — and the stamp
+#    stays (ADR 0021 §4). With the key equal the red comes from outside it (TODO.md, docs/) or from
+#    the machine, gate_REVIEW already refuses a red TEST_CMD before gate_PR is read, and one red
+#    in one worktree may not cost every checkout of the same content the catalogue again.
 i4_verdict 1 "$I4_SCORE_GREEN"; i4_health
-i4_phase "a red suite takes the stamp away, so it never means 'the command ran'" "PR"
+i4_phase "a red suite over a measured key leaves the stamp standing — only the catalogue's verdict takes it away" "DONE"
 
-# 7. MEANING — and the OTHER input, because the stamp answers to both checks. Here the suite is
-#    green and the score carries a live survivor: `103 caught … of 104` is not a hypothesis, it is
-#    what this repo's base branch carried for days. The green run in between is not scaffolding
-#    either — it proves the removal is a verdict that can be revised and not a one-way latch.
-i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
-i4_phase "green again, and the stamp comes back" "DONE"
-i4_verdict 0 "$I4_SCORE_SURVIVOR"; i4_health
-i4_phase "a score with a live survivor takes the stamp away too" "PR"
+# 7. MEANING — and the verdict that DOES take it away. `--full` runs the catalogue over the key
+#    world 6 left standing, the suite is green and the score carries a live survivor: `103 caught …
+#    of 104` is not a hypothesis, it is what this repo's base branch carried for days. The removal
+#    is the catalogue's own answer about this content, which is why it is the one that counts.
+i4_verdict 0 "$I4_SCORE_SURVIVOR"; i4_health --full
+i4_phase "a score with a live survivor takes the stamp away" "PR"
 
 # 8. WINDOW — the catalogue is green AND the measured tree moves while it runs. The real run takes
 #    twenty to fifty minutes, and the phase that types `sdd health` is the phase that also commits,
