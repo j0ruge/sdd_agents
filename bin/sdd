@@ -6476,16 +6476,25 @@ cmd_preflight() {
   # RESOLVES the identity the old way (`cd` + `pwd -P`, both `cd`s with an emptied CDPATH), so an
   # old git costs a second rev-parse and nothing else. This line is where the operator is told that
   # the slow path is the one being taken — a notice, not a broken kit.
+  #
+  # The stamps and the killer map are the KIT's own machinery, so their sentence is said only in a
+  # tree that carries the catalogue — has_mutation_catalogue, the artifact question gate_PR scopes
+  # the stamp on. A target repo has no tests/check-mutation.sh, and J-target-repo-ships promises its
+  # operator never hears of one (QA-1 of mission 20261026-health-pula-catalogo).
   if [ "$( git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | grep -c . )" = 1 ]; then
     ok "git speaks --path-format (2.31+)"
   else
+    local kit_fallback=""
+    if has_mutation_catalogue "$REPO_ROOT"; then
+      kit_fallback=" The mutation stamps ('mutation_stamp_dir', through the same
+        'git_common_dir_abs') and the killer map (tests/check-mutation.sh, 'killers_paths') take
+        that same fallback, so both still land in the one common dir every worktree of the clone
+        shares."
+    fi
     warn "this git does not know 'rev-parse --path-format' (2.31+, and it does not fail — it
         echoes the flag back and exits 0). 'ledger_repo_root' refuses the echoed shape and falls
         back to resolving the common dir with cd + pwd -P, which answers the same string, so the
-        ledger stays correct. The mutation stamps ('mutation_stamp_dir', through the same
-        'git_common_dir_abs') and the killer map (tests/check-mutation.sh, 'killers_paths') take
-        that same fallback, so both still land in the one common dir every worktree of the clone
-        shares. Upgrading git removes the extra rev-parse."
+        ledger stays correct.$kit_fallback Upgrading git removes the extra rev-parse."
   fi
 
   if [ -z "$gnu" ]; then

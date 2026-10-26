@@ -1910,6 +1910,15 @@ mut_PRE_path_format_warn_silent() {
 mut_PRE_path_format_probe_inverted() {
   sed -i '/^cmd_preflight()/,/^}/ s@grep -c [.] )" = 1 \]; then@grep -c . )" = 99 ]; then@' "$1"
 }
+# The same warning's sentence about the KIT's stamps and killer map, unscoped again: the shape the
+# fix wave 291d9af shipped, where a target repo on a git older than 2.31 was told about a
+# tests/check-mutation.sh it does not have (QA-1 of mission 20261026-health-pula-catalogo).
+# Anchored on the scope question inside cmd_preflight, so gate_PR's own has_mutation_catalogue is
+# never touched. Caught by "an old git in a repo without the catalogue is not told about the
+# mutation stamps or the killer map" in check-preflight.sh.
+mut_PRE_path_format_kit_note_unscoped() {
+  sed -i '/^cmd_preflight()/,/^}/ s@^    if has_mutation_catalogue "$REPO_ROOT"; then$@    if true; then@' "$1"
+}
 
 # Not a gate: `sdd approve` goes back to announcing the next step unconditionally, the way it did
 # when the gate was asked once at the top and only `missing *` could stop the command. Everything
@@ -7002,6 +7011,7 @@ CATALOG=(
   PRE_testcmd_never_run
   PRE_path_format_warn_silent
   PRE_path_format_probe_inverted
+  PRE_path_format_kit_note_unscoped
   RUN_approve_next_unconditional
   RUN_e2e_dir_hardcoded
   RUN_autonomy_exclusions_undeclared

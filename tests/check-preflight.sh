@@ -266,6 +266,24 @@ assert_has "a modern git is told it speaks --path-format" "git speaks --path-for
 assert_lacks "...and is not warned about an old git" \
   "this git does not know 'rev-parse --path-format'" "$out_newgit"
 
+# The same warning, read for what it must NOT say outside the kit (QA-1 of mission
+# 20261026-health-pula-catalogo). The fix wave 291d9af taught it that the mutation stamps and the
+# killer map take the same fallback: true, and about the KIT's own machinery. This fixture is a
+# target repo (no tests/check-mutation.sh), and J-target-repo-ships promises its operator never
+# hears of tests/check-mutation.sh, the catalogue or a stamp. The `has` above is the floor: the
+# warning WAS printed into this very output, so a zero here is the sentence gone and not the line.
+assert_eq "an old git in a repo without the catalogue is not told about the mutation stamps or the killer map" \
+  "0" "$(grep -ciE 'check-mutation|mutation stamp|killer map' <<< "$out_oldgit" || true)"
+# ...and the POSITIVE control, one file apart: a tree that carries tests/check-mutation.sh (the
+# question has_mutation_catalogue asks, the same one gate_PR scopes the stamp on) is the kit, and
+# there the sentence is true and still said. Without this pair, a fix that deleted the sentence
+# everywhere, or a scope that never opens, would pass the assertion above.
+mkdir -p "$FIX/tests" && : > "$FIX/tests/check-mutation.sh"
+out_oldgit_kit="$( PATH="$FIX/.oldgit:$PATH" "$SDD" preflight 2>&1 )"
+rm -f "$FIX/tests/check-mutation.sh"; rmdir "$FIX/tests" 2>/dev/null || true
+assert_has "an old git in a repo that carries the catalogue is still told the stamps and the killer map share the fallback" \
+  "The mutation stamps ('mutation_stamp_dir'" "$out_oldgit_kit"
+
 # --- the executor hat sees Bash ---------------------------------------------
 # The auth probe used to run without --agent and called itself "the same flags as run_phase"; on
 # 2026-09-06 it was green while every hat booted without a shell (Claude Code 2.1.263 reads the
