@@ -227,10 +227,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`sdd-planner`) — a lista de tipos de agente sai de quando a sessão abriu, e pode não ter o `sdd-planner`. No
   `dotp-remake` a sessão estava em `rea-projects/`, pai do alvo, e na 3.2b e na 3.2c o tipo faltou com o link já em
   `.claude/agents/`; no `magic_tutor` ela abriu antes do `sdd install` (`Agent type 'sdd-planner' not found`). Nos
-  dois, um agente genérico mandado ler o `sdd-planner.md` como contrato conduziu o grill. Direção: o comando nomeia
-  esse caminho de reserva, ou manda reabrir a sessão no alvo, depois do install.
+  dois, um agente genérico lendo o `sdd-planner.md` conduziu o grill sem o `permissionsDeny` dele (push e PR
+  vetados só em prosa). Direção: nomear o caminho de reserva, ou mandar reabrir a sessão no alvo após o install.
   — descoberto pelo relay do `/sdd-plan` na 3.2b do `dotp-remake` (2026-10-19)
-  RECURRED 7: dotp-remake/3.2c (2026-10-19); magic_tutor (2026-10-20); dotp-remake/3.4a (2026-10-22); dotp-remake/3.4b (2026-10-23); dotp-remake/3.5b (2026-10-24); sdd_agents/20261026-health-pula-catalogo (2026-10-26); sdd_agents/20261026-health-pula-catalogo/EXEC (2026-10-26)
+  RECURRED 8: dotp-remake/3.2c (2026-10-19); magic_tutor (2026-10-20); dotp-remake/3.4a (2026-10-22); dotp-remake/3.4b (2026-10-23); dotp-remake/3.5b (2026-10-24); sdd_agents/20261026-health-pula-catalogo (2026-10-26); sdd_agents/20261026-health-pula-catalogo/EXEC (2026-10-26); warehouse_explorer_web/20261028-whf-162-jdb-na-descricao (2026-10-28)
 - [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:104`
   (`Relaying the grill`) — na 3.2c do `dotp-remake` a sessão caiu com uma pergunta pendente, e a chamada voltou "the
   session ended before this call's result was recorded, so its outcome is unknown". Na sessão nova, o `SendMessage` ao
@@ -533,6 +533,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > evento que o reabre — pela régua D15, ausência de consumidor é decisão adiada, não achado. Os
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
+
+- [ ] **O revisor não tem destino para o LOW que não move a nota** — `agents/sdd-reviewer.md:95`
+  (`MEDIUM/LOW, cheap`) — a tabela manda todo MEDIUM/LOW barato para um `R<n>` de lote, mas a escala do
+  `codereview` dá A com "minor MEDIUM/LOW", e as rodadas deixam o LOW no relatório com motivo escrito: na
+  `20261028-whf-162-jdb-na-descricao` do `warehouse_explorer_web`, 11 LOW na r1, 2 na r2 e 6 na r3, e o gate
+  passou na r3. Seguir a tabela compra uma EXEC que não muda nota; não seguir a contraria. Direção: uma linha
+  "LOW sem efeito na nota → fica no relatório, com motivo", decidida junto da régua do `CONTEXT.md:140`.
+  — descoberto pela retro do `codereview` na r3 da `20261028-whf-162-jdb-na-descricao` (2026-10-30)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
