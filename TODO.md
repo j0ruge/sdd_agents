@@ -446,6 +446,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   em 2026-10-18. Direção: com `JIRA_ENABLED=true`, a mensagem final e o corpo do PR nomeiam o `sdd close`.
   — descoberto por `sessão coordenadora` na missão `20261018-silencios-do-formulario-e-dos-dialogos` (2026-10-18)
 
+- [ ] **O pós-merge não lista o `RESOLVED by` que já pode sair** — `bin/sdd:12444` (`close_return_home`) —
+  o `sdd close` volta à base com o merge e para aí, e o `sdd status` diz "only the merge is left". O ciclo de
+  vida (`templates/todo.pt-BR.md`) apaga o item quando `git merge-base --is-ancestor <hash>` vale, e nada o
+  lista. Medido no `warehouse_explorer_web` depois do PR #8: 5 itens RESOLVED, apagados por script avulso só
+  porque um handoff lembrava; a seção que fica vazia também não tem regra. Direção: depois do fast-forward,
+  `close_return_home` lista os `RESOLVED by` cujo hash entrou na base (só lista), nos dois braços do JIRA.
+  — descoberto por `sessão interativa` no pós-merge da missão `20261028-whf-162-jdb-na-descricao` (2026-10-30)
+
+- [ ] **O K8 lê o branch em que se está, e diz "the mission branch"** — `bin/sdd:2315` (`rev-list -n 1 HEAD`) —
+  o gate DOCS mede `HEAD` contra a base, e não o `branch:` da missão. Mergeada e lida do `master`, a missão
+  passa (intervalo vazio, resíduo declarado); lida de um branch posterior com commit próprio, o DOCS fica `·`
+  com "the mission branch adds no KAIZEN_LOG.md entry". Medido no `warehouse_explorer_web`: `✓` no `master`
+  8015fb7, `·` no `chore/pos-whf-162` 64a2cdb, mesma missão. O `sdd run` não cai nisso (troca para o branch).
+  Direção: medir o intervalo do `branch:` declarado, ou dar intervalo vazio quando ele já está na base.
+  — descoberto por `sessão interativa` no pós-merge da missão `20261028-whf-162-jdb-na-descricao` (2026-10-30)
+
 - [ ] **O README chama o repositório de privado, e ele é público** — `README.md:45` (`PRIVATE`) — o
   comentário do `git clone` diz "PRIVATE repository", e `gh repo view j0ruge/sdd_agents` responde
   `"isPrivate": false`; quem instala pode concluir que precisa de acesso concedido ou de token. Direção: tirar
