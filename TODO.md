@@ -456,7 +456,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O K8 lê o branch em que se está, e diz "the mission branch"** — `bin/sdd:2315` (`rev-list -n 1 HEAD`) —
   o gate DOCS mede `HEAD` contra a base, e não o `branch:` da missão. Mergeada e lida do `master`, a missão
-  passa (intervalo vazio, resíduo declarado); lida de um branch posterior com commit próprio, o DOCS fica `·`
+  passa (intervalo vazio, resíduo declarado); lida de um branch posterior com commit próprio, a DOCS fica `·`
   com "the mission branch adds no KAIZEN_LOG.md entry". Medido no `warehouse_explorer_web`: `✓` no `master`
   8015fb7, `·` no `chore/pos-whf-162` 64a2cdb, mesma missão. O `sdd run` não cai nisso (troca para o branch).
   Direção: medir o intervalo do `branch:` declarado, ou dar intervalo vazio quando ele já está na base.
