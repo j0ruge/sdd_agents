@@ -230,7 +230,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   dois, um agente genérico mandado ler o `sdd-planner.md` como contrato conduziu o grill. Direção: o comando nomeia
   esse caminho de reserva, ou manda reabrir a sessão no alvo, depois do install.
   — descoberto pelo relay do `/sdd-plan` na 3.2b do `dotp-remake` (2026-10-19)
-  RECURRED 7: dotp-remake/3.2c (2026-10-19); magic_tutor (2026-10-20); dotp-remake/3.4a (2026-10-22); dotp-remake/3.4b (2026-10-23); dotp-remake/3.5b (2026-10-24); sdd_agents/20261026-health-pula-catalogo (2026-10-26); sdd_agents/20261026-health-pula-catalogo/EXEC (2026-10-26)
+  RECURRED 8: dotp-remake/3.2c (2026-10-19); magic_tutor (2026-10-20); dotp-remake/3.4a (2026-10-22); dotp-remake/3.4b (2026-10-23); dotp-remake/3.5b (2026-10-24); sdd_agents/20261026-health-pula-catalogo (2026-10-26); sdd_agents/20261026-health-pula-catalogo/EXEC (2026-10-26); dotp-remake/3.5c (2026-10-31)
 - [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:104`
   (`Relaying the grill`) — na 3.2c do `dotp-remake` a sessão caiu com uma pergunta pendente, e a chamada voltou "the
   session ended before this call's result was recorded, so its outcome is unknown". Na sessão nova, o `SendMessage` ao
@@ -375,12 +375,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o relay responde uma vez e cita a primeira pergunta; o planner não fecha turno de job repetindo pergunta aberta.
   — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
 
+- [ ] **A hand-back do planner com um subagente ainda vivo não chega ao relay, e a pergunta fica parada** —
+  `commands/sdd-plan.md:131` (`Long work between two questions`) — o harness só avisa o relay quando o agente para
+  sem filho vivo em background. Na 3.5c o planner pôs o REA num subagente e devolveu as perguntas 3 e 4 com ele
+  rodando; elas só chegaram quando o subagente terminou. Uma sonda (um agente que devolve com um filho de 75 s)
+  confirmou: a primeira hand-back não gerou aviso. Direção: o planner espera o filho terminar antes de fechar o
+  turno, e o comando e o `agents/sdd-planner.md` dizem isso no passo do trabalho longo.
+  — descoberto pelo relay do `/sdd-plan` na 3.5c do `dotp-remake` (2026-10-31)
+
 - [ ] **O `sdd approve` commita o ADR do `adr:` sem tirar o `proposed`** — `bin/sdd:8672` (`proposed`) — o `sdd adr new`
   escreve `proposed`, e o `cmd_approve` (`:8835`) só põe o arquivo do `adr:` no commit da aprovação. O status final
   depende de quem escreveu o ADR: no `dotp-remake`, o 0011 nasceu `accepted` à mão (`02c19f5`) e o 0012 ficou
   `proposed` (`a81c28f`) até a REVIEW r1 da 3.4b achar e a DOCS mudar à mão. Direção: o `sdd approve` troca o
   `proposed` do ADR do `adr:` por `accepted` no mesmo commit, com probe.
   — descoberto por `sdd-reviewer` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
+  RECURRED 1: dotp-remake/3.5c (2026-10-31)
 
 - [ ] **A linha `kit:` do handoff não tem quem a transporte** — `agents/sdd-publisher.md:69` (`TODO_FILE`) — o
   `templates/handoff.md:63-65` manda o achado do kit numa missão de alvo morar no handoff, marcado `kit:`, levado por
