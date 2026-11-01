@@ -272,10 +272,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **A pergunta que o planner devolve com tarefa sua ainda em segundo plano não chega ao relay** —
   `commands/sdd-plan.md:132` (`Long work between two questions`) — no `magic_tutor`, a Q3, a Q4 e a Q7 foram o fim
   de turno do planner com subagentes ou um teste dele ainda rodando; o relay só recebeu a volta seguinte ("a Q7
-  continua esperando a resposta do humano") e teve de pedir o texto duas vezes. Direção: o planner não encerra o
-  turno com pergunta enquanto tem tarefa viva, e toda pergunta pendente volta inteira na devolução seguinte; o relay
-  que lê o número de uma pergunta que não repassou pede o texto antes de tudo.
+  continua esperando a resposta do humano") e teve de pedir o texto duas vezes. Uma sonda mediu a causa na 3.5c do
+  `dotp-remake`: o harness só avisa o relay quando o agente para sem filho vivo em background. Direção: o planner
+  não encerra o turno com pergunta enquanto tem tarefa viva, e toda pergunta pendente volta inteira na devolução
+  seguinte; o relay que lê o número de uma pergunta que não repassou pede o texto antes de tudo.
   — descoberto pelo relay do `/sdd-plan` na missão `20261024-narracao-e-mesa` do `magic_tutor` (2026-10-24)
+  RECURRED 1: dotp-remake/3.5c (2026-10-31)
 
 - [ ] **O planner marca o `- answer:` de pergunta que o humano não viu, e sob `auto` o gate já lê aprovado** —
   `agents/sdd-planner.md:52` (`Mark each answer`) — no `magic_tutor`, a decisão 7 ("confirmadas em bloco") saiu
@@ -383,14 +385,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   novo, com a resposta do humano já com o relay. Sem dano, porque a resposta nomeou a opção pelo texto. Direção:
   o relay responde uma vez e cita a primeira pergunta; o planner não fecha turno de job repetindo pergunta aberta.
   — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
-
-- [ ] **A hand-back do planner com um subagente ainda vivo não chega ao relay, e a pergunta fica parada** —
-  `commands/sdd-plan.md:131` (`Long work between two questions`) — o harness só avisa o relay quando o agente para
-  sem filho vivo em background. Na 3.5c o planner pôs o REA num subagente e devolveu as perguntas 3 e 4 com ele
-  rodando; elas só chegaram quando o subagente terminou. Uma sonda (um agente que devolve com um filho de 75 s)
-  confirmou: a primeira hand-back não gerou aviso. Direção: o planner espera o filho terminar antes de fechar o
-  turno, e o comando e o `agents/sdd-planner.md` dizem isso no passo do trabalho longo.
-  — descoberto pelo relay do `/sdd-plan` na 3.5c do `dotp-remake` (2026-10-31)
 
 - [ ] **O `sdd approve` commita o ADR do `adr:` sem tirar o `proposed`** — `bin/sdd:8672` (`proposed`) — o `sdd adr new`
   escreve `proposed`, e o `cmd_approve` (`:8835`) só põe o arquivo do `adr:` no commit da aprovação. O status final
