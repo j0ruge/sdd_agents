@@ -127,10 +127,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **A sabotagem roda cada mutante sem teto de tempo nem de memória, e um mutante em laço derruba o run** —
   `agents/sdd-executor.md:93` (`checkpoint-notas.md`) — o passo 4 manda guardar a cópia e restaurar depois de cada
-  rodada, e só. Na 3.5c do `dotp-remake`, o mutante M224 (`>= 2` → `>= 1` na regra da lenda) pôs o motor num laço
-  de decisões: um SIGKILL (exit 137) matou o script antes do restauro (o `.bak` ficou, o mutante aplicado), a
-  sessão e o `sdd run`. Com teto de heap do GC (3 GB) e timeout, o mesmo mutante dá OOM em 86 s e nada mais cai.
-  Direção: o contrato passa a exigir, por rodada, grupo de processos próprio, timeout e teto; estouro conta como morto.
+  rodada, e só. Na 3.5c do `dotp-remake`, o mutante M224 (`>= 2` → `>= 1` na regra da lenda) pôs o motor num laço de
+  decisões: um SIGKILL (exit 137) matou o script antes do restauro (o `.bak` ficou, o mutante aplicado), a sessão e o
+  `sdd run`. Com teto de heap e timeout, o mesmo mutante dá OOM em 86 s e nada mais cai. Direção: o contrato passa a
+  exigir, por rodada, grupo de processos próprio, timeout e teto; estouro conta como morto. RESOLVED by 5d98fba.
   — descoberto por `claude` na missão `20261031-plano-3-5-c-nao-pode-protecao-e-prevencao` (2026-10-31)
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
