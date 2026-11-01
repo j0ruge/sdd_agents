@@ -91,9 +91,9 @@ In this order, no shortcuts:
    rewrote the fix after a sabotage would commit code no sabotage degraded. Degrade
    **each line the final diff adds or changes** — the refactor's as much as the fix's — and put
    back **each line it deletes**, one at a time, keeping a copy of the file to restore after each
-   run; watch a probe go red for every one. A line whose degradation leaves every probe green is a
-   fix with no sensor: write the probe, or say in the notes why none can exist. Append one line per
-   sabotage to `checkpoint-notas.md`
+   run, under *Every sabotage run has a ceiling* below; watch a probe go red for every one. A line
+   whose degradation leaves every probe green is a fix with no sensor: write the probe, or say in
+   the notes why none can exist. Append one line per sabotage to `checkpoint-notas.md`
    (`R<n> sabotage: <what was degraded> → <which probe went red>`). An `R<n>` of **prose** has no
    line to degrade: re-read the whole paragraph around the corrected sentence, and every place that
    repeats the claim, before the commit — five of the eight repeats measured were prose.
@@ -107,6 +107,35 @@ not fit an automated test, the plan says why — re-read it before accepting a m
 Your context window is the scarce resource of the phase: read what the boot names, and nothing
 else. It names the increment table, the last notes and the sections of the handoff you need — the
 files behind them are there when a Check sends you to one, not as a warm-up.
+
+### Every sabotage run has a ceiling
+
+This holds for every sabotage this session runs, not only the `R<n>` of step 4: a plan that asks
+for a mutant table per `I<n>` or `F<n>` runs the same risk. A mutant can turn the code under test
+into an endless loop, and then what runs out is the machine, not the test: in the 3.5c of
+`dotp-remake` (2026-10-31) one mutant (`>= 2` → `>= 1`) made the engine ask the same decision
+forever, and the SIGKILL of exit 137 took the sabotage script before its restore, the EXEC session
+and the whole `sdd run` — the mutant stayed applied in the tree, next to its backup. So every run of
+the tests against a mutant goes under three ceilings:
+
+- **its own process group** — the run's, never the script's, so killing the group kills everything
+  the run spawned (test host, build servers) and leaves the script alive to restore: `setsid`, or
+  `start_new_session=True` and `os.killpg` in Python; GNU `timeout` already runs the command in a
+  group of its own unless given `--foreground`;
+- **a timeout**, a few times the duration of the green run (`timeout -k 10 600 <cmd>`, or
+  `communicate(timeout=…)` in Python);
+- **a memory ceiling the stack obeys**, well below what the machine has, so the test dies before
+  anything else does: `DOTNET_GCHeapHardLimit` in .NET, `ulimit -v` for a native binary,
+  `systemd-run --user --scope -p MemoryMax=…` where there is a cgroup, `-Xmx` on the JVM. These are
+  examples: use the one your stack honours, or the one the plan names.
+
+Run the **unmutated** code under the same ceilings first: it has to pass, or the ceilings are too
+tight and every mutant would die of them. After that, a run that hits the timeout or the memory
+ceiling **counts as a killed mutant**, and its note names the ceiling where the probe would go
+(`→ timeout 600 s`, `→ memory ceiling`). The restore never depends on the child ending well: put
+the file back in a `finally` (or a `trap … EXIT`) of the process that applied the mutant, never as
+the next command after the test, which a `set -e` or a kill that reaches the script skips. Under
+the three ceilings the mutant of the 3.5c died out of memory in 86 s, and nothing else fell.
 
 ## 4. Found something out of scope?
 
