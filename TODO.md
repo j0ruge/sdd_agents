@@ -102,9 +102,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `PHASE` e o `<FASE>-…-<sid>.stream.jsonl` fica sem linha (medido no `dotp-remake`: a `7e4567fd`, 10 entradas sem
   commit). O `sdd status --no-gates` (`:7832`) não lê a árvore; o completo roda o `gate_EXEC`, que só a olha com todo
   incremento `done` e o `TEST_CMD` vermelho (`:1515`): com um `pending`, o run seguinte abre outra sessão sobre a sobra,
-  sem aviso no boot. Hipótese, não medida: morrer no meio da sabotagem de um `R<n>` (`agents/sdd-executor.md:88`) deixa
-  a linha degradada para a próxima commitar. Direção: status e boot citam o stream órfão e a árvore suja.
+  sem aviso no boot. Medido na 3.5c: morrer na sabotagem (`agents/sdd-executor.md:88`) deixa o mutante aplicado,
+  com o `.bak`, para a próxima commitar. Direção: status e boot citam o stream órfão e a árvore suja.
   — descoberto por `retrofit-watch` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
+  RECURRED 1: dotp-remake/3.5c (2026-10-31)
 
 - [ ] **O `sdd run` paga a REVIEW sem avisar que o `READ_EXTRA` não cobre o `codereview`** — `bin/sdd:6963`
   (`sk_entry`) — o aviso com a entrada a acrescentar só sai no `sdd preflight`, que é opcional: o `sdd run` não o
@@ -123,6 +124,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   ou `dono/repo`. — descoberto por `claude` no espelho do `TODO.md` do `magic_tutor` (2026-10-26)
 
 ### Contrato e configuração
+
+- [ ] **A sabotagem roda cada mutante sem teto de tempo nem de memória, e um mutante em laço derruba o run** —
+  `agents/sdd-executor.md:93` (`checkpoint-notas.md`) — o passo 4 manda guardar a cópia e restaurar depois de cada
+  rodada, e só. Na 3.5c do `dotp-remake`, o mutante M224 (`>= 2` → `>= 1` na regra da lenda) pôs o motor num laço
+  de decisões: um SIGKILL (exit 137) matou o script antes do restauro (o `.bak` ficou, o mutante aplicado), a
+  sessão e o `sdd run`. Com teto de heap do GC (3 GB) e timeout, o mesmo mutante dá OOM em 86 s e nada mais cai.
+  Direção: o contrato manda cada rodada num grupo de processos próprio, com timeout e teto; estouro conta como morto.
+  — descoberto por `claude` na missão `20261031-plano-3-5-c-nao-pode-protecao-e-prevencao` (2026-10-31)
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
   `config/schema.md:145` (`claude -p`) — no I6 da missão `20261020-narracao-com-dicas` do `magic_tutor`
