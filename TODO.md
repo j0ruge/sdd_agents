@@ -153,9 +153,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
   (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
-  squash, e o item fica preso para sempre; no `sales_quote` os PRs #405 e #406 entraram por squash e
-  quatro itens com `RESOLVED by` não saíam. Direção: aceitar como prova também o merge do PR que
-  carregou o hash, ou declarar que o ciclo exige merge commit. Fonte:
+  squash, e o item fica preso para sempre; os PRs JRC-Brasil/sales_quote#405 e JRC-Brasil/sales_quote#406
+  entraram por squash e quatro itens com `RESOLVED by` não saíam. Direção: aceitar como prova também o
+  merge do PR que carregou o hash, ou declarar que o ciclo exige merge commit. Fonte:
   `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C7) — descoberto na triagem
   das issues do `sales_quote` (2026-10-09)
 - [ ] **A prosa congelada diz a regra 2 e o teto de largura mais estritos que os sensores** —
@@ -578,6 +578,29 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   passou na r3. Seguir a tabela compra uma EXEC que não muda nota; não seguir a contraria. Direção: uma linha
   "LOW sem efeito na nota → fica no relatório, com motivo", decidida junto da régua do `CONTEXT.md:140`.
   — descoberto pela retro do `codereview` na r3 da `20261028-whf-162-jdb-na-descricao` (2026-10-30)
+
+- [ ] **O revisor tem de esperar o comando no mesmo turno, sem o `Monitor`, e o harness barra o `sleep`** —
+  `agents/sdd-reviewer.md:144` (`poll it, in this same turn`) — a linha 8 tira `Monitor` e `ScheduleWakeup`, e
+  `sleep 100; cat <saída>` volta "Blocked: … use Monitor with an until-loop". Medido em duas REVIEW do
+  `dotp-remake`: `20261024-plano-3-5-b-auras-e-equipamento` (2026-10-25) e
+  `20261031-plano-3-5-c-nao-pode-protecao-e-prevencao` (2026-11-01). Na segunda, a saída dos mutantes foi lida em
+  primeiro plano com `timeout 590 bash -c 'until /usr/bin/grep -q "^rc=" <saída>; do sleep 5; done'`. Direção:
+  esse laço no chapéu, com teto abaixo dos 10 min do Bash. — descoberto pela retro do `codereview` (fila do
+  `retrofit-watch`) nas REVIEW do `dotp-remake` (2026-11-02)
+- [ ] **A sonda do revisor fora do repo vai por `Write`, que o `acceptEdits` nega, e filtro sem teste sai rc 0** —
+  `agents/sdd-reviewer.md:87` (`Reproduce before you conclude`) — o chapéu manda reproduzir sem dizer onde gravar
+  a cópia descartável. O `Write` em `~/.wt/…` volta negado (de propósito: `bin/sdd:5305`), e o heredoc pelo
+  Bash resolve. Na REVIEW da `20261023-plano-3-4-b-ate-o-fim-do-turno` do `dotp-remake` (2026-10-24), o
+  `dotnet test --filter` lançado junto rodou sem o arquivo: "No test matches the given testcase filter", rc 0,
+  um verde que só o turno seguinte notou. Negado também na 3.5b, 3.5c e 3.5d. Direção: "sonda fora do repo por
+  heredoc" no chapéu, e filtro que não acha teste conta como falha.
+  — descoberto pela retro do `codereview` (fila do `retrofit-watch`) nas REVIEW do `dotp-remake` (2026-11-02)
+- [ ] **Uma medida no título de um item troca a chave do espelho a cada medição** — `templates/todo.pt-BR.md:17`
+  (`**<título>**`) — o `todo-to-github-issues` usa o título como chave. No `magic_tutor`, o item "O docs/monitor.md
+  tem 501 linhas…" foi a 520 e a 547 em três sessões (2026-10-21 e 2026-10-22). A cada medição saiu `ORPHAN` + `CREATE`,
+  e a chave da j0ruge/magic_tutor#39 foi trocada à mão três vezes (hoje o título diz 795). A skill diz isso desde a
+  2.9.0; a semente, não. Direção: uma linha no formato, nas duas variantes: número que muda vai no corpo.
+  — descoberto pela retro do `todo-to-github-issues` (fila do `retrofit-watch`) no `magic_tutor` (2026-11-02)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
