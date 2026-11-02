@@ -153,9 +153,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
   (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
-  squash, e o item fica preso para sempre; no `sales_quote` os PRs #405 e #406 entraram por squash e
-  quatro itens com `RESOLVED by` não saíam. Direção: aceitar como prova também o merge do PR que
-  carregou o hash, ou declarar que o ciclo exige merge commit. Fonte:
+  squash, e o item fica preso para sempre; os PRs JRC-Brasil/sales_quote#405 e JRC-Brasil/sales_quote#406
+  entraram por squash e quatro itens com `RESOLVED by` não saíam. Direção: aceitar como prova também o
+  merge do PR que carregou o hash, ou declarar que o ciclo exige merge commit. Fonte:
   `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C7) — descoberto na triagem
   das issues do `sales_quote` (2026-10-09)
 - [ ] **A prosa congelada diz a regra 2 e o teto de largura mais estritos que os sensores** —
@@ -598,8 +598,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **Uma medida no título de um item troca a chave do espelho a cada medição** — `templates/todo.pt-BR.md:17`
   (`**<título>**`) — o `todo-to-github-issues` usa o título como chave. No `magic_tutor`, o item "O docs/monitor.md
   tem 501 linhas…" foi a 520 e a 547 em três sessões (2026-10-21 e 2026-10-22). A cada medição saiu `ORPHAN` + `CREATE`,
-  e a chave da #39 foi trocada à mão via REST três vezes. A skill passou a dizer isso na 2.9.0; a semente, não. Direção:
-  uma linha no formato, nas duas variantes: número que muda vai no corpo, não no título.
+  e a chave da j0ruge/magic_tutor#39 foi trocada à mão três vezes (hoje o título diz 795). A skill diz isso desde a
+  2.9.0; a semente, não. Direção: uma linha no formato, nas duas variantes: número que muda vai no corpo.
   — descoberto pela retro do `todo-to-github-issues` (fila do `retrofit-watch`) no `magic_tutor` (2026-11-02)
 
 ## Decidido — não reabrir
