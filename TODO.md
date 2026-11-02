@@ -102,9 +102,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `PHASE` e o `<FASE>-…-<sid>.stream.jsonl` fica sem linha (medido no `dotp-remake`: a `7e4567fd`, 10 entradas sem
   commit). O `sdd status --no-gates` (`:7832`) não lê a árvore; o completo roda o `gate_EXEC`, que só a olha com todo
   incremento `done` e o `TEST_CMD` vermelho (`:1515`): com um `pending`, o run seguinte abre outra sessão sobre a sobra,
-  sem aviso no boot. Hipótese, não medida: morrer no meio da sabotagem de um `R<n>` (`agents/sdd-executor.md:88`) deixa
-  a linha degradada para a próxima commitar. Direção: status e boot citam o stream órfão e a árvore suja.
+  sem aviso no boot. Medido na 3.5c: morrer na sabotagem (`agents/sdd-executor.md:88`) deixa o mutante aplicado,
+  com o `.bak`, para a próxima commitar. Direção: status e boot citam o stream órfão e a árvore suja.
   — descoberto por `retrofit-watch` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
+  RECURRED 1: dotp-remake/3.5c (2026-10-31)
 
 - [ ] **O `sdd run` paga a REVIEW sem avisar que o `READ_EXTRA` não cobre o `codereview`** — `bin/sdd:6963`
   (`sk_entry`) — o aviso com a entrada a acrescentar só sai no `sdd preflight`, que é opcional: o `sdd run` não o
@@ -133,6 +134,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **A sabotagem roda cada mutante sem teto de tempo nem de memória, e um mutante em laço derruba o run** —
+  `agents/sdd-executor.md:93` (`checkpoint-notas.md`) — o passo 4 manda guardar a cópia e restaurar depois de cada
+  rodada, e só. Na 3.5c do `dotp-remake`, o mutante M224 (`>= 2` → `>= 1` na regra da lenda) pôs o motor num laço de
+  decisões: um SIGKILL (exit 137) matou o script antes do restauro (o `.bak` ficou, o mutante aplicado), a sessão e o
+  `sdd run`. Com teto de heap e timeout, o mesmo mutante dá OOM em 86 s e nada mais cai. Direção: o contrato passa a
+  exigir, por rodada, grupo de processos próprio, timeout e teto; estouro conta como morto. RESOLVED by 5d98fba.
+  — descoberto por `claude` na missão `20261031-plano-3-5-c-nao-pode-protecao-e-prevencao` (2026-10-31)
+
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
   `config/schema.md:145` (`claude -p`) — no I6 da missão `20261020-narracao-com-dicas` do `magic_tutor`
   (`49d2c89`) o "Onde" listava `.claude/skills/revisar-partida/`; o `Edit` foi recusado e o executor trocou o
@@ -152,7 +161,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **A prosa congelada diz a regra 2 e o teto de largura mais estritos que os sensores** —
   `templates/checkpoint.md:27` (`check-x.sh`) — desde o lote 8 a regra 2 lê a variável e aceita `'^ *✓ '`,
   e o teto isenta a linha que só carrega a âncora; o template e o `agents/sdd-planner.md:111` ainda dizem só
-  `^  ok    `, e o `templates/todo.pt-BR.md:24`, o `templates/todo.md:24` e o `agents/sdd-executor.md:127`,
+  `^  ok    `, e o `templates/todo.pt-BR.md:24`, o `templates/todo.md:24` e o `agents/sdd-executor.md:158`,
   "nenhuma linha passa de 120". Não falha aberta, mas a saída só aparece na mensagem de FAIL. Direção: as
   cinco frases dizem a regra nova quando o congelamento cair.
   Lote 9 (`20261016-lote-9-o-papel-de-cada-palavra`): toda mescla, só o padrão deve âncora (getopt_long), par de zeros.
@@ -239,7 +248,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   dois, um agente genérico mandado ler o `sdd-planner.md` como contrato conduziu o grill. Direção: o comando nomeia
   esse caminho de reserva, ou manda reabrir a sessão no alvo, depois do install.
   — descoberto pelo relay do `/sdd-plan` na 3.2b do `dotp-remake` (2026-10-19)
-  RECURRED 7: dotp-remake/3.2c (2026-10-19); magic_tutor (2026-10-20); dotp-remake/3.4a (2026-10-22); dotp-remake/3.4b (2026-10-23); dotp-remake/3.5b (2026-10-24); sdd_agents/20261026-health-pula-catalogo (2026-10-26); sdd_agents/20261026-health-pula-catalogo/EXEC (2026-10-26)
+  RECURRED 9: dotp-remake/3.2c (2026-10-19); magic_tutor (2026-10-20); dotp-remake/3.4a (2026-10-22); dotp-remake/3.4b (2026-10-23); dotp-remake/3.5b (2026-10-24); sdd_agents/20261026-health-pula-catalogo (2026-10-26); sdd_agents/20261026-health-pula-catalogo/EXEC (2026-10-26); dotp-remake/3.5c (2026-10-31); dotp-remake/3.5d (2026-11-01)
 - [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:104`
   (`Relaying the grill`) — na 3.2c do `dotp-remake` a sessão caiu com uma pergunta pendente, e a chamada voltou "the
   session ended before this call's result was recorded, so its outcome is unknown". Na sessão nova, o `SendMessage` ao
@@ -272,10 +281,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **A pergunta que o planner devolve com tarefa sua ainda em segundo plano não chega ao relay** —
   `commands/sdd-plan.md:132` (`Long work between two questions`) — no `magic_tutor`, a Q3, a Q4 e a Q7 foram o fim
   de turno do planner com subagentes ou um teste dele ainda rodando; o relay só recebeu a volta seguinte ("a Q7
-  continua esperando a resposta do humano") e teve de pedir o texto duas vezes. Direção: o planner não encerra o
-  turno com pergunta enquanto tem tarefa viva, e toda pergunta pendente volta inteira na devolução seguinte; o relay
-  que lê o número de uma pergunta que não repassou pede o texto antes de tudo.
+  continua esperando a resposta do humano") e teve de pedir o texto duas vezes. Uma sonda mediu a causa na 3.5c do
+  `dotp-remake`: o harness só avisa o relay quando o agente para sem filho vivo em background. Direção: o planner
+  não encerra o turno com pergunta enquanto tem tarefa viva, e toda pergunta pendente volta inteira na devolução
+  seguinte; o relay que lê o número de uma pergunta que não repassou pede o texto antes de tudo.
   — descoberto pelo relay do `/sdd-plan` na missão `20261024-narracao-e-mesa` do `magic_tutor` (2026-10-24)
+  RECURRED 2: dotp-remake/3.5c (2026-10-31); dotp-remake/3.5d (2026-11-01)
 
 - [ ] **O planner marca o `- answer:` de pergunta que o humano não viu, e sob `auto` o gate já lê aprovado** —
   `agents/sdd-planner.md:52` (`Mark each answer`) — no `magic_tutor`, a decisão 7 ("confirmadas em bloco") saiu
@@ -333,7 +344,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261021-dica-mais-rapida` do `magic_tutor` (2026-10-21)
 
 - [ ] **O `sdd-executor` lançado como subagente fecha o último incremento e volta sem o `20-handoff-exec.md`** —
-  `agents/sdd-executor.md:175` (`20-handoff-exec.md`) — o §6 manda escrever o handoff quando nenhuma linha fica
+  `agents/sdd-executor.md:204` (`20-handoff-exec.md`) — o §6 manda escrever o handoff quando nenhuma linha fica
   `pending`. No `magic_tutor` (missão `20261021-dica-mais-rapida`), o relay lançou como subagente o executor do I11,
   o último: ele commitou o `I11 done` (`508c4c9`, 19:48) e devolveu o relatório sem o handoff, que só veio quando o
   relay pediu (`ae3cc8e`, 19:52). Pelo `sdd run`, o gate do EXEC acusa a falta; fora dele, nada acusa. Direção: o
@@ -390,6 +401,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `proposed` (`a81c28f`) até a REVIEW r1 da 3.4b achar e a DOCS mudar à mão. Direção: o `sdd approve` troca o
   `proposed` do ADR do `adr:` por `accepted` no mesmo commit, com probe.
   — descoberto por `sdd-reviewer` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
+  RECURRED 1: dotp-remake/3.5c (2026-10-31)
 
 - [ ] **A linha `kit:` do handoff não tem quem a transporte** — `agents/sdd-publisher.md:69` (`TODO_FILE`) — o
   `templates/handoff.md:63-65` manda o achado do kit numa missão de alvo morar no handoff, marcado `kit:`, levado por
@@ -454,6 +466,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   cartões da campanha (SQ-156 a SQ-162) seguiram "Em andamento" depois do merge, até o operador fechá-los à mão
   em 2026-10-18. Direção: com `JIRA_ENABLED=true`, a mensagem final e o corpo do PR nomeiam o `sdd close`.
   — descoberto por `sessão coordenadora` na missão `20261018-silencios-do-formulario-e-dos-dialogos` (2026-10-18)
+
+- [ ] **O pós-merge não lista o `RESOLVED by` que já pode sair** — `bin/sdd:12444` (`close_return_home`) —
+  o `sdd close` volta à base com o merge e para aí, e o `sdd status` diz "only the merge is left". O ciclo de
+  vida (`templates/todo.pt-BR.md`) apaga o item quando `git merge-base --is-ancestor <hash>` vale, e nada o
+  lista. Medido no `warehouse_explorer_web` depois do PR #8: 5 itens RESOLVED, apagados por script avulso só
+  porque um handoff lembrava; a seção que fica vazia também não tem regra. Direção: depois do fast-forward,
+  `close_return_home` lista os `RESOLVED by` cujo hash entrou na base (só lista), nos dois braços do JIRA.
+  — descoberto por `sessão interativa` no pós-merge da missão `20261028-whf-162-jdb-na-descricao` (2026-10-30)
+
+- [ ] **O K8 lê o branch em que se está, e diz "the mission branch"** — `bin/sdd:2315` (`rev-list -n 1 HEAD`) —
+  o gate DOCS mede `HEAD` contra a base, e não o `branch:` da missão. Mergeada e lida do `master`, a missão
+  passa (intervalo vazio, resíduo declarado); lida de um branch posterior com commit próprio, a DOCS fica `·`
+  com "the mission branch adds no KAIZEN_LOG.md entry". Medido no `warehouse_explorer_web`: `✓` no `master`
+  8015fb7, `·` no `chore/pos-whf-162` 64a2cdb, mesma missão. O `sdd run` não cai nisso (troca para o branch).
+  Direção: medir o intervalo do `branch:` declarado, ou dar intervalo vazio quando ele já está na base.
+  — descoberto por `sessão interativa` no pós-merge da missão `20261028-whf-162-jdb-na-descricao` (2026-10-30)
 
 - [ ] **O README chama o repositório de privado, e ele é público** — `README.md:45` (`PRIVATE`) — o
   comentário do `git clone` diz "PRIVATE repository", e `gh repo view j0ruge/sdd_agents` responde
