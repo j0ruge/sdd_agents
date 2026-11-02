@@ -24,12 +24,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Prioridade — resolver logo
 
 - [ ] **O carimbo é tudo ou nada: uma linha de prosa em `agents/` refaz o catálogo inteiro** — `bin/sdd:2435`
-  (`MUTATION_STAMP_PATHS`) — a chave é um md5 de todo `bin/ tests/ templates/ config/ agents/`, e o pulo do
-  catálogo (PR #330) só vale com ela igual. O PR #337 mudou a prosa do `agents/sdd-executor.md` e uma sonda
-  do `tests/check-hat.sh`: a chave andou, e o `sdd health` refez o catálogo (775 mutantes no carimbo de 2026-10-26)
-  e passou de 3 h até o dono mandar parar. O dono pediu não recarimbar o que já está carimbado. Direção: um
-  veredito por mutante, refeito só quando muda o que ele muta ou um sensor que o mata (o `--touched` do
-  `check-mutation.sh` já escolhe por sensor); os outros herdam o do carimbo anterior.
+  (`MUTATION_STAMP_PATHS`) — a chave é um md5 dos arquivos rastreados em `bin/ tests/ templates/ config/ agents/`,
+  menos o `tests/health-baseline.txt`, e o pulo do catálogo (PR #330) só vale com ela igual. O PR #337 mudou
+  prosa do `agents/sdd-executor.md` e uma sonda do `check-hat.sh`, e o `sdd health` refez o catálogo (775
+  mutantes em 2026-10-26) por mais de 3 h, até o dono mandar parar: ele pediu não recarimbar o que já está
+  carimbado. Nenhum veredito por mutante persiste (o mapa guarda o matador e o tempo). Direção: guardar o veredito
+  com as dependências do mutante (alvo, sensores, runner, config) e refazer só o que mudou, e sempre o sobrevivente.
   — descoberto pelo relay da 3.5d do `dotp-remake`, com o dono (2026-11-02)
 
 ### Sensores que faltam
