@@ -23,14 +23,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Prioridade — resolver logo
 
-- [ ] **O `sdd health` refaz o catálogo inteiro mesmo com o carimbo valendo para o conteúdo** — `bin/sdd:7371`
-  (`--with-mutation`) — o carimbo prova o verde sobre `bin/ tests/ templates/ config/ agents/`, mas só o
-  `gate_PR` o cobra: o `cmd_health` não o consulta e roda os 775 mutantes sempre, até num diff só de `TODO.md`
-  e catraca. O mapa dos matadores some com a worktree, e nenhum checkout do kit nesta máquina o tinha: o
-  `sdd health` deste achado ia em 464 de 775 logs (8 ainda rodando) após 5 h 13 min. Direção: a chave igual à
-  do carimbo pula o catálogo e roda a suíte rápida e a catraca; o mapa e o carimbo voltam ao checkout principal
-  sem passo manual. Prioridade do dono. RESOLVED by 6dbd63c e `11fe1fe`.
-  — descoberto pelo relay da sessão coordenadora da 3.5b do `dotp-remake` (2026-10-25)
+- [ ] **O carimbo é tudo ou nada: uma linha de prosa em `agents/` refaz o catálogo inteiro** — `bin/sdd:2435`
+  (`MUTATION_STAMP_PATHS`) — a chave é um md5 dos arquivos rastreados em `bin/ tests/ templates/ config/ agents/`,
+  menos o `tests/health-baseline.txt`, e o pulo do catálogo (PR #330) só vale com ela igual. O PR #337 mudou
+  prosa do `agents/sdd-executor.md` e uma sonda do `check-hat.sh`, e o `sdd health` refez o catálogo (775
+  mutantes em 2026-10-26) por mais de 3 h, até o dono mandar parar: ele pediu não recarimbar o que já está
+  carimbado. Nenhum veredito por mutante persiste (o mapa guarda o matador e o tempo). Direção: guardar o veredito
+  com as dependências do mutante (alvo, sensores, runner, config) e refazer só o que mudou, e sempre o sobrevivente.
+  — descoberto pelo relay da 3.5d do `dotp-remake`, com o dono (2026-11-02)
 
 ### Sensores que faltam
 
@@ -132,15 +132,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   lento, quando a suíte já roda, e provar por sabotagem (sem o `setsid`) que a sonda acusa. — descoberto pelo
   relay da missão `20261026-health-pula-catalogo` (2026-10-26)
 
-### Contrato e configuração
+- [ ] **O `gate_PR` só prova que o PR existe, não que o head dele é o que a missão fechou** — `bin/sdd:2620`
+  (`--json url`) — o gate pede ao `gh` só a `url`, e o `gate:` do `50-pr.md` (`agents/sdd-publisher.md:92`)
+  registra só "`gh pr view <url> --json url → ok`", sem o head empurrado nem a saída. Um push que falhou deixa o
+  PR no commit velho e o gate verde. Voltou no PR `j0ruge/dotp-remake#23` (o LOW 15 da r3 do `/codereview`,
+  sobre o `50-pr.md` da 3.5d). Vizinho de "A REVIEW aprovada não vê o código que entrou depois dela". Direção:
+  o gate compara o `headRefOid` com o HEAD da missão, e o `gate:` registra o head e a saída.
+  — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
-- [ ] **A sabotagem roda cada mutante sem teto de tempo nem de memória, e um mutante em laço derruba o run** —
-  `agents/sdd-executor.md:93` (`checkpoint-notas.md`) — o passo 4 manda guardar a cópia e restaurar depois de cada
-  rodada, e só. Na 3.5c do `dotp-remake`, o mutante M224 (`>= 2` → `>= 1` na regra da lenda) pôs o motor num laço de
-  decisões: um SIGKILL (exit 137) matou o script antes do restauro (o `.bak` ficou, o mutante aplicado), a sessão e o
-  `sdd run`. Com teto de heap e timeout, o mesmo mutante dá OOM em 86 s e nada mais cai. Direção: o contrato passa a
-  exigir, por rodada, grupo de processos próprio, timeout e teto; estouro conta como morto. RESOLVED by 5d98fba.
-  — descoberto por `claude` na missão `20261031-plano-3-5-c-nao-pode-protecao-e-prevencao` (2026-10-31)
+### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
   `config/schema.md:145` (`claude -p`) — no I6 da missão `20261020-narracao-com-dicas` do `magic_tutor`
@@ -530,6 +530,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `--detach` que a faz e imprime o caminho do log.
   — descoberto por `retrofit-watch` na missão `20261020-amep-anexo-na-demanda` do `lighthouse_project` (2026-10-21)
 
+- [ ] **O vigia do `sdd run` destacado casa com a própria shell, e o kit não diz como esperar o fim** —
+  `docs/failure-modes.md:796` (`grep 'bin/sdd run'`) — o sintoma do run que sumiu se mede com um
+  `ps … | grep 'bin/sdd run'` que acha o próprio `grep`, e o "What you do" manda destacar com `setsid nohup`
+  sem dizer como saber que acabou. Na 3.5d do `dotp-remake` o relay vigiou com `pgrep -f 'sdd run <missão>'`, que
+  casa com a shell do vigia (o padrão está no argv dela); o fim veio da linha `✓ pipeline complete` do log. A
+  armadilha está em handoffs do kit desde 2026-08-26, nunca no doc do operador. Direção: o doc dá o
+  `[b]in/sdd run` ou o PID do líder do `setsid`, e a linha de fim do log.
+  — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
+
 ### Comentário e registro
 
 ### Idioma
@@ -543,15 +552,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
 
 ### Custo e escala
-
-- [ ] **O mapa de tempos do catálogo de mutação mora no checkout, e o worktree de cada branch roda sem ele** —
-  `tests/check-mutation.sh:7818` (`KILLERS_FILE`) — o mapa (`.sdd/cache/`, fora do git) põe primeiro o passo que
-  matou cada mutante e lança os mais longos antes (40 mutantes: 4796 s → 1959 s, no comentário do mapa). Ele é
-  gravado no fim do catálogo, no `.sdd/cache/` daquele checkout, e o trabalho do kit roda num worktree por branch: em
-  2026-10-25, nenhum dos 8 checkouts do kit nesta máquina tinha o mapa, e o `sdd health` do `sdd_agents-gate-sem-saida`
-  fez 299 de 775 mutantes em ~152 min (238 s cada, em média). Direção: o mapa mora no `git rev-parse --git-common-dir`,
-  que os worktrees dividem, ou o `sdd health` avisa o custo de rodar sem ele. RESOLVED by 4ae37c9 e `3e728d6`.
-  — descoberto por `sessão coordenadora` no `magic_tutor` (2026-10-25)
 
 - [ ] **Um incremento que roda por quase 1 h não cabe no `sdd-executor`, que não tem `Monitor`** —
   `agents/sdd-executor.md:7` (`disallowedTools`) — a fronteira do chapéu
