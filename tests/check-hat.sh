@@ -288,6 +288,34 @@ executor_agent_probes() {
      && grep -qF 'each line the final diff adds or changes' <<< "$sab" && grep -qF 'each line it deletes' <<< "$sab"; then
     pass "hat: the executor sabotages an R<n> after the refactor, every line the final diff adds, changes or deletes"
   else fail "hat: sdd-executor sabotages an R<n> before its refactor, or no longer every line the final diff adds, changes or deletes (Codex on sales_quote#416 and #243)"; fi
+  # The TODO.md item on sabotage with no ceiling (dotp-remake 3.5c, 2026-10-31): the mutant M224
+  # put the .NET engine in an endless decision loop, and the SIGKILL of exit 137 took the sabotage
+  # script before its restore (the backup left, the mutant applied in the tree), the EXEC session and
+  # the whole sdd run. That mission sabotaged its I<n> too (a mutant table per increment), so the
+  # fence is a subsection of § 3 of its own, scoped to every sabotage the session runs, read as a
+  # BLOCK from its heading to the next heading; step 4 points to it. Each ceiling is read on its
+  # bullet, not as a word anywhere in the block (the verdict sentence also says "timeout" and
+  # "memory ceiling"), and the memory ceiling carries examples of more than one stack, so a text that
+  # only knows .NET reads red. An overrun is a KILLED mutant here, and the kit's own catalogue reads a
+  # deadline as inconclusive (docs/failure-modes.md, "A suite step timed out"): there a slow machine
+  # could buy a point; here the unmutated code passes under the same ceilings first, so an overrun is
+  # the mutant's. The catalogue cannot reach these probes — the limit of this function, declared above.
+  local s3 fence
+  s3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$ex")"
+  fence="$(awk '/^### Every sabotage run/ { on = 1; print; next } on && /^#/ { on = 0 } on' <<< "$s3")"
+  if [ -n "$fence" ] && grep -qF 'not only the `R<n>` of step 4' <<< "$fence" \
+     && grep -qE '^- \*\*its own process group\*\*' <<< "$fence" && grep -qE '^- \*\*a timeout\*\*' <<< "$fence" \
+     && grep -qE '^- \*\*a memory ceiling the stack obeys\*\*' <<< "$fence" \
+     && grep -qF 'DOTNET_GCHeapHardLimit' <<< "$fence" && grep -qF 'ulimit -v' <<< "$fence" \
+     && grep -qF 'MemoryMax=' <<< "$fence" && grep -qF '*Every sabotage run has a ceiling*' <<< "$sab"; then
+    pass "hat: the executor fences every sabotage run, not only an R<n>'s: its own process group, a timeout, a memory ceiling the stack obeys"
+  else fail "hat: sdd-executor no longer fences every sabotage run (the scope beyond the R<n>, the process group, the timeout, or the memory ceiling with examples of more than one stack), or step 4 no longer points to the fence"; fi
+  if grep -qF 'the **unmutated** code under the same ceilings' <<< "$fence" \
+     && grep -qF 'counts as a killed mutant' <<< "$fence" \
+     && grep -qF 'never depends on the child ending well' <<< "$fence" \
+     && grep -qF '`finally`' <<< "$fence" && grep -qF '`trap … EXIT`' <<< "$fence"; then
+    pass "hat: and an overrun counts as a killed mutant after an unmutated run under the same ceilings, and the restore never waits on the child"
+  else fail "hat: sdd-executor no longer counts an overrun as a killed mutant (after the unmutated run under the same ceilings), or the restore depends on the child ending well again (a finally or a trap of the process that applied the mutant)"; fi
 }
 
 # One hat promised a measurement nobody makes, and another was silent where its boundary needed a
