@@ -127,10 +127,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **A sabotagem roda cada mutante sem teto de tempo nem de memória, e um mutante em laço derruba o run** —
   `agents/sdd-executor.md:93` (`checkpoint-notas.md`) — o passo 4 manda guardar a cópia e restaurar depois de cada
-  rodada, e só. Na 3.5c do `dotp-remake`, o mutante M224 (`>= 2` → `>= 1` na regra da lenda) pôs o motor num laço
-  de decisões: um SIGKILL (exit 137) matou o script antes do restauro (o `.bak` ficou, o mutante aplicado), a
-  sessão e o `sdd run`. Com teto de heap do GC (3 GB) e timeout, o mesmo mutante dá OOM em 86 s e nada mais cai.
-  Direção: o contrato passa a exigir, por rodada, grupo de processos próprio, timeout e teto; estouro conta como morto.
+  rodada, e só. Na 3.5c do `dotp-remake`, o mutante M224 (`>= 2` → `>= 1` na regra da lenda) pôs o motor num laço de
+  decisões: um SIGKILL (exit 137) matou o script antes do restauro (o `.bak` ficou, o mutante aplicado), a sessão e o
+  `sdd run`. Com teto de heap e timeout, o mesmo mutante dá OOM em 86 s e nada mais cai. Direção: o contrato passa a
+  exigir, por rodada, grupo de processos próprio, timeout e teto; estouro conta como morto. RESOLVED by 5d98fba.
   — descoberto por `claude` na missão `20261031-plano-3-5-c-nao-pode-protecao-e-prevencao` (2026-10-31)
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
@@ -152,7 +152,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **A prosa congelada diz a regra 2 e o teto de largura mais estritos que os sensores** —
   `templates/checkpoint.md:27` (`check-x.sh`) — desde o lote 8 a regra 2 lê a variável e aceita `'^ *✓ '`,
   e o teto isenta a linha que só carrega a âncora; o template e o `agents/sdd-planner.md:111` ainda dizem só
-  `^  ok    `, e o `templates/todo.pt-BR.md:24`, o `templates/todo.md:24` e o `agents/sdd-executor.md:127`,
+  `^  ok    `, e o `templates/todo.pt-BR.md:24`, o `templates/todo.md:24` e o `agents/sdd-executor.md:158`,
   "nenhuma linha passa de 120". Não falha aberta, mas a saída só aparece na mensagem de FAIL. Direção: as
   cinco frases dizem a regra nova quando o congelamento cair.
   Lote 9 (`20261016-lote-9-o-papel-de-cada-palavra`): toda mescla, só o padrão deve âncora (getopt_long), par de zeros.
@@ -333,7 +333,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261021-dica-mais-rapida` do `magic_tutor` (2026-10-21)
 
 - [ ] **O `sdd-executor` lançado como subagente fecha o último incremento e volta sem o `20-handoff-exec.md`** —
-  `agents/sdd-executor.md:175` (`20-handoff-exec.md`) — o §6 manda escrever o handoff quando nenhuma linha fica
+  `agents/sdd-executor.md:204` (`20-handoff-exec.md`) — o §6 manda escrever o handoff quando nenhuma linha fica
   `pending`. No `magic_tutor` (missão `20261021-dica-mais-rapida`), o relay lançou como subagente o executor do I11,
   o último: ele commitou o `I11 done` (`508c4c9`, 19:48) e devolveu o relatório sem o handoff, que só veio quando o
   relay pediu (`ae3cc8e`, 19:52). Pelo `sdd run`, o gate do EXEC acusa a falta; fora dele, nada acusa. Direção: o
