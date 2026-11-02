@@ -322,9 +322,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
 - [ ] **A REVIEW aprovada não vê o código que entrou depois dela** — `bin/sdd:1925` (`gate_REVIEW`) — o gate lê
   a nota da última rodada e não compara o commit que ela revisou com o HEAD. No lighthouse o F5–F8 (emenda E1–E6)
-  e o R3 (P2 do Codex no PR #29) entraram depois da r2 em A, e o humano forçou a r3 e a r4 com `--phase REVIEW`:
-  2 das 6 intervenções da missão. É o espelho do D21, em que só `F<n>` reabre a QA. Direção: a rodada grava o
-  commit revisado, e código commitado depois dele reabre a REVIEW ou é nomeado no motivo do gate.
+  e o R3 (P2 do Codex no PR JRC-Brasil/lighthouse_project#29) entraram depois da r2 em A, e o humano forçou a r3 e a r4
+  com `--phase REVIEW`: 2 das 6 intervenções da missão. É o espelho do D21, em que só `F<n>` reabre a QA. Direção: a
+  rodada grava o commit revisado, e código commitado depois dele reabre a REVIEW ou é nomeado no motivo do gate.
   — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
 - [ ] **O `/sdd-plan` só manda para worktree no checkout do kit, não com outra missão em voo no alvo** —
   `commands/sdd-plan.md:30` (`KIT-TOUCHED`) — no `lighthouse_project` a M2 (`sdd run`, LH-8) rodava no checkout
@@ -381,10 +381,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **Com o passo 2 pulado, o `/sdd-plan` não olha o branch antes de o planner ler o repo** —
   `commands/sdd-plan.md:56` (`skip this step`)
   — com o kit fora do alvo, o branch atual só aparece na pergunta de aprovação, e o `sdd approve` corta dele a
-  branch da missão. No `ui24_agent` o checkout estava em `retrofit-ui24-operator-mcp-vivo`, com a PR #83 aberta:
-  o planner leria um checkout que não é a base, e a missão nasceria com commits de outra PR. Direção: no passo
-  3, comparar `git branch --show-current` com o `DEFAULT_BRANCH` e, se divergir, perguntar a base ao humano
-  antes de delegar.
+  branch da missão. No `ui24_agent` o checkout estava em `retrofit-ui24-operator-mcp-vivo`, com a PR
+  j0ruge/ui24-agent#83 aberta: o planner leria um checkout que não é a base, e a missão nasceria com commits de outra
+  PR. Direção: no passo 3, comparar `git branch --show-current` com o `DEFAULT_BRANCH` e, se divergir, perguntar a base
+  ao humano antes de delegar.
   — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
 
 - [ ] **O relay não prevê que o job em background do planner repete a pergunta já feita** —
@@ -407,8 +407,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `templates/handoff.md:63-65` manda o achado do kit numa missão de alvo morar no handoff, marcado `kit:`, levado por
   "um humano ou a triagem do `sdd kaizen`"; mas o publisher lê todo handoff (`:25`) e o contrato dele só chama de
   achado fora de escopo o que foi para o `TODO_FILE`, sem falar de `kit:`, e o `sdd-kaizen` só tria o `TODO.md` do kit
-  (`agents/sdd-kaizen.md:209-211`). Na 3.4b do `dotp-remake`, o `kit:` do `45-docs.md:187` (o item "O `sdd approve`
-  commita o ADR do `adr:` sem tirar o `proposed`") não chegou ao PR #19 nem a este arquivo até o relay ler o handoff.
+  (`agents/sdd-kaizen.md:209-211`). Na 3.4b, o `kit:` do `45-docs.md:187` (o item "O `sdd approve` commita o ADR do
+  `adr:` sem tirar o `proposed`") não chegou ao PR j0ruge/dotp-remake#19 nem a este arquivo até o relay ler o handoff.
   Direção: o publisher lista os `kit:` dos handoffs no PR, para o humano levar, e o `gate_PR` confere a contagem.
   — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
 
@@ -425,9 +425,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O "Como verificar" do PR copia o `$SDD_HOME` do `TEST_CMD`, e o comando falha fora do runner** —
   `agents/sdd-publisher.md:59` (`how to verify`) — o publisher monta "the commands, in order" pelos handoffs e
   troca `$TODO_FILE` e `$DEFAULT_BRANCH` pelo valor, mas deixa o `$SDD_HOME`, que só existe dentro do `sdd`
-  (`bin/sdd:68`). No PR #72 do `magic_tutor`, a linha do `check-todo.sh` colada numa shell deu rc 127
-  (`/tests/check-todo.sh`), e o `sdd preflight`, que roda o mesmo `TEST_CMD` com o ambiente do runner, deu ok.
-  Direção: o "how to verify" manda rodar o gate por `sdd preflight`, ou só usa o que a shell do leitor tem.
+  (`bin/sdd:68`). No PR j0ruge/magic_tutor#72, a linha do `check-todo.sh` colada numa shell deu rc 127
+  (`/tests/check-todo.sh`), e o `sdd preflight`, que roda o mesmo `TEST_CMD` com o ambiente do runner, deu ok. Direção:
+  o "how to verify" manda rodar o gate por `sdd preflight`, ou só usa o que a shell do leitor tem.
   — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-23)
 
 - [ ] **O `sdd preflight` reprova a árvore suja sem dizer os caminhos, nem que eram só não versionados** —
@@ -470,9 +470,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O pós-merge não lista o `RESOLVED by` que já pode sair** — `bin/sdd:12444` (`close_return_home`) —
   o `sdd close` volta à base com o merge e para aí, e o `sdd status` diz "only the merge is left". O ciclo de
   vida (`templates/todo.pt-BR.md`) apaga o item quando `git merge-base --is-ancestor <hash>` vale, e nada o
-  lista. Medido no `warehouse_explorer_web` depois do PR #8: 5 itens RESOLVED, apagados por script avulso só
-  porque um handoff lembrava; a seção que fica vazia também não tem regra. Direção: depois do fast-forward,
-  `close_return_home` lista os `RESOLVED by` cujo hash entrou na base (só lista), nos dois braços do JIRA.
+  lista. Medido depois do PR j0ruge/warehouse_explorer_web#8: 5 itens RESOLVED, apagados por script avulso só porque um
+  handoff lembrava; a seção que fica vazia também não tem regra. Direção: depois do fast-forward, `close_return_home`
+  lista os `RESOLVED by` cujo hash entrou na base (só lista), nos dois braços do JIRA.
   — descoberto por `sessão interativa` no pós-merge da missão `20261028-whf-162-jdb-na-descricao` (2026-10-30)
 
 - [ ] **O K8 lê o branch em que se está, e diz "the mission branch"** — `bin/sdd:2315` (`rev-list -n 1 HEAD`) —
@@ -492,10 +492,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O corpo do PR promete CI para os sensores novos, e o alvo pode não ter CI** — `templates/pr-body.md:26`
   (`Sensores novos`) — a frase "rodam no CI a partir deste PR" é fixa no template, o `agents/sdd-publisher.md:61`
   manda listar o que "start running in CI", e nada confere o alvo. O `dotp-remake` não tem `.github/workflows`
-  (os checks dos PRs são só GitGuardian e CodeRabbit), e o corpo saiu com a frase no #10 e no #11 (3.2b),
-  corrigida à mão para "rodam na suíte local, `dotnet test`; o repositório não tem CI". O `magic_tutor` também
-  não tem `.github/workflows`. Direção: o publisher só afirma CI com um workflow em `.github/workflows/`; sem
-  ele, diz onde a suíte rodou: pelo `TEST_CMD`.
+  (os checks dos PRs são só GitGuardian e CodeRabbit), e o corpo saiu com a frase nos PRs j0ruge/dotp-remake#10 e
+  j0ruge/dotp-remake#11 (3.2b), corrigida à mão para "rodam na suíte local, `dotnet test`; o repositório não tem CI". O
+  `magic_tutor` também não tem `.github/workflows`. Direção: o publisher só afirma CI com um workflow em
+  `.github/workflows/`; sem ele, diz onde a suíte rodou: pelo `TEST_CMD`.
   — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
   RECURRED 1: magic_tutor/pr25 (2026-10-20)
 
@@ -509,9 +509,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O corpo do PR copia pendência do plano que a revisão já fechou** — `agents/sdd-publisher.md:62`
   (`decisions for a human`) — a união das perguntas abertas dos handoffs traz as do `00-missao.md`, escritas antes da
-  corrida, sem conferir o desfecho. No PR #13 do `dotp-remake` (3.3a) saiu "Decidir sobre a diferença entre a nota B
-  da REVIEW do kit e a nota A do Fluxo de entrega", e o `40-review-r1.md` deu A em todo critério; o relay corrigiu o
-  corpo à mão. Direção: a pendência do plano que um handoff posterior responde sai, ou vai junto da resposta.
+  corrida, sem conferir o desfecho. No PR j0ruge/dotp-remake#13 (3.3a) saiu "Decidir sobre a diferença entre a nota B da
+  REVIEW do kit e a nota A do Fluxo de entrega", e o `40-review-r1.md` deu A em todo critério; o relay corrigiu o corpo
+  à mão. Direção: a pendência do plano que um handoff posterior responde sai, ou vai junto da resposta.
   — descoberto pelo relay do `sdd run` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
 
 - [ ] **O `sdd preflight` imprime "printf: erro de escrita: Pipe quebrado" com a `READ_EXTRA` preenchida** —
