@@ -579,6 +579,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   "LOW sem efeito na nota → fica no relatório, com motivo", decidida junto da régua do `CONTEXT.md:140`.
   — descoberto pela retro do `codereview` na r3 da `20261028-whf-162-jdb-na-descricao` (2026-10-30)
 
+- [ ] **A Check de um item novo no `TODO_FILE` fixa o título e obriga a duplicar** — `agents/sdd-planner.md:89`
+  (`RECURRED`) — no plano `20261103-perfil-por-tipo` do `magic_tutor`, a Check do I10 conta
+  `grep -m1 -c 'O Jev ao vivo por tipo de decisão' TODO.md` → `1`. Antes da execução entrou um item aberto sobre o
+  mesmo assunto (o 84 do `TODO.md` de lá): para ficar verde, o executor teria de abrir uma duplicata, contra a regra
+  da `RECURRED`, e o `--check`/`--red` medem o texto, não a duplicata. Direção: a Check de item novo aceita também
+  a entrada `RECURRED` num aberto equivalente, e o planner lê os abertos ao escrevê-la.
+  — descoberto pela retro do `sdd` no plano `20261103-perfil-por-tipo` do `magic_tutor` (2026-11-03)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
