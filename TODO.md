@@ -552,11 +552,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O lembrete do `sdd kaizen` não vê o backlog nem diz o custo** — `bin/sdd:11601` (`kaizen_reminder`) — no
   fim do `sdd run`, a função só olha a série de autonomia e se já há veredito do `kit_sha`. Ela não lê o
-  `todo-findings` e manda rodar o `sdd kaizen` sem dizer o que ele é: uma sessão com teto de
-  `BUDGET_PER_PHASE_USD` (US$ 40 no `.sdd/config.sh` do kit) que tria o `TODO.md` e escreve a próxima missão
-  (`agents/sdd-kaizen.md:209`). No fim da 3.5d do `dotp-remake`, com 65 achados abertos, o dono mandou rodar e
-  recuou ao ver isso: sem resolver o monte de achado, não faz sentido. Hoje só uma memória local segura o próximo
-  relay. Direção: a linha cita os achados abertos e o teto da sessão, e a decisão fica com o humano.
+  `todo-findings` e manda rodar o `sdd kaizen` sem dizer o que ele é: uma sessão, e outra se o gate falhar
+  (`bin/sdd:11995`), cada uma com teto de `BUDGET_PER_PHASE_USD` (US$ 40 no `.sdd/config.sh` do kit). A sessão
+  tria o `TODO.md` e escreve a próxima missão (`agents/sdd-kaizen.md:209`). No fim da 3.5d do `dotp-remake`, com
+  65 achados abertos, o dono mandou rodar e recuou ao ver isso: sem resolver o monte de achado, não faz sentido.
+  Hoje só uma memória local segura o próximo relay. Direção: a linha cita os achados e o teto, e o humano decide.
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
 ### Comentário e registro
