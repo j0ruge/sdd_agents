@@ -587,6 +587,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   a entrada `RECURRED` num aberto equivalente, e o planner lê os abertos ao escrevê-la.
   — descoberto pela retro do `sdd` no plano `20261103-perfil-por-tipo` do `magic_tutor` (2026-11-03)
 
+- [ ] **O plano que executa fora do `sdd run` promete o gate do EXEC sem o `20-handoff-exec.md`** —
+  `bin/sdd:1523` (`20-handoff-exec.md`) — a decisão 3 da `20261106-rapido-sem-arestas` do `magic_tutor` dizia: "com
+  todos os incrementos `done` e os commits no histórico, o `gate_EXEC` passa e o `sdd run` começa na QA". Com os
+  incrementos feitos pelo superpowers, o `sdd why` deu "every increment done and the suite green, but
+  20-handoff-exec.md is missing", e o relay escreveu o handoff à mão (`templates/handoff.md`). O `docs/plan-only.md`
+  não cobre a volta ao `sdd run`, e o `sdd-executor` nem entra nesse fluxo. Direção: o `plan-only.md` lista o que o
+  gate lê, e o planner põe o handoff no fim do último incremento.
+  — descoberto pelo relay da missão `20261106-rapido-sem-arestas` do `magic_tutor` (2026-11-06)
+
+- [ ] **A ajuda do `sdd why` não diz que a fase EXEC roda a suíte inteira** — `bin/sdd:12100` (`sdd why`) — o
+  `sdd boot` e o `run --dry-run` avisam que os gates rodam o `TEST_CMD`, e o `sdd status` oferece `--no-gates`; o
+  `sdd why` parece só ler o disco. No `magic_tutor`, `sdd why 20261106-rapido-sem-arestas EXEC` passou dos 2 min do
+  prazo padrão do Bash (o `gate-exec-test` das 18:14 levou 2 min 11 s) e foi cortado: uma sessão pode ler o corte como
+  gate reprovado. Direção: uma linha na ajuda, como a do `sdd boot`, dizendo quais fases rodam o `TEST_CMD`.
+  — descoberto pelo relay da missão `20261106-rapido-sem-arestas` do `magic_tutor` (2026-11-06)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
