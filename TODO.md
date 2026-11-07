@@ -420,6 +420,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   linha ⛔ com texto proposto, ou leva o motivo escrito de não virar.
   — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
 
+- [ ] **O planner manda chamar a `grill-with-docs`, que o modelo não pode invocar** — `agents/sdd-planner.md:41`
+  (`grill-with-docs`) — a skill instalada (mattpocock/skills @ 447ca70) traz `disable-model-invocation: true`, fica
+  fora da lista que o modelo vê, e o corpo dela só manda chamar a `grilling` e a `domain-modeling`. No grill da 3.5e
+  do `dotp-remake`, o planner não a achou e carregou só a `grilling`, até o relay apontar a `domain-modeling`; o
+  preflight a dá por presente (`KIT_THIRD_PARTY_SKILLS`). Direção: o contrato nomeia as duas skills.
+  — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
+
 ### Saída humana e cosmética
 
 - [ ] **O "Como verificar" do PR copia o `$SDD_HOME` do `TEST_CMD`, e o comando falha fora do runner** —
