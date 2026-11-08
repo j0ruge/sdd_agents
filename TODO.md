@@ -288,6 +288,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay do `/sdd-plan` na missão `20261024-narracao-e-mesa` do `magic_tutor` (2026-10-24)
   RECURRED 2: dotp-remake/3.5c (2026-10-31); dotp-remake/3.5d (2026-11-01)
 
+- [ ] **O planner que não devolve com filho vivo só espera gastando chamadas** — `agents/sdd-planner.md:7`
+  (`disallowedTools`) — o contrato veta o `Monitor` ao planner, o harness bloqueia o `sleep` em primeiro plano, e o
+  item acima manda não encerrar o turno com tarefa viva. Sobra a espera em laço: no planejamento da 3.6b do
+  `dotp-remake`, o planner (um `general-purpose` que seguia o contrato, #299) relatou umas 60 chamadas de espera
+  nos 19 min do teste de autocontenção; o relay não as recontou. Direção: liberar o `Monitor` ao planner, ou o
+  planner rodar em primeiro plano o subagente que precisa esperar. Sem correção verificada.
+  — descoberto pelo `sdd-planner` na missão `20261108-plano-3-6-b-substituicao-de-dano-e-de-evento` (2026-11-08)
+
 - [ ] **O planner marca o `- answer:` de pergunta que o humano não viu, e sob `auto` o gate já lê aprovado** —
   `agents/sdd-planner.md:52` (`Mark each answer`) — no `magic_tutor`, a decisão 7 ("confirmadas em bloco") saiu
   `- answer: (recommended)` com `aprovacao: auto` antes de a Q7 chegar ao humano, e o `sdd status` leu
