@@ -295,7 +295,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   não encerra o turno com pergunta enquanto tem tarefa viva, e toda pergunta pendente volta inteira na devolução
   seguinte; o relay que lê o número de uma pergunta que não repassou pede o texto antes de tudo.
   — descoberto pelo relay do `/sdd-plan` na missão `20261024-narracao-e-mesa` do `magic_tutor` (2026-10-24)
-  RECURRED 2: dotp-remake/3.5c (2026-10-31); dotp-remake/3.5d (2026-11-01)
+  RECURRED 3: dotp-remake/3.5c (2026-10-31); dotp-remake/3.5d (2026-11-01); dotp-remake/3.6a (2026-11-07)
 
 - [ ] **O planner marca o `- answer:` de pergunta que o humano não viu, e sob `auto` o gate já lê aprovado** —
   `agents/sdd-planner.md:52` (`Mark each answer`) — no `magic_tutor`, a decisão 7 ("confirmadas em bloco") saiu
@@ -428,14 +428,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (MEDIUM), e o relay padronizou à mão (`859acf9` no alvo). Direção: lição que o próprio log chama de reincidente vira
   linha ⛔ com texto proposto, ou leva o motivo escrito de não virar.
   — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
-
-- [ ] **O turno do planner que termina com subagente vivo não chega ao relay** — `agents/sdd-planner.md:67`
-  (`aprovacao:`) — a notificação da tarefa só sai quando o agente para sem filho vivo em segundo plano: o turno que
-  devolve a pergunta com um subagente dele ainda rodando não notifica o relay, e a pergunta fica presa até o filho
-  acabar. No grill da 3.6a do `dotp-remake`, as perguntas 8 e 9 só chegaram na volta seguinte, repetidas com a 10,
-  quando o mapeamento terminou (18:53). Nem o `:67-75` nem o relay do `commands/sdd-plan.md` falam disso. Direção: o
-  planner espera ou para o filho antes de devolver a pergunta.
-  — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-07)
 
 ### Saída humana e cosmética
 
