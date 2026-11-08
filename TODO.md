@@ -140,6 +140,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o gate compara o `headRefOid` com o HEAD da missão, e o `gate:` registra o head e a saída.
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
+- [ ] **O cabeçalho do `TODO.md` semeado pelo `install` não acompanha o template** — `bin/sdd:6207`
+  (`already exists (preserved)`) — o `install` nunca reescreve um `TODO.md` com achados (`:6197`), e nenhum sensor
+  compara o cabeçalho dele com o `templates/todo.<lang>.md`. A exceção da `RECURRED` bem formada entrou no template em
+  `b0c80aa` (2026-10-23) e não chegou ao `TODO.md` do `dotp-remake`, semeado em 2026-10-18. Na r2 do `/codereview` do PR
+  `j0ruge/dotp-remake#25`, o agente deu MEDIUM a uma `RECURRED` de 136 colunas pelo cabeçalho velho, com o
+  `check-todo.sh --check` verde; o `--audit` da `todo-to-github-issues` 2.9.5 também não acusa o cabeçalho. Direção: o
+  `install` ou o `health` avisam quando o preâmbulo difere do template do idioma, sem reescrever.
+  — descoberto por `codereview` na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-08)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
@@ -419,6 +428,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (MEDIUM), e o relay padronizou à mão (`859acf9` no alvo). Direção: lição que o próprio log chama de reincidente vira
   linha ⛔ com texto proposto, ou leva o motivo escrito de não virar.
   — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
+
+- [ ] **O turno do planner que termina com subagente vivo não chega ao relay** — `agents/sdd-planner.md:67`
+  (`aprovacao:`) — a notificação da tarefa só sai quando o agente para sem filho vivo em segundo plano: o turno que
+  devolve a pergunta com um subagente dele ainda rodando não notifica o relay, e a pergunta fica presa até o filho
+  acabar. No grill da 3.6a do `dotp-remake`, as perguntas 8 e 9 só chegaram na volta seguinte, repetidas com a 10,
+  quando o mapeamento terminou (18:53). Nem o `:67-75` nem o relay do `commands/sdd-plan.md` falam disso. Direção: o
+  planner espera ou para o filho antes de devolver a pergunta.
+  — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-07)
 
 ### Saída humana e cosmética
 
