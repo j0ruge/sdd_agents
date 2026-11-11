@@ -140,6 +140,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o gate compara o `headRefOid` com o HEAD da missão, e o `gate:` registra o head e a saída.
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
+- [ ] **`PR #N` de outro repositório passa pelo `check-todo.sh` e vira link errado na issue** —
+  `tests/check-todo.sh:768` (`lint_todo`) — o `--check` não lê referência, e a direção do vizinho "O
+  `check-todo.sh` aceita o `#N` solto" isenta o `#N` depois de `PR`: é aí que este erro mora. Este arquivo
+  tinha 8 desses em 7 itens, com rc 0, e só o `REF?` da `todo-to-github-issues` os mostrou, depois do merge dos
+  itens (PR #339). O PR #378, ainda aberto, achou outros três. Uma sonda com `dotp-remake` e um `PR` inexistente
+  deu rc 0 em 2026-11-07. A regra de escrever `dono/repo#N` não está no `templates/todo.pt-BR.md`. Direção: o template
+  diz a regra, e o `--check --baseline` acusa, nos itens novos, `PR #N` ao lado do nome de outro repo.
+  — descoberto pelo relay da 3.5d do `dotp-remake`, no espelho do `TODO.md` do kit (2026-11-02)
+
 - [ ] **O cabeçalho do `TODO.md` semeado pelo `install` não acompanha o template** — `bin/sdd:6207`
   (`already exists (preserved)`) — o `install` nunca reescreve um `TODO.md` com achados (`:6197`), e nenhum sensor
   compara o cabeçalho dele com o `templates/todo.<lang>.md`. A exceção da `RECURRED` bem formada entrou no template em
@@ -208,9 +217,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`--force`) — o `cmd_install` só compara o 1º argumento com `--force`, e o `cmd_link_agents` (`:11803`)
   não lê nenhum: o `--help` depois do subcomando executa. Num repo de rascunho, o 1º gravou `.sdd/config.sh`,
   `docs/handoffs/`, `TODO.md` e os agentes; o 2º, 8 symlinks e o `.gitignore`. O `main()` (`:11954`) só trata
-  `--help` na 1ª posição; `run`, `retry`, `status` e `health` recusam opção desconhecida. Direção: todo
-  subcomando recusa opção desconhecida e lê `-h/--help` como a própria ajuda, com um caso por efeito colateral.
+  `--help` na 1ª posição; `run`, `retry`, `status` e `health` recusam opção desconhecida; `sdd kaizen --help`
+  também, sem dar o uso (`unknown kaizen option: --help`). Direção: todo subcomando recusa opção desconhecida e
+  lê `-h/--help` como a própria ajuda, com um caso por efeito colateral.
   — descoberto por `sessão coordenadora` no `lighthouse_project`, ao ler o uso do `link-agents` (2026-10-16)
+  RECURRED 1: dotp-remake/3.5d (2026-11-02)
 
 - [ ] **O remédio do `sdd kaizen` recusado ensina a mesma receita sem `--no-track`** — `bin/sdd:11912`
   (`shared_why`) — o motivo manda `worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>`, e a
@@ -429,6 +440,37 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   linha ⛔ com texto proposto, ou leva o motivo escrito de não virar.
   — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
 
+- [ ] **O planner manda chamar a `grill-with-docs`, que o modelo não pode invocar** — `agents/sdd-planner.md:41`
+  (`grill-with-docs`) — a skill instalada (mattpocock/skills @ 447ca70) traz `disable-model-invocation: true`, fica
+  fora da lista que o modelo vê, e o corpo dela só manda chamar a `grilling` e a `domain-modeling`. No grill da 3.5e
+  do `dotp-remake`, o planner não a achou e carregou só a `grilling`, até o relay apontar a `domain-modeling`; o
+  preflight a dá por presente (`KIT_THIRD_PARTY_SKILLS`). Direção: o contrato nomeia as duas skills.
+  — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
+
+- [ ] **O aceite do `/sdd-plan` só olha três caminhos no `git status`** — `commands/sdd-plan.md:193`
+  (`HAT_WRITES_BASE`) — o passo 4 lista a pasta da missão, o `TODO_FILE` e a catraca, e não diz o que fazer com o
+  resto. Na 3.5e do `dotp-remake`, o planner escreveu o levantamento do `.exe` em `docs/knowledge/`, fora do
+  `writes:` dele; o `sdd approve` não o commitou, e o plano o dá por existente. Só o `git status` inteiro o mostrou,
+  e o `sdd preflight` recusaria depois, com `working tree dirty` e sem dizer por quê. Direção: o passo 4 roda o
+  `git status --porcelain` inteiro e manda commitar na branch da missão o arquivo de que o plano depende.
+  — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
+
+- [ ] **O `/sdd-plan` não diz o que fazer com a aprovação dada antes do plano** — `commands/sdd-plan.md:186`
+  (`AskUserQuestion`) — o passo 3 só aceita o SIM da pergunta que o relay faz depois de mostrar o plano. Na 3.5e do
+  `dotp-remake`, o dono escreveu no meio do grill "Escolha as recomendadas e aprovo o plano", e o relay rodou o
+  `sdd approve` sem a pergunta, depois de mostrar o plano e medir o `--check` e o `--red`. Seguir o texto pede uma
+  pergunta redundante; não seguir pula em silêncio um passo obrigatório. Direção: uma linha para a aprovação
+  antecipada nas palavras do próprio humano, dizendo o que ainda se mostra e o que para a linha.
+  — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
+
+- [ ] **A citação "ADR 0018" do kit colide com o ADR 0018 do alvo** — `templates/missao.md:41` (`ADR 0018 §3`) — o
+  template e os contratos citam o ADR do kit só pelo número: 12 citações em `templates/missao.md`,
+  `agents/sdd-planner.md`, `sdd-docs.md`, `sdd-publisher.md` e `sdd-kaizen.md`. A frase do PLAN-AUTO vai para o
+  `00-missao.md` do alvo, e na 3.6a do `dotp-remake` o plano alocou o ADR 0018 do próprio repo: ela passou a apontar
+  para o ADR errado, e o planner a reescreveu à mão ("ADR 0018 §3 do kit `sdd`"). Os dois `templates/todo*.md:26` já
+  nomeiam o kit, com link. Direção: as outras 12 seguem o molde do `todo.md:26`.
+  — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-07)
+
 ### Saída humana e cosmética
 
 - [ ] **O "Como verificar" do PR copia o `$SDD_HOME` do `TEST_CMD`, e o comando falha fora do runner** —
@@ -546,6 +588,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   casa com a shell do vigia (o padrão está no argv dela); o fim veio da linha `✓ pipeline complete` do log. A
   armadilha está em handoffs do kit desde 2026-08-26, nunca no doc do operador. Direção: o doc dá o
   `[b]in/sdd run` ou o PID do líder do `setsid`, e a linha de fim do log.
+  — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
+
+- [ ] **O lembrete do `sdd kaizen` não vê o backlog nem diz o custo** — `bin/sdd:11601` (`kaizen_reminder`) — no
+  fim do `sdd run`, a função só olha a série de autonomia e se já há veredito do `kit_sha`. Ela não lê o
+  `todo-findings` e manda rodar o `sdd kaizen` sem dizer o que ele é: uma sessão, e outra se o gate falhar
+  (`bin/sdd:11995`), cada uma com teto de `BUDGET_PER_PHASE_USD` (US$ 40 no `.sdd/config.sh` do kit). A sessão
+  tria o `TODO.md` e escreve a próxima missão (`agents/sdd-kaizen.md:209`). No fim da 3.5d do `dotp-remake`, com
+  65 achados abertos, o dono mandou rodar e recuou ao ver isso: sem resolver o monte de achado, não faz sentido.
+  Hoje só uma memória local segura o próximo relay. Direção: a linha cita os achados e o teto, e o humano decide.
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
 ### Comentário e registro
