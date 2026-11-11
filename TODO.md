@@ -149,6 +149,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   diz a regra, e o `--check --baseline` acusa, nos itens novos, `PR #N` ao lado do nome de outro repo.
   — descoberto pelo relay da 3.5d do `dotp-remake`, no espelho do `TODO.md` do kit (2026-11-02)
 
+- [ ] **O cabeçalho do `TODO.md` semeado pelo `install` não acompanha o template** — `bin/sdd:6207`
+  (`already exists (preserved)`) — o `install` nunca reescreve um `TODO.md` com achados (`:6197`), e nenhum sensor
+  compara o cabeçalho dele com o `templates/todo.<lang>.md`. A exceção da `RECURRED` bem formada entrou no template em
+  `b0c80aa` (2026-10-23) e não chegou ao `TODO.md` do `dotp-remake`, semeado em 2026-10-18. Na r2 do `/codereview` do PR
+  `j0ruge/dotp-remake#25`, o agente deu MEDIUM a uma `RECURRED` de 136 colunas pelo cabeçalho velho, com o
+  `check-todo.sh --check` verde; o `--audit` da `todo-to-github-issues` 2.9.5 também não acusa o cabeçalho. Direção: o
+  `install` ou o `health` avisam quando o preâmbulo difere do template do idioma, sem reescrever.
+  — descoberto por `codereview` na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-08)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
@@ -297,7 +306,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   não encerra o turno com pergunta enquanto tem tarefa viva, e toda pergunta pendente volta inteira na devolução
   seguinte; o relay que lê o número de uma pergunta que não repassou pede o texto antes de tudo.
   — descoberto pelo relay do `/sdd-plan` na missão `20261024-narracao-e-mesa` do `magic_tutor` (2026-10-24)
-  RECURRED 2: dotp-remake/3.5c (2026-10-31); dotp-remake/3.5d (2026-11-01)
+  RECURRED 3: dotp-remake/3.5c (2026-10-31); dotp-remake/3.5d (2026-11-01); dotp-remake/3.6a (2026-11-07)
 
 - [ ] **O planner marca o `- answer:` de pergunta que o humano não viu, e sob `auto` o gate já lê aprovado** —
   `agents/sdd-planner.md:52` (`Mark each answer`) — no `magic_tutor`, a decisão 7 ("confirmadas em bloco") saiu
