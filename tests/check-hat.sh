@@ -558,6 +558,20 @@ planner_agent_probes() {
   else
     fail "hat: sdd-planner writes aprovacao: auto on its own again, instead of leaving it to the human who reads the plan"
   fi
+  # Item D: § 1 forbids ending a turn with a live background task, the harness blocks a foreground
+  # `sleep`, and the contract vetoed Monitor — what was left was a loop of wait calls (~60 in 19 min
+  # in dotp-remake 3.6b). The planner is the one hat that may use Monitor; ScheduleWakeup stays
+  # vetoed, so a key emptied or removed reads red too. It proves the FILE, not that a subagent can
+  # call Monitor in the harness: that needs a real session (the pending list of 00-missao.md).
+  local dis
+  dis="$(fm_value "$agent" disallowedTools)"
+  if [ "$dis" != "$ABSENT" ] && ! grep -qw 'Monitor' <<< "$dis" && grep -qw 'ScheduleWakeup' <<< "$dis" \
+     && grep -qF 'wait for it with `Monitor` and an `until` loop' <<< "$s1" \
+     && grep -qF 'never with a loop of wait calls' <<< "$s1"; then
+    pass "hat: the planner may use Monitor, and waits on a live task with it"
+  else
+    fail "hat: sdd-planner vetoes Monitor again (or lost the ScheduleWakeup veto), or § 1 no longer says to wait on a live background task with Monitor and an until loop"
+  fi
   # Codex review of PR #252: § 6 changed and two other copies of the same contract did not — the
   # template the planner copies said "all ✅ → auto", and the pipeline doc said a well-run grill is
   # the approval. A planner following either skips the reading the human asked for. The template is

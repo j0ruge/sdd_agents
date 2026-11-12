@@ -231,7 +231,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `/sdd-plan` porque o `bin/` está congelado até o veredito. Direção: `--no-track` no motivo e nas duas citações.
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
-- [ ] **O planner chama a base de `main`, e o alvo pode ter outra** — `agents/sdd-planner.md:260`
+- [ ] **O planner chama a base de `main`, e o alvo pode ter outra** — `agents/sdd-planner.md:273`
   (`kaizen_log:`) — a exceção do `branch:` diz "naming the base branch itself (`main`)", e o `k8_base_refusal`
   (`bin/sdd:2201`) compara com o `$DEFAULT_BRANCH`. No `sales_quote`, cuja base é a `develop`, o planner pode deixar
   `kaizen_log` sem `skipped` numa missão na base, e quem recusa é o `gate_PLAN` (ou o `gate_DOCS` de um `--phase`
@@ -656,7 +656,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Idioma
 
-- [ ] **A devolução do planner ao relay não tem regra de idioma** — `agents/sdd-planner.md:273` (`OUTPUT_LANG`) —
+- [ ] **A devolução do planner ao relay não tem regra de idioma** — `agents/sdd-planner.md:285` (`OUTPUT_LANG`) —
   o `## Language` cobre só os três artefatos e o parágrafo do relay (`:67`) não fala de idioma; só a seção
   `## Relaying the grill to the human` do `commands/sdd-plan.md` pede a devolução "written in `OUTPUT_LANG`". No grill
   da 0.4.0 do `lighthouse_project` (`pt-BR`), a 1ª devolução veio inteira em inglês apesar do prompt de delegação em

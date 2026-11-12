@@ -116,6 +116,12 @@ lê `Bash` na `init`, e a linha `session` do ledger carrega `harness:` para o bu
 invisível. O que fica: `--setting-sources user,project,local` continua carregando as skills do
 humano — medido, é 2% do prefixo e três fases dependem delas (`codereview`, `ticket`, `qa-*`); a
 rota é a linha 2 do ADR 0007, não uma flag.
+Desde `20261112-as-reincidentes-primeiro` o `sdd-planner` é o único chapéu sem o `Monitor` no
+`disallowedTools:`: o § 1 dele proíbe devolver com tarefa viva em segundo plano, o harness bloqueia
+o `sleep` em primeiro plano, e sem o `Monitor` sobrava a espera em laço (umas 60 chamadas em 19 min
+na 3.6b do `dotp-remake`). Os outros sete continuam vetando. O probe (`tests/check-hat.sh`,
+`planner_agent_probes`) prova o arquivo, não que um subagente consiga chamar o `Monitor` no harness:
+isso pede sessão real, e o item D reabre se a próxima `/sdd-plan` medir que não.
 
 ## 3. Gestão de contexto — o que o agente sabe agora
 

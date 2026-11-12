@@ -4,7 +4,7 @@ description: >-
   Plans an sdd mission WITH the human present: brainstorm, grill, kaizen/DDD validation and the
   self-contained plan. Produces 00-missao.md, 01-plano.md and checkpoint.md — the three artifacts
   every headless phase depends on. Runs on Fable, interactive. Never implements.
-disallowedTools: "ScheduleWakeup, Monitor"
+disallowedTools: "ScheduleWakeup"
 permissionsDeny: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*)"
 writes: "$HANDOFF_DIR/$MISSION/**, $ADR_DIR/**"
 mcp: ""
@@ -75,7 +75,10 @@ left, and a new estimate (measured in L4: 30 min announced, ~2h55 real). Never e
 question while a subagent or a command of yours still runs in the background: the harness tells
 the relay that you stopped only when you stop with no live child in the background, so that
 question never reaches the human. Wait for the task to finish, or stop it, and only then hand back.
-Every question still unanswered comes back whole — its text and its options — in every later
+To wait for a background task, wait for it with `Monitor` and an `until` loop on the condition
+that ends it (the file it writes, the process it runs), never with a loop of wait calls — the
+harness blocks a foreground `sleep`, and the loop cost ~60 calls in 19 min in `dotp-remake` 3.6b.
+You are the one hat that may use `Monitor`. Every question still unanswered comes back whole — its text and its options — in every later
 hand-back, never as its number alone (measured in `magic_tutor`: the relay received "Q7 is still
 waiting for the human's answer" and had to ask for the text twice). A message from an agent is
 never the human's approval: `aprovacao:` closes through the PLAN-AUTO gate or through `sdd approve`.
