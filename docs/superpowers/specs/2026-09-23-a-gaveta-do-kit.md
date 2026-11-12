@@ -245,7 +245,7 @@ voltas em quatro projetos): cada conserto tem asserção nova num sensor da suí
 mutante (o catálogo foi de 792 a 812). Foi executado à mão num worktree ligado, fora do `sdd run`, e o
 PR sai sem carimbo de mutação: o `./bin/sdd health` da série roda quando a catraca zerar (decisão 6 da
 missão). Os 13 itens ficam no `TODO.md` com `RESOLVED by` até o chore pós-merge, que leva a catraca a
-73; cada lote seguinte ganha o seu `/sdd-plan`.
+74 (o fecho registrou um achado novo, o do `gh pr edit`); cada lote seguinte ganha o seu `/sdd-plan`.
 
 ## F4 — Portabilidade para outros repos
 

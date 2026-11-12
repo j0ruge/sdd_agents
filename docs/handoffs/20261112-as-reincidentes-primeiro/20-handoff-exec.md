@@ -57,7 +57,7 @@ Cada incremento tem a sua linha `done` no `checkpoint.md`, num commit `chore(mis
 |---|---|
 | `docs/handoffs/20261112-as-reincidentes-primeiro/checkpoint.md` | a tabela, 19 de 19 `done`, com o hash de cada incremento |
 | `docs/handoffs/20261112-as-reincidentes-primeiro/checkpoint-notas.md` | as medidas de cada incremento e os desvios |
-| `TODO.md` | os 13 itens com `RESOLVED by`, ainda abertos (catraca 86) |
+| `TODO.md` | os 13 itens com `RESOLVED by`, ainda abertos, e o achado novo do `gh pr edit` (catraca 87) |
 | `KAIZEN_LOG.md` | a entrada de 2026-11-12, com antes e depois medidos |
 | `docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md` | o parágrafo "Hoje (2026-11-12)" |
 
@@ -71,7 +71,7 @@ Nunca `./bin/sdd health`.
 
 ## Pendências / Decisions for a Human
 
-- Chore pós-merge: apagar os 13 itens com `RESOLVED by` e levar a catraca a 73, pela receita de
+- Chore pós-merge: apagar os 13 itens com `RESOLVED by` e levar a catraca a 74, pela receita de
   `docs/finding-prs.md`, depois de `git merge-base --is-ancestor <hash> main` valer para cada hash
   (com squash merge os hashes não entram na `main`) — `00-missao.md`, Pendências.
 - A `main` fica sem carimbo de mutação até a catraca zerar (decisão 6).
@@ -88,4 +88,5 @@ Nunca `./bin/sdd health`.
 
 ## Achados fora de escopo
 
-- Nenhum item novo no `TODO.md` nesta missão.
+- Um item novo no `TODO.md` (catraca 86 → 87, `tests/health-baseline.txt` no mesmo commit): o `gh pr edit`
+  que o publisher e o `gate_PR` mandam usar não edita o corpo no `gh` 2.45, medido ao atualizar o corpo do #391.

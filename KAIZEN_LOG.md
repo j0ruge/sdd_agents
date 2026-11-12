@@ -23,7 +23,7 @@ dois: prosa do `/sdd-plan`, do planner e do publisher (I1–I7), o `check-todo.s
 **Depois** (medido em `59b5f96`, o último commit de código; a suíte rápida rodou verde num clone de
 rascunho a cada um a seis incrementos, oito corridas de 604 a 670 s):
 - **13** itens com `RESOLVED by <hash>`, o hash do incremento que consertou cada um
-  (`grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md` → 13); a catraca segue em 86 até o chore pós-merge;
+  (`grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md` → 13); a catraca segue em 86 até o chore pós-merge (87 com o achado do `gh pr edit`, registrado no fecho);
 - `ok` por sensor, do mesmo jeito: `check-hat.sh` 103 (+7), `check-templates.sh` 114 (+1),
   `check-gates.sh` 488 (+4), `check-preflight.sh` 167 (+5), `check-dry-run.sh` 90 (+3),
   `check-todo.sh` 16 (+1);

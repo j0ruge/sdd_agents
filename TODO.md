@@ -741,6 +741,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   gate reprovado. Direção: uma linha na ajuda, como a do `sdd boot`, dizendo quais fases rodam o `TEST_CMD`.
   — descoberto pelo relay da missão `20261106-rapido-sem-arestas` do `magic_tutor` (2026-11-06)
 
+- [ ] **O `gh pr edit` que o publisher e o `gate_PR` mandam usar não edita o corpo no `gh` 2.45** —
+  `agents/sdd-publisher.md:83` (`gh pr edit`) — no PR #391 deste kit, `gh pr edit 391 --body-file <arquivo>` saiu
+  rc 1 com `GraphQL: Projects (classic) is being deprecated … (repository.pullRequest.projectCards)`, e o corpo
+  ficou como estava; `gh api -X PATCH repos/<dono>/<repo>/pulls/<n> -F body=@<arquivo>` trocou. O motivo do
+  `gate_PR` sobre os `⛔` manda o mesmo comando ao publisher, dono do corpo: a volta que conserta o PR falha.
+  Direção: as duas instruções passam ao PATCH da REST (`gh` mais novo não medido).
+  — descoberto pela sessão interativa da missão `20261112-as-reincidentes-primeiro` (2026-11-12)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
