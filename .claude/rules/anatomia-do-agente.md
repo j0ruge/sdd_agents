@@ -140,12 +140,13 @@ da fase (`phase_templates`). Desde `20260922-o-motivo-da-fase` o boot também di
 foi aberta: a linha `Why this phase:` carrega o `GATE_WHY` que o `derive_phase` publicou (chamado,
 nunca `$( )`), ou diz `forced from the CLI` quando o runner não derivou a fase — o executor da
 `20260921-amep-backend-0-1-0` abriu sem linha `pending` e sem motivo, e fez commit no-op. Desde
-`20261112-as-reincidentes-primeiro` logo abaixo dela vem, só quando há sobra, o bloco
-`Leftovers on disk before this session opened` (`session_leftovers`, a definição do `sdd status`): o
-stream que nenhuma linha do journal fechou e até dez caminhos sujos, com a ordem de ler `git status`
-e `git diff` antes de editar e de nunca commitar `.bak` nem mutante aplicado que não é seu — na 3.5c
-do `dotp-remake` a sessão morta na sabotagem deixou o mutante aplicado para a seguinte; sem sobra, o
-prompt é byte a byte o de antes. O TL;DR tem teto de 20 linhas (`handoff_tldr_ok`), cobrado pelos gates
+`20261112-as-reincidentes-primeiro` logo abaixo dela vem, só quando há sobra, um bloco
+(`session_leftovers`, a definição do `sdd status`): `Leftovers on disk before this session opened`
+quando há stream que nenhuma linha do journal fechou, `The tree was not clean when this session
+opened` quando só há caminhos sujos (até dez), e nos dois a ordem de ler `git status` e `git diff`
+antes de editar — o que é do trabalho da fase a sessão termina e commita, `.bak` e mutante aplicado
+que não escreveu nunca — na 3.5c do `dotp-remake` a sessão morta na sabotagem deixou o mutante
+aplicado para a seguinte; sem sobra, o prompt é byte a byte o de antes. O TL;DR tem teto de 20 linhas (`handoff_tldr_ok`), cobrado pelos gates
 de EXEC, QA e REVIEW — as três fases cujo chapéu **escreve** o arquivo, senão o gate giraria a
 linha. Quem mede: `sdd census` (por arquivo; `boot bill` no último handoff **e no pior ponto**),
 `sdd boot <missão> <FASE>` (o prompt, sem sessão), `cache_read` na linha do ledger e a linha

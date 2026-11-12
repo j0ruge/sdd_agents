@@ -1001,6 +1001,18 @@ lb_has() { if grep -qE "$2" <<< "$1"; then printf 1; else printf 0; fi }
 assert_eq "the boot prompt names the orphan stream and the dirty tree a dead session left" \
   "clean:0 removed:0 stream:1 dirty:1 look:1" \
   "clean:$(lb_has "$LB_CLEAN" 'did not close') removed:$(lb_has "$LB_DIFF" '^[<|]') stream:$(lb_has "$LB_DIFF" '^> .*EXEC-20260109-100000-cccc3333\.stream\.jsonl') dirty:$(lb_has "$LB_DIFF" '^> .* M tracked\.txt') look:$(lb_has "$LB_DIFF" '^> .*git status.*git diff')"
+# Dirt with no orphan stream is not a dead session (R1, from the final review of this branch): a
+# session the budget cut, a human's untracked file or an uncommitted install leave the same tree.
+# The block then says the tree was not clean, never that a session died, and the rule it gives is
+# the narrow one the plan asked for: what belongs to this phase is the session's to finish and
+# commit, a .bak or an applied mutant it did not write never is. With the orphan back, the block
+# still names the dead session.
+mv "$LB/.sdd/logs/$LBM/EXEC-20260109-100000-cccc3333.stream.jsonl" "$SDD_STATE_FIX/cccc3333.aside"
+LB_DIRT="$( cd "$LB" && "$SDD" boot "$LBM" EXEC 2>&1 )" || true
+mv "$SDD_STATE_FIX/cccc3333.aside" "$LB/.sdd/logs/$LBM/EXEC-20260109-100000-cccc3333.stream.jsonl"
+assert_eq "a dirty tree alone is told it was not clean, never that a session died" \
+  "dirt-only died:0 not-clean:1 dirty:1 yours:1 foreign:0 · with-orphan died:1 yours:1" \
+  "dirt-only died:$(lb_has "$LB_DIRT" 'did not close') not-clean:$(lb_has "$LB_DIRT" '^The tree was not clean when this session opened') dirty:$(lb_has "$LB_DIRT" '^ +M tracked\.txt') yours:$(lb_has "$LB_DIRT" 'belongs to the work of this phase is yours to finish and commit') foreign:$(lb_has "$LB_DIRT" "another session's change") · with-orphan died:$(lb_has "$LB_LEFT" 'did not close') yours:$(lb_has "$LB_LEFT" 'belongs to the work of this phase is yours to finish and commit')"
 LB_RC=0
 ( cd "$LB" && "$SDD" run "$LBM" --max-phases 1 >/dev/null 2>&1 ) || LB_RC=$?
 LB_JOURNAL="$(cat "$LB/.sdd/logs/$LBM/pipeline.log" 2>/dev/null)" || true

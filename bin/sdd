@@ -3461,12 +3461,21 @@ EOF
   # dotp-remake a session died during the sabotage step and left the mutant applied, with its
   # `.bak`, for the next one to commit. session_leftovers is the definition `sdd status` prints
   # too; with nothing left the block is empty and the prompt is byte for byte what it was.
+  #
+  # Only an orphan stream says a session died. Dirt alone is a tree that was not clean, and the R1 of
+  # the final review measured why the two read apart: a session the budget cut, a human's untracked
+  # file or an uncommitted install leave the same porcelain, and a block that called them a dead
+  # session's work told the session finishing the increment that its own half was not its to commit.
   local leftover_block="" lo_line
   session_leftovers
   if [ -n "$LEFTOVER_STREAMS" ] || [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then
-    leftover_block="
-Leftovers on disk before this session opened — a session of this mission did not close, or left
-work uncommitted:"
+    if [ -n "$LEFTOVER_STREAMS" ]; then
+      leftover_block="
+Leftovers on disk before this session opened — a session of this mission did not close:"
+    else
+      leftover_block="
+The tree was not clean when this session opened:"
+    fi
     if [ -n "$LEFTOVER_STREAMS" ]; then
       while IFS= read -r lo_line; do
         leftover_block="$leftover_block
@@ -3486,8 +3495,8 @@ work uncommitted:"
       fi
     fi
     leftover_block="$leftover_block
-Run git status and git diff BEFORE you edit anything. What you did not write is not yours: never
-commit a .bak, an applied mutant or another session's change — say in the handoff what you found."
+Run git status and git diff BEFORE you edit anything. What belongs to the work of this phase is yours to finish and commit;
+never commit a .bak or an applied mutant you did not write, and say in the handoff what else you found."
   fi
   [ -n "$slash" ] && printf '%s\n\n' "$slash"
   cat <<EOF

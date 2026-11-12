@@ -6818,6 +6818,16 @@ mut_RUN_leftover_journal_unsaid() {
 mut_RUN_leftovers_unreadable_journal_guessed() {
   sed -i '/^session_leftovers() {/,/^}/ s@^      journal_blind=1$@      journal_blind=0@' "$1"
 }
+# R1 of the final review: dirt with no orphan stream is not a dead session. One mutant puts the dead
+# session back over dirt alone, the other puts back the wide rule that told a session its own half
+# increment was not its to commit. Caught by "a dirty tree alone is told it was not clean, never
+# that a session died" (check-dry-run.sh).
+mut_RUN_boot_dirt_blamed_on_dead_session() {
+  sed -i '/^boot_prompt() {/,/^}/ s@^The tree was not clean when this session opened:"$@Leftovers on disk before this session opened — a session of this mission did not close:"@' "$1"
+}
+mut_RUN_boot_leftovers_rule_widened() {
+  sed -i "/^boot_prompt() {/,/^}/ s@What belongs to the work of this phase is yours to finish and commit;@What you did not write is not yours: never commit another session's change;@" "$1"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7628,6 +7638,8 @@ CATALOG=(
   RUN_boot_leftovers_unsaid
   RUN_leftover_journal_unsaid
   RUN_leftovers_unreadable_journal_guessed
+  RUN_boot_dirt_blamed_on_dead_session
+  RUN_boot_leftovers_rule_widened
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
