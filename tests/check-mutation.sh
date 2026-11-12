@@ -6738,6 +6738,21 @@ mut_COORD_stragglers_argv0() {
 mut_COORD_stragglers_pipe_fatal() {
   sed -i '/^def name_stragglers(/,/^def / s/^    except OSError:$/    except ZeroDivisionError:/' "${1%/*}/sdd-coordination.py"
 }
+# -h/--help after the subcommand is read no more (item E of TODO.md): `sdd install --help` installs
+# the kit again. Caught by "install --help prints the help and writes nothing" (check-preflight.sh).
+mut_RUN_help_after_subcommand_ignored() {
+  sed -i '/^main() {/,/^}/ s@^    case "$arg" in -h|--help) cmd_help; return 0 ;; esac$@    :@' "$1"
+}
+# cmd_install accepts any option again, and installs. Caught by "install refuses an option it does
+# not know, before writing anything" (check-preflight.sh).
+mut_RUN_install_unknown_option_accepted() {
+  sed -i '/^cmd_install() {/,/^}/ s@^      \*) die "unknown install option: @      *) : "unknown install option: @' "$1"
+}
+# cmd_link_agents takes an argument again, and links. Caught by "link-agents refuses an argument,
+# before linking anything" (check-preflight.sh).
+mut_RUN_link_agents_argument_accepted() {
+  sed -i '/^cmd_link_agents() {/,/^}/ s@^  \[ \$# -eq 0 \] || die "unknown link-agents option: @  true || die "unknown link-agents option: @' "$1"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7532,6 +7547,9 @@ CATALOG=(
   PLAN_adr_tbd_accepted
   EXEC_adr_drift_blind
   RUN_adr_warn_silent
+  RUN_help_after_subcommand_ignored
+  RUN_install_unknown_option_accepted
+  RUN_link_agents_argument_accepted
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

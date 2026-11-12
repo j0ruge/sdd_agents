@@ -6078,7 +6078,15 @@ phase_budget() {
 
 cmd_install() {
   local force=0
-  if [ "${1:-}" = "--force" ]; then force=1; fi
+  # Every option is read, and what is not --force is refused before anything is written (item E):
+  # reading only "$1" let `sdd install --help` install the kit.
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --force) force=1 ;;
+      *) die "unknown install option: $1 (see 'sdd help')" ;;
+    esac
+    shift
+  done
   resolve_repo_root
   step "installing sdd into $REPO_ROOT"
 
@@ -12076,6 +12084,8 @@ USAGE
                              configuration. What the PLAN and EXEC gates ask is governed by
                              ADR_CHECK (off|warn|block), never by this command
   sdd help | sdd version
+  sdd <command> -h|--help    the same help, after any command, and nothing else: no install, no
+                             link, no session
 
 LEDGER OPTIONS (`autonomy` and `kaizen`)
   --all-repos                read the WHOLE ledger, not just the rows born in this repo. It
@@ -12115,6 +12125,9 @@ EOF
 # ---------------------------------------------------------------------------
 cmd_link_agents() {
   local linked already untracked src name target IGNORE MARKER
+  # It takes no argument, and one is refused before anything is linked (item E): `sdd link-agents
+  # --help` used to link the agents. bin/sdd-link-agents enters through main() with the same argv.
+  [ $# -eq 0 ] || die "unknown link-agents option: $1 (see 'sdd help')"
   REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
     || die "not inside a git repository."
 
@@ -12268,8 +12281,16 @@ main() {
   local admission=0
   coordination_enter "$@" || admission=$?
   [ "$COORDINATION_ADMITTED" = 1 ] || return "$admission"
-  local subcmd="${1:-help}"
+  local subcmd="${1:-help}" arg
   shift || true
+  # -h/--help after ANY subcommand prints the help and nothing else (item E of TODO.md): it was read
+  # only in the first position, and `sdd install --help` installed the kit while `sdd link-agents
+  # --help` linked the agents, both measured in a target. One point, before the dispatch and so
+  # before any effect, for every subcommand. No subcommand takes -h or --help as a value, and no
+  # mission id matches it (resolve_mission: ^[0-9]{8}-[a-z0-9-]+$).
+  for arg in "$@"; do
+    case "$arg" in -h|--help) cmd_help; return 0 ;; esac
+  done
   case "$subcmd" in
     install)   cmd_install "$@" ;;
     link-agents) cmd_link_agents "$@" ;;
