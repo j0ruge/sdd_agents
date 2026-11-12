@@ -1,6 +1,6 @@
 ---
 missao: 20261112-as-reincidentes-primeiro
-atualizado: 2026-11-12 08:47
+atualizado: 2026-11-12 16:32
 ---
 
 # Checkpoint — as reincidentes primeiro (lote 1 de zerar a catraca)
@@ -26,8 +26,8 @@ atualizado: 2026-11-12 08:47
 | I6 | L: a fila de PRs de achado ganha receita em docs/finding-prs.md | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    doc: the queue of finding PRs has its recipe, and the TODO header points at it' <<< "$o"` → `1` | done | 92f87fc |
 | I7 | J: o corpo do PR só promete CI onde há workflow | `a=$(bash tests/check-templates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    pr-body.md: the new-sensors line promises CI only as one of two fill-ins' <<< "$a") $(grep -c '^  ok    hat: the publisher claims CI only with a workflow on disk, and names TEST_CMD otherwise' <<< "$b")"` → `1 1` | done | 21f2278 |
 | I8 | C: o check-todo.sh recusa o #N solto que nomeia um item | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: a bare #N that names an item is refused in a file that numbers its items' <<< "$o"` → `1` | done | 5cde830 |
-| I9 | E: --help depois do subcomando só imprime a ajuda | `o=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    install --help prints the help and writes nothing' <<< "$o") $(grep -c '^  ok    link-agents --help prints the help and links nothing' <<< "$o")"` → `1 1` | pending | — |
-| I10 | F: o install não adota a branch de trabalho como base | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    install without origin/HEAD asks the remote, then an existing origin/main or origin/master, and calls the current branch a guess' <<< "$o"` → `1` | pending | — |
+| I9 | E: --help depois do subcomando só imprime a ajuda | `o=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    install --help prints the help and writes nothing' <<< "$o") $(grep -c '^  ok    link-agents --help prints the help and links nothing' <<< "$o")"` → `1 1` | done | c40c25a |
+| I10 | F: o install não adota a branch de trabalho como base | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    install without origin/HEAD asks the remote, then an existing origin/main or origin/master, and calls the current branch a guess' <<< "$o"` → `1` | done | f93ed48 |
 | I11 | G: o sdd approve aceita o ADR que commita | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd approve turns the proposed ADR that adr: names into accepted, in the approval commit' <<< "$o"` → `1` | pending | — |
 | I12 | I: o sdd status fala antes de rodar o TEST_CMD | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd status names the TEST_CMD before the gate that runs it, and a missing mission is told about --no-gates' <<< "$o"` → `1` | pending | — |
 | I13 | H1: o sdd status mostra o stream órfão e a árvore suja | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd status names a stream no journal line closed and the paths left dirty, on both faces' <<< "$o"` → `1` | pending | — |
