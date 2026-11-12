@@ -800,6 +800,19 @@ publisher_stamp_probes() {
   else pass "hat: and the stamp is no reason for the publisher to stop before the PR is open"; fi
   if grep -qE 'review bot.*one batch.*\./bin/sdd health.*sdd run' "$pub"; then pass "hat: and the PR body carries the order: bots, one batch of fixes, the stamp, sdd run"
   else fail "hat: the publisher's PR body lost the order before the merge"; fi
+  # Item J: the "new sensors" bullet said "the tests and specs that start running in CI from this PR
+  # onwards", and a target with no CI workflow got that promise in its PR body. The bullet — read
+  # from its own marker to the next bullet, so a condition moved elsewhere reads red — claims CI
+  # only when .github/workflows/ holds a workflow, and otherwise names where the suite ran, by
+  # TEST_CMD. templates/pr-body.md carries the two fill-ins (check-templates.sh).
+  local ns
+  ns="$(awk '/^- \*\*new sensors\*\*/{s=1; print; next} s && /^- \*\*/{s=0} s' "$pub")"
+  if grep -qF '.github/workflows/' <<< "$ns" && grep -qF 'TEST_CMD' <<< "$ns" \
+     && grep -qF 'only when' <<< "$ns"; then
+    pass "hat: the publisher claims CI only with a workflow on disk, and names TEST_CMD otherwise"
+  else
+    fail "hat: the publisher's new-sensors bullet promises CI without checking .github/workflows/ in the target, or no longer names TEST_CMD when there is no workflow"
+  fi
 }
 
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
