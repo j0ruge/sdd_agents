@@ -17,6 +17,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > Ela mora lá e não no `TEST_CMD` porque um teto dentro da suíte reprovaria toda missão em voo.
 > ⚠️ A contagem sai de `tests/check-todo.sh`, nunca de um `grep -c '^- \[ \]'`, que não sabe
 > onde a seção aberta termina.
+> A fila de PRs de achado (cada um move a mesma linha da catraca e o fim da mesma seção, e
+> conflita com o seguinte) tem receita em [`docs/finding-prs.md`](docs/finding-prs.md), que também
+> serve ao chore pós-merge que apaga os itens `RESOLVED by` de uma missão.
 
 ## Aberto
 <!-- sdd:open -->

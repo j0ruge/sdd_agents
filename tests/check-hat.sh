@@ -754,6 +754,30 @@ background_question_probes() {
   fi
 }
 
+# --- the queue of finding PRs (item L) -------------------------------------------------------------
+# Every finding PR moves the same ratchet line (`todo-findings` of tests/health-baseline.txt) and
+# appends to the end of the same section of TODO.md, so each merge puts the next PR in conflict:
+# four of PRs 381 and 386–389 conflicted on the ratchet, two on TODO.md, and PRs 378, 380 and 383
+# again during the grill of 20261112-as-reincidentes-primeiro. The recipe of 9593497 passed every
+# time and lived only in the history. The doc carries it; the header of TODO.md, read above the
+# open marker, points at it. `--check TODO.md --baseline origin/main` is demanded in THAT order:
+# measured, the other order is rc 96 (unknown option).
+doc_finding_prs_probes() {
+  local doc="$ROOT/docs/finding-prs.md" head
+  head="$(awk '/<!-- sdd:open -->/{exit} 1' "$ROOT/TODO.md")"
+  if [ -f "$doc" ] \
+     && grep -qF 'git merge origin/main' "$doc" \
+     && grep -qF 'tests/check-todo.sh --count TODO.md' "$doc" \
+     && grep -qF 'todo-findings' "$doc" \
+     && grep -qF 'tests/check-todo.sh --check TODO.md --baseline origin/main' "$doc" \
+     && grep -qF -- '--match-head-commit' "$doc" \
+     && grep -qF 'docs/finding-prs.md' <<< "$head"; then
+    pass "doc: the queue of finding PRs has its recipe, and the TODO header points at it"
+  else
+    fail "doc: docs/finding-prs.md is missing or lost a step of the recipe (merge of origin/main, the recount, todo-findings, --check --baseline origin/main, --match-head-commit), or the TODO.md header no longer points at it"
+  fi
+}
+
 
 # --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
 # The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
@@ -1078,6 +1102,7 @@ command_worktree_return_probes
 command_branch_cwd_probes
 command_planner_unregistered_probes
 background_question_probes
+doc_finding_prs_probes
 publisher_stamp_probes
 boot_probes
 release_probes
