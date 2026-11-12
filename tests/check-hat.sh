@@ -449,6 +449,22 @@ command_approval_probes() {
   else
     fail "command: /sdd-plan no longer says its warning forbids approval prose in aprovacao, never the auto value"
   fi
+  # Item K: in dotp-remake 3.5e the owner wrote mid-grill "pick the recommended ones and I approve
+  # the plan", and the relay ran sdd approve without the question, after showing the plan and
+  # measuring --check and --red. Following the text asked a redundant question; not following it
+  # skipped a mandatory step in silence. The early approval is the human's own word, never an
+  # agent's; it still shows (steps 1 and 2 ran) and it has three stops. Each piece is its own literal.
+  if grep -qF 'An approval given before the plan' <<< "$sec" \
+     && grep -qF 'in their own words and in this session' <<< "$sec" \
+     && grep -qF 'counts as the `YES` of this question only after steps 1 and 2 ran' <<< "$sec" \
+     && grep -qF 'when a measure fails' <<< "$sec" \
+     && grep -qF 'when a PLAN-AUTO criterion is ✗' <<< "$sec" \
+     && grep -qF 'when the plan left the scope the human approved' <<< "$sec" \
+     && grep -qF 'An approval relayed by an agent is never this case' <<< "$sec"; then
+    pass "command: /sdd-plan says what an approval given before the plan still shows, and what stops it"
+  else
+    fail "command: /sdd-plan no longer says that an approval the human wrote before the plan still waits for the measures and the rendered plan, or what stops it (a failed measure, a ✗ criterion, a plan outside the approved scope)"
+  fi
 }
 
 # --- /sdd-plan: what the relay commits, and what it holds back -----------------------------------
