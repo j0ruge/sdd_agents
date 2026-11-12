@@ -804,14 +804,18 @@ publisher_stamp_probes() {
   # onwards", and a target with no CI workflow got that promise in its PR body. The bullet — read
   # from its own marker to the next bullet, so a condition moved elsewhere reads red — claims CI
   # only when .github/workflows/ holds a workflow, and otherwise names where the suite ran, by
-  # TEST_CMD. templates/pr-body.md carries the two fill-ins (check-templates.sh).
-  local ns
+  # TEST_CMD. templates/pr-body.md carries the two fill-ins (check-templates.sh). Without a workflow
+  # it never says the repository has no CI (CodeRabbit on PR #391): CI can live outside
+  # .github/workflows/, and the absence of one directory is all the disk proves. The bullet is
+  # joined into one line first, so a wrap between the words cannot hide the claim.
+  local ns ns1
   ns="$(awk '/^- \*\*new sensors\*\*/{s=1; print; next} s && /^- \*\*/{s=0} s' "$pub")"
+  ns1="$(tr -s ' \n' '  ' <<< "$ns")"
   if grep -qF '.github/workflows/' <<< "$ns" && grep -qF 'TEST_CMD' <<< "$ns" \
-     && grep -qF 'only when' <<< "$ns"; then
+     && grep -qF 'only when' <<< "$ns" && ! grep -qiF 'has no CI' <<< "$ns1"; then
     pass "hat: the publisher claims CI only with a workflow on disk, and names TEST_CMD otherwise"
   else
-    fail "hat: the publisher's new-sensors bullet promises CI without checking .github/workflows/ in the target, or no longer names TEST_CMD when there is no workflow"
+    fail "hat: the publisher's new-sensors bullet promises CI without checking .github/workflows/ in the target, no longer names TEST_CMD when there is no workflow, or says the repository has no CI"
   fi
 }
 

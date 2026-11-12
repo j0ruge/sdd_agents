@@ -60,8 +60,9 @@ target repo. Fill it **from what is in the handoffs**, inventing nothing and sof
 - **evidence** — the table with each phase's result and the link to the artifact;
 - **new sensors** — the tests and specs this PR adds, and where they run: say they run in CI
   from this PR onwards only when the target holds a workflow in `.github/workflows/`; without
-  one, say they run in the local suite, by `TEST_CMD` (name the command), and that the
-  repository has no CI. The template carries both fill-ins; keep the one the disk proves;
+  one, say they run in the local suite, by `TEST_CMD` (name the command), and say nothing else
+  about CI: the missing workflow does not prove there is none, since CI can live outside
+  `.github/workflows/`. The template carries both fill-ins; keep the one the disk proves;
 - **decisions for a human** — the union of the open questions from every handoff, as a checklist.
   This section is why the pipeline does not stall on human judgement: it arrives together with the
   code, in the right place to decide. It also carries every `⛔` row of `45-docs.md`, with its

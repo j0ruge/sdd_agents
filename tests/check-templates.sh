@@ -450,8 +450,10 @@ check pr-body.md '^## Riscos e não-feitos'    "section 'Riscos e não-feitos'"
 # target without a CI workflow got a PR body promising what never runs. The line is now a fill-in
 # of two alternatives, CI or the local suite by TEST_CMD; the publisher picks by the disk
 # (agents/sdd-publisher.md, probed in check-hat.sh). The regex demands both alternatives on the
-# one line, so the old fixed promise cannot satisfy it.
-check pr-body.md '^\*\*Sensores novos\*\* \(<rodam no CI a partir deste PR \| rodam na suíte local, pelo `<TEST_CMD>`; o repositório não tem CI>\):$' "the new-sensors line promises CI only as one of two fill-ins"
+# one line, so the old fixed promise cannot satisfy it. And the local fill-in says where the suite
+# ran, never that the repository has no CI (CodeRabbit on PR #391): no workflow in
+# .github/workflows/ does not prove there is none, since CI can live elsewhere.
+check pr-body.md '^\*\*Sensores novos\*\* \(<rodam no CI a partir deste PR \| rodam na suíte local, pelo `<TEST_CMD>`>\):$' "the new-sensors line promises CI only as one of two fill-ins, and never claims there is no CI"
 
 # == templates/review.md ==
 #
