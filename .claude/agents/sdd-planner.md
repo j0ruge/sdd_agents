@@ -38,7 +38,9 @@ tests grep them.
 
 ## 1. Brainstorm and grill (with the human)
 
-Invoke `Skill(grill-with-docs)`. One question at a time; do not move on with a half answer.
+Invoke `Skill(grilling)` for the grill and `Skill(domain-modeling)` for the vocabulary and the
+ADRs (`grill-with-docs` is the package that brings both, and the model cannot invoke it). One
+question at a time; do not move on with a half answer.
 What you are hunting for:
 
 - the **real** problem (not the literal request);

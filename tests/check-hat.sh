@@ -572,6 +572,18 @@ planner_agent_probes() {
   else
     fail "hat: sdd-planner vetoes Monitor again (or lost the ScheduleWakeup veto), or § 1 no longer says to wait on a live background task with Monitor and an until loop"
   fi
+  # Item M: the installed grill-with-docs (mattpocock/skills @ 447ca70) carries
+  # `disable-model-invocation: true`, so it is not in the list the model sees, and its body only says
+  # to call grilling and domain-modeling. In dotp-remake 3.5e the planner did not find it and loaded
+  # grilling alone until the relay pointed at domain-modeling. § 1 names the two the model can call;
+  # an order to invoke grill-with-docs anywhere in the file reads red. KIT_THIRD_PARTY_SKILLS
+  # (bin/sdd) is out of scope and keeps the package name.
+  if grep -qF 'Skill(grilling)' <<< "$s1" && grep -qF 'Skill(domain-modeling)' <<< "$s1" \
+     && ! grep -qE 'Invoke `?Skill\(grill-with-docs\)' "$agent"; then
+    pass "hat: the planner invokes the grilling and domain-modeling skills, which the model can call"
+  else
+    fail "hat: sdd-planner orders Skill(grill-with-docs) again, which the model cannot invoke, or § 1 no longer names Skill(grilling) and Skill(domain-modeling)"
+  fi
   # Codex review of PR #252: § 6 changed and two other copies of the same contract did not — the
   # template the planner copies said "all ✅ → auto", and the pipeline doc said a well-run grill is
   # the approval. A planner following either skips the reading the human asked for. The template is

@@ -714,7 +714,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   e a chave da j0ruge/magic_tutor#39 foi trocada à mão três vezes (hoje o título diz 795). A skill diz isso desde a
   2.9.0; a semente, não. Direção: uma linha no formato, nas duas variantes: número que muda vai no corpo.
   — descoberto pela retro do `todo-to-github-issues` (fila do `retrofit-watch`) no `magic_tutor` (2026-11-02)
-- [ ] **A Check de um item novo no `TODO_FILE` fixa o título e obriga a duplicar** — `agents/sdd-planner.md:89`
+- [ ] **A Check de um item novo no `TODO_FILE` fixa o título e obriga a duplicar** — `agents/sdd-planner.md:100`
   (`RECURRED`) — no plano `20261103-perfil-por-tipo` do `magic_tutor`, a Check do I10 conta
   `grep -m1 -c 'O Jev ao vivo por tipo de decisão' TODO.md` → `1`. Antes da execução entrou um item aberto sobre o
   mesmo assunto (o 84 do `TODO.md` de lá): para ficar verde, o executor teria de abrir uma duplicata, contra a regra
