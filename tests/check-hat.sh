@@ -662,6 +662,31 @@ command_branch_cwd_probes() {
   fi
 }
 
+# --- /sdd-plan: the sdd-planner agent type is not registered (item A, 10 returns) ----------------
+# The harness reads the list of agent types when the session opens, so an agent installed later, or
+# linked under a child of the directory the session opened in, is not there: `Agent type
+# 'sdd-planner' not found` in magic_tutor, and in dotp-remake 3.2b and 3.2c with the link already in
+# .claude/agents/. Both times a general agent read sdd-planner.md and ran the grill WITHOUT the hat's
+# permissionsDeny — push and PR were vetoed in prose only. "Then" names the preferred way out (reopen
+# at the target's root after the install) and the fallback (a general agent with the three vetoes
+# written in its briefing, and one line to the human). Read in "Then", where the delegation lives:
+# a way out moved to another section is read after the delegation has already failed.
+command_planner_unregistered_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" then_sec
+  then_sec="$(awk '/^## Then/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  if grep -qF "Agent type 'sdd-planner' not found" <<< "$then_sec" \
+     && grep -qF 'not registered' <<< "$then_sec" \
+     && grep -qF 'reopen the session at the repository root' <<< "$then_sec" \
+     && grep -qF 'sdd install && sdd-link-agents' <<< "$then_sec" \
+     && grep -qF 'permissionsDeny' <<< "$then_sec" \
+     && grep -qF '`git push`, `gh pr create` and `gh pr merge`' <<< "$then_sec" \
+     && grep -qF 'without the registered hat' <<< "$then_sec"; then
+    pass "command: /sdd-plan names the way out when the sdd-planner agent type is not registered"
+  else
+    fail "command: /sdd-plan no longer names the way out when the sdd-planner agent type is not registered (reopen at the root after sdd install && sdd-link-agents, or a general agent with the three permissionsDeny vetoes in its briefing and a line to the human)"
+  fi
+}
+
 
 # --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
 # The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
@@ -984,6 +1009,7 @@ command_relay_probes
 command_worktree_probes
 command_worktree_return_probes
 command_branch_cwd_probes
+command_planner_unregistered_probes
 publisher_stamp_probes
 boot_probes
 release_probes

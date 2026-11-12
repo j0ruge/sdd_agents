@@ -76,6 +76,19 @@ command came with no argument), the repository root it writes under (the worktre
 you), the config values from step 3, and the absolute template paths from step 4 — stated as *the*
 templates to start from, never as examples.
 
+**When the agent type is not registered** (`Agent type 'sdd-planner' not found`, or the type is
+missing from the list of agents this session offers): the harness reads that list when the session
+opens, so an agent installed after it opened, or linked in a child of the directory it opened in,
+is not there — the link in `.claude/agents/` does not help this session. Tell the human so, and
+ask them to run `sdd install && sdd-link-agents` in the target (when it is not done yet) and to
+reopen the session at the repository root; that is the way out, because only the registered hat
+carries its `permissionsDeny`. Only if the human chooses to go on in this session, delegate to a
+general agent instead: hand it the same briefing, tell it to read the absolute path of
+`agents/sdd-planner.md` as its contract, and write in the briefing the three vetoes that hat's
+`permissionsDeny` holds — never run `git push`, `gh pr create` and `gh pr merge` — because a
+general agent does not load them. Then tell the human in one line that the grill runs
+without the registered hat, with those three vetoes in prose only.
+
 When step 2 moved you, hand the planner two more orders, and hold it to them:
 
 - **The branch.** When the grill decides the mission's id, the planner renames the branch inside
