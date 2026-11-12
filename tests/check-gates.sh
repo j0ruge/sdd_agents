@@ -6464,6 +6464,65 @@ else
        "seen by the suite: ${AN_SEEN:-<none>}; line ${AN_LINE:-<none>} vs EXEC row ${AN_EXEC:-<none>}; named: ${AN_NAMED:-0}; in why: $(grep -c 'running TEST_CMD' <<< "$AN_WHY"); with pending: $(grep -c 'running TEST_CMD' <<< "$AN_PENDING"); missing: $(tail -1 <<< "$AN_MISSING")"
 fi
 
+# Item H of TODO.md, first half: the leftovers of a session that died with the runner. The journal
+# line of a session is written when it ENDS, so a host that froze left pipeline.log at `PHASE` and a
+# `<PHASE>-<stamp>-<sid8>.stream.jsonl` that no line cites (dotp-remake, session 7e4567fd, 10 entries
+# uncommitted); and the next `sdd run` opened a session over that tree with no word. A repository of
+# its own, because the fixture above is never clean (.stub/ is untracked) and the control needs a
+# clean tree: one stream no journal line closed, one a line closed by its `log=` file name, and one
+# modified tracked file. Both faces have to name the first, never the second, and the dirty path; the
+# clean control prints neither header. Then the face that runs without the lock, while a live owner
+# holds the checkout (a full status blocked in its own TEST_CMD): the newest stream is in course.
+LM="20260108-status-leftovers"
+LO="$SDD_STATE_FIX/leftovers"
+LO_LOGS="$LO/.sdd/logs/$LM"
+mkdir -p "$LO/.sdd" "$LO/docs/handoffs/$LM"
+( cd "$LO" && git init -q -b main && git config user.email "fixture@example.com" && git config user.name "Fixture" )
+printf '%s\n' 'PROJECT_NAME="leftovers"' 'DEFAULT_BRANCH="main"' 'TEST_CMD="true"' 'E2E_CMD=""' \
+  'HANDOFF_DIR="docs/handoffs"' 'QA_DOCS_PATH="docs/qa"' 'JIRA_ENABLED=false' > "$LO/.sdd/config.sh"
+printf '.sdd/logs/\n' > "$LO/.gitignore"
+printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n|---|---|---|---|---|\n| I1 | slice one | `true` → 0 | pending | — |\n' \
+  > "$LO/docs/handoffs/$LM/checkpoint.md"
+echo content > "$LO/tracked.txt"
+( cd "$LO" && git add -A && git commit -qm init )
+LO_FULL0="$( cd "$LO" && "$SDD" status "$LM" 2>&1 )" || true
+LO_NG0="$( cd "$LO" && "$SDD" status "$LM" --no-gates 2>&1 )" || true
+mkdir -p "$LO_LOGS"
+: > "$LO_LOGS/EXEC-20260108-100000-aaaa1111.stream.jsonl"
+: > "$LO_LOGS/EXEC-20260108-090000-bbbb2222.stream.jsonl"
+printf '%s  EXEC  agent=sdd-executor  session=bbbb2222  rc=0  log=%s\n' "2026-01-08T09:10:00+00:00" \
+  "$LO_LOGS/EXEC-20260108-090000-bbbb2222.json" > "$LO_LOGS/pipeline.log"
+echo changed >> "$LO/tracked.txt"
+LO_FULL="$( cd "$LO" && "$SDD" status "$LM" 2>&1 )" || true
+LO_NG="$( cd "$LO" && "$SDD" status "$LM" --no-gates 2>&1 )" || true
+lo_terms() {
+  printf 'orphan:%s%s closed:%s dirty:%s%s next:%s' \
+    "$(has "$1" '^  leftovers of a session that never closed:$')" "$(has "$1" '^    EXEC-20260108-100000-aaaa1111\.stream\.jsonl$')" \
+    "$(has "$1" '^    EXEC-20260108-090000-bbbb2222\.stream\.jsonl')" "$(has "$1" '^  uncommitted paths:$')" "$(has "$1" '^     M tracked\.txt$')" \
+    "$(has "$1" "the next 'sdd run' opens its session over this tree")"
+}
+assert_eq "sdd status names a stream no journal line closed and the paths left dirty, on both faces" \
+  "full orphan:11 closed:0 dirty:11 next:1 · no-gates orphan:11 closed:0 dirty:11 next:1 · clean orphan:00 closed:0 dirty:00 next:0 / orphan:00 closed:0 dirty:00 next:0" \
+  "full $(lo_terms "$LO_FULL") · no-gates $(lo_terms "$LO_NG") · clean $(lo_terms "$LO_FULL0") / $(lo_terms "$LO_NG0")"
+# The live owner. The row is `done` on HEAD so gate_EXEC reaches the TEST_CMD, which waits for a file
+# (30 s at most, so a probe that died before releasing it does not hang the suite).
+sed -i "s/| pending | — |\$/| done | $( cd "$LO" && git rev-parse --short HEAD ) |/" "$LO/docs/handoffs/$LM/checkpoint.md"
+sed -i 's/^TEST_CMD=.*/TEST_CMD='"'"'i=0; while [ ! -e release ] \&\& [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done'"'"'/' "$LO/.sdd/config.sh"
+( cd "$LO" && exec "$SDD" status "$LM" >/dev/null 2>&1 ) &
+LO_BG=$!
+LO_LIVE=""
+for _ in $(seq 100); do
+  LO_LIVE="$( cd "$LO" && "$SDD" status "$LM" --no-gates 2>&1 )" || true
+  grep -q 'CHECKOUT-OWNER' <<< "$LO_LIVE" && break
+  sleep 0.1
+done
+touch "$LO/release"
+wait "$LO_BG" 2>/dev/null || true
+assert_eq "sdd status --no-gates calls the newest stream in course while a live owner holds the checkout" \
+  "owner:1 in-course:1 orphan:0" \
+  "owner:$(has "$LO_LIVE" 'CHECKOUT-OWNER') in-course:$(has "$LO_LIVE" '^    EXEC-20260108-100000-aaaa1111\.stream\.jsonl \(in course\)$') orphan:$(has "$LO_LIVE" '^  leftovers of a session that never closed:$')"
+rm -rf "$LO"
+
 # D17 of 20261012-a-rota-da-qa: the mission id is a grammar the runner checks in resolve_mission,
 # ^[0-9]{8}-[a-z0-9-]+$, and that is what makes the whole-id boundary of the K8 reader exact
 # (CodeRabbit on PR #247: a mission `foo` was satisfied by an entry citing only `foo.bar` or `foo` plus U+00E9).

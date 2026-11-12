@@ -813,6 +813,18 @@ lying about a disk that moved on, so *any* death of the runner — a kill, a reb
 laptop — is recoverable by rerunning the same command. `sdd status <mission> --no-gates` tells you
 where it stopped without paying for a suite to find out.
 
+**When the session died with it, the tree is NOT clean, and the status says so.** A session's
+journal line is written when the session ENDS, so a runner that died mid-phase leaves
+`pipeline.log` at its `PHASE` line and a `<PHASE>-<stamp>-<sid8>.stream.jsonl` that no line cites
+— and whatever the session had edited and not committed. Measured in `dotp-remake`: session
+`7e4567fd`, ten uncommitted entries; in its 3.5c, a session that died during the sabotage step left
+the mutant applied, with its `.bak`, for the next one to commit. Both faces of `sdd status` print
+`leftovers of a session that never closed:` with each such stream, and `uncommitted paths:` with
+up to ten entries of `git status --porcelain`. Read the stream (`tail` it: one JSON event per
+line) and `git diff` before the next `sdd run`, which opens its session over that tree. While
+another command holds the checkout, `--no-gates` sets the newest stream apart as `(in course)`:
+it is probably that command's live session, not a leftover.
+
 ---
 
 ## The runner published a draft PR by itself

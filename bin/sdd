@@ -8017,7 +8017,9 @@ cmd_status() {
   info ""
 
   if [ "$no_gates" = "1" ]; then
-    coordination_owner
+    # Captured and printed as before: the leftovers below need to know whether an owner is live.
+    local owner; owner="$(coordination_owner)" || owner=""
+    [ -z "$owner" ] || printf '%s\n' "$owner"
     local f names=""
     for f in "$MISSION_DIR"/*; do [ -e "$f" ] && names="$names ${f##*/}"; done
     info "  artifacts:"
@@ -8029,6 +8031,7 @@ cmd_status() {
     info ""
     status_increments
     info ""
+    status_leftovers "$owner"
     local jrnl="$REPO_ROOT/.sdd/logs/$MISSION/pipeline.log"
     if [ -f "$jrnl" ]; then
       info "  last journal lines:"
@@ -8058,6 +8061,7 @@ cmd_status() {
   status_unrecorded ${green[@]+"${green[@]}"}
 
   info ""
+  status_leftovers
   local next; next="$(current_phase)"
   if [ -z "$next" ]; then
     printf '  %spipeline complete — only the merge is left (the human gate)%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
@@ -8091,6 +8095,89 @@ status_increments() {
     esac
     printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
   done <<< "$rows"
+}
+
+# session_leftovers [<owner line>] — what a session that never closed left behind (item H of
+# TODO.md). The journal line of a session is written when it ENDS, so a runner that died with its
+# session left pipeline.log at `PHASE` and a `<PHASE>-<stamp>-<sid8>.stream.jsonl` no line cites
+# (dotp-remake, session 7e4567fd, 10 entries uncommitted), and the next `sdd run` opened a session
+# over that tree without a word. Below cmd_status for the reason status_increments gives; ONE
+# definition, read by both faces of `sdd status` and by boot_prompt.
+#
+# Published, never printed, and CALLED, never `$( )`: LEFTOVER_STREAMS, the file name of each stream
+# of this mission whose sibling `<…>.json` no journal line cites in `log=` (compared by FILE NAME:
+# the path in the line is absolute, and the repo may have moved); LEFTOVER_LIVE, the one stream an
+# owner may still be writing; LEFTOVER_DIRTY, the first ten `XY path` entries of the porcelain
+# status of the whole repository (hat_status_lines, untracked included), and LEFTOVER_DIRTY_N, all
+# of them. `.sdd/logs/` is ignored by `sdd install`, so the streams themselves are not dirt.
+#
+# <owner line> is the CHECKOUT-OWNER the caller saw. Only `status --no-gates` runs without the lock
+# and can see another command holding the checkout; when it does, the NEWEST orphan, by the stamp in
+# its name, is most likely that command's session in flight and is set apart as LEFTOVER_LIVE. The
+# full face and the boot hold the lock themselves, so no other session can be running and every
+# orphan is one. DECLARED LIMIT: a session that runs `sdd status` (full face) from inside its own
+# phase reentering the lock sees its own stream named as a leftover.
+LEFTOVER_STREAMS=""
+LEFTOVER_LIVE=""
+LEFTOVER_DIRTY=""
+LEFTOVER_DIRTY_N=0
+session_leftovers() {
+  local owner="${1:-}" dir="$REPO_ROOT/.sdd/logs/$MISSION" closed="" f base stamp best="" line
+  local -a orphans=()
+  LEFTOVER_STREAMS=""; LEFTOVER_LIVE=""; LEFTOVER_DIRTY=""; LEFTOVER_DIRTY_N=0
+  # The file name of every `log=` value: the last field, read to the end of the line because the
+  # path under REPO_ROOT may hold a space. index()/substr(), the house rule for a literal separator.
+  if [ -f "$dir/pipeline.log" ]; then
+    closed="$(awk '{ i = index($0, "  log="); if (i) { n = split(substr($0, i + 6), a, "/"); print a[n] } }' \
+                "$dir/pipeline.log")" || closed=""
+  fi
+  for f in "$dir"/*.stream.jsonl; do
+    [ -f "$f" ] || continue
+    base="${f##*/}"
+    if grep -qxF -- "${base%.stream.jsonl}.json" <<< "$closed"; then continue; fi
+    orphans+=( "$base" )
+  done
+  if [ -n "$owner" ]; then
+    for base in ${orphans[@]+"${orphans[@]}"}; do
+      [[ $base =~ -([0-9]{8}-[0-9]{6})-[^-]+\.stream\.jsonl$ ]] || continue
+      stamp="${BASH_REMATCH[1]}"
+      if [ -z "$best" ] || [[ $stamp > $best ]]; then best="$stamp"; LEFTOVER_LIVE="$base"; fi
+    done
+  fi
+  for base in ${orphans[@]+"${orphans[@]}"}; do
+    [ "$base" = "$LEFTOVER_LIVE" ] && continue
+    LEFTOVER_STREAMS="${LEFTOVER_STREAMS:+$LEFTOVER_STREAMS$'\n'}$base"
+  done
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    LEFTOVER_DIRTY_N=$((LEFTOVER_DIRTY_N + 1))
+    if [ "$LEFTOVER_DIRTY_N" -le 10 ]; then LEFTOVER_DIRTY="${LEFTOVER_DIRTY:+$LEFTOVER_DIRTY$'\n'}$line"; fi
+  done < <(hat_status_lines)
+  return 0
+}
+
+# status_leftovers [<owner line>] — the page block of session_leftovers, for both faces of
+# `sdd status`. Nothing at all when there is no orphan and the tree is clean; otherwise the block
+# and one blank line after it.
+status_leftovers() {
+  session_leftovers "${1:-}"
+  local s
+  if [ -n "$LEFTOVER_STREAMS" ]; then
+    info "  leftovers of a session that never closed:"
+    while IFS= read -r s; do printf '    %s\n' "$s"; done <<< "$LEFTOVER_STREAMS"
+  fi
+  if [ -n "$LEFTOVER_LIVE" ]; then
+    info "  a session the owner above may still be writing:"
+    printf '    %s (in course)\n' "$LEFTOVER_LIVE"
+  fi
+  if [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then
+    info "  uncommitted paths:"
+    while IFS= read -r s; do printf '    %s\n' "$s"; done <<< "$LEFTOVER_DIRTY"
+    if [ "$LEFTOVER_DIRTY_N" -gt 10 ]; then printf '    … and %s more\n' "$((LEFTOVER_DIRTY_N - 10))"; fi
+    dim "  the next 'sdd run' opens its session over this tree — read git status and git diff first"
+  fi
+  if [ -n "$LEFTOVER_STREAMS$LEFTOVER_LIVE" ] || [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then info ""; fi
+  return 0
 }
 
 # status_unrecorded <phase>... — the green phases (#153) that THIS machine's ledger holds no

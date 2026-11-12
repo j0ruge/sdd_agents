@@ -461,7 +461,10 @@ que o harness negou à sessão (`journal_denials`, logo depois do `hat_init_fact
 `cmd_close`; o caminho sem espaço nem controle, nunca o comando); desde `20261112-as-reincidentes-primeiro`
 a face completa do `sdd status` diz na stderr `running TEST_CMD (<cmd>) for the EXEC gate…` antes de
 cada suíte que um gate vai rodar (`run_check_cmd`, ligado só pelo `cmd_status`), e a missão que não
-existe nomeia o `--no-gates` — no `ui24_agent` 1 min 57 s calados foram lidos como travamento;
+existe nomeia o `--no-gates` — no `ui24_agent` 1 min 57 s calados foram lidos como travamento; na
+mesma missão as duas faces do `sdd status` mostram a sobra de uma sessão que morreu com o runner
+(`session_leftovers`, uma definição: o stream que nenhuma linha `log=` do journal cita e até dez
+caminhos sujos; com outro dono no checkout, o `--no-gates` separa o stream mais novo como em curso);
 `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
 fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria: teto por missão
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),

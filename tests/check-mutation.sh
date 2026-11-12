@@ -6546,8 +6546,10 @@ mut_COORD_worker_ignores_sigint() {
   sed -i "/^            os.environ\['SDD_COORDINATION_ID'\] = value\['execution_id'\]$/i\\            signal.signal(signal.SIGINT, signal.SIG_IGN)" "${1%/*}/sdd-coordination.py"
 }
 
+# Since item H of TODO.md the --no-gates face captures the owner (the leftovers read it) and prints
+# it on the next line; the mutant hides that print, which is what it always sabotaged.
 mut_COORD_owner_hidden() {
-  sed -i 's@^    coordination_owner$@    :@' "$1"
+  sed -i 's@^    \[ -z "\$owner" \] || printf .%s\\n. "\$owner"$@    :@' "$1"
 }
 
 mut_RUN_branch_filtered_source() {
@@ -6781,6 +6783,23 @@ mut_RUN_status_suite_unannounced() {
 }
 mut_RUN_missing_mission_no_gates_unsaid() {
   sed -i "/^resolve_mission() {/,/^}/ s@<mission> --no-gates' reads a mission off@<mission>' reads a mission off@" "$1"
+}
+# Item H of TODO.md, first half. One mutant per face of `sdd status` (a door added with no probe is
+# a door nobody sees fall), one for the journal filter, one for the session in course. Caught by
+# "sdd status names a stream no journal line closed and the paths left dirty, on both faces" and,
+# the last, by "sdd status --no-gates calls the newest stream in course while a live owner holds
+# the checkout" (check-gates.sh).
+mut_RUN_leftovers_full_face_unsaid() {
+  sed -i '/^cmd_status() {/,/^}/ s@^  status_leftovers$@  :@' "$1"
+}
+mut_RUN_leftovers_no_gates_unsaid() {
+  sed -i '/^cmd_status() {/,/^}/ s@^    status_leftovers "\$owner"$@    :@' "$1"
+}
+mut_RUN_leftovers_journal_ignored() {
+  sed -i '/^session_leftovers() {/,/^}/ s@^    if grep -qxF -- "\${base%.stream.jsonl}.json" <<< "\$closed"; then continue; fi$@    if false; then continue; fi@' "$1"
+}
+mut_RUN_leftovers_in_course_blind() {
+  sed -i '/^session_leftovers() {/,/^}/ s@^  if \[ -n "\$owner" \]; then$@  if false; then@' "$1"
 }
 
 CATALOG=(
@@ -7585,6 +7604,10 @@ CATALOG=(
   RUN_approve_adr_left_proposed
   RUN_status_suite_unannounced
   RUN_missing_mission_no_gates_unsaid
+  RUN_leftovers_full_face_unsaid
+  RUN_leftovers_no_gates_unsaid
+  RUN_leftovers_journal_ignored
+  RUN_leftovers_in_course_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
