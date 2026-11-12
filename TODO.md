@@ -106,7 +106,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   commit). O `sdd status --no-gates` (`:7832`) não lê a árvore; o completo roda o `gate_EXEC`, que só a olha com todo
   incremento `done` e o `TEST_CMD` vermelho (`:1515`): com um `pending`, o run seguinte abre outra sessão sobre a sobra,
   sem aviso no boot. Medido na 3.5c: morrer na sabotagem (`agents/sdd-executor.md:88`) deixa o mutante aplicado,
-  com o `.bak`, para a próxima commitar. Direção: status e boot citam o stream órfão e a árvore suja.
+  com o `.bak`, para a próxima commitar. Direção: status e boot citam stream órfão e árvore suja. RESOLVED by 59b5f96
   — descoberto por `retrofit-watch` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
   RECURRED 1: dotp-remake/3.5c (2026-10-31)
 
@@ -124,7 +124,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mostrou que o GitHub ligaria cada um à issue ou ao PR de mesmo número, e o conserto pediu um PR próprio
   (`j0ruge/magic_tutor#115`). Recusar todo `#N` não serve: este arquivo cita PR assim. Direção: acusar o
   `#N` só num arquivo que numera os itens, quando N é o número de um item e não vem depois de `PR`, `issue`
-  ou `dono/repo`. — descoberto por `claude` no espelho do `TODO.md` do `magic_tutor` (2026-10-26)
+  ou `dono/repo`. RESOLVED by 5cde830 — descoberto por `claude` no espelho do `TODO.md` do `magic_tutor` (2026-10-26)
   RECURRED 2: magic_tutor/PR-166 (2026-11-03); magic_tutor/20261103-perfil-por-tipo (2026-11-04)
 
 - [ ] **A sonda de interrupção do `check-health.sh` mede o grupo antes do `setsid`, e a suíte cai sem defeito** —
@@ -223,7 +223,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `docs/handoffs/`, `TODO.md` e os agentes; o 2º, 8 symlinks e o `.gitignore`. O `main()` (`:11954`) só trata
   `--help` na 1ª posição; `run`, `retry`, `status` e `health` recusam opção desconhecida; `sdd kaizen --help`
   também, sem dar o uso (`unknown kaizen option: --help`). Direção: todo subcomando recusa opção desconhecida e
-  lê `-h/--help` como a própria ajuda, com um caso por efeito colateral.
+  lê `-h/--help` como a própria ajuda, com um caso por efeito colateral. RESOLVED by c40c25a
   — descoberto por `sessão coordenadora` no `lighthouse_project`, ao ler o uso do `link-agents` (2026-10-16)
   RECURRED 1: dotp-remake/3.5d (2026-11-02)
 
@@ -247,7 +247,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   branch de trabalho é o caso comum: saiu `DEFAULT_BRANCH="plano-3-2"` no `dotp-remake` e `"chore/sdd-install"`
   no `magic_tutor` (este com `origin/main` no clone), sob o "Detected from origin/HEAD" do `config/starter.conf`;
   o "confirm it" da saída foi a única defesa. Direção: tentar `git ls-remote --symref origin HEAD` e um
-  `origin/main`/`origin/master` existente antes da branch atual, e dizer que ela é palpite quando for ela.
+  `origin/main`/`origin/master` existente antes da branch atual, e chamar a atual de palpite. RESOLVED by f93ed48
   — descoberto por `retrofit-watch` no `dotp-remake` (2026-10-19)
   RECURRED 1: magic_tutor (2026-10-20)
 
@@ -270,7 +270,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `dotp-remake` a sessão estava em `rea-projects/`, pai do alvo, e na 3.2b e na 3.2c o tipo faltou com o link já em
   `.claude/agents/`; no `magic_tutor` ela abriu antes do `sdd install` (`Agent type 'sdd-planner' not found`). Nos
   dois, um agente genérico lendo o `sdd-planner.md` conduziu o grill sem o `permissionsDeny` dele (push e PR
-  vetados só em prosa). Direção: nomear o caminho de reserva, ou mandar reabrir a sessão no alvo após o install.
+  vetados só em prosa). Direção: nomear a reserva, ou reabrir a sessão no alvo após o install. RESOLVED by 60042c9
   — descoberto pelo relay do `/sdd-plan` na 3.2b do `dotp-remake` (2026-10-19)
   RECURRED 10: dotp-remake/3.2c (2026-10-19); magic_tutor (2026-10-20); dotp-remake/3.4a (2026-10-22); dotp-remake/3.4b (2026-10-23); dotp-remake/3.5b (2026-10-24); sdd_agents/20261026-health-pula-catalogo (2026-10-26); sdd_agents/20261026-health-pula-catalogo/EXEC (2026-10-26); warehouse_explorer_web/20261028-whf-162-jdb-na-descricao (2026-10-28); dotp-remake/3.5c (2026-10-31); dotp-remake/3.5d (2026-11-01)
 - [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:116`
@@ -308,7 +308,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   continua esperando a resposta do humano") e teve de pedir o texto duas vezes. Uma sonda mediu a causa na 3.5c do
   `dotp-remake`: o harness só avisa o relay quando o agente para sem filho vivo em background. Direção: o planner
   não encerra o turno com pergunta enquanto tem tarefa viva, e toda pergunta pendente volta inteira na devolução
-  seguinte; o relay que lê o número de uma pergunta que não repassou pede o texto antes de tudo.
+  seguinte; o relay que lê o número de uma pergunta que não repassou pede o texto antes de tudo. RESOLVED by 01a20ae
   — descoberto pelo relay do `/sdd-plan` na missão `20261024-narracao-e-mesa` do `magic_tutor` (2026-10-24)
   RECURRED 3: dotp-remake/3.5c (2026-10-31); dotp-remake/3.5d (2026-11-01); dotp-remake/3.6a (2026-11-07)
 
@@ -317,7 +317,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   item acima manda não encerrar o turno com tarefa viva. Sobra a espera em laço: na 3.6b do `dotp-remake`, umas 60
   chamadas de espera em 19 min (relato do planner, #299; o relay não as recontou). Na 3.6c, o `Agent` lançou os três
   subagentes em segundo plano, sem opção de primeiro plano, e o planner esperou lendo o tamanho das saídas entre
-  outros passos. Direção: liberar o `Monitor` ao planner. Sem correção verificada.
+  outros passos. Direção: liberar o `Monitor` ao planner. Sem correção verificada. RESOLVED by 6841138
   — descoberto pelo `sdd-planner` na missão `20261108-plano-3-6-b-substituicao-de-dano-e-de-evento` (2026-11-08)
   RECURRED 1: dotp-remake/3.6c (2026-11-09)
 
@@ -432,7 +432,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   escreve `proposed`, e o `cmd_approve` (`:8835`) só põe o arquivo do `adr:` no commit da aprovação. O status final
   depende de quem escreveu o ADR: no `dotp-remake`, o 0011 nasceu `accepted` à mão (`02c19f5`) e o 0012 ficou
   `proposed` (`a81c28f`) até a REVIEW r1 da 3.4b achar e a DOCS mudar à mão. Direção: o `sdd approve` troca o
-  `proposed` do ADR do `adr:` por `accepted` no mesmo commit, com probe.
+  `proposed` do ADR do `adr:` por `accepted` no mesmo commit, com probe. RESOLVED by 5e8da5e
   — descoberto por `sdd-reviewer` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
   RECURRED 1: dotp-remake/3.5c (2026-10-31)
 
@@ -472,7 +472,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`grill-with-docs`) — a skill instalada (mattpocock/skills @ 447ca70) traz `disable-model-invocation: true`, fica
   fora da lista que o modelo vê, e o corpo dela só manda chamar a `grilling` e a `domain-modeling`. No grill da 3.5e
   do `dotp-remake`, o planner não a achou e carregou só a `grilling`, até o relay apontar a `domain-modeling`; o
-  preflight a dá por presente (`KIT_THIRD_PARTY_SKILLS`). Direção: o contrato nomeia as duas skills.
+  preflight a dá por presente (`KIT_THIRD_PARTY_SKILLS`). Direção: o contrato nomeia as duas skills. RESOLVED by 4fb7109
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
   RECURRED 1: sdd_agents/20261112 (2026-11-12)
 
@@ -489,7 +489,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `dotp-remake`, o dono escreveu no meio do grill "Escolha as recomendadas e aprovo o plano", e o relay rodou o
   `sdd approve` sem a pergunta, depois de mostrar o plano e medir o `--check` e o `--red`. Seguir o texto pede uma
   pergunta redundante; não seguir pula em silêncio um passo obrigatório. Direção: uma linha para a aprovação
-  antecipada nas palavras do próprio humano, dizendo o que ainda se mostra e o que para a linha.
+  antecipada nas palavras do próprio humano, dizendo o que ainda se mostra e o que para a linha. RESOLVED by 11556b3
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
   RECURRED 1: sdd_agents/20261112 (2026-11-12)
 
@@ -514,7 +514,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   da mesma seção do `TODO.md`. No merge dos PRs 381 e 386 a 389, quatro conflitaram na catraca e dois no `TODO.md`.
   A receita do `9593497` (merge da `main` na branch, "catraca X + n → Y" recontada pelo `check-todo.sh --count`, o
   `--check`, o `--anchors` e o `--check --baseline origin/main`, push, GitGuardian e `gh pr merge --match-head-commit`)
-  passou as quatro vezes, em ~25 chamadas, e só mora no histórico. Direção: a receita num doc do kit, ou um script.
+  passou as quatro vezes, em ~25 chamadas, e só mora no histórico. Direção: receita num doc do kit. RESOLVED by 92f87fc
   — descoberto por `sessão interativa` no merge dos PRs de achado do kit (2026-11-11)
   RECURRED 1: sdd_agents/20261112 (2026-11-12)
 
@@ -563,7 +563,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   depois da linha do TICKET, nada sai durante a suíte do alvo: 1 min 57 s no `ui24_agent`, medido com
   `sdd status 20261003-fase8-s8-dinamica-eq-restantes > arquivo`. Num `timeout 60` a espera foi tomada por
   travamento, e o erro de missão ausente não cita o `--no-gates`, que lê só o disco. Direção: uma linha
-  "rodando o TEST_CMD (<cmd>)…" antes do gate que a chama, e o `--no-gates` na mensagem de uso.
+  "rodando o TEST_CMD (<cmd>)…" antes do gate que a chama, e o `--no-gates` na mensagem de uso. RESOLVED by 39a3bac
   — descoberto por `retrofit-watch` na sessão do `ui24_agent` que planejou a S9 (2026-10-17)
   RECURRED 1: magic_tutor/20261103-perfil-por-tipo (2026-11-03)
 
@@ -602,7 +602,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (os checks dos PRs são só GitGuardian e CodeRabbit), e o corpo saiu com a frase nos PRs j0ruge/dotp-remake#10 e
   j0ruge/dotp-remake#11 (3.2b), corrigida à mão para "rodam na suíte local, `dotnet test`; o repositório não tem CI". O
   `magic_tutor` também não tem `.github/workflows`. Direção: o publisher só afirma CI com um workflow em
-  `.github/workflows/`; sem ele, diz onde a suíte rodou: pelo `TEST_CMD`.
+  `.github/workflows/`; sem ele, diz onde a suíte rodou: pelo `TEST_CMD`. RESOLVED by 21f2278
   — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
   RECURRED 1: magic_tutor/pr25 (2026-10-20)
 
