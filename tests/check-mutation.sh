@@ -6757,6 +6757,14 @@ mut_RUN_install_unknown_option_accepted() {
 mut_RUN_link_agents_argument_accepted() {
   sed -i '/^cmd_link_agents() {/,/^}/ s@^  \[ \$# -eq 0 \] || die "unknown link-agents option: @  true || die "unknown link-agents option: @' "$1"
 }
+# The help scan after the checkout admission again (CodeRabbit and Codex on PR #391): `sdd install
+# --help` outside a repository dies "not inside a git repository", and `sdd run --help` on a held
+# checkout answers CHECKOUT-BUSY. Caught by "--help prints the help outside a repository, for every
+# subcommand whose admission resolves the root" (check-preflight.sh), and by "sdd run --help prints
+# the usage while a live owner holds the checkout, never CHECKOUT-BUSY" (check-gates.sh).
+mut_RUN_help_after_admission() {
+  sed -i '/^main() {/,/^}/ { /^  for arg in "\$@"; do$/,/^  done$/d; s#^  \[ "\$COORDINATION_ADMITTED" = 1 \] || return "\$admission"$#&\n  for arg in "$@"; do case "$arg" in -h|--help) cmd_help; return 0 ;; esac; done# }' "$1"
+}
 # Item F of TODO.md, one mutant per step cmd_install gained and one for its warning. Each is
 # caught by "install without origin/HEAD asks the remote, then an existing origin/main or
 # origin/master, and calls the current branch a guess" (check-preflight.sh), in a different world:
@@ -6776,6 +6784,13 @@ mut_RUN_install_guess_unsaid() {
 # turns the proposed ADR that adr: names into accepted, in the approval commit" (check-gates.sh).
 mut_RUN_approve_adr_left_proposed() {
   sed -i '/^cmd_approve() {/,/^}/ s@^         adr_accept "\$REPO_ROOT/\$adr_value"$@         : "$REPO_ROOT/$adr_value"@' "$1"
+}
+# The adr: containment dropped (CodeRabbit on PR #391): `../x.md` and a path through a directory
+# symlinked out of the tree reach adr_accept again, which rewrites the Status line of a file outside
+# the checkout. Caught by "sdd approve leaves an ADR that resolves outside the checkout as it is, says
+# so, and commits the mission without it" (check-gates.sh).
+mut_RUN_approve_adr_outside_rewritten() {
+  sed -i '/^cmd_approve() {/,/^}/ s@ \&\& ! adr_dir_contained "\$REPO_ROOT" "\$adr_value"; then$@ \&\& false; then@' "$1"
 }
 # Item I of TODO.md, one mutant per half of "sdd status names the TEST_CMD before the gate that
 # runs it, and a missing mission is told about --no-gates" (check-gates.sh): the announcement in
@@ -7625,10 +7640,12 @@ CATALOG=(
   RUN_help_after_subcommand_ignored
   RUN_install_unknown_option_accepted
   RUN_link_agents_argument_accepted
+  RUN_help_after_admission
   RUN_install_remote_head_skipped
   RUN_install_origin_main_skipped
   RUN_install_guess_unsaid
   RUN_approve_adr_left_proposed
+  RUN_approve_adr_outside_rewritten
   RUN_status_suite_unannounced
   RUN_missing_mission_no_gates_unsaid
   RUN_leftovers_full_face_unsaid

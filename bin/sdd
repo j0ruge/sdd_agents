@@ -9344,7 +9344,13 @@ cmd_approve() {
   local adr_value; adr_value="$(frontmatter "$m" adr)"
   case "$adr_value" in
     ''|TBD|none|\<*) : ;;
-    *) if [ -f "$REPO_ROOT/$adr_value" ]; then
+    *) if [ -f "$REPO_ROOT/$adr_value" ] && ! adr_dir_contained "$REPO_ROOT" "$adr_value"; then
+         # Only a file that PHYSICALLY resolves inside the checkout (CodeRabbit on PR #391): `../x.md`
+         # and a path through a directory symlinked out of the tree pass `[ -f ]`, adr_accept rewrote
+         # that file's Status line in another directory, and the `git add` that refuses the path
+         # came after the approval was written. The same containment adr_new uses for ADR_DIR.
+         warn "adr: $adr_value resolves outside the checkout — its status was left as it is, and it stays out of the approval commit"
+       elif [ -f "$REPO_ROOT/$adr_value" ]; then
          # The approval accepts the ADR it commits (item G of TODO.md): `sdd adr new` wrote it
          # `proposed`, and a plan approved over a proposed decision left the ADR saying otherwise
          # until somebody noticed. After the `y`, before the `git add`, so a `n` writes nothing.
@@ -12520,19 +12526,23 @@ coordination_owner() {
 }
 
 main() {
-  local admission=0
-  coordination_enter "$@" || admission=$?
-  [ "$COORDINATION_ADMITTED" = 1 ] || return "$admission"
-  local subcmd="${1:-help}" arg
-  shift || true
+  local admission=0 arg
   # -h/--help after ANY subcommand prints the help and nothing else (item E of TODO.md): it was read
   # only in the first position, and `sdd install --help` installed the kit while `sdd link-agents
   # --help` linked the agents, both measured in a target. One point, before the dispatch and so
   # before any effect, for every subcommand. No subcommand takes -h or --help as a value, and no
   # mission id matches it (resolve_mission: ^[0-9]{8}-[a-z0-9-]+$).
+  # And before the checkout admission too (CodeRabbit and Codex on PR #391): coordination_enter
+  # resolves the root of the subcommands it admits, so after it `sdd install --help` outside a
+  # repository died "not inside a git repository", and `sdd run --help` on a held checkout answered
+  # CHECKOUT-BUSY. cmd_help is a heredoc: it needs no repository, no config and no lock.
   for arg in "$@"; do
     case "$arg" in -h|--help) cmd_help; return 0 ;; esac
   done
+  coordination_enter "$@" || admission=$?
+  [ "$COORDINATION_ADMITTED" = 1 ] || return "$admission"
+  local subcmd="${1:-help}"
+  shift || true
   case "$subcmd" in
     install)   cmd_install "$@" ;;
     link-agents) cmd_link_agents "$@" ;;

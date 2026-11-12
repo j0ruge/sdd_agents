@@ -2582,6 +2582,31 @@ else
   fail "link-agents refuses an argument, before linking anything" \
        "rc != 0, 'unknown link-agents option: --bogus', no symlink" "rc $rc; out: $(head -c 120 <<< "$out")"
 fi
+# The scan runs BEFORE the checkout admission (CodeRabbit and Codex on PR #391): after it, `sdd
+# install --help` outside a repository died with "not inside a git repository", because
+# coordination_enter resolves the root of every subcommand it admits. Help writes nothing and needs
+# no repository. The world is a directory git cannot find a repository from (GIT_CEILING_DIRECTORIES
+# at its parent), proved before anything is read, and three subcommands whose admission resolves
+# the root. The held checkout (CHECKOUT-BUSY) is the other world, in check-gates.sh.
+HN="$FIX/help-nogit"; mkdir -p "$HN"
+if ( cd "$HN" && GIT_CEILING_DIRECTORIES="$FIX" git rev-parse --show-toplevel ) >/dev/null 2>&1; then
+  fail "--help prints the help outside a repository, for every subcommand whose admission resolves the root" \
+       "a directory no repository is found from" "git finds one from $HN"
+else
+  bad=""
+  for sub in install link-agents run; do
+    rc=0; out="$( cd "$HN" && GIT_CEILING_DIRECTORIES="$FIX" "$SDD" "$sub" --help 2>&1 )" || rc=$?
+    { [ "$rc" -eq 0 ] && grep -qF -- "$HELP_LINE" <<< "$out" && ! grep -qF 'not inside a git repository' <<< "$out"; } \
+      || bad="$bad $sub (rc $rc: $(head -c 80 <<< "$out"))"
+  done
+  left="$(ls -A "$HN" | tr '\n' ' ')" || true
+  if [ -z "$bad" ] && [ -z "$left" ]; then
+    pass "--help prints the help outside a repository, for every subcommand whose admission resolves the root"
+  else
+    fail "--help prints the help outside a repository, for every subcommand whose admission resolves the root" \
+         "rc 0 and the usage for install, link-agents and run, nothing written" "failed:${bad:- none}; left: ${left:-nothing}"
+  fi
+fi
 
 # --- install without origin/HEAD never adopts the work branch in silence (item F) --------------
 # Without refs/remotes/origin/HEAD the install wrote the branch it ran on, and installing from a

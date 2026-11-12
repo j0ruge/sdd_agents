@@ -4364,6 +4364,46 @@ else
        "the ADR sdd adr new wrote is proposed before, accepted in the approval commit; a hand-accepted ADR reaches its commit byte for byte" \
        "born proposed: ${APPROVE_ADR_BORN:-?}; committed status: '${APPROVE_ADR_STATUS:-<none>}'; control rc $AC_RC, subject '$AC_SUBJECT', byte for byte: $AC_SAME; out: $(tail -2 <<< "$AC_OUT")"
 fi
+git checkout -q main
+# --- 3c. and it never rewrites an ADR outside the checkout (CodeRabbit on PR #391).
+#
+# The adr: value is read relative to the repo root, and nothing kept it there: `../x.md` and a path
+# through a directory that is a symlink out of the tree both pass `[ -f ]`, so adr_accept rewrote
+# the Status line of a file in another directory, after the approval was written, and the `git add`
+# that refused the path came too late. With ADR_CHECK=off the PLAN gate does not read adr: either.
+# Two worlds, each a mission of its own over a `proposed` ADR in a sibling directory of the repo:
+# the traversal and the symlinked parent. The ADR stays byte for byte, the approval commit carries
+# the mission and not the path, and the warning names the value.
+OUTADR="$FIX.outside-adr"
+mkdir -p "$OUTADR"
+printf '# ADR 0010 — outside\n\n- **Status**: proposed (—, 2026-01-01)\n- **Spec**: TBD\n\nbody\n' \
+  > "$OUTADR/0010-outside.md"
+cp "$OUTADR/0010-outside.md" "$OUTADR.expected"
+ln -s "$OUTADR" "$FIX/docs/adr-out"
+out_world() { # out_world <mission> <adr: value> → "rc:<n> same:<yes|no> committed:<n> warned:<0|1> subject:<0|1>"
+  local m="$1" v="$2" rc=0 out same=no
+  mkdir -p "$FIX/docs/handoffs/$m"
+  sed -e "s/^missao: .*/missao: $m/" -e "s|^branch: .*|branch: missao/$m|" -e 's/^aprovacao: .*/aprovacao:/' \
+      -e "s|^adr: .*|adr: $v|" <<< "$AC_MISSAO" > "$FIX/docs/handoffs/$m/00-missao.md"
+  printf '# Plano\n' > "$FIX/docs/handoffs/$m/01-plano.md"
+  git show "missao/$AM:docs/handoffs/$AM/checkpoint.md" > "$FIX/docs/handoffs/$m/checkpoint.md" 2>/dev/null || true
+  out="$( cd "$FIX" && "$SDD" approve "$m" 2>&1 <<< "y" )" || rc=$?
+  # `-s` first: an expected file never written would compare nothing.
+  [ -s "$OUTADR.expected" ] && cmp -s "$OUTADR/0010-outside.md" "$OUTADR.expected" && same=yes
+  printf 'rc:%s same:%s committed:%s warned:%s subject:%s' "$rc" "$same" \
+    "$(git show --name-only --format= HEAD | grep -cF '0010-outside')" \
+    "$(grep -qF "adr: $v resolves outside the checkout" <<< "$out" && echo 1 || echo 0)" \
+    "$([ "$(git log -1 --format=%s)" = "chore(missao): plan $m approved by the human" ] && echo 1 || echo 0)"
+  cp "$OUTADR.expected" "$OUTADR/0010-outside.md"
+  git checkout -q main 2>/dev/null || true
+}
+OUT_DOTDOT="$(out_world 20260103-approve-adr-dotdot "../${OUTADR##*/}/0010-outside.md")"
+OUT_LINK="$(out_world 20260103-approve-adr-link docs/adr-out/0010-outside.md)"
+rm -f "$FIX/docs/adr-out" "$OUTADR.expected"
+rm -rf "$OUTADR"
+assert_eq "sdd approve leaves an ADR that resolves outside the checkout as it is, says so, and commits the mission without it" \
+  "dotdot rc:0 same:yes committed:0 warned:1 subject:1 · link rc:0 same:yes committed:0 warned:1 subject:1" \
+  "dotdot $OUT_DOTDOT · link $OUT_LINK"
 # Back to `main` for every block below: the directories and the ADRs leave with the branches they
 # now live on.
 git checkout -q main
@@ -6516,11 +6556,18 @@ for _ in $(seq 100); do
   grep -q 'CHECKOUT-OWNER' <<< "$LO_LIVE" && break
   sleep 0.1
 done
+# Help is read before the admission (CodeRabbit and Codex on PR #391): with the checkout held,
+# `sdd run --help` answered CHECKOUT-BUSY (rc 75) instead of the usage. Read inside the same window,
+# so the owner seen above is the one it would have waited on.
+LO_HELP_RC=0; LO_HELP="$( cd "$LO" && "$SDD" run "$LM" --help 2>&1 )" || LO_HELP_RC=$?
 touch "$LO/release"
 wait "$LO_BG" 2>/dev/null || true
 assert_eq "sdd status --no-gates calls the newest stream in course while a live owner holds the checkout" \
   "owner:1 in-course:1 orphan:0" \
   "owner:$(has "$LO_LIVE" 'CHECKOUT-OWNER') in-course:$(has "$LO_LIVE" '^    EXEC-20260108-100000-aaaa1111\.stream\.jsonl \(in course\)$') orphan:$(has "$LO_LIVE" '^  leftovers of a session that never closed:$')"
+assert_eq "sdd run --help prints the usage while a live owner holds the checkout, never CHECKOUT-BUSY" \
+  "owner:1 rc:0 usage:1 busy:0" \
+  "owner:$(has "$LO_LIVE" 'CHECKOUT-OWNER') rc:$LO_HELP_RC usage:$(has "$LO_HELP" '^sdd — runner for the autonomous development agent pipeline$') busy:$(has "$LO_HELP" 'CHECKOUT-BUSY')"
 rm -rf "$LO"
 
 # D17 of 20261012-a-rota-da-qa: the mission id is a grammar the runner checks in resolve_mission,
