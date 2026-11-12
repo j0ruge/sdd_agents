@@ -969,6 +969,60 @@ assert_eq "past EXEC: the mission's artifacts are byte-identical" "$art_before" 
 assert_eq "past EXEC: no tracked path changed" "" "$(git status --porcelain)"
 git reset -q --hard HEAD~1
 
+# --- the boot names what a dead session left (item H of TODO.md, second half) ------------------
+# In the 3.5c of dotp-remake a session died during the sabotage step and left the mutant applied,
+# with its `.bak`, and the next EXEC session was opened over that tree with no word about it. A
+# repository of its own, because the fixture above is asserted clean and this one must not be: one
+# stream no journal line closed and one modified tracked file. DIFFERENTIAL: the prompt over the
+# leftovers against the prompt over the clean tree, which must differ ONLY by added lines — every
+# probe above compares whole prompts, and the clean one has to stay what it was. Then a real lap
+# (the stub above answers 97 instead of a session): the journal gets a LEFTOVER line before the
+# session opens.
+echo "== the boot names what a dead session left =="
+LB="$SDD_STATE_FIX/leftover-boot"
+LBM="20260109-boot-leftovers"
+mkdir -p "$LB/docs/handoffs/$LBM"
+( cd "$LB" && git init -q -b main && git config user.email "fixture@example.com" && git config user.name "Fixture" \
+  && echo content > tracked.txt && "$SDD" install >/dev/null 2>&1 )
+printf '%s\n' 'PROJECT_NAME="leftovers"' 'DEFAULT_BRANCH="main"' 'TEST_CMD="true"' 'E2E_CMD=""' \
+  'HANDOFF_DIR="docs/handoffs"' 'QA_DOCS_PATH="docs/qa"' 'JIRA_ENABLED=false' > "$LB/.sdd/config.sh"
+printf -- '---\nmissao: %s\nbranch: main\naprovacao: auto\n---\n# Mission\n' "$LBM" > "$LB/docs/handoffs/$LBM/00-missao.md"
+: > "$LB/docs/handoffs/$LBM/01-plano.md"
+printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n|---|---|---|---|---|\n| I1 | slice one | `true` → 0 | pending | — |\n' \
+  > "$LB/docs/handoffs/$LBM/checkpoint.md"
+( cd "$LB" && git add -A && git commit -qm init )
+LB_CLEAN="$( cd "$LB" && "$SDD" boot "$LBM" EXEC 2>&1 )" || true
+mkdir -p "$LB/.sdd/logs/$LBM"
+: > "$LB/.sdd/logs/$LBM/EXEC-20260109-100000-cccc3333.stream.jsonl"
+echo changed >> "$LB/tracked.txt"
+LB_LEFT="$( cd "$LB" && "$SDD" boot "$LBM" EXEC 2>&1 )" || true
+LB_DIFF="$(diff <(printf '%s\n' "$LB_CLEAN") <(printf '%s\n' "$LB_LEFT"))" || true
+lb_has() { if grep -qE "$2" <<< "$1"; then printf 1; else printf 0; fi }
+assert_eq "the boot prompt names the orphan stream and the dirty tree a dead session left" \
+  "clean:0 removed:0 stream:1 dirty:1 look:1" \
+  "clean:$(lb_has "$LB_CLEAN" 'did not close') removed:$(lb_has "$LB_DIFF" '^[<|]') stream:$(lb_has "$LB_DIFF" '^> .*EXEC-20260109-100000-cccc3333\.stream\.jsonl') dirty:$(lb_has "$LB_DIFF" '^> .* M tracked\.txt') look:$(lb_has "$LB_DIFF" '^> .*git status.*git diff')"
+LB_RC=0
+( cd "$LB" && "$SDD" run "$LBM" --max-phases 1 >/dev/null 2>&1 ) || LB_RC=$?
+LB_JOURNAL="$(cat "$LB/.sdd/logs/$LBM/pipeline.log" 2>/dev/null)" || true
+assert_eq "the journal writes LEFTOVER before the session opened over a dead session's leftovers" \
+  "leftover:1 first-is-before-session:1" \
+  "leftover:$(grep -cE '^[^ ]+  LEFTOVER  EXEC  streams=1  dirty=1$' <<< "$LB_JOURNAL") first-is-before-session:$(awk '/  LEFTOVER  /{print (s ? 0 : 1); exit} /  EXEC  .*session=/{s=1}' <<< "$LB_JOURNAL")"
+# A journal that exists and cannot be read cannot say which streams it closed: the boot calls none
+# of them an orphan (every one would be a guess, and the stub's session above DID close), keeps the
+# dirty paths, and the reader's own complaint stays off stderr — regime 8 of check-autonomy.sh
+# measures that channel for the two journal writers. `armed` is the floor: as root the mode is
+# ignored and this would be the readable world under another name.
+chmod 000 "$LB/.sdd/logs/$LBM/pipeline.log"
+LB_ARMED=0
+( : < "$LB/.sdd/logs/$LBM/pipeline.log" ) 2>/dev/null || LB_ARMED=1
+LB_BLIND_ERR="$SDD_STATE_FIX/leftover-boot.err"
+LB_BLIND="$( cd "$LB" && "$SDD" boot "$LBM" EXEC 2>"$LB_BLIND_ERR" )" || true
+chmod 644 "$LB/.sdd/logs/$LBM/pipeline.log"
+assert_eq "an unreadable journal names no stream an orphan in the boot, and its reader says nothing raw" \
+  "armed:1 streams:0 dirty:1 raw:0" \
+  "armed:$LB_ARMED streams:$(lb_has "$LB_BLIND" 'stream no journal line closed') dirty:$(lb_has "$LB_BLIND" '^ +M tracked\.txt') raw:$(grep -c 'pipeline\.log' "$LB_BLIND_ERR")"
+rm -rf "$LB" "$LB_BLIND_ERR"
+
 # --- scope hygiene: no function reads the caller's local --------------------
 # `pstep` is `local` to `run_phase`. Bash dynamic scoping means EVERY function it calls can see
 # that local — so another function referencing `$pstep` "works", but only by coincidence of who

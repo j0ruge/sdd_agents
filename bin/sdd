@@ -3456,6 +3456,39 @@ on the item's RECURRED line, never a new item.
 EOF
     return 0
   fi
+  # What a session that never closed left on disk (item H of TODO.md, second half), named in the
+  # boot of the session that would otherwise be opened over it without a word: in the 3.5c of
+  # dotp-remake a session died during the sabotage step and left the mutant applied, with its
+  # `.bak`, for the next one to commit. session_leftovers is the definition `sdd status` prints
+  # too; with nothing left the block is empty and the prompt is byte for byte what it was.
+  local leftover_block="" lo_line
+  session_leftovers
+  if [ -n "$LEFTOVER_STREAMS" ] || [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then
+    leftover_block="
+Leftovers on disk before this session opened — a session of this mission did not close, or left
+work uncommitted:"
+    if [ -n "$LEFTOVER_STREAMS" ]; then
+      while IFS= read -r lo_line; do
+        leftover_block="$leftover_block
+  stream no journal line closed: .sdd/logs/$MISSION/$lo_line"
+      done <<< "$LEFTOVER_STREAMS"
+    fi
+    if [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then
+      leftover_block="$leftover_block
+  uncommitted paths ($LEFTOVER_DIRTY_N):"
+      while IFS= read -r lo_line; do
+        leftover_block="$leftover_block
+    $lo_line"
+      done <<< "$LEFTOVER_DIRTY"
+      if [ "$LEFTOVER_DIRTY_N" -gt 10 ]; then
+        leftover_block="$leftover_block
+    … and $((LEFTOVER_DIRTY_N - 10)) more"
+      fi
+    fi
+    leftover_block="$leftover_block
+Run git status and git diff BEFORE you edit anything. What you did not write is not yours: never
+commit a .bak, an applied mutant or another session's change — say in the handoff what you found."
+  fi
   [ -n "$slash" ] && printf '%s\n\n' "$slash"
   cat <<EOF
 You are in phase $step of mission \`$MISSION\` in project \`$PROJECT_NAME\`${agent:+, as the agent $agent}.
@@ -3470,7 +3503,7 @@ before. Read, in this order, before anything else:
   6. $item6
 $handoff_block$notes_block$lang_line
 Your task in this session: $(phase_task "$step").
-$why_line
+$why_line$leftover_block
 $(phase_extra "$step")
 $turn_rule
 
@@ -5516,6 +5549,16 @@ missing and write the artifacts. The gate will be re-evaluated."
   if [ -z "$mcp" ]; then cmd+=(--strict-mcp-config); mcp_mode="<none: --strict-mcp-config>"; fi
   if [ -n "$resume_sid" ]; then cmd+=(--resume "$resume_sid" --fork-session)
   else cmd+=(--session-id "$sid"); fi
+  # The journal says it too, for the human on `tail -F` (item H of TODO.md): one line before a NEW
+  # session that boots over the leftovers its prompt names — a retry gets the gate's reason as its
+  # prompt instead, so it carries no block and writes no line. pipeline_log_line is silent under
+  # --dry-run, which opens no session.
+  if [ -z "$resume_sid" ]; then
+    session_leftovers
+    if [ "$LEFTOVER_STREAMS_N" -gt 0 ] || [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then
+      pipeline_log_line "$(date -Iseconds)  LEFTOVER  $phase  streams=$LEFTOVER_STREAMS_N  dirty=$LEFTOVER_DIRTY_N"
+    fi
+  fi
 
   if [ "$DRY_RUN" = "1" ]; then
     info ""
@@ -8109,7 +8152,8 @@ status_increments() {
 # the path in the line is absolute, and the repo may have moved); LEFTOVER_LIVE, the one stream an
 # owner may still be writing; LEFTOVER_DIRTY, the first ten `XY path` entries of the porcelain
 # status of the whole repository (hat_status_lines, untracked included), and LEFTOVER_DIRTY_N, all
-# of them. `.sdd/logs/` is ignored by `sdd install`, so the streams themselves are not dirt.
+# of them; LEFTOVER_STREAMS_N counts the first. `.sdd/logs/` is ignored by `sdd install`, so the
+# streams themselves are not dirt.
 #
 # <owner line> is the CHECKOUT-OWNER the caller saw. Only `status --no-gates` runs without the lock
 # and can see another command holding the checkout; when it does, the NEWEST orphan, by the stamp in
@@ -8118,20 +8162,30 @@ status_increments() {
 # orphan is one. DECLARED LIMIT: a session that runs `sdd status` (full face) from inside its own
 # phase reentering the lock sees its own stream named as a leftover.
 LEFTOVER_STREAMS=""
+LEFTOVER_STREAMS_N=0
 LEFTOVER_LIVE=""
 LEFTOVER_DIRTY=""
 LEFTOVER_DIRTY_N=0
 session_leftovers() {
   local owner="${1:-}" dir="$REPO_ROOT/.sdd/logs/$MISSION" closed="" f base stamp best="" line
   local -a orphans=()
-  LEFTOVER_STREAMS=""; LEFTOVER_LIVE=""; LEFTOVER_DIRTY=""; LEFTOVER_DIRTY_N=0
+  LEFTOVER_STREAMS=""; LEFTOVER_STREAMS_N=0; LEFTOVER_LIVE=""; LEFTOVER_DIRTY=""; LEFTOVER_DIRTY_N=0
   # The file name of every `log=` value: the last field, read to the end of the line because the
   # path under REPO_ROOT may hold a space. index()/substr(), the house rule for a literal separator.
-  if [ -f "$dir/pipeline.log" ]; then
-    closed="$(awk '{ i = index($0, "  log="); if (i) { n = split(substr($0, i + 6), a, "/"); print a[n] } }' \
-                "$dir/pipeline.log")" || closed=""
+  # A journal that exists and cannot be read cannot say which streams it closed, so then NONE is
+  # called an orphan — every one would be a guess — and awk is never run on it, whose complaint
+  # would name the path on stderr, the channel regime 8 of check-autonomy.sh measures (the dirty
+  # paths are still read).
+  local journal_blind=0
+  if [ -e "$dir/pipeline.log" ]; then
+    if [ -r "$dir/pipeline.log" ]; then
+      closed="$(awk '{ i = index($0, "  log="); if (i) { n = split(substr($0, i + 6), a, "/"); print a[n] } }' \
+                  "$dir/pipeline.log")" || journal_blind=1
+    else
+      journal_blind=1
+    fi
   fi
-  for f in "$dir"/*.stream.jsonl; do
+  [ "$journal_blind" = 1 ] || for f in "$dir"/*.stream.jsonl; do
     [ -f "$f" ] || continue
     base="${f##*/}"
     if grep -qxF -- "${base%.stream.jsonl}.json" <<< "$closed"; then continue; fi
@@ -8147,6 +8201,7 @@ session_leftovers() {
   for base in ${orphans[@]+"${orphans[@]}"}; do
     [ "$base" = "$LEFTOVER_LIVE" ] && continue
     LEFTOVER_STREAMS="${LEFTOVER_STREAMS:+$LEFTOVER_STREAMS$'\n'}$base"
+    LEFTOVER_STREAMS_N=$((LEFTOVER_STREAMS_N + 1))
   done
   while IFS= read -r line; do
     [ -n "$line" ] || continue

@@ -38,7 +38,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Sensores que faltam
 
 - [ ] **O `sdd preflight` não mede a forma do `TODO_FILE`, e nada avisa o alvo sem o opt-in** —
-  `bin/sdd:6883` (`preflight-test`) — a forma só é medida quando o `TEST_CMD` do alvo inclui o
+  `bin/sdd:6926` (`preflight-test`) — a forma só é medida quando o `TEST_CMD` do alvo inclui o
   `check-todo.sh` (o opt-in de `config/schema.md`); o do `sales_quote` não incluía, e o `TODO.md` dele
   divergiu calado até 206 violações, achadas só quando o espelho de issues recusou. Direção: o
   `sdd preflight` roda `check-todo.sh --check "$TODO_FILE" --allow-empty` sozinho, ou avisa. Fonte:
@@ -53,7 +53,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
   — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
 
-- [ ] **Nada avisa que o clone do kit está velho ou fora da `main`** — `bin/sdd:4134` (`autonomy_kit_stamp`) —
+- [ ] **Nada avisa que o clone do kit está velho ou fora da `main`** — `bin/sdd:4167` (`autonomy_kit_stamp`) —
   o runner grava o SHA e a sujeira do `SDD_HOME` no journal, mas nada os compara com o upstream, e as seis
   linhas do `sdd health --release` também não. No `ui24_agent`, o `~/repos/sdd_agents` estava numa branch
   já mergeada, 382 commits atrás da `main`, e todo alvo rodou o kit velho sem saber. Direção: avisar uma
@@ -93,7 +93,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `--check` passou. Direção: o `--check` reprova `atualizado:` posterior ao relógio, com probe.
   — descoberto por `retrofit-watch` na missão `20261020-amep-anexo-na-demanda` do `lighthouse_project` (2026-10-21)
 
-- [ ] **A sonda do `Bash` do `sdd preflight` dá `ok` pela resposta, nunca pelo comando rodado** — `bin/sdd:6617`
+- [ ] **A sonda do `Bash` do `sdd preflight` dá `ok` pela resposta, nunca pelo comando rodado** — `bin/sdd:6660`
   (`sdd-preflight-ok`) — o braço `ok` só faz `grep` do marcador no `result`, e o marcador está literal no prompt:
   um modelo que repita o texto sem chamar o `Bash` fica verde, e sem linha `init` o `ok` ainda afirma "Bash in the
   tool list". O fixture prova: o stub A do `tests/check-preflight.sh` responde sem `tool_use` e a sonda diz `ok`.
@@ -101,7 +101,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto na varredura do R6 da missão `20261020-a-sessao-le-o-que-o-boot-manda` (2026-10-21)
 
 - [ ] **A sessão que morre junto com o runner some do journal, e a sobra dela não aparece no `sdd status`** —
-  `bin/sdd:5646` (`pipeline_log_line`) — a linha da sessão só sai no fim; com o host travado, o `pipeline.log` acaba no
+  `bin/sdd:5689` (`pipeline_log_line`) — a linha da sessão só sai no fim; com o host travado, o `pipeline.log` acaba no
   `PHASE` e o `<FASE>-…-<sid>.stream.jsonl` fica sem linha (medido no `dotp-remake`: a `7e4567fd`, 10 entradas sem
   commit). O `sdd status --no-gates` (`:7832`) não lê a árvore; o completo roda o `gate_EXEC`, que só a olha com todo
   incremento `done` e o `TEST_CMD` vermelho (`:1515`): com um `pending`, o run seguinte abre outra sessão sobre a sobra,
@@ -110,7 +110,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
   RECURRED 1: dotp-remake/3.5c (2026-10-31)
 
-- [ ] **O `sdd run` paga a REVIEW sem avisar que o `READ_EXTRA` não cobre o `codereview`** — `bin/sdd:6981`
+- [ ] **O `sdd run` paga a REVIEW sem avisar que o `READ_EXTRA` não cobre o `codereview`** — `bin/sdd:7024`
   (`sk_entry`) — o aviso com a entrada a acrescentar só sai no `sdd preflight`, que é opcional: o `sdd run` não o
   repete e abre a REVIEW assim mesmo. No `magic_tutor`, as três últimas missões tiveram Reads negados nas
   `references/` do `codereview` (5, 2 e 3 no `pipeline.log`). Na `20261024-dica-na-hora`, 3 dos 5 agentes da
@@ -153,7 +153,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   diz a regra, e o `--check --baseline` acusa, nos itens novos, `PR #N` ao lado do nome de outro repo.
   — descoberto pelo relay da 3.5d do `dotp-remake`, no espelho do `TODO.md` do kit (2026-11-02)
 
-- [ ] **O cabeçalho do `TODO.md` semeado pelo `install` não acompanha o template** — `bin/sdd:6257`
+- [ ] **O cabeçalho do `TODO.md` semeado pelo `install` não acompanha o template** — `bin/sdd:6300`
   (`already exists (preserved)`) — o `install` nunca reescreve um `TODO.md` com achados (`:6197`), e nenhum sensor
   compara o cabeçalho dele com o `templates/todo.<lang>.md`. A exceção da `RECURRED` bem formada entrou no template em
   `b0c80aa` (2026-10-23) e não chegou ao `TODO.md` do `dotp-remake`, semeado em 2026-10-18. Na r2 do `/codereview` do PR
@@ -217,7 +217,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   parado na r4; a r7, com só o `R7` entre as rodadas, deu A em tudo. Direção: só `R<n>` entra entre rodadas,
   o boot da rodada lista o commit que não fecha `R<n>`, e o platô compara a classe do achado, não só a letra.
   — descoberto por `sdd-reviewer` na missão `20261013-amep-alignment-review` (2026-10-14)
-- [ ] **`sdd install --help` instala o kit, e `sdd link-agents --help` liga os agentes** — `bin/sdd:6091`
+- [ ] **`sdd install --help` instala o kit, e `sdd link-agents --help` liga os agentes** — `bin/sdd:6134`
   (`--force`) — o `cmd_install` só compara o 1º argumento com `--force`, e o `cmd_link_agents` (`:11803`)
   não lê nenhum: o `--help` depois do subcomando executa. Num repo de rascunho, o 1º gravou `.sdd/config.sh`,
   `docs/handoffs/`, `TODO.md` e os agentes; o 2º, 8 symlinks e o `.gitignore`. O `main()` (`:11954`) só trata
@@ -227,7 +227,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sessão coordenadora` no `lighthouse_project`, ao ler o uso do `link-agents` (2026-10-16)
   RECURRED 1: dotp-remake/3.5d (2026-11-02)
 
-- [ ] **O remédio do `sdd kaizen` recusado ensina a mesma receita sem `--no-track`** — `bin/sdd:12094`
+- [ ] **O remédio do `sdd kaizen` recusado ensina a mesma receita sem `--no-track`** — `bin/sdd:12140`
   (`shared_why`) — o motivo manda `worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>`, e a
   branch do juiz nasce rastreando a `main` (git 2.43, medido em repo de rascunho); o `docs/failure-modes.md:685`
   e o `docs/pipeline.md:1569` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
@@ -242,7 +242,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `DEFAULT_BRANCH` do alvo, e não o literal `main`.
   — descoberto pelo Codex no yokoten `JRC-Brasil/sales_quote#484`, sobre a cópia do `bad6168` (2026-10-15)
 
-- [ ] **O `sdd install` adota a branch atual como base quando falta `origin/HEAD`** — `bin/sdd:6142`
+- [ ] **O `sdd install` adota a branch atual como base quando falta `origin/HEAD`** — `bin/sdd:6185`
   (`--show-current`) — sem `refs/remotes/origin/HEAD` o install grava a branch em que está, e instalar numa
   branch de trabalho é o caso comum: saiu `DEFAULT_BRANCH="plano-3-2"` no `dotp-remake` e `"chore/sdd-install"`
   no `magic_tutor` (este com `origin/main` no clone), sob o "Detected from origin/HEAD" do `config/starter.conf`;
@@ -251,14 +251,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` no `dotp-remake` (2026-10-19)
   RECURRED 1: magic_tutor (2026-10-20)
 
-- [ ] **A primeira instalação semeia o `TODO.md` em inglês, qualquer que seja o idioma** — `bin/sdd:6208`
+- [ ] **A primeira instalação semeia o `TODO.md` em inglês, qualquer que seja o idioma** — `bin/sdd:6251`
   (`inst_lang`) — o install lê o `OUTPUT_LANG` da config que acabou de gerar do `starter.conf`, onde ele vem
   vazio, e cai no `templates/todo.md` (`:6103`). Ajustar o idioma depois não troca a semente: no `dotp-remake`
   (`pt-BR`) foi preciso apagar o `TODO.md` intocado e rodar o `sdd install` de novo. Direção: um `--lang` no
   install, ou a saída nomear o reinstall quando o `TODO_FILE` ainda é a semente de outro idioma.
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
 
-- [ ] **Nada instala nem confere o `/sdd-plan` que o `link-agents` manda rodar** — `bin/sdd:12363`
+- [ ] **Nada instala nem confere o `/sdd-plan` que o `link-agents` manda rodar** — `bin/sdd:12409`
   (`/sdd-plan`) — a saída termina em "Next: $ /sdd-plan", mas o comando só existe onde alguém criou o link
   `~/.claude/commands/sdd-plan.md`, descrito só na ADR 0016 (máquina do operador); o README (`:45`) não o cita
   e o `sdd preflight` não o mede. Numa máquina nova o `~/.claude/commands` nem existia. Direção: o `link-agents`
@@ -385,7 +385,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   handoff foi escrito.
   — descoberto pelo relay da missão `20261021-dica-mais-rapida` do `magic_tutor` (2026-10-21)
 
-- [ ] **O chapéu não pode declarar MCP, e o executor fica sem o REA** — `bin/sdd:5487` (`--strict-mcp-config`) —
+- [ ] **O chapéu não pode declarar MCP, e o executor fica sem o REA** — `bin/sdd:5520` (`--strict-mcp-config`) —
   toda fase roda sem servidor MCP, e um `mcp:` no chapéu para o runner ("carving those servers into a
   --mcp-config is not implemented"). No `dotp-remake`, ler o `DotP_D14.exe` pelo MCP `rea` só cabe no PLAN: na
   3.3d o planner levantou no REA o que o EXEC precisaria ler, e o dono pediu o REA também no `sdd run`. Direção:
@@ -428,7 +428,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o relay responde uma vez e cita a primeira pergunta; o planner não fecha turno de job repetindo pergunta aberta.
   — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
 
-- [ ] **O `sdd approve` commita o ADR do `adr:` sem tirar o `proposed`** — `bin/sdd:8761` (`proposed`) — o `sdd adr new`
+- [ ] **O `sdd approve` commita o ADR do `adr:` sem tirar o `proposed`** — `bin/sdd:8807` (`proposed`) — o `sdd adr new`
   escreve `proposed`, e o `cmd_approve` (`:8835`) só põe o arquivo do `adr:` no commit da aprovação. O status final
   depende de quem escreveu o ADR: no `dotp-remake`, o 0011 nasceu `accepted` à mão (`02c19f5`) e o 0012 ficou
   `proposed` (`a81c28f`) até a REVIEW r1 da 3.4b achar e a DOCS mudar à mão. Direção: o `sdd approve` troca o
@@ -519,7 +519,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   RECURRED 1: sdd_agents/20261112 (2026-11-12)
 
 - [ ] **O `PR #N aberto` que a fase PR escreve no roadmap e no `KAIZEN_LOG.md` envelhece no merge** —
-  `bin/sdd:12556` (`close_return_home`) — o head do PR grava o estado dele em doc durável, e nada o lista depois do
+  `bin/sdd:12698` (`close_return_home`) — o head do PR grava o estado dele em doc durável, e nada o lista depois do
   merge. Na `main` do `dotp-remake` depois de j0ruge/dotp-remake#28, o `docs/roadmap.md:32` e `:159` e o
   `KAIZEN_LOG.md:1346` e `:1349` seguiam com `PR #28 aberto` (o `f5d6710` de lá); a 3.6c deixou o mesmo no roadmap,
   e o pós-merge consertou à mão. Vizinho de "O pós-merge não lista o `RESOLVED by` que já pode sair". Direção: o
@@ -537,7 +537,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-23)
 
 - [ ] **O `sdd preflight` reprova a árvore suja sem dizer os caminhos, nem que eram só não versionados** —
-  `bin/sdd:7112` (`git status --porcelain`) — no `magic_tutor` o preflight disse só "working tree dirty", e o
+  `bin/sdd:7155` (`git status --porcelain`) — no `magic_tutor` o preflight disse só "working tree dirty", e o
   porcelain tinha só `??`: 4 `partidas/*.md` que o app grava e o repo deixa fora do git de propósito (nomes de
   oponentes) e a `.claude/worktrees/` do harness. Foi preciso rodar o `git status` à mão e pôr os dois no
   `.git/info/exclude`. Direção: a falha lista os caminhos (até uns 10) e, quando todos são `??`, nomeia o
@@ -551,7 +551,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-qa` em
   `20261005-mascaras-ncm-e-painel`, transportado por `sdd-kaizen` (2026-10-12)
 
-- [ ] **O `sdd status` manda `sdd run` com o app fora do ar, e a fase fechada volta a pendente** — `bin/sdd:8067`
+- [ ] **O `sdd status` manda `sdd run` com o app fora do ar, e a fase fechada volta a pendente** — `bin/sdd:8110`
   (`run: sdd run`) — com o `30-handoff-qa.md` em `done`, o `gate_QA` refaz a e2e ao vivo; app caído vira `· QA`,
   `next phase: QA` e `run: sdd run`, embora o motivo diga "no session can start it" (`:1867`). Esse `sdd run`
   compra uma sessão `QA:close` (opus no alvo) antes de escalar `app-down` (`tests/check-autonomy.sh:2557`), e cada
@@ -559,7 +559,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   status lê o `GATE_APP_DOWN` e diz "fechada, e2e não re-verificável agora: app fora", com o remédio da escalada.
   — descoberto por `sessão coordenadora` na missão `20261013-amep-alignment-review` (2026-10-14)
 
-- [ ] **O `sdd status` fica calado enquanto o gate do EXEC roda o `TEST_CMD`** — `bin/sdd:7995` (`--no-gates`) —
+- [ ] **O `sdd status` fica calado enquanto o gate do EXEC roda o `TEST_CMD`** — `bin/sdd:8038` (`--no-gates`) —
   depois da linha do TICKET, nada sai durante a suíte do alvo: 1 min 57 s no `ui24_agent`, medido com
   `sdd status 20261003-fase8-s8-dinamica-eq-restantes > arquivo`. Num `timeout 60` a espera foi tomada por
   travamento, e o erro de missão ausente não cita o `--no-gates`, que lê só o disco. Direção: uma linha
@@ -567,14 +567,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` na sessão do `ui24_agent` que planejou a S9 (2026-10-17)
   RECURRED 1: magic_tutor/20261103-perfil-por-tipo (2026-11-03)
 
-- [ ] **O fim da corrida diz que só falta o merge, e o `sdd close` some** — `bin/sdd:9673` (`pipeline complete`) —
+- [ ] **O fim da corrida diz que só falta o merge, e o `sdd close` some** — `bin/sdd:9719` (`pipeline complete`) —
   o `sdd run` e o `sdd status` (`:7700`) fecham com "only the merge is left", e nenhum template, chapéu ou comando
   cita o `sdd close <missão>` pós-merge (`docs/pipeline.md` § "After the PR"). Medido no `sales_quote`: os 7
   cartões da campanha (SQ-156 a SQ-162) seguiram "Em andamento" depois do merge, até o operador fechá-los à mão
   em 2026-10-18. Direção: com `JIRA_ENABLED=true`, a mensagem final e o corpo do PR nomeiam o `sdd close`.
   — descoberto por `sessão coordenadora` na missão `20261018-silencios-do-formulario-e-dos-dialogos` (2026-10-18)
 
-- [ ] **O pós-merge não lista o `RESOLVED by` que já pode sair** — `bin/sdd:12556` (`close_return_home`) —
+- [ ] **O pós-merge não lista o `RESOLVED by` que já pode sair** — `bin/sdd:12698` (`close_return_home`) —
   o `sdd close` volta à base com o merge e para aí, e o `sdd status` diz "only the merge is left". O ciclo de
   vida (`templates/todo.pt-BR.md`) apaga o item quando `git merge-base --is-ancestor <hash>` vale, e nada o
   lista. Medido depois do PR j0ruge/warehouse_explorer_web#8: 5 itens RESOLVED, apagados por script avulso só porque um
@@ -606,7 +606,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sessão coordenadora` na missão `20261019-plano-3-2-a-magicas-de-uma-vez` (2026-10-19)
   RECURRED 1: magic_tutor/pr25 (2026-10-20)
 
-- [ ] **O `sdd run` diz que commita na base quando a TICKET vai cortar o branch antes** — `bin/sdd:6372`
+- [ ] **O `sdd run` diz que commita na base quando a TICKET vai cortar o branch antes** — `bin/sdd:6415`
   (`warn_if_on_base_branch`) — compara só o branch atual com o `DEFAULT_BRANCH`. No `lighthouse_project` (LH-8,
   `JIRA_ENABLED=true`, `branch:` no placeholder) o `sdd run` de `develop` avisou "commits straight into it", e o
   `8f6b46f` da TICKET já nasceu no branch da missão: o `develop` local ficou no `e03583a` do approve, cujo aviso
@@ -622,14 +622,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay do `sdd run` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
 
 - [ ] **O `sdd preflight` imprime "printf: erro de escrita: Pipe quebrado" com a `READ_EXTRA` preenchida** —
-  `bin/sdd:5824` (`kit_read_rules`) — o `read_rules_cover` sai do `while` no 1º casamento e o produtor segue
+  `bin/sdd:5867` (`kit_read_rules`) — o `read_rules_cover` sai do `while` no 1º casamento e o produtor segue
   escrevendo num pipe sem leitor (`:5353`, `:5360`). No `lighthouse_project` foram 7 linhas antes do "third-party
   skills present", com veredito `ok`. As funções reais, extraídas, repetem o ruído sob SIGPIPE ignorado (como num
   pai Node) e calam com a ação padrão; quem o ignorava naquela corrida não foi achado. Erro de escrita num preflight
   verde se lê como falha. Direção: ler a lista inteira (`mapfile -t`) antes de casar, com caso sob `SIG_IGN`.
   — descoberto por `claude` no `lighthouse_project`, ao preencher a `READ_EXTRA` (2026-10-23)
 
-- [ ] **A ajuda do `sdd run` não diz como soltá-lo da sessão que o dispara** — `bin/sdd:12225`
+- [ ] **A ajuda do `sdd run` não diz como soltá-lo da sessão que o dispara** — `bin/sdd:12271`
   (`sdd run <mission>`) — o run leva horas, e quem o dispara de uma sessão do Claude Code e vai dar `/clear` ou
   fechar o terminal precisa destacá-lo, sem saber onde ler o progresso depois. Na peça C do `lighthouse_project`
   funcionou `nohup setsid sdd run <m> > ~/.cache/<log> 2>&1 < /dev/null &`: o pai virou o PID 2140, fora da
@@ -646,7 +646,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `[b]in/sdd run` ou o PID do líder do `setsid`, e a linha de fim do log.
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
-- [ ] **O lembrete do `sdd kaizen` não vê o backlog nem diz o custo** — `bin/sdd:11787` (`kaizen_reminder`) — no
+- [ ] **O lembrete do `sdd kaizen` não vê o backlog nem diz o custo** — `bin/sdd:11833` (`kaizen_reminder`) — no
   fim do `sdd run`, a função só olha a série de autonomia e se já há veredito do `kit_sha`. Ela não lê o
   `todo-findings` e manda rodar o `sdd kaizen` sem dizer o que ele é: uma sessão, e outra se o gate falhar
   (`bin/sdd:11995`), cada uma com teto de `BUDGET_PER_PHASE_USD` (US$ 40 no `.sdd/config.sh` do kit). A sessão
@@ -734,7 +734,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   gate lê, e o planner põe o handoff no fim do último incremento.
   — descoberto pelo relay da missão `20261106-rapido-sem-arestas` do `magic_tutor` (2026-11-06)
 
-- [ ] **A ajuda do `sdd why` não diz que a fase EXEC roda a suíte inteira** — `bin/sdd:12288` (`sdd why`) — o
+- [ ] **A ajuda do `sdd why` não diz que a fase EXEC roda a suíte inteira** — `bin/sdd:12334` (`sdd why`) — o
   `sdd boot` e o `run --dry-run` avisam que os gates rodam o `TEST_CMD`, e o `sdd status` oferece `--no-gates`; o
   `sdd why` parece só ler o disco. No `magic_tutor`, `sdd why 20261106-rapido-sem-arestas EXEC` passou dos 2 min do
   prazo padrão do Bash (o `gate-exec-test` das 18:14 levou 2 min 11 s) e foi cortado: uma sessão pode ler o corte como

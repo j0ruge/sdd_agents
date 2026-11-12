@@ -785,8 +785,10 @@ mut_RUN_derive_in_subshell() {
 
 # The boot prompt stops saying why the phase was opened. The session is back to looking for "the
 # first pending" with no reason in hand, which is how the no-op commit of issue #54 was born.
+# Since item H of TODO.md the leftovers block rides on the same line; the mutant drops the reason
+# and keeps the block, which is what it always sabotaged.
 mut_BOOT_reason_dropped() {
-  sed -i '/^boot_prompt() {/,/^}/ { /^\$why_line$/d }' "$1"
+  sed -i '/^boot_prompt() {/,/^}/ s@^\$why_line\$leftover_block$@$leftover_block@' "$1"
 }
 
 # Door 1 of no-work goes: cmd_run derives EXEC over an unreadable cell and buys the session, whose
@@ -6801,6 +6803,21 @@ mut_RUN_leftovers_journal_ignored() {
 mut_RUN_leftovers_in_course_blind() {
   sed -i '/^session_leftovers() {/,/^}/ s@^  if \[ -n "\$owner" \]; then$@  if false; then@' "$1"
 }
+# Item H of TODO.md, second half: the boot block and the journal line, one mutant each. Caught by
+# "the boot prompt names the orphan stream and the dirty tree a dead session left" and "the journal
+# writes LEFTOVER before the session opened over a dead session's leftovers" (check-dry-run.sh).
+mut_RUN_boot_leftovers_unsaid() {
+  sed -i 's@^\$why_line\$leftover_block$@$why_line@' "$1"
+}
+mut_RUN_leftover_journal_unsaid() {
+  sed -i '/^run_phase() {/,/^}/ s@^      pipeline_log_line "\$(date -Iseconds)  LEFTOVER  @      : "$(date -Iseconds)  LEFTOVER  @' "$1"
+}
+# ...and the journal that cannot be read is read as "closed nothing", so every stream is called an
+# orphan. Caught by "an unreadable journal names no stream an orphan in the boot, and its reader
+# says nothing raw" (check-dry-run.sh).
+mut_RUN_leftovers_unreadable_journal_guessed() {
+  sed -i '/^session_leftovers() {/,/^}/ s@^      journal_blind=1$@      journal_blind=0@' "$1"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7608,6 +7625,9 @@ CATALOG=(
   RUN_leftovers_no_gates_unsaid
   RUN_leftovers_journal_ignored
   RUN_leftovers_in_course_blind
+  RUN_boot_leftovers_unsaid
+  RUN_leftover_journal_unsaid
+  RUN_leftovers_unreadable_journal_guessed
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

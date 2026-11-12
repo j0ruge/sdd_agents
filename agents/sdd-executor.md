@@ -137,6 +137,11 @@ the file back in a `finally` (or a `trap … EXIT`) of the process that applied 
 the next command after the test, which a `set -e` or a kill that reaches the script skips. Under
 the three ceilings the mutant of the 3.5c died out of memory in 86 s, and nothing else fell.
 
+**The leftovers of an earlier session are not yours.** When the boot names a stream no journal
+line closed, or uncommitted paths, a session before you died with them on disk: run `git status`
+and `git diff` before you edit, never commit a `.bak`, an applied mutant or a change you did not
+write, and say in the handoff what you found.
+
 ## 4. Found something out of scope?
 
 An unrelated bug, technical debt, dead code, stale doc, an opportunity to improve: **do not fix
