@@ -58,6 +58,16 @@
 #      that does not is held to 120. A `<where>` has no length limit. The messages name the line the
 #      item OPENS on, as rules 1, 3, 4 and the cap do, so a `--baseline` key does not move when the
 #      line of returns changes.
+#   7. in a file that NUMBERS its items — one open item whose title opens with `**<digits>. ` — a
+#      bare `#N` in the body of an open item is refused when N is the number of an item of the
+#      file: to one reader it is item N, to another PR N (measured twice in magic_tutor). Bare means
+#      the byte before the `#` is not an ASCII letter, a digit, `.`, `_`, `/` or `-` (glued to
+#      `owner/repo#N`, a file), and the word before it, across blanks, is not `PR`, `PRs`, `issue`
+#      or `issues` in any case — blanks and not one space, because a wrapped line reaches the body
+#      joined with its indent. The message names the line the item OPENS on, like rules 1 to 6, and
+#      the exits: `item N`, or `PR #N` / `owner/repo#N`. A file that numbers nothing — this kit's
+#      own — is untouched. DECLARED: the numbers come from open items only, never from the decided
+#      records; a `#N` inside a code span is read like any other.
 #
 # And per decided record: `- **<title>** — …`, one physical line, a code span after the title (the
 # pointer to the evidence) and a `(YYYY-MM-DD)` at the end. Records are not counted as findings.
@@ -92,8 +102,9 @@
 # and no exclusion from check-lang's surface(): TODO.md is content in OUTPUT_LANG, so a sensor
 # keyed on the Portuguese words of the found-by field would both break in an English target repo
 # and widen the exact coverage hole that TODO.md already records against check-lang's surface().
-# The two section markers and the token of rule 6 are the only WORDS this file reads, and they are
-# English on purpose — the same rule that keeps status tokens English inside a pt-BR checkpoint.
+# The two section markers, the token of rule 6 and the four tracker words of rule 7 (PR, PRs,
+# issue, issues) are the only WORDS this file reads, and they are English on purpose — the same
+# rule that keeps status tokens English inside a pt-BR checkpoint.
 # The previous version found the section by `^## Aberto`, a Portuguese heading, and was the one
 # exception to this paragraph: in a target whose findings sat under another heading it read the
 # whole file.
@@ -457,6 +468,32 @@ todo_awk() {
       if (n + 0 != k) return rtok " says " n ", lists " k
       return ""
     }
+    # Rule 7, the bare #N. A # followed by digits is bare unless the byte before it is an ASCII
+    # letter, a digit, a dot, an underscore, a slash or a hyphen (glued to owner/repo, a file, a
+    # word), or the word before it, across blanks, is PR, PRs, issue or issues in any case. Blanks
+    # and not one space: a wrapped line reaches this body joined with its indent. ASCII classes
+    # only, the mawk rule above. Each candidate keeps the line its item opens on and the number;
+    # END judges them, because a citation can come before the item it names.
+    function bare_scan(text, at,   i, p, o, num, c, w) {
+      i = 1
+      while ((p = index(substr(text, i), "#")) > 0) {
+        o = i + p - 1; i = o + 1
+        num = substr(text, o + 1)
+        if (!match(num, /^[0-9]+/)) continue
+        num = substr(num, 1, RLENGTH)
+        c = (o > 1) ? substr(text, o - 1, 1) : ""
+        if (c ~ /[A-Za-z0-9._\/-]/) continue
+        w = substr(text, 1, o - 1)
+        if (w ~ /[ \t]$/) {
+          sub(/[ \t]+$/, "", w)
+          if (match(w, /[A-Za-z]+$/)) {
+            w = tolower(substr(w, RSTART, RLENGTH))
+            if (w == "pr" || w == "prs" || w == "issue" || w == "issues") continue
+          }
+        }
+        ncand++; cand_at[ncand] = at; cand_n[ncand] = num + 0
+      }
+    }
     function nomarker(at) {
       if (mode == "lint")
         print "  line " at ": an H2 with no section marker on the next line — the skeleton has two, each followed by " omark " or " dmark
@@ -482,6 +519,11 @@ todo_awk() {
         print start tt spans(rest)
       }
       if (mode == "lint") {
+        # Rule 7: the file numbers its items when one title opens with digits and a dot.
+        if (first ~ /^- \[ \] \*\*[0-9]+\. /) {
+          nn = substr(first, 9); sub(/\..*$/, "", nn); itemno[nn + 0] = 1
+        }
+        bare_scan(body, start)
         if (first !~ /^- \[ \] \*\*/)
           print "  line " start ": item does not open with `- [ ] **<title>**`"
         if (head_of(body) !~ /`[^`]+`/)
@@ -758,6 +800,11 @@ todo_awk() {
     # the whole-file mode of the probes, and the CLI refuses it (rc 99) before the parser runs.
     END {
       flush(); if (h2) nomarker(h2)
+      # A file that numbers no item has no key in itemno, so the rule cannot act there.
+      if (mode == "lint")
+        for (k = 1; k <= ncand; k++)
+          if (cand_n[k] in itemno)
+            print "  line " cand_at[k] ": a bare #" cand_n[k] " names item " cand_n[k] " of this file — write `item " cand_n[k] "`, or `PR #" cand_n[k] "` / `owner/repo#" cand_n[k] "` when it is not the item"
       if (marked && !dseen && mode == "lint")
         print "  line " NR ": no decided section — the skeleton ends with a `##` whose next line is " dmark
       if (mode == "count") print items + 0
@@ -822,7 +869,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=13
+RULES_FLOOR=14
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -2385,6 +2432,53 @@ EOF
   fi
   rule_end 32 'a RECURRED line is measured, and outside the cap and the width when it parses'
 
+  # ── Rule 7: a bare #N that names an item, in a file that numbers its items (item C) ──────────
+  # magic_tutor numbers its items (`**57. …**`) and cites PRs and issues as `#N` too, so a bare
+  # `#57` reads as "item 57" to one reader and "PR 57" to another; twice a session wrote it meaning
+  # the item. Item 56 cites #57 BEFORE item 57 exists in the file, so the numbers are collected over
+  # the whole file and judged at the end. The clean worlds are the exits the message names (PR,
+  # issue, owner/repo), a number no item has, and a file that numbers nothing — which is this kit's
+  # own TODO.md, where `PR #378` and a loose `#257` keep passing.
+  rule_begin
+  printf '%s\n' '## Aberto' '<!-- sdd:open -->' '' \
+    '- [ ] **56. A first numbered finding** — `bin/sdd:42` (`bsym`) — see #57 for the cause.' \
+    '  — found by `sdd-qa` (2026-08-16)' \
+    '- [ ] **57. A second numbered finding** — `bin/sdd:42` (`bsym`) — matters.' \
+    '  — found by `sdd-qa` (2026-08-16)' \
+    > "$box/num-bare.md"
+  assert_says "$box/num-bare.md" 8 'line 4: a bare #57 names item 57 of this file' \
+    "a bare #57 that names a later item of a numbered file"
+  sed 's/see #57 for/see (#57) for/' "$box/num-bare.md" > "$box/num-paren.md"
+  assert_says "$box/num-paren.md" 8 'a bare #57 names item 57' "a #57 after a parenthesis is still bare"
+  sed 's/see #57 for/see #56 for/' "$box/num-bare.md" > "$box/num-self.md"
+  assert_says "$box/num-self.md" 8 'a bare #56 names item 56' "a bare #N that names an earlier item, its own"
+  local numvar
+  for numvar in 'PR #57' 'PRs #57' 'issue #57' 'Issues #57' 'j0ruge/magic_tutor#57' 'see #999'; do
+    sed "s|see #57|see $numvar|; s|see see|see|" "$box/num-bare.md" > "$box/num-ok.md"
+    assert_clean "$(with_decided "$box/num-ok.md")" 8 "a numbered file citing \"$numvar\""
+  done
+  # Each byte of the glued class has its own world: a degraded class loses one of them in silence.
+  for numvar in 'v1.#57' 'v_#57' 'v/#57' 'v-#57'; do
+    sed "s|see #57|see $numvar|" "$box/num-bare.md" > "$box/num-glued.md"
+    assert_clean "$(with_decided "$box/num-glued.md")" 8 "a #57 glued after \"${numvar%#57}\" is not bare"
+  done
+  sed 's/\*\*56\. /**/; s/\*\*57\. /**/' "$box/num-bare.md" > "$box/num-unnumbered.md"
+  assert_clean "$(with_decided "$box/num-unnumbered.md")" 8 "a file that numbers no item lets a bare #57 pass"
+  # Numbering is digits, a dot and a blank opening the title: a title that opens with a count is
+  # not a number, and loosening the test to "a digit in the title" made this world red.
+  sed 's/\*\*56\. /**56 /; s/\*\*57\. /**57 /' "$box/num-bare.md" > "$box/num-count.md"
+  assert_clean "$(with_decided "$box/num-count.md")" 8 "titles opening with a count and no dot number nothing"
+  # A # and a blank before the digits is no #N: the digits are read right after the #, and a match
+  # left unanchored read the 57 of "# 570" as a citation of item 57.
+  sed 's/see #57 for/see # 570 for/' "$box/num-bare.md" > "$box/num-blank.md"
+  assert_clean "$(with_decided "$box/num-blank.md")" 8 "a # followed by a blank cites nothing"
+  # The reporting path, not only the parser: `--check` over the refused world is rc 1, the rc of
+  # every shape violation (measured before this rule existed), and over a clean one rc 0.
+  assert_rc 1 "--check refuses a bare #N that names an item" bash "$SELF" --check "$(with_decided "$box/num-bare.md")"
+  sed 's/see #57 for/see PR #57 for/' "$box/num-bare.md" > "$box/num-pr.md"
+  assert_rc 0 "--check accepts the same file citing PR #57" bash "$SELF" --check "$(with_decided "$box/num-pr.md")"
+  rule_end 18 'a bare #N that names an item is refused in a file that numbers its items'
+
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
   assert_rc 96 "an unknown option must exit 96" bash "$SELF" --bogus
@@ -2424,8 +2518,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 229 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 229\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 247 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 247\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi

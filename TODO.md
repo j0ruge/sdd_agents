@@ -118,7 +118,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   headless lê a reference. Direção: o `sdd run` faz a mesma busca de skills, sem sessão, e avisa ou para.
   — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
 
-- [ ] **O `check-todo.sh` aceita o `#N` solto que quer dizer "item N"** — `tests/check-todo.sh:768`
+- [ ] **O `check-todo.sh` aceita o `#N` solto que quer dizer "item N"** — `tests/check-todo.sh:815`
   (`lint_todo`) — o `TODO.md` do `magic_tutor` numera os itens (`**57. …**`), e três deles citavam outros
   como `#57`, `#26` e `#58`. O `--check` deu rc 0; só a linha `REF?` do espelho (`todo-to-github-issues`)
   mostrou que o GitHub ligaria cada um à issue ou ao PR de mesmo número, e o conserto pediu um PR próprio
@@ -145,7 +145,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
 - [ ] **`PR #N` de outro repositório passa pelo `check-todo.sh` e vira link errado na issue** —
-  `tests/check-todo.sh:768` (`lint_todo`) — o `--check` não lê referência, e a direção do vizinho "O
+  `tests/check-todo.sh:815` (`lint_todo`) — o `--check` não lê referência, e a direção do vizinho "O
   `check-todo.sh` aceita o `#N` solto" isenta o `#N` depois de `PR`: é aí que este erro mora. Este arquivo
   tinha 8 desses em 7 itens, com rc 0, e só o `REF?` da `todo-to-github-issues` os mostrou, depois do merge dos
   itens (PR #339). O PR #378, ainda aberto, achou outros três. Uma sonda com `dotp-remake` e um `PR` inexistente
