@@ -4121,8 +4121,15 @@ EOF
 # leaving it out of the commit is visible: committed and intact, it would add nothing to the diff.
 # The value is relative to the repo root, the way adr_check_link reads it. ADR_CHECK is off in this
 # fixture (the starter default), so a fixture ADR with no `Spec:` line does not shut gate_PLAN.
+#
+# Since item G of TODO.md the file is written by `sdd adr new` itself, never by a printf here: its
+# `- **Status**: proposed (…)` line is the spelling the approve turns into `accepted`, and a fixture
+# typed by hand would agree with a spelling the runner may no longer write. The witness below says
+# the line is there before the approve runs, so the assertion in section 3 cannot pass on a file
+# that never said `proposed`.
 mkdir -p "$FIX/docs/adr"
-printf '# ADR 0001 — approve fixture\n' > "$FIX/docs/adr/0001-approve-fixture.md"
+( cd "$FIX" && "$SDD" adr new --slug approve-fixture >/dev/null 2>&1 ) || true
+APPROVE_ADR_BORN="$(grep -c '^- \*\*Status\*\*: proposed (' "$FIX/docs/adr/0001-approve-fixture.md" 2>/dev/null)" || true
 
 # --- 1. the preview, and `n` as a real no-op.
 #
@@ -4313,9 +4320,52 @@ else
        "the three artifacts and the adr: file in the commit, the unrelated edit left dirty, HEAD unmoved on the second call" \
        "subject '$APPROVE_SUBJECT', $APPROVE_FILES file(s): ${APPROVE_TOUCHED//$'\n'/ · }, rc2 $APPROVE_AGAIN_RC, status: ${APPROVE_STATUS//$'\n'/ · }, second call: $(tail -2 <<< "$APPROVE_AGAIN_OUT")"
 fi
-# Back to `main` for every block below: the directory and the ADR leave with the branch they now
-# live on, and the dirty file goes first so the switch cannot refuse.
+# --- 3b. and the ADR it commits is accepted (item G of TODO.md).
+#
+# `sdd adr new` writes `proposed`, and the approve only put the file in its commit: in dotp-remake
+# ADR 0012 stayed `proposed` until the REVIEW r1 of 3.4b found it and the DOCS phase edited it by
+# hand. The approval commit now carries the status line as `accepted` — read from the COMMIT, not
+# the tree, since the commit is the claim — and nothing else of the file changes. The control is a
+# second mission whose ADR a human wrote `accepted`: it reaches its commit byte for byte. The first
+# world is section 2's approve over the ADR `sdd adr new` wrote above (APPROVE_ADR_BORN).
+APPROVE_ADR_COMMITTED="$(git show HEAD:docs/adr/0001-approve-fixture.md 2>/dev/null)" || true
+APPROVE_ADR_STATUS="$(grep '^- \*\*Status\*\*:' <<< "$APPROVE_ADR_COMMITTED")" || true
 git checkout -q -- file.txt
+git checkout -q main
+AC="20260103-approve-accepted"
+mkdir -p "$FIX/docs/handoffs/$AC"
+# On `main` the first mission's directory exists only on its branch, so it is read from there.
+AC_MISSAO="$(git show "missao/$AM:docs/handoffs/$AM/00-missao.md" 2>/dev/null)" || true
+sed -e "s/^missao: .*/missao: $AC/" -e "s|^branch: .*|branch: missao/$AC|" -e 's/^aprovacao: .*/aprovacao:/' \
+    -e 's|^adr: .*|adr: docs/adr/0009-hand-accepted.md|' <<< "$AC_MISSAO" > "$FIX/docs/handoffs/$AC/00-missao.md"
+printf '# Plano\n' > "$FIX/docs/handoffs/$AC/01-plano.md"
+git show "missao/$AM:docs/handoffs/$AM/checkpoint.md" > "$FIX/docs/handoffs/$AC/checkpoint.md" 2>/dev/null || true
+# `mkdir -p` again: docs/adr/ held only the first ADR, which now lives on that mission's branch, so
+# git removed the directory with it when the checkout came back to main.
+mkdir -p "$FIX/docs/adr"
+printf '# ADR 0009 — hand accepted\n\n- **Status**: accepted (—, 2026-01-01)\n- **Spec**: TBD\n\nbody\n' \
+  > "$FIX/docs/adr/0009-hand-accepted.md"
+cp "$FIX/docs/adr/0009-hand-accepted.md" "$FIX/hand-accepted.expected"
+AC_RC=0; AC_OUT="$( cd "$FIX" && "$SDD" approve "$AC" 2>&1 <<< "y" )" || AC_RC=$?
+AC_SAME=no
+# `-s` on the expected file first: a control whose ADR was never written would compare nothing.
+[ -s "$FIX/hand-accepted.expected" ] && git show HEAD:docs/adr/0009-hand-accepted.md 2>/dev/null \
+  | cmp -s - "$FIX/hand-accepted.expected" && AC_SAME=yes
+AC_SUBJECT="$(git log -1 --format=%s)"
+rm -f "$FIX/hand-accepted.expected"
+if [ "$APPROVE_ADR_BORN" = 1 ] \
+   && grep -qx -- '- \*\*Status\*\*: accepted (—, [0-9-]*)' <<< "$APPROVE_ADR_STATUS" \
+   && ! grep -qF 'proposed' <<< "$APPROVE_ADR_STATUS" \
+   && [ "$(grep -c . <<< "$APPROVE_ADR_STATUS")" -eq 1 ] \
+   && [ "$AC_RC" -eq 0 ] && [ "$AC_SUBJECT" = "chore(missao): plan $AC approved by the human" ] && [ "$AC_SAME" = yes ]; then
+  pass "sdd approve turns the proposed ADR that adr: names into accepted, in the approval commit"
+else
+  fail "sdd approve turns the proposed ADR that adr: names into accepted, in the approval commit" \
+       "the ADR sdd adr new wrote is proposed before, accepted in the approval commit; a hand-accepted ADR reaches its commit byte for byte" \
+       "born proposed: ${APPROVE_ADR_BORN:-?}; committed status: '${APPROVE_ADR_STATUS:-<none>}'; control rc $AC_RC, subject '$AC_SUBJECT', byte for byte: $AC_SAME; out: $(tail -2 <<< "$AC_OUT")"
+fi
+# Back to `main` for every block below: the directories and the ADRs leave with the branches they
+# now live on.
 git checkout -q main
 
 # --- 3a. and it stops sending the human to a gate that is still shut.

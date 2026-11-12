@@ -233,7 +233,8 @@ That reserves the next free id under `ADR_DIR`, writes the header, and fills `ad
 `00-missao.md` in the same call. Then **write the body**, in the repo's `OUTPUT_LANG`, following
 the shape of the newest ADR already there: context with numbers, the decision, and the
 alternatives you discarded with the reason. The stub the command leaves is a header and a comment
-— a body nobody wrote is a decision nobody made.
+— a body nobody wrote is a decision nobody made. The header says `proposed`, and it stays so while
+you plan: `sdd approve` turns it into `accepted` in the approval commit, the moment the human approves.
 
 If the mission takes no such trade-off, write `adr: none`. That is a decision too, and it passes.
 

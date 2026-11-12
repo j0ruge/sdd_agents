@@ -6767,6 +6767,12 @@ mut_RUN_install_origin_main_skipped() {
 mut_RUN_install_guess_unsaid() {
   sed -i '/^cmd_install() {/,/^}/ s@^    \[ "\$branch_guess" -eq 0 \] || warn "DEFAULT_BRANCH@    [ "$branch_guess" -eq 0 ] || : "DEFAULT_BRANCH@' "$1"
 }
+# Item G of TODO.md: the approve commits the ADR that adr: names and no longer accepts it — the
+# ADR sdd adr new wrote `proposed` reaches the approval commit `proposed`. Caught by "sdd approve
+# turns the proposed ADR that adr: names into accepted, in the approval commit" (check-gates.sh).
+mut_RUN_approve_adr_left_proposed() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^         adr_accept "\$REPO_ROOT/\$adr_value"$@         : "$REPO_ROOT/$adr_value"@' "$1"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7567,6 +7573,7 @@ CATALOG=(
   RUN_install_remote_head_skipped
   RUN_install_origin_main_skipped
   RUN_install_guess_unsaid
+  RUN_approve_adr_left_proposed
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

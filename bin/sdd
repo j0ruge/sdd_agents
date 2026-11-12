@@ -8645,6 +8645,49 @@ adr_spec_relative() {
   esac
 }
 
+# The status line `sdd adr new` writes, in ONE spelling read twice: adr_new prints
+# `<ADR_STATUS_LINE><ADR_STATUS_PROPOSED><ticket>, <date>)`, and adr_accept — the approve — turns the
+# ADR_STATUS_PROPOSED of that line into ADR_STATUS_ACCEPTED. Spelled as two literals, the day
+# adr_new changed its wording the approve would stop accepting anything, and no line would say so
+# (item G of TODO.md: in dotp-remake ADR 0012 stayed `proposed` until a REVIEW round found it).
+ADR_STATUS_LINE='- **Status**: '
+ADR_STATUS_PROPOSED='proposed ('
+ADR_STATUS_ACCEPTED='accepted ('
+
+# adr_accept <file> — the approval accepts the ADR it commits.
+#
+# Only the FIRST line that starts with ADR_STATUS_LINE is read, and it changes only when it goes on
+# with ADR_STATUS_PROPOSED, which is what adr_new wrote: the rest of the line (ticket, date) and
+# the rest of the file stay byte for byte. An ADR a human already wrote `accepted`, or with a status
+# in another dialect (`aceito`, `Date: … · Status:`), is not this command's to rewrite and is left
+# untouched — mtime included, since nothing is moved into place when nothing changed.
+#
+# Same write as frontmatter_write: a temporary beside the file, awk through ENVIRON (the `*` of the
+# prefix is a literal, compared with index(), never a regex), the mode kept, `mv -f`. A symlink is
+# WARNED about and skipped, never refused: before this the approve committed a linked ADR as it
+# was, and a `die` here would come after aprovacao is already written.
+adr_accept() {
+  local file="$1" tmp rc=0
+  if [ -L "$file" ]; then
+    warn "$file is a symbolic link — its status was left as it is; accept the ADR by hand"
+    return 0
+  fi
+  tmp="$(mktemp "${file}.XXXXXX")" || die "adr_accept: could not create a temporary beside $file"
+  SDD_ADR_PREFIX="$ADR_STATUS_LINE" SDD_ADR_FROM="$ADR_STATUS_PROPOSED" SDD_ADR_TO="$ADR_STATUS_ACCEPTED" awk '
+    BEGIN { p = ENVIRON["SDD_ADR_PREFIX"]; from = p ENVIRON["SDD_ADR_FROM"]; to = p ENVIRON["SDD_ADR_TO"] }
+    !seen && index($0, p) == 1 {
+      seen = 1
+      if (index($0, from) == 1) { print to substr($0, length(from) + 1); changed = 1; next }
+    }
+    { print }
+    END { exit changed ? 0 : 3 }
+  ' "$file" > "$tmp" || rc=$?
+  if [ "$rc" -eq 3 ]; then rm -f "$tmp"; return 0; fi
+  [ "$rc" -eq 0 ] || { rm -f "$tmp"; die "adr_accept: awk failed on $file"; }
+  chmod --reference="$file" "$tmp" 2>/dev/null \
+    || warn "adr_accept: could not keep the mode of $file — it now carries the temporary's (0600); restore it with chmod"
+  mv -f "$tmp" "$file" || { rm -f "$tmp"; die "adr_accept: could not replace $file"; }
+}
 
 # adr_new <root> <slug> <ticket> <spec> <dry-run> — reserve the id and write the header.
 #
@@ -8701,7 +8744,7 @@ adr_new() {
 
   {
     printf '# ADR %s — %s\n\n' "$id" "$slug"
-    printf -- '- **Status**: proposed (%s, %s)\n' "${ticket:-—}" "$(date +%F)"
+    printf -- '%s%s%s, %s)\n' "$ADR_STATUS_LINE" "$ADR_STATUS_PROPOSED" "${ticket:-—}" "$(date +%F)"
     printf -- '- **Spec**: %s\n' "${spec_rel:-TBD}"
     printf '\n<!-- sdd adr new: replace this line with the decision, in OUTPUT_LANG=%s. Give the\n' "${OUTPUT_LANG:-<unset>}"
     printf '     heading above a real title, and follow the shape of the newest ADR in %s. -->\n' "${ADR_DIR%/}"
@@ -9044,7 +9087,7 @@ cmd_approve() {
   info ""
   dim "  approving says: this plan is what you want built. It writes aprovacao: $approved_as"
   dim "  into 00-missao.md and commits the mission directory (plus the file adr: names, when it is"
-  dim "  a path). It does NOT start the pipeline."
+  dim "  a path, its 'proposed' status turned 'accepted'). It does NOT start the pipeline."
   # The fifth door, and the only one whose commit a human asks for out loud. It went in written by
   # the same mission that closed the silence of the fourth (`sdd retry`) and shipped silent itself:
   # standing on `main`, approving dropped a `chore(missao)` commit straight into the base branch
@@ -9131,6 +9174,10 @@ cmd_approve() {
   case "$adr_value" in
     ''|TBD|none|\<*) : ;;
     *) if [ -f "$REPO_ROOT/$adr_value" ]; then
+         # The approval accepts the ADR it commits (item G of TODO.md): `sdd adr new` wrote it
+         # `proposed`, and a plan approved over a proposed decision left the ADR saying otherwise
+         # until somebody noticed. After the `y`, before the `git add`, so a `n` writes nothing.
+         adr_accept "$REPO_ROOT/$adr_value"
          paths+=( "$adr_value" )
        fi ;;
   esac
@@ -9139,7 +9186,7 @@ cmd_approve() {
     && git commit -q -m "chore(missao): plan $MISSION approved by the human" \
          -m "Written by 'sdd approve': closing the PLAN gate used to mean editing the frontmatter
 by hand, in the exact shape gate_PLAN greps. The mission directory enters this commit, with the
-file adr: names when it is a path, and nothing else." \
+file adr: names when it is a path (its proposed status turned accepted), and nothing else." \
          -- "${paths[@]}" ) \
     || die "git refused the approval commit — 'aprovacao: $approved_as' IS written in $rel, commit it by hand"
 
