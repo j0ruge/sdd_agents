@@ -480,6 +480,30 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   nomeiam o kit, com link. Direção: as outras 12 seguem o molde do `todo.md:26`.
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-07)
 
+- [ ] **O `/sdd-plan` delega ao planner sem olhar a árvore do alvo nem as missões que já existem** —
+  `commands/sdd-plan.md:15` (`show-toplevel`) — o passo 2 só protege o checkout do kit (`KIT-TOUCHED`), e essa guarda
+  só vale dentro de um `sdd run`. Ao abrir a 3.6d do `dotp-remake` por um handoff velho, a árvore tinha 6 `M` e 6 `??`
+  na `plano-3-6-e`, que uma sessão do Codex executava à mão, e a pasta da 3.6d já existia, mergeada em
+  j0ruge/dotp-remake#28. Só o `git status` e o `git log` do relay seguraram o planner. Direção: o "Before anything
+  else" roda o `git status --porcelain`, lista o `HANDOFF_DIR` e para com árvore suja ou tópico já em pasta.
+  — descoberto por `sdd-plan` (relay) depois da missão `20261111-plano-3-6-d-custos-e-ciclagem` (2026-11-11)
+
+- [ ] **A fila de PRs de achado do kit não tem receita, e cada merge põe o seguinte em conflito** —
+  `tests/health-baseline.txt:26` (`todo-findings`) — todo PR de achado move a mesma linha da catraca e apenda no fim
+  da mesma seção do `TODO.md`. No merge dos PRs 381 e 386 a 389, quatro conflitaram na catraca e dois no `TODO.md`.
+  A receita do `9593497` (merge da `main` na branch, "catraca X + n → Y" recontada pelo `check-todo.sh --count`, o
+  `--check`, o `--anchors` e o `--check --baseline origin/main`, push, GitGuardian e `gh pr merge --match-head-commit`)
+  passou as quatro vezes, em ~25 chamadas, e só mora no histórico. Direção: a receita num doc do kit, ou um script.
+  — descoberto por `sessão interativa` no merge dos PRs de achado do kit (2026-11-11)
+
+- [ ] **O `PR #N aberto` que a fase PR escreve no roadmap e no `KAIZEN_LOG.md` envelhece no merge** —
+  `bin/sdd:12444` (`close_return_home`) — o head do PR grava o estado dele em doc durável, e nada o lista depois do
+  merge. Na `main` do `dotp-remake` depois de j0ruge/dotp-remake#28, o `docs/roadmap.md:32` e `:159` e o
+  `KAIZEN_LOG.md:1346` e `:1349` seguiam com `PR #28 aberto` (o `f5d6710` de lá); a 3.6c deixou o mesmo no roadmap,
+  e o pós-merge consertou à mão. Vizinho de "O pós-merge não lista o `RESOLVED by` que já pode sair". Direção: o
+  `close_return_home` lista as linhas que dão o PR mergeado como aberto (só lista). Sem correção verificada.
+  — descoberto por `sessão interativa` no pós-merge da missão `20261111-plano-3-6-d-custos-e-ciclagem` (2026-11-11)
+
 ### Saída humana e cosmética
 
 - [ ] **O "Como verificar" do PR copia o `$SDD_HOME` do `TEST_CMD`, e o comando falha fora do runner** —
