@@ -1,6 +1,6 @@
 ---
 missao: 20261112-as-reincidentes-primeiro
-atualizado: 2026-11-12 02:48
+atualizado: 2026-11-12 08:23
 ---
 
 # Checkpoint — as reincidentes primeiro (lote 1 de zerar a catraca)
@@ -18,7 +18,7 @@ atualizado: 2026-11-12 02:48
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | A: o /sdd-plan nomeia a saída quando o agente sdd-planner não está registrado | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan names the way out when the sdd-planner agent type is not registered' <<< "$o"` → `1` | pending | — |
+| I1 | A: o /sdd-plan nomeia a saída quando o agente sdd-planner não está registrado | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan names the way out when the sdd-planner agent type is not registered' <<< "$o"` → `1` | done | 60042c9 |
 | I2 | B: pergunta nenhuma fica atrás de tarefa viva em segundo plano | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan and the planner leave no question behind a live background task' <<< "$o"` → `1` | pending | — |
 | I3 | D: o planner pode usar o Monitor e espera a tarefa viva com ele | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: the planner may use Monitor, and waits on a live task with it' <<< "$o"` → `1` | pending | — |
 | I4 | M: o planner chama as skills grilling e domain-modeling | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: the planner invokes the grilling and domain-modeling skills, which the model can call' <<< "$o"` → `1` | pending | — |
