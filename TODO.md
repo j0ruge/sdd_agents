@@ -122,6 +122,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`j0ruge/magic_tutor#115`). Recusar todo `#N` não serve: este arquivo cita PR assim. Direção: acusar o
   `#N` só num arquivo que numera os itens, quando N é o número de um item e não vem depois de `PR`, `issue`
   ou `dono/repo`. — descoberto por `claude` no espelho do `TODO.md` do `magic_tutor` (2026-10-26)
+  RECURRED 2: magic_tutor/PR-166 (2026-11-03); magic_tutor/20261103-perfil-por-tipo (2026-11-04)
 
 - [ ] **A sonda de interrupção do `check-health.sh` mede o grupo antes do `setsid`, e a suíte cai sem defeito** —
   `tests/check-health.sh:1868` (`INTR_PID`) — o `ps -o pgid=` roda logo depois do `setsid … &`, às vezes antes de
@@ -449,6 +450,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   linha ⛔ com texto proposto, ou leva o motivo escrito de não virar.
   — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
 
+- [ ] **O 3º caso do §0 do QA está só no caminho com interface, e o sem interface chega a ele igual** —
+  `agents/sdd-qa.md:41` (`third case`) — o `qa: skipped` manda a fase direto a esta sessão nos dois caminhos,
+  mas o §0 o põe "on the **with interface** path", e a tabela do §0 manda a sessão sem interface percorrer a
+  jornada; quem a segura é o §2 ("never walk"). No `20261103-perfil-por-tipo` do `magic_tutor`, sem interface,
+  a QA parou certa pelo §2; a que parar no §0 gasta a sessão percorrendo. Direção: o 3º caso nos dois
+  caminhos, apontando o §2.
+  — descoberto por `sdd-qa` na missão `20261103-perfil-por-tipo` do `magic_tutor` (2026-11-03)
+
+- [ ] **O remédio do `qa: skipped` refutado apaga, com o handoff, os achados fora de escopo dele** —
+  `agents/sdd-qa.md:79` (`delete this handoff`) — o `git rm` do `30-handoff-qa.md` tira da árvore a seção
+  "Achados fora de escopo", e o achado do kit que só existia ali (o item acima) ficou só no histórico do alvo:
+  o humano seguiu a receita no `magic_tutor` (`74c5610`) e só o achou na retro da sessão. Direção: o passo 4
+  manda levar antes os achados do kit ao `TODO.md` do kit, ou o runner os colhe antes do `git rm`.
+  — descoberto pela retro do `sdd` no `20261103-perfil-por-tipo` do `magic_tutor` (2026-11-03)
+
 - [ ] **O planner manda chamar a `grill-with-docs`, que o modelo não pode invocar** — `agents/sdd-planner.md:41`
   (`grill-with-docs`) — a skill instalada (mattpocock/skills @ 447ca70) traz `disable-model-invocation: true`, fica
   fora da lista que o modelo vê, e o corpo dela só manda chamar a `grilling` e a `domain-modeling`. No grill da 3.5e
@@ -543,6 +559,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   travamento, e o erro de missão ausente não cita o `--no-gates`, que lê só o disco. Direção: uma linha
   "rodando o TEST_CMD (<cmd>)…" antes do gate que a chama, e o `--no-gates` na mensagem de uso.
   — descoberto por `retrofit-watch` na sessão do `ui24_agent` que planejou a S9 (2026-10-17)
+  RECURRED 1: magic_tutor/20261103-perfil-por-tipo (2026-11-03)
 
 - [ ] **O fim da corrida diz que só falta o merge, e o `sdd close` some** — `bin/sdd:9487` (`pipeline complete`) —
   o `sdd run` e o `sdd status` (`:7700`) fecham com "only the merge is left", e nenhum template, chapéu ou comando
