@@ -350,7 +350,9 @@ resolve_mission() {
     while IFS= read -r d; do matches+=("$(basename "$d")"); done \
       < <(find "$base" -mindepth 1 -maxdepth 1 -type d -name "*${want}*" | sort)
     case "${#matches[@]}" in
-      0) die "mission '$want' not found in $HANDOFF_DIR/" ;;
+      # The remedy for the other way `sdd status` goes wrong rides along (item I of TODO.md): the
+      # plain page runs the gates, and a wait read as a hang is followed by a guess at the name.
+      0) die "mission '$want' not found in $HANDOFF_DIR/ — 'sdd status <mission> --no-gates' reads a mission off the disk without running a gate" ;;
       1) MISSION="${matches[0]}" ;;
       *) die "'$want' is ambiguous: ${matches[*]}" ;;
     esac
@@ -884,6 +886,9 @@ app_probe() {
 declare -A _CHECK_RC=()
 declare -A _CHECK_LOG=()
 LAST_CHECK_LOG=""
+# Set to 1 by the full face of `sdd status` and by nothing else (item I of TODO.md): see the line
+# that reads it in run_check_cmd.
+CHECK_ANNOUNCE=0
 
 run_check_cmd() {
   local cmd="$1" label="${2:-check}" logfile rc=0
@@ -891,6 +896,19 @@ run_check_cmd() {
   if [ -n "${_CHECK_RC[$cmd]+x}" ]; then
     LAST_CHECK_LOG="${_CHECK_LOG[$cmd]}"
     return "${_CHECK_RC[$cmd]}"
+  fi
+  # The page that asks "where am I" says it is about to wait, and for what. Measured in ui24_agent:
+  # 1 min 57 s of silence after the TICKET line while gate_EXEC ran the suite, and a `timeout 60`
+  # read it as a hang. HERE, after the memo, so a cached answer announces nothing; on stderr, since
+  # the gates are also read through `$(current_phase)` and stdout would land in the capture. The
+  # phase and the key come from the label every gate already passes (`gate-<phase>-test|e2e`), so
+  # the four gate sites share this one line and no gate decides on its own whether it will run.
+  # `sdd why`, `sdd run` and the dry-run never set CHECK_ANNOUNCE: their outputs stay as they were.
+  if [ "$CHECK_ANNOUNCE" = 1 ] && [[ $label == gate-*-* ]]; then
+    local ann_phase="${label#gate-}" ann_key=TEST_CMD
+    [ "${ann_phase##*-}" = e2e ] && ann_key=E2E_CMD
+    ann_phase="${ann_phase%-*}"
+    printf '  %srunning %s (%s) for the %s gate…%s\n' "$C_DIM" "$ann_key" "$cmd" "${ann_phase^^}" "$C_RESET" >&2
   fi
   # The name has to be unique per EXECUTION, and it was unique per second per LABEL — which is
   # neither. This is the file GATE_WHY sends the operator to read ("see $LAST_CHECK_LOG"), so an
@@ -8027,6 +8045,8 @@ cmd_status() {
 
   local ph state why
   local -a green=()
+  # The full face, and only it, announces every suite a gate is about to run (run_check_cmd).
+  CHECK_ANNOUNCE=1
   for ph in $PHASES; do
     if "gate_$ph"; then state="${C_GREEN}✓${C_RESET}"; green+=("$ph"); else state="${C_YELLOW}·${C_RESET}"; fi
     why="$GATE_WHY"

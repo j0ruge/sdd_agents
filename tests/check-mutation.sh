@@ -6773,6 +6773,15 @@ mut_RUN_install_guess_unsaid() {
 mut_RUN_approve_adr_left_proposed() {
   sed -i '/^cmd_approve() {/,/^}/ s@^         adr_accept "\$REPO_ROOT/\$adr_value"$@         : "$REPO_ROOT/$adr_value"@' "$1"
 }
+# Item I of TODO.md, one mutant per half of "sdd status names the TEST_CMD before the gate that
+# runs it, and a missing mission is told about --no-gates" (check-gates.sh): the announcement in
+# run_check_cmd turned into a no-op, and the --no-gates taken out of the not-found message.
+mut_RUN_status_suite_unannounced() {
+  sed -i '/^run_check_cmd() {/,/^}/ s@^    printf \(.  %srunning %s\)@    : \1@' "$1"
+}
+mut_RUN_missing_mission_no_gates_unsaid() {
+  sed -i "/^resolve_mission() {/,/^}/ s@<mission> --no-gates' reads a mission off@<mission>' reads a mission off@" "$1"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7574,6 +7583,8 @@ CATALOG=(
   RUN_install_origin_main_skipped
   RUN_install_guess_unsaid
   RUN_approve_adr_left_proposed
+  RUN_status_suite_unannounced
+  RUN_missing_mission_no_gates_unsaid
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -6425,6 +6425,45 @@ NG_TYPO_RC=0
 assert_eq "a misspelt status option is refused, never read as a mission name" "1" \
   "$( [ "$NG_TYPO_RC" -ne 0 ] && echo 1 || echo 0 )"
 
+# Item I of TODO.md: the full page says it is about to run the suite. Measured in ui24_agent, 1 min
+# 57 s of silence after the TICKET line, and a `timeout 60` read the wait as a hang. A mission of
+# its own, one `done` row on HEAD, so gate_EXEC reaches TEST_CMD; the TEST_CMD reads the status
+# output AS IT RUNS, so a line printed after the suite (or never) leaves the mark at 0 — order is
+# asked of the disk, not of the clock. Then the same mission with the row `pending`: the gate
+# returns before the suite and the line must not appear. `sdd why` runs the same gate and must stay
+# quiet: the line belongs to the status page. And a mission that does not exist is told about the
+# read that runs no gate.
+AN="20260106-status-announce"
+AN_DIR="$FIX/docs/handoffs/$AN"
+AN_OUT="$SDD_STATE_FIX/announce-out"
+AN_MARK="$SDD_STATE_FIX/announce-mark"
+mkdir -p "$AN_DIR"
+printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n|---|---|---|---|---|\n| I1 | slice one | `true` → 0 | done | %s |\n' \
+  "$(git rev-parse --short HEAD)" > "$AN_DIR/checkpoint.md"
+: > "$AN_MARK"
+sed -i "s|^TEST_CMD=\"true\"|TEST_CMD=\"grep -c 'running TEST_CMD' $AN_OUT >> $AN_MARK; true\"|" .sdd/config.sh
+"$SDD" status "$AN" > "$AN_OUT" 2>&1 || true
+AN_SEEN="$(head -1 "$AN_MARK")"
+AN_LINE="$(grep -n 'running TEST_CMD (grep -c' "$AN_OUT" | head -1 | cut -d: -f1)"
+AN_EXEC="$(grep -nE 'EXEC {4}' "$AN_OUT" | head -1 | cut -d: -f1)"
+AN_NAMED="$(grep -c "running TEST_CMD (grep -c 'running TEST_CMD' .*) for the EXEC gate" "$AN_OUT")" || true
+AN_WHY="$("$SDD" why "$AN" EXEC 2>&1)" || true
+sed -i "s|^TEST_CMD=.*|TEST_CMD=\"true\"|" .sdd/config.sh
+sed -i 's/| done | [0-9a-f]* |$/| pending | — |/' "$AN_DIR/checkpoint.md"
+AN_PENDING="$("$SDD" status "$AN" 2>&1)" || true
+AN_MISSING="$("$SDD" status 20260107-no-such-mission 2>&1)" || true
+rm -rf "$AN_DIR" "$FIX/.sdd/logs/$AN"
+if [ "${AN_SEEN:-0}" -ge 1 ] && [ -n "$AN_LINE" ] && [ -n "$AN_EXEC" ] && [ "$AN_LINE" -lt "$AN_EXEC" ] \
+   && [ "${AN_NAMED:-0}" -ge 1 ] && ! grep -q 'running TEST_CMD' <<< "$AN_WHY" \
+   && ! grep -q 'running TEST_CMD' <<< "$AN_PENDING" && grep -qE 'EXEC {4}' <<< "$AN_PENDING" \
+   && grep -qF "not found in docs/handoffs/" <<< "$AN_MISSING" && grep -qF -- "--no-gates" <<< "$AN_MISSING"; then
+  pass "sdd status names the TEST_CMD before the gate that runs it, and a missing mission is told about --no-gates"
+else
+  fail "sdd status names the TEST_CMD before the gate that runs it, and a missing mission is told about --no-gates" \
+       "the line seen by the suite itself, above the EXEC row, naming the command; none in sdd why or with a pending row; --no-gates in the not-found message" \
+       "seen by the suite: ${AN_SEEN:-<none>}; line ${AN_LINE:-<none>} vs EXEC row ${AN_EXEC:-<none>}; named: ${AN_NAMED:-0}; in why: $(grep -c 'running TEST_CMD' <<< "$AN_WHY"); with pending: $(grep -c 'running TEST_CMD' <<< "$AN_PENDING"); missing: $(tail -1 <<< "$AN_MISSING")"
+fi
+
 # D17 of 20261012-a-rota-da-qa: the mission id is a grammar the runner checks in resolve_mission,
 # ^[0-9]{8}-[a-z0-9-]+$, and that is what makes the whole-id boundary of the K8 reader exact
 # (CodeRabbit on PR #247: a mission `foo` was satisfied by an entry citing only `foo.bar` or `foo` plus U+00E9).

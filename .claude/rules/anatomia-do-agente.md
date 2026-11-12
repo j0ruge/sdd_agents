@@ -458,7 +458,11 @@ motivo nomeia primeiro"; rc 3 em
 `PHASE <X> reason="…"` por fase derivada, que é o que o humano no `tail -F` lê, e desde
 `20261020-a-sessao-le-o-que-o-boot-manda` uma linha `DENIED <X> tool=… path=…` por chamada distinta
 que o harness negou à sessão (`journal_denials`, logo depois do `hat_init_facts` no `run_phase` e no
-`cmd_close`; o caminho sem espaço nem controle, nunca o comando); `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
+`cmd_close`; o caminho sem espaço nem controle, nunca o comando); desde `20261112-as-reincidentes-primeiro`
+a face completa do `sdd status` diz na stderr `running TEST_CMD (<cmd>) for the EXEC gate…` antes de
+cada suíte que um gate vai rodar (`run_check_cmd`, ligado só pelo `cmd_status`), e a missão que não
+existe nomeia o `--no-gates` — no `ui24_agent` 1 min 57 s calados foram lidos como travamento;
+`QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
 fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria: teto por missão
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
 `ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos
