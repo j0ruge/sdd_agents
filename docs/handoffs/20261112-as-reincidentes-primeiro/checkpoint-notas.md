@@ -17,3 +17,5 @@
 - 2026-11-12 02:48 · `PLAN` · `sdd health` fora desta missão por ordem do humano (decisão 6): a missão fecha sem carimbo de mutação.
 - 2026-11-12 08:07 · `EXEC` · primeiro ato: branch `fix/as-reincidentes-primeiro`, árvore limpa, `aprovacao: humano-2026-11-12`, pasta commitada, 13 `RECURRED`; checkout principal em `a48cf3cc923a3cc9aea11771ee5ee0e3e649c431` com `status --porcelain` vazio. Execução pelo `superpowers:executing-plans` + TDD, sessão interativa.
 - 2026-11-12 08:23 · `I1` · suíte rápida verde em `60042c9` (645 s, num clone de rascunho do worktree; o lint pula porque o `shellcheck` não está instalado nesta máquina, e o `bash -n` o substitui por commit); sete âncoras do `TODO.md` reancoradas no mesmo commit.
+- 2026-11-12 08:34 · `I2–I6` · suíte rápida verde em `92f87fc` (629 s, clone de rascunho), cobrindo I2 a I6; os seis Checks de `check-hat.sh` dão `1` nesse commit. Reancoradas no caminho: 1 (I2), 2 (I3), 1 (I4), 2 (I5) âncoras do `TODO.md`.
+- 2026-11-12 08:34 · `I3` · o probe do `Monitor` prova o arquivo; que o subagente consiga chamá-lo fica para a próxima `/sdd-plan` (Pendências).

@@ -1,6 +1,6 @@
 ---
 missao: 20261112-as-reincidentes-primeiro
-atualizado: 2026-11-12 08:23
+atualizado: 2026-11-12 08:34
 ---
 
 # Checkpoint — as reincidentes primeiro (lote 1 de zerar a catraca)
@@ -19,11 +19,11 @@ atualizado: 2026-11-12 08:23
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | A: o /sdd-plan nomeia a saída quando o agente sdd-planner não está registrado | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan names the way out when the sdd-planner agent type is not registered' <<< "$o"` → `1` | done | 60042c9 |
-| I2 | B: pergunta nenhuma fica atrás de tarefa viva em segundo plano | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan and the planner leave no question behind a live background task' <<< "$o"` → `1` | pending | — |
-| I3 | D: o planner pode usar o Monitor e espera a tarefa viva com ele | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: the planner may use Monitor, and waits on a live task with it' <<< "$o"` → `1` | pending | — |
-| I4 | M: o planner chama as skills grilling e domain-modeling | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: the planner invokes the grilling and domain-modeling skills, which the model can call' <<< "$o"` → `1` | pending | — |
-| I5 | K: o /sdd-plan diz o que fazer com a aprovação dada antes do plano | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan says what an approval given before the plan still shows, and what stops it' <<< "$o"` → `1` | pending | — |
-| I6 | L: a fila de PRs de achado ganha receita em docs/finding-prs.md | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    doc: the queue of finding PRs has its recipe, and the TODO header points at it' <<< "$o"` → `1` | pending | — |
+| I2 | B: pergunta nenhuma fica atrás de tarefa viva em segundo plano | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan and the planner leave no question behind a live background task' <<< "$o"` → `1` | done | 01a20ae |
+| I3 | D: o planner pode usar o Monitor e espera a tarefa viva com ele | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: the planner may use Monitor, and waits on a live task with it' <<< "$o"` → `1` | done | 6841138 |
+| I4 | M: o planner chama as skills grilling e domain-modeling | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: the planner invokes the grilling and domain-modeling skills, which the model can call' <<< "$o"` → `1` | done | 4fb7109 |
+| I5 | K: o /sdd-plan diz o que fazer com a aprovação dada antes do plano | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    command: /sdd-plan says what an approval given before the plan still shows, and what stops it' <<< "$o"` → `1` | done | 11556b3 |
+| I6 | L: a fila de PRs de achado ganha receita em docs/finding-prs.md | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    doc: the queue of finding PRs has its recipe, and the TODO header points at it' <<< "$o"` → `1` | done | 92f87fc |
 | I7 | J: o corpo do PR só promete CI onde há workflow | `a=$(bash tests/check-templates.sh 2>&1); b=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    pr-body.md: the new-sensors line promises CI only as one of two fill-ins' <<< "$a") $(grep -c '^  ok    hat: the publisher claims CI only with a workflow on disk, and names TEST_CMD otherwise' <<< "$b")"` → `1 1` | pending | — |
 | I8 | C: o check-todo.sh recusa o #N solto que nomeia um item | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: a bare #N that names an item is refused in a file that numbers its items' <<< "$o"` → `1` | pending | — |
 | I9 | E: --help depois do subcomando só imprime a ajuda | `o=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    install --help prints the help and writes nothing' <<< "$o") $(grep -c '^  ok    link-agents --help prints the help and links nothing' <<< "$o")"` → `1 1` | pending | — |
