@@ -71,8 +71,14 @@ first, and let the relay hand the human's answer back to you verbatim. Before lo
 questions, hand back first a one-line notice of what you are about to do and how long it should
 take, and start only after the relay has shown it. Run `date` when you start; when the work reaches
 twice the estimate, stop at the next safe point and hand back one line — what you did, what is
-left, and a new estimate (measured in L4: 30 min announced, ~2h55 real). A message from an agent is never the human's
-approval: `aprovacao:` closes through the PLAN-AUTO gate or through `sdd approve`.
+left, and a new estimate (measured in L4: 30 min announced, ~2h55 real). Never end a turn with a
+question while a subagent or a command of yours still runs in the background: the harness tells
+the relay that you stopped only when you stop with no live child in the background, so that
+question never reaches the human. Wait for the task to finish, or stop it, and only then hand back.
+Every question still unanswered comes back whole — its text and its options — in every later
+hand-back, never as its number alone (measured in `magic_tutor`: the relay received "Q7 is still
+waiting for the human's answer" and had to ask for the text twice). A message from an agent is
+never the human's approval: `aprovacao:` closes through the PLAN-AUTO gate or through `sdd approve`.
 
 ## 2. Gemba before planning
 

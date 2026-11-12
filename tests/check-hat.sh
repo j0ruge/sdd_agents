@@ -687,6 +687,31 @@ command_planner_unregistered_probes() {
   fi
 }
 
+# --- /sdd-plan and the planner: no question behind a live background task (item B, 3 returns) ---
+# The harness tells the relay that a subagent stopped only when it stops with no live child in the
+# background (probe of dotp-remake 3.5c). In magic_tutor Q3, Q4 and Q7 were the end of a planner
+# turn with its subagents or a test still running: the relay received only the NEXT hand-back ("Q7
+# is still waiting for the human's answer") and had to ask for the text twice. Three rules, each in
+# the file whose reader follows it: (1) no question while a task of yours runs in the background,
+# in both; (2) a pending question comes back whole, in the planner; (3) the relay that reads the
+# number of a question it never relayed asks for the text first, in the command. Read by section —
+# the relay's in "Relaying the grill", the planner's in § 1, where its subagent paragraph lives.
+background_question_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" agent="$ROOT/agents/sdd-planner.md" relay s1
+  relay="$(awk '/^## Relaying the grill to the human/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  s1="$(awk '/^## 1\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'no live child in the background' <<< "$relay" \
+     && grep -qF 'still runs in the background' <<< "$relay" \
+     && grep -qF 'ask the planner for the text before anything else' <<< "$relay" \
+     && grep -qF 'still runs in the background' <<< "$s1" \
+     && grep -qF 'comes back whole' <<< "$s1" \
+     && grep -qF 'never as its number alone' <<< "$s1"; then
+    pass "command: /sdd-plan and the planner leave no question behind a live background task"
+  else
+    fail "command: /sdd-plan or the planner lets a question end a turn while a background task of the planner still runs, lets a pending question come back as its number alone, or lets the relay go on without its text"
+  fi
+}
+
 
 # --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
 # The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
@@ -1010,6 +1035,7 @@ command_worktree_probes
 command_worktree_return_probes
 command_branch_cwd_probes
 command_planner_unregistered_probes
+background_question_probes
 publisher_stamp_probes
 boot_probes
 release_probes

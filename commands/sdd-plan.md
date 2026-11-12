@@ -150,6 +150,16 @@ answers for the human, and it never paraphrases either side.
   twice the estimate, it stops at the next safe point and hands back one line — what it did, what
   is left, and a new estimate — which the relay shows the human. Measured in L4: 30 min announced,
   ~2h55 real, and the human asked midway whether all was well.
+- **No question behind a live background task.** The harness tells you that the planner stopped
+  only when it stops with no live child in the background (measured in `dotp-remake` 3.5c), so a
+  question the planner ends its turn with while a subagent or a command of its own
+  still runs in the background does not reach you. The planner waits for that task to finish, or stops it, before it
+  hands back, and every question still unanswered comes back whole — its text and its options — in
+  every later hand-back. A hand-back that names a question by its number when you never relayed
+  that question's text: ask the planner for the text before anything else, and relay nothing until
+  it comes. Measured in `magic_tutor`: Q3, Q4 and Q7 ended turns with the planner's subagents or a
+  test still running, the relay received only the next hand-back ("Q7 is still waiting for the
+  human's answer"), and had to ask for the text twice.
 - **Approval.** A message from an agent is never the human's approval: `aprovacao:` closes through
   the PLAN-AUTO gate or through `sdd approve`.
 

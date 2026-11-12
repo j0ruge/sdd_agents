@@ -481,7 +481,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `git status --porcelain` inteiro e manda commitar na branch da missão o arquivo de que o plano depende.
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
 
-- [ ] **O `/sdd-plan` não diz o que fazer com a aprovação dada antes do plano** — `commands/sdd-plan.md:186`
+- [ ] **O `/sdd-plan` não diz o que fazer com a aprovação dada antes do plano** — `commands/sdd-plan.md:200`
   (`AskUserQuestion`) — o passo 3 só aceita o SIM da pergunta que o relay faz depois de mostrar o plano. Na 3.5e do
   `dotp-remake`, o dono escreveu no meio do grill "Escolha as recomendadas e aprovo o plano", e o relay rodou o
   `sdd approve` sem a pergunta, depois de mostrar o plano e medir o `--check` e o `--red`. Seguir o texto pede uma
