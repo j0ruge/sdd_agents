@@ -30,7 +30,7 @@ phase that has already been paid for:
 | Key | Required | Default | What it is |
 |---|---|---|---|
 | `PROJECT_NAME` | yes | — | Short name of the target repo. Appears in the logs and in the PR body. |
-| `DEFAULT_BRANCH` | yes | — | **Base branch for PRs**. ⚠️ Not always `main`: in `sales_quote` the flow is `develop → staging → main`, so it is `develop`. Check `git symbolic-ref refs/remotes/origin/HEAD` instead of assuming. |
+| `DEFAULT_BRANCH` | yes | — | **Base branch for PRs**. ⚠️ Not always `main`: in `sales_quote` the flow is `develop → staging → main`, so it is `develop`. Check `git symbolic-ref refs/remotes/origin/HEAD` instead of assuming. `sdd install` derives it in this order, first answer wins: `origin/HEAD`, the remote's HEAD (`git ls-remote --symref origin HEAD`, 5 s deadline), an existing `origin/main` then `origin/master`, and only then the branch it ran on — which it calls a guess, in a warning. |
 | `OUTPUT_LANG` | no | empty | Language of the mission **artifacts** — handoffs, checkpoint, commit messages, PR body — passed into the boot prompt of every phase. Empty ⇒ the runner says nothing about language and each session follows whatever the existing artifacts use. It does not affect the kit, which is English, nor the contract (config keys and status tokens are always English). It also picks the `TODO.md` seed of `sdd install`: `templates/todo.<OUTPUT_LANG>.md`, or the English `templates/todo.md` when the kit has no variant. E.g. `pt-BR`, `en`, `es`. |
 
 ## Verification commands (the runner's sensors)

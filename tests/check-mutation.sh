@@ -6753,6 +6753,20 @@ mut_RUN_install_unknown_option_accepted() {
 mut_RUN_link_agents_argument_accepted() {
   sed -i '/^cmd_link_agents() {/,/^}/ s@^  \[ \$# -eq 0 \] || die "unknown link-agents option: @  true || die "unknown link-agents option: @' "$1"
 }
+# Item F of TODO.md, one mutant per step cmd_install gained and one for its warning. Each is
+# caught by "install without origin/HEAD asks the remote, then an existing origin/main or
+# origin/master, and calls the current branch a guess" (check-preflight.sh), in a different world:
+# the remote's HEAD skipped answers main where the remote says develop; origin/main|master skipped
+# answers the work branch; the guess unsaid prints no warning over it.
+mut_RUN_install_remote_head_skipped() {
+  sed -i '/^cmd_install() {/,/^}/ s@GIT_TERMINAL_PROMPT=0 timeout 5 git ls-remote --symref origin HEAD \\$@true \\@' "$1"
+}
+mut_RUN_install_origin_main_skipped() {
+  sed -i '/^cmd_install() {/,/^}/ s@^      for cand in main master; do$@      for cand in; do@' "$1"
+}
+mut_RUN_install_guess_unsaid() {
+  sed -i '/^cmd_install() {/,/^}/ s@^    \[ "\$branch_guess" -eq 0 \] || warn "DEFAULT_BRANCH@    [ "$branch_guess" -eq 0 ] || : "DEFAULT_BRANCH@' "$1"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7550,6 +7564,9 @@ CATALOG=(
   RUN_help_after_subcommand_ignored
   RUN_install_unknown_option_accepted
   RUN_link_agents_argument_accepted
+  RUN_install_remote_head_skipped
+  RUN_install_origin_main_skipped
+  RUN_install_guess_unsaid
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

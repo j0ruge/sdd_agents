@@ -2583,6 +2583,43 @@ else
        "rc != 0, 'unknown link-agents option: --bogus', no symlink" "rc $rc; out: $(head -c 120 <<< "$out")"
 fi
 
+# --- install without origin/HEAD never adopts the work branch in silence (item F) --------------
+# Without refs/remotes/origin/HEAD the install wrote the branch it ran on, and installing from a
+# work branch is the common case: `DEFAULT_BRANCH="plano-3-2"` in dotp-remake, `"chore/sdd-install"`
+# in magic_tutor — the latter WITH origin/main in the clone. The steps are now origin/HEAD, the
+# remote's HEAD (`git ls-remote --symref`), an existing origin/main then origin/master, and only
+# then the current branch, said to be a guess. Three worlds, each installing from `wip/x` with no
+# origin/HEAD (a bare remote added by hand and fetched; set-head -d in case a newer git creates it):
+# (1) the remote's HEAD is develop while origin/main exists — the remote's answer wins; (2) the
+# remote's HEAD names a branch it does not have, so it answers nothing, and origin/main and
+# origin/master both exist — main wins; (3) no remote — wip/x and the guess. The guess line must be
+# absent from the first two, or "says it is a guess" would be read off a line printed every time.
+echo "== install without origin/HEAD asks the remote before the current branch =="
+db_world() { # db_world <dir> <the bare remote's HEAD, or none> <branches the remote holds...>
+  local d="$1" head="$2" b; shift 2
+  help_repo "$d" || return 1
+  if [ "$head" != none ]; then
+    git init -q --bare -b "$head" "$d.remote.git" || return 1
+    ( cd "$d" && git remote add origin "$d.remote.git" \
+      && for b in "$@"; do git push -q origin "main:refs/heads/$b" || exit 1; done \
+      && git fetch -q origin && { git remote set-head origin -d >/dev/null 2>&1 || true; } ) >/dev/null 2>&1 || return 1
+  fi
+  ( cd "$d" && git checkout -q -b wip/x ) >/dev/null 2>&1
+}
+db_answer() { # db_answer <dir> → <DEFAULT_BRANCH>/<guess lines in the install output>
+  local o v
+  o="$( cd "$1" && "$SDD" install 2>&1 )" || true
+  v="$( sed -nE 's/^DEFAULT_BRANCH="([^"]*)".*/\1/p' "$1/.sdd/config.sh" 2>/dev/null )" || true
+  printf '%s/%s' "${v:-none}" "$(grep -c 'is a guess' <<< "$o")"
+}
+db_world "$FIX/db-remote" develop main develop || exit 1
+db_world "$FIX/db-main"   trunk   main master  || exit 1
+db_world "$FIX/db-none"   none                 || exit 1
+db_ohead="$(git -C "$FIX/db-remote" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null || echo absent)"
+assert_eq "install without origin/HEAD asks the remote, then an existing origin/main or origin/master, and calls the current branch a guess" \
+  "origin/HEAD absent; develop/0; main/0; wip/x/1" \
+  "origin/HEAD $db_ohead; $(db_answer "$FIX/db-remote"); $(db_answer "$FIX/db-main"); $(db_answer "$FIX/db-none")"
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    preflight measures the GNU userland instead of assuming it\n'; exit 0; fi

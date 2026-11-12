@@ -6095,14 +6095,35 @@ cmd_install() {
   if [ -f "$CONFIG_FILE" ]; then
     ok ".sdd/config.sh already exists (preserved)"
   else
-    local branch test_cmd project
+    local branch branch_from="origin/HEAD" branch_guess=0 cand test_cmd project
     project="$(basename "$REPO_ROOT")"
     # `|| true` is mandatory: a repo with no remote has no origin/HEAD, git fails, and pipefail
     # would take the whole install down in silence.
     branch="$( cd "$REPO_ROOT" \
       && git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null \
       | sed 's|^origin/||' || true )"
-    [ -n "$branch" ] || branch="$( cd "$REPO_ROOT" && git branch --show-current )"
+    # Without origin/HEAD the install used to write the branch it ran on, and installing from a
+    # work branch is the common case (item F of TODO.md: `plano-3-2` in dotp-remake,
+    # `chore/sdd-install` in magic_tutor, the latter with origin/main in the clone). The steps, first
+    # answer wins: the remote's own HEAD, asked with a short deadline and no prompt — a repo with
+    # no remote or no network answers nothing and the install goes on; then an existing origin/main,
+    # then origin/master; and only then the current branch, which the install calls a guess.
+    if [ -z "$branch" ]; then
+      branch="$( cd "$REPO_ROOT" && GIT_TERMINAL_PROMPT=0 timeout 5 git ls-remote --symref origin HEAD \
+        </dev/null 2>/dev/null | sed -n 's|^ref: refs/heads/\([^[:space:]]*\)[[:space:]]*HEAD$|\1|p' || true )"
+      branch_from="the remote's HEAD (git ls-remote --symref origin HEAD)"
+    fi
+    if [ -z "$branch" ]; then
+      for cand in main master; do
+        if git -C "$REPO_ROOT" show-ref --verify --quiet "refs/remotes/origin/$cand"; then
+          branch="$cand"; branch_from="origin/$cand"; break
+        fi
+      done
+    fi
+    if [ -z "$branch" ]; then
+      branch="$( cd "$REPO_ROOT" && git branch --show-current )"
+      branch_from="the current branch"; branch_guess=1
+    fi
     # `elif`, first match wins. Four independent `if`s meant every one of them ran, so the LAST
     # match won whatever the repo actually is: a Node project carrying a `go.mod` for a sidecar
     # tool was installed with `go test ./...` as the suite every gate runs — the wrong suite,
@@ -6139,7 +6160,10 @@ cmd_install() {
         -e "s|<TEST_CMD>|$test_cmd_sed|g" \
         -e "s|<SDD_HOME>|$home_sed|g" \
         "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"
-    ok ".sdd/config.sh created (base branch detected: $branch — confirm it)"
+    ok ".sdd/config.sh created (base branch: $branch, from $branch_from — confirm it)"
+    [ "$branch_guess" -eq 0 ] || warn "DEFAULT_BRANCH=\"$branch\" is a guess: no origin/HEAD, the remote named no HEAD,
+        and neither origin/main nor origin/master exists, so it is the branch this install ran on.
+        Confirm DEFAULT_BRANCH in .sdd/config.sh before 'sdd run' opens a PR against it."
     [ -z "$node_unread" ] || warn "could not read package.json's scripts ($node_unread) — TEST_CMD
         is a bare 'npm test'. If the repo declares lint, typecheck or build, chain them in by hand."
   fi

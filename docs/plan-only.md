@@ -43,7 +43,7 @@ In PLAN-only mode only these keys matter — leave the rest as `sdd install` shi
 | Key | Why it matters here |
 |---|---|
 | `PROJECT_NAME` | names the mission in the artifacts |
-| `DEFAULT_BRANCH` | **derive it, never assume**: `git symbolic-ref --short refs/remotes/origin/HEAD`. `sales_quote` is `develop`, not `main` |
+| `DEFAULT_BRANCH` | **derive it, never assume**: `git symbolic-ref --short refs/remotes/origin/HEAD`; without it, `git ls-remote --symref origin HEAD`, then an existing `origin/main` or `origin/master` — the branch you stand on is the last resort and a guess (`sdd install` follows this order and says so). `sales_quote` is `develop`, not `main` |
 | `OUTPUT_LANG` | the language of the artifacts; the kit itself stays English |
 | `HANDOFF_DIR` | where missions live, normally `docs/handoffs` |
 | `TODO_FILE` | where the planner parks out-of-scope findings |
