@@ -471,6 +471,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   do `dotp-remake`, o planner não a achou e carregou só a `grilling`, até o relay apontar a `domain-modeling`; o
   preflight a dá por presente (`KIT_THIRD_PARTY_SKILLS`). Direção: o contrato nomeia as duas skills.
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
+  RECURRED 1: sdd_agents/20261112 (2026-11-12)
 
 - [ ] **O aceite do `/sdd-plan` só olha três caminhos no `git status`** — `commands/sdd-plan.md:193`
   (`HAT_WRITES_BASE`) — o passo 4 lista a pasta da missão, o `TODO_FILE` e a catraca, e não diz o que fazer com o
@@ -487,6 +488,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   pergunta redundante; não seguir pula em silêncio um passo obrigatório. Direção: uma linha para a aprovação
   antecipada nas palavras do próprio humano, dizendo o que ainda se mostra e o que para a linha.
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
+  RECURRED 1: sdd_agents/20261112 (2026-11-12)
 
 - [ ] **A citação "ADR 0018" do kit colide com o ADR 0018 do alvo** — `templates/missao.md:41` (`ADR 0018 §3`) — o
   template e os contratos citam o ADR do kit só pelo número: 12 citações em `templates/missao.md`,
@@ -511,6 +513,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `--check`, o `--anchors` e o `--check --baseline origin/main`, push, GitGuardian e `gh pr merge --match-head-commit`)
   passou as quatro vezes, em ~25 chamadas, e só mora no histórico. Direção: a receita num doc do kit, ou um script.
   — descoberto por `sessão interativa` no merge dos PRs de achado do kit (2026-11-11)
+  RECURRED 1: sdd_agents/20261112 (2026-11-12)
 
 - [ ] **O `PR #N aberto` que a fase PR escreve no roadmap e no `KAIZEN_LOG.md` envelhece no merge** —
   `bin/sdd:12444` (`close_return_home`) — o head do PR grava o estado dele em doc durável, e nada o lista depois do
