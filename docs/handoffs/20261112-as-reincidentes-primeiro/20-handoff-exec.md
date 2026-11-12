@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 6f75daaf-9250-42a8-982d-3bd58897e713
 data: 2026-11-12 17:35
-gate: bash tests/run-all.sh em 215fd54 (clone de rascunho) → rc 0, suite green, 581 s, 2085 ok, 0 FAIL, anchors: all 810 mutants still apply
+gate: bash tests/run-all.sh em 5ee401c (clone de rascunho) → rc 0, suite green, 615 s, 2088 ok, 0 FAIL, anchors: all 812 mutants still apply
 ---
 
 # Handoff — EXEC — Os 13 achados do kit que já voltaram pelo menos uma vez deixam de voltar
@@ -14,17 +14,18 @@ gate: bash tests/run-all.sh em 215fd54 (clone de rascunho) → rc 0, suite green
 
 ## TL;DR
 
-Os 15 incrementos e o R1 da revisão final estão `done`: os 13 itens com `RECURRED` do `TODO.md` têm
-conserto, asserção nova num sensor e `RESOLVED by <hash>`; os do runner têm mutante (catálogo 792 → 810).
-A execução foi fora do `sdd run`, à mão, num worktree ligado, pelo `superpowers:executing-plans`
-(decisão 5). Sem `sdd health` nem carimbo (decisão 6). O próximo passo é o PR contra `main`.
+Os 15 incrementos, o R1 da revisão final e os R2–R4 da revisão do PR #391 estão `done`: os 13 itens
+com `RECURRED` do `TODO.md` têm conserto, asserção nova num sensor e `RESOLVED by <hash>`; os do runner
+têm mutante (catálogo 792 → 812). A execução foi fora do `sdd run`, à mão, num worktree ligado, pelo
+`superpowers:executing-plans` (decisão 5). Sem `sdd health` nem carimbo (decisão 6). O PR é o #391,
+com os achados dos bots consertados numa leva; o próximo passo é o merge, que é do humano.
 
 ## Estado do repo
 
-- **Branch:** `fix/as-reincidentes-primeiro` — ainda não empurrada
-- **Último commit:** o do checkpoint do R1 (esta versão do arquivo entra nele)
+- **Branch:** `fix/as-reincidentes-primeiro` — empurrada, PR #391 contra `main`
+- **Último commit:** o do checkpoint de R2–R4 (esta versão do arquivo entra nele)
 - **Working tree:** limpo
-- **Suíte:** `bash tests/run-all.sh` → verde em `215fd54`, 581 s, 2085 `ok`, 0 `FAIL`
+- **Suíte:** `bash tests/run-all.sh` → verde em `5ee401c`, 615 s, 2088 `ok`, 0 `FAIL`
 - **E2E:** não se aplica (o kit não tem interface; `E2E_CMD` vazio)
 
 ## O que foi feito
@@ -45,6 +46,8 @@ A execução foi fora do `sdd run`, à mão, num worktree ligado, pelo `superpow
 - `59b5f96` — I14 (item H, 2ª metade): o boot da fase cita a sobra da sessão morta
 - `0985ff5` — I15: `RESOLVED by` nos 13 itens, entrada do `KAIZEN_LOG.md`, este handoff e a gaveta
 - `215fd54` — R1 (revisão final do branch): sujeira sozinha não é sessão morta no boot da fase
+- `820787e` — R2 e R3 (revisão do PR #391): o `adr:` do approve dentro do checkout, e o `--help` antes da admissão
+- `5ee401c` — R4 (revisão do PR #391): sem workflow, o corpo do PR não afirma que não há CI; o `ls-remote` manual com prazo
 
 Cada incremento tem a sua linha `done` no `checkpoint.md`, num commit `chore(missao)` próprio.
 
@@ -52,7 +55,7 @@ Cada incremento tem a sua linha `done` no `checkpoint.md`, num commit `chore(mis
 
 | Arquivo | O que contém |
 |---|---|
-| `docs/handoffs/20261112-as-reincidentes-primeiro/checkpoint.md` | a tabela, 15 de 15 `done`, com o hash de cada incremento |
+| `docs/handoffs/20261112-as-reincidentes-primeiro/checkpoint.md` | a tabela, 19 de 19 `done`, com o hash de cada incremento |
 | `docs/handoffs/20261112-as-reincidentes-primeiro/checkpoint-notas.md` | as medidas de cada incremento e os desvios |
 | `TODO.md` | os 13 itens com `RESOLVED by`, ainda abertos (catraca 86) |
 | `KAIZEN_LOG.md` | a entrada de 2026-11-12, com antes e depois medidos |
@@ -60,10 +63,11 @@ Cada incremento tem a sua linha `done` no `checkpoint.md`, num commit `chore(mis
 
 ## Boot da próxima fase
 
-Não há fase do runner depois desta nesta missão (decisão 5). Quem segue é a sessão interativa: a
-revisão final do branch já rodou (uma Important, virou o R1; nove Minor adiadas, listadas no PR); falta
-o push de `fix/as-reincidentes-primeiro` e o PR contra `main` com o corpo do § "Depois do I15" do
-`01-plano.md`. Esperar todos os bots; o merge é do humano. Nunca `./bin/sdd health`.
+Não há fase do runner depois desta nesta missão (decisão 5). O PR #391 está aberto. A revisão dos bots
+rodou sobre o `f7f94b2`: o CodeRabbit deixou 5 achados (R2, R3, R4, o prazo do `ls-remote` manual e a
+reserva do `/sdd-plan`, que o humano decidiu manter), o Codex 1 (o mesmo do R3) e o Copilot não revisou
+(sem cota). Uma rodada nova dos bots sobre os consertos vira outra leva `R<n>`; o merge é do humano.
+Nunca `./bin/sdd health`.
 
 ## Pendências / Decisions for a Human
 
@@ -76,10 +80,11 @@ o push de `fix/as-reincidentes-primeiro` e o PR contra `main` com o corpo do § 
 ## Riscos e não-feitos
 
 - Nenhum catálogo mediu os mutantes antigos depois de os sensores mudarem: o `--anchors` prova que
-  todos se aplicam, e o `--only` prova cada um dos 18 novos e os dois reapontados; o resto espera o
+  todos se aplicam, e o `--only` prova cada um dos 20 novos e os dois reapontados; o resto espera o
   `sdd health` do zero.
-- `./bin/sdd why 20261112-as-reincidentes-primeiro EXEC` não foi rodado antes deste commit: ele lê
-  este arquivo e roda a suíte, e roda na verificação final.
+- `./bin/sdd why 20261112-as-reincidentes-primeiro EXEC` respondeu `16 increment(s) done, suite green,
+  handoff written` no `f7f94b2`; ele lê este arquivo e roda a suíte, então roda de novo depois deste
+  commit, e o corpo do PR traz a resposta.
 
 ## Achados fora de escopo
 

@@ -1,6 +1,6 @@
 ---
 missao: 20261112-as-reincidentes-primeiro
-atualizado: 2026-11-12 18:33
+atualizado: 2026-11-12 19:35
 ---
 
 # Checkpoint — as reincidentes primeiro (lote 1 de zerar a catraca)
@@ -34,6 +34,9 @@ atualizado: 2026-11-12 18:33
 | I14 | H2: o boot da fase cita a sobra da sessão morta | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    the boot prompt names the orphan stream and the dirty tree a dead session left' <<< "$o"` → `1` | done | 59b5f96 |
 | I15 | Fecho: RESOLVED by nos 13 itens, KAIZEN_LOG e 20-handoff-exec.md | `grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md` → `13` | done | 0985ff5 |
 | R1 | Revisão final: sujeira sozinha não é sessão morta, e o boot devolve à fase o que é dela | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    a dirty tree alone is told it was not clean, never that a session died' <<< "$o"` → `1` | done | 215fd54 |
+| R2 | Revisão do PR #391 (CodeRabbit): o sdd approve não reescreve ADR fora do checkout | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd approve leaves an ADR that resolves outside the checkout as it is, says so, and commits the mission without it' <<< "$o"` → `1` | done | 820787e |
+| R3 | Revisão do PR #391 (CodeRabbit e Codex): o --help vem antes da admissão do checkout | `a=$(bash tests/check-preflight.sh 2>&1); b=$(bash tests/check-gates.sh 2>&1); echo "$(grep -c '^  ok    --help prints the help outside a repository, for every subcommand whose admission resolves the root' <<< "$a") $(grep -c '^  ok    sdd run --help prints the usage while a live owner holds the checkout, never CHECKOUT-BUSY' <<< "$b")"` → `1 1` | done | 820787e |
+| R4 | Revisão do PR #391 (CodeRabbit): sem workflow, o corpo do PR não afirma que não há CI | `o=$(bash tests/check-templates.sh 2>&1); grep -c '^  ok    pr-body.md: the new-sensors line promises CI only as one of two fill-ins, and never claims there is no CI' <<< "$o"` → `1` | done | 5ee401c |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only.

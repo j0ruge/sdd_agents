@@ -32,7 +32,10 @@ rascunho a cada um a seis incrementos, oito corridas de 604 a 670 s):
   (`COORD_owner_hidden`, `BOOT_reason_dropped`), e seguem pegos;
 - a revisão final do branch, por um revisor novo, achou uma Important e nove Minor. A Important virou
   o R1 (`215fd54`): o boot deixou de chamar de sessão morta a sujeira sem stream órfão. Com ele,
-  `check-dry-run.sh` 91 (+4 contra o antes) e `all 810 mutants` (+18).
+  `check-dry-run.sh` 91 (+4 contra o antes) e `all 810 mutants` (+18);
+- a revisão do PR #391 (CodeRabbit e Codex; o Copilot ficou sem cota) pediu três consertos com probe:
+  R2 e R3 (`820787e`) e R4 (`5ee401c`). Com eles, `check-gates.sh` 490 (+6 contra o antes),
+  `check-preflight.sh` 168 (+6) e `all 812 mutants` (+20).
 
 **O que a execução ensinou** (notas da missão): o `--only` roda um controle sem sabotagem antes do
 mutante, e foi esse controle que achou o regime 8 do `check-autonomy.sh` vermelho no I14: um leitor novo
