@@ -1,6 +1,6 @@
 ---
 missao: 20261112-as-reincidentes-primeiro
-atualizado: 2026-11-12 17:23
+atualizado: 2026-11-12 17:35
 ---
 
 # Checkpoint — as reincidentes primeiro (lote 1 de zerar a catraca)
@@ -31,7 +31,7 @@ atualizado: 2026-11-12 17:23
 | I11 | G: o sdd approve aceita o ADR que commita | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd approve turns the proposed ADR that adr: names into accepted, in the approval commit' <<< "$o"` → `1` | done | 5e8da5e |
 | I12 | I: o sdd status fala antes de rodar o TEST_CMD | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd status names the TEST_CMD before the gate that runs it, and a missing mission is told about --no-gates' <<< "$o"` → `1` | done | 39a3bac |
 | I13 | H1: o sdd status mostra o stream órfão e a árvore suja | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd status names a stream no journal line closed and the paths left dirty, on both faces' <<< "$o"` → `1` | done | 1022cc8 |
-| I14 | H2: o boot da fase cita a sobra da sessão morta | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    the boot prompt names the orphan stream and the dirty tree a dead session left' <<< "$o"` → `1` | pending | — |
+| I14 | H2: o boot da fase cita a sobra da sessão morta | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    the boot prompt names the orphan stream and the dirty tree a dead session left' <<< "$o"` → `1` | done | 59b5f96 |
 | I15 | Fecho: RESOLVED by nos 13 itens, KAIZEN_LOG e 20-handoff-exec.md | `grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md` → `13` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
