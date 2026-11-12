@@ -1,6 +1,6 @@
 ---
 missao: 20261112-as-reincidentes-primeiro
-atualizado: 2026-11-12 17:46
+atualizado: 2026-11-12 18:33
 ---
 
 # Checkpoint — as reincidentes primeiro (lote 1 de zerar a catraca)
@@ -33,7 +33,7 @@ atualizado: 2026-11-12 17:46
 | I13 | H1: o sdd status mostra o stream órfão e a árvore suja | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd status names a stream no journal line closed and the paths left dirty, on both faces' <<< "$o"` → `1` | done | 1022cc8 |
 | I14 | H2: o boot da fase cita a sobra da sessão morta | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    the boot prompt names the orphan stream and the dirty tree a dead session left' <<< "$o"` → `1` | done | 59b5f96 |
 | I15 | Fecho: RESOLVED by nos 13 itens, KAIZEN_LOG e 20-handoff-exec.md | `grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md` → `13` | done | 0985ff5 |
-| R1 | Revisão final: sujeira sozinha não é sessão morta, e o boot devolve à fase o que é dela | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    a dirty tree alone is told it was not clean, never that a session died' <<< "$o"` → `1` | pending | — |
+| R1 | Revisão final: sujeira sozinha não é sessão morta, e o boot devolve à fase o que é dela | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    a dirty tree alone is told it was not clean, never that a session died' <<< "$o"` → `1` | done | 215fd54 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only.

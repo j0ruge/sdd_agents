@@ -242,7 +242,7 @@ seguinte à F9, por decisão humana.
 **Hoje (2026-11-12).** A série de zerar a catraca começou, com a catraca em 86. O lote 1,
 `20261112-as-reincidentes-primeiro`, fechou as 13 reincidentes do `TODO.md` (os itens com `RECURRED`, 25
 voltas em quatro projetos): cada conserto tem asserção nova num sensor da suíte, e os do runner têm
-mutante (o catálogo foi de 792 a 808). Foi executado à mão num worktree ligado, fora do `sdd run`, e o
+mutante (o catálogo foi de 792 a 810). Foi executado à mão num worktree ligado, fora do `sdd run`, e o
 PR sai sem carimbo de mutação: o `./bin/sdd health` da série roda quando a catraca zerar (decisão 6 da
 missão). Os 13 itens ficam no `TODO.md` com `RESOLVED by` até o chore pós-merge, que leva a catraca a
 73; cada lote seguinte ganha o seu `/sdd-plan`.

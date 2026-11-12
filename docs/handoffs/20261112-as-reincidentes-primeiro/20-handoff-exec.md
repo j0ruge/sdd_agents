@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 6f75daaf-9250-42a8-982d-3bd58897e713
 data: 2026-11-12 17:35
-gate: bash tests/run-all.sh em 59b5f96 (clone de rascunho) → rc 0, suite green, 614 s, 2084 ok, 0 FAIL, anchors: all 808 mutants still apply
+gate: bash tests/run-all.sh em 215fd54 (clone de rascunho) → rc 0, suite green, 581 s, 2085 ok, 0 FAIL, anchors: all 810 mutants still apply
 ---
 
 # Handoff — EXEC — Os 13 achados do kit que já voltaram pelo menos uma vez deixam de voltar
@@ -14,17 +14,17 @@ gate: bash tests/run-all.sh em 59b5f96 (clone de rascunho) → rc 0, suite green
 
 ## TL;DR
 
-Os 15 incrementos estão `done`: os 13 itens com `RECURRED` do `TODO.md` têm conserto, asserção nova num
-sensor e `RESOLVED by <hash>`; os do runner têm mutante (catálogo 792 → 808). A execução foi fora do
-`sdd run`, à mão, num worktree ligado, pelo `superpowers:executing-plans` (decisão 5). Sem `sdd health`
-nem carimbo (decisão 6). O próximo passo é a revisão final do branch e o PR contra `main`.
+Os 15 incrementos e o R1 da revisão final estão `done`: os 13 itens com `RECURRED` do `TODO.md` têm
+conserto, asserção nova num sensor e `RESOLVED by <hash>`; os do runner têm mutante (catálogo 792 → 810).
+A execução foi fora do `sdd run`, à mão, num worktree ligado, pelo `superpowers:executing-plans`
+(decisão 5). Sem `sdd health` nem carimbo (decisão 6). O próximo passo é o PR contra `main`.
 
 ## Estado do repo
 
 - **Branch:** `fix/as-reincidentes-primeiro` — ainda não empurrada
-- **Último commit:** o do I15 (este arquivo entra nele)
-- **Working tree:** limpo depois do commit do I15
-- **Suíte:** `bash tests/run-all.sh` → verde em `59b5f96`, 614 s, 2084 `ok`, 0 `FAIL`
+- **Último commit:** o do checkpoint do R1 (esta versão do arquivo entra nele)
+- **Working tree:** limpo
+- **Suíte:** `bash tests/run-all.sh` → verde em `215fd54`, 581 s, 2085 `ok`, 0 `FAIL`
 - **E2E:** não se aplica (o kit não tem interface; `E2E_CMD` vazio)
 
 ## O que foi feito
@@ -43,7 +43,8 @@ nem carimbo (decisão 6). O próximo passo é a revisão final do branch e o PR 
 - `39a3bac` — I12 (item I): o `sdd status` fala antes de rodar o `TEST_CMD`
 - `1022cc8` — I13 (item H, 1ª metade): o `sdd status` mostra o stream órfão e a árvore suja
 - `59b5f96` — I14 (item H, 2ª metade): o boot da fase cita a sobra da sessão morta
-- este commit — I15: `RESOLVED by` nos 13 itens, entrada do `KAIZEN_LOG.md`, este handoff e a gaveta
+- `0985ff5` — I15: `RESOLVED by` nos 13 itens, entrada do `KAIZEN_LOG.md`, este handoff e a gaveta
+- `215fd54` — R1 (revisão final do branch): sujeira sozinha não é sessão morta no boot da fase
 
 Cada incremento tem a sua linha `done` no `checkpoint.md`, num commit `chore(missao)` próprio.
 
@@ -59,10 +60,10 @@ Cada incremento tem a sua linha `done` no `checkpoint.md`, num commit `chore(mis
 
 ## Boot da próxima fase
 
-Não há fase do runner depois desta nesta missão (decisão 5). Quem segue é a sessão interativa:
-revisão final do branch inteiro (`git diff a48cf3c..HEAD`), depois push de
-`fix/as-reincidentes-primeiro` e PR contra `main` com o corpo do § "Depois do I15" do `01-plano.md`.
-Esperar todos os bots; o merge é do humano. Nunca `./bin/sdd health`.
+Não há fase do runner depois desta nesta missão (decisão 5). Quem segue é a sessão interativa: a
+revisão final do branch já rodou (uma Important, virou o R1; nove Minor adiadas, listadas no PR); falta
+o push de `fix/as-reincidentes-primeiro` e o PR contra `main` com o corpo do § "Depois do I15" do
+`01-plano.md`. Esperar todos os bots; o merge é do humano. Nunca `./bin/sdd health`.
 
 ## Pendências / Decisions for a Human
 
@@ -75,7 +76,7 @@ Esperar todos os bots; o merge é do humano. Nunca `./bin/sdd health`.
 ## Riscos e não-feitos
 
 - Nenhum catálogo mediu os mutantes antigos depois de os sensores mudarem: o `--anchors` prova que
-  todos se aplicam, e o `--only` prova cada um dos 16 novos e os dois reapontados; o resto espera o
+  todos se aplicam, e o `--only` prova cada um dos 18 novos e os dois reapontados; o resto espera o
   `sdd health` do zero.
 - `./bin/sdd why 20261112-as-reincidentes-primeiro EXEC` não foi rodado antes deste commit: ele lê
   este arquivo e roda a suíte, e roda na verificação final.

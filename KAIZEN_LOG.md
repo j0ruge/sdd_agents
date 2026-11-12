@@ -29,7 +29,10 @@ rascunho a cada um a seis incrementos, oito corridas de 604 a 670 s):
   `check-todo.sh` 16 (+1);
 - `--anchors`: `all 808 mutants` (+16, todos de `bin/sdd`, cada um provado com `--only` contra o
   sensor que o mata). Dois mutantes antigos foram reapontados porque a linha deles mudou de forma
-  (`COORD_owner_hidden`, `BOOT_reason_dropped`), e seguem pegos.
+  (`COORD_owner_hidden`, `BOOT_reason_dropped`), e seguem pegos;
+- a revisão final do branch, por um revisor novo, achou uma Important e nove Minor. A Important virou
+  o R1 (`215fd54`): o boot deixou de chamar de sessão morta a sujeira sem stream órfão. Com ele,
+  `check-dry-run.sh` 91 (+4 contra o antes) e `all 810 mutants` (+18).
 
 **O que a execução ensinou** (notas da missão): o `--only` roda um controle sem sabotagem antes do
 mutante, e foi esse controle que achou o regime 8 do `check-autonomy.sh` vermelho no I14: um leitor novo
