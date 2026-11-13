@@ -332,6 +332,19 @@ executor_agent_probes() {
      && grep -qF 'is not an earlier increment' <<< "$left" && grep -qF 'checkpoint-notas.md' <<< "$left"; then
     pass "hat: the executor reads what an earlier session left before TEST_CMD, and a red the leftovers explain is not an earlier increment's"
   else fail "hat: sdd-executor reads what an earlier session left after TEST_CMD, calls a red the leftovers explain an earlier increment's, or no longer says where the finding goes before the last increment"; fi
+  # The review of PR #391 (CodeRabbit): the same block said "undo what you did not write", with a
+  # half-written file among the leftovers. While an increment is pending, gate_EXEC answers before
+  # it looks at the tree, so a session opens over an uncommitted edit of the human's and was told to
+  # throw it away, and uncommitted work has no other copy: the KAIZEN_LOG.md entry of 2026-08-14 on
+  # the sensor of the sensor measured a `git checkout` that undid a sabotage and took the whole
+  # implementation with it. Only a mutant its `.bak` confirms goes back, by `mv`; every other change
+  # stays where it is, and a red one of them explains stops the line.
+  if [ -n "$left" ] && grep -qF 'diff <file>.bak <file>' <<< "$left" \
+     && grep -qF 'mv <file>.bak <file>' <<< "$left" && grep -qF 'stays exactly as it is' <<< "$left" \
+     && grep -qF 'never `git restore`' <<< "$left" && grep -qF 'mark your increment `blocked`' <<< "$left" \
+     && ! grep -qF 'undo what you did not write' <<< "$left"; then
+    pass "hat: the executor puts back only a mutant its .bak confirms, leaves every other change it did not write in place, and stops on a red one of them explains"
+  else fail "hat: sdd-executor puts back a leftover no .bak confirms, tells the session to undo uncommitted changes whose owner it cannot tell, or no longer stops the line on a red one of them explains"; fi
 }
 
 # One hat promised a measurement nobody makes, and another was silent where its boundary needed a

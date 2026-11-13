@@ -70,10 +70,17 @@ in its Commit cell is a label the gate refuses.
 journal line closed, a session before you died; when it names only uncommitted paths, the tree was
 not clean when you opened. Either way run `git status` and `git diff` before `TEST_CMD` and before
 you edit: what belongs to your increment is yours to finish and commit, a `.bak` or an applied
-mutant you did not write never is. A red that the leftovers explain (an applied mutant, a
-half-written file) is not an earlier increment's: undo what you did not write, from its `.bak` when
-there is one, and run `TEST_CMD` again. What else you found goes in one line of
-`checkpoint-notas.md`, and in the handoff when this is the last increment.
+mutant you did not write never is. The one leftover you put back is an applied mutant, and only
+when its `.bak` confirms it: `diff <file>.bak <file>` shows nothing but the line a sabotage degrades
+or puts back, and `mv <file>.bak <file>` restores it. Every other change you cannot tell is your
+increment's (an edit of the human's, a half-written file the increment does not name, a `.bak` that
+differs by more) stays exactly as it is: never `git restore`, `git checkout --`, `git stash`,
+`git clean` or `rm` it, because you cannot tell whose it is, and uncommitted work has no other copy.
+A red that the leftovers explain is not an earlier increment's: with the mutant back, run
+`TEST_CMD` again, and if a change you left in place still turns it red,
+mark your increment `blocked`, name the paths, and stop; whose change it is, the human decides.
+What else you found goes in one line of `checkpoint-notas.md`, and in the handoff when this is the
+last increment.
 
 Before touching anything, run `TEST_CMD`.
 
