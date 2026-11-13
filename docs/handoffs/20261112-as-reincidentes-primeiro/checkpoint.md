@@ -1,6 +1,6 @@
 ---
 missao: 20261112-as-reincidentes-primeiro
-atualizado: 2026-11-12 19:35
+atualizado: 2026-11-12 21:27
 ---
 
 # Checkpoint — as reincidentes primeiro (lote 1 de zerar a catraca)
@@ -37,6 +37,10 @@ atualizado: 2026-11-12 19:35
 | R2 | Revisão do PR #391 (CodeRabbit): o sdd approve não reescreve ADR fora do checkout | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd approve leaves an ADR that resolves outside the checkout as it is, says so, and commits the mission without it' <<< "$o"` → `1` | done | 820787e |
 | R3 | Revisão do PR #391 (CodeRabbit e Codex): o --help vem antes da admissão do checkout | `a=$(bash tests/check-preflight.sh 2>&1); b=$(bash tests/check-gates.sh 2>&1); echo "$(grep -c '^  ok    --help prints the help outside a repository, for every subcommand whose admission resolves the root' <<< "$a") $(grep -c '^  ok    sdd run --help prints the usage while a live owner holds the checkout, never CHECKOUT-BUSY' <<< "$b")"` → `1 1` | done | 820787e |
 | R4 | Revisão do PR #391 (CodeRabbit): sem workflow, o corpo do PR não afirma que não há CI | `o=$(bash tests/check-templates.sh 2>&1); grep -c '^  ok    pr-body.md: the new-sensors line promises CI only as one of two fill-ins, and never claims there is no CI' <<< "$o"` → `1` | done | 5ee401c |
+| R5 | Codereview do branch: o lint do branch volta ao da base, e a volta do stub tem testemunha | `o=$(bash tests/check-dry-run.sh 2>&1); echo "$(grep -c '^  ok    the journal writes LEFTOVER before the session opened over a dead session' <<< "$o") $(grep -c 'lap-rc:0 sessions:1' tests/check-dry-run.sh)"` → `1 1` | done | 185919c |
+| R6 | Codereview do branch: o stream da sessão morta se aposenta quando uma sessão posterior fecha | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    a session that closed after the dead one retires its stream, and the dirt left is still told' <<< "$o"` → `1` | done | 3636961 |
+| R7 | Codereview do branch: o executor lê a sobra de uma sessão anterior antes do TEST_CMD | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: the executor reads what an earlier session left before TEST_CMD' <<< "$o"` → `1` | done | 2e4b0b3 |
+| R8 | Codereview do branch: os registros (KAIZEN_LOG, README, TODO.md) e o achado do lint, catraca 88 | `o=$(bash tests/check-todo.sh 2>&1); echo "$(grep -c '^  ok    88 finding(s), all within 8 lines' <<< "$o") $(grep -c '^todo-findings 88$' tests/health-baseline.txt) $(grep -c 'docs/finding-prs.md' README.md)"` → `1 1 1` | done | 3c0f2d8 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only.
