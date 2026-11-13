@@ -66,6 +66,15 @@ it belongs in the open questions for the human of `00-missao.md` (the last secti
 template) or in the next mission, and stop: left `pending`, it keeps EXEC open forever, and a word
 in its Commit cell is a label the gate refuses.
 
+**What an earlier session left is read before anything else.** When the boot names a stream no
+journal line closed, a session before you died; when it names only uncommitted paths, the tree was
+not clean when you opened. Either way run `git status` and `git diff` before `TEST_CMD` and before
+you edit: what belongs to your increment is yours to finish and commit, a `.bak` or an applied
+mutant you did not write never is. A red that the leftovers explain (an applied mutant, a
+half-written file) is not an earlier increment's: undo what you did not write, from its `.bak` when
+there is one, and run `TEST_CMD` again. What else you found goes in one line of
+`checkpoint-notas.md`, and in the handoff when this is the last increment.
+
 Before touching anything, run `TEST_CMD`.
 
 - **Red because of an earlier increment** → you do not fix it and you do not carry on. Mark that
@@ -136,12 +145,6 @@ ceiling **counts as a killed mutant**, and its note names the ceiling where the 
 the file back in a `finally` (or a `trap … EXIT`) of the process that applied the mutant, never as
 the next command after the test, which a `set -e` or a kill that reaches the script skips. Under
 the three ceilings the mutant of the 3.5c died out of memory in 86 s, and nothing else fell.
-
-**What an earlier session left is read before it is committed.** When the boot names a stream no
-journal line closed, a session before you died; when it names only uncommitted paths, the tree was
-not clean when you opened. Either way run `git status` and `git diff` before you edit: what belongs
-to your increment is yours to finish and commit, a `.bak` or an applied mutant you did not write
-never is, and the handoff says what else you found.
 
 ## 4. Found something out of scope?
 

@@ -316,6 +316,22 @@ executor_agent_probes() {
      && grep -qF '`finally`' <<< "$fence" && grep -qF '`trap … EXIT`' <<< "$fence"; then
     pass "hat: and an overrun counts as a killed mutant after an unmutated run under the same ceilings, and the restore never waits on the child"
   else fail "hat: sdd-executor no longer counts an overrun as a killed mutant (after the unmutated run under the same ceilings), or the restore depends on the child ending well again (a finally or a trap of the process that applied the mutant)"; fi
+  # The review of the whole branch (item H, read by the hat): the paragraph on what an earlier
+  # session left sat in § 3, after § 2 had already run TEST_CMD and called a red an earlier
+  # increment's. The mutant a dead session left applied (dotp-remake 3.5c) makes TEST_CMD red, so
+  # the paragraph is read in § 2, above that line, once in the file, and says such a red is not an
+  # earlier increment's; what else the session found goes in checkpoint-notas.md, since only the
+  # last increment writes the handoff. Read as a BLOCK, from its bold lead to the next blank line.
+  local s2 left nleft ntest
+  s2="$(awk '/^## 2\. /{s=1; next} s && /^## /{s=0} s' "$ex")"
+  left="$(awk '/^\*\*What an earlier session left/ { on = 1 } on && /^$/ { exit } on' <<< "$s2")"
+  nleft="$(awk '/^\*\*What an earlier session left/ { print NR; exit }' <<< "$s2")"
+  ntest="$(awk '/^Before touching anything, run `TEST_CMD`/ { print NR; exit }' <<< "$s2")"
+  if [ -n "$left" ] && [ -n "$nleft" ] && [ -n "$ntest" ] && [ "$nleft" -lt "$ntest" ] \
+     && [ "$(grep -c '^\*\*What an earlier session left' "$ex")" -eq 1 ] \
+     && grep -qF 'is not an earlier increment' <<< "$left" && grep -qF 'checkpoint-notas.md' <<< "$left"; then
+    pass "hat: the executor reads what an earlier session left before TEST_CMD, and a red the leftovers explain is not an earlier increment's"
+  else fail "hat: sdd-executor reads what an earlier session left after TEST_CMD, calls a red the leftovers explain an earlier increment's, or no longer says where the finding goes before the last increment"; fi
 }
 
 # One hat promised a measurement nobody makes, and another was silent where its boundary needed a

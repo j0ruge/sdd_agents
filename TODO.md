@@ -377,7 +377,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261021-dica-mais-rapida` do `magic_tutor` (2026-10-21)
 
 - [ ] **O `sdd-executor` lançado como subagente fecha o último incremento e volta sem o `20-handoff-exec.md`** —
-  `agents/sdd-executor.md:204` (`20-handoff-exec.md`) — o §6 manda escrever o handoff quando nenhuma linha fica
+  `agents/sdd-executor.md:207` (`20-handoff-exec.md`) — o §6 manda escrever o handoff quando nenhuma linha fica
   `pending`. No `magic_tutor` (missão `20261021-dica-mais-rapida`), o relay lançou como subagente o executor do I11,
   o último: ele commitou o `I11 done` (`508c4c9`, 19:48) e devolveu o relatório sem o handoff, que só veio quando o
   relay pediu (`ae3cc8e`, 19:52). Pelo `sdd run`, o gate do EXEC acusa a falta; fora dele, nada acusa. Direção: o
