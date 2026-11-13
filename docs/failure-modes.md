@@ -823,7 +823,9 @@ the mutant applied, with its `.bak`, for the next one to commit. Both faces of `
 up to ten entries of `git status --porcelain`. Read the stream (`tail` it: one JSON event per
 line) and `git diff` before the next `sdd run`, which opens its session over that tree. While
 another command holds the checkout, `--no-gates` sets the newest stream apart as `(in course)`:
-it is probably that command's live session, not a leftover.
+it is probably that command's live session, not a leftover. The stream stops being named once a
+later session of the mission closes: that session's boot told it about the leftovers, so the
+older stream is history from then on. To retire it sooner, move it out of `.sdd/logs/<mission>/`.
 
 ---
 

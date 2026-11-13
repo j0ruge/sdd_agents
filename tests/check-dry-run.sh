@@ -1022,6 +1022,15 @@ LB_JOURNAL="$(cat "$LB/.sdd/logs/$LBM/pipeline.log" 2>/dev/null)" || true
 assert_eq "the journal writes LEFTOVER before the session opened over a dead session's leftovers" \
   "lap-rc:0 sessions:1 leftover:1 first-is-before-session:1" \
   "lap-rc:$LB_RC sessions:$(grep -cE '^[^ ]+  EXEC  .*  session=[^ ]' <<< "$LB_JOURNAL") leftover:$(grep -cE '^[^ ]+  LEFTOVER  EXEC  streams=1  dirty=1$' <<< "$LB_JOURNAL") first-is-before-session:$(awk '/  LEFTOVER  /{print (s ? 0 : 1); exit} /  EXEC  .*session=/{s=1}' <<< "$LB_JOURNAL")"
+# A dead session's stream retires once a later session of the mission closes (the review of this
+# branch): nothing ever writes the journal line of a session that died, so without the rule every
+# later boot of the mission, every phase, said a session did not close. The lap above is that later
+# session, told about the leftovers in its own boot: its stream is newer than the orphan and its line
+# cites it. The dirt it did not commit is still told, as a tree that was not clean.
+LB_AFTER="$( cd "$LB" && "$SDD" boot "$LBM" EXEC 2>&1 )" || true
+assert_eq "a session that closed after the dead one retires its stream, and the dirt left is still told" \
+  "died:0 stream:0 not-clean:1 dirty:1" \
+  "died:$(lb_has "$LB_AFTER" 'did not close') stream:$(lb_has "$LB_AFTER" 'cccc3333') not-clean:$(lb_has "$LB_AFTER" '^The tree was not clean when this session opened') dirty:$(lb_has "$LB_AFTER" '^ +M tracked\.txt')"
 # A journal that exists and cannot be read cannot say which streams it closed: the boot calls none
 # of them an orphan (every one would be a guess, and the stub's session above DID close), keeps the
 # dirty paths, and the reader's own complaint stays off stderr — regime 8 of check-autonomy.sh

@@ -8158,7 +8158,8 @@ status_increments() {
 #
 # Published, never printed, and CALLED, never `$( )`: LEFTOVER_STREAMS, the file name of each stream
 # of this mission whose sibling `<…>.json` no journal line cites in `log=` (compared by FILE NAME:
-# the path in the line is absolute, and the repo may have moved); LEFTOVER_LIVE, the one stream an
+# the path in the line is absolute, and the repo may have moved) and that is not older, by the stamp
+# in its name, than the newest stream a line does cite; LEFTOVER_LIVE, the one stream an
 # owner may still be writing; LEFTOVER_DIRTY, the first ten `XY path` entries of the porcelain
 # status of the whole repository (hat_status_lines, untracked included), and LEFTOVER_DIRTY_N, all
 # of them; LEFTOVER_STREAMS_N counts the first. `.sdd/logs/` is ignored by `sdd install`, so the
@@ -8194,10 +8195,21 @@ session_leftovers() {
       journal_blind=1
     fi
   fi
+  # A dead session's stream retires once a later session of the mission closes (the review of this
+  # branch): nothing writes the journal line of a session that died, so its stream stayed an orphan
+  # for the rest of the mission, and every later boot, every phase, said a session did not close.
+  # The later session was told in its own boot; once its line is written the older orphan is
+  # history. By the stamp in the names, the comparison LEFTOVER_LIVE makes below.
+  local newest_closed=""
+  while IFS= read -r line; do
+    [[ $line =~ -([0-9]{8}-[0-9]{6})-[^-]+\.json$ ]] || continue
+    if [[ ${BASH_REMATCH[1]} > $newest_closed ]]; then newest_closed="${BASH_REMATCH[1]}"; fi
+  done <<< "$closed"
   [ "$journal_blind" = 1 ] || for f in "$dir"/*.stream.jsonl; do
     [ -f "$f" ] || continue
     base="${f##*/}"
     if grep -qxF -- "${base%.stream.jsonl}.json" <<< "$closed"; then continue; fi
+    if [[ $base =~ -([0-9]{8}-[0-9]{6})-[^-]+\.stream\.jsonl$ ]] && [[ ${BASH_REMATCH[1]} < $newest_closed ]]; then continue; fi
     orphans+=( "$base" )
   done
   if [ -n "$owner" ]; then
