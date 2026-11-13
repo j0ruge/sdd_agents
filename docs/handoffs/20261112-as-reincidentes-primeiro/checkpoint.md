@@ -41,6 +41,7 @@ atualizado: 2026-11-12 21:27
 | R6 | Codereview do branch: o stream da sessão morta se aposenta quando uma sessão posterior fecha | `o=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    a session that closed after the dead one retires its stream, and the dirt left is still told' <<< "$o"` → `1` | done | 3636961 |
 | R7 | Codereview do branch: o executor lê a sobra de uma sessão anterior antes do TEST_CMD | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: the executor reads what an earlier session left before TEST_CMD' <<< "$o"` → `1` | done | 2e4b0b3 |
 | R8 | Codereview do branch: os registros (KAIZEN_LOG, README, TODO.md) e o achado do lint, catraca 88 | `o=$(bash tests/check-todo.sh 2>&1); echo "$(grep -c '^  ok    88 finding(s), all within 8 lines' <<< "$o") $(grep -c '^todo-findings 88$' tests/health-baseline.txt) $(grep -c 'docs/finding-prs.md' README.md)"` → `1 1 1` | done | 3c0f2d8 |
+| R9 | Re-revisão do PR #391 (CodeRabbit): o executor só põe de volta o mutante que o .bak confirma, e deixa o resto onde está | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    hat: the executor puts back only a mutant its .bak confirms' <<< "$o"` → `1` | done | 3f3a57c |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only.

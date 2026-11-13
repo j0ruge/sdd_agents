@@ -3,8 +3,8 @@ missao: 20261112-as-reincidentes-primeiro
 fase: EXEC
 status: done
 sessao: 6f75daaf-9250-42a8-982d-3bd58897e713
-data: 2026-11-12 21:27
-gate: bash tests/run-all.sh em 2e4b0b3 (clone de rascunho) → rc 0, suite green, 672 s, 2090 ok, 0 FAIL, anchors: all 813 mutants still apply
+data: 2026-11-13 08:33
+gate: bash tests/run-all.sh em 3f3a57c (clone de rascunho) → rc 0, suite green, 880 s, 2091 ok, 0 FAIL, anchors: all 813 mutants still apply
 ---
 
 # Handoff — EXEC — Os 13 achados do kit que já voltaram pelo menos uma vez deixam de voltar
@@ -14,8 +14,8 @@ gate: bash tests/run-all.sh em 2e4b0b3 (clone de rascunho) → rc 0, suite green
 
 ## TL;DR
 
-Os 15 incrementos, o R1 da revisão final, os R2–R4 da revisão do PR #391 e os R5–R8 do codereview do
-branch inteiro estão `done`: os 13 itens
+Os 15 incrementos, o R1 da revisão final, os R2–R4 da revisão do PR #391, os R5–R8 do codereview do
+branch inteiro e o R9 da re-revisão do CodeRabbit estão `done`: os 13 itens
 com `RECURRED` do `TODO.md` têm conserto, asserção nova num sensor e `RESOLVED by <hash>`; os do runner
 têm mutante (catálogo 792 → 813). A execução foi fora do `sdd run`, à mão, num worktree ligado, pelo
 `superpowers:executing-plans` (decisão 5). Sem `sdd health` nem carimbo (decisão 6). O PR é o #391,
@@ -25,9 +25,9 @@ o merge, que é do humano.
 ## Estado do repo
 
 - **Branch:** `fix/as-reincidentes-primeiro` — empurrada, PR #391 contra `main`
-- **Último commit:** o do checkpoint de R5–R8 (esta versão do arquivo entra nele)
+- **Último commit:** o do checkpoint do R9 (esta versão do arquivo entra nele)
 - **Working tree:** limpo
-- **Suíte:** `bash tests/run-all.sh` → verde em `2e4b0b3`, 672 s, 2090 `ok`, 0 `FAIL`; o lint se pula sem o
+- **Suíte:** `bash tests/run-all.sh` → verde em `3f3a57c`, 880 s, 2091 `ok`, 0 `FAIL`; o lint se pula sem o
   `shellcheck` no PATH, e o 0.11.0 do cache do `uv` dá os 4 avisos da base, nenhum novo
 - **E2E:** não se aplica (o kit não tem interface; `E2E_CMD` vazio)
 
@@ -55,6 +55,7 @@ o merge, que é do humano.
 - `3636961` — R6 (codereview do branch): o stream da sessão morta se aposenta quando uma sessão posterior fecha
 - `2e4b0b3` — R7 (codereview do branch): o executor lê a sobra de uma sessão anterior antes do `TEST_CMD`
 - `3c0f2d8` — R8 (codereview do branch): `KAIZEN_LOG.md`, README, o item do `PR #N` e o achado do lint (catraca 88)
+- `3f3a57c` — R9 (re-revisão do PR #391, CodeRabbit): o executor só põe de volta o mutante que o `.bak` confirma
 
 Cada incremento tem a sua linha `done` no `checkpoint.md`, num commit `chore(missao)`, que pode cobrir
 vários (o `checkpoint-notas.md` diz quais).
@@ -63,7 +64,7 @@ vários (o `checkpoint-notas.md` diz quais).
 
 | Arquivo | O que contém |
 |---|---|
-| `docs/handoffs/20261112-as-reincidentes-primeiro/checkpoint.md` | a tabela, 23 de 23 `done`, com o hash de cada incremento |
+| `docs/handoffs/20261112-as-reincidentes-primeiro/checkpoint.md` | a tabela, 24 de 24 `done`, com o hash de cada incremento |
 | `docs/handoffs/20261112-as-reincidentes-primeiro/checkpoint-notas.md` | as medidas de cada incremento e os desvios |
 | `TODO.md` | os 13 itens com `RESOLVED by`, ainda abertos, e os achados novos do `gh pr edit` e do lint (catraca 88) |
 | `KAIZEN_LOG.md` | a entrada de 2026-11-12, com antes e depois medidos |
@@ -75,8 +76,9 @@ Não há fase do runner depois desta nesta missão (decisão 5). O PR #391 está
 rodou sobre o `f7f94b2`: o CodeRabbit deixou 5 achados (R2, R3, R4, o prazo do `ls-remote` manual e a
 reserva do `/sdd-plan`, que o humano decidiu manter), o Codex 1 (o mesmo do R3) e o Copilot não revisou
 (sem cota). Depois, o `codereview:codereview` do branch inteiro deu nota B (4 Medium, viraram R5–R8;
-15 Low adiados, listados no corpo do PR). Uma rodada nova dos bots sobre os consertos vira outra leva
-`R<n>`; o merge é do humano.
+15 Low adiados, listados no corpo do PR). O CodeRabbit re-revisou o `6df6a67` e deixou 1 Major: o
+executor mandava desfazer mudança não commitada de dono desconhecido; virou o R9. Uma rodada nova dos
+bots sobre os consertos vira outra leva `R<n>`; o merge é do humano.
 Nunca `./bin/sdd health`.
 
 ## Pendências / Decisions for a Human
