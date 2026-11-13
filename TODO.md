@@ -640,6 +640,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   binário vê o `TEST_CMD` do kit vermelho. Direção: consertar os 4, e o `sdd preflight` avisar sem o linter.
   — descoberto pelo codereview do branch da missão `20261112-as-reincidentes-primeiro` (2026-11-12)
 
+- [ ] **A receita de merge dos PRs de achado não conta os threads de revisão abertos no head** —
+  `docs/finding-prs.md:45` (`gh pr checks`) — o passo 6 espera os checks e o 7 mergeia preso ao head, e nenhum
+  dos dois lê os threads. No #391 o `mergeable_state` dizia `clean` e o check do CodeRabbit `success`, e um Major
+  dele sobre o head (`agents/sdd-executor.md:75`) seguia `isResolved: false`, postado 3 h antes do handoff que
+  apontava o merge como próximo passo; só a consulta `reviewThreads` do GraphQL o mostrou. Direção: o passo 7
+  exige `unresolved: 0` contado no head, com o comando ao lado.
+  — descoberto pela sessão interativa do merge da missão `20261112-as-reincidentes-primeiro` (2026-11-13)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
