@@ -969,6 +969,84 @@ assert_eq "past EXEC: the mission's artifacts are byte-identical" "$art_before" 
 assert_eq "past EXEC: no tracked path changed" "" "$(git status --porcelain)"
 git reset -q --hard HEAD~1
 
+# --- the boot names what a dead session left (item H of TODO.md, second half) ------------------
+# In the 3.5c of dotp-remake a session died during the sabotage step and left the mutant applied,
+# with its `.bak`, and the next EXEC session was opened over that tree with no word about it. A
+# repository of its own, because the fixture above is asserted clean and this one must not be: one
+# stream no journal line closed and one modified tracked file. DIFFERENTIAL: the prompt over the
+# leftovers against the prompt over the clean tree, which must differ ONLY by added lines — every
+# probe above compares whole prompts, and the clean one has to stay what it was. Then a real lap
+# (the stub above answers 97 instead of a session): the journal gets a LEFTOVER line before the
+# session opens.
+echo "== the boot names what a dead session left =="
+LB="$SDD_STATE_FIX/leftover-boot"
+LBM="20260109-boot-leftovers"
+mkdir -p "$LB/docs/handoffs/$LBM"
+( cd "$LB" && git init -q -b main && git config user.email "fixture@example.com" && git config user.name "Fixture" \
+  && echo content > tracked.txt && "$SDD" install >/dev/null 2>&1 )
+printf '%s\n' 'PROJECT_NAME="leftovers"' 'DEFAULT_BRANCH="main"' 'TEST_CMD="true"' 'E2E_CMD=""' \
+  'HANDOFF_DIR="docs/handoffs"' 'QA_DOCS_PATH="docs/qa"' 'JIRA_ENABLED=false' > "$LB/.sdd/config.sh"
+printf -- '---\nmissao: %s\nbranch: main\naprovacao: auto\n---\n# Mission\n' "$LBM" > "$LB/docs/handoffs/$LBM/00-missao.md"
+: > "$LB/docs/handoffs/$LBM/01-plano.md"
+printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n|---|---|---|---|---|\n| I1 | slice one | `true` → 0 | pending | — |\n' \
+  > "$LB/docs/handoffs/$LBM/checkpoint.md"
+( cd "$LB" && git add -A && git commit -qm init )
+LB_CLEAN="$( cd "$LB" && "$SDD" boot "$LBM" EXEC 2>&1 )" || true
+mkdir -p "$LB/.sdd/logs/$LBM"
+: > "$LB/.sdd/logs/$LBM/EXEC-20260109-100000-cccc3333.stream.jsonl"
+echo changed >> "$LB/tracked.txt"
+LB_LEFT="$( cd "$LB" && "$SDD" boot "$LBM" EXEC 2>&1 )" || true
+LB_DIFF="$(diff <(printf '%s\n' "$LB_CLEAN") <(printf '%s\n' "$LB_LEFT"))" || true
+lb_has() { if grep -qE "$2" <<< "$1"; then printf 1; else printf 0; fi }
+assert_eq "the boot prompt names the orphan stream and the dirty tree a dead session left" \
+  "clean:0 removed:0 stream:1 dirty:1 look:1" \
+  "clean:$(lb_has "$LB_CLEAN" 'did not close') removed:$(lb_has "$LB_DIFF" '^[<|]') stream:$(lb_has "$LB_DIFF" '^> .*EXEC-20260109-100000-cccc3333\.stream\.jsonl') dirty:$(lb_has "$LB_DIFF" '^> .* M tracked\.txt') look:$(lb_has "$LB_DIFF" '^> .*git status.*git diff')"
+# Dirt with no orphan stream is not a dead session (R1, from the final review of this branch): a
+# session the budget cut, a human's untracked file or an uncommitted install leave the same tree.
+# The block then says the tree was not clean, never that a session died, and the rule it gives is
+# the narrow one the plan asked for: what belongs to this phase is the session's to finish and
+# commit, a .bak or an applied mutant it did not write never is. With the orphan back, the block
+# still names the dead session.
+mv "$LB/.sdd/logs/$LBM/EXEC-20260109-100000-cccc3333.stream.jsonl" "$SDD_STATE_FIX/cccc3333.aside"
+LB_DIRT="$( cd "$LB" && "$SDD" boot "$LBM" EXEC 2>&1 )" || true
+mv "$SDD_STATE_FIX/cccc3333.aside" "$LB/.sdd/logs/$LBM/EXEC-20260109-100000-cccc3333.stream.jsonl"
+assert_eq "a dirty tree alone is told it was not clean, never that a session died" \
+  "dirt-only died:0 not-clean:1 dirty:1 yours:1 foreign:0 · with-orphan died:1 yours:1" \
+  "dirt-only died:$(lb_has "$LB_DIRT" 'did not close') not-clean:$(lb_has "$LB_DIRT" '^The tree was not clean when this session opened') dirty:$(lb_has "$LB_DIRT" '^ +M tracked\.txt') yours:$(lb_has "$LB_DIRT" 'belongs to the work of this phase is yours to finish and commit') foreign:$(lb_has "$LB_DIRT" "another session's change") · with-orphan died:$(lb_has "$LB_LEFT" 'did not close') yours:$(lb_has "$LB_LEFT" 'belongs to the work of this phase is yours to finish and commit')"
+# The lap is witnessed (the review of this branch): `first-is-before-session` alone prints 1 for a
+# journal that never opened a session too, so the lap's rc and its one session line are terms of
+# the same assertion. The stub's lap returns 0 and leaves one EXEC line that names a session.
+LB_RC=0
+( cd "$LB" && "$SDD" run "$LBM" --max-phases 1 >/dev/null 2>&1 ) || LB_RC=$?
+LB_JOURNAL="$(cat "$LB/.sdd/logs/$LBM/pipeline.log" 2>/dev/null)" || true
+assert_eq "the journal writes LEFTOVER before the session opened over a dead session's leftovers" \
+  "lap-rc:0 sessions:1 leftover:1 first-is-before-session:1" \
+  "lap-rc:$LB_RC sessions:$(grep -cE '^[^ ]+  EXEC  .*  session=[^ ]' <<< "$LB_JOURNAL") leftover:$(grep -cE '^[^ ]+  LEFTOVER  EXEC  streams=1  dirty=1$' <<< "$LB_JOURNAL") first-is-before-session:$(awk '/  LEFTOVER  /{print (s ? 0 : 1); exit} /  EXEC  .*session=/{s=1}' <<< "$LB_JOURNAL")"
+# A dead session's stream retires once a later session of the mission closes (the review of this
+# branch): nothing ever writes the journal line of a session that died, so without the rule every
+# later boot of the mission, every phase, said a session did not close. The lap above is that later
+# session, told about the leftovers in its own boot: its stream is newer than the orphan and its line
+# cites it. The dirt it did not commit is still told, as a tree that was not clean.
+LB_AFTER="$( cd "$LB" && "$SDD" boot "$LBM" EXEC 2>&1 )" || true
+assert_eq "a session that closed after the dead one retires its stream, and the dirt left is still told" \
+  "died:0 stream:0 not-clean:1 dirty:1" \
+  "died:$(lb_has "$LB_AFTER" 'did not close') stream:$(lb_has "$LB_AFTER" 'cccc3333') not-clean:$(lb_has "$LB_AFTER" '^The tree was not clean when this session opened') dirty:$(lb_has "$LB_AFTER" '^ +M tracked\.txt')"
+# A journal that exists and cannot be read cannot say which streams it closed: the boot calls none
+# of them an orphan (every one would be a guess, and the stub's session above DID close), keeps the
+# dirty paths, and the reader's own complaint stays off stderr — regime 8 of check-autonomy.sh
+# measures that channel for the two journal writers. `armed` is the floor: as root the mode is
+# ignored and this would be the readable world under another name.
+chmod 000 "$LB/.sdd/logs/$LBM/pipeline.log"
+LB_ARMED=0
+( : < "$LB/.sdd/logs/$LBM/pipeline.log" ) 2>/dev/null || LB_ARMED=1
+LB_BLIND_ERR="$SDD_STATE_FIX/leftover-boot.err"
+LB_BLIND="$( cd "$LB" && "$SDD" boot "$LBM" EXEC 2>"$LB_BLIND_ERR" )" || true
+chmod 644 "$LB/.sdd/logs/$LBM/pipeline.log"
+assert_eq "an unreadable journal names no stream an orphan in the boot, and its reader says nothing raw" \
+  "armed:1 streams:0 dirty:1 raw:0" \
+  "armed:$LB_ARMED streams:$(lb_has "$LB_BLIND" 'stream no journal line closed') dirty:$(lb_has "$LB_BLIND" '^ +M tracked\.txt') raw:$(grep -c 'pipeline\.log' "$LB_BLIND_ERR")"
+rm -rf "$LB" "$LB_BLIND_ERR"
+
 # --- scope hygiene: no function reads the caller's local --------------------
 # `pstep` is `local` to `run_phase`. Bash dynamic scoping means EVERY function it calls can see
 # that local — so another function referencing `$pstep` "works", but only by coincidence of who

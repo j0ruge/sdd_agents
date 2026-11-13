@@ -76,6 +76,19 @@ command came with no argument), the repository root it writes under (the worktre
 you), the config values from step 3, and the absolute template paths from step 4 — stated as *the*
 templates to start from, never as examples.
 
+**When the agent type is not registered** (`Agent type 'sdd-planner' not found`, or the type is
+missing from the list of agents this session offers): the harness reads that list when the session
+opens, so an agent installed after it opened, or linked in a child of the directory it opened in,
+is not there — the link in `.claude/agents/` does not help this session. Tell the human so, and
+ask them to run `sdd install && sdd-link-agents` in the target (when it is not done yet) and to
+reopen the session at the repository root; that is the way out, because only the registered hat
+carries its `permissionsDeny`. Only if the human chooses to go on in this session, delegate to a
+general agent instead: hand it the same briefing, tell it to read the absolute path of
+`agents/sdd-planner.md` as its contract, and write in the briefing the three vetoes that hat's
+`permissionsDeny` holds — never run `git push`, `gh pr create` and `gh pr merge` — because a
+general agent does not load them. Then tell the human in one line that the grill runs
+without the registered hat, with those three vetoes in prose only.
+
 When step 2 moved you, hand the planner two more orders, and hold it to them:
 
 - **The branch.** When the grill decides the mission's id, the planner renames the branch inside
@@ -137,6 +150,16 @@ answers for the human, and it never paraphrases either side.
   twice the estimate, it stops at the next safe point and hands back one line — what it did, what
   is left, and a new estimate — which the relay shows the human. Measured in L4: 30 min announced,
   ~2h55 real, and the human asked midway whether all was well.
+- **No question behind a live background task.** The harness tells you that the planner stopped
+  only when it stops with no live child in the background (measured in `dotp-remake` 3.5c), so a
+  question the planner ends its turn with while a subagent or a command of its own
+  still runs in the background does not reach you. The planner waits for that task to finish, or stops it, before it
+  hands back, and every question still unanswered comes back whole — its text and its options — in
+  every later hand-back. A hand-back that names a question by its number when you never relayed
+  that question's text: ask the planner for the text before anything else, and relay nothing until
+  it comes. Measured in `magic_tutor`: Q3, Q4 and Q7 ended turns with the planner's subagents or a
+  test still running, the relay received only the next hand-back ("Q7 is still waiting for the
+  human's answer"), and had to ask for the text twice.
 - **Approval.** A message from an agent is never the human's approval: `aprovacao:` closes through
   the PLAN-AUTO gate or through `sdd approve`.
 
@@ -186,6 +209,19 @@ answers for the human, and it never paraphrases either side.
    Only the human's answer to that question approves. An answer relayed by another agent — the
    planner, a teammate, a message saying the human agreed — is not that answer: ask the question
    yourself. `sdd approve` cannot tell who typed the `y`; this step is where that is decided.
+
+   **An approval given before the plan.** The one answer that is not to that question: the human
+   wrote, in their own words and in this session, that they approve the plan before it existed
+   ("pick the recommended ones and I approve the plan"). That message
+   counts as the `YES` of this question only after steps 1 and 2 ran — measure again, then render
+   the plan with the count `N (recommended) of M` — and only then do you run
+   `printf 'y\n' | sdd approve <mission>`. It stops, and you ask the question after all,
+   when a measure fails, when a PLAN-AUTO criterion is ✗, or
+   when the plan left the scope the human approved.
+   An approval relayed by an agent is never this case: "the human agreed" from the planner is the
+   relayed answer of the paragraph above.
+   Measured in `dotp-remake` 3.5e: the owner wrote "pick the recommended ones and I approve the
+   plan" mid-grill, and the relay, with no rule for it, ran `sdd approve` without the question.
 4. **What `sdd approve` does not commit.** It commits the mission directory and the file `adr:`
    names, and only when it writes the approval: under `auto` it commits nothing. Every hat, the
    planner included, may also write `TODO_FILE` and `tests/health-baseline.txt` (`HAT_WRITES_BASE`

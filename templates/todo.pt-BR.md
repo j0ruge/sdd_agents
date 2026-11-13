@@ -25,6 +25,11 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > seção aberta passa de 120 caracteres, fora a `RECURRED` bem formada (abaixo).
 > ([ADR 0011 do kit sdd](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
+> **`#N` solto num arquivo que numera.** Quando um item aberto tem o título começando por
+> `**<N>. `, o arquivo numera os itens, e um `#N` solto no corpo que coincide com o número de um
+> item é recusado: para um leitor é o item N, para outro o PR N. Escreva `item N`, ou `PR #N`,
+> `issue #N` ou `dono/repo#N` para o que não é o item. Num arquivo que não numera, o `#N` passa.
+>
 > **Registro decidido** — uma linha física, sem caixa, apontando a evidência:
 >
 > ```md

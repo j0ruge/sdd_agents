@@ -25,6 +25,11 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > passes 120 characters, except a well-formed `RECURRED` (below).
 > ([ADR 0011 of the sdd kit](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
+> **A bare `#N` in a file that numbers.** When an open item's title opens with `**<N>. `, the
+> file numbers its items, and a bare `#N` in a body that matches the number of an item is
+> refused: to one reader it is item N, to another PR N. Write `item N`, or `PR #N`, `issue #N`
+> or `owner/repo#N` for what is not the item. In a file that numbers nothing, a `#N` passes.
+>
 > **Decided record** — one physical line, no box, pointing at the evidence:
 >
 > ```md

@@ -23,7 +23,7 @@
 | Review | <todos os itens Grade A em r<N>> | [`40-review-r<N>.md`](<link>) |
 | Docs | <checklist de drift ✅> | [`45-docs.md`](<link>) |
 
-**Sensores novos** (rodam no CI a partir deste PR):
+**Sensores novos** (<rodam no CI a partir deste PR | rodam na suíte local, pelo `<TEST_CMD>`>):
 
 - `<spec/teste>` — <o que ele prova>
 

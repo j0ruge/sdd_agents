@@ -66,6 +66,22 @@ it belongs in the open questions for the human of `00-missao.md` (the last secti
 template) or in the next mission, and stop: left `pending`, it keeps EXEC open forever, and a word
 in its Commit cell is a label the gate refuses.
 
+**What an earlier session left is read before anything else.** When the boot names a stream no
+journal line closed, a session before you died; when it names only uncommitted paths, the tree was
+not clean when you opened. Either way run `git status` and `git diff` before `TEST_CMD` and before
+you edit: what belongs to your increment is yours to finish and commit, a `.bak` or an applied
+mutant you did not write never is. The one leftover you put back is an applied mutant, and only
+when its `.bak` confirms it: `diff <file>.bak <file>` shows nothing but the line a sabotage degrades
+or puts back, and `mv <file>.bak <file>` restores it. Every other change you cannot tell is your
+increment's (an edit of the human's, a half-written file the increment does not name, a `.bak` that
+differs by more) stays exactly as it is: never `git restore`, `git checkout --`, `git stash`,
+`git clean` or `rm` it, because you cannot tell whose it is, and uncommitted work has no other copy.
+A red that the leftovers explain is not an earlier increment's: with the mutant back, run
+`TEST_CMD` again, and if a change you left in place still turns it red,
+mark your increment `blocked`, name the paths, and stop; whose change it is, the human decides.
+What else you found goes in one line of `checkpoint-notas.md`, and in the handoff when this is the
+last increment.
+
 Before touching anything, run `TEST_CMD`.
 
 - **Red because of an earlier increment** → you do not fix it and you do not carry on. Mark that

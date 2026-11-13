@@ -4,6 +4,60 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-11-12 — As 13 reincidentes do `TODO.md` ganham conserto e sensor
+
+**Missão:** `20261112-as-reincidentes-primeiro`, o lote 1 de zerar a catraca. O recorte são os itens
+abertos que já tinham voltado pelo menos uma vez (a linha `RECURRED`), um incremento por item e o H em
+dois: prosa do `/sdd-plan`, do planner e do publisher (I1–I7), o `check-todo.sh` (I8) e o runner
+(I9–I14). Executada à mão num worktree ligado, pelo `superpowers:executing-plans`, fora do `sdd run`; sem
+`sdd health` nem carimbo de mutação, por decisão do humano (decisão 6 do `00-missao.md`).
+
+**Antes** (medido em `a48cf3c`, 2026-11-12, e no `796ec91`, o commit do grill):
+- **13** itens abertos com `RECURRED`, somando **25** voltas em quatro projetos (`dotp-remake`,
+  `magic_tutor`, `warehouse_explorer_web`, `sdd_agents`), nenhum com conserto no código: **10** itens e
+  **22** voltas em `a48cf3c`, e mais 3 itens com uma volta cada, que o grill desta missão registrou
+  (`796ec91`, as três `RECURRED 1: sdd_agents/20261112`); a maior, o `/sdd-plan` sem saída para o
+  agente não registrado, com **10** voltas;
+- `ok` por sensor, rodado sozinho: `check-hat.sh` 96, `check-templates.sh` 113, `check-gates.sh` 484,
+  `check-preflight.sh` 162, `check-dry-run.sh` 87, `check-todo.sh` 15;
+- `tests/check-mutation.sh --anchors`: `all 792 mutants still apply and leave valid code`.
+
+**Depois** (medido em `59b5f96`, o último commit de código dos incrementos, e nas três revisões
+abaixo, cada uma no seu sha; a suíte rápida rodou verde num clone de rascunho a cada um a seis
+incrementos, oito corridas de 604 a 670 s):
+- **13** itens com `RESOLVED by <hash>`, o hash do incremento que consertou cada um
+  (`grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md` → 13); a catraca segue em 86 até o chore pós-merge
+  (88 com os dois achados registrados depois: o do `gh pr edit` no fecho, e o do lint no codereview);
+- `ok` por sensor, do mesmo jeito: `check-hat.sh` 103 (+7), `check-templates.sh` 114 (+1),
+  `check-gates.sh` 488 (+4), `check-preflight.sh` 167 (+5), `check-dry-run.sh` 90 (+3),
+  `check-todo.sh` 16 (+1);
+- `--anchors`: `all 808 mutants` (+16, todos de `bin/sdd`, cada um provado com `--only` contra o
+  sensor que o mata). Dois mutantes antigos foram reapontados porque a linha deles mudou de forma
+  (`COORD_owner_hidden`, `BOOT_reason_dropped`), e seguem pegos;
+- a revisão final do branch, por um revisor novo, achou uma Important e nove Minor. A Important virou
+  o R1 (`215fd54`): o boot deixou de chamar de sessão morta a sujeira sem stream órfão. Com ele,
+  `check-dry-run.sh` 91 (+4 contra o antes) e `all 810 mutants` (+18);
+- a revisão do PR #391 (CodeRabbit e Codex; o Copilot ficou sem cota) pediu três consertos com probe:
+  R2 e R3 (`820787e`) e R4 (`5ee401c`). Com eles, `check-gates.sh` 490 (+6 contra o antes),
+  `check-preflight.sh` 168 (+6) e `all 812 mutants` (+20);
+- o `codereview:codereview` do branch inteiro (`a48cf3c..f400350`), que a missão tinha tirado do
+  runner, achou 4 MEDIUM e 21 LOW, sem CRITICAL nem HIGH. Os MEDIUM viraram R5–R8: os 3 avisos de
+  lint que a suíte pulou, medidos com o `shellcheck` 0.11.0 do cache do `uv` (4 na base, 7 no head,
+  4 depois do R5); o stream de uma sessão morta, que nunca se aposentava (R6, `3636961`); o parágrafo
+  da sobra no executor, lido depois do `TEST_CMD` (R7, `2e4b0b3`); e este registro. Com eles,
+  `check-dry-run.sh` 92 (+5 contra o antes), `check-hat.sh` 104 (+8) e `all 813 mutants` (+21).
+
+**O que a execução ensinou** (notas da missão): o `--only` roda um controle sem sabotagem antes do
+mutante, e foi esse controle que achou o regime 8 do `check-autonomy.sh` vermelho no I14: um leitor novo
+do `pipeline.log` imprimia o erro cru quando o journal não se lê. O "nearest" do `check-todo.sh
+--anchors` nem sempre é a linha para onde a âncora foi: no I12, 7 das 32 sugestões apontavam outra
+ocorrência do símbolo, e o mapa do `git diff -U0` respondeu certo.
+
+**O que fica para medir** (pendente): o `sdd health` da série, quando a catraca zerar, mede os 808
+mutantes de uma vez; e o `Monitor` liberado ao planner (I3) só se prova num `/sdd-plan` real.
+
+---
+
 ## 2026-10-26 — O `sdd health` pula o catálogo com a chave já medida
 
 **Missão:** `20261026-health-pula-catalogo` (ADR 0021), que fecha dois achados do `TODO.md`: o de

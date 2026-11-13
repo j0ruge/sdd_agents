@@ -316,6 +316,35 @@ executor_agent_probes() {
      && grep -qF '`finally`' <<< "$fence" && grep -qF '`trap … EXIT`' <<< "$fence"; then
     pass "hat: and an overrun counts as a killed mutant after an unmutated run under the same ceilings, and the restore never waits on the child"
   else fail "hat: sdd-executor no longer counts an overrun as a killed mutant (after the unmutated run under the same ceilings), or the restore depends on the child ending well again (a finally or a trap of the process that applied the mutant)"; fi
+  # The review of the whole branch (item H, read by the hat): the paragraph on what an earlier
+  # session left sat in § 3, after § 2 had already run TEST_CMD and called a red an earlier
+  # increment's. The mutant a dead session left applied (dotp-remake 3.5c) makes TEST_CMD red, so
+  # the paragraph is read in § 2, above that line, once in the file, and says such a red is not an
+  # earlier increment's; what else the session found goes in checkpoint-notas.md, since only the
+  # last increment writes the handoff. Read as a BLOCK, from its bold lead to the next blank line.
+  local s2 left nleft ntest
+  s2="$(awk '/^## 2\. /{s=1; next} s && /^## /{s=0} s' "$ex")"
+  left="$(awk '/^\*\*What an earlier session left/ { on = 1 } on && /^$/ { exit } on' <<< "$s2")"
+  nleft="$(awk '/^\*\*What an earlier session left/ { print NR; exit }' <<< "$s2")"
+  ntest="$(awk '/^Before touching anything, run `TEST_CMD`/ { print NR; exit }' <<< "$s2")"
+  if [ -n "$left" ] && [ -n "$nleft" ] && [ -n "$ntest" ] && [ "$nleft" -lt "$ntest" ] \
+     && [ "$(grep -c '^\*\*What an earlier session left' "$ex")" -eq 1 ] \
+     && grep -qF 'is not an earlier increment' <<< "$left" && grep -qF 'checkpoint-notas.md' <<< "$left"; then
+    pass "hat: the executor reads what an earlier session left before TEST_CMD, and a red the leftovers explain is not an earlier increment's"
+  else fail "hat: sdd-executor reads what an earlier session left after TEST_CMD, calls a red the leftovers explain an earlier increment's, or no longer says where the finding goes before the last increment"; fi
+  # The review of PR #391 (CodeRabbit): the same block said "undo what you did not write", with a
+  # half-written file among the leftovers. While an increment is pending, gate_EXEC answers before
+  # it looks at the tree, so a session opens over an uncommitted edit of the human's and was told to
+  # throw it away, and uncommitted work has no other copy: the KAIZEN_LOG.md entry of 2026-08-14 on
+  # the sensor of the sensor measured a `git checkout` that undid a sabotage and took the whole
+  # implementation with it. Only a mutant its `.bak` confirms goes back, by `mv`; every other change
+  # stays where it is, and a red one of them explains stops the line.
+  if [ -n "$left" ] && grep -qF 'diff <file>.bak <file>' <<< "$left" \
+     && grep -qF 'mv <file>.bak <file>' <<< "$left" && grep -qF 'stays exactly as it is' <<< "$left" \
+     && grep -qF 'never `git restore`' <<< "$left" && grep -qF 'mark your increment `blocked`' <<< "$left" \
+     && ! grep -qF 'undo what you did not write' <<< "$left"; then
+    pass "hat: the executor puts back only a mutant its .bak confirms, leaves every other change it did not write in place, and stops on a red one of them explains"
+  else fail "hat: sdd-executor puts back a leftover no .bak confirms, tells the session to undo uncommitted changes whose owner it cannot tell, or no longer stops the line on a red one of them explains"; fi
 }
 
 # One hat promised a measurement nobody makes, and another was silent where its boundary needed a
@@ -449,6 +478,22 @@ command_approval_probes() {
   else
     fail "command: /sdd-plan no longer says its warning forbids approval prose in aprovacao, never the auto value"
   fi
+  # Item K: in dotp-remake 3.5e the owner wrote mid-grill "pick the recommended ones and I approve
+  # the plan", and the relay ran sdd approve without the question, after showing the plan and
+  # measuring --check and --red. Following the text asked a redundant question; not following it
+  # skipped a mandatory step in silence. The early approval is the human's own word, never an
+  # agent's; it still shows (steps 1 and 2 ran) and it has three stops. Each piece is its own literal.
+  if grep -qF 'An approval given before the plan' <<< "$sec" \
+     && grep -qF 'in their own words and in this session' <<< "$sec" \
+     && grep -qF 'counts as the `YES` of this question only after steps 1 and 2 ran' <<< "$sec" \
+     && grep -qF 'when a measure fails' <<< "$sec" \
+     && grep -qF 'when a PLAN-AUTO criterion is ✗' <<< "$sec" \
+     && grep -qF 'when the plan left the scope the human approved' <<< "$sec" \
+     && grep -qF 'An approval relayed by an agent is never this case' <<< "$sec"; then
+    pass "command: /sdd-plan says what an approval given before the plan still shows, and what stops it"
+  else
+    fail "command: /sdd-plan no longer says that an approval the human wrote before the plan still waits for the measures and the rendered plan, or what stops it (a failed measure, a ✗ criterion, a plan outside the approved scope)"
+  fi
 }
 
 # --- /sdd-plan: what the relay commits, and what it holds back -----------------------------------
@@ -558,6 +603,32 @@ planner_agent_probes() {
   else
     fail "hat: sdd-planner writes aprovacao: auto on its own again, instead of leaving it to the human who reads the plan"
   fi
+  # Item D: § 1 forbids ending a turn with a live background task, the harness blocks a foreground
+  # `sleep`, and the contract vetoed Monitor — what was left was a loop of wait calls (~60 in 19 min
+  # in dotp-remake 3.6b). The planner is the one hat that may use Monitor; ScheduleWakeup stays
+  # vetoed, so a key emptied or removed reads red too. It proves the FILE, not that a subagent can
+  # call Monitor in the harness: that needs a real session (the pending list of 00-missao.md).
+  local dis
+  dis="$(fm_value "$agent" disallowedTools)"
+  if [ "$dis" != "$ABSENT" ] && ! grep -qw 'Monitor' <<< "$dis" && grep -qw 'ScheduleWakeup' <<< "$dis" \
+     && grep -qF 'wait for it with `Monitor` and an `until` loop' <<< "$s1" \
+     && grep -qF 'never with a loop of wait calls' <<< "$s1"; then
+    pass "hat: the planner may use Monitor, and waits on a live task with it"
+  else
+    fail "hat: sdd-planner vetoes Monitor again (or lost the ScheduleWakeup veto), or § 1 no longer says to wait on a live background task with Monitor and an until loop"
+  fi
+  # Item M: the installed grill-with-docs (mattpocock/skills @ 447ca70) carries
+  # `disable-model-invocation: true`, so it is not in the list the model sees, and its body only says
+  # to call grilling and domain-modeling. In dotp-remake 3.5e the planner did not find it and loaded
+  # grilling alone until the relay pointed at domain-modeling. § 1 names the two the model can call;
+  # an order to invoke grill-with-docs anywhere in the file reads red. KIT_THIRD_PARTY_SKILLS
+  # (bin/sdd) is out of scope and keeps the package name.
+  if grep -qF 'Skill(grilling)' <<< "$s1" && grep -qF 'Skill(domain-modeling)' <<< "$s1" \
+     && ! grep -qE 'Invoke `?Skill\(grill-with-docs\)' "$agent"; then
+    pass "hat: the planner invokes the grilling and domain-modeling skills, which the model can call"
+  else
+    fail "hat: sdd-planner orders Skill(grill-with-docs) again, which the model cannot invoke, or § 1 no longer names Skill(grilling) and Skill(domain-modeling)"
+  fi
   # Codex review of PR #252: § 6 changed and two other copies of the same contract did not — the
   # template the planner copies said "all ✅ → auto", and the pipeline doc said a well-run grill is
   # the approval. A planner following either skips the reading the human asked for. The template is
@@ -662,6 +733,80 @@ command_branch_cwd_probes() {
   fi
 }
 
+# --- /sdd-plan: the sdd-planner agent type is not registered (item A, 10 returns) ----------------
+# The harness reads the list of agent types when the session opens, so an agent installed later, or
+# linked under a child of the directory the session opened in, is not there: `Agent type
+# 'sdd-planner' not found` in magic_tutor, and in dotp-remake 3.2b and 3.2c with the link already in
+# .claude/agents/. Both times a general agent read sdd-planner.md and ran the grill WITHOUT the hat's
+# permissionsDeny — push and PR were vetoed in prose only. "Then" names the preferred way out (reopen
+# at the target's root after the install) and the fallback (a general agent with the three vetoes
+# written in its briefing, and one line to the human). Read in "Then", where the delegation lives:
+# a way out moved to another section is read after the delegation has already failed.
+command_planner_unregistered_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" then_sec
+  then_sec="$(awk '/^## Then/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  if grep -qF "Agent type 'sdd-planner' not found" <<< "$then_sec" \
+     && grep -qF 'not registered' <<< "$then_sec" \
+     && grep -qF 'reopen the session at the repository root' <<< "$then_sec" \
+     && grep -qF 'sdd install && sdd-link-agents' <<< "$then_sec" \
+     && grep -qF 'permissionsDeny' <<< "$then_sec" \
+     && grep -qF '`git push`, `gh pr create` and `gh pr merge`' <<< "$then_sec" \
+     && grep -qF 'without the registered hat' <<< "$then_sec"; then
+    pass "command: /sdd-plan names the way out when the sdd-planner agent type is not registered"
+  else
+    fail "command: /sdd-plan no longer names the way out when the sdd-planner agent type is not registered (reopen at the root after sdd install && sdd-link-agents, or a general agent with the three permissionsDeny vetoes in its briefing and a line to the human)"
+  fi
+}
+
+# --- /sdd-plan and the planner: no question behind a live background task (item B, 3 returns) ---
+# The harness tells the relay that a subagent stopped only when it stops with no live child in the
+# background (probe of dotp-remake 3.5c). In magic_tutor Q3, Q4 and Q7 were the end of a planner
+# turn with its subagents or a test still running: the relay received only the NEXT hand-back ("Q7
+# is still waiting for the human's answer") and had to ask for the text twice. Three rules, each in
+# the file whose reader follows it: (1) no question while a task of yours runs in the background,
+# in both; (2) a pending question comes back whole, in the planner; (3) the relay that reads the
+# number of a question it never relayed asks for the text first, in the command. Read by section —
+# the relay's in "Relaying the grill", the planner's in § 1, where its subagent paragraph lives.
+background_question_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" agent="$ROOT/agents/sdd-planner.md" relay s1
+  relay="$(awk '/^## Relaying the grill to the human/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  s1="$(awk '/^## 1\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'no live child in the background' <<< "$relay" \
+     && grep -qF 'still runs in the background' <<< "$relay" \
+     && grep -qF 'ask the planner for the text before anything else' <<< "$relay" \
+     && grep -qF 'still runs in the background' <<< "$s1" \
+     && grep -qF 'comes back whole' <<< "$s1" \
+     && grep -qF 'never as its number alone' <<< "$s1"; then
+    pass "command: /sdd-plan and the planner leave no question behind a live background task"
+  else
+    fail "command: /sdd-plan or the planner lets a question end a turn while a background task of the planner still runs, lets a pending question come back as its number alone, or lets the relay go on without its text"
+  fi
+}
+
+# --- the queue of finding PRs (item L) -------------------------------------------------------------
+# Every finding PR moves the same ratchet line (`todo-findings` of tests/health-baseline.txt) and
+# appends to the end of the same section of TODO.md, so each merge puts the next PR in conflict:
+# four of PRs 381 and 386–389 conflicted on the ratchet, two on TODO.md, and PRs 378, 380 and 383
+# again during the grill of 20261112-as-reincidentes-primeiro. The recipe of 9593497 passed every
+# time and lived only in the history. The doc carries it; the header of TODO.md, read above the
+# open marker, points at it. `--check TODO.md --baseline origin/main` is demanded in THAT order:
+# measured, the other order is rc 96 (unknown option).
+doc_finding_prs_probes() {
+  local doc="$ROOT/docs/finding-prs.md" head
+  head="$(awk '/<!-- sdd:open -->/{exit} 1' "$ROOT/TODO.md")"
+  if [ -f "$doc" ] \
+     && grep -qF 'git merge origin/main' "$doc" \
+     && grep -qF 'tests/check-todo.sh --count TODO.md' "$doc" \
+     && grep -qF 'todo-findings' "$doc" \
+     && grep -qF 'tests/check-todo.sh --check TODO.md --baseline origin/main' "$doc" \
+     && grep -qF -- '--match-head-commit' "$doc" \
+     && grep -qF 'docs/finding-prs.md' <<< "$head"; then
+    pass "doc: the queue of finding PRs has its recipe, and the TODO header points at it"
+  else
+    fail "doc: docs/finding-prs.md is missing or lost a step of the recipe (merge of origin/main, the recount, todo-findings, --check --baseline origin/main, --match-head-commit), or the TODO.md header no longer points at it"
+  fi
+}
+
 
 # --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
 # The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
@@ -684,6 +829,23 @@ publisher_stamp_probes() {
   else pass "hat: and the stamp is no reason for the publisher to stop before the PR is open"; fi
   if grep -qE 'review bot.*one batch.*\./bin/sdd health.*sdd run' "$pub"; then pass "hat: and the PR body carries the order: bots, one batch of fixes, the stamp, sdd run"
   else fail "hat: the publisher's PR body lost the order before the merge"; fi
+  # Item J: the "new sensors" bullet said "the tests and specs that start running in CI from this PR
+  # onwards", and a target with no CI workflow got that promise in its PR body. The bullet — read
+  # from its own marker to the next bullet, so a condition moved elsewhere reads red — claims CI
+  # only when .github/workflows/ holds a workflow, and otherwise names where the suite ran, by
+  # TEST_CMD. templates/pr-body.md carries the two fill-ins (check-templates.sh). Without a workflow
+  # it never says the repository has no CI (CodeRabbit on PR #391): CI can live outside
+  # .github/workflows/, and the absence of one directory is all the disk proves. The bullet is
+  # joined into one line first, so a wrap between the words cannot hide the claim.
+  local ns ns1
+  ns="$(awk '/^- \*\*new sensors\*\*/{s=1; print; next} s && /^- \*\*/{s=0} s' "$pub")"
+  ns1="$(tr -s ' \n' '  ' <<< "$ns")"
+  if grep -qF '.github/workflows/' <<< "$ns" && grep -qF 'TEST_CMD' <<< "$ns" \
+     && grep -qF 'only when' <<< "$ns" && ! grep -qiF 'has no CI' <<< "$ns1"; then
+    pass "hat: the publisher claims CI only with a workflow on disk, and names TEST_CMD otherwise"
+  else
+    fail "hat: the publisher's new-sensors bullet promises CI without checking .github/workflows/ in the target, no longer names TEST_CMD when there is no workflow, or says the repository has no CI"
+  fi
 }
 
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
@@ -984,6 +1146,9 @@ command_relay_probes
 command_worktree_probes
 command_worktree_return_probes
 command_branch_cwd_probes
+command_planner_unregistered_probes
+background_question_probes
+doc_finding_prs_probes
 publisher_stamp_probes
 boot_probes
 release_probes

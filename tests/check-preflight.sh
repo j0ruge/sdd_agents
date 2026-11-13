@@ -2527,6 +2527,124 @@ out="$( cd "$FIX/uneval" && env -u SDD_PROBE_NEVER_SET "$SDD" install 2>&1 )"
 assert_has "install says a config that does not evaluate does not load, instead of using defaults in silence" \
   "parses but does not evaluate" "$out"
 
+# --- --help after the subcommand prints the help and nothing else (item E) ---------------------
+# `help|--help|-h` was read only in the FIRST position, and cmd_install and cmd_link_agents read no
+# option but --force: `sdd install --help` installed the kit and `sdd link-agents --help` linked
+# the agents, both measured in a target. main() now reads -h/--help after any subcommand, before
+# the dispatch and so before any effect; the two parsers refuse what they do not know. Each world
+# is a repo of its own, and "nothing" is the whole tree: no .sdd/, docs/handoffs/, TODO.md,
+# .claude/ or .gitignore appears, and no symlink or ignore line is added to an installed repo.
+# bin/sdd-link-agents ends in `exec bin/sdd link-agents "$@"`, the same door, and is read too.
+echo "== --help after the subcommand prints the help and nothing else =="
+HELP_LINE="sdd — runner for the autonomous development agent pipeline"
+help_repo() { # help_repo <dir> — a fresh repo with one empty commit
+  mkdir -p "$1" && ( cd "$1" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" && git commit -q --allow-empty -m init ) >/dev/null 2>&1
+}
+HI="$FIX/help-install"; help_repo "$HI" || exit 1
+rc=0; out="$( cd "$HI" && "$SDD" install --help 2>&1 )" || rc=$?
+left="$(find "$HI" -mindepth 1 -maxdepth 1 ! -name .git -printf '%f ')" || true
+if [ "$rc" -eq 0 ] && grep -qF -- "$HELP_LINE" <<< "$out" && [ -z "$left" ]; then
+  pass "install --help prints the help and writes nothing"
+else
+  fail "install --help prints the help and writes nothing" "rc 0, the usage, and nothing but .git in the repo" \
+       "rc $rc; left: ${left:-nothing}; out: $(head -c 120 <<< "$out")"
+fi
+HB="$FIX/help-bogus"; help_repo "$HB" || exit 1
+rc=0; out="$( cd "$HB" && "$SDD" install --bogus 2>&1 )" || rc=$?
+left="$(find "$HB" -mindepth 1 -maxdepth 1 ! -name .git -printf '%f ')" || true
+if [ "$rc" -ne 0 ] && grep -qF 'unknown install option: --bogus' <<< "$out" && [ -z "$left" ]; then
+  pass "install refuses an option it does not know, before writing anything"
+else
+  fail "install refuses an option it does not know, before writing anything" \
+       "rc != 0, 'unknown install option: --bogus', nothing but .git" "rc $rc; left: ${left:-nothing}; out: $(head -c 120 <<< "$out")"
+fi
+HL="$FIX/help-link"; help_repo "$HL" || exit 1
+( cd "$HL" && "$SDD" install >/dev/null 2>&1 && git add -A && git commit -qm installed ) >/dev/null 2>&1
+before_tree="$( cd "$HL" && git status --porcelain; find .claude -type l | sort; md5sum .gitignore 2>/dev/null )" || true
+rc=0; out="$( cd "$HL" && "$SDD" link-agents --help 2>&1 )" || rc=$?
+rc2=0; out2="$( cd "$HL" && "$ROOT/bin/sdd-link-agents" --help 2>&1 )" || rc2=$?
+after_tree="$( cd "$HL" && git status --porcelain; find .claude -type l | sort; md5sum .gitignore 2>/dev/null )" || true
+links="$(find "$HL/.claude" -type l | wc -l)"
+if [ "$rc" -eq 0 ] && [ "$rc2" -eq 0 ] && grep -qF -- "$HELP_LINE" <<< "$out" && grep -qF -- "$HELP_LINE" <<< "$out2" \
+   && [ "$before_tree" = "$after_tree" ] && [ "$links" -eq 0 ]; then
+  pass "link-agents --help prints the help and links nothing"
+else
+  fail "link-agents --help prints the help and links nothing" \
+       "rc 0 twice (sdd link-agents, bin/sdd-link-agents), the usage twice, no symlink, the tree and .gitignore unchanged" \
+       "rc $rc/$rc2; links $links; tree changed: $([ "$before_tree" = "$after_tree" ] && echo no || echo yes); out: $(head -c 120 <<< "$out")"
+fi
+rc=0; out="$( cd "$HL" && "$SDD" link-agents --bogus 2>&1 )" || rc=$?
+if [ "$rc" -ne 0 ] && grep -qF 'unknown link-agents option: --bogus' <<< "$out" \
+   && [ "$(find "$HL/.claude" -type l | wc -l)" -eq 0 ]; then
+  pass "link-agents refuses an argument, before linking anything"
+else
+  fail "link-agents refuses an argument, before linking anything" \
+       "rc != 0, 'unknown link-agents option: --bogus', no symlink" "rc $rc; out: $(head -c 120 <<< "$out")"
+fi
+# The scan runs BEFORE the checkout admission (CodeRabbit and Codex on PR #391): after it, `sdd
+# install --help` outside a repository died with "not inside a git repository", because
+# coordination_enter resolves the root of every subcommand it admits. Help writes nothing and needs
+# no repository. The world is a directory git cannot find a repository from (GIT_CEILING_DIRECTORIES
+# at its parent), proved before anything is read, and three subcommands whose admission resolves
+# the root. The held checkout (CHECKOUT-BUSY) is the other world, in check-gates.sh.
+HN="$FIX/help-nogit"; mkdir -p "$HN"
+if ( cd "$HN" && GIT_CEILING_DIRECTORIES="$FIX" git rev-parse --show-toplevel ) >/dev/null 2>&1; then
+  fail "--help prints the help outside a repository, for every subcommand whose admission resolves the root" \
+       "a directory no repository is found from" "git finds one from $HN"
+else
+  bad=""
+  for sub in install link-agents run; do
+    rc=0; out="$( cd "$HN" && GIT_CEILING_DIRECTORIES="$FIX" "$SDD" "$sub" --help 2>&1 )" || rc=$?
+    { [ "$rc" -eq 0 ] && grep -qF -- "$HELP_LINE" <<< "$out" && ! grep -qF 'not inside a git repository' <<< "$out"; } \
+      || bad="$bad $sub (rc $rc: $(head -c 80 <<< "$out"))"
+  done
+  left="$(ls -A "$HN" | tr '\n' ' ')" || true
+  if [ -z "$bad" ] && [ -z "$left" ]; then
+    pass "--help prints the help outside a repository, for every subcommand whose admission resolves the root"
+  else
+    fail "--help prints the help outside a repository, for every subcommand whose admission resolves the root" \
+         "rc 0 and the usage for install, link-agents and run, nothing written" "failed:${bad:- none}; left: ${left:-nothing}"
+  fi
+fi
+
+# --- install without origin/HEAD never adopts the work branch in silence (item F) --------------
+# Without refs/remotes/origin/HEAD the install wrote the branch it ran on, and installing from a
+# work branch is the common case: `DEFAULT_BRANCH="plano-3-2"` in dotp-remake, `"chore/sdd-install"`
+# in magic_tutor — the latter WITH origin/main in the clone. The steps are now origin/HEAD, the
+# remote's HEAD (`git ls-remote --symref`), an existing origin/main then origin/master, and only
+# then the current branch, said to be a guess. Three worlds, each installing from `wip/x` with no
+# origin/HEAD (a bare remote added by hand and fetched; set-head -d in case a newer git creates it):
+# (1) the remote's HEAD is develop while origin/main exists — the remote's answer wins; (2) the
+# remote's HEAD names a branch it does not have, so it answers nothing, and origin/main and
+# origin/master both exist — main wins; (3) no remote — wip/x and the guess. The guess line must be
+# absent from the first two, or "says it is a guess" would be read off a line printed every time.
+echo "== install without origin/HEAD asks the remote before the current branch =="
+db_world() { # db_world <dir> <the bare remote's HEAD, or none> <branches the remote holds...>
+  local d="$1" head="$2" b; shift 2
+  help_repo "$d" || return 1
+  if [ "$head" != none ]; then
+    git init -q --bare -b "$head" "$d.remote.git" || return 1
+    ( cd "$d" && git remote add origin "$d.remote.git" \
+      && for b in "$@"; do git push -q origin "main:refs/heads/$b" || exit 1; done \
+      && git fetch -q origin && { git remote set-head origin -d >/dev/null 2>&1 || true; } ) >/dev/null 2>&1 || return 1
+  fi
+  ( cd "$d" && git checkout -q -b wip/x ) >/dev/null 2>&1
+}
+db_answer() { # db_answer <dir> → <DEFAULT_BRANCH>/<guess lines in the install output>
+  local o v
+  o="$( cd "$1" && "$SDD" install 2>&1 )" || true
+  v="$( sed -nE 's/^DEFAULT_BRANCH="([^"]*)".*/\1/p' "$1/.sdd/config.sh" 2>/dev/null )" || true
+  printf '%s/%s' "${v:-none}" "$(grep -c 'is a guess' <<< "$o")"
+}
+db_world "$FIX/db-remote" develop main develop || exit 1
+db_world "$FIX/db-main"   trunk   main master  || exit 1
+db_world "$FIX/db-none"   none                 || exit 1
+db_ohead="$(git -C "$FIX/db-remote" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null || echo absent)"
+assert_eq "install without origin/HEAD asks the remote, then an existing origin/main or origin/master, and calls the current branch a guess" \
+  "origin/HEAD absent; develop/0; main/0; wip/x/1" \
+  "origin/HEAD $db_ohead; $(db_answer "$FIX/db-remote"); $(db_answer "$FIX/db-main"); $(db_answer "$FIX/db-none")"
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    preflight measures the GNU userland instead of assuming it\n'; exit 0; fi

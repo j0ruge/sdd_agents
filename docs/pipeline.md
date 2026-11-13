@@ -188,7 +188,8 @@ left open and the planner leaves `aprovacao` empty, and the runner stops asking 
 being approved — the title, the PLAN-AUTO evidence, the increments, the open questions — asks
 `[y/N]`, and only on an explicit yes switches to the branch `00-missao.md` declares, writes
 `aprovacao: humano-<date>` and commits **the mission directory** — plus the file `adr:` names, when
-it is a path.
+it is a path, with the `proposed` status `sdd adr new` wrote turned into `accepted` (an ADR whose
+status says anything else is committed as it is).
 It never opens a session: approving is the one decision in the pipeline that has to come from
 outside it. `N` and a bare Enter are answers and exit 0; when not a single character reaches the
 prompt (stdin closed, an empty pipe, a harness with no terminal) it exits **66** (`EX_NOINPUT`) and

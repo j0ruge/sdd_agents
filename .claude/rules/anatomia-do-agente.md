@@ -116,6 +116,12 @@ lê `Bash` na `init`, e a linha `session` do ledger carrega `harness:` para o bu
 invisível. O que fica: `--setting-sources user,project,local` continua carregando as skills do
 humano — medido, é 2% do prefixo e três fases dependem delas (`codereview`, `ticket`, `qa-*`); a
 rota é a linha 2 do ADR 0007, não uma flag.
+Desde `20261112-as-reincidentes-primeiro` o `sdd-planner` é o único chapéu sem o `Monitor` no
+`disallowedTools:`: o § 1 dele proíbe devolver com tarefa viva em segundo plano, o harness bloqueia
+o `sleep` em primeiro plano, e sem o `Monitor` sobrava a espera em laço (umas 60 chamadas em 19 min
+na 3.6b do `dotp-remake`). Os outros sete continuam vetando. O probe (`tests/check-hat.sh`,
+`planner_agent_probes`) prova o arquivo, não que um subagente consiga chamar o `Monitor` no harness:
+isso pede sessão real, e o item D reabre se a próxima `/sdd-plan` medir que não.
 
 ## 3. Gestão de contexto — o que o agente sabe agora
 
@@ -133,7 +139,16 @@ de REVIEW) e inlina só `## TL;DR` + a seção de boot (`handoff_boot_sections`)
 da fase (`phase_templates`). Desde `20260922-o-motivo-da-fase` o boot também diz **por que** a fase
 foi aberta: a linha `Why this phase:` carrega o `GATE_WHY` que o `derive_phase` publicou (chamado,
 nunca `$( )`), ou diz `forced from the CLI` quando o runner não derivou a fase — o executor da
-`20260921-amep-backend-0-1-0` abriu sem linha `pending` e sem motivo, e fez commit no-op. O TL;DR tem teto de 20 linhas (`handoff_tldr_ok`), cobrado pelos gates
+`20260921-amep-backend-0-1-0` abriu sem linha `pending` e sem motivo, e fez commit no-op. Desde
+`20261112-as-reincidentes-primeiro` logo abaixo dela vem, só quando há sobra, um bloco
+(`session_leftovers`, a definição do `sdd status`): `Leftovers on disk before this session opened`
+quando há stream que nenhuma linha do journal fechou e que não é mais velho que o último stream
+fechado (a sessão seguinte, avisada no próprio boot, dá baixa nele ao fechar), `The tree was not
+clean when this session opened` quando só há caminhos sujos (até dez), e nos dois a ordem de ler
+`git status` e `git diff` antes de editar — o que é do trabalho da fase a sessão termina e commita,
+`.bak` e mutante aplicado que não escreveu nunca — na 3.5c do `dotp-remake` a sessão morta na
+sabotagem deixou o mutante aplicado para a seguinte; sem sobra, o prompt é byte a byte o de antes.
+O TL;DR tem teto de 20 linhas (`handoff_tldr_ok`), cobrado pelos gates
 de EXEC, QA e REVIEW — as três fases cujo chapéu **escreve** o arquivo, senão o gate giraria a
 linha. Quem mede: `sdd census` (por arquivo; `boot bill` no último handoff **e no pior ponto**),
 `sdd boot <missão> <FASE>` (o prompt, sem sessão), `cache_read` na linha do ledger e a linha
@@ -452,7 +467,16 @@ motivo nomeia primeiro"; rc 3 em
 `PHASE <X> reason="…"` por fase derivada, que é o que o humano no `tail -F` lê, e desde
 `20261020-a-sessao-le-o-que-o-boot-manda` uma linha `DENIED <X> tool=… path=…` por chamada distinta
 que o harness negou à sessão (`journal_denials`, logo depois do `hat_init_facts` no `run_phase` e no
-`cmd_close`; o caminho sem espaço nem controle, nunca o comando); `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
+`cmd_close`; o caminho sem espaço nem controle, nunca o comando); desde `20261112-as-reincidentes-primeiro`
+a face completa do `sdd status` diz na stderr `running TEST_CMD (<cmd>) for the EXEC gate…` antes de
+cada suíte que um gate vai rodar (`run_check_cmd`, ligado só pelo `cmd_status`), e a missão que não
+existe nomeia o `--no-gates` — no `ui24_agent` 1 min 57 s calados foram lidos como travamento; na
+mesma missão as duas faces do `sdd status` mostram a sobra de uma sessão que morreu com o runner
+(`session_leftovers`, uma definição: o stream que nenhuma linha `log=` do journal cita, até uma
+sessão posterior fechar, e até dez caminhos sujos; com outro dono no checkout, o `--no-gates` separa
+o stream mais novo como em curso), e o journal ganhou a linha `LEFTOVER <X> streams=<n> dirty=<n>`
+antes da sessão nova que abre sobre essa sobra (no `run_phase`, nunca no retry, que não leva o
+bloco); `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
 fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria: teto por missão
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
 `ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos

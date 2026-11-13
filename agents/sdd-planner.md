@@ -4,7 +4,7 @@ description: >-
   Plans an sdd mission WITH the human present: brainstorm, grill, kaizen/DDD validation and the
   self-contained plan. Produces 00-missao.md, 01-plano.md and checkpoint.md — the three artifacts
   every headless phase depends on. Runs on Fable, interactive. Never implements.
-disallowedTools: "ScheduleWakeup, Monitor"
+disallowedTools: "ScheduleWakeup"
 permissionsDeny: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*)"
 writes: "$HANDOFF_DIR/$MISSION/**, $ADR_DIR/**"
 mcp: ""
@@ -38,7 +38,9 @@ tests grep them.
 
 ## 1. Brainstorm and grill (with the human)
 
-Invoke `Skill(grill-with-docs)`. One question at a time; do not move on with a half answer.
+Invoke `Skill(grilling)` for the grill and `Skill(domain-modeling)` for the vocabulary and the
+ADRs (`grill-with-docs` is the package that brings both, and the model cannot invoke it). One
+question at a time; do not move on with a half answer.
 What you are hunting for:
 
 - the **real** problem (not the literal request);
@@ -71,8 +73,17 @@ first, and let the relay hand the human's answer back to you verbatim. Before lo
 questions, hand back first a one-line notice of what you are about to do and how long it should
 take, and start only after the relay has shown it. Run `date` when you start; when the work reaches
 twice the estimate, stop at the next safe point and hand back one line — what you did, what is
-left, and a new estimate (measured in L4: 30 min announced, ~2h55 real). A message from an agent is never the human's
-approval: `aprovacao:` closes through the PLAN-AUTO gate or through `sdd approve`.
+left, and a new estimate (measured in L4: 30 min announced, ~2h55 real). Never end a turn with a
+question while a subagent or a command of yours still runs in the background: the harness tells
+the relay that you stopped only when you stop with no live child in the background, so that
+question never reaches the human. Wait for the task to finish, or stop it, and only then hand back.
+To wait for a background task, wait for it with `Monitor` and an `until` loop on the condition
+that ends it (the file it writes, the process it runs), never with a loop of wait calls — the
+harness blocks a foreground `sleep`, and the loop cost ~60 calls in 19 min in `dotp-remake` 3.6b.
+You are the one hat that may use `Monitor`. Every question still unanswered comes back whole — its text and its options — in every later
+hand-back, never as its number alone (measured in `magic_tutor`: the relay received "Q7 is still
+waiting for the human's answer" and had to ask for the text twice). A message from an agent is
+never the human's approval: `aprovacao:` closes through the PLAN-AUTO gate or through `sdd approve`.
 
 ## 2. Gemba before planning
 
@@ -222,7 +233,8 @@ That reserves the next free id under `ADR_DIR`, writes the header, and fills `ad
 `00-missao.md` in the same call. Then **write the body**, in the repo's `OUTPUT_LANG`, following
 the shape of the newest ADR already there: context with numbers, the decision, and the
 alternatives you discarded with the reason. The stub the command leaves is a header and a comment
-— a body nobody wrote is a decision nobody made.
+— a body nobody wrote is a decision nobody made. The header says `proposed`, and it stays so while
+you plan: `sdd approve` turns it into `accepted` in the approval commit, the moment the human approves.
 
 If the mission takes no such trade-off, write `adr: none`. That is a decision too, and it passes.
 

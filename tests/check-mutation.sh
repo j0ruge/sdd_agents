@@ -785,8 +785,10 @@ mut_RUN_derive_in_subshell() {
 
 # The boot prompt stops saying why the phase was opened. The session is back to looking for "the
 # first pending" with no reason in hand, which is how the no-op commit of issue #54 was born.
+# Since item H of TODO.md the leftovers block rides on the same line; the mutant drops the reason
+# and keeps the block, which is what it always sabotaged.
 mut_BOOT_reason_dropped() {
-  sed -i '/^boot_prompt() {/,/^}/ { /^\$why_line$/d }' "$1"
+  sed -i '/^boot_prompt() {/,/^}/ s@^\$why_line\$leftover_block$@$leftover_block@' "$1"
 }
 
 # Door 1 of no-work goes: cmd_run derives EXEC over an unreadable cell and buys the session, whose
@@ -6546,8 +6548,10 @@ mut_COORD_worker_ignores_sigint() {
   sed -i "/^            os.environ\['SDD_COORDINATION_ID'\] = value\['execution_id'\]$/i\\            signal.signal(signal.SIGINT, signal.SIG_IGN)" "${1%/*}/sdd-coordination.py"
 }
 
+# Since item H of TODO.md the --no-gates face captures the owner (the leftovers read it) and prints
+# it on the next line; the mutant hides that print, which is what it always sabotaged.
 mut_COORD_owner_hidden() {
-  sed -i 's@^    coordination_owner$@    :@' "$1"
+  sed -i 's@^    \[ -z "\$owner" \] || printf .%s\\n. "\$owner"$@    :@' "$1"
 }
 
 mut_RUN_branch_filtered_source() {
@@ -6737,6 +6741,113 @@ mut_COORD_stragglers_argv0() {
 # ECHILD. Caught by "a closed stderr does not end the supervision" (check-coordination.sh).
 mut_COORD_stragglers_pipe_fatal() {
   sed -i '/^def name_stragglers(/,/^def / s/^    except OSError:$/    except ZeroDivisionError:/' "${1%/*}/sdd-coordination.py"
+}
+# -h/--help after the subcommand is read no more (item E of TODO.md): `sdd install --help` installs
+# the kit again. Caught by "install --help prints the help and writes nothing" (check-preflight.sh).
+mut_RUN_help_after_subcommand_ignored() {
+  sed -i '/^main() {/,/^}/ s@^    case "$arg" in -h|--help) cmd_help; return 0 ;; esac$@    :@' "$1"
+}
+# cmd_install accepts any option again, and installs. Caught by "install refuses an option it does
+# not know, before writing anything" (check-preflight.sh).
+mut_RUN_install_unknown_option_accepted() {
+  sed -i '/^cmd_install() {/,/^}/ s@^      \*) die "unknown install option: @      *) : "unknown install option: @' "$1"
+}
+# cmd_link_agents takes an argument again, and links. Caught by "link-agents refuses an argument,
+# before linking anything" (check-preflight.sh).
+mut_RUN_link_agents_argument_accepted() {
+  sed -i '/^cmd_link_agents() {/,/^}/ s@^  \[ \$# -eq 0 \] || die "unknown link-agents option: @  true || die "unknown link-agents option: @' "$1"
+}
+# The help scan after the checkout admission again (CodeRabbit and Codex on PR #391): `sdd install
+# --help` outside a repository dies "not inside a git repository", and `sdd run --help` on a held
+# checkout answers CHECKOUT-BUSY. Caught by "--help prints the help outside a repository, for every
+# subcommand whose admission resolves the root" (check-preflight.sh), and by "sdd run --help prints
+# the usage while a live owner holds the checkout, never CHECKOUT-BUSY" (check-gates.sh).
+mut_RUN_help_after_admission() {
+  sed -i '/^main() {/,/^}/ { /^  for arg in "\$@"; do$/,/^  done$/d; s#^  \[ "\$COORDINATION_ADMITTED" = 1 \] || return "\$admission"$#&\n  for arg in "$@"; do case "$arg" in -h|--help) cmd_help; return 0 ;; esac; done# }' "$1"
+}
+# Item F of TODO.md, one mutant per step cmd_install gained and one for its warning. Each is
+# caught by "install without origin/HEAD asks the remote, then an existing origin/main or
+# origin/master, and calls the current branch a guess" (check-preflight.sh), in a different world:
+# the remote's HEAD skipped answers main where the remote says develop; origin/main|master skipped
+# answers the work branch; the guess unsaid prints no warning over it.
+mut_RUN_install_remote_head_skipped() {
+  sed -i '/^cmd_install() {/,/^}/ s@GIT_TERMINAL_PROMPT=0 timeout 5 git ls-remote --symref origin HEAD \\$@true \\@' "$1"
+}
+mut_RUN_install_origin_main_skipped() {
+  sed -i '/^cmd_install() {/,/^}/ s@^      for cand in main master; do$@      for cand in; do@' "$1"
+}
+mut_RUN_install_guess_unsaid() {
+  sed -i '/^cmd_install() {/,/^}/ s@^    \[ "\$branch_guess" -eq 0 \] || warn "DEFAULT_BRANCH@    [ "$branch_guess" -eq 0 ] || : "DEFAULT_BRANCH@' "$1"
+}
+# Item G of TODO.md: the approve commits the ADR that adr: names and no longer accepts it — the
+# ADR sdd adr new wrote `proposed` reaches the approval commit `proposed`. Caught by "sdd approve
+# turns the proposed ADR that adr: names into accepted, in the approval commit" (check-gates.sh).
+mut_RUN_approve_adr_left_proposed() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^         adr_accept "\$REPO_ROOT/\$adr_value"$@         : "$REPO_ROOT/$adr_value"@' "$1"
+}
+# The adr: containment dropped (CodeRabbit on PR #391): `../x.md` and a path through a directory
+# symlinked out of the tree reach adr_accept again, which rewrites the Status line of a file outside
+# the checkout. Caught by "sdd approve leaves an ADR that resolves outside the checkout as it is, says
+# so, and commits the mission without it" (check-gates.sh).
+mut_RUN_approve_adr_outside_rewritten() {
+  sed -i '/^cmd_approve() {/,/^}/ s@ \&\& ! adr_dir_contained "\$REPO_ROOT" "\$adr_value"; then$@ \&\& false; then@' "$1"
+}
+# Item I of TODO.md, one mutant per half of "sdd status names the TEST_CMD before the gate that
+# runs it, and a missing mission is told about --no-gates" (check-gates.sh): the announcement in
+# run_check_cmd turned into a no-op, and the --no-gates taken out of the not-found message.
+mut_RUN_status_suite_unannounced() {
+  sed -i '/^run_check_cmd() {/,/^}/ s@^    printf \(.  %srunning %s\)@    : \1@' "$1"
+}
+mut_RUN_missing_mission_no_gates_unsaid() {
+  sed -i "/^resolve_mission() {/,/^}/ s@<mission> --no-gates' reads a mission off@<mission>' reads a mission off@" "$1"
+}
+# Item H of TODO.md, first half. One mutant per face of `sdd status` (a door added with no probe is
+# a door nobody sees fall), one for the journal filter, one for the session in course. Caught by
+# "sdd status names a stream no journal line closed and the paths left dirty, on both faces" and,
+# the last, by "sdd status --no-gates calls the newest stream in course while a live owner holds
+# the checkout" (check-gates.sh).
+mut_RUN_leftovers_full_face_unsaid() {
+  sed -i '/^cmd_status() {/,/^}/ s@^  status_leftovers$@  :@' "$1"
+}
+mut_RUN_leftovers_no_gates_unsaid() {
+  sed -i '/^cmd_status() {/,/^}/ s@^    status_leftovers "\$owner"$@    :@' "$1"
+}
+mut_RUN_leftovers_journal_ignored() {
+  sed -i '/^session_leftovers() {/,/^}/ s@^    if grep -qxF -- "\${base%.stream.jsonl}.json" <<< "\$closed"; then continue; fi$@    if false; then continue; fi@' "$1"
+}
+mut_RUN_leftovers_in_course_blind() {
+  sed -i '/^session_leftovers() {/,/^}/ s@^  if \[ -n "\$owner" \]; then$@  if false; then@' "$1"
+}
+# Item H of TODO.md, second half: the boot block and the journal line, one mutant each. Caught by
+# "the boot prompt names the orphan stream and the dirty tree a dead session left" and "the journal
+# writes LEFTOVER before the session opened over a dead session's leftovers" (check-dry-run.sh).
+mut_RUN_boot_leftovers_unsaid() {
+  sed -i 's@^\$why_line\$leftover_block$@$why_line@' "$1"
+}
+mut_RUN_leftover_journal_unsaid() {
+  sed -i '/^run_phase() {/,/^}/ s@^      pipeline_log_line "\$(date -Iseconds)  LEFTOVER  @      : "$(date -Iseconds)  LEFTOVER  @' "$1"
+}
+# ...and the journal that cannot be read is read as "closed nothing", so every stream is called an
+# orphan. Caught by "an unreadable journal names no stream an orphan in the boot, and its reader
+# says nothing raw" (check-dry-run.sh).
+mut_RUN_leftovers_unreadable_journal_guessed() {
+  sed -i '/^session_leftovers() {/,/^}/ s@^      journal_blind=1$@      journal_blind=0@' "$1"
+}
+# The review of the whole branch: a dead session's stream retires once a later session closes, or
+# every later boot of the mission says a session did not close. Caught by "a session that closed
+# after the dead one retires its stream, and the dirt left is still told" (check-dry-run.sh).
+mut_RUN_leftovers_never_retired() {
+  sed -i '/^session_leftovers() {/,/^}/ s#&& \[\[ \${BASH_REMATCH\[1\]} < \$newest_closed \]\]; then continue; fi$#\&\& false; then continue; fi#' "$1"
+}
+# R1 of the final review: dirt with no orphan stream is not a dead session. One mutant puts the dead
+# session back over dirt alone, the other puts back the wide rule that told a session its own half
+# increment was not its to commit. Caught by "a dirty tree alone is told it was not clean, never
+# that a session died" (check-dry-run.sh).
+mut_RUN_boot_dirt_blamed_on_dead_session() {
+  sed -i '/^boot_prompt() {/,/^}/ s@^The tree was not clean when this session opened:"$@Leftovers on disk before this session opened — a session of this mission did not close:"@' "$1"
+}
+mut_RUN_boot_leftovers_rule_widened() {
+  sed -i "/^boot_prompt() {/,/^}/ s@What belongs to the work of this phase is yours to finish and commit;@What you did not write is not yours: never commit another session's change;@" "$1"
 }
 
 CATALOG=(
@@ -7532,6 +7643,27 @@ CATALOG=(
   PLAN_adr_tbd_accepted
   EXEC_adr_drift_blind
   RUN_adr_warn_silent
+  RUN_help_after_subcommand_ignored
+  RUN_install_unknown_option_accepted
+  RUN_link_agents_argument_accepted
+  RUN_help_after_admission
+  RUN_install_remote_head_skipped
+  RUN_install_origin_main_skipped
+  RUN_install_guess_unsaid
+  RUN_approve_adr_left_proposed
+  RUN_approve_adr_outside_rewritten
+  RUN_status_suite_unannounced
+  RUN_missing_mission_no_gates_unsaid
+  RUN_leftovers_full_face_unsaid
+  RUN_leftovers_no_gates_unsaid
+  RUN_leftovers_journal_ignored
+  RUN_leftovers_in_course_blind
+  RUN_boot_leftovers_unsaid
+  RUN_leftover_journal_unsaid
+  RUN_leftovers_unreadable_journal_guessed
+  RUN_leftovers_never_retired
+  RUN_boot_dirt_blamed_on_dead_session
+  RUN_boot_leftovers_rule_widened
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

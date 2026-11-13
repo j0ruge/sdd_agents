@@ -239,6 +239,15 @@ incrementos e a rodada de conserto da revisão final; o próximo passo é o PR).
 juiz deixou só no plano entraram no `TODO.md` pelo #309 (catraca 29), e zerar a catraca é o lote
 seguinte à F9, por decisão humana.
 
+**Hoje (2026-11-12).** A série de zerar a catraca começou, com a catraca em 86. O lote 1,
+`20261112-as-reincidentes-primeiro`, fechou as 13 reincidentes do `TODO.md` (os itens com `RECURRED`, 25
+voltas em quatro projetos): cada conserto tem asserção nova num sensor da suíte, e os do runner têm
+mutante (o catálogo foi de 792 a 813, com o R6 do codereview do branch). Foi executado à mão num worktree ligado, fora do `sdd run`, e o
+PR sai sem carimbo de mutação: o `./bin/sdd health` da série roda quando a catraca zerar (decisão 6 da
+missão). Os 13 itens ficam no `TODO.md` com `RESOLVED by` até o chore pós-merge, que leva a catraca a
+75 (o fecho registrou um achado novo, o do `gh pr edit`, e o codereview do branch outro, o do lint
+que a suíte pula sem o `shellcheck`); cada lote seguinte ganha o seu `/sdd-plan`.
+
 ## F4 — Portabilidade para outros repos
 
 Fontes, transcritas aqui porque não eram versionadas:

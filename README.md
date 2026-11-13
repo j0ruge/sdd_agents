@@ -215,6 +215,7 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | [`docs/pipeline.md`](docs/pipeline.md) | state machine, gates per phase, what each agent reads and writes |
 | [`docs/failure-modes.md`](docs/failure-modes.md) | what breaks, how the kit reacts, how to get unstuck |
 | [`docs/plan-only.md`](docs/plan-only.md) | adopting the planning half alone, and setting up a new project for it |
+| [`docs/finding-prs.md`](docs/finding-prs.md) | merging a queue of PRs that only register `TODO.md` findings, and the post-merge chore |
 | [`docs/adr/`](docs/adr/) | the architectural decisions taken, and the alternatives discarded with them |
 | [`config/schema.md`](config/schema.md) | every `.sdd/config.sh` key, with its default and why |
 | [`CONTEXT.md`](CONTEXT.md) | glossary of the kit's own vocabulary, and the decisions resolved in interview |

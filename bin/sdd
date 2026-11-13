@@ -350,7 +350,9 @@ resolve_mission() {
     while IFS= read -r d; do matches+=("$(basename "$d")"); done \
       < <(find "$base" -mindepth 1 -maxdepth 1 -type d -name "*${want}*" | sort)
     case "${#matches[@]}" in
-      0) die "mission '$want' not found in $HANDOFF_DIR/" ;;
+      # The remedy for the other way `sdd status` goes wrong rides along (item I of TODO.md): the
+      # plain page runs the gates, and a wait read as a hang is followed by a guess at the name.
+      0) die "mission '$want' not found in $HANDOFF_DIR/ — 'sdd status <mission> --no-gates' reads a mission off the disk without running a gate" ;;
       1) MISSION="${matches[0]}" ;;
       *) die "'$want' is ambiguous: ${matches[*]}" ;;
     esac
@@ -884,6 +886,9 @@ app_probe() {
 declare -A _CHECK_RC=()
 declare -A _CHECK_LOG=()
 LAST_CHECK_LOG=""
+# Set to 1 by the full face of `sdd status` and by nothing else (item I of TODO.md): see the line
+# that reads it in run_check_cmd.
+CHECK_ANNOUNCE=0
 
 run_check_cmd() {
   local cmd="$1" label="${2:-check}" logfile rc=0
@@ -891,6 +896,19 @@ run_check_cmd() {
   if [ -n "${_CHECK_RC[$cmd]+x}" ]; then
     LAST_CHECK_LOG="${_CHECK_LOG[$cmd]}"
     return "${_CHECK_RC[$cmd]}"
+  fi
+  # The page that asks "where am I" says it is about to wait, and for what. Measured in ui24_agent:
+  # 1 min 57 s of silence after the TICKET line while gate_EXEC ran the suite, and a `timeout 60`
+  # read it as a hang. HERE, after the memo, so a cached answer announces nothing; on stderr, since
+  # the gates are also read through `$(current_phase)` and stdout would land in the capture. The
+  # phase and the key come from the label every gate already passes (`gate-<phase>-test|e2e`), so
+  # the four gate sites share this one line and no gate decides on its own whether it will run.
+  # `sdd why`, `sdd run` and the dry-run never set CHECK_ANNOUNCE: their outputs stay as they were.
+  if [ "$CHECK_ANNOUNCE" = 1 ] && [[ $label == gate-*-* ]]; then
+    local ann_phase="${label#gate-}" ann_key=TEST_CMD
+    [ "${ann_phase##*-}" = e2e ] && ann_key=E2E_CMD
+    ann_phase="${ann_phase%-*}"
+    printf '  %srunning %s (%s) for the %s gate…%s\n' "$C_DIM" "$ann_key" "$cmd" "${ann_phase^^}" "$C_RESET" >&2
   fi
   # The name has to be unique per EXECUTION, and it was unique per second per LABEL — which is
   # neither. This is the file GATE_WHY sends the operator to read ("see $LAST_CHECK_LOG"), so an
@@ -3438,6 +3456,48 @@ on the item's RECURRED line, never a new item.
 EOF
     return 0
   fi
+  # What a session that never closed left on disk (item H of TODO.md, second half), named in the
+  # boot of the session that would otherwise be opened over it without a word: in the 3.5c of
+  # dotp-remake a session died during the sabotage step and left the mutant applied, with its
+  # `.bak`, for the next one to commit. session_leftovers is the definition `sdd status` prints
+  # too; with nothing left the block is empty and the prompt is byte for byte what it was.
+  #
+  # Only an orphan stream says a session died. Dirt alone is a tree that was not clean, and the R1 of
+  # the final review measured why the two read apart: a session the budget cut, a human's untracked
+  # file or an uncommitted install leave the same porcelain, and a block that called them a dead
+  # session's work told the session finishing the increment that its own half was not its to commit.
+  local leftover_block="" lo_line
+  session_leftovers
+  if [ -n "$LEFTOVER_STREAMS" ] || [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then
+    if [ -n "$LEFTOVER_STREAMS" ]; then
+      leftover_block="
+Leftovers on disk before this session opened — a session of this mission did not close:"
+    else
+      leftover_block="
+The tree was not clean when this session opened:"
+    fi
+    if [ -n "$LEFTOVER_STREAMS" ]; then
+      while IFS= read -r lo_line; do
+        leftover_block="$leftover_block
+  stream no journal line closed: .sdd/logs/$MISSION/$lo_line"
+      done <<< "$LEFTOVER_STREAMS"
+    fi
+    if [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then
+      leftover_block="$leftover_block
+  uncommitted paths ($LEFTOVER_DIRTY_N):"
+      while IFS= read -r lo_line; do
+        leftover_block="$leftover_block
+    $lo_line"
+      done <<< "$LEFTOVER_DIRTY"
+      if [ "$LEFTOVER_DIRTY_N" -gt 10 ]; then
+        leftover_block="$leftover_block
+    … and $((LEFTOVER_DIRTY_N - 10)) more"
+      fi
+    fi
+    leftover_block="$leftover_block
+Run git status and git diff BEFORE you edit anything. What belongs to the work of this phase is yours to finish and commit;
+never commit a .bak or an applied mutant you did not write, and say in the handoff what else you found."
+  fi
   [ -n "$slash" ] && printf '%s\n\n' "$slash"
   cat <<EOF
 You are in phase $step of mission \`$MISSION\` in project \`$PROJECT_NAME\`${agent:+, as the agent $agent}.
@@ -3452,7 +3512,7 @@ before. Read, in this order, before anything else:
   6. $item6
 $handoff_block$notes_block$lang_line
 Your task in this session: $(phase_task "$step").
-$why_line
+$why_line$leftover_block
 $(phase_extra "$step")
 $turn_rule
 
@@ -5498,6 +5558,16 @@ missing and write the artifacts. The gate will be re-evaluated."
   if [ -z "$mcp" ]; then cmd+=(--strict-mcp-config); mcp_mode="<none: --strict-mcp-config>"; fi
   if [ -n "$resume_sid" ]; then cmd+=(--resume "$resume_sid" --fork-session)
   else cmd+=(--session-id "$sid"); fi
+  # The journal says it too, for the human on `tail -F` (item H of TODO.md): one line before a NEW
+  # session that boots over the leftovers its prompt names — a retry gets the gate's reason as its
+  # prompt instead, so it carries no block and writes no line. pipeline_log_line is silent under
+  # --dry-run, which opens no session.
+  if [ -z "$resume_sid" ]; then
+    session_leftovers
+    if [ "$LEFTOVER_STREAMS_N" -gt 0 ] || [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then
+      pipeline_log_line "$(date -Iseconds)  LEFTOVER  $phase  streams=$LEFTOVER_STREAMS_N  dirty=$LEFTOVER_DIRTY_N"
+    fi
+  fi
 
   if [ "$DRY_RUN" = "1" ]; then
     info ""
@@ -6078,7 +6148,15 @@ phase_budget() {
 
 cmd_install() {
   local force=0
-  if [ "${1:-}" = "--force" ]; then force=1; fi
+  # Every option is read, and what is not --force is refused before anything is written (item E):
+  # reading only "$1" let `sdd install --help` install the kit.
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --force) force=1 ;;
+      *) die "unknown install option: $1 (see 'sdd help')" ;;
+    esac
+    shift
+  done
   resolve_repo_root
   step "installing sdd into $REPO_ROOT"
 
@@ -6087,14 +6165,35 @@ cmd_install() {
   if [ -f "$CONFIG_FILE" ]; then
     ok ".sdd/config.sh already exists (preserved)"
   else
-    local branch test_cmd project
+    local branch branch_from="origin/HEAD" branch_guess=0 cand test_cmd project
     project="$(basename "$REPO_ROOT")"
     # `|| true` is mandatory: a repo with no remote has no origin/HEAD, git fails, and pipefail
     # would take the whole install down in silence.
     branch="$( cd "$REPO_ROOT" \
       && git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null \
       | sed 's|^origin/||' || true )"
-    [ -n "$branch" ] || branch="$( cd "$REPO_ROOT" && git branch --show-current )"
+    # Without origin/HEAD the install used to write the branch it ran on, and installing from a
+    # work branch is the common case (item F of TODO.md: `plano-3-2` in dotp-remake,
+    # `chore/sdd-install` in magic_tutor, the latter with origin/main in the clone). The steps, first
+    # answer wins: the remote's own HEAD, asked with a short deadline and no prompt — a repo with
+    # no remote or no network answers nothing and the install goes on; then an existing origin/main,
+    # then origin/master; and only then the current branch, which the install calls a guess.
+    if [ -z "$branch" ]; then
+      branch="$( cd "$REPO_ROOT" && GIT_TERMINAL_PROMPT=0 timeout 5 git ls-remote --symref origin HEAD \
+        </dev/null 2>/dev/null | sed -n 's|^ref: refs/heads/\([^[:space:]]*\)[[:space:]]*HEAD$|\1|p' || true )"
+      branch_from="the remote's HEAD (git ls-remote --symref origin HEAD)"
+    fi
+    if [ -z "$branch" ]; then
+      for cand in main master; do
+        if git -C "$REPO_ROOT" show-ref --verify --quiet "refs/remotes/origin/$cand"; then
+          branch="$cand"; branch_from="origin/$cand"; break
+        fi
+      done
+    fi
+    if [ -z "$branch" ]; then
+      branch="$( cd "$REPO_ROOT" && git branch --show-current )"
+      branch_from="the current branch"; branch_guess=1
+    fi
     # `elif`, first match wins. Four independent `if`s meant every one of them ran, so the LAST
     # match won whatever the repo actually is: a Node project carrying a `go.mod` for a sidecar
     # tool was installed with `go test ./...` as the suite every gate runs — the wrong suite,
@@ -6131,7 +6230,10 @@ cmd_install() {
         -e "s|<TEST_CMD>|$test_cmd_sed|g" \
         -e "s|<SDD_HOME>|$home_sed|g" \
         "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"
-    ok ".sdd/config.sh created (base branch detected: $branch — confirm it)"
+    ok ".sdd/config.sh created (base branch: $branch, from $branch_from — confirm it)"
+    [ "$branch_guess" -eq 0 ] || warn "DEFAULT_BRANCH=\"$branch\" is a guess: no origin/HEAD, the remote named no HEAD,
+        and neither origin/main nor origin/master exists, so it is the branch this install ran on.
+        Confirm DEFAULT_BRANCH in .sdd/config.sh before 'sdd run' opens a PR against it."
     [ -z "$node_unread" ] || warn "could not read package.json's scripts ($node_unread) — TEST_CMD
         is a bare 'npm test'. If the repo declares lint, typecheck or build, chain them in by hand."
   fi
@@ -7967,7 +8069,9 @@ cmd_status() {
   info ""
 
   if [ "$no_gates" = "1" ]; then
-    coordination_owner
+    # Captured and printed as before: the leftovers below need to know whether an owner is live.
+    local owner; owner="$(coordination_owner)" || owner=""
+    [ -z "$owner" ] || printf '%s\n' "$owner"
     local f names=""
     for f in "$MISSION_DIR"/*; do [ -e "$f" ] && names="$names ${f##*/}"; done
     info "  artifacts:"
@@ -7979,6 +8083,7 @@ cmd_status() {
     info ""
     status_increments
     info ""
+    status_leftovers "$owner"
     local jrnl="$REPO_ROOT/.sdd/logs/$MISSION/pipeline.log"
     if [ -f "$jrnl" ]; then
       info "  last journal lines:"
@@ -7995,6 +8100,8 @@ cmd_status() {
 
   local ph state why
   local -a green=()
+  # The full face, and only it, announces every suite a gate is about to run (run_check_cmd).
+  CHECK_ANNOUNCE=1
   for ph in $PHASES; do
     if "gate_$ph"; then state="${C_GREEN}✓${C_RESET}"; green+=("$ph"); else state="${C_YELLOW}·${C_RESET}"; fi
     why="$GATE_WHY"
@@ -8006,6 +8113,7 @@ cmd_status() {
   status_unrecorded ${green[@]+"${green[@]}"}
 
   info ""
+  status_leftovers
   local next; next="$(current_phase)"
   if [ -z "$next" ]; then
     printf '  %spipeline complete — only the merge is left (the human gate)%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
@@ -8039,6 +8147,113 @@ status_increments() {
     esac
     printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
   done <<< "$rows"
+}
+
+# session_leftovers [<owner line>] — what a session that never closed left behind (item H of
+# TODO.md). The journal line of a session is written when it ENDS, so a runner that died with its
+# session left pipeline.log at `PHASE` and a `<PHASE>-<stamp>-<sid8>.stream.jsonl` no line cites
+# (dotp-remake, session 7e4567fd, 10 entries uncommitted), and the next `sdd run` opened a session
+# over that tree without a word. Below cmd_status for the reason status_increments gives; ONE
+# definition, read by both faces of `sdd status` and by boot_prompt.
+#
+# Published, never printed, and CALLED, never `$( )`: LEFTOVER_STREAMS, the file name of each stream
+# of this mission whose sibling `<…>.json` no journal line cites in `log=` (compared by FILE NAME:
+# the path in the line is absolute, and the repo may have moved) and that is not older, by the stamp
+# in its name, than the newest stream a line does cite; LEFTOVER_LIVE, the one stream an
+# owner may still be writing; LEFTOVER_DIRTY, the first ten `XY path` entries of the porcelain
+# status of the whole repository (hat_status_lines, untracked included), and LEFTOVER_DIRTY_N, all
+# of them; LEFTOVER_STREAMS_N counts the first. `.sdd/logs/` is ignored by `sdd install`, so the
+# streams themselves are not dirt.
+#
+# <owner line> is the CHECKOUT-OWNER the caller saw. Only `status --no-gates` runs without the lock
+# and can see another command holding the checkout; when it does, the NEWEST orphan, by the stamp in
+# its name, is most likely that command's session in flight and is set apart as LEFTOVER_LIVE. The
+# full face and the boot hold the lock themselves, so no other session can be running and every
+# orphan is one. DECLARED LIMIT: a session that runs `sdd status` (full face) from inside its own
+# phase reentering the lock sees its own stream named as a leftover.
+LEFTOVER_STREAMS=""
+LEFTOVER_STREAMS_N=0
+LEFTOVER_LIVE=""
+LEFTOVER_DIRTY=""
+LEFTOVER_DIRTY_N=0
+session_leftovers() {
+  local owner="${1:-}" dir="$REPO_ROOT/.sdd/logs/$MISSION" closed="" f base stamp best="" line
+  local -a orphans=()
+  LEFTOVER_STREAMS=""; LEFTOVER_STREAMS_N=0; LEFTOVER_LIVE=""; LEFTOVER_DIRTY=""; LEFTOVER_DIRTY_N=0
+  # The file name of every `log=` value: the last field, read to the end of the line because the
+  # path under REPO_ROOT may hold a space. index()/substr(), the house rule for a literal separator.
+  # A journal that exists and cannot be read cannot say which streams it closed, so then NONE is
+  # called an orphan — every one would be a guess — and awk is never run on it, whose complaint
+  # would name the path on stderr, the channel regime 8 of check-autonomy.sh measures (the dirty
+  # paths are still read).
+  local journal_blind=0
+  if [ -e "$dir/pipeline.log" ]; then
+    if [ -r "$dir/pipeline.log" ]; then
+      closed="$(awk '{ i = index($0, "  log="); if (i) { n = split(substr($0, i + 6), a, "/"); print a[n] } }' \
+                  "$dir/pipeline.log")" || journal_blind=1
+    else
+      journal_blind=1
+    fi
+  fi
+  # A dead session's stream retires once a later session of the mission closes (the review of this
+  # branch): nothing writes the journal line of a session that died, so its stream stayed an orphan
+  # for the rest of the mission, and every later boot, every phase, said a session did not close.
+  # The later session was told in its own boot; once its line is written the older orphan is
+  # history. By the stamp in the names, the comparison LEFTOVER_LIVE makes below.
+  local newest_closed=""
+  while IFS= read -r line; do
+    [[ $line =~ -([0-9]{8}-[0-9]{6})-[^-]+\.json$ ]] || continue
+    if [[ ${BASH_REMATCH[1]} > $newest_closed ]]; then newest_closed="${BASH_REMATCH[1]}"; fi
+  done <<< "$closed"
+  [ "$journal_blind" = 1 ] || for f in "$dir"/*.stream.jsonl; do
+    [ -f "$f" ] || continue
+    base="${f##*/}"
+    if grep -qxF -- "${base%.stream.jsonl}.json" <<< "$closed"; then continue; fi
+    if [[ $base =~ -([0-9]{8}-[0-9]{6})-[^-]+\.stream\.jsonl$ ]] && [[ ${BASH_REMATCH[1]} < $newest_closed ]]; then continue; fi
+    orphans+=( "$base" )
+  done
+  if [ -n "$owner" ]; then
+    for base in ${orphans[@]+"${orphans[@]}"}; do
+      [[ $base =~ -([0-9]{8}-[0-9]{6})-[^-]+\.stream\.jsonl$ ]] || continue
+      stamp="${BASH_REMATCH[1]}"
+      if [ -z "$best" ] || [[ $stamp > $best ]]; then best="$stamp"; LEFTOVER_LIVE="$base"; fi
+    done
+  fi
+  for base in ${orphans[@]+"${orphans[@]}"}; do
+    [ "$base" = "$LEFTOVER_LIVE" ] && continue
+    LEFTOVER_STREAMS="${LEFTOVER_STREAMS:+$LEFTOVER_STREAMS$'\n'}$base"
+    LEFTOVER_STREAMS_N=$((LEFTOVER_STREAMS_N + 1))
+  done
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    LEFTOVER_DIRTY_N=$((LEFTOVER_DIRTY_N + 1))
+    if [ "$LEFTOVER_DIRTY_N" -le 10 ]; then LEFTOVER_DIRTY="${LEFTOVER_DIRTY:+$LEFTOVER_DIRTY$'\n'}$line"; fi
+  done < <(hat_status_lines)
+  return 0
+}
+
+# status_leftovers [<owner line>] — the page block of session_leftovers, for both faces of
+# `sdd status`. Nothing at all when there is no orphan and the tree is clean; otherwise the block
+# and one blank line after it.
+status_leftovers() {
+  session_leftovers "${1:-}"
+  local s
+  if [ -n "$LEFTOVER_STREAMS" ]; then
+    info "  leftovers of a session that never closed:"
+    while IFS= read -r s; do printf '    %s\n' "$s"; done <<< "$LEFTOVER_STREAMS"
+  fi
+  if [ -n "$LEFTOVER_LIVE" ]; then
+    info "  a session the owner above may still be writing:"
+    printf '    %s (in course)\n' "$LEFTOVER_LIVE"
+  fi
+  if [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then
+    info "  uncommitted paths:"
+    while IFS= read -r s; do printf '    %s\n' "$s"; done <<< "$LEFTOVER_DIRTY"
+    if [ "$LEFTOVER_DIRTY_N" -gt 10 ]; then printf '    … and %s more\n' "$((LEFTOVER_DIRTY_N - 10))"; fi
+    dim "  the next 'sdd run' opens its session over this tree — read git status and git diff first"
+  fi
+  if [ -n "$LEFTOVER_STREAMS$LEFTOVER_LIVE" ] || [ "$LEFTOVER_DIRTY_N" -gt 0 ]; then info ""; fi
+  return 0
 }
 
 # status_unrecorded <phase>... — the green phases (#153) that THIS machine's ledger holds no
@@ -8613,6 +8828,49 @@ adr_spec_relative() {
   esac
 }
 
+# The status line `sdd adr new` writes, in ONE spelling read twice: adr_new prints
+# `<ADR_STATUS_LINE><ADR_STATUS_PROPOSED><ticket>, <date>)`, and adr_accept — the approve — turns the
+# ADR_STATUS_PROPOSED of that line into ADR_STATUS_ACCEPTED. Spelled as two literals, the day
+# adr_new changed its wording the approve would stop accepting anything, and no line would say so
+# (item G of TODO.md: in dotp-remake ADR 0012 stayed `proposed` until a REVIEW round found it).
+ADR_STATUS_LINE='- **Status**: '
+ADR_STATUS_PROPOSED='proposed ('
+ADR_STATUS_ACCEPTED='accepted ('
+
+# adr_accept <file> — the approval accepts the ADR it commits.
+#
+# Only the FIRST line that starts with ADR_STATUS_LINE is read, and it changes only when it goes on
+# with ADR_STATUS_PROPOSED, which is what adr_new wrote: the rest of the line (ticket, date) and
+# the rest of the file stay byte for byte. An ADR a human already wrote `accepted`, or with a status
+# in another dialect (`aceito`, `Date: … · Status:`), is not this command's to rewrite and is left
+# untouched — mtime included, since nothing is moved into place when nothing changed.
+#
+# Same write as frontmatter_write: a temporary beside the file, awk through ENVIRON (the `*` of the
+# prefix is a literal, compared with index(), never a regex), the mode kept, `mv -f`. A symlink is
+# WARNED about and skipped, never refused: before this the approve committed a linked ADR as it
+# was, and a `die` here would come after aprovacao is already written.
+adr_accept() {
+  local file="$1" tmp rc=0
+  if [ -L "$file" ]; then
+    warn "$file is a symbolic link — its status was left as it is; accept the ADR by hand"
+    return 0
+  fi
+  tmp="$(mktemp "${file}.XXXXXX")" || die "adr_accept: could not create a temporary beside $file"
+  SDD_ADR_PREFIX="$ADR_STATUS_LINE" SDD_ADR_FROM="$ADR_STATUS_PROPOSED" SDD_ADR_TO="$ADR_STATUS_ACCEPTED" awk '
+    BEGIN { p = ENVIRON["SDD_ADR_PREFIX"]; from = p ENVIRON["SDD_ADR_FROM"]; to = p ENVIRON["SDD_ADR_TO"] }
+    !seen && index($0, p) == 1 {
+      seen = 1
+      if (index($0, from) == 1) { print to substr($0, length(from) + 1); changed = 1; next }
+    }
+    { print }
+    END { exit changed ? 0 : 3 }
+  ' "$file" > "$tmp" || rc=$?
+  if [ "$rc" -eq 3 ]; then rm -f "$tmp"; return 0; fi
+  [ "$rc" -eq 0 ] || { rm -f "$tmp"; die "adr_accept: awk failed on $file"; }
+  chmod --reference="$file" "$tmp" 2>/dev/null \
+    || warn "adr_accept: could not keep the mode of $file — it now carries the temporary's (0600); restore it with chmod"
+  mv -f "$tmp" "$file" || { rm -f "$tmp"; die "adr_accept: could not replace $file"; }
+}
 
 # adr_new <root> <slug> <ticket> <spec> <dry-run> — reserve the id and write the header.
 #
@@ -8669,7 +8927,7 @@ adr_new() {
 
   {
     printf '# ADR %s — %s\n\n' "$id" "$slug"
-    printf -- '- **Status**: proposed (%s, %s)\n' "${ticket:-—}" "$(date +%F)"
+    printf -- '%s%s%s, %s)\n' "$ADR_STATUS_LINE" "$ADR_STATUS_PROPOSED" "${ticket:-—}" "$(date +%F)"
     printf -- '- **Spec**: %s\n' "${spec_rel:-TBD}"
     printf '\n<!-- sdd adr new: replace this line with the decision, in OUTPUT_LANG=%s. Give the\n' "${OUTPUT_LANG:-<unset>}"
     printf '     heading above a real title, and follow the shape of the newest ADR in %s. -->\n' "${ADR_DIR%/}"
@@ -9012,7 +9270,7 @@ cmd_approve() {
   info ""
   dim "  approving says: this plan is what you want built. It writes aprovacao: $approved_as"
   dim "  into 00-missao.md and commits the mission directory (plus the file adr: names, when it is"
-  dim "  a path). It does NOT start the pipeline."
+  dim "  a path, its 'proposed' status turned 'accepted'). It does NOT start the pipeline."
   # The fifth door, and the only one whose commit a human asks for out loud. It went in written by
   # the same mission that closed the silence of the fourth (`sdd retry`) and shipped silent itself:
   # standing on `main`, approving dropped a `chore(missao)` commit straight into the base branch
@@ -9098,7 +9356,17 @@ cmd_approve() {
   local adr_value; adr_value="$(frontmatter "$m" adr)"
   case "$adr_value" in
     ''|TBD|none|\<*) : ;;
-    *) if [ -f "$REPO_ROOT/$adr_value" ]; then
+    *) if [ -f "$REPO_ROOT/$adr_value" ] && ! adr_dir_contained "$REPO_ROOT" "$adr_value"; then
+         # Only a file that PHYSICALLY resolves inside the checkout (CodeRabbit on PR #391): `../x.md`
+         # and a path through a directory symlinked out of the tree pass `[ -f ]`, adr_accept rewrote
+         # that file's Status line in another directory, and the `git add` that refuses the path
+         # came after the approval was written. The same containment adr_new uses for ADR_DIR.
+         warn "adr: $adr_value resolves outside the checkout — its status was left as it is, and it stays out of the approval commit"
+       elif [ -f "$REPO_ROOT/$adr_value" ]; then
+         # The approval accepts the ADR it commits (item G of TODO.md): `sdd adr new` wrote it
+         # `proposed`, and a plan approved over a proposed decision left the ADR saying otherwise
+         # until somebody noticed. After the `y`, before the `git add`, so a `n` writes nothing.
+         adr_accept "$REPO_ROOT/$adr_value"
          paths+=( "$adr_value" )
        fi ;;
   esac
@@ -9107,7 +9375,7 @@ cmd_approve() {
     && git commit -q -m "chore(missao): plan $MISSION approved by the human" \
          -m "Written by 'sdd approve': closing the PLAN gate used to mean editing the frontmatter
 by hand, in the exact shape gate_PLAN greps. The mission directory enters this commit, with the
-file adr: names when it is a path, and nothing else." \
+file adr: names when it is a path (its proposed status turned accepted), and nothing else." \
          -- "${paths[@]}" ) \
     || die "git refused the approval commit — 'aprovacao: $approved_as' IS written in $rel, commit it by hand"
 
@@ -12076,6 +12344,8 @@ USAGE
                              configuration. What the PLAN and EXEC gates ask is governed by
                              ADR_CHECK (off|warn|block), never by this command
   sdd help | sdd version
+  sdd <command> -h|--help    the same help, after any command, and nothing else: no install, no
+                             link, no session
 
 LEDGER OPTIONS (`autonomy` and `kaizen`)
   --all-repos                read the WHOLE ledger, not just the rows born in this repo. It
@@ -12115,6 +12385,9 @@ EOF
 # ---------------------------------------------------------------------------
 cmd_link_agents() {
   local linked already untracked src name target IGNORE MARKER
+  # It takes no argument, and one is refused before anything is linked (item E): `sdd link-agents
+  # --help` used to link the agents. bin/sdd-link-agents enters through main() with the same argv.
+  [ $# -eq 0 ] || die "unknown link-agents option: $1 (see 'sdd help')"
   REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
     || die "not inside a git repository."
 
@@ -12265,7 +12538,19 @@ coordination_owner() {
 }
 
 main() {
-  local admission=0
+  local admission=0 arg
+  # -h/--help after ANY subcommand prints the help and nothing else (item E of TODO.md): it was read
+  # only in the first position, and `sdd install --help` installed the kit while `sdd link-agents
+  # --help` linked the agents, both measured in a target. One point, before the dispatch and so
+  # before any effect, for every subcommand. No subcommand takes -h or --help as a value, and no
+  # mission id matches it (resolve_mission: ^[0-9]{8}-[a-z0-9-]+$).
+  # And before the checkout admission too (CodeRabbit and Codex on PR #391): coordination_enter
+  # resolves the root of the subcommands it admits, so after it `sdd install --help` outside a
+  # repository died "not inside a git repository", and `sdd run --help` on a held checkout answered
+  # CHECKOUT-BUSY. cmd_help is a heredoc: it needs no repository, no config and no lock.
+  for arg in "$@"; do
+    case "$arg" in -h|--help) cmd_help; return 0 ;; esac
+  done
   coordination_enter "$@" || admission=$?
   [ "$COORDINATION_ADMITTED" = 1 ] || return "$admission"
   local subcmd="${1:-help}"
