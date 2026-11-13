@@ -2543,7 +2543,7 @@ help_repo() { # help_repo <dir> — a fresh repo with one empty commit
 }
 HI="$FIX/help-install"; help_repo "$HI" || exit 1
 rc=0; out="$( cd "$HI" && "$SDD" install --help 2>&1 )" || rc=$?
-left="$( cd "$HI" && ls -A | grep -vxF '.git' | tr '\n' ' ' )" || true
+left="$(find "$HI" -mindepth 1 -maxdepth 1 ! -name .git -printf '%f ')" || true
 if [ "$rc" -eq 0 ] && grep -qF -- "$HELP_LINE" <<< "$out" && [ -z "$left" ]; then
   pass "install --help prints the help and writes nothing"
 else
@@ -2552,7 +2552,7 @@ else
 fi
 HB="$FIX/help-bogus"; help_repo "$HB" || exit 1
 rc=0; out="$( cd "$HB" && "$SDD" install --bogus 2>&1 )" || rc=$?
-left="$( cd "$HB" && ls -A | grep -vxF '.git' | tr '\n' ' ' )" || true
+left="$(find "$HB" -mindepth 1 -maxdepth 1 ! -name .git -printf '%f ')" || true
 if [ "$rc" -ne 0 ] && grep -qF 'unknown install option: --bogus' <<< "$out" && [ -z "$left" ]; then
   pass "install refuses an option it does not know, before writing anything"
 else

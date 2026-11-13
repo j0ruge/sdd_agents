@@ -1013,12 +1013,15 @@ mv "$SDD_STATE_FIX/cccc3333.aside" "$LB/.sdd/logs/$LBM/EXEC-20260109-100000-cccc
 assert_eq "a dirty tree alone is told it was not clean, never that a session died" \
   "dirt-only died:0 not-clean:1 dirty:1 yours:1 foreign:0 · with-orphan died:1 yours:1" \
   "dirt-only died:$(lb_has "$LB_DIRT" 'did not close') not-clean:$(lb_has "$LB_DIRT" '^The tree was not clean when this session opened') dirty:$(lb_has "$LB_DIRT" '^ +M tracked\.txt') yours:$(lb_has "$LB_DIRT" 'belongs to the work of this phase is yours to finish and commit') foreign:$(lb_has "$LB_DIRT" "another session's change") · with-orphan died:$(lb_has "$LB_LEFT" 'did not close') yours:$(lb_has "$LB_LEFT" 'belongs to the work of this phase is yours to finish and commit')"
+# The lap is witnessed (the review of this branch): `first-is-before-session` alone prints 1 for a
+# journal that never opened a session too, so the lap's rc and its one session line are terms of
+# the same assertion. The stub's lap returns 0 and leaves one EXEC line that names a session.
 LB_RC=0
 ( cd "$LB" && "$SDD" run "$LBM" --max-phases 1 >/dev/null 2>&1 ) || LB_RC=$?
 LB_JOURNAL="$(cat "$LB/.sdd/logs/$LBM/pipeline.log" 2>/dev/null)" || true
 assert_eq "the journal writes LEFTOVER before the session opened over a dead session's leftovers" \
-  "leftover:1 first-is-before-session:1" \
-  "leftover:$(grep -cE '^[^ ]+  LEFTOVER  EXEC  streams=1  dirty=1$' <<< "$LB_JOURNAL") first-is-before-session:$(awk '/  LEFTOVER  /{print (s ? 0 : 1); exit} /  EXEC  .*session=/{s=1}' <<< "$LB_JOURNAL")"
+  "lap-rc:0 sessions:1 leftover:1 first-is-before-session:1" \
+  "lap-rc:$LB_RC sessions:$(grep -cE '^[^ ]+  EXEC  .*  session=[^ ]' <<< "$LB_JOURNAL") leftover:$(grep -cE '^[^ ]+  LEFTOVER  EXEC  streams=1  dirty=1$' <<< "$LB_JOURNAL") first-is-before-session:$(awk '/  LEFTOVER  /{print (s ? 0 : 1); exit} /  EXEC  .*session=/{s=1}' <<< "$LB_JOURNAL")"
 # A journal that exists and cannot be read cannot say which streams it closed: the boot calls none
 # of them an orphan (every one would be a guess, and the stub's session above DID close), keeps the
 # dirty paths, and the reader's own complaint stays off stderr — regime 8 of check-autonomy.sh
