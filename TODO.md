@@ -149,8 +149,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `check-todo.sh` aceita o `#N` solto" isenta o `#N` depois de `PR`: é aí que este erro mora. Este arquivo
   tinha 8 desses em 7 itens, com rc 0, e só o `REF?` da `todo-to-github-issues` os mostrou, depois do merge dos
   itens (PR #339). O PR #378, ainda aberto, achou outros três. Uma sonda com `dotp-remake` e um `PR` inexistente
-  deu rc 0 em 2026-11-07. A regra de escrever `dono/repo#N` não está no `templates/todo.pt-BR.md`. Direção: o template
-  diz a regra, e o `--check --baseline` acusa, nos itens novos, `PR #N` ao lado do nome de outro repo.
+  deu rc 0 em 2026-11-07. O `templates/todo.pt-BR.md` diz o `dono/repo#N` desde `5cde830`, mas oferece `PR #N`
+  sem dizer "deste repositório". Direção: o template diz isso, e o `--check --baseline` acusa `PR #N` de outro repo.
   — descoberto pelo relay da 3.5d do `dotp-remake`, no espelho do `TODO.md` do kit (2026-11-02)
 
 - [ ] **O cabeçalho do `TODO.md` semeado pelo `install` não acompanha o template** — `bin/sdd:6300`
@@ -748,6 +748,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `gate_PR` sobre os `⛔` manda o mesmo comando ao publisher, dono do corpo: a volta que conserta o PR falha.
   Direção: as duas instruções passam ao PATCH da REST (`gh` mais novo não medido).
   — descoberto pela sessão interativa da missão `20261112-as-reincidentes-primeiro` (2026-11-12)
+
+- [ ] **O lint da suíte se pula sem o `shellcheck`, e a `main` já tem 4 avisos que ele reprova** —
+  `tests/run-all.sh:292` (`command -v shellcheck`) — sem o binário o passo diz `(linter absent — skipped)` e a
+  suíte sai verde: toda corrida da missão `20261112-as-reincidentes-primeiro` pulou, e o branch trouxe 3 avisos
+  que só o codereview viu. Com o `shellcheck` 0.11.0 do cache do `uv`, `-S warning` dá 4 em `a48cf3c`: SC2209 no
+  `check-gates.sh` e no `check-hat.sh`, SC2010 no `check-gates.sh`, SC2120 no `check-health.sh`. Quem instala o
+  binário vê o `TEST_CMD` do kit vermelho. Direção: consertar os 4, e o `sdd preflight` avisar sem o linter.
+  — descoberto pelo codereview do branch da missão `20261112-as-reincidentes-primeiro` (2026-11-12)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
