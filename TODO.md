@@ -648,6 +648,24 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   exige `unresolved: 0` contado no head, com o comando ao lado.
   — descoberto pela sessão interativa do merge da missão `20261112-as-reincidentes-primeiro` (2026-11-13)
 
+- [ ] **O `sdd run` num worktree do alvo manda `install --force`, e o que falta é o `link-agents`** —
+  `bin/sdd:5522` (`Run 'sdd install --force'`) — os `.claude/agents/sdd-*.md` são links gitignored de cada
+  checkout, então todo `git worktree` do alvo nasce sem eles, e a mensagem culpa "o kit ganhou um chapéu".
+  No `dotp-remake` o primeiro `sdd run` da 3.6f, de `~/.wt/dotp-remake-plano-3-6-f`, morreu nisso; o
+  `sdd link-agents` no worktree criou 8 links, a `.sdd/config.sh` ficou igual ao commit e a run foi até o PR.
+  Direção: com o `--git-dir` diferente do `--git-common-dir`, esta mensagem e a do `--dry-run` (`:5520`)
+  nomeiam o `sdd link-agents`.
+  — descoberto pela sessão interativa que lançou a run da 3.6f do `dotp-remake` (2026-11-14)
+
+- [ ] **A sabotagem devolve o mutante com `mv`, e o build incremental mede o binário do mutante** —
+  `agents/sdd-executor.md:75` (`mv <file>.bak <file>`) — o `mv` devolve ao arquivo o mtime de antes do build
+  do mutante: o MSBuild (e o make e afins) não recompila, e a medida sem mutante de depois roda contra o
+  binário do último mutante. No R1 da 3.6f do `dotp-remake` ela saiu vermelha em 4 s, com a dll do sexto
+  mutante; com `touch` nos três arquivos, 133/133 verdes (`~/.wt/exec-3-6f/r1/k2/summary.txt`). Direção:
+  restaurar com `cp <file>.bak <file> && rm <file>.bak` (ou `touch` depois do `mv`), e o chapéu dizer que a
+  medida sem mutante de depois recompila. Fonte: o `20-handoff-exec.md` da 3.6f, no `dotp-remake`
+  — descoberto por `sdd-executor` no R1 da `20261111-plano-3-6-f-gatilho-atrasado-e-conjurar-de-graca` (2026-11-15)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
