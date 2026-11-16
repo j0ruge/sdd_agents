@@ -427,6 +427,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `close_return_home` lista as linhas que dão o PR mergeado como aberto (só lista). Sem correção verificada.
   — descoberto por `sessão interativa` no pós-merge da missão `20261111-plano-3-6-d-custos-e-ciclagem` (2026-11-11)
 
+- [ ] **O `sdd status --no-gates` roda o `git status` sem `GIT_OPTIONAL_LOCKS=0` sobre a run em voo** —
+  `bin/sdd:8231` (`hat_status_lines`) — o `session_leftovers` lê a árvore com o `git status` padrão, que reescreve
+  o índice sob o `index.lock`, e o `--no-gates` é a leitura que roda sem a trava, com outro dono comitando. O
+  `docs/pipeline.md:51` promete que um monitor que o consulte não derruba a run: só vale para a trava do checkout.
+  Num repo de rascunho, com um `git status` em laço ao lado, 1505 de 5216 `git add` falharam com `File exists` no
+  `index.lock`; com `GIT_OPTIONAL_LOCKS=0`, 0 de 4685. O `kit_guard_tree` (`bin/sdd:4285`) já usa a variável.
+  Direção: a mesma variável na leitura do `session_leftovers`.
+  — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
+
 ### Saída humana e cosmética
 
 - [ ] **O "Como verificar" do PR copia o `$SDD_HOME` do `TEST_CMD`, e o comando falha fora do runner** —
@@ -537,6 +546,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   65 achados abertos, o dono mandou rodar e recuou ao ver isso: sem resolver o monte de achado, não faz sentido.
   Hoje só uma memória local segura o próximo relay. Direção: a linha cita os achados e o teto, e o humano decide.
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
+
+- [ ] **O `CHECKOUT-BUSY` do `sdd status` não aponta o `--no-gates`, que lê o disco com a run em voo** —
+  `bin/sdd:12471` (`coordination_enter`) — a recusa imprime só o dono (o `describe` do `sdd-coordination.py`).
+  Na 5a do `dotp-remake`, o relay rodou `sdd status <missão>` com a run em voo, recebeu só o `CHECKOUT-BUSY` e
+  escreveu no handoff que o status "não serve durante a run"; a sessão seguinte ia ler o checkpoint por `sed`. O
+  `--no-gates` está no `README.md` e no `docs/failure-modes.md`, e a missão inexistente já aponta para ele
+  (`bin/sdd:355`); a recusa da trava, não. Direção: com rc 75 num subcomando que pede a trava, uma linha a mais
+  com `sdd status <missão> --no-gates`. Vizinho do decidido "O sdd status travaria mais de 2 min".
+  — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
 
 ### Comentário e registro
 
