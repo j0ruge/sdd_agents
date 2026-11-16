@@ -80,6 +80,22 @@ sair, ao ver as capturas.
 | M8 | **Um grill sem o dono pode recomendar sobre evidência errada.** Na 6a, uma recomendação se apoiou num número errado: "o decodificador de TDX recusa 25,5 %", quando eram 28 de 9 176. O próprio planner achou o erro depois, e a confirmação voltou ao dono. | `00-missao.md` da 6a (`dotp-remake`) | Aceitar "as recomendadas" sem humano chega perto do D1 recusado. O approve tem de mostrar a evidência que mudou desde o grill |
 | M9 | **A execução não viu as próprias capturas.** Na 5a, o `Read` da imagem que o EXEC gerou foi negado. A primeira carta desenhada passou pelo gate sem que ninguém olhasse, e o dono achou o visual feio na manhã seguinte. | journal da 5a | Aceite visual não é trabalho de worker: fica com o humano, como a Métrica 5 |
 
+
+### A 5b, de dia (2026-11-16)
+
+A run lançada às 07:24 abriu o PR #35 do `dotp-remake` às 11:33: US$ 71,82 em 17 sessões, sem teto e sem rc 3. A `main` não andou,
+então o M3 não se repetiu. Depois vieram as rodadas r3 a r5 à mão até A, a passada de três perfis de interface e o Codex limpo no
+head. O merge saiu às 11:47 (`466b7f6`), e o pós-merge, no #36, às 12:26 (`e911d15`). Nenhuma decisão de merge precisou do dono.
+
+| # | Fato | Evidência | Para a opção |
+|---|---|---|---|
+| M10 | **O aviso do fim da run chegou à sessão nova.** O handoff dizia que a sessão aberta depois do `/clear` não receberia o fim da tarefa de fundo da sessão antiga. Recebeu, às 11:33. | a notificação da tarefa de fundo do `sdd run`, na sessão nova | A espera própria (`pgrep` em laço) não depende do harness; com as duas, a falha de uma não cega o worker |
+| M11 | **A DOCS escreve "sem PR" antes de o PR existir.** A DOCS roda antes da fase PR, e o roadmap e o `KAIZEN_LOG.md` saíram dizendo "sem PR". O PR aberto logo depois os contradisse. Na 5a, o pós-merge consertou o mesmo ("o PR não foi aberto"); na 5b, a r3 deu MEDIUM de comportamento. | r3 do #35 (`624eb7c`); `f389bf6` na 5a | Candidato a achado do kit: a DOCS não grava o estado do PR, ou a fase PR o atualiza |
+| M12 | **As medidas "sem saída guardada" estavam nos logs do runner.** Dois LOW de comportamento fecharam lendo `.sdd/logs/<missão>/gate-*-test-*.log` e os `*.stream.jsonl` das sessões, locais e fora do git. Um número ("82 s") não estava em lugar nenhum e saiu do texto. | `7b68392`; corpo do #35 | O worker tem nos logs a evidência que o revisor pede, sem remedir; o handoff poderia citar o log |
+| M13 | **A hora engana; o sha não.** A primeira espera pelo Codex filtrou por hora com `date -u -d '11:44:30'`, que lê a hora como UTC, e contou o recibo do head antigo. O C11 (o sha curto do head no recibo) pegou o erro. | recibos do Codex no #35 | O W7 casa o recibo pelo sha do head, nunca pela hora |
+| M14 | **A revisão de interface por perfil é trabalho de worker.** UI Finish-Gate Reviewer, Game Designer e Level Designer leram as capturas da QA em paralelo, cerca de 2,5 min cada. Nenhum bloqueou; os três acharam o mesmo defeito no escopo, não bloqueante (o painel corta o `#id`), que foi ao `TODO.md`. | corpo do #35, "Passada dos perfis" | Vem antes do aceite visual e não o substitui (M9) |
+| M15 | **O Codex nem sempre revisa o PR que abre.** No #36 não houve reação em 30 min depois de aberto. O `@codex review` explícito teve recibo em 2 min. No #33 da 5a, a revisão ao abrir veio em 1 min 12 s. | #36 (14:53:31Z aberto; pedido 15:24:26Z; recibo 15:26Z) | O W7 pede o `@codex review` sempre, sem esperar a revisão automática |
+
 ## 5. O que a opção precisaria decidir (perguntas, não decisões)
 
 - **Onde se delega.** Nesta noite foi por palavra, para PRs nomeados e com prazo implícito
