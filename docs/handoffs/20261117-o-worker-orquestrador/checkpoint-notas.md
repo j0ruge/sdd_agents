@@ -9,3 +9,4 @@
 > Intervenção humana abre a linha com o marcador `intervention:`, fora desta citação.
 
 - 2026-11-17 16:58 · `PLAN` · plano escrito pelo planner; esta missão é o primeiro `sdd run` de uma missão do kit num worktree ligado (decisão 12): se a corrida morrer por causa do arranjo, registre aqui o comando, o rc e a última linha do `pipeline.log`, e pare
+- 2026-11-17 18:34 · `I1` · feito em bdfa30e; Check → `3`, suíte verde (12 min, rc 0). O `--anchors` já dizia `0 off target` com a âncora em :41 (tolerância de 10 linhas), mas o plano manda o número exato e ela foi para :43. Os probes do sensor leem as chaves só do frontmatter (`fm:`), como o verbo vai ler; sete sabotagens em cópia dos templates derrubaram uma asserção cada
