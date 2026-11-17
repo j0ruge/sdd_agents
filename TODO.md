@@ -684,6 +684,29 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   medida sem mutante de depois recompila. Fonte: o `20-handoff-exec.md` da 3.6f, no `dotp-remake`
   — descoberto por `sdd-executor` no R1 da `20261111-plano-3-6-f-gatilho-atrasado-e-conjurar-de-graca` (2026-11-15)
 
+- [ ] **O `/sdd-plan` não diz o que fazer com respostas do grill delegadas por escrito** —
+  `commands/sdd-plan.md:213` (`An approval given before the plan`) — a regra só trata da aprovação antes do plano.
+  No `dotp-remake`, o handoff da 7b trazia a ordem escrita do dono ("o grill é respondido com a recomendada"), menos
+  o que mexe no visual dele ou no contrato do tema; o relay levou as 5 perguntas ao dono, porque todas tocavam isso.
+  Sem regra, o relay decide sozinho se responde pelo humano, e "Relaying the grill" manda nunca responder. Direção:
+  um parágrafo irmão do da aprovação antecipada: ordem do humano, da sessão ou do handoff, e as exceções vão a ele.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
+
+- [ ] **O `--red` do aceite pode rodar ao lado da run de outra missão na mesma máquina, sem aviso** —
+  `tests/check-checkpoint.sh:1616` (`red_one`) — na esteira do `dotp-remake` (planejar a N+1 durante a run da N), a
+  run da 7a com o planner da 7b ao lado desceu a 1137 MB livres de 7,7 GB (6 de 802 amostras de 30 s abaixo de
+  2 GB); um `--red` com build e Godot por cima disputaria a memória e a janela do Godot (a run da 3.5c já morreu de
+  OOM). E o `--red` abre as janelas que os Checks abrem, sem listá-las antes nem deixar pular. Direção: o "Measure
+  again" avisa quando há `sdd run` em voo na máquina e adia o `--red`; o `--red` ganha `--list` e `--only <ids>`.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
+
+- [ ] **O `sdd adr new` dá a uma branch o número que outra branch sem merge já usa** —
+  `bin/sdd:8723` (`adr_next_id`) — o MAX+1 só lê o `docs/adr/` do checkout. No `dotp-remake`, a 6a (ADR 0026) e a
+  7a (ADR 0027) estavam em branches sem merge, e o `sdd adr new` da 7b, cortada da `main`, daria 0026 de novo; o
+  planner criou 0026 e 0027 vazios para pular, apagou-os, e saiu 0028. Sem isso, a colisão só aparece no merge.
+  Direção: `--after <n>`, ou ler também os `docs/adr/` das outras branches e worktrees do repositório.
+  — descoberto pelo planner na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
