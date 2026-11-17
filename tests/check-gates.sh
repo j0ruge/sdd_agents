@@ -3362,7 +3362,7 @@ assert_eq "stamp: on a git older than 2.31 the fixture names the SAME place, and
       new="$( cd / && fixture_stamps "$FIX" )"
       o="$(i4_old '' "$FIX")";  if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then s=same; else s="split:$o|$new"; fi
       o="$(i4_old '' "$MDIR")"; if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then u=sub;  else u="sub:$o|$new"; fi
-      o="$(i4_old '' "$i4_nl")"; if [ "$o" = "1:1:" ]; then l=nl;   else l="nl:$o"; fi
+      o="$(i4_old '' "$i4_nl")"; if [ "$o" = "1:1:" ]; then l="nl"; else l="nl:$o"; fi
       o="$(i4_old mute "$FIX")"; if [ "$o" = "1:1:" ]; then m=mute; else m="mute:$o"; fi
       o="$(i4_old fail "$FIX")"; if [ "$o" = "1:1:" ]; then f=fail; else f="fail:$o"; fi
       o="$(i4_old gone "$FIX")"; if [ "$o" = "1:1:" ]; then g=gone; else g="gone:$o"; fi
@@ -3653,7 +3653,7 @@ skipwin_key="$(ls -A "$skipwin_dir" 2>/dev/null || true)"
 i4_verdict 0 "$I4_SCORE_GREEN" move-the-tree
 skipwin_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
 skipwin_kept=gone; [ -n "$skipwin_key" ] && [ -f "$skipwin_dir/$skipwin_key" ] && skipwin_kept=kept
-skipwin_other="$(ls -A "$skipwin_dir" 2>/dev/null | grep -vxF "${skipwin_key:-}" | grep -c . || true)"
+skipwin_other="$(find "$skipwin_dir" -mindepth 1 -maxdepth 1 ! -name "${skipwin_key:-}" 2>/dev/null | grep -c . || true)"
 git -C "$FIX" checkout -- tests/scratch.tracked
 i4_verdict 0 "$I4_SCORE_GREEN"
 assert_eq "stamp: a tree that moved while the suite of a skip ran is refused by name, and the key it skipped over stays the only stamp" \
