@@ -77,3 +77,6 @@ Uma linha por missão, escrita depois do merge. Colunas que só um humano preenc
 - O kit fixo (C1) é degrau próprio ou parte do W2?
 - Missão sem jornada de interface num repo com interface (C2): declaração por missão no
   `00-missao.md`, ou o W4 sobe o stack sempre?
+- O D5 ("merge segue humano") ganha uma opção de **merge delegado**? Em 2026-11-16 o dono delegou
+  os merges de uma noite, e o fluxo que rodou — o checklist de "tudo ok", a regra de parada e os
+  fatos M1–M9 — está em [`2026-11-16-o-worker-merge-delegado.md`](2026-11-16-o-worker-merge-delegado.md).
