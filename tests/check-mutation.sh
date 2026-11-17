@@ -6868,6 +6868,24 @@ mut_WORKER_delegate_signs_without_answer() {
 mut_WORKER_delegate_signs_expired() {
   sed -i '/^cmd_delegate() {/,/^}/ s@^  if expired @  if false \&\& expired @' "${1%/*}/sdd-worker"
 }
+# The expiry check of the effective level dropped: a delegation whose instant passed goes on
+# granting its level. Caught by "level: absent, illegible, unsigned and expired each answer assisted
+# and say why" (check-worker.sh).
+mut_WORKER_level_ignores_expiry() {
+  sed -i '/^effective_level() {/,/^}/ s@^  if expired "\$exp"; then@  if false \&\& expired "$exp"; then@' "${1%/*}/sdd-worker"
+}
+# The digest comparison dropped: a delegation edited after the owner signed it — its level raised,
+# its lots widened — grants what the edit says. Caught by "level: a delegation edited after signing
+# answers assisted" (check-worker.sh).
+mut_WORKER_level_ignores_digest() {
+  sed -i '/^effective_level() {/,/^}/ s@^  if \[ "\${signed##\* }" != "\$want" \]; then@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The lot's ceiling replaces the signed level whenever the two differ, so a ceiling above the
+# signed level raises it. Caught by "level: the lot ceiling lowers the level and never raises it,
+# and an uncovered lot is assisted" (check-worker.sh).
+mut_WORKER_level_ceiling_raises() {
+  sed -i '/^effective_level() {/,/^}/ s@^      if \[ "\$cr" -lt "\$sr" \]; then@      if [ "$cr" -ne "$sr" ]; then@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7686,6 +7704,9 @@ CATALOG=(
   WORKER_unknown_verb_accepted
   WORKER_delegate_signs_without_answer
   WORKER_delegate_signs_expired
+  WORKER_level_ignores_expiry
+  WORKER_level_ignores_digest
+  WORKER_level_ceiling_raises
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

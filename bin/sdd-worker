@@ -39,8 +39,20 @@ usage: sdd-worker <verb> <args>
 USAGE
 }
 
-# now — the local instant, to the minute. ONE clock for every verb.
-now() { date '+%Y-%m-%d %H:%M'; }
+# now — the local instant, to the minute. ONE clock for every verb. SDD_WORKER_NOW replaces the
+# real clock only when it is LATER than it: the seam lets the sensor move time forward and watch a
+# delegation expire, and never brings an expired one back. The two instants are compared by their
+# digits, never as text under the locale's collation; a value with no digits fails the test and
+# leaves the real clock.
+now() {
+  local real seam="${SDD_WORKER_NOW:-}"
+  real="$(date '+%Y-%m-%d %H:%M')"
+  if [ "${seam//[!0-9]/}" -gt "${real//[!0-9]/}" ] 2>/dev/null; then
+    printf '%s\n' "$seam"
+  else
+    printf '%s\n' "$real"
+  fi
+}
 
 # fm_value <file> <key> — the value of <key> in the frontmatter of <file>: the text after the `: `
 # that follows the key on the first line starting with `<key>:`, trailing blanks removed. Prints
@@ -58,13 +70,20 @@ fm_value() {
     }' "$1"
 }
 
-# on_ladder <name> — 0 when <name> is exactly one of the five levels. Positive: a level is a level
-# because the ladder names it, never because nothing refused it.
-on_ladder() {
-  local l
-  for l in "${LADDER[@]}"; do [ "$l" = "$1" ] && return 0; done
+# ladder_rank <name> — the position of <name> on the ladder, 0 for assisted; prints nothing and
+# returns 1 when <name> is not exactly one of the five levels. Positive: a level is a level because
+# the ladder names it, never because nothing refused it.
+ladder_rank() {
+  local i
+  for i in "${!LADDER[@]}"; do
+    [ "${LADDER[$i]}" = "$1" ] && { printf '%s\n' "$i"; return 0; }
+  done
   return 1
 }
+
+# on_ladder <name> — 0 when <name> is a level. It is ladder_rank and nothing else, so the two can
+# never disagree about what a level is.
+on_ladder() { ladder_rank "$1" > /dev/null; }
 
 # delegation_legible <file> — 0 when the six keys are present and not empty, the level is on the
 # ladder, expires is a local instant to the minute and both ceilings are numbers; otherwise 1, with
@@ -170,10 +189,115 @@ cmd_delegate() {
     "$f" "$f" "$id"
 }
 
+# repo_root <dir> — the top of the git checkout that holds <dir>; empty outside one.
+repo_root() { git -C "$1" rev-parse --show-toplevel 2>/dev/null || true; }
+
+# config_key <root> <key> — the value of <key> in <root>/.sdd/config.sh, read by sourcing the file
+# in a subshell, the way the runner loads it: nothing the file sets leaks into this program. Empty
+# when there is no root, no file, or no such key. ONE reader for every key a verb needs.
+config_key() {
+  local cfg="$1/.sdd/config.sh" key="$2"
+  [ -n "$1" ] && [ -f "$cfg" ] || return 0
+  # shellcheck disable=SC1090
+  ( set +eu; . "$cfg" > /dev/null 2>&1 < /dev/null; printf '%s' "${!key-}" ) || true
+}
+
+# lots_table <campaign.md> — one line `<lot> <ceiling>` per row of the table under the `## Lotes`
+# heading, in the order of the queue. The two columns are found by their header names (`Lot`,
+# `Ceiling`), the separator row is skipped, and the table ends at its first line that is not a
+# row. Prints nothing when the file or the table is absent. ONE reader of the queue.
+lots_table() {
+  [ -f "$1" ] || return 0
+  awk '
+    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
+    $0 == "## Lotes" { sec = 1; next }
+    !sec { next }
+    /^## / { exit }
+    substr($0, 1, 1) != "|" { if (hdr) exit; next }
+    {
+      n = split($0, c, "|")
+      if (!hdr) {
+        for (i = 2; i < n; i++) { h = trim(c[i]); if (h == "Lot") lc = i; if (h == "Ceiling") cc = i }
+        hdr = 1; next
+      }
+      if (trim(c[2]) ~ /^:?-+:?$/) next
+      if (lc && cc) print trim(c[lc]), trim(c[cc])
+    }' "$1"
+}
+
+# effective_level <campaign-dir> [<lot>] — the level the worker may act at, PUBLISHED in LEVEL,
+# with the reason in LEVEL_WHY. The first rule that matches decides, in this order, and every rule
+# that refuses answers assisted: a delegation that does not hold means "do nothing alone", never
+# "do what it says". Called, never substituted: under `$( )` both globals would die with the
+# subshell. The lot's ceiling only ever lowers the level.
+effective_level() {
+  local dir="${1%/}" lot="${2:-}" f signed want exp lv root lots w found="" l c cr sr
+  local -a words=()
+  f="$dir/delegation.md"
+  LEVEL=assisted
+  if [ ! -f "$f" ]; then LEVEL_WHY="no delegation: $f does not exist"; return 0; fi
+  if ! delegation_legible "$f"; then LEVEL_WHY="illegible: $ILLEGIBLE_WHY"; return 0; fi
+  signed="$(fm_value "$f" signed)"
+  if [ -z "$signed" ]; then LEVEL_WHY="unsigned: the signed: line is empty"; return 0; fi
+  want="$(delegation_digest "$f")"
+  if [ "${signed##* }" != "$want" ]; then
+    LEVEL_WHY="edited after signing: signed ${signed##* }, the six keys now give $want"; return 0
+  fi
+  exp="$(fm_value "$f" expires)"
+  if expired "$exp"; then LEVEL_WHY="expired: $exp is not after $(now)"; return 0; fi
+  lv="$(fm_value "$f" level)"
+  root="$(repo_root "$dir")"
+  if [ "$lv" != assisted ] && [ -z "$(config_key "$root" ON_ESCALATION_CMD)" ]; then
+    LEVEL_WHY="no pager: ON_ESCALATION_CMD is empty in ${root:-(no repo)}/.sdd/config.sh"; return 0
+  fi
+  if [ -n "$lot" ]; then
+    lots="$(fm_value "$f" lots)"
+    if [ "$lots" != all ]; then
+      read -ra words <<< "$lots"
+      for w in "${words[@]}"; do [ "$w" = "$lot" ] && found=1; done
+      if [ -z "$found" ]; then LEVEL_WHY="lot not covered: $lot is not in lots: $lots"; return 0; fi
+    fi
+    found=""
+    while read -r l c; do
+      if [ "$l" = "$lot" ]; then found=1; break; fi
+    done < <(lots_table "$dir/campaign.md")
+    if [ -z "$found" ]; then
+      LEVEL_WHY="lot not covered: $dir/campaign.md has no row for $lot"; return 0
+    fi
+    if [ "$c" != - ]; then
+      if ! cr="$(ladder_rank "$c")"; then
+        LEVEL_WHY="capped by the lot: the ceiling '$c' of $lot is not a level"; return 0
+      fi
+      sr="$(ladder_rank "$lv")"
+      if [ "$cr" -lt "$sr" ]; then
+        LEVEL="$c"; LEVEL_WHY="capped by the lot: the ceiling of $lot is $c"; return 0
+      fi
+    fi
+  fi
+  LEVEL="$lv"
+  LEVEL_WHY="signed until $exp"
+}
+
+# level <campaign-dir> [--lot L<n>] — the effective level, and why, on one line; rc 0 whatever the
+# answer, since assisted is an answer and not an error. A --lot with no lot is a usage error: read
+# as no lot, it would answer the uncapped level to a caller that asked about one lot.
+cmd_level() {
+  local lot=""
+  case "$#" in
+    1) : ;;
+    3) [ "$2" = --lot ] && [ -n "$3" ] || { usage; return 2; }; lot="$3" ;;
+    *) usage; return 2 ;;
+  esac
+  [ -d "$1" ] || { usage; return 2; }
+  effective_level "$1" "$lot"
+  printf 'level %s — %s\n' "$LEVEL" "$LEVEL_WHY"
+}
+
 main() {
   case "${1:-}" in
     delegate) shift; cmd_delegate "$@" ;;
-    level | allows | budget | next | pr-ready)
+    level) shift; cmd_level "$@" ;;
+    allows | budget | next | pr-ready)
       printf 'sdd-worker: %s is not implemented yet\n' "$1" >&2
       return 2 ;;
     *) usage; return 2 ;;
