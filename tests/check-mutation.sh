@@ -6857,6 +6857,17 @@ mut_RUN_boot_leftovers_rule_widened() {
 mut_WORKER_unknown_verb_accepted() {
   sed -i '/^main() {/,/^}/ s@^    \*) usage; return 2 ;;$@    *) usage; return 0 ;;@' "${1%/*}/sdd-worker"
 }
+# A stdin that closed before a single character reads as a yes: the delegation is signed with nobody
+# asked. Caught by "delegate: no answer on stdin leaves rc 66 and writes nothing" (check-worker.sh).
+mut_WORKER_delegate_signs_without_answer() {
+  sed -i '/^cmd_delegate() {/,/^}/ s@^    return 66$@    ans=y; got=0@' "${1%/*}/sdd-worker"
+}
+# The expiry check dropped: a delegation whose instant already passed is asked about and signed.
+# Caught by "delegate: n, an expired instant, an undefined level and a missing ceiling sign nothing"
+# (check-worker.sh).
+mut_WORKER_delegate_signs_expired() {
+  sed -i '/^cmd_delegate() {/,/^}/ s@^  if expired @  if false \&\& expired @' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7673,6 +7684,8 @@ CATALOG=(
   RUN_boot_dirt_blamed_on_dead_session
   RUN_boot_leftovers_rule_widened
   WORKER_unknown_verb_accepted
+  WORKER_delegate_signs_without_answer
+  WORKER_delegate_signs_expired
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
