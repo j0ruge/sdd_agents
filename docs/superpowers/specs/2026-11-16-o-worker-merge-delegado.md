@@ -71,7 +71,7 @@ sair, ao ver as capturas.
 | # | Fato | Evidência | Para a opção |
 |---|---|---|---|
 | M1 | **Bot que não revisou parece ter revisado.** O Copilot publicou review com estado `COMMENTED` no #32 e no #33, e o corpo dizia "unable to review … insufficient remaining quota". No `dotp-remake`, o CodeRabbit está no plano Free: só gera resumo e walkthrough, sem revisão linha a linha, e respondeu ao `@coderabbitai review` com "Review finished". Num PR do kit, ele bateu no limite por hora ("Review limit reached") e revisou 4 min depois. | `gh api repos/j0ruge/dotp-remake/pulls/32/reviews`; comentários do CodeRabbit no #32 | O W7 lê o **corpo**: cota, limite ou plano Free contam como "não revisou", uma lacuna declarada no PR, nunca como "limpo". Falta decidir se "não revisou" bloqueia. Nesta noite não bloqueou: bastaram o Codex limpo e o `/codereview` em A |
-| M2 | **O Codex respondeu em minutos:** 2 min 42 s no #32 (06:26:01Z → 06:28:43Z) e 1 min 12 s no #33. No `sales_quote`, o C6 mediu um achado que chegou a 51 min. | `gh api repos/j0ruge/dotp-remake/issues/{32,33}/comments` | A espera de ≥ 60 min do W7 é um teto, não o tempo típico |
+| M2 | **O Codex respondeu em minutos:** 2 min 42 s no #32 (06:26:01Z → 06:28:43Z) e 1 min 12 s no #33. No `sales_quote`, o C6 mediu um achado que chegou a 51 min. | `gh api repos/j0ruge/dotp-remake/issues/{32,33}/comments` | O timeout do W7 continua ≥ 60 min, para cobrir a cauda de 51 min do C6. Ele é o limite da espera, não o tempo típico: o recibo do head costuma vir em minutos |
 | M3 | **A `main` anda durante a run.** A run da 5a levou cerca de 5 h, e nesse meio a `main` ganhou commits. O PR precisou de merge da `main`, com conflito, antes da revisão final. | `41de7ef` | O worker precisa do passo "trazer a `main` e rodar a suíte de novo" antes do merge. A re-revisão tem de saber deixar de fora o que veio da `main`, e a skill `codereview` não tem esse caminho (candidata a retro) |
 | M4 | **Um merge invalida o PR seguinte.** O merge do #409 mudou a base do #408: novo merge da `main`, catraca recontada, push e bots de novo. | `8905bd0` | Uma fila de merges re-valida cada PR depois do merge anterior. Nunca mergear em lote |
 | M5 | **A régua do REVIEW do pipeline é mais baixa que a do dono.** A r1 do pipeline deu Documentation B, que o `REVIEW_PROSE_CRITERIA` aceita, e o dono exige A. Foram 3 rodadas à mão (r2 a r4) depois do PR aberto. | `40-review-r1.md` a `40-review-r3.md` da 5a; o corpo do #32 | A régua do merge delegado é configuração do alvo, e o laço de rodadas tem teto (3) |
@@ -83,7 +83,9 @@ sair, ao ver as capturas.
 
 ### A 5b, de dia (2026-11-16)
 
-A run lançada às 07:24 abriu o PR #35 do `dotp-remake` às 11:33: US$ 71,82 em 17 sessões, sem teto e sem rc 3. A `main` não andou,
+A delegação da §1 já estava esgotada. A 5b entrou por uma nova, dada em 2026-11-16 por volta de 07:40, com a run já em voo: *"vamos seguir o mesmo
+fluxo da 5a na 5b e depois o mesmo na Entrega 2, planejamento com fable 5.2, escolhas recomendadas das perguntas, aprovacao,
+execucao com o Opus ate o fim, pr, pr review e merge"*. A run lançada às 07:24 abriu o PR #35 do `dotp-remake` às 11:33: US$ 71,82 em 17 sessões, sem teto e sem rc 3. A `main` não andou,
 então o M3 não se repetiu. Depois vieram as rodadas r3 a r5 à mão até A, a passada de três perfis de interface e o Codex limpo no
 head. O merge saiu às 11:47 (`466b7f6`), e o pós-merge, no #36, às 12:26 (`e911d15`). Nenhuma decisão de merge precisou do dono.
 
@@ -100,7 +102,7 @@ head. O merge saiu às 11:47 (`466b7f6`), e o pós-merge, no #36, às 12:26 (`e9
 
 Na madrugada de 2026-11-17, por volta de 01:30, o dono delegou o Plano 7 inteiro numa frase: "quando terminar essa fase, coloca no
 pr, depois merge e ja aprova as outras do 7, no que precisa planeja com o Fable, aceita as recomendacoes, depois da YES e executa,
-vai assim em todos". A delegação passou a incluir o `sdd approve`, que a §5 ainda lista entre o que nunca entra. Ninguém interveio
+vai assim em todos". Como a da 5b, ela inclui o `sdd approve`, que a §5 ainda lista entre o que nunca entra. Ninguém interveio
 durante as runs. Os sucessos:
 - **A run da 7a correu sozinha por 7 h 42 min**, das 20:02 às 03:44: 12 incrementos e o I13 pedido pela REVIEW r1, depois QA, REVIEW
   r2 com A, DOCS e o PR #42 do `dotp-remake`. Foram US$ 101,88 em 18 sessões, sem bater no teto. A sabotagem matou todos os mutantes,
@@ -142,7 +144,7 @@ durante as runs. Os sucessos:
   as âncoras do `TODO.md`?
 - **A ordem da fila** de merges (M4).
 - **O que nunca entra:** `sdd approve`, apagar branch ou worktree, push na `main` e aceite visual
-  (M9). O pós-merge entra como PR (M7). No Plano 7 o dono delegou também o approve, com a remedição
+  (M9). O pós-merge entra como PR (M7). Desde a 5b o dono delega também o approve, com a remedição
   e o render antes (M22, M25). Falta decidir se o approve entra, e com que paradas.
 - **A delegação entre sessões** (M26): se o SIM da sessão nova é o mecanismo, ou se a delegação
   fica gravada com alcance e prazo, como pede o primeiro item.
