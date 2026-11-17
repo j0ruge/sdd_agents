@@ -374,10 +374,10 @@ HEALTH_RC=0
 # the ADR — the fixture is a main checkout, so its common dir is its own .git — and never borrowed
 # from bin/sdd. The stub's argv file goes too, so what is read after a run was written BY that run:
 # cmd_health has two paths to the suite now, and a leftover would answer for the one not taken.
-# Only the `skip:` worlds call health_run_keep, which keeps the stamps; both pass their arguments on.
+# Only the `skip:` worlds call health_run_keep, which keeps the stamps and passes its arguments on.
 health_run() {
   rm -rf "${FIX:?}/.git/sdd-mutation/stamps"
-  health_run_keep "$@"
+  health_run_keep
 }
 health_run_keep() { # health_run_keep [health option...]
   rm -f "${FIX:?}/tests/stub-argv.txt"

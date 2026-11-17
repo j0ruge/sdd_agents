@@ -1103,7 +1103,7 @@ SHIM
   new="$( cd / && release_stamps "$d/repo" )"
   o="$(rel_old '' "$d/repo")";     if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then s=same; else s="split:$o|$new"; fi
   o="$(rel_old '' "$d/repo/a/b")"; if [ -n "$new" ] && [ "$o" = "0:1:$new" ]; then u=sub;  else u="sub:$o|$new"; fi
-  o="$(rel_old '' "$d/nl"$'\n'"repo")"; if [ "$o" = "1:1:" ]; then l=nl; else l="nl:$o"; fi
+  o="$(rel_old '' "$d/nl"$'\n'"repo")"; if [ "$o" = "1:1:" ]; then l="nl"; else l="nl:$o"; fi
   o="$(rel_old mute "$d/repo")";   if [ "$o" = "1:1:" ]; then m=mute; else m="mute:$o"; fi
   o="$(rel_old fail "$d/repo")";   if [ "$o" = "1:1:" ]; then f=fail; else f="fail:$o"; fi
   o="$(rel_old gone "$d/repo")";   if [ "$o" = "1:1:" ]; then g=gone; else g="gone:$o"; fi
