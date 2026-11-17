@@ -513,6 +513,50 @@ for v in "$T"/todo.md "$T"/todo.*.md; do
 done
 check todo.pt-BR.md '^## ' "the pt-BR variant this repo's OUTPUT_LANG seeds from"
 
+# == the worker templates ==
+#
+# bin/sdd-worker (mission 20261117-o-worker-orquestrador) reads three things the runner does not:
+# the lots table of a campaign, the frontmatter of its delegation, and the two optional keys a
+# mission declares to belong to one (campaign:, lot:). Every key it reads is read from the
+# FRONTMATTER and nowhere else, so a regex prefixed `fm:` below greps the frontmatter only: a key
+# written in the prose of the body satisfies no reader, and must satisfy no assertion either.
+#
+# One ok line per template, not one per grep, and not through check(): each line is a sentence a
+# Check of that mission greps by name (`^  ok    worker templates: `), and check() prints
+# `<file>: <description>`. The group passes when every regex in it matches; the first one that
+# does not is named on stderr. One CHECKS_RUN per assertion, like every other primitive here.
+frontmatter_of() { # frontmatter_of <file> — the lines between the opening --- and the closing one
+  awk 'NR == 1 { if ($0 != "---") exit; next } $0 == "---" { exit } { print }' "$1" 2>/dev/null
+}
+worker_tpl() { # worker_tpl <file> <description> <regex>... — `fm:<regex>` reads the frontmatter only
+  local f="$1" desc="$2" re fm miss=""
+  shift 2
+  fm="$(frontmatter_of "$T/$f")"
+  for re in "$@"; do
+    case "$re" in
+      fm:*) grep -qE "${re#fm:}" <<< "$fm" || { miss="$re"; break; } ;;
+      *) grep -qE "$re" "$T/$f" 2>/dev/null || { miss="$re"; break; } ;;
+    esac
+  done
+  CHECKS_RUN=$((CHECKS_RUN + 1))
+  if [ -z "$miss" ] && [ "$#" -gt 0 ]; then
+    pass "worker templates: $desc"
+  else
+    printf '  FAIL  worker templates: %s — %s does not match %s\n' "$desc" "$f" "${miss:-<no regex>}" >&2
+    fails=$((fails + 1))
+  fi
+}
+echo "== the worker templates =="
+worker_tpl campaign.md "campaign.md carries the lots table and the harness and model keys" \
+  'fm:^campaign: ' 'fm:^title: ' 'fm:^date: ' \
+  'fm:^harness: ' 'fm:^plan_model: ' 'fm:^exec_model: ' \
+  '^## Lotes$' '^\| Lot \| Título \| Ceiling \| Itens \|$'
+worker_tpl delegation.md "delegation.md carries level, lots, expires, both ceilings and an empty signed" \
+  'fm:^campaign: ' 'fm:^level: ' 'fm:^lots: ' 'fm:^expires: ' \
+  'fm:^budget_mission_usd: ' 'fm:^budget_campaign_usd: ' 'fm:^signed:$'
+worker_tpl missao.md "missao.md offers the optional campaign and lot keys" \
+  'fm:^campaign: ' 'fm:^lot: '
+
 REVIEW_MARK="$CHECKS_RUN"
 REVIEW_ASSERTIONS=0
 REVIEW_FAILS_BEFORE="$fails"
