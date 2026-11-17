@@ -102,7 +102,7 @@ head. O merge saiu às 11:47 (`466b7f6`), e o pós-merge, no #36, às 12:26 (`e9
 
 Na madrugada de 2026-11-17, por volta de 01:30, o dono delegou o Plano 7 inteiro numa frase: "quando terminar essa fase, coloca no
 pr, depois merge e ja aprova as outras do 7, no que precisa planeja com o Fable, aceita as recomendacoes, depois da YES e executa,
-vai assim em todos". Como a da 5b, ela inclui o `sdd approve`, que a §5 ainda lista entre o que nunca entra. Ninguém interveio
+vai assim em todos". Como a da 5b, ela inclui o `sdd approve`, que ficou fora na noite da 5a (§1). Ninguém interveio
 durante as runs. Os sucessos:
 - **A run da 7a correu sozinha por 7 h 42 min**, das 20:02 às 03:44: 12 incrementos e o I13 pedido pela REVIEW r1, depois QA, REVIEW
   r2 com A, DOCS e o PR #42 do `dotp-remake`. Foram US$ 101,88 em 18 sessões, sem bater no teto. A sabotagem matou todos os mutantes,
@@ -118,7 +118,7 @@ durante as runs. Os sucessos:
 |---|---|---|---|
 | M16 | **A REVIEW do pipeline deu A, e os perfis acharam um defeito alto.** O foco cobria a pilha. O EXEC não chama `Agent`, então a passada de perfis sobre as capturas ficou com o worker. Confirma o M14, desta vez com um defeito real. | `8f71124`, `fc7d2a5` e `a368c94` no `dotp-remake`; relatórios dos perfis fora do git | A passada de perfis é um passo do worker antes do `/codereview`, não um opcional |
 | M17 | **O merge da `main` depois da run gera conflitos de docs.** Caíram em `CLAUDE.md`, `KAIZEN_LOG.md`, roadmap e nas âncoras do `TODO.md`, que andam com as linhas do `CLAUDE.md`. O `check-todo` pegou as âncoras. | `5d7d9ac`; corpo do #42, "Merge da `main`" | Confirma o M3. O worker roda o `check-todo` e a suíte depois de cada merge da `main` |
-| M18 | **Com a `main` mergeada, o diff desde o head da REVIEW traz texto de outra missão.** O `/codereview` precisou de escopo por caminho: 2 achados da r3 eram da 6a. | r3 no corpo do #42 | A re-revisão do worker recebe a lista de arquivos da missão, além do `base=` (o M3 já pedia isso à skill) |
+| M18 | **Com a `main` mergeada, o diff desde o head da REVIEW traz texto de outra missão.** O `/codereview` precisou de escopo por caminho: 2 achados da r3 eram da 6a. | r3 no corpo do #42 | A re-revisão do worker recebe a lista de arquivos da missão, além do `base=` (o M3 já pedia isso à skill). O filtro tira só os arquivos que a `main` mudou sozinha. Num arquivo que as duas mudaram, como o `CLAUDE.md` ou o `TODO.md`, o texto da `main` continua no diff, e o revisor precisa ser avisado |
 | M19 | **Os ⛔ da DOCS ficam para o worker aplicar,** e o `45-docs.md` e o `50-pr.md` envelhecem dizendo "⛔ aberto". O `50-pr.md` afirmou "suíte verde no `c6f70cd`" sem medida guardada. | `1c586ac`, `b217b4a` | O worker aplica o ⛔ e anota nos dois arquivos. Afirmação de suíte verde leva o log |
 | M20 | **O dono mergeou uma missão no meio da cadeia**: a 6a, sem o `/codereview` do Claude. A `main` andou, e o PR da 7a precisou do merge dela antes da revisão. | #40 do `dotp-remake` (`cd10594`) | O worker confere a `main` antes de cada passo e não supõe que só ele a move |
 | M21 | **O `sdd adr new` colidiu de novo.** A 7b2 precisou do 0029, porque o 0028 só existia na `plano-7-b`, sem merge. O contorno foi um arquivo vazio temporário. | kit #411, item 3 | A esteira de planos precisa de ADR reservado por branch |
@@ -143,9 +143,10 @@ durante as runs. Os sucessos:
   que fazer com conflito. Escalar sempre, ou só quando o conflito sai dos arquivos mecânicos, como
   as âncoras do `TODO.md`?
 - **A ordem da fila** de merges (M4).
-- **O que nunca entra:** `sdd approve`, apagar branch ou worktree, push na `main` e aceite visual
-  (M9). O pós-merge entra como PR (M7). Desde a 5b o dono delega também o approve, com a remedição
-  e o render antes (M22, M25). Falta decidir se o approve entra, e com que paradas.
+- **O que nunca entra:** apagar branch ou worktree, push na `main` e aceite visual (M9). O
+  pós-merge entra como PR (M7).
+- **O approve:** ficou fora na noite da 5a (§1). Desde a 5b o dono o delega, com a remedição e o
+  render antes (M22, M25). Falta decidir se ele entra, e com que paradas.
 - **A delegação entre sessões** (M26): se o SIM da sessão nova é o mecanismo, ou se a delegação
   fica gravada com alcance e prazo, como pede o primeiro item.
 - **A trilha:** cada merge delegado deixa no PR o checklist da §3 preenchido com os shas, e a
