@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# sdd-worker — the verbs of the campaign worker (ADR 0022).
+#
+# The worker is a SESSION that orchestrates a campaign: it plans, approves, runs `sdd run`, opens
+# the pull request, reviews it and merges, inside a level of autonomy the owner signed. The
+# questions that decide those acts used to be the model's reading, and the reading was wrong four
+# times on record (a Codex receipt matched by the hour instead of the sha, a watcher whose `pgrep -f`
+# matched itself, a bot with no quota read as "reviewed", a checker that read 20 of 21 units). This
+# program answers them from artifacts instead:
+#
+#   delegate   show a campaign's delegation, ask, and sign it
+#   level      the effective level of autonomy, with the reason
+#   allows     whether one act fits that level
+#   budget     what the campaign spent against its two ceilings
+#   next       the next act of the campaign
+#   pr-ready   whether a pull request meets the owner's five-item bar on its head sha
+#
+# Every verb but `delegate` only reads. None of them acts: launching `sdd run`, opening the pull
+# request and merging stay with the session, through the commands that already exist.
+# The runner (`bin/sdd`) owns ONE mission; this program owns the campaign and never writes what the
+# runner owns. The sensor is tests/check-worker.sh.
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: sdd-worker <verb> <args>
+  delegate <campaign-dir>                      show the delegation, ask, and sign it
+  level    <campaign-dir> [--lot L<n>]         the effective level of autonomy, with the reason
+  allows   <campaign-dir> <act> [--lot L<n>]   whether the act fits the effective level
+  budget   <campaign-dir>                      the campaign's spend against its ceilings
+  next     <campaign-dir>                      the next act of the campaign
+  pr-ready <mission-dir> <pr>                  whether the pull request is ready on its head sha
+USAGE
+}
+
+main() {
+  case "${1:-}" in
+    delegate | level | allows | budget | next | pr-ready)
+      printf 'sdd-worker: %s is not implemented yet\n' "$1" >&2
+      return 2 ;;
+    *) usage; return 2 ;;
+  esac
+}
+
+{ main "$@"; exit $?; }

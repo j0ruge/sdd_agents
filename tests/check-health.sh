@@ -1534,9 +1534,9 @@ surface_rules_hold \
 # only that at least one of them is awake. Each world below is answered by exactly one rule, so
 # deleting that rule turns exactly one of them red.
 #
-# The floor: six steps removed, so the list shrinks below it while --with-mutation still adds
-# exactly the catalogue step. Rule 2 is satisfied throughout; only the floor refuses this.
-surface_degrade '0,/^run "sdd health discriminates"/s/^run "/# run "/; 0,/^run "preflight and the install/s/^run "/# run "/' 'a suite that lost steps'
+# The floor: every top-level `run` commented out, guarded ones kept (6 steps, however many sensors
+# land; cut at preflight it hit 10 with check-worker.sh). Rule 2 holds; only the floor refuses it.
+surface_degrade 's/^run "/# run "/' 'a suite that lost steps'
 surface_rules_hold \
   && broken "the surface rules passed a suite that quietly lost steps — the anti-vacuity floor answers no world of its own"
 
@@ -1946,8 +1946,8 @@ GITENV_SOURCE='. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"'
 # ⚠️ DECLARED LIMIT (D15): like LINT_FLOOR, this floor is written by hand and nothing measures it.
 # `GITENV_FLOOR=0` alone survives the sabotage pass — it bites only paired with a narrowed glob, two
 # edits — and a floor a new sensor left behind keeps passing while it describes a smaller suite than
-# the one the census reads.
-GITENV_FLOOR=17
+# the one the census reads. 17 -> 18 with tests/check-worker.sh (ADR 0022).
+GITENV_FLOOR=18
 gitenv_census() { # gitenv_census <tests dir> — PUBLISHES GITENV_SEEN (entry points read) and GITENV_MISSING (names not sourcing it before their first git)
   local f at
   GITENV_SEEN=0; GITENV_MISSING=""

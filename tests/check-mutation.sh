@@ -6850,6 +6850,14 @@ mut_RUN_boot_leftovers_rule_widened() {
   sed -i "/^boot_prompt() {/,/^}/ s@What belongs to the work of this phase is yours to finish and commit;@What you did not write is not yours: never commit another session's change;@" "$1"
 }
 
+# The campaign worker (ADR 0022) — bin/sdd-worker, measured by tests/check-worker.sh. The "$1" of
+# every mutant is the copy of bin/sdd; these edit its neighbour, like mut_COORD_* do.
+# A verb the program does not know leaves rc 0, the shape a caller reads as an answer. Caught by
+# "usage: no verb and an unknown verb print the usage and leave rc 2" (check-worker.sh).
+mut_WORKER_unknown_verb_accepted() {
+  sed -i '/^main() {/,/^}/ s@^    \*) usage; return 2 ;;$@    *) usage; return 0 ;;@' "${1%/*}/sdd-worker"
+}
+
 CATALOG=(
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
@@ -7664,6 +7672,7 @@ CATALOG=(
   RUN_leftovers_never_retired
   RUN_boot_dirt_blamed_on_dead_session
   RUN_boot_leftovers_rule_widened
+  WORKER_unknown_verb_accepted
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
@@ -7759,6 +7768,13 @@ apply_mutant() {
      && ! python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' \
           "$box/bin/sdd-coordination.py" 2>>"$box.log"; then
     echo "the mutant is not valid Python" >> "$box.log"
+    return 91
+  fi
+  # bin/sdd-worker the same way, parsed only when this mutant changed it: a mutant that left it
+  # unparseable would die in check-worker.sh at the first call and score `caught` for a crash.
+  if ! cmp -s "$ROOT/bin/sdd-worker" "$box/bin/sdd-worker" \
+     && ! bash -n "$box/bin/sdd-worker" 2>>"$box.log"; then
+    echo "the mutant is not valid bash" >> "$box.log"
     return 91
   fi
   return 0
@@ -8070,6 +8086,7 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }
   anchor_control_invalid()    { printf 'if\n' >> "$1"; }
   anchor_control_invalid_py() { printf 'def\n' >> "${1%/*}/sdd-coordination.py"; }
+  anchor_control_invalid_worker() { printf 'if\n' >> "${1%/*}/sdd-worker"; }
   anchor_one() { # anchor_one <name> <function> — writes <box>.rc like run_mutant, for the same scoring
     local box="$WORK/$1" arc=0
     anchor_box "$box"
@@ -8095,7 +8112,7 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
     done
     [ "$broken" -eq 0 ]
   }
-  for ctl in noop:90 invalid:91 invalid_py:91; do
+  for ctl in noop:90 invalid:91 invalid_py:91 invalid_worker:91; do
     anchor_box "$WORK/_control_${ctl%%:*}"
     crc=0; apply_mutant "anchor_control_${ctl%%:*}" "$WORK/_control_${ctl%%:*}" || crc=$?
     if [ "$crc" != "${ctl##*:}" ]; then

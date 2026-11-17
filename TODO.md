@@ -651,7 +651,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão interativa da missão `20261112-as-reincidentes-primeiro` (2026-11-12)
 
 - [ ] **O lint da suíte se pula sem o `shellcheck`, e a `main` já tem 4 avisos que ele reprova** —
-  `tests/run-all.sh:292` (`command -v shellcheck`) — sem o binário o passo diz `(linter absent — skipped)` e a
+  `tests/run-all.sh:294` (`command -v shellcheck`) — sem o binário o passo diz `(linter absent — skipped)` e a
   suíte sai verde: toda corrida da missão `20261112-as-reincidentes-primeiro` pulou, e o branch trouxe 3 avisos
   que só o codereview viu. Com o `shellcheck` 0.11.0 do cache do `uv`, `-S warning` dá 4 em `a48cf3c`: SC2209 no
   `check-gates.sh` e no `check-hat.sh`, SC2010 no `check-gates.sh`, SC2120 no `check-health.sh`. Quem instala o
