@@ -289,13 +289,26 @@
 #       `git worktree add` with a provisional branch and its rename to the mission's branch written,
 #       says that in the kit `/sdd-plan` cuts it, and the approve act runs `sdd approve` in that
 #       worktree (decision 4 of the owner on the r6)
+#   R67 the campaign ceiling is a hard limit: budget leaves rc 1 on a `no room — …` line naming what
+#       is left of the ceiling and the signed mission cap when what is left, in cents, is below that
+#       cap, and a left equal to the cap still opens a run (rc 0, the campaign line); a spend that
+#       reached the ceiling is still the campaign line, never `no room`. The cap goes to cents from
+#       the text as signed, a fraction of a cent rounding up: 12.5 against 12.49 and 12.50 left, 0.014
+#       against one cent left, 0.011 against two and 0.01 against one; and the left is the cents of
+#       the ceiling less those of the sum, 0.10 + 0.20 leaving exactly a cap of 1.10 under a ceiling
+#       of 1.40 (a binary comparison stops it) and 0.10 + 0.70 a cap of 40 under 40.80. The signed cap
+#       is compared, not a stricter one a .sdd/config.sh sets: 12.5 there and 20 left of a signed 40
+#       stop. The command pages that line as `no-room`, apart from `campaign-ceiling`, and its loop
+#       names it; the comment above cmd_budget and docs/pipeline.md write the rule, the signed cap's
+#       reason and the phase the runner may spend past its cap, and templates/delegation.md names the
+#       line (achado #3 and decision 2 of the owner on the r6)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33,
-# R60 and R63 to R66 carry their own negative control: each checker runs on the files, where it has
+# R60 and R63 to R67 carry their own negative control: each checker runs on the files, where it has
 # to miss nothing, and on copies with one thing taken out, where it has to name exactly that thing.
-# A checker that never misses is decoration. R64 and R65 also read a comment of bin/sdd-worker,
-# which the catalogue does reach (mut_WORKER_reuse_*, mut_WORKER_blind_*); R63 and R66 read the
-# command and docs/pipeline.md alone, so their controls are all they have.
+# A checker that never misses is decoration. R64, R65 and R67 also read a comment of bin/sdd-worker,
+# which the catalogue does reach (mut_WORKER_reuse_*, mut_WORKER_blind_*, mut_WORKER_ceiling_*); R63
+# and R66 read the command and docs/pipeline.md alone, so their controls are all they have.
 #
 # Declared limit, no probe: the review item stops when `git rev-list <reviewed_head>..<head>` does
 # not run, and no world here makes it fail — it walks the commits `git merge-base --is-ancestor` has
@@ -393,12 +406,27 @@
 # - tree_primitive guards tree_control, and nothing guards it: dropped alone it changes no answer,
 #   since tree_control compares the whole output; dropped together with a looser comparison (the
 #   want found among the lines) the four families go green — measured in the sabotage pass of the
-#   R13. It is the last line control() and docs_control() have too, and the mutation catalogue,
-#   which mutates bin/ alone, never reaches it.
+#   R13; R67's `ceiling:` reads through it as well, and its tree_primitive call dropped alone is
+#   green (the pass of the R14). It is the last line control() and docs_control() have too, and the
+#   mutation catalogue, which mutates bin/ alone, never reaches it.
 # - Each family measures the phrase that carries a claim, never the sentence around it: a line of
 #   the comment above cmd_pr_ready that holds none of the four phrases (its lead, the source of the
 #   bar, the reason an item with no owner would be a gate nobody can satisfy) can go and leave
 #   `blind:` green, and so can the connecting prose of the other three.
+#
+# Declared limits of R67, no probe:
+# - templates/delegation.md also writes the cap left unused and the phase the runner may spend past
+#   its own cap, in this repo's OUTPUT_LANG, and this file is English surface (tests/check-lang.sh
+#   refuses those phrases here): only the template's `no room — …` line, under its heading, is read.
+#   The two claims are read in docs/pipeline.md and in the comment above cmd_budget. The campaign.md
+#   and delegation.md of the kit's own campaign repeat the rule in the same language, unread, and so
+#   does the placeholder of budget_campaign_usd: in the template; the sentence of ADR 0022 §8 is
+#   unread too (each measured in the sabotage pass of the R14: taken out, every probe green).
+# - short and left outside cmd_budget's `local` change no answer: one verb per process, and budget
+#   runs once in it. The jq witness of the fixture has no world on this jq, which puts 1.40 less
+#   0.10 + 0.20 below 1.10; it stays to name the fixture when a jq does not.
+# - The lead of the comment above cmd_budget (its rc line) and the comment inside it, over the
+#   cents of the cap, carry no claim the family reads, as in R63 to R66.
 #
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
@@ -409,10 +437,10 @@
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
 # `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `narrow: `, `listed: `,
 # `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `criteria: `, `gone: `,
-# `stamp: `, `reuse: `, `blind: `, `cut: `, `command: ` and `docs: `) prints exactly the assertions
-# the mission plan or the fix increment that opened it names — the checkpoint counts them. Inside a
-# mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it; the census in
-# check-health.sh holds that clause.
+# `stamp: `, `reuse: `, `blind: `, `cut: `, `ceiling: `, `command: ` and `docs: `) prints exactly
+# the assertions the mission plan or the fix increment that opened it names — the checkpoint counts
+# them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
+# the census in check-health.sh holds that clause.
 #
 # Usage: tests/check-worker.sh   (exit 0 = every verb answers what its rule says)
 set -uo pipefail
@@ -1204,7 +1232,9 @@ fi
 # Four delegations of one campaign, b-cap, whose two missions spent 8.50: a ceiling of 8.5 (at it)
 # and of 8 (above it) leave rc 1, of 8.51 (the boundary) and of 10 (which a comparison of text puts
 # below 8.5) leave rc 0. Each lives in a directory named b-cap, under a parent of its own, since
-# the id is the directory's name (R35). The answers it cannot have ride along, each over a
+# the id is the directory's name (R35), and each signs a mission cap of 0.01: the boundary leaves
+# one cent of the ceiling, and a cap above what is left stops budget on its own (R67), which is not
+# the rule this probe reads. The answers it cannot have ride along, each over a
 # directory that answers rc 0 with the fixture's ledger, so the rc 1 is the break's: no delegation,
 # a delegation with no campaign ceiling, the same campaign copied outside any git checkout, and a
 # ledger that is a directory.
@@ -1214,8 +1244,8 @@ mission "$REPO" "$H" 20990112-b-cap-2 b-cap
 { spent 20990111-b-cap-1 session 5.25; spent 20990112-b-cap-2 close 3.25; } >> "$BOX/state/autonomy-log.jsonl"
 for w in 'b-at|8.5|1|8.50' 'b-above|8|1|8.00' 'b-edge|8.51|0|8.51' 'b-below|10|0|10.00'; do
   IFS='|' read -r id cap rc shown <<< "$w"
-  d="$(campaign "$id/b-cap" pr "$FAR" 25 "$cap")"
-  budget_is "$id" "$rc" "campaign US\$ 8.50 of $shown — 2 mission(s); mission cap US\$ 25" "$d"
+  d="$(campaign "$id/b-cap" pr "$FAR" 0.01 "$cap")"
+  budget_is "$id" "$rc" "campaign US\$ 8.50 of $shown — 2 mission(s); mission cap US\$ 0.01" "$d"
 done
 mkdir -p "$REPO/docs/campaigns/b-absent"
 budget_is 'no delegation' 1 'no ceiling — no delegation' "$REPO/docs/campaigns/b-absent"
@@ -1239,8 +1269,8 @@ fi
 # --- R17: no ledger yet -------------------------------------------------------------------------
 # One mission of the campaign and three ledgers that hold nothing: a state directory that does not
 # exist, one with no ledger file, and an empty ledger. Each is zero spent and rc 0, and the line
-# names the mission cap of this delegation, 37.5 as signed — R15 and R16 print 25, so a constant fails
-# one of the two.
+# names the mission cap of this delegation, 37.5 as signed — R15 prints 25 and R16 0.01, so a
+# constant fails one of the three.
 got=""
 d="$(campaign b-fresh pr "$FAR" 37.5 200)"
 mission "$REPO" "$H" 20990121-b-fresh b-fresh
@@ -3178,7 +3208,9 @@ fi
 #              0.7999999999999999: a campaign cap of 0.80 is reached (rc 1, `0.80 of 0.80`), one of
 #              0.81 is not (rc 0); the cents are rounded, never cut down nor up: two missions of
 #              s-frac spent 0.50 and 0.303, 0.80 of a cap of 0.81 (rc 0), two of s-half 0.50 and
-#              0.306, 0.81 of 0.81 (rc 1), and a cap of 0.806 is 0.81, which 0.80 is below (rc 0)
+#              0.306, 0.81 of 0.81 (rc 1), and a cap of 0.806 is 0.81, which 0.80 is below (rc 0);
+#              each signs a mission cap of 0.01, the one cent a ceiling of 0.81 leaves, since a cap
+#              above what is left stops budget on its own (R67)
 #   as-signed  a signed mission cap of 0.015 is printed as signed, the value `run` passes to
 #              `sdd run`: `%.2f` would hand the runner 0.01 or 0.02; so are 10.004 and 0.01
 #   cent       a signed mission cap below one cent — 0.004, which `%.2f` printed as 0.00, the
@@ -3186,7 +3218,9 @@ fi
 #   grammar    each BUDGET_MISSION_USD of a list in a config: a value the runner's own pattern
 #              refuses (read out of bin/sdd HERE: 1e2, 5e0, +5 and a blank, which jq reads as
 #              numbers, among them) stops budget naming the file, the value and the refusal; one it
-#              accepts, at or below the signed 150, holds — a differential, value by value
+#              accepts, at or below the signed 150, holds — a differential, value by value; the
+#              campaign ceiling is 200, since a mission cap above what is left of it stops budget
+#              on its own (R67)
 # Every answer is the whole line.
 got=""
 mission "$REPO" "$H" 20990601-s-a s-cents
@@ -3203,8 +3237,8 @@ for w in 's-at|s-cents|0.80|1|0.80 of 0.80' 's-edge|s-cents|0.81|0|0.80 of 0.81'
          's-up|s-frac|0.81|0|0.80 of 0.81' 's-half|s-half|0.81|1|0.81 of 0.81' \
          's-capr|s-cents|0.806|0|0.80 of 0.81'; do
   IFS='|' read -r id c cap rc shown <<< "$w"
-  d="$(campaign "$id/$c" pr "$FAR" 25 "$cap")"
-  want="campaign US\$ $shown — 2 mission(s); mission cap US\$ 25"
+  d="$(campaign "$id/$c" pr "$FAR" 0.01 "$cap")"
+  want="campaign US\$ $shown — 2 mission(s); mission cap US\$ 0.01"
   budget_is "$id" "$rc" "$want" "$d"
   [ "$W_OUT" = "$want" ] || got="${got:+$got; }$id: the line is '$W_OUT'"
 done
@@ -3230,7 +3264,7 @@ for v in 1e2 5e0 1E2 +5 ' 5' '5 ' 0x10 1.2.3 . 100.00 .5 5. 007 00.05 150; do
   mkdir -p "$k/.sdd" "$k/docs/campaigns"
   git init -q -b main "$k"
   printf 'BUDGET_MISSION_USD="%s"\n' "$v" > "$k/.sdd/config.sh"
-  cp -a "$(campaign "s-g$n" pr "$FAR" 150 100)" "$k/docs/campaigns/"
+  cp -a "$(campaign "s-g$n" pr "$FAR" 150 200)" "$k/docs/campaigns/"
   if runner_refuses "$v"; then
     refused=$((refused + 1))
     want="no mission cap — $k/.sdd/config.sh sets BUDGET_MISSION_USD=$v, which sdd run refuses as no number; delete the line, or set it above 0 and at most 150"
@@ -3238,7 +3272,7 @@ for v in 1e2 5e0 1E2 +5 ' 5' '5 ' 0x10 1.2.3 . 100.00 .5 5. 007 00.05 150; do
     [ "$W_OUT" = "$want" ] || got="${got:+$got; }grammar '$v': the line is '$W_OUT'"
   else
     accepted=$((accepted + 1))
-    want='campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 150'
+    want='campaign US$ 0.00 of 200.00 — 0 mission(s); mission cap US$ 150'
     budget_is "grammar '$v'" 0 "$want" "$k/docs/campaigns/s-g$n"
     [ "$W_OUT" = "$want" ] || got="${got:+$got; }grammar '$v': the line is '$W_OUT'"
   fi
@@ -3998,9 +4032,10 @@ fi
 # 4 of the owner on it). What they read lives in the command, in docs/pipeline.md and in the
 # comments of bin/sdd-worker, and no mutant of the catalogue reaches the first two, so each checker
 # carries its own negative control, like `command:` and `docs:`: it runs on the files, where it has
-# to miss nothing, and on a copy of the three files with one of them edited, where it has to name
-# exactly what the edit took out. Each checker prints one item per line.
-R13_FILES=(commands/sdd-worker.md docs/pipeline.md bin/sdd-worker)
+# to miss nothing, and on a copy of the files with one of them edited, where it has to name exactly
+# what the edit took out. Each checker prints one item per line. The fourth file is R67's: the
+# ceiling's rule is written in the delegation's template too, and the copy carries it for that family.
+R13_FILES=(commands/sdd-worker.md docs/pipeline.md bin/sdd-worker templates/delegation.md)
 
 # squeeze — stdin's lines as one line, every run of blanks one space: a phrase wrapped across two
 # lines is read as written.
@@ -4235,6 +4270,173 @@ if [ -z "$got" ]; then
 else
   fail 'cut: in a target the session cuts the mission worktree before /sdd-plan, the git worktree add and the rename written, in the kit /sdd-plan cuts it, and sdd approve runs there' \
     'each phrase in its act, and each sabotaged copy naming what it lost' "$got"
+fi
+
+# --- R67: the campaign ceiling is a hard limit ---------------------------------------------------
+# budget read the ceiling between acts, and a run opened below it could pass it by up to a mission
+# cap: `campaign US$ 190.50 of 200.00 … mission cap US$ 40`, rc 0 (achado #3 of the review r6).
+# Decision 2 of the owner: budget stops when what is left of the ceiling, in cents, is below the
+# signed mission cap. One mission of ce-room spent 190.50, the r6's world; two of ce-cents 0.10 and
+# 0.20, a binary 0.30000000000000004; two of ce-seven 0.10 and 0.70, a binary 0.7999999999999999;
+# ce-sub has none. Each world is a delegation of one of them in a directory of its own named after
+# the campaign (R35), as <world>|<campaign>|<mission cap>|<campaign cap>|<rc>|<line>|<spent>|
+# <ceiling>|<x>: a <line> of `room` wants the no room line with <x> left, `campaign` the campaign
+# line with <x> missions, each written HERE and compared whole.
+#   below, short   9.50 and 39.99 left under a cap of 40: rc 1
+#   equal          40.00 left: rc 0, the run may spend up to its cap and the campaign end at its
+#                  ceiling exactly
+#   reached        a spend at the ceiling is the campaign line, rc 1, never `no room`
+#   frac-*         a cap of 12.5 against 12.49 left (rc 1) and 12.50 (rc 0): no cap cut to 12
+#   binary, -short 1.10 left exactly by 1.40 less 0.10 + 0.20, which binary floats put below 1.10
+#                  (rc 0), and 1.09 (rc 1); 1.10 * 100 is 110.00000000000001, so a cap made cents by
+#                  a product stops the first, and so does one rounded up from that product
+#   trail          a cap of 1.100 is the 110 cents of 1.10: a zero after the cents rounds nothing up
+#   seven          0.10 + 0.70 leaving exactly a cap of 40 under 40.80: rc 0
+#   sub, sub-fits, cent  a cap with a fraction of a cent rounds up: 0.014 against one cent left
+#                  (rc 1: rounded, or by %.2f, it is one cent and holds), 0.011 against two and 0.01
+#                  against one (rc 0: a cap of whole cents is not lifted a cent)
+# A last world is a repo of its own whose .sdd/config.sh sets BUDGET_MISSION_USD=12.5 under a signed
+# 40, with 20.00 left: the cap the runner applies there fits, and budget stops all the same, since
+# the comparison is with the signed cap.
+got=""
+mission "$REPO" "$H" 20991101-ce-room ce-room
+mission "$REPO" "$H" 20991102-ce-a ce-cents
+mission "$REPO" "$H" 20991103-ce-b ce-cents
+mission "$REPO" "$H" 20991104-ce-c ce-seven
+mission "$REPO" "$H" 20991105-ce-d ce-seven
+{ spent 20991101-ce-room session 190.5
+  spent 20991102-ce-a session 0.1; spent 20991103-ce-b close 0.2
+  spent 20991104-ce-c session 0.1; spent 20991105-ce-d close 0.7; } >> "$BOX/state/autonomy-log.jsonl"
+jq -en '1.4 - (0.1 + 0.2) < 1.1 and 1.1 * 100 > 110' > /dev/null \
+  || got="fixture: this jq does not put 1.40 - (0.10 + 0.20) below 1.10, nor 1.10 * 100 above 110"
+# room_line <spent> <ceiling> <left> <cap> and camp_line <spent> <ceiling> <missions> <cap> — the two
+# answers of budget, written HERE.
+room_line() {
+  printf 'no room — campaign US$ %s of %s leaves US$ %s, below the mission cap US$ %s a run may spend;' "$@"
+  printf ' sign a higher budget_campaign_usd, or a budget_mission_usd of at most %s' "$3"
+}
+camp_line() { printf 'campaign US$ %s of %s — %s mission(s); mission cap US$ %s' "$@"; }
+for w in 'below|ce-room|40|200|1|room|190.50|200.00|9.50' 'short|ce-room|40|230.49|1|room|190.50|230.49|39.99' \
+         'equal|ce-room|40|230.50|0|campaign|190.50|230.50|1' \
+         'reached|ce-room|40|190.50|1|campaign|190.50|190.50|1' \
+         'frac-short|ce-room|12.5|202.99|1|room|190.50|202.99|12.49' \
+         'frac-equal|ce-room|12.5|203|0|campaign|190.50|203.00|1' \
+         'binary|ce-cents|1.10|1.40|0|campaign|0.30|1.40|2' 'binary-short|ce-cents|1.10|1.39|1|room|0.30|1.39|1.09' \
+         'trail|ce-cents|1.100|1.40|0|campaign|0.30|1.40|2' \
+         'seven|ce-seven|40|40.80|0|campaign|0.80|40.80|2' \
+         'sub|ce-sub|0.014|0.01|1|room|0.00|0.01|0.01' 'sub-fits|ce-sub|0.011|0.02|0|campaign|0.00|0.02|0' \
+         'cent|ce-sub|0.01|0.01|0|campaign|0.00|0.01|0'; do
+  IFS='|' read -r id c mc cc rc kind sp ce x <<< "$w"
+  d="$(campaign "ce-$id/$c" pr "$FAR" "$mc" "$cc")"
+  if [ "$kind" = room ]; then want="$(room_line "$sp" "$ce" "$x" "$mc")"; else want="$(camp_line "$sp" "$ce" "$x" "$mc")"; fi
+  budget_is "$id" "$rc" "$want" "$d"
+  [ "$W_OUT" = "$want" ] || got="${got:+$got; }$id: the line is '$W_OUT'"
+done
+k="$BOX/ce-strict"
+mkdir -p "$k/.sdd" "$k/docs/campaigns"
+git init -q -b main "$k"
+printf 'HANDOFF_DIR="docs/handoffs"\nON_ESCALATION_CMD="true"\nBUDGET_MISSION_USD=12.5\n' > "$k/.sdd/config.sh"
+cp -a "$(campaign ce-strict-src/ce-strict pr "$FAR" 40 100)" "$k/docs/campaigns/"
+mission "$k" "$H" 20991106-ce-strict ce-strict
+spent 20991106-ce-strict session 80 >> "$BOX/state/autonomy-log.jsonl"
+want="$(room_line 80.00 100.00 20.00 40)"
+budget_is strict 1 "$want" "$k/docs/campaigns/ce-strict"
+[ "$W_OUT" = "$want" ] || got="${got:+$got; }strict: the line is '$W_OUT'"
+# item_of <text> <lead> — the numbered item of <text> whose first line starts with <lead>, squeezed;
+# the next numbered item or a blank line ends it.
+item_of() { awk -v p="$2" '!on && index($0, p) == 1 { on = 1; print; next } on && (/^[0-9]+\. / || !NF) { exit } on' <<< "$1" | squeeze; }
+CEIL_STOP='A `no room — …` line of `budget`'
+CEIL_PIPE='**The campaign ceiling is a hard limit.**'
+# ceiling_missing <root> — what the prose does not write of the rule: `ceiling: loop` (step 1 of the
+# loop names the `no room — …` line), `ceiling: stop` (the paragraph of the stops that opens on that
+# line pages it as `no-room` and says it is not `campaign-ceiling`), `ceiling: pipeline row` (the
+# budget row of the table of verbs names it), `ceiling: pipeline <rule|unused|signed>` (the
+# paragraph CEIL_PIPE of the worker's section writes the line, the cap left unused and why the cap
+# compared is the signed one), `ceiling: pipeline phase` (its declared limits name the phase the
+# runner may spend past its own cap), `ceiling: template rule` (the section under the heading of
+# the ceiling in templates/delegation.md names the line) and `ceiling: cmd_budget
+# <rule|signed|phase>` (the comment right above cmd_budget).
+ceiling_missing() {
+  local c="$1/commands/sdd-worker.md" p="$1/docs/pipeline.md" s
+  grep -qF '(`no room — …`)' <<< "$(item_of "$(section "$c" 'The loop' 2>/dev/null)" '1. `sdd-worker budget')" \
+    || printf 'ceiling: loop\n'
+  s="$(para_of "$(section "$c" 'The five stops' 2>/dev/null)" "$CEIL_STOP")"
+  { grep -qF 'with `no-room`' <<< "$s" && grep -qF 'is not `campaign-ceiling`' <<< "$s"; } || printf 'ceiling: stop\n'
+  s="$(section "$p" 'The worker' 2>/dev/null)"
+  grep -qF '`no room — …`' <<< "$(grep -F '| `sdd-worker budget <campaign-dir>` |' <<< "$s")" || printf 'ceiling: pipeline row\n'
+  s="$(para_of "$s" "$CEIL_PIPE")"
+  grep -qF '`no room — campaign US$' <<< "$s" || printf 'ceiling: pipeline rule\n'
+  grep -qF 'up to one mission cap unused' <<< "$s" || printf 'ceiling: pipeline unused\n'
+  grep -qF 'never passes the signed' <<< "$s" || printf 'ceiling: pipeline signed\n'
+  grep -qF 'a phase may spend past `BUDGET_MISSION_USD`' \
+    <<< "$(awk '$0 == "### Declared limits (ADR 0022)" { on = 1; next } on && /^#/ { exit } on' "$p" 2>/dev/null | squeeze)" \
+    || printf 'ceiling: pipeline phase\n'
+  grep -qF '`no room — …`' <<< "$(section "$1/templates/delegation.md" 'O teto da campanha' 2>/dev/null | squeeze)" \
+    || printf 'ceiling: template rule\n'
+  s="$(comment_of "$1/bin/sdd-worker" cmd_budget)"
+  grep -qF '`no room — campaign US$' <<< "$s" || printf 'ceiling: cmd_budget rule\n'
+  grep -qF 'never passes the signed' <<< "$s" || printf 'ceiling: cmd_budget signed\n'
+  grep -qF 'a phase may spend past' <<< "$s" || printf 'ceiling: cmd_budget phase\n'
+}
+m="$(ceiling_missing "$ROOT")"
+[ -z "$m" ] || got="${got:+$got; }missing: ${m//$'\n'/, }"
+T13=templates/delegation.md
+tree_control 'loop: no line' ceiling_missing 'ceiling: loop' "$C13" 's/ (`no room — …`)//'
+tree_control 'loop: the line only in step 2' ceiling_missing 'ceiling: loop' "$C13" 's/ (`no room — …`)//
+/^2\. The act\./ s/$/ (`no room — …`)/'
+tree_control 'loop: the line only past a blank line' ceiling_missing 'ceiling: loop' "$C13" 's/ (`no room — …`)//
+/^2\. The act\./i\
+\
+(`no room — …`)'
+tree_control 'loop: the line only in a quoted step' ceiling_missing 'ceiling: loop' "$C13" 's/ (`no room — …`)//
+/^1\. `sdd-worker budget/i\
+> 1. `sdd-worker budget` (`no room — …`)\
+'
+tree_control 'stop: paged as the ceiling' ceiling_missing 'ceiling: stop' "$C13" 's/with `no-room`/with `campaign-ceiling`/'
+tree_control 'stop: read as the ceiling' ceiling_missing 'ceiling: stop' "$C13" 's/is not `campaign-ceiling`/is `campaign-ceiling`/'
+tree_control 'stop: the paragraph only after the section' ceiling_missing 'ceiling: stop' "$C13" \
+  's/^A `no room — …` line of `budget`/The line of `budget`/
+$a\
+\
+A `no room — …` line of `budget` is paged with `no-room`, and it is not `campaign-ceiling`.'
+tree_control 'pipeline: row' ceiling_missing 'ceiling: pipeline row' docs/pipeline.md \
+  '/^| `sdd-worker budget <campaign-dir>` |/ s/`no room — …`/a short room/'
+tree_control 'pipeline: the row phrase only in the prose' ceiling_missing 'ceiling: pipeline row' docs/pipeline.md \
+  '/^| `sdd-worker budget <campaign-dir>` |/ s/`no room — …`/a short room/
+/^\*\*The campaign ceiling is a hard limit\.\*\*/ s/$/ (`no room — …`)/'
+tree_control 'pipeline: rule' ceiling_missing 'ceiling: pipeline rule' docs/pipeline.md 's/`no room — campaign US\$/`no room US$/'
+tree_control 'pipeline: unused' ceiling_missing 'ceiling: pipeline unused' docs/pipeline.md \
+  's/up to one mission cap unused/some money unused/'
+tree_control 'pipeline: signed' ceiling_missing 'ceiling: pipeline signed' docs/pipeline.md \
+  's/never passes the signed/may pass the signed/'
+tree_control 'pipeline: the paragraph renamed' ceiling_missing \
+  $'ceiling: pipeline rule\nceiling: pipeline unused\nceiling: pipeline signed' docs/pipeline.md \
+  's/^\*\*The campaign ceiling is a hard limit\.\*\*/**The campaign ceiling.**/'
+tree_control 'pipeline: phase' ceiling_missing 'ceiling: pipeline phase' docs/pipeline.md \
+  's/a phase may spend past `BUDGET_MISSION_USD`/a phase spends/'
+tree_control 'pipeline: phase only above the limits' ceiling_missing 'ceiling: pipeline phase' docs/pipeline.md \
+  's/a phase may spend past `BUDGET_MISSION_USD`/a phase spends/
+/^\*\*The campaign ceiling is a hard limit\.\*\*/ s/$/ a phase may spend past `BUDGET_MISSION_USD`/'
+tree_control 'template: rule' ceiling_missing 'ceiling: template rule' "$T13" 's/`no room — …`/a stop/'
+tree_control 'template: the line only in another section' ceiling_missing 'ceiling: template rule' "$T13" \
+  's/`no room — …`/a stop/
+/^## Como assinar$/a\
+`no room — …`'
+tree_control 'comment: rule' ceiling_missing 'ceiling: cmd_budget rule' "$W13" \
+  '/^cmd_budget() {$/,$ !s/`no room — campaign US\$/`no room US$/'
+tree_control 'comment: signed' ceiling_missing 'ceiling: cmd_budget signed' "$W13" \
+  '/^cmd_budget() {$/,$ !s/never passes the signed/may pass the signed/'
+tree_control 'comment: phase' ceiling_missing 'ceiling: cmd_budget phase' "$W13" \
+  '/^cmd_budget() {$/,$ !s/a phase may spend past/a phase spends/'
+tree_control 'comment: cut off by a blank line' ceiling_missing \
+  $'ceiling: cmd_budget rule\nceiling: cmd_budget signed\nceiling: cmd_budget phase' "$W13" 's/^cmd_budget() {$/\n&/'
+tree_primitive ceiling_missing 'ceiling: loop' "$C13" 's/ (`no room — …`)//
+s/with `no-room`/with `campaign-ceiling`/'
+if [ -z "$got" ]; then
+  pass 'ceiling: budget stops on a no room line when what is left of the campaign ceiling, in cents, is below the signed mission cap, opens at an equal one, and the command, docs/pipeline.md, the template and cmd_budget write the rule'
+else
+  fail 'ceiling: budget stops on a no room line when what is left of the campaign ceiling, in cents, is below the signed mission cap, opens at an equal one, and the command, docs/pipeline.md, the template and cmd_budget write the rule' \
+    'each world its whole line and rc, the signed cap compared, each phrase in its place, and each sabotaged copy naming what it lost' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

@@ -1937,7 +1937,7 @@ stderr and leaves rc 2. The reason of an answer comes after ` — `.
 | `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible, expired, changed after it was shown (it signs the terms it showed) or while the signature was written, or a write that failed; 66 nothing on stdin |
 | `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0; 1 on `assisted — unread: …`, when the checkouts of the campaign do not read or no copy of the terms can be made |
 | `sdd-worker allows <campaign-dir> <act> --lot L<n>` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner; 2 not an act, or no `--lot` (every act is of one lot, and the lot's ceiling is the act's) |
-| `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, no ceiling or spend to read (`no spend — …`, the checkouts or the base that do not read among them), or `no mission cap — …` when the signed mission cap is zero or below one cent, or the config of the campaign's checkout or of a mission's worktree would beat it |
+| `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling, with room for one run; 1 at or above it, with less of it left than the signed mission cap (`no room — …`), no ceiling or spend to read (`no spend — …`, the checkouts or the base that do not read among them), or `no mission cap — …` when the signed mission cap is zero or below one cent, or the config of the campaign's checkout or of a mission's worktree would beat it |
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts or the base do not read); 3 when `gh` did not answer |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
 
@@ -1966,6 +1966,18 @@ number`; one at or below it is the stricter ceiling, and holds. A signed `budget
 zero is no ceiling for the runner too, and one below one cent is no cap the cents can hold: each
 stops `budget` before any `.sdd/config.sh` is read, naming the delegation: `no mission cap —
 <delegation.md> signs budget_mission_usd: 0, …`.
+
+**The campaign ceiling is a hard limit.** Below the ceiling, `budget` holds what is left of it, the
+ceiling's cents less the sum's, against the signed mission cap, in cents from its text: a fraction
+of a cent rounds up, and nothing goes through a `%.2f` or a binary product (`1.10 * 100` is
+`110.00000000000001`). A left below the cap is rc 1, on the line
+`no room — campaign US$ <spent> of <ceiling> leaves US$ <left>, below the mission cap US$ <cap> …`,
+since the next run may spend up to its cap; a left equal to it opens the run, and the campaign then
+ends at its ceiling exactly. The cap compared is the signed one, because the cap the runner applies
+never passes the signed (a config that would set it higher stops `budget` first) and one below it
+only spends less. So the campaign may end with up to one mission cap unused, and passes the one
+signed only by the phase the runner may spend past its own cap (Declared limits). `budget` does not
+know the act it comes before, so the stop holds before every one, a merge among them.
 
 **`next`** walks the lots in table order and stops at the first one not merged: no mission → `plan`;
 a mission whose `aprovacao:` the runner's `gate_PLAN` would not admit (only `auto` and `humano-…`
@@ -2044,6 +2056,10 @@ criterion A, no tolerance for prose), and the worker's round is what applies it.
   `sdd approve` has too.
 - The ceilings read the ledger of this machine, and the spend of the orchestrating session and of
   its subagents is outside both.
+- The campaign ceiling holds against the mission caps, not against the runner's overrun: the
+  runner reads its spend before a phase opens, so a phase may spend past `BUDGET_MISSION_USD`, and
+  the campaign past its ceiling by that much. The room `budget` keeps is one run's, and the loop
+  launches one run at a time.
 - A campaign's missions are matched by id, not by repository.
 - `budget`, `level` above `assisted`, and `next` source the `.sdd/config.sh` of the campaign's
   checkout and of each linked worktree that holds a mission of the campaign, and of no other (the

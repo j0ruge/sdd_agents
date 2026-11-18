@@ -240,6 +240,12 @@ Uma linha que não mediu parada também para e avisa, com o nome do que o verbo 
 `no-ceiling`, e o `no spend — …` (fora de um checkout, o `git worktree list` que falhou, o ledger
 que não se lê) é `no-spend`. Nenhuma delas é `campaign-ceiling`: ninguém mediu gasto nenhum.
 
+Uma linha `no room — …` do `budget` mediu gasto abaixo do teto, mas o que resta dele é menor que o
+teto de missão assinado: o `run` seguinte passaria do teto da campanha, e a linha para antes de
+qualquer ato, o merge incluso, com o nome `no-room`. Ela também não é `campaign-ceiling`, o gasto que
+atingiu o teto; para seguir, o dono assina um teto de campanha maior ou um teto de missão de no
+máximo o que resta.
+
 Sem `ON_ESCALATION_CMD` no `.sdd/config.sh` de algum checkout do kit (o desta campanha ou o worktree
 de uma missão, onde o `sdd run` roda e avisa), toda delegação acima de `assisted` vale `assisted`
 (decisão 10): o aviso que chega ao dono é condição para o worker agir sozinho.

@@ -4,7 +4,7 @@ level: <assisted | pr | plan | merge | full>
 lots: <all, ou L1 L2 … separados por espaço>
 expires: <YYYY-MM-DD HH:MM, hora local>
 budget_mission_usd: <número de pelo menos 0.01 — o teto de cada missão, passado como assinado ao sdd run como BUDGET_MISSION_USD, se nenhum .sdd/config.sh lido (o da campanha e o de cada worktree que guarda missão dela) fixar essa chave acima dele; 0 é sem teto, e o budget para>
-budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger>
+budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger; o budget para quando o que resta dele é menor que o budget_mission_usd>
 signed:
 ---
 
@@ -59,6 +59,20 @@ Antes de assinar, resolva a linha `BUDGET_MISSION_USD` do `.sdd/config.sh` por u
 apague-a e commite a remoção antes de cortar os worktrees das missões (um worktree cortado antes do
 commit continua com a linha), ou deixe-a, no checkout da campanha e em cada worktree de missão, no
 teto assinado ou abaixo dele.
+
+## O teto da campanha
+
+O `budget_campaign_usd:` é limite duro. Abaixo dele, o `bin/sdd-worker budget` compara o que resta
+(o teto menos o gasto, em centavos) com o `budget_mission_usd:` assinado, também em centavos (a
+fração de centavo arredonda para cima), e sai com rc 1 numa linha `no room — …`, que nomeia o resto
+e o teto de missão, quando o resto é menor: o `run` seguinte pode gastar até o teto dele e passaria
+do da campanha. Resto igual ao teto de missão ainda abre o `run`, e a campanha termina no teto. A
+comparação é com o teto assinado, porque o que o runner aplica nunca passa dele (o `budget` já para
+num `.sdd/config.sh` que o passa). Assim a campanha pode acabar com até um teto de missão sem usar,
+e só passa do assinado pelo que o runner gasta além do próprio teto: ele lê o gasto antes de abrir
+cada fase, e uma fase pode gastar além do `BUDGET_MISSION_USD`. A parada vale antes de todo ato, o
+merge incluso; para seguir, assine um teto de campanha maior ou um teto de missão de no máximo o que
+resta.
 
 ## Como assinar
 

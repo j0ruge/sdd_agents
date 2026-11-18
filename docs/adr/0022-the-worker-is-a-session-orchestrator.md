@@ -124,7 +124,10 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
 
 8. **Two ceilings and a pager.** The ceiling per mission reaches the runner as
    `BUDGET_MISSION_USD`; the ceiling of the campaign is the sum of the ledger over the campaign's
-   missions. Either one spent stops the worker.
+   missions. Either one spent stops the worker. The campaign's is a hard limit (decision 2 of the
+   owner on the review r6 of the mission that built the worker): `sdd-worker budget` stops when
+   what is left of it is below the signed mission cap, so a campaign may end with up to one mission
+   cap unused, and passes its ceiling only by what the runner spends past its own cap in a phase.
 
 ## Alternatives discarded
 

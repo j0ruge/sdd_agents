@@ -653,7 +653,8 @@ campaign_set() {
 # binary 0.7999999999999999, reaches a ceiling of 0.80; both are printed from those cents, and the
 # mission cap is printed as signed, the very value `run` hands the runner (a `%.2f` of 0.015 would
 # hand it 0.01 or 0.02).
-# rc 0 below the ceiling; rc 1 at it or above it, and rc 1 for every answer it cannot have — no
+# rc 0 below the ceiling with room for one run (below); rc 1 at it or above it, on no room for a
+# run, and rc 1 for every answer it cannot have — no
 # delegation or an illegible one (no ceiling), a directory outside a git checkout, a set of checkouts
 # that does not read (campaign_set: the worktrees do not list, a HANDOFF_DIR of the set is not the
 # root's, or the base does not read) or a ledger that does not read (no spend): a spend that could
@@ -671,8 +672,24 @@ campaign_set() {
 # each checkout of the set is read (campaign_set: the campaign's checkout, then each worktree that
 # holds a mission of the campaign, and no other), and the first that would beat the signed cap is
 # the one the stop names.
-# Declared limits: a line is matched by its mission id alone, so a mission of the same id in another
-# repo is counted too (the fail-safe side: more spend, an earlier stop); a malformed line is skipped
+# The campaign ceiling is a hard limit (achado #3 and decision 2 of the owner on the r6): below it,
+# budget also holds what is left (the ceiling's cents less the sum's) against the signed mission
+# cap, and a left below that cap is rc 1, on
+# `no room — campaign US$ <spent> of <ceiling> leaves US$ <left>, below the mission cap US$ <cap> …`:
+# the next run may spend up to its cap, and would pass the ceiling. A left equal to the cap opens
+# the run, and the campaign then ends at its ceiling exactly; a spend that reached the ceiling is
+# the campaign line, rc 1, before any of this. The cap goes to cents from its text as signed, never
+# through a %.2f nor a binary product (1.10 * 100 is 110.00000000000001), and a fraction of a cent
+# rounds up: a run capped at 0.014 may spend more than the one cent left. The cap compared is the
+# signed one, not the one the runner applies, because that one never passes the signed (a config
+# that would set it higher stops budget above) and one below it only spends less: so a campaign may
+# end with up to one mission cap unused, never past the one signed. budget does not know the act
+# that follows it, so the stop holds before every act, a merge of a lot whose run is over among them.
+# Declared limits: the runner reads its own spend before a phase opens, so a phase may spend past
+# BUDGET_MISSION_USD, and the campaign past its ceiling by that much; the room is one run's, and the
+# loop of commands/sdd-worker.md launches one run at a time; a line is matched by its mission id
+# alone, so a mission of the same id in another repo is counted too (the fail-safe side: more
+# spend, an earlier stop); a malformed line is skipped
 # (`fromjson?`, as the runner reads the ledger), and its cost with it; the ceiling is read whether or
 # not the delegation is signed — whether the worker may act on it is the level's question; an empty
 # BUDGET_MISSION_USD in the file stops, though the runner fills it with its default, which may be
@@ -681,7 +698,7 @@ campaign_set() {
 # that runs a mission reads the worktree its plan made.
 cmd_budget() {
   [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
-  local dir="${1%/}" f root cap mcap run wt p ledger out spent ceiling reached
+  local dir="${1%/}" f root cap mcap run wt p ledger out spent ceiling reached short left
   local -a ms=()
   f="$dir/delegation.md"
   if [ ! -f "$f" ]; then printf 'no ceiling — no delegation: %s does not exist\n' "$f"; return 1; fi
@@ -725,14 +742,25 @@ cmd_budget() {
   cap="$(fm_value "$f" budget_campaign_usd)"
   ledger="$(ledger_path)"
   [ -e "$ledger" ] || ledger=/dev/null
-  if ! out="$(jq -nrR --arg cap "$cap" --args '
+  # The mission cap's cents come from its text (digits, and a fraction the legible grammar allows):
+  # the whole part times 100, the first two digits of the fraction, and one more cent when a digit
+  # after those two is above zero.
+  if ! out="$(jq -nrR --arg cap "$cap" --arg m "$mcap" --args '
          [inputs | fromjson? | select(type == "object" and (.mission | IN($ARGS.positional[])))
           | .cost_usd | numbers] | add // 0
          | (. * 100 | round) as $spent | ($cap | tonumber * 100 | round) as $ceiling
-         | "\($spent) \($ceiling) \($spent >= $ceiling)"' ${ms[@]+"${ms[@]}"} < "$ledger")"; then
+         | ($m | split(".") | (.[0] | tonumber) * 100 + ((.[1] // "") + "00" | .[0:2] | tonumber) + (if (.[1] // "") | .[2:] | test("[1-9]") then 1 else 0 end)) as $mission
+         | "\($spent) \($ceiling) \($spent >= $ceiling) \($ceiling - $spent < $mission)"' ${ms[@]+"${ms[@]}"} < "$ledger")"; then
     printf 'no spend — the ledger %s does not read\n' "$ledger"; return 1
   fi
-  read -r spent ceiling reached <<< "$out"
+  read -r spent ceiling reached short <<< "$out"
+  if [ "$reached" != true ] && [ "$short" = true ]; then
+    left=$((ceiling - spent))
+    printf 'no room — campaign US$ %d.%02d of %d.%02d leaves US$ %d.%02d, below the mission cap US$ %s a run may spend;' \
+      "$((spent / 100))" "$((spent % 100))" "$((ceiling / 100))" "$((ceiling % 100))" "$((left / 100))" "$((left % 100))" "$mcap"
+    printf ' sign a higher budget_campaign_usd, or a budget_mission_usd of at most %d.%02d\n' "$((left / 100))" "$((left % 100))"
+    return 1
+  fi
   printf 'campaign US$ %d.%02d of %d.%02d — %d mission(s); mission cap US$ %s\n' \
     "$((spent / 100))" "$((spent % 100))" "$((ceiling / 100))" "$((ceiling % 100))" "${#ms[@]}" "$mcap"
   if [ "$reached" = true ]; then return 1; fi

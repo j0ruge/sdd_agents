@@ -4,7 +4,7 @@ level: assisted
 lots: all
 expires: <YYYY-MM-DD HH:MM, hora local>
 budget_mission_usd: <número de pelo menos 0.01 — o teto de cada missão, passado como assinado ao sdd run como BUDGET_MISSION_USD, se nenhum .sdd/config.sh lido (o da campanha e o de cada worktree que guarda missão dela) fixar essa chave acima dele; 0 é sem teto, e o budget para>
-budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger>
+budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger; o budget para quando o que resta dele é menor que o budget_mission_usd>
 signed:
 ---
 

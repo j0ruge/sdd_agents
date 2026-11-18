@@ -56,9 +56,10 @@ Every turn of the loop, in this order, reading the disk again each time: the del
 or be edited, between two acts, and the answer of the last turn is not the answer of this one.
 
 1. `sdd-worker budget <campaign-dir>`: rc 1 is a stop, named by the line it printed (below): the
-   campaign ceiling reached, a mission cap the runner would not apply (`no mission cap — …`), or a
-   ceiling or a spend it could not read (`no ceiling — …`, `no spend — …`). Its line prints the
-   mission cap, the `BUDGET_MISSION_USD` the next `run` passes.
+   campaign ceiling reached, less of it left than the mission cap a run may spend (`no room — …`),
+   a mission cap the runner would not apply (`no mission cap — …`), or a ceiling or a spend it
+   could not read (`no ceiling — …`, `no spend — …`). Its line prints the mission cap, the
+   `BUDGET_MISSION_USD` the next `run` passes.
 2. The act. When the last act of the lot has a move in **The transitions** (below), the act is that
    one; otherwise `sdd-worker next <campaign-dir>`, whose first line is
    `<act> <lot> <mission> — <reason>`. The line `done - -` ends the campaign; rc 1 is a `stop …`
@@ -242,6 +243,12 @@ delegation, or an illegible one) with `no-ceiling`; a `no spend — …` line (n
 `git worktree list` that failed, an upstream of the campaign's checkout that does not read, a ledger
 that does not read) with `no-spend`. None of them is
 `campaign-ceiling`: nobody measured a spend.
+
+A `no room — …` line of `budget` measured a spend below the ceiling, with less of it left than the
+signed mission cap: the next `run` may spend up to its cap and pass the ceiling, so the loop stops
+before any act, a merge among them, and the line is paged with `no-room`. It is not a stop of the
+spend that reached the ceiling, so it is not `campaign-ceiling`: the owner signs a higher ceiling,
+or a mission cap of at most what is left, and the campaign goes on.
 
 The runner pages its own rc 3 already, `budget-exhausted` among them, from the `.sdd/config.sh` of
 the worktree it runs in, whose pager `level` reads as it reads this one: that stop is not paged

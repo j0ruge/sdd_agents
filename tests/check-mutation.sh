@@ -7219,7 +7219,7 @@ mut_WORKER_listed_budget_goes_on() {
 # Caught by "spend: the spend reaches its ceiling in cents, the mission cap is printed as signed and
 # refused below one cent, and a config value the runner refuses stops budget" (check-worker.sh).
 mut_WORKER_spend_float_compare() {
-  sed -i '/^cmd_budget() {/,/^}/ s@| "\\(\$spent) \\(\$ceiling) \\(\$spent >= \$ceiling)"@| "\\($spent) \\($ceiling) \\(. >= ($cap | tonumber))"@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_budget() {/,/^}/ s@| "\\(\$spent) \\(\$ceiling) \\(\$spent >= \$ceiling) @| "\\($spent) \\($ceiling) \\(. >= ($cap | tonumber)) @' "${1%/*}/sdd-worker"
 }
 # The mission cap is printed with two decimals again, not as signed: 0.015 reaches `sdd run` as
 # 0.01 or 0.02, and 0.004 as 0.00, the runner's no ceiling (achado #5 of the mission's review r5).
@@ -7367,6 +7367,45 @@ mut_WORKER_reuse_limit_dropped() {
 # (check-worker.sh).
 mut_WORKER_blind_limit_dropped() {
   sed -i '/^# .*`CHANGES_REQUESTED` that carries no inline comment/d' "${1%/*}/sdd-worker"
+}
+# The campaign ceiling is read between acts again (achado #3 of the mission's review r6): with
+# 9.50 left of 200 and a mission cap of 40, budget answers rc 0 and the next run may end past the
+# ceiling. Caught by "ceiling: budget stops on a no room line when what is left of the campaign
+# ceiling, in cents, is below the signed mission cap, opens at an equal one, and the command,
+# docs/pipeline.md, the template and cmd_budget write the rule" (check-worker.sh).
+mut_WORKER_ceiling_room_unchecked() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if \[ "\$reached" != true \] && \[ "\$short" = true \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The mission cap made cents by a rounded binary product: 0.014 becomes one cent, which the one cent
+# left holds, and the run capped there may spend 0.004 past the ceiling. Caught by "ceiling: …"
+# (check-worker.sh), the world sub.
+mut_WORKER_ceiling_cap_rounded() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^         | (\$m | split("\.") | .* as \$mission$@         | ($m | tonumber * 100 | round) as $mission@' "${1%/*}/sdd-worker"
+}
+# What is left compared with the cap as binary floats, not in cents: 1.40 less 0.10 + 0.20 is
+# 1.0999999999999999, below a cap of 1.10, and a run that fits is refused (and 8.51 less 8.50 is
+# below 0.01). Caught by "budget: at the ceiling or above it the verb leaves rc 1" and by
+# "ceiling: …", the world binary (check-worker.sh).
+mut_WORKER_ceiling_float_compare() {
+  sed -i '/^cmd_budget() {/,/^}/ s@ \\(\$ceiling - \$spent < \$mission)"@ \\(($cap | tonumber) - . < ($m | tonumber))"@' "${1%/*}/sdd-worker"
+}
+# A left equal to the mission cap stops: the run that would end the campaign at its ceiling exactly
+# is refused. Caught by "budget: at the ceiling or above it the verb leaves rc 1" (the boundary
+# leaves one cent, the cap of 0.01) and by "ceiling: …", the world equal (check-worker.sh).
+mut_WORKER_ceiling_equal_stops() {
+  sed -i '/^cmd_budget() {/,/^}/ s@ \\(\$ceiling - \$spent < \$mission)"@ \\($ceiling - $spent <= $mission)"@' "${1%/*}/sdd-worker"
+}
+# The cap compared is the last one a .sdd/config.sh of the set assigns, not the signed one: 12.5
+# in the config fits the 20.00 left under a signed 40, and budget opens a run the rule says it
+# stops. Caught by "ceiling: …" (check-worker.sh), the world strict.
+mut_WORKER_ceiling_effective_compared() {
+  sed -i '/^cmd_budget() {/,/^}/ s@ --arg m "\$mcap" --args .$@ --arg m "$run" --args '"'"'@' "${1%/*}/sdd-worker"
+}
+# The comment of cmd_budget stops writing the no room line (decision 2 of the owner on the
+# mission's review r6): the rule is kept, and its line goes unsaid. Caught by "ceiling: …"
+# (check-worker.sh), the item cmd_budget rule.
+mut_WORKER_ceiling_rule_dropped() {
+  sed -i '/^# `no room — campaign US\$ <spent> of <ceiling>/d' "${1%/*}/sdd-worker"
 }
 
 CATALOG=(
@@ -8259,6 +8298,12 @@ CATALOG=(
   WORKER_gone_copy_shown
   WORKER_reuse_limit_dropped
   WORKER_blind_limit_dropped
+  WORKER_ceiling_room_unchecked
+  WORKER_ceiling_cap_rounded
+  WORKER_ceiling_float_compare
+  WORKER_ceiling_equal_stops
+  WORKER_ceiling_effective_compared
+  WORKER_ceiling_rule_dropped
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
