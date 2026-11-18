@@ -6914,6 +6914,23 @@ mut_WORKER_budget_counts_every_mission() {
 mut_WORKER_budget_never_stops() {
   sed -i '/^cmd_budget() {/,/^}/ s@^  if \[ "\${out##\* }" = true \]; then return 1; fi$@  if false; then return 1; fi@' "${1%/*}/sdd-worker"
 }
+# A gh that failed reads as an empty list: "I could not read" becomes "there is no pull request",
+# and the lot is sent to run again. Caught by "next: a gh that does not answer leaves rc 3, and a
+# pull request closed without merge stops" (check-worker.sh).
+mut_WORKER_next_gh_failure_reads_no_pr() {
+  sed -i '/^pr_states() {/,/^}/ s@^  if \[ "\$rc" -ne 0 \]; then GH_WHY=.*; return 1; fi$@  [ "$rc" -eq 0 ] || out="[]"@' "${1%/*}/sdd-worker"
+}
+# The approval check dropped from the walk: a mission nobody approved is run. Caught by "next: a lot
+# with no mission is planned, and one with an empty approval is approved" (check-worker.sh).
+mut_WORKER_next_skips_approval() {
+  sed -i '/^cmd_next() {/,/^}/ s@^      if ! approved "\$p/00-missao.md"; then$@      if false; then@' "${1%/*}/sdd-worker"
+}
+# A merged pull request no longer makes its lot done: the walk stops at a lot already merged instead
+# of going past it. Caught by "next: a merged lot is skipped, and a campaign with every lot merged is
+# done" (check-worker.sh).
+mut_WORKER_next_ignores_merged() {
+  sed -i '/^cmd_next() {/,/^}/ s@^    if \[ -n "\$merged" \]; then continue; fi$@    if false; then continue; fi@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7740,6 +7757,9 @@ CATALOG=(
   WORKER_allows_ignores_lot
   WORKER_budget_counts_every_mission
   WORKER_budget_never_stops
+  WORKER_next_gh_failure_reads_no_pr
+  WORKER_next_skips_approval
+  WORKER_next_ignores_merged
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

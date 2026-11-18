@@ -58,6 +58,22 @@
 #       illegible one (no ceiling), a directory outside a git checkout, a ledger that does not read
 #   R17 a missing or empty ledger is zero spent (rc 0), and the line prints the mission cap of the
 #       delegation, the one the worker passes to `sdd run` as BUDGET_MISSION_USD
+#   R18 `next` plans a lot no mission of the campaign declares (another campaign's mission on the
+#       lot, or this campaign's on another lot, is not it), and approves a mission whose aprovacao:
+#       the runner's gate does not admit — empty, the template's placeholder, or empty in one copy
+#   R19 an approved mission with no pull request is run, found also when it lives only in a linked
+#       worktree (in flight); an open pull request is reviewed, a closed one beside it changing
+#       nothing; `auto` is approved as `humano-…` is
+#   R20 a lot with a merged pull request is skipped, and a queue whose every lot is merged is done;
+#       the queue is the table under `## Lotes` and nothing after it; the stub answers like the real
+#       gh, so a call without --state all reads no merged pull request
+#   R21 the line `ahead plan <lot>` follows a run or a review when the lot after the deciding one has
+#       no mission, and never otherwise
+#   R22 a gh that fails, or answers anything but an array of {number, state} with a known state, is
+#       rc 3 with no act on stdout — never "no pull request"; a pull request closed without merge,
+#       two missions on one lot, an approved mission with no branch, no campaign.md and an empty
+#       queue stop (rc 1); a call of the wrong shape is rc 2. gh runs at the repo root, or the stub
+#       refuses it
 #
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
@@ -83,7 +99,7 @@ unset SDD_WORKER_NOW ON_ESCALATION_CMD
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
-PROBE_FLOOR=17
+PROBE_FLOOR=22
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -762,6 +778,251 @@ if [ -z "$got" ]; then
 else
   fail 'budget: a missing ledger is zero spent, and the mission cap is printed' \
     'campaign US$ 0.00 of 200.00 — 1 mission(s); mission cap US$ 37.50, rc 0, for each' "$got"
+fi
+
+# --- next: the fixtures -------------------------------------------------------------------------
+# lot_mission <checkout> <id> <campaign> <lot> <branch> <approval> — a mission folder of <campaign>
+# and <lot> under the checkout's docs/handoffs, made from the kit's own template; an <approval> of
+# `-` leaves aprovacao: empty and `=` keeps the template's placeholder. Only the frontmatter is
+# edited, so a template whose lot: or branch: key moved leaves its placeholder and the probe that
+# finds the mission goes red.
+lot_mission() {
+  local ap="$6"
+  [ "$ap" != - ] || ap=""
+  mkdir -p "$1/$H/$2"
+  sed "2,/^---\$/ {
+         s@^missao: .*@missao: $2@
+         s@^campaign: .*@campaign: $3@
+         s@^lot: .*@lot: $4@
+         s@^branch: .*@branch: $5@
+       }" "$ROOT/templates/missao.md" > "$1/$H/$2/00-missao.md"
+  [ "$ap" = = ] || sed -i "2,/^---\$/ s@^aprovacao: .*@aprovacao: $ap@" "$1/$H/$2/00-missao.md"
+}
+
+# The gh stub answers the one question next asks, `gh pr list --head <branch> --state all --json
+# number,state`, from $BOX/prs/<branch>: a JSON array in the shape the real gh printed on 2026-11-17
+# for `gh pr list --head feat/o-revisor-so-acha --state all --json number,state` in this repo
+# (`[{"number":34,"state":"MERGED"}]`), or `[]` when there is no file, which is what it prints for a
+# head with no pull request. Without --state all it keeps only the OPEN ones, as the real gh does by
+# default. A <branch>.fail beside the file makes it fail, and a <branch>.raw is printed as it is. It
+# answers only from the root of the fixture repo, which is where gh infers the repository from.
+mkdir -p "$BOX/stub" "$BOX/prs"
+REPO_REAL="$(CDPATH='' cd "$REPO" && pwd -P)"
+cat > "$BOX/stub/gh" <<STUB
+#!/usr/bin/env bash
+[ "\$(pwd -P)" = "$REPO_REAL" ] || { echo "gh stub: run from \$(pwd -P), not the repo root" >&2; exit 9; }
+[ "\${1:-} \${2:-}" = "pr list" ] || { echo "gh stub: unexpected call: \$*" >&2; exit 9; }
+shift 2
+head="" all=""
+while [ "\$#" -gt 0 ]; do
+  case "\$1" in
+    --head) head="\$2"; shift 2 ;;
+    --state) [ "\$2" != all ] || all=1; shift 2 ;;
+    --json) [ "\$2" = number,state ] || { echo "gh stub: --json \$2" >&2; exit 9; }; shift 2 ;;
+    *) echo "gh stub: unexpected argument \$1" >&2; exit 9 ;;
+  esac
+done
+[ -n "\$head" ] || { echo "gh stub: no --head" >&2; exit 9; }
+f="$BOX/prs/\$head"
+[ ! -e "\$f.fail" ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+[ ! -e "\$f.raw" ] || { cat "\$f.raw"; exit 0; }
+[ -e "\$f" ] || { echo '[]'; exit 0; }
+if [ -n "\$all" ]; then cat "\$f"; else jq -c '[.[] | select(.state == "OPEN")]' "\$f"; fi
+STUB
+chmod +x "$BOX/stub/gh"
+
+# prs <branch> <json> — what the stub answers for <branch>.
+prs() { printf '%s\n' "$2" > "$BOX/prs/$1"; }
+
+# next_is <label> <rc> <want> <ahead> <dir> — runs next over <dir> with the gh stub first on the
+# PATH; appends to got unless it left <rc> and a first line on stdout that starts with <want> (a
+# literal, never a pattern), followed by no other line when <ahead> is empty, or else by exactly the
+# line <ahead>.
+next_is() {
+  local label="$1" rc="$2" want="$3" ahead="$4" l1 rest=""
+  PATH="$BOX/stub:$PATH" worker next "$5"
+  l1="${W_OUT%%$'\n'*}"
+  [[ "$W_OUT" != *$'\n'* ]] || rest="${W_OUT#*$'\n'}"
+  [ "$W_RC" = "$rc" ] && [[ "$l1" == "$want"* ]] && [ "$rest" = "$ahead" ] \
+    || got="${got:+$got; }$label: rc $W_RC, '${W_OUT//$'\n'/ / }' (want rc $rc, '$want…'${ahead:+, then '$ahead'})"
+}
+
+N=20990200
+
+# --- R18: no mission is planned, an empty approval is approved ----------------------------------
+# Campaign n-plan has no mission on L1, and around it the missions a looser reader would take for
+# it: another campaign's on L1, and this campaign's on L2 — each approved with a pull request open,
+# so taking one for L1 answers review. Three missions are not approved: an empty aprovacao:, the
+# template's placeholder (a value, which the runner's gate does not admit), and a mission whose copy
+# in the campaign's checkout is approved while its copy in the linked worktree is not. None of the
+# three has a pull request: a program that skipped the approval would answer run.
+got=""
+d="$(campaign n-plan pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+lot_mission "$REPO" "$((N + 1))-n-other" n-other L1 n-other-b humano-2099-01-01
+lot_mission "$REPO" "$((N + 2))-n-plan-l2" n-plan L2 n-plan-l2-b humano-2099-01-01
+prs n-other-b '[{"number":11,"state":"OPEN"}]'
+prs n-plan-l2-b '[{"number":12,"state":"OPEN"}]'
+next_is 'no mission' 0 'plan L1 - — ' '' "$d"
+for w in 'n-empty|-' 'n-placeholder|=' 'n-copies|humano-2099-01-01'; do
+  IFS='|' read -r id a <<< "$w"
+  d="$(campaign "$id" pr "$FAR" 25 200)"
+  set_lots "$d/campaign.md" 'L1:-'
+  lot_mission "$REPO" "$((N + 3))-$id" "$id" L1 "$id-b" "$a"
+  [ "$id" != n-copies ] || lot_mission "$BOX/wt" "$((N + 3))-$id" "$id" L1 "$id-b" -
+  next_is "$id" 0 "approve L1 $((N + 3))-$id — " '' "$d"
+done
+if [ -z "$got" ]; then
+  pass 'next: a lot with no mission is planned, and one with an empty approval is approved'
+else
+  fail 'next: a lot with no mission is planned, and one with an empty approval is approved' \
+    'plan L1 - for the lot with no mission, approve L1 <mission> for each one not approved' "$got"
+fi
+
+# --- R19: approved with no pull request is run, an open one is reviewed -------------------------
+# The mission of n-run lives only in the linked worktree, the shape of a lot in flight: a reader of
+# the campaign's checkout alone would plan it again. The one of n-review is approved `auto` — the
+# other spelling the runner's gate admits — and its branch has a closed pull request beside the open
+# one, so the open one decides.
+got=""
+d="$(campaign n-run pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-'
+lot_mission "$BOX/wt" "$((N + 4))-n-run" n-run L1 n-run-b humano-2099-01-01
+next_is 'approved, no pull request' 0 "run L1 $((N + 4))-n-run — " '' "$d"
+d="$(campaign n-review pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-'
+lot_mission "$REPO" "$((N + 5))-n-review" n-review L1 n-review-b auto
+prs n-review-b '[{"number":5,"state":"CLOSED"},{"number":7,"state":"OPEN"}]'
+next_is 'an open pull request' 0 "review L1 $((N + 5))-n-review — " '' "$d"
+if [ -z "$got" ]; then
+  pass 'next: an approved mission with no pull request is run, and an open one is reviewed'
+else
+  fail 'next: an approved mission with no pull request is run, and an open one is reviewed' \
+    'run L1 <mission> with no pull request, review L1 <mission> with one open' "$got"
+fi
+
+# --- R20: a merged lot is skipped, every lot merged is done -------------------------------------
+# n-skip has L1 merged (the real answer, copied) and no mission on L2: the walk goes past L1 and
+# plans L2. n-done has both lots merged, one beside a closed pull request, and a stray table under
+# the last lot's heading, after the queue: a reader that did not end the queue at its table would
+# read its rows as lots.
+got=""
+d="$(campaign n-skip pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+lot_mission "$REPO" "$((N + 6))-n-skip" n-skip L1 n-skip-b humano-2099-01-01
+prs n-skip-b '[{"number":34,"state":"MERGED"}]'
+next_is 'L1 merged' 0 'plan L2 - — ' '' "$d"
+d="$(campaign n-done pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+printf '\n| Lot | Title | Ceiling | Items |\n|---|---|---|---|\n| L9 | stray | - | 1 |\n' >> "$d/campaign.md"
+lot_mission "$REPO" "$((N + 7))-n-done-1" n-done L1 n-done-1-b humano-2099-01-01
+lot_mission "$REPO" "$((N + 8))-n-done-2" n-done L2 n-done-2-b humano-2099-01-01
+prs n-done-1-b '[{"number":3,"state":"CLOSED"},{"number":35,"state":"MERGED"}]'
+prs n-done-2-b '[{"number":36,"state":"MERGED"}]'
+next_is 'every lot merged' 0 'done - - — ' '' "$d"
+if [ -z "$got" ]; then
+  pass 'next: a merged lot is skipped, and a campaign with every lot merged is done'
+else
+  fail 'next: a merged lot is skipped, and a campaign with every lot merged is done' \
+    'plan L2 past a merged L1, done - - when every lot is merged' "$got"
+fi
+
+# --- R21: planned ahead -------------------------------------------------------------------------
+# Ahead is the lot after the one that decides, and only when it has no mission: a run on L1 with no
+# mission on L2; a review on L2 past a merged L1, with L3 and L4 empty (ahead names L3, never L2
+# nor L4); a review on L1 whose L2 already has a mission (no ahead); an approve on L1 with L2 empty
+# (no ahead: the lot does not run yet); and a run on the last lot (nothing ahead of it).
+got=""
+d="$(campaign n-ahead-run pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+lot_mission "$REPO" "$((N + 9))-n-ahead-run" n-ahead-run L1 n-ahead-run-b humano-2099-01-01
+next_is 'run, L2 empty' 0 "run L1 $((N + 9))-n-ahead-run — " 'ahead plan L2' "$d"
+d="$(campaign n-ahead-rev pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:-' 'L3:-' 'L4:-'
+lot_mission "$REPO" "$((N + 10))-n-ahead-rev-1" n-ahead-rev L1 n-ahead-rev-1-b humano-2099-01-01
+lot_mission "$REPO" "$((N + 11))-n-ahead-rev-2" n-ahead-rev L2 n-ahead-rev-2-b humano-2099-01-01
+prs n-ahead-rev-1-b '[{"number":40,"state":"MERGED"}]'
+prs n-ahead-rev-2-b '[{"number":41,"state":"OPEN"}]'
+next_is 'review on L2, L3 empty' 0 "review L2 $((N + 11))-n-ahead-rev-2 — " 'ahead plan L3' "$d"
+d="$(campaign n-ahead-taken pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+lot_mission "$REPO" "$((N + 12))-n-ahead-taken-1" n-ahead-taken L1 n-ahead-taken-1-b humano-2099-01-01
+lot_mission "$REPO" "$((N + 13))-n-ahead-taken-2" n-ahead-taken L2 n-ahead-taken-2-b -
+prs n-ahead-taken-1-b '[{"number":42,"state":"OPEN"}]'
+next_is 'review, L2 has a mission' 0 "review L1 $((N + 12))-n-ahead-taken-1 — " '' "$d"
+d="$(campaign n-ahead-appr pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+lot_mission "$REPO" "$((N + 14))-n-ahead-appr" n-ahead-appr L1 n-ahead-appr-b -
+next_is 'approve, L2 empty' 0 "approve L1 $((N + 14))-n-ahead-appr — " '' "$d"
+next_is 'run on the last lot' 0 "run L1 $((N + 4))-n-run — " '' "$REPO/docs/campaigns/n-run"
+if [ -z "$got" ]; then
+  pass 'next: while a lot runs, the next lot with no mission is planned ahead'
+else
+  fail 'next: while a lot runs, the next lot with no mission is planned ahead' \
+    'ahead plan <the lot after the deciding one>, only under run or review and only when it is empty' "$got"
+fi
+
+# --- R22: gh that does not answer, and what stops -----------------------------------------------
+# Six answers gh may give that are not read, each on L2 past a merged L1, so the verb has already
+# printed nothing when gh fails: a failure, an empty answer with rc 0, text, an object, an object
+# whose values are well-formed pull requests (read as a list it is a merged lot), and a state off
+# the three. Each is rc 3 with nothing on stdout and gh named on stderr — read as "no pull request"
+# they would answer run. Then what stops (rc 1): a pull request closed without merge, two missions
+# declaring one lot, an approved mission with no branch (gh asked about an empty head lists every
+# pull request of the repo), a directory with no campaign.md, a campaign.md whose campaign: is
+# empty, a campaign copied outside any git checkout, an empty queue — each of the last four over a
+# queue whose L1 a reader that went on would plan; and a call of the wrong shape is rc 2.
+got=""
+for w in 'fail|' 'empty|' 'text|not json' 'object|{"message":"Not Found"}' \
+         'keyed|{"51":{"number":51,"state":"MERGED"}}' 'state|[{"number":4,"state":"DRAFT"}]'; do
+  IFS='|' read -r k raw <<< "$w"
+  id="n-gh-$k"
+  d="$(campaign "$id" pr "$FAR" 25 200)"
+  set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+  lot_mission "$REPO" "$((N + 15))-$id-1" "$id" L1 "$id-1-b" humano-2099-01-01
+  lot_mission "$REPO" "$((N + 16))-$id-2" "$id" L2 "$id-2-b" humano-2099-01-01
+  prs "$id-1-b" '[{"number":50,"state":"MERGED"}]'
+  if [ "$k" = fail ]; then : > "$BOX/prs/$id-2-b.fail"; else printf '%s' "$raw" > "$BOX/prs/$id-2-b.raw"; fi
+  PATH="$BOX/stub:$PATH" worker next "$d"
+  [ "$W_RC" = 3 ] && [ -z "$W_OUT" ] && grep -q "gh pr list --head $id-2-b" <<< "$W_ERR" \
+    || got="${got:+$got; }$id: rc $W_RC, stdout '${W_OUT//$'\n'/ / }', stderr '${W_ERR%%$'\n'*}'"
+done
+d="$(campaign n-closed pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+lot_mission "$REPO" "$((N + 17))-n-closed" n-closed L1 n-closed-b humano-2099-01-01
+prs n-closed-b '[{"number":9,"state":"CLOSED"}]'
+next_is 'closed without merge' 1 "stop L1 $((N + 17))-n-closed — pull request closed without merge" '' "$d"
+d="$(campaign n-two pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-'
+lot_mission "$REPO" "$((N + 18))-n-two-a" n-two L1 n-two-a-b humano-2099-01-01
+lot_mission "$REPO" "$((N + 19))-n-two-b" n-two L1 n-two-b-b humano-2099-01-01
+next_is 'two missions on one lot' 1 'stop L1 - — ' '' "$d"
+d="$(campaign n-nobranch pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-'
+lot_mission "$REPO" "$((N + 20))-n-nobranch" n-nobranch L1 '' humano-2099-01-01
+next_is 'no branch' 1 "stop L1 $((N + 20))-n-nobranch — " '' "$d"
+mkdir -p "$REPO/docs/campaigns/n-nofile"
+next_is 'no campaign.md' 1 'stop - - — ' '' "$REPO/docs/campaigns/n-nofile"
+d="$(campaign n-noid pr "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-'
+sed -i '2,/^---$/ s@^campaign: .*@campaign:@' "$d/campaign.md"
+next_is 'empty campaign:' 1 'stop - - — ' '' "$d"
+cp -a "$REPO/docs/campaigns/n-plan" "$BOX/loose/"
+next_is 'outside a checkout' 1 'stop - - — ' '' "$BOX/loose/n-plan"
+d="$(campaign n-noqueue pr "$FAR" 25 200)"
+set_lots "$d/campaign.md"
+next_is 'empty queue' 1 'stop - - — ' '' "$d"
+for a in '' "$REPO/docs/campaigns/n-absent" "$REPO/docs/campaigns/n-run extra"; do
+  read -ra args <<< "$a"
+  PATH="$BOX/stub:$PATH" worker next ${args[@]+"${args[@]}"}
+  [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -q '^usage: sdd-worker ' <<< "$W_ERR" \
+    || got="${got:+$got; }next '$a': rc $W_RC, stdout '${W_OUT%%$'\n'*}'"
+done
+if [ -z "$got" ]; then
+  pass 'next: a gh that does not answer leaves rc 3, and a pull request closed without merge stops'
+else
+  fail 'next: a gh that does not answer leaves rc 3, and a pull request closed without merge stops' \
+    'rc 3 and no act for each unread answer; stop with rc 1 for each world that stops' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

@@ -346,25 +346,32 @@ checkouts_of() {
     | awk '!seen[$0]++'
 }
 
-# campaign_missions <root> <id> — the id of every mission of campaign <id>, one per line, each once:
-# the folders under HANDOFF_DIR (the root's; docs/handoffs when unset) of every checkout of the
-# root's repository whose 00-missao.md declares exactly `campaign: <id>`. ONE definition of which
-# missions are a campaign's. An empty <id> prints nothing, since it would match every mission that
-# belongs to no campaign; `budget` never reaches that branch (a legible delegation names its
-# campaign), and it is kept because it decides what an empty id answers: no mission, never all.
-campaign_missions() {
+# campaign_mission_dirs <root> <id> — the folder of every copy of every mission of campaign <id>,
+# one per line: the folders under HANDOFF_DIR (the root's; docs/handoffs when unset) of every
+# checkout of the root's repository whose 00-missao.md declares exactly `campaign: <id>`. ONE
+# definition of which missions are a campaign's, for both readers: budget counts their ids, next
+# reads their copies. An empty <id> prints nothing, since it would match every mission that belongs
+# to no campaign; neither verb reaches that branch (a legible delegation names its campaign, and
+# next stops on a campaign.md that names none), and it is kept because it decides what an empty id
+# answers: no mission, never all.
+campaign_mission_dirs() {
   local root="$1" id="$2" hd wt m
   [ -n "$root" ] && [ -n "$id" ] || return 0
   hd="$(config_key "$root" HANDOFF_DIR)"
   hd="${hd:-docs/handoffs}"
   while IFS= read -r wt; do
     for m in "$wt/$hd"/*/00-missao.md; do
-      if [ -f "$m" ] && [ "$(fm_value "$m" campaign)" = "$id" ]; then
-        m="${m%/00-missao.md}"
-        printf '%s\n' "${m##*/}"
-      fi
+      if [ -f "$m" ] && [ "$(fm_value "$m" campaign)" = "$id" ]; then printf '%s\n' "${m%/00-missao.md}"; fi
     done
-  done < <(checkouts_of "$root") | awk '!seen[$0]++'
+  done < <(checkouts_of "$root")
+}
+
+# campaign_missions <root> <id> — the id of every mission of campaign <id>, one per line, each once:
+# the folder names of campaign_mission_dirs, a mission copied in two checkouts counted once.
+campaign_missions() {
+  local p
+  campaign_mission_dirs "$1" "$2" | while IFS= read -r p; do printf '%s\n' "${p##*/}"; done \
+    | awk '!seen[$0]++'
 }
 
 # budget <campaign-dir> — what the campaign spent against its ceiling: the cost_usd of every ledger
@@ -403,13 +410,135 @@ cmd_budget() {
   if [ "${out##* }" = true ]; then return 1; fi
 }
 
+# approved <00-missao.md> — 0 when its aprovacao: is one the runner's gate_PLAN admits: auto, or
+# humano-<date>. Positive, and the runner's own grammar: an empty value, or the template's
+# placeholder, is a plan nobody approved.
+approved() {
+  case "$(fm_value "$1" aprovacao)" in auto | humano-*) return 0 ;; *) return 1 ;; esac
+}
+
+# lot_of <lot> <mission-dir...> — PUBLISHES LOT_DIRS, every copy among <mission-dir...> whose
+# 00-missao.md declares exactly `lot: <lot>`, and LOT_IDS, their distinct mission ids. Called, never
+# substituted: under `$( )` both arrays would die with the subshell.
+lot_of() {
+  local lot="$1" p i seen
+  shift
+  LOT_DIRS=(); LOT_IDS=()
+  for p in "$@"; do
+    [ "$(fm_value "$p/00-missao.md" lot)" = "$lot" ] || continue
+    LOT_DIRS+=("$p")
+    seen=""
+    for i in ${LOT_IDS[@]+"${LOT_IDS[@]}"}; do [ "$i" != "${p##*/}" ] || seen=1; done
+    [ -n "$seen" ] || LOT_IDS+=("${p##*/}")
+  done
+}
+
+# pr_states <root> <branch> — the pull requests whose head is <branch>, PUBLISHED in PR_STATES as one
+# `<number> <state>` per line, from `gh pr list --head <branch> --state all --json number,state` run
+# at <root>, the checkout gh infers the repository from. Returns 1, with the reason in GH_WHY, when
+# gh failed or answered anything but one array whose every element has a state of OPEN, CLOSED or
+# MERGED — an empty answer included: an answer that was not read is never "no pull request", which
+# would send a lot to run again. An element that is not an object makes jq itself fail on `.state`,
+# so no rule of its own says so; the number is only printed.
+pr_states() {
+  local out rc=0
+  out="$(CDPATH='' cd -- "$1" && gh pr list --head "$2" --state all --json number,state)" || rc=$?
+  if [ "$rc" -ne 0 ]; then GH_WHY="gh pr list --head $2 failed (rc $rc)"; return 1; fi
+  if ! PR_STATES="$(jq -rn 'input
+         | if type == "array" and all(.[]; .state | IN("OPEN", "CLOSED", "MERGED"))
+           then .[] | "\(.number) \(.state)" else error("off the contract") end' 2> /dev/null <<< "$out")"; then
+    GH_WHY="gh pr list --head $2 answered no array of pull requests in a known state: '${out:0:80}'"
+    return 1
+  fi
+}
+
+# next <campaign-dir> — the next act of the campaign, from the queue, the missions on disk and gh.
+# It walks the lots of campaign.md in the order of the table and stops at the first one not merged:
+# no mission → plan; a mission not approved → approve; approved with no pull request → run; a pull
+# request open → review; only closed ones → stop. A merged pull request makes the lot done, and a
+# queue whose every lot is merged is done. When the act is run or review and the lot after it has no
+# mission, a second line says the session may plan that one ahead. rc 0; rc 1 when the line is
+# stop; rc 3, and no act at all, when gh did not answer. What next cannot decide stops it, naming
+# why: no campaign.md, an empty campaign:, a directory outside a git checkout, an empty queue, two
+# missions on one lot, and an approved mission with no branch — `gh pr list --head ''` lists every
+# pull request of the repo, and one merged anywhere would read as this lot's.
+# A mission is found as budget finds them, in the campaign's checkout and in every linked worktree,
+# so a lot in flight is never planned again. Copies of one mission are one mission, approved only
+# when every copy is: approve is the act the ladder grants last, run is not. Declared limit: the
+# branch read is the first copy's that names one.
+cmd_next() {
+  [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
+  local dir="${1%/}" cf id root l i m p branch act="" ahead="" n s merged open closed
+  local -a lots=() dirs=()
+  cf="$dir/campaign.md"
+  if [ ! -f "$cf" ]; then printf 'stop - - — no campaign: %s does not exist\n' "$cf"; return 1; fi
+  id="$(fm_value "$cf" campaign)"
+  if [ -z "$id" ]; then printf 'stop - - — illegible: campaign: is empty in %s\n' "$cf"; return 1; fi
+  root="$(repo_root "$dir")"
+  if [ -z "$root" ]; then printf 'stop - - — %s is not inside a git checkout\n' "$dir"; return 1; fi
+  while read -r l _; do lots+=("$l"); done < <(lots_table "$cf")
+  if [ "${#lots[@]}" -eq 0 ]; then
+    printf 'stop - - — the queue is empty: no row under ## Lotes in %s\n' "$cf"; return 1
+  fi
+  mapfile -t dirs < <(campaign_mission_dirs "$root" "$id")
+  for i in "${!lots[@]}"; do
+    l="${lots[$i]}"
+    lot_of "$l" ${dirs[@]+"${dirs[@]}"}
+    if [ "${#LOT_IDS[@]}" -eq 0 ]; then act="plan $l - — no mission of campaign $id declares lot: $l"; break; fi
+    if [ "${#LOT_IDS[@]}" -gt 1 ]; then
+      act="stop $l - — more than one mission declares lot: $l (${LOT_IDS[*]})"; break
+    fi
+    m="${LOT_IDS[0]}"
+    for p in "${LOT_DIRS[@]}"; do
+      if ! approved "$p/00-missao.md"; then
+        act="approve $l $m — not approved: $p/00-missao.md has aprovacao: '$(fm_value "$p/00-missao.md" aprovacao)'"
+        break
+      fi
+    done
+    [ -z "$act" ] || break
+    branch=""
+    for p in "${LOT_DIRS[@]}"; do
+      branch="$(fm_value "$p/00-missao.md" branch)"
+      [ -z "$branch" ] || break
+    done
+    if [ -z "$branch" ]; then act="stop $l $m — the mission names no branch: ${LOT_DIRS[0]}/00-missao.md"; break; fi
+    if ! pr_states "$root" "$branch"; then
+      printf 'sdd-worker: %s — no act is named: an answer that was not read is never "no pull request"\n' \
+        "$GH_WHY" >&2
+      return 3
+    fi
+    merged=""; open=""; closed=""
+    while read -r n s; do
+      case "$s" in MERGED) merged="$merged #$n" ;; OPEN) open="$open #$n" ;; CLOSED) closed="$closed #$n" ;; esac
+    done <<< "$PR_STATES"
+    if [ -n "$merged" ]; then continue; fi
+    if [ -n "$open" ]; then act="review $l $m — pull request$open is open on $branch"
+    elif [ -n "$closed" ]; then act="stop $l $m — pull request closed without merge:$closed"
+    else act="run $l $m — approved, and no pull request has the head $branch"
+    fi
+    break
+  done
+  [ -n "$act" ] || act="done - - — every lot of the queue is merged (${#lots[@]} lot(s))"
+  case "$act" in
+    run\ * | review\ *)
+      if [ "$((i + 1))" -lt "${#lots[@]}" ]; then
+        lot_of "${lots[$((i + 1))]}" ${dirs[@]+"${dirs[@]}"}
+        [ "${#LOT_IDS[@]}" -gt 0 ] || ahead="ahead plan ${lots[$((i + 1))]}"
+      fi ;;
+  esac
+  printf '%s\n' "$act"
+  [ -z "$ahead" ] || printf '%s\n' "$ahead"
+  case "$act" in stop\ *) return 1 ;; esac
+}
+
 main() {
   case "${1:-}" in
     delegate) shift; cmd_delegate "$@" ;;
     level) shift; cmd_level "$@" ;;
     allows) shift; cmd_allows "$@" ;;
     budget) shift; cmd_budget "$@" ;;
-    next | pr-ready)
+    next) shift; cmd_next "$@" ;;
+    pr-ready)
       printf 'sdd-worker: %s is not implemented yet\n' "$1" >&2
       return 2 ;;
     *) usage; return 2 ;;
