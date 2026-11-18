@@ -131,6 +131,28 @@ durante as runs. Os sucessos:
 | M28 | **Um agente Opus consertou a interface em cerca de 20 min**, com TDD, sabotagem, `--smoke-ui` e captura. O relay olhou a imagem antes de afirmar o conserto. | `FocusClearanceTests`; `8f71124` a `a368c94` | O conserto de defeito de perfil é delegável, e a captura é conferida por quem afirma |
 | M29 | **A sessão principal gastou contexto onde não precisava**: o relatório inteiro do `/codereview` no chat, status a cada notificação, as 10 voltas do grill pelo relay, leituras grandes (o índice do `CLAUDE.md`, imagens) e o render do plano. | sessão `9126c7a5` | O orquestrador fala uma linha por evento; agentes devolvem veredito curto e gravam o detalhe em arquivo; relatório e plano vão para arquivo; o grill delegado fica com o planner; o fluxo do PR vai a um agente "pastor de PR". A skill `codereview` gravar o relatório em arquivo e imprimir só a nota é candidato a retro |
 
+### A 7b e a 7b1, de dia (2026-11-17)
+
+A sessão nova perguntou ao dono, uma única vez, se a delegação da cadeia continuava, e ele respondeu SIM às 08:23. A run da 7b
+abriu o PR #44 do `dotp-remake` às 14:17: US$ 145,29 em 18 sessões, com a REVIEW r2 em A. Dessa vez o dono acompanhou o dia inteiro,
+com o jogo rodando na tela dele. A cadeia seguiu com as regras do M29, e os resultados foram estes:
+- **A 7b foi mergeada às ~17:20** (`6600362`). Antes do merge passaram três consertos, a passada dos perfis, duas rodadas do
+  `/codereview` (r3 B, r4 A) e o Codex limpo.
+- **Saíram mais três PRs no mesmo dia:** o do llm_wiki do alvo (#45), o pós-merge (#46) e a 7b1, aprovada e lançada às ~17:50.
+- **O replanejamento da 7b2 começou em esteira,** durante a run da 7b1.
+- **A sessão principal fechou o dia com 31,9% da janela.** Cada agente devolveu de 4 a 10 linhas, e o detalhe ficou em
+  `~/.wt/exec-7b/pos/`.
+
+| # | Fato | Evidência | Para a opção |
+|---|---|---|---|
+| M30 | **O "pastor de PR" funciona num subagente.** Um agente geral no Opus chamou a skill `codereview` pelo `Skill` e levou três PRs até "pronto para merge": a revisão em A, os consertos com TDD, o Codex pelo sha e o corpo do PR. O orquestrador leu só o veredito e fez o merge com `--match-head-commit`. | #44 (r3 B → r4 A, `926de05`), #45 (r1 B → r4 A), #46 (r1 A) | O passo W7 inteiro cabe num agente. O merge fica com quem tem a delegação, e o agente nunca o faz |
+| M31 | **O planner respondeu o próprio grill.** O brief mandou responder cada pergunta pela recomendada, gravar a resposta no `00-missao.md` e só devolver o que saísse do escopo. Foram 14 de 14 perguntas na 7b1 sem nenhuma volta pelo relay, contra as 10 voltas da 7b2 (M29). | `00-missao.md` da 7b1 | A delegação do grill vai no brief do planner, com a lista explícita do que é "fora do escopo" |
+| M32 | **O dono escolheu sem ter visto a imagem.** O relay mandou as quatro variantes do comp e perguntou logo em seguida. O dono escolheu a recomendada (C) e voltou atrás minutos depois ("pera que eu não vi as fotos"), já com o planner retomado para a C. Depois de ver, ele ficou com a A. | rodada 6 do comp; o planner parado e retomado | Uma escolha visual só é pedida depois de o humano dizer que viu. O worker abre a imagem onde ele está olhando, e no WSL isso é o visualizador do Windows (`explorer.exe`) |
+| M33 | **O jogo rodando achou o que a QA e a REVIEW não acharam.** Abrindo uma cópia destacada do head (`git worktree add --detach` mais o `watch.sh`), o dono viu a arte chegar atrasada às placas e a luz da prioridade escurecer o outro lado. Ele também pediu a missão nova da "mesa cheia". | PR #44, seção "Depois do pipeline" | Antes do merge, o worker oferece uma espiada numa cópia que não é o worktree da run. Essa espiada não substitui o aceite (M9) |
+| M34 | **Uma missão foi inserida no meio da cadeia.** A 7b1 entrou antes da 7b2 por decisão do dono, depois de um estudo de espaço e de uma rodada de comp. A 7b2 é replanejada em esteira sobre o plano da 7b1, como a 7b2 original foi planejada sobre o da 7b. | ordem do roadmap §7 (#46) | A delegação sobrevive à inserção quando a decisão é do dono. Falta um estado "replanejar a N+1" depois de inserir uma missão |
+| M35 | **Um merge foi segurado para não invalidar a revisão em curso.** O #45 ficou pronto antes do #44 e esperou. Depois do merge da 7b, absorveu a `main` sem conflito e precisou só de uma rodada sobre o delta. | `8f8c8f0` | Aplica o M4: na fila, o PR caro entra primeiro e o barato absorve a `main` |
+| M36 | **O approve não leva o que o planner grava fora da pasta da missão**, como a página do llm_wiki e as linhas de índice. O relay commitou essas mudanças à parte. | `fa9bd84` no `dotp-remake`; achado no `TODO.md` | Com a regra de gravar o que se explora, o worker confere a árvore antes do approve |
+
 ## 5. O que a opção precisaria decidir (perguntas, não decisões)
 
 - **Onde se delega.** Nesta noite foi por palavra, para PRs nomeados e com prazo implícito

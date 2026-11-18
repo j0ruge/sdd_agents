@@ -707,6 +707,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   planner criou 0026 e 0027 vazios para pular, apagou-os, e saiu 0028. Sem isso, a colisão só aparece no merge.
   Direção: `--after <n>`, ou ler também os `docs/adr/` das outras branches e worktrees do repositório.
   — descoberto pelo planner na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
+  RECURRED 1: dotp-remake/20261117-plano-7-b1-a-mesa-cheia (2026-11-17)
+
+- [ ] **O `sdd approve` deixa fora do commit o que o planner escreveu fora da pasta da missão** —
+  `bin/sdd:9210` (`cmd_approve`) — o commit leva só a pasta e o ADR. No `dotp-remake`, o planner da 7b1 deixou a página
+  do llm_wiki, a linha dela no `indice.md`, no `log.md` e no índice do `CLAUDE.md`, sem commit; o relay as commitou à
+  parte (`fa9bd84`). Com a regra do alvo de gravar o que se explora, isso vira rotina. Direção: o approve lista o que
+  está modificado ou não rastreado fora da pasta e pergunta se entra, ou recusa com a lista.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261117-plano-7-b1-a-mesa-cheia` (2026-11-17)
+
+- [ ] **Mitigação de risco do plano sem incremento se perde, e a REVIEW dá A mesmo assim** —
+  `templates/plano.md:41` (`Riscos e não-feitos`) — o `01-plano.md:840` da 7b previu o engasgo da assadura e propôs
+  assar os decks antes do primeiro quadro; nenhum incremento levou isso, o portão do I12 provava só que a arte chega,
+  e a REVIEW deu A. O dono viu as janelas pretas no jogo, e o conserto foi à mão (`322aca8`..`1d1a0b7`). Direção: a
+  coluna Mitigação aponta o incremento e o Check, ou "adiado → <missão>", e o PLAN-AUTO reprova a linha sem nenhum.
+  — descoberto pelo dono e pelo relay na missão `20261116-plano-7-b-o-palco-3d` (2026-11-17)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
