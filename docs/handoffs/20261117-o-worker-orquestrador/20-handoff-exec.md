@@ -160,7 +160,7 @@ worktree ligado, sem `KIT-TOUCHED`, `hat-crossed` nem escalada no `pipeline.log`
 - **O carimbo de mutação não rodou**, pela regra do dono; o `gate_PR` deve sair com rc 2 pedindo `./bin/sdd health`, e isso se lê como "PR pronto para revisão" (pendência 6)
 - **A quarta pergunta do §4 do caderno** (missão sem jornada num repo com interface) não foi decidida pela ADR 0022: o caderno a registra como deixada ao W4 (`ENV_UP_CMD`). Decidir se vira missão é seu
 - **A missão do L1 já existe aprovada** (`20261117-l1-a-prosa-do-chapeu`, `469971a`, no worktree `~/repos/sdd_agents-l1`): com a delegação assinada, o primeiro ato do worker é `run L1`, não `plan L1`
-- **O Check do I9 espera `3`, e a família `command:` imprime `4` desde o R10**, cujo Check (`4`) conta a mesma família: o mesmo conflito entre duas células do plano que o R9 teve com o I1 (acertado em `5565a41`). A linha do I9 não foi mexida; acertar o esperado é da sessão orquestradora
+- **O Check do I9 espera `3`, e a família `command:` imprime `4` desde o R10**, cujo Check (`4`) conta a mesma família: o mesmo conflito entre duas células do plano que o R9 teve com o I1 (acertado em `5565a41`). Acertado pela sessão orquestradora em `995c4ad` (o esperado do I9 passa a `4`)
 
 ## Riscos e não-feitos
 
