@@ -2,9 +2,9 @@
 missao: 20261117-o-worker-orquestrador
 fase: EXEC
 status: done
-sessao: e6a2eda8-ecc5-40a4-8a2a-812112ca70a6
-data: 2026-11-18 08:22
-gate: "tests/run-all.sh na árvore do 756fed3 → suite green, rc 0, 2139 linhas ok (2137 antes do R4), as mesmas 12 linhas FAIL dos controles negativos de antes; anchors: all 852 mutants still apply and leave valid code; tests/check-worker.sh → worker verbs: 43 probe(s), as dezoito famílias 1/3/6/4/3/5/7/3/1/1/2/1/1/1/1/1/1/1 (usage, delegate, level, allows, budget, next, pr-ready, command, docs, seal, legible, cap, rationale, lot, shown, worktree, pipe, zero); grep -c '^mut_WORKER_' tests/check-mutation.sh → 39; tests/check-todo.sh --anchors TODO.md → 83 measured, 0 off target; checkpoint 17 de 17 done (I1–I11, F1, F2, R1–R4)"
+sessao: c7ae6eea-5c8b-48b0-92fd-1cc437e56336
+data: 2026-11-18 09:19
+gate: "tests/run-all.sh na árvore do 7fde4ed → suite green, rc 0, 2140 linhas ok (2139 antes do R5), as mesmas 12 ocorrências de FAIL, todas texto dentro de linhas ok; anchors: all 854 mutants still apply and leave valid code; tests/check-worker.sh → worker verbs: 44 probe(s), as dezenove famílias 1/3/6/4/3/5/7/3/1/1/2/1/1/1/1/1/1/1/1 (usage, delegate, level, allows, budget, next, pr-ready, command, docs, seal, legible, cap, rationale, lot, shown, worktree, pipe, zero, pager); grep -c '^mut_WORKER_' tests/check-mutation.sh → 41; check-mutation.sh --only WORKER_pager_root_only e WORKER_pager_file_misnamed contra check-worker.sh → os dois morrem (rc 1); tests/check-todo.sh --anchors TODO.md → 83 measured, 0 off target; checkpoint 18 de 18 done (I1–I11, F1, F2, R1–R5)"
 ---
 
 # Handoff — EXEC — O worker orquestrador
@@ -14,19 +14,19 @@ gate: "tests/run-all.sh na árvore do 756fed3 → suite green, rc 0, 2139 linhas
 
 ## TL;DR
 
-Os onze incrementos, os dois consertos da QA (`F1`, `F2`), os dois da r1 (`R1`, `R2`) e os dois da
-r2 da REVIEW (`R3`, `R4`) estão feitos, um commit cada, e a suíte está verde no `756fed3`. O `R3` fez o
-`budget` ler o `.sdd/config.sh` de todo checkout do repo, os worktrees das missões inclusos; o `R4` fez
-os dois leitores da tabela de notas dividirem a linha como o `gate_REVIEW` (um `\|` é pipe da célula)
-e o teto por missão assinado zero parar nomeando a delegação. O sensor tem 43 asserções em dezoito
-famílias e 39 mutantes `mut_WORKER_*`. Próxima: a r3.
+Os onze incrementos, os dois consertos da QA (`F1`, `F2`) e os cinco da REVIEW (`R1`–`R5`) estão
+feitos, um commit cada, e a suíte está verde no `7fde4ed`. O `R5`, do achado #1 da r3, fez o `level`
+ler o pager no `.sdd/config.sh` de todo checkout do repo, o mesmo conjunto do `budget` desde o `R3`:
+um worktree com o `ON_ESCALATION_CMD` vazio responde `assisted — no pager`, nomeando o arquivo dele.
+O sensor tem 44 asserções em dezenove famílias e 41 mutantes `mut_WORKER_*`. A r3 foi a última de
+`REVIEW_MAX_ITER=3`: uma r4 que reavalie o `R5` é decisão do humano.
 
 ## Estado do repo
 
 - **Branch:** `feat/o-worker-orquestrador`, só local, sem upstream (nada foi empurrado)
-- **Último commit de código:** `756fed3` `fix(worker): o pipe escapado na tabela de notas e o teto assinado zero`; este handoff, as notas e o checkpoint vêm num commit logo depois
+- **Último commit de código:** `7fde4ed` `fix(worker): o level confere o pager no config de todo checkout do repo`; este handoff, as notas e o checkpoint vêm num commit logo depois
 - **Working tree:** limpo depois do commit do handoff
-- **Suíte:** `tests/run-all.sh` → verde, rc 0, 2139 linhas `ok`, 852 mutantes aplicam (`--anchors`); as 12 linhas `FAIL` do log são as dos controles negativos dos sensores, as mesmas antes e depois do R4
+- **Suíte:** `tests/run-all.sh` → verde, rc 0, 2140 linhas `ok`, 854 mutantes aplicam (`--anchors`); as 12 ocorrências de `FAIL` no log são texto dentro de linhas `ok` (os controles negativos dos sensores), as mesmas antes e depois do R5
 - **E2E:** não há `E2E_CMD`: o kit é bash e markdown, sem interface
 
 ## O que foi feito
@@ -58,13 +58,17 @@ famílias e 39 mutantes `mut_WORKER_*`. Próxima: a r3.
 - `7747f6b` — R3 (#1, HIGH): o `budget` aplica a regra do R1 ao `.sdd/config.sh` de todo checkout que o `checkouts_of` lista, o da campanha primeiro e cada worktree ligado depois, guarde ele missão da campanha ou não (o conjunto mais largo, o lado seguro), e a parada nomeia o arquivo do worktree. Família nova `worktree: ` (1 linha), dois mutantes `mut_WORKER_worktree_*`
 - `756fed3` — R4 (#2 e #3, LOW): o `round_grades` e o `round_unjustified` dividem a linha pelo `cells()` do `GRADE_ROW_AWK`, cópia do `escaped_pipe` e da reemenda do `gate_REVIEW` — a justificativa `<why \| in one sentence>` deixa de passar, e um critério com `\|` deixa de deslocar um B para fora da coluna da nota (mesmo corte no outro leitor, com o lado aberto pior, consertado junto); o `budget_mission_usd: 0` assinado para o `budget` antes de qualquer config, nomeando a delegação. Famílias novas `pipe: ` (diferencial contra o split do `gate_REVIEW` lido do `bin/sdd`) e `zero: ` (1 linha cada), quatro mutantes (`pipe_*` 3, `zero_signed_unchecked`)
 
+### Rodada r3 da REVIEW (`R5`, do achado #1 do `40-review-r3.md`)
+
+- `7fde4ed` — R5 (#1, MEDIUM): a regra `no pager` do `effective_level` lê o `ON_ESCALATION_CMD` no `.sdd/config.sh` de todo checkout que o `checkouts_of` lista, o da campanha primeiro e cada worktree ligado depois, guarde ele missão ou não (o conjunto do `budget`), e o motivo nomeia o primeiro arquivo vazio; `level` e `allows` respondem pela mesma definição. O ramo fora de checkout git virou guarda própria antes do laço (o `checkouts_of ""` leria os worktrees do cwd) e responde o de antes, `(no repo)`. Família nova `pager: ` (1 linha, o R44 do sensor: worktree com missão, sem missão, o inverso, o controle e o mundo fora de git), dois mutantes `mut_WORKER_pager_*`; o worktree do fixture do R15 ganhou o config do repo do fixture, como um worktree real ganha o config commitado
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
 | `bin/sdd-worker` | o programa: `delegate`, `level`, `allows`, `budget`, `next`, `pr-ready` |
-| `tests/check-worker.sh` | o sensor, 43 asserções em dezoito famílias (`seal: ` e `legible: ` da QA, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: ` e `zero: ` da REVIEW inclusas), com controle negativo nas famílias de prosa |
-| `tests/check-mutation.sh` | 39 mutantes `mut_WORKER_*` no `CATALOG` |
+| `tests/check-worker.sh` | o sensor, 44 asserções em dezenove famílias (`seal: ` e `legible: ` da QA, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `, `zero: ` e `pager: ` da REVIEW inclusas), com controle negativo nas famílias de prosa |
+| `tests/check-mutation.sh` | 41 mutantes `mut_WORKER_*` no `CATALOG` |
 | `tests/fixtures/codex-review-state.txt` | o comentário de máquina do Codex, copiado do PR 409 (proveniência no sensor) |
 | `commands/sdd-worker.md` | o comando da sessão orquestradora |
 | `templates/campaign.md`, `templates/delegation.md` | os dois contratos da campanha |
@@ -74,26 +78,20 @@ famílias e 39 mutantes `mut_WORKER_*`. Próxima: a r3.
 
 ## Boot da próxima fase
 
-**REVIEW r3, depois de `R3` e `R4`.** Revise o diff `c021f95..756fed3` (os dois consertos e o
-commit de checkpoint do R3), reproduzindo numa cópia `mktemp -d` o que cada achado da r2 dizia. O que
-mudou e é visível na CLI:
+**Depois do `R5`: a r3 foi a última rodada de `REVIEW_MAX_ITER=3`.** Com três `40-review-r<N>.md`
+no disco (`review_rounds_on_disk`), o runner não abre uma quarta sozinho; abrir a r4 que reavalie o
+`R5` é decisão do humano. Se ela vier, revise o diff `83ef6e7..7fde4ed` e reproduza numa cópia
+`mktemp -d` o que o achado #1 da r3 dizia. O que mudou e é visível na CLI:
 
-- **`budget`** (R3) sai rc 1, `no mission cap — <arquivo> sets BUDGET_MISSION_USD=<valor>, …`, quando o
-  `.sdd/config.sh` de **qualquer** checkout do repo (o da campanha ou um worktree ligado) fixa a chave
-  acima do teto assinado, em zero, vazia ou fora de número, e nomeia o arquivo desse checkout.
-- **`budget`** (R4, #3) com `budget_mission_usd: 0` (ou `0.00`) assinado sai rc 1, `no mission cap —
-  <delegation.md> signs budget_mission_usd: 0, which sdd run reads as no ceiling; sign a cap above 0`,
-  antes de ler config nenhum; `0.5` é teto e vale.
-- **`pr-ready`** (R4, #2) divide cada linha da tabela de notas como o `gate_REVIEW`: um `\|` é pipe da
-  célula, `\\|` é barra literal contra um delimitador real. A justificativa-placeholder com pipe
-  escapado é recusada e a frase com pipe escapado passa; uma linha sem célula de justificativa
-  (`| Security | A`, que o runner pula) é recusada, o lado mais estrito.
+- **`level`** (R5), acima de `assisted`, responde `level assisted — no pager: ON_ESCALATION_CMD is
+  empty in <checkout>/.sdd/config.sh` quando o config de **qualquer** checkout do repo (o da campanha
+  ou um worktree ligado, com missão ou sem) deixa o pager vazio, ou não existe; nomeia o primeiro
+  arquivo nessa ordem. Fora de checkout git, `… in (no repo)/.sdd/config.sh`, como antes.
+- **`allows`** responde `ask <ato> needs <nível>, effective assisted — no pager: …` pelo mesmo motivo.
 
-As escolhas, os limites e cada sabotagem estão nas notas do `R3` e do `R4` do `checkpoint-notas.md`.
-A prosa da ADR 0022 (§3, "a digest of the other fields"; §8, "reaches the runner as
-BUDGET_MISSION_USD"; linhas 94 e 150, "every criterion A", "on the grade alone") não foi mexida:
-ficou menos precisa, não falsa, e é da DOCS. A linha 150 ("never the reverse on the grade alone")
-voltou a ser verdade com o R4.
+As escolhas, os limites e cada sabotagem estão nas notas do `R5` do `checkpoint-notas.md`. Os seis
+LOW de prosa da r3 (pendência 1 do `40-review-r3.md`) não foram mexidos: são da DOCS. A prosa da
+ADR 0022 continua como a r2 a deixou (§3, §8, linhas 94 e 150), também da DOCS.
 
 **O que vale desde a primeira QA, num repo sem interface.** O que é visível para quem usa o kit:
 
@@ -162,6 +160,13 @@ worktree ligado, sem `KIT-TOUCHED`, `hat-crossed` nem escalada no `pipeline.log`
 - **Dois limites que o R3 declara, no comentário do `cmd_budget`:** um worktree criado depois da chamada não é lido (o laço do comando chama o `budget` a cada volta, então a volta que roda uma missão lê o worktree que o plano dela criou); e um worktree alheio à campanha cujo config vence o teto também para (o lado seguro: o dono conserta o arquivo ou poda o worktree).
 - **A reemenda do pipe mora em três lugares** (`checkpoint_rows` e `gate_REVIEW` no `bin/sdd`, `GRADE_ROW_AWK` no `bin/sdd-worker`). Quem segura a do worker igual à do `gate_REVIEW` é o probe `pipe: `, que lê o `escaped_pipe` e o laço do runner e compara os veredictos; o `n > 0 &&` e o `n = 0` da cópia não têm mundo no worker e ficam para ela seguir a do runner linha a linha (notas do `R4`).
 - **A regra do preenchimento mora em dois programas** (`bin/sdd` e `bin/sdd-worker`). Quem as segura iguais é o probe `rationale: `, que lê a do runner e compara os veredictos; uma mudança numa só deixa o sensor vermelho.
+- **O pager fora do commit agora tem de estar em cada worktree** (R5): o dono que deixa o
+  `ON_ESCALATION_CMD` só no checkout da campanha, sem commitar a linha, vê o `level` cair para
+  `assisted — no pager` nomeando o worktree da missão, até escrevê-la lá. É a regra da decisão 10
+  aplicada onde o runner avisa, e a prosa do `templates/delegation.md` e da campanha do kit diz isso.
+  Dois limites no comentário do `effective_level`: worktree sem pasta (prunable) lê sem pager até o
+  `git worktree prune` (o lado seguro), e worktree criado depois da chamada não é lido (o laço
+  pergunta `allows` antes de cada ato).
 - **A catraca não se moveu** (`todo-findings 83`): nenhum item entrou ou saiu do `TODO.md`.
 
 ## Achados fora de escopo
