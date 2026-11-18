@@ -80,19 +80,21 @@
 #   R23 `pr-ready` answers `ready <the full head sha>` when the five items hold on one sha: the
 #       newest round (by number: r10 after an r9 graded B) grades A in every row, the bold Overall
 #       one included, and names a reviewed head after which only the mission folder changed — a file
-#       whose name git quotes by default among them, and nothing at all when it names the head
-#       itself; the newest receipt of the Codex bot is for that sha, completed, with no unresolved
+#       whose name git quotes by default among them, and the commit right under the round's when it
+#       names that; each world's rounds committed, as R46 requires; the newest receipt of the Codex
+#       bot is for that sha, completed, with no unresolved
 #       finding, and it is on the second page, so the comments are read with --paginate; every review
 #       thread is resolved; the pull request is open and mergeable; the local HEAD is the head
 #   R24 the review item fails for a grade other than A (B in a strict row, in an indented one, A- in
 #       the bold Overall one), a newest round that names no head, or names HEAD, or a sha that is no
 #       commit, a change outside the mission folder after the reviewed head — a move into the folder
-#       included, so renames are not followed —, a pull request head this checkout does not have, no
+#       included, so renames are not followed —, a pull request head this checkout does not have (the
+#       ancestry is what does not run), no
 #       round, a round with no grade table, the root of the checkout given as the mission folder, and
 #       a folder outside any git checkout; an older round graded A beside the newest changes nothing
 #   R25 the codex item fails for a receipt for another sha, one not completed, one with an unresolved
 #       finding or a null for it, no receipt at all, a newest receipt whose state does not parse (an
-#       older good one is never read in its place), and a receipt for the head posted by somebody
+#       older good one is never read in its place, R48), and a receipt for the head posted by somebody
 #       other than the bot — anybody can comment on a public repo; the receipt is the real one of PR
 #       409
 #   R26 the threads item fails for one unresolved thread, and for more threads than the hundred read
@@ -164,11 +166,37 @@
 #       worktree — with a mission of the campaign or none — or in the campaign's checkout lowers the
 #       level to assisted naming that file, and `allows run` asks; the pager in every checkout is
 #       the signed level; a campaign outside any git checkout names `(no repo)`, never the cwd's
+#   R45 the review item knows the header and the separator of the grade table by the shape of the
+#       line, never by the grade: the separator is the row whose every cell is `:?-+:?`, the header
+#       the first row, its criterion `Criterion`; a criterion graded `---`, `:---:` or `Grade`, a row
+#       of dashes with one cell that is not, a `Criterion` row past the first and a criterion in the
+#       header's place are read and refused, a `| --- | A | --- |` row by its rationale; an aligned,
+#       a spaced and an open separator, and a header in bold, are skipped (achado #8 of the r5)
+#   R46 the review item refuses a mission folder holding anything git has not committed — a round
+#       modified, staged, untracked under status.showUntrackedFiles=no, or ignored, and a file
+#       whose name git quotes —, naming the first path and its status, over a head whose round
+#       grades B; a change outside the folder is ready; a git status that does not run is not-ready
+#       (achado #18 of the r5)
+#   R47 the review item reads every commit after the reviewed head against each parent, and needs
+#       the reviewed head to be an ancestor of the head: a change to code reverted later, a merge
+#       whose resolution changes code, and a reviewed commit the head does not carry each fail; the
+#       head itself passes the ancestry and is refused only by R46; an empty commit is ready; a git
+#       diff-tree that does not run is not-ready (achados #9 and #10 of the r5)
+#   R48 the receipt is the newest comment of the bot carrying the marker, chosen before it is
+#       parsed: one cut short, or whose code_review is no object, fails codex with rc 1, a good
+#       older one never read in its place; a comment of the bot without the marker is no receipt
+#       (achado #11 of the r5)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
 # and on copies with one thing taken out, where it has to name exactly that thing. A checker that
 # never misses is decoration.
+#
+# Declared limit, no probe: the review item stops when `git rev-list <reviewed_head>..<head>` does
+# not run, and no world here makes it fail — it walks the commits `git merge-base --is-ancestor` has
+# just walked between the same two shas, and reads no tree. The stop decides which failure a broken
+# history produces (without it, an empty list of commits reads as a range with nothing outside the
+# folder), so it stays, with the missing world named here.
 #
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
@@ -177,7 +205,7 @@
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
-# `zero: `, `pager: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that
+# `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that
 # opened it names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the
 # sensor at the first red, after printing it; the census in check-health.sh holds that clause.
 #
@@ -1299,8 +1327,13 @@ RR_REAL="$(CDPATH='' cd "$RR" && pwd -P)"
 [ "$(grep -c " | $RUN_RAT |\$" "$MD/40-review-r2.md")" = 8 ] && grep -qx "gate: $RUN_GATE" "$MD/40-review-r2.md" \
   || got="${got:+$got; }fixture: the round does not justify its eight rows and fill its gate:"
 
-# ready_reset — the ready repo at B, its two rounds as committed and nothing else on disk.
-ready_reset() { rm -f "$MD"/40-review-r*.md "$RR"/40-review-r*.md "$MD/note.md"; gitc reset -q --hard "$B"; }
+# ready_reset — the ready repo at B, its two rounds as committed and nothing else on disk, and B the
+# head a world is served with (HEADNOW).
+ready_reset() {
+  rm -f "$MD"/40-review-r*.md "$RR"/40-review-r*.md "$MD/note.md"; gitc reset -q --hard "$B"
+  HEADNOW="$B"
+}
+HEADNOW="$B"
 
 # The receipt is the real one: the body of the comment the Codex bot left on PR 409 of this repo,
 # saved on 2026-11-17 by
@@ -1319,23 +1352,36 @@ comment() {
     -e "$3" "$RECEIPT")" '{user: {login: $l}, body: $b}'
 }
 
-# serve <world> — the gh answers of pull request #PRN for <world>, every item true: open and
-# mergeable, with B as the head; the comments in two pages, written one array after the other as
-# `gh api --paginate` prints them, the first page carrying an older receipt of the bot (for Z1) and a
-# person's comment, the second the receipt for B; two threads, both resolved, in the shape
-# `gh api graphql` printed for PR 315 of this repo on 2026-11-17. The answers live in $BOX/ghfx/<world>.
+# serve <world> [<head>] — the gh answers of pull request #PRN for <world>, every item true: open and
+# mergeable, with <head> (B when none is given) as the head; the comments in two pages, written one
+# array after the other as `gh api --paginate` prints them, the first page carrying an older receipt
+# of the bot (for Z1) and a person's comment, the second the receipt for the head; two threads, both
+# resolved, in the shape `gh api graphql` printed for PR 315 of this repo on 2026-11-17. The answers
+# live in $BOX/ghfx/<world>.
 serve() {
-  local fx="$BOX/ghfx/$1"
+  local fx="$BOX/ghfx/$1" h="${2:-$B}"
   rm -rf "$fx"; mkdir -p "$fx"
   printf '%s\n' "$RR_REAL" > "$fx/root"
   printf '%s\n' "$PRN" > "$fx/number"
   printf 'j0ruge/fixture\n' > "$fx/repo"
-  printf '{"headRefOid":"%s","mergeable":"MERGEABLE","state":"OPEN"}\n' "$B" > "$fx/view"
+  printf '{"headRefOid":"%s","mergeable":"MERGEABLE","state":"OPEN"}\n' "$h" > "$fx/view"
   printf '[%s,%s]' "$(comment "$CODEX" "$Z1" '')" '{"user":{"login":"j0ruge"},"body":"thanks"}' \
     > "$fx/comments.1"
-  printf '[%s]' "$(comment "$CODEX" "$B" '')" > "$fx/comments.2"
+  printf '[%s]' "$(comment "$CODEX" "$h" '')" > "$fx/comments.2"
   printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"nodes":[{"isResolved":true},{"isResolved":true}]}}}}}' \
     > "$fx/threads"
+}
+
+# land <world> — the mission folder committed as the disk now has it, on top of the checkout's HEAD,
+# and <world> served with that commit as the head (HEADNOW): a round a world writes is the round the
+# pull request head carries, since the review item refuses a mission folder with a change not
+# committed (R46). The commit touches the mission folder alone, so the range after the reviewed head
+# stays the folder's (R47).
+land() {
+  gitc add -A -- "$H/20990300-ready"
+  gitc commit -q --allow-empty -m world
+  HEADNOW="$(git -C "$RR" rev-parse HEAD)"
+  serve "$1" "$HEADNOW"
 }
 
 # The gh stub of pr-ready answers the four questions the verb asks, from the world GHFX names, and
@@ -1382,18 +1428,23 @@ ready_is() {
 
 # --- R23: all five true at one sha --------------------------------------------------------------
 # The good world; the same world with its rounds renamed r9 and r10 and the r9 graded B (the newest
-# is r10 by number, and a glob, which sorts r10 first, would read the B); and a round naming the head
-# itself, on disk, where nothing changed after the reviewed head.
+# is r10 by number, and a glob, which sorts r10 first, would read the B); and a round naming the
+# commit under it, committed on top of B — the worker's own flow: the round names the HEAD it read,
+# and the commit that carries it is the head. Each world's rounds are committed (land): the review
+# item reads the round the head carries.
 serve good
 ready_is 'all five true' 0 "ready $B" good
 [ "$W_OUT" = "ready $B" ] || got="${got:+$got; }the line is '$W_OUT', not 'ready $B'"
 mv "$MD/40-review-r2.md" "$MD/40-review-r10.md"; mv "$MD/40-review-r1.md" "$MD/40-review-r9.md"
 sed -i 's@^| Security | A |@| Security | B |@' "$MD/40-review-r9.md"
 grep -q '^| Security | B |' "$MD/40-review-r9.md" || got="${got:+$got; }fixture: r9 was not graded B"
-ready_is 'r10 after an r9 graded B' 0 "ready $B" good
+land good-r10
+ready_is 'r10 after an r9 graded B' 0 "ready $HEADNOW" good-r10
 ready_reset
 round "$MD/40-review-r2.md" "$B"
-ready_is 'a round naming the head itself' 0 "ready $B" good
+land good-under
+ready_is 'a round naming the commit under it' 0 "ready $HEADNOW" good-under
+[ "$(git -C "$RR" rev-parse "$HEADNOW^")" = "$B" ] || got="${got:+$got; }fixture: the round's commit is not on B"
 ready_reset
 if [ -z "$got" ]; then
   pass 'pr-ready: all five true at one sha answers ready with the full sha'
@@ -1430,12 +1481,12 @@ sed -i 's@^### Overall Grade@### Grades@' "$MD/40-review-r2.md"
 grep -q '^### Grades' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 kept its grade heading"
 ready_is 'no grade table' 1 'not-ready review: ' good; ready_reset
 # The head the pull request names is not in this checkout, receipt and all: only the review item
-# can say so, since the diff it reads does not run.
+# can say so, since the ancestry it reads does not run.
 UNFETCHED=0000000000000000000000000000000000000007
 serve r-unfetched
 printf '{"headRefOid":"%s","mergeable":"MERGEABLE","state":"OPEN"}\n' "$UNFETCHED" > "$BOX/ghfx/r-unfetched/view"
 printf '[%s]' "$(comment "$CODEX" "$UNFETCHED" '')" > "$BOX/ghfx/r-unfetched/comments.2"
-ready_is 'a head not fetched' 1 'not-ready review: git diff ' r-unfetched
+ready_is 'a head not fetched' 1 'not-ready review: git merge-base --is-ancestor ' r-unfetched
 # The mission folder given as the root of the checkout: every path is under it.
 round "$RR/40-review-r2.md" "$A"
 ready_is 'the root as the mission folder' 1 'not-ready review: the mission folder ' good "$RR"; ready_reset
@@ -1510,14 +1561,16 @@ else
 fi
 
 # --- R28: the head item -------------------------------------------------------------------------
-# Ahead: a local commit on top of B. Behind: the checkout at A with the two rounds on disk, so the
-# review item still reads them.
+# Ahead: a local commit on top of B. Behind: the pull request head a commit on top of B that adds a
+# note to the mission folder, and the checkout back at B, whose rounds are committed, so the review
+# item still reads them and its folder is clean.
 got=""
 serve h-local
 printf 'note\n' > "$MD/note.md"; gitc add -A; gitc commit -q -m c
 ready_is 'local HEAD ahead' 1 'not-ready head: ' h-local; ready_reset
-gitc reset -q --hard "$A"; round "$MD/40-review-r1.md" "$A"; round "$MD/40-review-r2.md" "$A"
-ready_is 'local HEAD behind' 1 'not-ready head: ' h-local; ready_reset
+printf 'note\n' > "$MD/note.md"; land h-behind; gitc reset -q --hard "$B"
+[ ! -e "$MD/note.md" ] || got="${got:+$got; }fixture: the checkout did not go back to B"
+ready_is 'local HEAD behind' 1 'not-ready head: ' h-behind; ready_reset
 [ "$(git -C "$RR" rev-parse HEAD)" = "$B" ] || got="${got:+$got; }fixture: the ready repo did not go back to B"
 if [ -z "$got" ]; then
   pass 'pr-ready: a local HEAD that is not the pull request head fails head'
@@ -1957,7 +2010,7 @@ judged() {
   if [ "$2" = 0 ]; then
     { [ "$W_RC" = 1 ] && [[ "$W_OUT" != *$'\n'* ]] && [[ "$W_OUT" == "$3"* ]]; } && refused_n=$((refused_n + 1)) && return 0
   else
-    { [ "$W_RC" = 0 ] && [ "$W_OUT" = "ready $B" ]; } && kept_n=$((kept_n + 1)) && return 0
+    { [ "$W_RC" = 0 ] && [ "$W_OUT" = "ready $HEADNOW" ]; } && kept_n=$((kept_n + 1)) && return 0
   fi
   got="${got:+$got; }$1: the runner says $([ "$2" = 0 ] && echo refused || echo justified), pr-ready rc $W_RC '$W_OUT'"
 }
@@ -1975,6 +2028,7 @@ for cell in "${CELLS[@]}"; do
   set_row "$MD/40-review-r2.md" "$cell"
   t="${cell//[*\`]/}"
   rr=1; runner_refuses "$t" && rr=0
+  land rationale
   PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
   judged "rationale '$cell'" "$rr" "not-ready review: $MD/40-review-r2.md: Security grades A with a placeholder rationale (${t:-<empty>})"
 done
@@ -1984,23 +2038,27 @@ for w in "gate: $TG|$TG" 'gate:|' "gate: \"$TG\"|$TG" "gate: $RUN_GATE|$RUN_GATE
   set_gate "$MD/40-review-r2.md" "${w%%|*}"
   grep -qxF "${w%%|*}" "$MD/40-review-r2.md" || got="${got:+$got; }fixture: '${w%%|*}' did not land"
   rr=1; runner_refuses "${w#*|}" && rr=0
+  land rationale
   PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
   judged "'${w%%|*}'" "$rr" "not-ready review: the gate: of $MD/40-review-r2.md is a placeholder"
 done
 ready_reset
 set_gate "$MD/40-review-r2.md" -
 grep -q '^gate:' "$MD/40-review-r2.md" && got="${got:+$got; }fixture: the gate: line was not deleted"
+land rationale
 PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
 judged 'no gate:' 0 "not-ready review: the gate: of $MD/40-review-r2.md is a placeholder"
 ready_reset
 sed -i "s@ | $RUN_RAT |\$@ | <…> |@" "$MD/40-review-r2.md"
 [ "$(grep -c ' | <…> |$' "$MD/40-review-r2.md")" = 8 ] || got="${got:+$got; }fixture: the eight fill-ins did not land"
+land rationale
 PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
 judged 'the eight fill-ins of the template' 0 \
   "not-ready review: $MD/40-review-r2.md: Code Quality (Zen) grades A with a placeholder rationale (<…>)"
 ready_reset
 sed -i 's@^| 1 | <CRITICAL .*@| 1 | LOW | <…> | x |@' "$MD/40-review-r2.md"
 grep -qxF '| 1 | LOW | <…> | x |' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: the findings row did not land"
+land rationale
 PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
 judged 'a fill-in in the findings table' 1 ''
 ready_reset
@@ -2195,6 +2253,7 @@ for row in "${ROWS[@]}"; do
   else
     rr=1; want=""
   fi
+  land pipe
   PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
   judged "row '$row'" "$rr" "$want"
 done
@@ -2205,6 +2264,7 @@ ready_reset
 # row of fewer than four cells, and pr-ready, the stricter of the two, refuses it as an A no
 # sentence supports — never by the rationale the row above it left behind.
 set_line "$MD/40-review-r2.md" '| Security | A'
+land pipe
 PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
 { [ "$W_RC" = 1 ] && [ "$W_OUT" = "not-ready review: $MD/40-review-r2.md: Security grades A with a placeholder rationale (<empty>) — a grade no sentence supports is a label" ]; } \
   || got="${got:+$got; }a row with no Rationale cell: rc $W_RC '$W_OUT'"
@@ -2322,6 +2382,263 @@ if [ -z "$got" ]; then
 else
   fail 'pager: a mission worktree whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file' \
     "assisted naming the file of m (and run asked), of x, of the campaign's checkout; pr and run allowed with the pager in every checkout" "$got"
+fi
+
+# --- R45: the header and the separator, by the shape of the line ---------------------------------
+# A row of the grade table is skipped for its shape and never for its grade: the separator is the
+# row whose every cell is `:?-+:?` (aligned or not, closed by a pipe or not), and the header is the
+# first row of the table, its criterion reading `Criterion`. Every other row is a criterion, read
+# and held to A. Decided by the grade, as the verb did (achado #8 of the review r5), a criterion
+# graded `---` or `Grade` was skipped, and the round was ready with no grade for it. Each world
+# writes one line of the newest round (r2) in place of another, commits it (land) and reads the
+# whole answer, so a refusal by another row or another item never passes for this one:
+#   dash      `| Security | --- | Not evaluated |`       not-ready, grades ---
+#   colon     `| Security | :---: | Not evaluated |`     not-ready, grades :---:
+#   dashes    `| Security | --- | --- |`                 not-ready, grades ---: the criterion is a cell too
+#   lastcell  `| --- | --- | Not evaluated |`            not-ready, grades ---: and so is the last one
+#   word      `| Security | Grade | Not evaluated |`     not-ready, grades Grade
+#   critdash  `| --- | B | Not evaluated |`              not-ready, grades B: a separator is every cell
+#   ratdash   `| --- | A | --- |`                        not-ready, the rationale `---` a fill-in
+#   midhead   `| Criterion | B | Not evaluated |`       not-ready, grades B: the header is the first row
+#   nohead    the header itself `| Security | B | Not evaluated |`   not-ready, grades B
+#   boldhead  the header in bold, `| **Criterion** | **Grade** | **Rationale** |`   ready
+#   aligned   the separator `|:---|:---:|---:|`          ready
+#   spaced    the separator `| --- | --- | --- |`        ready
+#   open      the separator `|---|---|---`, no closing pipe     ready
+# gate_REVIEW decides by the criterion cell, so it reads the first three and the two header worlds
+# as pr-ready does; critdash and ratdash it skips, and pr-ready is there the stricter of the two.
+got=""
+R2F="$MD/40-review-r2.md"
+SROW="| Security | A | $RUN_RAT |"; SEPL='|-----------|-------|-----------|'; HEADL='| Criterion | Grade | Rationale |'
+{ grep -qxF -- "$SROW" "$R2F" && grep -qxF -- "$SEPL" "$R2F" && grep -qxF -- "$HEADL" "$R2F"; } \
+  || got="fixture: r2 lacks its Security row, its separator or its header as the template writes them"
+# swap_line <round> <old> <new> — the first line of <round> that is exactly <old> replaced by <new>.
+swap_line() {
+  OLD="$2" NEW="$3" awk '!done && $0 == ENVIRON["OLD"] { print ENVIRON["NEW"]; done = 1; next } { print }' \
+    "$1" > "$1.new" && mv "$1.new" "$1"
+  grep -qxF -- "$3" "$1" || got="${got:+$got; }fixture: the line '$3' did not land"
+}
+# sep_is <label> <old> <new> <rc> <want> — r2 with <old> swapped for <new>, committed, then pr-ready;
+# appends to got unless it left <rc> and the one line <want>, whole (`ready` is the landed head).
+sep_is() {
+  local want="$5"
+  ready_reset
+  swap_line "$R2F" "$2" "$3"
+  land sep
+  [ "$want" != ready ] || want="ready $HEADNOW"
+  PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+  { [ "$W_RC" = "$4" ] && [ "$W_OUT" = "$want" ]; } || got="${got:+$got; }$1: rc $W_RC '$W_OUT' (want rc $4 '$want')"
+}
+export GHFX="$BOX/ghfx/sep"
+gr="not-ready review: $R2F grades"; ge=', and every row must read A'
+sep_is dash "$SROW" '| Security | --- | Not evaluated |' 1 "$gr ---$ge"
+sep_is colon "$SROW" '| Security | :---: | Not evaluated |' 1 "$gr :---:$ge"
+sep_is dashes "$SROW" '| Security | --- | --- |' 1 "$gr ---$ge"
+sep_is lastcell "$SROW" '| --- | --- | Not evaluated |' 1 "$gr ---$ge"
+sep_is word "$SROW" '| Security | Grade | Not evaluated |' 1 "$gr Grade$ge"
+sep_is critdash "$SROW" '| --- | B | Not evaluated |' 1 "$gr B$ge"
+sep_is ratdash "$SROW" '| --- | A | --- |' 1 \
+  "not-ready review: $R2F: --- grades A with a placeholder rationale (---) — a grade no sentence supports is a label"
+sep_is midhead "$SROW" '| Criterion | B | Not evaluated |' 1 "$gr B$ge"
+sep_is nohead "$HEADL" '| Security | B | Not evaluated |' 1 "$gr B$ge"
+sep_is boldhead "$HEADL" '| **Criterion** | **Grade** | **Rationale** |' 0 ready
+sep_is aligned "$SEPL" '|:---|:---:|---:|' 0 ready
+sep_is spaced "$SEPL" '| --- | --- | --- |' 0 ready
+sep_is open "$SEPL" '|---|---|---' 0 ready
+ready_reset
+if [ -z "$got" ]; then
+  pass 'sep: the header and the separator are known by the shape of the line, so a criterion graded --- is read and is not A'
+else
+  fail 'sep: the header and the separator are known by the shape of the line, so a criterion graded --- is read and is not A' \
+    'not-ready for each criterion row graded --- or Grade, for --- rows that are not separators and a misplaced header; ready for each separator' "$got"
+fi
+
+# --- R46: the round the head carries -------------------------------------------------------------
+# The merge takes the head, never the disk (achado #18 of the review r5): a round on disk that the
+# head does not carry would authorize the merge of a round nobody committed, and the head item
+# proves the checkout is at the head, not that the mission folder is clean. So the review item
+# refuses a mission folder with any change not committed, naming the first path and the status git
+# gives it. Each world commits r2 graded B at the head (land) — the round the merge would take —
+# and leaves the disk saying otherwise:
+#   modified   r2 rewritten on disk graded A                 not-ready, status ` M`
+#   staged     the same rewrite staged, not committed         not-ready, status `M `
+#   untracked  a round r3 graded A and a note, never added, under status.showUntrackedFiles=no:
+#              not-ready, `??`, the first of the two named alone
+#   ignored    the same r3, ignored by .git/info/exclude      not-ready, status `!!`
+#   named      the good world, λ.txt (a name git quotes by default) modified: not-ready, the name as
+#              written
+#   config     a copy of the good world whose config sets status.branch to no boolean, which git
+#              status refuses and no other git call of the verb reads: not-ready naming the status,
+#              never a clean folder read from an empty answer
+#   outside    the good world, with src/app.txt modified on disk: ready — the refusal is the folder's
+got=""
+R3F="$MD/40-review-r3.md"
+# committed_is <label> <status> <path> — pr-ready over the world the caller left on disk; appends to
+# got unless it left rc 1 and the one line naming <path> (from the root) with its <status>.
+committed_is() {
+  local want="not-ready review: $3 in the mission folder is not committed (status '$2') — the merge takes the head, never the disk"
+  PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+  { [ "$W_RC" = 1 ] && [ "$W_OUT" = "$want" ]; } || got="${got:+$got; }$1: rc $W_RC '$W_OUT' (want rc 1 '$want')"
+}
+# graded_b_landed <world> — r2 graded B in Security, committed at the head <world> serves.
+graded_b_landed() {
+  ready_reset
+  sed -i 's@^| Security | A |@| Security | B |@' "$R2F"
+  land "$1"
+  export GHFX="$BOX/ghfx/$1"
+  grep -q '^| Security | B |' <<< "$(git -C "$RR" show "HEAD:$H/20990300-ready/40-review-r2.md")" \
+    || got="${got:+$got; }fixture: $1: the head does not carry r2 graded B"
+}
+graded_b_landed k-modified; round "$R2F" "$A"
+committed_is modified ' M' "$H/20990300-ready/40-review-r2.md"
+graded_b_landed k-staged; round "$R2F" "$A"; gitc add -- "$R2F"
+committed_is staged 'M ' "$H/20990300-ready/40-review-r2.md"
+graded_b_landed k-untracked; round "$R3F" "$A"; printf 'n\n' > "$MD/note.md"; gitc config status.showUntrackedFiles no
+[ -z "$(git -C "$MD" status --porcelain -- .)" ] || got="${got:+$got; }fixture: untracked: git status still lists r3"
+committed_is untracked '??' "$H/20990300-ready/40-review-r3.md"
+gitc config --unset status.showUntrackedFiles
+graded_b_landed k-ignored; round "$R3F" "$A"; printf '40-review-r3.md\n' >> "$RR/.git/info/exclude"
+[ -z "$(git -C "$MD" status --porcelain -- .)" ] || got="${got:+$got; }fixture: ignored: r3 is not ignored"
+committed_is ignored '!!' "$H/20990300-ready/40-review-r3.md"
+sed -i '/^40-review-r3\.md$/d' "$RR/.git/info/exclude"
+ready_reset; export GHFX="$BOX/ghfx/good"; printf 'm\n' > "$MD/λ.txt"
+committed_is named ' M' "$H/20990300-ready/λ.txt"
+ready_reset
+# copy_world <name> — a copy of the ready repo as it now stands, its path printed: the worlds that
+# break the repository itself never touch the one every other world reads.
+copy_world() { local c="$BOX/rc-$1"; rm -rf "$c"; cp -a "$RR" "$c"; printf '%s\n' "$c"; }
+CI="$(copy_world config)"
+serve k-config; (CDPATH='' cd "$CI" && pwd -P) > "$BOX/ghfx/k-config/root"; export GHFX="$BOX/ghfx/k-config"
+git -C "$CI" config status.branch maybe
+! git -C "$CI" status --porcelain > /dev/null 2>&1 || got="${got:+$got; }fixture: config: git status still runs"
+PATH="$BOX/stub-ready:$PATH" worker pr-ready "$CI/$H/20990300-ready" "$PRN"
+{ [ "$W_RC" = 1 ] && [ "$W_OUT" = "not-ready review: git status does not run in $CI/$H/20990300-ready" ]; } \
+  || got="${got:+$got; }config: rc $W_RC '$W_OUT'"
+printf 'dirty\n' > "$RR/src/app.txt"
+ready_is outside 0 "ready $B" good
+[ "$W_OUT" = "ready $B" ] || got="${got:+$got; }outside: the line is '$W_OUT', not 'ready $B'"
+ready_reset
+if [ -z "$got" ]; then
+  pass 'committed: a mission folder with a change not committed, staged, untracked or ignored fails review'
+else
+  fail 'committed: a mission folder with a change not committed, staged, untracked or ignored fails review' \
+    "rc 1 naming the path and its status for each world; ready with a change outside the folder" "$got"
+fi
+
+# --- R47: every commit after the reviewed head, and the reviewed head an ancestor ----------------
+# Commits after the reviewed head may touch only the mission folder, and that is read commit by
+# commit: the diff between the two ends does not see a change made and then undone (achado #10 of
+# the review r5), nor the resolution of a merge whose parents touch the folder alone. And the head
+# has to carry the reviewed commit (achado #9): a round that read a commit the pull request dropped
+# is a review of another history. The round of each world names its reviewed head; the head is
+# what the world served:
+#   revert   after B, C changes src/app.txt and D reverts it, the round naming A: not-ready, src/app.txt
+#            named with C — the diff between A and D touches the folder alone
+#   evil     after B, a merge of a side branch that only adds a note, its resolution changing
+#            src/app.txt: not-ready, src/app.txt named with the merge
+#   sibling  the round names E, a commit on A that only adds a note to the folder, which the head does
+#            not carry: not-ready, not an ancestor — every commit of E..head and the diff between the
+#            two touch the folder alone, so only the ancestry says no
+#   itself   the round on disk names B, the head: the ancestry accepts the head itself and the range
+#            is empty, so only the committed item (R46) refuses it
+#   empty    after B, an empty commit (a push to wake a bot): ready — a commit that changes nothing
+#            changes nothing outside the folder
+#   tree     a copy whose head C adds a note after B, and B's tree deleted from its objects: git
+#            diff-tree does not run on B, and the answer is not-ready naming B, never a range read as
+#            clean from an empty answer
+got=""
+pre="$H/20990300-ready/"
+range_is() {
+  PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+  { [ "$W_RC" = 1 ] && [ "$W_OUT" = "$2" ]; } || got="${got:+$got; }$1: rc $W_RC '$W_OUT' (want rc 1 '$2')"
+}
+# outside_of <a> <b> — the paths outside the mission folder that the diff between <a> and <b> lists.
+outside_of() { git -C "$RR" -c core.quotePath=false diff --no-renames --name-only "$1" "$2" | grep -v "^$pre" || true; }
+ready_reset
+printf 'three\n' > "$RR/src/app.txt"; gitc commit -q -am c; RC1="$(git -C "$RR" rev-parse HEAD)"
+gitc revert --no-edit HEAD > /dev/null; HEADNOW="$(git -C "$RR" rev-parse HEAD)"
+serve n-revert "$HEADNOW"; export GHFX="$BOX/ghfx/n-revert"
+[ -z "$(outside_of "$A" "$HEADNOW")" ] || got="${got:+$got; }fixture: revert: the diff between A and the head leaves the folder"
+range_is revert "not-ready review: src/app.txt changed in $RC1 after the reviewed head $A, outside $pre"
+ready_reset
+gitc checkout -q -b r-side "$B"; printf 'side\n' > "$MD/note.md"; gitc add -A; gitc commit -q -m side
+gitc checkout -q main; gitc merge -q --no-ff --no-commit r-side > /dev/null 2>&1
+printf 'evil\n' > "$RR/src/app.txt"; gitc add src/app.txt; gitc commit -q -m evil
+HEADNOW="$(git -C "$RR" rev-parse HEAD)"; serve n-evil "$HEADNOW"; export GHFX="$BOX/ghfx/n-evil"
+{ [ "$(git -C "$RR" rev-list --count --merges "$B..$HEADNOW")" = 1 ] \
+  && [ -z "$(git -C "$RR" diff-tree -r --no-commit-id --name-only "$HEADNOW")" ]; } \
+  || got="${got:+$got; }fixture: evil: the head is not a merge whose own diff git log shows empty"
+range_is evil "not-ready review: src/app.txt changed in $HEADNOW after the reviewed head $A, outside $pre"
+ready_reset; gitc branch -q -D r-side
+gitc checkout -q --detach "$A"; printf 'e\n' > "$MD/note.md"; gitc add -A; gitc commit -q -m e
+E="$(git -C "$RR" rev-parse HEAD)"; gitc checkout -q main
+round "$R2F" "$E"; land n-sibling; export GHFX="$BOX/ghfx/n-sibling"
+{ [ -z "$(outside_of "$E" "$HEADNOW")" ] \
+  && [ -z "$(git -C "$RR" -c core.quotePath=false log --format= --name-only --no-renames "$E..$HEADNOW" | grep -v "^$pre" | grep -v '^$' || true)" ]; } \
+  || got="${got:+$got; }fixture: sibling: E..head leaves the folder"
+range_is sibling "not-ready review: the reviewed head $E of $R2F is not an ancestor of the head $HEADNOW — the pull request does not carry the commit the round read"
+ready_reset
+round "$R2F" "$B"; export GHFX="$BOX/ghfx/good"
+range_is itself "not-ready review: $H/20990300-ready/40-review-r2.md in the mission folder is not committed (status ' M') — the merge takes the head, never the disk"
+ready_reset
+land n-empty
+[ -z "$(git -C "$RR" diff-tree -r --no-commit-id --name-only "$HEADNOW")" ] || got="${got:+$got; }fixture: empty: the commit changes a path"
+ready_is empty 0 "ready $HEADNOW" n-empty
+[ "$W_OUT" = "ready $HEADNOW" ] || got="${got:+$got; }empty: the line is '$W_OUT'"
+ready_reset
+CT="$(copy_world tree)"
+printf 'n\n' > "$CT/$H/20990300-ready/note.md"
+git -C "$CT" add -A; git -C "$CT" -c user.name=fixture -c user.email=fixture@example.com commit -q -m c
+CTH="$(git -C "$CT" rev-parse HEAD)"; BT="$(git -C "$CT" rev-parse "$B^{tree}")"
+rm -f "$CT/.git/objects/${BT:0:2}/${BT:2}"
+! git -C "$CT" cat-file -e "$BT" 2> /dev/null || got="${got:+$got; }fixture: tree: the tree of B is still there"
+serve n-tree "$CTH"; (CDPATH='' cd "$CT" && pwd -P) > "$BOX/ghfx/n-tree/root"; export GHFX="$BOX/ghfx/n-tree"
+PATH="$BOX/stub-ready:$PATH" worker pr-ready "$CT/$H/20990300-ready" "$PRN"
+{ [ "$W_RC" = 1 ] && [ "$W_OUT" = "not-ready review: git diff-tree $B does not run here" ]; } \
+  || got="${got:+$got; }tree: rc $W_RC '$W_OUT'"
+if [ -z "$got" ]; then
+  pass 'range: a commit after the reviewed head that touches code, a merge resolution and a reviewed head the pull request does not carry each fail review'
+else
+  fail 'range: a commit after the reviewed head that touches code, a merge resolution and a reviewed head the pull request does not carry each fail review' \
+    'rc 1 naming the path and the commit, or the reviewed head that is no ancestor; the head itself refused only as not committed' "$got"
+fi
+
+# --- R48: the newest receipt, read or refused ----------------------------------------------------
+# The receipt is the newest comment of the bot that carries the marker, chosen BEFORE its payload is
+# parsed: a newest one that does not parse says nothing, and an older good one is never read in its
+# place (achado #11 of the review r5). The worlds, on the good world's pages:
+#   truncated  the newest receipt cut before the `} -->` that closes its payload, a good receipt for
+#              the head on the page before it: not-ready codex, does not parse
+#   shapeless  the newest receipt's code_review a string, not an object: not-ready codex, rc 1 — a
+#              receipt that says nothing, never a gh off its contract
+#   chatter    after the bot's receipt for the head, a comment of the bot with no marker: ready —
+#              only a comment carrying the marker is a receipt
+got=""
+unparsed="not-ready codex: the newest receipt of $CODEX does not parse"
+serve k-truncated
+printf '[%s,%s]' "$(comment "$CODEX" "$B" '')" '{"user":{"login":"j0ruge"},"body":"thanks"}' > "$BOX/ghfx/k-truncated/comments.1"
+printf '[%s]' "$(comment "$CODEX" "$B" 's/,"security_review".*$//')" > "$BOX/ghfx/k-truncated/comments.2"
+tb="$(jq -r '.[0].body' "$BOX/ghfx/k-truncated/comments.2")"
+{ grep -qF 'codex-review-state:v1 {' <<< "$tb" && ! grep -q 'codex-review-state:v1 {.*} -->' <<< "$tb"; } \
+  || got="fixture: truncated: the newest receipt is not cut before its close"
+ready_is truncated 1 "$unparsed" k-truncated
+[ "$W_OUT" = "$unparsed" ] || got="${got:+$got; }truncated: the line is '$W_OUT'"
+serve k-shapeless
+printf '[%s]' "$(comment "$CODEX" "$B" 's/"code_review":{[^}]*}/"code_review":"done"/')" > "$BOX/ghfx/k-shapeless/comments.2"
+grep -qF '"code_review":"done"' <<< "$(jq -r '.[0].body' "$BOX/ghfx/k-shapeless/comments.2")" \
+  || got="${got:+$got; }fixture: shapeless: code_review kept its object"
+ready_is shapeless 1 "$unparsed" k-shapeless
+[ "$W_OUT" = "$unparsed" ] || got="${got:+$got; }shapeless: the line is '$W_OUT'"
+serve k-chatter
+printf '[%s,%s]' "$(comment "$CODEX" "$B" '')" \
+  "$(jq -cn --arg l "$CODEX" '{user: {login: $l}, body: "Codex is reviewing this pull request."}')" > "$BOX/ghfx/k-chatter/comments.2"
+ready_is chatter 0 "ready $B" k-chatter
+[ "$W_OUT" = "ready $B" ] || got="${got:+$got; }chatter: the line is '$W_OUT'"
+if [ -z "$got" ]; then
+  pass 'receipt: the newest comment of the bot with the marker is the receipt, and one that does not parse fails codex'
+else
+  fail 'receipt: the newest comment of the bot with the marker is the receipt, and one that does not parse fails codex' \
+    'not-ready codex for a truncated and a shapeless newest receipt; ready with a comment of the bot without the marker after it' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

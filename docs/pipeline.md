@@ -1950,25 +1950,33 @@ with rc 1.
 **`pr-ready`** reads the pull request head (`headRefOid`) and requires five items on that one sha,
 naming the first that fails:
 
-1. `review`: the newest `40-review-r<N>.md` of the mission folder, by number, names
-   `reviewed_head: <sha>` in its frontmatter; every `Grade` cell under `### Overall Grade`, the row
-   split as `gate_REVIEW` splits it (a `\|` is a pipe of its cell), is exactly `A`; no `Rationale`
+1. `review`: the round is the one **committed at the head**, never a copy on disk: the mission
+   folder holds nothing `git status` lists (modified, staged, untracked or ignored), and with
+   item 5 the round read is the round the merge takes. The newest `40-review-r<N>.md` of the
+   mission folder, by number, names `reviewed_head: <sha>` in its frontmatter; every `Grade` cell
+   under `### Overall Grade`, the row split as `gate_REVIEW` splits it (a `\|` is a pipe of its
+   cell), is exactly `A`, the header and the separator known by the shape of the line (the
+   separator's every cell `:?-+:?`, the header the first row, its criterion `Criterion`), never by
+   the grade; no `Rationale`
    cell, and not the `gate:` of the frontmatter (absent included), is a fill-in by the rule
    `gate_REVIEW` applies (`placeholder`, copied into the worker and held equal to the runner's by
-   `tests/check-worker.sh`); and
-   `git diff --no-renames --name-only <reviewed_head> <head>` lists only paths under the mission
-   folder;
+   `tests/check-worker.sh`); the reviewed head is an ancestor of the head (the head itself
+   included); and every commit of `<reviewed_head>..<head>`, each against each parent, touches only
+   paths under the mission folder (`git diff-tree -r -m`, no rename followed), so a change undone
+   later and the resolution of a merge count;
 2. `codex`: of the comments of `chatgpt-codex-connector[bot]`, read with `--paginate`, the newest
-   one carrying `codex-review-state:v1` is for the head, `completed`, with `has_unresolved_findings`
-   false. A receipt anybody else posts does not count, and no other bot's review is read, so a bot
-   out of quota neither blocks nor counts as a review;
+   one carrying `codex-review-state:v1` parses and is for the head, `completed`, with
+   `has_unresolved_findings` false; a newest one that does not parse is not ready, never an older
+   one read in its place. A receipt anybody else posts does not count, and no other bot's review is
+   read, so a bot out of quota neither blocks nor counts as a review;
 3. `threads`: no review thread unresolved, and no more of them than the hundred read;
 4. `mergeable`: the pull request is `OPEN` and `MERGEABLE`;
 5. `head`: the local `HEAD` is that sha.
 
 The `ready <sha>` line is what the session passes to `gh pr merge --merge --match-head-commit`. The
 method — a merge commit, never a squash — belongs to the command that merges, and
-`commands/sdd-worker.md` writes it.
+`commands/sdd-worker.md` writes it. The five items are read one after the other, never at once, so
+the session reads `pr-ready` again immediately before `gh pr merge`.
 
 **`reviewed_head:` is the worker's key, on purpose.** The rounds the REVIEW phase of `sdd run`
 writes do not carry it, and `templates/review.md` does not name it. So after a run `pr-ready`
@@ -1994,6 +2002,9 @@ criterion A, no tolerance for prose), and the worker's round is what applies it.
   `ON_ESCALATION_CMD` empty, the worker only fails closed (`no mission cap`, `assisted — no pager`):
   the file wins over the environment, and making the signed values win there needs the runner's
   config precedence, which ADR 0022 does not change.
+- `pr-ready` reads its five items one after the other: a receipt, a thread or the mergeability can
+  change between two reads on the same sha, and `--match-head-commit` holds the sha only. A ready
+  is good for the merge that follows it at once, never for one later.
 - `sdd approve` under `full` still writes `humano-YYYY-MM-DD`; the trail is the campaign journal.
 - Visual acceptance is never the worker's. Deleting a branch or a worktree, and pushing to the
   default branch, are in no level.

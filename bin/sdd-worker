@@ -671,8 +671,18 @@ newest_round() {
 # Cut at every `|`, a criterion holding `\|` moved a B out of the Grade column and left an A there,
 # and the fill-in `<why \| in one sentence>` was judged by `<why \`, which reads as a sentence:
 # both pass a round gate_REVIEW refuses. tests/check-worker.sh reads the runner's split out of
-# bin/sdd and holds the two equal on the same rows (its `pipe:` family).
+# bin/sdd and holds the two equal on the same rows (its `pipe:` family). Returns the number of
+# pieces, the one before the first pipe included.
+# graded(<array>, <n>) — 1 when the cells cells() left are a criterion row of the grade table, 0 when
+# they are its header or its separator, both known by the shape of the line and NEVER by the grade:
+# the separator is the row whose every cell is `:?-+:?` (an empty piece after a closing pipe is no
+# cell), and the header is the first row of the table, its criterion reading `Criterion`. Decided by
+# the grade, a criterion graded `---` or `Grade` was skipped, and a round with no grade for it read
+# as graded A (achado #8 of the mission's review r5). Counts the rows in `rows_seen`, so a reader
+# calls it once per table row of the section. gate_REVIEW decides by the criterion cell instead, a
+# reading that never drops a named criterion; here a row it skips (`| --- | B | … |`) is read.
 GRADE_ROW_AWK='
+function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
 function escaped_pipe(s,   t) { t = s; sub(/\\+$/, "", t); return (length(s) - length(t)) % 2 }
 function cells(row, f,   raw, rawn, i, n) {
   split("", f)
@@ -682,25 +692,35 @@ function cells(row, f,   raw, rawn, i, n) {
     if (n > 0 && escaped_pipe(f[n])) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
     else { f[++n] = raw[i] }
   }
+  return n
+}
+function graded(f, n,   i, last, sep, c) {
+  rows_seen++
+  last = (trim(f[n]) == "") ? n - 1 : n
+  sep = 1
+  for (i = 2; i <= last; i++) if (trim(f[i]) !~ /^:?-+:?$/) sep = 0
+  if (sep) return 0
+  c = f[2]; gsub(/[*`]/, "", c)
+  if (rows_seen == 1 && trim(c) == "Criterion") return 0
+  return 1
 }
 '
 
 # round_grades <round> — the Grade cell of every row of the table under `### Overall Grade`, one per
 # line, read as the runner's gate_REVIEW reads it: the third column of the row as cells() splits it,
 # a row indented or not, its bold and code-span marks removed; the header row and the separator are
-# skipped, and the read ends at the next heading. An empty cell prints <empty>. Prints nothing when
-# the section has no row.
+# skipped by their shape (graded), and the read ends at the next heading. An empty cell prints
+# <empty>. Prints nothing when the section has no row.
 round_grades() {
   awk "$GRADE_ROW_AWK"'
-    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
     /^###[ \t]+Overall Grade/ { sec = 1; next }
     !sec { next }
     /^#+[ \t]/ { exit }
     $0 !~ /^[ \t]*\|/ { next }
     {
-      cells($0, c)
+      n = cells($0, c)
+      if (!graded(c, n)) next
       g = c[3]; gsub(/[*`]/, "", g); g = trim(g)
-      if (g == "Grade" || g ~ /^:?-+:?$/) next
       print (g == "" ? "<empty>" : g)
     }' "$1"
 }
@@ -739,18 +759,17 @@ placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit p
 # round_unjustified <round> — the first row under `### Overall Grade` whose Rationale is a fill-in
 # (placeholder), as `<criterion><TAB><rationale>`, the rationale read as gate_REVIEW reads it: the
 # fourth column of the row as cells() splits it, a `\|` inside it given back as the pipe, its `*`
-# and backticks removed, its blanks trimmed, `<empty>` for an empty one. The separator row is
-# skipped and the read ends at the next heading, like round_grades. Prints nothing when every row
-# is justified.
+# and backticks removed, its blanks trimmed, `<empty>` for an empty one. The header and the
+# separator are skipped by their shape (graded) and the read ends at the next heading, like
+# round_grades. Prints nothing when every row is justified.
 round_unjustified() {
   awk "$PLACEHOLDER_AWK$GRADE_ROW_AWK"'
-    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
     /^###[ \t]+Overall Grade/ { sec = 1; next }
     !sec { next }
     /^#+[ \t]/ { exit }
     /^[ \t]*\|/ {
-      cells($0, c)
-      if (trim(c[2]) ~ /^:?-+:?$/) next
+      n = cells($0, c)
+      if (!graded(c, n)) next
       r = c[4]; gsub(/[*`]/, "", r); r = trim(r)
       if (placeholder(r)) { print trim(c[2]) "\t" (r == "" ? "<empty>" : r); exit }
     }' "$1"
@@ -776,12 +795,17 @@ gh_unread() {
 # `ready <sha>` and rc 0 when the five items hold, else `not-ready <item>: <reason>` and rc 1 for the
 # first that fails, in this order:
 #   review     the newest 40-review-r<N>.md of the mission folder (by number) grades A in every row
-#              of `### Overall Grade`, with no Rationale and no gate: that is a fill-in by the rule
-#              of gate_REVIEW (placeholder), and names `reviewed_head: <sha>`, and between that sha
-#              and the head only the mission folder changed — renames not followed, so a move into
-#              the folder is a change outside it;
-#   codex      the newest receipt (`codex-review-state:v1`) the Codex bot left on the pull request,
-#              read from every page, is for the head, completed, with no unresolved finding;
+#              of `### Overall Grade` (its header and its separator known by the shape of the line,
+#              never by the grade), with no Rationale and no gate: that is a fill-in by the rule of
+#              gate_REVIEW (placeholder); it names `reviewed_head: <sha>`, an ancestor of the head
+#              (the head itself among them), and every commit after that sha touches the mission
+#              folder alone — read commit by commit and against each parent, so a change undone
+#              later and a merge's resolution count, and renames not followed, so a move into the
+#              folder is a change outside it; and the mission folder holds nothing git has not
+#              committed (modified, staged, untracked or ignored), so with the head item the round
+#              read is the round the head carries;
+#   codex      the newest comment of the Codex bot that carries `codex-review-state:v1`, read from
+#              every page, parses and is for the head, completed, with no unresolved finding;
 #   threads    every review thread is resolved, and every one was read;
 #   mergeable  the pull request is OPEN and MERGEABLE;
 #   head       the local HEAD of the mission's checkout is the head.
@@ -790,14 +814,17 @@ gh_unread() {
 # never a squash) is the merging command's, not this verb's. No bot's review is read but the Codex
 # state, so a bot with no quota neither blocks nor counts as a review. The `reviewed_head:` key is the
 # worker's own round's: a round the runner's REVIEW phase wrote names no head, and is not ready.
-# Declared limits: the round is read from the disk of the checkout as it stands — the head item
-# proves the checkout is at the head, not that its tree is clean; a path git still quotes under
-# core.quotePath=false (a control byte, a quote or a backslash in its name) never matches the mission
-# folder, the fail-safe side; and only the first hundred threads are read, which is why a pull request
-# with more is not ready.
+# Declared limits: the five items are read one after the other, never at once — a receipt, a thread
+# or the mergeability can change between two reads on the same sha, which --match-head-commit does
+# not see (achado #13 of the mission's review r5) —, so whoever merges reads pr-ready again
+# immediately before `gh pr merge`, and a ready read earlier is no ready; a path git still quotes
+# under core.quotePath=false (a control byte, a quote or a backslash in its name) never matches the
+# mission folder, the fail-safe side; and only the first hundred threads are read, which is why a
+# pull request with more is not ready.
 cmd_pr_ready() {
   [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
   local dir="${1%/}" pr="$2" root view head state mergeable round rh g unjust gv prefix changed p repo verdict
+  local anc commits c dirty
   local threads open total seen unseen here
   local -a grades=()
   root="$(repo_root "$dir")"
@@ -848,15 +875,50 @@ cmd_pr_ready() {
   if [ -z "$prefix" ]; then
     printf 'not-ready review: the mission folder %s is the root of its checkout\n' "$dir"; return 1
   fi
-  if ! changed="$(git -C "$root" -c core.quotePath=false diff --no-renames --name-only "$rh" "$head" 2> /dev/null)"; then
-    printf 'not-ready review: git diff %s %s does not run here — is the pull request head fetched?\n' "$rh" "$head"
+  # The head carries the commit the round read: --is-ancestor answers 0 for an ancestor, the head
+  # itself among them, 1 for a commit the head does not carry, and anything else when it cannot
+  # read the two — a head this checkout has not fetched.
+  anc=0; git -C "$root" merge-base --is-ancestor "$rh" "$head" 2> /dev/null || anc=$?
+  if [ "$anc" -eq 1 ]; then
+    printf 'not-ready review: the reviewed head %s of %s is not an ancestor of the head %s — the pull request does not carry the commit the round read\n' \
+      "$rh" "$round" "$head"
     return 1
   fi
-  while IFS= read -r p; do
-    if [ -n "$p" ] && [[ "$p" != "$prefix"* ]]; then
-      printf 'not-ready review: %s changed after the reviewed head %s, outside %s\n' "$p" "$rh" "$prefix"; return 1
+  if [ "$anc" -ne 0 ]; then
+    printf 'not-ready review: git merge-base --is-ancestor %s %s does not run here — is the pull request head fetched?\n' "$rh" "$head"
+    return 1
+  fi
+  # Every commit after the reviewed head, oldest first, each against each of its parents (-m: the
+  # resolution of a merge is a change too) — never the diff between the two ends, which does not see
+  # a change made and undone after the round. diff-tree is plumbing: it follows no rename unless
+  # asked (-M), whatever diff.renames says, so a move into the folder lists the path it left.
+  if ! commits="$(git -C "$root" rev-list --reverse "$rh..$head" 2> /dev/null)"; then
+    printf 'not-ready review: git rev-list %s..%s does not run here\n' "$rh" "$head"; return 1
+  fi
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    if ! changed="$(git -C "$root" -c core.quotePath=false diff-tree -r -m --no-commit-id --name-only "$c" 2> /dev/null)"; then
+      printf 'not-ready review: git diff-tree %s does not run here\n' "$c"; return 1
     fi
-  done <<< "$changed"
+    while IFS= read -r p; do
+      if [ -n "$p" ] && [[ "$p" != "$prefix"* ]]; then
+        printf 'not-ready review: %s changed in %s after the reviewed head %s, outside %s\n' "$p" "$c" "$rh" "$prefix"; return 1
+      fi
+    done <<< "$changed"
+  done <<< "$commits"
+  # The merge takes the head, never the disk: the round above was read from the disk, and with the
+  # head item below it is the round the head carries only when the mission folder holds nothing git
+  # has not committed — modified, staged, untracked (whatever status.showUntrackedFiles says) or
+  # ignored. The first entry is named with its status.
+  if ! dirty="$(git -C "$dir" -c core.quotePath=false status --porcelain --untracked-files=all --ignored -- . 2> /dev/null)"; then
+    printf 'not-ready review: git status does not run in %s\n' "$dir"; return 1
+  fi
+  if [ -n "$dirty" ]; then
+    dirty="${dirty%%$'\n'*}"
+    printf "not-ready review: %s in the mission folder is not committed (status '%s') — the merge takes the head, never the disk\n" \
+      "${dirty:3}" "${dirty:0:2}"
+    return 1
+  fi
 
   if ! gh_at "$root" repo view --json nameWithOwner -q .nameWithOwner; then
     gh_unread "gh repo view failed (rc $GH_RC)"; return 3
@@ -869,18 +931,21 @@ cmd_pr_ready() {
     gh_unread "gh api --paginate repos/$repo/issues/$pr/comments failed (rc $GH_RC)"; return 3
   fi
   # The pages are arrays, one after the other, as --paginate prints them; a comment of another shape
-  # makes jq fail. A receipt whose state does not parse is a receipt that says nothing — never one to
-  # skip, which would let an older receipt decide.
+  # makes jq fail. The receipt is the newest comment of the bot that CARRIES the marker, chosen before
+  # its payload is parsed: one whose payload does not parse (cut short, or no code_review object) is a
+  # receipt that says nothing — never one to skip, which would let an older receipt decide (achado
+  # #11 of the mission's review r5). A comment of the bot without the marker is no receipt.
   if ! verdict="$(jq -rn --arg head "$head" --arg login "$CODEX_LOGIN" '
          [inputs] | if length > 0 and all(.[]; type == "array") then [.[][]] else error("off the contract") end
-         | [.[] | select(.user.login == $login) | .body
-            | capture("codex-review-state:v1 (?<s>\\{.*\\}) -->").s | (fromjson? // {}) | .code_review]
+         | [.[] | select(.user.login == $login) | .body | select(contains("codex-review-state:v1"))]
          | last
          | if . == null then "no receipt of \($login) on the pull request"
-           elif .commit_sha != $head then "the newest receipt of \($login) is for \(.commit_sha), not the head \($head)"
-           elif .status != "completed" then "the newest receipt of \($login) is \(.status), not completed"
-           elif .has_unresolved_findings != false then "the newest receipt of \($login) has unresolved findings (\(.has_unresolved_findings))"
-           else "ok" end' 2> /dev/null <<< "$GH_OUT")"; then
+           else (try ([capture("codex-review-state:v1 (?<s>\\{.*\\}) -->")][0].s | fromjson | .code_review) catch null) as $r
+           | if ($r | type) != "object" then "the newest receipt of \($login) does not parse"
+             elif $r.commit_sha != $head then "the newest receipt of \($login) is for \($r.commit_sha), not the head \($head)"
+             elif $r.status != "completed" then "the newest receipt of \($login) is \($r.status), not completed"
+             elif $r.has_unresolved_findings != false then "the newest receipt of \($login) has unresolved findings (\($r.has_unresolved_findings))"
+             else "ok" end end' 2> /dev/null <<< "$GH_OUT")"; then
     gh_unread "gh api --paginate repos/$repo/issues/$pr/comments answered no pages of comments: '${GH_OUT:0:80}'"
     return 3
   fi

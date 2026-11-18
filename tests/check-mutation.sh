@@ -6941,7 +6941,7 @@ mut_WORKER_ready_grade_b_passes() {
 # a review of this one — the receipt matched by the hour (M13). Caught by "pr-ready: a receipt for
 # another sha, an unfinished one and an unresolved finding each fail codex" (check-worker.sh).
 mut_WORKER_ready_codex_any_sha() {
-  sed -i '/^cmd_pr_ready() {/,/^}/ s@^\( *\)elif \.commit_sha != \$head then@\1elif false then@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^\( *\)elif \$r\.commit_sha != \$head then@\1elif false then@' "${1%/*}/sdd-worker"
 }
 # An unresolved review thread no longer stops the merge. Caught by "pr-ready: one open thread fails
 # threads" (check-worker.sh).
@@ -7077,14 +7077,14 @@ mut_WORKER_worktree_file_misnamed() {
 # review r2). Caught by "pipe: a grade row holding an escaped pipe is read as gate_REVIEW splits it,
 # so a fill-in rationale with one fails review" (check-worker.sh).
 mut_WORKER_pipe_cut_raw() {
-  sed -i '/^round_unjustified() {/,/^}/ s@^      cells(\$0, c)$@      split($0, c, "|")@' "${1%/*}/sdd-worker"
+  sed -i '/^round_unjustified() {/,/^}/ s@^      n = cells(\$0, c)$@      n = split($0, c, "|")@' "${1%/*}/sdd-worker"
 }
 # The grade is cut at every `|` again: a criterion holding `\|` moves its B out of the Grade column
 # and leaves an A there, a round gate_REVIEW refuses read as graded A. Caught by "pipe: a grade row
 # holding an escaped pipe is read as gate_REVIEW splits it, so a fill-in rationale with one fails
 # review" (check-worker.sh).
 mut_WORKER_pipe_grades_cut_raw() {
-  sed -i '/^round_grades() {/,/^}/ s@^      cells(\$0, c)$@      split($0, c, "|")@' "${1%/*}/sdd-worker"
+  sed -i '/^round_grades() {/,/^}/ s@^      n = cells(\$0, c)$@      n = split($0, c, "|")@' "${1%/*}/sdd-worker"
 }
 # The rejoin asks "does the piece end in a backslash" instead of the parity of the run: `\\|`, a
 # literal backslash against a real delimiter, glues two cells, and an A row reads its rationale as
@@ -7114,6 +7114,73 @@ mut_WORKER_pager_root_only() {
 # (check-worker.sh).
 mut_WORKER_pager_file_misnamed() {
   sed -i '/^effective_level() {/,/^}/ s@ is empty in \$wt/\.sdd/config\.sh"; return 0$@ is empty in $root/.sdd/config.sh"; return 0@' "${1%/*}/sdd-worker"
+}
+# The separator is known by its grade cell again, not by every cell: a criterion graded `---` is
+# skipped as a separator, and the round reads as graded A with no grade for it (achado #8 of the
+# mission's review r5). Caught by "sep: the header and the separator are known by the shape of the
+# line, so a criterion graded --- is read and is not A" (check-worker.sh).
+mut_WORKER_sep_by_grade() {
+  sed -i "/^GRADE_ROW_AWK='\$/,/^'\$/ s@^  for (i = 2; i <= last; i++) if (trim(f\[i\]) !~ /^:?-+:?\$/) sep = 0\$@  if (trim(f[3]) !~ /^:?-+:?\$/) sep = 0@" "${1%/*}/sdd-worker"
+}
+# The header is any row whose criterion reads `Criterion`, not only the first: a criterion row so
+# named, graded B, is skipped. Caught by "sep: the header and the separator are known by the shape
+# of the line, so a criterion graded --- is read and is not A" (check-worker.sh).
+mut_WORKER_sep_header_anywhere() {
+  sed -i "/^GRADE_ROW_AWK='\$/,/^'\$/ s@^  if (rows_seen == 1 \&\& trim(c) == \"Criterion\") return 0\$@  if (trim(c) == \"Criterion\") return 0@" "${1%/*}/sdd-worker"
+}
+# The rationale reader skips a row by its criterion cell again: `| --- | A | --- |`, graded A by the
+# grade reader, has its fill-in rationale never read. Caught by "sep: the header and the separator
+# are known by the shape of the line, so a criterion graded --- is read and is not A" (check-worker.sh).
+mut_WORKER_sep_unjustified_by_criterion() {
+  sed -i '/^round_unjustified() {/,/^}/ s@^      if (!graded(c, n)) next$@      if (trim(c[2]) ~ /^:?-+:?$/) next@' "${1%/*}/sdd-worker"
+}
+# The mission folder is no longer checked for what git has not committed: a round on disk graded A
+# authorizes the merge of a head whose round grades B (achado #18 of the mission's review r5).
+# Caught by "committed: a mission folder with a change not committed, staged, untracked or ignored
+# fails review" (check-worker.sh).
+mut_WORKER_committed_unchecked() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ -n "\$dirty" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# An ignored file of the mission folder is no longer seen: a round the repo's ignore rules hide is
+# read from the disk and never carried by the head. Caught by "committed: a mission folder with a
+# change not committed, staged, untracked or ignored fails review" (check-worker.sh).
+mut_WORKER_committed_ignored_unseen() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@ status --porcelain --untracked-files=all --ignored -- \. @ status --porcelain --untracked-files=all -- . @' "${1%/*}/sdd-worker"
+}
+# The reviewed head no longer has to be an ancestor of the head: a round over a commit the pull
+# request dropped reads as a review of this history (achado #9 of the mission's review r5). Caught
+# by "range: a commit after the reviewed head that touches code, a merge resolution and a reviewed
+# head the pull request does not carry each fail review" (check-worker.sh).
+mut_WORKER_range_ancestry_unchecked() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$anc" -eq 1 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# Each commit of the range is judged by the diff between the two ends again: a change to code made
+# after the round and reverted before the head is never seen (achado #10 of the mission's review r5).
+# Caught by "range: a commit after the reviewed head that touches code, a merge resolution and a
+# reviewed head the pull request does not carry each fail review" (check-worker.sh).
+mut_WORKER_range_endpoints_only() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@ diff-tree -r -m --no-commit-id --name-only "\$c" @ diff --no-renames --name-only "$rh" "$head" @' "${1%/*}/sdd-worker"
+}
+# A merge commit of the range is read with no diff, as git shows one by default: the resolution of
+# a merge whose two parents touch the mission folder alone changes code unseen. Caught by "range: a
+# commit after the reviewed head that touches code, a merge resolution and a reviewed head the pull
+# request does not carry each fail review" (check-worker.sh).
+mut_WORKER_range_merge_unseen() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@ diff-tree -r -m --no-commit-id @ diff-tree -r --no-commit-id @' "${1%/*}/sdd-worker"
+}
+# The receipt's payload is matched before the newest is chosen again: a newest receipt cut short
+# drops out, and an older receipt for the head decides (achado #11 of the mission's review r5).
+# Caught by "receipt: the newest comment of the bot with the marker is the receipt, and one that does
+# not parse fails codex" (check-worker.sh).
+mut_WORKER_receipt_parsed_first() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@| \.body | select(contains("codex-review-state:v1"))\]@| .body | select(test("codex-review-state:v1 \\\\{.*\\\\} -->"))]@' "${1%/*}/sdd-worker"
+}
+# Every comment of the bot is a receipt, the marker no longer asked for: a remark of the bot after
+# its receipt for the head reads as a receipt that does not parse. Caught by "receipt: the newest
+# comment of the bot with the marker is the receipt, and one that does not parse fails codex"
+# (check-worker.sh).
+mut_WORKER_receipt_any_comment() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@| \.body | select(contains("codex-review-state:v1"))\]@| .body]@' "${1%/*}/sdd-worker"
 }
 
 CATALOG=(
@@ -7971,6 +8038,16 @@ CATALOG=(
   WORKER_zero_signed_unchecked
   WORKER_pager_root_only
   WORKER_pager_file_misnamed
+  WORKER_sep_by_grade
+  WORKER_sep_header_anywhere
+  WORKER_sep_unjustified_by_criterion
+  WORKER_committed_unchecked
+  WORKER_committed_ignored_unseen
+  WORKER_range_ancestry_unchecked
+  WORKER_range_endpoints_only
+  WORKER_range_merge_unseen
+  WORKER_receipt_parsed_first
+  WORKER_receipt_any_comment
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
