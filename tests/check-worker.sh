@@ -12,8 +12,9 @@
 #   R1  no verb, and a verb the program does not know, print the usage on stderr and leave rc 2 —
 #       never a silent rc 0 that a caller would read as an answer
 #   R2  `delegate` signs on a yes, and only on one: it writes `signed: <instant> <digest>`, where the
-#       digest is the first 12 hex of the sha256 of the six other keys (computed HERE, independently
-#       of the program), and it touches no other line of the file
+#       digest is the first 12 hex of the sha256 of the six other keys and of the ceiling of each lot
+#       of the campaign.md beside it (computed HERE, independently of the program), and it touches no
+#       other line of the file
 #   R3  `delegate` with no character on stdin is rc 66 and writes nothing — nobody was asked, which
 #       is not the same as a no (the contract of `sdd approve`)
 #   R4  `delegate` signs nothing on a no, nor — with a yes on stdin — on a delegation that already
@@ -111,6 +112,10 @@
 #       ON_ESCALATION_CMD row of config/schema.md names the worker and `assisted`, and its
 #       BUDGET_MISSION_USD row the worker; CONTEXT.md has a glossary row for each of the five terms,
 #       the level's writing the ladder and the worker's naming the coordination helper it is not
+#   R34 the seal covers the lot ceilings (probed after R14): a ceiling lifted, or a lot added under
+#       `lots: all`, after signing answers assisted — edited after signing, for the delegation and for
+#       that lot, so approve and merge are asked there; a lot's title and count rewritten and an item
+#       struck change nothing; the delegate shows each ceiling it signs, `ceiling <lot>: <ceiling>`
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -123,8 +128,8 @@
 # rule goes unmeasured, and the sensor says nothing about it.
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
-# verbs, `command: ` and `docs: `) prints exactly the assertions the mission plan names — the checkpoint
-# counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
+# verbs, `seal: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the
+# fix increment that opened it names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
 # the census in check-health.sh holds that clause.
 #
 # Usage: tests/check-worker.sh   (exit 0 = every verb answers what its rule says)
@@ -141,7 +146,7 @@ unset SDD_WORKER_NOW ON_ESCALATION_CMD
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
-PROBE_FLOOR=33
+PROBE_FLOOR=34
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -204,12 +209,17 @@ campaign() {
   printf '%s\n' "$d"
 }
 
-# digest_of <campaign> <level> <lots> <expires> <mission cap> <campaign cap> — the digest the
-# contract defines, computed by the sensor and never by the program: the first 12 hex of the sha256
-# of the six lines `key: value`, each ending in a newline, in this order.
+# digest_of <campaign> <level> <lots> <expires> <mission cap> <campaign cap> ['<lot> <ceiling>']... —
+# the digest the contract defines, computed by the sensor and never by the program: the first 12
+# hex of the sha256 of the six lines `key: value`, in this order, then one line
+# `ceiling <lot>: <ceiling>` per row of the campaign's lots table, in the order of the queue, each
+# line ending in a newline.
 digest_of() {
-  printf 'campaign: %s\nlevel: %s\nlots: %s\nexpires: %s\nbudget_mission_usd: %s\nbudget_campaign_usd: %s\n' \
-    "$@" | sha256sum | cut -c1-12
+  { printf 'campaign: %s\nlevel: %s\nlots: %s\nexpires: %s\nbudget_mission_usd: %s\nbudget_campaign_usd: %s\n' \
+      "${@:1:6}"
+    shift 6
+    for r in "$@"; do printf 'ceiling %s: %s\n' "${r%% *}" "${r#* }"; done
+  } | sha256sum | cut -c1-12
 }
 
 # signed_line <delegation> — the frontmatter's signed: line, as written.
@@ -233,7 +243,8 @@ fi
 
 # --- R2: delegate signs on a yes ----------------------------------------------------------------
 # Five terms: rc 0; the signed: line has the instant-and-digest shape; the digest is the one the
-# sensor computes from the six values (a program that hashed a constant, or fewer keys, differs);
+# sensor computes from the six values and the two ceilings of the template's lots table, L1 with
+# none and L2 at plan (a program that hashed a constant, fewer keys or no ceiling differs);
 # the instant lies between two readings of the clock taken around the call; and the file minus its
 # signed: line is byte for byte what it was. The stdout echoes the grant and says how to commit it.
 got=""
@@ -244,12 +255,13 @@ t0="$(date '+%Y-%m-%d %H:%M')"
 worker_from "$BOX/in" delegate "$d"
 t1="$(date '+%Y-%m-%d %H:%M')"
 line="$(signed_line "$d/delegation.md")"
-want="$(digest_of c-yes pr all '2099-12-31 23:59' 25 200.50)"
+want="$(digest_of c-yes pr all '2099-12-31 23:59' 25 200.50 'L1 -' 'L2 plan')"
 stamp="${line#signed: }"; stamp="${stamp% *}"
 [ "$W_RC" = 0 ] || got="rc $W_RC (stdout '${W_OUT##*$'\n'}')"
 [[ "$line" =~ ^signed:\ [0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}\ [0-9a-f]{12}$ ]] \
   || got="${got:+$got; }signed line '$line'"
-[ "${line##* }" = "$want" ] || got="${got:+$got; }digest '${line##* }', the six keys give '$want'"
+[ "${line##* }" = "$want" ] \
+  || got="${got:+$got; }digest '${line##* }', the six keys and the two ceilings give '$want'"
 { [ "${stamp//[!0-9]/}" -ge "${t0//[!0-9]/}" ] 2>/dev/null \
     && [ "${stamp//[!0-9]/}" -le "${t1//[!0-9]/}" ]; } \
   || got="${got:+$got; }instant '$stamp' is not between $t0 and $t1"
@@ -673,6 +685,57 @@ if [ -z "$got" ]; then
 else
   fail 'allows: the lot ceiling stops approve on a capped lot under full' \
     'approve asked on the lot capped at merge, allowed where the lot is not capped' "$got"
+fi
+
+# --- R34: the seal covers the lot ceilings ------------------------------------------------------
+# A lot's ceiling is what keeps its approval from being delegated (the L6 of the kit's campaign is
+# capped at plan), and it lives in campaign.md, beside the file the owner signs. Three full
+# delegations over L1 (no ceiling) and L6 (plan), each signed by the program and first witnessed
+# capping L6 at plan, so what follows is the edit's and nothing else's: L6's ceiling replaced by
+# `-`, and a row L7 added under `lots: all` (a lot the owner never saw), each answer assisted,
+# edited after signing, for the delegation and for that lot, and allows asks approve and merge on
+# it. The counter-world rewrites L1's title and count and strikes an item, which the campaign does
+# as it goes: the level stands, and L6 is still capped. The delegate shows each ceiling it signs on
+# a line of its own, and the digest it writes is the one the sensor computes from the six values
+# and the two ceilings — a world the template's two rows (R2) do not reach alone.
+got=""
+for w in 's-lift|s/^| L6 | lote L6 | plan | 1 |$/| L6 | lote L6 | - | 1 |/' \
+         's-add|/^| L6 | lote L6 | plan | 1 |$/a | L7 | lote L7 | - | 1 |' \
+         's-strike|s/^| L1 | lote L1 | - | 1 |$/| L1 | renamed | - | 3 |/; 0,/^- \[ \] /s//- [x] /'; do
+  id="${w%%|*}"
+  d="$(campaign "$id" full "$FAR" 25 200)"
+  set_lots "$d/campaign.md" 'L1:-' 'L6:plan'
+  sign "$d"
+  { grep -qx 'ceiling L1: -' <<< "$W_OUT" && grep -qx 'ceiling L6: plan' <<< "$W_OUT"; } \
+    || got="${got:+$got; }$id: the delegate did not show the ceilings it signs"
+  line="$(signed_line "$d/delegation.md")"
+  want="$(digest_of "$id" full all "$FAR" 25 200 'L1 -' 'L6 plan')"
+  [ "${line##* }" = "$want" ] \
+    || got="${got:+$got; }$id: digest '${line##* }', the six keys and the two ceilings give '$want'"
+  level_is "$id before" 'level plan — capped by the lot' "$d" --lot L6
+  cp "$d/campaign.md" "$BOX/$id.campaign"
+  sed -i "${w#*|}" "$d/campaign.md"
+  cmp -s "$BOX/$id.campaign" "$d/campaign.md" && got="${got:+$got; }fixture $id: the edit changed nothing"
+  if [ "$id" = s-strike ]; then
+    { grep -q '^- \[x\] ' "$d/campaign.md" && grep -qx '| L1 | renamed | - | 3 |' "$d/campaign.md"; } \
+      || got="${got:+$got; }fixture $id: the strike or the rename did not land"
+    level_is "$id after" "level full — signed until $FAR" "$d"
+    level_is "$id after, L6" 'level plan — capped by the lot' "$d" --lot L6
+    continue
+  fi
+  sl=L6; [ "$id" = s-lift ] || sl=L7
+  level_is "$id after" 'level assisted — edited after signing' "$d"
+  level_is "$id after, $sl" 'level assisted — edited after signing' "$d" --lot "$sl"
+  allows_is "$id, approve" 1 'ask approve needs full, effective assisted — edited after signing' \
+    "$d" approve --lot "$sl"
+  allows_is "$id, merge" 1 'ask merge needs merge, effective assisted — edited after signing' \
+    "$d" merge --lot "$sl"
+done
+if [ -z "$got" ]; then
+  pass 'seal: a lot ceiling lifted or a lot added after signing answers assisted, and the delegate shows each ceiling'
+else
+  fail 'seal: a lot ceiling lifted or a lot added after signing answers assisted, and the delegate shows each ceiling' \
+    'assisted — edited after signing for the lifted ceiling and the added lot, the level standing for a struck item, each ceiling on the stdout of delegate' "$got"
 fi
 
 # --- budget: the fixtures -----------------------------------------------------------------------

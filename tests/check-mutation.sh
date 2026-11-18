@@ -6959,6 +6959,20 @@ mut_WORKER_ready_unmergeable_passes() {
 mut_WORKER_ready_head_unchecked() {
   sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$here" != "\$head" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
+# The lot ceilings leave the seal: the digest covers the six keys only, so lifting the plan ceiling
+# of a lot after signing full delegates its approval under a signature that still holds (Q1 of the
+# mission's QA). Caught by "delegate: an answer of y signs with a digest of the other fields" and by
+# "seal: a lot ceiling lifted or a lot added after signing answers assisted, and the delegate shows
+# each ceiling" (check-worker.sh).
+mut_WORKER_seal_ceilings_unsigned() {
+  sed -i '/^delegation_terms() {/,/^}/ { /lots_table/d }' "${1%/*}/sdd-worker"
+}
+# The ceilings are signed and not shown: the owner answers y to a grant whose caps the question never
+# put in front of them. Caught by "seal: a lot ceiling lifted or a lot added after signing answers
+# assisted, and the delegate shows each ceiling" (check-worker.sh).
+mut_WORKER_seal_ceilings_unshown() {
+  sed -i '/^cmd_delegate() {/,/^}/ s@^  delegation_terms "\$1"$@  delegation_terms "$1" | grep -v "^ceiling "@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7793,6 +7807,8 @@ CATALOG=(
   WORKER_ready_threads_unread
   WORKER_ready_unmergeable_passes
   WORKER_ready_head_unchecked
+  WORKER_seal_ceilings_unsigned
+  WORKER_seal_ceilings_unshown
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

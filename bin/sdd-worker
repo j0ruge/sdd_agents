@@ -127,14 +127,23 @@ expired() {
   [ "${1//[!0-9]/}" -le "${n//[!0-9]/}" ]
 }
 
-# delegation_digest <file> — the first 12 hex of the sha256 of the six keys, each written
-# `key: value` and a newline, in the order of DELEGATION_KEYS. ONE definition for both readers: the
-# `delegate` that writes it and the `level` that checks it.
-delegation_digest() {
-  local k
-  for k in "${DELEGATION_KEYS[@]}"; do printf '%s: %s\n' "$k" "$(fm_value "$1" "$k")"; done \
-    | sha256sum | cut -c1-12
+# delegation_terms <campaign-dir> — what a signature grants, one line each: the six keys of the
+# delegation, `key: value` in the order of DELEGATION_KEYS, then one `ceiling <lot>: <ceiling>` per
+# row of the lots table of the campaign.md beside it, in the order of the queue (lots_table, the one
+# reader of the queue). A lot's ceiling is what keeps its approval from being delegated, and it lives
+# in a file the owner does not sign: outside the seal, an edit of the table would lift a capped lot
+# to the signed level, or bring in a lot the owner never saw, under a signature that still holds.
+# The titles, the counts and the items are not in it, since the campaign strikes them as it goes.
+# ONE definition for the three readers: the delegate that shows it and signs its digest, and the
+# level that checks it.
+delegation_terms() {
+  local dir="${1%/}" k l c
+  for k in "${DELEGATION_KEYS[@]}"; do printf '%s: %s\n' "$k" "$(fm_value "$dir/delegation.md" "$k")"; done
+  while read -r l c; do printf 'ceiling %s: %s\n' "$l" "$c"; done < <(lots_table "$dir/campaign.md")
 }
+
+# delegation_digest <campaign-dir> — the first 12 hex of the sha256 of delegation_terms.
+delegation_digest() { delegation_terms "$1" | sha256sum | cut -c1-12; }
 
 # delegation_write_signed <file> <line> — the frontmatter's `signed:` line replaced by <line>, or
 # <line> added before the closing `---` when the key is absent. The body is never touched, and the
@@ -153,20 +162,21 @@ delegation_write_signed() {
   fi
 }
 
-# delegate <campaign-dir> — show the six keys of the delegation, ask on stderr, read ONE line of
-# stdin, and sign only on a yes. It refuses before asking what it could never sign (rc 1): no
+# delegate <campaign-dir> — show what a signature grants (the six keys of the delegation and the
+# ceiling of each lot, delegation_terms), ask on stderr, read ONE line of stdin, and sign only on a
+# yes. It refuses before asking what it could never sign (rc 1): no
 # delegation, an illegible one, or one whose instant already passed. The stdin contract is the one
 # of `sdd approve`: a pipe is an answer, no TTY is required, and no character at all is not a no —
 # nobody was asked — so it is rc 66 and nothing is written. It does not read .sdd/config.sh and it
 # does not commit: the commit is the owner's trail, and the line it prints says how.
 cmd_delegate() {
   [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
-  local f="${1%/}/delegation.md" k ans="" got=0 id
+  local f="${1%/}/delegation.md" ans="" got=0 id
   if [ ! -f "$f" ]; then
     printf 'not signed — no delegation at %s\n' "$f"
     return 1
   fi
-  for k in "${DELEGATION_KEYS[@]}"; do printf '%s: %s\n' "$k" "$(fm_value "$f" "$k")"; done
+  delegation_terms "$1"
   if ! delegation_legible "$f"; then
     printf 'not signed — illegible: %s\n' "$ILLEGIBLE_WHY"
     return 1
@@ -190,7 +200,7 @@ cmd_delegate() {
     y | Y | yes | Yes | YES) : ;;
     *) printf 'not signed — the answer was not y, and nothing was written\n'; return 0 ;;
   esac
-  delegation_write_signed "$f" "signed: $(now) $(delegation_digest "$f")"
+  delegation_write_signed "$f" "signed: $(now) $(delegation_digest "$1")"
   id="$(fm_value "$f" campaign)"
   printf 'signed %s — commit it: git add %s && git commit -m "chore(campaign): sign the delegation of %s"\n' \
     "$f" "$f" "$id"
@@ -246,9 +256,10 @@ effective_level() {
   if ! delegation_legible "$f"; then LEVEL_WHY="illegible: $ILLEGIBLE_WHY"; return 0; fi
   signed="$(fm_value "$f" signed)"
   if [ -z "$signed" ]; then LEVEL_WHY="unsigned: the signed: line is empty"; return 0; fi
-  want="$(delegation_digest "$f")"
+  want="$(delegation_digest "$dir")"
   if [ "${signed##* }" != "$want" ]; then
-    LEVEL_WHY="edited after signing: signed ${signed##* }, the six keys now give $want"; return 0
+    LEVEL_WHY="edited after signing: signed ${signed##* }, the six keys and the lot ceilings now give $want"
+    return 0
   fi
   exp="$(fm_value "$f" expires)"
   if expired "$exp"; then LEVEL_WHY="expired: $exp is not after $(now)"; return 0; fi

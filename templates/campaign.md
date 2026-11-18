@@ -23,7 +23,9 @@ exec_model: <opus — o modelo que executa as fases>
 > primeiro lote que não está mergeado. `Lot` é `L<n>`. `Ceiling` é `-` (sem teto) ou o nome de um
 > nível da escada (`assisted`, `pr`, `plan`, `merge`, `full`): o nível efetivo do lote é o menor entre
 > o assinado e esse teto, e o teto nunca sobe o nível. `Itens` é a contagem de itens da seção do lote.
-> Nada de `|` cru numa célula.
+> Nada de `|` cru numa célula. O `Lot` e o `Ceiling` de cada linha estão sob a assinatura do
+> `delegation.md`: mudar um teto, ou pôr ou tirar um lote, depois de assinar faz a delegação valer
+> `assisted` até ser assinada de novo. O título, a contagem e os itens ficam fora dela.
 
 | Lot | Título | Ceiling | Itens |
 |---|---|---|---|

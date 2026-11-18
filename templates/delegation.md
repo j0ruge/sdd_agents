@@ -35,7 +35,11 @@ noite sem ninguém olhando precisa de um aviso que chegue.
 
 1. Preencha as seis primeiras chaves e deixe `signed:` vazio.
 2. Num terminal, rode `bin/sdd-worker delegate <diretório desta campanha>`: ele mostra o que está
-   sendo concedido e pergunta. Só `y` assina.
-3. A assinatura grava `signed: <YYYY-MM-DD HH:MM> <digest>`. Mudar qualquer uma das seis chaves
-   depois disso invalida o digest, e a delegação volta a valer `assisted` até ser assinada de novo.
+   sendo concedido (as seis chaves e uma linha `ceiling <lote>: <teto>` por lote da tabela do
+   `campaign.md` ao lado) e pergunta. Só `y` assina.
+3. A assinatura grava `signed: <YYYY-MM-DD HH:MM> <digest>`, e o digest cobre as seis chaves e o
+   `Lot` e o `Ceiling` de cada linha da tabela de lotes do `campaign.md`. Mudar uma das seis chaves,
+   subir ou baixar um teto, ou pôr ou tirar um lote da tabela depois disso invalida o digest, e a
+   delegação volta a valer `assisted` até ser assinada de novo. Riscar itens e reescrever o título
+   ou a contagem de um lote não invalida: a campanha faz isso enquanto anda.
 4. Commite o arquivo: a delegação é versionada no repo-alvo, e o commit é a trilha.

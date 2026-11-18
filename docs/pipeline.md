@@ -1876,11 +1876,16 @@ Under `assisted` the session proposes each act and waits for the owner's yes.
    ceiling never raises the level, and one that is not a level caps the lot at `assisted`;
 9. otherwise the signed level, `— signed until <expires>`.
 
-**The signature.** `sdd-worker delegate` prints the six `key: value` lines, asks
-`Sign this delegation? [y/N] ` on stderr and reads one line of stdin. Only `y` signs: it writes
-`signed: <YYYY-MM-DD HH:MM> <digest>`, the digest being the first 12 hex of the `sha256sum` of the
-six lines in the order above, each `key: value` and a newline — so a delegation edited after
-signing is no delegation. It does not commit; its last line names the `git add` and `git commit` to
+**The signature.** `sdd-worker delegate` prints what it grants: the six `key: value` lines, then
+one `ceiling <lot>: <ceiling>` line per row of the lots table of the `campaign.md` beside it, in
+the order of the queue. It asks `Sign this delegation? [y/N] ` on stderr and reads one line of
+stdin. Only `y` signs: it writes `signed: <YYYY-MM-DD HH:MM> <digest>`, the digest being the first
+12 hex of the `sha256sum` of those lines, in that order, each ending in a newline — so a delegation
+edited after signing is no delegation, and neither is one whose campaign lifted or lowered a lot's
+ceiling, or gained or lost a lot, after it. A lot's ceiling is what keeps its approval from being
+delegated, and it lives in a file the owner does not sign: the digest is what puts it under the
+signature. A lot's title and count and its items are not signed, since the campaign strikes them as
+it goes. It does not commit; its last line names the `git add` and `git commit` to
 run. No character on stdin is rc 66 and writes nothing, the contract of `sdd approve`; an illegible
 or already expired delegation is refused before the question, with rc 1. `level: assisted` may be
 signed, and grants nothing.
@@ -1896,7 +1901,7 @@ stderr and leaves rc 2. The reason of an answer comes after ` — `.
 
 | Call | Stdout | rc |
 |---|---|---|
-| `sdd-worker delegate <campaign-dir>` | the six keys, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible or expired; 66 nothing on stdin |
+| `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible or expired; 66 nothing on stdin |
 | `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0 |
 | `sdd-worker allows <campaign-dir> <act> [--lot L<n>]` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner; 2 not an act |
 | `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, or no ceiling or spend to read |
