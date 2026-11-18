@@ -1,6 +1,6 @@
 ---
 missao: 20261117-o-worker-orquestrador
-atualizado: 2026-11-18 01:20
+atualizado: 2026-11-18 01:54
 ---
 
 # Checkpoint — O worker orquestrador
@@ -29,6 +29,8 @@ atualizado: 2026-11-18 01:20
 | I9 | O comando da sessão (commands/sdd-worker.md) | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    command: ' <<< "$o"` → `3` | done | 5721c92 |
 | I10 | Documentação e vocabulário | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    docs: ' <<< "$o"` → `1` | done | 30bc8cd |
 | I11 | A campanha do kit e a gaveta | `o=$(bin/sdd-worker level docs/superpowers/campaigns/20261117-zerar-as-issues 2>/dev/null); a=$(grep -c '^level assisted' <<< "$o"); b=$(grep -c '^- \[ \] ' docs/superpowers/campaigns/20261117-zerar-as-issues/campaign.md 2>/dev/null); echo "$a $b"` → `1 83` | done | 3fe5d3e |
+| F1 | A assinatura cobre o teto de cada lote: hoje o `Ceiling` mora no `campaign.md`, fora do digest, e trocar o `plan` do L6 por `-` depois de assinar `full` faz `allows approve --lot L6` responder `allowed` com a assinatura válida (Q1 do `30-handoff-qa.md`); o `delegate` também passa a mostrar os tetos que assina. Fecha com o Check E o re-walk da jornada J5 do `30-handoff-qa.md` verde | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    seal: ' <<< "$o"); c=$(grep -c '^mut_WORKER_seal_' tests/check-mutation.sh); test "$c" -ge 1; echo "$a $?"` → `1 0` | pending | — |
+| F2 | O `campaign:` da delegação e o do `campaign.md` têm de ser o nome do diretório, e o `expires:` um instante que existe: hoje os dois ids divergem sem aviso (o `budget` soma as missões de um, o `next` anda nas do outro), o id placeholder do template vira fila no `next` (`plan L1`, rc 0), e `2026-11-18 99:99` é assinado e lido como prazo (Q2 e Q3 do `30-handoff-qa.md`). Fecha com o Check E o re-walk da jornada J6 do `30-handoff-qa.md` verde | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    legible: ' <<< "$o"); c=$(grep -c '^mut_WORKER_legible_' tests/check-mutation.sh); test "$c" -ge 2; echo "$a $?"` → `2 0` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
