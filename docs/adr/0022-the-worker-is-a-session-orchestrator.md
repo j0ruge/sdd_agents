@@ -86,8 +86,8 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
 
    A delegation that is absent, unsigned, expired, illegible, or of a level nobody defined is
    `assisted`, and so is any signed level above `assisted` when `ON_ESCALATION_CMD` is empty in the
-   `.sdd/config.sh` of any checkout of the campaign's repo, the mission's worktree, where `sdd run`
-   pages from, among them. The effective level of a lot is the lower of the signed level and the lot's own ceiling. The
+   `.sdd/config.sh` of the campaign's checkout or of a linked worktree that holds a mission of the
+   campaign, where `sdd run` pages from; the file of a worktree that holds none is never read. The effective level of a lot is the lower of the signed level and the lot's own ceiling. The
    predicate is written positively: an act is allowed because a level names it, never because
    nothing refused it.
 
@@ -158,9 +158,11 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
   the orchestrating session and of its subagents is outside both. A campaign's missions are matched
   by id, not by repository. `sdd approve` under `full` still writes `humano-YYYY-MM-DD`. Visual
   acceptance is never the worker's. Deleting a branch or a worktree and pushing to the default
-  branch are in no level. The pager and the mission cap are read in the `.sdd/config.sh` of every
-  checkout of the repo, so the worker executes the file of worktrees where no `sdd run` runs; the
-  narrower set is the owner's open question. Where a target's file assigns the cap above the signed
+  branch are in no level. The pager and the mission cap are read in the `.sdd/config.sh` of the
+  campaign's checkout and of each worktree that holds a mission of the campaign, and of no other
+  (the narrow set, the owner's choice): a worktree with none runs no `sdd run` of the campaign, and
+  sourcing its file would execute it. A worktree whose branch carries a merged copy of a mission of
+  the campaign holds one, and is read. Where a target's file assigns the cap above the signed
   one, or leaves the pager empty, the worker fails closed: the runner's config precedence is
   unchanged.
 - The Codex harness (planning and execution on other models) is the next mission; nothing here

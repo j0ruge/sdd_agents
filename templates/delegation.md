@@ -3,7 +3,7 @@ campaign: <YYYYMMDD>-<slug — o id da campanha, igual ao campaign: do campaign.
 level: <assisted | pr | plan | merge | full>
 lots: <all, ou L1 L2 … separados por espaço>
 expires: <YYYY-MM-DD HH:MM, hora local>
-budget_mission_usd: <número acima de 0 — o teto de cada missão, passado ao sdd run como BUDGET_MISSION_USD, se nenhum .sdd/config.sh do repo (o da campanha e o de cada worktree) fixar essa chave acima dele; 0 é sem teto, e o budget para>
+budget_mission_usd: <número de pelo menos 0.01 — o teto de cada missão, passado como assinado ao sdd run como BUDGET_MISSION_USD, se nenhum .sdd/config.sh lido (o da campanha e o de cada worktree que guarda missão dela) fixar essa chave acima dele; 0 é sem teto, e o budget para>
 budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger>
 signed:
 ---
@@ -30,10 +30,12 @@ signed:
 | `full` | o de `merge`, e aprova o plano (`sdd approve`) |
 
 Delegação ausente, ilegível, sem assinatura, editada depois de assinada ou vencida vale `assisted`.
-Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` de qualquer checkout do repo
-também vale `assisted`, nomeando o arquivo: o da campanha e o de cada worktree ligado, porque o
-`sdd run` de uma missão roda no worktree dela e avisa pelo config de lá. Uma noite sem ninguém
-olhando precisa de um aviso que chegue. Pager fora do commit é escrito também em cada worktree.
+Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` do checkout da campanha ou de
+um worktree ligado que guarda uma missão dela também vale `assisted`, nomeando o arquivo, porque o
+`sdd run` de uma missão roda no worktree dela e avisa pelo config de lá. Worktree sem missão da
+campanha não é lido: nenhum `sdd run` dela roda ali, e ler o arquivo seria executá-lo. Uma noite sem
+ninguém olhando precisa de um aviso que chegue. Pager fora do commit é escrito também em cada
+worktree de missão.
 
 ## O teto por missão
 
@@ -42,16 +44,19 @@ runner lê o `.sdd/config.sh` do checkout em que roda **por cima** do ambiente: 
 essa chave vence o teto assinado, e o `config/starter.conf` que o `sdd install` semeia atribui
 `150`. O checkout em que o `sdd run` roda é o worktree da missão, não o da campanha, e um worktree
 cortado de um commit que ainda tem a linha a carrega mesmo depois de ela ser apagada aqui. Por isso
-o `bin/sdd-worker budget` lê o arquivo de todo checkout do repo (o da campanha e cada worktree
-ligado) e sai com rc 1 numa linha `no mission cap — …`, que nomeia o arquivo e o valor, quando um
-deles fixa a chave acima do teto assinado, em `0` (sem teto), vazia ou num valor que não é número.
-Um valor menor ou igual ao assinado é o teto mais estrito, e vale. Um `budget_mission_usd: 0`
-assinado também é sem teto para o runner, e o `budget` para antes de ler qualquer `.sdd/config.sh`,
-nomeando esta delegação.
+o `bin/sdd-worker budget` lê o arquivo do checkout da campanha e o de cada worktree que guarda uma
+missão dela, e de nenhum outro, cada um a partir do próprio checkout, e sai com rc 1 numa linha
+`no mission cap — …`, que nomeia o arquivo e o valor, quando um deles fixa a chave acima do teto
+assinado, em `0` (sem teto), vazia ou num valor que o runner recusa (ele aceita dígitos e no máximo
+um ponto: `1e2` é recusado). Um valor menor ou igual ao assinado é o teto mais estrito, e vale. Um
+`budget_mission_usd: 0` assinado também é sem teto para o runner, e um abaixo de `0.01` é menos que
+o centavo em que o worker conta: os dois param o `budget` antes de ler qualquer `.sdd/config.sh`,
+nomeando esta delegação. O teto que o `budget` imprime é o assinado, como está escrito.
 
 Antes de assinar, resolva a linha `BUDGET_MISSION_USD` do `.sdd/config.sh` por um de dois caminhos:
 apague-a e commite a remoção antes de cortar os worktrees das missões (um worktree cortado antes do
-commit continua com a linha), ou deixe-a, em todo checkout, no teto assinado ou abaixo dele.
+commit continua com a linha), ou deixe-a, no checkout da campanha e em cada worktree de missão, no
+teto assinado ou abaixo dele.
 
 ## Como assinar
 

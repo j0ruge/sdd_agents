@@ -524,8 +524,9 @@ a assinatura da delegação (`sdd-worker delegate` mostra as seis chaves e o tet
 pergunta, só `y` assina, e sai 66 sem escrever nada quando não lê resposta, o contrato do
 `sdd approve`). A delegação tem fim (`expires:`), dois tetos em dólar e cinco níveis cumulativos
 (`assisted` < `pr` < `plan` < `merge` < `full`); toda falha dela vale `assisted`, e acima de
-`assisted` também vale o `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` de qualquer checkout do
-repo. As paradas do worker (sem recibo do Codex 60 min depois do pedido, nota abaixo de A depois de
+`assisted` também vale o `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` do checkout da campanha ou
+de um worktree que guarda missão dela (o conjunto estreito: worktree sem missão da campanha não é
+lido, e ler o arquivo seria executá-lo). As paradas do worker (sem recibo do Codex 60 min depois do pedido, nota abaixo de A depois de
 3 rodadas, conflito no merge fora do `TODO.md` e da catraca, e os dois tetos) chamam o mesmo pager.
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha

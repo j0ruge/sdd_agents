@@ -3,7 +3,7 @@ campaign: 20261117-zerar-as-issues
 level: assisted
 lots: all
 expires: <YYYY-MM-DD HH:MM, hora local>
-budget_mission_usd: <número acima de 0 — o teto de cada missão, passado ao sdd run como BUDGET_MISSION_USD, se nenhum .sdd/config.sh do repo (o da campanha e o de cada worktree) fixar essa chave acima dele; 0 é sem teto, e o budget para>
+budget_mission_usd: <número de pelo menos 0.01 — o teto de cada missão, passado como assinado ao sdd run como BUDGET_MISSION_USD, se nenhum .sdd/config.sh lido (o da campanha e o de cada worktree que guarda missão dela) fixar essa chave acima dele; 0 é sem teto, e o budget para>
 budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger>
 signed:
 ---
@@ -29,13 +29,13 @@ ao preencher.
 
 Para o worker agir sozinho, depois do merge da missão que o construiu:
 
-1. configurar o `ON_ESCALATION_CMD` para **todo** checkout do repo: o `level` lê o `.sdd/config.sh`
-   de cada checkout que o `git worktree list` dá (o principal e cada worktree ligado, guarde ele
-   missão da campanha ou não), e um vazio em qualquer deles faz todo nível acima de `assisted` valer
-   `assisted`, nomeando o arquivo. Commitada, a linha só chega aos worktrees cortados depois do
-   commit; fora do commit, ela vai em cada checkout. Como fazer isso sem sujar os nove checkouts de
-   hoje é decisão em aberto (pendência 2 do `40-review-r4.md` da missão
-   `20261117-o-worker-orquestrador`);
+1. configurar o `ON_ESCALATION_CMD` no checkout da campanha e em cada worktree que guarda uma missão
+   dela: o `level` lê o `.sdd/config.sh` desses checkouts, e de nenhum outro (o conjunto estreito,
+   escolha do dono na r5 da missão `20261117-o-worker-orquestrador`), e um vazio em qualquer deles
+   faz todo nível acima de `assisted` valer `assisted`, nomeando o arquivo. Commitada, a linha só
+   chega aos worktrees cortados depois do commit; fora do commit, ela vai em cada worktree de
+   missão. Um worktree cuja branch traz uma cópia mergeada de missão da campanha também guarda uma,
+   e também é lido;
 2. preencher `level`, `expires` e os dois tetos abaixo, e assinar (seção "Como assinar").
 
 ## Os cinco níveis, cumulativos
@@ -49,8 +49,8 @@ Para o worker agir sozinho, depois do merge da missão que o construiu:
 | `full` | o de `merge`, e aprova o plano (`sdd approve`) |
 
 Delegação ausente, ilegível, sem assinatura, editada depois de assinada ou vencida vale `assisted`.
-Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` de qualquer checkout do repo
-(o da campanha e o de cada worktree ligado, onde o `sdd run` da missão roda e avisa) também vale
+Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` do checkout da campanha ou de
+um worktree que guarda missão dela (onde o `sdd run` da missão roda e avisa) também vale
 `assisted`: uma noite sem ninguém olhando precisa de um aviso que chegue. O L6 desta campanha tem teto `plan` no
 `campaign.md`: nele o nível efetivo nunca passa de `plan`, qualquer que seja o assinado.
 

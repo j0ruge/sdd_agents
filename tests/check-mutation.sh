@@ -6912,7 +6912,7 @@ mut_WORKER_budget_counts_every_mission() {
 # The ceiling never stops: a campaign at its ceiling or above it answers rc 0, and the worker goes on
 # spending. Caught by "budget: at the ceiling or above it the verb leaves rc 1" (check-worker.sh).
 mut_WORKER_budget_never_stops() {
-  sed -i '/^cmd_budget() {/,/^}/ s@^  if \[ "\${out##\* }" = true \]; then return 1; fi$@  if false; then return 1; fi@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if \[ "\$reached" = true \]; then return 1; fi$@  if false; then return 1; fi@' "${1%/*}/sdd-worker"
 }
 # A gh that failed reads as an empty list: "I could not read" becomes "there is no pull request",
 # and the lot is sent to run again. Caught by "next: a gh that does not answer leaves rc 3, and a
@@ -7021,7 +7021,7 @@ mut_WORKER_cap_file_unread() {
 # budget. Caught by "cap: a repo config that sets BUDGET_MISSION_USD above the signed mission cap,
 # or to 0, stops budget and names the key" (check-worker.sh).
 mut_WORKER_cap_caller_env_leaks() {
-  sed -i '/^config_key() {/,/^}/ s@^  ( set +eu; \[ "\$#" -lt 3 \] || printf -v "\$key" .%s. "\$3"$@  ( set +eu@' "${1%/*}/sdd-worker"
+  sed -i '/^config_key() {/,/^}/ s@^    \[ "\$#" -lt 3 \] || printf -v "\$key" .%s. "\$3"$@    :@' "${1%/*}/sdd-worker"
 }
 # A zero in the repo's config holds as a cap: BUDGET_MISSION_USD=0 is no ceiling for the runner, and
 # the worker would launch a mission with none. Caught by "cap: a repo config that sets
@@ -7061,14 +7061,15 @@ mut_WORKER_shown_terms_unchecked() {
 # worktree and loads that checkout's .sdd/config.sh, so a worktree cut from a commit that still sets
 # BUDGET_MISSION_USD=150 beats the signed 40 while budget prints it (achado #1 of the mission's
 # review r2). Caught by "worktree: a mission worktree whose config sets BUDGET_MISSION_USD above the
-# signed cap stops budget and names that file" (check-worker.sh).
+# signed cap stops budget and names that file, and a worktree with no mission of the campaign is not
+# read" (check-worker.sh).
 mut_WORKER_worktree_root_only() {
-  sed -i '/^cmd_budget() {/,/^}/ s@^  done < <(checkouts_of "\$root")$@  done < <(echo "$root")@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_budget() {/,/^}/ s|^  for wt in "\${SET_CHECKOUTS\[@\]}"; do$|  for wt in "$root"; do|' "${1%/*}/sdd-worker"
 }
 # The stop names the campaign's file whatever checkout beat the cap: the owner told to delete a line
 # that is not there, and the worktree's left in place. Caught by "worktree: a mission worktree whose
-# config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file"
-# (check-worker.sh).
+# config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file, and a
+# worktree with no mission of the campaign is not read" (check-worker.sh).
 mut_WORKER_worktree_file_misnamed() {
   sed -i '/^cmd_budget() {/,/^}/ s@^        "\$wt/\.sdd/config\.sh" "\$run"$@        "$root/.sdd/config.sh" "$run"@' "${1%/*}/sdd-worker"
 }
@@ -7104,14 +7105,15 @@ mut_WORKER_zero_signed_unchecked() {
 # and pages from that checkout's .sdd/config.sh, so a worktree that leaves ON_ESCALATION_CMD empty
 # stops the line with rc 3 and nobody is told, while level answers the signed pr (achado #1 of the
 # mission's review r3). Caught by "pager: a mission worktree whose config leaves ON_ESCALATION_CMD
-# empty lowers the level to assisted and names that file" (check-worker.sh).
+# empty lowers the level to assisted and names that file, and a worktree with no mission of the
+# campaign is not read" (check-worker.sh).
 mut_WORKER_pager_root_only() {
-  sed -i '/^effective_level() {/,/^}/ s@^    done < <(checkouts_of "\$root")$@    done < <(echo "$root")@' "${1%/*}/sdd-worker"
+  sed -i '/^effective_level() {/,/^}/ s|^    for wt in "\${SET_CHECKOUTS\[@\]}"; do$|    for wt in "$root"; do|' "${1%/*}/sdd-worker"
 }
 # The stop names the campaign's file whatever checkout has no pager: the owner told to write a
 # pager that is already there, and the worktree's left empty. Caught by "pager: a mission worktree
-# whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file"
-# (check-worker.sh).
+# whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file, and a
+# worktree with no mission of the campaign is not read" (check-worker.sh).
 mut_WORKER_pager_file_misnamed() {
   sed -i '/^effective_level() {/,/^}/ s@ is empty in \$wt/\.sdd/config\.sh"; return 0$@ is empty in $root/.sdd/config.sh"; return 0@' "${1%/*}/sdd-worker"
 }
@@ -7181,6 +7183,75 @@ mut_WORKER_receipt_parsed_first() {
 # (check-worker.sh).
 mut_WORKER_receipt_any_comment() {
   sed -i '/^cmd_pr_ready() {/,/^}/ s@| \.body | select(contains("codex-review-state:v1"))\]@| .body]@' "${1%/*}/sdd-worker"
+}
+
+# Every worktree of the repo joins the set again, whether or not it holds a mission of the
+# campaign: budget and level execute the .sdd/config.sh of a branch where no `sdd run` of the
+# campaign runs, and its cap, pager and HANDOFF_DIR decide the answer (achado #3 of the mission's
+# review r5). Caught by "narrow: budget, level, allows and next read the config of the campaign's
+# checkout and of the worktrees that hold a mission of it, and of no other" (check-worker.sh).
+mut_WORKER_narrow_every_checkout() {
+  sed -i '/^campaign_set() {/,/^}/ s@^    if \[ -n "\$held" \] && \[ "\$wt" != "\$root" \]; then$@    if [ "$wt" != "$root" ]; then@' "${1%/*}/sdd-worker"
+}
+# A git worktree list that failed reads as a list with the campaign's checkout alone: budget sums
+# fewer missions, level reads fewer pagers, next plans a lot in flight again (achado #24 of the
+# mission's review r5). Caught by "listed: a git worktree list that fails, before or after printing,
+# stops budget, level and next with rc 1 naming the call, and allows asks" (check-worker.sh).
+mut_WORKER_listed_failure_swallowed() {
+  sed -i '/^checkouts_of() {/,/^}/ s@^  if \[ "\$rc" -ne 0 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# budget goes on past a set that did not read, over the campaign's checkout alone: zero missions
+# and rc 0 where the listing failed. Caught by "listed: a git worktree list that fails, before or
+# after printing, stops budget, level and next with rc 1 naming the call, and allows asks"
+# (check-worker.sh).
+mut_WORKER_listed_budget_goes_on() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if ! campaign_set "\$root" "\$(fm_value "\$f" campaign)"; then printf .no spend — %s\\n. "\$SET_WHY"; return 1; fi$@  campaign_set "$root" "$(fm_value "$f" campaign)" || :@' "${1%/*}/sdd-worker"
+}
+# The sum is compared with the ceiling as binary floats again, not in cents: 0.10 + 0.70 sums to
+# 0.7999999999999999 and never reaches a ceiling of 0.80 (achado #4 of the mission's review r5).
+# Caught by "spend: the spend reaches its ceiling in cents, the mission cap is printed as signed and
+# refused below one cent, and a config value the runner refuses stops budget" (check-worker.sh).
+mut_WORKER_spend_float_compare() {
+  sed -i '/^cmd_budget() {/,/^}/ s@| "\\(\$spent) \\(\$ceiling) \\(\$spent >= \$ceiling)"@| "\\($spent) \\($ceiling) \\(. >= ($cap | tonumber))"@' "${1%/*}/sdd-worker"
+}
+# The mission cap is printed with two decimals again, not as signed: 0.015 reaches `sdd run` as
+# 0.01 or 0.02, and 0.004 as 0.00, the runner's no ceiling (achado #5 of the mission's review r5).
+# Caught by "spend: the spend reaches its ceiling in cents, the mission cap is printed as signed and
+# refused below one cent, and a config value the runner refuses stops budget" (check-worker.sh).
+mut_WORKER_spend_cap_rounded() {
+  sed -i '/^cmd_budget() {/,/^}/ s| "\${#ms\[@\]}" "\$mcap"$| "${#ms[@]}" "$(LC_ALL=C printf %.2f "$mcap")"|' "${1%/*}/sdd-worker"
+}
+# A signed mission cap below one cent holds again: 0.004 is a cap the cents of the campaign cannot
+# hold, and `%.2f` used to print it as the runner's no ceiling (achado #5 of the mission's review
+# r5). Caught by "spend: the spend reaches its ceiling in cents, the mission cap is printed as signed
+# and refused below one cent, and a config value the runner refuses stops budget" (check-worker.sh).
+mut_WORKER_spend_below_cent_holds() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if \[\[ "\$mcap" =~ ^0+\\\.00 \]\]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The runner's grammar of BUDGET_MISSION_USD is no longer applied to the config: 1e2, +5 or a
+# blank, which jq reads as numbers and the runner refuses, hold as a cap (achado #21 of the
+# mission's review r5). Caught by "spend: the spend reaches its ceiling in cents, the mission cap is
+# printed as signed and refused below one cent, and a config value the runner refuses stops budget"
+# (check-worker.sh).
+mut_WORKER_spend_grammar_unchecked() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^      \*\[!0-9\.\]\* | \. | \*\.\*\.\*)$@      __no_value_is_this__)@' "${1%/*}/sdd-worker"
+}
+# The config is sourced from the cwd of the caller again: a relative include in a worktree's file
+# reads the caller's checkout, or nothing, and the cap and pager of the worktree are missed
+# (achado #38 of the mission's review r5). Caught by "cwd: a config is sourced from its own
+# checkout, and a HANDOFF_DIR in the set other than the campaign checkout's stops budget, level and
+# next naming the file" (check-worker.sh).
+mut_WORKER_cwd_caller_cwd() {
+  sed -i -e '/^config_key() {/,/^}/ s@^  ( set +eu; CDPATH=.. cd -- "\$1" || exit 0$@  ( set +eu@' \
+    -e '/^config_key() {/,/^}/ s@^    \. \./\.sdd/config\.sh > /dev/null@    . "$cfg" > /dev/null@' "${1%/*}/sdd-worker"
+}
+# A HANDOFF_DIR in a worktree of the set other than the root's is no longer read: the runner there
+# looks for its missions where the worker does not, and budget, level and next answer as if it
+# agreed (achado #37 of the mission's review r5). Caught by "cwd: a config is sourced from its own
+# checkout, and a HANDOFF_DIR in the set other than the campaign checkout's stops budget, level and
+# next naming the file" (check-worker.sh).
+mut_WORKER_cwd_handoff_dir_unchecked() {
+  sed -i '/^campaign_set() {/,/^}/ s@^      if \[ "\$whd" != "\$hd" \]; then$@      if false; then@' "${1%/*}/sdd-worker"
 }
 
 CATALOG=(
@@ -8048,6 +8119,15 @@ CATALOG=(
   WORKER_range_merge_unseen
   WORKER_receipt_parsed_first
   WORKER_receipt_any_comment
+  WORKER_narrow_every_checkout
+  WORKER_listed_failure_swallowed
+  WORKER_listed_budget_goes_on
+  WORKER_spend_float_compare
+  WORKER_spend_cap_rounded
+  WORKER_spend_below_cent_holds
+  WORKER_spend_grammar_unchecked
+  WORKER_cwd_caller_cwd
+  WORKER_cwd_handoff_dir_unchecked
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -35,7 +35,8 @@
 #   R9  above assisted, a campaign whose repo sets no ON_ESCALATION_CMD (empty, or no config, even
 #       under a caller that exports one: the runner does not run without the file) is assisted —
 #       the same signed file answers merge where the pager is set; the config read is the
-#       campaign's repo (every checkout of it, R44), never the cwd
+#       campaign's repo (its checkout and the worktrees that hold a mission of it, R44), never the
+#       cwd
 #   R10 with --lot, a ceiling below the signed level lowers it and one above never raises it; a lot
 #       outside `lots:`, or with no row in the table, is assisted; a --lot with no lot is rc 2
 #   R11 `allows`, over a delegation signed at each of the five levels, answers the table of acts of
@@ -59,8 +60,9 @@
 #   R16 at the campaign ceiling or above it `budget` leaves rc 1, and below it rc 0, the comparison
 #       being numeric (10 is above 8.5); so do the answers it cannot have — no delegation or an
 #       illegible one (no ceiling), a directory outside a git checkout, a ledger that does not read
+#       (and a worktree list that does not run, R50)
 #   R17 a missing or empty ledger is zero spent (rc 0), and the line prints the mission cap of the
-#       delegation, the one the worker passes to `sdd run` as BUDGET_MISSION_USD
+#       delegation as signed, the one the worker passes to `sdd run` as BUDGET_MISSION_USD
 #   R18 `next` plans a lot no mission of the campaign declares (another campaign's mission on the
 #       lot, or this campaign's on another lot, is not it), and approves a mission whose aprovacao:
 #       the runner's gate does not admit — empty, the template's placeholder, or empty in one copy
@@ -147,12 +149,12 @@
 #   R40 `delegate` signs what it showed: the delegation edited while the question is open (a FIFO
 #       on stdin) is `not signed`, rc 1, the file as the edit left it; the same FIFO with no edit
 #       signs, so the refusal is the edit's
-#   R41 `budget` applies R37 to the .sdd/config.sh of every checkout of the campaign's repo — the
-#       campaign's and every linked worktree, one that holds a mission of the campaign or not —,
-#       since `sdd run` runs in the mission's worktree and loads that checkout's file: a worktree
-#       cut from a commit that still sets the key above the signed cap stops budget naming the
-#       worktree's file, with the line deleted in the campaign's checkout; deleted everywhere, the
-#       signed cap holds
+#   R41 `budget` applies R37 to the .sdd/config.sh of the campaign's checkout and of each linked
+#       worktree that holds a mission of the campaign, since `sdd run` runs in the mission's
+#       worktree and loads that checkout's file: a worktree cut from a commit that still sets the
+#       key above the signed cap stops budget naming the worktree's file, with the line deleted in
+#       the campaign's checkout; one that holds no mission of the campaign is not read (R49), and
+#       its 150 holds nothing; deleted everywhere, the signed cap holds
 #   R42 the review item of `pr-ready` splits a row of the grade table as gate_REVIEW splits it: a
 #       `\|` is a pipe of its cell, not a delimiter, and `\\|` is a backslash against a real one.
 #       The runner's own split is read out of bin/sdd HERE, and pr-ready agrees with it on every
@@ -161,10 +163,11 @@
 #   R43 a signed `budget_mission_usd:` of zero, which `sdd run` reads as no ceiling, stops `budget`
 #       naming the delegation and never a .sdd/config.sh — with no config, or one silent on the key;
 #       a fraction above zero is the cap, and holds
-#   R44 above assisted, the pager of every checkout of the campaign's repo is read, since `sdd run`
-#       runs in the mission's worktree and pages from that checkout's file: an empty one in a
-#       worktree — with a mission of the campaign or none — or in the campaign's checkout lowers the
-#       level to assisted naming that file, and `allows run` asks; the pager in every checkout is
+#   R44 above assisted, the pager of the campaign's checkout and of each worktree that holds a
+#       mission of the campaign is read, since `sdd run` runs in the mission's worktree and pages
+#       from that checkout's file: an empty one in such a worktree or in the campaign's checkout
+#       lowers the level to assisted naming that file, and `allows run` asks; an empty one in a
+#       worktree with no mission of the campaign is not read (R49); the pager in every checkout is
 #       the signed level; a campaign outside any git checkout names `(no repo)`, never the cwd's
 #   R45 the review item knows the header and the separator of the grade table by the shape of the
 #       line, never by the grade: the separator is the row whose every cell is `:?-+:?`, the header
@@ -186,6 +189,26 @@
 #       parsed: one cut short, or whose code_review is no object, fails codex with rc 1, a good
 #       older one never read in its place; a comment of the bot without the marker is no receipt
 #       (achado #11 of the r5)
+#   R49 budget, level, allows and next read the .sdd/config.sh of the campaign's checkout and of
+#       the worktrees that hold a mission of the campaign, and of no other: a worktree with another
+#       campaign's mission or none, whose file sets the cap to 150, the pager to empty and
+#       HANDOFF_DIR elsewhere and touches a mark, changes no answer and is never executed; the file
+#       of the mission's worktree is (achado #3 of the r5, the narrow set the owner chose)
+#   R50 a `git worktree list` that fails, before printing or after a full answer, stops budget
+#       (`no spend — …`), level (`level assisted — unread: …`) and next (`stop - - — unread: …`)
+#       with rc 1, naming the call and its rc, and allows asks; a git that passes gives R49's
+#       answers (achado #24 of the r5)
+#   R51 money is counted in cents: 0.10 + 0.70 reaches a ceiling of 0.80, and the cents are
+#       rounded (0.803 is 0.80, 0.806 is 0.81, a cap of 0.806 is 0.81); the mission cap is printed
+#       as signed (0.015, 10.004) and refused below one cent (0.004, 0.0099, 00.009), naming the
+#       delegation; a BUDGET_MISSION_USD the runner's own pattern refuses (read out of bin/sdd
+#       HERE) stops budget naming the file, the value and the refusal, and one it accepts at or
+#       below the signed cap holds — a differential (achados #4, #5 and #21 of the r5)
+#   R52 a .sdd/config.sh is sourced from its own checkout: a relative include in the mission's
+#       worktree reads that worktree's file, asked from the repo's cwd or from another; and a
+#       HANDOFF_DIR in a worktree of the set other than the campaign checkout's stops budget, level
+#       and next with rc 1 naming both files, the default written out on one side being the same
+#       (achados #37 and #38 of the r5)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -198,6 +221,24 @@
 # history produces (without it, an empty list of commits reads as a range with nothing outside the
 # folder), so it stays, with the missing world named here.
 #
+# Declared limits of the set (R49 to R52), no probe:
+# - config_key enters the checkout with `CDPATH='' cd -- <root> || exit 0` and sources
+#   `./.sdd/config.sh` there. Every caller passes a path git printed, which is absolute, so CDPATH
+#   is never consulted and `./.sdd/config.sh` is the same file as `<root>/.sdd/config.sh`: the world
+#   of a relative root was not built. The `|| exit 0` decides what a checkout it cannot enter
+#   answers (nothing, never the caller's cwd), and no world reaches it: the `-f` test before it
+#   already needs to traverse the same directory.
+# - checkouts_of puts the root first and lists each checkout once, and campaign_set never appends
+#   the root twice: git lists every worktree, the root among them, and every reader dedupes the
+#   mission ids after it, so a root listed twice reads the same files and answers the same; the
+#   root first only orders the copies of a mission, and in every world here the root is the main
+#   checkout, which git lists first anyway — a campaign in a linked worktree was not built.
+# - campaign_set answers no mission for an empty id, and no verb reaches it (bin/sdd-worker says
+#   why): it decides what an empty id would answer, never all the missions of no campaign.
+# - The HANDOFF_DIR of a worktree outside the set is not read: a worktree whose HANDOFF_DIR is not
+#   the root's keeps its missions where the root's glob does not look, holds none the set sees, and
+#   its missions are not counted (bin/sdd-worker, campaign_set).
+#
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
 # sums outside LC_ALL=C answers wrong here. Declared limit: on a machine without the locale that
@@ -205,7 +246,8 @@
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
-# `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that
+# `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `narrow: `, `listed: `,
+# `spend: `, `cwd: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that
 # opened it names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the
 # sensor at the first red, after printing it; the census in check-health.sh holds that clause.
 #
@@ -220,7 +262,7 @@ fails=0
 # The seam, the pager and the mission cap are the fixture's to set: a value exported by whoever runs
 # the suite (an `sdd run` launched by the worker exports the cap) would move the clock of every
 # probe, lend a pager to a repo that has none, or stand in for a config that is silent on the cap.
-unset SDD_WORKER_NOW ON_ESCALATION_CMD BUDGET_MISSION_USD
+unset SDD_WORKER_NOW ON_ESCALATION_CMD BUDGET_MISSION_USD HANDOFF_DIR
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
@@ -886,8 +928,8 @@ git -C "$REPO" -c user.name=fixture -c user.email=fixture@example.com commit -q 
 git -C "$REPO" worktree add -q -b fixture-side "$BOX/wt" > /dev/null 2>&1 \
   || got="fixture: the linked worktree was not created"
 # A worktree carries the config its repo commits, and the fixture repo commits none: this one gets
-# the campaign checkout's own, pager and all, so every level asked later of a campaign of the
-# fixture repo — which reads the pager of every checkout of the repo (R44) — stays the one signed.
+# the campaign checkout's own, HANDOFF_DIR and pager and all, so b-sum, whose mission it holds and
+# whose verbs therefore read its file (R44, R52), reads the same keys as in the campaign's checkout.
 mkdir -p "$BOX/wt/.sdd"; cp "$REPO/.sdd/config.sh" "$BOX/wt/.sdd/config.sh"
 mission "$BOX/wt" "$H" 20990106-b-wt b-sum
 mission "$BOX/wt" "$H" 20990101-b-one b-sum
@@ -907,11 +949,11 @@ mkdir -p "$BOX/state" "$BOX/home/.sdd"
   spent 20990107-b-hd-in session 2; spent 20990108-b-hd-decoy session 16
 } > "$BOX/state/autonomy-log.jsonl"
 cp "$BOX/state/autonomy-log.jsonl" "$BOX/home/.sdd/"
-want='campaign US$ 8.50 of 100.00 — 3 mission(s); mission cap US$ 25.00'
+want='campaign US$ 8.50 of 100.00 — 3 mission(s); mission cap US$ 25'
 budget_is 'SDD_STATE_DIR' 0 "$want" "$d"
 ( unset SDD_STATE_DIR; HOME="$BOX/home" budget_is 'HOME' 0 "$want" "$d"; printf '%s' "$got" > "$BOX/got" )
 got="$(cat "$BOX/got")"
-budget_is 'HANDOFF_DIR' 0 'campaign US$ 2.00 of 100.00 — 1 mission(s); mission cap US$ 25.00' \
+budget_is 'HANDOFF_DIR' 0 'campaign US$ 2.00 of 100.00 — 1 mission(s); mission cap US$ 25' \
   "$HD/docs/campaigns/b-hd"
 if [ -z "$got" ]; then
   pass "budget: the sum counts the campaign's missions and no other"
@@ -935,7 +977,7 @@ mission "$REPO" "$H" 20990112-b-cap-2 b-cap
 for w in 'b-at|8.5|1|8.50' 'b-above|8|1|8.00' 'b-edge|8.51|0|8.51' 'b-below|10|0|10.00'; do
   IFS='|' read -r id cap rc shown <<< "$w"
   d="$(campaign "$id/b-cap" pr "$FAR" 25 "$cap")"
-  budget_is "$id" "$rc" "campaign US\$ 8.50 of $shown — 2 mission(s); mission cap US\$ 25.00" "$d"
+  budget_is "$id" "$rc" "campaign US\$ 8.50 of $shown — 2 mission(s); mission cap US\$ 25" "$d"
 done
 mkdir -p "$REPO/docs/campaigns/b-absent"
 budget_is 'no delegation' 1 'no ceiling — no delegation' "$REPO/docs/campaigns/b-absent"
@@ -959,7 +1001,7 @@ fi
 # --- R17: no ledger yet -------------------------------------------------------------------------
 # One mission of the campaign and three ledgers that hold nothing: a state directory that does not
 # exist, one with no ledger file, and an empty ledger. Each is zero spent and rc 0, and the line
-# names the mission cap of this delegation, 37.50 — R15 and R16 print 25.00, so a constant fails
+# names the mission cap of this delegation, 37.5 as signed — R15 and R16 print 25, so a constant fails
 # one of the two.
 got=""
 d="$(campaign b-fresh pr "$FAR" 37.5 200)"
@@ -968,13 +1010,13 @@ mkdir -p "$BOX/state-empty" "$BOX/state-blank"
 : > "$BOX/state-blank/autonomy-log.jsonl"
 for s in state-none state-empty state-blank; do
   SDD_STATE_DIR="$BOX/$s" budget_is "$s" 0 \
-    'campaign US$ 0.00 of 200.00 — 1 mission(s); mission cap US$ 37.50' "$d"
+    'campaign US$ 0.00 of 200.00 — 1 mission(s); mission cap US$ 37.5' "$d"
 done
 if [ -z "$got" ]; then
   pass 'budget: a missing ledger is zero spent, and the mission cap is printed'
 else
   fail 'budget: a missing ledger is zero spent, and the mission cap is printed' \
-    'campaign US$ 0.00 of 200.00 — 1 mission(s); mission cap US$ 37.50, rc 0, for each' "$got"
+    'campaign US$ 0.00 of 200.00 — 1 mission(s); mission cap US$ 37.5, rc 0, for each' "$got"
 fi
 
 # --- R37: the mission cap the runner applies ----------------------------------------------------
@@ -1014,9 +1056,11 @@ budget_is starter 1 "$stop" "$d"
 for w in 'zero|0.00' 'above|40.01' 'empty|'; do
   IFS='|' read -r id v <<< "$w"
   d="$(cap_world "$id" "BUDGET_MISSION_USD=\"$v\"")"
-  budget_is "$id" 1 "no mission cap — $BOX/cap-$id/.sdd/config.sh sets BUDGET_MISSION_USD=$v, " "$d"
+  want="no mission cap — $BOX/cap-$id/.sdd/config.sh sets BUDGET_MISSION_USD=$v, which sdd run applies over the signed budget_mission_usd: 40; delete the line, or set it above 0 and at most that"
+  budget_is "$id" 1 "$want" "$d"
+  [ "$W_OUT" = "$want" ] || got="${got:+$got; }$id: the line is '$W_OUT'"
 done
-held='campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 40.00'
+held='campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 40'
 for w in 'equal|BUDGET_MISSION_USD=40' 'below|BUDGET_MISSION_USD=12.5' \
          'default|BUDGET_MISSION_USD="${BUDGET_MISSION_USD:-150}"' 'noconf|'; do
   IFS='|' read -r id v <<< "$w"
@@ -1032,7 +1076,7 @@ if [ -z "$got" ]; then
   pass 'cap: a repo config that sets BUDGET_MISSION_USD above the signed mission cap, or to 0, stops budget and names the key'
 else
   fail 'cap: a repo config that sets BUDGET_MISSION_USD above the signed mission cap, or to 0, stops budget and names the key' \
-    "rc 1 naming the file and BUDGET_MISSION_USD=<value> for the starter, 0.00, 40.01 and empty; rc 0 and the mission cap 40.00 for 40, 12.5, the default form, no line and no config" "$got"
+    "rc 1 naming the file and BUDGET_MISSION_USD=<value> for the starter, 0.00, 40.01 and empty; rc 0 and the mission cap 40 for 40, 12.5, the default form, no line and no config" "$got"
 fi
 
 # --- next: the fixtures -------------------------------------------------------------------------
@@ -2150,7 +2194,7 @@ else
     'rc 1, not signed — the delegation changed…, the file as edited; rc 0 and signed at pr with no edit' "$got"
 fi
 
-# --- R41: the config of every checkout ----------------------------------------------------------
+# --- R41: the config of the checkouts in the set ------------------------------------------------
 # The runner loads the .sdd/config.sh of the checkout it runs in (CONFIG_FILE under its REPO_ROOT,
 # in bin/sdd), and the session launches it in the mission's worktree: the line deleted in the
 # campaign's checkout, the remedy templates/delegation.md gives, is still there in a worktree cut
@@ -2158,44 +2202,48 @@ fi
 # worktrees cut from that commit — m holds the campaign's mission, x holds none —, the line then
 # deleted in the campaign's checkout; campaign w-cap, mission cap 40, campaign cap 100:
 #   m      m keeps the 150 of the commit, x has the line deleted: rc 1, naming m's file and 150
-#   x      m has the line deleted, x keeps 150: rc 1, naming x's file — every checkout of the repo
-#          is read, not only one that holds a mission of the campaign: the wider set is the safe one
+#   x      m has the line deleted, x keeps 150: rc 0, the signed cap — x holds no mission of the
+#          campaign, so no `sdd run` of it runs there, and its file is never read (the narrow set
+#          the owner chose, R49)
 #   clean  the line deleted in every checkout: rc 0, the signed cap and the one mission, so each
 #          stop is the worktree's file and nothing else
-# The folder of x ends in a backslash, a letter and a space, which `git worktree list` prints raw: a
-# reader of its lines that drops a backslash or trims a space reads a checkout that is not there,
-# whose absent file holds the signed cap — the fail-open side.
+# The folder of m ends in a backslash, a letter and a space, which `git worktree list` prints raw: a
+# reader of its lines that drops a backslash or trims a space globs a checkout that is not there,
+# finds no mission in it, and leaves m out of the set with its 150 unread — the fail-open side.
 got=""
 W="$BOX/wcap"
-WX="$BOX/wcap-x\\b "
+WM="$BOX/wcap-m\\b "
+WX="$BOX/wcap-x"
 mkdir -p "$W/.sdd" "$W/docs/campaigns"
 git init -q -b main "$W"
 noline='HANDOFF_DIR="docs/handoffs"'
 printf '%s\nBUDGET_MISSION_USD=150\n' "$noline" > "$W/.sdd/config.sh"
 git -C "$W" add .sdd/config.sh
 git -C "$W" -c user.name=fixture -c user.email=fixture@example.com commit -q -m fixture
-git -C "$W" worktree add -q -b feat/w-m "$BOX/wcap-m" > /dev/null 2>&1 \
+git -C "$W" worktree add -q -b feat/w-m "$WM" > /dev/null 2>&1 \
   || got="${got:+$got; }fixture: the worktree m was not created"
 git -C "$W" worktree add -q -b feat/w-x "$WX" > /dev/null 2>&1 \
   || got="${got:+$got; }fixture: the worktree x was not created"
-mission "$BOX/wcap-m" "$H" 20990301-w-m w-cap
+mission "$WM" "$H" 20990301-w-m w-cap
 cp -a "$(campaign w-cap pr "$FAR" 40 100)" "$W/docs/campaigns/"
 printf '%s\n' "$noline" > "$W/.sdd/config.sh"
 printf '%s\n' "$noline" > "$WX/.sdd/config.sh"
-grep -qx 'BUDGET_MISSION_USD=150' "$BOX/wcap-m/.sdd/config.sh" 2>/dev/null \
+grep -qx 'BUDGET_MISSION_USD=150' "$WM/.sdd/config.sh" 2>/dev/null \
   || got="${got:+$got; }fixture: the worktree m does not carry the 150 of the commit"
 wstop=" sets BUDGET_MISSION_USD=150, which sdd run applies over the signed budget_mission_usd: 40; "
-budget_is m 1 "no mission cap — $BOX/wcap-m/.sdd/config.sh$wstop" "$W/docs/campaigns/w-cap"
-printf '%s\n' "$noline" > "$BOX/wcap-m/.sdd/config.sh"
+budget_is m 1 "no mission cap — $WM/.sdd/config.sh$wstop" "$W/docs/campaigns/w-cap"
+printf '%s\n' "$noline" > "$WM/.sdd/config.sh"
 printf '%s\nBUDGET_MISSION_USD=150\n' "$noline" > "$WX/.sdd/config.sh"
-budget_is x 1 "no mission cap — $WX/.sdd/config.sh$wstop" "$W/docs/campaigns/w-cap"
+held='campaign US$ 0.00 of 100.00 — 1 mission(s); mission cap US$ 40'
+budget_is x 0 "$held" "$W/docs/campaigns/w-cap"
+[ "$W_OUT" = "$held" ] || got="${got:+$got; }x: the line is not the whole answer: '$W_OUT'"
 printf '%s\n' "$noline" > "$WX/.sdd/config.sh"
-budget_is clean 0 'campaign US$ 0.00 of 100.00 — 1 mission(s); mission cap US$ 40.00' "$W/docs/campaigns/w-cap"
+budget_is clean 0 "$held" "$W/docs/campaigns/w-cap"
 if [ -z "$got" ]; then
-  pass 'worktree: a mission worktree whose config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file'
+  pass 'worktree: a mission worktree whose config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file, and a worktree with no mission of the campaign is not read'
 else
-  fail 'worktree: a mission worktree whose config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file' \
-    "rc 1 naming the file of m, then of x, and 150; rc 0 and the mission cap 40.00 over 1 mission with the line deleted in every checkout" "$got"
+  fail 'worktree: a mission worktree whose config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file, and a worktree with no mission of the campaign is not read' \
+    "rc 1 naming the file of m and 150; rc 0 and the mission cap 40 over 1 mission with x keeping 150, and with the line deleted in every checkout" "$got"
 fi
 
 # --- R42: a pipe escaped inside a cell of the grade table ----------------------------------------
@@ -2286,8 +2334,9 @@ fi
 #   zero    mission cap 0, no .sdd/config.sh: rc 1, the stop naming the delegation and its 0
 #   zeros   0.00, a spelling of the runner's numeric zero: rc 1, the same stop
 #   silent  0, a config silent on the key: rc 1, the same stop, and no config.sh named
-#   frac    0.5, a fraction above zero, no config: rc 0 and the mission cap 0.50 — every positive
-#           value is a cap for the runner, so the stop is the zero's and never "below one dollar"
+#   frac    0.5, a fraction above zero, no config: rc 0 and the mission cap 0.5 — a fraction of a
+#           cent or more is a cap for the runner, so the stop is the zero's and never "below one
+#           dollar" (below one cent is the stop of R51)
 got=""
 zero_world() {
   local k="$BOX/zero-$1"
@@ -2305,15 +2354,15 @@ for w in 'zero|0|-' 'zeros|0.00|-' 'silent|0|HANDOFF_DIR="docs/handoffs"'; do
     || got="${got:+$got; }$id: the stop says more than its line: '$W_OUT'"
   [[ "$W_OUT" != *config.sh* ]] || got="${got:+$got; }$id: the stop names a config: '$W_OUT'"
 done
-budget_is frac 0 'campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 0.50' "$(zero_world frac 0.5 -)"
+budget_is frac 0 'campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 0.5' "$(zero_world frac 0.5 -)"
 if [ -z "$got" ]; then
   pass 'zero: a signed mission cap of zero stops budget naming the delegation, never a config that does not set it'
 else
   fail 'zero: a signed mission cap of zero stops budget naming the delegation, never a config that does not set it' \
-    "rc 1 naming the delegation and its 0 for 0, 0.00 and a config silent on the key; rc 0 and the mission cap 0.50 for 0.5" "$got"
+    "rc 1 naming the delegation and its 0 for 0, 0.00 and a config silent on the key; rc 0 and the mission cap 0.5 for 0.5" "$got"
 fi
 
-# --- R44: the pager of every checkout -----------------------------------------------------------
+# --- R44: the pager of the checkouts in the set -------------------------------------------------
 # The pager is the mission cap's twin (R41): the runner loads the .sdd/config.sh of the checkout it
 # runs in, and the session launches it in the mission's worktree, so a pager written only in the
 # campaign's checkout — left out of the commit, since its command often carries a secret topic —
@@ -2323,19 +2372,21 @@ fi
 # mission, x holds none —; campaign p-pager signed at pr, its lot L1 with no ceiling:
 #   m        the pager in the campaign's checkout and in x, m's left empty: assisted naming m's
 #            file, and `allows run --lot L1` asks
-#   x        the pager in the campaign's checkout and in m, x's left empty: assisted naming x's
-#            file — every checkout of the repo is read, not only one that holds a mission
+#   x        the pager in the campaign's checkout and in m, x's left empty: the signed pr — x holds
+#            no mission of the campaign, no `sdd run` of it pages from there, and its file is never
+#            read (the narrow set, R49)
 #   inverse  the pager in both worktrees, the campaign's checkout left empty: assisted naming its file
 #   control  the pager in every checkout: the signed pr, and `allows run --lot L1` allowed, so each
 #            stop is a file's empty pager and nothing else
 #   nogit    the same file copied outside any git checkout, asked from the cwd of P with the pager
 #            everywhere: assisted naming `(no repo)`, never a checkout of the cwd's repo; the signed
 #            assisted of R9 copied there answers its own level, since assisted asks for no pager
-# The folder of x ends in a backslash, a letter and a space, as in R41: a reader of its lines that
-# drops either reads a checkout that is not there, whose absent file has no pager, and the control
-# goes red on it. Every answer is the whole line: a stop naming the wrong file starts the same.
+# The folder of m ends in a backslash, a letter and a space, as in R41: a reader of its lines that
+# drops either globs a checkout that is not there, finds no mission, and leaves m's empty pager
+# unread, so the world m goes red on it. Every answer is the whole line: a stop naming the wrong
+# file starts the same.
 got=""
-P="$BOX/wpager"; PM="$BOX/wpager-m"; PX="$BOX/wpager-x\\b "
+P="$BOX/wpager"; PM="$BOX/wpager-m\\b "; PX="$BOX/wpager-x"
 nopager='ON_ESCALATION_CMD=""'; pager='ON_ESCALATION_CMD="true"'
 mkdir -p "$P/.sdd" "$P/docs/campaigns"
 git init -q -b main "$P"
@@ -2368,7 +2419,7 @@ allows_is m-run 1 "ask run needs pr, effective assisted — no pager: ON_ESCALAT
   "$d" run --lot L1
 [ "$W_OUT" = "ask run needs pr, effective assisted — no pager: ON_ESCALATION_CMD is empty in $PM/.sdd/config.sh" ] \
   || got="${got:+$got; }m-run: the line is not the whole answer: '$W_OUT'"
-pager_is x "$pager" "$pager" "$nopager" "$nopage $PX/.sdd/config.sh"
+pager_is x "$pager" "$pager" "$nopager" "level pr — signed until $FAR"
 pager_is inverse "$nopager" "$pager" "$pager" "$nopage $P/.sdd/config.sh"
 pager_is control "$pager" "$pager" "$pager" "level pr — signed until $FAR"
 allows_is control-run 0 'allowed run at pr' "$d" run --lot L1
@@ -2378,10 +2429,10 @@ W_CWD="$P" level_is nogit "$nopage (no repo)/.sdd/config.sh" "$BOX/nogit/p-pager
 [ "$W_OUT" = "$nopage (no repo)/.sdd/config.sh" ] || got="${got:+$got; }nogit: the line is not the whole answer: '$W_OUT'"
 W_CWD="$P" level_is nogit-assisted "level assisted — signed until $FAR" "$BOX/nogit/l-pager-assisted"
 if [ -z "$got" ]; then
-  pass 'pager: a mission worktree whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file'
+  pass 'pager: a mission worktree whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file, and a worktree with no mission of the campaign is not read'
 else
-  fail 'pager: a mission worktree whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file' \
-    "assisted naming the file of m (and run asked), of x, of the campaign's checkout; pr and run allowed with the pager in every checkout" "$got"
+  fail 'pager: a mission worktree whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file, and a worktree with no mission of the campaign is not read' \
+    "assisted naming the file of m (and run asked) and of the campaign's checkout; pr with x's empty; pr and run allowed with the pager in every checkout" "$got"
 fi
 
 # --- R45: the header and the separator, by the shape of the line ---------------------------------
@@ -2639,6 +2690,283 @@ if [ -z "$got" ]; then
 else
   fail 'receipt: the newest comment of the bot with the marker is the receipt, and one that does not parse fails codex' \
     'not-ready codex for a truncated and a shapeless newest receipt; ready with a comment of the bot without the marker after it' "$got"
+fi
+
+# --- R49: the narrow set ------------------------------------------------------------------------
+# A .sdd/config.sh is read by sourcing it, which runs the file as shell, and `sdd run` reads the
+# file of the checkout it runs in: the campaign's, or the worktree of a mission of the campaign. A
+# worktree that holds none runs no `sdd run` of this campaign, so its file is never read — not for
+# the cap, the pager or HANDOFF_DIR (achado #3 of the r5; the owner chose the narrow set). One repo,
+# its config committed with a pager; three linked worktrees cut from that commit — m holds the
+# campaign's mission (L1, not approved, so next answers approve and asks no gh), o a mission of
+# another campaign, x none —; campaign n-narrow signed at pr, mission cap 40, campaign cap 100.
+# budget, level, `allows run --lot L1` and next are each asked from the cwd of the repo, the marks
+# cleared before each:
+#   control  every config clean, m's touching a mark of its own: each verb gives its answer, whole,
+#            and leaves m's mark — the set is read
+#   poison   o's and x's config set the cap to 150, the pager to empty and HANDOFF_DIR elsewhere, and
+#            touch a mark of their own: each verb answers exactly what it answered in control, m's
+#            mark comes back, and o's and x's are never made
+got=""
+NR="$BOX/narrow"
+clean=$'HANDOFF_DIR="docs/handoffs"\nON_ESCALATION_CMD="true"'
+mkdir -p "$NR/.sdd" "$NR/docs/campaigns"
+git init -q -b main "$NR"
+printf '%s\n' "$clean" > "$NR/.sdd/config.sh"
+git -C "$NR" add .sdd/config.sh
+git -C "$NR" -c user.name=fixture -c user.email=fixture@example.com commit -q -m fixture
+for w in m o x; do
+  git -C "$NR" worktree add -q -b "feat/n-$w" "$NR-$w" > /dev/null 2>&1 \
+    || got="${got:+$got; }fixture: the worktree $w was not created"
+done
+lot_mission "$NR-m" 20990501-n-m n-narrow L1 feat/n-m -
+lot_mission "$NR-o" 20990502-n-o n-other L1 feat/n-o -
+d="$(campaign n-narrow pr "$FAR" 40 100)"
+sign "$d"
+cp -a "$d" "$NR/docs/campaigns/"
+d="$NR/docs/campaigns/n-narrow"
+# four_ask <dir> — budget, level, `allows run --lot L1` and next asked of <dir> from the cwd of NR,
+# the marks cleared before each; PUBLISHES FOUR, one `<verb>: rc <rc> '<stdout>' marks <names>` line
+# per verb. Called, never substituted: under `$( )` the global would die with the subshell.
+four_ask() {
+  local v f mk
+  FOUR=""
+  for v in budget level allows next; do
+    rm -f "$BOX"/narrow-mark-*
+    case "$v" in
+      budget) LC_ALL="$NUM_POISON" W_CWD="$NR" worker budget "$1" ;;
+      allows) W_CWD="$NR" worker allows "$1" run --lot L1 ;;
+      *) W_CWD="$NR" worker "$v" "$1" ;;
+    esac
+    mk=""
+    for f in "$BOX"/narrow-mark-*; do [ ! -e "$f" ] || mk="$mk ${f##*/narrow-mark-}"; done
+    FOUR+="$v: rc $W_RC '$W_OUT' marks$mk"$'\n'
+  done
+}
+printf '%s\ntouch %q\n' "$clean" "$BOX/narrow-mark-m" > "$NR-m/.sdd/config.sh"
+for w in o x; do printf '%s\n' "$clean" > "$NR-$w/.sdd/config.sh"; done
+four_ask "$d"
+control="$FOUR"
+want="budget: rc 0 'campaign US\$ 0.00 of 100.00 — 1 mission(s); mission cap US\$ 40' marks m
+level: rc 0 'level pr — signed until $FAR' marks m
+allows: rc 0 'allowed run at pr' marks m
+next: rc 0 'approve L1 20990501-n-m — not approved: $NR-m/$H/20990501-n-m/00-missao.md has aprovacao: ''' marks m
+"
+[ "$control" = "$want" ] || got="${got:+$got; }control: '${control//$'\n'/ / }' (want '${want//$'\n'/ / }')"
+for w in o x; do
+  printf 'HANDOFF_DIR="work/elsewhere"\nON_ESCALATION_CMD=""\nBUDGET_MISSION_USD=150\ntouch %q\n' \
+    "$BOX/narrow-mark-$w" > "$NR-$w/.sdd/config.sh"
+done
+four_ask "$d"
+[ "$FOUR" = "$control" ] || got="${got:+$got; }poison: '${FOUR//$'\n'/ / }' (want the control's)"
+for w in o x; do printf '%s\n' "$clean" > "$NR-$w/.sdd/config.sh"; done
+if [ -z "$got" ]; then
+  pass "narrow: budget, level, allows and next read the config of the campaign's checkout and of the worktrees that hold a mission of it, and of no other"
+else
+  fail "narrow: budget, level, allows and next read the config of the campaign's checkout and of the worktrees that hold a mission of it, and of no other" \
+    "the control's four answers, each leaving m's mark, and the same four with o's and x's config poisoned, their marks never made" "$got"
+fi
+
+# --- R50: a worktree list that does not run ------------------------------------------------------
+# The set is read from `git worktree list`, and a listing that failed used to leave the campaign's
+# checkout alone in it: budget summed fewer missions and read fewer caps, level fewer pagers, and
+# next planned a lot in flight again — less, in silence (achado #24 of the r5). A git first on the
+# PATH runs the real one for every call but `worktree list`; over the world of R49, clean:
+#   fail   it refuses before printing (rc 128): budget `no spend — <the call> failed (rc 128)`,
+#          level `level assisted — unread: …`, next `stop - - — unread: …`, each rc 1, and
+#          `allows run` asks; no config is read, so no mark is made
+#   late   it prints the real list and then fails (rc 1): the same four, naming rc 1 — the listing
+#          is judged by its rc, never by what it printed
+#   pass   it runs the real one: the answers of R49's control, so each stop is the failure's
+got=""
+REAL_GIT="$(command -v git)"
+mkdir -p "$BOX/gitshim"
+{ printf '#!/usr/bin/env bash\nreal=%q\n' "$REAL_GIT"
+  cat <<'SHIM'
+case " $* " in
+  *" worktree list "*)
+    case "${SDD_GIT_SHIM:-}" in
+      fail) echo 'fatal: the shim refuses worktree list' >&2; exit 128 ;;
+      late) "$real" "$@"; exit 1 ;;
+    esac ;;
+esac
+exec "$real" "$@"
+SHIM
+} > "$BOX/gitshim/git"
+chmod +x "$BOX/gitshim/git"
+NRT="$(git -C "$NR" rev-parse --show-toplevel)"
+for w in 'fail|128' 'late|1'; do
+  IFS='|' read -r mode rc <<< "$w"
+  why="git -C $NRT worktree list --porcelain failed (rc $rc)"
+  want="budget: rc 1 'no spend — $why' marks
+level: rc 1 'level assisted — unread: $why' marks
+allows: rc 1 'ask run needs pr, effective assisted — unread: $why' marks
+next: rc 1 'stop - - — unread: $why' marks
+"
+  PATH="$BOX/gitshim:$PATH" SDD_GIT_SHIM="$mode" four_ask "$d"
+  [ "$FOUR" = "$want" ] || got="${got:+$got; }$mode: '${FOUR//$'\n'/ / }' (want '${want//$'\n'/ / }')"
+done
+PATH="$BOX/gitshim:$PATH" SDD_GIT_SHIM=pass four_ask "$d"
+[ "$FOUR" = "$control" ] || got="${got:+$got; }pass: '${FOUR//$'\n'/ / }' (want R49's control)"
+if [ -z "$got" ]; then
+  pass 'listed: a git worktree list that fails, before or after printing, stops budget, level and next with rc 1 naming the call, and allows asks'
+else
+  fail 'listed: a git worktree list that fails, before or after printing, stops budget, level and next with rc 1 naming the call, and allows asks' \
+    "rc 1 and the call with its rc for each verb, no config read; R49's control through a git that passes" "$got"
+fi
+
+# --- R51: money in cents -------------------------------------------------------------------------
+# The spend is counted in cents, and the cap the session passes on is the one signed (achados #4,
+# #5 and #21 of the r5). In the fixture repo:
+#   cents      two missions of s-cents spent 0.10 and 0.70, which a binary sum puts at
+#              0.7999999999999999: a campaign cap of 0.80 is reached (rc 1, `0.80 of 0.80`), one of
+#              0.81 is not (rc 0); the cents are rounded, never cut down nor up: two missions of
+#              s-frac spent 0.50 and 0.303, 0.80 of a cap of 0.81 (rc 0), two of s-half 0.50 and
+#              0.306, 0.81 of 0.81 (rc 1), and a cap of 0.806 is 0.81, which 0.80 is below (rc 0)
+#   as-signed  a signed mission cap of 0.015 is printed as signed, the value `run` passes to
+#              `sdd run`: `%.2f` would hand the runner 0.01 or 0.02; so are 10.004 and 0.01
+#   cent       a signed mission cap below one cent — 0.004, which `%.2f` printed as 0.00, the
+#              runner's no ceiling, 0.0099 and 00.009 — stops budget naming the delegation
+#   grammar    each BUDGET_MISSION_USD of a list in a config: a value the runner's own pattern
+#              refuses (read out of bin/sdd HERE: 1e2, 5e0, +5 and a blank, which jq reads as
+#              numbers, among them) stops budget naming the file, the value and the refusal; one it
+#              accepts, at or below the signed 150, holds — a differential, value by value
+# Every answer is the whole line.
+got=""
+mission "$REPO" "$H" 20990601-s-a s-cents
+mission "$REPO" "$H" 20990602-s-b s-cents
+{ spent 20990601-s-a session 0.1; spent 20990602-s-b close 0.7; } >> "$BOX/state/autonomy-log.jsonl"
+jq -en '0.1 + 0.7 < 0.8' > /dev/null || got="fixture: this jq sums 0.1 and 0.7 to 0.8 exactly"
+mission "$REPO" "$H" 20990603-s-c s-frac
+mission "$REPO" "$H" 20990604-s-d s-frac
+mission "$REPO" "$H" 20990605-s-e s-half
+mission "$REPO" "$H" 20990606-s-f s-half
+{ spent 20990603-s-c session 0.5; spent 20990604-s-d session 0.303
+  spent 20990605-s-e session 0.5; spent 20990606-s-f session 0.306; } >> "$BOX/state/autonomy-log.jsonl"
+for w in 's-at|s-cents|0.80|1|0.80 of 0.80' 's-edge|s-cents|0.81|0|0.80 of 0.81' \
+         's-up|s-frac|0.81|0|0.80 of 0.81' 's-half|s-half|0.81|1|0.81 of 0.81' \
+         's-capr|s-cents|0.806|0|0.80 of 0.81'; do
+  IFS='|' read -r id c cap rc shown <<< "$w"
+  d="$(campaign "$id/$c" pr "$FAR" 25 "$cap")"
+  want="campaign US\$ $shown — 2 mission(s); mission cap US\$ 25"
+  budget_is "$id" "$rc" "$want" "$d"
+  [ "$W_OUT" = "$want" ] || got="${got:+$got; }$id: the line is '$W_OUT'"
+done
+for w in '0.015|0|campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 0.015' \
+         '10.004|0|campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 10.004' \
+         '0.01|0|campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 0.01' \
+         '0.004|1|' '0.0099|1|' '00.009|1|'; do
+  IFS='|' read -r v rc want <<< "$w"
+  d="$(campaign "s-mc-$v/s-mc" pr "$FAR" "$v" 100)"
+  [ -n "$want" ] || want="no mission cap — $d/delegation.md signs budget_mission_usd: $v, below one cent; sign a cap of at least 0.01"
+  budget_is "cap $v" "$rc" "$want" "$d"
+  [ "$W_OUT" = "$want" ] || got="${got:+$got; }cap $v: the line is '$W_OUT'"
+done
+rpat="$(sed -n 's/^ *\(.*\)) die "BUDGET_MISSION_USD must be a number.*/\1/p' "$ROOT/bin/sdd")"
+runner_refuses() { eval "case \"\$1\" in $rpat) return 0 ;; esac"; return 1; }
+{ [ "$(grep -c 'die "BUDGET_MISSION_USD must be a number' "$ROOT/bin/sdd")" = 1 ] && [ -n "$rpat" ] \
+    && runner_refuses '' && runner_refuses 1e2 && ! runner_refuses 40; } \
+  || got="${got:+$got; }fixture: the runner's pattern of BUDGET_MISSION_USD was not read out of bin/sdd ('$rpat')"
+n=0; refused=0; accepted=0
+for v in 1e2 5e0 1E2 +5 ' 5' '5 ' 0x10 1.2.3 . 100.00 .5 5. 007 00.05 150; do
+  n=$((n + 1))
+  k="$BOX/spend-$n"
+  mkdir -p "$k/.sdd" "$k/docs/campaigns"
+  git init -q -b main "$k"
+  printf 'BUDGET_MISSION_USD="%s"\n' "$v" > "$k/.sdd/config.sh"
+  cp -a "$(campaign "s-g$n" pr "$FAR" 150 100)" "$k/docs/campaigns/"
+  if runner_refuses "$v"; then
+    refused=$((refused + 1))
+    want="no mission cap — $k/.sdd/config.sh sets BUDGET_MISSION_USD=$v, which sdd run refuses as no number; delete the line, or set it above 0 and at most 150"
+    budget_is "grammar '$v'" 1 "$want" "$k/docs/campaigns/s-g$n"
+    [ "$W_OUT" = "$want" ] || got="${got:+$got; }grammar '$v': the line is '$W_OUT'"
+  else
+    accepted=$((accepted + 1))
+    want='campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 150'
+    budget_is "grammar '$v'" 0 "$want" "$k/docs/campaigns/s-g$n"
+    [ "$W_OUT" = "$want" ] || got="${got:+$got; }grammar '$v': the line is '$W_OUT'"
+  fi
+done
+[ "$refused" -ge 1 ] && [ "$accepted" -ge 1 ] \
+  || got="${got:+$got; }fixture: the runner refuses $refused and accepts $accepted of the list"
+if [ -z "$got" ]; then
+  pass 'spend: the spend reaches its ceiling in cents, the mission cap is printed as signed and refused below one cent, and a config value the runner refuses stops budget'
+else
+  fail 'spend: the spend reaches its ceiling in cents, the mission cap is printed as signed and refused below one cent, and a config value the runner refuses stops budget' \
+    'rc 1 at 0.80 and rc 0 at 0.81 and 0.806 for 0.10 + 0.70, 0.803 below 0.81 and 0.806 at it; 0.015, 10.004 and 0.01 printed as signed, 0.004, 0.0099 and 00.009 stopped; the runner and budget agreeing on every value' "$got"
+fi
+
+# --- R52: a config read from its own checkout ------------------------------------------------------
+# The runner is launched in the mission's worktree (`cd <mission-worktree> && … sdd run`) and
+# sources that checkout's config there, so a relative include in it resolves against the worktree;
+# the worker sourced it from the cwd of its caller (achado #38 of the r5). One repo whose config
+# includes `./.sdd/local.sh`, a linked worktree m cut from it holding the campaign's mission;
+# campaign c-cwd signed at pr, mission cap 40, campaign cap 100. budget and level are asked from
+# the repo's cwd and from the box's, which has no .sdd:
+#   include  the repo's local.sh sets the cap to 10 and the pager, m's the cap to 150 and an empty
+#            pager: budget stops naming m's file and 150, and level is assisted naming m's file
+#   same     m's local.sh is the repo's: rc 0 and the signed cap, and the signed pr
+# A HANDOFF_DIR in a checkout of the set other than the campaign checkout's would have the runner
+# there look for its missions elsewhere (achado #37 of the r5): it stops budget (`no spend — …`),
+# level (`level assisted — unread: …`) and next (`stop - - — unread: …`), each rc 1, naming both
+# files; the default written out on one side and left out on the other is the same HANDOFF_DIR.
+got=""
+C="$BOX/cwd"; CM="$BOX/cwd-m"
+inc='. ./.sdd/local.sh'
+mkdir -p "$C/.sdd" "$C/docs/campaigns"
+git init -q -b main "$C"
+printf 'HANDOFF_DIR="docs/handoffs"\n%s\n' "$inc" > "$C/.sdd/config.sh"
+git -C "$C" add .sdd/config.sh
+git -C "$C" -c user.name=fixture -c user.email=fixture@example.com commit -q -m fixture
+git -C "$C" worktree add -q -b feat/c-m "$CM" > /dev/null 2>&1 \
+  || got="${got:+$got; }fixture: the worktree m was not created"
+grep -qxF "$inc" "$CM/.sdd/config.sh" 2>/dev/null \
+  || got="${got:+$got; }fixture: the worktree m does not carry the include of the commit"
+[ ! -e "$BOX/.sdd" ] || got="${got:+$got; }fixture: the box has a .sdd of its own"
+lot_mission "$CM" 20990701-c-m c-cwd L1 feat/c-m -
+d="$(campaign c-cwd pr "$FAR" 40 100)"
+sign "$d"
+cp -a "$d" "$C/docs/campaigns/"
+d="$C/docs/campaigns/c-cwd"
+here=$'BUDGET_MISSION_USD=10\nON_ESCALATION_CMD="true"'
+printf '%s\n' "$here" > "$C/.sdd/local.sh"
+printf 'BUDGET_MISSION_USD=150\nON_ESCALATION_CMD=""\n' > "$CM/.sdd/local.sh"
+# cwd_is <label> <verb> <rc> <want> [<cwd>] — the verb asked of d from <cwd> (the repo's when
+# absent); appends to got unless it left <rc> and the one line <want>, whole.
+cwd_is() {
+  if [ "$2" = budget ]; then LC_ALL="$NUM_POISON" W_CWD="${5:-$C}" worker budget "$d"
+  else W_CWD="${5:-$C}" worker "$2" "$d"; fi
+  [ "$W_RC" = "$3" ] && [ "$W_OUT" = "$4" ] \
+    || got="${got:+$got; }$1 $2: rc $W_RC, '${W_OUT//$'\n'/ / }' (want rc $3, '$4')"
+}
+for cwd in "$C" "$BOX"; do
+  cwd_is "include ${cwd##*/}" budget 1 "no mission cap — $CM/.sdd/config.sh sets BUDGET_MISSION_USD=150, which sdd run applies over the signed budget_mission_usd: 40; delete the line, or set it above 0 and at most that" "$cwd"
+  cwd_is "include ${cwd##*/}" level 0 "level assisted — no pager: ON_ESCALATION_CMD is empty in $CM/.sdd/config.sh" "$cwd"
+done
+printf '%s\n' "$here" > "$CM/.sdd/local.sh"
+held='campaign US$ 0.00 of 100.00 — 1 mission(s); mission cap US$ 40'
+for cwd in "$C" "$BOX"; do
+  cwd_is "same ${cwd##*/}" budget 0 "$held" "$cwd"
+  cwd_is "same ${cwd##*/}" level 0 "level pr — signed until $FAR" "$cwd"
+done
+printf 'HANDOFF_DIR="work/missions"\n%s\n' "$inc" > "$CM/.sdd/config.sh"
+why="HANDOFF_DIR 'work/missions' in $CM/.sdd/config.sh is not the campaign checkout's 'docs/handoffs' ($C/.sdd/config.sh)"
+cwd_is divergent budget 1 "no spend — $why"
+cwd_is divergent level 1 "level assisted — unread: $why"
+cwd_is divergent next 1 "stop - - — unread: $why"
+approve="approve L1 20990701-c-m — not approved: $CM/$H/20990701-c-m/00-missao.md has aprovacao: ''"
+for w in "$inc|HANDOFF_DIR=\"docs/handoffs\"" "HANDOFF_DIR=\"docs/handoffs\"|"; do
+  printf '%s\n%s\n' "${w%%|*}" "$inc" > "$C/.sdd/config.sh"
+  printf '%s\n%s\n' "${w#*|}" "$inc" > "$CM/.sdd/config.sh"
+  cwd_is "default ${w%%=*}" budget 0 "$held"
+  cwd_is "default ${w%%=*}" level 0 "level pr — signed until $FAR"
+  cwd_is "default ${w%%=*}" next 0 "$approve"
+done
+if [ -z "$got" ]; then
+  pass "cwd: a config is sourced from its own checkout, and a HANDOFF_DIR in the set other than the campaign checkout's stops budget, level and next naming the file"
+else
+  fail "cwd: a config is sourced from its own checkout, and a HANDOFF_DIR in the set other than the campaign checkout's stops budget, level and next naming the file" \
+    "m's include read from m from both cwds (150 and no pager, then 40 and pr); rc 1 naming m's HANDOFF_DIR for the three verbs, and the default the same on both sides" "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------
