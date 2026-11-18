@@ -165,8 +165,12 @@ act, and whether a pull request meets the merge bar on its head sha. An absent, 
 or illegible delegation answers `assisted`, and then the worker does nothing alone. With the
 `bin/` directory on the `PATH`, `sdd-worker` is there too; with only `sdd` symlinked, link
 `sdd-worker` as well, or call it by the path `commands/sdd-worker.md` resolves:
-`"$(dirname "$(readlink -f "$(command -v sdd)")")/sdd-worker"`. The contracts, the rules and the
-declared limits are in [`docs/pipeline.md`](docs/pipeline.md#the-worker).
+`"$(dirname "$(readlink -f "$(command -v sdd)")")/sdd-worker"`. The session command itself is not
+installed by anything: neither `sdd install` nor `sdd-link-agents` touches `commands/`, so a session
+has `/sdd-worker` only where Claude Code finds the file, in `~/.claude/commands/` or the repo's
+`.claude/commands/`, linked by hand:
+`ln -s ~/repos/sdd_agents/commands/sdd-worker.md ~/.claude/commands/`. The contracts, the rules and
+the declared limits are in [`docs/pipeline.md`](docs/pipeline.md#the-worker).
 
 `sdd run` and `sdd retry` put you on the branch the plan declares (`branch:` in `00-missao.md`)
 before the first gate — checking it out, or cutting it from where you stand. A `<…>` placeholder or

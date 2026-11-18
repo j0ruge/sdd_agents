@@ -227,6 +227,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   e o `sdd preflight` não o mede. Numa máquina nova o `~/.claude/commands` nem existia. Direção: o `link-agents`
   cria esse link, idempotente como os dos agentes, ou o README o põe nos passos de instalação.
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
+  RECURRED 1: sdd_agents/20261117-o-worker-orquestrador (2026-11-18)
 
 - [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:116`
   (`Relaying the grill`) — na 3.2c do `dotp-remake` a sessão caiu com uma pergunta pendente, e a chamada voltou "the
@@ -561,7 +562,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd-worker:303` (`git add %q`) — o dono copia `signed … — commit it: git add <arquivo> && git commit …`, e
   sob o veneno do R58 do `tests/check-worker.sh` (`[ci]q"x @&*$1\`) a linha colada numa shell parte o caminho no
   espaço e abre uma aspa que não fecha; o id da campanha entra cru no `-m "…"` também. Direção: caminho e id saem
-  por `%q`, e o R2 do sensor roda a linha impressa e confere que o `git add` recebeu um argumento só.
+  por `%q`, e o R2 do sensor roda a linha e confere que o `git add` recebe um argumento só. RESOLVED by cbaf6be
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto por `sdd-executor` na
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 

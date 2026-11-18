@@ -290,8 +290,9 @@ desde #112): passo novo sem linha na tabela é recusado, estouro é vermelho nom
 mutante é rc 124, que o catálogo lê como `TIMED-OUT` (inconclusivo), nunca como pego. Sintoma e
 saída em [`docs/failure-modes.md`](docs/failure-modes.md).
 
-⚠️ **Dezesseis dos dezessete rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
-verifica CADA mutante rodando a suíte inteira numa sandbox, e isso segurava a árvore por mais de
+⚠️ **Os dezessete rodam no `TEST_CMD`, mas o `check-mutation.sh` só pela metade barata (`--anchors`,
+abaixo); o catálogo inteiro é opt-in desde `4c86712`.** Ele verifica CADA mutante rodando a suíte
+inteira numa sandbox, e isso segurava a árvore por mais de
 dez minutos por gate — até tornar uma FASE insatisfazível: três sessões de REVIEW seguidas
 encerraram o turno com as palavras *"waiting for the suite"*, e em `claude -p` encerrar o turno é
 encerrar a sessão. Hoje o catálogo mora no `sdd health`, pelo mesmo argumento que já vale para a

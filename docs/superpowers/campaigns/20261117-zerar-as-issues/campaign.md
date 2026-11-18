@@ -24,8 +24,8 @@ exec_model: opus
 ## Lotes
 
 > Na ordem da fila: o `next` percorre a tabela de cima para baixo e para no primeiro lote que não
-> está mergeado. O L6 tem teto `plan`: qualquer que seja o nível assinado, o worker planeja as
-> missões dele e nunca as aprova nem as mergeia sozinho.
+> está mergeado. Os L6a a L6k têm teto `plan`: qualquer que seja o nível assinado, o worker planeja
+> a missão de cada um e nunca a aprova nem a mergeia sozinho.
 
 | Lot | Título | Ceiling | Itens |
 |---|---|---|---|
@@ -34,7 +34,17 @@ exec_model: opus
 | L3 | Gates do fim da linha | - | 13 |
 | L4 | Preflight, health e sensores | - | 14 |
 | L5 | Saída humana e contrato do runner | - | 17 |
-| L6 | Desenho, uma missão por item ou par | plan | 11 |
+| L6a | O carimbo tudo ou nada | plan | 1 |
+| L6b | A prosa da DOCS sem revisão | plan | 1 |
+| L6c | O plano que manda editar em `.claude/` | plan | 1 |
+| L6d | O veredito da QA depois de um R<n> | plan | 1 |
+| L6e | O platô da REVIEW que lê só as letras | plan | 1 |
+| L6f | A QA sem interface que para em `BLOCKED` | plan | 1 |
+| L6g | A guarda do kit e o merge só de docs | plan | 1 |
+| L6h | O chapéu sem MCP | plan | 1 |
+| L6i | O remédio do `qa: skipped` refutado | plan | 1 |
+| L6j | O incremento de quase 1 h sem `Monitor` | plan | 1 |
+| L6k | O LOW que não move a nota | plan | 1 |
 
 ### L1 — Prosa de chapéu e docs (piloto)
 
@@ -127,33 +137,73 @@ exec_model: opus
 - [ ] O `CHECKOUT-BUSY` do `sdd status` não aponta o `--no-gates`, que lê o disco com a run em voo
 - [ ] ◆ O `sdd adr new` dá a uma branch o número que outra branch sem merge já usa
 
-### L6 — Desenho, uma missão por item ou par
+### L6a a L6k — Desenho, um lote por item
 
-> Itens de desenho, com teto `plan`: as escolhas deles não são tomadas por um grill sem o dono. Uma
-> missão por item, ou por par quando os dois tocam a mesma decisão.
+> Itens de desenho, com teto `plan`: as escolhas deles não são tomadas por um grill sem o dono. Um
+> lote por item, e uma missão por lote (decisão do dono na r5 da missão
+> `20261117-o-worker-orquestrador`): o `next` acha a missão de um lote pelo `lot:` e dá o lote por
+> feito no merge dela, então um lote de onze itens fecharia no primeiro merge, com dez abertos.
+>
+> A decisão 8 vale para os sete `◆` daqui como para os outros: sob delegação, o grill segue a opção
+> recomendada pelo planner, e o corpo do PR lista a escolha para o aceite do dono. O que segura a
+> escolha é o teto `plan`: o worker planeja, e o dono lê e aprova cada plano (`sdd approve`) antes
+> de o EXEC começar, e mergeia ele mesmo.
+
+#### L6a — O carimbo tudo ou nada
 
 - [ ] O carimbo é tudo ou nada: uma linha de prosa em `agents/` refaz o catálogo inteiro
+
+#### L6b — A prosa da DOCS sem revisão
+
 - [ ] ◆ A prosa que a DOCS escreve depois da REVIEW não passa por revisão nenhuma
+
+#### L6c — O plano que manda editar em `.claude/`
+
 - [ ] ◆ O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash
+
+#### L6d — O veredito da QA depois de um R<n>
+
 - [ ] ◆ O veredito da QA não é revalidado depois de um R<n>
+
+#### L6e — O platô da REVIEW que lê só as letras
+
 - [ ] O platô da REVIEW lê só as letras, e pararia um laço que converge
+
+#### L6f — A QA sem interface que para em `BLOCKED`
+
 - [ ] ◆ Num repo sem interface, a QA para em `BLOCKED` ao seguir a própria instrução de escrever o teste do achado
+
+#### L6g — A guarda do kit e o merge só de docs
+
 - [ ] ◆ A guarda do kit para a corrida do alvo por um merge só de docs no checkout do kit
+
+#### L6h — O chapéu sem MCP
+
 - [ ] O chapéu não pode declarar MCP, e o executor fica sem o REA
+
+#### L6i — O remédio do `qa: skipped` refutado
+
 - [ ] ◆ O remédio do `qa: skipped` refutado apaga, com o handoff, os achados fora de escopo dele
+
+#### L6j — O incremento de quase 1 h sem `Monitor`
+
 - [ ] Um incremento que roda por quase 1 h não cabe no `sdd-executor`, que não tem `Monitor`
+
+#### L6k — O LOW que não move a nota
+
 - [ ] ◆ O revisor não tem destino para o LOW que não move a nota
 
 ## Os itens marcados com ◆ (decisão 8)
 
 Os 24 itens com `◆` deixam uma escolha em aberto. Sob delegação, o grill da missão segue a opção
 recomendada pelo planner, e o corpo do PR lista cada um deles, com a escolha feita, para o aceite
-do dono. Por lote: L1 nenhum, L2 3, L3 5, L4 3, L5 6, L6 7.
+do dono. Por lote: L1 nenhum, L2 3, L3 5, L4 3, L5 6, e 7 nos L6a a L6k (um em cada um dos L6b, L6c,
+L6d, L6f, L6g, L6i e L6k), onde o teto `plan` faz o dono aprovar cada plano antes do EXEC.
 
 ## A régua do "tudo ok" (decisão 9)
 
-O worker só mergeia (nível `merge` ou acima, e nunca no L6) com os cinco itens verdadeiros no mesmo
-sha, lidos por `bin/sdd-worker pr-ready <dir-da-missão> <pr>`, que responde `ready <sha>`:
+O worker só mergeia (nível `merge` ou acima, e nunca nos L6a a L6k) com os cinco itens verdadeiros
+no mesmo sha, lidos por `bin/sdd-worker pr-ready <dir-da-missão> <pr>`, que responde `ready <sha>`:
 
 1. a rodada de revisão mais nova nomeia o head (`reviewed_head:`) e dá A em todo critério, cada A
    com uma justificativa que não é preenchimento, e o `gate:` dela traz a evidência;
@@ -163,7 +213,9 @@ sha, lidos por `bin/sdd-worker pr-ready <dir-da-missão> <pr>`, que responde `re
 5. o `HEAD` local é o head do PR, e o merge é `gh pr merge --merge --match-head-commit <sha>`:
    sempre merge commit, nunca squash.
 
-Bot sem cota conta como "não revisou": é declarado no corpo do PR e não bloqueia.
+O recibo do Codex é o item 2, e sem ele não há merge: o Codex que não responde é a parada
+`no-receipt`. Qualquer outro bot sem cota conta como "não revisou": é declarado no corpo do PR e
+não bloqueia.
 
 ## As paradas (decisões 9 e 10)
 
@@ -180,8 +232,13 @@ caso ao dono, com os nomes do `commands/sdd-worker.md`:
    respondeu `no mission cap — …`, porque o `.sdd/config.sh` do checkout da campanha ou de um
    worktree de missão dela fixa essa chave acima do teto assinado, ou porque a delegação assina um
    `budget_mission_usd: 0`, que o runner lê como sem teto, ou um abaixo de `0.01`;
-5. `campaign-ceiling`: `bin/sdd-worker budget` sai com rc 1 em qualquer outra linha, a campanha
-   gastou o `budget_campaign_usd`.
+5. `campaign-ceiling`: `bin/sdd-worker budget` sai com rc 1 na linha `campaign US$ <gasto> of
+   <teto>`, a campanha gastou o `budget_campaign_usd` que ele mediu; só nessa linha.
+
+Uma linha que não mediu parada também para e avisa, com o nome do que o verbo imprimiu: o
+`stop …` do `next` é `next-stop`, o `no ceiling — …` do `budget` (delegação ausente ou ilegível) é
+`no-ceiling`, e o `no spend — …` (fora de um checkout, o `git worktree list` que falhou, o ledger
+que não se lê) é `no-spend`. Nenhuma delas é `campaign-ceiling`: ninguém mediu gasto nenhum.
 
 Sem `ON_ESCALATION_CMD` no `.sdd/config.sh` de algum checkout do kit (o desta campanha ou o worktree
 de uma missão, onde o `sdd run` roda e avisa), toda delegação acima de `assisted` vale `assisted`

@@ -41,7 +41,11 @@ through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, 
    no pager): tell the owner, who fixes it and signs again with `sdd-worker delegate`, in a terminal
    of his own.
 3. **Read `harness:`, `plan_model:` and `exec_model:`** in the frontmatter of `campaign.md`. A
-   harness other than `claude` stops here: this command drives Claude Code only.
+   harness other than `claude` stops here: this command drives Claude Code only. `exec_model:` is
+   what the campaign declares, and nothing passes it on: the runner runs EXEC on `MODEL_EXEC` (each
+   other phase on its own `MODEL_<PHASE>`, `config/schema.md`), from the `.sdd/config.sh` of the
+   mission's worktree over the environment, `opus` when neither sets it. Before a `run`, read that
+   key there; when it is not `exec_model:`, tell the owner, and never edit his file to match.
 4. **Never act while an `sdd run` of another mission is alive in the same checkout.** One checkout,
    one owner of execution: each mission runs in its own worktree, and
    `sdd status <mission> --no-gates` names who holds a checkout.
@@ -51,19 +55,46 @@ through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, 
 Every turn of the loop, in this order, reading the disk again each time: the delegation can expire,
 or be edited, between two acts, and the answer of the last turn is not the answer of this one.
 
-1. `sdd-worker budget <campaign-dir>`: rc 1 is a stop, the campaign ceiling or a mission cap the
-   runner would not apply (`no mission cap — …`, below). Its line prints the mission cap, the
-   `BUDGET_MISSION_USD` the next `run` passes.
-2. `sdd-worker next <campaign-dir>`: the first line is `<act> <lot> <mission> — <reason>`. The line
-   `done - -` ends the campaign; rc 1 is a `stop …` line; rc 3 is a `gh` that did not answer: wait
-   and ask again, and never read it as "no pull request". A second line `ahead plan <lot>` lets the
-   next lot be planned while this one runs or is reviewed, when its own `plan` act is allowed.
+1. `sdd-worker budget <campaign-dir>`: rc 1 is a stop, named by the line it printed (below): the
+   campaign ceiling reached, a mission cap the runner would not apply (`no mission cap — …`), or a
+   ceiling or a spend it could not read (`no ceiling — …`, `no spend — …`). Its line prints the
+   mission cap, the `BUDGET_MISSION_USD` the next `run` passes.
+2. The act. When the last act of the lot has a move in **The transitions** (below), the act is that
+   one; otherwise `sdd-worker next <campaign-dir>`, whose first line is
+   `<act> <lot> <mission> — <reason>`. The line `done - -` ends the campaign; rc 1 is a `stop …`
+   line; rc 3 is a `gh` that did not answer: wait and ask again, and never read it as "no pull
+   request". A second line `ahead plan <lot>` lets the next lot be planned while this one runs or is
+   reviewed, when its own `plan` act is allowed.
 3. `sdd-worker allows <campaign-dir> <act> --lot <lot>`: rc 0, the act is yours; rc 1, propose it to
-   the owner and wait for his yes.
+   the owner, with the exact command, and wait for his yes. The yes is for that act alone: with it,
+   go back to 1, and when steps 1 and 2 bring the same act again, the yes stands for this step's
+   rc 0; another act asks again.
 4. The act, as the section below writes it.
 5. One line in `<campaign-dir>/journal.md`, append-only: `- <instant> · <lot> · <act> · <outcome>`,
    the instant from `date '+%Y-%m-%d %H:%M'` run in the same batch of commands, never from memory.
-6. Back to 1.
+   Never in the checkout the `sdd` on the PATH resolves to while an `sdd run` is alive, and no other
+   file of the campaign directory either: the runner arms its kit guard on that checkout in every
+   run (`kit_guard_arm`), and a line appended there stops the run with `KIT-TOUCHED`, rc 3. The
+   kit's own campaign is in that checkout when its directory is passed there: while a run you
+   launched is alive, keep its lines outside that checkout and append them once the run has ended.
+6. Back to 1, and after every wait too: a ceiling or a delegation read before a wait does not hold
+   after it.
+
+## The transitions
+
+`next` derives `plan`, `approve`, `run` and `review` from the disk and `gh`, and it reads every open
+pull request as `review`, whatever happened to it. These moves it never derives are yours, and each
+act still passes its own `allows` call (step 3):
+
+| After | The act | Why |
+|---|---|---|
+| `run`, rc 0 | `pr` | the run opened the pull request, and its body still owes the owner the grill answers and the bots that did not review |
+| `pr` | `review` | the body is written, and the round comes next |
+| `review`, every criterion A and the Codex receipt on the head | `merge`: `allows … merge`, then `pr-ready` | `next` answers `review` again for an open pull request; an rc 1 of `pr-ready` names the act that fixes its item |
+| every wait: the owner's yes, a bot, a deadline, a run | step 1, `budget` | the ceiling read before the wait, and the delegation, may have moved since |
+
+A new session finds the last act of each lot in the journal's tail: a `run` with rc 0 and no `pr`
+line after it is a `pr` still to do, though the pull request is open and `next` says `review`.
 
 ## The acts
 
@@ -111,10 +142,14 @@ The pager is read the same way: `allows run` reads the `ON_ESCALATION_CMD` of th
 and an empty one in the mission's worktree answers `ask … — no pager`, naming that file.
 
 ```bash
-cd <mission-worktree> && BUDGET_MISSION_USD=<cap> setsid nohup env -u CLAUDECODE \
+cd <mission-worktree> && BUDGET_MISSION_USD=<cap> setsid -w nohup env -u CLAUDECODE \
   bash -c 'sdd run "$1"; echo "sdd run rc=$?"' _ <mission> > <log> 2>&1 < /dev/null &
 echo "$!"
 ```
+
+The `-w` keeps that PID alive until the runner exits. In a shell with job control the background
+job leads its own process group, and `setsid` then forks; without `-w` its parent, the `$!`, exits
+at once, and a wait on it ends before the run does.
 
 Wait on that PID (`tail --pid=<pid> -f /dev/null`, or a monitor whose condition is
 `! kill -0 <pid>`), never on `pgrep -f`, which matches its own command line (M23). Then read the
@@ -128,10 +163,11 @@ and `budget-exhausted` among them is a stop (the mission ceiling).
 `sdd-worker allows <campaign-dir> pr --lot <L>`
 
 The run's PR phase opens the pull request; this act is what its body owes the owner. It lists the
-grill answers that touch his rules, and declares every bot that did not review (no quota, no plan,
-a rate limit) as "did not review": such a bot neither blocks nor counts as a review. When the run
-left no pull request, open it from the mission's branch with `gh pr create`, never by a push to the
-base.
+grill answers that touch his rules, and declares every bot but Codex that did not review (no quota,
+no plan, a rate limit) as "did not review": such a bot neither blocks nor counts as a review. Codex
+is never one of them: its receipt on the head is an item of `pr-ready`, so a Codex that does not
+answer is the `no-receipt` stop. When the run left no pull request, open it from the mission's
+branch with `gh pr create`, never by a push to the base.
 
 ### `review`
 
@@ -171,14 +207,25 @@ resumes from there.
 ## The five stops
 
 Each stop runs `ON_ESCALATION_CMD`, writes one line to `journal.md`, and ends the loop.
-Then the session waits for the owner, whatever the level. A `stop …` line of `next` is handled the
-same way, its own line as the reason. Page the way the runner does, from the repository root, with
-the stop's name in `SDD_REASON` and five seconds for the pager:
+Then the session waits for the owner, whatever the level. Page the way the runner does, from the
+repository root, with the stop's name in `SDD_REASON`, the line it rests on in `SDD_GATE_WHY`, and
+five seconds for the pager:
 
 ```bash
-( . .sdd/config.sh && SDD_REASON=<stop> SDD_MISSION=<mission> SDD_GATE_WHY='<line>' \
+why="$(sdd-worker budget <campaign-dir>)"
+( . .sdd/config.sh && SDD_REASON=<stop> SDD_MISSION=<mission> SDD_GATE_WHY="$why" \
   timeout -k 1 5 bash -c "$ON_ESCALATION_CMD" < /dev/null )
 ```
+
+`why` is set in the same batch of commands, by running again the verb whose line stopped the loop,
+as above, or by reading the file the session wrote the line to: never by pasting the line between
+quotes, which an apostrophe in an id or a path ends.
+
+A line of a verb that measured no stop is paged the same way, named by what the verb printed: a
+`stop …` line of `next` with `SDD_REASON=next-stop`; a `no ceiling — …` line of `budget` (no
+delegation, or an illegible one) with `no-ceiling`; a `no spend — …` line (no checkout, a
+`git worktree list` that failed, a ledger that does not read) with `no-spend`. None of them is
+`campaign-ceiling`: nobody measured a spend.
 
 The runner pages its own rc 3 already, `budget-exhausted` among them, from the `.sdd/config.sh` of
 the worktree it runs in, whose pager `level` reads as it reads this one: that stop is not paged
@@ -188,7 +235,7 @@ twice.
 2. **`below-a`**: a criterion still graded below A after three rounds of review on one pull request.
 3. **`conflict`**: a merge conflict with the base outside the findings file and its ratchet.
 4. **`mission-ceiling`**: `sdd run` stopped on `budget-exhausted`, the mission spent its `BUDGET_MISSION_USD`; or `sdd-worker budget` answered `no mission cap — …`, the config of the campaign's checkout or of a mission's worktree sets that key over the signed cap, or the delegation signs a mission cap of zero, which the runner reads as no ceiling, or one below one cent.
-5. **`campaign-ceiling`**: `sdd-worker budget` leaves rc 1 on any other line, the campaign spent its ceiling.
+5. **`campaign-ceiling`**: `sdd-worker budget` leaves rc 1 on its `campaign US$ <spent> of <ceiling>` line, the spend it measured reached the ceiling; only on that line.
 
 ## Never
 
@@ -197,7 +244,7 @@ No level grants these, and no delegation can:
 - Delete a branch or a worktree (`--delete-branch`, `git branch -D`, `git worktree remove`).
 - Push to the base branch: every change reaches it through a pull request.
 - Give the visual acceptance of a journey: what the owner has to see is his, at every level.
-- Move the kit's main checkout while a run is alive (`git pull`, `git checkout`, a commit there).
+- Move the kit's main checkout while a run is alive (`git pull`, `git checkout`, a commit there, a file of a campaign directory written there).
 
 ## Context
 

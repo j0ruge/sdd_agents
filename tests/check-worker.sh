@@ -112,7 +112,11 @@
 #   R31 each of the seven acts of the table kept HERE has one heading in the command, and the first
 #       line under it is the literal `sdd-worker allows <campaign-dir> <act> --lot <L>`
 #   R32 the command writes the five stops (one numbered line each, with the pager and the journal),
-#       the never list and the context rules, each phrase on a line of its own section
+#       the never list and the context rules, each phrase on a line of its own section; the fifth
+#       stop names the `campaign US$` line of budget, a measured spend, the lines that measured
+#       nothing are paged under their own names (`next-stop`, `no-ceiling`, `no-spend`), and the
+#       line reaches the pager as `SDD_GATE_WHY="$…"`, never between single quotes (achados #30 and
+#       #31 of the r5)
 #   R33 docs/pipeline.md writes, under `## The worker`, a call of every verb main() dispatches and the
 #       ladder in order; README.md has a usage line of sdd-worker and a link to that section; the
 #       ON_ESCALATION_CMD row of config/schema.md names the worker and `assisted`, and its
@@ -247,9 +251,15 @@
 #       fails), both in the box of R58 and for a campaign whose id carries an apostrophe, a quote,
 #       a blank and `$1`, and the line ends in a newline (the achado the R9 filed in TODO.md,
 #       closed in the R10)
+#   R60 the command writes the moves next never derives, each a row of `## The transitions` found
+#       once by its first two cells — `run` with rc 0 to `pr`, `pr` to `review`, a round all A with
+#       the Codex receipt to `merge` (its allows, then pr-ready), every wait back to `budget` —, its
+#       loop takes the act from that table (step 2) and goes back to budget after every wait (step
+#       6), and every `setsid` in a code block is `setsid -w`, the run act's launch among them
+#       (achados #14 to #17 of the r5)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
-# carry their own negative control: each checker runs on the files, where it has to miss nothing,
+# and R60 carry their own negative control: each checker runs on the files, where it has to miss nothing,
 # and on copies with one thing taken out, where it has to name exactly that thing. A checker that
 # never misses is decoration.
 #
@@ -966,8 +976,8 @@ else
 fi
 
 # --- R34: the seal covers the lot ceilings ------------------------------------------------------
-# A lot's ceiling is what keeps its approval from being delegated (the L6 of the kit's campaign is
-# capped at plan), and it lives in campaign.md, beside the file the owner signs. Three full
+# A lot's ceiling is what keeps its approval from being delegated (the L6a to L6k of the kit's
+# campaign are capped at plan), and it lives in campaign.md, beside the file the owner signs. Three full
 # delegations over L1 (no ceiling) and L6 (plan), each signed by the program and first witnessed
 # capping L6 at plan, so what follows is the edit's and nothing else's: L6's ceiling replaced by
 # `-`, and a row L7 added under `lots: all` (a lot the owner never saw), each answer assisted,
@@ -1892,6 +1902,16 @@ prose_missing() {
     grep -qF "$p" <<< "$items" || printf 'stops: %s\n' "$p"
   done
   for p in ON_ESCALATION_CMD journal.md; do grep -qF "$p" <<< "$s" || printf 'stops: %s\n' "$p"; done
+  # The fifth stop is a measured spend alone, and the lines of a verb that measured nothing are paged
+  # under the names of what it printed (achado #30 of the r5); the line goes to the pager through a
+  # variable, never pasted between single quotes (#31).
+  grep -qF 'campaign US$' <<< "$(grep -F 'campaign-ceiling' <<< "$items")" \
+    || printf 'stops: campaign-ceiling on a measured spend\n'
+  for p in 'SDD_REASON=next-stop' '`no-ceiling`' '`no-spend`'; do
+    grep -qF "$p" <<< "$s" || printf 'stops: %s\n' "$p"
+  done
+  { grep -qF 'SDD_GATE_WHY="$' <<< "$s" && ! grep -qF "SDD_GATE_WHY='" <<< "$s"; } \
+    || printf 'stops: SDD_GATE_WHY by variable\n'
   items="$(section "$1" 'Never' 2>/dev/null | grep '^- ')"
   for p in 'Delete a branch or a worktree' 'Push to the base branch' 'visual acceptance' "kit's main checkout"; do
     grep -qF "$p" <<< "$items" || printf 'never: %s\n' "$p"
@@ -1975,11 +1995,83 @@ control 'context: handoff' prose_missing 'context: a handoff to a file' '/^- .*a
 control 'context: not a bullet' prose_missing 'context: One line per event' 's/^- \(One line per event\)/\1/'
 control 'context: no next' prose_missing 'context: resumes from level and next' 's/^\(- A new session resumes from `sdd-worker level`\) and `sdd-worker next`/\1/'
 control 'context: no level' prose_missing 'context: resumes from level and next' 's/^\(- A new session resumes from\) `sdd-worker level` and/\1/'
+control 'ceiling on any line' prose_missing 'stops: campaign-ceiling on a measured spend' '/^5\. / s/on its `campaign US\$ <spent> of <ceiling>` line/on any other line/'
+control 'measured line in stop 4' prose_missing 'stops: campaign-ceiling on a measured spend' '/^5\. / s/on its `campaign US\$ <spent> of <ceiling>` line/on any other line/
+/^4\. / s/$/ Not the `campaign US$` line./'
+control 'no-spend paged as the ceiling' prose_missing 'stops: `no-spend`' 's/with `no-spend`/with `campaign-ceiling`/'
+control 'next-stop only outside the section' prose_missing 'stops: SDD_REASON=next-stop' 's/SDD_REASON=next-stop/SDD_REASON=stop/
+$a\
+SDD_REASON=next-stop'
+control 'why pasted' prose_missing 'stops: SDD_GATE_WHY by variable' "s/SDD_GATE_WHY=\"\\\$why\"/SDD_GATE_WHY='<line>'/"
+control 'why pasted beside the variable' prose_missing 'stops: SDD_GATE_WHY by variable' "/SDD_GATE_WHY=\"\\\$why\"/ s/\$/ SDD_GATE_WHY='<line>'/"
+control 'why pasted between double quotes' prose_missing 'stops: SDD_GATE_WHY by variable' 's/SDD_GATE_WHY="\$why"/SDD_GATE_WHY="<line>"/'
 if [ -z "$got" ]; then
   pass 'command: the five stops, the never list and the context rules are written'
 else
   fail 'command: the five stops, the never list and the context rules are written' \
     'every phrase on a line of its section, and each sabotaged copy naming what it lost' "$got"
+fi
+
+# --- R60: the moves next never derives, and the launch that outlives its parent -----------------
+# next reads every open pull request as `review` (achados #16 and #17 of the r5), so the command
+# writes the moves itself: each is one row of the table under `## The transitions`, found by its
+# first two cells exactly as TRANSITION_ROWS writes them, once; step 2 of the loop takes its act
+# from that table, and step 6 goes back to budget after every wait (#14). Every `setsid` written in
+# a code block is `setsid -w`, the launch of the run act among them (#15): without it, under job
+# control, the PID the session waits on exits before the run. Prose that says `setsid` is no launch.
+TRANSITION_ROWS=(
+  'run|| `run`, rc 0 | `pr` |'
+  'pr|| `pr` | `review` |'
+  'merge|| `review`, every criterion A and the Codex receipt on the head | `merge`: `allows … merge`, then `pr-ready` |'
+  "wait|| every wait: the owner's yes, a bot, a deadline, a run | step 1, \`budget\` |"
+)
+
+# code_of <text> — the lines of <text> inside its ``` fences.
+code_of() { awk '/^```/ { c = !c; next } c' <<< "$1"; }
+
+# transitions_missing <file> — what the command does not write of the moves and of the launch, one
+# item per line: a row by its name, `loop: step 2`, `loop: step 6`, `setsid: launch` (the run
+# act's code has no `setsid -w `) and `setsid: bare` (a code line has a `setsid` with no `-w`).
+transitions_missing() {
+  local s row loop
+  s="$(section "$1" 'The transitions' 2>/dev/null)"
+  for row in "${TRANSITION_ROWS[@]}"; do
+    [ "$(awk -v p="${row#*|}" 'index($0, p) == 1' <<< "$s" | grep -c .)" = 1 ] || printf '%s\n' "${row%%|*}"
+  done
+  loop="$(section "$1" 'The loop' 2>/dev/null)"
+  grep -qF '**The transitions**' <<< "$(grep '^2\. ' <<< "$loop")" || printf 'loop: step 2\n'
+  grep -qF 'after every wait' <<< "$(grep '^6\. ' <<< "$loop")" || printf 'loop: step 6\n'
+  s="$(awk -v h='### `run`' '$0 == h { on = 1; next } on && /^#/ { exit } on' "$1" 2>/dev/null)"
+  grep -qF 'setsid -w ' <<< "$(code_of "$s")" || printf 'setsid: launch\n'
+  [ "$(grep -oE 'setsid( -w)?' <<< "$(code_of "$(cat "$1" 2>/dev/null)")" | grep -cvx 'setsid -w')" = 0 ] \
+    || printf 'setsid: bare\n'
+}
+
+got=""
+m="$(transitions_missing "$COMMAND")"
+[ -z "$m" ] || got="missing: ${m//$'\n'/, }"
+control 'no run row' transitions_missing run '/^| `run`, rc 0 | `pr` |/d'
+control 'pr row names merge' transitions_missing pr 's/^| `pr` | `review` |/| `pr` | `merge` |/'
+control 'merge row twice' transitions_missing merge '/^| `review`, every criterion A/ p'
+control 'wait row after the section' transitions_missing wait '/^| every wait: /d
+$a\
+| every wait: the owner'"'"'s yes, a bot, a deadline, a run | step 1, `budget` | moved |'
+control 'step 2 reads next alone' transitions_missing 'loop: step 2' 's/has a move in \*\*The transitions\*\* (below)/has a move below/'
+control 'step 6 forgets the waits' transitions_missing 'loop: step 6' 's/^6\. Back to 1, and after every wait too:/6. Back to 1:/'
+control 'launch without -w' transitions_missing $'setsid: launch\nsetsid: bare' 's/setsid -w nohup/setsid nohup/'
+control 'a bare setsid in another block' transitions_missing 'setsid: bare' 's/^why="\$(sdd-worker budget <campaign-dir>)"$/&\nsetsid true/'
+control 'setsid -w only in another block' transitions_missing $'setsid: launch\nsetsid: bare' 's/setsid -w nohup/setsid nohup/
+s/^why="\$(sdd-worker budget <campaign-dir>)"$/&\nsetsid -w true/'
+control 'setsid -w only in prose' transitions_missing $'setsid: launch\nsetsid: bare' 's/setsid -w nohup/setsid nohup/
+$a\
+setsid -w nohup'
+control "setsid -w only in the run act's prose" transitions_missing $'setsid: launch\nsetsid: bare' 's/setsid -w nohup/setsid nohup/
+s/^The `-w` keeps that PID alive/With `setsid -w ` that PID stays alive/'
+if [ -z "$got" ]; then
+  pass 'command: it writes the moves next never derives — run to pr, pr to review, an A round and its receipt to merge, every wait back to budget — and launches under setsid -w'
+else
+  fail 'command: it writes the moves next never derives — run to pr, pr to review, an A round and its receipt to merge, every wait back to budget — and launches under setsid -w' \
+    'each row once in its section, the loop reading it, every setsid in code with -w, and each sabotaged copy naming what it lost' "$got"
 fi
 
 # --- docs: the documentation and the vocabulary -------------------------------------------------

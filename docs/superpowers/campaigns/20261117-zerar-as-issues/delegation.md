@@ -53,8 +53,9 @@ Para o worker agir sozinho, depois do merge da missão que o construiu:
 Delegação ausente, ilegível, sem assinatura, editada depois de assinada ou vencida vale `assisted`.
 Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` do checkout da campanha ou de
 um worktree que guarda missão dela (onde o `sdd run` da missão roda e avisa) também vale
-`assisted`: uma noite sem ninguém olhando precisa de um aviso que chegue. O L6 desta campanha tem teto `plan` no
-`campaign.md`: nele o nível efetivo nunca passa de `plan`, qualquer que seja o assinado.
+`assisted`: uma noite sem ninguém olhando precisa de um aviso que chegue. Os L6a a L6k desta
+campanha têm teto `plan` no `campaign.md`: neles o nível efetivo nunca passa de `plan`, qualquer que
+seja o assinado.
 
 ## Como assinar
 
@@ -64,7 +65,7 @@ um worktree que guarda missão dela (onde o `sdd run` da missão roda e avisa) t
    lote da tabela do `campaign.md` ao lado) e pergunta. Só `y` assina.
 3. A assinatura grava `signed: <YYYY-MM-DD HH:MM> <digest>`, e o digest cobre as seis chaves e o
    `Lot` e o `Ceiling` de cada linha da tabela de lotes do `campaign.md`. Mudar uma das seis chaves,
-   subir ou baixar um teto (o `plan` do L6, por exemplo), ou pôr ou tirar um lote da tabela depois
+   subir ou baixar um teto (o `plan` do L6a, por exemplo), ou pôr ou tirar um lote da tabela depois
    disso invalida o digest, e a delegação volta a valer `assisted` até ser assinada de novo. Riscar
    itens e reescrever o título ou a contagem de um lote não invalida: a campanha faz isso enquanto
    anda.

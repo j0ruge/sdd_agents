@@ -96,8 +96,10 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
    the mission grades every criterion A and names that head (commits after it may touch only the
    mission's handoff directory); the review bot's machine state says `completed` for that sha with
    no unresolved finding; no review thread is open; the pull request is mergeable; and the head the
-   caller will pass to `--match-head-commit` is the one that was read. A bot that did not review
-   (quota, plan, rate limit) is "did not review", declared in the pull request, and does not block.
+   caller will pass to `--match-head-commit` is the one that was read. The Codex receipt is one of
+   the five, so it is required: a Codex that does not answer is a stop, never a pass. Any other bot
+   that did not review (quota, plan, rate limit) is "did not review", declared in the pull request,
+   and does not block.
    Three stops: no receipt for the head 60 minutes after an explicit request, a grade below A after
    three rounds, a merge conflict outside the findings file and its ratchet.
 
@@ -105,7 +107,8 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
    on the strongest model, and the campaign declares the harness and the two models. Under
    delegation the relay answers the grill with the recommended option; an answer that touches the
    owner's rules is listed in the pull request for his acceptance. A lot may carry a ceiling: the
-   design lot of the kit's campaign is capped at `plan`, so its approval is never delegated.
+   design lots of the kit's campaign (one item each, since a lot is done when one mission merges)
+   are capped at `plan`, so their approval is never delegated.
    `sdd approve` itself does not change.
 
 7. **The kit is a target, through `sdd run` in the mission's worktree** (amends D2, extends
