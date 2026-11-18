@@ -386,7 +386,8 @@ run "one checkout has one execution owner" "$ROOT/tests/check-coordination.sh"
 
 # Deliberately NOT guarded by SDD_MUTANT, for the reason the adr step carries: its verb assertions
 # drive bin/sdd-worker as a subprocess, and the `mut_WORKER_*` entries of the catalogue are caught
-# HERE or nowhere. It reads bin/, templates/ and commands/, all three copied by sandbox().
+# HERE or nowhere. It reads bin/, templates/, commands/, config/schema.md, docs/pipeline.md,
+# README.md and CONTEXT.md, every one copied by sandbox().
 run "the worker answers from artifacts" "$ROOT/tests/check-worker.sh"
 
 # The catalogue's cheap half, in seconds and on every run: every mutant still APPLIES and leaves

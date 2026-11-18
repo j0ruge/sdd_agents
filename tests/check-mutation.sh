@@ -7826,8 +7826,11 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # since "skip the document that is missing" is the fail-open this repo forbids — so the control
   # run went red and every mutant would have scored by vacuity. Measured, not feared: that is how
   # this line was born. Two files, and they keep the sandbox a faithful kit instead of making a
-  # documentation rule optional.
-  cp "$ROOT/CLAUDE.md" "$ROOT/TODO.md" "$1/"
+  # documentation rule optional. `README.md` and `CONTEXT.md` joined them the same way: the docs
+  # probe of check-worker.sh reads both from its own kit root, and without them the control run of
+  # `--only WORKER_unknown_verb_accepted check-worker.sh` went red on that probe — measured in
+  # 20261117-o-worker-orquestrador, I10. Read, never mutated: out of the stamp key.
+  cp "$ROOT/CLAUDE.md" "$ROOT/TODO.md" "$ROOT/README.md" "$ROOT/CONTEXT.md" "$1/"
   # `docs/adr` and NOT `docs`: check-kaizen.sh asserts the runner still names ADR 0003, and the
   # sabotage that strips the citation has to be able to kill it INSIDE a mutant. Three small files,
   # against a `docs/` tree whose handoffs are megabytes and which no sensor here reads — the

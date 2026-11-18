@@ -1,5 +1,13 @@
 # O worker — roadmap do kit que pega missão aprovada e leva até o PR sozinho (2026-09-22)
 
+> ⚠️ **Revisado em 2026-11-17 pela [ADR 0022](../../adr/0022-the-worker-is-a-session-orchestrator.md)**
+> (missão `20261117-o-worker-orquestrador`). O worker passou a ser uma **sessão** que orquestra uma
+> campanha dentro de uma delegação assinada, com cinco níveis de autonomia: a D1 (o worker nunca
+> planeja), a D2 (nunca o repo do kit) e a D5 (o merge segue humano) foram revisadas lá, e a forma
+> da §3 (o `tick --once` disparado por timer do sistema, no clone dedicado) ficou **de lado, sem ser
+> recusada**. O resto deste texto fica como foi escrito: W1 está no código; W2 a W7 não. O worker de
+> hoje está em `docs/pipeline.md` § "The worker".
+
 > Spec de **roadmap**, escrita com o humano presente (brainstorm de 2026-09-22, logo depois de o
 > PR #57 — `20260922-o-motivo-da-fase` — ser aberto). Não é spec de missão: cada linha da §4 vira
 > uma missão do kit com `/sdd-plan`, spec e plano próprios. Encaixa-se no plano do Codex Astra

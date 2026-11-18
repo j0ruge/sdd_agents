@@ -112,6 +112,9 @@ sdd run <mission> --max-phases 2    # stop after N phases
 
 sdd adr new --slug <s> --spec <path>  # reserve the next free ADR id (O_EXCL) and write both sides of the link
 sdd adr check [--mission <m>]         # read the links back; rc 0 clean, 1 violation, 2 bad configuration
+
+sdd-worker <verb> <dir> [args]        # the campaign worker's verbs (delegate, level, allows, budget, next, pr-ready);
+                                      #   they answer from artifacts and never act — see below
 ```
 
 `sdd approve <mission>` is the human gate with a command instead of a hand edit. It prints what you
@@ -150,6 +153,17 @@ Set `SPEC_DIR` if the repo keeps a SpecKit-style tree, and the same two-way chec
 `<SPEC_DIR>/*/spec.md`. The grammar, the two scopes and the CI/SpecKit recipes are in
 [`docs/pipeline.md`](docs/pipeline.md#adr-traceability); the decision itself is
 [ADR 0008](docs/adr/0008-adr-ids-are-allocated-and-links-are-checked.md).
+
+`sdd-worker` lives beside `sdd` in the kit's `bin/`, and it is the program of the **campaign
+worker** ([ADR 0022](docs/adr/0022-the-worker-is-a-session-orchestrator.md)): an interactive
+session, following `commands/sdd-worker.md`, that takes a queue of missions through plan, approval,
+run, review and merge inside a delegation the owner signed with `sdd-worker delegate` — a file with
+a level (`assisted` < `pr` < `plan` < `merge` < `full`), the lots it covers, an end and two
+ceilings. The verbs only answer: the effective level, whether an act fits it, the spend, the next
+act, and whether a pull request meets the merge bar on its head sha. An absent, unsigned, expired
+or illegible delegation answers `assisted`, and then the worker does nothing alone. The contracts,
+the rules and the declared limits are in
+[`docs/pipeline.md`](docs/pipeline.md#the-worker).
 
 `sdd run` and `sdd retry` put you on the branch the plan declares (`branch:` in `00-missao.md`)
 before the first gate — checking it out, or cutting it from where you stand. A `<…>` placeholder or

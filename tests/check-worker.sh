@@ -106,10 +106,16 @@
 #       line under it is the literal `sdd-worker allows <campaign-dir> <act> --lot <L>`
 #   R32 the command writes the five stops (one numbered line each, with the pager and the journal),
 #       the never list and the context rules, each phrase on a line of its own section
+#   R33 docs/pipeline.md writes, under `## The worker`, a call of every verb main() dispatches and the
+#       ladder in order; README.md has a usage line of sdd-worker and a link to that section; the
+#       ON_ESCALATION_CMD row of config/schema.md names the worker and `assisted`, and its
+#       BUDGET_MISSION_USD row the worker; CONTEXT.md has a glossary row for each of the five terms,
+#       the level's writing the ladder and the worker's naming the coordination helper it is not
 #
-# The command is prose, and no mutant of bin/ reaches it, so R30 to R32 carry their own negative
-# control: each checker runs on the file, where it has to miss nothing, and on copies with one thing
-# taken out, where it has to name exactly that thing. A checker that never misses is decoration.
+# The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
+# carry their own negative control: each checker runs on the files, where it has to miss nothing,
+# and on copies with one thing taken out, where it has to name exactly that thing. A checker that
+# never misses is decoration.
 #
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
@@ -117,7 +123,7 @@
 # rule goes unmeasured, and the sensor says nothing about it.
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
-# verbs, and `command: `) prints exactly the assertions the mission plan names — the checkpoint
+# verbs, `command: ` and `docs: `) prints exactly the assertions the mission plan names — the checkpoint
 # counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
 # the census in check-health.sh holds that clause.
 #
@@ -135,7 +141,7 @@ unset SDD_WORKER_NOW ON_ESCALATION_CMD
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
-PROBE_FLOOR=32
+PROBE_FLOOR=33
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -1517,6 +1523,112 @@ if [ -z "$got" ]; then
 else
   fail 'command: the five stops, the never list and the context rules are written' \
     'every phrase on a line of its section, and each sabotaged copy naming what it lost' "$got"
+fi
+
+# --- docs: the documentation and the vocabulary -------------------------------------------------
+# Four documents name the worker, and each is prose no mutant of bin/ reaches, so the checker carries
+# its own negative control, like the command's. What each owes is read from the sensor's ladder and
+# from the program's main(), never from a second list written here:
+#   docs/pipeline.md  under `## The worker`, a call of every verb, and the ladder written in order
+#   README.md         a line of the usage block starting `sdd-worker `, and a link to that section
+#   config/schema.md  the ON_ESCALATION_CMD row names the worker and `assisted`; the
+#                     BUDGET_MISSION_USD row names the worker
+#   CONTEXT.md        a glossary row per term, found by the identifier its first cell carries in
+#                     parentheses (the terms are pt-BR, the identifiers are not); the row of the level
+#                     writes the ladder, and the worker's names the coordination helper, whose Bash
+#                     worker is the other thing called a worker
+DOC_FILES=(docs/pipeline.md README.md config/schema.md CONTEXT.md)
+DOC_TERMS=(campaign.md lot: delegation.md level: bin/sdd-worker)
+
+# ladder_line — the five levels as the documents write them: `assisted` < `pr` < ... < `full`.
+ladder_line() { local l s=""; for l in "${LEVELS[@]}"; do s="${s:+$s < }\`$l\`"; done; printf '%s' "$s"; }
+
+# glossary_row <file> <identifier> — the table rows whose first cell is a bold term followed by
+# `(<identifier>)` as a code span, the shape of `| **Churn** (`churned`) |` in CONTEXT.md.
+glossary_row() { grep -F "** (\`$2\`) |" "$1" 2>/dev/null | grep -E '^\| \*\*[^*|]+\*\* \(`'; }
+
+# docs_missing <root> — what the four documents under <root> do not write, one item per line. A
+# section that is not there is one item, not one per verb: the copy names its own break.
+docs_missing() {
+  local s v row t
+  s="$(section "$1/docs/pipeline.md" 'The worker' 2>/dev/null)"
+  if [ -z "$s" ]; then
+    printf 'pipeline: no section\n'
+  else
+    printf '%s\n' "$s" > "$BOX/docs-section"
+    while IFS= read -r v; do printf 'pipeline: verb %s\n' "$v"; done < <(verbs_missing "$BOX/docs-section")
+    grep -qF "$(ladder_line)" <<< "$s" || printf 'pipeline: ladder\n'
+  fi
+  grep -qE '^sdd-worker ' "$1/README.md" 2>/dev/null || printf 'readme: command\n'
+  grep -qF '(docs/pipeline.md#the-worker)' "$1/README.md" 2>/dev/null || printf 'readme: link\n'
+  row="$(grep -E '^\| `ON_ESCALATION_CMD` \|' "$1/config/schema.md" 2>/dev/null)"
+  { grep -qF 'sdd-worker' <<< "$row" && grep -qF '`assisted`' <<< "$row"; } || printf 'schema: ON_ESCALATION_CMD\n'
+  row="$(grep -E '^\| `BUDGET_MISSION_USD` \|' "$1/config/schema.md" 2>/dev/null)"
+  grep -qF 'sdd-worker' <<< "$row" || printf 'schema: BUDGET_MISSION_USD\n'
+  for t in "${DOC_TERMS[@]}"; do
+    [ -n "$(glossary_row "$1/CONTEXT.md" "$t")" ] || printf 'context: %s\n' "$t"
+  done
+  grep -qF "$(ladder_line)" <<< "$(glossary_row "$1/CONTEXT.md" level:)" || printf 'context: ladder\n'
+  grep -qF 'sdd-coordination.py' <<< "$(glossary_row "$1/CONTEXT.md" bin/sdd-worker)" \
+    || printf 'context: coordination\n'
+}
+
+# docs_control <label> <want> <file> <sed script> — runs docs_missing on a copy of the four documents
+# in which <file> alone was edited by <sed script>; appends to got unless it printed exactly <want>.
+# A sed that stops matching leaves a copy that misses nothing, which is not <want>: red.
+docs_control() {
+  local f out copy="$BOX/docs-copy"
+  rm -rf "$copy"
+  for f in "${DOC_FILES[@]}"; do
+    mkdir -p "$(dirname "$copy/$f")" && cp "$ROOT/$f" "$copy/$f" 2>/dev/null
+  done
+  sed -i "$4" "$copy/$3" 2>/dev/null
+  out="$(docs_missing "$copy")"
+  [ "$out" = "$2" ] || got="${got:+$got; }$1: printed '${out//$'\n'/, }' (want '${2//$'\n'/, }')"
+}
+
+# --- R33: the documents name the worker, its verbs and its levels -------------------------------
+got=""
+m="$(docs_missing "$ROOT")"
+[ -z "$m" ] || got="missing: ${m//$'\n'/, }"
+docs_control 'no section' 'pipeline: no section' docs/pipeline.md 's/^## The worker$/## The workers/'
+docs_control 'next only before the section' 'pipeline: verb next' docs/pipeline.md 's/sdd-worker next/sdd-worker nexts/g
+/^## The kaizen loop$/a\
+`sdd-worker next`'
+# The ladder, the `assisted` of the pager row and the helper of the worker's row are each written
+# once in their file, so a copy that only takes one out would be missed alike by a checker that reads
+# the whole file instead of its section or row: those controls also put it back somewhere else.
+lad="$(ladder_line)"
+docs_control 'ladder only before the section' 'pipeline: ladder' docs/pipeline.md 's/`plan` < `merge`/`merge` < `plan`/g
+/^## The kaizen loop$/a\
+'"$lad"
+docs_control 'no command line' 'readme: command' README.md '/^sdd-worker /d'
+docs_control 'no link' 'readme: link' README.md 's@(docs/pipeline.md#the-worker)@(docs/pipeline.md)@g'
+docs_control 'assisted only in another row' 'schema: ON_ESCALATION_CMD' config/schema.md '/^| `ON_ESCALATION_CMD` |/ s/`assisted`/assisted/g
+/^| `BUDGET_MISSION_USD` |/ s/ |$/ `assisted` |/'
+docs_control 'pager row, no worker' 'schema: ON_ESCALATION_CMD' config/schema.md '/^| `ON_ESCALATION_CMD` |/ s/sdd-worker/the worker/g'
+docs_control 'mission cap, no worker' 'schema: BUDGET_MISSION_USD' config/schema.md '/^| `BUDGET_MISSION_USD` |/ s/sdd-worker/the worker/g'
+# The five identifiers are written out in this want, never read from DOC_TERMS: a term dropped from
+# the array would vanish from a want built of it too.
+docs_control 'no glossary rows' $'context: campaign.md\ncontext: lot:\ncontext: delegation.md\ncontext: level:\ncontext: bin/sdd-worker\ncontext: ladder\ncontext: coordination' \
+  CONTEXT.md '/^| \*\*[^*]*\*\* (`[^`]*`) |/d'
+docs_control 'lot term not first' 'context: lot:' CONTEXT.md 's/^| \(\*\*[^*]*\*\* (`lot:`) |\)/| x | \1/'
+docs_control 'ladder only in another row' 'context: ladder' CONTEXT.md '/(`level:`) |/ s/ < `full`//
+/(`campaign.md`) |/ s/ |$/ '"$lad"' |/'
+docs_control 'helper only in another row' 'context: coordination' CONTEXT.md '/(`bin\/sdd-worker`) |/ s/sdd-coordination\.py/the helper/g
+/(`campaign.md`) |/ s/ |$/ sdd-coordination.py |/'
+# The primitive under every control above, against an answer known wrong: told to want the command
+# line from a copy that only lost the link, docs_control() has to append, or each control passes on
+# anything — the same control R30 runs on control().
+saved="$got"
+docs_control 'the primitive' 'readme: command' README.md 's@(docs/pipeline.md#the-worker)@(docs/pipeline.md)@g'
+[ "$got" != "$saved" ] || saved="${saved:+$saved; }docs_control() let a copy printing the link pass as the command"
+got="$saved"
+if [ -z "$got" ]; then
+  pass 'docs: pipeline.md, README.md, schema.md and CONTEXT.md name the worker, its verbs and its five levels'
+else
+  fail 'docs: pipeline.md, README.md, schema.md and CONTEXT.md name the worker, its verbs and its five levels' \
+    'each document naming what it owes, and each sabotaged copy naming what it lost' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

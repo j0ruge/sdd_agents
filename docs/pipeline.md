@@ -1792,3 +1792,170 @@ and the human decides (ADR 0002). Same convention as a `blocked` increment.
 **The reminder:** when a target repo's pipeline completes, `sdd run` prints one dim line if the
 current kit version has missions without a verdict yet — pull, not push: the human is the
 kanban, and the line disappears once the verdict exists.
+
+## The worker
+
+The runner owns **one** mission: its phases, its gates, its ledger rows. The **campaign worker**
+owns a queue of them — an interactive session that plans, approves, runs, reviews and merges one
+mission after another, inside a level of autonomy the owner signed
+([ADR 0022](adr/0022-the-worker-is-a-session-orchestrator.md), which revises D1, D2 and D5 of the
+worker roadmap of 2026-09-22 and sets its timer-fired tick aside). It is not the Bash worker of
+[checkout ownership](#checkout-ownership), the process the coordination supervisor watches: one
+word, two things, and `CONTEXT.md` keeps them apart.
+
+Two files make it:
+
+- `commands/sdd-worker.md` is the loop the session follows: before every act it asks the program,
+  then acts through the commands that already exist (`/sdd-plan`, `sdd approve`, `sdd run`, `gh`),
+  and appends one line to the campaign's `journal.md`. It also writes the five stops, what no level
+  grants, and how the session keeps its own context window for a whole night.
+- `bin/sdd-worker` answers, from artifacts, the questions that used to be the model's reading and
+  went wrong four times on record — a review receipt matched by the clock instead of the sha, a
+  watcher whose `pgrep -f` matched itself, a bot out of quota read as "reviewed", a checker that
+  read 20 of 21 units. It answers and signs; it never launches a run, opens a pull request or
+  merges, and it never writes what the runner owns: it reads the frontmatter of `00-missao.md`, the
+  ledger, `gh` and the review bot's machine comment. Its sensor is `tests/check-worker.sh`, with the
+  `mut_WORKER_*` entries of the mutation catalogue.
+
+### A campaign directory
+
+Any directory of the target repo — the convention is `docs/campaigns/<YYYYMMDD>-<slug>/`, and the
+kit's own live under `docs/superpowers/campaigns/` — holding three files. No config key names it:
+every verb but `pr-ready` takes it as its first argument and finds the repo root by
+`git -C <dir> rev-parse --show-toplevel`; `HANDOFF_DIR` and `ON_ESCALATION_CMD` come from that
+root's `.sdd/config.sh`, read in a subshell.
+
+- `campaign.md` (`templates/campaign.md`): frontmatter `campaign:` (the id, the directory's name),
+  `title:`, `date:`, `harness:`, `plan_model:` and `exec_model:`; then the heading `## Lotes` over a
+  table with one row per lot in queue order — `L<n>`, a title, a ceiling (`-` or a level name) and
+  an item count —, and one `### L<n>` per lot with its items as `- [ ] <title>`. A `◆ ` right after
+  the box marks an item whose open choice the planner makes and the pull request lists for the
+  owner's acceptance.
+- `delegation.md` (`templates/delegation.md`): only the frontmatter is read — `campaign:`, `level:`,
+  `lots:` (`all`, or lots separated by spaces), `expires:` (`YYYY-MM-DD HH:MM`, local time),
+  `budget_mission_usd:`, `budget_campaign_usd:` and `signed:`. A value is the text after the first
+  `: `, trailing blanks removed, no quotes; a `<…>` placeholder of the template is therefore
+  illegible.
+- `journal.md`: one line per event, append-only, its instant taken from `date`. No verb reads it;
+  it is the trail of what the session did.
+
+A lot finds its mission through the mission's own artifact: `00-missao.md` declares `campaign:` and
+`lot:` in its frontmatter (two optional keys of `templates/missao.md`), and its `branch:` names the
+pull request. There is no state file: the next act is derived from the queue, the missions on disk —
+in the checkout of the campaign and in every linked worktree of its repo, since a lot's mission runs
+in its own worktree until the merge — and the pull requests.
+
+### The ladder and the table of acts
+
+Five cumulative levels, one definition in the program: `assisted` < `pr` < `plan` < `merge` < `full`.
+A name outside the ladder is no level. The table of acts is the second definition, written
+positively: an act is allowed because the table names a level at or below the effective one, never
+because nothing refused it, and a word the table does not name is rc 2, never "allowed".
+
+| Act | Lowest level that grants it |
+|---|---|
+| `run`, `pr`, `review` | `pr` |
+| `plan` | `plan` |
+| `merge`, `postmerge` | `merge` |
+| `approve` | `full` |
+
+Under `assisted` the session proposes each act and waits for the owner's yes.
+
+**The effective level** (`sdd-worker level`) — the first rule that matches decides:
+
+1. no `delegation.md` → `assisted — no delegation`;
+2. illegible — one of the six keys missing or empty, a level off the ladder, an `expires:` that is
+   not `YYYY-MM-DD HH:MM`, a ceiling that is not a number → `assisted — illegible`;
+3. `signed:` empty → `assisted — unsigned`;
+4. the digest in `signed:` differs from the one recomputed → `assisted — edited after signing`;
+5. `expires:` not after now → `assisted — expired`;
+6. above `assisted`, with `ON_ESCALATION_CMD` empty in the campaign repo's `.sdd/config.sh`, or no
+   config at all → `assisted — no pager`;
+7. with `--lot`: a lot outside `lots:`, or with no row in the table → `assisted — lot not covered`;
+8. with `--lot`: a lot ceiling lower than the signed level → that level, `— capped by the lot`. A
+   ceiling never raises the level, and one that is not a level caps the lot at `assisted`;
+9. otherwise the signed level, `— signed until <expires>`.
+
+**The signature.** `sdd-worker delegate` prints the six `key: value` lines, asks
+`Sign this delegation? [y/N] ` on stderr and reads one line of stdin. Only `y` signs: it writes
+`signed: <YYYY-MM-DD HH:MM> <digest>`, the digest being the first 12 hex of the `sha256sum` of the
+six lines in the order above, each `key: value` and a newline — so a delegation edited after
+signing is no delegation. It does not commit; its last line names the `git add` and `git commit` to
+run. No character on stdin is rc 66 and writes nothing, the contract of `sdd approve`; an illegible
+or already expired delegation is refused before the question, with rc 1. `level: assisted` may be
+signed, and grants nothing.
+
+**The clock.** One function gives the instant, `date '+%Y-%m-%d %H:%M'`. The seam `SDD_WORKER_NOW`
+replaces it only when it is **later** than the real clock: it lets the sensor move time forward and
+watch a delegation expire, and it never brings an expired one back.
+
+### The six verbs
+
+A call of the wrong shape, an unknown verb or a directory that is not there prints the usage on
+stderr and leaves rc 2. The reason of an answer comes after ` — `.
+
+| Call | Stdout | rc |
+|---|---|---|
+| `sdd-worker delegate <campaign-dir>` | the six keys, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible or expired; 66 nothing on stdin |
+| `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0 |
+| `sdd-worker allows <campaign-dir> <act> [--lot L<n>]` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner; 2 not an act |
+| `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, or no ceiling or spend to read |
+| `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line; 3 when `gh` did not answer |
+| `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
+
+**`budget`** sums, with `jq` (never `awk`: under pt-BR the `mawk` reads `1.99` as 1), the `cost_usd`
+of the ledger rows (`${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`) whose `mission` is one of the
+campaign's: the folders under the repo's `HANDOFF_DIR` whose `00-missao.md` declares exactly that
+`campaign:`, each mission once. An absent ledger is zero spent. The mission cap it prints is the
+value the session passes to `sdd run` as `BUDGET_MISSION_USD`.
+
+**`next`** walks the lots in table order and stops at the first one not merged: no mission → `plan`;
+a mission whose `aprovacao:` the runner's `gate_PLAN` would not admit (only `auto` and `humano-…`
+pass) → `approve`; approved, with no pull request on its `branch:` → `run`; an open pull request →
+`review`; only closed ones → `stop … pull request closed without merge`; every lot merged →
+`done - -`. The pull requests come from `gh pr list --head <branch> --state all`; a `gh` that
+fails, or answers off its contract, is rc 3 with no act — "could not read" never becomes "no pull
+request", which would send the session to run the lot again. Two missions on one lot, an approved
+mission with no branch, no `campaign.md` and an empty queue stop, with rc 1.
+
+**`pr-ready`** reads the pull request head (`headRefOid`) and requires five items on that one sha,
+naming the first that fails:
+
+1. `review`: the newest `40-review-r<N>.md` of the mission folder, by number, names
+   `reviewed_head: <sha>` in its frontmatter; every `Grade` cell under `### Overall Grade` is
+   exactly `A`; and `git diff --no-renames --name-only <reviewed_head> <head>` lists only paths
+   under the mission folder;
+2. `codex`: of the comments of `chatgpt-codex-connector[bot]`, read with `--paginate`, the newest
+   one carrying `codex-review-state:v1` is for the head, `completed`, with `has_unresolved_findings`
+   false. A receipt anybody else posts does not count, and no other bot's review is read, so a bot
+   out of quota neither blocks nor counts as a review;
+3. `threads`: no review thread unresolved, and no more of them than the hundred read;
+4. `mergeable`: the pull request is `OPEN` and `MERGEABLE`;
+5. `head`: the local `HEAD` is that sha.
+
+The `ready <sha>` line is what the session passes to `gh pr merge --merge --match-head-commit`. The
+method — a merge commit, never a squash — belongs to the command that merges, and
+`commands/sdd-worker.md` writes it.
+
+**`reviewed_head:` is the worker's key, on purpose.** The rounds the REVIEW phase of `sdd run`
+writes do not carry it, and `templates/review.md` does not name it. So after a run `pr-ready`
+answers `not-ready review: the newest round names no head` until the session makes its own round
+over the head and writes it with the key: the owner's bar is higher than the pipeline's (every
+criterion A, no tolerance for prose), and the worker's round is what applies it. A round
+`gate_REVIEW` passes may fail `pr-ready`; never the reverse on the grade alone.
+
+### Declared limits (ADR 0022)
+
+- The signature proves an answer on stdin, not a person: an agent with a shell passes, the limit
+  `sdd approve` has too.
+- The ceilings read the ledger of this machine, and the spend of the orchestrating session and of
+  its subagents is outside both.
+- A campaign's missions are matched by id, not by repository.
+- `sdd approve` under `full` still writes `humano-YYYY-MM-DD`; the trail is the campaign journal.
+- Visual acceptance is never the worker's. Deleting a branch or a worktree, and pushing to the
+  default branch, are in no level.
+- A mission of the kit runs by `sdd run` in the mission's linked worktree, through the `sdd` on the
+  PATH — the main checkout, which the mission does not edit; from the main checkout it stays
+  forbidden. The kit's `gate_PR` leaves rc 2 when only the mutation stamp is missing, which the
+  worker reads as "ready for review".
+- The Codex harness is the next mission: nothing here opens a phase outside `claude -p`.
