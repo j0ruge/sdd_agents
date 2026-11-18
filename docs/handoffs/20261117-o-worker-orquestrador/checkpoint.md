@@ -1,6 +1,6 @@
 ---
 missao: 20261117-o-worker-orquestrador
-atualizado: 2026-11-18 00:06
+atualizado: 2026-11-18 00:49
 ---
 
 # Checkpoint — O worker orquestrador
@@ -27,7 +27,7 @@ atualizado: 2026-11-18 00:06
 | I7 | O verbo next | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    next: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 14; echo "$a $?"` → `5 0` | done | 9de910a |
 | I8 | O verbo pr-ready | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    pr-ready: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 19; echo "$a $?"` → `7 0` | done | 26adfe4 |
 | I9 | O comando da sessão (commands/sdd-worker.md) | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    command: ' <<< "$o"` → `3` | done | 5721c92 |
-| I10 | Documentação e vocabulário | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    docs: ' <<< "$o"` → `1` | pending | — |
+| I10 | Documentação e vocabulário | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    docs: ' <<< "$o"` → `1` | done | 30bc8cd |
 | I11 | A campanha do kit e a gaveta | `o=$(bin/sdd-worker level docs/superpowers/campaigns/20261117-zerar-as-issues 2>/dev/null); a=$(grep -c '^level assisted' <<< "$o"); b=$(grep -c '^- \[ \] ' docs/superpowers/campaigns/20261117-zerar-as-issues/campaign.md 2>/dev/null); echo "$a $b"` → `1 83` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
