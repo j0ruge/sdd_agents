@@ -153,6 +153,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
   orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-18)
 
+- [ ] **O `gate_REVIEW` aprova a tabela de notas a que falta um critério** — `bin/sdd:1943` (`gate_REVIEW`) —
+  o comentário diz "a partial review is not a review", mas o gate conta linhas, não critérios: uma
+  `### Overall Grade` só com a linha `**Overall**` em A passa (`rows > 0`), e nenhum programa do kit nomeia os
+  oito critérios do `templates/review.md`. O `pr-ready` do worker tinha a mesma régua (R11 da r6 da missão).
+  Direção: o gate exige uma linha por critério do template e nomeia no motivo o que falta.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r6.md` — descoberto por `sdd-reviewer` na
+  missão `20261117-o-worker-orquestrador` (2026-11-18)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
