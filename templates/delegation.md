@@ -30,8 +30,10 @@ signed:
 | `full` | o de `merge`, e aprova o plano (`sdd approve`) |
 
 Delegação ausente, ilegível, sem assinatura, editada depois de assinada ou vencida vale `assisted`.
-Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` também vale `assisted`: uma
-noite sem ninguém olhando precisa de um aviso que chegue.
+Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` de qualquer checkout do repo
+também vale `assisted`, nomeando o arquivo: o da campanha e o de cada worktree ligado, porque o
+`sdd run` de uma missão roda no worktree dela e avisa pelo config de lá. Uma noite sem ninguém
+olhando precisa de um aviso que chegue. Pager fora do commit é escrito também em cada worktree.
 
 ## O teto por missão
 

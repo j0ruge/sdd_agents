@@ -1875,8 +1875,10 @@ Under `assisted` the session proposes each act and waits for the owner's yes.
 3. `signed:` empty → `assisted — unsigned`;
 4. the digest in `signed:` differs from the one recomputed → `assisted — edited after signing`;
 5. `expires:` not after now → `assisted — expired`;
-6. above `assisted`, with `ON_ESCALATION_CMD` empty in the campaign repo's `.sdd/config.sh`, or no
-   config at all → `assisted — no pager`;
+6. above `assisted`, with `ON_ESCALATION_CMD` empty in the `.sdd/config.sh` of any checkout of the
+   campaign's repo, or no config at all → `assisted — no pager`, naming that file: the campaign's
+   checkout first, then each linked worktree, since `sdd run` runs a mission in its worktree and
+   pages from that checkout's file (the set `budget` reads);
 7. with `--lot`: a lot outside `lots:`, or with no row in the table → `assisted — lot not covered`;
 8. with `--lot`: a lot ceiling lower than the signed level → that level, `— capped by the lot`. A
    ceiling never raises the level, and one that is not a level caps the lot at `assisted`;

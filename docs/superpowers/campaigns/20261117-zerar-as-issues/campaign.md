@@ -183,8 +183,9 @@ caso ao dono, com os nomes do `commands/sdd-worker.md`:
 5. `campaign-ceiling`: `bin/sdd-worker budget` sai com rc 1 em qualquer outra linha, a campanha
    gastou o `budget_campaign_usd`.
 
-Sem `ON_ESCALATION_CMD` no `.sdd/config.sh` do kit, toda delegação acima de `assisted` vale
-`assisted` (decisão 10): o aviso que chega ao dono é condição para o worker agir sozinho.
+Sem `ON_ESCALATION_CMD` no `.sdd/config.sh` de algum checkout do kit (o desta campanha ou o worktree
+de uma missão, onde o `sdd run` roda e avisa), toda delegação acima de `assisted` vale `assisted`
+(decisão 10): o aviso que chega ao dono é condição para o worker agir sozinho.
 
 Não é parada: com o PR aberto e só o carimbo de mutação faltando, o `sdd run` de uma missão do kit
 sai com rc 2 e pede `./bin/sdd health`. Pela regra do dono (PR de missão do kit mergeia sem

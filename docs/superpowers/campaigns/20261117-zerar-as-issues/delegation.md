@@ -29,8 +29,8 @@ ao preencher.
 
 Para o worker agir sozinho, depois do merge da missão que o construiu:
 
-1. configurar o `ON_ESCALATION_CMD` no `.sdd/config.sh` do kit — sem ele, todo nível acima de
-   `assisted` vale `assisted`;
+1. configurar o `ON_ESCALATION_CMD` no `.sdd/config.sh` do kit, commitado ou escrito também em cada
+   worktree de missão — vazio em qualquer checkout, todo nível acima de `assisted` vale `assisted`;
 2. preencher `level`, `expires` e os dois tetos abaixo, e assinar (seção "Como assinar").
 
 ## Os cinco níveis, cumulativos
@@ -44,8 +44,9 @@ Para o worker agir sozinho, depois do merge da missão que o construiu:
 | `full` | o de `merge`, e aprova o plano (`sdd approve`) |
 
 Delegação ausente, ilegível, sem assinatura, editada depois de assinada ou vencida vale `assisted`.
-Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` também vale `assisted`: uma
-noite sem ninguém olhando precisa de um aviso que chegue. O L6 desta campanha tem teto `plan` no
+Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` de qualquer checkout do repo
+(o da campanha e o de cada worktree ligado, onde o `sdd run` da missão roda e avisa) também vale
+`assisted`: uma noite sem ninguém olhando precisa de um aviso que chegue. O L6 desta campanha tem teto `plan` no
 `campaign.md`: nele o nível efetivo nunca passa de `plan`, qualquer que seja o assinado.
 
 ## Como assinar

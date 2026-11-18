@@ -301,7 +301,7 @@ lots_table() {
 # "do what it says". Called, never substituted: under `$( )` both globals would die with the
 # subshell. The lot's ceiling only ever lowers the level.
 effective_level() {
-  local dir="${1%/}" lot="${2:-}" f signed want exp lv root lots w found="" l c cr sr
+  local dir="${1%/}" lot="${2:-}" f signed want exp lv root wt lots w found="" l c cr sr
   local -a words=()
   f="$dir/delegation.md"
   LEVEL=assisted
@@ -318,8 +318,22 @@ effective_level() {
   if expired "$exp"; then LEVEL_WHY="expired: $exp is not after $(now)"; return 0; fi
   lv="$(fm_value "$f" level)"
   root="$(repo_root "$dir")"
-  if [ "$lv" != assisted ] && [ -z "$(config_key "$root" ON_ESCALATION_CMD)" ]; then
-    LEVEL_WHY="no pager: ON_ESCALATION_CMD is empty in ${root:-(no repo)}/.sdd/config.sh"; return 0
+  if [ "$lv" != assisted ] && [ -z "$root" ]; then
+    LEVEL_WHY="no pager: ON_ESCALATION_CMD is empty in (no repo)/.sdd/config.sh"; return 0
+  fi
+  # The runner pages from the .sdd/config.sh of the checkout it runs in, and the session launches it
+  # in the mission's worktree: so the pager of every checkout of the repo is read, the set budget
+  # reads (checkouts_of), the campaign's first, and the first one that is empty is the one named.
+  # Declared limits: a worktree whose folder is gone (prunable) has no file, so no pager, until
+  # `git worktree prune` (the fail-safe side); one made after this call is not read, and the loop of
+  # commands/sdd-worker.md asks allows before every act, so the run of a mission reads the worktree
+  # its plan made.
+  if [ "$lv" != assisted ]; then
+    while IFS= read -r wt; do
+      if [ -z "$(config_key "$wt" ON_ESCALATION_CMD)" ]; then
+        LEVEL_WHY="no pager: ON_ESCALATION_CMD is empty in $wt/.sdd/config.sh"; return 0
+      fi
+    done < <(checkouts_of "$root")
   fi
   if [ -n "$lot" ]; then
     lots="$(fm_value "$f" lots)"

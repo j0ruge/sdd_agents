@@ -7100,6 +7100,21 @@ mut_WORKER_pipe_parity_lost() {
 mut_WORKER_zero_signed_unchecked() {
   sed -i '/^cmd_budget() {/,/^}/ s@^  if ! \[\[ "\$mcap" =~ \[1-9\] \]\]; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
+# Only the campaign's checkout is read for the pager again: `sdd run` runs in the mission's worktree
+# and pages from that checkout's .sdd/config.sh, so a worktree that leaves ON_ESCALATION_CMD empty
+# stops the line with rc 3 and nobody is told, while level answers the signed pr (achado #1 of the
+# mission's review r3). Caught by "pager: a mission worktree whose config leaves ON_ESCALATION_CMD
+# empty lowers the level to assisted and names that file" (check-worker.sh).
+mut_WORKER_pager_root_only() {
+  sed -i '/^effective_level() {/,/^}/ s@^    done < <(checkouts_of "\$root")$@    done < <(echo "$root")@' "${1%/*}/sdd-worker"
+}
+# The stop names the campaign's file whatever checkout has no pager: the owner told to write a
+# pager that is already there, and the worktree's left empty. Caught by "pager: a mission worktree
+# whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file"
+# (check-worker.sh).
+mut_WORKER_pager_file_misnamed() {
+  sed -i '/^effective_level() {/,/^}/ s@ is empty in \$wt/\.sdd/config\.sh"; return 0$@ is empty in $root/.sdd/config.sh"; return 0@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7954,6 +7969,8 @@ CATALOG=(
   WORKER_pipe_grades_cut_raw
   WORKER_pipe_parity_lost
   WORKER_zero_signed_unchecked
+  WORKER_pager_root_only
+  WORKER_pager_file_misnamed
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

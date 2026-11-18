@@ -35,7 +35,7 @@
 #   R9  above assisted, a campaign whose repo sets no ON_ESCALATION_CMD (empty, or no config, even
 #       under a caller that exports one: the runner does not run without the file) is assisted —
 #       the same signed file answers merge where the pager is set; the config read is the
-#       campaign's repo, never the cwd
+#       campaign's repo (every checkout of it, R44), never the cwd
 #   R10 with --lot, a ceiling below the signed level lowers it and one above never raises it; a lot
 #       outside `lots:`, or with no row in the table, is assisted; a --lot with no lot is rc 2
 #   R11 `allows`, over a delegation signed at each of the five levels, answers the table of acts of
@@ -159,6 +159,11 @@
 #   R43 a signed `budget_mission_usd:` of zero, which `sdd run` reads as no ceiling, stops `budget`
 #       naming the delegation and never a .sdd/config.sh — with no config, or one silent on the key;
 #       a fraction above zero is the cap, and holds
+#   R44 above assisted, the pager of every checkout of the campaign's repo is read, since `sdd run`
+#       runs in the mission's worktree and pages from that checkout's file: an empty one in a
+#       worktree — with a mission of the campaign or none — or in the campaign's checkout lowers the
+#       level to assisted naming that file, and `allows run` asks; the pager in every checkout is
+#       the signed level; a campaign outside any git checkout names `(no repo)`, never the cwd's
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -172,7 +177,7 @@
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
-# `zero: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that
+# `zero: `, `pager: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that
 # opened it names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the
 # sensor at the first red, after printing it; the census in check-health.sh holds that clause.
 #
@@ -852,6 +857,10 @@ mission "$REPO" "$H" 20990105-b-none -
 git -C "$REPO" -c user.name=fixture -c user.email=fixture@example.com commit -q --allow-empty -m fixture
 git -C "$REPO" worktree add -q -b fixture-side "$BOX/wt" > /dev/null 2>&1 \
   || got="fixture: the linked worktree was not created"
+# A worktree carries the config its repo commits, and the fixture repo commits none: this one gets
+# the campaign checkout's own, pager and all, so every level asked later of a campaign of the
+# fixture repo — which reads the pager of every checkout of the repo (R44) — stays the one signed.
+mkdir -p "$BOX/wt/.sdd"; cp "$REPO/.sdd/config.sh" "$BOX/wt/.sdd/config.sh"
 mission "$BOX/wt" "$H" 20990106-b-wt b-sum
 mission "$BOX/wt" "$H" 20990101-b-one b-sum
 HD="$BOX/hd"
@@ -2242,6 +2251,77 @@ if [ -z "$got" ]; then
 else
   fail 'zero: a signed mission cap of zero stops budget naming the delegation, never a config that does not set it' \
     "rc 1 naming the delegation and its 0 for 0, 0.00 and a config silent on the key; rc 0 and the mission cap 0.50 for 0.5" "$got"
+fi
+
+# --- R44: the pager of every checkout -----------------------------------------------------------
+# The pager is the mission cap's twin (R41): the runner loads the .sdd/config.sh of the checkout it
+# runs in, and the session launches it in the mission's worktree, so a pager written only in the
+# campaign's checkout — left out of the commit, since its command often carries a secret topic —
+# pages nobody when the runner in the worktree stops the line with rc 3, and the command tells the
+# session that the runner already paged that stop. One repo whose committed config leaves
+# ON_ESCALATION_CMD empty, two linked worktrees cut from that commit — m holds the campaign's
+# mission, x holds none —; campaign p-pager signed at pr, its lot L1 with no ceiling:
+#   m        the pager in the campaign's checkout and in x, m's left empty: assisted naming m's
+#            file, and `allows run --lot L1` asks
+#   x        the pager in the campaign's checkout and in m, x's left empty: assisted naming x's
+#            file — every checkout of the repo is read, not only one that holds a mission
+#   inverse  the pager in both worktrees, the campaign's checkout left empty: assisted naming its file
+#   control  the pager in every checkout: the signed pr, and `allows run --lot L1` allowed, so each
+#            stop is a file's empty pager and nothing else
+#   nogit    the same file copied outside any git checkout, asked from the cwd of P with the pager
+#            everywhere: assisted naming `(no repo)`, never a checkout of the cwd's repo; the signed
+#            assisted of R9 copied there answers its own level, since assisted asks for no pager
+# The folder of x ends in a backslash, a letter and a space, as in R41: a reader of its lines that
+# drops either reads a checkout that is not there, whose absent file has no pager, and the control
+# goes red on it. Every answer is the whole line: a stop naming the wrong file starts the same.
+got=""
+P="$BOX/wpager"; PM="$BOX/wpager-m"; PX="$BOX/wpager-x\\b "
+nopager='ON_ESCALATION_CMD=""'; pager='ON_ESCALATION_CMD="true"'
+mkdir -p "$P/.sdd" "$P/docs/campaigns"
+git init -q -b main "$P"
+printf 'HANDOFF_DIR="docs/handoffs"\n%s\n' "$nopager" > "$P/.sdd/config.sh"
+git -C "$P" add .sdd/config.sh
+git -C "$P" -c user.name=fixture -c user.email=fixture@example.com commit -q -m fixture
+git -C "$P" worktree add -q -b feat/p-m "$PM" > /dev/null 2>&1 \
+  || got="${got:+$got; }fixture: the worktree m was not created"
+git -C "$P" worktree add -q -b feat/p-x "$PX" > /dev/null 2>&1 \
+  || got="${got:+$got; }fixture: the worktree x was not created"
+grep -qxF "$nopager" "$PM/.sdd/config.sh" 2>/dev/null \
+  || got="${got:+$got; }fixture: the worktree m does not carry the empty pager of the commit"
+mission "$PM" "$H" 20990401-p-m p-pager
+d="$(campaign p-pager pr "$FAR" 25 100)"
+sign "$d"
+cp -a "$d" "$P/docs/campaigns/"
+d="$P/docs/campaigns/p-pager"
+# pager_is <label> <campaign's> <m's> <x's> <want> — each checkout's config written with its
+# ON_ESCALATION_CMD line, then level asked; appends to got unless the one line is <want>, whole.
+pager_is() {
+  printf 'HANDOFF_DIR="docs/handoffs"\n%s\n' "$2" > "$P/.sdd/config.sh"
+  printf 'HANDOFF_DIR="docs/handoffs"\n%s\n' "$3" > "$PM/.sdd/config.sh"
+  printf 'HANDOFF_DIR="docs/handoffs"\n%s\n' "$4" > "$PX/.sdd/config.sh"
+  level_is "$1" "$5" "$d"
+  [ "$W_OUT" = "$5" ] || got="${got:+$got; }$1: the line is not the whole answer: '$W_OUT'"
+}
+nopage='level assisted — no pager: ON_ESCALATION_CMD is empty in'
+pager_is m "$pager" "$nopager" "$pager" "$nopage $PM/.sdd/config.sh"
+allows_is m-run 1 "ask run needs pr, effective assisted — no pager: ON_ESCALATION_CMD is empty in $PM/.sdd/config.sh" \
+  "$d" run --lot L1
+[ "$W_OUT" = "ask run needs pr, effective assisted — no pager: ON_ESCALATION_CMD is empty in $PM/.sdd/config.sh" ] \
+  || got="${got:+$got; }m-run: the line is not the whole answer: '$W_OUT'"
+pager_is x "$pager" "$pager" "$nopager" "$nopage $PX/.sdd/config.sh"
+pager_is inverse "$nopager" "$pager" "$pager" "$nopage $P/.sdd/config.sh"
+pager_is control "$pager" "$pager" "$pager" "level pr — signed until $FAR"
+allows_is control-run 0 'allowed run at pr' "$d" run --lot L1
+mkdir -p "$BOX/nogit"
+cp -a "$d" "$REPO/docs/campaigns/l-pager-assisted" "$BOX/nogit/"
+W_CWD="$P" level_is nogit "$nopage (no repo)/.sdd/config.sh" "$BOX/nogit/p-pager"
+[ "$W_OUT" = "$nopage (no repo)/.sdd/config.sh" ] || got="${got:+$got; }nogit: the line is not the whole answer: '$W_OUT'"
+W_CWD="$P" level_is nogit-assisted "level assisted — signed until $FAR" "$BOX/nogit/l-pager-assisted"
+if [ -z "$got" ]; then
+  pass 'pager: a mission worktree whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file'
+else
+  fail 'pager: a mission worktree whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file' \
+    "assisted naming the file of m (and run asked), of x, of the campaign's checkout; pr and run allowed with the pager in every checkout" "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

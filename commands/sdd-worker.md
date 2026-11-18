@@ -104,7 +104,9 @@ the line keeps it after the owner deletes it in the campaign's checkout. That is
 the file of every checkout of the repo first, the campaign's and each linked worktree, and answers
 `no mission cap — …`, rc 1, naming the file and the value, when a line sets the key above the
 signed cap, to zero, or to anything that is not a number: a stop, never a run. A signed cap of zero
-is no ceiling for the runner either, and `budget` stops on it first, naming the delegation.
+is no ceiling for the runner either, and `budget` stops on it first, naming the delegation. The
+pager is read the same way: `allows run` reads the `ON_ESCALATION_CMD` of every checkout, and an
+empty one in the mission's worktree answers `ask … — no pager`, naming that file.
 
 ```bash
 cd <mission-worktree> && BUDGET_MISSION_USD=<cap> setsid nohup env -u CLAUDECODE \
@@ -115,8 +117,9 @@ echo "$!"
 Wait on that PID (`tail --pid=<pid> -f /dev/null`, or a monitor whose condition is
 `! kill -0 <pid>`), never on `pgrep -f`, which matches its own command line (M23). Then read the
 `sdd run rc=` line of the log. An rc 0 is the pull request open; an rc 2 is a human step the runner
-names; an rc 3 is an escalation the runner already paged: write it in the journal and wait for the
-owner, and `budget-exhausted` among them is a stop (the mission ceiling).
+names; an rc 3 is an escalation the runner already paged, with the worktree's pager, which `level`
+requires as it requires the campaign checkout's: write it in the journal and wait for the owner,
+and `budget-exhausted` among them is a stop (the mission ceiling).
 
 ### `pr`
 
@@ -174,7 +177,9 @@ the stop's name in `SDD_REASON` and five seconds for the pager:
   timeout -k 1 5 bash -c "$ON_ESCALATION_CMD" < /dev/null )
 ```
 
-The runner pages its own rc 3 already, `budget-exhausted` among them: that stop is not paged twice.
+The runner pages its own rc 3 already, `budget-exhausted` among them, from the `.sdd/config.sh` of
+the worktree it runs in, whose pager `level` reads as it reads this one: that stop is not paged
+twice.
 
 1. **`no-receipt`**: no Codex receipt for the head 60 minutes after the explicit `@codex review`.
 2. **`below-a`**: a criterion still graded below A after three rounds of review on one pull request.
