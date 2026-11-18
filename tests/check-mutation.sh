@@ -6931,6 +6931,34 @@ mut_WORKER_next_skips_approval() {
 mut_WORKER_next_ignores_merged() {
   sed -i '/^cmd_next() {/,/^}/ s@^    if \[ -n "\$merged" \]; then continue; fi$@    if false; then continue; fi@' "${1%/*}/sdd-worker"
 }
+# A round graded B in a row passes the review item: the owner's bar drops to the pipeline's. Caught
+# by "pr-ready: a grade below A, a round that names no head, and code after the reviewed head each
+# fail review" (check-worker.sh).
+mut_WORKER_ready_grade_b_passes() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^    if \[ "\$g" != A \]; then@    if [ "$g" != A ] \&\& [ "$g" != B ]; then@' "${1%/*}/sdd-worker"
+}
+# The receipt's sha is no longer compared with the head: a Codex review of an older commit reads as
+# a review of this one — the receipt matched by the hour (M13). Caught by "pr-ready: a receipt for
+# another sha, an unfinished one and an unresolved finding each fail codex" (check-worker.sh).
+mut_WORKER_ready_codex_any_sha() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^\( *\)elif \.commit_sha != \$head then@\1elif false then@' "${1%/*}/sdd-worker"
+}
+# An unresolved review thread no longer stops the merge. Caught by "pr-ready: one open thread fails
+# threads" (check-worker.sh).
+mut_WORKER_ready_threads_unread() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$open" -ne 0 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The state and the mergeability are no longer read: a conflicting or closed pull request is ready.
+# Caught by "pr-ready: a conflicting or closed pull request fails mergeable" (check-worker.sh).
+mut_WORKER_ready_unmergeable_passes() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$state" != OPEN \] || \[ "\$mergeable" != MERGEABLE \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The local HEAD is no longer compared with the pull request's: the session answers ready over a
+# checkout that is not the head it reviewed. Caught by "pr-ready: a local HEAD that is not the pull
+# request head fails head" (check-worker.sh).
+mut_WORKER_ready_head_unchecked() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$here" != "\$head" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7760,6 +7788,11 @@ CATALOG=(
   WORKER_next_gh_failure_reads_no_pr
   WORKER_next_skips_approval
   WORKER_next_ignores_merged
+  WORKER_ready_grade_b_passes
+  WORKER_ready_codex_any_sha
+  WORKER_ready_threads_unread
+  WORKER_ready_unmergeable_passes
+  WORKER_ready_head_unchecked
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

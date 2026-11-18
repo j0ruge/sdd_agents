@@ -74,6 +74,32 @@
 #       two missions on one lot, an approved mission with no branch, no campaign.md and an empty
 #       queue stop (rc 1); a call of the wrong shape is rc 2. gh runs at the repo root, or the stub
 #       refuses it
+#   R23 `pr-ready` answers `ready <the full head sha>` when the five items hold on one sha: the
+#       newest round (by number: r10 after an r9 graded B) grades A in every row, the bold Overall
+#       one included, and names a reviewed head after which only the mission folder changed — a file
+#       whose name git quotes by default among them, and nothing at all when it names the head
+#       itself; the newest receipt of the Codex bot is for that sha, completed, with no unresolved
+#       finding, and it is on the second page, so the comments are read with --paginate; every review
+#       thread is resolved; the pull request is open and mergeable; the local HEAD is the head
+#   R24 the review item fails for a grade other than A (B in a strict row, in an indented one, A- in
+#       the bold Overall one), a newest round that names no head, or names HEAD, or a sha that is no
+#       commit, a change outside the mission folder after the reviewed head — a move into the folder
+#       included, so renames are not followed —, a pull request head this checkout does not have, no
+#       round, a round with no grade table, the root of the checkout given as the mission folder, and
+#       a folder outside any git checkout; an older round graded A beside the newest changes nothing
+#   R25 the codex item fails for a receipt for another sha, one not completed, one with an unresolved
+#       finding or a null for it, no receipt at all, a newest receipt whose state does not parse (an
+#       older good one is never read in its place), and a receipt for the head posted by somebody
+#       other than the bot — anybody can comment on a public repo; the receipt is the real one of PR
+#       409
+#   R26 the threads item fails for one unresolved thread, and for more threads than the hundred read
+#   R27 the mergeable item fails for a conflicting pull request, a closed one GitHub calls
+#       mergeable, and a merged one (the answer of PR 409, copied)
+#   R28 the head item fails for a local HEAD ahead of the pull request head, and for one behind it
+#   R29 a gh that fails — before answering, or after printing a full answer — or answers off its
+#       contract, on the pull request, the repo, the comments or the threads, is rc 3 with nothing on
+#       stdout and the call named on stderr: never ready, and never a not-ready a caller would set out
+#       to fix; a call of the wrong shape is rc 2
 #
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
@@ -99,7 +125,7 @@ unset SDD_WORKER_NOW ON_ESCALATION_CMD
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
-PROBE_FLOOR=22
+PROBE_FLOOR=29
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -1023,6 +1049,325 @@ if [ -z "$got" ]; then
 else
   fail 'next: a gh that does not answer leaves rc 3, and a pull request closed without merge stops' \
     'rc 3 and no act for each unread answer; stop with rc 1 for each world that stops' "$got"
+fi
+
+# --- pr-ready: the fixtures ---------------------------------------------------------------------
+# One repo for every world, its history the shape pr-ready reads: Z0 holds the code (src/app.txt,
+# src/old.txt) and the mission's 00-missao.md; Z1 changes src/app.txt; A moves src/old.txt into the
+# mission folder; B commits two rounds, both naming A as the reviewed head, and a file whose name
+# git quotes by default (λ.txt). B is the pull request's head, so A..B touches the mission folder
+# alone, Z1..B carries the move and Z0..B the code. The
+# review worlds edit the rounds on disk, where the verb reads them, and ready_reset puts the repo
+# back; every gh world serves its own copy of the answers.
+PRN=412
+RR="$BOX/ready"
+MD="$RR/$H/20990300-ready"
+CODEX='chatgpt-codex-connector[bot]'
+got=""
+gitc() { git -C "$RR" -c user.name=fixture -c user.email=fixture@example.com "$@"; }
+
+# round <file> <reviewed head> — a review round copied from templates/review.md: every grade of the
+# `### Overall Grade` table filled with A (the bold of the Overall row kept), and `reviewed_head:`
+# added under the frontmatter's gate: line — none when the head is `-`.
+round() {
+  sed -e "2,/^---\$/ s@^gate: .*@&\nreviewed_head: $2@" -e 's@| <A> |@| A |@' \
+      -e 's@| \*\*<A>\*\* |@| **A** |@' "$ROOT/templates/review.md" > "$1"
+  [ "$2" != - ] || sed -i '2,/^---$/ { /^reviewed_head:/d }' "$1"
+}
+
+mkdir -p "$RR/src"
+git init -q -b main "$RR"
+printf 'one\n' > "$RR/src/app.txt"; printf 'old\n' > "$RR/src/old.txt"
+lot_mission "$RR" 20990300-ready r-camp L1 ready-b humano-2099-01-01
+gitc add -A; gitc commit -q -m z0; Z0="$(git -C "$RR" rev-parse HEAD)"
+printf 'two\n' > "$RR/src/app.txt"; gitc commit -q -am z1; Z1="$(git -C "$RR" rev-parse HEAD)"
+gitc mv src/old.txt "$H/20990300-ready/old.txt"; gitc commit -q -m a; A="$(git -C "$RR" rev-parse HEAD)"
+round "$MD/40-review-r1.md" "$A"; round "$MD/40-review-r2.md" "$A"; printf 'n\n' > "$MD/λ.txt"
+gitc add -A; gitc commit -q -m b; B="$(git -C "$RR" rev-parse HEAD)"
+RR_REAL="$(CDPATH='' cd "$RR" && pwd -P)"
+# The fixture is the world it claims: four distinct commits, and a round whose grades are A.
+[ "$(printf '%s\n' "$Z0" "$Z1" "$A" "$B" | sort -u | grep -c '^[0-9a-f]\{40\}$')" = 4 ] \
+  || got="fixture: the four commits of the ready repo were not made"
+[ "$(grep -c '^| [A-Za-z*][^|]* | \**A\** |' "$MD/40-review-r2.md")" = 8 ] \
+  || got="${got:+$got; }fixture: the round copied from templates/review.md does not grade eight rows A"
+
+# ready_reset — the ready repo at B, its two rounds as committed and nothing else on disk.
+ready_reset() { rm -f "$MD"/40-review-r*.md "$RR"/40-review-r*.md "$MD/note.md"; gitc reset -q --hard "$B"; }
+
+# The receipt is the real one: the body of the comment the Codex bot left on PR 409 of this repo,
+# saved on 2026-11-17 by
+#   gh api repos/j0ruge/sdd_agents/issues/409/comments --jq '[.[] | select(.user.login ==
+#     "chatgpt-codex-connector[bot]" and (.body | contains("codex-review-state:v1")))] | last | .body'
+# into tests/fixtures/codex-review-state.txt; a world swaps its sha (and the short one in the table)
+# for the one it names, and may edit it further with a sed script.
+RECEIPT="$ROOT/tests/fixtures/codex-review-state.txt"
+REAL_SHA=a0bf8e9d8f09a88c8997bbf8356fca7a1d5ed6cd
+grep -q "\"code_review\":{\"commit_sha\":\"$REAL_SHA\"" "$RECEIPT" \
+  || got="${got:+$got; }fixture: $RECEIPT carries no code_review receipt for $REAL_SHA"
+# comment <login> <sha> <sed> — one issue comment as gh api prints it, trimmed to user.login and body,
+# carrying the receipt for <sha> edited by <sed> (empty for none).
+comment() {
+  jq -cn --arg l "$1" --arg b "$(sed -e "s/$REAL_SHA/$2/g" -e "s/\`${REAL_SHA:0:7}\`/\`${2:0:7}\`/" \
+    -e "$3" "$RECEIPT")" '{user: {login: $l}, body: $b}'
+}
+
+# serve <world> — the gh answers of pull request #PRN for <world>, every item true: open and
+# mergeable, with B as the head; the comments in two pages, written one array after the other as
+# `gh api --paginate` prints them, the first page carrying an older receipt of the bot (for Z1) and a
+# person's comment, the second the receipt for B; two threads, both resolved, in the shape
+# `gh api graphql` printed for PR 315 of this repo on 2026-11-17. The answers live in $BOX/ghfx/<world>.
+serve() {
+  local fx="$BOX/ghfx/$1"
+  rm -rf "$fx"; mkdir -p "$fx"
+  printf '%s\n' "$RR_REAL" > "$fx/root"
+  printf '%s\n' "$PRN" > "$fx/number"
+  printf 'j0ruge/fixture\n' > "$fx/repo"
+  printf '{"headRefOid":"%s","mergeable":"MERGEABLE","state":"OPEN"}\n' "$B" > "$fx/view"
+  printf '[%s,%s]' "$(comment "$CODEX" "$Z1" '')" '{"user":{"login":"j0ruge"},"body":"thanks"}' \
+    > "$fx/comments.1"
+  printf '[%s]' "$(comment "$CODEX" "$B" '')" > "$fx/comments.2"
+  printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"nodes":[{"isResolved":true},{"isResolved":true}]}}}}}' \
+    > "$fx/threads"
+}
+
+# The gh stub of pr-ready answers the four questions the verb asks, from the world GHFX names, and
+# only from the root of the ready repo: `pr view <n> --json headRefOid,mergeable,state`, `repo view
+# --json nameWithOwner -q .nameWithOwner`, the comments (both pages under --paginate, the first page
+# alone without it, as the real gh does) and the graphql query of the review threads, which has to
+# name the owner, the repo and the pull request. A <answer>.fail in the world makes that answer fail,
+# and a <answer>.partial makes it fail after printing the answer, as a gh that dies on a later page.
+mkdir -p "$BOX/stub-ready"
+cat > "$BOX/stub-ready/gh" <<'STUB'
+#!/usr/bin/env bash
+fx="${GHFX:?gh stub: GHFX names no world}"
+[ "$(pwd -P)" = "$(cat "$fx/root")" ] || { echo "gh stub: run from $(pwd -P), not the repo root" >&2; exit 9; }
+n="$(cat "$fx/number")"; repo="$(cat "$fx/repo")"
+give() {
+  local a="$1"; shift
+  [ ! -e "$fx/$a.fail" ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+  cat "$@"
+  [ ! -e "$fx/$a.partial" ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+  exit 0
+}
+case "$*" in
+  "pr view $n --json headRefOid,mergeable,state") give view "$fx/view" ;;
+  "repo view --json nameWithOwner -q .nameWithOwner") give repo "$fx/repo" ;;
+  "api --paginate repos/$repo/issues/$n/comments") give comments "$fx/comments.1" "$fx/comments.2" ;;
+  "api repos/$repo/issues/$n/comments") give comments "$fx/comments.1" ;;
+  "api graphql -f query="*"owner:\"${repo%%/*}\",name:\"${repo#*/}\""*"pullRequest(number:$n)"*) give threads "$fx/threads" ;;
+esac
+echo "gh stub: unexpected call: $*" >&2
+exit 9
+STUB
+chmod +x "$BOX/stub-ready/gh"
+
+# ready_is <label> <rc> <want> <world> [<mission dir>] — runs pr-ready over the mission folder (the
+# ready repo's when none is given) and pull request #PRN, with the stub first on the PATH serving
+# <world>; appends to got unless it left <rc> and exactly one line on stdout that starts with <want>
+# (a literal, never a pattern).
+ready_is() {
+  export GHFX="$BOX/ghfx/$4"
+  PATH="$BOX/stub-ready:$PATH" worker pr-ready "${5:-$MD}" "$PRN"
+  [ "$W_RC" = "$2" ] && [[ "$W_OUT" != *$'\n'* ]] && [[ "$W_OUT" == "$3"* ]] \
+    || got="${got:+$got; }$1: rc $W_RC, '${W_OUT//$'\n'/ / }' (want rc $2, '$3…'; stderr '${W_ERR%%$'\n'*}')"
+}
+
+# --- R23: all five true at one sha --------------------------------------------------------------
+# The good world; the same world with its rounds renamed r9 and r10 and the r9 graded B (the newest
+# is r10 by number, and a glob, which sorts r10 first, would read the B); and a round naming the head
+# itself, on disk, where nothing changed after the reviewed head.
+serve good
+ready_is 'all five true' 0 "ready $B" good
+[ "$W_OUT" = "ready $B" ] || got="${got:+$got; }the line is '$W_OUT', not 'ready $B'"
+mv "$MD/40-review-r2.md" "$MD/40-review-r10.md"; mv "$MD/40-review-r1.md" "$MD/40-review-r9.md"
+sed -i 's@^| Security | A |@| Security | B |@' "$MD/40-review-r9.md"
+grep -q '^| Security | B |' "$MD/40-review-r9.md" || got="${got:+$got; }fixture: r9 was not graded B"
+ready_is 'r10 after an r9 graded B' 0 "ready $B" good
+ready_reset
+round "$MD/40-review-r2.md" "$B"
+ready_is 'a round naming the head itself' 0 "ready $B" good
+ready_reset
+if [ -z "$got" ]; then
+  pass 'pr-ready: all five true at one sha answers ready with the full sha'
+else
+  fail 'pr-ready: all five true at one sha answers ready with the full sha' "ready $B, rc 0" "$got"
+fi
+
+# --- R24: the review item -----------------------------------------------------------------------
+# Each world breaks the newest round (r2) and leaves r1 — graded A, naming A — as it is, so a reader
+# of any round but the newest answers ready. Every other item is true in the good world.
+got=""
+sed -i 's@^| Security | A |@| Security | B |@' "$MD/40-review-r2.md"
+grep -q '^| Security | B |' "$MD/40-review-r2.md" || got="fixture: r2 was not graded B"
+ready_is 'Security B' 1 'not-ready review: ' good; ready_reset
+sed -i 's@^| \*\*Overall\*\* | \*\*A\*\* |@| **Overall** | **A-** |@' "$MD/40-review-r2.md"
+grep -qF '| **Overall** | **A-** |' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 Overall was not A-"
+ready_is 'Overall A-' 1 'not-ready review: ' good; ready_reset
+sed -i 's@^| Security | A |@   | Security | B |@' "$MD/40-review-r2.md"
+grep -q '^   | Security | B |' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 has no indented B"
+ready_is 'an indented row graded B' 1 'not-ready review: ' good; ready_reset
+round "$MD/40-review-r2.md" -
+ready_is 'no reviewed head' 1 'not-ready review: the newest round names no head' good; ready_reset
+round "$MD/40-review-r2.md" HEAD
+ready_is 'HEAD as the reviewed head' 1 'not-ready review: ' good; ready_reset
+round "$MD/40-review-r2.md" deadbeefdead
+ready_is 'a sha that is no commit' 1 "not-ready review: the reviewed head 'deadbeefdead'" good; ready_reset
+round "$MD/40-review-r2.md" "$Z0"
+ready_is 'code after the reviewed head' 1 'not-ready review: src/app.txt ' good; ready_reset
+round "$MD/40-review-r2.md" "$Z1"
+ready_is 'a move into the mission folder' 1 'not-ready review: src/old.txt ' good; ready_reset
+rm -f "$MD"/40-review-r*.md
+ready_is 'no round' 1 'not-ready review: ' good; ready_reset
+sed -i 's@^### Overall Grade@### Grades@' "$MD/40-review-r2.md"
+grep -q '^### Grades' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 kept its grade heading"
+ready_is 'no grade table' 1 'not-ready review: ' good; ready_reset
+# The head the pull request names is not in this checkout, receipt and all: only the review item
+# can say so, since the diff it reads does not run.
+UNFETCHED=0000000000000000000000000000000000000007
+serve r-unfetched
+printf '{"headRefOid":"%s","mergeable":"MERGEABLE","state":"OPEN"}\n' "$UNFETCHED" > "$BOX/ghfx/r-unfetched/view"
+printf '[%s]' "$(comment "$CODEX" "$UNFETCHED" '')" > "$BOX/ghfx/r-unfetched/comments.2"
+ready_is 'a head not fetched' 1 'not-ready review: git diff ' r-unfetched
+# The mission folder given as the root of the checkout: every path is under it.
+round "$RR/40-review-r2.md" "$A"
+ready_is 'the root as the mission folder' 1 'not-ready review: the mission folder ' good "$RR"; ready_reset
+mkdir -p "$BOX/loose-ready"; cp -a "$MD" "$BOX/loose-ready/"
+ready_is 'outside a checkout' 1 'not-ready review: ' good "$BOX/loose-ready/20990300-ready"
+if [ -z "$got" ]; then
+  pass 'pr-ready: a grade below A, a round that names no head, and code after the reviewed head each fail review'
+else
+  fail 'pr-ready: a grade below A, a round that names no head, and code after the reviewed head each fail review' \
+    'rc 1 and not-ready review: … for each world' "$got"
+fi
+
+# --- R25: the codex item ------------------------------------------------------------------------
+# Each world edits the second page of the good one; the witness is that the page changed. With no
+# receipt at all, both pages carry only a person's comment. The spoof is a receipt for the head that
+# a person posted after the bot's newest, which is for Z1. A null for the unresolved findings is not
+# a false, and a newest receipt whose state does not parse says nothing, so the good receipt before
+# it is never the one read.
+got=""
+for w in "c-sha|$CODEX|$A|" "c-unfinished|$CODEX|$B|s/\"status\":\"completed\"/\"status\":null/" \
+         "c-finding|$CODEX|$B|s/\"has_unresolved_findings\":false/\"has_unresolved_findings\":true/" \
+         "c-finding-null|$CODEX|$B|s/\"has_unresolved_findings\":false/\"has_unresolved_findings\":null/" \
+         "c-spoof|j0ruge|$B|" "c-unreadable|$CODEX|$B|s/\"has_any_findings\":false,/\"has_any_findings\":,/"; do
+  IFS='|' read -r fx who sha ed <<< "$w"
+  serve "$fx"
+  printf '[%s]' "$(comment "$who" "$sha" "$ed")" > "$BOX/ghfx/$fx/comments.2"
+  cmp -s "$BOX/ghfx/good/comments.2" "$BOX/ghfx/$fx/comments.2" && got="${got:+$got; }fixture: $fx is the good page"
+  # Unreadable: the page before carries a good receipt for the head, which only a skip would read.
+  [ "$fx" != c-unreadable ] || printf '[%s]' "$(comment "$CODEX" "$B" '')" > "$BOX/ghfx/$fx/comments.1"
+  ready_is "$fx" 1 'not-ready codex: ' "$fx"
+done
+serve c-none
+printf '[%s]' '{"user":{"login":"j0ruge"},"body":"thanks"}' > "$BOX/ghfx/c-none/comments.1"
+printf '[]' > "$BOX/ghfx/c-none/comments.2"
+ready_is 'no receipt' 1 'not-ready codex: ' c-none
+if [ -z "$got" ]; then
+  pass 'pr-ready: a receipt for another sha, an unfinished one and an unresolved finding each fail codex'
+else
+  fail 'pr-ready: a receipt for another sha, an unfinished one and an unresolved finding each fail codex' \
+    'rc 1 and not-ready codex: … for each world' "$got"
+fi
+
+# --- R26: the threads item ----------------------------------------------------------------------
+got=""
+serve t-open
+printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"nodes":[{"isResolved":true},{"isResolved":false}]}}}}}' \
+  > "$BOX/ghfx/t-open/threads"
+ready_is 'one open thread' 1 'not-ready threads: ' t-open
+serve t-unseen
+jq -cn '{data: {repository: {pullRequest: {reviewThreads: {totalCount: 101, nodes: [range(100) | {isResolved: true}]}}}}}' \
+  > "$BOX/ghfx/t-unseen/threads"
+ready_is 'a thread past the hundred read' 1 'not-ready threads: ' t-unseen
+if [ -z "$got" ]; then
+  pass 'pr-ready: one open thread fails threads'
+else
+  fail 'pr-ready: one open thread fails threads' 'rc 1 and not-ready threads: … for each world' "$got"
+fi
+
+# --- R27: the mergeable item --------------------------------------------------------------------
+got=""
+for w in 'm-conflict|CONFLICTING|OPEN' 'm-closed|MERGEABLE|CLOSED' 'm-merged|UNKNOWN|MERGED'; do
+  IFS='|' read -r fx mg st <<< "$w"
+  serve "$fx"
+  printf '{"headRefOid":"%s","mergeable":"%s","state":"%s"}\n' "$B" "$mg" "$st" > "$BOX/ghfx/$fx/view"
+  ready_is "$fx" 1 'not-ready mergeable: ' "$fx"
+done
+if [ -z "$got" ]; then
+  pass 'pr-ready: a conflicting or closed pull request fails mergeable'
+else
+  fail 'pr-ready: a conflicting or closed pull request fails mergeable' \
+    'rc 1 and not-ready mergeable: … for each world' "$got"
+fi
+
+# --- R28: the head item -------------------------------------------------------------------------
+# Ahead: a local commit on top of B. Behind: the checkout at A with the two rounds on disk, so the
+# review item still reads them.
+got=""
+serve h-local
+printf 'note\n' > "$MD/note.md"; gitc add -A; gitc commit -q -m c
+ready_is 'local HEAD ahead' 1 'not-ready head: ' h-local; ready_reset
+gitc reset -q --hard "$A"; round "$MD/40-review-r1.md" "$A"; round "$MD/40-review-r2.md" "$A"
+ready_is 'local HEAD behind' 1 'not-ready head: ' h-local; ready_reset
+[ "$(git -C "$RR" rev-parse HEAD)" = "$B" ] || got="${got:+$got; }fixture: the ready repo did not go back to B"
+if [ -z "$got" ]; then
+  pass 'pr-ready: a local HEAD that is not the pull request head fails head'
+else
+  fail 'pr-ready: a local HEAD that is not the pull request head fails head' \
+    'rc 1 and not-ready head: … for each world' "$got"
+fi
+
+# --- R29: a gh that does not answer, and the wrong shape ----------------------------------------
+# Each world breaks one answer of the good one, so only that answer stands between it and ready:
+# a failure, a failure after a full answer was printed (a gh that dies on a later page), or an answer
+# off the contract — text, a short sha, a name with no owner, an object for the pages (one keyed by
+# comments whose receipt is good, read as a list it is ready), nothing at all, a graphql error, and
+# threads with no count, keyed instead of listed, or of unknown resolution. Each is rc 3, nothing on
+# stdout, the call named on stderr. Then the calls of the wrong shape, rc 2 with the usage.
+for w in 'g-view-fail|view|FAIL|gh pr view' 'g-view-rc|view|RC|gh pr view' 'g-view-text|view|not json|gh pr view' \
+         'g-view-short|view|{"headRefOid":"a0bf8e9","mergeable":"MERGEABLE","state":"OPEN"}|gh pr view' \
+         'g-repo-fail|repo|FAIL|gh repo view' 'g-repo-rc|repo|RC|gh repo view' \
+         'g-repo-name|repo|fixture|gh repo view' \
+         'g-comments-fail|comments|FAIL|gh api --paginate' 'g-comments-rc|comments|RC|gh api --paginate' \
+         'g-comments-keyed|comments.1|KEYED|gh api --paginate' \
+         'g-comments-object|comments.1|{"message":"Not Found"}|gh api --paginate' \
+         'g-comments-empty|comments.1||gh api --paginate' \
+         'g-threads-fail|threads|FAIL|gh api graphql' 'g-threads-rc|threads|RC|gh api graphql' \
+         'g-threads-error|threads|{"data":null,"errors":[{"message":"Could not resolve"}]}|gh api graphql' \
+         'g-threads-nocount|threads|{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":true}]}}}}}|gh api graphql' \
+         'g-threads-keyed|threads|{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":1,"nodes":{"x":{"isResolved":true}}}}}}}|gh api graphql' \
+         'g-threads-unknown|threads|{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":1,"nodes":[{"isResolved":null}]}}}}}|gh api graphql'; do
+  IFS='|' read -r fx file body what <<< "$w"
+  serve "$fx"
+  if [ "$body" = FAIL ]; then
+    : > "$BOX/ghfx/$fx/$file.fail"
+  elif [ "$body" = RC ]; then
+    : > "$BOX/ghfx/$fx/$file.partial"
+  elif [ "$body" = KEYED ]; then
+    printf '{"1":%s}' "$(comment "$CODEX" "$B" '')" > "$BOX/ghfx/$fx/comments.1"
+    : > "$BOX/ghfx/$fx/comments.2"
+  else
+    printf '%s' "$body" > "$BOX/ghfx/$fx/$file"
+    [ "$file" != comments.1 ] || : > "$BOX/ghfx/$fx/comments.2"
+  fi
+  export GHFX="$BOX/ghfx/$fx"
+  PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+  [ "$W_RC" = 3 ] && [ -z "$W_OUT" ] && grep -qF "sdd-worker: $what" <<< "$W_ERR" \
+    || got="${got:+$got; }$fx: rc $W_RC, stdout '${W_OUT//$'\n'/ / }', stderr '${W_ERR%%$'\n'*}'"
+done
+export GHFX="$BOX/ghfx/good"
+for a in '' "$MD" "$MD|12a" "$MD|#412" "$MD|0" "$RR/nowhere|$PRN" "$MD|$PRN|extra"; do
+  IFS='|' read -ra args <<< "$a"
+  PATH="$BOX/stub-ready:$PATH" worker pr-ready ${args[@]+"${args[@]}"}
+  [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -q '^usage: sdd-worker ' <<< "$W_ERR" \
+    || got="${got:+$got; }pr-ready '$a': rc $W_RC, stdout '${W_OUT%%$'\n'*}'"
+done
+if [ -z "$got" ]; then
+  pass 'pr-ready: a gh that does not answer leaves rc 3 and never ready'
+else
+  fail 'pr-ready: a gh that does not answer leaves rc 3 and never ready' \
+    'rc 3, nothing on stdout and the call on stderr for each unread answer; rc 2 for each wrong shape' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

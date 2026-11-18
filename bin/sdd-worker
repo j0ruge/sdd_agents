@@ -30,6 +30,9 @@ DELEGATION_KEYS=(campaign level lots expires budget_mission_usd budget_campaign_
 # grants it, and an act is allowed because the table names a level at or below the effective one —
 # never because nothing refused it. A word the table does not name is no act at all.
 ACTS=(run:pr pr:pr review:pr plan:plan merge:merge postmerge:merge approve:full)
+# The one author whose receipt counts for pr-ready: anybody can comment on a pull request of a
+# public repo, and a receipt somebody pasted is not a review.
+CODEX_LOGIN='chatgpt-codex-connector[bot]'
 
 usage() {
   cat >&2 <<'USAGE'
@@ -531,6 +534,182 @@ cmd_next() {
   case "$act" in stop\ *) return 1 ;; esac
 }
 
+# newest_round <mission-dir> — the 40-review-r<N>.md of highest N, compared as a number: r10 is newer
+# than r9, which a glob sorts the other way. Prints nothing when there is none.
+newest_round() {
+  local f n best=-1 out=""
+  for f in "$1"/40-review-r*.md; do
+    n="${f##*/40-review-r}"; n="${n%.md}"
+    [[ "$n" =~ ^[0-9]+$ ]] || continue
+    if [ "$n" -gt "$best" ]; then best="$n"; out="$f"; fi
+  done
+  [ -z "$out" ] || printf '%s\n' "$out"
+}
+
+# round_grades <round> — the Grade cell of every row of the table under `### Overall Grade`, one per
+# line, read as the runner's gate_REVIEW reads it: the third column, a row indented or not, its bold
+# and code-span marks removed; the header row and the separator are skipped, and the read ends at the
+# next heading. An empty cell prints <empty>. Prints nothing when the section has no row.
+round_grades() {
+  awk '
+    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
+    /^###[ \t]+Overall Grade/ { sec = 1; next }
+    !sec { next }
+    /^#+[ \t]/ { exit }
+    $0 !~ /^[ \t]*\|/ { next }
+    {
+      split($0, c, "|")
+      g = c[3]; gsub(/[*`]/, "", g); g = trim(g)
+      if (g == "Grade" || g ~ /^:?-+:?$/) next
+      print (g == "" ? "<empty>" : g)
+    }' "$1"
+}
+
+# gh_at <root> <args...> — gh run at <root>, the checkout gh infers the repository from; its stdout
+# PUBLISHED in GH_OUT and its rc in GH_RC. Returns 1 when gh failed. Called, never substituted.
+gh_at() {
+  local root="$1"
+  shift
+  GH_RC=0
+  GH_OUT="$(CDPATH='' cd -- "$root" && gh "$@")" || GH_RC=$?
+  [ "$GH_RC" -eq 0 ]
+}
+
+# gh_unread <what> — the stderr line for an answer gh did not give. The caller leaves rc 3 and
+# nothing on stdout: an answer that was not read is never ready, nor a not-ready to set out to fix.
+gh_unread() {
+  printf 'sdd-worker: %s — no item is named: an answer that was not read is never ready\n' "$1" >&2
+}
+
+# pr-ready <mission-dir> <pr> — whether pull request <pr> meets the owner's bar on its head sha:
+# `ready <sha>` and rc 0 when the five items hold, else `not-ready <item>: <reason>` and rc 1 for the
+# first that fails, in this order:
+#   review     the newest 40-review-r<N>.md of the mission folder (by number) grades A in every row
+#              of `### Overall Grade` and names `reviewed_head: <sha>`, and between that sha and the
+#              head only the mission folder changed — renames not followed, so a move into the
+#              folder is a change outside it;
+#   codex      the newest receipt (`codex-review-state:v1`) the Codex bot left on the pull request,
+#              read from every page, is for the head, completed, with no unresolved finding;
+#   threads    every review thread is resolved, and every one was read;
+#   mergeable  the pull request is OPEN and MERGEABLE;
+#   head       the local HEAD of the mission's checkout is the head.
+# rc 3, and nothing on stdout, when gh failed or answered off its contract. The `ready` line carries
+# the sha the caller passes to `gh pr merge --merge --match-head-commit`; the method (a merge commit,
+# never a squash) is the merging command's, not this verb's. No bot's review is read but the Codex
+# state, so a bot with no quota neither blocks nor counts as a review. The `reviewed_head:` key is the
+# worker's own round's: a round the runner's REVIEW phase wrote names no head, and is not ready.
+# Declared limits: the round is read from the disk of the checkout as it stands — the head item
+# proves the checkout is at the head, not that its tree is clean; a path git still quotes under
+# core.quotePath=false (a control byte, a quote or a backslash in its name) never matches the mission
+# folder, the fail-safe side; and only the first hundred threads are read, which is why a pull request
+# with more is not ready.
+cmd_pr_ready() {
+  [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
+  local dir="${1%/}" pr="$2" root view head state mergeable round rh g prefix changed p repo verdict
+  local threads open total seen unseen here
+  local -a grades=()
+  root="$(repo_root "$dir")"
+  if [ -z "$root" ]; then printf 'not-ready review: %s is not inside a git checkout\n' "$dir"; return 1; fi
+  if ! gh_at "$root" pr view "$pr" --json headRefOid,mergeable,state; then
+    gh_unread "gh pr view $pr failed (rc $GH_RC)"; return 3
+  fi
+  # A head that is not a full sha, or no object at all, makes jq fail; a state or a mergeability
+  # that is absent reads null, which the mergeable item refuses.
+  if ! view="$(jq -rn 'input | if (.headRefOid | test("^[0-9a-f]{40}$"))
+           then "\(.headRefOid) \(.state) \(.mergeable)" else error("off the contract") end' 2> /dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh pr view $pr answered no pull request with a full head sha: '${GH_OUT:0:80}'"; return 3
+  fi
+  read -r head state mergeable <<< "$view"
+
+  round="$(newest_round "$dir")"
+  if [ -z "$round" ]; then printf 'not-ready review: no 40-review-r<N>.md in %s\n' "$dir"; return 1; fi
+  rh="$(fm_value "$round" reviewed_head)"
+  if [ -z "$rh" ]; then
+    printf 'not-ready review: the newest round names no head — %s has no reviewed_head:\n' "$round"; return 1
+  fi
+  if ! [[ "$rh" =~ ^[0-9a-f]{7,40}$ ]] || ! git -C "$root" rev-parse -q --verify "$rh^{commit}" > /dev/null; then
+    printf "not-ready review: the reviewed head '%s' of %s is no commit of this checkout\n" "$rh" "$round"; return 1
+  fi
+  mapfile -t grades < <(round_grades "$round")
+  if [ "${#grades[@]}" -eq 0 ]; then
+    printf 'not-ready review: %s has no grade under ### Overall Grade\n' "$round"; return 1
+  fi
+  for g in "${grades[@]}"; do
+    if [ "$g" != A ]; then printf 'not-ready review: %s grades %s, and every row must read A\n' "$round" "$g"; return 1; fi
+  done
+  prefix="$(git -C "$dir" rev-parse --show-prefix)"
+  if [ -z "$prefix" ]; then
+    printf 'not-ready review: the mission folder %s is the root of its checkout\n' "$dir"; return 1
+  fi
+  if ! changed="$(git -C "$root" -c core.quotePath=false diff --no-renames --name-only "$rh" "$head" 2> /dev/null)"; then
+    printf 'not-ready review: git diff %s %s does not run here — is the pull request head fetched?\n' "$rh" "$head"
+    return 1
+  fi
+  while IFS= read -r p; do
+    if [ -n "$p" ] && [[ "$p" != "$prefix"* ]]; then
+      printf 'not-ready review: %s changed after the reviewed head %s, outside %s\n' "$p" "$rh" "$prefix"; return 1
+    fi
+  done <<< "$changed"
+
+  if ! gh_at "$root" repo view --json nameWithOwner -q .nameWithOwner; then
+    gh_unread "gh repo view failed (rc $GH_RC)"; return 3
+  fi
+  repo="$GH_OUT"
+  if ! [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    gh_unread "gh repo view answered '${repo:0:80}', not <owner>/<name>"; return 3
+  fi
+  if ! gh_at "$root" api --paginate "repos/$repo/issues/$pr/comments"; then
+    gh_unread "gh api --paginate repos/$repo/issues/$pr/comments failed (rc $GH_RC)"; return 3
+  fi
+  # The pages are arrays, one after the other, as --paginate prints them; a comment of another shape
+  # makes jq fail. A receipt whose state does not parse is a receipt that says nothing — never one to
+  # skip, which would let an older receipt decide.
+  if ! verdict="$(jq -rn --arg head "$head" --arg login "$CODEX_LOGIN" '
+         [inputs] | if length > 0 and all(.[]; type == "array") then [.[][]] else error("off the contract") end
+         | [.[] | select(.user.login == $login) | .body
+            | capture("codex-review-state:v1 (?<s>\\{.*\\}) -->").s | (fromjson? // {}) | .code_review]
+         | last
+         | if . == null then "no receipt of \($login) on the pull request"
+           elif .commit_sha != $head then "the newest receipt of \($login) is for \(.commit_sha), not the head \($head)"
+           elif .status != "completed" then "the newest receipt of \($login) is \(.status), not completed"
+           elif .has_unresolved_findings != false then "the newest receipt of \($login) has unresolved findings (\(.has_unresolved_findings))"
+           else "ok" end' 2> /dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh api --paginate repos/$repo/issues/$pr/comments answered no pages of comments: '${GH_OUT:0:80}'"
+    return 3
+  fi
+  if [ "$verdict" != ok ]; then printf 'not-ready codex: %s\n' "$verdict"; return 1; fi
+
+  if ! gh_at "$root" api graphql -f \
+       "query=query{repository(owner:\"${repo%%/*}\",name:\"${repo#*/}\"){pullRequest(number:$pr){reviewThreads(first:100){totalCount nodes{isResolved}}}}}"; then
+    gh_unread "gh api graphql (the review threads of #$pr) failed (rc $GH_RC)"; return 3
+  fi
+  if ! threads="$(jq -rn 'input | .data.repository.pullRequest.reviewThreads
+         | if (.totalCount | type) == "number" and (.nodes | type) == "array"
+              and all(.nodes[]; (.isResolved | type) == "boolean")
+           then "\([.nodes[] | select(.isResolved == false)] | length) \(.totalCount) \(.nodes | length) \((.nodes | length) < .totalCount)"
+           else error("off the contract") end' 2> /dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh api graphql answered no review threads of #$pr: '${GH_OUT:0:80}'"; return 3
+  fi
+  read -r open total seen unseen <<< "$threads"
+  if [ "$open" -ne 0 ]; then
+    printf 'not-ready threads: %s of %s review thread(s) not resolved\n' "$open" "$total"; return 1
+  fi
+  if [ "$unseen" != false ]; then
+    printf 'not-ready threads: %s of %s review threads read, the rest unseen\n' "$seen" "$total"; return 1
+  fi
+
+  if [ "$state" != OPEN ] || [ "$mergeable" != MERGEABLE ]; then
+    printf 'not-ready mergeable: the pull request is %s and %s, not OPEN and MERGEABLE\n' "$state" "$mergeable"
+    return 1
+  fi
+
+  here="$(git -C "$root" rev-parse -q --verify HEAD || true)"
+  if [ "$here" != "$head" ]; then
+    printf 'not-ready head: the local HEAD %s is not the pull request head %s\n' "${here:-(none)}" "$head"; return 1
+  fi
+  printf 'ready %s\n' "$head"
+}
+
 main() {
   case "${1:-}" in
     delegate) shift; cmd_delegate "$@" ;;
@@ -538,9 +717,7 @@ main() {
     allows) shift; cmd_allows "$@" ;;
     budget) shift; cmd_budget "$@" ;;
     next) shift; cmd_next "$@" ;;
-    pr-ready)
-      printf 'sdd-worker: %s is not implemented yet\n' "$1" >&2
-      return 2 ;;
+    pr-ready) shift; cmd_pr_ready "$@" ;;
     *) usage; return 2 ;;
   esac
 }
