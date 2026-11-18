@@ -36,12 +36,16 @@ noite sem ninguém olhando precisa de um aviso que chegue.
 ## O teto por missão
 
 O worker passa o `budget_mission_usd:` ao `sdd run` como `BUDGET_MISSION_USD`, no ambiente, e o
-runner lê o `.sdd/config.sh` do repo **por cima** do ambiente: uma linha que atribui essa chave
-vence o teto assinado, e o `config/starter.conf` que o `sdd install` semeia atribui `150`. Por isso
-o `bin/sdd-worker budget` sai com rc 1 numa linha `no mission cap — …`, que nomeia o arquivo e o
-valor, quando o arquivo fixa a chave acima do teto assinado, em `0` (sem teto), vazia ou num valor
-que não é número. Um valor menor ou igual ao assinado é o teto mais estrito, e vale. Antes de
-assinar, apague a linha do `.sdd/config.sh` ou deixe-a no teto assinado, ou abaixo dele.
+runner lê o `.sdd/config.sh` do checkout em que roda **por cima** do ambiente: uma linha que atribui
+essa chave vence o teto assinado, e o `config/starter.conf` que o `sdd install` semeia atribui
+`150`. O checkout em que o `sdd run` roda é o worktree da missão, não o da campanha, e um worktree
+cortado de um commit que ainda tem a linha a carrega mesmo depois de ela ser apagada aqui. Por isso
+o `bin/sdd-worker budget` lê o arquivo de todo checkout do repo (o da campanha e cada worktree
+ligado) e sai com rc 1 numa linha `no mission cap — …`, que nomeia o arquivo e o valor, quando um
+deles fixa a chave acima do teto assinado, em `0` (sem teto), vazia ou num valor que não é número.
+Um valor menor ou igual ao assinado é o teto mais estrito, e vale. Antes de assinar, apague a linha
+do `.sdd/config.sh` e commite a remoção antes de cortar os worktrees das missões, ou deixe-a no teto
+assinado, ou abaixo dele.
 
 ## Como assinar
 

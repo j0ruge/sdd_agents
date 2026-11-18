@@ -452,19 +452,28 @@ campaign_missions() {
 # delegation or an illegible one (no ceiling), a directory outside a git checkout or a ledger that
 # does not read (no spend): a spend that could not be read is never zero. A missing ledger is the
 # one zero, since nothing ran yet. rc 1 too, and no mission cap, when the runner would not apply the
-# signed one: it sources the repo's .sdd/config.sh over its environment, so a file that assigns
-# BUDGET_MISSION_USD above the signed cap, or to a zero (no ceiling), or to anything that is not a
-# number, beats the value the session passes; a value at or below the signed cap is the stricter
-# one, and holds.
+# signed one: it sources the .sdd/config.sh of the checkout it runs in over its environment, so a
+# file that assigns BUDGET_MISSION_USD above the signed cap, or to a zero (no ceiling), or to
+# anything that is not a number, beats the value the session passes; a value at or below the signed
+# cap is the stricter one, and holds. The session launches `sdd run` in the mission's worktree, not
+# in the campaign's checkout, and a worktree cut from a commit that still sets the key keeps the
+# line the owner deleted here: so the file of every checkout of the repo is read (checkouts_of, the
+# set campaign_mission_dirs walks), the campaign's first and every linked worktree after it, whether
+# or not it holds a mission of the campaign — the wider set is the fail-safe one — and the first
+# that would beat the signed cap is the one the stop names.
 # Declared limits: a line is matched by its mission id alone, so a mission of the same id in another
 # repo is counted too (the fail-safe side: more spend, an earlier stop); a malformed line is skipped
 # (`fromjson?`, as the runner reads the ledger), and its cost with it; the ceiling is read whether or
 # not the delegation is signed — whether the worker may act on it is the level's question; an empty
 # BUDGET_MISSION_USD in the file stops, though the runner fills it with its default, which may be
-# below the signed cap (the fail-safe side: the owner deletes the line).
+# below the signed cap (the fail-safe side: the owner deletes the line); a worktree made after this
+# call is not read, and the loop of commands/sdd-worker.md calls budget on every turn, so the turn
+# that runs a mission reads the worktree its plan made; a worktree unrelated to the campaign whose
+# file beats the cap stops it too (the fail-safe side again: the owner fixes that file, or prunes
+# the worktree).
 cmd_budget() {
   [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
-  local dir="${1%/}" f root cap mcap run ledger out
+  local dir="${1%/}" f root cap mcap run wt ledger out
   local -a ms=()
   f="$dir/delegation.md"
   if [ ! -f "$f" ]; then printf 'no ceiling — no delegation: %s does not exist\n' "$f"; return 1; fi
@@ -472,14 +481,16 @@ cmd_budget() {
   root="$(repo_root "$dir")"
   if [ -z "$root" ]; then printf 'no spend — %s is not inside a git checkout\n' "$dir"; return 1; fi
   mcap="$(fm_value "$f" budget_mission_usd)"
-  run="$(config_key "$root" BUDGET_MISSION_USD "$mcap")"
-  if ! jq -en --arg r "$run" --arg s "$mcap" '($r | tonumber) as $r | $r > 0 and $r <= ($s | tonumber)' \
-       > /dev/null 2>&1; then
-    printf 'no mission cap — %s sets BUDGET_MISSION_USD=%s, which sdd run applies over the signed' \
-      "$root/.sdd/config.sh" "$run"
-    printf ' budget_mission_usd: %s; delete the line, or set it above 0 and at most that\n' "$mcap"
-    return 1
-  fi
+  while IFS= read -r wt; do
+    run="$(config_key "$wt" BUDGET_MISSION_USD "$mcap")"
+    if ! jq -en --arg r "$run" --arg s "$mcap" '($r | tonumber) as $r | $r > 0 and $r <= ($s | tonumber)' \
+         > /dev/null 2>&1; then
+      printf 'no mission cap — %s sets BUDGET_MISSION_USD=%s, which sdd run applies over the signed' \
+        "$wt/.sdd/config.sh" "$run"
+      printf ' budget_mission_usd: %s; delete the line, or set it above 0 and at most that\n' "$mcap"
+      return 1
+    fi
+  done < <(checkouts_of "$root")
   mapfile -t ms < <(campaign_missions "$root" "$(fm_value "$f" campaign)")
   cap="$(fm_value "$f" budget_campaign_usd)"
   ledger="$(ledger_path)"

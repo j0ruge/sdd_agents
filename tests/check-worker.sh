@@ -145,6 +145,12 @@
 #   R40 `delegate` signs what it showed: the delegation edited while the question is open (a FIFO
 #       on stdin) is `not signed`, rc 1, the file as the edit left it; the same FIFO with no edit
 #       signs, so the refusal is the edit's
+#   R41 `budget` applies R37 to the .sdd/config.sh of every checkout of the campaign's repo — the
+#       campaign's and every linked worktree, one that holds a mission of the campaign or not —,
+#       since `sdd run` runs in the mission's worktree and loads that checkout's file: a worktree
+#       cut from a commit that still sets the key above the signed cap stops budget naming the
+#       worktree's file, with the line deleted in the campaign's checkout; deleted everywhere, the
+#       signed cap holds
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -157,10 +163,10 @@
 # rule goes unmeasured, and the sensor says nothing about it.
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
-# verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `command: ` and
-# `docs: `) prints exactly the assertions the mission plan or the fix increment that opened it
-# names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the
-# first red, after printing it; the census in check-health.sh holds that clause.
+# verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `,
+# `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that
+# opened it names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the
+# sensor at the first red, after printing it; the census in check-health.sh holds that clause.
 #
 # Usage: tests/check-worker.sh   (exit 0 = every verb answers what its rule says)
 set -uo pipefail
@@ -2067,6 +2073,54 @@ if [ -z "$got" ]; then
 else
   fail 'shown: a delegation edited while the question is open is not signed, and the same y with no edit signs' \
     'rc 1, not signed — the delegation changed…, the file as edited; rc 0 and signed at pr with no edit' "$got"
+fi
+
+# --- R41: the config of every checkout ----------------------------------------------------------
+# The runner loads the .sdd/config.sh of the checkout it runs in (CONFIG_FILE under its REPO_ROOT,
+# in bin/sdd), and the session launches it in the mission's worktree: the line deleted in the
+# campaign's checkout, the remedy templates/delegation.md gives, is still there in a worktree cut
+# from a commit that has it. One repo whose committed config sets BUDGET_MISSION_USD=150, two linked
+# worktrees cut from that commit — m holds the campaign's mission, x holds none —, the line then
+# deleted in the campaign's checkout; campaign w-cap, mission cap 40, campaign cap 100:
+#   m      m keeps the 150 of the commit, x has the line deleted: rc 1, naming m's file and 150
+#   x      m has the line deleted, x keeps 150: rc 1, naming x's file — every checkout of the repo
+#          is read, not only one that holds a mission of the campaign: the wider set is the safe one
+#   clean  the line deleted in every checkout: rc 0, the signed cap and the one mission, so each
+#          stop is the worktree's file and nothing else
+# The folder of x ends in a backslash, a letter and a space, which `git worktree list` prints raw: a
+# reader of its lines that drops a backslash or trims a space reads a checkout that is not there,
+# whose absent file holds the signed cap — the fail-open side.
+got=""
+W="$BOX/wcap"
+WX="$BOX/wcap-x\\b "
+mkdir -p "$W/.sdd" "$W/docs/campaigns"
+git init -q -b main "$W"
+noline='HANDOFF_DIR="docs/handoffs"'
+printf '%s\nBUDGET_MISSION_USD=150\n' "$noline" > "$W/.sdd/config.sh"
+git -C "$W" add .sdd/config.sh
+git -C "$W" -c user.name=fixture -c user.email=fixture@example.com commit -q -m fixture
+git -C "$W" worktree add -q -b feat/w-m "$BOX/wcap-m" > /dev/null 2>&1 \
+  || got="${got:+$got; }fixture: the worktree m was not created"
+git -C "$W" worktree add -q -b feat/w-x "$WX" > /dev/null 2>&1 \
+  || got="${got:+$got; }fixture: the worktree x was not created"
+mission "$BOX/wcap-m" "$H" 20990301-w-m w-cap
+cp -a "$(campaign w-cap pr "$FAR" 40 100)" "$W/docs/campaigns/"
+printf '%s\n' "$noline" > "$W/.sdd/config.sh"
+printf '%s\n' "$noline" > "$WX/.sdd/config.sh"
+grep -qx 'BUDGET_MISSION_USD=150' "$BOX/wcap-m/.sdd/config.sh" 2>/dev/null \
+  || got="${got:+$got; }fixture: the worktree m does not carry the 150 of the commit"
+wstop=" sets BUDGET_MISSION_USD=150, which sdd run applies over the signed budget_mission_usd: 40; "
+budget_is m 1 "no mission cap — $BOX/wcap-m/.sdd/config.sh$wstop" "$W/docs/campaigns/w-cap"
+printf '%s\n' "$noline" > "$BOX/wcap-m/.sdd/config.sh"
+printf '%s\nBUDGET_MISSION_USD=150\n' "$noline" > "$WX/.sdd/config.sh"
+budget_is x 1 "no mission cap — $WX/.sdd/config.sh$wstop" "$W/docs/campaigns/w-cap"
+printf '%s\n' "$noline" > "$WX/.sdd/config.sh"
+budget_is clean 0 'campaign US$ 0.00 of 100.00 — 1 mission(s); mission cap US$ 40.00' "$W/docs/campaigns/w-cap"
+if [ -z "$got" ]; then
+  pass 'worktree: a mission worktree whose config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file'
+else
+  fail 'worktree: a mission worktree whose config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file' \
+    "rc 1 naming the file of m, then of x, and 150; rc 0 and the mission cap 40.00 over 1 mission with the line deleted in every checkout" "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

@@ -7014,7 +7014,7 @@ mut_WORKER_legible_instant_unchecked() {
 # BUDGET_MISSION_USD above the signed mission cap, or to 0, stops budget and names the key"
 # (check-worker.sh).
 mut_WORKER_cap_file_unread() {
-  sed -i '/^cmd_budget() {/,/^}/ s@^  if ! jq -en --arg r "\$run"@  if false \&\& ! jq -en --arg r "$run"@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_budget() {/,/^}/ s@^    if ! jq -en --arg r "\$run"@    if false \&\& ! jq -en --arg r "$run"@' "${1%/*}/sdd-worker"
 }
 # The cap is read under the caller's own environment instead of the signed value: a session that
 # exported BUDGET_MISSION_USD=999 reads it back as the repo's, and a file silent on the key stops
@@ -7056,6 +7056,21 @@ mut_WORKER_lot_optional() {
 # signs" (check-worker.sh).
 mut_WORKER_shown_terms_unchecked() {
   sed -i '/^cmd_delegate() {/,/^}/ s@^  if \[ "\$(delegation_terms "\$1")" != "\$shown" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# Only the campaign's checkout is read for the mission cap again: `sdd run` runs in the mission's
+# worktree and loads that checkout's .sdd/config.sh, so a worktree cut from a commit that still sets
+# BUDGET_MISSION_USD=150 beats the signed 40 while budget prints it (achado #1 of the mission's
+# review r2). Caught by "worktree: a mission worktree whose config sets BUDGET_MISSION_USD above the
+# signed cap stops budget and names that file" (check-worker.sh).
+mut_WORKER_worktree_root_only() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  done < <(checkouts_of "\$root")$@  done < <(echo "$root")@' "${1%/*}/sdd-worker"
+}
+# The stop names the campaign's file whatever checkout beat the cap: the owner told to delete a line
+# that is not there, and the worktree's left in place. Caught by "worktree: a mission worktree whose
+# config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file"
+# (check-worker.sh).
+mut_WORKER_worktree_file_misnamed() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^        "\$wt/\.sdd/config\.sh" "\$run"$@        "$root/.sdd/config.sh" "$run"@' "${1%/*}/sdd-worker"
 }
 
 CATALOG=(
@@ -7905,6 +7920,8 @@ CATALOG=(
   WORKER_rationale_gate_unread
   WORKER_lot_optional
   WORKER_shown_terms_unchecked
+  WORKER_worktree_root_only
+  WORKER_worktree_file_misnamed
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
