@@ -100,15 +100,25 @@
 #       contract, on the pull request, the repo, the comments or the threads, is rc 3 with nothing on
 #       stdout and the call named on stderr: never ready, and never a not-ready a caller would set out
 #       to fix; a call of the wrong shape is rc 2
+#   R30 commands/sdd-worker.md writes a call of every verb bin/sdd-worker dispatches — the verbs are
+#       read from the program's main(), so a verb it gains is a verb the command owes
+#   R31 each of the seven acts of the table kept HERE has one heading in the command, and the first
+#       line under it is the literal `sdd-worker allows <campaign-dir> <act> --lot <L>`
+#   R32 the command writes the five stops (one numbered line each, with the pager and the journal),
+#       the never list and the context rules, each phrase on a line of its own section
+#
+# The command is prose, and no mutant of bin/ reaches it, so R30 to R32 carry their own negative
+# control: each checker runs on the file, where it has to miss nothing, and on copies with one thing
+# taken out, where it has to name exactly that thing. A checker that never misses is decoration.
 #
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
 # sums outside LC_ALL=C answers wrong here. Declared limit: on a machine without the locale that
 # rule goes unmeasured, and the sensor says nothing about it.
 #
-# Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, and the
-# verbs as they land) prints exactly the assertions the mission plan names — the checkpoint counts
-# them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
+# Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
+# verbs, and `command: `) prints exactly the assertions the mission plan names — the checkpoint
+# counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
 # the census in check-health.sh holds that clause.
 #
 # Usage: tests/check-worker.sh   (exit 0 = every verb answers what its rule says)
@@ -125,7 +135,7 @@ unset SDD_WORKER_NOW ON_ESCALATION_CMD
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
-PROBE_FLOOR=29
+PROBE_FLOOR=32
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -1368,6 +1378,145 @@ if [ -z "$got" ]; then
 else
   fail 'pr-ready: a gh that does not answer leaves rc 3 and never ready' \
     'rc 3, nothing on stdout and the call on stderr for each unread answer; rc 2 for each wrong shape' "$got"
+fi
+
+# --- command: the session's command -------------------------------------------------------------
+# commands/sdd-worker.md is prose an interactive session follows, so these probes read the file, one
+# phrase per markdown line. Each checker prints what the file misses, one item per line; each
+# assertion runs it on the file (nothing missed) and on copies with one thing taken out, built here
+# from the file and anchored on its text, where it has to name that thing.
+COMMAND="$ROOT/commands/sdd-worker.md"
+
+# command_verbs — the verbs bin/sdd-worker dispatches, one per line, read from the case of its
+# main(): the program is the source, so a verb it gains is a verb the command has to name.
+command_verbs() { sed -n '/^main() {$/,/^}$/ s/^    \([a-z][a-z-]*\)) shift; cmd_.*/\1/p' "$WORKER"; }
+
+# section <file> <heading> — the lines under `## <heading>`, up to the next `## `.
+section() { awk -v h="## $2" '$0 == h { on = 1; next } on && /^## / { exit } on' "$1"; }
+
+# verbs_missing <file> — each verb the file never writes as a call: `sdd-worker <verb>` followed by
+# a space, a backtick or the end of the line, so `sdd-worker budgets` is no call of budget.
+verbs_missing() {
+  local v
+  while IFS= read -r v; do
+    grep -qE "sdd-worker $v( |\`|\$)" "$1" 2>/dev/null || printf '%s\n' "$v"
+  done < <(command_verbs)
+}
+
+# acts_unpreceded <file> — each act of ACT_TABLE whose heading `### \`<act>\`` is not in the file
+# exactly once, or whose first non-blank line under it is not its allows call, written whole.
+acts_unpreceded() {
+  local row act n first
+  for row in "${ACT_TABLE[@]}"; do
+    act="${row%% *}"
+    n="$(grep -cxF "### \`$act\`" "$1" 2>/dev/null)"
+    first="$(awk -v h="### \`$act\`" '$0 == h { on = 1; next } on && NF { print; exit }' "$1" 2>/dev/null)"
+    [ "$n" = 1 ] && [ "$first" = "\`sdd-worker allows <campaign-dir> $act --lot <L>\`" ] \
+      || printf '%s\n' "$act"
+  done
+}
+
+# prose_missing <file> — what three sections do not write. The five stops: exactly five numbered
+# lines, each phrase on one of them, the pager and the journal in the section. The never list and
+# the context rules: each phrase on a bullet of its own section, the last rule naming both verbs a
+# new session resumes from. A phrase found only in another section is missing.
+prose_missing() {
+  local s items p
+  s="$(section "$1" 'The five stops' 2>/dev/null)"
+  items="$(grep -E '^[0-9]+\. ' <<< "$s")"
+  [ "$(grep -c . <<< "$items")" = 5 ] || printf 'stops: not five numbered lines\n'
+  for p in '60 minutes' 'three rounds' 'merge conflict' 'BUDGET_MISSION_USD' 'sdd-worker budget'; do
+    grep -qF "$p" <<< "$items" || printf 'stops: %s\n' "$p"
+  done
+  for p in ON_ESCALATION_CMD journal.md; do grep -qF "$p" <<< "$s" || printf 'stops: %s\n' "$p"; done
+  items="$(section "$1" 'Never' 2>/dev/null | grep '^- ')"
+  for p in 'Delete a branch or a worktree' 'Push to the base branch' 'visual acceptance' "kit's main checkout"; do
+    grep -qF "$p" <<< "$items" || printf 'never: %s\n' "$p"
+  done
+  items="$(section "$1" 'Context' 2>/dev/null | grep '^- ')"
+  for p in 'One line per event' 'returns only its verdict' 'a handoff to a file'; do
+    grep -qF "$p" <<< "$items" || printf 'context: %s\n' "$p"
+  done
+  items="$(grep -F 'sdd-worker level' <<< "$items")"
+  grep -qF 'sdd-worker next' <<< "$items" || printf 'context: resumes from level and next\n'
+}
+
+# control <label> <checker> <want> <sed script> — runs <checker> on a copy of the command edited by
+# <sed script>; appends to got unless the checker printed exactly <want>, one item per line, never
+# empty. A sed that stops matching leaves the copy equal to the file, where the checker prints
+# nothing: that is not <want>, so the control goes red instead of passing on a copy it never edited.
+control() {
+  local label="$1" checker="$2" want="$3" out
+  sed "$4" "$COMMAND" > "$BOX/command-copy" 2>/dev/null
+  out="$("$checker" "$BOX/command-copy")"
+  [ "$out" = "$want" ] || got="${got:+$got; }$label: printed '${out//$'\n'/, }' (want '${want//$'\n'/, }')"
+}
+
+# --- R30: every verb is named -------------------------------------------------------------------
+# The floor of six is the probe of the parse: a main() whose case changes shape (an arm split over
+# two lines) hides that verb from command_verbs, and a verb the parse misses is one nobody checks —
+# measured, level split that way left the controls green and only this floor red.
+got=""
+verbs="$(command_verbs)"
+[ "$(grep -c . <<< "$verbs")" -ge 6 ] || got="the program dispatches '${verbs//$'\n'/ }', not the six verbs"
+m="$(verbs_missing "$COMMAND")"
+[ -z "$m" ] || got="${got:+$got; }not named: ${m//$'\n'/ }"
+control 'no budget call' verbs_missing budget 's/sdd-worker budget/sdd-worker budgets/g'
+control 'no pr-ready call' verbs_missing pr-ready 's/sdd-worker pr-ready/sdd-worker pr_ready/g'
+# The primitive under every control, against an answer known wrong: told to want level from a copy
+# whose checker prints budget, control() has to append, or each control above passes on anything.
+saved="$got"
+control 'the primitive' verbs_missing level 's/sdd-worker budget/sdd-worker budgets/g'
+[ "$got" != "$saved" ] || saved="${saved:+$saved; }control() let a copy printing budget pass as level"
+got="$saved"
+if [ -z "$got" ]; then
+  pass 'command: it names every verb of bin/sdd-worker'
+else
+  fail 'command: it names every verb of bin/sdd-worker' \
+    'a call of each verb of main(), and each copy with one call taken out naming that verb' "$got"
+fi
+
+# --- R31: each act starts with its allows call --------------------------------------------------
+# The seven are ACT_TABLE's, whose size R11 already witnesses by counting its 35 cells.
+got=""
+m="$(acts_unpreceded "$COMMAND")"
+[ -z "$m" ] || got="not preceded: ${m//$'\n'/ }"
+control 'review call deleted' acts_unpreceded review '/^`sdd-worker allows <campaign-dir> review --lot <L>`$/d'
+control 'run call names plan' acts_unpreceded run 's/^`sdd-worker allows <campaign-dir> run --lot/`sdd-worker allows <campaign-dir> plan --lot/'
+control 'plan call after prose' acts_unpreceded plan 's/^\(`sdd-worker allows <campaign-dir> plan --lot <L>`\)$/Plan first.\n\n\1/'
+control 'approve call partial' acts_unpreceded approve 's/^`sdd-worker allows <campaign-dir> approve --lot <L>`$/`sdd-worker allows <campaign-dir> approve`/'
+control 'merge heading twice' acts_unpreceded merge '$a\
+\
+### `merge`\
+\
+Merge by hand.'
+if [ -z "$got" ]; then
+  pass 'command: each of the seven acts is preceded by its allows call'
+else
+  fail 'command: each of the seven acts is preceded by its allows call' \
+    'one heading per act whose first line is its allows call, and each sabotaged copy naming its act' "$got"
+fi
+
+# --- R32: the stops, the never list, the context rules ------------------------------------------
+got=""
+m="$(prose_missing "$COMMAND")"
+[ -z "$m" ] || got="missing: ${m//$'\n'/, }"
+control 'stop 1 deleted' prose_missing $'stops: not five numbered lines\nstops: 60 minutes' '/60 minutes/d'
+control 'a sixth stop' prose_missing 'stops: not five numbered lines' '/^5\. /a\
+6. **Another.** One more stop.'
+control 'stop 4 not numbered' prose_missing $'stops: not five numbered lines\nstops: BUDGET_MISSION_USD' 's/^4\. \(.*BUDGET_MISSION_USD\)/\1/'
+control 'no pager' prose_missing $'stops: ON_ESCALATION_CMD\nstops: journal.md' '/ON_ESCALATION_CMD/d'
+control 'never: main checkout' prose_missing "never: kit's main checkout" "/^- Move the kit's main checkout/d"
+control 'never: not a bullet' prose_missing 'never: visual acceptance' 's/^- \(Give the visual acceptance\)/\1/'
+control 'context: handoff' prose_missing 'context: a handoff to a file' '/^- .*a handoff to a file/d'
+control 'context: not a bullet' prose_missing 'context: One line per event' 's/^- \(One line per event\)/\1/'
+control 'context: no next' prose_missing 'context: resumes from level and next' 's/^\(- A new session resumes from `sdd-worker level`\) and `sdd-worker next`/\1/'
+control 'context: no level' prose_missing 'context: resumes from level and next' 's/^\(- A new session resumes from\) `sdd-worker level` and/\1/'
+if [ -z "$got" ]; then
+  pass 'command: the five stops, the never list and the context rules are written'
+else
+  fail 'command: the five stops, the never list and the context rules are written' \
+    'every phrase on a line of its section, and each sabotaged copy naming what it lost' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

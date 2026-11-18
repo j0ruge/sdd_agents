@@ -384,9 +384,9 @@ run "every hat declares its boundary" "$ROOT/tests/check-hat.sh"
 run "adr allocator and link check" "$ROOT/tests/check-adr.sh"
 run "one checkout has one execution owner" "$ROOT/tests/check-coordination.sh"
 
-# Deliberately NOT guarded by SDD_MUTANT, for the reason the adr step carries: every assertion in
-# that file drives bin/sdd-worker as a subprocess, and the `mut_WORKER_*` entries of the catalogue
-# are caught HERE or nowhere. It reads only bin/, which sandbox() copies.
+# Deliberately NOT guarded by SDD_MUTANT, for the reason the adr step carries: its verb assertions
+# drive bin/sdd-worker as a subprocess, and the `mut_WORKER_*` entries of the catalogue are caught
+# HERE or nowhere. It reads bin/, templates/ and commands/, all three copied by sandbox().
 run "the worker answers from artifacts" "$ROOT/tests/check-worker.sh"
 
 # The catalogue's cheap half, in seconds and on every run: every mutant still APPLIES and leaves
