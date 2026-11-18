@@ -140,7 +140,8 @@ suite (`TEST_CMD`), and make the review round through a subagent that writes the
 and returns only the grade table, each grade with its one-sentence rationale. Write the round as
 `<HANDOFF_DIR>/<mission>/40-review-r<N>.md`, one above the newest, with `reviewed_head: <sha>` in
 its frontmatter, the `git rev-parse HEAD` the round read, and the suite's result in `gate:`.
-`pr-ready` refuses a round whose rationale or `gate:` is still a fill-in of `templates/review.md`. The rounds the runner's REVIEW phase writes carry no such key, so `pr-ready` waits for this
+`pr-ready` refuses a round whose rationale or `gate:` is still a fill-in of `templates/review.md`.
+The rounds the runner's REVIEW phase writes carry no `reviewed_head:`, so `pr-ready` waits for this
 one. Fix what the round finds and review again, until every criterion is A. Commit and push the
 round, then ask `@codex review` on the pull request, always, and wait for its receipt on the new
 head.
