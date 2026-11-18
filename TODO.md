@@ -161,6 +161,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r6.md` — descoberto por `sdd-reviewer` na
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
+- [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
+  `bin/sdd-worker:1109` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
+  nomeia threads: 18 dos 38 achados do CodeRabbit no PR #414 moravam no corpo das revisões, e um PR com eles,
+  com uma `CHANGES_REQUESTED` sem inline ou com o `local/ci` vermelho dá `ready`. Ler os três é um sexto item,
+  que muda a régua e não tem dono: nenhum ato do laço publica o `local/ci`, e sem quem o escreva o item é gate
+  insatisfazível (princípio 1). Direção: decidir quem o publica (o ato `review`, que já roda a suíte?).
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r6.md` — descoberto por `sdd-reviewer` na
+  missão `20261117-o-worker-orquestrador` (2026-11-18)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —

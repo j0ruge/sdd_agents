@@ -246,5 +246,5 @@ de uma missão, onde o `sdd run` roda e avisa), toda delegação acima de `assis
 
 Não é parada: com o PR aberto e só o carimbo de mutação faltando, o `sdd run` de uma missão do kit
 sai com rc 2 e pede `./bin/sdd health`. Pela regra do dono (PR de missão do kit mergeia sem
-carimbo; o `sdd health` só roda com a catraca zerada), esse rc 2 se lê como "PR pronto para a
-revisão".
+carimbo; o `sdd health` só roda com a catraca zerada), esse rc 2 se lê como o rc 0: o PR está
+aberto, e o ato seguinte é o `pr` (a tabela `## The transitions` do `commands/sdd-worker.md`).

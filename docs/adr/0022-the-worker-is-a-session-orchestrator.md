@@ -64,7 +64,10 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
    (`campaign.md`), the delegation (`delegation.md`) and a one-line-per-event journal. The verbs take
    that directory as an argument; no configuration key names it. A lot finds its mission through the
    mission's own artifact: `00-missao.md` declares `campaign:` and `lot:`. There is no state file:
-   the next step is derived from the queue, the missions on disk and the pull requests.
+   the next step is derived from the queue, the missions and the pull requests. A mission is found
+   on disk, in the campaign's checkout and in every linked worktree of its repository, and in the
+   base, the tree of the upstream of the branch that checkout has checked out, read through git: a
+   merged mission whose worktree was removed is still the campaign's.
 
 3. **The delegation is an artifact with an end.** It carries the level, the lots it covers, the
    instant it expires, a ceiling per mission and a ceiling for the campaign, and it is signed by the

@@ -1976,7 +1976,10 @@ number,state,isCrossRepository`, and only the repository's own count: `--head` m
 name alone, and a pull request from a fork's branch of the same name (`isCrossRepository` true) is
 never the lot's. The merge is read before the approval: a lot whose pull request merged is done even
 when a copy of its mission left in an old worktree is not approved, and a mission that names a
-branch is asked about even when it is not approved. A `gh` that
+branch is asked about even when it is not approved. Declared limit: `--head` matches a name, never
+its use, so a merged pull request of an earlier use of the same branch name makes the lot done;
+measured on 2026-11-18, 0 of 160 merged pull requests of the kit share a head name with another of
+its 161 pull requests, so it stays a limit and not a fix. A `gh` that
 fails, or answers off its contract, is rc 3 with no act — "could not read" never becomes "no pull
 request", which would send the session to run the lot again. Two missions on one lot, an approved
 mission with no branch, no `campaign.md`, a `campaign:` in it that is not the directory's name (an
@@ -2019,6 +2022,15 @@ method — a merge commit, never a squash — belongs to the command that merges
 `commands/sdd-worker.md` writes it. The five items are read one after the other, never at once, so
 the session reads `pr-ready` again immediately before `gh pr merge`.
 
+**What `pr-ready` does not read.** The body of a review, where 18 of the 38 findings CodeRabbit
+left on PR #414 lived; a review in state `CHANGES_REQUESTED` that carries no inline comment; and the
+`local/ci` status of the head, the suite's result published as a commit status. The bar it applies
+(§3 of `docs/superpowers/specs/2026-11-16-o-worker-merge-delegado.md`, decision 9 of the mission)
+names review threads alone, so none of the three keeps a pull request from `ready` once its five
+items hold. Reading them is a sixth item, which changes the bar: it is open in `TODO.md`, with the
+question of who writes `local/ci` in the worker's loop, since an item that no act writes would be a
+gate nobody can satisfy.
+
 **`reviewed_head:` is the worker's key, on purpose.** The rounds the REVIEW phase of `sdd run`
 writes do not carry it, and `templates/review.md` does not name it. So after a run `pr-ready`
 answers `not-ready review: the newest round names no head` until the session makes its own round
@@ -2058,5 +2070,5 @@ criterion A, no tolerance for prose), and the worker's round is what applies it.
 - A mission of the kit runs by `sdd run` in the mission's linked worktree, through the `sdd` on the
   PATH — the main checkout, which the mission does not edit; from the main checkout it stays
   forbidden. The kit's `gate_PR` leaves rc 2 when only the mutation stamp is missing, which the
-  worker reads as "ready for review".
+  worker reads as it reads an rc 0: the pull request is open, and its `pr` act comes next.
 - The Codex harness is the next mission: nothing here opens a phase outside `claude -p`.

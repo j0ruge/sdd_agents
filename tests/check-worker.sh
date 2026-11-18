@@ -274,11 +274,28 @@
 #       copies) stops the three with rc 1 naming it or the call, and allows asks; a copy of the base
 #       is named `<upstream>:<path>` in the act, and the copies go when the verb exits (achado #2 of
 #       the r6)
+#   R63 the rc 2 of a mission of the kit, its pull request open and only the stamp missing, goes to
+#       `pr` as the rc 0 does: a row of `## The transitions` found once by its first two cells, the
+#       journal's paragraph of a new session, the run act's paragraph of the rc, `## A mission of
+#       the kit` and the worker's section of docs/pipeline.md each say so (achado #4 of the r6)
+#   R64 the comment right above cmd_next and the paragraph of `next` in docs/pipeline.md declare that
+#       a merged pull request of an earlier use of the same branch name makes the lot done, each with
+#       the measure of the reuse (achado #5 of the r6)
+#   R65 the comment right above cmd_pr_ready and the paragraph `**What `pr-ready` does not read.**`
+#       of docs/pipeline.md name the body of a review, the `CHANGES_REQUESTED` review with no inline
+#       comment and the `local/ci` status of the head, and point at TODO.md, where the sixth item
+#       waits (decision 1 of the owner on the r6)
+#   R66 the plan act has the session cut the mission's worktree in a target before `/sdd-plan`, the
+#       `git worktree add` with a provisional branch and its rename to the mission's branch written,
+#       says that in the kit `/sdd-plan` cuts it, and the approve act runs `sdd approve` in that
+#       worktree (decision 4 of the owner on the r6)
 #
-# The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
-# and R60 carry their own negative control: each checker runs on the files, where it has to miss nothing,
-# and on copies with one thing taken out, where it has to name exactly that thing. A checker that
-# never misses is decoration.
+# The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33,
+# R60 and R63 to R66 carry their own negative control: each checker runs on the files, where it has
+# to miss nothing, and on copies with one thing taken out, where it has to name exactly that thing.
+# A checker that never misses is decoration. R64 and R65 also read a comment of bin/sdd-worker,
+# which the catalogue does reach (mut_WORKER_reuse_*, mut_WORKER_blind_*); R63 and R66 read the
+# command and docs/pipeline.md alone, so their controls are all they have.
 #
 # Declared limit, no probe: the review item stops when `git rev-list <reviewed_head>..<head>` does
 # not run, and no world here makes it fail — it walks the commits `git merge-base --is-ancestor` has
@@ -372,6 +389,17 @@
 #   the other families is one, since their repos have no remote: that answer, the disk alone, is the
 #   limit bin/sdd-worker declares on campaign_set, and no probe pins it.
 #
+# Declared limits of R63 to R66, no probe:
+# - tree_primitive guards tree_control, and nothing guards it: dropped alone it changes no answer,
+#   since tree_control compares the whole output; dropped together with a looser comparison (the
+#   want found among the lines) the four families go green — measured in the sabotage pass of the
+#   R13. It is the last line control() and docs_control() have too, and the mutation catalogue,
+#   which mutates bin/ alone, never reaches it.
+# - Each family measures the phrase that carries a claim, never the sentence around it: a line of
+#   the comment above cmd_pr_ready that holds none of the four phrases (its lead, the source of the
+#   bar, the reason an item with no owner would be a gate nobody can satisfy) can go and leave
+#   `blind:` green, and so can the connecting prose of the other three.
+#
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
 # sums outside LC_ALL=C answers wrong here. Declared limit: on a machine without the locale that
@@ -381,9 +409,10 @@
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
 # `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `narrow: `, `listed: `,
 # `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `criteria: `, `gone: `,
-# `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that opened it
-# names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at
-# the first red, after printing it; the census in check-health.sh holds that clause.
+# `stamp: `, `reuse: `, `blind: `, `cut: `, `command: ` and `docs: `) prints exactly the assertions
+# the mission plan or the fix increment that opened it names — the checkpoint counts them. Inside a
+# mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it; the census in
+# check-health.sh holds that clause.
 #
 # Usage: tests/check-worker.sh   (exit 0 = every verb answers what its rule says)
 set -uo pipefail
@@ -3962,6 +3991,250 @@ if [ -z "$got" ]; then
 else
   fail "gone: a merged mission whose worktree was removed is found in the base, counted once, and a base that does not read stops budget, level and next" \
     "the answer with the worktree alive in every world that keeps the mission somewhere, the four stops naming the upstream or the call, approve naming the base's copy" "$got"
+fi
+
+# --- R63 to R66: the rc 2 of the kit, the reused branch name, what pr-ready does not read, the cut -
+# Four families of prose and of declared limits (achados #4 and #5 of the review r6, decisions 1 and
+# 4 of the owner on it). What they read lives in the command, in docs/pipeline.md and in the
+# comments of bin/sdd-worker, and no mutant of the catalogue reaches the first two, so each checker
+# carries its own negative control, like `command:` and `docs:`: it runs on the files, where it has
+# to miss nothing, and on a copy of the three files with one of them edited, where it has to name
+# exactly what the edit took out. Each checker prints one item per line.
+R13_FILES=(commands/sdd-worker.md docs/pipeline.md bin/sdd-worker)
+
+# squeeze — stdin's lines as one line, every run of blanks one space: a phrase wrapped across two
+# lines is read as written.
+squeeze() { awk '{ s = s " " $0 } END { gsub(/[ \t]+/, " ", s); print s }'; }
+# para_of <text> <lead> — the paragraph of <text> whose first line starts with <lead>, squeezed; a
+# blank line ends it, and only the first such paragraph is read.
+para_of() { awk -v p="$2" '!on && index($0, p) == 1 { on = 1 } on && !NF { exit } on' <<< "$1" | squeeze; }
+# act_of <file> <act> — the lines under `### `<act>``, up to the next heading.
+act_of() { awk -v h="### \`$2\`" '$0 == h { on = 1; next } on && /^#/ { exit } on' "$1" 2>/dev/null; }
+# comment_of <file> <function> — the comment lines right above `<function>() {`, `#` taken off,
+# squeezed; a line that is not a comment ends the block above it.
+comment_of() {
+  awk -v f="$2() {" '/^#/ { c = c " " substr($0, 2); next } $0 == f { print c; exit } { c = "" }' "$1" 2>/dev/null | squeeze
+}
+
+# tree_control <label> <checker> <want> <file> <sed script> — runs <checker> on a copy of R13_FILES
+# in which <file> alone was edited by <sed script>; appends to got unless it printed exactly <want>.
+# A sed that stops matching leaves a copy that misses nothing, which is not <want>: red.
+tree_control() {
+  local f out copy="$BOX/r13-copy"
+  rm -rf "$copy"
+  for f in "${R13_FILES[@]}"; do
+    mkdir -p "$(dirname "$copy/$f")" && cp "$ROOT/$f" "$copy/$f" 2>/dev/null
+  done
+  sed -i "$5" "$copy/$4" 2>/dev/null
+  out="$("$2" "$copy")"
+  [ "$out" = "$3" ] || got="${got:+$got; }$1: printed '${out//$'\n'/, }' (want '${3//$'\n'/, }')"
+}
+# tree_primitive <checker> <item> <file> <sed script> — the primitive under every control of a
+# family, against an answer known wrong: told to want <item> from a copy whose edit makes <checker>
+# print <item> AND one more item after it, tree_control() has to append — so a comparison that
+# only asks for <item> among the lines, at their start or for any output at all passes nothing.
+# Run inside every family, so each line stands on its own.
+tree_primitive() {
+  local saved="$got"
+  tree_control 'the primitive' "$1" "$2" "$3" "$4"
+  [ "$got" != "$saved" ] || saved="${saved:+$saved; }tree_control() let a copy printing another item pass as '$2'"
+  got="$saved"
+}
+
+# --- R63: the rc 2 of a mission of the kit goes to pr, as the rc 0 does --------------------------
+STAMP_ROW='| `run` of a mission of the kit, rc 2, the pull request open and only the stamp missing | `pr` |'
+# stamp_missing <root> — `stamp: row` (the row is not in `## The transitions` exactly once, by its
+# first two cells), `stamp: resume` (the journal's paragraph of a new session does not read the rc 2
+# as a pr still to do), `stamp: run` (the run act's paragraph of the rc does not name it),
+# `stamp: kit` (`## A mission of the kit` does not send it to pr) and `stamp: pipeline` (the
+# worker's section of docs/pipeline.md does not read it as an rc 0).
+stamp_missing() {
+  local c="$1/commands/sdd-worker.md" s
+  s="$(section "$c" 'The transitions' 2>/dev/null)"
+  [ "$(awk -v p="$STAMP_ROW" 'index($0, p) == 1' <<< "$s" | grep -c .)" = 1 ] || printf 'stamp: row\n'
+  grep -qF 'rc 2 for a mission of the kit with only the stamp missing' <<< "$(para_of "$s" 'A new session finds')" \
+    || printf 'stamp: resume\n'
+  grep -qF 'the rc 2 of a mission of the kit with the pull request open' \
+    <<< "$(para_of "$(act_of "$c" run)" 'Wait on that PID')" || printf 'stamp: run\n'
+  grep -qF 'That rc 2 goes to `pr` as an rc 0 does' <<< "$(section "$c" 'A mission of the kit' 2>/dev/null | squeeze)" \
+    || printf 'stamp: kit\n'
+  grep -qF 'which the worker reads as it reads an rc 0' \
+    <<< "$(section "$1/docs/pipeline.md" 'The worker' 2>/dev/null | squeeze)" || printf 'stamp: pipeline\n'
+}
+got=""
+m="$(stamp_missing "$ROOT")"
+[ -z "$m" ] || got="missing: ${m//$'\n'/, }"
+C13=commands/sdd-worker.md
+tree_control 'no row' stamp_missing 'stamp: row' "$C13" '/^| `run` of a mission of the kit, rc 2,/d'
+tree_control 'row twice' stamp_missing 'stamp: row' "$C13" '/^| `run` of a mission of the kit, rc 2,/ p'
+tree_control 'row names review' stamp_missing 'stamp: row' "$C13" \
+  's/^\(| `run` of a mission of the kit, rc 2, [^|]* | \)`pr` |/\1`review` |/'
+tree_control 'row after the section' stamp_missing 'stamp: row' "$C13" \
+  '/^| `run` of a mission of the kit, rc 2,/ { h; d }
+$G'
+tree_control 'resume reads rc 0 alone' stamp_missing 'stamp: resume' "$C13" \
+  's/^rc 2 for a mission of the kit with only the stamp missing, /rc 0 /'
+tree_control 'resume clause in another paragraph' stamp_missing 'stamp: resume' "$C13" \
+  's/^rc 2 for a mission of the kit with only the stamp missing/\n&/'
+tree_control 'run act forgets the kit' stamp_missing 'stamp: run' "$C13" \
+  's/the rc 2 of a mission of the kit with the pull request open/an rc 2/'
+tree_control 'run clause only in another paragraph' stamp_missing 'stamp: run' "$C13" \
+  's/^names, except the rc 2 of a mission of the kit/names.\n\nExcept the rc 2 of a mission of the kit/'
+tree_control 'kit reads ready for review' stamp_missing 'stamp: kit' "$C13" \
+  's/That rc 2 goes to `pr` as an rc 0 does/Read that rc 2 as "ready for review"/'
+tree_control 'kit sentence only in another section' stamp_missing 'stamp: kit' "$C13" \
+  's/That rc 2 goes to `pr` as an rc 0 does/That rc 2 waits/
+/^## The transitions$/i\
+That rc 2 goes to `pr` as an rc 0 does.\
+'
+tree_control 'pipeline reads ready for review' stamp_missing 'stamp: pipeline' docs/pipeline.md \
+  's/^  worker reads as it reads an rc 0:/  worker reads as "ready for review":/'
+tree_control 'pipeline sentence only before the section' stamp_missing 'stamp: pipeline' docs/pipeline.md \
+  's/^  worker reads as it reads an rc 0:/  worker reads as "ready for review":/
+/^## The kaizen loop$/a\
+which the worker reads as it reads an rc 0'
+tree_control 'row quoted' stamp_missing 'stamp: row' "$C13" 's/^| `run` of a mission of the kit, rc 2,/> &/'
+tree_primitive stamp_missing 'stamp: row' "$C13" '/^| `run` of a mission of the kit, rc 2,/d
+s/That rc 2 goes to `pr` as an rc 0 does/That rc 2 waits/'
+if [ -z "$got" ]; then
+  pass 'stamp: the rc 2 of a mission of the kit, its pull request open and only the stamp missing, goes to pr as the rc 0 does — in the transitions, the journal, the run act, the kit section and docs/pipeline.md'
+else
+  fail 'stamp: the rc 2 of a mission of the kit, its pull request open and only the stamp missing, goes to pr as the rc 0 does — in the transitions, the journal, the run act, the kit section and docs/pipeline.md' \
+    'each phrase in its section, the row once, and each sabotaged copy naming what it lost' "$got"
+fi
+
+# --- R64: a merged pull request of an earlier use of the branch name -----------------------------
+REUSE_LIMIT='a merged pull request of an earlier use of the same branch name makes the lot done'
+REUSE_MEASURE='(^|[^0-9])0 of [0-9]+ merged pull requests'
+# reuse_missing <root> — `reuse: <where> limit` and `reuse: <where> measure`, where is cmd_next (the
+# comment right above it in bin/sdd-worker) or pipeline (the paragraph of `next` in docs/pipeline.md).
+reuse_missing() {
+  local c p
+  c="$(comment_of "$1/bin/sdd-worker" cmd_next)"
+  p="$(para_of "$(section "$1/docs/pipeline.md" 'The worker' 2>/dev/null)" '**`next`** walks the lots')"
+  grep -qF "$REUSE_LIMIT" <<< "$c" || printf 'reuse: cmd_next limit\n'
+  grep -qE "$REUSE_MEASURE" <<< "$c" || printf 'reuse: cmd_next measure\n'
+  grep -qF "$REUSE_LIMIT" <<< "$p" || printf 'reuse: pipeline limit\n'
+  grep -qE "$REUSE_MEASURE" <<< "$p" || printf 'reuse: pipeline measure\n'
+}
+got=""
+m="$(reuse_missing "$ROOT")"
+[ -z "$m" ] || got="missing: ${m//$'\n'/, }"
+tree_control 'comment: limit line deleted' reuse_missing 'reuse: cmd_next limit' bin/sdd-worker \
+  '/^# a merged pull request of an earlier use of the same branch name makes the lot done/d'
+tree_control 'comment: no measure' reuse_missing 'reuse: cmd_next measure' bin/sdd-worker \
+  '/^cmd_next() {$/,$ !s/0 of \([0-9]*\) merged pull requests/none of the \1 merged pull requests/'
+tree_control 'comment: limit cut off by a blank line' reuse_missing $'reuse: cmd_next limit\nreuse: cmd_next measure' bin/sdd-worker \
+  '/^# a head name with another of its [0-9]* pull requests/ s/$/\n/'
+tree_control 'comment: limit only above pr_states' reuse_missing 'reuse: cmd_next limit' bin/sdd-worker \
+  '/^# a merged pull request of an earlier use of the same branch name makes the lot done/d
+/^# pr_states <root> <branch>/i\
+# a merged pull request of an earlier use of the same branch name makes the lot done'
+tree_control 'pipeline: no limit' reuse_missing 'reuse: pipeline limit' docs/pipeline.md \
+  's/a merged pull request of an earlier use of the same branch name makes the lot done/a pull request may be read twice/'
+tree_control 'pipeline: no measure' reuse_missing 'reuse: pipeline measure' docs/pipeline.md \
+  's/0 of \([0-9]*\) merged pull requests/none of the \1 merged pull requests/'
+tree_control 'pipeline: limit in a paragraph of its own' reuse_missing $'reuse: pipeline limit\nreuse: pipeline measure' docs/pipeline.md \
+  's/ Declared limit: `--head` matches/\n\n&/'
+tree_control 'pipeline: the measure is not zero' reuse_missing 'reuse: pipeline measure' docs/pipeline.md \
+  's/ 0 of \([0-9]*\) merged pull requests/ 160 of \1 merged pull requests/'
+tree_primitive reuse_missing 'reuse: pipeline limit' docs/pipeline.md \
+  's/a merged pull request of an earlier use of the same branch name makes the lot done/a pull request may be read twice/
+s/0 of \([0-9]*\) merged pull requests/none of the \1 merged pull requests/'
+if [ -z "$got" ]; then
+  pass 'reuse: cmd_next and docs/pipeline.md declare that a merged pull request of an earlier use of the branch name makes the lot done, with the measure'
+else
+  fail 'reuse: cmd_next and docs/pipeline.md declare that a merged pull request of an earlier use of the branch name makes the lot done, with the measure' \
+    'the limit and its measure in the comment above cmd_next and in the paragraph of next, and each sabotaged copy naming what it lost' "$got"
+fi
+
+# --- R65: what pr-ready does not read -----------------------------------------------------------
+# <item>|<phrase>: the three things the bar does not read, and the pointer at the sixth item.
+BLIND_PHRASES=('body|body of a review' 'changes-requested|`CHANGES_REQUESTED`' 'local/ci|`local/ci`' 'todo|TODO.md')
+# blind_missing <root> — `blind: <where> <item>` for each phrase of BLIND_PHRASES that the comment
+# right above cmd_pr_ready (where is cmd_pr_ready) or the paragraph `**What `pr-ready` does not
+# read.**` of the worker's section of docs/pipeline.md (where is pipeline) does not write.
+blind_missing() {
+  local c p x
+  c="$(comment_of "$1/bin/sdd-worker" cmd_pr_ready)"
+  p="$(para_of "$(section "$1/docs/pipeline.md" 'The worker' 2>/dev/null)" '**What `pr-ready` does not read.**')"
+  for x in "${BLIND_PHRASES[@]}"; do grep -qF -- "${x#*|}" <<< "$c" || printf 'blind: cmd_pr_ready %s\n' "${x%%|*}"; done
+  for x in "${BLIND_PHRASES[@]}"; do grep -qF -- "${x#*|}" <<< "$p" || printf 'blind: pipeline %s\n' "${x%%|*}"; done
+}
+got=""
+m="$(blind_missing "$ROOT")"
+[ -z "$m" ] || got="missing: ${m//$'\n'/, }"
+W13=bin/sdd-worker
+tree_control 'comment: no body' blind_missing 'blind: cmd_pr_ready body' "$W13" 's/the body of a review (/the review (/'
+tree_control 'comment: CHANGES_REQUESTED line deleted' blind_missing 'blind: cmd_pr_ready changes-requested' "$W13" \
+  '/^# .*`CHANGES_REQUESTED`/d'
+tree_control 'comment: no local/ci' blind_missing 'blind: cmd_pr_ready local/ci' "$W13" \
+  '/^cmd_pr_ready() {$/,$ !s/`local\/ci`/the suite/g'
+tree_control 'comment: no TODO.md' blind_missing 'blind: cmd_pr_ready todo' "$W13" \
+  '/^cmd_pr_ready() {$/,$ !s/TODO\.md/the backlog/'
+tree_control 'comment: cut off by a blank line' blind_missing \
+  $'blind: cmd_pr_ready body\nblind: cmd_pr_ready changes-requested\nblind: cmd_pr_ready local/ci\nblind: cmd_pr_ready todo' "$W13" \
+  's/^cmd_pr_ready() {$/\n&/'
+tree_control 'pipeline: no body' blind_missing 'blind: pipeline body' docs/pipeline.md \
+  's/^\(\*\*What `pr-ready` does not read\.\*\*\) The body of a review,/\1 The text of a review,/'
+tree_control 'pipeline: no CHANGES_REQUESTED' blind_missing 'blind: pipeline changes-requested' docs/pipeline.md \
+  's/a review in state `CHANGES_REQUESTED` that/a review that/'
+tree_control 'pipeline: no local/ci' blind_missing 'blind: pipeline local/ci' docs/pipeline.md \
+  '/^\*\*What `pr-ready` does not read\.\*\*/,/^$/ s/`local\/ci`/the suite/g'
+tree_control 'pipeline: no TODO.md' blind_missing 'blind: pipeline todo' docs/pipeline.md \
+  '/^\*\*What `pr-ready` does not read\.\*\*/,/^$/ s/`TODO\.md`/the backlog/'
+tree_control 'pipeline: no such paragraph' blind_missing \
+  $'blind: pipeline body\nblind: pipeline changes-requested\nblind: pipeline local/ci\nblind: pipeline todo' docs/pipeline.md \
+  's/^\*\*What `pr-ready` does not read\.\*\*/**What it leaves out.**/'
+tree_control 'pipeline: the paragraph quoted' blind_missing \
+  $'blind: pipeline body\nblind: pipeline changes-requested\nblind: pipeline local/ci\nblind: pipeline todo' docs/pipeline.md \
+  's/^\*\*What `pr-ready` does not read\.\*\*/> &/'
+tree_primitive blind_missing 'blind: cmd_pr_ready body' "$W13" 's/the body of a review (/the review (/
+/^cmd_pr_ready() {$/,$ !s/TODO\.md/the backlog/'
+if [ -z "$got" ]; then
+  pass 'blind: cmd_pr_ready and docs/pipeline.md declare what pr-ready does not read — the body of a review, a CHANGES_REQUESTED with no inline comment, local/ci — and point at TODO.md'
+else
+  fail 'blind: cmd_pr_ready and docs/pipeline.md declare what pr-ready does not read — the body of a review, a CHANGES_REQUESTED with no inline comment, local/ci — and point at TODO.md' \
+    'each phrase in the comment above cmd_pr_ready and in the paragraph of pipeline.md, and each sabotaged copy naming what it lost' "$got"
+fi
+
+# --- R66: the worktree of a target's mission is cut in the plan act ------------------------------
+# cut_missing <root> — what the plan and approve acts of the command do not write: `cut: target`
+# (the session cuts the worktree before /sdd-plan in a target), `cut: add` (the `git worktree add`
+# with the mission's worktree and a provisional branch), `cut: branch` (the rename to the mission's
+# branch), `cut: kit` (in the kit /sdd-plan cuts it), `cut: approve` (sdd approve runs there).
+cut_missing() {
+  local c="$1/commands/sdd-worker.md" p a
+  p="$(act_of "$c" plan | squeeze)"
+  a="$(act_of "$c" approve | squeeze)"
+  grep -qF 'In a target, the session cuts it before `/sdd-plan`' <<< "$p" || printf 'cut: target\n'
+  { grep -qF '`git worktree add <mission-worktree> ' <<< "$p" && grep -qF ' -b <provisional> ' <<< "$p"; } \
+    || printf 'cut: add\n'
+  grep -qF '`git -C <mission-worktree> branch -m <provisional> <branch>`' <<< "$p" || printf 'cut: branch\n'
+  grep -qF 'In the kit, `/sdd-plan` cuts it' <<< "$p" || printf 'cut: kit\n'
+  grep -qF "sdd approve <mission>\` in the mission's worktree" <<< "$a" || printf 'cut: approve\n'
+}
+got=""
+m="$(cut_missing "$ROOT")"
+[ -z "$m" ] || got="missing: ${m//$'\n'/, }"
+tree_control 'no target cut' cut_missing 'cut: target' "$C13" 's/In a target, the session cuts$/In a target, the owner cuts/'
+tree_control 'no worktree add' cut_missing 'cut: add' "$C13" 's/`git worktree add <mission-worktree> /`git checkout /'
+tree_control 'add with no branch' cut_missing 'cut: add' "$C13" 's/ -b <provisional> origin/ origin/'
+tree_control 'no rename' cut_missing 'cut: branch' "$C13" 's/^`git -C <mission-worktree> branch -m <provisional> <branch>`\./the branch it names./'
+tree_control 'no kit' cut_missing 'cut: kit' "$C13" 's/ In the kit,$/ In the kit too,/'
+tree_control 'approve anywhere' cut_missing 'cut: approve' "$C13" "s/sdd approve <mission>\` in the mission's worktree/sdd approve <mission>\`/"
+tree_control 'the cut under another act' cut_missing $'cut: target\ncut: add\ncut: branch\ncut: kit' "$C13" \
+  's/^The mission runs in a worktree of its own/### `note`\n\n&/'
+tree_control 'approve sentence only in plan' cut_missing 'cut: approve' "$C13" \
+  "s/sdd approve <mission>\` in the mission's worktree/sdd approve <mission>\`/
+s/^The mission runs in a worktree of its own/Run \`sdd approve <mission>\` in the mission's worktree. &/"
+tree_primitive cut_missing 'cut: add' "$C13" 's/`git worktree add <mission-worktree> /`git checkout /
+s/^`git -C <mission-worktree> branch -m <provisional> <branch>`\./the branch it names./'
+if [ -z "$got" ]; then
+  pass 'cut: in a target the session cuts the mission worktree before /sdd-plan, the git worktree add and the rename written, in the kit /sdd-plan cuts it, and sdd approve runs there'
+else
+  fail 'cut: in a target the session cuts the mission worktree before /sdd-plan, the git worktree add and the rename written, in the kit /sdd-plan cuts it, and sdd approve runs there' \
+    'each phrase in its act, and each sabotaged copy naming what it lost' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

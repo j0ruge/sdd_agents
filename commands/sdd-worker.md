@@ -89,12 +89,14 @@ act still passes its own `allows` call (step 3):
 | After | The act | Why |
 |---|---|---|
 | `run`, rc 0 | `pr` | the run opened the pull request, and its body still owes the owner the grill answers and the bots that did not review |
+| `run` of a mission of the kit, rc 2, the pull request open and only the stamp missing | `pr` | the kit's `gate_PR` waits for the mutation stamp, which a mission's pull request of the kit merges without: the run left what an rc 0 leaves |
 | `pr` | `review` | the body is written, and the round comes next |
 | `review`, every criterion A and the Codex receipt on the head | `merge`: `allows … merge`, then `pr-ready` | `next` answers `review` again for an open pull request; an rc 1 of `pr-ready` names the act that fixes its item |
 | every wait: the owner's yes, a bot, a deadline, a run | step 1, `budget` | the ceiling read before the wait, and the delegation, may have moved since |
 
-A new session finds the last act of each lot in the journal's tail: a `run` with rc 0 and no `pr`
-line after it is a `pr` still to do, though the pull request is open and `next` says `review`.
+A new session finds the last act of each lot in the journal's tail: a `run` with rc 0, or with
+rc 2 for a mission of the kit with only the stamp missing, and no `pr` line after it is a `pr`
+still to do, though the pull request is open and `next` says `review`.
 
 ## The acts
 
@@ -111,6 +113,16 @@ which is how `next` finds it. Under delegation the relay answers the grill with 
 option, and every answer that touches a rule of the owner is listed in the pull request body, for
 his acceptance. The plan, the grill and the report go to files; the planner returns only its verdict.
 
+The mission runs in a worktree of its own, cut before anything of it is written. In the kit,
+`/sdd-plan` cuts it (its step 2), and the planner renames its branch. In a target, the session cuts
+it before `/sdd-plan`, beside the campaign's checkout and from the base, with `git fetch` and then
+`git worktree add <mission-worktree> --no-track -b <provisional> origin/<DEFAULT_BRANCH>`, and runs
+`/sdd-plan` from it (`cd <mission-worktree>`), so the plan, `sdd approve` and `sdd run` all happen
+there and `next` finds the mission in that worktree. Once the plan names the mission's branch
+(`branch:` in its `00-missao.md`), the session renames the worktree's branch to it, while the
+branch has no upstream:
+`git -C <mission-worktree> branch -m <provisional> <branch>`.
+
 ### `approve`
 
 `sdd-worker allows <campaign-dir> approve --lot <L>`
@@ -119,8 +131,8 @@ Measure again before approving: `tests/check-checkpoint.sh --check <checkpoint>`
 `--red <checkpoint>` by the kit's path, the `--red` in the background and waited for its last line.
 A `FAIL`, or a run without the line `<n> pending Check(s), every one red at HEAD`, goes back to
 `plan`. Write the extract of the plan the owner would have read to a file in the mission's
-directory, then run `printf 'y\n' | sdd approve <mission>`. It writes `humano-YYYY-MM-DD` even under
-delegation: the journal line is the trail of who approved.
+directory, then run `printf 'y\n' | sdd approve <mission>` in the mission's worktree. It writes
+`humano-YYYY-MM-DD` even under delegation: the journal line is the trail of who approved.
 
 ### `run`
 
@@ -154,9 +166,11 @@ at once, and a wait on it ends before the run does.
 Wait on that PID (`tail --pid=<pid> -f /dev/null`, or a monitor whose condition is
 `! kill -0 <pid>`), never on `pgrep -f`, which matches its own command line (M23). Then read the
 `sdd run rc=` line of the log. An rc 0 is the pull request open; an rc 2 is a human step the runner
-names; an rc 3 is an escalation the runner already paged, with the worktree's pager, which `level`
-requires as it requires the campaign checkout's: write it in the journal and wait for the owner,
-and `budget-exhausted` among them is a stop (the mission ceiling).
+names, except the rc 2 of a mission of the kit with the pull request open and only the stamp
+missing, which goes on as an rc 0 does (**A mission of the kit**); an rc 3 is an escalation the
+runner already paged, with the worktree's pager, which `level` requires as it requires the campaign
+checkout's: write it in the journal and wait for the owner, and `budget-exhausted` among them is a
+stop (the mission ceiling).
 
 ### `pr`
 
@@ -263,5 +277,6 @@ conversation:
 The kit's own mission runs in the mission's linked worktree, by `sdd run` from that worktree: the
 `sdd` on the PATH is the kit's main checkout, which the mission does not edit. The kit's `gate_PR`
 asks for the mutation stamp, so `sdd run` leaves with rc 2 when the pull request is open and only
-the stamp is missing; read it as "ready for review", by the owner's standing rule that a mission's
-pull request of the kit merges without the stamp.
+the stamp is missing. That rc 2 goes to `pr` as an rc 0 does (**The transitions**), by the owner's
+standing rule that a mission's pull request of the kit merges without the stamp: the pull request
+is open, and its body still owes the owner what `pr` writes.

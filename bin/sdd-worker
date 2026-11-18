@@ -787,7 +787,7 @@ pr_states() {
   fi
 }
 
-# next <campaign-dir> — the next act of the campaign, from the queue, the missions on disk and gh.
+# next <campaign-dir> — the next act of the campaign, from the queue, the campaign's missions and gh.
 # It walks the lots of campaign.md in the order of the table and stops at the first one not merged:
 # no mission → plan; a mission not approved → approve; approved with no pull request → run; a pull
 # request open → review; only closed ones → stop. A merged pull request of the repository (never a
@@ -809,8 +809,11 @@ pr_states() {
 # set is not the root's, or the base does not read) stops, `unread: …`, rc 1. A copy of the base is
 # named in the act as git names it, `<upstream>:<path>`, never as the temporary copy that was read.
 # Copies of one mission are one mission, approved only
-# when every copy is: approve is the act the ladder grants last, run is not. Declared limit: the
-# branch read is the first copy's that names one.
+# when every copy is: approve is the act the ladder grants last, run is not. Declared limits: the
+# branch read is the first copy's that names one; and `--head` matches a name, never its use, so
+# a merged pull request of an earlier use of the same branch name makes the lot done (achado #5 of
+# the mission's review r6) — measured on 2026-11-18, 0 of 160 merged pull requests of the kit share
+# a head name with another of its 161 pull requests, so it stays a limit and not a fix.
 cmd_next() {
   [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
   local dir="${1%/}" cf id root l i m p pend branch act="" ahead="" n s merged open closed
@@ -1096,6 +1099,13 @@ gh_unread() {
 # under core.quotePath=false (a control byte, a quote or a backslash in its name) never matches the
 # mission folder, the fail-safe side; and only the first hundred threads are read, which is why a
 # pull request with more is not ready.
+# What it does not read, since the bar it applies (§3 of
+# docs/superpowers/specs/2026-11-16-o-worker-merge-delegado.md, decision 9 of the mission) names
+# review threads alone: the body of a review (18 of the 38 findings CodeRabbit left on PR #414
+# lived there), a review in state `CHANGES_REQUESTED` that carries no inline comment, and the
+# `local/ci` status of the head, so none of them keeps a pull request from ready. A sixth item that
+# reads them changes the bar, and it is open in TODO.md with the question of who writes `local/ci`
+# in the worker's loop: an item that no act writes would be a gate nobody can satisfy.
 cmd_pr_ready() {
   [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
   local dir="${1%/}" pr="$2" root view head state mergeable round rh g unjust missing gv prefix changed p repo verdict

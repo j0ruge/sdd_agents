@@ -7353,6 +7353,21 @@ mut_WORKER_gone_failure_swallowed() {
 mut_WORKER_gone_copy_shown() {
   sed -i '/^cmd_next() {/,/^}/ s@^  \[ -z "\${BASE_COPY:-}" \] || act=.*$@  :@' "${1%/*}/sdd-worker"
 }
+# The comment of cmd_next stops declaring that a merged pull request of an earlier use of the same
+# branch name makes the lot done (achado #5 of the mission's review r6): the limit is kept, and
+# silent. Caught by "reuse: cmd_next and docs/pipeline.md declare that a merged pull request of an
+# earlier use of the branch name makes the lot done, with the measure" (check-worker.sh).
+mut_WORKER_reuse_limit_dropped() {
+  sed -i '/^# a merged pull request of an earlier use of the same branch name makes the lot done/d' "${1%/*}/sdd-worker"
+}
+# The comment of cmd_pr_ready stops naming the CHANGES_REQUESTED review with no inline comment among
+# what the verb does not read (decision 1 of the owner on the mission's review r6). Caught by
+# "blind: cmd_pr_ready and docs/pipeline.md declare what pr-ready does not read — the body of a
+# review, a CHANGES_REQUESTED with no inline comment, local/ci — and point at TODO.md"
+# (check-worker.sh).
+mut_WORKER_blind_limit_dropped() {
+  sed -i '/^# .*`CHANGES_REQUESTED` that carries no inline comment/d' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -8242,6 +8257,8 @@ CATALOG=(
   WORKER_gone_base_unread
   WORKER_gone_failure_swallowed
   WORKER_gone_copy_shown
+  WORKER_reuse_limit_dropped
+  WORKER_blind_limit_dropped
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
