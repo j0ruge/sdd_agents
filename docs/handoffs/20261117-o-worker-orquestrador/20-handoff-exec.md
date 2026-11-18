@@ -2,9 +2,9 @@
 missao: 20261117-o-worker-orquestrador
 fase: EXEC
 status: done
-sessao: 56832ff8-7f67-4867-9159-ec807a1e9f8d
-data: 2026-11-18 01:20
-gate: "tests/run-all.sh em 3fe5d3e → suite green, rc 0, 2129 linhas ok, 0 FAIL, 13 min 55 s; anchors: all 832 mutants still apply and leave valid code; tests/check-worker.sh → worker verbs: 33 probe(s), as nove famílias 1/3/6/4/3/5/7/3/1; grep -c '^mut_WORKER_' tests/check-mutation.sh → 19; tests/check-todo.sh --anchors TODO.md → 83 measured, 0 off target; checkpoint 11 de 11 done"
+sessao: 9ae88e4f-4702-4394-b142-28fed9c8ff08
+data: 2026-11-18 03:37
+gate: "tests/run-all.sh na árvore do 8add018 → suite green, rc 0, 2132 linhas ok, 0 FAIL; anchors: all 839 mutants still apply and leave valid code; tests/check-worker.sh → worker verbs: 36 probe(s), as onze famílias 1/3/6/4/3/5/7/3/1/1/2 (usage, delegate, level, allows, budget, next, pr-ready, command, docs, seal, legible); grep -c '^mut_WORKER_' tests/check-mutation.sh → 26; tests/check-todo.sh --anchors TODO.md → 83 measured, 0 off target; checkpoint 13 de 13 done (I1–I11, F1, F2)"
 ---
 
 # Handoff — EXEC — O worker orquestrador
@@ -14,18 +14,18 @@ gate: "tests/run-all.sh em 3fe5d3e → suite green, rc 0, 2129 linhas ok, 0 FAIL
 
 ## TL;DR
 
-Os onze incrementos estão feitos, um commit cada, e a suíte está verde no `3fe5d3e`. O kit ganhou
-o `bin/sdd-worker` (seis verbos que respondem por artefato), o sensor `tests/check-worker.sh` (33
-asserções, 19 mutantes `mut_WORKER_*`), o `commands/sdd-worker.md`, os templates da campanha e da
-delegação, a documentação e a campanha do kit sem assinatura (`level assisted — illegible`). A QA
-começa pela CLI do worker, sempre numa cópia em `mktemp -d` e nunca assinando a delegação real.
+Os onze incrementos e os dois consertos do ciclo 1 da QA estão feitos, um commit cada, e a suíte
+está verde no `8add018`. O `F1` pôs o teto de cada lote sob a assinatura (Q1); o `F2` fez do id da
+campanha o nome do diretório e do `expires:` um instante que existe (Q2, Q3). O sensor
+`tests/check-worker.sh` tem 36 asserções em onze famílias e 26 mutantes `mut_WORKER_*`. A QA volta
+para refazer J3, J5 e J6 numa cópia em `mktemp -d`, nunca assinando a delegação real.
 
 ## Estado do repo
 
 - **Branch:** `feat/o-worker-orquestrador`, só local, sem upstream (nada foi empurrado)
-- **Último commit de código:** `3fe5d3e` `docs(worker): a campanha que zera as issues do kit espera a assinatura do dono`; este handoff e o checkpoint vêm num commit logo depois
+- **Último commit de código:** `8add018` `fix(worker): o id da campanha é o nome do diretório, e o prazo é um instante que existe`; este handoff e o checkpoint vêm num commit logo depois
 - **Working tree:** limpo depois do commit do handoff
-- **Suíte:** `tests/run-all.sh` → verde, rc 0, 2129 linhas `ok`, 0 `FAIL`, 13 min 55 s, 832 mutantes aplicam (`--anchors`)
+- **Suíte:** `tests/run-all.sh` → verde, rc 0, 2132 linhas `ok`, 0 `FAIL`, 839 mutantes aplicam (`--anchors`)
 - **E2E:** não há `E2E_CMD`: o kit é bash e markdown, sem interface
 
 ## O que foi feito
@@ -42,13 +42,18 @@ começa pela CLI do worker, sempre numa cópia em `mktemp -d` e nunca assinando 
 - `30bc8cd` — I10: `docs/pipeline.md` (`## The worker`), `README.md`, `config/schema.md`, `CONTEXT.md` (cinco verbetes), a exceção no `commands/sdd-plan.md` e a nota no roadmap de setembro
 - `3fe5d3e` — I11: a campanha `docs/superpowers/campaigns/20261117-zerar-as-issues/` (seis lotes, 83 itens, 24 `◆`, L6 com teto `plan`) e a delegação sem assinatura; a gaveta passa a F6 para "em construção"; o §4 do caderno do worker registra o que a ADR 0022 respondeu
 
+### Ciclo 1 da QA (`F1`, `F2`, dos achados Q1 a Q3 do `30-handoff-qa.md`)
+
+- `42d1a56` — F1 (Q1): o `delegation_terms` é a única definição do que a assinatura concede, as seis chaves e uma linha `ceiling <lote>: <teto>` por linha da tabela de lotes; o `delegate` mostra exatamente o que assina, e subir, baixar, pôr ou tirar o teto de um lote depois de assinar responde `assisted — edited after signing`. Família nova `seal: ` (1 linha), dois mutantes `mut_WORKER_seal_*`. Re-walk da J5 verde numa cópia
+- `8add018` — F2 (Q2, Q3): o `id_is_dir` é a regra única do id, o `campaign:` de um arquivo igual ao nome do diretório resolvido (`readlink -f`: `.`, barra no fim e symlink são o diretório). O `delegation_legible` a aplica à `delegation.md` e ao `campaign.md` (o que falta é ilegível), então `level`/`allows` → `assisted`, `budget` → `no ceiling`, `delegate` recusa; o `next` a aplica ao `campaign.md` e para com rc 1 nomeando os dois valores (o ramo do `campaign:` vazio saiu, a regra o cobre). O `expires:` tem de voltar do `date -d` como foi. Família nova `legible: ` (2 linhas), cinco mutantes `mut_WORKER_legible_*`, o fixture do R16 com cada delegação em `<pai>/b-cap`, e o R4 passando a cobrar o motivo da regex. Re-walk da J6 verde numa cópia
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
 | `bin/sdd-worker` | o programa: `delegate`, `level`, `allows`, `budget`, `next`, `pr-ready` |
-| `tests/check-worker.sh` | o sensor, 33 asserções em nove famílias, com controle negativo nas famílias de prosa |
-| `tests/check-mutation.sh` | 19 mutantes `mut_WORKER_*` no `CATALOG` |
+| `tests/check-worker.sh` | o sensor, 36 asserções em onze famílias (`seal: ` do F1 e `legible: ` do F2 inclusas), com controle negativo nas famílias de prosa |
+| `tests/check-mutation.sh` | 26 mutantes `mut_WORKER_*` no `CATALOG` |
 | `tests/fixtures/codex-review-state.txt` | o comentário de máquina do Codex, copiado do PR 409 (proveniência no sensor) |
 | `commands/sdd-worker.md` | o comando da sessão orquestradora |
 | `templates/campaign.md`, `templates/delegation.md` | os dois contratos da campanha |
@@ -58,7 +63,28 @@ começa pela CLI do worker, sempre numa cópia em `mktemp -d` e nunca assinando 
 
 ## Boot da próxima fase
 
-**QA, num repo sem interface.** O que é visível para quem usa o kit:
+**QA que volta depois do ciclo 1 (`F1`, `F2`).** Refaça, numa cópia `mktemp -d` da campanha real
+(o molde está no topo da J5 do `30-handoff-qa.md`), a J5, a J6 e a J3 inteira, e reescreva o
+`30-handoff-qa.md` com o que o reteste viu. O que mudou e é visível na CLI:
+
+- **`delegate`** imprime, depois das seis chaves, uma linha `ceiling <lote>: <teto>` por linha da
+  tabela de lotes, e o digest gravado as cobre: o `signed:` de uma delegação assinada antes do F1
+  deixa de bater (nenhuma real estava assinada). É por isso que a J3 volta inteira.
+- **O id é o nome do diretório.** Um `campaign:` da `delegation.md` ou do `campaign.md` que não é o
+  nome do diretório, ou um `campaign.md` ausente, responde `level assisted — illegible: campaign:
+  '<valor>' in <arquivo> is not the directory's name '<nome>'` (ou `<arquivo> does not exist`); o
+  `allows` pede, o `budget` diz `no ceiling`, rc 1, o `delegate` recusa com rc 1. Uma campanha
+  renomeada ou copiada com outro nome cai aqui até os dois arquivos dizerem o nome novo.
+- **O `next`** para com rc 1 sobre esse mesmo motivo, e também sobre o `campaign:` vazio, cuja
+  mensagem mudou: era `illegible: campaign: is empty in …`, agora é a da regra de identidade.
+- **O `expires:`** tem de ser um instante que o relógio tem: `2026-11-18 99:99` e `2026-11-31 10:00`
+  respondem `illegible: expires '<valor>' is no instant on the clock`, e `2096-02-29 12:00` assina.
+
+Na J6 do `30-handoff-qa.md`, o passo do Q3 precisa do `campaign:` do `campaign.md` de volta ao id
+certo antes de trocar o `expires:`: com o placeholder ainda lá, a recusa é a da identidade, que
+vem antes do instante. O re-walk desta sessão fez isso e viu cada "esperado" da tabela.
+
+**O que vale desde a primeira QA, num repo sem interface.** O que é visível para quem usa o kit:
 
 - **A CLI `bin/sdd-worker`.** Sem verbo, ou com um verbo desconhecido, imprime o uso e sai com rc 2.
   Os seis verbos, as saídas e os rc estão na tabela "Os seis verbos" do `01-plano.md` e em
@@ -115,7 +141,9 @@ worktree ligado, sem `KIT-TOUCHED`, `hat-crossed` nem escalada no `pipeline.log`
 ## Riscos e não-feitos
 
 - **A campanha não tem sensor durável**, por desenho (`01-plano.md`, I11): o Check foi efêmero. Os títulos foram copiados de `5221477:TODO.md`, e nada compara a campanha com o `TODO.md` depois disso: um item retitulado ou um item novo não aparece nela.
-- **Os 19 mutantes foram provados um a um com `--only`**, que é dica e não carimbo; o catálogo inteiro e o carimbo são do `./bin/sdd health`, que não rodou.
+- **Os 26 mutantes foram provados um a um com `--only`**, que é dica e não carimbo; o catálogo inteiro e o carimbo são do `./bin/sdd health`, que não rodou.
+- **Dois limites que o F2 declara, medidos na sabotagem:** a comparação do que o `date -d` devolve com o que foi escrito não tem mundo no GNU date 9 (ele recusa 24:00, 23:60 e o buraco do horário de verão, e devolve igual todo o resto), e fica para um `date` que role 24:00 para o dia seguinte, com o limite escrito no comentário do `delegation_legible`; e o `${1%/}` do `delegation_legible` só tira a barra dupla do caminho impresso no motivo. Um `date` sem `-d` (o do BSD) faria toda delegação ilegível, isto é, `assisted`: o lado seguro, num kit que já exige Linux para a coordenação.
+- **A ADR 0022 §3** diz "a digest of the other fields", e desde o F1 o digest cobre também os tetos dos lotes. O texto ficou menos preciso, não falso; mexer numa ADR aceita fica para a REVIEW ou a DOCS (nota do F1).
 - **Os limites declarados na ADR 0022 continuam valendo:** a assinatura prova uma resposta no stdin, não uma pessoa; os tetos leem o ledger desta máquina, e o gasto da sessão orquestradora e dos subagentes fica fora deles; as missões de uma campanha são casadas pelo id, não pelo repositório.
 - **O `pr-ready` exige `reviewed_head:`**, que as rodadas da fase REVIEW do `sdd run` não escrevem. Depois de uma corrida ele responde `not-ready review: the newest round names no head` até a rodada da sessão do worker. É desenho (M5 do caderno), não defeito.
 - **O `next` não deriva o `postmerge`**, e nenhum verbo age: quem roda, abre PR e mergeia é a sessão.
