@@ -7309,6 +7309,28 @@ mut_WORKER_kept_unchecked() {
 mut_WORKER_once_reads_live() {
   sed -i '/^effective_level() {/,/^}/ s@^  src="\$TERMS_COPY"$@  src="$dir"@' "${1%/*}/sdd-worker"
 }
+# The review item no longer asks for a row of every criterion: a round whose grade table carries
+# the bold Overall row alone, graded A, is ready (achado #1 of the mission's review r6).
+# Caught by "criteria: a round that leaves out the row of a criterion fails review and names it, an A
+# in every row present is not an A in every criterion" (check-worker.sh).
+mut_WORKER_criteria_unchecked() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ -n "\$missing" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The criteria are counted, not found: a round with one criterion written twice in place of another
+# carries eight rows and reads as graded on every criterion.
+# Caught by "criteria: a round that leaves out the row of a criterion fails review and names it, an A
+# in every row present is not an A in every criterion" (check-worker.sh).
+mut_WORKER_criteria_counted() {
+  sed -i -e '/^round_missing() {/,/^}/ s@ seen\[trim(k)\] = 1$@ rows++@' \
+    -e '/^round_missing() {/,/^}/ s@if (!(want\[i\] in seen))@if (i > rows)@' "${1%/*}/sdd-worker"
+}
+# The criteria reader no longer stops at the next heading: a criterion row moved below the grade
+# table, into the findings, counts as graded.
+# Caught by "criteria: a round that leaves out the row of a criterion fails review and names it, an A
+# in every row present is not an A in every criterion" (check-worker.sh).
+mut_WORKER_criteria_past_heading() {
+  sed -i '/^round_missing() {/,/^}/ s@^\(    /^#+\[ \\t]/ \){ exit }$@\1{ next }@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -8192,6 +8214,9 @@ CATALOG=(
   WORKER_stale_merge_after_approval
   WORKER_kept_unchecked
   WORKER_once_reads_live
+  WORKER_criteria_unchecked
+  WORKER_criteria_counted
+  WORKER_criteria_past_heading
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

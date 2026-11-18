@@ -257,6 +257,14 @@
 #       loop takes the act from that table (step 2) and goes back to budget after every wait (step
 #       6), and every `setsid` in a code block is `setsid -w`, the run act's launch among them
 #       (achados #14 to #17 of the r5)
+#   R61 the review item requires a row of the grade table for every criterion, not an A in every
+#       row present: the names are REVIEW_CRITERIA, read out of bin/sdd-worker HERE and held equal,
+#       in order, to the criterion cells of the table of templates/review.md; a round with the bold
+#       Overall row alone, with a middle criterion or the last taken out, with a criterion written
+#       twice in place of another, with the first cut to a prefix, or with a row moved above the
+#       heading, below the next one or into a quote fails, naming every criterion it leaves out; the
+#       eight rows each A, a criterion in a code span and a ninth row graded A are ready (achado #1
+#       of the r6)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # and R60 carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -323,6 +331,20 @@
 #   prefix anywhere, and the regex it replaced answer the same. The worlds of a folder named with a
 #   regex character, and of a fixture whose diff leaves the folder, were not built.
 #
+# Declared limits of R61, no probe:
+# - round_missing skips the header and the separator by graded(), as the other two readers of the
+#   table do, and no world tells the skip from its absence: a row graded() skips reads `Criterion`
+#   or a run of dashes as its criterion, never a name of REVIEW_CRITERIA, which this sensor holds
+#   equal to the template's rows, and tbl_names reads neither of those as a row.
+# - round_missing prints nothing, not an empty line, when every criterion has a row: equivalent
+#   through its one caller, whose `$( )` drops the newline.
+# - `missing` is a local of cmd_pr_ready, and one verb runs per process: no world reads it outside.
+# - The comparison of REVIEW_CRITERIA with the template has no world of its own: a template that
+#   gains, loses or renames a row turns red the worlds of this family, whose names come from the
+#   template, and the pr-ready ones besides (a row gained or lost fails the fixture of R23, eight
+#   rows graded A; a row renamed leaves every round without a name the definition requires). It
+#   stays for the name it prints: the definition and the template, side by side.
+#
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
 # sums outside LC_ALL=C answers wrong here. Declared limit: on a machine without the locale that
@@ -331,7 +353,7 @@
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
 # `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `narrow: `, `listed: `,
-# `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `command: ` and
+# `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `criteria: `, `command: ` and
 # `docs: `) prints exactly the assertions the mission plan or the fix increment that opened it
 # names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at
 # the first red, after printing it; the census in check-health.sh holds that clause.
@@ -2513,7 +2535,9 @@ fi
 # `<why \| in one sentence>` by its first piece, `<why \`, which has a letter and no closing
 # `>`: a fill-in the runner refuses read as a sentence, on the bar of a merge with no human. The
 # runner's split is read out of gate_REVIEW in bin/sdd HERE — its escaped_pipe() and the loop that
-# rejoins — and run on each row the probe writes in place of the Security row of the newest round.
+# rejoins — and run on each row the probe writes in place of the Security row of the newest round
+# (above it, the Security row kept, when the row's criterion is not Security: the round keeps a row
+# for every criterion, R61, and is judged by the row the probe wrote).
 # The oracle is what that split leaves, `*` and backticks stripped: a Grade that is not A is
 # refused by its grade, a Rationale the runner's placeholder() calls a fill-in is refused by the
 # rationale, and the rest is ready; pr-ready has to agree on every row. The rows: fill-ins holding
@@ -2534,10 +2558,13 @@ runner_reads() {
     g = f[3]; r = f[4]; gsub(/[*`]/, "", g); gsub(/[*`]/, "", r)
     gsub(/^[ \t]+|[ \t]+$/, "", g); gsub(/^[ \t]+|[ \t]+$/, "", r); print g "\t" r }' <<< "$1"
 }
-# set_line <round> <row> — the Security row of <round> replaced by <row>, as written.
+# set_line <round> <row> — the Security row of <round> replaced by <row>, as written; a row whose
+# criterion is not Security is written above it instead, and the Security row stays.
 set_line() {
-  ROW="$2" awk '/^\| Security \|/ { print ENVIRON["ROW"]; next } { print }' "$1" > "$1.new" && mv "$1.new" "$1"
+  ROW="$2" awk '/^\| Security \|/ { print ENVIRON["ROW"]; if (index(ENVIRON["ROW"], "| Security |") != 1) print; next }
+    { print }' "$1" > "$1.new" && mv "$1.new" "$1"
   grep -qxF "$2" "$1" || got="${got:+$got; }fixture: the row '$2' did not land"
+  grep -q '^| Security |' "$1" || got="${got:+$got; }fixture: the row '$2' left no Security row"
 }
 serve pipe
 export GHFX="$BOX/ghfx/pipe"
@@ -2718,23 +2745,30 @@ fi
 #   open      the separator `|---|---|---`, no closing pipe     ready
 # gate_REVIEW decides by the criterion cell, so it reads the first three and the two header worlds
 # as pr-ready does; critdash and ratdash it skips, and pr-ready is there the stricter of the two.
+# The four rows that name no criterion (lastcell, critdash, ratdash, midhead) are written above the
+# Security row, which stays: the round keeps a row for every criterion (R61), and is refused by the
+# row the world wrote.
 got=""
 R2F="$MD/40-review-r2.md"
 SROW="| Security | A | $RUN_RAT |"; SEPL='|-----------|-------|-----------|'; HEADL='| Criterion | Grade | Rationale |'
 { grep -qxF -- "$SROW" "$R2F" && grep -qxF -- "$SEPL" "$R2F" && grep -qxF -- "$HEADL" "$R2F"; } \
   || got="fixture: r2 lacks its Security row, its separator or its header as the template writes them"
-# swap_line <round> <old> <new> — the first line of <round> that is exactly <old> replaced by <new>.
+# swap_line <round> <old> <new> [above] — the first line of <round> that is exactly <old> replaced by
+# <new>; with `above`, <new> is written above it and <old> stays.
 swap_line() {
-  OLD="$2" NEW="$3" awk '!done && $0 == ENVIRON["OLD"] { print ENVIRON["NEW"]; done = 1; next } { print }' \
+  OLD="$2" NEW="$3" ABOVE="${4:-}" awk '!done && $0 == ENVIRON["OLD"] {
+      print ENVIRON["NEW"]; if (ENVIRON["ABOVE"] != "") print; done = 1; next } { print }' \
     "$1" > "$1.new" && mv "$1.new" "$1"
   grep -qxF -- "$3" "$1" || got="${got:+$got; }fixture: the line '$3' did not land"
+  if [ -n "${4:-}" ] && ! grep -qxF -- "$2" "$1"; then got="${got:+$got; }fixture: the line '$2' did not stay"; fi
 }
-# sep_is <label> <old> <new> <rc> <want> — r2 with <old> swapped for <new>, committed, then pr-ready;
-# appends to got unless it left <rc> and the one line <want>, whole (`ready` is the landed head).
+# sep_is <label> <old> <new> <rc> <want> [above] — r2 with <old> swapped for <new> (or <new> written
+# above it), committed, then pr-ready; appends to got unless it left <rc> and the one line <want>,
+# whole (`ready` is the landed head).
 sep_is() {
   local want="$5"
   ready_reset
-  swap_line "$R2F" "$2" "$3"
+  swap_line "$R2F" "$2" "$3" "${6:-}"
   land sep
   [ "$want" != ready ] || want="ready $HEADNOW"
   PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
@@ -2745,12 +2779,12 @@ gr="not-ready review: $R2F grades"; ge=', and every row must read A'
 sep_is dash "$SROW" '| Security | --- | Not evaluated |' 1 "$gr ---$ge"
 sep_is colon "$SROW" '| Security | :---: | Not evaluated |' 1 "$gr :---:$ge"
 sep_is dashes "$SROW" '| Security | --- | --- |' 1 "$gr ---$ge"
-sep_is lastcell "$SROW" '| --- | --- | Not evaluated |' 1 "$gr ---$ge"
+sep_is lastcell "$SROW" '| --- | --- | Not evaluated |' 1 "$gr ---$ge" above
 sep_is word "$SROW" '| Security | Grade | Not evaluated |' 1 "$gr Grade$ge"
-sep_is critdash "$SROW" '| --- | B | Not evaluated |' 1 "$gr B$ge"
+sep_is critdash "$SROW" '| --- | B | Not evaluated |' 1 "$gr B$ge" above
 sep_is ratdash "$SROW" '| --- | A | --- |' 1 \
-  "not-ready review: $R2F: --- grades A with a placeholder rationale (---) — a grade no sentence supports is a label"
-sep_is midhead "$SROW" '| Criterion | B | Not evaluated |' 1 "$gr B$ge"
+  "not-ready review: $R2F: --- grades A with a placeholder rationale (---) — a grade no sentence supports is a label" above
+sep_is midhead "$SROW" '| Criterion | B | Not evaluated |' 1 "$gr B$ge" above
 sep_is nohead "$HEADL" '| Security | B | Not evaluated |' 1 "$gr B$ge"
 sep_is boldhead "$HEADL" '| **Criterion** | **Grade** | **Rationale** |' 0 ready
 sep_is aligned "$SEPL" '|:---|:---:|---:|' 0 ready
@@ -3621,6 +3655,112 @@ if [ -z "$got" ]; then
 else
   fail 'once: the level, the lots and the ceilings a verb authorizes are the ones whose digest it checked' \
     'plan and an ask with the ceiling lifted after the digest, merge with the level raised after it, edited after signing when asked again; unread with no TMPDIR; the reason budget gives for an unreadable file' "$got"
+fi
+
+# --- R61: a row for every criterion -------------------------------------------------------------
+# An A in every row present is not an A in every criterion (achado #1 of the review r6, the class
+# of the r5's #8 at the level of the row): a round whose `### Overall Grade` table carried the bold
+# Overall row alone, or any subset of the rows of templates/review.md, read as ready. The review
+# item requires a row for each name of REVIEW_CRITERIA, its one definition, read out of
+# bin/sdd-worker HERE and held equal, in order, to the criterion cells of the template's table: a
+# criterion the template gains or loses turns this red, never the verb silent. The comparison has
+# its negative controls — the template with its Security row taken out or a ninth row added, and
+# the program with one name taken out of its definition, each has to differ. Each world rewrites
+# the newest round (r2) with an awk program, witnesses the criterion cells the table is left with,
+# commits it (land) and reads the whole line; a refusal names what the template has and the round
+# lacks, in the template's order, joined by `, `:
+#   good     the eight rows, each A                                 ready
+#   overall  the bold Overall row alone                             the seven others
+#   middle   the Security row taken out                             Security
+#   twice    Security turned into a second Type Safety row          Security: eight rows, seven criteria
+#   last     the Overall row taken out                              Overall
+#   prefix   `Code Quality` in place of `Code Quality (Zen)`        Code Quality (Zen): the name, not a prefix
+#   after    the Security row moved below the next heading          Security: the table ends there
+#   before   the Security row moved above `### Overall Grade`       Security: the table starts there
+#   quoted   the Security row quoted, `> | Security | …`             Security: a row starts with its pipe
+#   code     the Security criterion in a code span                  ready: read as its grade is
+#   extra    a ninth row, Accessibility, graded A                   ready: a row beyond them is held to A only
+got=""
+# tbl_names <file> — the criterion cell of every row of the table under `### Overall Grade`, one per
+# line, its `*` and backticks stripped and its blanks trimmed; the header (`Criterion`) and the
+# separator (dashes) are not rows, and the table ends at the next heading.
+tbl_names() {
+  awk '/^###[ \t]+Overall Grade/ { s = 1; next }
+    !s { next }
+    /^#/ { exit }
+    /^\|/ { split($0, f, "|"); c = f[2]; gsub(/[*`]/, "", c); gsub(/^[ \t]+|[ \t]+$/, "", c)
+            if (c != "Criterion" && c !~ /^:?-+:?$/) print c }' "$1"
+}
+# def_of <program> — the REVIEW_CRITERIA of <program>, the single-quoted lines after its `=`.
+def_of() { sed -n "/^REVIEW_CRITERIA='/,/'\$/p" "$1" | sed -e "1s/^REVIEW_CRITERIA='//" -e "\$s/'\$//"; }
+# joined — stdin's lines joined by `, `, as the verb names them.
+joined() { awk '{ printf "%s%s", (NR > 1 ? ", " : ""), $0 }'; }
+TPL_NAMES="$(tbl_names "$ROOT/templates/review.md")"
+DEF="$(def_of "$WORKER")"
+[ -n "$DEF" ] || got="no REVIEW_CRITERIA read out of $WORKER"
+[ "$DEF" = "$TPL_NAMES" ] || got="${got:+$got; }REVIEW_CRITERIA of bin/sdd-worker ('$(joined <<< "$DEF")') is not the rows of templates/review.md ('$(joined <<< "$TPL_NAMES")')"
+mkdir -p "$BOX/crit"
+grep -vxF '| Security | <A> | <…> |' "$ROOT/templates/review.md" > "$BOX/crit/less.md"
+awk '{ print } /^\| \*\*Overall\*\* \|/ { print "| Accessibility | <A> | <…> |" }' "$ROOT/templates/review.md" > "$BOX/crit/more.md"
+grep -vx 'Security' "$WORKER" > "$BOX/crit/sdd-worker"
+{ [ "$(tbl_names "$BOX/crit/less.md")" = "$(grep -vx Security <<< "$TPL_NAMES")" ] && [ "$(tbl_names "$BOX/crit/less.md")" != "$DEF" ]; } \
+  || got="${got:+$got; }control: the template with no Security row reads '$(tbl_names "$BOX/crit/less.md" | joined)'"
+{ [ "$(tbl_names "$BOX/crit/more.md")" = "$TPL_NAMES"$'\nAccessibility' ] && [ "$(tbl_names "$BOX/crit/more.md")" != "$DEF" ]; } \
+  || got="${got:+$got; }control: the template with a ninth row reads '$(tbl_names "$BOX/crit/more.md" | joined)'"
+{ [ -n "$DEF" ] && [ "$(def_of "$BOX/crit/sdd-worker")" = "$(grep -vx Security <<< "$DEF")" ] \
+    && [ "$(def_of "$BOX/crit/sdd-worker")" != "$TPL_NAMES" ]; } \
+  || got="${got:+$got; }control: the program with no Security in its definition reads '$(def_of "$BOX/crit/sdd-worker" | joined)'"
+ALL="$(joined <<< "$TPL_NAMES")"
+OROW="| **Overall** | **A** | $RUN_RAT |"
+{ grep -qxF -- "$SROW" "$R2F" && grep -qxF -- "$OROW" "$R2F"; } \
+  || got="${got:+$got; }fixture: r2 lacks its Security row or its bold Overall row as the template writes them"
+# crit_is <label> <rc> <left out | ready> <the table's criteria, joined> <awk program> [<line>] — r2
+# rewritten by <awk program> (ENVIRON S is its Security row, O its Overall row, R the rationale of
+# every row), its table witnessed, and <line> too when given (a row the world moved or rewrote, which
+# the table's criteria alone do not show), committed, then pr-ready; appends to got unless it left
+# <rc> and the one line naming <left out> (or `ready` and the landed head), whole.
+crit_is() {
+  local want t
+  ready_reset
+  S="$SROW" O="$OROW" R="$RUN_RAT" awk "$5" "$R2F" > "$R2F.new" && mv "$R2F.new" "$R2F"
+  t="$(tbl_names "$R2F" | joined)"
+  [ "$t" = "$4" ] || got="${got:+$got; }fixture $1: the table reads '$t', not '$4'"
+  if [ -n "${6:-}" ] && ! grep -qxF -- "$6" "$R2F"; then got="${got:+$got; }fixture $1: the line '$6' did not land"; fi
+  land criteria
+  if [ "$3" = ready ]; then want="ready $HEADNOW"
+  else want="not-ready review: $R2F has no row for $3 under ### Overall Grade — every criterion must read A, and a partial review is not a review"
+  fi
+  PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+  { [ "$W_RC" = "$2" ] && [ "$W_OUT" = "$want" ]; } || got="${got:+$got; }$1: rc $W_RC '$W_OUT' (want rc $2 '$want')"
+}
+export GHFX="$BOX/ghfx/criteria"
+crit_is good 0 ready "$ALL" '{ print }'
+crit_is overall 1 "$(grep -vx Overall <<< "$TPL_NAMES" | joined)" Overall \
+  'index($0, " | A | " ENVIRON["R"] " |") { next } { print }'
+crit_is middle 1 Security "$(grep -vx Security <<< "$TPL_NAMES" | joined)" '$0 == ENVIRON["S"] { next } { print }'
+crit_is twice 1 Security "$(sed 's/^Security$/Type Safety/' <<< "$TPL_NAMES" | joined)" \
+  '$0 == ENVIRON["S"] { print "| Type Safety | A | " ENVIRON["R"] " |"; next } { print }'
+crit_is last 1 Overall "$(grep -vx Overall <<< "$TPL_NAMES" | joined)" '$0 == ENVIRON["O"] { next } { print }'
+crit_is prefix 1 'Code Quality (Zen)' "$(sed 's/^Code Quality (Zen)$/Code Quality/' <<< "$TPL_NAMES" | joined)" \
+  '$0 == "| Code Quality (Zen) | A | " ENVIRON["R"] " |" { print "| Code Quality | A | " ENVIRON["R"] " |"; next } { print }'
+crit_is after 1 Security "$(grep -vx Security <<< "$TPL_NAMES" | joined)" \
+  '$0 == ENVIRON["S"] { next } { print } /^## / && done != 1 && seen { print ENVIRON["S"]; done = 1 } /^### Overall Grade/ { seen = 1 }' \
+  "$SROW"
+crit_is before 1 Security "$(grep -vx Security <<< "$TPL_NAMES" | joined)" \
+  '$0 == ENVIRON["S"] { next } /^### Overall Grade/ { print ENVIRON["S"] } { print }' "$SROW"
+crit_is quoted 1 Security "$(grep -vx Security <<< "$TPL_NAMES" | joined)" \
+  '$0 == ENVIRON["S"] { print "> " ENVIRON["S"]; next } { print }' "> $SROW"
+crit_is code 0 ready "$ALL" '$0 == ENVIRON["S"] { print "| `Security` | A | " ENVIRON["R"] " |"; next } { print }' \
+  "| \`Security\` | A | $RUN_RAT |"
+crit_is extra 0 ready "$ALL, Accessibility" '{ print } $0 == ENVIRON["O"] { print "| Accessibility | A | " ENVIRON["R"] " |" }'
+grep -qx '## .*' <<< "$(sed -n '/^### Overall Grade/,$p' "$ROOT/templates/review.md")" \
+  || got="${got:+$got; }fixture: templates/review.md has no heading after its grade table, where the after world moves a row"
+ready_reset
+if [ -z "$got" ]; then
+  pass 'criteria: a round that leaves out the row of a criterion fails review and names it, an A in every row present is not an A in every criterion'
+else
+  fail 'criteria: a round that leaves out the row of a criterion fails review and names it, an A in every row present is not an A in every criterion' \
+    'REVIEW_CRITERIA equal to the rows of templates/review.md; not-ready naming the criteria left out for each world that leaves one out, ready for the eight rows, a code span and a ninth row' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

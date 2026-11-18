@@ -868,6 +868,23 @@ function graded(f, n,   i, last, sep, c) {
 }
 '
 
+# REVIEW_CRITERIA — the rows of the `### Overall Grade` table of templates/review.md, one per line
+# and in its order: the seven criteria of the codereview skill and Overall, each as its criterion
+# cell reads once its `*` and backticks are removed and its blanks trimmed (the template writes the
+# Overall row in bold). The one definition of what the review item requires a row of: an A in every
+# row present is not an A in every criterion, and a round with the Overall row alone was ready
+# (achado #1 of the mission's review r6). tests/check-worker.sh reads it out of this file and holds
+# it equal to the template's rows (its `criteria:` family), so a criterion the template gains or
+# loses turns the sensor red, never this verb silent.
+REVIEW_CRITERIA='Code Quality (Zen)
+Type Safety
+Error Handling
+Security
+Performance
+Test Coverage
+Documentation
+Overall'
+
 # round_grades <round> — the Grade cell of every row of the table under `### Overall Grade`, one per
 # line, read as the runner's gate_REVIEW reads it: the third column of the row as cells() splits it,
 # a row indented or not, its bold and code-span marks removed; the header row and the separator are
@@ -937,6 +954,29 @@ round_unjustified() {
     }' "$1"
 }
 
+# round_missing <round> — the names of REVIEW_CRITERIA that no row under `### Overall Grade` carries,
+# in that order, joined by `, `: a row carries a name when its criterion cell, as cells() splits it,
+# its `*` and backticks removed and its blanks trimmed, is that name exactly. A name is found, never
+# counted, so a criterion written twice stands in for none left out. The header and the separator
+# are skipped by their shape (graded) and the read ends at the next heading, like round_grades.
+# Prints nothing when every criterion has a row.
+round_missing() {
+  SDD_REVIEW_CRITERIA="$REVIEW_CRITERIA" awk "$GRADE_ROW_AWK"'
+    /^###[ \t]+Overall Grade/ { sec = 1; next }
+    !sec { next }
+    /^#+[ \t]/ { exit }
+    /^[ \t]*\|/ {
+      n = cells($0, c)
+      if (!graded(c, n)) next
+      k = c[2]; gsub(/[*`]/, "", k); seen[trim(k)] = 1
+    }
+    END {
+      m = split(ENVIRON["SDD_REVIEW_CRITERIA"], want, "\n")
+      for (i = 1; i <= m; i++) if (!(want[i] in seen)) out = out (out == "" ? "" : ", ") want[i]
+      if (out != "") print out
+    }' "$1"
+}
+
 # gh_at <root> <args...> — gh run at <root>, the checkout gh infers the repository from; its stdout
 # PUBLISHED in GH_OUT and its rc in GH_RC. Returns 1 when gh failed. Called, never substituted.
 gh_at() {
@@ -958,10 +998,12 @@ gh_unread() {
 # first that fails, in this order:
 #   review     the newest 40-review-r<N>.md of the mission folder (by number) grades A in every row
 #              of `### Overall Grade` (its header and its separator known by the shape of the line,
-#              never by the grade), with no Rationale and no gate: that is a fill-in by the rule of
-#              gate_REVIEW (placeholder); it names `reviewed_head: <sha>`, an ancestor of the head
-#              (the head itself among them), and every commit after that sha touches the mission
-#              folder alone — read commit by commit and against each parent, so a change undone
+#              never by the grade), and has a row for every criterion of REVIEW_CRITERIA (an A in
+#              every row present is not an A in every criterion), with no Rationale and no gate:
+#              that is a fill-in by the rule of gate_REVIEW (placeholder); it names
+#              `reviewed_head: <sha>`, an ancestor of the head (the head itself among them), and
+#              every commit after that sha touches the mission folder alone — read commit by
+#              commit and against each parent, so a change undone
 #              later and a merge's resolution count, and renames not followed, so a move into the
 #              folder is a change outside it; and the mission folder holds nothing git has not
 #              committed (modified, staged, untracked or ignored), so with the head item the round
@@ -985,7 +1027,7 @@ gh_unread() {
 # pull request with more is not ready.
 cmd_pr_ready() {
   [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
-  local dir="${1%/}" pr="$2" root view head state mergeable round rh g unjust gv prefix changed p repo verdict
+  local dir="${1%/}" pr="$2" root view head state mergeable round rh g unjust missing gv prefix changed p repo verdict
   local anc commits c dirty
   local threads open total seen unseen here
   local -a grades=()
@@ -1022,6 +1064,12 @@ cmd_pr_ready() {
   if [ -n "$unjust" ]; then
     printf 'not-ready review: %s: %s grades A with a placeholder rationale (%s) — a grade no sentence supports is a label\n' \
       "$round" "${unjust%%$'\t'*}" "${unjust#*$'\t'}"
+    return 1
+  fi
+  missing="$(round_missing "$round")"
+  if [ -n "$missing" ]; then
+    printf 'not-ready review: %s has no row for %s under ### Overall Grade — every criterion must read A, and a partial review is not a review\n' \
+      "$round" "$missing"
     return 1
   fi
   # The gate: by the same rule, its surrounding quotes stripped as the runner's frontmatter reader

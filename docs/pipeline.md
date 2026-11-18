@@ -1984,8 +1984,13 @@ naming the first that fails:
    under `### Overall Grade`, the row split as `gate_REVIEW` splits it (a `\|` is a pipe of its
    cell), is exactly `A`, the header and the separator known by the shape of the line (the
    separator's every cell `:?-+:?`, the header the first row, its criterion `Criterion`), never by
-   the grade; no `Rationale`
-   cell, and not the `gate:` of the frontmatter (absent included), is a fill-in by the rule
+   the grade; the table has a row for each of the eight names of the table of
+   `templates/review.md` (the seven criteria and `Overall`: `REVIEW_CRITERIA` in the worker, held
+   equal to the template by `tests/check-worker.sh`), found by the criterion cell with its `*` and
+   backticks removed, never counted, so a round that leaves one out is not ready and the reason
+   names it: an `A` in every row present is not an `A` in every criterion, and a row beyond the
+   eight is held to `A` like the rest; no `Rationale` cell, and not the `gate:` of the
+   frontmatter (absent included), is a fill-in by the rule
    `gate_REVIEW` applies (`placeholder`, copied into the worker and held equal to the runner's by
    `tests/check-worker.sh`); the reviewed head is an ancestor of the head (the head itself
    included); and every commit of `<reviewed_head>..<head>`, each against each parent, touches only
