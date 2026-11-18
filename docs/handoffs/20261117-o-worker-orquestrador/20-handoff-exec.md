@@ -2,9 +2,9 @@
 missao: 20261117-o-worker-orquestrador
 fase: EXEC
 status: done
-sessao: 9ae88e4f-4702-4394-b142-28fed9c8ff08
-data: 2026-11-18 03:37
-gate: "tests/run-all.sh na árvore do 8add018 → suite green, rc 0, 2132 linhas ok, 0 FAIL; anchors: all 839 mutants still apply and leave valid code; tests/check-worker.sh → worker verbs: 36 probe(s), as onze famílias 1/3/6/4/3/5/7/3/1/1/2 (usage, delegate, level, allows, budget, next, pr-ready, command, docs, seal, legible); grep -c '^mut_WORKER_' tests/check-mutation.sh → 26; tests/check-todo.sh --anchors TODO.md → 83 measured, 0 off target; checkpoint 13 de 13 done (I1–I11, F1, F2)"
+sessao: 65ee2253-4d03-4dac-ae08-2ba6543eaef6
+data: 2026-11-18 06:10
+gate: "tests/run-all.sh na árvore do 6bc1755 → suite green, rc 0, 2136 linhas ok, 0 FAIL, 8 min 37 s; anchors: all 846 mutants still apply and leave valid code; tests/check-worker.sh → worker verbs: 40 probe(s), as quinze famílias 1/3/6/4/3/5/7/3/1/1/2/1/1/1/1 (usage, delegate, level, allows, budget, next, pr-ready, command, docs, seal, legible, cap, rationale, lot, shown); grep -c '^mut_WORKER_' tests/check-mutation.sh → 33; tests/check-todo.sh --anchors TODO.md → 83 measured, 0 off target; checkpoint 15 de 15 done (I1–I11, F1, F2, R1, R2)"
 ---
 
 # Handoff — EXEC — O worker orquestrador
@@ -14,18 +14,18 @@ gate: "tests/run-all.sh na árvore do 8add018 → suite green, rc 0, 2132 linhas
 
 ## TL;DR
 
-Os onze incrementos e os dois consertos do ciclo 1 da QA estão feitos, um commit cada, e a suíte
-está verde no `8add018`. O `F1` pôs o teto de cada lote sob a assinatura (Q1); o `F2` fez do id da
-campanha o nome do diretório e do `expires:` um instante que existe (Q2, Q3). O sensor
-`tests/check-worker.sh` tem 36 asserções em onze famílias e 26 mutantes `mut_WORKER_*`. A QA volta
-para refazer J3, J5 e J6 numa cópia em `mktemp -d`, nunca assinando a delegação real.
+Os onze incrementos, os dois consertos da QA (`F1`, `F2`) e os dois da r1 da REVIEW (`R1`, `R2`)
+estão feitos, um commit cada, e a suíte está verde no `6bc1755`. O `R1` fez o `budget` parar quando o
+`.sdd/config.sh` do alvo vence o teto por missão assinado; o `R2` fez o `pr-ready` recusar
+justificativa e `gate:` de preenchimento, o `allows` exigir `--lot` e o `delegate` assinar só o que
+mostrou. O sensor tem 40 asserções em quinze famílias e 33 mutantes `mut_WORKER_*`. Próxima: a r2.
 
 ## Estado do repo
 
 - **Branch:** `feat/o-worker-orquestrador`, só local, sem upstream (nada foi empurrado)
-- **Último commit de código:** `8add018` `fix(worker): o id da campanha é o nome do diretório, e o prazo é um instante que existe`; este handoff e o checkpoint vêm num commit logo depois
+- **Último commit de código:** `6bc1755` `fix(worker): a justificativa e o gate: da rodada, o lote do ato e os termos que o delegate mostrou`; este handoff e o checkpoint vêm num commit logo depois
 - **Working tree:** limpo depois do commit do handoff
-- **Suíte:** `tests/run-all.sh` → verde, rc 0, 2132 linhas `ok`, 0 `FAIL`, 839 mutantes aplicam (`--anchors`)
+- **Suíte:** `tests/run-all.sh` → verde, rc 0, 2136 linhas `ok`, 0 `FAIL`, 846 mutantes aplicam (`--anchors`)
 - **E2E:** não há `E2E_CMD`: o kit é bash e markdown, sem interface
 
 ## O que foi feito
@@ -47,13 +47,18 @@ para refazer J3, J5 e J6 numa cópia em `mktemp -d`, nunca assinando a delegaç�
 - `42d1a56` — F1 (Q1): o `delegation_terms` é a única definição do que a assinatura concede, as seis chaves e uma linha `ceiling <lote>: <teto>` por linha da tabela de lotes; o `delegate` mostra exatamente o que assina, e subir, baixar, pôr ou tirar o teto de um lote depois de assinar responde `assisted — edited after signing`. Família nova `seal: ` (1 linha), dois mutantes `mut_WORKER_seal_*`. Re-walk da J5 verde numa cópia
 - `8add018` — F2 (Q2, Q3): o `id_is_dir` é a regra única do id, o `campaign:` de um arquivo igual ao nome do diretório resolvido (`readlink -f`: `.`, barra no fim e symlink são o diretório). O `delegation_legible` a aplica à `delegation.md` e ao `campaign.md` (o que falta é ilegível), então `level`/`allows` → `assisted`, `budget` → `no ceiling`, `delegate` recusa; o `next` a aplica ao `campaign.md` e para com rc 1 nomeando os dois valores (o ramo do `campaign:` vazio saiu, a regra o cobre). O `expires:` tem de voltar do `date -d` como foi. Família nova `legible: ` (2 linhas), cinco mutantes `mut_WORKER_legible_*`, o fixture do R16 com cada delegação em `<pai>/b-cap`, e o R4 passando a cobrar o motivo da regex. Re-walk da J6 verde numa cópia
 
+### Rodada r1 da REVIEW (`R1`, `R2`, dos achados #1 a #4 do `40-review-r1.md`)
+
+- `328087f` — R1 (#1, HIGH): o `budget` lê o `.sdd/config.sh` do repo da campanha como o runner o carrega, com o teto assinado no ambiente (`config_key` ganhou o terceiro argumento), e sai rc 1 com `no mission cap — <arquivo> sets BUDGET_MISSION_USD=<valor>, …` quando o valor que o `sdd run` aplicaria está acima do teto assinado, em zero, vazio ou fora de número; o starter que o `sdd install` escreve (150) cai aqui. Sem editar `bin/sdd`. Família nova `cap: ` (1 linha), três mutantes `mut_WORKER_cap_*`
+- `6bc1755` — R2 (#2, #3, #4): o item `review` do `pr-ready` recusa a linha graduada A cuja justificativa é preenchimento, e o `gate:` de preenchimento ou ausente, pela regra do `gate_REVIEW` (cópia do `PLACEHOLDER_AWK`, comparada com a do runner pelo probe); o `allows` sem `--lot` é rc 2, nomeando a falta; o `delegate` relê os termos depois do `y` e não assina o que mudou com a pergunta aberta, e o digest gravado é o dos termos mostrados. Famílias novas `rationale: `, `lot: ` e `shown: ` (1 linha cada), quatro mutantes (`rationale_*` 2, `lot_optional`, `shown_terms_unchecked`)
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
 | `bin/sdd-worker` | o programa: `delegate`, `level`, `allows`, `budget`, `next`, `pr-ready` |
-| `tests/check-worker.sh` | o sensor, 36 asserções em onze famílias (`seal: ` do F1 e `legible: ` do F2 inclusas), com controle negativo nas famílias de prosa |
-| `tests/check-mutation.sh` | 26 mutantes `mut_WORKER_*` no `CATALOG` |
+| `tests/check-worker.sh` | o sensor, 40 asserções em quinze famílias (`seal: ` e `legible: ` da QA, `cap: `, `rationale: `, `lot: ` e `shown: ` da REVIEW inclusas), com controle negativo nas famílias de prosa |
+| `tests/check-mutation.sh` | 33 mutantes `mut_WORKER_*` no `CATALOG` |
 | `tests/fixtures/codex-review-state.txt` | o comentário de máquina do Codex, copiado do PR 409 (proveniência no sensor) |
 | `commands/sdd-worker.md` | o comando da sessão orquestradora |
 | `templates/campaign.md`, `templates/delegation.md` | os dois contratos da campanha |
@@ -63,26 +68,26 @@ para refazer J3, J5 e J6 numa cópia em `mktemp -d`, nunca assinando a delegaç�
 
 ## Boot da próxima fase
 
-**QA que volta depois do ciclo 1 (`F1`, `F2`).** Refaça, numa cópia `mktemp -d` da campanha real
-(o molde está no topo da J5 do `30-handoff-qa.md`), a J5, a J6 e a J3 inteira, e reescreva o
-`30-handoff-qa.md` com o que o reteste viu. O que mudou e é visível na CLI:
+**REVIEW r2, depois de `R1` e `R2`.** Revise o diff `d5eee41..6bc1755` (os dois consertos e os
+dois commits de checkpoint), reproduzindo numa cópia `mktemp -d` o que cada achado da r1 dizia. O que
+mudou e é visível na CLI:
 
-- **`delegate`** imprime, depois das seis chaves, uma linha `ceiling <lote>: <teto>` por linha da
-  tabela de lotes, e o digest gravado as cobre: o `signed:` de uma delegação assinada antes do F1
-  deixa de bater (nenhuma real estava assinada). É por isso que a J3 volta inteira.
-- **O id é o nome do diretório.** Um `campaign:` da `delegation.md` ou do `campaign.md` que não é o
-  nome do diretório, ou um `campaign.md` ausente, responde `level assisted — illegible: campaign:
-  '<valor>' in <arquivo> is not the directory's name '<nome>'` (ou `<arquivo> does not exist`); o
-  `allows` pede, o `budget` diz `no ceiling`, rc 1, o `delegate` recusa com rc 1. Uma campanha
-  renomeada ou copiada com outro nome cai aqui até os dois arquivos dizerem o nome novo.
-- **O `next`** para com rc 1 sobre esse mesmo motivo, e também sobre o `campaign:` vazio, cuja
-  mensagem mudou: era `illegible: campaign: is empty in …`, agora é a da regra de identidade.
-- **O `expires:`** tem de ser um instante que o relógio tem: `2026-11-18 99:99` e `2026-11-31 10:00`
-  respondem `illegible: expires '<valor>' is no instant on the clock`, e `2096-02-29 12:00` assina.
+- **`budget`** (R1) sai rc 1, `no mission cap — <arquivo> sets BUDGET_MISSION_USD=<valor>, …`,
+  quando o `.sdd/config.sh` do repo da campanha fixa a chave acima do teto assinado, em zero, vazia
+  ou fora de número; igual ou abaixo, ou na forma `${BUDGET_MISSION_USD:-…}`, vale o assinado.
+- **`pr-ready`** (R2, #2) responde `not-ready review: <rodada>: <critério> grades A with a
+  placeholder rationale (<texto>) — …` e `not-ready review: the gate: of <rodada> is a placeholder or
+  absent ('<valor>') — …`. A rodada que a sessão do worker escreve precisa de uma frase por nota e
+  da evidência no `gate:`; o ato `review` do `commands/sdd-worker.md` agora pede isso ao subagente.
+- **`allows`** (R2, #3) sem `--lot` é rc 2, `sdd-worker: allows needs --lot L<n>: …` no stderr, e o
+  uso passou a dizer `allows <campaign-dir> <act> --lot L<n>`. Quem chamava sem o lote recebe uso.
+- **`delegate`** (R2, #4) responde `not signed — the delegation changed after it was shown, and
+  nothing was written: run delegate again`, rc 1, quando o arquivo muda com a pergunta aberta.
 
-Na J6 do `30-handoff-qa.md`, o passo do Q3 precisa do `campaign:` do `campaign.md` de volta ao id
-certo antes de trocar o `expires:`: com o placeholder ainda lá, a recusa é a da identidade, que
-vem antes do instante. O re-walk desta sessão fez isso e viu cada "esperado" da tabela.
+As escolhas, os limites e cada sabotagem estão nas notas do `R1` e do `R2` do `checkpoint-notas.md`.
+A prosa da ADR 0022 (§3, "a digest of the other fields"; §8, "reaches the runner as
+BUDGET_MISSION_USD"; linhas 94 e 150, "every criterion A", "on the grade alone") não foi mexida:
+ficou menos precisa, não falsa, e é da DOCS.
 
 **O que vale desde a primeira QA, num repo sem interface.** O que é visível para quem usa o kit:
 
@@ -141,12 +146,14 @@ worktree ligado, sem `KIT-TOUCHED`, `hat-crossed` nem escalada no `pipeline.log`
 ## Riscos e não-feitos
 
 - **A campanha não tem sensor durável**, por desenho (`01-plano.md`, I11): o Check foi efêmero. Os títulos foram copiados de `5221477:TODO.md`, e nada compara a campanha com o `TODO.md` depois disso: um item retitulado ou um item novo não aparece nela.
-- **Os 26 mutantes foram provados um a um com `--only`**, que é dica e não carimbo; o catálogo inteiro e o carimbo são do `./bin/sdd health`, que não rodou.
+- **Os 33 mutantes foram provados um a um com `--only`**, que é dica e não carimbo; o catálogo inteiro e o carimbo são do `./bin/sdd health`, que não rodou.
 - **Dois limites que o F2 declara, medidos na sabotagem:** a comparação do que o `date -d` devolve com o que foi escrito não tem mundo no GNU date 9 (ele recusa 24:00, 23:60 e o buraco do horário de verão, e devolve igual todo o resto), e fica para um `date` que role 24:00 para o dia seguinte, com o limite escrito no comentário do `delegation_legible`; e o `${1%/}` do `delegation_legible` só tira a barra dupla do caminho impresso no motivo. Um `date` sem `-d` (o do BSD) faria toda delegação ilegível, isto é, `assisted`: o lado seguro, num kit que já exige Linux para a coordenação.
 - **A ADR 0022 §3** diz "a digest of the other fields", e desde o F1 o digest cobre também os tetos dos lotes. O texto ficou menos preciso, não falso; mexer numa ADR aceita fica para a REVIEW ou a DOCS (nota do F1).
 - **Os limites declarados na ADR 0022 continuam valendo:** a assinatura prova uma resposta no stdin, não uma pessoa; os tetos leem o ledger desta máquina, e o gasto da sessão orquestradora e dos subagentes fica fora deles; as missões de uma campanha são casadas pelo id, não pelo repositório.
 - **O `pr-ready` exige `reviewed_head:`**, que as rodadas da fase REVIEW do `sdd run` não escrevem. Depois de uma corrida ele responde `not-ready review: the newest round names no head` até a rodada da sessão do worker. É desenho (M5 do caderno), não defeito.
 - **O `next` não deriva o `postmerge`**, e nenhum verbo age: quem roda, abre PR e mergeia é a sessão.
+- **Três limites que o R2 declara:** o `gate:` ausente é recusado pelo `pr-ready` (o `gate_REVIEW` o deixa passar, para as rodadas anteriores à chave; a do worker nasce do template); um `\|` dentro da justificativa corta a célula no `round_unjustified`, onde o `gate_REVIEW` a reemenda, então um pedaço que é palavra de preenchimento (`TODO\|…`) recusa uma frase real — o lado fechado, escrito no comentário; e o `allows` sem `--lot` deixou de responder, uma mudança de uso para quem o chamava assim (nenhum chamador do kit: o comando já passava o lote em todo ato).
+- **A regra do preenchimento mora em dois programas** (`bin/sdd` e `bin/sdd-worker`). Quem as segura iguais é o probe `rationale: `, que lê a do runner e compara os veredictos; uma mudança numa só deixa o sensor vermelho.
 - **A catraca não se moveu** (`todo-findings 83`): nenhum item entrou ou saiu do `TODO.md`.
 
 ## Achados fora de escopo
