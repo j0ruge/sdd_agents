@@ -116,6 +116,15 @@
 #       `lots: all`, after signing answers assisted — edited after signing, for the delegation and for
 #       that lot, so approve and merge are asked there; a lot's title and count rewritten and an item
 #       struck change nothing; the delegate shows each ceiling it signs, `ceiling <lot>: <ceiling>`
+#   R35 the campaign's id is its directory's name, in both files: a campaign signed and then moved
+#       to a directory of another name, a campaign.md or a delegation turned to another id after
+#       signing, and a delegation left with no campaign.md are illegible — level and allows answer
+#       assisted, budget
+#       no ceiling, delegate signs nothing — and next stops on the first two and on the template's
+#       placeholder id, naming both values; `.`, a trailing slash and a symlink are the directory
+#   R36 an expires: the clock does not have — minute 99, the 31st of November, the 29th of February
+#       of a common year — is illegible: level answers assisted for it and delegate refuses it
+#       before the question; the 29th of February of a leap year signs
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -128,7 +137,7 @@
 # rule goes unmeasured, and the sensor says nothing about it.
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
-# verbs, `seal: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the
+# verbs, `seal: `, `legible: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the
 # fix increment that opened it names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
 # the census in check-health.sh holds that clause.
 #
@@ -146,7 +155,7 @@ unset SDD_WORKER_NOW ON_ESCALATION_CMD
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
-PROBE_FLOOR=34
+PROBE_FLOOR=36
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -188,17 +197,19 @@ for r in "$NOPAGER" "$NOCONF"; do mkdir -p "$r/docs/campaigns"; git init -q -b m
 mkdir -p "$NOPAGER/.sdd"
 printf 'HANDOFF_DIR="docs/handoffs"\nON_ESCALATION_CMD=""\n' > "$NOPAGER/.sdd/config.sh"
 
-# campaign <id> <level> <expires> <mission cap> <campaign cap> — a campaign directory made from the
-# kit's own templates, every placeholder of the delegation's frontmatter replaced by a real value,
-# `lots: all`, and `signed:` left as the template has it (empty); prints its path. A cap given as `-`
-# deletes that key's line: a missing ceiling. Only the frontmatter (line 2 to the closing ---) is
-# edited, the way the verbs read it.
+# campaign <path> <level> <expires> <mission cap> <campaign cap> — a campaign directory,
+# docs/campaigns/<path> of the fixture repo, made from the kit's own templates, every placeholder of
+# the delegation's frontmatter replaced by a real value, `lots: all`, and `signed:` left as the
+# template has it (empty); prints its path. The id written in both files is the last segment of
+# <path>, the directory's name, as the contract says: two directories of one campaign are
+# `<a>/<id>` and `<b>/<id>`. A cap given as `-` deletes that key's line: a missing ceiling. Only the
+# frontmatter (line 2 to the closing ---) is edited, the way the verbs read it.
 campaign() {
-  local d="$REPO/docs/campaigns/$1"
+  local d="$REPO/docs/campaigns/$1" id="${1##*/}"
   mkdir -p "$d"
-  sed "2,/^---\$/ s@^campaign: .*@campaign: $1@" "$ROOT/templates/campaign.md" > "$d/campaign.md"
+  sed "2,/^---\$/ s@^campaign: .*@campaign: $id@" "$ROOT/templates/campaign.md" > "$d/campaign.md"
   sed "2,/^---\$/ {
-         s@^campaign: .*@campaign: $1@
+         s@^campaign: .*@campaign: $id@
          s@^level: .*@level: $2@
          s@^lots: .*@lots: all@
          s@^expires: .*@expires: $3@
@@ -326,6 +337,8 @@ for w in 'c-no|pr|2099-12-31 23:59|25|200|n' 'c-expired|pr|2020-01-01 00:00|25|2
   case "$id" in
     c-no) refused "$id" 0 'the answer was not y' ;;
     c-expired) refused "$id" 1 'expired' ;;
+    # The clock (R36) refuses `next week` too, so only the pattern's own reason tells it apart.
+    c-badinstant) refused "$id" 1 "illegible: expires 'next week' is not YYYY-MM-DD HH:MM" ;;
     *) refused "$id" 1 'illegible' ;;
   esac
   [ "$id" = c-no ] || ! grep -qF 'Sign this delegation?' <<< "$W_ERR" \
@@ -830,33 +843,32 @@ fi
 # --- R16: at the ceiling or above it ------------------------------------------------------------
 # Four delegations of one campaign, b-cap, whose two missions spent 8.50: a ceiling of 8.5 (at it)
 # and of 8 (above it) leave rc 1, of 8.51 (the boundary) and of 10 (which a comparison of text puts
-# below 8.5) leave rc 0. The answers it cannot have ride along, each over a directory that answers
-# rc 0 with the fixture's ledger, so the rc 1 is the break's: no delegation, a delegation with no
-# campaign ceiling, the same campaign copied outside any git checkout, and a ledger that is a
-# directory.
+# below 8.5) leave rc 0. Each lives in a directory named b-cap, under a parent of its own, since
+# the id is the directory's name (R35). The answers it cannot have ride along, each over a
+# directory that answers rc 0 with the fixture's ledger, so the rc 1 is the break's: no delegation,
+# a delegation with no campaign ceiling, the same campaign copied outside any git checkout, and a
+# ledger that is a directory.
 got=""
 mission "$REPO" "$H" 20990111-b-cap-1 b-cap
 mission "$REPO" "$H" 20990112-b-cap-2 b-cap
 { spent 20990111-b-cap-1 session 5.25; spent 20990112-b-cap-2 close 3.25; } >> "$BOX/state/autonomy-log.jsonl"
 for w in 'b-at|8.5|1|8.50' 'b-above|8|1|8.00' 'b-edge|8.51|0|8.51' 'b-below|10|0|10.00'; do
   IFS='|' read -r id cap rc shown <<< "$w"
-  d="$(campaign "$id" pr "$FAR" 25 "$cap")"
-  sed -i '2,/^---$/ s@^campaign: .*@campaign: b-cap@' "$d/delegation.md"
+  d="$(campaign "$id/b-cap" pr "$FAR" 25 "$cap")"
   budget_is "$id" "$rc" "campaign US\$ 8.50 of $shown — 2 mission(s); mission cap US\$ 25.00" "$d"
 done
 mkdir -p "$REPO/docs/campaigns/b-absent"
 budget_is 'no delegation' 1 'no ceiling — no delegation' "$REPO/docs/campaigns/b-absent"
-d="$(campaign b-nocap pr "$FAR" 25 -)"
-sed -i '2,/^---$/ s@^campaign: .*@campaign: b-cap@' "$d/delegation.md"
+d="$(campaign b-nocap/b-cap pr "$FAR" 25 -)"
 budget_is 'no campaign ceiling' 1 'no ceiling — illegible: budget_campaign_usd' "$d"
 mkdir -p "$BOX/loose"
-cp -a "$REPO/docs/campaigns/b-below" "$BOX/loose/"
+cp -a "$REPO/docs/campaigns/b-below/b-cap" "$BOX/loose/"
 git -C "$BOX/loose" rev-parse --show-toplevel > /dev/null 2>&1 \
   && got="${got:+$got; }fixture: $BOX/loose is inside a git checkout"
-budget_is 'outside a checkout' 1 'no spend — ' "$BOX/loose/b-below"
+budget_is 'outside a checkout' 1 'no spend — ' "$BOX/loose/b-cap"
 mkdir -p "$BOX/state-dir/autonomy-log.jsonl"
 SDD_STATE_DIR="$BOX/state-dir" budget_is 'a ledger that does not read' 1 'no spend — ' \
-  "$REPO/docs/campaigns/b-below"
+  "$REPO/docs/campaigns/b-below/b-cap"
 if [ -z "$got" ]; then
   pass 'budget: at the ceiling or above it the verb leaves rc 1'
 else
@@ -1692,6 +1704,97 @@ if [ -z "$got" ]; then
 else
   fail 'docs: pipeline.md, README.md, schema.md and CONTEXT.md name the worker, its verbs and its five levels' \
     'each document naming what it owes, and each sabotaged copy naming what it lost' "$got"
+fi
+
+# --- R35: the campaign's id is its directory's name ---------------------------------------------
+# The id is written three times (the directory, campaign.md, delegation.md), and neither the digest
+# nor any other rule reads the directory's name or the campaign: of campaign.md, so each world is
+# first a full delegation the program signed and that answers full: the assisted, the no ceiling,
+# the refusal and the stop that follow are this rule's and nothing else's. g-moved is signed and
+# its directory renamed g-renamed, both files still writing g-moved; the campaign.md of g-crossed
+# turns to another id after signing (the J6 of the mission's QA: budget summed the missions of one
+# id while next walked the queue of another); the delegation of g-deleg turns to another id, its
+# campaign.md still right — the digest breaks there, but budget reads the ceiling of an unsigned
+# delegation too, and summed the other id's missions; g-lone loses its campaign.md, which a reader
+# of the delegation alone never misses. Each answers level and allows with assisted — illegible
+# (never the digest's edited after signing) and budget with no ceiling, naming both values (g-lone:
+# the file it lacks), and delegate refuses the renamed one before the question. next stops on the first two and on the template's campaign.md copied as it
+# is, whose placeholder a reader of the frontmatter alone takes for an id, and plans L1 for.
+# The controls, over g-named: `.` from inside it, a trailing slash and a symlink of another name are
+# the directory, and answer full (level) and plan L1 (next) — a rule that read the argument as
+# written goes red there.
+got=""
+C="$REPO/docs/campaigns"
+for id in g-moved g-crossed g-deleg g-lone g-named; do
+  d="$(campaign "$id" full "$FAR" 25 200)"
+  sign "$d"
+  level_is "$id before" "level full — signed until $FAR" "$d"
+done
+mv "$C/g-moved" "$C/g-renamed"
+sed -i '2,/^---$/ s@^campaign: .*@campaign: g-other@' "$C/g-crossed/campaign.md" "$C/g-deleg/delegation.md"
+rm "$C/g-lone/campaign.md"
+ln -s g-named "$C/g-alias"
+mkdir -p "$C/g-template"
+cp "$ROOT/templates/campaign.md" "$C/g-template/"
+for w in "g-renamed|campaign: 'g-moved' in $C/g-renamed/delegation.md is not the directory's name 'g-renamed'" \
+         "g-crossed|campaign: 'g-other' in $C/g-crossed/campaign.md is not the directory's name 'g-crossed'" \
+         "g-deleg|campaign: 'g-other' in $C/g-deleg/delegation.md is not the directory's name 'g-deleg'" \
+         "g-lone|$C/g-lone/campaign.md does not exist"; do
+  IFS='|' read -r id why <<< "$w"
+  level_is "$id" "level assisted — illegible: $why" "$C/$id"
+  allows_is "$id" 1 "ask approve needs full, effective assisted — illegible: $why" "$C/$id" approve
+  budget_is "$id" 1 "no ceiling — illegible: $why" "$C/$id"
+done
+cp "$C/g-renamed/delegation.md" "$BOX/g-renamed.before"
+answer $'y\n'
+worker_from "$BOX/in" delegate "$C/g-renamed"
+refused g-renamed 1 "illegible: campaign: 'g-moved' in "
+! grep -qF 'Sign this delegation?' <<< "$W_ERR" || got="${got:+$got; }g-renamed: the question was asked"
+next_is g-renamed 1 \
+  "stop - - — illegible: campaign: 'g-moved' in $C/g-renamed/campaign.md is not the directory's name 'g-renamed'" \
+  '' "$C/g-renamed"
+next_is g-crossed 1 \
+  "stop - - — illegible: campaign: 'g-other' in $C/g-crossed/campaign.md is not the directory's name 'g-crossed'" \
+  '' "$C/g-crossed"
+next_is 'the template' 1 "stop - - — illegible: campaign: '<YYYYMMDD>-" '' "$C/g-template"
+W_CWD="$C/g-named" level_is dot "level full — signed until $FAR" .
+level_is 'trailing slash' "level full — signed until $FAR" "$C/g-named/"
+level_is symlink "level full — signed until $FAR" "$C/g-alias"
+W_CWD="$C/g-named" next_is dot 0 'plan L1 - — ' '' .
+if [ -z "$got" ]; then
+  pass "legible: a campaign: that is not its directory's name, in either file, is illegible to every verb and stops next"
+else
+  fail "legible: a campaign: that is not its directory's name, in either file, is illegible to every verb and stops next" \
+    'assisted, no ceiling, a refusal and a stop naming both values for each break; full and plan L1 for each control' "$got"
+fi
+
+# --- R36: an instant the clock has --------------------------------------------------------------
+# Three instants of the right shape that the clock does not have: minute 99, the 31st of November
+# and the 29th of February of 2099, a common year. Each is far ahead, so without this rule nothing
+# else refuses it — the comparison by digits reads it as not expired, level answers unsigned and
+# delegate asks and signs. Each answers level with assisted — illegible, and delegate refuses it
+# before the question, the file unchanged. The control is the 29th of February of 2096, a leap year:
+# it signs, and level answers full until it — a rule that refused every 29th of February goes red
+# there.
+got=""
+for w in 'i-minute|2099-11-18 99:99' 'i-november|2099-11-31 10:00' 'i-common|2099-02-29 12:00'; do
+  IFS='|' read -r id ex <<< "$w"
+  d="$(campaign "$id" full "$ex" 25 200)"
+  level_is "$id" "level assisted — illegible: expires '$ex' is no instant on the clock" "$d"
+  cp "$d/delegation.md" "$BOX/$id.before"
+  answer $'y\n'
+  worker_from "$BOX/in" delegate "$d"
+  refused "$id" 1 "illegible: expires '$ex' is no instant on the clock"
+  ! grep -qF 'Sign this delegation?' <<< "$W_ERR" || got="${got:+$got; }$id: the question was asked"
+done
+d="$(campaign i-leap full '2096-02-29 12:00' 25 200)"
+sign "$d"
+level_is i-leap 'level full — signed until 2096-02-29 12:00' "$d"
+if [ -z "$got" ]; then
+  pass 'legible: an expires: the clock does not have is illegible to level and refused by delegate, and a leap day signs'
+else
+  fail 'legible: an expires: the clock does not have is illegible to level and refused by delegate, and a leap day signs' \
+    'assisted — illegible and a refusal for each instant the clock lacks; full until the leap day' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

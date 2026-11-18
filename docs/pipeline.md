@@ -1835,7 +1835,10 @@ root's `.sdd/config.sh`, read in a subshell.
   `lots:` (`all`, or lots separated by spaces), `expires:` (`YYYY-MM-DD HH:MM`, local time),
   `budget_mission_usd:`, `budget_campaign_usd:` and `signed:`. A value is the text after the first
   `: `, trailing blanks removed, no quotes; a `<…>` placeholder of the template is therefore
-  illegible.
+  illegible. The id is the directory's name: the `campaign:` of this file and of the `campaign.md`
+  beside it are both read against it, `.`, a trailing slash and a symlink naming the directory
+  itself, so a campaign renamed or copied under another name answers `assisted` until both files
+  say the new name.
 - `journal.md`: one line per event, append-only, its instant taken from `date`. No verb reads it;
   it is the trail of what the session did.
 
@@ -1864,8 +1867,11 @@ Under `assisted` the session proposes each act and waits for the owner's yes.
 **The effective level** (`sdd-worker level`) — the first rule that matches decides:
 
 1. no `delegation.md` → `assisted — no delegation`;
-2. illegible — one of the six keys missing or empty, a level off the ladder, an `expires:` that is
-   not `YYYY-MM-DD HH:MM`, a ceiling that is not a number → `assisted — illegible`;
+2. illegible — one of the six keys missing or empty, a `campaign:` here or in the `campaign.md`
+   beside it that is not the directory's name (no `campaign.md` included), a level off the ladder,
+   an `expires:` that is not `YYYY-MM-DD HH:MM` or that the clock does not have (`date -d` has to
+   give it back as written, so `2026-11-31 10:00` and `99:99` are refused), a ceiling that is not a
+   number → `assisted — illegible`;
 3. `signed:` empty → `assisted — unsigned`;
 4. the digest in `signed:` differs from the one recomputed → `assisted — edited after signing`;
 5. `expires:` not after now → `assisted — expired`;
@@ -1921,7 +1927,9 @@ pass) → `approve`; approved, with no pull request on its `branch:` → `run`; 
 `done - -`. The pull requests come from `gh pr list --head <branch> --state all`; a `gh` that
 fails, or answers off its contract, is rc 3 with no act — "could not read" never becomes "no pull
 request", which would send the session to run the lot again. Two missions on one lot, an approved
-mission with no branch, no `campaign.md` and an empty queue stop, with rc 1.
+mission with no branch, no `campaign.md`, a `campaign:` in it that is not the directory's name (an
+empty one and the template's placeholder among them, both values named) and an empty queue stop,
+with rc 1.
 
 **`pr-ready`** reads the pull request head (`headRefOid`) and requires five items on that one sha,
 naming the first that fails:

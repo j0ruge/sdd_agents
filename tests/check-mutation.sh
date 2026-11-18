@@ -6973,6 +6973,41 @@ mut_WORKER_seal_ceilings_unsigned() {
 mut_WORKER_seal_ceilings_unshown() {
   sed -i '/^cmd_delegate() {/,/^}/ s@^  delegation_terms "\$1"$@  delegation_terms "$1" | grep -v "^ceiling "@' "${1%/*}/sdd-worker"
 }
+# The campaign: of a file is no longer compared with the directory's name: a campaign renamed after
+# signing, or a campaign.md turned to another id, answers the signed level, and next walks the
+# queue of the template's placeholder (Q2 of the mission's QA). Caught by "legible: a campaign: that
+# is not its directory's name, in either file, is illegible to every verb and stops next"
+# (check-worker.sh).
+mut_WORKER_legible_id_unchecked() {
+  sed -i '/^id_is_dir() {/,/^}/ s@^  if \[ "\$v" != "\$name" \]; then@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The delegation reads its own campaign: and not the campaign.md's: budget sums the missions of one
+# id while next walks the queue of another (the J6 of the mission's QA). Caught by "legible: a
+# campaign: that is not its directory's name, in either file, is illegible to every verb and stops
+# next" (check-worker.sh).
+mut_WORKER_legible_campaign_md_unread() {
+  sed -i '/^delegation_legible() {/,/^}/ s@^  for k in delegation\.md campaign\.md; do$@  for k in delegation.md; do@' "${1%/*}/sdd-worker"
+}
+# The delegation reads the campaign.md's campaign: and not its own: budget sums the missions of the
+# id the delegation names, while next walks the queue of the directory's. Caught by "legible: a
+# campaign: that is not its directory's name, in either file, is illegible to every verb and stops
+# next" (check-worker.sh).
+mut_WORKER_legible_delegation_md_unread() {
+  sed -i '/^delegation_legible() {/,/^}/ s@^  for k in delegation\.md campaign\.md; do$@  for k in campaign.md; do@' "${1%/*}/sdd-worker"
+}
+# next no longer checks the id of the campaign.md it walks: the template's placeholder is a queue
+# to plan, rc 0. Caught by "legible: a campaign: that is not its directory's name, in either file,
+# is illegible to every verb and stops next" (check-worker.sh).
+mut_WORKER_legible_next_id_unchecked() {
+  sed -i '/^cmd_next() {/,/^}/ { /id_is_dir/d }' "${1%/*}/sdd-worker"
+}
+# An expires: of the right shape is an instant whether or not the clock has it: 2099-11-31 and
+# 99:99 are signed and read back as the deadline (Q3 of the mission's QA). Caught by "legible: an
+# expires: the clock does not have is illegible to level and refused by delegate, and a leap day
+# signs" (check-worker.sh).
+mut_WORKER_legible_instant_unchecked() {
+  sed -i '/^delegation_legible() {/,/^}/ s@^  if ! rt="\$(date -d .*; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7809,6 +7844,11 @@ CATALOG=(
   WORKER_ready_head_unchecked
   WORKER_seal_ceilings_unsigned
   WORKER_seal_ceilings_unshown
+  WORKER_legible_id_unchecked
+  WORKER_legible_campaign_md_unread
+  WORKER_legible_delegation_md_unread
+  WORKER_legible_next_id_unchecked
+  WORKER_legible_instant_unchecked
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

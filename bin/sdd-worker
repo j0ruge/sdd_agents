@@ -92,16 +92,49 @@ ladder_rank() {
 # never disagree about what a level is.
 on_ladder() { ladder_rank "$1" > /dev/null; }
 
-# delegation_legible <file> — 0 when the six keys are present and not empty, the level is on the
-# ladder, expires is a local instant to the minute and both ceilings are numbers; otherwise 1, with
-# the first rule that failed PUBLISHED in ILLEGIBLE_WHY. Called, never substituted: under `$( )` the
-# reason would die with the subshell. A `<…>` placeholder of the template fails one of these rules.
+# campaign_name <campaign-dir> — the name of the directory a campaign lives in, resolved: `.`, a
+# trailing slash and a symlink all name the directory itself. Empty when it does not resolve.
+campaign_name() {
+  local p
+  p="$(readlink -f -- "$1")" || true
+  printf '%s\n' "${p##*/}"
+}
+
+# id_is_dir <campaign-dir> <file> — 0 when <file> exists and its campaign: is the name of
+# <campaign-dir> (campaign_name); otherwise 1, with both values PUBLISHED in ID_WHY. The contract
+# writes the id three times (the directory, campaign.md and delegation.md), and a reader of one of
+# them alone lets two campaigns cross: budget summing the missions of one id while next walks the
+# queue of another, or the template's placeholder read as an id. ONE rule, for the two files of
+# the delegation and for next. Called, never substituted: under `$( )` the reason would die with
+# the subshell.
+id_is_dir() {
+  local name v
+  name="$(campaign_name "$1")"
+  if [ ! -f "$2" ]; then ID_WHY="$2 does not exist"; return 1; fi
+  v="$(fm_value "$2" campaign)"
+  if [ "$v" != "$name" ]; then ID_WHY="campaign: '$v' in $2 is not the directory's name '$name'"; return 1; fi
+}
+
+# delegation_legible <campaign-dir> — 0 when the six keys of its delegation.md are present and not
+# empty, the campaign: of that file and of the campaign.md beside it is the directory's name
+# (id_is_dir), the level is on the ladder, expires is a local instant to the minute that the clock
+# has — it comes back from `date -d` as it went, so 2026-11-31 and 99:99 are not instants — and
+# both ceilings are numbers; otherwise 1, with the first rule that failed PUBLISHED in
+# ILLEGIBLE_WHY. Called, never substituted: under `$( )` the reason would die with the subshell. A
+# `<…>` placeholder of the template fails one of these rules.
+# Declared limit: the comparison of what `date` gives back has no world on GNU date 9, which refuses
+# every instant of this shape it does not have (minute 60, hour 24, a gap of summer time, measured)
+# and gives the others back as written; it stays for a `date` that rolls 24:00 over to the next day.
 delegation_legible() {
-  local f="$1" k v
+  local dir="${1%/}" f k v rt
+  f="$dir/delegation.md"
   ILLEGIBLE_WHY=""
   for k in "${DELEGATION_KEYS[@]}"; do
     v="$(fm_value "$f" "$k")"
     if [ -z "$v" ]; then ILLEGIBLE_WHY="$k is missing or empty"; return 1; fi
+  done
+  for k in delegation.md campaign.md; do
+    if ! id_is_dir "$dir" "$dir/$k"; then ILLEGIBLE_WHY="$ID_WHY"; return 1; fi
   done
   v="$(fm_value "$f" level)"
   if ! on_ladder "$v"; then
@@ -110,6 +143,9 @@ delegation_legible() {
   v="$(fm_value "$f" expires)"
   if ! [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]]; then
     ILLEGIBLE_WHY="expires '$v' is not YYYY-MM-DD HH:MM"; return 1
+  fi
+  if ! rt="$(date -d "$v" '+%Y-%m-%d %H:%M' 2> /dev/null)" || [ "$rt" != "$v" ]; then
+    ILLEGIBLE_WHY="expires '$v' is no instant on the clock"; return 1
   fi
   for k in budget_mission_usd budget_campaign_usd; do
     v="$(fm_value "$f" "$k")"
@@ -177,7 +213,7 @@ cmd_delegate() {
     return 1
   fi
   delegation_terms "$1"
-  if ! delegation_legible "$f"; then
+  if ! delegation_legible "$1"; then
     printf 'not signed — illegible: %s\n' "$ILLEGIBLE_WHY"
     return 1
   fi
@@ -253,7 +289,7 @@ effective_level() {
   f="$dir/delegation.md"
   LEVEL=assisted
   if [ ! -f "$f" ]; then LEVEL_WHY="no delegation: $f does not exist"; return 0; fi
-  if ! delegation_legible "$f"; then LEVEL_WHY="illegible: $ILLEGIBLE_WHY"; return 0; fi
+  if ! delegation_legible "$dir"; then LEVEL_WHY="illegible: $ILLEGIBLE_WHY"; return 0; fi
   signed="$(fm_value "$f" signed)"
   if [ -z "$signed" ]; then LEVEL_WHY="unsigned: the signed: line is empty"; return 0; fi
   want="$(delegation_digest "$dir")"
@@ -365,8 +401,8 @@ checkouts_of() {
 # checkout of the root's repository whose 00-missao.md declares exactly `campaign: <id>`. ONE
 # definition of which missions are a campaign's, for both readers: budget counts their ids, next
 # reads their copies. An empty <id> prints nothing, since it would match every mission that belongs
-# to no campaign; neither verb reaches that branch (a legible delegation names its campaign, and
-# next stops on a campaign.md that names none), and it is kept because it decides what an empty id
+# to no campaign; neither verb reaches that branch (a legible delegation and the campaign.md next
+# walks both name their directory, id_is_dir), and it is kept because it decides what an empty id
 # answers: no mission, never all.
 campaign_mission_dirs() {
   local root="$1" id="$2" hd wt m
@@ -406,7 +442,7 @@ cmd_budget() {
   local -a ms=()
   f="$dir/delegation.md"
   if [ ! -f "$f" ]; then printf 'no ceiling — no delegation: %s does not exist\n' "$f"; return 1; fi
-  if ! delegation_legible "$f"; then printf 'no ceiling — illegible: %s\n' "$ILLEGIBLE_WHY"; return 1; fi
+  if ! delegation_legible "$dir"; then printf 'no ceiling — illegible: %s\n' "$ILLEGIBLE_WHY"; return 1; fi
   root="$(repo_root "$dir")"
   if [ -z "$root" ]; then printf 'no spend — %s is not inside a git checkout\n' "$dir"; return 1; fi
   mapfile -t ms < <(campaign_missions "$root" "$(fm_value "$f" campaign)")
@@ -473,7 +509,8 @@ pr_states() {
 # queue whose every lot is merged is done. When the act is run or review and the lot after it has no
 # mission, a second line says the session may plan that one ahead. rc 0; rc 1 when the line is
 # stop; rc 3, and no act at all, when gh did not answer. What next cannot decide stops it, naming
-# why: no campaign.md, an empty campaign:, a directory outside a git checkout, an empty queue, two
+# why: no campaign.md, a campaign: that is not the directory's name (id_is_dir: an empty one and the
+# template's placeholder among them), a directory outside a git checkout, an empty queue, two
 # missions on one lot, and an approved mission with no branch — `gh pr list --head ''` lists every
 # pull request of the repo, and one merged anywhere would read as this lot's.
 # A mission is found as budget finds them, in the campaign's checkout and in every linked worktree,
@@ -486,8 +523,8 @@ cmd_next() {
   local -a lots=() dirs=()
   cf="$dir/campaign.md"
   if [ ! -f "$cf" ]; then printf 'stop - - — no campaign: %s does not exist\n' "$cf"; return 1; fi
+  if ! id_is_dir "$dir" "$cf"; then printf 'stop - - — illegible: %s\n' "$ID_WHY"; return 1; fi
   id="$(fm_value "$cf" campaign)"
-  if [ -z "$id" ]; then printf 'stop - - — illegible: campaign: is empty in %s\n' "$cf"; return 1; fi
   root="$(repo_root "$dir")"
   if [ -z "$root" ]; then printf 'stop - - — %s is not inside a git checkout\n' "$dir"; return 1; fi
   while read -r l _; do lots+=("$l"); done < <(lots_table "$cf")
