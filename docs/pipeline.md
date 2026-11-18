@@ -1927,7 +1927,9 @@ every checkout of the repo, the campaign's and each linked worktree, the way the
 the signed cap in the environment, and answers `no mission cap — <file> sets
 BUDGET_MISSION_USD=<value>, …`, rc 1, naming the first file whose value the runner would apply
 above the signed cap, at zero (no ceiling), or not a number; one at or below it is the stricter
-ceiling, and holds.
+ceiling, and holds. A signed `budget_mission_usd:` of zero is no ceiling for the runner too, and
+it stops `budget` before any file is read, naming the delegation: `no mission cap — <delegation.md>
+signs budget_mission_usd: 0, …`.
 
 **`next`** walks the lots in table order and stops at the first one not merged: no mission → `plan`;
 a mission whose `aprovacao:` the runner's `gate_PLAN` would not admit (only `auto` and `humano-…`
@@ -1944,10 +1946,11 @@ with rc 1.
 naming the first that fails:
 
 1. `review`: the newest `40-review-r<N>.md` of the mission folder, by number, names
-   `reviewed_head: <sha>` in its frontmatter; every `Grade` cell under `### Overall Grade` is
-   exactly `A`; no `Rationale` cell, and not the `gate:` of the frontmatter (absent included), is a
-   fill-in by the rule `gate_REVIEW` applies (`placeholder`, copied into the worker and held equal
-   to the runner's by `tests/check-worker.sh`); and
+   `reviewed_head: <sha>` in its frontmatter; every `Grade` cell under `### Overall Grade`, the row
+   split as `gate_REVIEW` splits it (a `\|` is a pipe of its cell), is exactly `A`; no `Rationale`
+   cell, and not the `gate:` of the frontmatter (absent included), is a fill-in by the rule
+   `gate_REVIEW` applies (`placeholder`, copied into the worker and held equal to the runner's by
+   `tests/check-worker.sh`); and
    `git diff --no-renames --name-only <reviewed_head> <head>` lists only paths under the mission
    folder;
 2. `codex`: of the comments of `chatgpt-codex-connector[bot]`, read with `--paginate`, the newest

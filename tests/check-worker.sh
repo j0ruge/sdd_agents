@@ -151,6 +151,14 @@
 #       cut from a commit that still sets the key above the signed cap stops budget naming the
 #       worktree's file, with the line deleted in the campaign's checkout; deleted everywhere, the
 #       signed cap holds
+#   R42 the review item of `pr-ready` splits a row of the grade table as gate_REVIEW splits it: a
+#       `\|` is a pipe of its cell, not a delimiter, and `\\|` is a backslash against a real one.
+#       The runner's own split is read out of bin/sdd HERE, and pr-ready agrees with it on every
+#       row: a fill-in rationale holding an escaped pipe fails, a sentence holding one is ready, and
+#       a criterion holding one never moves a B into the grade column
+#   R43 a signed `budget_mission_usd:` of zero, which `sdd run` reads as no ceiling, stops `budget`
+#       naming the delegation and never a .sdd/config.sh — with no config, or one silent on the key;
+#       a fraction above zero is the cap, and holds
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -163,8 +171,8 @@
 # rule goes unmeasured, and the sensor says nothing about it.
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
-# verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `,
-# `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that
+# verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
+# `zero: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that
 # opened it names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the
 # sensor at the first red, after printing it; the census in check-health.sh holds that clause.
 #
@@ -2121,6 +2129,119 @@ if [ -z "$got" ]; then
 else
   fail 'worktree: a mission worktree whose config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file' \
     "rc 1 naming the file of m, then of x, and 150; rc 0 and the mission cap 40.00 over 1 mission with the line deleted in every checkout" "$got"
+fi
+
+# --- R42: a pipe escaped inside a cell of the grade table ----------------------------------------
+# GFM writes a literal pipe inside a cell as `\|`, and gate_REVIEW rejoins it before it reads a
+# column (its escaped_pipe, by the PARITY of the run of backslashes: `\\` is a literal backslash
+# against a real delimiter). Cut at every `|`, the worker judged the rationale
+# `<why \| in one sentence>` by its first piece, `<why \`, which has a letter and no closing
+# `>`: a fill-in the runner refuses read as a sentence, on the bar of a merge with no human. The
+# runner's split is read out of gate_REVIEW in bin/sdd HERE — its escaped_pipe() and the loop that
+# rejoins — and run on each row the probe writes in place of the Security row of the newest round.
+# The oracle is what that split leaves, `*` and backticks stripped: a Grade that is not A is
+# refused by its grade, a Rationale the runner's placeholder() calls a fill-in is refused by the
+# rationale, and the rest is ready; pr-ready has to agree on every row. The rows: fill-ins holding
+# an escaped pipe (angle brackets around one, a fill-in word before one), sentences holding one
+# (the shell pipeline of the runner's own world 10 in check-gates.sh, a plain one), a row with no
+# closing pipe, whose last cell is the Rationale, a criterion holding one, which leaves a B where a
+# cut at every `|` reads the A, and the even run `\\|`, a backslash against a real delimiter, whose
+# A a rejoin by "ends in a backslash" would glue away.
+got=""
+RUNNER_EP="$(sed -n '/^gate_REVIEW() {/,/^}/ { /^ *function escaped_pipe(s, /p }' "$ROOT/bin/sdd")"
+RUNNER_SPLIT="$(sed -n '/^gate_REVIEW() {/,/^}/ { /^ *delete f$/,/^ *}$/p }' "$ROOT/bin/sdd")"
+{ grep -q 'escaped_pipe' <<< "$RUNNER_EP" && grep -qF 'escaped_pipe(f[n])' <<< "$RUNNER_SPLIT"; } \
+  || got="fixture: no escaped_pipe() and rejoin read out of gate_REVIEW in $ROOT/bin/sdd"
+# runner_reads <row> — `<grade><TAB><rationale>` of <row> as the split of gate_REVIEW leaves them,
+# each with its `*` and backticks stripped and its blanks trimmed.
+runner_reads() {
+  awk "$RUNNER_EP"' { '"$RUNNER_SPLIT"'
+    g = f[3]; r = f[4]; gsub(/[*`]/, "", g); gsub(/[*`]/, "", r)
+    gsub(/^[ \t]+|[ \t]+$/, "", g); gsub(/^[ \t]+|[ \t]+$/, "", r); print g "\t" r }' <<< "$1"
+}
+# set_line <round> <row> — the Security row of <round> replaced by <row>, as written.
+set_line() {
+  ROW="$2" awk '/^\| Security \|/ { print ENVIRON["ROW"]; next } { print }' "$1" > "$1.new" && mv "$1.new" "$1"
+  grep -qxF "$2" "$1" || got="${got:+$got; }fixture: the row '$2' did not land"
+}
+serve pipe
+export GHFX="$BOX/ghfx/pipe"
+refused_n=0; kept_n=0
+ROWS=('| Security | A | <why \| in one sentence> |'
+      '| Security | A | <a\|b> |'
+      '| Security | A | TODO\| |'
+      '| Security | A | `TODO\|` list references removed; assertions now target the function. Green. |'
+      '| Security | A | read with grep \| sort, measured |'
+      '| Security | A | Confirmed no leaks.'
+      '| Security (a\| A | B | Confirmed no leaks. |'
+      '| Escaping (\\| A | Confirmed no leaks. |')
+for row in "${ROWS[@]}"; do
+  ready_reset
+  set_line "$MD/40-review-r2.md" "$row"
+  IFS=$'\t' read -r rg rt <<< "$(runner_reads "$row")"
+  if [ "$rg" != A ]; then
+    rr=0; want="not-ready review: $MD/40-review-r2.md grades $rg, and every row must read A"
+  elif runner_refuses "$rt"; then
+    rr=0; want="not-ready review: $MD/40-review-r2.md: Security grades A with a placeholder rationale (${rt:-<empty>})"
+  else
+    rr=1; want=""
+  fi
+  PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+  judged "row '$row'" "$rr" "$want"
+done
+ready_reset
+{ [ "$refused_n" = 4 ] && [ "$kept_n" = 4 ]; } \
+  || got="${got:+$got; }$refused_n refused and $kept_n ready of the 8 rows (want 4 and 4)"
+# A row with no Rationale cell, and no closing pipe, after rows that have one: gate_REVIEW skips a
+# row of fewer than four cells, and pr-ready, the stricter of the two, refuses it as an A no
+# sentence supports — never by the rationale the row above it left behind.
+set_line "$MD/40-review-r2.md" '| Security | A'
+PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+{ [ "$W_RC" = 1 ] && [ "$W_OUT" = "not-ready review: $MD/40-review-r2.md: Security grades A with a placeholder rationale (<empty>) — a grade no sentence supports is a label" ]; } \
+  || got="${got:+$got; }a row with no Rationale cell: rc $W_RC '$W_OUT'"
+ready_reset
+if [ -z "$got" ]; then
+  pass 'pipe: a grade row holding an escaped pipe is read as gate_REVIEW splits it, so a fill-in rationale with one fails review'
+else
+  fail 'pipe: a grade row holding an escaped pipe is read as gate_REVIEW splits it, so a fill-in rationale with one fails review' \
+    "pr-ready agreeing with the split and the placeholder() of gate_REVIEW on the 8 rows, and refusing a row with no Rationale cell" "$got"
+fi
+
+# --- R43: a signed mission cap of zero -----------------------------------------------------------
+# For the runner a BUDGET_MISSION_USD of zero is no ceiling (config/schema.md), and the grammar of
+# the delegation reads `0` as a number, so a signed `budget_mission_usd: 0` is legible. budget
+# stopped on it, but inside the loop over the configs of the checkouts, so the stop accused a
+# .sdd/config.sh of setting the key to 0 where there was no such file, or no such line, and told
+# the owner to delete it. Four campaigns, each the only one of its repo, signed at pr with a
+# campaign cap of 100:
+#   zero    mission cap 0, no .sdd/config.sh: rc 1, the stop naming the delegation and its 0
+#   zeros   0.00, a spelling of the runner's numeric zero: rc 1, the same stop
+#   silent  0, a config silent on the key: rc 1, the same stop, and no config.sh named
+#   frac    0.5, a fraction above zero, no config: rc 0 and the mission cap 0.50 — every positive
+#           value is a cap for the runner, so the stop is the zero's and never "below one dollar"
+got=""
+zero_world() {
+  local k="$BOX/zero-$1"
+  mkdir -p "$k/docs/campaigns"
+  git init -q -b main "$k"
+  if [ "$3" != - ]; then mkdir -p "$k/.sdd"; printf '%s\n' "$3" > "$k/.sdd/config.sh"; fi
+  cp -a "$(campaign "z-$1" pr "$FAR" "$2" 100)" "$k/docs/campaigns/"
+  printf '%s\n' "$k/docs/campaigns/z-$1"
+}
+for w in 'zero|0|-' 'zeros|0.00|-' 'silent|0|HANDOFF_DIR="docs/handoffs"'; do
+  IFS='|' read -r id v c <<< "$w"
+  d="$(zero_world "$id" "$v" "$c")"
+  budget_is "$id" 1 "no mission cap — $d/delegation.md signs budget_mission_usd: $v, which sdd run reads as no ceiling; sign a cap above 0" "$d"
+  [ "$W_OUT" = "no mission cap — $d/delegation.md signs budget_mission_usd: $v, which sdd run reads as no ceiling; sign a cap above 0" ] \
+    || got="${got:+$got; }$id: the stop says more than its line: '$W_OUT'"
+  [[ "$W_OUT" != *config.sh* ]] || got="${got:+$got; }$id: the stop names a config: '$W_OUT'"
+done
+budget_is frac 0 'campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 0.50' "$(zero_world frac 0.5 -)"
+if [ -z "$got" ]; then
+  pass 'zero: a signed mission cap of zero stops budget naming the delegation, never a config that does not set it'
+else
+  fail 'zero: a signed mission cap of zero stops budget naming the delegation, never a config that does not set it' \
+    "rc 1 naming the delegation and its 0 for 0, 0.00 and a config silent on the key; rc 0 and the mission cap 0.50 for 0.5" "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

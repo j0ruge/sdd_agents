@@ -7072,6 +7072,34 @@ mut_WORKER_worktree_root_only() {
 mut_WORKER_worktree_file_misnamed() {
   sed -i '/^cmd_budget() {/,/^}/ s@^        "\$wt/\.sdd/config\.sh" "\$run"$@        "$root/.sdd/config.sh" "$run"@' "${1%/*}/sdd-worker"
 }
+# The rationale is cut at every `|` again: the fill-in `<why \| in one sentence>`, which
+# gate_REVIEW refuses, is judged by `<why \` and reads as a sentence (achado #2 of the mission's
+# review r2). Caught by "pipe: a grade row holding an escaped pipe is read as gate_REVIEW splits it,
+# so a fill-in rationale with one fails review" (check-worker.sh).
+mut_WORKER_pipe_cut_raw() {
+  sed -i '/^round_unjustified() {/,/^}/ s@^      cells(\$0, c)$@      split($0, c, "|")@' "${1%/*}/sdd-worker"
+}
+# The grade is cut at every `|` again: a criterion holding `\|` moves its B out of the Grade column
+# and leaves an A there, a round gate_REVIEW refuses read as graded A. Caught by "pipe: a grade row
+# holding an escaped pipe is read as gate_REVIEW splits it, so a fill-in rationale with one fails
+# review" (check-worker.sh).
+mut_WORKER_pipe_grades_cut_raw() {
+  sed -i '/^round_grades() {/,/^}/ s@^      cells(\$0, c)$@      split($0, c, "|")@' "${1%/*}/sdd-worker"
+}
+# The rejoin asks "does the piece end in a backslash" instead of the parity of the run: `\\|`, a
+# literal backslash against a real delimiter, glues two cells, and an A row reads its rationale as
+# the grade. Caught by "pipe: a grade row holding an escaped pipe is read as gate_REVIEW splits it,
+# so a fill-in rationale with one fails review" (check-worker.sh).
+mut_WORKER_pipe_parity_lost() {
+  sed -i "/^GRADE_ROW_AWK='\$/,/^'\$/ s@return (length(s) - length(t)) % 2 }@return (length(s) - length(t)) > 0 }@" "${1%/*}/sdd-worker"
+}
+# A signed mission cap of zero, which the runner reads as no ceiling, is no longer stopped at the
+# delegation: the stop falls to the loop over the configs and accuses a .sdd/config.sh that does
+# not set the key (achado #3 of the mission's review r2). Caught by "zero: a signed mission cap of
+# zero stops budget naming the delegation, never a config that does not set it" (check-worker.sh).
+mut_WORKER_zero_signed_unchecked() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if ! \[\[ "\$mcap" =~ \[1-9\] \]\]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7922,6 +7950,10 @@ CATALOG=(
   WORKER_shown_terms_unchecked
   WORKER_worktree_root_only
   WORKER_worktree_file_misnamed
+  WORKER_pipe_cut_raw
+  WORKER_pipe_grades_cut_raw
+  WORKER_pipe_parity_lost
+  WORKER_zero_signed_unchecked
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

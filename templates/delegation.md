@@ -43,7 +43,9 @@ cortado de um commit que ainda tem a linha a carrega mesmo depois de ela ser apa
 o `bin/sdd-worker budget` lê o arquivo de todo checkout do repo (o da campanha e cada worktree
 ligado) e sai com rc 1 numa linha `no mission cap — …`, que nomeia o arquivo e o valor, quando um
 deles fixa a chave acima do teto assinado, em `0` (sem teto), vazia ou num valor que não é número.
-Um valor menor ou igual ao assinado é o teto mais estrito, e vale. Antes de assinar, apague a linha
+Um valor menor ou igual ao assinado é o teto mais estrito, e vale. Um `budget_mission_usd: 0`
+assinado também é sem teto para o runner, e o `budget` para antes de ler qualquer arquivo, nomeando
+esta delegação. Antes de assinar, apague a linha
 do `.sdd/config.sh` e commite a remoção antes de cortar os worktrees das missões, ou deixe-a no teto
 assinado, ou abaixo dele.
 

@@ -451,11 +451,13 @@ campaign_missions() {
 # rc 0 below the ceiling; rc 1 at it or above it, and rc 1 for every answer it cannot have — no
 # delegation or an illegible one (no ceiling), a directory outside a git checkout or a ledger that
 # does not read (no spend): a spend that could not be read is never zero. A missing ledger is the
-# one zero, since nothing ran yet. rc 1 too, and no mission cap, when the runner would not apply the
-# signed one: it sources the .sdd/config.sh of the checkout it runs in over its environment, so a
-# file that assigns BUDGET_MISSION_USD above the signed cap, or to a zero (no ceiling), or to
-# anything that is not a number, beats the value the session passes; a value at or below the signed
-# cap is the stricter one, and holds. The session launches `sdd run` in the mission's worktree, not
+# one zero, since nothing ran yet. rc 1 too, and no mission cap, when the signed cap is zero, which
+# the runner reads as no ceiling: the stop names the delegation, the one place that sets it, before
+# any config is read. And when the runner would not apply the signed one: it sources the
+# .sdd/config.sh of the checkout it runs in over its environment, so a file that assigns
+# BUDGET_MISSION_USD above the signed cap, or to a zero (no ceiling), or to anything that is not a
+# number, beats the value the session passes; a value at or below the signed cap is the stricter
+# one, and holds. The session launches `sdd run` in the mission's worktree, not
 # in the campaign's checkout, and a worktree cut from a commit that still sets the key keeps the
 # line the owner deleted here: so the file of every checkout of the repo is read (checkouts_of, the
 # set campaign_mission_dirs walks), the campaign's first and every linked worktree after it, whether
@@ -478,9 +480,15 @@ cmd_budget() {
   f="$dir/delegation.md"
   if [ ! -f "$f" ]; then printf 'no ceiling — no delegation: %s does not exist\n' "$f"; return 1; fi
   if ! delegation_legible "$dir"; then printf 'no ceiling — illegible: %s\n' "$ILLEGIBLE_WHY"; return 1; fi
+  mcap="$(fm_value "$f" budget_mission_usd)"
+  # A legible cap is digits with an optional fraction, so it is above zero when a digit is.
+  if ! [[ "$mcap" =~ [1-9] ]]; then
+    printf 'no mission cap — %s signs budget_mission_usd: %s, which sdd run reads as no ceiling;' "$f" "$mcap"
+    printf ' sign a cap above 0\n'
+    return 1
+  fi
   root="$(repo_root "$dir")"
   if [ -z "$root" ]; then printf 'no spend — %s is not inside a git checkout\n' "$dir"; return 1; fi
-  mcap="$(fm_value "$f" budget_mission_usd)"
   while IFS= read -r wt; do
     run="$(config_key "$wt" BUDGET_MISSION_USD "$mcap")"
     if ! jq -en --arg r "$run" --arg s "$mcap" '($r | tonumber) as $r | $r > 0 and $r <= ($s | tonumber)' \
@@ -640,19 +648,43 @@ newest_round() {
   [ -z "$out" ] || printf '%s\n' "$out"
 }
 
+# GRADE_ROW_AWK — cells(<row>, <array>): the cells of a row of the grade table, split as the runner's
+# gate_REVIEW splits it (the escaped_pipe and the rejoin of bin/sdd, copied): GFM writes a pipe
+# inside a cell as `\|`, so a piece whose run of trailing backslashes is ODD is joined to the next,
+# its last backslash given back as the pipe; an EVEN run (`\\`, a literal backslash) sits against a
+# real delimiter. The array is emptied first, since it is the caller's: a row with fewer cells
+# would read the cells the row before it left.
+# Cut at every `|`, a criterion holding `\|` moved a B out of the Grade column and left an A there,
+# and the fill-in `<why \| in one sentence>` was judged by `<why \`, which reads as a sentence:
+# both pass a round gate_REVIEW refuses. tests/check-worker.sh reads the runner's split out of
+# bin/sdd and holds the two equal on the same rows (its `pipe:` family).
+GRADE_ROW_AWK='
+function escaped_pipe(s,   t) { t = s; sub(/\\+$/, "", t); return (length(s) - length(t)) % 2 }
+function cells(row, f,   raw, rawn, i, n) {
+  split("", f)
+  rawn = split(row, raw, "|")
+  n = 0
+  for (i = 1; i <= rawn; i++) {
+    if (n > 0 && escaped_pipe(f[n])) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
+    else { f[++n] = raw[i] }
+  }
+}
+'
+
 # round_grades <round> — the Grade cell of every row of the table under `### Overall Grade`, one per
-# line, read as the runner's gate_REVIEW reads it: the third column, a row indented or not, its bold
-# and code-span marks removed; the header row and the separator are skipped, and the read ends at the
-# next heading. An empty cell prints <empty>. Prints nothing when the section has no row.
+# line, read as the runner's gate_REVIEW reads it: the third column of the row as cells() splits it,
+# a row indented or not, its bold and code-span marks removed; the header row and the separator are
+# skipped, and the read ends at the next heading. An empty cell prints <empty>. Prints nothing when
+# the section has no row.
 round_grades() {
-  awk '
+  awk "$GRADE_ROW_AWK"'
     function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
     /^###[ \t]+Overall Grade/ { sec = 1; next }
     !sec { next }
     /^#+[ \t]/ { exit }
     $0 !~ /^[ \t]*\|/ { next }
     {
-      split($0, c, "|")
+      cells($0, c)
       g = c[3]; gsub(/[*`]/, "", g); g = trim(g)
       if (g == "Grade" || g ~ /^:?-+:?$/) next
       print (g == "" ? "<empty>" : g)
@@ -692,19 +724,18 @@ placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit p
 
 # round_unjustified <round> — the first row under `### Overall Grade` whose Rationale is a fill-in
 # (placeholder), as `<criterion><TAB><rationale>`, the rationale read as gate_REVIEW reads it: the
-# fourth column, its `*` and backticks removed, its blanks trimmed, `<empty>` for an empty one. The
-# separator row is skipped and the read ends at the next heading, like round_grades. Prints nothing
-# when every row is justified. Declared limit: the cell is cut at every `|`, where gate_REVIEW
-# rejoins a `\|` written inside it, so a rationale holding one is judged by its first piece — a
-# piece that is a fill-in word (`TODO\|…`) is refused, the closed side.
+# fourth column of the row as cells() splits it, a `\|` inside it given back as the pipe, its `*`
+# and backticks removed, its blanks trimmed, `<empty>` for an empty one. The separator row is
+# skipped and the read ends at the next heading, like round_grades. Prints nothing when every row
+# is justified.
 round_unjustified() {
-  awk "$PLACEHOLDER_AWK"'
+  awk "$PLACEHOLDER_AWK$GRADE_ROW_AWK"'
     function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
     /^###[ \t]+Overall Grade/ { sec = 1; next }
     !sec { next }
     /^#+[ \t]/ { exit }
     /^[ \t]*\|/ {
-      split($0, c, "|")
+      cells($0, c)
       if (trim(c[2]) ~ /^:?-+:?$/) next
       r = c[4]; gsub(/[*`]/, "", r); r = trim(r)
       if (placeholder(r)) { print trim(c[2]) "\t" (r == "" ? "<empty>" : r); exit }

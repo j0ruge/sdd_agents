@@ -103,7 +103,8 @@ cap at or below this one; the starter assigns `150`, and a worktree cut from a c
 the line keeps it after the owner deletes it in the campaign's checkout. That is why `budget` reads
 the file of every checkout of the repo first, the campaign's and each linked worktree, and answers
 `no mission cap — …`, rc 1, naming the file and the value, when a line sets the key above the
-signed cap, to zero, or to anything that is not a number: a stop, never a run.
+signed cap, to zero, or to anything that is not a number: a stop, never a run. A signed cap of zero
+is no ceiling for the runner either, and `budget` stops on it first, naming the delegation.
 
 ```bash
 cd <mission-worktree> && BUDGET_MISSION_USD=<cap> setsid nohup env -u CLAUDECODE \
@@ -178,7 +179,7 @@ The runner pages its own rc 3 already, `budget-exhausted` among them: that stop 
 1. **`no-receipt`**: no Codex receipt for the head 60 minutes after the explicit `@codex review`.
 2. **`below-a`**: a criterion still graded below A after three rounds of review on one pull request.
 3. **`conflict`**: a merge conflict with the base outside the findings file and its ratchet.
-4. **`mission-ceiling`**: `sdd run` stopped on `budget-exhausted`, the mission spent its `BUDGET_MISSION_USD`; or `sdd-worker budget` answered `no mission cap — …`, the config of a checkout of the repo (the mission's worktree among them) sets that key over the signed cap.
+4. **`mission-ceiling`**: `sdd run` stopped on `budget-exhausted`, the mission spent its `BUDGET_MISSION_USD`; or `sdd-worker budget` answered `no mission cap — …`, the config of a checkout of the repo (the mission's worktree among them) sets that key over the signed cap, or the delegation signs a mission cap of zero, which the runner reads as no ceiling.
 5. **`campaign-ceiling`**: `sdd-worker budget` leaves rc 1 on any other line, the campaign spent its ceiling.
 
 ## Never

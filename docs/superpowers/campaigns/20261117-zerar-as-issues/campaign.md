@@ -178,7 +178,8 @@ caso ao dono, com os nomes do `commands/sdd-worker.md`:
 4. `mission-ceiling`: o `sdd run` parou em `budget-exhausted`, a missão gastou o
    `budget_mission_usd`, que chega a ele como `BUDGET_MISSION_USD`; ou o `bin/sdd-worker budget`
    respondeu `no mission cap — …`, porque o `.sdd/config.sh` de um checkout do repo (o worktree da
-   missão entre eles) fixa essa chave acima do teto assinado;
+   missão entre eles) fixa essa chave acima do teto assinado, ou porque a delegação assina um
+   `budget_mission_usd: 0`, que o runner lê como sem teto;
 5. `campaign-ceiling`: `bin/sdd-worker budget` sai com rc 1 em qualquer outra linha, a campanha
    gastou o `budget_campaign_usd`.
 
