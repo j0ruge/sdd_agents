@@ -225,7 +225,8 @@ quotes, which an apostrophe in an id or a path ends.
 A line of a verb that measured no stop is paged the same way, named by what the verb printed: a
 `stop …` line of `next` with `SDD_REASON=next-stop`; a `no ceiling — …` line of `budget` (no
 delegation, or an illegible one) with `no-ceiling`; a `no spend — …` line (no checkout, a
-`git worktree list` that failed, a ledger that does not read) with `no-spend`. None of them is
+`git worktree list` that failed, an upstream of the campaign's checkout that does not read, a ledger
+that does not read) with `no-spend`. None of them is
 `campaign-ceiling`: nobody measured a spend.
 
 The runner pages its own rc 3 already, `budget-exhausted` among them, from the `.sdd/config.sh` of

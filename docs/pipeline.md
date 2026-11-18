@@ -1852,9 +1852,16 @@ worktree of the set whose `HANDOFF_DIR` is not the root's stops `budget`, `level
 
 A lot finds its mission through the mission's own artifact: `00-missao.md` declares `campaign:` and
 `lot:` in its frontmatter (two optional keys of `templates/missao.md`), and its `branch:` names the
-pull request. There is no state file: the next act is derived from the queue, the missions on disk —
-in the checkout of the campaign and in every linked worktree of its repo, since a lot's mission runs
-in its own worktree until the merge — and the pull requests.
+pull request. There is no state file: the next act is derived from the queue, the missions and the
+pull requests. A mission is found on disk, in the checkout of the campaign and in every linked
+worktree of its repo, since a lot's mission runs in its own worktree until the merge; and after the
+merge in the base, the tree of the upstream of the branch the campaign's checkout has checked out,
+read through git (`for-each-ref`, `ls-tree`, `show`) as the last fetch left it. So a merged mission
+whose worktree was removed while that checkout was behind is still the campaign's: `next` does not
+plan its lot again and `budget` still counts its spend, and a mission on disk and in the base is one
+mission. An upstream that is set and does not read stops `budget`, `level` and `next` with rc 1,
+naming it; a checkout on a detached HEAD or on a branch with no upstream reads no base, and a
+mission merged after the last fetch is not in it until the next one.
 
 ### The ladder and the table of acts
 
@@ -1930,15 +1937,17 @@ stderr and leaves rc 2. The reason of an answer comes after ` — `.
 | `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible, expired, changed after it was shown (it signs the terms it showed) or while the signature was written, or a write that failed; 66 nothing on stdin |
 | `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0; 1 on `assisted — unread: …`, when the checkouts of the campaign do not read or no copy of the terms can be made |
 | `sdd-worker allows <campaign-dir> <act> --lot L<n>` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner; 2 not an act, or no `--lot` (every act is of one lot, and the lot's ceiling is the act's) |
-| `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, no ceiling or spend to read (`no spend — …`, the checkouts that do not read among them), or `no mission cap — …` when the signed mission cap is zero or below one cent, or the config of the campaign's checkout or of a mission's worktree would beat it |
-| `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts do not read); 3 when `gh` did not answer |
+| `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, no ceiling or spend to read (`no spend — …`, the checkouts or the base that do not read among them), or `no mission cap — …` when the signed mission cap is zero or below one cent, or the config of the campaign's checkout or of a mission's worktree would beat it |
+| `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts or the base do not read); 3 when `gh` did not answer |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
 
 **`budget`** sums, with `jq` (never `awk`: under pt-BR the `mawk` reads `1.99` as 1), the `cost_usd`
 of the ledger rows (`${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`) whose `mission` is one of the
 campaign's: the folders under the repo's `HANDOFF_DIR` whose `00-missao.md` declares exactly that
-`campaign:`, in the campaign's checkout and in every linked worktree of the repo, each mission once
-(a `git worktree list` that fails is `no spend — <the call> failed (rc <n>)`, rc 1, never a smaller
+`campaign:`, in the campaign's checkout, in every linked worktree of the repo and in the base (the
+tree of the upstream of the branch that checkout has checked out), each mission once (a
+`git worktree list` that fails is `no spend — <the call> failed (rc <n>)`, and an upstream that does
+not read `no spend — the upstream <ref> of <checkout> does not read: …`, rc 1, never a smaller
 sum). Money is counted in cents: the sum and the ceiling each go through `* 100 | round` before
 they are compared, so `0.10 + 0.70`, a binary `0.7999999999999999`, reaches a ceiling of `0.80`, and
 both are printed from those cents. An absent ledger is zero spent. The mission cap it prints is the
@@ -2031,6 +2040,11 @@ criterion A, no tolerance for prose), and the worker's round is what applies it.
   merged copy of a mission of the campaign holds one, and is read; and a worktree whose
   `HANDOFF_DIR` is not the root's keeps its missions where the root's does not look, so it is out
   of the set, its missions are not counted, and its file is not read.
+- The base those verbs read is the upstream of the branch the campaign's checkout has checked out,
+  as the last fetch left it, read at that checkout's `HANDOFF_DIR`; its `.sdd/config.sh` is never
+  sourced, since no `sdd run` runs in it. A detached HEAD or a branch with no upstream reads no base,
+  and a merged mission whose worktree was removed is then found nowhere until the checkout takes the
+  base in; a branch whose upstream is not the base reads that branch's tree.
 - In a target whose `.sdd/config.sh` assigns `BUDGET_MISSION_USD` above the signed cap, or leaves
   `ON_ESCALATION_CMD` empty, the worker only fails closed (`no mission cap`, `assisted — no pager`):
   the file wins over the environment, and making the signed values win there needs the runner's

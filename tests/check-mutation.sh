@@ -7331,6 +7331,28 @@ mut_WORKER_criteria_counted() {
 mut_WORKER_criteria_past_heading() {
   sed -i '/^round_missing() {/,/^}/ s@^\(    /^#+\[ \\t]/ \){ exit }$@\1{ next }@' "${1%/*}/sdd-worker"
 }
+# The base is no longer read: a mission merged into it whose worktree was removed, with the
+# campaign's checkout behind, is found nowhere, next plans its lot again and budget forgets its
+# spend (achado #2 of the mission's review r6). Caught by "gone: a merged mission whose worktree was
+# removed is found in the base, counted once, and a base that does not read stops budget, level and
+# next" (check-worker.sh).
+mut_WORKER_gone_base_unread() {
+  sed -i '/^campaign_set() {/,/^}/ s@^  if ! base_copies "\$root" "\$hd" "\$id"; then SET_WHY="\$BASE_WHY"; return 1; fi$@  BASE_DIRS=()@' "${1%/*}/sdd-worker"
+}
+# A base that does not read is read as a base with no mission: an upstream whose ref is gone, or a
+# git that fails on it, leaves the set on disk alone, a smaller sum and a lot planned again, in
+# silence. Caught by "gone: a merged mission whose worktree was removed is found in the base, counted
+# once, and a base that does not read stops budget, level and next" (check-worker.sh).
+mut_WORKER_gone_failure_swallowed() {
+  sed -i '/^campaign_set() {/,/^}/ s@^  if ! base_copies "\$root" "\$hd" "\$id"; then SET_WHY="\$BASE_WHY"; return 1; fi$@  base_copies "$root" "$hd" "$id" || :@' "${1%/*}/sdd-worker"
+}
+# The act names the temporary copy of the base it read, a file that goes when the verb exits, in
+# place of `<upstream>:<path>`. Caught by "gone: a merged mission whose worktree was removed is found
+# in the base, counted once, and a base that does not read stops budget, level and next"
+# (check-worker.sh).
+mut_WORKER_gone_copy_shown() {
+  sed -i '/^cmd_next() {/,/^}/ s@^  \[ -z "\${BASE_COPY:-}" \] || act=.*$@  :@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -8217,6 +8239,9 @@ CATALOG=(
   WORKER_criteria_unchecked
   WORKER_criteria_counted
   WORKER_criteria_past_heading
+  WORKER_gone_base_unread
+  WORKER_gone_failure_swallowed
+  WORKER_gone_copy_shown
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

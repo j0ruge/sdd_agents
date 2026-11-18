@@ -353,19 +353,28 @@ lots_table() {
 # of its delegation.md and of its campaign.md, the latter only when the campaign has one. A file that
 # does not read leaves an empty copy, which every reader takes as the other verbs take the file
 # itself: illegible, with the same reason. Returns 1 when the temporary directory cannot be made.
-# The temporary directory goes when the program exits (a trap on EXIT, TERMS_TMP): one copy per
-# process, and level and allows each make one. Called, never substituted.
+# The temporary directory goes when the program exits (the trap on EXIT, tmp_sweep, TERMS_TMP): one
+# copy per process, and level and allows each make one. Called, never substituted.
 terms_copy() {
   local dir="${1%/}"
   TERMS_COPY=""
   TERMS_TMP="$(mktemp -d "${TMPDIR:-/tmp}/sdd-worker-terms.XXXXXX")" || return 1
-  trap '[ -z "${TERMS_TMP:-}" ] || rm -rf -- "$TERMS_TMP"' EXIT
+  trap tmp_sweep EXIT
   TERMS_COPY="$TERMS_TMP/$(campaign_name "$dir")"
   mkdir -p -- "$TERMS_COPY" || return 1
   cat -- "$dir/delegation.md" > "$TERMS_COPY/delegation.md"
   [ ! -f "$dir/campaign.md" ] || cat -- "$dir/campaign.md" > "$TERMS_COPY/campaign.md"
   # A read that failed is the empty copy above, never a copy that was not made.
   return 0
+}
+
+# tmp_sweep — removes the temporary directories this process made, the copy of the terms
+# (terms_copy, TERMS_TMP) and the copies of the base (base_copies, BASE_TMP): the ONE trap on EXIT of
+# the program, which each maker sets. Two traps would be one, the second replacing the first, and
+# level makes both copies.
+tmp_sweep() {
+  [ -z "${TERMS_TMP:-}" ] || rm -rf -- "$TERMS_TMP"
+  [ -z "${BASE_TMP:-}" ] || rm -rf -- "$BASE_TMP"
 }
 
 # effective_level <campaign-dir> [<lot>] — the level the worker may act at, PUBLISHED in LEVEL,
@@ -535,25 +544,81 @@ checkouts_of() {
   mapfile -t CHECKOUTS < <({ printf '%s\n' "$1"; sed -n 's/^worktree //p' <<< "$out"; } | awk '!seen[$0]++')
 }
 
+# base_copies <root> <handoff-dir> <id> — PUBLISHES BASE_DIRS, a copy of the folder of every mission
+# of campaign <id> the base carries: the tree of the upstream of the branch checked out in <root>,
+# read by git (for-each-ref, ls-tree and show), whether or not the mission's worktree is still there
+# and whether or not <root> took the base in. A copy holds the mission's 00-missao.md as `git show
+# <upstream>:<path>` prints it, at BASE_COPY/<path>, in a temporary directory that goes when the
+# program exits (tmp_sweep, BASE_TMP); BASE_UP is the upstream's full name, and a reason that names a
+# copy names it `<upstream>:<path>`, never the copy (cmd_next). A folder is one of <handoff-dir>
+# itself, as `<handoff-dir>/*/00-missao.md` finds them on disk, and <handoff-dir> is normalised as
+# load_config normalises HANDOFF_DIR (a leading ./ and a trailing / dropped), the spelling git prints
+# the paths in. rc 0 and no copy when there is no upstream: a detached HEAD, or a branch with none
+# set. Returns 1, with the reason in BASE_WHY, when the upstream does not read — a for-each-ref, an
+# ls-tree or a show that fails, before printing or after, each judged by its rc — or no temporary
+# directory can be made for the copies. Called, never substituted.
+base_copies() {
+  local root="$1" hd="$2" id="$3" out up e rc=0
+  BASE_DIRS=(); BASE_WHY=""; BASE_UP=""; BASE_COPY=""
+  out="$(git -C "$root" for-each-ref --format='%(HEAD)%(upstream)' refs/heads/)" || rc=$?
+  if [ "$rc" -ne 0 ]; then BASE_WHY="the upstream of $root does not read: git for-each-ref failed (rc $rc)"; return 1; fi
+  up="$(sed -n 's/^\*//p' <<< "$out")"
+  [ -n "$up" ] || return 0
+  BASE_UP="$up"
+  if ! BASE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/sdd-worker-base.XXXXXX")"; then
+    BASE_WHY="no copy of the upstream $up of $root could be made under ${TMPDIR:-/tmp}"; return 1
+  fi
+  trap tmp_sweep EXIT
+  BASE_COPY="$BASE_TMP/tree"
+  while [ "${hd#./}" != "$hd" ]; do hd="${hd#./}"; done
+  while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
+  git -C "$root" ls-tree -r -z --name-only "$up" -- "$hd/" > "$BASE_TMP/list" || rc=$?
+  if [ "$rc" -ne 0 ]; then BASE_WHY="the upstream $up of $root does not read: git ls-tree $up failed (rc $rc)"; return 1; fi
+  while IFS= read -r -d '' e; do
+    case "${e#"$hd/"}" in */*/*) continue ;; */00-missao.md) : ;; *) continue ;; esac
+    mkdir -p -- "$BASE_COPY/${e%/*}"
+    git -C "$root" show "$up:$e" > "$BASE_COPY/$e" || rc=$?
+    if [ "$rc" -ne 0 ]; then BASE_WHY="the upstream $up of $root does not read: git show $up:$e failed (rc $rc)"; return 1; fi
+    [ "$(fm_value "$BASE_COPY/$e" campaign)" != "$id" ] || BASE_DIRS+=("$BASE_COPY/${e%/*}")
+  done < "$BASE_TMP/list"
+}
+
 # campaign_set <root> <id> — PUBLISHES SET_DIRS and SET_CHECKOUTS, ONE definition of what a verb
 # reads for campaign <id>. SET_DIRS is the folder of every copy of every mission of the campaign: the
 # folders under HANDOFF_DIR (the root's; docs/handoffs when unset) of every checkout of the root's
-# repository (checkouts_of) whose 00-missao.md declares exactly `campaign: <id>` — budget counts
-# their ids, next reads their copies. SET_CHECKOUTS is the checkouts whose .sdd/config.sh a verb may
+# repository (checkouts_of) whose 00-missao.md declares exactly `campaign: <id>`, then a copy of each
+# such folder the base carries (base_copies: the tree of the upstream of the root's branch) — budget
+# counts their ids, next reads their copies. A mission runs in a worktree of its own and reaches the
+# root's checkout only when the root takes the base in, and the owner may remove a merged worktree
+# before that: read on disk alone, such a mission was found nowhere, next planned its lot again and
+# budget forgot its spend (achado #2 of the r6). A mission found on disk and in the base is one
+# mission with two copies, as one held by two checkouts is: budget and next read mission ids, each
+# once. SET_CHECKOUTS is the checkouts whose .sdd/config.sh a verb may
 # source: <root>, then each worktree that holds one of SET_DIRS, and no other — the narrow set the
 # owner chose (achado #3 of the r5). Sourcing runs the file as shell, and `sdd run` reads the file of
 # the checkout it runs in, the campaign's or the worktree of one of its missions: a worktree that
-# holds none runs no `sdd run` of this campaign, so its file is never executed, for any key.
-# Returns 1, with the reason in SET_WHY, when the worktrees do not list, or when a checkout of the
-# set other than <root> sets a HANDOFF_DIR that is not the root's: the runner there would look for
-# its missions where the worker does not. An empty <id> finds no mission, since it would match every
+# holds none runs no `sdd run` of this campaign, so its file is never executed, for any key. The base
+# is no checkout: no `sdd run` runs in it, so its file is never sourced, and it is read at the root's
+# HANDOFF_DIR, the set's.
+# Returns 1, with the reason in SET_WHY, when the worktrees do not list, when a checkout of the set
+# other than <root> sets a HANDOFF_DIR that is not the root's (the runner there would look for its
+# missions where the worker does not), or when the base does not read (an upstream set whose
+# for-each-ref, ls-tree or show fails, or no temporary directory for its copies): a base that was not
+# read is never a base with no mission. An empty <id> finds no mission, since it would match every
 # mission that belongs to no campaign; no verb reaches that branch (a legible delegation and the
 # campaign.md next walks both name their directory, id_is_dir), and it is kept because it decides
 # what an empty id answers: no mission, never all. Called, never substituted.
 # Declared limits: a worktree whose HANDOFF_DIR is not the root's keeps its missions where the glob
 # of the root's does not look, so it holds none the set sees, is not read, and its missions are not
 # counted; a worktree whose branch carries a merged copy of a mission of the campaign holds one, and
-# is read.
+# is read. The base is the upstream of the branch the root has checked out, as the last fetch left
+# it: a root on a detached HEAD, or on a branch with no upstream set, reads no base, and a merged
+# mission whose worktree went is found nowhere until the root takes the base in — what every verb
+# answered before the base was read; a mission merged after the last fetch is not in it either (a
+# worktree removed once its merge is proved against the base, `git merge-base --is-ancestor` after a
+# `git fetch`, was fetched first); a root on a branch whose upstream is not the base reads that
+# branch's tree; and a base that keeps the missions outside the root's HANDOFF_DIR holds none the set
+# sees, as a worktree whose HANDOFF_DIR is not the root's.
 campaign_set() {
   local root="$1" id="$2" hd whd wt m held
   SET_DIRS=(); SET_CHECKOUTS=("$root"); SET_WHY=""
@@ -576,6 +641,8 @@ campaign_set() {
       fi
     fi
   done
+  if ! base_copies "$root" "$hd" "$id"; then SET_WHY="$BASE_WHY"; return 1; fi
+  SET_DIRS+=(${BASE_DIRS[@]+"${BASE_DIRS[@]}"})
 }
 
 # budget <campaign-dir> — what the campaign spent against its ceiling: the cost_usd of every ledger
@@ -588,9 +655,10 @@ campaign_set() {
 # hand it 0.01 or 0.02).
 # rc 0 below the ceiling; rc 1 at it or above it, and rc 1 for every answer it cannot have — no
 # delegation or an illegible one (no ceiling), a directory outside a git checkout, a set of checkouts
-# that does not read (campaign_set: the worktrees do not list, or a HANDOFF_DIR of the set is not
-# the root's) or a ledger that does not read (no spend): a spend that could not be read is never
-# zero. A missing ledger is the one zero, since nothing ran yet. rc 1 too, and no mission cap, when
+# that does not read (campaign_set: the worktrees do not list, a HANDOFF_DIR of the set is not the
+# root's, or the base does not read) or a ledger that does not read (no spend): a spend that could
+# not be read is never zero. A mission merged into the base counts whether or not its worktree is
+# still there (campaign_set reads the base), so its spend is never forgotten when the worktree goes. A missing ledger is the one zero, since nothing ran yet. rc 1 too, and no mission cap, when
 # the signed cap is zero, which the runner reads as no ceiling, or below one cent, the unit the
 # worker counts in: the stop names the delegation, the one place that sets it, before any config is
 # read. And when the runner would not apply the signed one: it sources the .sdd/config.sh of the
@@ -735,9 +803,11 @@ pr_states() {
 # template's placeholder among them), a directory outside a git checkout, an empty queue, two
 # missions on one lot, and an approved mission with no branch — `gh pr list --head ''` lists every
 # pull request of the repo, and one merged anywhere would read as this lot's.
-# A mission is found as budget finds them (campaign_set), in the campaign's checkout and in every
-# linked worktree, so a lot in flight is never planned again; a set that does not read (the
-# worktrees do not list, or a HANDOFF_DIR of the set is not the root's) stops, `unread: …`, rc 1.
+# A mission is found as budget finds them (campaign_set), in the campaign's checkout, in every
+# linked worktree and in the base, so a lot in flight is never planned again, nor a lot merged
+# after its worktree went; a set that does not read (the worktrees do not list, a HANDOFF_DIR of the
+# set is not the root's, or the base does not read) stops, `unread: …`, rc 1. A copy of the base is
+# named in the act as git names it, `<upstream>:<path>`, never as the temporary copy that was read.
 # Copies of one mission are one mission, approved only
 # when every copy is: approve is the act the ladder grants last, run is not. Declared limit: the
 # branch read is the first copy's that names one.
@@ -800,6 +870,7 @@ cmd_next() {
     break
   done
   [ -n "$act" ] || act="done - - — every lot of the queue is merged (${#lots[@]} lot(s))"
+  [ -z "${BASE_COPY:-}" ] || act="${act//"$BASE_COPY/"/"$BASE_UP:"}"
   case "$act" in
     run\ * | review\ *)
       if [ "$((i + 1))" -lt "${#lots[@]}" ]; then

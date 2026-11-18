@@ -265,6 +265,15 @@
 #       heading, below the next one or into a quote fails, naming every criterion it leaves out; the
 #       eight rows each A, a criterion in a code span and a ninth row graded A are ready (achado #1
 #       of the r6)
+#   R62 budget, level and next read the missions the base carries, the tree of the upstream of the
+#       campaign checkout's branch, through git: with that checkout behind the base and the merged
+#       mission's worktree removed, next does not plan its lot again and budget counts its spend, with
+#       HANDOFF_DIR written `./docs/handoffs/` too; the mission in a worktree or in the checkout and
+#       in the base is one mission; an upstream that is set and does not read (its ref deleted, a
+#       for-each-ref that fails, an ls-tree or a show that fails after printing, no TMPDIR for the
+#       copies) stops the three with rc 1 naming it or the call, and allows asks; a copy of the base
+#       is named `<upstream>:<path>` in the act, and the copies go when the verb exits (achado #2 of
+#       the r6)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # and R60 carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -345,6 +354,24 @@
 #   rows graded A; a row renamed leaves every round without a name the definition requires). It
 #   stays for the name it prints: the definition and the template, side by side.
 #
+# Declared limits of R62, no probe:
+# - base_copies lists `refs/heads/` and reads the upstream off the line for-each-ref marks `*`, the
+#   branch checked out: a listing of every ref answers the same, since no remote-tracking ref or tag
+#   is ever marked, so the pattern decides nothing (an equivalent degradation, not a missing world).
+#   The mark does: another branch tracks origin/stale, and reading any branch's upstream reads it.
+# - base_copies empties its four globals on entry, and each verb calls campaign_set once per
+#   process: no world reads a value a call before left.
+# - The list is read with `IFS=`, and every entry starts with the HANDOFF_DIR load_config makes a
+#   literal path, and the kept ones end in `/00-missao.md`: no entry kept starts or ends with a
+#   blank, so the trimming `IFS=` turns off has no world. The `-r` has one, the folder whose name
+#   carries a backslash.
+# - The gone world is asked from the cwd of another repo, whose branches track nothing: asked from
+#   the campaign's checkout, a git call that lost its `-C` would read the same repo and answer the
+#   same (measured: the ls-tree and the show without `-C` stay green from there).
+# - A checkout on a detached HEAD or on a branch with no upstream reads no base, and every world of
+#   the other families is one, since their repos have no remote: that answer, the disk alone, is the
+#   limit bin/sdd-worker declares on campaign_set, and no probe pins it.
+#
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
 # sums outside LC_ALL=C answers wrong here. Declared limit: on a machine without the locale that
@@ -353,8 +380,8 @@
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
 # `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `narrow: `, `listed: `,
-# `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `criteria: `, `command: ` and
-# `docs: `) prints exactly the assertions the mission plan or the fix increment that opened it
+# `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `criteria: `, `gone: `,
+# `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that opened it
 # names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at
 # the first red, after printing it; the census in check-health.sh holds that clause.
 #
@@ -3761,6 +3788,180 @@ if [ -z "$got" ]; then
 else
   fail 'criteria: a round that leaves out the row of a criterion fails review and names it, an A in every row present is not an A in every criterion' \
     'REVIEW_CRITERIA equal to the rows of templates/review.md; not-ready naming the criteria left out for each world that leaves one out, ready for the eight rows, a code span and a ninth row' "$got"
+fi
+
+# --- R62: a merged mission whose worktree was removed -------------------------------------------
+# A mission runs in a linked worktree of its own, and its folder reaches the campaign's checkout
+# only when that checkout takes the base in: the kit's checkout stays behind the base by rule while
+# a run is alive, and the owner removes a merged worktree in the cleanup. In between the set found
+# the mission nowhere, and next answered `plan L1` over a lot merged and budget forgot its spend,
+# rc 0 both (achado #2 of the review r6). The set reads the base too: the tree of the upstream of
+# the campaign's checkout, through git. One repo with a bare origin, its main tracking origin/main,
+# the campaign g-gone in its checkout (L1 and L2, signed at pr, mission cap 40, campaign cap 200),
+# L1's mission approved on gone-l1 in a linked worktree, its pull request merged and US$ 85 spent.
+# Beside it, committed with it, three folders a looser reader of the base would count, each with
+# spend of its own: a mission of g-gone one level deeper (archive/…), a folder of g-gone whose file
+# is a README.md and not a 00-missao.md, and a mission of another campaign; and a folder of no
+# campaign whose name carries a backslash, which a read that is not raw turns into a path git
+# does not have. Another branch tracks origin/stale, the base as it was before any mission, so the
+# upstream read is the checked-out branch's and no other's. Budget, level, `allows run --lot L1`
+# and next are asked from the cwd of another repo, whose main tracks nothing, and gh answers only
+# from the checkout:
+#   flight   the worktree alive, the base without the mission: the answer of today
+#   both     gone-l1 pushed to origin's main: the mission on disk and in the base, counted once
+#   gone     the worktree removed, the checkout behind origin/main: the same answer, never plan L1
+#            and never US$ 0.00; the copies of the base and of the terms go when each verb exits
+#   dotted   HANDOFF_DIR written `./docs/handoffs/`, which load_config normalises: the same
+#   noref    origin/main deleted under a main that still tracks it: the four stop with rc 1 naming
+#            the upstream, and allows asks; fetched again, the answer comes back
+#   refs     a git whose for-each-ref fails before printing: the four stop naming the call
+#   tree     a git whose ls-tree prints the list and then fails: the four stop naming the call
+#   show     a git whose show prints the file and then fails: the four stop naming the call
+#   notmp    no TMPDIR: budget and next stop, naming where the copy of the base was asked for
+#   pulled   the checkout fast-forwarded to origin/main: the mission in the checkout and in the
+#            base, counted once
+#   plan     L2's mission merged into the base with its aprovacao: empty and no pull request, the
+#            checkout behind again: next asks approve naming the base's copy as `<upstream>:<path>`,
+#            never the temporary copy it read, and budget counts it as a second mission
+got=""
+GO="$BOX/gone-origin.git"
+GN="$BOX/gone"
+M1=20990901-g-l1
+M2=20990902-g-l2
+gn() { git -C "$GN" -c user.name=fixture -c user.email=fixture@example.com "$@"; }
+gconf=$'HANDOFF_DIR="docs/handoffs"\nON_ESCALATION_CMD="true"'
+mkdir -p "$GN/.sdd" "$GN/docs/campaigns" "$BOX/gone-tmp"
+git init -q --bare -b main "$GO"
+git init -q -b main "$GN"
+printf '%s\n' "$gconf" > "$GN/.sdd/config.sh"
+gn add .sdd/config.sh
+gn commit -q -m z0
+gn remote add origin "$GO"
+gn push -q -u origin main 2> /dev/null || got="fixture: main was not pushed to the bare origin"
+GNT="$(git -C "$GN" rev-parse --show-toplevel)"
+UP=refs/remotes/origin/main
+gn push -q origin main:stale 2> /dev/null || got="${got:+$got; }fixture: origin/stale was not pushed"
+gn branch -q --track a-stale refs/remotes/origin/stale > /dev/null 2>&1 || got="${got:+$got; }fixture: a-stale was not created"
+[ "$(git -C "$GN" for-each-ref --format='%(upstream)' refs/heads/a-stale)" = refs/remotes/origin/stale ] \
+  || got="${got:+$got; }fixture: a-stale does not track origin/stale"
+[ "$(git -C "$GN" for-each-ref --format='%(upstream)' refs/heads/main)" = "$UP" ] \
+  || got="${got:+$got; }fixture: main does not track $UP"
+[ -z "$(git -C "$REPO" for-each-ref --format='%(upstream)' refs/heads/)" ] \
+  || got="${got:+$got; }fixture: a branch of the fixture repo tracks an upstream"
+d="$(campaign g-gone pr "$FAR" 40 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+sign "$d"
+cp -a "$d" "$GN/docs/campaigns/"
+d="$GN/docs/campaigns/g-gone"
+gn worktree add -q -b gone-l1 "$GN-l1" > /dev/null 2>&1 || got="${got:+$got; }fixture: the worktree of L1 was not created"
+lot_mission "$GN-l1" "$M1" g-gone L1 gone-l1 humano-2099-01-01
+lot_mission "$GN-l1" archive/20990903-g-deep g-gone L2 gone-deep humano-2099-01-01
+lot_mission "$GN-l1" 20990904-g-notes g-gone L2 gone-notes humano-2099-01-01
+mv "$GN-l1/$H/20990904-g-notes/00-missao.md" "$GN-l1/$H/20990904-g-notes/README.md"
+lot_mission "$GN-l1" 20990905-g-other g-elsewhere L2 gone-other humano-2099-01-01
+mkdir -p "$GN-l1/$H/"'20990906-g-a\b'
+cp "$ROOT/templates/missao.md" "$GN-l1/$H/"'20990906-g-a\b/00-missao.md'
+git -C "$GN-l1" add -A "$H"
+git -C "$GN-l1" -c user.name=fixture -c user.email=fixture@example.com commit -q -m l1
+prs gone-l1 '[{"number":90,"state":"MERGED"}]'
+{ spent "$M1" session 85; spent 20990903-g-deep session 7; spent 20990904-g-notes session 3
+  spent 20990905-g-other session 11; } >> "$SDD_STATE_DIR/autonomy-log.jsonl"
+mkdir -p "$BOX/stub-gone"
+{ printf '#!/usr/bin/env bash\nroot=%q\n' "$(CDPATH='' cd "$GN" && pwd -P)"; tail -n +3 "$BOX/stub/gh"; } > "$BOX/stub-gone/gh"
+chmod +x "$BOX/stub-gone/gh"
+# A git first on the PATH that runs the real one, but for the call SDD_GIT_SHIM names: refs fails
+# for-each-ref before printing (rc 128), tree and show run ls-tree and show and then fail (rc 1).
+# The subcommand is matched as a word of the call wherever it stands, with or without a -C before it.
+mkdir -p "$BOX/gitshim-gone"
+{ printf '#!/usr/bin/env bash\nreal=%q\n' "$REAL_GIT"
+  cat <<'SHIM'
+case "${SDD_GIT_SHIM:-}| $* " in
+  "refs|"*" for-each-ref "*) echo 'fatal: the shim refuses for-each-ref' >&2; exit 128 ;;
+  "tree|"*" ls-tree "* | "show|"*" show "*) "$real" "$@"; exit 1 ;;
+esac
+exec "$real" "$@"
+SHIM
+} > "$BOX/gitshim-gone/git"
+chmod +x "$BOX/gitshim-gone/git"
+# gone_ask <dir> — budget, level, `allows run --lot L1` and next asked of <dir> from the cwd of the
+# fixture repo, whose main tracks nothing, next under the gh stub of GN; PUBLISHES GONE, one
+# `<verb>: rc <rc> '<stdout>'` line per verb. Called, never substituted: under `$( )` the global
+# would die with the subshell.
+gone_ask() {
+  local v
+  GONE=""
+  for v in budget level allows next; do
+    case "$v" in
+      budget) LC_ALL="$NUM_POISON" W_CWD="$REPO" worker budget "$1" ;;
+      allows) W_CWD="$REPO" worker allows "$1" run --lot L1 ;;
+      *) PATH="$BOX/stub-gone:$PATH" W_CWD="$REPO" worker "$v" "$1" ;;
+    esac
+    GONE+="$v: rc $W_RC '$W_OUT'"$'\n'
+  done
+}
+# gone_stop <why> — the four answers of a set that does not read, for <why>.
+gone_stop() {
+  printf "budget: rc 1 'no spend — %s'\nlevel: rc 1 'level assisted — unread: %s'\n" "$1" "$1"
+  printf "allows: rc 1 'ask run needs pr, effective assisted — unread: %s'\nnext: rc 1 'stop - - — unread: %s'\n" "$1" "$1"
+}
+# gone_is <label> <want> — appends to got unless GONE is <want>, whole.
+gone_is() { [ "$GONE" = "$2" ] || got="${got:+$got; }$1: '${GONE//$'\n'/ / }' (want '${2//$'\n'/ / }')"; }
+want="budget: rc 0 'campaign US\$ 85.00 of 200.00 — 1 mission(s); mission cap US\$ 40'
+level: rc 0 'level pr — signed until $FAR'
+allows: rc 0 'allowed run at pr'
+next: rc 0 'plan L2 - — no mission of campaign g-gone declares lot: L2'
+"
+gone_ask "$d"; gone_is flight "$want"
+git -C "$GN-l1" push -q origin HEAD:main 2> /dev/null || got="${got:+$got; }fixture: gone-l1 was not pushed to origin's main"
+git -C "$GN" cat-file -e "$UP:$H/$M1/00-missao.md" 2> /dev/null || got="${got:+$got; }fixture: the base does not carry $M1"
+if git -C "$GN" cat-file -e "HEAD:$H/$M1/00-missao.md" 2> /dev/null; then got="${got:+$got; }fixture: the checkout is not behind the base"; fi
+gone_ask "$d"; gone_is both "$want"
+gn worktree remove "$GN-l1" || got="${got:+$got; }fixture: the worktree of L1 was not removed"
+{ [ ! -e "$GN-l1" ] && [ ! -e "$GN/$H/$M1" ]; } || got="${got:+$got; }fixture: $M1 is still on disk"
+TMPDIR="$BOX/gone-tmp" gone_ask "$d"; gone_is gone "$want"
+[ -z "$(ls -A "$BOX/gone-tmp")" ] || got="${got:+$got; }gone: the copies were left under TMPDIR: $(ls -A "$BOX/gone-tmp")"
+printf 'HANDOFF_DIR="./docs/handoffs/"\nON_ESCALATION_CMD="true"\n' > "$GN/.sdd/config.sh"
+gone_ask "$d"; gone_is dotted "$want"
+printf '%s\n' "$gconf" > "$GN/.sdd/config.sh"
+gn update-ref -d "$UP"
+[ "$(git -C "$GN" for-each-ref --format='%(upstream)' refs/heads/main)" = "$UP" ] \
+  || got="${got:+$got; }fixture noref: main no longer tracks $UP"
+gone_ask "$d"; gone_is noref "$(gone_stop "the upstream $UP of $GNT does not read: git ls-tree $UP failed (rc 128)")"$'\n'
+gn fetch -q origin
+gone_ask "$d"; gone_is fetched "$want"
+PATH="$BOX/gitshim-gone:$PATH" SDD_GIT_SHIM=refs gone_ask "$d"
+gone_is refs "$(gone_stop "the upstream of $GNT does not read: git for-each-ref failed (rc 128)")"$'\n'
+PATH="$BOX/gitshim-gone:$PATH" SDD_GIT_SHIM=tree gone_ask "$d"
+gone_is tree "$(gone_stop "the upstream $UP of $GNT does not read: git ls-tree $UP failed (rc 1)")"$'\n'
+PATH="$BOX/gitshim-gone:$PATH" SDD_GIT_SHIM=show gone_ask "$d"
+gone_is show "$(gone_stop "the upstream $UP of $GNT does not read: git show $UP:$H/$M1/00-missao.md failed (rc 1)")"$'\n'
+PATH="$BOX/gitshim-gone:$PATH" SDD_GIT_SHIM=pass gone_ask "$d"; gone_is pass "$want"
+why="no copy of the upstream $UP of $GNT could be made under $BOX/no-such-tmp"
+TMPDIR="$BOX/no-such-tmp" LC_ALL="$NUM_POISON" W_CWD="$REPO" worker budget "$d"
+{ [ "$W_RC" = 1 ] && [ "$W_OUT" = "no spend — $why" ]; } || got="${got:+$got; }notmp: budget rc $W_RC '$W_OUT' (want rc 1 'no spend — $why')"
+TMPDIR="$BOX/no-such-tmp" PATH="$BOX/stub-gone:$PATH" W_CWD="$REPO" worker next "$d"
+{ [ "$W_RC" = 1 ] && [ "$W_OUT" = "stop - - — unread: $why" ]; } || got="${got:+$got; }notmp: next rc $W_RC '$W_OUT' (want rc 1 'stop - - — unread: $why')"
+gn merge -q --ff-only "$UP" || got="${got:+$got; }fixture: the checkout was not fast-forwarded"
+[ -f "$GN/$H/$M1/00-missao.md" ] || got="${got:+$got; }fixture pulled: $M1 is not in the checkout"
+gone_ask "$d"; gone_is pulled "$want"
+gn worktree add -q -b gone-l2 "$GN-l2" "$UP" > /dev/null 2>&1 || got="${got:+$got; }fixture: the worktree of L2 was not created"
+lot_mission "$GN-l2" "$M2" g-gone L2 gone-l2 -
+git -C "$GN-l2" add -A "$H"
+git -C "$GN-l2" -c user.name=fixture -c user.email=fixture@example.com commit -q -m l2
+git -C "$GN-l2" push -q origin HEAD:main 2> /dev/null || got="${got:+$got; }fixture: gone-l2 was not pushed to origin's main"
+gn worktree remove "$GN-l2" || got="${got:+$got; }fixture: the worktree of L2 was not removed"
+[ ! -e "$GN/$H/$M2" ] || got="${got:+$got; }fixture plan: $M2 is on disk"
+gone_ask "$d"
+gone_is plan "budget: rc 0 'campaign US\$ 85.00 of 200.00 — 2 mission(s); mission cap US\$ 40'
+level: rc 0 'level pr — signed until $FAR'
+allows: rc 0 'allowed run at pr'
+next: rc 0 'approve L2 $M2 — not approved: $UP:$H/$M2/00-missao.md has aprovacao: '''
+"
+if [ -z "$got" ]; then
+  pass "gone: a merged mission whose worktree was removed is found in the base, counted once, and a base that does not read stops budget, level and next"
+else
+  fail "gone: a merged mission whose worktree was removed is found in the base, counted once, and a base that does not read stops budget, level and next" \
+    "the answer with the worktree alive in every world that keeps the mission somewhere, the four stops naming the upstream or the call, approve naming the base's copy" "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------
