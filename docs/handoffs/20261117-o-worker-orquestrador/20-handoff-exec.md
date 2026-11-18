@@ -2,9 +2,9 @@
 missao: 20261117-o-worker-orquestrador
 fase: EXEC
 status: done
-sessao: 65ee2253-4d03-4dac-ae08-2ba6543eaef6
-data: 2026-11-18 06:10
-gate: "tests/run-all.sh na árvore do 6bc1755 → suite green, rc 0, 2136 linhas ok, 0 FAIL, 8 min 37 s; anchors: all 846 mutants still apply and leave valid code; tests/check-worker.sh → worker verbs: 40 probe(s), as quinze famílias 1/3/6/4/3/5/7/3/1/1/2/1/1/1/1 (usage, delegate, level, allows, budget, next, pr-ready, command, docs, seal, legible, cap, rationale, lot, shown); grep -c '^mut_WORKER_' tests/check-mutation.sh → 33; tests/check-todo.sh --anchors TODO.md → 83 measured, 0 off target; checkpoint 15 de 15 done (I1–I11, F1, F2, R1, R2)"
+sessao: e6a2eda8-ecc5-40a4-8a2a-812112ca70a6
+data: 2026-11-18 08:22
+gate: "tests/run-all.sh na árvore do 756fed3 → suite green, rc 0, 2139 linhas ok (2137 antes do R4), as mesmas 12 linhas FAIL dos controles negativos de antes; anchors: all 852 mutants still apply and leave valid code; tests/check-worker.sh → worker verbs: 43 probe(s), as dezoito famílias 1/3/6/4/3/5/7/3/1/1/2/1/1/1/1/1/1/1 (usage, delegate, level, allows, budget, next, pr-ready, command, docs, seal, legible, cap, rationale, lot, shown, worktree, pipe, zero); grep -c '^mut_WORKER_' tests/check-mutation.sh → 39; tests/check-todo.sh --anchors TODO.md → 83 measured, 0 off target; checkpoint 17 de 17 done (I1–I11, F1, F2, R1–R4)"
 ---
 
 # Handoff — EXEC — O worker orquestrador
@@ -14,18 +14,19 @@ gate: "tests/run-all.sh na árvore do 6bc1755 → suite green, rc 0, 2136 linhas
 
 ## TL;DR
 
-Os onze incrementos, os dois consertos da QA (`F1`, `F2`) e os dois da r1 da REVIEW (`R1`, `R2`)
-estão feitos, um commit cada, e a suíte está verde no `6bc1755`. O `R1` fez o `budget` parar quando o
-`.sdd/config.sh` do alvo vence o teto por missão assinado; o `R2` fez o `pr-ready` recusar
-justificativa e `gate:` de preenchimento, o `allows` exigir `--lot` e o `delegate` assinar só o que
-mostrou. O sensor tem 40 asserções em quinze famílias e 33 mutantes `mut_WORKER_*`. Próxima: a r2.
+Os onze incrementos, os dois consertos da QA (`F1`, `F2`), os dois da r1 (`R1`, `R2`) e os dois da
+r2 da REVIEW (`R3`, `R4`) estão feitos, um commit cada, e a suíte está verde no `756fed3`. O `R3` fez o
+`budget` ler o `.sdd/config.sh` de todo checkout do repo, os worktrees das missões inclusos; o `R4` fez
+os dois leitores da tabela de notas dividirem a linha como o `gate_REVIEW` (um `\|` é pipe da célula)
+e o teto por missão assinado zero parar nomeando a delegação. O sensor tem 43 asserções em dezoito
+famílias e 39 mutantes `mut_WORKER_*`. Próxima: a r3.
 
 ## Estado do repo
 
 - **Branch:** `feat/o-worker-orquestrador`, só local, sem upstream (nada foi empurrado)
-- **Último commit de código:** `6bc1755` `fix(worker): a justificativa e o gate: da rodada, o lote do ato e os termos que o delegate mostrou`; este handoff e o checkpoint vêm num commit logo depois
+- **Último commit de código:** `756fed3` `fix(worker): o pipe escapado na tabela de notas e o teto assinado zero`; este handoff, as notas e o checkpoint vêm num commit logo depois
 - **Working tree:** limpo depois do commit do handoff
-- **Suíte:** `tests/run-all.sh` → verde, rc 0, 2136 linhas `ok`, 0 `FAIL`, 846 mutantes aplicam (`--anchors`)
+- **Suíte:** `tests/run-all.sh` → verde, rc 0, 2139 linhas `ok`, 852 mutantes aplicam (`--anchors`); as 12 linhas `FAIL` do log são as dos controles negativos dos sensores, as mesmas antes e depois do R4
 - **E2E:** não há `E2E_CMD`: o kit é bash e markdown, sem interface
 
 ## O que foi feito
@@ -52,13 +53,18 @@ mostrou. O sensor tem 40 asserções em quinze famílias e 33 mutantes `mut_WORK
 - `328087f` — R1 (#1, HIGH): o `budget` lê o `.sdd/config.sh` do repo da campanha como o runner o carrega, com o teto assinado no ambiente (`config_key` ganhou o terceiro argumento), e sai rc 1 com `no mission cap — <arquivo> sets BUDGET_MISSION_USD=<valor>, …` quando o valor que o `sdd run` aplicaria está acima do teto assinado, em zero, vazio ou fora de número; o starter que o `sdd install` escreve (150) cai aqui. Sem editar `bin/sdd`. Família nova `cap: ` (1 linha), três mutantes `mut_WORKER_cap_*`
 - `6bc1755` — R2 (#2, #3, #4): o item `review` do `pr-ready` recusa a linha graduada A cuja justificativa é preenchimento, e o `gate:` de preenchimento ou ausente, pela regra do `gate_REVIEW` (cópia do `PLACEHOLDER_AWK`, comparada com a do runner pelo probe); o `allows` sem `--lot` é rc 2, nomeando a falta; o `delegate` relê os termos depois do `y` e não assina o que mudou com a pergunta aberta, e o digest gravado é o dos termos mostrados. Famílias novas `rationale: `, `lot: ` e `shown: ` (1 linha cada), quatro mutantes (`rationale_*` 2, `lot_optional`, `shown_terms_unchecked`)
 
+### Rodada r2 da REVIEW (`R3`, `R4`, dos achados #1 a #3 do `40-review-r2.md`)
+
+- `7747f6b` — R3 (#1, HIGH): o `budget` aplica a regra do R1 ao `.sdd/config.sh` de todo checkout que o `checkouts_of` lista, o da campanha primeiro e cada worktree ligado depois, guarde ele missão da campanha ou não (o conjunto mais largo, o lado seguro), e a parada nomeia o arquivo do worktree. Família nova `worktree: ` (1 linha), dois mutantes `mut_WORKER_worktree_*`
+- `756fed3` — R4 (#2 e #3, LOW): o `round_grades` e o `round_unjustified` dividem a linha pelo `cells()` do `GRADE_ROW_AWK`, cópia do `escaped_pipe` e da reemenda do `gate_REVIEW` — a justificativa `<why \| in one sentence>` deixa de passar, e um critério com `\|` deixa de deslocar um B para fora da coluna da nota (mesmo corte no outro leitor, com o lado aberto pior, consertado junto); o `budget_mission_usd: 0` assinado para o `budget` antes de qualquer config, nomeando a delegação. Famílias novas `pipe: ` (diferencial contra o split do `gate_REVIEW` lido do `bin/sdd`) e `zero: ` (1 linha cada), quatro mutantes (`pipe_*` 3, `zero_signed_unchecked`)
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
 | `bin/sdd-worker` | o programa: `delegate`, `level`, `allows`, `budget`, `next`, `pr-ready` |
-| `tests/check-worker.sh` | o sensor, 40 asserções em quinze famílias (`seal: ` e `legible: ` da QA, `cap: `, `rationale: `, `lot: ` e `shown: ` da REVIEW inclusas), com controle negativo nas famílias de prosa |
-| `tests/check-mutation.sh` | 33 mutantes `mut_WORKER_*` no `CATALOG` |
+| `tests/check-worker.sh` | o sensor, 43 asserções em dezoito famílias (`seal: ` e `legible: ` da QA, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: ` e `zero: ` da REVIEW inclusas), com controle negativo nas famílias de prosa |
+| `tests/check-mutation.sh` | 39 mutantes `mut_WORKER_*` no `CATALOG` |
 | `tests/fixtures/codex-review-state.txt` | o comentário de máquina do Codex, copiado do PR 409 (proveniência no sensor) |
 | `commands/sdd-worker.md` | o comando da sessão orquestradora |
 | `templates/campaign.md`, `templates/delegation.md` | os dois contratos da campanha |
@@ -68,26 +74,26 @@ mostrou. O sensor tem 40 asserções em quinze famílias e 33 mutantes `mut_WORK
 
 ## Boot da próxima fase
 
-**REVIEW r2, depois de `R1` e `R2`.** Revise o diff `d5eee41..6bc1755` (os dois consertos e os
-dois commits de checkpoint), reproduzindo numa cópia `mktemp -d` o que cada achado da r1 dizia. O que
+**REVIEW r3, depois de `R3` e `R4`.** Revise o diff `c021f95..756fed3` (os dois consertos e o
+commit de checkpoint do R3), reproduzindo numa cópia `mktemp -d` o que cada achado da r2 dizia. O que
 mudou e é visível na CLI:
 
-- **`budget`** (R1) sai rc 1, `no mission cap — <arquivo> sets BUDGET_MISSION_USD=<valor>, …`,
-  quando o `.sdd/config.sh` do repo da campanha fixa a chave acima do teto assinado, em zero, vazia
-  ou fora de número; igual ou abaixo, ou na forma `${BUDGET_MISSION_USD:-…}`, vale o assinado.
-- **`pr-ready`** (R2, #2) responde `not-ready review: <rodada>: <critério> grades A with a
-  placeholder rationale (<texto>) — …` e `not-ready review: the gate: of <rodada> is a placeholder or
-  absent ('<valor>') — …`. A rodada que a sessão do worker escreve precisa de uma frase por nota e
-  da evidência no `gate:`; o ato `review` do `commands/sdd-worker.md` agora pede isso ao subagente.
-- **`allows`** (R2, #3) sem `--lot` é rc 2, `sdd-worker: allows needs --lot L<n>: …` no stderr, e o
-  uso passou a dizer `allows <campaign-dir> <act> --lot L<n>`. Quem chamava sem o lote recebe uso.
-- **`delegate`** (R2, #4) responde `not signed — the delegation changed after it was shown, and
-  nothing was written: run delegate again`, rc 1, quando o arquivo muda com a pergunta aberta.
+- **`budget`** (R3) sai rc 1, `no mission cap — <arquivo> sets BUDGET_MISSION_USD=<valor>, …`, quando o
+  `.sdd/config.sh` de **qualquer** checkout do repo (o da campanha ou um worktree ligado) fixa a chave
+  acima do teto assinado, em zero, vazia ou fora de número, e nomeia o arquivo desse checkout.
+- **`budget`** (R4, #3) com `budget_mission_usd: 0` (ou `0.00`) assinado sai rc 1, `no mission cap —
+  <delegation.md> signs budget_mission_usd: 0, which sdd run reads as no ceiling; sign a cap above 0`,
+  antes de ler config nenhum; `0.5` é teto e vale.
+- **`pr-ready`** (R4, #2) divide cada linha da tabela de notas como o `gate_REVIEW`: um `\|` é pipe da
+  célula, `\\|` é barra literal contra um delimitador real. A justificativa-placeholder com pipe
+  escapado é recusada e a frase com pipe escapado passa; uma linha sem célula de justificativa
+  (`| Security | A`, que o runner pula) é recusada, o lado mais estrito.
 
-As escolhas, os limites e cada sabotagem estão nas notas do `R1` e do `R2` do `checkpoint-notas.md`.
+As escolhas, os limites e cada sabotagem estão nas notas do `R3` e do `R4` do `checkpoint-notas.md`.
 A prosa da ADR 0022 (§3, "a digest of the other fields"; §8, "reaches the runner as
 BUDGET_MISSION_USD"; linhas 94 e 150, "every criterion A", "on the grade alone") não foi mexida:
-ficou menos precisa, não falsa, e é da DOCS.
+ficou menos precisa, não falsa, e é da DOCS. A linha 150 ("never the reverse on the grade alone")
+voltou a ser verdade com o R4.
 
 **O que vale desde a primeira QA, num repo sem interface.** O que é visível para quem usa o kit:
 
@@ -152,7 +158,9 @@ worktree ligado, sem `KIT-TOUCHED`, `hat-crossed` nem escalada no `pipeline.log`
 - **Os limites declarados na ADR 0022 continuam valendo:** a assinatura prova uma resposta no stdin, não uma pessoa; os tetos leem o ledger desta máquina, e o gasto da sessão orquestradora e dos subagentes fica fora deles; as missões de uma campanha são casadas pelo id, não pelo repositório.
 - **O `pr-ready` exige `reviewed_head:`**, que as rodadas da fase REVIEW do `sdd run` não escrevem. Depois de uma corrida ele responde `not-ready review: the newest round names no head` até a rodada da sessão do worker. É desenho (M5 do caderno), não defeito.
 - **O `next` não deriva o `postmerge`**, e nenhum verbo age: quem roda, abre PR e mergeia é a sessão.
-- **Três limites que o R2 declara:** o `gate:` ausente é recusado pelo `pr-ready` (o `gate_REVIEW` o deixa passar, para as rodadas anteriores à chave; a do worker nasce do template); um `\|` dentro da justificativa corta a célula no `round_unjustified`, onde o `gate_REVIEW` a reemenda, então um pedaço que é palavra de preenchimento (`TODO\|…`) recusa uma frase real — o lado fechado, escrito no comentário; e o `allows` sem `--lot` deixou de responder, uma mudança de uso para quem o chamava assim (nenhum chamador do kit: o comando já passava o lote em todo ato).
+- **Dois limites que o R2 declara:** o `gate:` ausente é recusado pelo `pr-ready` (o `gate_REVIEW` o deixa passar, para as rodadas anteriores à chave; a do worker nasce do template); e o `allows` sem `--lot` deixou de responder, uma mudança de uso para quem o chamava assim (nenhum chamador do kit: o comando já passava o lote em todo ato). O terceiro, o `\|` que cortava a justificativa, deixou de ser limite com o R4, que também achou o mesmo corte no `round_grades`, com o lado aberto.
+- **Dois limites que o R3 declara, no comentário do `cmd_budget`:** um worktree criado depois da chamada não é lido (o laço do comando chama o `budget` a cada volta, então a volta que roda uma missão lê o worktree que o plano dela criou); e um worktree alheio à campanha cujo config vence o teto também para (o lado seguro: o dono conserta o arquivo ou poda o worktree).
+- **A reemenda do pipe mora em três lugares** (`checkpoint_rows` e `gate_REVIEW` no `bin/sdd`, `GRADE_ROW_AWK` no `bin/sdd-worker`). Quem segura a do worker igual à do `gate_REVIEW` é o probe `pipe: `, que lê o `escaped_pipe` e o laço do runner e compara os veredictos; o `n > 0 &&` e o `n = 0` da cópia não têm mundo no worker e ficam para ela seguir a do runner linha a linha (notas do `R4`).
 - **A regra do preenchimento mora em dois programas** (`bin/sdd` e `bin/sdd-worker`). Quem as segura iguais é o probe `rationale: `, que lê a do runner e compara os veredictos; uma mudança numa só deixa o sensor vermelho.
 - **A catraca não se moveu** (`todo-findings 83`): nenhum item entrou ou saiu do `TODO.md`.
 
