@@ -235,6 +235,11 @@
 #       it alone — is never granted, and asked again the files are edited after signing; the copy
 #       goes when the verb exits, one it cannot make under TMPDIR is `unread`, rc 1, and a file it
 #       cannot read answers what budget answers for it (achado #25 of the r5)
+#   R58 every probe runs in a box whose path does not read as itself as a regex, a JSON string, a
+#       sed script, a glob or one shell word (proved armed before the first probe; rc 94 when it is
+#       not): a path of the fixture enters each of them as text only — the ledger lines are built
+#       by jq, the commit line of delegate is compared by grep -xF, the mission folder's prefix by
+#       index(), and a call of the wrong shape is split on `|` (achados #28 and #29 of the r5)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -279,6 +284,21 @@
 #   a root user, for whom that mkdir succeeds. The second has no world of its own: one name made in
 #   a directory mktemp -d has just made.
 #
+# Declared limits of R58, no probe:
+# - The trap removes the mktemp directory, not only the box under it, and the box's mkdir stops the
+#   sensor when it fails: the sensor does not read the temporary directory after itself, and the box
+#   is one name made in a directory mktemp -d has just made.
+# - The regex guard has no world of its own: of the 23 names tried, every one a glob does not read
+#   as itself a regex does not either, so a poison a regex reads as itself stops at the glob guard.
+#   It stays for the name it prints.
+# - spent() writes event and repo as the runner does, and budget reads only mission and cost_usd:
+#   a constant in either changes no answer.
+# - not_under serves two fixture checks over a constant prefix, `docs/handoffs/20990300-ready/`,
+#   with no character a regex reads, and git prints names relative to the root, so the prefix is
+#   only ever at the start: a filter that drops every line, one that drops a line holding the
+#   prefix anywhere, and the regex it replaced answer the same. The worlds of a folder named with a
+#   regex character, and of a fixture whose diff leaves the folder, were not built.
+#
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
 # sums outside LC_ALL=C answers wrong here. Declared limit: on a machine without the locale that
@@ -314,8 +334,29 @@ fail() { PROBES=$((PROBES + 1))
          printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
          fails=$((fails + 1)); [ -z "${SDD_MUTANT:-}" ] || exit 1; }
 
-BOX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-worker-XXXXXX")"
-trap 'rm -rf "$BOX"' EXIT
+# The box lives one directory below its mktemp, in a directory whose name arms the class of R58: a
+# path of the fixture that enters a regex, a JSON string written by printf, a sed script or a glob
+# pattern answers wrong here on every run, and not only under a TMPDIR somebody chose. `[ci]` is a
+# bracket expression to grep and to a glob, `"` ends a JSON string, `@` ends the s command of every
+# sed in this file and `&` is its match; the blank, `*`, `$1` and the trailing backslash are what a
+# shell word or an `awk -v` reads (the name is `[ci]q"x @&*$1\`, written with \x22 for the quote).
+# The poison is proved ARMED before any probe, by the four operations themselves: a box that one of
+# them reads as itself measures nothing of that kind, and the sensor stops with rc 94, naming it.
+# Declared limit: a `|` and a newline are not in it. The probes that list calls of the wrong shape
+# split each call on `|`, and every reader of the ledger and of a config reads one line at a time.
+BOX_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/sdd-worker-XXXXXX")"
+trap 'rm -rf "$BOX_ROOT"' EXIT
+BOX="$BOX_ROOT/"$'[ci]q\x22x @&*$1\\'
+mkdir "$BOX" || { printf '  SENSOR-BROKEN  no box under %s\n' "$BOX_ROOT" >&2; exit 94; }
+inert=""
+grep -qx -- "$BOX" <<< "$BOX" 2> /dev/null && inert="${inert:+$inert, }a regex"
+jq -e . <<< "\"$BOX\"" > /dev/null 2>&1 && inert="${inert:+$inert, }a JSON string"
+[ "$(sed "s@^.*\$@$BOX@" <<< x 2> /dev/null)" = "$BOX" ] && inert="${inert:+$inert, }a sed script"
+# shellcheck disable=SC2053 # the unquoted right side IS the probe: the path read as a glob pattern
+[[ "$BOX" == $BOX ]] && inert="${inert:+$inert, }a glob"
+read -ra words <<< "$BOX"; [ "${#words[@]}" -gt 1 ] || inert="${inert:+$inert, }one shell word"
+[ -z "$inert" ] || { printf '  SENSOR-BROKEN  the box %s reads as itself as %s: the poison is not armed\n' \
+  "$BOX" "$inert" >&2; exit 94; }
 # The ledger is the fixture's for the whole sensor: no probe ever reads the real one. The one probe
 # of the $HOME fallback unsets this in a subshell, with HOME in the box.
 export SDD_STATE_DIR="$BOX/state"
@@ -432,8 +473,10 @@ cmp -s <(sed '/^signed:/d' "$BOX/c-yes.before") <(sed '/^signed:/d' "$d/delegati
   || got="${got:+$got; }a line other than signed: changed"
 grep -qx 'level: pr' <<< "$W_OUT" && grep -qx 'budget_campaign_usd: 200.50' <<< "$W_OUT" \
   || got="${got:+$got; }the grant was not echoed on stdout"
-grep -q "^signed $d/delegation.md — commit it: git add $d/delegation.md && git commit " <<< "$W_OUT" \
-  || got="${got:+$got; }no commit line on stdout"
+# The commit line is compared as text, the whole line: it carries the box's path, which a regex
+# reads as a bracket expression (R58).
+commit_line="signed $d/delegation.md — commit it: git add $d/delegation.md && git commit -m \"chore(campaign): sign the delegation of c-yes\""
+grep -qxF -- "$commit_line" <<< "$W_OUT" || got="${got:+$got; }no commit line on stdout"
 grep -qF 'Sign this delegation? [y/N]' <<< "$W_ERR" || got="${got:+$got; }the question was not asked"
 if [ -z "$got" ]; then
   pass 'delegate: an answer of y signs with a digest of the other fields'
@@ -927,10 +970,13 @@ mission() {
 
 # spent <mission> <event> <cost> — one line of the ledger in the shape the runner writes it (a
 # session line of the real ledger, trimmed to the keys around the two a reader of the spend reads);
-# <cost> is raw JSON: a number, or the null the runner writes for the events that carry none.
+# <cost> is raw JSON: a number, or the null the runner writes for the events that carry none. Built
+# by jq, never by printf: the repo is a path of the box, and a quote in it (R58) would make every
+# line malformed, which the reader skips and the sum reads as nothing spent.
 spent() {
-  printf '{"v":1,"ts":"2099-01-01T00:00:00-03:00","event":"%s","invocation":"run","project":"fixture","repo":"%s","mission":"%s","phase":"EXEC","rc":0,"cost_usd":%s}\n' \
-    "$2" "$REPO" "$1" "$3"
+  jq -cn --arg e "$2" --arg r "$REPO" --arg m "$1" --argjson c "$3" \
+    '{v: 1, ts: "2099-01-01T00:00:00-03:00", event: $e, invocation: "run", project: "fixture",
+      repo: $r, mission: $m, phase: "EXEC", rc: 0, cost_usd: $c}'
 }
 
 # The decimal comma (see the header): the locale only when it is armed, empty otherwise.
@@ -1366,11 +1412,15 @@ next_is 'outside a checkout' 1 'stop - - — ' '' "$BOX/loose/n-plan"
 d="$(campaign n-noqueue pr "$FAR" 25 200)"
 set_lots "$d/campaign.md"
 next_is 'empty queue' 1 'stop - - — ' '' "$d"
-for a in '' "$REPO/docs/campaigns/n-absent" "$REPO/docs/campaigns/n-run extra"; do
-  read -ra args <<< "$a"
+# Each call is split on `|`, never on blanks, and the split is witnessed: the box's path holds a
+# blank (R58), and split on it the absent directory became a call of two words, which answers the
+# same usage — a world the probe never meant.
+for a in '|0' "$REPO/docs/campaigns/n-absent|1" "$REPO/docs/campaigns/n-run|extra|2"; do
+  IFS='|' read -ra args <<< "${a%|*}"
+  [ "${#args[@]}" = "${a##*|}" ] || got="${got:+$got; }fixture: '${a%|*}' split into ${#args[@]} word(s), not ${a##*|}"
   PATH="$BOX/stub:$PATH" worker next ${args[@]+"${args[@]}"}
   [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -q '^usage: sdd-worker ' <<< "$W_ERR" \
-    || got="${got:+$got; }next '$a': rc $W_RC, stdout '${W_OUT%%$'\n'*}'"
+    || got="${got:+$got; }next '${a%|*}': rc $W_RC, stdout '${W_OUT%%$'\n'*}'"
 done
 if [ -z "$got" ]; then
   pass 'next: a gh that does not answer leaves rc 3, and a pull request closed without merge stops'
@@ -2658,8 +2708,11 @@ range_is() {
   PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
   { [ "$W_RC" = 1 ] && [ "$W_OUT" = "$2" ]; } || got="${got:+$got; }$1: rc $W_RC '$W_OUT' (want rc 1 '$2')"
 }
-# outside_of <a> <b> — the paths outside the mission folder that the diff between <a> and <b> lists.
-outside_of() { git -C "$RR" -c core.quotePath=false diff --no-renames --name-only "$1" "$2" | grep -v "^$pre" || true; }
+# not_under <prefix> — the lines of stdin that do not start with <prefix>, compared as text: a path
+# never enters a regex (R58). outside_of <a> <b> — the paths outside the mission folder that the
+# diff between <a> and <b> lists.
+not_under() { P="$1" awk 'index($0, ENVIRON["P"]) != 1'; }
+outside_of() { git -C "$RR" -c core.quotePath=false diff --no-renames --name-only "$1" "$2" | not_under "$pre"; }
 ready_reset
 printf 'three\n' > "$RR/src/app.txt"; gitc commit -q -am c; RC1="$(git -C "$RR" rev-parse HEAD)"
 gitc revert --no-edit HEAD > /dev/null; HEADNOW="$(git -C "$RR" rev-parse HEAD)"
@@ -2680,7 +2733,7 @@ gitc checkout -q --detach "$A"; printf 'e\n' > "$MD/note.md"; gitc add -A; gitc 
 E="$(git -C "$RR" rev-parse HEAD)"; gitc checkout -q main
 round "$R2F" "$E"; land n-sibling; export GHFX="$BOX/ghfx/n-sibling"
 { [ -z "$(outside_of "$E" "$HEADNOW")" ] \
-  && [ -z "$(git -C "$RR" -c core.quotePath=false log --format= --name-only --no-renames "$E..$HEADNOW" | grep -v "^$pre" | grep -v '^$' || true)" ]; } \
+  && [ -z "$(git -C "$RR" -c core.quotePath=false log --format= --name-only --no-renames "$E..$HEADNOW" | not_under "$pre" | grep -v '^$' || true)" ]; } \
   || got="${got:+$got; }fixture: sibling: E..head leaves the folder"
 range_is sibling "not-ready review: the reviewed head $E of $R2F is not an ancestor of the head $HEADNOW — the pull request does not carry the commit the round read"
 ready_reset

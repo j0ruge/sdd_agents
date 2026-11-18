@@ -172,7 +172,11 @@ run() { # run <name> <command...>
 # Moving a number is a commit with an author, never a deadline someone forgot.
 # Remeasured since, the rule unchanged: 'preflight and the install guard' was ~30 s on 2026-10-02 and
 # took 73 s on 2026-10-21 (ADR 0019's worlds), under a load of 2.09 with another repo's `sdd run`
-# alive, so its line is 8 × 73 ≈ 584, rounded up to 600 by the human's call.
+# alive, so its line is 8 × 73 ≈ 584, rounded up to 600 by the human's call. 'the worker answers
+# from artifacts' was 38 s when it landed (KAIZEN_LOG.md) and got 120; remeasured idle on 2026-11-18
+# (R9 of 20261117-o-worker-orquestrador, achado #36 of the r5), nothing of the kit running and a
+# load of 1.1 to 2.0 on 20 cores: 66.0, 67.1, 67.0 and 67.9 s, so its line is 8 × 68 = 544, rounded
+# up to 550. A lone run at 14:36 of the same day took 29 s: the clock of this machine moves.
 step_timeout() { # step_timeout <step name> — prints the deadline in seconds; rc 1 when the step has none
   case "$1" in
   "runner syntax (bash -n)") echo 60 ;;
@@ -193,7 +197,7 @@ step_timeout() { # step_timeout <step name> — prints the deadline in seconds; 
   "every hat declares its boundary") echo 60 ;;
   "adr allocator and link check") echo 90 ;;
   "one checkout has one execution owner") echo 240 ;;
-  "the worker answers from artifacts") echo 120 ;;
+  "the worker answers from artifacts") echo 550 ;;
   "catalogue anchors: every mutant still applies") echo 60 ;;
   "mutation: the suite dies when the runner is sabotaged") echo 0 ;;
   *) return 1 ;;
