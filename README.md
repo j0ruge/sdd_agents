@@ -44,6 +44,7 @@ the CLI is killed; it is released automatically when the last descendant exits. 
 ```bash
 # git clone https://github.com/j0ruge/sdd_agents.git   # PRIVATE repository
 export PATH="$HOME/repos/sdd_agents/bin:$PATH"     # or ln -s .../bin/sdd ~/.local/bin/sdd
+                                                   #   (and .../bin/sdd-worker beside it, for the worker)
 
 cd ~/repos/my-project
 sdd install            # creates .sdd/config.sh and copies .claude/agents/sdd-*.md
@@ -161,9 +162,11 @@ run, review and merge inside a delegation the owner signed with `sdd-worker dele
 a level (`assisted` < `pr` < `plan` < `merge` < `full`), the lots it covers, an end and two
 ceilings. The verbs only answer: the effective level, whether an act fits it, the spend, the next
 act, and whether a pull request meets the merge bar on its head sha. An absent, unsigned, expired
-or illegible delegation answers `assisted`, and then the worker does nothing alone. The contracts,
-the rules and the declared limits are in
-[`docs/pipeline.md`](docs/pipeline.md#the-worker).
+or illegible delegation answers `assisted`, and then the worker does nothing alone. With the
+`bin/` directory on the `PATH`, `sdd-worker` is there too; with only `sdd` symlinked, link
+`sdd-worker` as well, or call it by the path `commands/sdd-worker.md` resolves:
+`"$(dirname "$(readlink -f "$(command -v sdd)")")/sdd-worker"`. The contracts, the rules and the
+declared limits are in [`docs/pipeline.md`](docs/pipeline.md#the-worker).
 
 `sdd run` and `sdd retry` put you on the branch the plan declares (`branch:` in `00-missao.md`)
 before the first gate — checking it out, or cutting it from where you stand. A `<…>` placeholder or
@@ -234,7 +237,8 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | [`config/schema.md`](config/schema.md) | every `.sdd/config.sh` key, with its default and why |
 | [`CONTEXT.md`](CONTEXT.md) | glossary of the kit's own vocabulary, and the decisions resolved in interview |
 | [`agents/`](agents/) | the 8 agents (open markdown — portable to other harnesses) |
-| [`templates/`](templates/) | mission, plan, handoff, checkpoint, review, PR body |
+| [`templates/`](templates/) | mission, plan, handoff, checkpoint, review, PR body, campaign, delegation |
+| [`commands/`](commands/) | the session commands: `/sdd-plan` (planning, with you present) and `/sdd-worker` (the campaign loop) |
 | [`CLAUDE.md`](CLAUDE.md) | conventions for whoever (human or agent) works on **this** kit |
 | [`KAIZEN_LOG.md`](KAIZEN_LOG.md) | history of improvements with a measured before/after |
 | [`TODO.md`](TODO.md) | findings about the kit itself, recorded by any agent |

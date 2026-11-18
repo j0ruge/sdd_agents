@@ -279,18 +279,18 @@ regras estão em `templates/checkpoint.md`, com o porquê medido, e quem as cobr
 `tests/check-checkpoint.sh`.
 
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
-novo entra lá. Os dezesseis de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
+novo entra lá. Os dezessete de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
 `check-mutation.sh`, `check-lang.sh`, `check-autonomy.sh`, `check-kaizen.sh`, `check-preflight.sh`,
 `check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh`, `check-checkpoint.sh`,
-`check-health.sh`, `check-hat.sh`, `check-adr.sh` e `check-coordination.sh`.
+`check-health.sh`, `check-hat.sh`, `check-adr.sh`, `check-coordination.sh` e `check-worker.sh`.
 ⚠️ O número sai do comando e nunca desta linha — `ls tests/check-*.sh | wc -l` —, pela mesma
-régua do `44 caught of 44`: a lista envelheceu três vezes seguidas aqui, uma por sensor.
+régua do `44 caught of 44`: a lista envelheceu quatro vezes seguidas aqui, uma por sensor.
 ⚠️ **Todo passo da suíte tem prazo** (`step_timeout` do `run-all.sh`, 8× o tempo ocioso, piso 60 s;
 desde #112): passo novo sem linha na tabela é recusado, estouro é vermelho nomeado, e dentro de
 mutante é rc 124, que o catálogo lê como `TIMED-OUT` (inconclusivo), nunca como pego. Sintoma e
 saída em [`docs/failure-modes.md`](docs/failure-modes.md).
 
-⚠️ **Quinze dos dezesseis rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
+⚠️ **Dezesseis dos dezessete rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
 verifica CADA mutante rodando a suíte inteira numa sandbox, e isso segurava a árvore por mais de
 dez minutos por gate — até tornar uma FASE insatisfazível: três sessões de REVIEW seguidas
 encerraram o turno com as palavras *"waiting for the suite"*, e em `claude -p` encerrar o turno é

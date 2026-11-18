@@ -1822,8 +1822,11 @@ Two files make it:
 Any directory of the target repo — the convention is `docs/campaigns/<YYYYMMDD>-<slug>/`, and the
 kit's own live under `docs/superpowers/campaigns/` — holding three files. No config key names it:
 every verb but `pr-ready` takes it as its first argument and finds the repo root by
-`git -C <dir> rev-parse --show-toplevel`; `HANDOFF_DIR` and `ON_ESCALATION_CMD` come from that
-root's `.sdd/config.sh`, read in a subshell.
+`git -C <dir> rev-parse --show-toplevel`; `HANDOFF_DIR` comes from that root's `.sdd/config.sh`,
+read in a subshell. `ON_ESCALATION_CMD` and `BUDGET_MISSION_USD` are read the same way, but in the
+`.sdd/config.sh` of every checkout of the repo — the root's and each linked worktree's —, because
+`sdd run` runs a mission in its worktree and reads that checkout's file (rule 6 of the effective
+level, and `budget`).
 
 - `campaign.md` (`templates/campaign.md`): frontmatter `campaign:` (the id, the directory's name),
   `title:`, `date:`, `harness:`, `plan_model:` and `exec_model:`; then the heading `## Lotes` over a
@@ -1912,7 +1915,7 @@ stderr and leaves rc 2. The reason of an answer comes after ` — `.
 | `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible, expired, or changed after it was shown (it signs the terms it showed); 66 nothing on stdin |
 | `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0 |
 | `sdd-worker allows <campaign-dir> <act> --lot L<n>` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner; 2 not an act, or no `--lot` (every act is of one lot, and the lot's ceiling is the act's) |
-| `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, no ceiling or spend to read, or `no mission cap — …` when the config of a checkout of the repo (the mission's worktree among them) would beat the signed mission cap |
+| `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, no ceiling or spend to read, or `no mission cap — …` when the signed mission cap is zero or the config of a checkout of the repo (the mission's worktree among them) would beat it |
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line; 3 when `gh` did not answer |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
 
@@ -1930,7 +1933,7 @@ the signed cap in the environment, and answers `no mission cap — <file> sets
 BUDGET_MISSION_USD=<value>, …`, rc 1, naming the first file whose value the runner would apply
 above the signed cap, at zero (no ceiling), or not a number; one at or below it is the stricter
 ceiling, and holds. A signed `budget_mission_usd:` of zero is no ceiling for the runner too, and
-it stops `budget` before any file is read, naming the delegation: `no mission cap — <delegation.md>
+it stops `budget` before any `.sdd/config.sh` is read, naming the delegation: `no mission cap — <delegation.md>
 signs budget_mission_usd: 0, …`.
 
 **`next`** walks the lots in table order and stops at the first one not merged: no mission → `plan`;
@@ -1981,6 +1984,16 @@ criterion A, no tolerance for prose), and the worker's round is what applies it.
 - The ceilings read the ledger of this machine, and the spend of the orchestrating session and of
   its subagents is outside both.
 - A campaign's missions are matched by id, not by repository.
+- `budget`, and `level` above `assisted`, source the `.sdd/config.sh` of every checkout of the
+  repo on every call, a worktree that holds no mission of the campaign included: the wider set is
+  the fail-safe one for the two keys, and it executes the file of a branch where no `sdd run` runs.
+  A pager kept out of the commit is then a modified tracked line in each checkout. The narrower set
+  (the campaign's checkout and the worktrees that hold one of its missions) is an open decision of
+  the owner.
+- In a target whose `.sdd/config.sh` assigns `BUDGET_MISSION_USD` above the signed cap, or leaves
+  `ON_ESCALATION_CMD` empty, the worker only fails closed (`no mission cap`, `assisted — no pager`):
+  the file wins over the environment, and making the signed values win there needs the runner's
+  config precedence, which ADR 0022 does not change.
 - `sdd approve` under `full` still writes `humano-YYYY-MM-DD`; the trail is the campaign journal.
 - Visual acceptance is never the worker's. Deleting a branch or a worktree, and pushing to the
   default branch, are in no level.

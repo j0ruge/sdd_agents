@@ -3,7 +3,7 @@ campaign: <YYYYMMDD>-<slug — o id da campanha, igual ao campaign: do campaign.
 level: <assisted | pr | plan | merge | full>
 lots: <all, ou L1 L2 … separados por espaço>
 expires: <YYYY-MM-DD HH:MM, hora local>
-budget_mission_usd: <número — o teto de cada missão, passado ao sdd run como BUDGET_MISSION_USD, se o .sdd/config.sh não fixar essa chave acima dele>
+budget_mission_usd: <número acima de 0 — o teto de cada missão, passado ao sdd run como BUDGET_MISSION_USD, se nenhum .sdd/config.sh do repo (o da campanha e o de cada worktree) fixar essa chave acima dele; 0 é sem teto, e o budget para>
 budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger>
 signed:
 ---
@@ -46,10 +46,12 @@ o `bin/sdd-worker budget` lê o arquivo de todo checkout do repo (o da campanha 
 ligado) e sai com rc 1 numa linha `no mission cap — …`, que nomeia o arquivo e o valor, quando um
 deles fixa a chave acima do teto assinado, em `0` (sem teto), vazia ou num valor que não é número.
 Um valor menor ou igual ao assinado é o teto mais estrito, e vale. Um `budget_mission_usd: 0`
-assinado também é sem teto para o runner, e o `budget` para antes de ler qualquer arquivo, nomeando
-esta delegação. Antes de assinar, apague a linha
-do `.sdd/config.sh` e commite a remoção antes de cortar os worktrees das missões, ou deixe-a no teto
-assinado, ou abaixo dele.
+assinado também é sem teto para o runner, e o `budget` para antes de ler qualquer `.sdd/config.sh`,
+nomeando esta delegação.
+
+Antes de assinar, resolva a linha `BUDGET_MISSION_USD` do `.sdd/config.sh` por um de dois caminhos:
+apague-a e commite a remoção antes de cortar os worktrees das missões (um worktree cortado antes do
+commit continua com a linha), ou deixe-a, em todo checkout, no teto assinado ou abaixo dele.
 
 ## Como assinar
 

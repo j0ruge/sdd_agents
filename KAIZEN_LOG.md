@@ -4,6 +4,53 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-11-18 — A delegação deixa de ser palavra: seis verbos que respondem por artefato
+
+**Missão:** `20261117-o-worker-orquestrador` ([ADR 0022](docs/adr/0022-the-worker-is-a-session-orchestrator.md)),
+a primeira missão do kit executada por `sdd run` num worktree ligado, pelo `sdd` do PATH (decisões 6
+e 12 do `00-missao.md`). Onze incrementos do plano, dois `F<n>` da QA e cinco `R<n>` da REVIEW.
+
+**Antes** (medido em `5221477`, o corte da branch, e no merge-base `7ea43e3`):
+- `bin/` com `sdd`, `sdd-coordination.py` e `sdd-link-agents`; `commands/` só com `sdd-plan.md`:
+  **0** verbos do worker. Do roadmap W1–W7, só o W1 no código;
+- a delegação era **palavra**: valia "nesta sessão", a cadeia do Plano 7 do `dotp-remake` precisou de
+  um SIM novo do dono quando a janela virou (M26), e a da 5a foi marcada "usada e esgotada" à mão
+  numa memória do agente;
+- os juízos que decidem um merge eram leitura do modelo, e erraram **4** vezes no registro (M1, M13,
+  M23, M24 do `2026-11-16-o-worker-merge-delegado.md`);
+- **16** sensores (`ls tests/check-*.sh`); catálogo com **813** mutantes, nenhum `mut_WORKER_*`.
+
+**Depois** (medido no `444f1d9`, o head da REVIEW r4, em 2026-11-18):
+- `bin/sdd-worker`, **6** verbos (`delegate`, `level`, `allows`, `budget`, `next`, `pr-ready`), 932
+  linhas, e `commands/sdd-worker.md`, o laço da sessão, 215 linhas;
+- a delegação é um **arquivo** por campanha (`delegation.md`), assinado por `sdd-worker delegate` com o
+  digest das seis chaves e do teto de cada lote; ausente, ilegível, sem assinatura, editada, vencida
+  ou sem pager, vale `assisted`;
+- `tests/check-worker.sh` sozinho: **45** linhas `ok`, 0 `FAIL`, `worker verbs: 44 probe(s)`, 38 s;
+  **17** sensores; **41** mutantes `mut_WORKER_*`, catálogo **854**, todos aplicando (`--anchors` no
+  `e0e6fcf`, pela r4);
+- a campanha do kit, 83 itens em 6 lotes: `bin/sdd-worker level
+  docs/superpowers/campaigns/20261117-zerar-as-issues` → `level assisted — illegible` (prazo e tetos
+  são do dono, e não há assinatura).
+
+**A corrida** (ledger desta máquina e `pipeline.log` da missão, até a REVIEW r4): **24** sessões,
+**US$ 119,74**: EXEC 18 sessões, US$ 87,03; QA 2, US$ 8,42; REVIEW 4, US$ 24,29. Nenhuma parada pelo
+arranjo (nenhuma `kit-touched`, `hat-crossed`, `foreign-commit` nem `session-died`). Uma parada às
+09:34: a r3 deu B com o teto de rodadas esgotado (`budget-exhausted`, `REVIEW_MAX_ITER=3`), e a r4
+rodou por `--phase REVIEW`. As r1, r2 e r3 deram B em Error Handling pela mesma classe em três sítios:
+o worker não lia o `.sdd/config.sh` que o `sdd run` lê — primeiro nenhum (o teto, R1), depois só o do
+checkout da campanha, quando o runner lê o do worktree da missão (o teto, R3; o pager, R5). **18** negações no journal: 8 `Write` de rascunho em `/tmp`, 6 `Read`
+nas `references/` do `codereview` (o `READ_EXTRA` do kit é vazio), 3 `Bash` e 1 `Read` em `/tmp`.
+
+**O que a execução ensinou** (notas e rodadas da missão): o pedido da r3 ao executor, "feche a classe,
+não o sítio", foi o que parou o laço: o R5 reusou o `checkouts_of` do `budget`, e a r4 conferiu os
+quatro chamadores do `config_key`. Sítio consertado um a um tinha custado duas rodadas.
+
+**O que fica para medir** (pendente): o PR e o merge desta missão; a primeira campanha assinada (o L1
+do kit); e o `sdd health` da série, quando a catraca zerar.
+
+---
+
 ## 2026-11-12 — As 13 reincidentes do `TODO.md` ganham conserto e sensor
 
 **Missão:** `20261112-as-reincidentes-primeiro`, o lote 1 de zerar a catraca. O recorte são os itens

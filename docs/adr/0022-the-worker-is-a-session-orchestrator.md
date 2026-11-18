@@ -70,8 +70,9 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
    instant it expires, a ceiling per mission and a ceiling for the campaign, and it is signed by the
    owner (`sdd-worker delegate`, which shows what is being granted, asks, and leaves with rc 66 and
    writes nothing when it reads no answer, as `sdd approve` does). The signature carries a digest of
-   the other fields, so a delegation edited after signing is no delegation. The worker reads it
-   again before every act.
+   the six other keys and of the ceiling of each lot in the table of the `campaign.md` beside it, so
+   a delegation edited after signing, or whose campaign moved a lot's ceiling, is no delegation. The
+   worker reads it again before every act.
 
 4. **Five cumulative levels, one definition.** `assisted` < `pr` < `plan` < `merge` < `full`:
 
@@ -84,8 +85,9 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
    | `full` | also `sdd approve` |
 
    A delegation that is absent, unsigned, expired, illegible, or of a level nobody defined is
-   `assisted`, and so is any signed level above `assisted` when `ON_ESCALATION_CMD` is empty. The
-   effective level of a lot is the lower of the signed level and the lot's own ceiling. The
+   `assisted`, and so is any signed level above `assisted` when `ON_ESCALATION_CMD` is empty in the
+   `.sdd/config.sh` of any checkout of the campaign's repo, the mission's worktree, where `sdd run`
+   pages from, among them. The effective level of a lot is the lower of the signed level and the lot's own ceiling. The
    predicate is written positively: an act is allowed because a level names it, never because
    nothing refused it.
 
@@ -156,6 +158,10 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
   the orchestrating session and of its subagents is outside both. A campaign's missions are matched
   by id, not by repository. `sdd approve` under `full` still writes `humano-YYYY-MM-DD`. Visual
   acceptance is never the worker's. Deleting a branch or a worktree and pushing to the default
-  branch are in no level.
+  branch are in no level. The pager and the mission cap are read in the `.sdd/config.sh` of every
+  checkout of the repo, so the worker executes the file of worktrees where no `sdd run` runs; the
+  narrower set is the owner's open question. Where a target's file assigns the cap above the signed
+  one, or leaves the pager empty, the worker fails closed: the runner's config precedence is
+  unchanged.
 - The Codex harness (planning and execution on other models) is the next mission; nothing here
   opens a phase outside `claude -p`.

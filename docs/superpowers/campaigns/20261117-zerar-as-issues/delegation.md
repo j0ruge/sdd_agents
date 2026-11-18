@@ -3,7 +3,7 @@ campaign: 20261117-zerar-as-issues
 level: assisted
 lots: all
 expires: <YYYY-MM-DD HH:MM, hora local>
-budget_mission_usd: <número — o teto de cada missão, passado ao sdd run como BUDGET_MISSION_USD, se o .sdd/config.sh não fixar essa chave acima dele>
+budget_mission_usd: <número acima de 0 — o teto de cada missão, passado ao sdd run como BUDGET_MISSION_USD, se nenhum .sdd/config.sh do repo (o da campanha e o de cada worktree) fixar essa chave acima dele; 0 é sem teto, e o budget para>
 budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger>
 signed:
 ---
@@ -29,8 +29,13 @@ ao preencher.
 
 Para o worker agir sozinho, depois do merge da missão que o construiu:
 
-1. configurar o `ON_ESCALATION_CMD` no `.sdd/config.sh` do kit, commitado ou escrito também em cada
-   worktree de missão — vazio em qualquer checkout, todo nível acima de `assisted` vale `assisted`;
+1. configurar o `ON_ESCALATION_CMD` para **todo** checkout do repo: o `level` lê o `.sdd/config.sh`
+   de cada checkout que o `git worktree list` dá (o principal e cada worktree ligado, guarde ele
+   missão da campanha ou não), e um vazio em qualquer deles faz todo nível acima de `assisted` valer
+   `assisted`, nomeando o arquivo. Commitada, a linha só chega aos worktrees cortados depois do
+   commit; fora do commit, ela vai em cada checkout. Como fazer isso sem sujar os nove checkouts de
+   hoje é decisão em aberto (pendência 2 do `40-review-r4.md` da missão
+   `20261117-o-worker-orquestrador`);
 2. preencher `level`, `expires` e os dois tetos abaixo, e assinar (seção "Como assinar").
 
 ## Os cinco níveis, cumulativos
