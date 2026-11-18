@@ -1,6 +1,6 @@
 ---
 missao: 20261117-o-worker-orquestrador
-atualizado: 2026-11-18 15:10
+atualizado: 2026-11-18 15:17
 ---
 
 # Checkpoint — O worker orquestrador
@@ -18,7 +18,7 @@ atualizado: 2026-11-18 15:10
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | Templates da campanha e da delegação | `o=$(bash tests/check-templates.sh 2>&1); grep -c '^  ok    worker templates: ' <<< "$o"` → `3` | done | bdfa30e |
+| I1 | Templates da campanha e da delegação | `o=$(bash tests/check-templates.sh 2>&1); grep -c '^  ok    worker templates: ' <<< "$o"` → `5` | done | bdfa30e |
 | I2 | O programa e o sensor, ligados na suíte | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    usage: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 1; echo "$a $?"` → `1 0` | done | f7f99ea |
 | I3 | O verbo delegate | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    delegate: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 3; echo "$a $?"` → `3 0` | done | 3b6d636 |
 | I4 | O verbo level | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    level: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 6; echo "$a $?"` → `6 0` | done | dc66ce2 |
