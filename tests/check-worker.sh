@@ -36,6 +36,18 @@
 #       the campaign's repo, never the cwd
 #   R10 with --lot, a ceiling below the signed level lowers it and one above never raises it; a lot
 #       outside `lots:`, or with no row in the table, is assisted; a --lot with no lot is rc 2
+#   R11 `allows`, over a delegation signed at each of the five levels, answers the table of acts of
+#       the mission plan (kept HERE, never read from the program) in every one of the 35 cells:
+#       `allowed <act> at <level>` with rc 0, or `ask <act> needs <floor>, effective <level> — …`
+#       with rc 1
+#   R12 a word the table does not name — a near miss of an act, a level's name, an entry of the
+#       table as written, nothing — is rc 2 with nothing on stdout, under a full delegation where
+#       every act is allowed; so is a call of the wrong shape
+#   R13 a delegation that does not hold (absent, illegible, unsigned, expired, edited after signing,
+#       no pager) asks the owner for every act, naming the reason of its branch; the signed ones are
+#       first witnessed allowing approve, so the ask is the break's and nothing else's
+#   R14 with --lot, the lot's ceiling is the act's: under full, approve is asked on a lot capped at
+#       merge and allowed on the lots that are not, and a lot with no row asks for it
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, and the
 # verbs as they land) prints exactly the assertions the mission plan names — the checkpoint counts
@@ -56,7 +68,7 @@ unset SDD_WORKER_NOW ON_ESCALATION_CMD
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
-PROBE_FLOOR=10
+PROBE_FLOOR=14
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -446,6 +458,145 @@ if [ -z "$got" ]; then
 else
   fail 'level: the lot ceiling lowers the level and never raises it, and an uncovered lot is assisted' \
     'the lower of the signed level and the ceiling, assisted where the lot is not covered' "$got"
+fi
+
+# --- allows: the fixtures -----------------------------------------------------------------------
+# The table of acts as the mission plan writes it, kept HERE and never read from the program: one
+# row per act, the lowest level that grants it, then one letter per level of the ladder in order
+# (assisted pr plan merge full), y where the act is allowed. A program whose table moved one act,
+# or that compared the ranks the wrong way round, differs in at least one cell.
+LEVELS=(assisted pr plan merge full)
+ACT_TABLE=('run pr nyyyy' 'pr pr nyyyy' 'review pr nyyyy' 'plan plan nnyyy'
+           'merge merge nnnyy' 'postmerge merge nnnyy' 'approve full nnnny')
+
+# allows_is <label> <rc> <want> <args...> — runs allows <args...>; appends to got unless it left
+# <rc> and exactly one line on stdout — equal to <want> when <rc> is 0 (the allowed line is whole),
+# starting with <want> otherwise (the ask line ends in the level's reason). <want> is a literal,
+# never a pattern.
+allows_is() {
+  local label="$1" rc="$2" want="$3"; shift 3
+  worker allows "$@"
+  if [ "$W_RC" = "$rc" ] && [[ "$W_OUT" != *$'\n'* ]] \
+     && { [[ "$rc" = 0 && "$W_OUT" == "$want" ]] || [[ "$rc" != 0 && "$W_OUT" == "$want"* ]]; }; then
+    return 0
+  fi
+  got="${got:+$got; }$label: rc $W_RC, '$W_OUT' (want rc $rc, '$want')"
+}
+
+# --- R11: five levels by seven acts -------------------------------------------------------------
+# Every cell asked of a delegation signed at its level, in a repo with a pager, and counted: the
+# count is the witness that the 35 cells were asked, since a loop that asked none leaves got empty.
+got=""; cells=0
+for i in "${!LEVELS[@]}"; do
+  lv="${LEVELS[$i]}"
+  d="$(campaign "a-$lv" "$lv" "$FAR" 25 200)"
+  sign "$d"
+  for row in "${ACT_TABLE[@]}"; do
+    read -r act floor yes <<< "$row"
+    before="$got"
+    if [ "${yes:$i:1}" = y ]; then
+      allows_is "$lv/$act" 0 "allowed $act at $lv" "$d" "$act"
+    else
+      allows_is "$lv/$act" 1 "ask $act needs $floor, effective $lv — signed until $FAR" "$d" "$act"
+    fi
+    [ "$got" != "$before" ] || cells=$((cells + 1))
+  done
+done
+[ "$cells" = 35 ] || got="${got:+$got; }$cells of 35 cells answered the table"
+if [ -z "$got" ]; then
+  pass 'allows: the five levels by the seven acts answer the table, 35 of 35'
+else
+  fail 'allows: the five levels by the seven acts answer the table, 35 of 35' \
+    'allowed where the table says y, ask with the floor where it says n' "$got"
+fi
+
+# --- R12: a word that is not an act -------------------------------------------------------------
+# Asked of the full delegation, where every act of the table is allowed: a word read as any act, or
+# as any level, is allowed there, so rc 2 and an empty stdout are what tell the refusal apart, and
+# the stderr names the word. The near misses: an unknown word, a capital, a prefix, two acts in one
+# argument, a glob, a level's name, an entry of the table as the program may write it, and nothing.
+# The calls of the wrong shape ride along: no act, a --lot with no lot, a misspelt flag, and a
+# directory that is not there.
+got=""
+d="$REPO/docs/campaigns/a-full"
+for act in frobnicate Merge merg 'run pr' '*' assisted 'run:pr' ''; do
+  worker allows "$d" "$act"
+  { [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -qF "'$act' is not an act" <<< "$W_ERR" \
+      && grep -q '^usage: sdd-worker ' <<< "$W_ERR"; } \
+    || got="${got:+$got; }act '$act': rc $W_RC, stdout '$W_OUT', stderr '${W_ERR%%$'\n'*}'"
+done
+for args in "$d" "$d|run|--lot" "$d|run|--lit|L1" "$REPO/docs/campaigns/a-nowhere|run"; do
+  IFS='|' read -ra a <<< "$args"
+  worker allows "${a[@]}"
+  { [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -q '^usage: sdd-worker ' <<< "$W_ERR"; } \
+    || got="${got:+$got; }allows ${a[*]}: rc $W_RC, stdout '$W_OUT'"
+done
+if [ -z "$got" ]; then
+  pass 'allows: an act outside the table leaves rc 2 and is never allowed'
+else
+  fail 'allows: an act outside the table leaves rc 2 and is never allowed' \
+    "rc 2, nothing on stdout, the word named on stderr" "$got"
+fi
+
+# --- R13: a delegation that does not hold -------------------------------------------------------
+# Six worlds, each signed (where it is signed at all) at full, so that only the break stands
+# between the act and an allow: absent, the template, unsigned, expired (a seam one minute past
+# FAR), edited after signing (lots narrowed), and no pager (the same signed file copied to
+# the repo whose config sets none). The three signed ones are first witnessed allowing approve. Each
+# world asks for each of the seven acts, effective assisted, with its own reason — and the count is
+# the witness that the 42 were asked.
+got=""; asks=0
+mkdir -p "$REPO/docs/campaigns/a-absent" "$REPO/docs/campaigns/a-template"
+cp "$ROOT/templates/delegation.md" "$REPO/docs/campaigns/a-template/delegation.md"
+campaign a-unsigned full "$FAR" 25 200 > /dev/null
+for id in a-expiring a-edited a-pager; do
+  d="$(campaign "$id" full "$FAR" 25 200)"
+  sign "$d"
+  allows_is "$id before" 0 'allowed approve at full' "$d" approve
+done
+sed -i '2,/^---$/ s@^lots: all$@lots: L1@' "$REPO/docs/campaigns/a-edited/delegation.md"
+cp -a "$REPO/docs/campaigns/a-pager" "$NOPAGER/docs/campaigns/"
+for w in "a-absent||no delegation" "a-template||illegible: " "a-unsigned||unsigned" \
+         "a-expiring|2100-01-01 00:00|expired: " "a-edited||edited after signing" \
+         "$NOPAGER/docs/campaigns/a-pager||no pager"; do
+  IFS='|' read -r id seam why <<< "$w"
+  if [[ "$id" == /* ]]; then d="$id"; else d="$REPO/docs/campaigns/$id"; fi
+  for row in "${ACT_TABLE[@]}"; do
+    read -r act floor _ <<< "$row"
+    before="$got"
+    SDD_WORKER_NOW="$seam" allows_is "${id##*/}/$act" 1 \
+      "ask $act needs $floor, effective assisted — $why" "$d" "$act"
+    [ "$got" != "$before" ] || asks=$((asks + 1))
+  done
+done
+[ "$asks" = 42 ] || got="${got:+$got; }$asks of 42 acts asked the owner"
+if [ -z "$got" ]; then
+  pass 'allows: a broken delegation asks the owner for every act'
+else
+  fail 'allows: a broken delegation asks the owner for every act' \
+    'ask <act> needs <floor>, effective assisted — <the reason of the break>, for each' "$got"
+fi
+
+# --- R14: the lot's ceiling is the act's --------------------------------------------------------
+# A full delegation over three lots: no ceiling, merge, full. With no lot, and on L1 and L3, approve
+# is allowed at full — the witness that the delegation grants it; on L2 it is asked, and merge is
+# allowed there at merge, so the cap is the lot's ceiling and not a refusal of the lot. A lot the
+# table has no row for asks too.
+got=""
+d="$(campaign a-lots full "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:merge' 'L3:full'
+sign "$d"
+allows_is 'no lot' 0 'allowed approve at full' "$d" approve
+allows_is 'L1, no ceiling' 0 'allowed approve at full' "$d" approve --lot L1
+allows_is 'L3, ceiling full' 0 'allowed approve at full' "$d" approve --lot L3
+allows_is 'L2, approve' 1 'ask approve needs full, effective merge — capped by the lot' "$d" approve --lot L2
+allows_is 'L2, merge' 0 'allowed merge at merge' "$d" merge --lot L2
+allows_is 'L9, no row' 1 'ask approve needs full, effective assisted — lot not covered' "$d" approve --lot L9
+if [ -z "$got" ]; then
+  pass 'allows: the lot ceiling stops approve on a capped lot under full'
+else
+  fail 'allows: the lot ceiling stops approve on a capped lot under full' \
+    'approve asked on the lot capped at merge, allowed where the lot is not capped' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

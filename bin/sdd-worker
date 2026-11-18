@@ -26,6 +26,10 @@ LADDER=(assisted pr plan merge full)
 # The six keys of a delegation, in the order the digest reads them. `signed:` is not among them: it
 # is where the digest is written.
 DELEGATION_KEYS=(campaign level lots expires budget_mission_usd budget_campaign_usd)
+# The table of acts, ONE definition and positive: each act is written with the lowest level that
+# grants it, and an act is allowed because the table names a level at or below the effective one —
+# never because nothing refused it. A word the table does not name is no act at all.
+ACTS=(run:pr pr:pr review:pr plan:plan merge:merge postmerge:merge approve:full)
 
 usage() {
   cat >&2 <<'USAGE'
@@ -293,11 +297,49 @@ cmd_level() {
   printf 'level %s — %s\n' "$LEVEL" "$LEVEL_WHY"
 }
 
+# act_floor <act> — the lowest level that grants <act>, read from ACTS; prints nothing and returns
+# 1 when the table does not name <act> exactly.
+act_floor() {
+  local e
+  for e in "${ACTS[@]}"; do
+    [ "${e%%:*}" = "$1" ] && { printf '%s\n' "${e#*:}"; return 0; }
+  done
+  return 1
+}
+
+# allows <campaign-dir> <act> [--lot L<n>] — whether <act> fits the effective level: rc 0 and
+# `allowed`, or rc 1 and `ask`, naming the level the act needs and the reason of the effective one,
+# so the owner reads why it came back. A word the table does not name is a usage error (rc 2,
+# nothing on stdout): read as any level, it would be allowed at the top. The --lot is the level's
+# own, so a capped lot caps the act. A rank that does not compare asks, never allows: that world is
+# a floor off the ladder, which only an edit of ACTS could write, so no probe reaches it from outside.
+cmd_allows() {
+  local lot="" need
+  case "$#" in
+    2) : ;;
+    4) [ "$3" = --lot ] && [ -n "$4" ] || { usage; return 2; }; lot="$4" ;;
+    *) usage; return 2 ;;
+  esac
+  [ -d "$1" ] || { usage; return 2; }
+  if ! need="$(act_floor "$2")"; then
+    printf "sdd-worker: '%s' is not an act (%s)\n" "$2" "${ACTS[*]%%:*}" >&2
+    usage; return 2
+  fi
+  effective_level "$1" "$lot"
+  if [ "$(ladder_rank "$LEVEL")" -ge "$(ladder_rank "$need")" ] 2>/dev/null; then
+    printf 'allowed %s at %s\n' "$2" "$LEVEL"
+    return 0
+  fi
+  printf 'ask %s needs %s, effective %s — %s\n' "$2" "$need" "$LEVEL" "$LEVEL_WHY"
+  return 1
+}
+
 main() {
   case "${1:-}" in
     delegate) shift; cmd_delegate "$@" ;;
     level) shift; cmd_level "$@" ;;
-    allows | budget | next | pr-ready)
+    allows) shift; cmd_allows "$@" ;;
+    budget | next | pr-ready)
       printf 'sdd-worker: %s is not implemented yet\n' "$1" >&2
       return 2 ;;
     *) usage; return 2 ;;

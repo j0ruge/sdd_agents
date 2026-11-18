@@ -6886,6 +6886,23 @@ mut_WORKER_level_ignores_digest() {
 mut_WORKER_level_ceiling_raises() {
   sed -i '/^effective_level() {/,/^}/ s@^      if \[ "\$cr" -lt "\$sr" \]; then@      if [ "$cr" -ne "$sr" ]; then@' "${1%/*}/sdd-worker"
 }
+# A word the table of acts does not name reads as an act any level grants, so under a delegation
+# above assisted it is allowed. Caught by "allows: an act outside the table leaves rc 2 and is never
+# allowed" (check-worker.sh).
+mut_WORKER_allows_unknown_act() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^  if ! need="\$(act_floor "\$2")"; then@  if ! need="$(act_floor "$2" || echo assisted)"; then@' "${1%/*}/sdd-worker"
+}
+# The table of acts moves merge down a step: a delegation signed at plan merges alone. Caught by
+# "allows: the five levels by the seven acts answer the table, 35 of 35" (check-worker.sh).
+mut_WORKER_allows_merge_at_plan() {
+  sed -i '/^ACTS=(/ s@ merge:merge @ merge:plan @' "${1%/*}/sdd-worker"
+}
+# The --lot of allows dropped on the way to the effective level: a lot capped below the signed level
+# is allowed what the delegation grants elsewhere. Caught by "allows: the lot ceiling stops approve
+# on a capped lot under full" (check-worker.sh).
+mut_WORKER_allows_ignores_lot() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^  effective_level "\$1" "\$lot"$@  effective_level "$1"@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7707,6 +7724,9 @@ CATALOG=(
   WORKER_level_ignores_expiry
   WORKER_level_ignores_digest
   WORKER_level_ceiling_raises
+  WORKER_allows_unknown_act
+  WORKER_allows_merge_at_plan
+  WORKER_allows_ignores_lot
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
