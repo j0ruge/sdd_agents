@@ -3,7 +3,7 @@ campaign: <YYYYMMDD>-<slug — o id da campanha, igual ao campaign: do campaign.
 level: <assisted | pr | plan | merge | full>
 lots: <all, ou L1 L2 … separados por espaço>
 expires: <YYYY-MM-DD HH:MM, hora local>
-budget_mission_usd: <número — o teto de cada missão, passado ao sdd run como BUDGET_MISSION_USD>
+budget_mission_usd: <número — o teto de cada missão, passado ao sdd run como BUDGET_MISSION_USD, se o .sdd/config.sh não fixar essa chave acima dele>
 budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger>
 signed:
 ---
@@ -32,6 +32,16 @@ signed:
 Delegação ausente, ilegível, sem assinatura, editada depois de assinada ou vencida vale `assisted`.
 Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` também vale `assisted`: uma
 noite sem ninguém olhando precisa de um aviso que chegue.
+
+## O teto por missão
+
+O worker passa o `budget_mission_usd:` ao `sdd run` como `BUDGET_MISSION_USD`, no ambiente, e o
+runner lê o `.sdd/config.sh` do repo **por cima** do ambiente: uma linha que atribui essa chave
+vence o teto assinado, e o `config/starter.conf` que o `sdd install` semeia atribui `150`. Por isso
+o `bin/sdd-worker budget` sai com rc 1 numa linha `no mission cap — …`, que nomeia o arquivo e o
+valor, quando o arquivo fixa a chave acima do teto assinado, em `0` (sem teto), vazia ou num valor
+que não é número. Um valor menor ou igual ao assinado é o teto mais estrito, e vale. Antes de
+assinar, apague a linha do `.sdd/config.sh` ou deixe-a no teto assinado, ou abaixo dele.
 
 ## Como assinar
 

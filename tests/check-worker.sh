@@ -32,9 +32,10 @@
 #   R8  a near miss of a level name (a capital, a prefix, a word past the top, two levels, a glob)
 #       is not a level: in `level:` the delegation is illegible, in a lot's Ceiling the lot is
 #       capped at assisted
-#   R9  above assisted, a campaign whose repo sets no ON_ESCALATION_CMD (empty, or no config) is
-#       assisted — the same signed file answers merge where the pager is set; the config read is
-#       the campaign's repo, never the cwd
+#   R9  above assisted, a campaign whose repo sets no ON_ESCALATION_CMD (empty, or no config, even
+#       under a caller that exports one: the runner does not run without the file) is assisted —
+#       the same signed file answers merge where the pager is set; the config read is the
+#       campaign's repo, never the cwd
 #   R10 with --lot, a ceiling below the signed level lowers it and one above never raises it; a lot
 #       outside `lots:`, or with no row in the table, is assisted; a --lot with no lot is rc 2
 #   R11 `allows`, over a delegation signed at each of the five levels, answers the table of acts of
@@ -125,6 +126,11 @@
 #   R36 an expires: the clock does not have — minute 99, the 31st of November, the 29th of February
 #       of a common year — is illegible: level answers assisted for it and delegate refuses it
 #       before the question; the 29th of February of a leap year signs
+#   R37 `budget` reads the repo's .sdd/config.sh the way the runner loads it, over the signed mission
+#       cap in the environment, and leaves rc 1 naming the file and the value when the cap the
+#       runner would apply is above the signed one, zero, or empty — the config `sdd install` writes
+#       among them; at or below it, in a form where the environment wins, silent on the key under a
+#       caller that exports another value, or with no config, the signed cap holds
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -137,7 +143,7 @@
 # rule goes unmeasured, and the sensor says nothing about it.
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
-# verbs, `seal: `, `legible: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the
+# verbs, `seal: `, `legible: `, `cap: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the
 # fix increment that opened it names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
 # the census in check-health.sh holds that clause.
 #
@@ -149,13 +155,14 @@ ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKER="$ROOT/bin/sdd-worker"
 PROBES=0
 fails=0
-# The seam and the pager are the fixture's to set: a value exported by whoever runs the suite would
-# move the clock of every probe, or lend a pager to a repo that has none.
-unset SDD_WORKER_NOW ON_ESCALATION_CMD
+# The seam, the pager and the mission cap are the fixture's to set: a value exported by whoever runs
+# the suite (an `sdd run` launched by the worker exports the cap) would move the clock of every
+# probe, lend a pager to a repo that has none, or stand in for a config that is silent on the cap.
+unset SDD_WORKER_NOW ON_ESCALATION_CMD BUDGET_MISSION_USD
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
-PROBE_FLOOR=36
+PROBE_FLOOR=37
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -504,7 +511,9 @@ fi
 # other two: the difference is the config and nothing else. Each is asked from the cwd of a repo with the opposite
 # answer, so a program that read the cwd's config instead of the campaign's answers the other
 # side. A signed assisted, in the repo with no pager, answers its own level: the rule is about the
-# levels that act alone, and assisted acts on nothing.
+# levels that act alone, and assisted acts on nothing. The repo with no config is asked once more
+# under a caller that exports a pager: `sdd run` does not run without the file, so the caller's
+# value lends nothing, and the reader answers empty there instead of reading the environment.
 got=""
 d="$(campaign l-pager merge "$FAR" 25 200)"
 sign "$d"
@@ -512,6 +521,11 @@ cp -a "$d" "$NOPAGER/docs/campaigns/"; cp -a "$d" "$NOCONF/docs/campaigns/"
 W_CWD="$NOPAGER" level_is 'pager set' "level merge — signed until $FAR" "$d"
 W_CWD="$REPO" level_is 'pager empty' 'level assisted — no pager' "$NOPAGER/docs/campaigns/l-pager"
 W_CWD="$REPO" level_is 'no config' 'level assisted — no pager' "$NOCONF/docs/campaigns/l-pager"
+( export ON_ESCALATION_CMD=true
+  W_CWD="$REPO" level_is 'no config, a pager exported' 'level assisted — no pager' \
+    "$NOCONF/docs/campaigns/l-pager"
+  printf '%s' "$got" > "$BOX/got" )
+got="$(cat "$BOX/got")"
 d="$(campaign l-pager-assisted assisted "$FAR" 25 200)"
 sign "$d"
 cp -a "$d" "$NOPAGER/docs/campaigns/"
@@ -895,6 +909,64 @@ if [ -z "$got" ]; then
 else
   fail 'budget: a missing ledger is zero spent, and the mission cap is printed' \
     'campaign US$ 0.00 of 200.00 — 1 mission(s); mission cap US$ 37.50, rc 0, for each' "$got"
+fi
+
+# --- R37: the mission cap the runner applies ----------------------------------------------------
+# The runner sources the repo's .sdd/config.sh over its environment (load_config in bin/sdd), so a
+# file that assigns BUDGET_MISSION_USD beats the cap the session passes to `sdd run`, and the
+# starter that `sdd install` writes assigns 150. Each world is one repo of its own holding campaign
+# k-<world>, signed mission cap 40 and campaign cap 100, and no ledger line:
+#   starter  the config `sdd install` writes from config/starter.conf, its own line active: rc 1
+#   zero     BUDGET_MISSION_USD=0.00, no ceiling at all: rc 1
+#   above    40.01, just over the signed cap — 150 against 40 as text would hold: rc 1
+#   empty    BUDGET_MISSION_USD="", which the runner fills with its default: rc 1
+#   equal    40, the signed cap itself: rc 0
+#   below    12.5, the stricter ceiling, which holds: rc 0
+#   default  BUDGET_MISSION_USD="${BUDGET_MISSION_USD:-150}", where the environment wins: rc 0
+#   silent   no such line, under a caller that exports BUDGET_MISSION_USD=999: the session's own
+#            value never reaches the reading, since `sdd run` gets the signed cap: rc 0
+#   noconf   no .sdd/config.sh at all: rc 0
+# A stop names the file, the key and the value it sets. The starter's value is read from the
+# starter here, so a starter that changes its default moves the expectation, never the reach.
+got=""
+cap_world() {
+  local k="$BOX/cap-$1"
+  mkdir -p "$k/docs/campaigns"
+  git init -q -b main "$k"
+  if [ "$1" != noconf ]; then mkdir -p "$k/.sdd"; printf '%s\n' "$2" > "$k/.sdd/config.sh"; fi
+  cp -a "$(campaign "k-$1" pr "$FAR" 40 100)" "$k/docs/campaigns/"
+  printf '%s\n' "$k/docs/campaigns/k-$1"
+}
+sv="$(sed -n 's/^BUDGET_MISSION_USD=\([0-9.]*\).*/\1/p' "$ROOT/config/starter.conf")"
+jq -en --arg s "$sv" '($s | tonumber) > 40' > /dev/null 2>&1 \
+  || got="fixture: config/starter.conf sets no BUDGET_MISSION_USD above 40 ('$sv')"
+d="$(cap_world starter '')"
+sed -e 's|<PROJECT_NAME>|fixture|g' -e 's|<DEFAULT_BRANCH>|main|g' -e 's|<TEST_CMD>|true|g' \
+  -e "s|<SDD_HOME>|$ROOT|g" "$ROOT/config/starter.conf" > "$BOX/cap-starter/.sdd/config.sh"
+stop="no mission cap — $BOX/cap-starter/.sdd/config.sh sets BUDGET_MISSION_USD=$sv, "
+budget_is starter 1 "$stop" "$d"
+for w in 'zero|0.00' 'above|40.01' 'empty|'; do
+  IFS='|' read -r id v <<< "$w"
+  d="$(cap_world "$id" "BUDGET_MISSION_USD=\"$v\"")"
+  budget_is "$id" 1 "no mission cap — $BOX/cap-$id/.sdd/config.sh sets BUDGET_MISSION_USD=$v, " "$d"
+done
+held='campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 40.00'
+for w in 'equal|BUDGET_MISSION_USD=40' 'below|BUDGET_MISSION_USD=12.5' \
+         'default|BUDGET_MISSION_USD="${BUDGET_MISSION_USD:-150}"' 'noconf|'; do
+  IFS='|' read -r id v <<< "$w"
+  budget_is "$id" 0 "$held" "$(cap_world "$id" "$v")"
+done
+d="$(cap_world silent 'HANDOFF_DIR="docs/handoffs"')"
+( export BUDGET_MISSION_USD=999
+  [ "$(bash -c 'printf %s "${BUDGET_MISSION_USD-}"')" = 999 ] \
+    || got="${got:+$got; }fixture: the exported 999 does not reach a child"
+  budget_is silent 0 "$held" "$d"; printf '%s' "$got" > "$BOX/got" )
+got="$(cat "$BOX/got")"
+if [ -z "$got" ]; then
+  pass 'cap: a repo config that sets BUDGET_MISSION_USD above the signed mission cap, or to 0, stops budget and names the key'
+else
+  fail 'cap: a repo config that sets BUDGET_MISSION_USD above the signed mission cap, or to 0, stops budget and names the key' \
+    "rc 1 naming the file and BUDGET_MISSION_USD=<value> for the starter, 0.00, 40.01 and empty; rc 0 and the mission cap 40.00 for 40, 12.5, the default form, no line and no config" "$got"
 fi
 
 # --- next: the fixtures -------------------------------------------------------------------------

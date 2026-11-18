@@ -1910,7 +1910,7 @@ stderr and leaves rc 2. The reason of an answer comes after ` — `.
 | `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible or expired; 66 nothing on stdin |
 | `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0 |
 | `sdd-worker allows <campaign-dir> <act> [--lot L<n>]` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner; 2 not an act |
-| `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, or no ceiling or spend to read |
+| `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, no ceiling or spend to read, or `no mission cap — …` when the repo's config would beat the signed mission cap |
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line; 3 when `gh` did not answer |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
 
@@ -1918,7 +1918,12 @@ stderr and leaves rc 2. The reason of an answer comes after ` — `.
 of the ledger rows (`${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`) whose `mission` is one of the
 campaign's: the folders under the repo's `HANDOFF_DIR` whose `00-missao.md` declares exactly that
 `campaign:`, each mission once. An absent ledger is zero spent. The mission cap it prints is the
-value the session passes to `sdd run` as `BUDGET_MISSION_USD`.
+value the session passes to `sdd run` as `BUDGET_MISSION_USD`, and the runner sources the repo's
+`.sdd/config.sh` over that environment: a line there that assigns the key wins (the starter assigns
+`150`). So `budget` reads the file the way the runner does, with the signed cap in the environment,
+and answers `no mission cap — <file> sets BUDGET_MISSION_USD=<value>, …`, rc 1, when the value the
+runner would apply is above the signed cap, zero (no ceiling), or not a number; one at or below it
+is the stricter ceiling, and holds.
 
 **`next`** walks the lots in table order and stops at the first one not merged: no mission → `plan`;
 a mission whose `aprovacao:` the runner's `gate_PLAN` would not admit (only `auto` and `humano-…`

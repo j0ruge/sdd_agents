@@ -7008,6 +7008,28 @@ mut_WORKER_legible_next_id_unchecked() {
 mut_WORKER_legible_instant_unchecked() {
   sed -i '/^delegation_legible() {/,/^}/ s@^  if ! rt="\$(date -d .*; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
+# The repo's config is no longer read for the mission cap: budget prints the signed cap while the
+# starter's BUDGET_MISSION_USD=150 is the one sdd run applies, since the file sources over the
+# environment (achado #1 of the mission's review r1). Caught by "cap: a repo config that sets
+# BUDGET_MISSION_USD above the signed mission cap, or to 0, stops budget and names the key"
+# (check-worker.sh).
+mut_WORKER_cap_file_unread() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if ! jq -en --arg r "\$run"@  if false \&\& ! jq -en --arg r "$run"@' "${1%/*}/sdd-worker"
+}
+# The cap is read under the caller's own environment instead of the signed value: a session that
+# exported BUDGET_MISSION_USD=999 reads it back as the repo's, and a file silent on the key stops
+# budget. Caught by "cap: a repo config that sets BUDGET_MISSION_USD above the signed mission cap,
+# or to 0, stops budget and names the key" (check-worker.sh).
+mut_WORKER_cap_caller_env_leaks() {
+  sed -i '/^config_key() {/,/^}/ s@^  ( set +eu; \[ "\$#" -lt 3 \] || printf -v "\$key" .%s. "\$3"$@  ( set +eu@' "${1%/*}/sdd-worker"
+}
+# A zero in the repo's config holds as a cap: BUDGET_MISSION_USD=0 is no ceiling for the runner, and
+# the worker would launch a mission with none. Caught by "cap: a repo config that sets
+# BUDGET_MISSION_USD above the signed mission cap, or to 0, stops budget and names the key"
+# (check-worker.sh).
+mut_WORKER_cap_zero_holds() {
+  sed -i '/^cmd_budget() {/,/^}/ s@ as \$r | \$r > 0 and @ as $r | $r >= 0 and @' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7849,6 +7871,9 @@ CATALOG=(
   WORKER_legible_delegation_md_unread
   WORKER_legible_next_id_unchecked
   WORKER_legible_instant_unchecked
+  WORKER_cap_file_unread
+  WORKER_cap_caller_env_leaks
+  WORKER_cap_zero_holds
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

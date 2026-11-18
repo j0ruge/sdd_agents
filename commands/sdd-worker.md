@@ -50,8 +50,9 @@ through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, 
 Every turn of the loop, in this order, reading the disk again each time: the delegation can expire,
 or be edited, between two acts, and the answer of the last turn is not the answer of this one.
 
-1. `sdd-worker budget <campaign-dir>`: rc 1 is a stop (the campaign ceiling). Its line prints the
-   mission cap, the `BUDGET_MISSION_USD` the next `run` passes.
+1. `sdd-worker budget <campaign-dir>`: rc 1 is a stop, the campaign ceiling or a mission cap the
+   runner would not apply (`no mission cap — …`, below). Its line prints the mission cap, the
+   `BUDGET_MISSION_USD` the next `run` passes.
 2. `sdd-worker next <campaign-dir>`: the first line is `<act> <lot> <mission> — <reason>`. The line
    `done - -` ends the campaign; rc 1 is a `stop …` line; rc 3 is a `gh` that did not answer: wait
    and ask again, and never read it as "no pull request". A second line `ahead plan <lot>` lets the
@@ -94,7 +95,11 @@ delegation: the journal line is the trail of who approved.
 `sdd-worker allows <campaign-dir> run --lot <L>`
 
 Launch `sdd run` in the mission's worktree, detached from this session, with the mission cap that
-`budget` printed, and keep the PID it echoes:
+`budget` printed, and keep the PID it echoes. The runner sources the repo's `.sdd/config.sh` over
+its environment, so the cap passed here holds only where the file leaves `BUDGET_MISSION_USD`
+alone or assigns it a cap at or below this one; the starter assigns `150`. That is why `budget` reads the file first
+and answers `no mission cap — …`, rc 1, naming the file and the value, when the line sets the key
+above the signed cap, to zero, or to anything that is not a number: a stop, never a run.
 
 ```bash
 cd <mission-worktree> && BUDGET_MISSION_USD=<cap> setsid nohup env -u CLAUDECODE \
@@ -168,8 +173,8 @@ The runner pages its own rc 3 already, `budget-exhausted` among them: that stop 
 1. **`no-receipt`**: no Codex receipt for the head 60 minutes after the explicit `@codex review`.
 2. **`below-a`**: a criterion still graded below A after three rounds of review on one pull request.
 3. **`conflict`**: a merge conflict with the base outside the findings file and its ratchet.
-4. **`mission-ceiling`**: `sdd run` stopped on `budget-exhausted`, the mission spent its `BUDGET_MISSION_USD`.
-5. **`campaign-ceiling`**: `sdd-worker budget` leaves rc 1, the campaign spent its ceiling.
+4. **`mission-ceiling`**: `sdd run` stopped on `budget-exhausted`, the mission spent its `BUDGET_MISSION_USD`; or `sdd-worker budget` answered `no mission cap — …`, the repo's config sets that key over the signed cap.
+5. **`campaign-ceiling`**: `sdd-worker budget` leaves rc 1 on any other line, the campaign spent its ceiling.
 
 ## Never
 

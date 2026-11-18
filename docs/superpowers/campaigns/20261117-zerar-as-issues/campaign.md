@@ -175,9 +175,10 @@ caso ao dono, com os nomes do `commands/sdd-worker.md`:
 3. `conflict`: o merge da `main` na branch dá conflito fora do `TODO.md` e da catraca
    (`tests/health-baseline.txt`);
 4. `mission-ceiling`: o `sdd run` parou em `budget-exhausted`, a missão gastou o
-   `budget_mission_usd`, que chega a ele como `BUDGET_MISSION_USD`;
-5. `campaign-ceiling`: `bin/sdd-worker budget` sai com rc 1, a campanha gastou o
-   `budget_campaign_usd`.
+   `budget_mission_usd`, que chega a ele como `BUDGET_MISSION_USD`; ou o `bin/sdd-worker budget`
+   respondeu `no mission cap — …`, porque o `.sdd/config.sh` fixa essa chave acima do teto assinado;
+5. `campaign-ceiling`: `bin/sdd-worker budget` sai com rc 1 em qualquer outra linha, a campanha
+   gastou o `budget_campaign_usd`.
 
 Sem `ON_ESCALATION_CMD` no `.sdd/config.sh` do kit, toda delegação acima de `assisted` vale
 `assisted` (decisão 10): o aviso que chega ao dono é condição para o worker agir sozinho.

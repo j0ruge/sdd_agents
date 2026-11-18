@@ -3,7 +3,7 @@ campaign: 20261117-zerar-as-issues
 level: assisted
 lots: all
 expires: <YYYY-MM-DD HH:MM, hora local>
-budget_mission_usd: <número — o teto de cada missão, passado ao sdd run como BUDGET_MISSION_USD>
+budget_mission_usd: <número — o teto de cada missão, passado ao sdd run como BUDGET_MISSION_USD, se o .sdd/config.sh não fixar essa chave acima dele>
 budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger>
 signed:
 ---
