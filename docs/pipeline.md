@@ -1907,9 +1907,9 @@ stderr and leaves rc 2. The reason of an answer comes after ` — `.
 
 | Call | Stdout | rc |
 |---|---|---|
-| `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible or expired; 66 nothing on stdin |
+| `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible, expired, or changed after it was shown (it signs the terms it showed); 66 nothing on stdin |
 | `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0 |
-| `sdd-worker allows <campaign-dir> <act> [--lot L<n>]` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner; 2 not an act |
+| `sdd-worker allows <campaign-dir> <act> --lot L<n>` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner; 2 not an act, or no `--lot` (every act is of one lot, and the lot's ceiling is the act's) |
 | `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, no ceiling or spend to read, or `no mission cap — …` when the repo's config would beat the signed mission cap |
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line; 3 when `gh` did not answer |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
@@ -1941,8 +1941,11 @@ naming the first that fails:
 
 1. `review`: the newest `40-review-r<N>.md` of the mission folder, by number, names
    `reviewed_head: <sha>` in its frontmatter; every `Grade` cell under `### Overall Grade` is
-   exactly `A`; and `git diff --no-renames --name-only <reviewed_head> <head>` lists only paths
-   under the mission folder;
+   exactly `A`; no `Rationale` cell, and not the `gate:` of the frontmatter (absent included), is a
+   fill-in by the rule `gate_REVIEW` applies (`placeholder`, copied into the worker and held equal
+   to the runner's by `tests/check-worker.sh`); and
+   `git diff --no-renames --name-only <reviewed_head> <head>` lists only paths under the mission
+   folder;
 2. `codex`: of the comments of `chatgpt-codex-connector[bot]`, read with `--paginate`, the newest
    one carrying `codex-review-state:v1` is for the head, `completed`, with `has_unresolved_findings`
    false. A receipt anybody else posts does not count, and no other bot's review is read, so a bot

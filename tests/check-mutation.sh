@@ -6971,7 +6971,7 @@ mut_WORKER_seal_ceilings_unsigned() {
 # put in front of them. Caught by "seal: a lot ceiling lifted or a lot added after signing answers
 # assisted, and the delegate shows each ceiling" (check-worker.sh).
 mut_WORKER_seal_ceilings_unshown() {
-  sed -i '/^cmd_delegate() {/,/^}/ s@^  delegation_terms "\$1"$@  delegation_terms "$1" | grep -v "^ceiling "@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_delegate() {/,/^}/ s@^  printf .%s\\n. "\$shown"$@  grep -v "^ceiling " <<< "$shown"@' "${1%/*}/sdd-worker"
 }
 # The campaign: of a file is no longer compared with the directory's name: a campaign renamed after
 # signing, or a campaign.md turned to another id, answers the signed level, and next walks the
@@ -7029,6 +7029,33 @@ mut_WORKER_cap_caller_env_leaks() {
 # (check-worker.sh).
 mut_WORKER_cap_zero_holds() {
   sed -i '/^cmd_budget() {/,/^}/ s@ as \$r | \$r > 0 and @ as $r | $r >= 0 and @' "${1%/*}/sdd-worker"
+}
+# A round graded A whose Rationale is a fill-in passes the review item: the `<…>` of the template on
+# every row reads as a review, the round gate_REVIEW refuses (achado #2 of the mission's review r1).
+# Caught by "rationale: a round graded A with a placeholder rationale or gate: fails review, by the
+# rule of gate_REVIEW" (check-worker.sh).
+mut_WORKER_rationale_unread() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ -n "\$unjust" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The gate: of the round is no longer judged: `gate: <…>`, the template's own, carries no evidence
+# and reads ready. Caught by "rationale: a round graded A with a placeholder rationale or gate: fails
+# review, by the rule of gate_REVIEW" (check-worker.sh).
+mut_WORKER_rationale_gate_unread() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if placeholder "\$gv"; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# An act asked with no --lot answers the signed level again, over every ceiling of the queue: under
+# full, approve is allowed with the L6 of the kit's campaign capped at plan (achado #3 of the
+# mission's review r1). Caught by "lot: an act asked with no --lot is rc 2 and never allowed, under a
+# full delegation with a lot capped at plan" (check-worker.sh).
+mut_WORKER_lot_optional() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^    2) printf .sdd-worker: allows needs --lot.*@    2) : ;;@' "${1%/*}/sdd-worker"
+}
+# The terms are no longer read again after the yes: a delegation edited while the question is open
+# is signed as it stands, not as it was shown (achado #4 of the mission's review r1). Caught by
+# "shown: a delegation edited while the question is open is not signed, and the same y with no edit
+# signs" (check-worker.sh).
+mut_WORKER_shown_terms_unchecked() {
+  sed -i '/^cmd_delegate() {/,/^}/ s@^  if \[ "\$(delegation_terms "\$1")" != "\$shown" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
 
 CATALOG=(
@@ -7874,6 +7901,10 @@ CATALOG=(
   WORKER_cap_file_unread
   WORKER_cap_caller_env_leaks
   WORKER_cap_zero_holds
+  WORKER_rationale_unread
+  WORKER_rationale_gate_unread
+  WORKER_lot_optional
+  WORKER_shown_terms_unchecked
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

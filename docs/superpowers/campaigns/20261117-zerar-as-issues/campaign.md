@@ -155,7 +155,8 @@ do dono. Por lote: L1 nenhum, L2 3, L3 5, L4 3, L5 6, L6 7.
 O worker só mergeia (nível `merge` ou acima, e nunca no L6) com os cinco itens verdadeiros no mesmo
 sha, lidos por `bin/sdd-worker pr-ready <dir-da-missão> <pr>`, que responde `ready <sha>`:
 
-1. a rodada de revisão mais nova nomeia o head (`reviewed_head:`) e dá A em todo critério;
+1. a rodada de revisão mais nova nomeia o head (`reviewed_head:`) e dá A em todo critério, cada A
+   com uma justificativa que não é preenchimento, e o `gate:` dela traz a evidência;
 2. o recibo do Codex (`codex-review-state:v1`) é desse sha, `completed`, sem achado aberto;
 3. nenhum thread de revisão aberto;
 4. o PR está `OPEN` e `MERGEABLE`;

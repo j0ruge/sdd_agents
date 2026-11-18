@@ -39,7 +39,7 @@ usage() {
 usage: sdd-worker <verb> <args>
   delegate <campaign-dir>                      show the delegation, ask, and sign it
   level    <campaign-dir> [--lot L<n>]         the effective level of autonomy, with the reason
-  allows   <campaign-dir> <act> [--lot L<n>]   whether the act fits the effective level
+  allows   <campaign-dir> <act> --lot L<n>     whether the act fits the effective level of its lot
   budget   <campaign-dir>                      the campaign's spend against its ceilings
   next     <campaign-dir>                      the next act of the campaign
   pr-ready <mission-dir> <pr>                  whether the pull request is ready on its head sha
@@ -178,8 +178,12 @@ delegation_terms() {
   while read -r l c; do printf 'ceiling %s: %s\n' "$l" "$c"; done < <(lots_table "$dir/campaign.md")
 }
 
-# delegation_digest <campaign-dir> — the first 12 hex of the sha256 of delegation_terms.
-delegation_digest() { delegation_terms "$1" | sha256sum | cut -c1-12; }
+# terms_digest <terms> — the first 12 hex of the sha256 of <terms>, one newline after each line:
+# the ONE spelling of the hash, for the terms read now and for the terms the delegate showed.
+terms_digest() { printf '%s\n' "$1" | sha256sum | cut -c1-12; }
+
+# delegation_digest <campaign-dir> — the digest of delegation_terms, read now.
+delegation_digest() { terms_digest "$(delegation_terms "$1")"; }
 
 # delegation_write_signed <file> <line> — the frontmatter's `signed:` line replaced by <line>, or
 # <line> added before the closing `---` when the key is absent. The body is never touched, and the
@@ -205,14 +209,19 @@ delegation_write_signed() {
 # of `sdd approve`: a pipe is an answer, no TTY is required, and no character at all is not a no —
 # nobody was asked — so it is rc 66 and nothing is written. It does not read .sdd/config.sh and it
 # does not commit: the commit is the owner's trail, and the line it prints says how.
+# It signs what it showed: the terms are kept as they were printed, read again after the yes, and a
+# change in between (the owner's editor, a `git pull` in the checkout) signs nothing (rc 1); the
+# digest written is the one of the terms shown, so an edit after that re-read leaves a signature the
+# file no longer matches, which level reads as edited after signing.
 cmd_delegate() {
   [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
-  local f="${1%/}/delegation.md" ans="" got=0 id
+  local f="${1%/}/delegation.md" ans="" got=0 id shown
   if [ ! -f "$f" ]; then
     printf 'not signed — no delegation at %s\n' "$f"
     return 1
   fi
-  delegation_terms "$1"
+  shown="$(delegation_terms "$1")"
+  printf '%s\n' "$shown"
   if ! delegation_legible "$1"; then
     printf 'not signed — illegible: %s\n' "$ILLEGIBLE_WHY"
     return 1
@@ -236,7 +245,11 @@ cmd_delegate() {
     y | Y | yes | Yes | YES) : ;;
     *) printf 'not signed — the answer was not y, and nothing was written\n'; return 0 ;;
   esac
-  delegation_write_signed "$f" "signed: $(now) $(delegation_digest "$1")"
+  if [ "$(delegation_terms "$1")" != "$shown" ]; then
+    printf 'not signed — the delegation changed after it was shown, and nothing was written: run delegate again\n'
+    return 1
+  fi
+  delegation_write_signed "$f" "signed: $(now) $(terms_digest "$shown")"
   id="$(fm_value "$f" campaign)"
   printf 'signed %s — commit it: git add %s && git commit -m "chore(campaign): sign the delegation of %s"\n' \
     "$f" "$f" "$id"
@@ -361,16 +374,19 @@ act_floor() {
   return 1
 }
 
-# allows <campaign-dir> <act> [--lot L<n>] — whether <act> fits the effective level: rc 0 and
-# `allowed`, or rc 1 and `ask`, naming the level the act needs and the reason of the effective one,
-# so the owner reads why it came back. A word the table does not name is a usage error (rc 2,
-# nothing on stdout): read as any level, it would be allowed at the top. The --lot is the level's
-# own, so a capped lot caps the act. A rank that does not compare asks, never allows: that world is
-# a floor off the ladder, which only an edit of ACTS could write, so no probe reaches it from outside.
+# allows <campaign-dir> <act> --lot L<n> — whether <act> fits the effective level of the lot: rc 0
+# and `allowed`, or rc 1 and `ask`, naming the level the act needs and the reason of the effective
+# one, so the owner reads why it came back. A word the table does not name is a usage error (rc 2,
+# nothing on stdout): read as any level, it would be allowed at the top. The --lot is required, and
+# its absence is a usage error too: every act of a campaign is an act of one lot, the lot's ceiling
+# is the act's, and an act asked with no lot would answer the signed level over every ceiling of the
+# queue — the argument the session would have to remember is the reading this program takes from it.
+# A rank that does not compare asks, never allows: that world is a floor off the ladder, which only
+# an edit of ACTS could write, so no probe reaches it from outside.
 cmd_allows() {
   local lot="" need
   case "$#" in
-    2) : ;;
+    2) printf 'sdd-worker: allows needs --lot L<n>: every act is of one lot, and its ceiling caps the act\n' >&2; usage; return 2 ;;
     4) [ "$3" = --lot ] && [ -n "$4" ] || { usage; return 2; }; lot="$4" ;;
     *) usage; return 2 ;;
   esac
@@ -632,6 +648,58 @@ round_grades() {
     }' "$1"
 }
 
+# PLACEHOLDER_AWK — a COPY of the runner's (PLACEHOLDER_AWK in bin/sdd, the rule gate_REVIEW applies
+# to every Rationale cell and to the gate: of a round): the refused set of fill-ins, written by a
+# model in place of a sentence. The rule lives in two programs, so tests/check-worker.sh reads the
+# runner's out of bin/sdd and holds the two equal on the same cells (its `rationale:` family): a
+# change to one that the other does not follow turns the sensor red. The function is the runner's,
+# line for line; its comments are shortened.
+PLACEHOLDER_AWK='
+# Refused: an EMPTY cell; the whole cell wrapped in angle brackets, which is how the `### Overall
+# Grade` table of templates/review.md ships its fill-ins; a bare ellipsis; and the bare fill-in
+# words below. It targets the WHOLE cell, never the presence of a character — a real sentence
+# containing <A> is a real sentence. NOT refused: `clean`, `n/a` and `—`, the terse rationales of
+# the codereview skill, which mean measured-with-nothing-to-say.
+function placeholder(s,   u, w) {
+  if (s == "") return 1
+  if (s ~ /^<.*>$/) return 1
+  u = toupper(s)
+  # `—` is E2 80 94 and mawk is byte-oriented, so the rule below sees three bytes with no letter.
+  if (s == "—") return 0
+  # A cell with no letter and no digit says nothing: `-`, `?`, `.`, `--`, `...` and `…`.
+  if (u !~ /[[:alnum:]]/) return 1
+  # The WORD, not the spelling: `TODO:` and `TBD.` are the bare words with punctuation.
+  w = u; gsub(/[^[:alnum:]]/, "", w)
+  if (w == "PREENCHER" || w == "TODO" || w == "TBD" || w == "FIXME" || w == "XXX" ||
+      w == "WIP" || w == "FILLME") return 1
+  return 0
+}
+'
+# placeholder <text> — rc 0 when <text> is a fill-in that says nothing, by the copy above. Through
+# ENVIRON and never `awk -v`, which runs escape sequences.
+placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit placeholder(ENVIRON["SDD_PLACEHOLDER_TEXT"]) ? 0 : 1 }'; }
+
+# round_unjustified <round> — the first row under `### Overall Grade` whose Rationale is a fill-in
+# (placeholder), as `<criterion><TAB><rationale>`, the rationale read as gate_REVIEW reads it: the
+# fourth column, its `*` and backticks removed, its blanks trimmed, `<empty>` for an empty one. The
+# separator row is skipped and the read ends at the next heading, like round_grades. Prints nothing
+# when every row is justified. Declared limit: the cell is cut at every `|`, where gate_REVIEW
+# rejoins a `\|` written inside it, so a rationale holding one is judged by its first piece — a
+# piece that is a fill-in word (`TODO\|…`) is refused, the closed side.
+round_unjustified() {
+  awk "$PLACEHOLDER_AWK"'
+    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
+    /^###[ \t]+Overall Grade/ { sec = 1; next }
+    !sec { next }
+    /^#+[ \t]/ { exit }
+    /^[ \t]*\|/ {
+      split($0, c, "|")
+      if (trim(c[2]) ~ /^:?-+:?$/) next
+      r = c[4]; gsub(/[*`]/, "", r); r = trim(r)
+      if (placeholder(r)) { print trim(c[2]) "\t" (r == "" ? "<empty>" : r); exit }
+    }' "$1"
+}
+
 # gh_at <root> <args...> — gh run at <root>, the checkout gh infers the repository from; its stdout
 # PUBLISHED in GH_OUT and its rc in GH_RC. Returns 1 when gh failed. Called, never substituted.
 gh_at() {
@@ -652,9 +720,10 @@ gh_unread() {
 # `ready <sha>` and rc 0 when the five items hold, else `not-ready <item>: <reason>` and rc 1 for the
 # first that fails, in this order:
 #   review     the newest 40-review-r<N>.md of the mission folder (by number) grades A in every row
-#              of `### Overall Grade` and names `reviewed_head: <sha>`, and between that sha and the
-#              head only the mission folder changed — renames not followed, so a move into the
-#              folder is a change outside it;
+#              of `### Overall Grade`, with no Rationale and no gate: that is a fill-in by the rule
+#              of gate_REVIEW (placeholder), and names `reviewed_head: <sha>`, and between that sha
+#              and the head only the mission folder changed — renames not followed, so a move into
+#              the folder is a change outside it;
 #   codex      the newest receipt (`codex-review-state:v1`) the Codex bot left on the pull request,
 #              read from every page, is for the head, completed, with no unresolved finding;
 #   threads    every review thread is resolved, and every one was read;
@@ -672,7 +741,7 @@ gh_unread() {
 # with more is not ready.
 cmd_pr_ready() {
   [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
-  local dir="${1%/}" pr="$2" root view head state mergeable round rh g prefix changed p repo verdict
+  local dir="${1%/}" pr="$2" root view head state mergeable round rh g unjust gv prefix changed p repo verdict
   local threads open total seen unseen here
   local -a grades=()
   root="$(repo_root "$dir")"
@@ -704,6 +773,21 @@ cmd_pr_ready() {
   for g in "${grades[@]}"; do
     if [ "$g" != A ]; then printf 'not-ready review: %s grades %s, and every row must read A\n' "$round" "$g"; return 1; fi
   done
+  unjust="$(round_unjustified "$round")"
+  if [ -n "$unjust" ]; then
+    printf 'not-ready review: %s: %s grades A with a placeholder rationale (%s) — a grade no sentence supports is a label\n' \
+      "$round" "${unjust%%$'\t'*}" "${unjust#*$'\t'}"
+    return 1
+  fi
+  # The gate: by the same rule, its surrounding quotes stripped as the runner's frontmatter reader
+  # does. Absent reads empty, and fails: gate_REVIEW leaves an absent gate: alone for the rounds that
+  # predate the key, and a round that names reviewed_head: is the worker's own, made from the template.
+  gv="$(fm_value "$round" gate)"; gv="${gv#[\"\']}"; gv="${gv%[\"\']}"
+  if placeholder "$gv"; then
+    printf "not-ready review: the gate: of %s is a placeholder or absent ('%s') — it carries the evidence the round closed\n" \
+      "$round" "$gv"
+    return 1
+  fi
   prefix="$(git -C "$dir" rev-parse --show-prefix)"
   if [ -z "$prefix" ]; then
     printf 'not-ready review: the mission folder %s is the root of its checkout\n' "$dir"; return 1

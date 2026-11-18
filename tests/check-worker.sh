@@ -39,7 +39,8 @@
 #   R10 with --lot, a ceiling below the signed level lowers it and one above never raises it; a lot
 #       outside `lots:`, or with no row in the table, is assisted; a --lot with no lot is rc 2
 #   R11 `allows`, over a delegation signed at each of the five levels, answers the table of acts of
-#       the mission plan (kept HERE, never read from the program) in every one of the 35 cells:
+#       the mission plan (kept HERE, never read from the program) in every one of the 35 cells, on
+#       a lot with no ceiling (every act is asked with --lot, R39):
 #       `allowed <act> at <level>` with rc 0, or `ask <act> needs <floor>, effective <level> — …`
 #       with rc 1
 #   R12 a word the table does not name — a near miss of an act, a level's name, an entry of the
@@ -131,6 +132,19 @@
 #       runner would apply is above the signed one, zero, or empty — the config `sdd install` writes
 #       among them; at or below it, in a form where the environment wins, silent on the key under a
 #       caller that exports another value, or with no config, the signed cap holds
+#   R38 the review item of `pr-ready` refuses a round graded A whose Rationale is a fill-in, by the
+#       rule gate_REVIEW applies: the runner's placeholder() is read out of bin/sdd HERE and run on
+#       the text each cell leaves once its `*` and backticks are stripped, and pr-ready agrees with
+#       it on every cell (a differential: the rule lives in two programs); the gate: of the round
+#       too — the template's own, an empty one, a quoted one —, and an absent one, since a round
+#       with reviewed_head: is the worker's own; a fill-in in a table after the grade table changes
+#       nothing
+#   R39 `allows` with no --lot is rc 2, nothing on stdout and the lot named on stderr, for each of
+#       the seven acts, under a full delegation that allows approve on a lot with no ceiling and caps
+#       it on a lot at plan: an act asked with no lot would answer over every ceiling of the queue
+#   R40 `delegate` signs what it showed: the delegation edited while the question is open (a FIFO
+#       on stdin) is `not signed`, rc 1, the file as the edit left it; the same FIFO with no edit
+#       signs, so the refusal is the edit's
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -143,9 +157,10 @@
 # rule goes unmeasured, and the sensor says nothing about it.
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
-# verbs, `seal: `, `legible: `, `cap: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the
-# fix increment that opened it names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
-# the census in check-health.sh holds that clause.
+# verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `command: ` and
+# `docs: `) prints exactly the assertions the mission plan or the fix increment that opened it
+# names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the
+# first red, after printing it; the census in check-health.sh holds that clause.
 #
 # Usage: tests/check-worker.sh   (exit 0 = every verb answers what its rule says)
 set -uo pipefail
@@ -162,7 +177,7 @@ unset SDD_WORKER_NOW ON_ESCALATION_CMD BUDGET_MISSION_USD
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
-PROBE_FLOOR=37
+PROBE_FLOOR=40
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -599,8 +614,9 @@ allows_is() {
 }
 
 # --- R11: five levels by seven acts -------------------------------------------------------------
-# Every cell asked of a delegation signed at its level, in a repo with a pager, and counted: the
-# count is the witness that the 35 cells were asked, since a loop that asked none leaves got empty.
+# Every cell asked of a delegation signed at its level, in a repo with a pager, on L1 (the
+# template's lot with no ceiling), and counted: the count is the witness that the 35 cells were
+# asked, since a loop that asked none leaves got empty.
 got=""; cells=0
 for i in "${!LEVELS[@]}"; do
   lv="${LEVELS[$i]}"
@@ -610,9 +626,9 @@ for i in "${!LEVELS[@]}"; do
     read -r act floor yes <<< "$row"
     before="$got"
     if [ "${yes:$i:1}" = y ]; then
-      allows_is "$lv/$act" 0 "allowed $act at $lv" "$d" "$act"
+      allows_is "$lv/$act" 0 "allowed $act at $lv" "$d" "$act" --lot L1
     else
-      allows_is "$lv/$act" 1 "ask $act needs $floor, effective $lv — signed until $FAR" "$d" "$act"
+      allows_is "$lv/$act" 1 "ask $act needs $floor, effective $lv — signed until $FAR" "$d" "$act" --lot L1
     fi
     [ "$got" != "$before" ] || cells=$((cells + 1))
   done
@@ -626,8 +642,8 @@ else
 fi
 
 # --- R12: a word that is not an act -------------------------------------------------------------
-# Asked of the full delegation, where every act of the table is allowed: a word read as any act, or
-# as any level, is allowed there, so rc 2 and an empty stdout are what tell the refusal apart, and
+# Asked of the full delegation on L1, where every act of the table is allowed: a word read as any
+# act, or as any level, is allowed there, so rc 2 and an empty stdout are what tell the refusal apart, and
 # the stderr names the word. The near misses: an unknown word, a capital, a prefix, two acts in one
 # argument, a glob, a level's name, an entry of the table as the program may write it, and nothing.
 # The calls of the wrong shape ride along: no act, a --lot with no lot, a misspelt flag, and a
@@ -635,12 +651,12 @@ fi
 got=""
 d="$REPO/docs/campaigns/a-full"
 for act in frobnicate Merge merg 'run pr' '*' assisted 'run:pr' ''; do
-  worker allows "$d" "$act"
+  worker allows "$d" "$act" --lot L1
   { [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -qF "'$act' is not an act" <<< "$W_ERR" \
       && grep -q '^usage: sdd-worker ' <<< "$W_ERR"; } \
     || got="${got:+$got; }act '$act': rc $W_RC, stdout '$W_OUT', stderr '${W_ERR%%$'\n'*}'"
 done
-for args in "$d" "$d|run|--lot" "$d|run|--lit|L1" "$REPO/docs/campaigns/a-nowhere|run"; do
+for args in "$d" "$d|run|--lot" "$d|run|--lit|L1" "$REPO/docs/campaigns/a-nowhere|run|--lot|L1"; do
   IFS='|' read -ra a <<< "$args"
   worker allows "${a[@]}"
   { [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -q '^usage: sdd-worker ' <<< "$W_ERR"; } \
@@ -667,7 +683,7 @@ campaign a-unsigned full "$FAR" 25 200 > /dev/null
 for id in a-expiring a-edited a-pager; do
   d="$(campaign "$id" full "$FAR" 25 200)"
   sign "$d"
-  allows_is "$id before" 0 'allowed approve at full' "$d" approve
+  allows_is "$id before" 0 'allowed approve at full' "$d" approve --lot L1
 done
 sed -i '2,/^---$/ s@^lots: all$@lots: L1@' "$REPO/docs/campaigns/a-edited/delegation.md"
 cp -a "$REPO/docs/campaigns/a-pager" "$NOPAGER/docs/campaigns/"
@@ -680,7 +696,7 @@ for w in "a-absent||no delegation" "a-template||illegible: " "a-unsigned||unsign
     read -r act floor _ <<< "$row"
     before="$got"
     SDD_WORKER_NOW="$seam" allows_is "${id##*/}/$act" 1 \
-      "ask $act needs $floor, effective assisted — $why" "$d" "$act"
+      "ask $act needs $floor, effective assisted — $why" "$d" "$act" --lot L1
     [ "$got" != "$before" ] || asks=$((asks + 1))
   done
 done
@@ -693,15 +709,14 @@ else
 fi
 
 # --- R14: the lot's ceiling is the act's --------------------------------------------------------
-# A full delegation over three lots: no ceiling, merge, full. With no lot, and on L1 and L3, approve
-# is allowed at full — the witness that the delegation grants it; on L2 it is asked, and merge is
+# A full delegation over three lots: no ceiling, merge, full. On L1 and L3 approve is allowed at
+# full — the witness that the delegation grants it; on L2 it is asked, and merge is
 # allowed there at merge, so the cap is the lot's ceiling and not a refusal of the lot. A lot the
 # table has no row for asks too.
 got=""
 d="$(campaign a-lots full "$FAR" 25 200)"
 set_lots "$d/campaign.md" 'L1:-' 'L2:merge' 'L3:full'
 sign "$d"
-allows_is 'no lot' 0 'allowed approve at full' "$d" approve
 allows_is 'L1, no ceiling' 0 'allowed approve at full' "$d" approve --lot L1
 allows_is 'L3, ceiling full' 0 'allowed approve at full' "$d" approve --lot L3
 allows_is 'L2, approve' 1 'ask approve needs full, effective merge — capped by the lot' "$d" approve --lot L2
@@ -1229,12 +1244,17 @@ CODEX='chatgpt-codex-connector[bot]'
 got=""
 gitc() { git -C "$RR" -c user.name=fixture -c user.email=fixture@example.com "$@"; }
 
-# round <file> <reviewed head> — a review round copied from templates/review.md: every grade of the
-# `### Overall Grade` table filled with A (the bold of the Overall row kept), and `reviewed_head:`
-# added under the frontmatter's gate: line — none when the head is `-`.
+# round <file> <reviewed head> — a review round copied from templates/review.md: every row of the
+# `### Overall Grade` table graded A (the bold of the Overall row kept) with a rationale RUN_RAT that
+# is a sentence, the frontmatter's gate: filled with RUN_GATE, and `reviewed_head:` added under it —
+# none when the head is `-`. The template ships its rationales and its gate: as fill-ins, which the
+# review item refuses (R38).
+RUN_RAT='measured, nothing to say'
+RUN_GATE='tests/run-all.sh rc 0, the tree clean'
 round() {
-  sed -e "2,/^---\$/ s@^gate: .*@&\nreviewed_head: $2@" -e 's@| <A> |@| A |@' \
-      -e 's@| \*\*<A>\*\* |@| **A** |@' "$ROOT/templates/review.md" > "$1"
+  sed -e "2,/^---\$/ s@^gate: .*@gate: $RUN_GATE\nreviewed_head: $2@" \
+      -e "s@| <A> | <[^|]*> |@| A | $RUN_RAT |@" \
+      -e "s@| \*\*<A>\*\* | <[^|]*> |@| **A** | $RUN_RAT |@" "$ROOT/templates/review.md" > "$1"
   [ "$2" != - ] || sed -i '2,/^---$/ { /^reviewed_head:/d }' "$1"
 }
 
@@ -1253,6 +1273,8 @@ RR_REAL="$(CDPATH='' cd "$RR" && pwd -P)"
   || got="fixture: the four commits of the ready repo were not made"
 [ "$(grep -c '^| [A-Za-z*][^|]* | \**A\** |' "$MD/40-review-r2.md")" = 8 ] \
   || got="${got:+$got; }fixture: the round copied from templates/review.md does not grade eight rows A"
+[ "$(grep -c " | $RUN_RAT |\$" "$MD/40-review-r2.md")" = 8 ] && grep -qx "gate: $RUN_GATE" "$MD/40-review-r2.md" \
+  || got="${got:+$got; }fixture: the round does not justify its eight rows and fill its gate:"
 
 # ready_reset — the ready repo at B, its two rounds as committed and nothing else on disk.
 ready_reset() { rm -f "$MD"/40-review-r*.md "$RR"/40-review-r*.md "$MD/note.md"; gitc reset -q --hard "$B"; }
@@ -1814,7 +1836,7 @@ for w in "g-renamed|campaign: 'g-moved' in $C/g-renamed/delegation.md is not the
          "g-lone|$C/g-lone/campaign.md does not exist"; do
   IFS='|' read -r id why <<< "$w"
   level_is "$id" "level assisted — illegible: $why" "$C/$id"
-  allows_is "$id" 1 "ask approve needs full, effective assisted — illegible: $why" "$C/$id" approve
+  allows_is "$id" 1 "ask approve needs full, effective assisted — illegible: $why" "$C/$id" approve --lot L1
   budget_is "$id" 1 "no ceiling — illegible: $why" "$C/$id"
 done
 cp "$C/g-renamed/delegation.md" "$BOX/g-renamed.before"
@@ -1867,6 +1889,184 @@ if [ -z "$got" ]; then
 else
   fail 'legible: an expires: the clock does not have is illegible to level and refused by delegate, and a leap day signs' \
     'assisted — illegible and a refusal for each instant the clock lacks; full until the leap day' "$got"
+fi
+
+# --- R38: a fill-in for a rationale, or for the gate: -------------------------------------------
+# gate_REVIEW refuses a round whose A no sentence supports (PLACEHOLDER_AWK in bin/sdd), and the
+# worker's bar is never below the pipeline's: bin/sdd-worker carries a copy of that rule, and this
+# probe holds the two equal over the same cells. The runner's placeholder() is read out of bin/sdd
+# HERE and run on the text each cell leaves once its `*` and backticks are stripped and its blanks
+# trimmed (what gate_REVIEW judges); pr-ready has to agree with it on every cell: rc 1 and `…
+# grades A with a placeholder rationale` where the runner refuses, `ready <B>` where it does not.
+# Each cell is the Rationale of the Security row of the newest round (r2), its A kept, every other
+# item true. The cells: the fill-ins of each kind (angle brackets, empty, an ellipsis in both
+# spellings, a dash, the fill-in words with their punctuation), one in a code span, and the terse
+# rationales the codereview skill writes (`clean`, `n/a`, `—`, the dash in bold), and sentences.
+# Then the gate: of r2, judged by the same rule: the template's own, an empty one and the
+# template's quoted (the runner strips the quotes) fail; the filled one is ready; and an absent one
+# fails too — the runner leaves it alone for the rounds that predate the key, and a round with
+# reviewed_head: is the worker's own, made from the template. The template's table as shipped, its
+# eight rows graded A and left `<…>` (the round of the finding), is one line naming the first row.
+# The counter-world: a fill-in left in the findings table, after the grade table, changes nothing.
+got=""
+RUNNER_PH="$(sed -n "/^PLACEHOLDER_AWK='\$/,/^'\$/p" "$ROOT/bin/sdd" | sed '1d;$d')"
+grep -q '^function placeholder(s, ' <<< "$RUNNER_PH" \
+  || got="fixture: no PLACEHOLDER_AWK with a placeholder() read out of $ROOT/bin/sdd"
+# runner_refuses <text> — rc 0 when the runner's own rule calls <text> a fill-in.
+runner_refuses() {
+  SDD_PLACEHOLDER_TEXT="$1" awk "$RUNNER_PH"' BEGIN { exit placeholder(ENVIRON["SDD_PLACEHOLDER_TEXT"]) ? 0 : 1 }'
+}
+# set_row <round> <cell> — the Security row of <round> rewritten as `| Security | A | <cell> |`.
+set_row() {
+  CELL="$2" awk '/^\| Security \|/ { print "| Security | A | " ENVIRON["CELL"] " |"; next } { print }' \
+    "$1" > "$1.new" && mv "$1.new" "$1"
+  grep -qxF "| Security | A | $2 |" "$1" || got="${got:+$got; }fixture: the cell '$2' did not land"
+}
+# set_gate <round> <line> — the frontmatter's gate: line replaced by <line>, deleted when it is `-`.
+set_gate() {
+  LINE="$2" awk 'NR == 1 { fm = 1; print; next }
+    fm && $0 == "---" { fm = 0 }
+    fm && index($0, "gate:") == 1 { if (ENVIRON["LINE"] != "-") print ENVIRON["LINE"]; next }
+    { print }' "$1" > "$1.new" && mv "$1.new" "$1"
+}
+# judged <label> <runner says refused: 0/1> — reads the last pr-ready against the runner's verdict.
+judged() {
+  if [ "$2" = 0 ]; then
+    { [ "$W_RC" = 1 ] && [[ "$W_OUT" != *$'\n'* ]] && [[ "$W_OUT" == "$3"* ]]; } && refused_n=$((refused_n + 1)) && return 0
+  else
+    { [ "$W_RC" = 0 ] && [ "$W_OUT" = "ready $B" ]; } && kept_n=$((kept_n + 1)) && return 0
+  fi
+  got="${got:+$got; }$1: the runner says $([ "$2" = 0 ] && echo refused || echo justified), pr-ready rc $W_RC '$W_OUT'"
+}
+serve rationale
+export GHFX="$BOX/ghfx/rationale"
+refused_n=0; kept_n=0
+# The first rationale of the template's table, the fill-in a model leaves, read from the template.
+TPL_RAT="$(sed -n 's/^| Code Quality (Zen) | <A> | \(<[^|]*>\) |$/\1/p' "$ROOT/templates/review.md")"
+[[ "$TPL_RAT" == '<'?*'>' ]] || got="${got:+$got; }fixture: no fill-in read from the first row of templates/review.md"
+CELLS=('<…>' '' '...' '…' '-' 'TODO:' 'TBD.' 'PREENCHER' 'wip' 'FIXME' 'XXX' 'FILLME'
+       "\`$TPL_RAT\`"
+       'clean' 'n/a' '—' '**—**' 'Confirmed no leaks.' 'a real sentence with <A> in it')
+for cell in "${CELLS[@]}"; do
+  ready_reset
+  set_row "$MD/40-review-r2.md" "$cell"
+  t="${cell//[*\`]/}"
+  rr=1; runner_refuses "$t" && rr=0
+  PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+  judged "rationale '$cell'" "$rr" "not-ready review: $MD/40-review-r2.md: Security grades A with a placeholder rationale (${t:-<empty>})"
+done
+TG="$(sed -n '2,/^---$/ s/^gate: //p' "$ROOT/templates/review.md")"
+for w in "gate: $TG|$TG" 'gate:|' "gate: \"$TG\"|$TG" "gate: $RUN_GATE|$RUN_GATE"; do
+  ready_reset
+  set_gate "$MD/40-review-r2.md" "${w%%|*}"
+  grep -qxF "${w%%|*}" "$MD/40-review-r2.md" || got="${got:+$got; }fixture: '${w%%|*}' did not land"
+  rr=1; runner_refuses "${w#*|}" && rr=0
+  PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+  judged "'${w%%|*}'" "$rr" "not-ready review: the gate: of $MD/40-review-r2.md is a placeholder"
+done
+ready_reset
+set_gate "$MD/40-review-r2.md" -
+grep -q '^gate:' "$MD/40-review-r2.md" && got="${got:+$got; }fixture: the gate: line was not deleted"
+PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+judged 'no gate:' 0 "not-ready review: the gate: of $MD/40-review-r2.md is a placeholder"
+ready_reset
+sed -i "s@ | $RUN_RAT |\$@ | <…> |@" "$MD/40-review-r2.md"
+[ "$(grep -c ' | <…> |$' "$MD/40-review-r2.md")" = 8 ] || got="${got:+$got; }fixture: the eight fill-ins did not land"
+PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+judged 'the eight fill-ins of the template' 0 \
+  "not-ready review: $MD/40-review-r2.md: Code Quality (Zen) grades A with a placeholder rationale (<…>)"
+ready_reset
+sed -i 's@^| 1 | <CRITICAL .*@| 1 | LOW | <…> | x |@' "$MD/40-review-r2.md"
+grep -qxF '| 1 | LOW | <…> | x |' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: the findings row did not land"
+PATH="$BOX/stub-ready:$PATH" worker pr-ready "$MD" "$PRN"
+judged 'a fill-in in the findings table' 1 ''
+ready_reset
+{ [ "$refused_n" -ge 12 ] && [ "$kept_n" -ge 7 ]; } \
+  || got="${got:+$got; }$refused_n refused and $kept_n justified of the 26 worlds (want at least 12 and 7)"
+if [ -z "$got" ]; then
+  pass 'rationale: a round graded A with a placeholder rationale or gate: fails review, by the rule of gate_REVIEW'
+else
+  fail 'rationale: a round graded A with a placeholder rationale or gate: fails review, by the rule of gate_REVIEW' \
+    "pr-ready refusing exactly the cells and the gate: values the runner's placeholder() refuses" "$got"
+fi
+
+# --- R39: an act asked with no lot ----------------------------------------------------------------
+# Every act of a campaign is an act of one of its lots, and a lot's ceiling is the act's (R14): an
+# act asked with no --lot would answer the signed level over every ceiling of the queue. A full
+# delegation over L1 (no ceiling) and L6 (plan), signed and first witnessed allowing approve on L1
+# and capping it on L6, so the refusal that follows is the missing lot's: each of the seven acts
+# asked with no --lot is rc 2, nothing on stdout, and the stderr names the lot it needs, in its own
+# line and in the usage — the usage alone is what every call of the wrong shape prints. The count
+# witnesses the seven.
+got=""; nolot=0
+d="$(campaign o-nolot full "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L6:plan'
+sign "$d"
+allows_is 'L1, approve' 0 'allowed approve at full' "$d" approve --lot L1
+allows_is 'L6, approve' 1 'ask approve needs full, effective plan — capped by the lot' "$d" approve --lot L6
+for row in "${ACT_TABLE[@]}"; do
+  read -r act _ <<< "$row"
+  worker allows "$d" "$act"
+  if [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -qF 'sdd-worker: allows needs --lot L<n>' <<< "$W_ERR" \
+     && grep -qF 'allows   <campaign-dir> <act> --lot L<n> ' <<< "$W_ERR"; then
+    nolot=$((nolot + 1))
+  else
+    got="${got:+$got; }$act with no lot: rc $W_RC, stdout '$W_OUT', stderr '${W_ERR%%$'\n'*}'"
+  fi
+done
+[ "$nolot" = 7 ] || got="${got:+$got; }$nolot of 7 acts refused with no lot"
+if [ -z "$got" ]; then
+  pass 'lot: an act asked with no --lot is rc 2 and never allowed, under a full delegation with a lot capped at plan'
+else
+  fail 'lot: an act asked with no --lot is rc 2 and never allowed, under a full delegation with a lot capped at plan' \
+    'rc 2, nothing on stdout, the --lot named on stderr, for each of the seven acts' "$got"
+fi
+
+# --- R40: the delegate signs what it showed ------------------------------------------------------
+# The delegate shows the terms, asks, and reads one line: an editor of the owner's, or a `git pull`
+# in the checkout, can change the file while the question is open. Two worlds over a FIFO on stdin,
+# signed at pr with a mission cap of 40: in h-edit the level becomes full and the cap 999 once the
+# question is on stderr (so the terms were read and shown), then the y arrives — rc 1, `not signed`
+# with its own reason, the file as the edit left it, the stdout showing what was asked (pr, 40), and
+# level answering unsigned; in h-kept the same y arrives with no edit, and it signs at pr, so the
+# refusal is the edit's and never the FIFO's.
+got=""
+for id in h-kept h-edit; do
+  d="$(campaign "$id" pr "$FAR" 40 200)"
+  mkfifo "$BOX/$id.fifo"
+  ( exec "$WORKER" delegate "$d" < "$BOX/$id.fifo" > "$BOX/$id.out" 2> "$BOX/$id.err" ) &
+  hp=$!
+  exec 3> "$BOX/$id.fifo"
+  for _ in $(seq 200); do grep -qF 'Sign this delegation?' "$BOX/$id.err" && break; sleep 0.05; done
+  grep -qF 'Sign this delegation?' "$BOX/$id.err" || got="${got:+$got; }$id: the question never came"
+  { grep -qx 'level: pr' "$BOX/$id.out" && grep -qx 'budget_mission_usd: 40' "$BOX/$id.out"; } \
+    || got="${got:+$got; }$id: the terms asked were not shown"
+  if [ "$id" = h-edit ]; then
+    sed -i '2,/^---$/ { s@^level: pr$@level: full@; s@^budget_mission_usd: 40$@budget_mission_usd: 999@ }' "$d/delegation.md"
+    grep -qx 'level: full' "$d/delegation.md" || got="${got:+$got; }fixture: the edit did not land"
+  fi
+  cp "$d/delegation.md" "$BOX/$id.asked"
+  ( printf 'y\n' >&3 ) 2> /dev/null || true
+  exec 3>&-
+  hr=0; wait "$hp" || hr=$?
+  if [ "$id" = h-kept ]; then
+    { [ "$hr" = 0 ] && grep -q '^signed ' "$BOX/$id.out"; } || got="${got:+$got; }$id: rc $hr, '$(tail -1 "$BOX/$id.out")'"
+    level_is "$id after" "level pr — signed until $FAR" "$d"
+    continue
+  fi
+  [ "$hr" = 1 ] || got="${got:+$got; }$id: rc $hr"
+  cmp -s "$BOX/$id.asked" "$d/delegation.md" \
+    || got="${got:+$got; }$id: the file was written: '$(signed_line "$d/delegation.md")'"
+  grep -q '^not signed — the delegation changed after it was shown' "$BOX/$id.out" \
+    || got="${got:+$got; }$id: no reason of its own ('$(tail -1 "$BOX/$id.out")')"
+  ! grep -q '^signed ' "$BOX/$id.out" || got="${got:+$got; }$id: stdout says signed"
+  level_is "$id after" 'level assisted — unsigned' "$d"
+done
+if [ -z "$got" ]; then
+  pass 'shown: a delegation edited while the question is open is not signed, and the same y with no edit signs'
+else
+  fail 'shown: a delegation edited while the question is open is not signed, and the same y with no edit signs' \
+    'rc 1, not signed — the delegation changed…, the file as edited; rc 0 and signed at pr with no edit' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

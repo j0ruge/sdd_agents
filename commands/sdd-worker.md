@@ -18,8 +18,9 @@ through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, 
 - `sdd-worker delegate <campaign-dir>` is the owner's, never yours: it shows the delegation, asks,
   and signs it. You never answer its question.
 - `sdd-worker level <campaign-dir> [--lot L<n>]`: the effective level of autonomy, with the reason.
-- `sdd-worker allows <campaign-dir> <act> [--lot L<n>]`: rc 0, the act is yours alone; rc 1, it goes
-  back to the owner, and the line names the level it needs.
+- `sdd-worker allows <campaign-dir> <act> --lot L<n>`: rc 0, the act is yours alone; rc 1, it goes
+  back to the owner, and the line names the level it needs. With no `--lot` it is rc 2: every act
+  is of one lot, and the lot's ceiling is the act's.
 - `sdd-worker budget <campaign-dir>`: the campaign's spend against its ceiling, and the mission cap.
 - `sdd-worker next <campaign-dir>`: the next act of the campaign, derived from the disk and `gh`.
 - `sdd-worker pr-ready <mission-dir> <pr>`: `ready <sha>` only when the five-item bar holds on the
@@ -129,9 +130,10 @@ base.
 
 In the mission's worktree, bring the base in (`git fetch`, then `git merge origin/<base>`), run the
 suite (`TEST_CMD`), and make the review round through a subagent that writes the report to a file
-and returns only the grades. Write the round as `<HANDOFF_DIR>/<mission>/40-review-r<N>.md`, one
-above the newest, with `reviewed_head: <sha>` in its frontmatter, the `git rev-parse HEAD` the round
-read. The rounds the runner's REVIEW phase writes carry no such key, so `pr-ready` waits for this
+and returns only the grade table, each grade with its one-sentence rationale. Write the round as
+`<HANDOFF_DIR>/<mission>/40-review-r<N>.md`, one above the newest, with `reviewed_head: <sha>` in
+its frontmatter, the `git rev-parse HEAD` the round read, and the suite's result in `gate:`.
+`pr-ready` refuses a round whose rationale or `gate:` is still a fill-in of `templates/review.md`. The rounds the runner's REVIEW phase writes carry no such key, so `pr-ready` waits for this
 one. Fix what the round finds and review again, until every criterion is A. Commit and push the
 round, then ask `@codex review` on the pull request, always, and wait for its receipt on the new
 head.
