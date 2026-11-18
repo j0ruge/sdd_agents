@@ -144,6 +144,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `install` ou o `health` avisam quando o preâmbulo difere do template do idioma, sem reescrever.
   — descoberto por `codereview` na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-08)
 
+- [ ] **Nenhum sensor relê os Checks `done`, e o R que estende a família de um I o deixa vermelho calado** —
+  `tests/check-checkpoint.sh:1616` (`red_one`) — o `--red` roda só as linhas `pending`. Na r5 do worker, o R9 e
+  o R10 puseram linhas nas famílias `worker templates:` e `command:`, que o I1 e o I9 contavam com número exato:
+  os dois ficaram vermelhos no head sem aviso, achados por um script da sessão (`5565a41`, `995c4ad`). Direção:
+  um `--green <checkpoint>` que roda o Check de cada linha `done` e nomeia a que não dá o esperado, e o
+  `sdd-reviewer` avisado de que o R que conta uma família já contada acerta o esperado da linha antiga.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
+  orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-18)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
