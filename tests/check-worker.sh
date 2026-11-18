@@ -238,8 +238,15 @@
 #   R58 every probe runs in a box whose path does not read as itself as a regex, a JSON string, a
 #       sed script, a glob or one shell word (proved armed before the first probe; rc 94 when it is
 #       not): a path of the fixture enters each of them as text only — the ledger lines are built
-#       by jq, the commit line of delegate is compared by grep -xF, the mission folder's prefix by
-#       index(), and a call of the wrong shape is split on `|` (achados #28 and #29 of the r5)
+#       by jq, the head of delegate's commit line is compared as a literal prefix and its command
+#       is run (R59), the mission folder's prefix by index(), and a call of the wrong shape is split
+#       on `|` (achados #28 and #29 of the r5)
+#   R59 the commit line delegate prints is a command (probed inside R2's line): RUN under a git first
+#       on the PATH, it calls `git add` with the delegation's path as one argument and
+#       `git commit -m` with the message whole, and nothing else (no commit after an add that
+#       fails), both in the box of R58 and for a campaign whose id carries an apostrophe, a quote,
+#       a blank and `$1`, and the line ends in a newline (the achado the R9 filed in TODO.md,
+#       closed in the R10)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -283,6 +290,13 @@
 #   refused), so the probe of an absent TMPDIR answers the same; the world that tells them apart is
 #   a root user, for whom that mkdir succeeds. The second has no world of its own: one name made in
 #   a directory mktemp -d has just made.
+#
+# Declared limits of R59, no probe:
+# - The quotes around the constant part of the commit message are not measured: it holds no `$`,
+#   backtick, backslash or quote, so single and double quotes answer the same, and the degradation
+#   that swaps them is equivalent, not a world the probe misses.
+# - commit_calls runs nothing for a line with no `— commit it: `; without that guard it would run
+#   the whole line, whose first word `signed` is no command, so no git call is made either way.
 #
 # Declared limits of R58, no probe:
 # - The trap removes the mktemp directory, not only the box under it, and the box's mkdir stops the
@@ -429,6 +443,31 @@ digest_of() {
 # signed_line <delegation> — the frontmatter's signed: line, as written.
 signed_line() { sed -n '2,/^---$/ { /^signed:/p }' "$1"; }
 
+# A git first on the PATH that runs nothing: it appends each call to the file GIT_CALLS names, as
+# its argument count and then one argument per line, so a call is read back by its words; the call
+# whose subcommand GIT_FAILS names leaves rc 1.
+mkdir "$BOX/git-stub"
+cat > "$BOX/git-stub/git" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$#" "$@" >> "$GIT_CALLS"
+[ "${GIT_FAILS:-}" != "$1" ] || exit 1
+EOF
+chmod +x "$BOX/git-stub/git"
+
+# commit_calls <stdout> [<failing subcommand>] — RUNS the command after `— commit it: ` on the first
+# line of <stdout> that starts with `signed `, in a shell of its own under the git above, and prints
+# what that git received. A line with no such command runs nothing and prints nothing.
+commit_calls() {
+  local line cmd
+  line="$(grep '^signed ' <<< "$1")"; line="${line%%$'\n'*}"
+  cmd="${line#* — commit it: }"
+  : > "$BOX/git-calls"
+  [ "$cmd" = "$line" ] \
+    || ( PATH="$BOX/git-stub:$PATH" GIT_CALLS="$BOX/git-calls" GIT_FAILS="${2:-}" bash -c "$cmd" ) \
+      > /dev/null 2>&1 < /dev/null
+  cat "$BOX/git-calls"
+}
+
 # --- R1: usage ----------------------------------------------------------------------------------
 # Both worlds, and three terms each: the rc alone is shared with every refusal a verb will have, the
 # usage text is what tells this branch apart, and an empty stdout keeps the usage off the channel a
@@ -473,11 +512,35 @@ cmp -s <(sed '/^signed:/d' "$BOX/c-yes.before") <(sed '/^signed:/d' "$d/delegati
   || got="${got:+$got; }a line other than signed: changed"
 grep -qx 'level: pr' <<< "$W_OUT" && grep -qx 'budget_campaign_usd: 200.50' <<< "$W_OUT" \
   || got="${got:+$got; }the grant was not echoed on stdout"
-# The commit line is compared as text, the whole line: it carries the box's path, which a regex
-# reads as a bracket expression (R58).
-commit_line="signed $d/delegation.md — commit it: git add $d/delegation.md && git commit -m \"chore(campaign): sign the delegation of c-yes\""
-grep -qxF -- "$commit_line" <<< "$W_OUT" || got="${got:+$got; }no commit line on stdout"
+# The commit line is a command the owner pastes (R59): its head is compared as text, since it
+# carries the box's path, which a regex reads as a bracket expression (R58), and its command is RUN,
+# under the git above. The box's blank, quote, `$1` and backslash leave a raw path as no command
+# (a syntax error, nothing run) or as more than one word, so `git add` has to receive the path as
+# one argument, `git commit` the message whole, and nothing else may run (a `&& git push`
+# appended is a third call).
+line="$(grep '^signed ' <<< "$W_OUT")"
+[[ "$line" == "signed $d/delegation.md — commit it: "* ]] || got="${got:+$got; }no commit line on stdout"
+# W_OUT is read by $( ), which drops the last newline: the file says whether the line ends in one,
+# or the owner's prompt is glued to the command he copies.
+[ -z "$(tail -c 1 "$BOX/out")" ] || got="${got:+$got; }the commit line does not end in a newline"
+calls="$(commit_calls "$W_OUT")"
+want_calls="$(printf '%s\n' 2 add "$d/delegation.md" 3 commit -m 'chore(campaign): sign the delegation of c-yes')"
+[ "$calls" = "$want_calls" ] \
+  || got="${got:+$got; }the commit line ran as git calls '${calls//$'\n'/|}' (want '${want_calls//$'\n'/|}')"
+# An add that fails commits nothing: the second call waits on the first.
+calls="$(commit_calls "$W_OUT" add)"
+[ "$calls" = "${want_calls%%$'\n'3*}" ] \
+  || got="${got:+$got; }with git add failing, the commit line ran '${calls//$'\n'/|}' (want the add alone)"
 grep -qF 'Sign this delegation? [y/N]' <<< "$W_ERR" || got="${got:+$got; }the question was not asked"
+# The id is a directory's name, so it can carry what the box carries: here an apostrophe, a quote, a
+# blank and `$1`, which a raw id in the message would end, open or expand (R59).
+d="$(campaign "c-id 'q\"\$1" pr '2099-12-31 23:59' 25 200.50)"
+answer $'y\n'
+worker_from "$BOX/in" delegate "$d"
+calls="$(commit_calls "$W_OUT")"
+want_calls="$(printf '%s\n' 2 add "$d/delegation.md" 3 commit -m "chore(campaign): sign the delegation of c-id 'q\"\$1")"
+{ [ "$W_RC" = 0 ] && [ "$calls" = "$want_calls" ]; } \
+  || got="${got:+$got; }an id of 'c-id 'q\"\$1': rc $W_RC, git calls '${calls//$'\n'/|}' (want rc 0 and '${want_calls//$'\n'/|}')"
 if [ -z "$got" ]; then
   pass 'delegate: an answer of y signs with a digest of the other fields'
 else

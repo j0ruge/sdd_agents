@@ -558,7 +558,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
 
 - [ ] **O `delegate` imprime o `git add` com o caminho cru, que não é comando num checkout com espaço ou aspa** —
-  `bin/sdd-worker:300` (`git add %s`) — o dono copia `signed … — commit it: git add <arquivo> && git commit …`, e
+  `bin/sdd-worker:303` (`git add %q`) — o dono copia `signed … — commit it: git add <arquivo> && git commit …`, e
   sob o veneno do R58 do `tests/check-worker.sh` (`[ci]q"x @&*$1\`) a linha colada numa shell parte o caminho no
   espaço e abre uma aspa que não fecha; o id da campanha entra cru no `-m "…"` também. Direção: caminho e id saem
   por `%q`, e o R2 do sensor roda a linha impressa e confere que o `git add` recebeu um argumento só.

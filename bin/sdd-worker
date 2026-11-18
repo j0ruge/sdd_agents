@@ -297,7 +297,10 @@ cmd_delegate() {
     return 1
   fi
   id="$(fm_value "$f" campaign)"
-  printf 'signed %s — commit it: git add %s && git commit -m "chore(campaign): sign the delegation of %s"\n' \
+  # The owner pastes the command, so what it takes from outside, the path and the id (a directory's
+  # name), goes through %q: a blank, a quote or a `$` in either stays inside one word. The message's
+  # constant part is single-quoted, and the id joins it as the next part of the same word.
+  printf "signed %s — commit it: git add %q && git commit -m 'chore(campaign): sign the delegation of '%q\n" \
     "$f" "$f" "$id"
 }
 

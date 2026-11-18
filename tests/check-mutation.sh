@@ -6868,6 +6868,13 @@ mut_WORKER_delegate_signs_without_answer() {
 mut_WORKER_delegate_signs_expired() {
   sed -i '/^cmd_delegate() {/,/^}/ s@^  if expired @  if false \&\& expired @' "${1%/*}/sdd-worker"
 }
+# The path of the commit line printed raw again (achado of the R9, closed in the R10): pasted in a
+# checkout whose path has a blank or a quote, the line is no command, or `git add` gets the wrong
+# words. Caught by "delegate: an answer of y signs with a digest of the other fields"
+# (check-worker.sh), which runs the line under a git first on the PATH.
+mut_WORKER_delegate_commit_path_raw() {
+  sed -i '/^cmd_delegate() {/,/^}/ s@commit it: git add %q && @commit it: git add %s \&\& @' "${1%/*}/sdd-worker"
+}
 # The expiry check of the effective level dropped: a delegation whose instant passed goes on
 # granting its level. Caught by "level: absent, illegible, unsigned and expired each answer assisted
 # and say why" (check-worker.sh).
@@ -8120,6 +8127,7 @@ CATALOG=(
   WORKER_unknown_verb_accepted
   WORKER_delegate_signs_without_answer
   WORKER_delegate_signs_expired
+  WORKER_delegate_commit_path_raw
   WORKER_level_ignores_expiry
   WORKER_level_ignores_digest
   WORKER_level_ceiling_raises
