@@ -18,7 +18,7 @@
 | F3 | T3 e a janela do juiz | janela 1 **fechada**: veredito `melhorou` sobre `4fd0f31` (PR #175, `3d350ed`). Dos 8 achados, 5 foram consertados na missão `20260928-os-achados-da-janela` (3, 4, 6, 7 e 8; PR #176) e 3 foram para o `TODO.md` (1, 2 e 5). Janela 2 **fechada sem veredito** em 2026-09-30: `indeterminado` sobre `6323c6f`, porque o PR #184 (só `TODO.md` + catraca) cunhou um `kit_sha` novo e deixou as 3 missões de `5b98087` em `previous` (`window_missions_stranded: 3`); o achado está no `TODO.md`. Janela 3 (aberta no merge do PR #185, missão `20260930-a-sub-etapa-que-andou`) **abandonada por decisão humana em 2026-10-01, sem veredito**: o kit descongela para a missão `20261001-a-janela-nao-se-parte` (ADR 0014), que conserta a causa — o eixo passa a agrupar pelo último commit de comportamento (`kit_rev`, de `bin agents templates config`) e a chave do carimbo deixa a catraca de fora, então um PR só de `TODO.md` deixa de partir a janela e de matar o carimbo. **A janela 4 abre no primeiro carimbo de alvo após o merge desta missão**. Ela partiu com os lotes 1–5, que mudaram o runner sem juiz (`./bin/sdd kaizen --series` em 2026-10-08: última fatia em `94123a4`, 1 missão, `window_broken: true`). **O kit congelou no merge do lote 6** (`20261008-lote-6-as-quatro-que-faltam`, decisão 6). Janela do lote 6 **fechada** em 2026-10-12: veredito `melhorou` sobre `0270727` (`sdd kaizen` de um worktree ligado; 5 missões do `sales_quote`, `advance_rate` 0,91 → 0,98, o `kit-touched` some da fatia), e o plano nascido foi replanejado com o humano como o lote 7 (`20261012-a-rota-da-qa`, ADR 0018). O kit descongelou no merge do veredito; o lote 7 foi executado num worktree ligado, e **O kit congelou no merge do lote 7** (D11 daquela missão); o lote 8 (`20261015-lote-8-a-leva-que-nao-parte-a-janela`) levou só `tests/` e `commands/`, sem partir a janela, e o lote 9 (`20261016-lote-9-o-papel-de-cada-palavra`) levou os três itens de `tests/` (#269, #270, #272), também sem partir, e o lote 10 (`20261016-lote-10-as-cinco-livres`) levou as cinco livres de `tests/` e `commands/` (#278, #280 e #281 consertados; #277 e #279 decididos sem conserto), também sem partir (`kaizen --series` em 2026-10-16 às 20:01: `bad6168`, `missions: 1`); a janela do lote 7 **fechou** em 2026-10-20 com veredito `melhorou` sobre `bad6168` (`sdd kaizen` de um worktree ligado; 4 missões de 3 repos, guarda `sufficient: true`; o veredito está em `docs/handoffs/20261020-a-sessao-le-o-que-o-boot-manda/05-verdict.md`), e a triagem leu os 26 itens abertos sem tirar nenhum | o kit descongelou no merge do PR #302 (`45a16a6`, 2026-10-20); o plano nascido é a F9; a T3 se desfez em 2026-10-04 (§ F3) | a próxima janela, que abre no merge da F9 |
 | F4 | Portabilidade para outros repos | sem pendência de código: lacunas 2 e 3 **consertadas** na missão `20260926-a-carona-antes-do-congelamento` (I5, I6), 4 e 5 no `TODO.md` (I7), 6 declarada no ADR 0007 | a prova num 2º alvo, que conta para a próxima janela do juiz | nada desde o veredito (F3, PR #175) |
 | F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
-| F6 | O worker (W1–W7) | estacionada por decisão; **coleta de campo aberta em 2026-10-09** ([caderno](2026-10-09-o-worker-caderno-de-campo.md), [linha de base](2026-10-09-o-worker-linha-de-base.md): 21 missões, 4 sem toque humano) | uma linha do caderno por missão do `sales_quote` | **decisão humana** |
+| F6 | O worker (W1–W7) | **em construção por decisão do dono em 2026-11-17**: a [ADR 0022](../../adr/0022-the-worker-is-a-session-orchestrator.md) faz do worker uma sessão que orquestra uma campanha, sob uma delegação assinada de cinco níveis, revisa D1, D2 e D5 do roadmap e deixa a forma do tick de lado; a missão `20261117-o-worker-orquestrador` constrói `bin/sdd-worker`, `commands/sdd-worker.md` e a campanha do kit (`docs/superpowers/campaigns/20261117-zerar-as-issues/`, sem assinatura). A coleta de campo segue ([caderno](2026-10-09-o-worker-caderno-de-campo.md), [linha de base](2026-10-09-o-worker-linha-de-base.md), [merge delegado](2026-11-16-o-worker-merge-delegado.md)) | o merge da missão; depois, o dono assina a delegação e o worker abre o L1, o piloto sobre o kit | **decisão humana**: a assinatura da delegação e o `ON_ESCALATION_CMD` do kit |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
 | F8 | O plano mede contra a base, não contra os incrementos anteriores | **fechada** pelo I4 de `20261008-lote-6-as-quatro-que-faltam`: o parágrafo no § 4 do `sdd-planner`, segurado pelo probe `hat:` do `tests/check-hat.sh` | nada | — |
 | F9 | A sessão lê o que o boot manda ler | plano nascido do `sdd kaizen` em 2026-10-20 e levado ao grill do `/sdd-plan` no mesmo dia (7 decisões, todas no recomendado; ADR 0019), aprovado `humano-2026-10-20` (`c7f9ad8`): `docs/handoffs/20261020-a-sessao-le-o-que-o-boot-manda/`, 6 incrementos (a regra só de leitura dos templates no `run_phase` e no `sdd close`, a sessão isolada do preflight, a negativa nomeada no journal, o `READ_EXTRA` e os avisos do preflight); os três achados da janela saíram para o `TODO.md` pelo #309. **Executada** de forma interativa no worktree `~/repos/sdd_agents-f9`: os seis incrementos e a rodada de conserto da revisão final (R1 `f9f3b34`, R2 `5f05cf4`) feitos, suíte verde em `259222b` (2027 `ok`), catálogo 716 → 742 mutantes (`--anchors`); a sonda isolada lê o template com a regra e é `DENIED` sem ela (2026-10-20 22:59, 2.1.304), e o preflight fica vermelho com o `kit_read_rules` sabotado; a DOCS escreveu a entrada do `KAIZEN_LOG.md` | o PR com `@codex review`, os consertos da revisão numa leva, depois o `./bin/sdd health` (carimbo) e o merge humano; depois do merge, o yokoten do `READ_EXTRA` no lighthouse e no jrc-libs | o PR e a revisão dele |
@@ -308,9 +308,10 @@ São quatro, todas abertas em 2026-09-22 a partir da missão do `lighthouse_proj
 ## F6 — O worker (W1–W7)
 
 Spec completo neste repo: `docs/superpowers/specs/2026-09-22-o-worker-roadmap-design.md` (trazido
-do branch local `docs/worker-roadmap`, commit `8722dc1`, que nunca tinha sido empurrado). É um
-`bin/sdd-worker tick --once`, disparado por systemd timer, que leva uma missão **aprovada em disco**
-até o PR com os bots tratados.
+do branch local `docs/worker-roadmap`, commit `8722dc1`, que nunca tinha sido empurrado). O desenho
+de setembro era um `bin/sdd-worker tick --once`, disparado por systemd timer, que leva uma missão
+**aprovada em disco** até o PR com os bots tratados; o `bin/sdd-worker` que existe hoje é outro
+(o parágrafo "Em construção", abaixo).
 
 - **W1 — um checkout, um dono:** entregue pelo PR #48 (`coordination_enter`, `flock`).
 - **W2 — identidade do repo no ledger vinda do remote**, não do caminho.
@@ -321,10 +322,20 @@ até o PR com os bots tratados.
 - **W6 — tick real,** com timer, lock da máquina e teto diário.
 - **W7 — bots do PR:** no máximo uma leva de consertos, depois escala.
 
-**Estacionado por decisão humana (2026-09-22):** só se volta ao roadmap quando os fluxos atuais
-rodarem até o fim sem problemas, e na volta começa pelo W2 via `/sdd-plan`. Dentro dele, cada degrau
-só executa sozinho depois de o anterior ter sensor, e o worker só executa depois de o W5 mostrar o
-que faria.
+**Em construção por decisão do dono (2026-11-17).** Estacionado em 2026-09-22 até os fluxos atuais
+rodarem até o fim sem problemas, o worker voltou por outro caminho: o dono delegou três cadeias
+inteiras de missões a uma sessão no `dotp-remake` (5a, 5b e o Plano 7, de 2026-11-15 a 2026-11-17),
+e o fluxo que rodou está em [`2026-11-16-o-worker-merge-delegado.md`](2026-11-16-o-worker-merge-delegado.md).
+A [ADR 0022](../../adr/0022-the-worker-is-a-session-orchestrator.md) faz dele uma **sessão que
+orquestra uma campanha**, sob uma delegação assinada de cinco níveis cumulativos (`assisted` < `pr`
+< `plan` < `merge` < `full`), e revisa três decisões do roadmap: D1 (o worker planeja, do nível
+`plan` para cima), D2 (o kit é alvo, por `sdd run` no worktree ligado da missão) e D5 (o merge é
+delegável, do nível `merge` para cima, pela régua lida num sha só). A forma do tick (W5, W6) fica de
+lado, sem ser recusada. A missão `20261117-o-worker-orquestrador` constrói `bin/sdd-worker` (seis
+verbos que respondem por artefato), `commands/sdd-worker.md` (o laço da sessão) e a campanha que
+zera as issues do kit, `docs/superpowers/campaigns/20261117-zerar-as-issues/`, que espera a
+assinatura do dono. Dos degraus acima, W2 a W6 seguem como estavam (a ADR registra que nenhum deles
+rodou), e o W4 (`ENV_UP_CMD`) continua sendo o que falta para um alvo com interface.
 
 **Coleta de campo desde 2026-10-09.** O humano passou a resolver as issues do `sales_quote` com o
 kit, e cada missão deixa uma linha no
@@ -416,7 +427,8 @@ segue adiada: as duas podem acabar no mesmo desenho, e quem planejar decide.
 
 ## Ordem sugerida
 
-**O que as fontes já decidem:** o worker só volta com os fluxos limpos (F6); as fases 2–4 e 6 do
+**O que as fontes já decidem:** o worker só voltava com os fluxos limpos (F6; voltou por decisão do
+dono em 2026-11-17, pela ADR 0022); as fases 2–4 e 6 do
 Astra vêm depois do worker (F7); a T3 vem depois do veredito da janela (F3 — a ordem de
 2026-09-21, com a T3 antes do congelamento, foi superada pela carona); o `sdd kaizen` roda do
 terminal do humano; e qualquer PR do kit segue abrir → todos os revisores → uma leva de consertos
@@ -435,4 +447,4 @@ terminal do humano; e qualquer PR do kit segue abrir → todos os revisores → 
 4. ~~A T3 com as três decisões humanas~~ — desfeita em 2026-10-04: os três itens saíram pela missão
    `20261004-lote-4-a-catraca-zera` ou por decisão escrita (§ F3).
 5. F1-P1 com ADR; depois decidir o F1-P4.
-6. F6 e F7, quando os fluxos rodarem limpos.
+6. F6 em construção desde 2026-11-17 (ADR 0022); F7 depois do worker.
