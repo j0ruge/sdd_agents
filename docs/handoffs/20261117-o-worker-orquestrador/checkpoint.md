@@ -1,6 +1,6 @@
 ---
 missao: 20261117-o-worker-orquestrador
-atualizado: 2026-11-17 21:35
+atualizado: 2026-11-17 22:31
 ---
 
 # Checkpoint — O worker orquestrador
@@ -24,7 +24,7 @@ atualizado: 2026-11-17 21:35
 | I4 | O verbo level | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    level: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 6; echo "$a $?"` → `6 0` | done | dc66ce2 |
 | I5 | O verbo allows | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    allows: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 9; echo "$a $?"` → `4 0` | done | 5bafad6 |
 | I6 | O verbo budget | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    budget: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 11; echo "$a $?"` → `3 0` | done | 4095baa |
-| I7 | O verbo next | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    next: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 14; echo "$a $?"` → `5 0` | pending | — |
+| I7 | O verbo next | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    next: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 14; echo "$a $?"` → `5 0` | done | 9de910a |
 | I8 | O verbo pr-ready | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    pr-ready: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 19; echo "$a $?"` → `7 0` | pending | — |
 | I9 | O comando da sessão (commands/sdd-worker.md) | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    command: ' <<< "$o"` → `3` | pending | — |
 | I10 | Documentação e vocabulário | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    docs: ' <<< "$o"` → `1` | pending | — |
