@@ -4,7 +4,7 @@ fase: DOCS
 status: done
 sessao: 05ca3d1f-fab0-4e59-a1e3-33869e290ff2
 data: 2026-11-18 10:17
-gate: docs em `d15222e`; `tests/check-worker.sh` → rc 0, 45 ok, 0 FAIL (`docs:` incluída); `tests/check-templates.sh` → rc 0, 117 ok; `tests/check-adr.sh` → rc 0, 81 ok; `tests/check-lang.sh` → `0 of 71 surface path(s) still in the allowlist, 0 new`; `tests/check-todo.sh --check TODO.md` → `83 finding(s), all within 8 lines, carrying anchor + date, every anchor on target`; `--anchors TODO.md` → `83 measured, 0 off target`; `bin/sdd-worker level docs/superpowers/campaigns/20261117-zerar-as-issues` → `level assisted — illegible`, 83 itens
+gate: docs em `d15222e`; `tests/run-all.sh` no `1eafd8c` → rc 0, 2140 ok, nenhuma linha FAIL, anchors 854 de 854; `tests/check-worker.sh` → rc 0, 45 ok, 0 FAIL (`docs:` incluída); `tests/check-templates.sh` → rc 0, 117 ok; `tests/check-adr.sh` → rc 0, 81 ok; `tests/check-lang.sh` → `0 of 71 surface path(s) still in the allowlist, 0 new`; `tests/check-todo.sh --check TODO.md` → `83 finding(s), all within 8 lines, carrying anchor + date, every anchor on target`; `--anchors TODO.md` → `83 measured, 0 off target`; `bin/sdd-worker level docs/superpowers/campaigns/20261117-zerar-as-issues` → `level assisted — illegible`, 83 itens
 ---
 
 # Handoff — DOCS — O worker orquestrador
@@ -23,11 +23,12 @@ Ficam duas linhas `⛔`, com texto proposto: `commands/sdd-worker.md:143` (fora 
 
 - **Branch:** `feat/o-worker-orquestrador`, no worktree `/home/joruge/repos/sdd_agents-worker`, merge-base
   `7ea43e3` com a `origin/main`; sem push nesta fase.
-- **Último commit:** o deste `45-docs.md`, sobre `d15222e`.
+- **Último commit:** a nota da suíte, sobre `1eafd8c` (este `45-docs.md`), sobre `d15222e` (os docs).
 - **Working tree:** limpo depois do commit.
-- **Suíte:** nesta fase rodaram os sensores que leem o que ela tocou (`check-worker`, `check-templates`,
-  `check-adr`, `check-lang`, `check-todo` e `--anchors`), todos verdes; a suíte inteira segue no registro
-  da r4 (`e0e6fcf`, rc 0, 2140 ok) e é refeita no fim desta sessão (ver Riscos).
+- **Suíte:** `tests/run-all.sh` no `1eafd8c` → verde: rc 0, 2140 ok, nenhuma linha `FAIL` (as mesmas 12
+  ocorrências de `FAIL` dentro de linhas ok da r4), `anchors: all 854 mutants still apply`, 10:19 → 10:33.
+  Antes do commit rodaram os sensores que leem o que a fase tocou (`check-worker`, `check-templates`,
+  `check-adr`, `check-lang`, `check-todo` e `--anchors`), todos verdes.
 - **E2E:** não se aplica (o kit não declara `E2E_CMD` nem `APP_URL`).
 
 ## O que foi feito
@@ -212,8 +213,8 @@ pendências abaixo, e a parada conhecida do `gate_PR` do kit (rc 2 por falta do 
 
 ## Riscos e não-feitos
 
-- A suíte inteira (`tests/run-all.sh`, ~14 min) não rodou antes deste commit; rodaram os sensores que leem
-  o que a fase tocou. Ela é refeita depois do commit, e o resultado vai para a nota de execução desta fase.
+- A suíte inteira rodou no `1eafd8c`, verde (acima); o carimbo de mutação (`./bin/sdd health`) não roda
+  nesta missão, pela regra do dono (pendência 6 do `00-missao.md`).
 - O texto proposto para a rule e para o comando é prosa que nenhum gate julga: o `gate_DOCS` prova que
   ele nomeia o documento, não que está certo. Quem aplica o julga.
 - O `20-handoff-exec.md` e as rodadas não foram reescritos: são registro, e a r4 conferiu a conta de
