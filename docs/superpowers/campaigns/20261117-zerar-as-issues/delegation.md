@@ -17,7 +17,9 @@ signed:
 > O valor de uma chave é o texto depois do primeiro `: `, sem os espaços do fim e sem aspas.
 > Enquanto um valor for um placeholder `<…>`, a delegação é **ilegível** e vale `assisted`.
 > Ilegível também: um `campaign:` (o daqui ou o do `campaign.md` ao lado) que não é o nome do
-> diretório, e um `expires:` que o relógio não tem (`2026-11-31 10:00`, `2026-11-18 99:99`).
+> diretório, um `lots:` que não é `all` nem uma lista de lotes da tabela do `campaign.md` (o
+> placeholder acima incluso: `<all,` não é lote), e um `expires:` que o relógio não tem
+> (`2026-11-31 10:00`, `2026-11-18 99:99`).
 
 ## O estado em que ela nasce
 

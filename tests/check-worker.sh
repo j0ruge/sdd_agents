@@ -209,6 +209,32 @@
 #       HANDOFF_DIR in a worktree of the set other than the campaign checkout's stops budget, level
 #       and next with rc 1 naming both files, the default written out on one side being the same
 #       (achados #37 and #38 of the r5)
+#   R53 `lots:` is `all` or a list of words each of which is a lot of the table of the campaign.md
+#       beside it: the template's own value (read out of templates/delegation.md HERE, whose words
+#       L1 and L2 a reader of the asked lot alone found), a lot with no row and `all` among other
+#       words are refused by delegate before the question, and are assisted — illegible to level,
+#       an ask to allows and no ceiling to budget, naming the word, over a full delegation signed by
+#       hand with the digest the program writes; a list of the table's lots signs and answers its
+#       level (achado #1 of the r5)
+#   R54 a pull request from a fork is not the lot's: next asks gh for isCrossRepository and counts
+#       only the elements where it is false — a fork's merged, open or closed one leaves the lot to
+#       run, the repo's open one beside a fork's merged one is reviewed —, and an element that does
+#       not carry it as a boolean is off the contract, rc 3 (achado #6 of the r5)
+#   R55 next reads the merge before the approval: a lot whose pull request merged is done though a
+#       copy of its mission in a linked worktree is not approved; the copy check still comes before
+#       review and run, names the first copy not approved, and is not carried to the next lot; a gh
+#       that fails there is rc 3, and a mission with no branch asks no gh (achado #7 of the r5)
+#   R56 delegate keeps an edit saved while the signature is written (an awk first on the PATH saves
+#       one between the copy and the move): not signed, rc 1, the file as the edit left it; with no
+#       edit it signs, the file keeping its mode and no temporary file left; a write that fails —
+#       the awk, the move, a directory it cannot write in — is not signed, rc 1, naming the step,
+#       the file unchanged (achado #23 of the r5)
+#   R57 level and allows grant what they checked: an edit landing right after the digest (a
+#       sha256sum first on the PATH) — a lot's ceiling lifted, the level raised — or around the
+#       copy of the terms (a cat first on the PATH) — the id turned after it, a ceiling lifted for
+#       it alone — is never granted, and asked again the files are edited after signing; the copy
+#       goes when the verb exits, one it cannot make under TMPDIR is `unread`, rc 1, and a file it
+#       cannot read answers what budget answers for it (achado #25 of the r5)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33
 # carry their own negative control: each checker runs on the files, where it has to miss nothing,
@@ -239,6 +265,20 @@
 #   the root's keeps its missions where the root's glob does not look, holds none the set sees, and
 #   its missions are not counted (bin/sdd-worker, campaign_set).
 #
+# Declared limits of R56 and R57, no probe:
+# - An edit saved between delegate's comparison and its move is lost (bin/sdd-worker says so on
+#   delegation_write_signed): an mv first on the PATH would build that world, and it is not closed,
+#   since closing it needs a lock the owner's editor honours.
+# - Under root, chmod takes nothing away: the directory delegate cannot write in (R56) and the files
+#   level cannot read (R57) are not built there, and those two worlds go unmeasured.
+# - delegate removes the first temporary file when the second cannot be made, and no world reaches
+#   it: the two are asked of the same directory one right after the other.
+# - terms_copy returns 1 when mktemp -d fails and when the mkdir of the campaign's name in it
+#   fails. Off root, the first guard degraded is caught by the second (the mkdir of `/<name>` is
+#   refused), so the probe of an absent TMPDIR answers the same; the world that tells them apart is
+#   a root user, for whom that mkdir succeeds. The second has no world of its own: one name made in
+#   a directory mktemp -d has just made.
+#
 # The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
 # this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
 # sums outside LC_ALL=C answers wrong here. Declared limit: on a machine without the locale that
@@ -247,9 +287,10 @@
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, the
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
 # `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `narrow: `, `listed: `,
-# `spend: `, `cwd: `, `command: ` and `docs: `) prints exactly the assertions the mission plan or the fix increment that
-# opened it names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the
-# sensor at the first red, after printing it; the census in check-health.sh holds that clause.
+# `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `command: ` and
+# `docs: `) prints exactly the assertions the mission plan or the fix increment that opened it
+# names — the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at
+# the first red, after printing it; the census in check-health.sh holds that clause.
 #
 # Usage: tests/check-worker.sh   (exit 0 = every verb answers what its rule says)
 set -uo pipefail
@@ -1099,39 +1140,51 @@ lot_mission() {
 }
 
 # The gh stub answers the one question next asks, `gh pr list --head <branch> --state all --json
-# number,state`, from $BOX/prs/<branch>: a JSON array in the shape the real gh printed on 2026-11-17
-# for `gh pr list --head feat/o-revisor-so-acha --state all --json number,state` in this repo
-# (`[{"number":34,"state":"MERGED"}]`), or `[]` when there is no file, which is what it prints for a
-# head with no pull request. Without --state all it keeps only the OPEN ones, as the real gh does by
-# default. A <branch>.fail beside the file makes it fail, and a <branch>.raw is printed as it is. It
-# answers only from the root of the fixture repo, which is where gh infers the repository from.
+# <fields>`, from $BOX/prs/<branch>: a JSON array in the shape the real gh printed on 2026-11-18 for
+# `gh pr list --head feat/o-revisor-so-acha --state all --json number,state,isCrossRepository` in
+# this repo (`[{"isCrossRepository":false,"number":34,"state":"MERGED"}]`; a pull request from a
+# fork, the same call on cli/cli: `{"isCrossRepository":true,"number":15089,"state":"CLOSED"}`), or
+# `[]` when there is no file, which is what it prints for a head with no pull request. Like the
+# real gh it prints only the fields --json asks for, so a caller that does not ask for
+# isCrossRepository cannot tell a fork's pull request from one of the repo; a field it does not
+# know is refused. Without --state all it keeps only the OPEN ones, as the real gh does by default.
+# A <branch>.fail beside the file makes it fail, and a <branch>.raw is printed as it is. It answers
+# only from the root of the fixture repo, which is where gh infers the repository from.
 mkdir -p "$BOX/stub" "$BOX/prs"
 REPO_REAL="$(CDPATH='' cd "$REPO" && pwd -P)"
-cat > "$BOX/stub/gh" <<STUB
-#!/usr/bin/env bash
-[ "\$(pwd -P)" = "$REPO_REAL" ] || { echo "gh stub: run from \$(pwd -P), not the repo root" >&2; exit 9; }
-[ "\${1:-} \${2:-}" = "pr list" ] || { echo "gh stub: unexpected call: \$*" >&2; exit 9; }
+{ printf '#!/usr/bin/env bash\nroot=%q\nbox=%q\n' "$REPO_REAL" "$BOX"
+  cat <<'STUB'
+[ "$(pwd -P)" = "$root" ] || { echo "gh stub: run from $(pwd -P), not the repo root" >&2; exit 9; }
+[ "${1:-} ${2:-}" = "pr list" ] || { echo "gh stub: unexpected call: $*" >&2; exit 9; }
 shift 2
-head="" all=""
-while [ "\$#" -gt 0 ]; do
-  case "\$1" in
-    --head) head="\$2"; shift 2 ;;
-    --state) [ "\$2" != all ] || all=1; shift 2 ;;
-    --json) [ "\$2" = number,state ] || { echo "gh stub: --json \$2" >&2; exit 9; }; shift 2 ;;
-    *) echo "gh stub: unexpected argument \$1" >&2; exit 9 ;;
+head="" all="" fields=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --head) head="$2"; shift 2 ;;
+    --state) [ "$2" != all ] || all=1; shift 2 ;;
+    --json) fields="$2"; shift 2 ;;
+    *) echo "gh stub: unexpected argument $1" >&2; exit 9 ;;
   esac
 done
-[ -n "\$head" ] || { echo "gh stub: no --head" >&2; exit 9; }
-f="$BOX/prs/\$head"
-[ ! -e "\$f.fail" ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
-[ ! -e "\$f.raw" ] || { cat "\$f.raw"; exit 0; }
-[ -e "\$f" ] || { echo '[]'; exit 0; }
-if [ -n "\$all" ]; then cat "\$f"; else jq -c '[.[] | select(.state == "OPEN")]' "\$f"; fi
+[ -n "$head" ] || { echo "gh stub: no --head" >&2; exit 9; }
+[ -n "$fields" ] || { echo "gh stub: no --json" >&2; exit 9; }
+for k in ${fields//,/ }; do
+  case "$k" in number | state | isCrossRepository) : ;; *) echo "gh stub: --json field $k" >&2; exit 9 ;; esac
+done
+f="$box/prs/$head"
+[ ! -e "$f.fail" ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+[ ! -e "$f.raw" ] || { cat "$f.raw"; exit 0; }
+[ -e "$f" ] || { echo '[]'; exit 0; }
+jq -c --arg f "$fields" --arg all "$all" \
+  '[.[] | select($all != "" or .state == "OPEN") | with_entries(select(.key | IN($f | split(",")[])))]' "$f"
 STUB
+} > "$BOX/stub/gh"
 chmod +x "$BOX/stub/gh"
 
-# prs <branch> <json> — what the stub answers for <branch>.
-prs() { printf '%s\n' "$2" > "$BOX/prs/$1"; }
+# prs <branch> <json> — what the stub answers for <branch>: <json> with isCrossRepository written
+# first in every element that does not carry it, as false — a pull request of the repo itself, the
+# shape of the real answer above. A fork's pull request is written with `"isCrossRepository":true`.
+prs() { jq -c 'map({isCrossRepository: (.isCrossRepository // false)} + .)' <<< "$2" > "$BOX/prs/$1"; }
 
 # next_is <label> <rc> <want> <ahead> <dir> — runs next over <dir> with the gh stub first on the
 # PATH; appends to got unless it left <rc> and a first line on stdout that starts with <want> (a
@@ -1265,15 +1318,17 @@ fi
 # Six answers gh may give that are not read, each on L2 past a merged L1, so the verb has already
 # printed nothing when gh fails: a failure, an empty answer with rc 0, text, an object, an object
 # whose values are well-formed pull requests (read as a list it is a merged lot), and a state off
-# the three. Each is rc 3 with nothing on stdout and gh named on stderr — read as "no pull request"
-# they would answer run. Then what stops (rc 1): a pull request closed without merge, two missions
+# the three — the last two carrying isCrossRepository, so each fails for its own reason (R54). Each
+# is rc 3 with nothing on stdout and gh named on stderr — read as "no pull request" they would
+# answer run. Then what stops (rc 1): a pull request closed without merge, two missions
 # declaring one lot, an approved mission with no branch (gh asked about an empty head lists every
 # pull request of the repo), a directory with no campaign.md, a campaign.md whose campaign: is
 # empty, a campaign copied outside any git checkout, an empty queue — each of the last four over a
 # queue whose L1 a reader that went on would plan; and a call of the wrong shape is rc 2.
 got=""
 for w in 'fail|' 'empty|' 'text|not json' 'object|{"message":"Not Found"}' \
-         'keyed|{"51":{"number":51,"state":"MERGED"}}' 'state|[{"number":4,"state":"DRAFT"}]'; do
+         'keyed|{"51":{"isCrossRepository":false,"number":51,"state":"MERGED"}}' \
+         'state|[{"isCrossRepository":false,"number":4,"state":"DRAFT"}]'; do
   IFS='|' read -r k raw <<< "$w"
   id="n-gh-$k"
   d="$(campaign "$id" pr "$FAR" 25 200)"
@@ -2698,8 +2753,9 @@ fi
 # worktree that holds none runs no `sdd run` of this campaign, so its file is never read — not for
 # the cap, the pager or HANDOFF_DIR (achado #3 of the r5; the owner chose the narrow set). One repo,
 # its config committed with a pager; three linked worktrees cut from that commit — m holds the
-# campaign's mission (L1, not approved, so next answers approve and asks no gh), o a mission of
-# another campaign, x none —; campaign n-narrow signed at pr, mission cap 40, campaign cap 100.
+# campaign's mission (L1, not approved and with no branch, so next answers approve and asks no gh),
+# o a mission of another campaign, x none —; campaign n-narrow signed at pr, mission cap 40,
+# campaign cap 100.
 # budget, level, `allows run --lot L1` and next are each asked from the cwd of the repo, the marks
 # cleared before each:
 #   control  every config clean, m's touching a mark of its own: each verb gives its answer, whole,
@@ -2719,7 +2775,9 @@ for w in m o x; do
   git -C "$NR" worktree add -q -b "feat/n-$w" "$NR-$w" > /dev/null 2>&1 \
     || got="${got:+$got; }fixture: the worktree $w was not created"
 done
-lot_mission "$NR-m" 20990501-n-m n-narrow L1 feat/n-m -
+# No branch: next answers approve with no gh asked, since a branch would have it read the merge first
+# (R55), and this repo has no remote.
+lot_mission "$NR-m" 20990501-n-m n-narrow L1 '' -
 lot_mission "$NR-o" 20990502-n-o n-other L1 feat/n-o -
 d="$(campaign n-narrow pr "$FAR" 40 100)"
 sign "$d"
@@ -2923,7 +2981,8 @@ git -C "$C" worktree add -q -b feat/c-m "$CM" > /dev/null 2>&1 \
 grep -qxF "$inc" "$CM/.sdd/config.sh" 2>/dev/null \
   || got="${got:+$got; }fixture: the worktree m does not carry the include of the commit"
 [ ! -e "$BOX/.sdd" ] || got="${got:+$got; }fixture: the box has a .sdd of its own"
-lot_mission "$CM" 20990701-c-m c-cwd L1 feat/c-m -
+# No branch, as in R49: next answers approve with no gh asked.
+lot_mission "$CM" 20990701-c-m c-cwd L1 '' -
 d="$(campaign c-cwd pr "$FAR" 40 100)"
 sign "$d"
 cp -a "$d" "$C/docs/campaigns/"
@@ -2967,6 +3026,393 @@ if [ -z "$got" ]; then
 else
   fail "cwd: a config is sourced from its own checkout, and a HANDOFF_DIR in the set other than the campaign checkout's stops budget, level and next naming the file" \
     "m's include read from m from both cwds (150 and no pager, then 40 and pr); rc 1 naming m's HANDOFF_DIR for the three verbs, and the default the same on both sides" "$got"
+fi
+
+# --- R53: lots: is all or a list of the table's lots ----------------------------------------------
+# The template's lots: is `<all, ou L1 L2 …>` and some words after, and a reader that split it into
+# words found L1 and L2 among them: a full delegation left with it signed, and approve on the
+# uncapped L1 was allowed (achado #1 of the r5). Each world is a full delegation over the template's
+# own table (L1 with no ceiling, L2 at plan), its lots: one of:
+#   template  the template's value, read out of templates/delegation.md HERE
+#   ghost     `L1 L3`, a lot the table has no row for
+#   all-plus  `all L1`, all among other words
+# Each is refused by delegate before the question (rc 1, the file unchanged, the word named), and,
+# signed here by hand with the digest the contract defines (digest_of, which the control below holds
+# equal to the program's), level --lot L1 answers assisted — illegible, allows approve --lot L1 asks
+# and budget has no ceiling, each naming the word. The controls: `L1 L2` signs through delegate and
+# answers full on L1 and plan on L2, and `L2` signs and answers plan on L2 and not covered on L1.
+got=""
+tplval="$(sed -n '2,/^---$/ s/^lots: //p' "$ROOT/templates/delegation.md")"
+read -ra tw <<< "$tplval"
+[[ " ${tw[*]} " == *" L1 "* ]] \
+  || got="fixture: the template's lots: '$tplval' has no word L1, which is the shape of the finding"
+now_sig="$(date '+%Y-%m-%d %H:%M')"
+for w in "lt-template|$tplval|<all," 'lt-ghost|L1 L3|L3' 'lt-allplus|all L1|all'; do
+  IFS='|' read -r id val word <<< "$w"
+  d="$(campaign "$id" full "$FAR" 25 200)"
+  sed -i "2,/^---\$/ s@^lots: .*@lots: $val@" "$d/delegation.md"
+  [ "$(sed -n '2,/^---$/ s/^lots: //p' "$d/delegation.md")" = "$val" ] \
+    || got="${got:+$got; }fixture $id: the lots: line did not land"
+  why="lots '$val' is neither all nor a list of the lots of $d/campaign.md: '$word' has no row"
+  cp "$d/delegation.md" "$BOX/$id.before"
+  answer $'y\n'
+  worker_from "$BOX/in" delegate "$d"
+  { [ "$W_RC" = 1 ] && [ "${W_OUT##*$'\n'}" = "not signed — illegible: $why" ] \
+      && cmp -s "$BOX/$id.before" "$d/delegation.md"; } \
+    || got="${got:+$got; }$id delegate: rc $W_RC, '${W_OUT##*$'\n'}' (want rc 1, 'not signed — illegible: $why')"
+  [[ "$W_ERR" != *'Sign this delegation?'* ]] || got="${got:+$got; }$id: the question was asked"
+  sed -i "2,/^---\$/ s@^signed:.*@signed: $now_sig $(digest_of "$id" full "$val" "$FAR" 25 200 'L1 -' 'L2 plan')@" \
+    "$d/delegation.md"
+  level_is "$id" "level assisted — illegible: $why" "$d" --lot L1
+  allows_is "$id" 1 "ask approve needs full, effective assisted — illegible: $why" "$d" approve --lot L1
+  budget_is "$id" 1 "no ceiling — illegible: $why" "$d"
+done
+d="$(campaign lt-list full "$FAR" 25 200)"
+sed -i '2,/^---$/ s@^lots: .*@lots: L1 L2@' "$d/delegation.md"
+sign "$d"
+sl="$(signed_line "$d/delegation.md")"
+[ "${sl##* }" = "$(digest_of lt-list full 'L1 L2' "$FAR" 25 200 'L1 -' 'L2 plan')" ] \
+  || got="${got:+$got; }lt-list: the program signed '${sl##* }', which is not the digest digest_of gives"
+level_is 'L1 L2, on L1' "level full — signed until $FAR" "$d" --lot L1
+level_is 'L1 L2, on L2' 'level plan — capped by the lot' "$d" --lot L2
+d="$(campaign lt-one full "$FAR" 25 200)"
+sed -i '2,/^---$/ s@^lots: .*@lots: L2@' "$d/delegation.md"
+sign "$d"
+level_is 'L2, on L2' 'level plan — capped by the lot' "$d" --lot L2
+level_is 'L2, on L1' 'level assisted — lot not covered: L1 is not in lots: L2' "$d" --lot L1
+if [ -z "$got" ]; then
+  pass "lots: a lots: that is not all or a list of the table's lots, the template's own among them, is illegible to every verb"
+else
+  fail "lots: a lots: that is not all or a list of the table's lots, the template's own among them, is illegible to every verb" \
+    'a refusal before the question, assisted, an ask and no ceiling naming the word, for each; full, plan and not covered for the lists' "$got"
+fi
+
+# --- R54: a pull request from a fork is not the lot's ---------------------------------------------
+# gh pr list --head matches the branch's name alone, and a fork can push a branch of that name: a
+# merged pull request from a fork, read as the lot's, skipped the lot, and the next one was planned
+# while this one never ran (achado #6 of the r5). Each campaign has L1 approved on its branch and L2
+# with no mission, and gh answers for the branch of L1:
+#   merged  a fork's alone, merged: run L1, ahead plan L2 — never plan L2
+#   open    a fork's alone, open: run L1 — never review
+#   closed  a fork's alone, closed: run L1 — never stop
+#   mixed   the repo's open beside a fork's merged: review L1, naming the repo's alone
+#   own     the same merged pull request with isCrossRepository false: plan L2, so the field is
+#           what decides
+# An answer whose element carries no isCrossRepository, or one that is no boolean (null, the string
+# "false"), is off the contract: rc 3, no act, gh named — read as absent it would hide the repo's
+# own merged pull request and send the lot to run again.
+got=""
+fork_world() {
+  d="$(campaign "$1" pr "$FAR" 25 200)"
+  set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+  lot_mission "$REPO" "20990801-$1" "$1" L1 "$1-b" humano-2099-01-01
+}
+for w in 'fk-merged|[{"isCrossRepository":true,"number":60,"state":"MERGED"}]|run L1 20990801-fk-merged — approved, and no pull request of the repository has the head fk-merged-b|ahead plan L2' \
+         'fk-open|[{"isCrossRepository":true,"number":61,"state":"OPEN"}]|run L1 20990801-fk-open — |ahead plan L2' \
+         'fk-closed|[{"isCrossRepository":true,"number":62,"state":"CLOSED"}]|run L1 20990801-fk-closed — |ahead plan L2' \
+         'fk-mixed|[{"number":63,"state":"OPEN"},{"isCrossRepository":true,"number":64,"state":"MERGED"}]|review L1 20990801-fk-mixed — pull request #63 is open on fk-mixed-b|ahead plan L2' \
+         'fk-own|[{"isCrossRepository":false,"number":65,"state":"MERGED"}]|plan L2 - — |'; do
+  IFS='|' read -r id json want ahead <<< "$w"
+  fork_world "$id"
+  prs "$id-b" "$json"
+  next_is "$id" 0 "$want" "$ahead" "$d"
+done
+for w in 'fk-nofield|[{"number":66,"state":"MERGED"}]' \
+         'fk-null|[{"isCrossRepository":null,"number":67,"state":"MERGED"}]' \
+         'fk-string|[{"isCrossRepository":"false","number":68,"state":"MERGED"}]'; do
+  IFS='|' read -r id json <<< "$w"
+  fork_world "$id"
+  printf '%s' "$json" > "$BOX/prs/$id-b.raw"
+  PATH="$BOX/stub:$PATH" worker next "$d"
+  { [ "$W_RC" = 3 ] && [ -z "$W_OUT" ] && [[ "$W_ERR" == *"gh pr list --head $id-b "* ]]; } \
+    || got="${got:+$got; }$id: rc $W_RC, stdout '${W_OUT//$'\n'/ / }', stderr '${W_ERR%%$'\n'*}' (want rc 3, no act, gh named)"
+done
+if [ -z "$got" ]; then
+  pass "fork: a pull request from a fork is not the lot's, and an answer that does not say whose it is is not read"
+else
+  fail "fork: a pull request from a fork is not the lot's, and an answer that does not say whose it is is not read" \
+    "run past a fork's merged, open or closed one, review on the repo's own beside a fork's, plan L2 past the repo's merged one; rc 3 off the contract" "$got"
+fi
+
+# --- R55: a merged lot with a stale copy ----------------------------------------------------------
+# A mission's copy in an old linked worktree keeps the aprovacao: it had before the plan was
+# approved, and the walk asked approve of it before reading the pull request: a lot merged long ago
+# stopped the campaign on approve (achado #7 of the r5). Each campaign has L1's mission approved in
+# the campaign's checkout and not in the linked worktree, both on its branch, and L2 with no
+# mission:
+#   merged     the repo's pull request merged: plan L2 — the lot is done, whatever a copy says
+#   open       it is open: approve L1 naming the worktree's copy — the copy check still comes before
+#              review and run
+#   fail       gh fails: rc 3, no act, gh named — the merge is read before approve, and an answer
+#              that was not read is none
+#   no branch  neither copy names a branch: approve L1, and gh is never asked (the stub refuses an
+#              empty --head, which would be rc 3)
+#   next       L1 merged with the stale copy, and L2 approved on its branch with no pull request:
+#              run L2 — what L1's copies said is not carried to the lot after it
+#   both       both copies of L1 not approved, its pull request open: approve L1 naming the first
+#              copy, the campaign checkout's
+got=""
+for k in merged open fail nobranch next both; do
+  id="st-$k"; br="$id-b"
+  [ "$k" != nobranch ] || br=''
+  d="$(campaign "$id" pr "$FAR" 25 200)"
+  set_lots "$d/campaign.md" 'L1:-' 'L2:-'
+  if [ "$k" = both ]; then
+    lot_mission "$REPO" "20990811-$id" "$id" L1 "$br" -
+  else
+    lot_mission "$REPO" "20990811-$id" "$id" L1 "$br" humano-2099-01-01
+  fi
+  lot_mission "$BOX/wt" "20990811-$id" "$id" L1 "$br" -
+  approve="approve L1 20990811-$id — not approved: $BOX/wt/$H/20990811-$id/00-missao.md has aprovacao: ''"
+  case "$k" in
+    merged) prs "$br" '[{"number":70,"state":"MERGED"}]'; next_is "$id" 0 'plan L2 - — ' '' "$d" ;;
+    open) prs "$br" '[{"number":71,"state":"OPEN"}]'; next_is "$id" 0 "$approve" '' "$d" ;;
+    nobranch) next_is "$id" 0 "$approve" '' "$d" ;;
+    next)
+      prs "$br" '[{"number":72,"state":"MERGED"}]'
+      lot_mission "$REPO" "20990812-$id" "$id" L2 "$id-2-b" humano-2099-01-01
+      next_is "$id" 0 "run L2 20990812-$id — " '' "$d" ;;
+    both)
+      prs "$br" '[{"number":73,"state":"OPEN"}]'
+      next_is "$id" 0 "approve L1 20990811-$id — not approved: $REPO/$H/20990811-$id/00-missao.md has aprovacao: ''" '' "$d" ;;
+    fail)
+      : > "$BOX/prs/$br.fail"
+      PATH="$BOX/stub:$PATH" worker next "$d"
+      { [ "$W_RC" = 3 ] && [ -z "$W_OUT" ] && [[ "$W_ERR" == *"gh pr list --head $br "* ]]; } \
+        || got="${got:+$got; }$id: rc $W_RC, stdout '${W_OUT//$'\n'/ / }', stderr '${W_ERR%%$'\n'*}' (want rc 3, no act, gh named)" ;;
+  esac
+done
+if [ -z "$got" ]; then
+  pass 'stale: a lot whose pull request merged is done though a stale copy is not approved, and the merge is read before approve'
+else
+  fail 'stale: a lot whose pull request merged is done though a stale copy is not approved, and the merge is read before approve' \
+    'plan L2 past the merged lot, approve on the open one and on the one with no branch, rc 3 when gh fails, run L2 past a merged L1, the first copy named' "$got"
+fi
+
+# --- R56: an edit while the signature is written is kept ------------------------------------------
+# delegate writes the signed line into a copy and moves the copy over the file, and an edit saved
+# between the two was lost under the move (achado #23 of the r5). An awk first on the PATH runs the
+# real one for every call and, for the one that writes the signed line (its `-v line=signed: …`),
+# appends a line of prose to the delegation after the real awk ends, the owner's editor saving in
+# that gap, and leaves a mark:
+#   edit     delegate with a y is `not signed — the delegation changed while …`, rc 1: the file is
+#            the one before plus the edit, its signed: still empty, no temporary file beside it, and
+#            the mark proves the edit landed in the gap
+#   control  the same awk with no edit asked signs, so the refusal is the edit's; the file keeps its
+#            mode (640, where the temporary file is born 600) and no temporary file is left
+# A write that fails is `not signed — the signature was not written: …`, rc 1, the file unchanged
+# and no temporary file left, never an rc with no line: the awk that writes the signed line fails
+# (the same awk, asked to), the move fails (an mv first on the PATH refuses it), and a campaign
+# directory delegate cannot write in (no temporary file can be made beside the delegation) — under
+# root chmod takes nothing away, and that last world goes unmeasured.
+got=""
+REAL_AWK="$(command -v awk)"
+mkdir -p "$BOX/awkshim"
+{ printf '#!/usr/bin/env bash\nreal=%q\nmark=%q\n' "$REAL_AWK" "$BOX/kept-mark"
+  cat <<'SHIM'
+hit=""
+for a in "$@"; do case "$a" in 'line=signed: '*) hit=1 ;; esac; done
+[ -n "$hit" ] || exec "$real" "$@"
+[ -z "${SDD_AWK_SHIM_FAIL:-}" ] || { echo 'awk: the shim refuses to write the signed line' >&2; exit 2; }
+[ -n "${SDD_AWK_SHIM_EDIT:-}" ] || exec "$real" "$@"
+rc=0
+"$real" "$@" || rc=$?
+printf '\nA line the owner saved while the signature was written.\n' >> "$SDD_AWK_SHIM_EDIT"
+: > "$mark"
+exit "$rc"
+SHIM
+} > "$BOX/awkshim/awk"
+chmod +x "$BOX/awkshim/awk"
+REAL_MV="$(command -v mv)"
+mkdir -p "$BOX/mvshim"
+{ printf '#!/usr/bin/env bash\nreal=%q\n' "$REAL_MV"
+  cat <<'SHIM'
+[ -z "${SDD_MV_SHIM_FAIL:-}" ] || { echo 'mv: the shim refuses the move' >&2; exit 1; }
+exec "$real" "$@"
+SHIM
+} > "$BOX/mvshim/mv"
+chmod +x "$BOX/mvshim/mv"
+# write_refused <label> <dir> <tail> — appends to got unless the last delegate left rc 1, a last
+# line `not signed — the signature was not written: …<tail>: run delegate again` (<tail> a literal:
+# each step that fails names itself), the delegation byte for byte as $BOX/<label>.before and no
+# temporary file beside it.
+write_refused() {
+  { [ "$W_RC" = 1 ] && [[ "${W_OUT##*$'\n'}" == 'not signed — the signature was not written: '*"$3: run delegate again" ]] \
+      && cmp -s "$BOX/$1.before" "$2/delegation.md" && ! compgen -G "$2/.delegation.*" > /dev/null; } \
+    || got="${got:+$got; }$1: rc $W_RC, '${W_OUT##*$'\n'}' (want rc 1, 'not signed — the signature was not written: …$3: run delegate again', the file unchanged, no temporary file)"
+}
+d="$(campaign kp-edit pr "$FAR" 25 200)"
+cp "$d/delegation.md" "$BOX/kp-edit.before"
+rm -f "$BOX/kept-mark"
+answer $'y\n'
+PATH="$BOX/awkshim:$PATH" SDD_AWK_SHIM_EDIT="$d/delegation.md" worker_from "$BOX/in" delegate "$d"
+want='not signed — the delegation changed while the signature was written; the change is kept and nothing was signed: run delegate again'
+{ [ "$W_RC" = 1 ] && [ "${W_OUT##*$'\n'}" = "$want" ]; } \
+  || got="${got:+$got; }edit: rc $W_RC, '${W_OUT##*$'\n'}' (want rc 1, '$want')"
+[ -e "$BOX/kept-mark" ] || got="${got:+$got; }fixture: the awk first on the PATH made no edit"
+cmp -s <(cat "$BOX/kp-edit.before"; printf '\nA line the owner saved while the signature was written.\n') "$d/delegation.md" \
+  || got="${got:+$got; }edit: the file is not the one before plus the edit (signed: '$(signed_line "$d/delegation.md")')"
+! compgen -G "$d/.delegation.*" > /dev/null || got="${got:+$got; }edit: a temporary file is left in $d"
+d="$(campaign kp-control pr "$FAR" 25 200)"
+chmod 640 "$d/delegation.md"
+rm -f "$BOX/kept-mark"
+answer $'y\n'
+PATH="$BOX/awkshim:$PATH" worker_from "$BOX/in" delegate "$d"
+{ [ "$W_RC" = 0 ] && [[ "$(signed_line "$d/delegation.md")" =~ ^signed:\ [0-9] ]] && [ ! -e "$BOX/kept-mark" ] \
+    && ! compgen -G "$d/.delegation.*" > /dev/null && [ "$(stat -c %a "$d/delegation.md")" = 640 ]; } \
+  || got="${got:+$got; }control: rc $W_RC, '$(signed_line "$d/delegation.md")', mode $(stat -c %a "$d/delegation.md") (want rc 0 and a signature, no edit, no temporary file, mode 640)"
+d="$(campaign kp-awkfail pr "$FAR" 25 200)"
+cp "$d/delegation.md" "$BOX/kp-awkfail.before"
+answer $'y\n'
+PATH="$BOX/awkshim:$PATH" SDD_AWK_SHIM_FAIL=1 worker_from "$BOX/in" delegate "$d"
+write_refused kp-awkfail "$d" "the signed copy of $d/delegation.md could not be made"
+d="$(campaign kp-mvfail pr "$FAR" 25 200)"
+cp "$d/delegation.md" "$BOX/kp-mvfail.before"
+answer $'y\n'
+PATH="$BOX/mvshim:$PATH" SDD_MV_SHIM_FAIL=1 worker_from "$BOX/in" delegate "$d"
+write_refused kp-mvfail "$d" " could not be moved over $d/delegation.md"
+if [ "$(id -u)" != 0 ]; then
+  d="$(campaign kp-readonly pr "$FAR" 25 200)"
+  cp "$d/delegation.md" "$BOX/kp-readonly.before"
+  chmod a-w "$d"
+  answer $'y\n'
+  worker_from "$BOX/in" delegate "$d"
+  chmod u+w "$d"
+  write_refused kp-readonly "$d" "no temporary file could be made in $d"
+fi
+if [ -z "$got" ]; then
+  pass 'kept: an edit saved while the signature is written is kept and nothing is signed, and a write that fails says so'
+else
+  fail 'kept: an edit saved while the signature is written is kept and nothing is signed, and a write that fails says so' \
+    'rc 1 and the file as the edit left it; a signature with no edit; rc 1 naming the write that failed' "$got"
+fi
+
+# --- R57: the terms checked are the terms read ----------------------------------------------------
+# effective_level checked the digest over one reading of delegation.md and campaign.md and read the
+# level, the lots and the lot's ceiling again after it: an edit landing in between was authorized
+# under the old signature (achado #25 of the r5). A sha256sum first on the PATH runs the real one
+# and, when asked, then applies one edit to one file and leaves a mark, an edit landing right after
+# the digest:
+#   ceiling  a full delegation over L1 (no ceiling) and L2 at plan, L2's ceiling lifted to `-` after
+#            the digest: level --lot L2 answers plan — capped by the lot, and allows approve --lot L2
+#            asks; asked again with no edit, the lifted file is edited after signing
+#   level    a merge delegation, its level: raised to full after the digest: level answers merge
+# Each is first asked through the same sha256sum with no edit, and the mark proves the edit landed.
+# A cat first on the PATH lands an edit around the copy of campaign.md, the last file copied:
+#   renamed  a campaign signed full and renamed, both files still naming the old id; right after the
+#            copy both are turned to the new name: level answers assisted — illegible naming the old
+#            id and the campaign's files, never the copy (the copy is what is read); asked again,
+#            the turned files are edited after signing
+#   aba      L2's ceiling lifted right before the copy and put back right after it: level answers
+#            assisted — edited after signing, the copy's digest; a digest of the files as they are
+#            when it runs would match the signature and grant the copy's lifted ceiling
+# The copy the verb reads is made under TMPDIR and goes when the verb exits, whatever its answer;
+# one it cannot make there is `level assisted — unread: …`, rc 1. And a delegation.md or campaign.md
+# the verb cannot read answers assisted — illegible with the reason budget gives for the same file
+# (a differential), never an rc with no line; under root chmod takes nothing away, and that world
+# goes unmeasured.
+got=""
+REAL_SUM="$(command -v sha256sum)"
+mkdir -p "$BOX/sumshim"
+{ printf '#!/usr/bin/env bash\nreal=%q\nmark=%q\n' "$REAL_SUM" "$BOX/once-mark"
+  cat <<'SHIM'
+rc=0
+"$real" "$@" || rc=$?
+if [ -n "${SDD_SUM_SHIM_FILE:-}" ]; then sed -i "$SDD_SUM_SHIM_SED" "$SDD_SUM_SHIM_FILE"; : > "$mark"; fi
+exit "$rc"
+SHIM
+} > "$BOX/sumshim/sha256sum"
+chmod +x "$BOX/sumshim/sha256sum"
+d="$(campaign on-ceiling full "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:plan'
+sign "$d"
+cp "$d/campaign.md" "$BOX/on-ceiling.signed"
+lift='s/^| L2 | lote L2 | plan | 1 |$/| L2 | lote L2 | - | 1 |/'
+PATH="$BOX/sumshim:$PATH" level_is 'ceiling, no edit' 'level plan — capped by the lot' "$d" --lot L2
+rm -f "$BOX/once-mark"
+PATH="$BOX/sumshim:$PATH" SDD_SUM_SHIM_FILE="$d/campaign.md" SDD_SUM_SHIM_SED="$lift" \
+  level_is 'ceiling lifted after the digest' 'level plan — capped by the lot' "$d" --lot L2
+{ [ -e "$BOX/once-mark" ] && grep -qxF '| L2 | lote L2 | - | 1 |' "$d/campaign.md"; } \
+  || got="${got:+$got; }fixture: the ceiling of L2 was not lifted after the digest"
+level_is 'ceiling lifted, asked again' 'level assisted — edited after signing' "$d" --lot L2
+cp "$BOX/on-ceiling.signed" "$d/campaign.md"
+PATH="$BOX/sumshim:$PATH" SDD_SUM_SHIM_FILE="$d/campaign.md" SDD_SUM_SHIM_SED="$lift" \
+  allows_is 'approve, the ceiling lifted after the digest' 1 \
+  'ask approve needs full, effective plan — capped by the lot' "$d" approve --lot L2
+d="$(campaign on-level merge "$FAR" 25 200)"
+sign "$d"
+PATH="$BOX/sumshim:$PATH" level_is 'level, no edit' "level merge — signed until $FAR" "$d"
+rm -f "$BOX/once-mark"
+PATH="$BOX/sumshim:$PATH" SDD_SUM_SHIM_FILE="$d/delegation.md" SDD_SUM_SHIM_SED='2,/^---$/ s/^level: merge$/level: full/' \
+  level_is 'level raised after the digest' "level merge — signed until $FAR" "$d"
+{ [ -e "$BOX/once-mark" ] && grep -qx 'level: full' "$d/delegation.md"; } \
+  || got="${got:+$got; }fixture: the level was not raised after the digest"
+level_is 'level raised, asked again' 'level assisted — edited after signing' "$d"
+REAL_CAT="$(command -v cat)"
+mkdir -p "$BOX/catshim"
+{ printf '#!/usr/bin/env bash\nreal=%q\nmark=%q\n' "$REAL_CAT" "$BOX/once-mark"
+  cat <<'SHIM'
+case "${!#}" in */campaign.md) : ;; *) exec "$real" "$@" ;; esac
+[ -n "${SDD_CAT_SHIM_DIR:-}" ] || exec "$real" "$@"
+[ -z "${SDD_CAT_SHIM_BEFORE:-}" ] \
+  || sed -i "$SDD_CAT_SHIM_BEFORE" "$SDD_CAT_SHIM_DIR/delegation.md" "$SDD_CAT_SHIM_DIR/campaign.md"
+rc=0
+"$real" "$@" || rc=$?
+[ -z "${SDD_CAT_SHIM_AFTER:-}" ] \
+  || sed -i "$SDD_CAT_SHIM_AFTER" "$SDD_CAT_SHIM_DIR/delegation.md" "$SDD_CAT_SHIM_DIR/campaign.md"
+: > "$mark"
+exit "$rc"
+SHIM
+} > "$BOX/catshim/cat"
+chmod +x "$BOX/catshim/cat"
+d="$(campaign on-ren full "$FAR" 25 200)"
+sign "$d"
+mv "$d" "$REPO/docs/campaigns/on-ren2"
+d="$REPO/docs/campaigns/on-ren2"
+rm -f "$BOX/once-mark"
+PATH="$BOX/catshim:$PATH" SDD_CAT_SHIM_DIR="$d" SDD_CAT_SHIM_AFTER='2,/^---$/ s/^campaign: on-ren$/campaign: on-ren2/' \
+  level_is 'renamed, the id turned after the copy' \
+  "level assisted — illegible: campaign: 'on-ren' in $d/delegation.md is not the directory's name 'on-ren2'" "$d"
+{ [ -e "$BOX/once-mark" ] && grep -qx 'campaign: on-ren2' "$d/delegation.md" && grep -qx 'campaign: on-ren2' "$d/campaign.md"; } \
+  || got="${got:+$got; }fixture: the id was not turned after the copy"
+level_is 'renamed, asked again' 'level assisted — edited after signing' "$d"
+d="$(campaign on-aba full "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L2:plan'
+sign "$d"
+rm -f "$BOX/once-mark"
+PATH="$BOX/catshim:$PATH" SDD_CAT_SHIM_DIR="$d" SDD_CAT_SHIM_BEFORE="$lift" \
+  SDD_CAT_SHIM_AFTER='s/^| L2 | lote L2 | - | 1 |$/| L2 | lote L2 | plan | 1 |/' \
+  level_is 'lifted for the copy alone' 'level assisted — edited after signing' "$d" --lot L2
+{ [ -e "$BOX/once-mark" ] && grep -qxF '| L2 | lote L2 | plan | 1 |' "$d/campaign.md"; } \
+  || got="${got:+$got; }fixture: the ceiling was not put back after the copy"
+mkdir -p "$BOX/terms-tmp"
+TMPDIR="$BOX/terms-tmp" worker level "$d" --lot L2
+TMPDIR="$BOX/terms-tmp" worker allows "$d" approve --lot L2
+TMPDIR="$BOX/terms-tmp" worker level "$REPO/docs/campaigns/on-ren2"
+[ -z "$(ls -A "$BOX/terms-tmp")" ] || got="${got:+$got; }the copies were left under TMPDIR: $(ls -A "$BOX/terms-tmp")"
+d="$(campaign on-notmp full "$FAR" 25 200)"
+sign "$d"
+TMPDIR="$BOX/no-such-tmp" worker level "$d"
+{ [ "$W_RC" = 1 ] && [[ "$W_OUT" == 'level assisted — unread: '* ]] && [[ "$W_OUT" != *$'\n'* ]]; } \
+  || got="${got:+$got; }no TMPDIR: rc $W_RC, '$W_OUT' (want rc 1, 'level assisted — unread: …')"
+if [ "$(id -u)" != 0 ]; then
+  for k in delegation campaign; do
+    d="$(campaign "on-unread-$k" full "$FAR" 25 200)"
+    sign "$d"
+    chmod 000 "$d/$k.md"
+    LC_ALL="$NUM_POISON" worker budget "$d"
+    why="${W_OUT#no ceiling — }"
+    [[ "$W_OUT" == 'no ceiling — illegible: '* ]] || got="${got:+$got; }fixture on-unread-$k: budget '$W_OUT'"
+    level_is "unreadable $k.md" "level assisted — $why" "$d" --lot L1
+    [ "$W_OUT" = "level assisted — $why" ] || got="${got:+$got; }unreadable $k.md: level '$W_OUT', budget '$why'"
+    chmod 644 "$d/$k.md"
+  done
+fi
+if [ -z "$got" ]; then
+  pass 'once: the level, the lots and the ceilings a verb authorizes are the ones whose digest it checked'
+else
+  fail 'once: the level, the lots and the ceilings a verb authorizes are the ones whose digest it checked' \
+    'plan and an ask with the ceiling lifted after the digest, merge with the level raised after it, edited after signing when asked again; unread with no TMPDIR; the reason budget gives for an unreadable file' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

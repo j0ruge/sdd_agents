@@ -1839,7 +1839,8 @@ worktree of the set whose `HANDOFF_DIR` is not the root's stops `budget`, `level
   the box marks an item whose open choice the planner makes and the pull request lists for the
   owner's acceptance.
 - `delegation.md` (`templates/delegation.md`): only the frontmatter is read — `campaign:`, `level:`,
-  `lots:` (`all`, or lots separated by spaces), `expires:` (`YYYY-MM-DD HH:MM`, local time),
+  `lots:` (`all`, or lots of the table of the `campaign.md` beside it, separated by spaces),
+  `expires:` (`YYYY-MM-DD HH:MM`, local time),
   `budget_mission_usd:`, `budget_campaign_usd:` and `signed:`. A value is the text after the first
   `: `, trailing blanks removed, no quotes; a `<…>` placeholder of the template is therefore
   illegible. The id is the directory's name: the `campaign:` of this file and of the `campaign.md`
@@ -1876,7 +1877,8 @@ Under `assisted` the session proposes each act and waits for the owner's yes.
 1. no `delegation.md` → `assisted — no delegation`;
 2. illegible — one of the six keys missing or empty, a `campaign:` here or in the `campaign.md`
    beside it that is not the directory's name (no `campaign.md` included), a level off the ladder,
-   an `expires:` that is not `YYYY-MM-DD HH:MM` or that the clock does not have (`date -d` has to
+   a `lots:` that is neither `all` nor a list of lots the table of that `campaign.md` has (the
+   template's `<all, ou L1 L2 …>` among them: its first word is no lot), an `expires:` that is not `YYYY-MM-DD HH:MM` or that the clock does not have (`date -d` has to
    give it back as written, so `2026-11-31 10:00` and `99:99` are refused), a ceiling that is not a
    number → `assisted — illegible`;
 3. `signed:` empty → `assisted — unsigned`;
@@ -1893,6 +1895,11 @@ Under `assisted` the session proposes each act and waits for the owner's yes.
    ceiling never raises the level, and one that is not a level caps the lot at `assisted`;
 9. otherwise the signed level, `— signed until <expires>`.
 
+Every rule reads ONE copy of the two files, made before the first: the digest is checked over the
+copy and the level, the lots and the ceiling granted are read from it, so an edit landing while the
+verb reads is never granted under the old signature, and the next call reads it as edited after
+signing. A copy that cannot be made (no `TMPDIR` to make it in) is `assisted — unread: …`, rc 1.
+
 **The signature.** `sdd-worker delegate` prints what it grants: the six `key: value` lines, then
 one `ceiling <lot>: <ceiling>` line per row of the lots table of the `campaign.md` beside it, in
 the order of the queue. It asks `Sign this delegation? [y/N] ` on stderr and reads one line of
@@ -1904,7 +1911,9 @@ delegated, and it lives in a file the owner does not sign: the digest is what pu
 signature. A lot's title and count and its items are not signed, since the campaign strikes them as
 it goes. It does not commit; its last line names the `git add` and `git commit` to
 run. No character on stdin is rc 66 and writes nothing, the contract of `sdd approve`; an illegible
-or already expired delegation is refused before the question, with rc 1. `level: assisted` may be
+or already expired delegation is refused before the question, with rc 1. An edit saved while the
+signature is being written is kept, and nothing is signed (rc 1): the file is compared, right
+before the move that writes it, with a copy taken before the write. `level: assisted` may be
 signed, and grants nothing.
 
 **The clock.** One function gives the instant, `date '+%Y-%m-%d %H:%M'`. The seam `SDD_WORKER_NOW`
@@ -1918,8 +1927,8 @@ stderr and leaves rc 2. The reason of an answer comes after ` — `.
 
 | Call | Stdout | rc |
 |---|---|---|
-| `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible, expired, or changed after it was shown (it signs the terms it showed); 66 nothing on stdin |
-| `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0; 1 on `assisted — unread: …`, when the checkouts of the campaign do not read |
+| `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible, expired, changed after it was shown (it signs the terms it showed) or while the signature was written, or a write that failed; 66 nothing on stdin |
+| `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0; 1 on `assisted — unread: …`, when the checkouts of the campaign do not read or no copy of the terms can be made |
 | `sdd-worker allows <campaign-dir> <act> --lot L<n>` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner; 2 not an act, or no `--lot` (every act is of one lot, and the lot's ceiling is the act's) |
 | `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling; 1 at or above it, no ceiling or spend to read (`no spend — …`, the checkouts that do not read among them), or `no mission cap — …` when the signed mission cap is zero or below one cent, or the config of the campaign's checkout or of a mission's worktree would beat it |
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts do not read); 3 when `gh` did not answer |
@@ -1953,7 +1962,12 @@ stops `budget` before any `.sdd/config.sh` is read, naming the delegation: `no m
 a mission whose `aprovacao:` the runner's `gate_PLAN` would not admit (only `auto` and `humano-…`
 pass) → `approve`; approved, with no pull request on its `branch:` → `run`; an open pull request →
 `review`; only closed ones → `stop … pull request closed without merge`; every lot merged →
-`done - -`. The pull requests come from `gh pr list --head <branch> --state all`; a `gh` that
+`done - -`. The pull requests come from `gh pr list --head <branch> --state all --json
+number,state,isCrossRepository`, and only the repository's own count: `--head` matches a branch's
+name alone, and a pull request from a fork's branch of the same name (`isCrossRepository` true) is
+never the lot's. The merge is read before the approval: a lot whose pull request merged is done even
+when a copy of its mission left in an old worktree is not approved, and a mission that names a
+branch is asked about even when it is not approved. A `gh` that
 fails, or answers off its contract, is rc 3 with no act — "could not read" never becomes "no pull
 request", which would send the session to run the lot again. Two missions on one lot, an approved
 mission with no branch, no `campaign.md`, a `campaign:` in it that is not the directory's name (an

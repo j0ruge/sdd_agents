@@ -7253,6 +7253,55 @@ mut_WORKER_cwd_caller_cwd() {
 mut_WORKER_cwd_handoff_dir_unchecked() {
   sed -i '/^campaign_set() {/,/^}/ s@^      if \[ "\$whd" != "\$hd" \]; then$@      if false; then@' "${1%/*}/sdd-worker"
 }
+# The lots: of a delegation is no longer read against the table: the template's own value, whose
+# words L1 and L2 the asked lot finds, signs, and a full delegation left with it approves the
+# uncapped L1 (achado #1 of the mission's review r5). Caught by "lots: a lots: that is not all or a
+# list of the table's lots, the template's own among them, is illegible to every verb"
+# (check-worker.sh).
+mut_WORKER_lots_unchecked() {
+  sed -i '/^delegation_legible() {/,/^}/ s@^  if \[ "\$v" != all \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The word all is taken among other words: `all L1` reads as a list whose words are all lots, and
+# signs. Caught by "lots: a lots: that is not all or a list of the table's lots, the template's own
+# among them, is illegible to every verb" (check-worker.sh).
+mut_WORKER_lots_all_among_words() {
+  sed -i '/^delegation_legible() {/,/^}/ s#^      for l in \${table\[@\]+"\${table\[@\]}"}; do#      for l in all ${table[@]+"${table[@]}"}; do#' "${1%/*}/sdd-worker"
+}
+# A pull request from a fork is counted as the lot's again: one merged from a branch of the same
+# name makes the lot done while it never ran (achado #6 of the mission's review r5). Caught by
+# "fork: a pull request from a fork is not the lot's, and an answer that does not say whose it is
+# is not read" (check-worker.sh).
+mut_WORKER_fork_counted() {
+  sed -i '/^pr_states() {/,/^}/ s@then \.\[\] | select(\.isCrossRepository == false) | @then .[] | @' "${1%/*}/sdd-worker"
+}
+# An element that does not say whose it is is read as a fork's: an answer off the contract hides
+# the repository's own merged pull request, and the lot is sent to run again. Caught by "fork: a
+# pull request from a fork is not the lot's, and an answer that does not say whose it is is not
+# read" (check-worker.sh).
+mut_WORKER_fork_field_unchecked() {
+  sed -i '/^pr_states() {/,/^}/ s@ and (\.isCrossRepository | type) == "boolean")$@)@' "${1%/*}/sdd-worker"
+}
+# The merge is read only for a mission every copy of which is approved, the old order: a stale copy
+# in an old worktree stops the campaign on approve over a lot merged long ago (achado #7 of the
+# mission's review r5). Caught by "stale: a lot whose pull request merged is done though a stale
+# copy is not approved, and the merge is read before approve" (check-worker.sh).
+mut_WORKER_stale_merge_after_approval() {
+  sed -i '/^cmd_next() {/,/^}/ s@^    if \[ -n "\$branch" \]; then$@    if [ -n "$branch" ] \&\& [ -z "$pend" ]; then@' "${1%/*}/sdd-worker"
+}
+# The file is no longer compared with the copy the signature was written from: an edit saved
+# between the copy and the move is lost under the move, and the file is signed (achado #23 of the
+# mission's review r5). Caught by "kept: an edit saved while the signature is written is kept and
+# nothing is signed, and a write that fails says so" (check-worker.sh).
+mut_WORKER_kept_unchecked() {
+  sed -i '/^delegation_write_signed() {/,/^}/ s@^  if ! cmp -s "\$seen" "\$f"; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The effective level reads the campaign's files again instead of its one copy: an edit landing
+# after the digest is granted under the old signature (achado #25 of the mission's review r5).
+# Caught by "once: the level, the lots and the ceilings a verb authorizes are the ones whose digest
+# it checked" (check-worker.sh).
+mut_WORKER_once_reads_live() {
+  sed -i '/^effective_level() {/,/^}/ s@^  src="\$TERMS_COPY"$@  src="$dir"@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -8128,6 +8177,13 @@ CATALOG=(
   WORKER_spend_grammar_unchecked
   WORKER_cwd_caller_cwd
   WORKER_cwd_handoff_dir_unchecked
+  WORKER_lots_unchecked
+  WORKER_lots_all_among_words
+  WORKER_fork_counted
+  WORKER_fork_field_unchecked
+  WORKER_stale_merge_after_approval
+  WORKER_kept_unchecked
+  WORKER_once_reads_live
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -117,16 +117,21 @@ id_is_dir() {
 
 # delegation_legible <campaign-dir> — 0 when the six keys of its delegation.md are present and not
 # empty, the campaign: of that file and of the campaign.md beside it is the directory's name
-# (id_is_dir), the level is on the ladder, expires is a local instant to the minute that the clock
-# has — it comes back from `date -d` as it went, so 2026-11-31 and 99:99 are not instants — and
-# both ceilings are numbers; otherwise 1, with the first rule that failed PUBLISHED in
+# (id_is_dir), the level is on the ladder, lots is `all` or a list of words each of which is a lot
+# of the table of that campaign.md (lots_table), expires is a local instant to the minute that the
+# clock has — it comes back from `date -d` as it went, so 2026-11-31 and 99:99 are not instants —
+# and both ceilings are numbers; otherwise 1, with the first rule that failed PUBLISHED in
 # ILLEGIBLE_WHY. Called, never substituted: under `$( )` the reason would die with the subshell. A
-# `<…>` placeholder of the template fails one of these rules.
+# `<…>` placeholder of the template fails one of these rules: the one of lots: (`<all, ou L1 L2 …>`
+# and the words after them) holds the words L1 and L2, which a reader that only looked for the asked
+# lot among the words found, and a full delegation left with it granted approve on the uncapped L1
+# (achado #1 of the r5); its first word, `<all,`, is no lot.
 # Declared limit: the comparison of what `date` gives back has no world on GNU date 9, which refuses
 # every instant of this shape it does not have (minute 60, hour 24, a gap of summer time, measured)
 # and gives the others back as written; it stays for a `date` that rolls 24:00 over to the next day.
 delegation_legible() {
-  local dir="${1%/}" f k v rt
+  local dir="${1%/}" f k v rt w l found
+  local -a words=() table=()
   f="$dir/delegation.md"
   ILLEGIBLE_WHY=""
   for k in "${DELEGATION_KEYS[@]}"; do
@@ -139,6 +144,19 @@ delegation_legible() {
   v="$(fm_value "$f" level)"
   if ! on_ladder "$v"; then
     ILLEGIBLE_WHY="level '$v' is not on the ladder (${LADDER[*]})"; return 1
+  fi
+  v="$(fm_value "$f" lots)"
+  if [ "$v" != all ]; then
+    while read -r l _; do table+=("$l"); done < <(lots_table "$dir/campaign.md")
+    read -ra words <<< "$v"
+    for w in "${words[@]}"; do
+      found=""
+      for l in ${table[@]+"${table[@]}"}; do [ "$l" != "$w" ] || found=1; done
+      if [ -z "$found" ]; then
+        ILLEGIBLE_WHY="lots '$v' is neither all nor a list of the lots of $dir/campaign.md: '$w' has no row"
+        return 1
+      fi
+    done
   fi
   v="$(fm_value "$f" expires)"
   if ! [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]]; then
@@ -187,19 +205,42 @@ delegation_digest() { terms_digest "$(delegation_terms "$1")"; }
 
 # delegation_write_signed <file> <line> — the frontmatter's `signed:` line replaced by <line>, or
 # <line> added before the closing `---` when the key is absent. The body is never touched, and the
-# file keeps its mode: the new content is written beside it and moved over it.
+# file keeps its mode: the new content is written beside it and moved over it. A copy of the file is
+# taken before the new content is written, and the file is compared with that copy right before the
+# move: an edit saved in between (the owner's editor, a `git pull`) is kept, and nothing is signed —
+# the move would have put the older text over it (achado #23 of the r5). Returns 1 with the reason
+# PUBLISHED in WRITE_WHY: the file changed, or a step of the write failed (naming the step). Called,
+# never substituted.
+# Declared limit: an edit saved between the comparison and the move is still lost. The window is two
+# system calls wide, and closing it needs a lock the owner's editor would honour, which no editor
+# shares with this program; the world that lands an edit there (an `mv` first on the PATH) is built
+# by no probe, because it is not closed.
 delegation_write_signed() {
-  local f="$1" tmp
-  tmp="$(mktemp "${f%/*}/.delegation.XXXXXX")"
-  if ! awk -v line="$2" '
+  local f="$1" seen tmp
+  WRITE_WHY=""
+  if ! seen="$(mktemp "${f%/*}/.delegation.XXXXXX")" || ! tmp="$(mktemp "${f%/*}/.delegation.XXXXXX")"; then
+    [ -z "$seen" ] || rm -f "$seen"
+    WRITE_WHY="the signature was not written: no temporary file could be made in ${f%/*}"; return 1
+  fi
+  if ! cp -- "$f" "$seen" || ! awk -v line="$2" '
          NR == 1 { fm = 1; print; next }
          fm && !done && index($0, "signed:") == 1 { print line; done = 1; next }
          fm && $0 == "---" { if (!done) print line; fm = 0; done = 1 }
          { print }' "$f" > "$tmp" \
-     || ! chmod --reference="$f" "$tmp" || ! mv -f "$tmp" "$f"; then
-    rm -f "$tmp"
+     || ! chmod --reference="$f" "$tmp"; then
+    rm -f "$seen" "$tmp"
+    WRITE_WHY="the signature was not written: the signed copy of $f could not be made"; return 1
+  fi
+  if ! cmp -s "$seen" "$f"; then
+    rm -f "$seen" "$tmp"
+    WRITE_WHY="the delegation changed while the signature was written; the change is kept and nothing was signed"
     return 1
   fi
+  if ! mv -f "$tmp" "$f"; then
+    rm -f "$seen" "$tmp"
+    WRITE_WHY="the signature was not written: $tmp could not be moved over $f"; return 1
+  fi
+  rm -f "$seen"
 }
 
 # delegate <campaign-dir> — show what a signature grants (the six keys of the delegation and the
@@ -212,7 +253,9 @@ delegation_write_signed() {
 # It signs what it showed: the terms are kept as they were printed, read again after the yes, and a
 # change in between (the owner's editor, a `git pull` in the checkout) signs nothing (rc 1); the
 # digest written is the one of the terms shown, so an edit after that re-read leaves a signature the
-# file no longer matches, which level reads as edited after signing.
+# file no longer matches, which level reads as edited after signing. An edit saved while the
+# signature is being written is kept, and nothing is signed (rc 1, delegation_write_signed, which
+# declares the window it leaves); so is a write that fails, naming the step.
 cmd_delegate() {
   [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
   local f="${1%/}/delegation.md" ans="" got=0 id shown
@@ -249,7 +292,10 @@ cmd_delegate() {
     printf 'not signed — the delegation changed after it was shown, and nothing was written: run delegate again\n'
     return 1
   fi
-  delegation_write_signed "$f" "signed: $(now) $(terms_digest "$shown")"
+  if ! delegation_write_signed "$f" "signed: $(now) $(terms_digest "$shown")"; then
+    printf 'not signed — %s: run delegate again\n' "$WRITE_WHY"
+    return 1
+  fi
   id="$(fm_value "$f" campaign)"
   printf 'signed %s — commit it: git add %s && git commit -m "chore(campaign): sign the delegation of %s"\n' \
     "$f" "$f" "$id"
@@ -299,24 +345,56 @@ lots_table() {
     }' "$1"
 }
 
+# terms_copy <campaign-dir> — PUBLISHES TERMS_COPY, a directory named as the campaign's
+# (campaign_name, so the id rule reads the same) inside a new temporary directory, holding one copy
+# of its delegation.md and of its campaign.md, the latter only when the campaign has one. A file that
+# does not read leaves an empty copy, which every reader takes as the other verbs take the file
+# itself: illegible, with the same reason. Returns 1 when the temporary directory cannot be made.
+# The temporary directory goes when the program exits (a trap on EXIT, TERMS_TMP): one copy per
+# process, and level and allows each make one. Called, never substituted.
+terms_copy() {
+  local dir="${1%/}"
+  TERMS_COPY=""
+  TERMS_TMP="$(mktemp -d "${TMPDIR:-/tmp}/sdd-worker-terms.XXXXXX")" || return 1
+  trap '[ -z "${TERMS_TMP:-}" ] || rm -rf -- "$TERMS_TMP"' EXIT
+  TERMS_COPY="$TERMS_TMP/$(campaign_name "$dir")"
+  mkdir -p -- "$TERMS_COPY" || return 1
+  cat -- "$dir/delegation.md" > "$TERMS_COPY/delegation.md"
+  [ ! -f "$dir/campaign.md" ] || cat -- "$dir/campaign.md" > "$TERMS_COPY/campaign.md"
+  # A read that failed is the empty copy above, never a copy that was not made.
+  return 0
+}
+
 # effective_level <campaign-dir> [<lot>] — the level the worker may act at, PUBLISHED in LEVEL,
 # with the reason in LEVEL_WHY. The first rule that matches decides, in this order, and every rule
 # that refuses answers assisted: a delegation that does not hold means "do nothing alone", never
 # "do what it says". LEVEL_STOP is set when the answer is assisted because the set of checkouts did
-# not read (campaign_set): that is no answer about the delegation, and level leaves rc 1 on it.
+# not read (campaign_set), or because no copy of the terms could be made: that is no answer about
+# the delegation, and level leaves rc 1 on it.
 # Called, never substituted: under `$( )` the globals would die with the
 # subshell. The lot's ceiling only ever lowers the level.
+# Every term is read from ONE copy of the two files (terms_copy), made before the first rule: the
+# digest is checked over the copy and the level, the lots and the lot's ceiling it grants are read
+# from the same copy, so an edit landing between two readings of the files is never granted under
+# the old signature (achado #25 of the r5). Asked again, the edited files are edited after signing.
+# The two files are copied one after the other: a copy whose halves come from two instants is still
+# what is both checked and granted, and it grants only when its digest is the signed one. The
+# reasons name the campaign's files, never the copy.
 effective_level() {
-  local dir="${1%/}" lot="${2:-}" f signed want exp lv root wt lots w found="" l c cr sr
+  local dir="${1%/}" lot="${2:-}" src f signed want exp lv root wt lots w found="" l c cr sr
   local -a words=()
-  f="$dir/delegation.md"
   LEVEL=assisted
   LEVEL_STOP=""
-  if [ ! -f "$f" ]; then LEVEL_WHY="no delegation: $f does not exist"; return 0; fi
-  if ! delegation_legible "$dir"; then LEVEL_WHY="illegible: $ILLEGIBLE_WHY"; return 0; fi
+  if [ ! -f "$dir/delegation.md" ]; then LEVEL_WHY="no delegation: $dir/delegation.md does not exist"; return 0; fi
+  if ! terms_copy "$dir"; then
+    LEVEL_STOP=1; LEVEL_WHY="unread: no copy of the terms of $dir could be made under ${TMPDIR:-/tmp}"; return 0
+  fi
+  src="$TERMS_COPY"
+  f="$src/delegation.md"
+  if ! delegation_legible "$src"; then LEVEL_WHY="illegible: ${ILLEGIBLE_WHY//"$src"/"$dir"}"; return 0; fi
   signed="$(fm_value "$f" signed)"
   if [ -z "$signed" ]; then LEVEL_WHY="unsigned: the signed: line is empty"; return 0; fi
-  want="$(delegation_digest "$dir")"
+  want="$(delegation_digest "$src")"
   if [ "${signed##* }" != "$want" ]; then
     LEVEL_WHY="edited after signing: signed ${signed##* }, the six keys and the lot ceilings now give $want"
     return 0
@@ -356,7 +434,7 @@ effective_level() {
     found=""
     while read -r l c; do
       if [ "$l" = "$lot" ]; then found=1; break; fi
-    done < <(lots_table "$dir/campaign.md")
+    done < <(lots_table "$src/campaign.md")
     if [ -z "$found" ]; then
       LEVEL_WHY="lot not covered: $dir/campaign.md has no row for $lot"; return 0
     fi
@@ -612,21 +690,28 @@ lot_of() {
   done
 }
 
-# pr_states <root> <branch> — the pull requests whose head is <branch>, PUBLISHED in PR_STATES as one
-# `<number> <state>` per line, from `gh pr list --head <branch> --state all --json number,state` run
-# at <root>, the checkout gh infers the repository from. Returns 1, with the reason in GH_WHY, when
-# gh failed or answered anything but one array whose every element has a state of OPEN, CLOSED or
-# MERGED — an empty answer included: an answer that was not read is never "no pull request", which
-# would send a lot to run again. An element that is not an object makes jq itself fail on `.state`,
-# so no rule of its own says so; the number is only printed.
+# pr_states <root> <branch> — the pull requests of the repository whose head is <branch>, PUBLISHED
+# in PR_STATES as one `<number> <state>` per line, from `gh pr list --head <branch> --state all
+# --json number,state,isCrossRepository` run at <root>, the checkout gh infers the repository from.
+# `--head` matches the branch's name alone, and a fork can push a branch of that name: a merged pull
+# request from a fork read as the lot's would make the lot done while it never ran (achado #6 of the
+# r5). So only the elements whose isCrossRepository is false are the repository's own, and the
+# others are left out. Returns 1, with the reason in GH_WHY, when gh failed or answered anything but
+# one array whose every element has a state of OPEN, CLOSED or MERGED and an isCrossRepository that
+# is a boolean — an empty answer included: an answer that was not read is never "no pull request",
+# which would send a lot to run again, and an element that does not say whose it is is not read as
+# the repository's or as a fork's. An element that is not an object makes jq itself fail on
+# `.state`, so no rule of its own says so; the number is only printed.
 pr_states() {
   local out rc=0
-  out="$(CDPATH='' cd -- "$1" && gh pr list --head "$2" --state all --json number,state)" || rc=$?
+  out="$(CDPATH='' cd -- "$1" && gh pr list --head "$2" --state all --json number,state,isCrossRepository)" || rc=$?
   if [ "$rc" -ne 0 ]; then GH_WHY="gh pr list --head $2 failed (rc $rc)"; return 1; fi
   if ! PR_STATES="$(jq -rn 'input
-         | if type == "array" and all(.[]; .state | IN("OPEN", "CLOSED", "MERGED"))
-           then .[] | "\(.number) \(.state)" else error("off the contract") end' 2> /dev/null <<< "$out")"; then
-    GH_WHY="gh pr list --head $2 answered no array of pull requests in a known state: '${out:0:80}'"
+         | if type == "array"
+              and all(.[]; (.state | IN("OPEN", "CLOSED", "MERGED")) and (.isCrossRepository | type) == "boolean")
+           then .[] | select(.isCrossRepository == false) | "\(.number) \(.state)"
+           else error("off the contract") end' 2> /dev/null <<< "$out")"; then
+    GH_WHY="gh pr list --head $2 answered no array of pull requests in a known state and repository: '${out:0:80}'"
     return 1
   fi
 }
@@ -634,8 +719,13 @@ pr_states() {
 # next <campaign-dir> — the next act of the campaign, from the queue, the missions on disk and gh.
 # It walks the lots of campaign.md in the order of the table and stops at the first one not merged:
 # no mission → plan; a mission not approved → approve; approved with no pull request → run; a pull
-# request open → review; only closed ones → stop. A merged pull request makes the lot done, and a
-# queue whose every lot is merged is done. When the act is run or review and the lot after it has no
+# request open → review; only closed ones → stop. A merged pull request of the repository (never a
+# fork's, pr_states) makes the lot done, and a queue whose every lot is merged is done. The merge is
+# read before the approval, whenever a copy names the branch: a copy of a mission left in an old
+# linked worktree keeps the aprovacao: it had before the plan was approved, and asked about first it
+# stopped the campaign on approve over a lot merged long ago (achado #7 of the r5); so a mission with
+# a branch costs a gh call even when it is not approved, and a gh that does not answer there is rc 3,
+# never approve. When the act is run or review and the lot after it has no
 # mission, a second line says the session may plan that one ahead. rc 0; rc 1 when the line is
 # stop; rc 3, and no act at all, when gh did not answer. What next cannot decide stops it, naming
 # why: no campaign.md, a campaign: that is not the directory's name (id_is_dir: an empty one and the
@@ -650,7 +740,7 @@ pr_states() {
 # branch read is the first copy's that names one.
 cmd_next() {
   [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
-  local dir="${1%/}" cf id root l i m p branch act="" ahead="" n s merged open closed
+  local dir="${1%/}" cf id root l i m p pend branch act="" ahead="" n s merged open closed
   local -a lots=() dirs=()
   cf="$dir/campaign.md"
   if [ ! -f "$cf" ]; then printf 'stop - - — no campaign: %s does not exist\n' "$cf"; return 1; fi
@@ -672,32 +762,37 @@ cmd_next() {
       act="stop $l - — more than one mission declares lot: $l (${LOT_IDS[*]})"; break
     fi
     m="${LOT_IDS[0]}"
+    pend=""
     for p in "${LOT_DIRS[@]}"; do
       if ! approved "$p/00-missao.md"; then
-        act="approve $l $m — not approved: $p/00-missao.md has aprovacao: '$(fm_value "$p/00-missao.md" aprovacao)'"
-        break
+        pend="$p"; break
       fi
     done
-    [ -z "$act" ] || break
     branch=""
     for p in "${LOT_DIRS[@]}"; do
       branch="$(fm_value "$p/00-missao.md" branch)"
       [ -z "$branch" ] || break
     done
-    if [ -z "$branch" ]; then act="stop $l $m — the mission names no branch: ${LOT_DIRS[0]}/00-missao.md"; break; fi
-    if ! pr_states "$root" "$branch"; then
-      printf 'sdd-worker: %s — no act is named: an answer that was not read is never "no pull request"\n' \
-        "$GH_WHY" >&2
-      return 3
-    fi
     merged=""; open=""; closed=""
-    while read -r n s; do
-      case "$s" in MERGED) merged="$merged #$n" ;; OPEN) open="$open #$n" ;; CLOSED) closed="$closed #$n" ;; esac
-    done <<< "$PR_STATES"
+    if [ -n "$branch" ]; then
+      if ! pr_states "$root" "$branch"; then
+        printf 'sdd-worker: %s — no act is named: an answer that was not read is never "no pull request"\n' \
+          "$GH_WHY" >&2
+        return 3
+      fi
+      while read -r n s; do
+        case "$s" in MERGED) merged="$merged #$n" ;; OPEN) open="$open #$n" ;; CLOSED) closed="$closed #$n" ;; esac
+      done <<< "$PR_STATES"
+    fi
     if [ -n "$merged" ]; then continue; fi
+    if [ -n "$pend" ]; then
+      act="approve $l $m — not approved: $pend/00-missao.md has aprovacao: '$(fm_value "$pend/00-missao.md" aprovacao)'"
+      break
+    fi
+    if [ -z "$branch" ]; then act="stop $l $m — the mission names no branch: ${LOT_DIRS[0]}/00-missao.md"; break; fi
     if [ -n "$open" ]; then act="review $l $m — pull request$open is open on $branch"
     elif [ -n "$closed" ]; then act="stop $l $m — pull request closed without merge:$closed"
-    else act="run $l $m — approved, and no pull request has the head $branch"
+    else act="run $l $m — approved, and no pull request of the repository has the head $branch"
     fi
     break
   done

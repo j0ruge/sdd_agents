@@ -17,7 +17,9 @@ signed:
 > O valor de uma chave é o texto depois do primeiro `: `, sem os espaços do fim e sem aspas.
 > Enquanto um valor for um placeholder `<…>`, a delegação é **ilegível** e vale `assisted`.
 > Ilegível também: um `campaign:` (o daqui ou o do `campaign.md` ao lado) que não é o nome do
-> diretório, e um `expires:` que o relógio não tem (`2026-11-31 10:00`, `2026-11-18 99:99`).
+> diretório, um `lots:` que não é `all` nem uma lista de lotes da tabela do `campaign.md` (o
+> placeholder acima incluso: `<all,` não é lote), e um `expires:` que o relógio não tem
+> (`2026-11-31 10:00`, `2026-11-18 99:99`).
 
 ## Os cinco níveis, cumulativos
 
@@ -63,7 +65,8 @@ teto assinado ou abaixo dele.
 1. Preencha as seis primeiras chaves e deixe `signed:` vazio.
 2. Num terminal, rode `bin/sdd-worker delegate <diretório desta campanha>`: ele mostra o que está
    sendo concedido (as seis chaves e uma linha `ceiling <lote>: <teto>` por lote da tabela do
-   `campaign.md` ao lado) e pergunta. Só `y` assina.
+   `campaign.md` ao lado) e pergunta. Só `y` assina. Uma edição salva enquanto a assinatura é gravada
+   fica no arquivo, e nada é assinado: rode o `delegate` de novo.
 3. A assinatura grava `signed: <YYYY-MM-DD HH:MM> <digest>`, e o digest cobre as seis chaves e o
    `Lot` e o `Ceiling` de cada linha da tabela de lotes do `campaign.md`. Mudar uma das seis chaves,
    subir ou baixar um teto, ou pôr ou tirar um lote da tabela depois disso invalida o digest, e a
