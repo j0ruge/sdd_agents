@@ -48,6 +48,21 @@
 #       first witnessed allowing approve, so the ask is the break's and nothing else's
 #   R14 with --lot, the lot's ceiling is the act's: under full, approve is asked on a lot capped at
 #       merge and allowed on the lots that are not, and a lot with no row asks for it
+#   R15 `budget` sums the cost_usd of the ledger lines whose mission is one of the campaign's — the
+#       folders under the repo's HANDOFF_DIR whose 00-missao.md declares exactly that campaign:, in
+#       the checkout of the campaign AND in every linked worktree of its repo, each mission once —
+#       and no other line: not another campaign's, not a longer id's, not a mission of no campaign;
+#       a malformed line costs only itself; the ledger is found by SDD_STATE_DIR, else under $HOME
+#   R16 at the campaign ceiling or above it `budget` leaves rc 1, and below it rc 0, the comparison
+#       being numeric (10 is above 8.5); so do the answers it cannot have — no delegation or an
+#       illegible one (no ceiling), a directory outside a git checkout, a ledger that does not read
+#   R17 a missing or empty ledger is zero spent (rc 0), and the line prints the mission cap of the
+#       delegation, the one the worker passes to `sdd run` as BUDGET_MISSION_USD
+#
+# The money is measured under a decimal comma: every budget call runs with LC_ALL set to pt_BR when
+# this machine has the locale and it is armed (its printf refuses 8.5), so a verb that formats or
+# sums outside LC_ALL=C answers wrong here. Declared limit: on a machine without the locale that
+# rule goes unmeasured, and the sensor says nothing about it.
 #
 # Every green line is `  ok    <family>: <assertion>` on stdout, and each family (`usage: `, and the
 # verbs as they land) prints exactly the assertions the mission plan names — the checkpoint counts
@@ -68,7 +83,7 @@ unset SDD_WORKER_NOW ON_ESCALATION_CMD
 
 # Anti-vacuity: a block that stops being dispatched prints what a clean program prints. One unit of
 # PROBES is one assertion outcome, and only pass() and fail() write it.
-PROBE_FLOOR=14
+PROBE_FLOOR=17
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -77,6 +92,9 @@ fail() { PROBES=$((PROBES + 1))
 
 BOX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-worker-XXXXXX")"
 trap 'rm -rf "$BOX"' EXIT
+# The ledger is the fixture's for the whole sensor: no probe ever reads the real one. The one probe
+# of the $HOME fallback unsets this in a subshell, with HOME in the box.
+export SDD_STATE_DIR="$BOX/state"
 
 # worker_from <stdin-file> <args...> — runs the program with <stdin-file> on stdin, from the cwd
 # W_CWD names (the sensor's own when unset); PUBLISHES W_RC, W_OUT and W_ERR. Called, never
@@ -597,6 +615,153 @@ if [ -z "$got" ]; then
 else
   fail 'allows: the lot ceiling stops approve on a capped lot under full' \
     'approve asked on the lot capped at merge, allowed where the lot is not capped' "$got"
+fi
+
+# --- budget: the fixtures -----------------------------------------------------------------------
+# mission <checkout> <handoff dir> <id> <campaign> — a mission folder made from the kit's own
+# template, its missao: and campaign: replaced; a <campaign> of `-` keeps the template's
+# placeholder, a mission that belongs to no campaign. Only the frontmatter is edited, so a template
+# whose campaign: key moved leaves the placeholder and the probe that counts the mission goes red.
+mission() {
+  mkdir -p "$1/$2/$3"
+  if [ "$4" = - ]; then
+    cp "$ROOT/templates/missao.md" "$1/$2/$3/00-missao.md"
+  else
+    sed "2,/^---\$/ { s@^missao: .*@missao: $3@; s@^campaign: .*@campaign: $4@; }" \
+      "$ROOT/templates/missao.md" > "$1/$2/$3/00-missao.md"
+  fi
+}
+
+# spent <mission> <event> <cost> — one line of the ledger in the shape the runner writes it (a
+# session line of the real ledger, trimmed to the keys around the two a reader of the spend reads);
+# <cost> is raw JSON: a number, or the null the runner writes for the events that carry none.
+spent() {
+  printf '{"v":1,"ts":"2099-01-01T00:00:00-03:00","event":"%s","invocation":"run","project":"fixture","repo":"%s","mission":"%s","phase":"EXEC","rc":0,"cost_usd":%s}\n' \
+    "$2" "$REPO" "$1" "$3"
+}
+
+# The decimal comma (see the header): the locale only when it is armed, empty otherwise.
+NUM_POISON=pt_BR.UTF-8
+[ "$(LC_ALL="$NUM_POISON" bash -c 'printf "%.2f" 8.5' 2>/dev/null)" != 8.50 ] || NUM_POISON=""
+
+# budget_is <label> <rc> <want> <args...> — runs budget <args...> under NUM_POISON; appends to got
+# unless it left <rc> and exactly one line on stdout that starts with <want> (a literal, never a
+# pattern).
+budget_is() {
+  local label="$1" rc="$2" want="$3"; shift 3
+  LC_ALL="$NUM_POISON" worker budget "$@"
+  [ "$W_RC" = "$rc" ] && [[ "$W_OUT" != *$'\n'* ]] && [[ "$W_OUT" == "$want"* ]] \
+    || got="${got:+$got; }$label: rc $W_RC, '$W_OUT' (want rc $rc, '$want…')"
+}
+
+H=docs/handoffs
+
+# --- R15: the campaign's missions and no other --------------------------------------------------
+# Campaign b-sum owns three missions: two in the fixture repo, one only in a linked worktree of it
+# (the shape of a mission in flight, whose folder reaches the campaign's checkout only with the
+# merge), and the worktree carries a second copy of one of the two, which is still one mission.
+# Their lines sum 8.50 — two sessions, a close, and an escalation that carries null. Around them,
+# lines a looser reader would add: another campaign's (40), a campaign whose id starts with b-sum
+# (100), a mission of no campaign (30), and a truncated line of one of the three. The same file
+# answers through SDD_STATE_DIR and through $HOME/.sdd. A second repo sets HANDOFF_DIR to another
+# folder and keeps a decoy mission of its campaign under docs/handoffs: only the declared one counts.
+got=""
+d="$(campaign b-sum pr "$FAR" 25 100)"
+mission "$REPO" "$H" 20990101-b-one b-sum
+mission "$REPO" "$H" 20990102-b-two b-sum
+mission "$REPO" "$H" 20990103-b-other b-other
+mission "$REPO" "$H" 20990104-b-longer b-sum-2
+mission "$REPO" "$H" 20990105-b-none -
+git -C "$REPO" -c user.name=fixture -c user.email=fixture@example.com commit -q --allow-empty -m fixture
+git -C "$REPO" worktree add -q -b fixture-side "$BOX/wt" > /dev/null 2>&1 \
+  || got="fixture: the linked worktree was not created"
+mission "$BOX/wt" "$H" 20990106-b-wt b-sum
+mission "$BOX/wt" "$H" 20990101-b-one b-sum
+HD="$BOX/hd"
+mkdir -p "$HD/.sdd" "$HD/docs/campaigns"
+git init -q -b main "$HD"
+printf 'HANDOFF_DIR="work/missions"\nON_ESCALATION_CMD="true"\n' > "$HD/.sdd/config.sh"
+cp -a "$(campaign b-hd pr "$FAR" 25 100)" "$HD/docs/campaigns/"
+mission "$HD" work/missions 20990107-b-hd-in b-hd
+mission "$HD" "$H" 20990108-b-hd-decoy b-hd
+mkdir -p "$BOX/state" "$BOX/home/.sdd"
+{ spent 20990101-b-one session 1.25; spent 20990101-b-one session 2.5
+  spent 20990102-b-two close 0.75; spent 20990102-b-two blocked null
+  printf '{"v":1,"event":"session","mission":"20990101-b-one","cost_usd":\n'
+  spent 20990103-b-other session 40; spent 20990104-b-longer session 100
+  spent 20990105-b-none session 30; spent 20990106-b-wt session 4
+  spent 20990107-b-hd-in session 2; spent 20990108-b-hd-decoy session 16
+} > "$BOX/state/autonomy-log.jsonl"
+cp "$BOX/state/autonomy-log.jsonl" "$BOX/home/.sdd/"
+want='campaign US$ 8.50 of 100.00 — 3 mission(s); mission cap US$ 25.00'
+budget_is 'SDD_STATE_DIR' 0 "$want" "$d"
+( unset SDD_STATE_DIR; HOME="$BOX/home" budget_is 'HOME' 0 "$want" "$d"; printf '%s' "$got" > "$BOX/got" )
+got="$(cat "$BOX/got")"
+budget_is 'HANDOFF_DIR' 0 'campaign US$ 2.00 of 100.00 — 1 mission(s); mission cap US$ 25.00' \
+  "$HD/docs/campaigns/b-hd"
+if [ -z "$got" ]; then
+  pass "budget: the sum counts the campaign's missions and no other"
+else
+  fail "budget: the sum counts the campaign's missions and no other" \
+    "$want, and 2.00 over 1 mission where HANDOFF_DIR moves" "$got"
+fi
+
+# --- R16: at the ceiling or above it ------------------------------------------------------------
+# Four delegations of one campaign, b-cap, whose two missions spent 8.50: a ceiling of 8.5 (at it)
+# and of 8 (above it) leave rc 1, of 8.51 (the boundary) and of 10 (which a comparison of text puts
+# below 8.5) leave rc 0. The answers it cannot have ride along, each over a directory that answers
+# rc 0 with the fixture's ledger, so the rc 1 is the break's: no delegation, a delegation with no
+# campaign ceiling, the same campaign copied outside any git checkout, and a ledger that is a
+# directory.
+got=""
+mission "$REPO" "$H" 20990111-b-cap-1 b-cap
+mission "$REPO" "$H" 20990112-b-cap-2 b-cap
+{ spent 20990111-b-cap-1 session 5.25; spent 20990112-b-cap-2 close 3.25; } >> "$BOX/state/autonomy-log.jsonl"
+for w in 'b-at|8.5|1|8.50' 'b-above|8|1|8.00' 'b-edge|8.51|0|8.51' 'b-below|10|0|10.00'; do
+  IFS='|' read -r id cap rc shown <<< "$w"
+  d="$(campaign "$id" pr "$FAR" 25 "$cap")"
+  sed -i '2,/^---$/ s@^campaign: .*@campaign: b-cap@' "$d/delegation.md"
+  budget_is "$id" "$rc" "campaign US\$ 8.50 of $shown — 2 mission(s); mission cap US\$ 25.00" "$d"
+done
+mkdir -p "$REPO/docs/campaigns/b-absent"
+budget_is 'no delegation' 1 'no ceiling — no delegation' "$REPO/docs/campaigns/b-absent"
+d="$(campaign b-nocap pr "$FAR" 25 -)"
+sed -i '2,/^---$/ s@^campaign: .*@campaign: b-cap@' "$d/delegation.md"
+budget_is 'no campaign ceiling' 1 'no ceiling — illegible: budget_campaign_usd' "$d"
+mkdir -p "$BOX/loose"
+cp -a "$REPO/docs/campaigns/b-below" "$BOX/loose/"
+git -C "$BOX/loose" rev-parse --show-toplevel > /dev/null 2>&1 \
+  && got="${got:+$got; }fixture: $BOX/loose is inside a git checkout"
+budget_is 'outside a checkout' 1 'no spend — ' "$BOX/loose/b-below"
+mkdir -p "$BOX/state-dir/autonomy-log.jsonl"
+SDD_STATE_DIR="$BOX/state-dir" budget_is 'a ledger that does not read' 1 'no spend — ' \
+  "$REPO/docs/campaigns/b-below"
+if [ -z "$got" ]; then
+  pass 'budget: at the ceiling or above it the verb leaves rc 1'
+else
+  fail 'budget: at the ceiling or above it the verb leaves rc 1' \
+    'rc 1 at 8.5 and 8, rc 0 at 8.51 and 10, rc 1 for each answer it cannot have' "$got"
+fi
+
+# --- R17: no ledger yet -------------------------------------------------------------------------
+# One mission of the campaign and three ledgers that hold nothing: a state directory that does not
+# exist, one with no ledger file, and an empty ledger. Each is zero spent and rc 0, and the line
+# names the mission cap of this delegation, 37.50 — R15 and R16 print 25.00, so a constant fails
+# one of the two.
+got=""
+d="$(campaign b-fresh pr "$FAR" 37.5 200)"
+mission "$REPO" "$H" 20990121-b-fresh b-fresh
+mkdir -p "$BOX/state-empty" "$BOX/state-blank"
+: > "$BOX/state-blank/autonomy-log.jsonl"
+for s in state-none state-empty state-blank; do
+  SDD_STATE_DIR="$BOX/$s" budget_is "$s" 0 \
+    'campaign US$ 0.00 of 200.00 — 1 mission(s); mission cap US$ 37.50' "$d"
+done
+if [ -z "$got" ]; then
+  pass 'budget: a missing ledger is zero spent, and the mission cap is printed'
+else
+  fail 'budget: a missing ledger is zero spent, and the mission cap is printed' \
+    'campaign US$ 0.00 of 200.00 — 1 mission(s); mission cap US$ 37.50, rc 0, for each' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

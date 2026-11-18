@@ -334,12 +334,82 @@ cmd_allows() {
   return 1
 }
 
+# ledger_path — the autonomy ledger the runner writes, one JSON line per event, machine-wide: the
+# spelling of autonomy_log_path in bin/sdd, so the two never name two files.
+ledger_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
+
+# checkouts_of <root> — <root>, then every worktree of its repository, one per line, each once. A
+# mission of a campaign runs in a worktree of its own, and its folder reaches the checkout that
+# holds the campaign only with the merge: a reader of <root> alone would not see it in flight.
+checkouts_of() {
+  { printf '%s\n' "$1"; git -C "$1" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' || true; } \
+    | awk '!seen[$0]++'
+}
+
+# campaign_missions <root> <id> — the id of every mission of campaign <id>, one per line, each once:
+# the folders under HANDOFF_DIR (the root's; docs/handoffs when unset) of every checkout of the
+# root's repository whose 00-missao.md declares exactly `campaign: <id>`. ONE definition of which
+# missions are a campaign's. An empty <id> prints nothing, since it would match every mission that
+# belongs to no campaign; `budget` never reaches that branch (a legible delegation names its
+# campaign), and it is kept because it decides what an empty id answers: no mission, never all.
+campaign_missions() {
+  local root="$1" id="$2" hd wt m
+  [ -n "$root" ] && [ -n "$id" ] || return 0
+  hd="$(config_key "$root" HANDOFF_DIR)"
+  hd="${hd:-docs/handoffs}"
+  while IFS= read -r wt; do
+    for m in "$wt/$hd"/*/00-missao.md; do
+      if [ -f "$m" ] && [ "$(fm_value "$m" campaign)" = "$id" ]; then
+        m="${m%/00-missao.md}"
+        printf '%s\n' "${m##*/}"
+      fi
+    done
+  done < <(checkouts_of "$root") | awk '!seen[$0]++'
+}
+
+# budget <campaign-dir> — what the campaign spent against its ceiling: the cost_usd of every ledger
+# line whose mission is one of the campaign's (the delegation's campaign:), summed by jq — never by
+# awk, whose mawk reads 1.99 as 1 under pt-BR — against budget_campaign_usd, and the mission cap the
+# worker passes to `sdd run` as BUDGET_MISSION_USD. Money is printed under LC_ALL=C, two decimals.
+# rc 0 below the ceiling; rc 1 at it or above it, and rc 1 for every answer it cannot have — no
+# delegation or an illegible one (no ceiling), a directory outside a git checkout or a ledger that
+# does not read (no spend): a spend that could not be read is never zero. A missing ledger is the
+# one zero, since nothing ran yet.
+# Declared limits: a line is matched by its mission id alone, so a mission of the same id in another
+# repo is counted too (the fail-safe side: more spend, an earlier stop); a malformed line is skipped
+# (`fromjson?`, as the runner reads the ledger), and its cost with it; the ceiling is read whether or
+# not the delegation is signed — whether the worker may act on it is the level's question.
+cmd_budget() {
+  [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
+  local dir="${1%/}" f root cap ledger out
+  local -a ms=()
+  f="$dir/delegation.md"
+  if [ ! -f "$f" ]; then printf 'no ceiling — no delegation: %s does not exist\n' "$f"; return 1; fi
+  if ! delegation_legible "$f"; then printf 'no ceiling — illegible: %s\n' "$ILLEGIBLE_WHY"; return 1; fi
+  root="$(repo_root "$dir")"
+  if [ -z "$root" ]; then printf 'no spend — %s is not inside a git checkout\n' "$dir"; return 1; fi
+  mapfile -t ms < <(campaign_missions "$root" "$(fm_value "$f" campaign)")
+  cap="$(fm_value "$f" budget_campaign_usd)"
+  ledger="$(ledger_path)"
+  [ -e "$ledger" ] || ledger=/dev/null
+  if ! out="$(jq -nrR --arg cap "$cap" --args '
+         [inputs | fromjson? | select(type == "object" and (.mission | IN($ARGS.positional[])))
+          | .cost_usd | numbers] | add // 0
+         | "\(.) \(. >= ($cap | tonumber))"' ${ms[@]+"${ms[@]}"} < "$ledger")"; then
+    printf 'no spend — the ledger %s does not read\n' "$ledger"; return 1
+  fi
+  LC_ALL=C printf 'campaign US$ %.2f of %.2f — %d mission(s); mission cap US$ %.2f\n' \
+    "${out% *}" "$cap" "${#ms[@]}" "$(fm_value "$f" budget_mission_usd)"
+  if [ "${out##* }" = true ]; then return 1; fi
+}
+
 main() {
   case "${1:-}" in
     delegate) shift; cmd_delegate "$@" ;;
     level) shift; cmd_level "$@" ;;
     allows) shift; cmd_allows "$@" ;;
-    budget | next | pr-ready)
+    budget) shift; cmd_budget "$@" ;;
+    next | pr-ready)
       printf 'sdd-worker: %s is not implemented yet\n' "$1" >&2
       return 2 ;;
     *) usage; return 2 ;;

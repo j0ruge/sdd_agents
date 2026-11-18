@@ -6903,6 +6903,17 @@ mut_WORKER_allows_merge_at_plan() {
 mut_WORKER_allows_ignores_lot() {
   sed -i '/^cmd_allows() {/,/^}/ s@^  effective_level "\$1" "\$lot"$@  effective_level "$1"@' "${1%/*}/sdd-worker"
 }
+# The filter of the campaign's missions dropped from the sum: every line of the ledger counts, other
+# campaigns' and other repos' included. Caught by "budget: the sum counts the campaign's missions and
+# no other" (check-worker.sh).
+mut_WORKER_budget_counts_every_mission() {
+  sed -i '/^cmd_budget() {/,/^}/ s@ and (\.mission | IN(\$ARGS\.positional\[\]))@@' "${1%/*}/sdd-worker"
+}
+# The ceiling never stops: a campaign at its ceiling or above it answers rc 0, and the worker goes on
+# spending. Caught by "budget: at the ceiling or above it the verb leaves rc 1" (check-worker.sh).
+mut_WORKER_budget_never_stops() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if \[ "\${out##\* }" = true \]; then return 1; fi$@  if false; then return 1; fi@' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -7727,6 +7738,8 @@ CATALOG=(
   WORKER_allows_unknown_act
   WORKER_allows_merge_at_plan
   WORKER_allows_ignores_lot
+  WORKER_budget_counts_every_mission
+  WORKER_budget_never_stops
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
