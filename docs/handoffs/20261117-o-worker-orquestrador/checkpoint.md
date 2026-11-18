@@ -1,6 +1,6 @@
 ---
 missao: 20261117-o-worker-orquestrador
-atualizado: 2026-11-17 23:30
+atualizado: 2026-11-18 00:06
 ---
 
 # Checkpoint — O worker orquestrador
@@ -26,7 +26,7 @@ atualizado: 2026-11-17 23:30
 | I6 | O verbo budget | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    budget: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 11; echo "$a $?"` → `3 0` | done | 4095baa |
 | I7 | O verbo next | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    next: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 14; echo "$a $?"` → `5 0` | done | 9de910a |
 | I8 | O verbo pr-ready | `o=$(bash tests/check-worker.sh 2>&1); a=$(grep -c '^  ok    pr-ready: ' <<< "$o"); c=$(grep -c '^mut_WORKER_' tests/check-mutation.sh); test "$c" -ge 19; echo "$a $?"` → `7 0` | done | 26adfe4 |
-| I9 | O comando da sessão (commands/sdd-worker.md) | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    command: ' <<< "$o"` → `3` | pending | — |
+| I9 | O comando da sessão (commands/sdd-worker.md) | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    command: ' <<< "$o"` → `3` | done | 5721c92 |
 | I10 | Documentação e vocabulário | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    docs: ' <<< "$o"` → `1` | pending | — |
 | I11 | A campanha do kit e a gaveta | `o=$(bin/sdd-worker level docs/superpowers/campaigns/20261117-zerar-as-issues 2>/dev/null); a=$(grep -c '^level assisted' <<< "$o"); b=$(grep -c '^- \[ \] ' docs/superpowers/campaigns/20261117-zerar-as-issues/campaign.md 2>/dev/null); echo "$a $b"` → `1 83` | pending | — |
 
