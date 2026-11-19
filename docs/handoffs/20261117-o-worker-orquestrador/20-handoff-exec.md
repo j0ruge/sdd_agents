@@ -133,8 +133,9 @@ escolheu a recomendada (`a1f98d3`): o R18, a suíte e a r9.
 
 ## Boot da próxima fase
 
-**Depois da r10 (`491a976`, A em todo critério, nenhum R): a próxima é o `merge`.** A r9 e a r10
-fecharam o R18, o R19 e o R20, e a r10 leu também o merge da `main` (`f59dc42`). O ato é o `merge` do
+**Depois da r11 (`94abaa8`, A em todo critério, nenhum R): a próxima é o `merge`.** A r9 e a r10
+fecharam o R18, o R19 e o R20, e a r10 leu também o merge da `main` (`f59dc42`). A r11 fechou o R21 e
+o R22, os dois P2 do Codex sobre o `f8e3e02`. O merge espera o recibo do Codex no head. O ato é o `merge` do
 `commands/sdd-worker.md`: `pr-ready` no head do PR #414, lido de novo logo antes do `gh pr merge`, e o
 merge é do dono. O que segue é o registro de como a r9 foi aberta. Ela seguiu a mesma régua do dono de
 20:30, a nota `REVIEW` do `checkpoint-notas.md` (`aebbc70`):
