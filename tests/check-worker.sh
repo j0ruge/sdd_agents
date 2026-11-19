@@ -486,6 +486,14 @@
 # - discarded_missing reads through tree_primitive too, and its call dropped alone is green (the
 #   pass of the R16), the limit of R63 to R66 above.
 #
+# Declared limit of the starter probe of budget_is, no probe:
+# - Its config is written by `sed -e "s|<SDD_HOME>|$ROOT|g"`, and a kit path that holds a `|` ends
+#   that expression: sed refuses it, the config comes out empty, and the probe goes red on a stop
+#   the fixture never set, a wrong failure and never a green one (item 15 of the CodeRabbit triage
+#   of PR #414, docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md). This file
+#   builds no kit under such a path, and read_extra_dir_ok (bin/sdd) refuses a `|` in it, so the
+#   phases of a kit there read no template either.
+#
 # Declared limits of R67, no probe:
 # - templates/delegation.md also writes the cap left unused and the phase the runner may spend past
 #   its own cap, in this repo's OUTPUT_LANG, and this file is English surface (tests/check-lang.sh

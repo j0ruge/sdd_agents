@@ -191,14 +191,14 @@ Cinco trechos, um por seção; todos acrescentam, menos o da § 4, que troca.
 
 A PR lê, nesta ordem: o TL;DR deste arquivo, a tabela acima e o `## Texto proposto`. O corpo do PR tem de
 nomear cada documento `⛔` numa linha com `⛔` (o `gate_PR` confere): `commands/sdd-worker.md` e
-`.claude/rules/anatomia-do-agente.md`, com o texto proposto para o humano aplicar. Levar também as
+`.claude/rules/anatomia-do-agente.md`, com o texto proposto (aplicado em `48b6bc3`). Levar também as
 pendências abaixo, e a parada conhecida do `gate_PR` do kit (rc 2 por falta do carimbo de mutação lê-se
 "pronto para revisão", pela regra do dono).
 
 ## Pendências / Decisions for a Human
 
-- **Aplicar as duas linhas `⛔`** — a sessão headless não escreve em `.claude/`, e `commands/` está fora do
-  `writes:` da DOCS — texto exato em `## Texto proposto`.
+- **Aplicar as duas linhas `⛔`** — feito: a sessão interativa as aplicou em `48b6bc3` (a headless não
+  escreve em `.claude/`, e `commands/` está fora do `writes:` da DOCS); texto em `## Texto proposto`.
 - **O conjunto largo do R3 e do R5** (pendência 2 do `40-review-r4.md`): o worker executa o `.sdd/config.sh`
   de todo checkout do repo, e um pager fora do commit pede uma linha em cada um dos 9 checkouts do kit
   (`git worktree list --porcelain` → 9). Agora é limite declarado na ADR 0022 e no `docs/pipeline.md`; a
