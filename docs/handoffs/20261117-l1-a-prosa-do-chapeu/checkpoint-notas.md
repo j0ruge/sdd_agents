@@ -25,3 +25,6 @@
 - 2026-11-19 16:32 · `I2` · I2 red: hat: the executor writes 20-handoff-exec.md in the increment that leaves no row pending, and its answer says whether it did → FAIL antes da prosa
 - 2026-11-19 16:32 · `I2` · I2 red: hat: the executor restores a mutant with cp and rm, so an incremental build sees a new mtime → FAIL antes da prosa (junto, a asserção das sobras ficou vermelha pelo literal trocado, como o plano previa)
 - 2026-11-19 16:32 · `I2` · desvio do plano: a frase do item D não diz "subagente de um relay" e sim "another session's relay", porque executor_agent_probes proíbe a palavra subagent no chapéu (o Agent é negado); install --force respondeu `updated`, sem CHECKOUT-BUSY; suíte verde
+- 2026-11-19 17:03 · `I3` · I3 red: hat: the reviewer waits for a slow command in the foreground, under a ceiling below the Bash limit → FAIL antes da prosa
+- 2026-11-19 17:03 · `I3` · I3 red: hat: the reviewer writes a probe outside the repo by heredoc, and a test filter that matches nothing is a failure → FAIL antes da prosa
+- 2026-11-19 17:03 · `I3` · install --force respondeu `updated`, sem CHECKOUT-BUSY; a 1ª suíte saiu vermelha só no check-health (sensor sozinho, check-hat rc 1) porque editei as asserções Red com ela em curso; refeita depois da prosa: suite green, 0 FAIL
