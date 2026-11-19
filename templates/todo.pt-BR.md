@@ -11,7 +11,8 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > pendente"). Análise longa e roadmap moram em `docs/`; o item aponta com `Fonte:`.
 >
 > **Achado aberto** — cerca de 6 linhas (teto 8), caixa sempre vazia, atribuição na última linha, ou
-> na de cima da `RECURRED`:
+> na de cima da `RECURRED`. Número que muda vai no corpo, nunca no título: o título é a chave do
+> espelho de issues, e uma medida nele troca a chave a cada medição.
 >
 > ```md
 > - [ ] **<título>** — `<arquivo:linha>` (`<símbolo>`) — <por que importa>. Direção: <o que fazer>.
