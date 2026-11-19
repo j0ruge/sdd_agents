@@ -380,7 +380,7 @@ hat_promise_probes() {
   p3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$pl")"
   p8="$(awk '/^## 8\. /{s=1; next} s && /^## /{s=0} s' "$pl")"
   if grep -qF '`kaizen_log: skipped` in the frontmatter of `00-missao.md`; the K8 row alone dispenses nothing' <<< "$p3" \
-     && grep -qF 'Naming the base branch itself (`main`) is a decision too, and passes, unless' <<< "$p8" \
+     && grep -qF 'Naming the base branch itself (the `DEFAULT_BRANCH` of the target) is a decision too, and passes, unless' <<< "$p8" \
      && grep -qF '`kaizen_log: skipped` with the human, or give the mission its own branch' <<< "$p8"; then
     pass "hat: the planner knows a mission on the base branch cannot promise K8, and writes K8 ✗ as kaizen_log: skipped"
   else fail "hat: sdd-planner no longer writes K8 ✗ as kaizen_log: skipped, or no longer knows a mission on the base branch cannot promise K8"; fi
@@ -645,6 +645,32 @@ planner_agent_probes() {
     pass "hat: the mission template and the pipeline doc say what § 6 says about aprovacao"
   else
     fail "hat: templates/missao.md or docs/pipeline.md went back to auto-approving an all-✅ plan, against § 6 of sdd-planner"
+  fi
+  # L1 (20261117-l1-a-prosa-do-chapeu), items A, B and C. A: § 8 called the base `main`, and a
+  # target can have another DEFAULT_BRANCH, which is what k8_base_refusal compares. B: the relay
+  # hands the planner's text on verbatim, so a hand-back in another language than OUTPUT_LANG is a
+  # paraphrase the human never asked for. C: a Check that fixes the title of a new TODO_FILE item
+  # forces a duplicate when an equivalent item opens between the plan and the execution.
+  local s4 s8 slang
+  s4="$(awk '/^## 4\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  s8="$(awk '/^## 8\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  slang="$(awk '/^## Language/{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'itself (the `DEFAULT_BRANCH` of the target) is a decision too, and passes, unless' <<< "$s8" \
+     && ! grep -qF 'itself (`main`)' "$agent"; then
+    pass "hat: the planner names the base branch by DEFAULT_BRANCH of the target, never by the literal main"
+  else
+    fail "hat: sdd-planner calls the base branch main again, instead of the DEFAULT_BRANCH of the target"
+  fi
+  if grep -qF 'every hand-back to the relay' <<< "$slang" && grep -qF 'OUTPUT_LANG' <<< "$s1"; then
+    pass "hat: the planner writes every hand-back to the relay in OUTPUT_LANG"
+  else
+    fail "hat: sdd-planner no longer says that every hand-back to the relay goes in the OUTPUT_LANG of the target"
+  fi
+  if grep -qF 'an equivalent open item' <<< "$s4" && grep -qF 'RECURRED' <<< "$s4" \
+     && grep -qF 'read the open items' <<< "$s4"; then
+    pass "hat: a planner Check for a new TODO_FILE item also accepts a RECURRED entry on an equivalent open item"
+  else
+    fail "hat: sdd-planner writes a Check that fixes the title of a new TODO_FILE item again, with no RECURRED way out"
   fi
 }
 

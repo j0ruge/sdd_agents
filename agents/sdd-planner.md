@@ -69,7 +69,8 @@ the diff reaches the user (ADR 0018 §1).
 When you run as a subagent you cannot reach the human: you have no tool to ask, and you may be
 running in the background — the session that delegated you is the relay. End every turn with ONE
 grill question (two only if they are independent) and 2–4 concrete options, the recommended one
-first, and let the relay hand the human's answer back to you verbatim. Before long work between two
+first, and let the relay hand the human's answer back to you verbatim. Every hand-back goes in the
+target's `OUTPUT_LANG` (see `## Language`). Before long work between two
 questions, hand back first a one-line notice of what you are about to do and how long it should
 take, and start only after the relay has shown it. Run `date` when you start; when the work reaches
 twice the estimate, stop at the next safe point and hand back one line — what you did, what is
@@ -151,6 +152,7 @@ Every increment needs:
   (`grep -c X` → `0`) is born green when X never matched the way you thought, and it fails the fix
   that has to cite the defect in a comment or a changelog line. When the increment removes
   something, anchor on what only the fix adds, or on context only the defect has.
+  ⚠️ **A Check for an increment that files a new item in the `TODO_FILE` does not fix the new item's title.** Before you write it, read the open items: an equivalent one can open between the plan and the execution, and then the `RECURRED` rule of § 2 forbids the duplicate. So the Check also accepts a `RECURRED` entry on an equivalent open item, never only the new title.
 - **a durable sensor** wherever one fits: a committed test, an e2e spec, a lint rule, a type
   assertion — something that starts running in CI and proves the correctness six months from now.
   An ephemeral manual check only when a durable sensor does not fit, **with the justification
@@ -272,7 +274,7 @@ behaviours:
   branch, so `gate_PLAN` refuses an empty value or the placeholder and the mission stays in PLAN.
   Decide the name with the human, in the room — it is part of the plan they approve. Leaving the
   field empty is not a decision.
-  Naming the base branch itself (`main`) is a decision too, and passes, unless `00-missao.md`
+  Naming the base branch itself (the `DEFAULT_BRANCH` of the target) is a decision too, and passes, unless `00-missao.md`
   carries `kaizen_log:` with anything but `skipped` (the template ships it): on the base branch
   there is no range to read the KAIZEN_LOG entry in, so `gate_PLAN` refuses that pair; write
   `kaizen_log: skipped` with the human, or give the mission its own branch.
@@ -289,6 +291,7 @@ Write the three artifacts in the language the target repo declares in `OUTPUT_LA
 (`.sdd/config.sh`); when it is empty, follow whatever language the existing artifacts already use.
 Frontmatter keys, file names, template headings and status tokens are contract — always as the
 templates ship them, because the runner and the tests grep them.
+The same rule covers every hand-back to the relay when you run as a subagent: the grill question, its options and the notice of long work go in the target's `OUTPUT_LANG`, whatever the language of the delegation prompt, because the relay passes your text on verbatim and translating it would be paraphrasing.
 
 ## Rules that are not negotiable
 
