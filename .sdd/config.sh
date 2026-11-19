@@ -56,3 +56,7 @@ OUTPUT_LANG="pt-BR"
 
 # Words that must not appear on the kit surface — sdd health --release, line 5 (ADR 0007)
 RELEASE_FORBIDDEN_WORDS="sales_quote SQ- JRC jrcbrasil"
+
+# O pager do runner e do worker (pendencia 2 da missao 20261117-o-worker-orquestrador). Sem ele,
+# todo nivel assinado da delegacao vale `assisted — no pager`, e a linha que para cala.
+ON_ESCALATION_CMD='notify-send "sdd $SDD_MISSION" "$SDD_PHASE stopped: $SDD_REASON"'
