@@ -230,12 +230,15 @@ resumes from there.
 
 Each stop runs `ON_ESCALATION_CMD`, writes one line to `journal.md`, and ends the loop.
 Then the session waits for the owner, whatever the level. Page the way the runner does, from the
-repository root, with the stop's name in `SDD_REASON`, the line it rests on in `SDD_GATE_WHY`, and
-five seconds for the pager:
+repository root, with the five fields the runner passes: the stop's name in `SDD_REASON`, the act or
+verb whose line stopped the loop in `SDD_PHASE`, the mission in `SDD_MISSION`, the `PROJECT_NAME`
+of that `.sdd/config.sh` in `SDD_PROJECT`, and the line it rests on in `SDD_GATE_WHY`; and five
+seconds for the pager:
 
 ```bash
 why="$(sdd-worker budget <campaign-dir>)"
-( . .sdd/config.sh && SDD_REASON=<stop> SDD_MISSION=<mission> SDD_GATE_WHY="$why" \
+( . .sdd/config.sh && SDD_REASON=<stop> SDD_PHASE=<act> SDD_PROJECT="${PROJECT_NAME:-}" \
+  SDD_MISSION=<mission> SDD_GATE_WHY="$why" \
   timeout -k 1 5 bash -c "$ON_ESCALATION_CMD" < /dev/null )
 ```
 

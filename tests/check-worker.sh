@@ -118,7 +118,8 @@
 #       stop names the `campaign US$` line of budget, a measured spend, the lines that measured
 #       nothing are paged under their own names (`next-stop`, `no-ceiling`, `no-spend`), and the
 #       line reaches the pager as `SDD_GATE_WHY="$…"`, never between single quotes (achados #30 and
-#       #31 of the r5)
+#       #31 of the r5); the pager call itself passes `SDD_PROJECT=` and `SDD_PHASE=`, as the runner's
+#       escalation_hook does (P2 of the Codex on PR #414, over f8e3e02)
 #   R33 docs/pipeline.md writes, under `## The worker`, a call of every verb main() dispatches and the
 #       ladder in order; README.md has a usage line of sdd-worker and a link to that section; the
 #       ON_ESCALATION_CMD row of config/schema.md names the worker and `assisted`, and its
@@ -2126,6 +2127,14 @@ prose_missing() {
   done
   { grep -qF 'SDD_GATE_WHY="$' <<< "$s" && ! grep -qF "SDD_GATE_WHY='" <<< "$s"; } \
     || printf 'stops: SDD_GATE_WHY by variable\n'
+  # The pager call passes the fields the runner's escalation_hook passes (bin/sdd), the project and
+  # the phase among them: a hook that reads ${SDD_PROJECT:?} aborts on a stop of the worker, and the
+  # owner is not paged (P2 of the Codex on PR #414). Read in the call, from its why= line to the
+  # closing fence, never anywhere in the section.
+  items="$(awk '/^why="\$\(sdd-worker budget/ { c = 1 } c && /^```/ { exit } c' <<< "$s")"
+  for p in 'SDD_PROJECT=' 'SDD_PHASE='; do
+    grep -qF "$p" <<< "$items" || printf 'stops: %s in the pager call\n' "$p"
+  done
   items="$(section "$1" 'Never' 2>/dev/null | grep '^- ')"
   for p in 'Delete a branch or a worktree' 'Push to the base branch' 'visual acceptance' "kit's main checkout"; do
     grep -qF "$p" <<< "$items" || printf 'never: %s\n' "$p"
@@ -2221,6 +2230,11 @@ SDD_REASON=next-stop'
 control 'why pasted' prose_missing 'stops: SDD_GATE_WHY by variable' "s/SDD_GATE_WHY=\"\\\$why\"/SDD_GATE_WHY='<line>'/"
 control 'why pasted beside the variable' prose_missing 'stops: SDD_GATE_WHY by variable' "/SDD_GATE_WHY=\"\\\$why\"/ s/\$/ SDD_GATE_WHY='<line>'/"
 control 'why pasted between double quotes' prose_missing 'stops: SDD_GATE_WHY by variable' 's/SDD_GATE_WHY="\$why"/SDD_GATE_WHY="<line>"/'
+control 'no project in the call' prose_missing 'stops: SDD_PROJECT= in the pager call' 's/ SDD_PROJECT="\${PROJECT_NAME:-}"//'
+control 'no phase in the call' prose_missing 'stops: SDD_PHASE= in the pager call' 's/ SDD_PHASE=<act>//'
+control 'project only beside the call' prose_missing 'stops: SDD_PROJECT= in the pager call' 's/ SDD_PROJECT="\${PROJECT_NAME:-}"//
+/^## The five stops$/a\
+SDD_PROJECT="${PROJECT_NAME:-}"'
 if [ -z "$got" ]; then
   pass 'command: the five stops, the never list and the context rules are written'
 else
