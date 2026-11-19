@@ -631,6 +631,16 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   passou na r3. Seguir a tabela compra uma EXEC que não muda nota; não seguir a contraria. Direção: uma linha
   "LOW sem efeito na nota → fica no relatório, com motivo", decidida junto da régua do `CONTEXT.md:140`.
   — descoberto pela retro do `codereview` na r3 da `20261028-whf-162-jdb-na-descricao` (2026-10-30)
+  RECURRED 1: sdd_agents/20261117-o-worker-orquestrador (2026-11-18)
+
+- [ ] **A rodada de revisão relê a missão inteira, porque o chapéu não passa `base=` à skill** —
+  `agents/sdd-reviewer.md:46` (`over the mission diff`) — a `/codereview:codereview` só revisa o delta com
+  `base=<head da rodada anterior>`; sem ele usa o merge-base com a `main`, e cada rodada acha LOW novo em
+  código que nenhum R tocou. Medido no PR #414: rodada ~1h30, R de 45–55 min fosse HIGH ou prosa, e a
+  rodada do runner nem grava o head que revisou. Direção: a rodada grava o head (como o `reviewed_head:`
+  do worker) e a seguinte invoca com `base=` e os achados abertos; LOW fora do delta vai ao TODO (D15).
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
+  orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O revisor tem de esperar o comando no mesmo turno, sem o `Monitor`, e o harness barra o `sleep`** —
   `agents/sdd-reviewer.md:144` (`poll it, in this same turn`) — a linha 8 tira `Monitor` e `ScheduleWakeup`, e
