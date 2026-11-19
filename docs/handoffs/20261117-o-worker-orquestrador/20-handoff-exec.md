@@ -2,9 +2,9 @@
 missao: 20261117-o-worker-orquestrador
 fase: EXEC
 status: done
-sessao: ca2c615d-f566-467c-a40f-214652493596 (a sessão orquestradora, fora do runner, escreve a seção da r7 depois do subagente sdd-executor do R17)
-data: 2026-11-19 00:19
-gate: "no 35a0753 com a ADR em a8b09ee, sensor a sensor, pela sessão orquestradora (a suíte inteira, tests/run-all.sh, roda no head deste handoff antes da r8): tests/check-worker.sh → rc 0, worker verbs: 67 probe(s) em 41 famílias, nenhuma linha FAIL, 95 s; grep -c '^mut_WORKER_' tests/check-mutation.sh → 90; tests/check-todo.sh → rc 0, 91 finding(s), every anchor on target; tests/check-lang.sh e tests/check-adr.sh rc 0; pelo subagente do R16, no 998d077: check-mutation.sh --anchors 903 de 903, os dois mutantes discarded mortos por --only, os Checks I6 R7 R12 R14 no esperado; pelo do R17, no af6b320: os Checks R12 R13 R16 no esperado, shellcheck -S warning limpo; checkpoint 30 de 30 done (I1–I11, F1, F2, R1–R17)"
+sessao: ca2c615d-f566-467c-a40f-214652493596 (a sessão orquestradora, fora do runner, escreve a seção da r8 depois do subagente sdd-executor do R18)
+data: 2026-11-19 06:40
+gate: "no e48190c, sensor a sensor, pelo subagente do R18 (a suíte inteira, tests/run-all.sh, roda no head deste handoff antes da r9, pela sessão orquestradora): tests/check-worker.sh → rc 0, 67 probe(s), nenhuma linha ok nova; check-mutation.sh --anchors 903 de 903; tests/check-todo.sh → rc 0, 91 finding(s), 91 de 91 âncoras; check-lang, check-checkpoint e check-pipefail rc 0; shellcheck -S warning limpo; os Checks R13 R14 R16 R17 no esperado; o Check do R18 1 1 1 1 → 1 0 0 0. A última suíte inteira é a do 67fb6f9 (antes da r8): rc 0, 2165 ok, 0 FAIL, anchors 903 de 903, 881 s; os 30 Checks done de então, 30 de 30. Checkpoint 31 de 31 done (I1–I11, F1, F2, R1–R18)"
 ---
 
 # Handoff — EXEC — O worker orquestrador
@@ -14,21 +14,22 @@ gate: "no 35a0753 com a ADR em a8b09ee, sensor a sensor, pela sessão orquestrad
 
 ## TL;DR
 
-Os onze incrementos, os dois consertos da QA (`F1`, `F2`) e os dezessete da REVIEW (`R1`–`R17`) estão
+Os onze incrementos, os dois consertos da QA (`F1`, `F2`) e os dezoito da REVIEW (`R1`–`R18`) estão
 feitos. `R6`–`R10` consertam os 28 achados reais do CodeRabbit no PR #414 (r5). `R11`–`R15` consertam
 os seis da r6 e as quatro decisões do dono das 17:05: o `pr-ready` exige os oito critérios, a missão
 mergeada sem worktree segue da campanha (lida na base), o teto da campanha é limite duro (`no room`),
 e o lote de um ato sobre uma missão sai do `lot:` dela (`allows … --mission`). `R16` e `R17` fecham
-a r7: o `budget` declara a missão largada que ele não acha, e um lote de cinco LOW. O sensor tem 67
-asserções em 41 famílias e 90 mutantes; a suíte inteira no head é da sessão orquestradora, que a roda
-antes da r8, e nada foi empurrado depois da r5.
+a r7: o `budget` declara a missão largada que ele não acha, e um lote de cinco LOW. A r8 deu A em
+todos os critérios; o `R18` é o lote de dois LOW dela, e compra a r9 porque mexe fora da pasta da
+missão. O sensor tem 67 asserções em 41 famílias e 90 mutantes. A suíte inteira no head é da sessão
+orquestradora, que a roda antes da r9, e nada foi empurrado depois da r5.
 
 ## Estado do repo
 
-- **Branch:** `feat/o-worker-orquestrador`, upstream `origin/feat/o-worker-orquestrador` no `3b8c711` (o head do PR #414), 47 commits à frente antes deste handoff, nada empurrado depois da r5
-- **Último commit de código:** `af6b320` `fix(worker): o lote de LOW da r7 — o upstream que não lê, a medida com o comando, o terceiro gasto` (R17); o checkpoint dele em `35a0753`, a ADR 0022 §8 em `a8b09ee`, e este handoff num commit logo depois
+- **Branch:** `feat/o-worker-orquestrador`, upstream `origin/feat/o-worker-orquestrador` no `3b8c711` (o head do PR #414), 52 commits à frente antes deste handoff, nada empurrado depois da r5
+- **Último commit de código:** `8f741f5` `fix(worker): o fixture da R69 grava a campanha no ledger e o cmd_budget conta os três gastos` (R18); o checkpoint dele em `e48190c`, e este handoff num commit logo depois
 - **Working tree:** limpo depois do commit do handoff
-- **Suíte:** a última corrida inteira é a do `3a77d92` (antes da r7: rc 0, 2164 `ok`, anchors 901 de 901, 14 min 32 s); o `R16` e o `R17` rodaram os sensores que tocaram, não a suíte, e a sessão orquestradora a roda no head deste handoff antes da r8
+- **Suíte:** a última corrida inteira é a do `67fb6f9`, antes da r8: rc 0, 2165 `ok`, anchors 903 de 903, 14 min 41 s. O `R18` rodou só os sensores que tocou, e a sessão orquestradora roda a suíte no head deste handoff antes da r9
 - **E2E:** não há `E2E_CMD`: o kit é bash e markdown, sem interface
 
 ## O que foi feito
@@ -96,6 +97,26 @@ dela voltou com a recomendada (`e59e163`): a fonte da missão largada é o `camp
 - `af6b320` — R17 (#2 a #6, lote de LOW, sem sabotagem nem mutante): a linha do upstream que não lê cobre as três grafias que o código imprime, e o upstream `[gone]` fica nomeado no `base_copies` e no `docs/pipeline.md`; a medida do reuso de nome de branch ganha o comando ao lado (`0 of 161 merged pull requests`, de 162, em 2026-11-19 00:00); o template e o `docs/pipeline.md` contam o terceiro gasto fora dos tetos, o da sessão que orquestra e dos subagentes dela; a frase do R11 acima passa a "a mesma lacuna"; o cabeçalho do sensor conta a R68. Uma sexta parte, que o R16 achou: o `KAIZEN_LOG.md` passa a contar dezessete `R<n>`
 - `a8b09ee` — a sessão orquestradora acerta a ADR 0022 §8 e as Consequences, que ainda diziam que a campanha só passa do teto pelo excesso do runner (o subagente do R17 apontou e deixou fora do lote)
 
+### Rodada r8 da REVIEW (`R18`, dos achados #1 e #2 do `40-review-r8.md` e da decisão do dono das 06:21)
+
+A r8 (`c2545d2`) é delta (`3a77d92..67fb6f9`, `base=` passado à skill). Ela deu A em todos os
+critérios e não abriu R de severidade. Abriu o lote de dois LOW, o R18. O R18 mexe em `bin/`, `tests/`
+e no `KAIZEN_LOG.md`, e o `pr-ready` recusa commit fora da pasta da missão depois do `reviewed_head:`.
+Por isso a pendência 1 dela perguntou se o lote compra uma r9 ou fica para depois do merge. O dono
+escolheu a recomendada (`a1f98d3`): o R18, a suíte e a r9.
+
+- `8f741f5` — R18 (#1 e #2, lote de LOW, sem sabotagem nem mutante):
+  - As três linhas de ledger do fixture da `discarded: ` (R69) levam `campaign: "di-gone"`, como o
+    runner as escreverá. Hoje isso não muda resposta nenhuma, e a família passa a ficar vermelha no
+    dia em que o `budget` somar por `.campaign`. Foi medido em duas cópias descartáveis:
+    - com o código de hoje, rc 0 e a família verde;
+    - com o leitor da fonte (b), rc 1 e só ela vermelha, `closed removed` e `dropped removed`
+      respondendo US$ 102.00 no lugar de 17.00 e 10.00.
+  - O comentário do `cmd_budget` deixa de dizer "never past the one signed" e conta os três gastos,
+    sem tocar a frase que a `ceiling: ` lê.
+  - O `KAIZEN_LOG.md` conta dezoito `R<n>`.
+  - O item do `pr-ready` no `TODO.md` foi reancorado de `:1210` para `:1214`.
+
 ## Artefatos
 
 | Arquivo | O que contém |
@@ -112,13 +133,18 @@ dela voltou com a recomendada (`e59e163`): a fonte da missão largada é o `camp
 
 ## Boot da próxima fase
 
-**Depois do `R17`: a r7 fecha os seus dois incrementos, e a próxima é a r8, a rodada delta do
-worker.** Pela mesma régua do dono de 20:30 (nota `REVIEW` do `checkpoint-notas.md`, `aebbc70`), a r8
-lê só `3a77d92..HEAD` e se cada achado da r7 fechou como o R dele dizia, invocando
-`/codereview:codereview base=3a77d92647a2df7b6b1ab4002ab9095bcff839dd`. Ela confere também o lote
-R17, porque existe pelo R16. Só CRITICAL/HIGH, ou MEDIUM reproduzido num verbo de confiança, abre
-rodada. Antes dela, a sessão orquestradora relê os Checks `done` e roda a suíte inteira no head. O
-merge continua com o dono. O que mudou e é visível desde a r7:
+**Depois do `R18`: a r8 fecha o seu lote, e a próxima é a r9, a rodada delta do worker.** Ela
+segue a mesma régua do dono de 20:30, a nota `REVIEW` do `checkpoint-notas.md` (`aebbc70`):
+- lê só `67fb6f9..HEAD` e confere se os achados #1 e #2 da r8 fecharam como o R18 dizia;
+- invoca `/codereview:codereview base=67fb6f9290bab52fdb474dce7765c36de3b8fc1b`;
+- existe só porque o `pr-ready` recusa commit fora da pasta da missão depois do `reviewed_head:`;
+- só CRITICAL/HIGH, ou MEDIUM reproduzido num verbo de confiança, abre rodada.
+
+Antes dela, a sessão orquestradora relê os Checks `done` e roda a suíte inteira no head. O merge
+continua com o dono. O que mudou desde a r8 não é visível para quem usa o kit: nenhuma resposta de
+verbo mudou. O R18 mexeu num fixture do sensor, num comentário do `bin/sdd-worker` e no `KAIZEN_LOG.md`.
+
+E o que mudou na r7:
 
 - **`budget`** (R16): nenhuma resposta mudou. A missão que nunca chegou à base e cujo worktree saiu
   segue fora da soma, e agora o limite está escrito nos quatro lugares onde quem lê o `budget` lê,
@@ -138,7 +164,7 @@ E o que mudou na r6:
 - **`commands/sdd-worker.md`** (R13 a R15): a linha do rc 2 em `## The transitions`, o corte do
   worktree no ato `plan`, o `approve` no worktree da missão, o `no-room` e o `--mission` em cada ato.
 
-As escolhas, os limites e cada sabotagem de `R11`–`R17` estão nas notas do `checkpoint-notas.md`.
+As escolhas, os limites e cada sabotagem de `R11`–`R18` estão nas notas do `checkpoint-notas.md`.
 
 **O que vale desde a primeira QA, num repo sem interface.** O que é visível para quem usa o kit:
 
