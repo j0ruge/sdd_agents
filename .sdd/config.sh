@@ -56,3 +56,10 @@ OUTPUT_LANG="pt-BR"
 
 # Words that must not appear on the kit surface — sdd health --release, line 5 (ADR 0007)
 RELEASE_FORBIDDEN_WORDS="sales_quote SQ- JRC jrcbrasil"
+
+# O pager do runner e do worker (pendencia 2 da missao 20261117-o-worker-orquestrador). Sem ele,
+# todo nivel assinado da delegacao vale `assisted — no pager`, e a linha que para cala.
+# Urgencia critical: no GNOME o aviso fica na tela ate ser fechado, e o de urgencia normal some em
+# segundos para a bandeja (com dois monitores, fora da vista de quem olha o outro); a voz chega a
+# quem nao esta olhando a tela. Medido em 2026-11-19: rc 0 em 2,37 s, dentro dos 5 s do pager.
+ON_ESCALATION_CMD='notify-send -u critical "sdd $SDD_MISSION" "$SDD_PHASE stopped: $SDD_REASON"; spd-say -w "sdd parou: $SDD_PHASE"'
