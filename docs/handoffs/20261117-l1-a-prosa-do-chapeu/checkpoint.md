@@ -1,6 +1,6 @@
 ---
 missao: 20261117-l1-a-prosa-do-chapeu
-atualizado: 2026-11-19 20:35
+atualizado: 2026-11-19 20:52
 ---
 
 # Checkpoint — L1: a prosa do chapéu e dos docs
@@ -30,7 +30,7 @@ atualizado: 2026-11-19 20:35
 | I7 | As duas sementes do TODO.md: número que muda não vai no título (item M) | `o=$(bash tests/check-templates.sh 2>&1); grep -c '^  ok    todo.*: a number that changes goes in the body, never in the title' <<< "$o"` → `2` | done | bc8710f |
 | I8 | A ajuda do sdd why diz que o gate roda a suíte (item N) | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    help: sdd why says its gate runs TEST_CMD for EXEC, QA or REVIEW, as sdd boot does' <<< "$o"` → `1` | done | c02da26 |
 | I9 | Fecho: RESOLVED by nos 14 itens e o 20-handoff-exec.md | `b=$(git show origin/main:TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `14` | done | c27e8c7 |
-| R1 | Achado #1 da r1: a receita de espera do revisor manda subir o timeout da própria chamada Bash para 600000 ms, ou o laço vai para segundo plano aos 120 s | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-reviewer.md .claude/agents/sdd-reviewer.md; c=$?; echo "$(grep -c '^  ok    hat: the reviewer runs the wait loop in a Bash call whose own timeout is raised to 600000 ms' <<< "$o") $c"` → `1 0` | pending | — |
+| R1 | Achado #1 da r1: a receita de espera do revisor manda subir o timeout da própria chamada Bash para 600000 ms, ou o laço vai para segundo plano aos 120 s | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-reviewer.md .claude/agents/sdd-reviewer.md; c=$?; echo "$(grep -c '^  ok    hat: the reviewer runs the wait loop in a Bash call whose own timeout is raised to 600000 ms' <<< "$o") $c"` → `1 0` | done | 772540c |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele

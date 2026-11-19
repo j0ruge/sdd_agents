@@ -43,3 +43,4 @@
 - 2026-11-19 19:31 · `I9` · I9 red: Check → 0 antes; 14 depois; 4 linhas requebradas (120 col) e o item F mantido em 8 linhas; check-todo --check rc 0, --anchors 103 medidas, 0 fora do alvo; suíte verde (destacada, rc 0, 0 FAIL); 20-handoff-exec.md em c8251cc
 - 2026-11-19 20:03 · `QA` · jornada de 5 passos no terminal verde, 0 achados, 0 F<n>; suíte verde rc 0, 0 FAIL; 30-handoff-qa.md status: done
 - 2026-11-19 20:35 · `R1` · nasceu do achado #1 da r1 (MEDIUM, reproduzido): timeout 590 do laço de espera numa chamada Bash de prazo padrão foi para segundo plano aos 120 s; com timeout 600000 segurou 590 s
+- 2026-11-19 20:52 · `R1` · R1 red: hat: the reviewer runs the wait loop in a Bash call whose own timeout is raised to 600000 ms → FAIL antes da prosa; R de prosa, sem sabotagem (parágrafo relido, única repetição é o corpo do item F do TODO.md); âncoras 103 medidas, 0 fora do alvo; suíte verde rc 0, 0 FAIL; commit 772540c

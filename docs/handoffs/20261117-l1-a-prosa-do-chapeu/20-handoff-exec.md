@@ -2,9 +2,9 @@
 missao: 20261117-l1-a-prosa-do-chapeu
 fase: EXEC
 status: done
-sessao: e0355e8c-77d9-481b-b61c-3a9ba3e8f33a
-data: 2026-11-19 19:31
-gate: "tests/run-all.sh → suite green, rc=0, 0 linhas ^  FAIL, 2181 linhas ^  ok (coordination: 192 passed, 0 failed); bash tests/check-hat.sh rc 0, 118 ok; check-templates.sh → 2 ok da frase do item M; cmp do espelho rc 0 para planner, executor, reviewer, docs e qa; check-todo.sh --check → 103 finding(s), all within 8 lines…, rc 0; --anchors → 103 measured, 0 off target; Check do I9 → 14"
+sessao: 5d9ebc05-bb88-4aaf-97b3-456ccb75cb9e
+data: 2026-11-19 20:51
+gate: "R1 (r1): tests/run-all.sh → suite green, rc=0, 0 linhas ^  FAIL; Check do R1 → 1 0; check-todo.sh --anchors TODO.md → 103 measured, 0 off target. I9: tests/run-all.sh → suite green, rc=0, 0 linhas ^  FAIL, 2181 linhas ^  ok (coordination: 192 passed, 0 failed); bash tests/check-hat.sh rc 0, 118 ok; check-templates.sh → 2 ok da frase do item M; cmp do espelho rc 0 para planner, executor, reviewer, docs e qa; check-todo.sh --check → 103 finding(s), all within 8 lines…, rc 0; --anchors → 103 measured, 0 off target; Check do I9 → 14"
 ---
 
 # Handoff — EXEC — L1: a prosa do chapéu e dos docs
@@ -17,7 +17,8 @@ gate: "tests/run-all.sh → suite green, rc=0, 0 linhas ^  FAIL, 2181 linhas ^  
 Os 9 incrementos estão `done`: os 14 achados de prosa (A a N) ganharam a frase e uma asserção cada
 (13 em `tests/check-hat.sh`, 2 em `tests/check-templates.sh`), os cinco chapéus editados estão
 iguais ao espelho, e os 14 itens do `TODO.md` carregam `RESOLVED by <hash>`, com os títulos
-intactos e a catraca sem mudar. Suíte verde. A QA percorre a jornada no terminal (abaixo).
+intactos e a catraca sem mudar. Suíte verde. A QA percorre a jornada no terminal (abaixo). Rodada r1 da REVIEW: o `R1` (`772540c`)
+fechou o único achado, a receita de espera do revisor sem o `timeout: 600000` da chamada Bash.
 
 ## Estado do repo
 
@@ -38,6 +39,20 @@ intactos e a catraca sem mudar. Suíte verde. A QA percorre a jornada no termina
 - `bc8710f` — I7, item M: as duas sementes do `TODO.md` dizem que número que muda vai no corpo, nunca no título
 - `c02da26` — I8, item N: a entrada do `sdd why` no `sdd help` diz que o gate roda o `TEST_CMD` para EXEC, QA ou REVIEW
 - `c27e8c7` — I9: `RESOLVED by` nos 14 itens; quatro linhas requebradas para caber em 120 colunas e 8 linhas
+
+## Rodada r1 da REVIEW — os incrementos de conserto
+
+- `772540c` — R1, achado #1 da r1 (MEDIUM): a seção "Two ways this session dies" do
+  `agents/sdd-reviewer.md` (e o espelho) manda rodar o laço `timeout 590` numa chamada Bash com o
+  parâmetro `timeout: 600000`, porque o padrão de 120 000 ms a manda para segundo plano aos 120 s;
+  o probe novo de `tests/check-hat.sh` (`the reviewer runs the wait loop in a Bash call whose own
+  timeout is raised to 600000 ms`) foi vermelho antes da frase. R de prosa: sem linha a degradar; o
+  parágrafo foi relido inteiro, e a única repetição da receita fora do chapéu é o corpo do item F do
+  `TODO.md`, que é registro do achado e fica como está. Nesta sessão a suíte passou dos 600 s numa
+  chamada direta e foi para segundo plano no teto; o laço da receita, numa chamada com o mesmo
+  `timeout: 600000`, leu o `rc=0` em primeiro plano.
+
+Para a r2: o delta é `517eeac..772540c` (três arquivos), mais este handoff e o checkpoint.
 
 ## Artefatos
 
