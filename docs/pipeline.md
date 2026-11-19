@@ -1860,8 +1860,10 @@ read through git (`for-each-ref`, `ls-tree`, `show`) as the last fetch left it. 
 whose worktree was removed while that checkout was behind is still the campaign's: `next` does not
 plan its lot again and `budget` still counts its spend, and a mission on disk and in the base is one
 mission. An upstream that is set and does not read stops `budget`, `level` and `next` with rc 1,
-naming it; a checkout on a detached HEAD or on a branch with no upstream reads no base, and a
-mission merged after the last fetch is not in it until the next one.
+naming it — an upstream `[gone]` among them (as `%(upstream:track)` prints it: the remote branch
+deleted after the merge and pruned by a fetch), whose ref `%(upstream)` still prints and whose
+`git ls-tree` exits 128; a checkout on a detached HEAD or on a branch with no upstream reads no
+base, and a mission merged after the last fetch is not in it until the next one.
 
 ### The ladder and the table of acts
 
@@ -1962,8 +1964,13 @@ campaign's: the folders under the repo's `HANDOFF_DIR` whose `00-missao.md` decl
 `campaign:`, in the campaign's checkout, in every linked worktree of the repo and in the base (the
 tree of the upstream of the branch that checkout has checked out), each mission once (a
 `git worktree list` that fails is `no spend — <the call> failed (rc <n>)`, and an upstream that does
-not read `no spend — the upstream <ref> of <checkout> does not read: …`, rc 1, never a smaller
-sum). Money is counted in cents: the sum and the ceiling each go through `* 100 | round` before
+not read is one of three lines: `no spend — the upstream of <checkout> does not read: git
+for-each-ref failed (rc <n>)`, with no ref to name, when the branches do not list;
+`no spend — the upstream <upstream> of <checkout> does not read: git ls-tree <upstream> failed
+(rc <n>)`, or `git show <upstream>:<path>` in the place of the `ls-tree`, when its tree does not
+read, an upstream `[gone]` among them; and `no spend — no copy of the upstream <upstream> of
+<checkout> could be made under <TMPDIR>` — each rc 1, never a smaller sum). Money is counted in
+cents: the sum and the ceiling each go through `* 100 | round` before
 they are compared, so `0.10 + 0.70`, a binary `0.7999999999999999`, reaches a ceiling of `0.80`, and
 both are printed from those cents. An absent ledger is zero spent. The mission cap it prints is the
 signed `budget_mission_usd:` as written, never rounded (`%.2f` would print `0.004` as `0.00`, the
@@ -1991,9 +1998,10 @@ since the next run may spend up to its cap; a left equal to it opens the run, an
 ends at its ceiling exactly. The cap compared is the signed one, because the cap the runner applies
 never passes the signed (a config that would set it higher stops `budget` first) and one below it
 only spends less. So the campaign may end with up to one mission cap unused, and passes the one
-signed only by the phase the runner may spend past its own cap and by the spend of a mission
-`budget` does not find (both in Declared limits). `budget` does not know the act it comes before,
-so the stop holds before every one, a merge among them.
+signed only by the phase the runner may spend past its own cap, by the spend of a mission `budget`
+does not find, and by the spend of the orchestrating session and of its subagents, which is
+outside both ceilings (all three in Declared limits). `budget` does not know the act it comes
+before, so the stop holds before every one, a merge among them.
 
 **`next`** walks the lots in table order and stops at the first one not merged: no mission → `plan`;
 a mission whose `aprovacao:` the runner's `gate_PLAN` would not admit (only `auto` and `humano-…`
@@ -2006,8 +2014,13 @@ never the lot's. The merge is read before the approval: a lot whose pull request
 when a copy of its mission left in an old worktree is not approved, and a mission that names a
 branch is asked about even when it is not approved. Declared limit: `--head` matches a name, never
 its use, so a merged pull request of an earlier use of the same branch name makes the lot done;
-measured on 2026-11-18, 0 of 160 merged pull requests of the kit share a head name with another of
-its 161 pull requests, so it stays a limit and not a fix. A `gh` that
+measured on 2026-11-19, 0 of 161 merged pull requests of the kit share a head name with another of
+its 162 pull requests, so it stays a limit and not a fix. The measure is
+`gh pr list --state all --limit 1000 --json state,headRefName --jq '. as $a | [.[] |
+select(.state == "MERGED")] as $m | [$m[] | .headRefName as $h | select([$a[] |
+select(.headRefName == $h)] | length > 1)] |
+"\(length) of \($m | length) merged, \($a | length) in all"'`, run in the kit's checkout, which
+printed `0 of 161 merged, 162 in all`. A `gh` that
 fails, or answers off its contract, is rc 3 with no act — "could not read" never becomes "no pull
 request", which would send the session to run the lot again. Two missions on one lot, an approved
 mission with no branch, no `campaign.md`, a `campaign:` in it that is not the directory's name (an

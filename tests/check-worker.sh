@@ -325,11 +325,13 @@
 #       source exists (achado #1 of the r7)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33,
-# R60 and R63 to R67 carry their own negative control: each checker runs on the files, where it has
+# R60 and R63 to R68 carry their own negative control: each checker runs on the files, where it has
 # to miss nothing, and on copies with one thing taken out, where it has to name exactly that thing.
 # A checker that never misses is decoration. R64, R65 and R67 also read a comment of bin/sdd-worker,
 # which the catalogue does reach (mut_WORKER_reuse_*, mut_WORKER_blind_*, mut_WORKER_ceiling_*); R63
-# and R66 read the command and docs/pipeline.md alone, so their controls are all they have. R69
+# and R66 read the command and docs/pipeline.md alone, so their controls are all they have. R68
+# reads the command, docs/pipeline.md and the comment of cmd_allows, and mut_WORKER_derived_* reach
+# the code of cmd_allows, never that comment, so its controls are all its prose has. R69
 # carries the same control over its four places, and two of them are comments of bin/sdd-worker,
 # which mut_WORKER_discarded_* reach.
 #

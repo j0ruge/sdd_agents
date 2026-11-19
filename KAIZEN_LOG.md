@@ -8,9 +8,9 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 **Missão:** `20261117-o-worker-orquestrador` ([ADR 0022](docs/adr/0022-the-worker-is-a-session-orchestrator.md)),
 a primeira missão do kit executada por `sdd run` num worktree ligado, pelo `sdd` do PATH (decisões 6
-e 12 do `00-missao.md`). Onze incrementos do plano, dois `F<n>` da QA e quinze `R<n>` da REVIEW,
-contados em 2026-11-18: R1 e R2 da r1, R3 e R4 da r2, R5 da r3, R6 a R10 da r5, R11 a R13 da r6, e
-R14 e R15 das decisões do dono sobre as pendências da r6 (a r4 não abriu nenhum).
+e 12 do `00-missao.md`). Onze incrementos do plano, dois `F<n>` da QA e dezessete `R<n>` da REVIEW,
+contados em 2026-11-19: R1 e R2 da r1, R3 e R4 da r2, R5 da r3, R6 a R10 da r5, R11 a R13 da r6,
+R14 e R15 das decisões do dono sobre as pendências da r6, e R16 e R17 da r7 (a r4 não abriu nenhum).
 
 **Antes** (medido em `5221477`, o corte da branch, e no merge-base `7ea43e3`):
 - `bin/` com `sdd`, `sdd-coordination.py` e `sdd-link-agents`; `commands/` só com `sdd-plan.md`:

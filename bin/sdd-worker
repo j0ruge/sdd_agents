@@ -615,7 +615,10 @@ checkouts_of() {
 # the paths in. rc 0 and no copy when there is no upstream: a detached HEAD, or a branch with none
 # set. Returns 1, with the reason in BASE_WHY, when the upstream does not read — a for-each-ref, an
 # ls-tree or a show that fails, before printing or after, each judged by its rc — or no temporary
-# directory can be made for the copies. Called, never substituted.
+# directory can be made for the copies. An upstream `[gone]` (as %(upstream:track) prints it: the
+# remote branch deleted after the merge and pruned by a fetch) is one that does not read: %(upstream)
+# still prints its ref, the ls-tree of that ref exits 128, and budget, level and next stop, naming
+# it. Called, never substituted.
 base_copies() {
   local root="$1" hd="$2" id="$3" out up e rc=0
   BASE_DIRS=(); BASE_WHY=""; BASE_UP=""; BASE_COPY=""
@@ -913,8 +916,13 @@ pr_states() {
 # when every copy is: approve is the act the ladder grants last, run is not. Declared limits: the
 # branch read is the first copy's that names one; and `--head` matches a name, never its use, so
 # a merged pull request of an earlier use of the same branch name makes the lot done (achado #5 of
-# the mission's review r6) — measured on 2026-11-18, 0 of 160 merged pull requests of the kit share
-# a head name with another of its 161 pull requests, so it stays a limit and not a fix.
+# the mission's review r6) — measured on 2026-11-19, 0 of 161 merged pull requests of the kit share
+# a head name with another of its 162 pull requests, so it stays a limit and not a fix. The measure,
+# run in the kit's checkout, printed `0 of 161 merged, 162 in all`:
+#   gh pr list --state all --limit 1000 --json state,headRefName --jq '. as $a | [.[] |
+#   select(.state == "MERGED")] as $m | [$m[] | .headRefName as $h | select([$a[] |
+#   select(.headRefName == $h)] | length > 1)] |
+#   "\(length) of \($m | length) merged, \($a | length) in all"'
 cmd_next() {
   [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
   local dir="${1%/}" cf id root l i m p pend branch act="" ahead="" n s merged open closed
