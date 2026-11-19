@@ -903,6 +903,36 @@ doc_finding_prs_probes() {
   fi
 }
 
+# --- the operator docs (items J, K, L of 20261117-l1-a-prosa-do-chapeu) ---------------------------
+# J: the README clone line called the repository PRIVATE, and it is public. K: the Symptom of the
+# vanished `sdd run` searched with `grep 'bin/sdd run'`, which finds its own grep, and a wait loop on
+# `pgrep -f 'sdd run <mission>'` matches the shell that waits, so it never ends; the section now
+# finds it by `[b]in/sdd run`, waits by `tail --pid=` and names `pipeline complete` as the end.
+# L: PR 391 nearly merged with a Major still open on the head while mergeable_state and a bot check
+# were green; step 7 of the recipe counts the unresolved review threads first.
+doc_operator_probes() {
+  local readme="$ROOT/README.md" fm="$ROOT/docs/failure-modes.md" fp="$ROOT/docs/finding-prs.md" sec
+  if grep -qxF '# git clone https://github.com/j0ruge/sdd_agents.git' "$readme" \
+     && ! grep -qF 'PRIVATE' "$readme"; then
+    pass "doc: the README shows the clone line without calling the repository private"
+  else
+    fail "doc: the README clone line is gone or the README calls the repository PRIVATE"
+  fi
+  sec="$(awk '/^## The `sdd run` process itself disappeared/{on=1; print; next} on && /^## /{on=0} on' "$fm")"
+  if [ -n "$sec" ] && grep -qF "pgrep -af '[b]in/sdd run" <<< "$sec" \
+     && grep -qF 'tail --pid=' <<< "$sec" && grep -qF 'pipeline complete' <<< "$sec" \
+     && ! grep -qF "grep 'bin/sdd run'" <<< "$sec"; then
+    pass "doc: failure-modes.md finds a detached sdd run without matching the watcher, and says how to wait for its end"
+  else
+    fail "doc: the vanished-sdd-run section of failure-modes.md is missing, still greps for bin/sdd run, or lost the [b]in pgrep, the tail --pid= wait or the pipeline complete end"
+  fi
+  if grep -qF 'reviewThreads' "$fp" && grep -qF 'isResolved' "$fp" && grep -qF 'unresolved: 0' "$fp"; then
+    pass "doc: the finding-PR recipe merges only with zero unresolved review threads on the head, with the command beside it"
+  else
+    fail "doc: docs/finding-prs.md merges without counting the unresolved review threads on the head (reviewThreads, isResolved, unresolved: 0)"
+  fi
+}
+
 
 # --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
 # The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
@@ -1248,6 +1278,7 @@ command_branch_cwd_probes
 command_planner_unregistered_probes
 background_question_probes
 doc_finding_prs_probes
+doc_operator_probes
 publisher_stamp_probes
 boot_probes
 release_probes

@@ -42,7 +42,7 @@ the CLI is killed; it is released automatically when the last descendant exits. 
 ## Installing into a target repo
 
 ```bash
-# git clone https://github.com/j0ruge/sdd_agents.git   # PRIVATE repository
+# git clone https://github.com/j0ruge/sdd_agents.git
 export PATH="$HOME/repos/sdd_agents/bin:$PATH"     # or ln -s .../bin/sdd ~/.local/bin/sdd
                                                    #   (and .../bin/sdd-worker beside it, for the worker)
 

@@ -792,8 +792,10 @@ environment before blocking there under the wrong kind. `sdd retry` is the human
 
 ## The `sdd run` process itself disappeared
 
-**Symptom:** no `BLOCKED`, no rc, no last line — the run is simply not there any more. `ps -eo
-pid,etime,cmd | grep 'bin/sdd run'` comes back empty and `pipeline.log` stops mid-mission.
+**Symptom:** no `BLOCKED`, no rc, no last line — the run is simply not there any more.
+`pgrep -af '[b]in/sdd run'` comes back empty and `pipeline.log` stops mid-mission. The brackets are
+the point: the pattern does not match its own text, so the command line of whoever searches never
+answers for the run.
 
 **What it is:** memory pressure killing the process from outside, not anything the pipeline did.
 Measured three times on 2026-09-16, all three when the run had been launched as a **background
@@ -803,6 +805,14 @@ with `sdd run <mission> --max-phases 1`, went nine phases without a single death
 **What you do:** run it in the foreground, or detach it properly with `setsid nohup` and an
 environment cleaned of the parent harness (`env -u CLAUDECODE …`) — never as a background job of
 an agent session, which is what a memory watchdog reaps first. Then `sdd run <mission>` again.
+
+A detached run tells you nothing when it ends, so find it and wait for its PID.
+`pgrep -af '[b]in/sdd run <mission>'` lists it (a wrapper on the PATH shows as a second line);
+`tail --pid=<pid> -f /dev/null` returns when that process is gone. Then read the end in the run's
+redirected output: the line `✓ pipeline complete` is the good end; without it, the last line of
+`.sdd/logs/<mission>/pipeline.log` says where it stopped. Never wait with
+`pgrep -f 'sdd run <mission>'` in a loop: that pattern is in the argv of the very shell that
+waits, so it matches itself and the loop never ends.
 
 **What is worth knowing before you panic — and it is design, not luck.** None of the three deaths
 corrupted anything. The tree was clean, no artifact was half-written, and the next `sdd run`

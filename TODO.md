@@ -637,7 +637,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: medir o intervalo do `branch:` declarado, ou dar intervalo vazio quando ele já está na base.
   — descoberto por `sessão interativa` no pós-merge da missão `20261028-whf-162-jdb-na-descricao` (2026-10-30)
 
-- [ ] **O README chama o repositório de privado, e ele é público** — `README.md:45` (`PRIVATE`) — o
+- [ ] **O README chama o repositório de privado, e ele é público** — `README.md:45` (`git clone`) — o
   comentário do `git clone` diz "PRIVATE repository", e `gh repo view j0ruge/sdd_agents` responde
   `"isPrivate": false`; quem instala pode concluir que precisa de acesso concedido ou de token. Direção: tirar
   o comentário, ou trocá-lo pelo que for verdade, com a data.
@@ -675,7 +675,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` na missão `20261020-amep-anexo-na-demanda` do `lighthouse_project` (2026-10-21)
 
 - [ ] **O vigia do `sdd run` destacado casa com a própria shell, e o kit não diz como esperar o fim** —
-  `docs/failure-modes.md:796` (`grep 'bin/sdd run'`) — o sintoma do run que sumiu se mede com um
+  `docs/failure-modes.md:796` (`[b]in/sdd run`) — o sintoma do run que sumiu se mede com um
   `ps … | grep 'bin/sdd run'` que acha o próprio `grep`, e o "What you do" manda destacar com `setsid nohup`
   sem dizer como saber que acabou. Na 3.5d do `dotp-remake` o relay vigiou com `pgrep -f 'sdd run <missão>'`, que
   casa com a shell do vigia (o padrão está no argv dela); o fim veio da linha `✓ pipeline complete` do log. A

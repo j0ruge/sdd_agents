@@ -44,7 +44,17 @@ Take the PRs in the order they will merge. For each one, on its branch, from the
 6. **Wait for the checks** of the new head. The kit's repository has no CI workflow; the checks
    are the review bots and GitGuardian (`gh pr checks <PR>`). A finding a bot raises is answered on
    the branch, and the recipe restarts from step 1 if `main` moved meanwhile.
-7. **Merge pinned to the head you measured:**
+7. **Merge pinned to the head you measured**, and only with no review thread left open on it.
+   First count the unresolved threads; the answer has to be `unresolved: 0`, with the head it
+   names equal to `<sha>`:
+
+   ```bash
+   gh api graphql -F owner=<owner> -F repo=<repo> -F pr=<PR> -f query='query($owner:String!,$repo:String!,$pr:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$pr){headRefOid reviewThreads(first:100){totalCount pageInfo{hasNextPage} nodes{isResolved}}}}}' --jq '.data.repository.pullRequest | "head \(.headRefOid[0:7]) threads \(.reviewThreads.totalCount) more \(.reviewThreads.pageInfo.hasNextPage) unresolved: \([.reviewThreads.nodes[] | select(.isResolved | not)] | length)"'
+   ```
+
+   A clean `mergeable_state` and a green bot check do not read threads: PR 391 had both with a
+   Major from CodeRabbit still open on the head. `more true` means over 100 threads, so the count
+   is not valid and the merge does not go. Then
    `gh pr merge <PR> --merge --match-head-commit <sha>`, with `<sha>` the head you pushed in step 5.
    A merge commit, never a squash: the `RESOLVED by <hash>` of a mission only reaches `main` with
    its commits, and the post-merge chore proves each hash with `git merge-base --is-ancestor`.
