@@ -156,7 +156,11 @@ wait for that line in the foreground, under a ceiling below the 10 min of a Bash
 timeout 590 bash -c 'until grep -q "^rc=" <output>; do sleep 5; done'
 ```
 
-If the `timeout` fires, run the same loop again in this same turn.
+Run that loop in a Bash call whose own `timeout` parameter is raised to its ceiling,
+`timeout: 600000`. The 10 min are the ceiling of a Bash call, not its default: left at the default
+of 120 000 ms, the call is moved to the background at 120 s, which is the "running in background"
+answer above (reproduced in the r1 of `20261117-l1-a-prosa-do-chapeu`). If the `timeout` fires, run
+the same loop again, in a call with the same parameter, in this same turn.
 
 If `TEST_CMD` really is too slow to sit through, that is a **finding** — it goes to `TODO_FILE`
 with the measurement. It is never a reason to narrate that you are waiting and stop.

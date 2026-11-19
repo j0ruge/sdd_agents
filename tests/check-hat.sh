@@ -706,6 +706,13 @@ reviewer_agent_probes() {
   else
     fail "hat: sdd-reviewer no longer says how to wait for a slow command without Monitor, in a foreground loop under the Bash ceiling"
   fi
+  # R1 of the r1 review: 10 min is the Bash ceiling, not its default. Without the call's own
+  # timeout raised, the loop above went to the background at 120 s (reproduced, 40-review-r1.md).
+  if grep -qF '`timeout: 600000`' <<< "$sdie" && grep -qF '120 000 ms' <<< "$sdie"; then
+    pass "hat: the reviewer runs the wait loop in a Bash call whose own timeout is raised to 600000 ms"
+  else
+    fail "hat: sdd-reviewer gives the wait loop without raising the Bash call's own timeout, so it goes to the background at 120 s"
+  fi
   if grep -qF 'heredoc' <<< "$s3" && grep -qF 'matches no test' <<< "$s3"; then
     pass "hat: the reviewer writes a probe outside the repo by heredoc, and a test filter that matches nothing is a failure"
   else
