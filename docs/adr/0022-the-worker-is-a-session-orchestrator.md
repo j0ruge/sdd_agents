@@ -127,7 +127,10 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
    missions. Either one spent stops the worker. The campaign's is a hard limit (decision 2 of the
    owner on the review r6 of the mission that built the worker): `sdd-worker budget` stops when
    what is left of it is below the signed mission cap, so a campaign may end with up to one mission
-   cap unused, and passes its ceiling only by what the runner spends past its own cap in a phase.
+   cap unused, and passes its ceiling only by three spends: what the runner spends past its own cap
+   in a phase, the spend of a mission `budget` does not find (one that never reached the base and
+   whose worktree was removed), and the spend of the orchestrating session and of its subagents,
+   which is outside both ceilings (Declared limits, below).
 
 ## Alternatives discarded
 
@@ -164,7 +167,9 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
   "no receipt", which stops the worker: fail closed.
 - **Declared limits.** The signature proves an answer on stdin, not a person: an agent with a
   shell passes, the same limit `sdd approve` has. The ceilings read the ledger of this machine, and the spend of
-  the orchestrating session and of its subagents is outside both. A campaign's missions are matched
+  the orchestrating session and of its subagents is outside both. A mission of the campaign that
+  never reached the base and whose worktree was removed is found nowhere, and its spend leaves the
+  campaign's sum until the ledger carries the campaign (the direction is in `TODO.md`). A campaign's missions are matched
   by id, not by repository. `sdd approve` under `full` still writes `humano-YYYY-MM-DD`. Visual
   acceptance is never the worker's. Deleting a branch or a worktree and pushing to the default
   branch are in no level. The pager and the mission cap are read in the `.sdd/config.sh` of the
