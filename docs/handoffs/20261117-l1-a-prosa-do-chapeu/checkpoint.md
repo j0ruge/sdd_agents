@@ -1,6 +1,6 @@
 ---
 missao: 20261117-l1-a-prosa-do-chapeu
-atualizado: 2026-11-19 17:30
+atualizado: 2026-11-19 18:05
 ---
 
 # Checkpoint — L1: a prosa do chapéu e dos docs
@@ -25,7 +25,7 @@ atualizado: 2026-11-19 17:30
 | I2 | O executor: o handoff no mesmo incremento, e o mutante restaurado com cp (itens D, E) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-executor.md .claude/agents/sdd-executor.md; c=$?; echo "$(grep -c '^  ok    hat: the executor writes 20-handoff-exec.md in the increment that leaves no row pending, and its answer says whether it did' <<< "$o") $(grep -c '^  ok    hat: the executor restores a mutant with cp and rm, so an incremental build sees a new mtime' <<< "$o") $c"` → `1 1 0` | done | abe5808 |
 | I3 | O revisor: esperar sem Monitor, e a sonda fora do repo (itens F, G) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-reviewer.md .claude/agents/sdd-reviewer.md; c=$?; echo "$(grep -c '^  ok    hat: the reviewer waits for a slow command in the foreground, under a ceiling below the Bash limit' <<< "$o") $(grep -c '^  ok    hat: the reviewer writes a probe outside the repo by heredoc, and a test filter that matches nothing is a failure' <<< "$o") $c"` → `1 1 0` | done | b51657d |
 | I4 | A DOCS: a lição reincidente ganha destino (item H) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-docs.md .claude/agents/sdd-docs.md; c=$?; echo "$(grep -c '^  ok    hat: the docs phase turns a lesson its own log calls recurrent into a proposed rule, or writes why not' <<< "$o") $c"` → `1 0` | done | 781fe39 |
-| I5 | A QA: o qa: skipped confirma nos dois caminhos (item I) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-qa.md .claude/agents/sdd-qa.md; c=$?; echo "$(grep -c '^  ok    hat: the qa hat sends a declared qa: skipped to the confirmation of section 2 on both paths' <<< "$o") $c"` → `1 0` | pending | — |
+| I5 | A QA: o qa: skipped confirma nos dois caminhos (item I) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-qa.md .claude/agents/sdd-qa.md; c=$?; echo "$(grep -c '^  ok    hat: the qa hat sends a declared qa: skipped to the confirmation of section 2 on both paths' <<< "$o") $c"` → `1 0` | done | 40c836b |
 | I6 | Os docs do operador: o README, o sdd run destacado e os threads abertos (itens J, K, L) | `o=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    doc: the README shows the clone line without calling the repository private' <<< "$o") $(grep -c '^  ok    doc: failure-modes.md finds a detached sdd run without matching the watcher, and says how to wait for its end' <<< "$o") $(grep -c '^  ok    doc: the finding-PR recipe merges only with zero unresolved review threads on the head, with the command beside it' <<< "$o")"` → `1 1 1` | pending | — |
 | I7 | As duas sementes do TODO.md: número que muda não vai no título (item M) | `o=$(bash tests/check-templates.sh 2>&1); grep -c '^  ok    todo.*: a number that changes goes in the body, never in the title' <<< "$o"` → `2` | pending | — |
 | I8 | A ajuda do sdd why diz que o gate roda a suíte (item N) | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    help: sdd why says its gate runs TEST_CMD for EXEC, QA or REVIEW, as sdd boot does' <<< "$o"` → `1` | pending | — |
