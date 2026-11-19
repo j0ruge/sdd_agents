@@ -170,6 +170,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r6.md` — descoberto por `sdd-reviewer` na
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
+- [ ] **Nenhum ato do worker resolve os threads de review, e o item `threads` do `pr-ready` fica sem dono** —
+  `commands/sdd-worker.md:216` (`merge`) — um rc 1 do `pr-ready` manda voltar "ao ato que conserta o item", e
+  para `not-ready threads` não há ato: o `review` conserta o que a rodada acha e pede o `@codex review`, mas nada
+  resolve o thread de bot cujo achado um commit já fechou. No PR #414 os R6–R10 consertaram os achados do
+  CodeRabbit e os 20 threads seguiram abertos (princípio 1: item que nenhum ato escreve). Direção: o `review`
+  resolve o thread cujo achado um commit fechou, nomeando o commit na resposta.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
+  orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-19)
+
 - [ ] **O `budget` esquece calado o gasto de uma missão que nunca chegou à base e cujo worktree saiu** —
   `bin/sdd-worker:690` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
   PR fechado sem merge ou a missão largada e o worktree removido, o `budget` dá US$ 0.00 no lugar dos US$ 85 do
