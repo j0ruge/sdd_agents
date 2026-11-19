@@ -701,14 +701,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   com `sdd status <missão> --no-gates`. Vizinho do decidido "O sdd status travaria mais de 2 min".
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
 
-- [ ] **O `delegate` imprime o `git add` com o caminho cru, que não é comando num checkout com espaço ou aspa** —
-  `bin/sdd-worker:312` (`git add %q`) — o dono copia `signed … — commit it: git add <arquivo> && git commit …`, e
-  sob o veneno do R58 do `tests/check-worker.sh` (`[ci]q"x @&*$1\`) a linha colada numa shell parte o caminho no
-  espaço e abre uma aspa que não fecha; o id da campanha entra cru no `-m "…"` também. Direção: caminho e id saem
-  por `%q`, e o R2 do sensor roda a linha e confere que o `git add` recebe um argumento só. RESOLVED by cbaf6be
-  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto por `sdd-executor` na
-  missão `20261117-o-worker-orquestrador` (2026-11-18)
-
 ### Comentário e registro
 
 ### Idioma
