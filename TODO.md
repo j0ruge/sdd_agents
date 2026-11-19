@@ -107,6 +107,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fase B pararam sem revisar, numa REVIEW de US$ 5,61. Com a entrada (`j0ruge/magic_tutor#104`), um subagente
   headless lê a reference. Direção: o `sdd run` faz a mesma busca de skills, sem sessão, e avisa ou para.
   — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
+  RECURRED 1: sdd_agents/20261117-o-worker-orquestrador (2026-11-18)
 
 - [ ] **A sonda de interrupção do `check-health.sh` mede o grupo antes do `setsid`, e a suíte cai sem defeito** —
   `tests/check-health.sh:1868` (`INTR_PID`) — o `ps -o pgid=` roda logo depois do `setsid … &`, às vezes antes de
@@ -143,6 +144,84 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `install` ou o `health` avisam quando o preâmbulo difere do template do idioma, sem reescrever.
   — descoberto por `codereview` na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-08)
 
+- [ ] **Nenhum sensor relê os Checks `done`, e o R que estende a família de um I o deixa vermelho calado** —
+  `tests/check-checkpoint.sh:1616` (`red_one`) — o `--red` roda só as linhas `pending`. Na r5 do worker, o R9 e
+  o R10 puseram linhas nas famílias `worker templates:` e `command:`, que o I1 e o I9 contavam com número exato:
+  os dois ficaram vermelhos no head sem aviso, achados por um script da sessão (`5565a41`, `995c4ad`). Direção:
+  um `--green <checkpoint>` que roda o Check de cada linha `done` e nomeia a que não dá o esperado, e o
+  `sdd-reviewer` avisado de que o R que conta uma família já contada acerta o esperado da linha antiga.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
+  orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-18)
+
+- [ ] **O `gate_REVIEW` aprova a tabela de notas a que falta um critério** — `bin/sdd:1943` (`gate_REVIEW`) —
+  o comentário diz "a partial review is not a review", mas o gate conta linhas, não critérios: uma
+  `### Overall Grade` só com a linha `**Overall**` em A passa (`rows > 0`), e nenhum programa do kit nomeia os
+  oito critérios do `templates/review.md`. O `pr-ready` do worker tinha a mesma régua (R11 da r6 da missão).
+  Direção: o gate exige uma linha por critério do template e nomeia no motivo o que falta.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r6.md` — descoberto por `sdd-reviewer` na
+  missão `20261117-o-worker-orquestrador` (2026-11-18)
+
+- [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
+  `bin/sdd-worker:1229` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
+  nomeia threads: 18 dos 38 achados do CodeRabbit no PR #414 moravam no corpo das revisões, e um PR com eles,
+  com uma `CHANGES_REQUESTED` sem inline ou com o `local/ci` vermelho dá `ready`. Ler os três é um sexto item,
+  que muda a régua e não tem dono: nenhum ato do laço publica o `local/ci`, e sem quem o escreva o item é gate
+  insatisfazível (princípio 1). Direção: decidir quem o publica (o ato `review`, que já roda a suíte?).
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r6.md` — descoberto por `sdd-reviewer` na
+  missão `20261117-o-worker-orquestrador` (2026-11-18)
+
+- [ ] **Nenhum ato do worker resolve os threads de review, e o item `threads` do `pr-ready` fica sem dono** —
+  `commands/sdd-worker.md:216` (`merge`) — um rc 1 do `pr-ready` manda voltar "to the act that fixes it", e
+  para `not-ready threads` não há ato: o `review` conserta o que a rodada acha e pede o `@codex review`, mas nada
+  resolve o thread de bot cujo achado um commit já fechou. No PR #414 os R6–R10 consertaram os achados do
+  CodeRabbit e os 20 threads seguiram abertos (princípio 1: item que nenhum ato escreve). Direção: o `review`
+  resolve o thread cujo achado um commit fechou, nomeando o commit na resposta.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
+  orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-19)
+
+- [ ] **O `budget` esquece calado o gasto de uma missão que nunca chegou à base e cujo worktree saiu** —
+  `bin/sdd-worker:703` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
+  PR fechado sem merge ou a missão largada e o worktree removido, o `budget` dá US$ 0.00 no lugar dos US$ 85 do
+  ledger, rc 0, e o teto que o R14 chama de limite duro passa por esse gasto. O R16 só o declara. Direção
+  (decisão do dono na pendência 1 da r7): a linha `session` do ledger ganha `campaign:`, que o runner lê do
+  `00-missao.md`, e o `budget` soma o gasto da campanha por esse campo, achando a missão que o conjunto perde.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r7.md` — descoberto por `sdd-reviewer` na
+  missão `20261117-o-worker-orquestrador` (2026-11-18)
+
+- [ ] **O PR sem conflito ainda quebra o `TODO.md` do alvo quando a missão paralela entra antes** —
+  `agents/sdd-publisher.md:48` (`status: blocked`) — o publisher só para no conflito textual, o GitHub dá
+  `MERGEABLE CLEAN` e o `TEST_CMD` mede o HEAD, não a mescla. O `j0ruge/magic_tutor#254` moveu o `descrever` da
+  `monitor/bancada.py` meia hora antes de o `j0ruge/magic_tutor#259` abrir, com o item 150 ancorado no lugar velho
+  (o espelho das issues trava; `b8cf0cc`); no `j0ruge/magic_tutor#176` (2026-11-04), dois itens 85. Direção: antes do
+  push, o publisher mede a árvore de `git merge-tree --write-tree origin/<base> HEAD` (`--anchors` e número repetido) e
+  para com `status: blocked`; a base que anda depois do push fica descoberta até quem faz o merge refazer essa medida.
+  — descoberto pela sessão que acompanhou o `sdd run` no `magic_tutor` (2026-11-18)
+
+- [ ] **Os leitores da tabela de notas seguem lendo depois da linha em branco, no worker e no runner** —
+  `bin/sdd-worker:1095` (`round_grades`) — ele, o `round_unjustified` e o `round_missing` pulam a linha que não
+  é de tabela e seguem até o próximo heading: uma linha de critério solta abaixo da tabela, na mesma seção
+  `### Overall Grade`, conta. O `gate_REVIEW` do `bin/sdd` lê igual, e consertar só o worker quebra a paridade
+  que o `check-worker.sh` segura. Direção: parar na primeira linha fora da tabela, nos três e no runner, com probe.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 6 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O mutante `range_ancestry_unchecked` só troca a mensagem, e o ancestral segue conferido** —
+  `tests/check-mutation.sh:7167` (`mut_WORKER_range_ancestry_unchecked`) — ele desliga o `"$anc" -eq 1` do
+  `cmd_pr_ready`, e o `"$anc" -ne 0` logo abaixo recusa o mesmo rc 1 com outra frase: o catálogo o pega pela
+  mensagem, e o mundo que o comentário dele promete (uma rodada sobre um commit que o PR largou) nunca é montado.
+  Direção: trocar também o `-ne 0` por `-gt 1`, provado por `--only WORKER_range_ancestry_unchecked check-worker.sh`.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 13 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **Os probes de nota do `pr-ready` passariam pelo item `dirty` com o leitor de nota frouxo** —
+  `tests/check-worker.sh:1904` (`ready_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
+  tabela sem linha editam o `40-review-r2.md` sem `land` e casam só `not-ready review: `, e o `dirty` também
+  reprova a árvore suja com esse prefixo: um `pr-ready` que aceitasse B ou A- seguiria vermelho pelo motivo
+  errado. Direção: `land` depois de cada edição e exigir o texto do ramo (`grades B`, `has no row for`), como a
+  sonda do `deadbeefdead` já faz.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 16 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
@@ -153,6 +232,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   planner (ou o `--check`) avisa o incremento EXEC que toca `.claude/`, e o executor deixa o texto proposto ao
   humano no PR, como o `sdd-docs`. Fonte: `20-handoff-exec.md:167` da missão.
   — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-20)
+  RECURRED 1: magic_tutor/20261118-o-que-a-mesa-nao-diz (2026-11-18)
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
   (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
@@ -226,6 +306,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   e o `sdd preflight` não o mede. Numa máquina nova o `~/.claude/commands` nem existia. Direção: o `link-agents`
   cria esse link, idempotente como os dos agentes, ou o README o põe nos passos de instalação.
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
+  RECURRED 1: sdd_agents/20261117-o-worker-orquestrador (2026-11-18)
 
 - [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:116`
   (`Relaying the grill`) — na 3.2c do `dotp-remake` a sessão caiu com uma pergunta pendente, e a chamada voltou "the
@@ -242,7 +323,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte.
   — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
 - [ ] **O aceite do `/sdd-plan` mede de novo os Checks, nunca os fatos do contexto verificado** —
-  `commands/sdd-plan.md:162` (`Measure again`) — o passo roda `--check` e `--red`, e a contagem que o plano cita passa
+  `commands/sdd-plan.md:174` (`Measure again`) — o passo roda `--check` e `--red`, e a contagem que o plano cita passa
   sem medida: "22 `MutableEvents.Add` em 12 arquivos" (`01-plano.md`, `00-missao.md` e ADR 0007 da 3.3a do
   `dotp-remake`) eram 10 arquivos, e o relay só pegou porque conferiu por amostra com `grep -rc`. Na 3.2c, dois fatos
   sem medida (a Lobotomy, a 701.8) chegaram ao EXEC. Direção: o aceite reconfere por amostra as contagens e âncoras do
@@ -403,7 +484,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `git status --porcelain` inteiro e manda commitar na branch da missão o arquivo de que o plano depende.
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
 
-- [ ] **A citação "ADR 0018" do kit colide com o ADR 0018 do alvo** — `templates/missao.md:41` (`ADR 0018 §3`) — o
+- [ ] **A citação "ADR 0018" do kit colide com o ADR 0018 do alvo** — `templates/missao.md:43` (`ADR 0018 §3`) — o
   template e os contratos citam o ADR do kit só pelo número: 12 citações em `templates/missao.md`,
   `agents/sdd-planner.md`, `sdd-docs.md`, `sdd-publisher.md` e `sdd-kaizen.md`. A frase do PLAN-AUTO vai para o
   `00-missao.md` do alvo, e na 3.6a do `dotp-remake` o plano alocou o ADR 0018 do próprio repo: ela passou a apontar
@@ -435,6 +516,70 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `index.lock`; com `GIT_OPTIONAL_LOCKS=0`, 0 de 4685. O `kit_guard_tree` (`bin/sdd:4285`) já usa a variável.
   Direção: a mesma variável na leitura do `session_leftovers`.
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
+
+- [ ] **O `config_key` do worker põe o valor do ambiente sem `export`, e o filho que o config abre lê vazio** —
+  `bin/sdd-worker:328` (`config_key`) — o `printf -v "$key"` vale só para o shell que sourceia o `.sdd/config.sh`,
+  e o runner lançado com a chave no ambiente a recebe exportada: um config que escolhe o teto num `bash -c` ou
+  num `$(…)` dá o default (150) ao `budget` e o 40 ao `sdd run` (reproduzido: o filho lê `[]`, e com `export`
+  antes, `[40]`). Direção: `export "$key"` depois do `printf -v`, antes de sourcear.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 1 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O `effective_level` confere o `expires:` antes do conjunto e publica o nível depois dele** —
+  `bin/sdd-worker:439` (`expired`) — o `expired "$exp"` roda antes do `campaign_set` e do `checkouts_of`, e o
+  `LEVEL` acima de `assisted`, o teto do lote incluso, sai depois: a delegação que vence nessa janela (de
+  milissegundos, não reproduzida) ainda dá o nível assinado. O laço pergunta `allows` antes de cada ato, o que
+  estreita a janela sem fechá-la. Direção: reler o `expired` logo antes de publicar um `LEVEL` acima de `assisted`.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 2 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O `checkouts_of` lê o `worktree list` sem `-z`, e o worktree com quebra de linha no caminho some** —
+  `bin/sdd-worker:609` (`checkouts_of`) — o git 2.43 imprime o caminho cru, e o `sed 's/^worktree //p'` parte
+  `…/wt` + `nl` em `…/wt` e uma linha solta (reproduzido): a missão desse worktree some calada do `budget`, do
+  `level` e do `next`. Direção: `--porcelain -z`, lido por NUL e com o rc guardado; o `-z` pede git 2.36+, então
+  antes decidir a versão mínima do git no kit.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 3 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O `pr_states` descarta o PR de fork depois de o `gh pr list` cortar a lista em 30** —
+  `bin/sdd-worker:901` (`pr_states`) — o `gh pr list --head <branch> --state all` roda sem `--limit` (o padrão é
+  30) e o `isCrossRepository` é lido depois do corte: com 30 PRs de fork na mesma branch, o PR da missão fica fora
+  e o `next` não o vê. Direção: `--limit 1000`, ou parar com veredito não lido quando a contagem bater no limite.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 5 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O yes do dono no passo 3 do laço do worker vale para o ato e não amarra o sha do merge** —
+  `commands/sdd-worker.md:77` (`sdd-worker allows`) — "the yes stands for this step's rc 0" deixa o yes de um
+  `merge` dado sobre o head A valer para o head B, quando os passos 1 e 2 trazem o mesmo ato. O `pr-ready` ainda
+  exige rodada A e recibo do Codex no B; o risco é o dono não ter visto o B. Direção: o yes só se reaproveita com
+  campanha, lote, missão, PR e comando iguais, e no `merge` também o sha.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 7 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O `postmerge` manda a linha do journal nomear o PR do que sobra para a base, sem dizer o que ela leva** —
+  `commands/sdd-worker.md:226` (`postmerge`) — o `next` não deriva esse ato, e a frase não exige o número do PR de
+  acompanhamento nem o estado da revisão dele: a sessão que retoma do journal não sabe se o PR abriu nem se a
+  rodada dele fechou. Direção: a linha do merge traz o número do PR e `review pendente`, e a sessão retomada o
+  conclui antes de chamar o `next`.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 8 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **A parada do worker roda o `budget` de novo para montar o `SDD_GATE_WHY` do pager** —
+  `commands/sdd-worker.md:239` (`sdd-worker budget`) — o `why` sai de rodar outra vez o verbo cuja linha parou o
+  laço, e entre as duas leituras o teto pode ter subido ou um gasto entrado: o pager recebe uma linha que não é a
+  que parou. Direção: guardar a saída do verbo no momento da parada (arquivo ou variável do mesmo lote) e reusá-la
+  no journal e no `SDD_GATE_WHY`.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 9 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **Uma edição do `.sdd/config.sh` durante a fase tira o teto de missão que a delegação assinou** —
+  `templates/delegation.md:72` (`BUDGET_MISSION_USD`) — o `config_reload` do runner relê o arquivo a cada volta, e
+  a sessão que grava `BUDGET_MISSION_USD=0` desliga o teto nas voltas seguintes; o `budget` só roda entre atos. O
+  template diz que a campanha só passa do assinado por três gastos, e este é um quarto. Direção: declarar o limite
+  já, no `bin/sdd-worker` e no template; o conserto de verdade (o runner guardar o teto do lançamento) muda a
+  precedência do `config_reload` e é decisão do dono.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 12 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 ### Saída humana e cosmética
 
@@ -595,6 +740,16 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   passou na r3. Seguir a tabela compra uma EXEC que não muda nota; não seguir a contraria. Direção: uma linha
   "LOW sem efeito na nota → fica no relatório, com motivo", decidida junto da régua do `CONTEXT.md:140`.
   — descoberto pela retro do `codereview` na r3 da `20261028-whf-162-jdb-na-descricao` (2026-10-30)
+  RECURRED 1: sdd_agents/20261117-o-worker-orquestrador (2026-11-18)
+
+- [ ] **A rodada de revisão relê a missão inteira, porque o chapéu não passa `base=` à skill** —
+  `agents/sdd-reviewer.md:46` (`over the mission diff`) — a `/codereview:codereview` só revisa o delta com
+  `base=<head da rodada anterior>`; sem ele usa o merge-base com a `main`, e cada rodada acha LOW novo em
+  código que nenhum R tocou. Medido no PR #414: rodada ~1h30, R de 45–55 min fosse HIGH ou prosa, e a
+  rodada do runner nem grava o head que revisou. Direção: a rodada grava o head (como o `reviewed_head:`
+  do worker) e a seguinte invoca com `base=` e os achados abertos; LOW fora do delta vai ao TODO (D15).
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
+  orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O revisor tem de esperar o comando no mesmo turno, sem o `Monitor`, e o harness barra o `sleep`** —
   `agents/sdd-reviewer.md:144` (`poll it, in this same turn`) — a linha 8 tira `Monitor` e `ScheduleWakeup`, e
@@ -651,7 +806,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão interativa da missão `20261112-as-reincidentes-primeiro` (2026-11-12)
 
 - [ ] **O lint da suíte se pula sem o `shellcheck`, e a `main` já tem 4 avisos que ele reprova** —
-  `tests/run-all.sh:292` (`command -v shellcheck`) — sem o binário o passo diz `(linter absent — skipped)` e a
+  `tests/run-all.sh:294` (`command -v shellcheck`) — sem o binário o passo diz `(linter absent — skipped)` e a
   suíte sai verde: toda corrida da missão `20261112-as-reincidentes-primeiro` pulou, e o branch trouxe 3 avisos
   que só o codereview viu. Com o `shellcheck` 0.11.0 do cache do `uv`, `-S warning` dá 4 em `a48cf3c`: SC2209 no
   `check-gates.sh` e no `check-hat.sh`, SC2010 no `check-gates.sh`, SC2120 no `check-health.sh`. Quem instala o
@@ -706,6 +861,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   planner criou 0026 e 0027 vazios para pular, apagou-os, e saiu 0028. Sem isso, a colisão só aparece no merge.
   Direção: `--after <n>`, ou ler também os `docs/adr/` das outras branches e worktrees do repositório.
   — descoberto pelo planner na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
+  RECURRED 1: dotp-remake/20261117-plano-7-b1-a-mesa-cheia (2026-11-17)
+
+- [ ] **O `sdd approve` deixa fora do commit o que o planner escreveu fora da pasta da missão** —
+  `bin/sdd:9210` (`cmd_approve`) — o commit leva só a pasta e o ADR. No `dotp-remake`, o planner da 7b1 deixou a página
+  do llm_wiki, a linha dela no `indice.md`, no `log.md` e no índice do `CLAUDE.md`, sem commit; o relay as commitou à
+  parte (`fa9bd84`). Com a regra do alvo de gravar o que se explora, isso vira rotina. Direção: o approve lista o que
+  está modificado ou não rastreado fora da pasta e pergunta se entra, ou recusa com a lista.
+  — descoberto pelo relay do `/sdd-plan` na missão `20261117-plano-7-b1-a-mesa-cheia` (2026-11-17)
+
+- [ ] **Mitigação de risco do plano sem incremento se perde, e a REVIEW dá A mesmo assim** —
+  `templates/plano.md:41` (`Riscos e não-feitos`) — o `01-plano.md:840` da 7b previu o engasgo da assadura e propôs
+  assar os decks antes do primeiro quadro; nenhum incremento levou isso, o portão do I12 provava só que a arte chega,
+  e a REVIEW deu A. O dono viu as janelas pretas no jogo, e o conserto foi à mão (`322aca8`..`1d1a0b7`). Direção: a
+  coluna Mitigação aponta o incremento e o Check, ou "adiado → <missão>", e o PLAN-AUTO reprova a linha sem nenhum.
+  — descoberto pelo dono e pelo relay na missão `20261116-plano-7-b-o-palco-3d` (2026-11-17)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->

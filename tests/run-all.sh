@@ -172,7 +172,11 @@ run() { # run <name> <command...>
 # Moving a number is a commit with an author, never a deadline someone forgot.
 # Remeasured since, the rule unchanged: 'preflight and the install guard' was ~30 s on 2026-10-02 and
 # took 73 s on 2026-10-21 (ADR 0019's worlds), under a load of 2.09 with another repo's `sdd run`
-# alive, so its line is 8 × 73 ≈ 584, rounded up to 600 by the human's call.
+# alive, so its line is 8 × 73 ≈ 584, rounded up to 600 by the human's call. 'the worker answers
+# from artifacts' was 38 s when it landed (KAIZEN_LOG.md) and got 120; remeasured idle on 2026-11-18
+# (R9 of 20261117-o-worker-orquestrador, achado #36 of the r5), nothing of the kit running and a
+# load of 1.1 to 2.0 on 20 cores: 66.0, 67.1, 67.0 and 67.9 s, so its line is 8 × 68 = 544, rounded
+# up to 550. A lone run at 14:36 of the same day took 29 s: the clock of this machine moves.
 step_timeout() { # step_timeout <step name> — prints the deadline in seconds; rc 1 when the step has none
   case "$1" in
   "runner syntax (bash -n)") echo 60 ;;
@@ -193,6 +197,7 @@ step_timeout() { # step_timeout <step name> — prints the deadline in seconds; 
   "every hat declares its boundary") echo 60 ;;
   "adr allocator and link check") echo 90 ;;
   "one checkout has one execution owner") echo 240 ;;
+  "the worker answers from artifacts") echo 550 ;;
   "catalogue anchors: every mutant still applies") echo 60 ;;
   "mutation: the suite dies when the runner is sabotaged") echo 0 ;;
   *) return 1 ;;
@@ -251,11 +256,12 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 # label-instead-of-artifact shape this whole mission is about, and the limit declared above.
 # Checkout coordination adds its sensor and the alternate linker: 17 -> 19 Bash paths.
 # tests/isolate-git.sh, sourced by every sensor and run by none (issue #226): 19 -> 20.
+# The campaign worker (ADR 0022) adds its program and its sensor: 20 -> 22.
 LINT_SEVERITY=warning
-LINT_FLOOR=20
+LINT_FLOOR=22
 
 lint_surface() {
-  local files=("$ROOT/bin/sdd" "$ROOT/bin/sdd-link-agents") f
+  local files=("$ROOT/bin/sdd" "$ROOT/bin/sdd-link-agents" "$ROOT/bin/sdd-worker") f
   for f in "$ROOT"/tests/*.sh; do [ -f "$f" ] && files+=("$f"); done
 
   # Anti-vacuity, half 1 — the LIST. Catches the glob that stops matching and the list narrowed
@@ -381,6 +387,12 @@ run "every hat declares its boundary" "$ROOT/tests/check-hat.sh"
 # fixture of its own under $TMPDIR with its own SDD_STATE_DIR.
 run "adr allocator and link check" "$ROOT/tests/check-adr.sh"
 run "one checkout has one execution owner" "$ROOT/tests/check-coordination.sh"
+
+# Deliberately NOT guarded by SDD_MUTANT, for the reason the adr step carries: its verb assertions
+# drive bin/sdd-worker as a subprocess, and the `mut_WORKER_*` entries of the catalogue are caught
+# HERE or nowhere. It reads bin/, templates/, commands/, config/schema.md, docs/pipeline.md,
+# README.md and CONTEXT.md, every one copied by sandbox().
+run "the worker answers from artifacts" "$ROOT/tests/check-worker.sh"
 
 # The catalogue's cheap half, in seconds and on every run: every mutant still APPLIES and leaves
 # valid bash and Python. A fix that moves a line a mutant anchors used to surface only at the end of

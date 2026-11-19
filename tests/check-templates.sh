@@ -132,6 +132,74 @@ refute() { # refute <file> <regex> <description> — passes when the regex does 
 FORBIDDEN_TLDR='o que foi corrigido'
 FORBIDDEN_POINTER='virou correção'
 
+# == the worker templates ==
+#
+# bin/sdd-worker (mission 20261117-o-worker-orquestrador) reads three things the runner does not:
+# the lots table of a campaign, the frontmatter of its delegation, and the two optional keys a
+# mission declares to belong to one (campaign:, lot:). Every key it reads is read from the
+# FRONTMATTER and nowhere else, so a regex prefixed `fm:` below greps the frontmatter only: a key
+# written in the prose of the body satisfies no reader, and must satisfy no assertion either. The
+# lots are read from one table, so a regex prefixed `lotes:` greps that table only.
+#
+# One ok line per template, not one per grep, and not through check(): each line is a sentence a
+# Check of that mission greps by name (`^  ok    worker templates: `), and check() prints
+# `<file>: <description>`. The group passes when every regex in it matches; the first one that
+# does not is named on stderr. One CHECKS_RUN per assertion, like every other primitive here. The
+# definitions live above the selftest, which runs each rule over worlds of known answer (R9 of the
+# same mission); the rules run below, with the other templates.
+#
+# The frontmatter is read the way fm_value (bin/sdd-worker) reads it: a file whose opening `---` is
+# never closed has none, so its lines are held until the closing one and printed only then (achado
+# #26 of the r5: printed as they came, they satisfied every fm: key of a file the worker reads
+# nothing from).
+frontmatter_of() { # frontmatter_of <file> — the lines between the opening --- and the closing one
+  awk 'NR == 1 { if ($0 != "---") exit; next }
+       $0 == "---" { closed = 1; exit }
+       { held = held $0 "\n" }
+       END { if (closed) printf "%s", held }' "$1" 2>/dev/null
+}
+# The lots are read the way lots_table (bin/sdd-worker) reads them: the first table under the line
+# `## Lotes`, which ends at its first line that is not a row, inside a section that ends at the next
+# `## ` heading (achado #27 of the r5: grepped over the whole file, a table under another heading
+# satisfied the rule, and the worker read no lot). Declared limit: the header is matched on any
+# line of that table, while the reader takes its first line as the header; a table whose first
+# line is something else and whose header comes later was not built.
+lots_of() { # lots_of <file> — the first table under `## Lotes`, one line per row
+  awk '$0 == "## Lotes" { sec = 1; next }
+       !sec { next }
+       /^## / { exit }
+       substr($0, 1, 1) != "|" { if (tbl) exit; next }
+       { tbl = 1; print }' "$1" 2>/dev/null
+}
+worker_tpl() { # worker_tpl <file> <description> <regex>... — `fm:` reads the frontmatter, `lotes:` the lots
+  local f="$1" desc="$2" re fm lots miss=""
+  shift 2
+  fm="$(frontmatter_of "$T/$f")"
+  lots="$(lots_of "$T/$f")"
+  for re in "$@"; do
+    case "$re" in
+      fm:*) grep -qE "${re#fm:}" <<< "$fm" || { miss="$re"; break; } ;;
+      lotes:*) grep -qE "${re#lotes:}" <<< "$lots" || { miss="$re"; break; } ;;
+      *) grep -qE "$re" "$T/$f" 2>/dev/null || { miss="$re"; break; } ;;
+    esac
+  done
+  CHECKS_RUN=$((CHECKS_RUN + 1))
+  if [ -z "$miss" ] && [ "$#" -gt 0 ]; then
+    pass "worker templates: $desc"
+  else
+    printf '  FAIL  worker templates: %s — %s does not match %s\n' "$desc" "$f" "${miss:-<no regex>}" >&2
+    fails=$((fails + 1))
+  fi
+}
+# The regexes of the two worker templates a reader stops on, ONE definition each: the rules below
+# read them, and so do the controls of the selftest, for the reason FORBIDDEN_TLDR gives.
+LOTS_HEADER='lotes:^\| Lot \| Título \| Ceiling \| Itens \|$'
+LOTS_ROW='lotes:^\| L[0-9]+ \| '
+CAMPAIGN_TPL=('fm:^campaign: ' 'fm:^title: ' 'fm:^date: ' 'fm:^harness: ' 'fm:^plan_model: '
+  'fm:^exec_model: ' '^## Lotes$' "$LOTS_HEADER" "$LOTS_ROW")
+DELEGATION_TPL=('fm:^campaign: ' 'fm:^level: ' 'fm:^lots: ' 'fm:^expires: ' 'fm:^budget_mission_usd: '
+  'fm:^budget_campaign_usd: ' 'fm:^signed:$')
+
 # --- selftest ----------------------------------------------------------------------------------
 # The debt CLAUDE.md names for this file, paid. Four of the five sensors the mutation catalogue
 # cannot reach carry a selftest; this one carried REVIEW_FLOOR and a declared adversarial pass
@@ -304,6 +372,69 @@ selftest() {
     *) broken "the doctored templates/ turned this sensor red (rc=$poison_rc) but not through the forbidden-prose rule — a red for the wrong reason is not a measurement" ;;
   esac
   printf '  ok    self-test: templates/ shipping the old section beside the new one turns this sensor red\n'
+
+  # The worker templates (R9 of 20261117-o-worker-orquestrador, achados #26 and #27 of the r5).
+  # Each rule of worker_tpl runs over worlds whose answer is known: the real template copied, which
+  # has to pass, and that copy with one thing changed, which has to fail naming the regex the
+  # reader stops at — a wording only that branch prints. Every world is proved built before it is
+  # read: a doctoring that stopped matching would hand the control an unchanged copy.
+  tpl_world() { # tpl_world <file under the box> <the regex it must name, or - for a pass> <regex>...
+    local f="$1" want="$2" before="$fails"
+    shift 2
+    worker_tpl "$f" control "$@" > "$box/tpl.out" 2>&1
+    if [ "$want" = - ]; then
+      [ "$fails" -eq "$before" ] && grep -qxF '  ok    worker templates: control' "$box/tpl.out"
+    else
+      [ "$fails" -eq "$((before + 1))" ] \
+        && grep -qxF "  FAIL  worker templates: control — $f does not match $want" "$box/tpl.out"
+    fi
+  }
+  cp "$T_KEEP/delegation.md" "$box/deleg.md"
+  awk 'NR > 1 && $0 == "---" && !cut { cut = 1; next } { print }' "$T_KEEP/delegation.md" > "$box/deleg-open.md"
+  [ "$(grep -cx -- '---' "$box/deleg-open.md")" = 1 ] \
+    || broken "the world with no closing --- was not built: deleg-open.md keeps another delimiter line"
+  tpl_world deleg.md - "${DELEGATION_TPL[@]}" \
+    || broken "worker_tpl refused templates/delegation.md as it is — the control below would read any failure as the rule's"
+  tpl_world deleg-open.md 'fm:^campaign: ' "${DELEGATION_TPL[@]}" \
+    || broken "a delegation.md with no closing --- is not refused at its first fm: key, and fm_value (bin/sdd-worker) reads none of them"
+  printf '  ok    worker templates: a frontmatter with no closing --- holds no key, as fm_value reads it\n'
+
+  # The lots: the first table under `## Lotes`, as lots_table reads it. Five worlds, each the
+  # template with one edit: another heading between `## Lotes` and the table (the reader stops at
+  # it), the heading spelt `## Lotes antigos` with an empty `## Lotes` at the end, the table moved
+  # above the heading, another table first under the heading, and a blank line between the
+  # separator and the rows (the reader's table ends there). camp-near is the only world that refuses
+  # the exact heading of lots_of, camp-above its `!sec` and camp-cut its `## ` bound (the end of the
+  # table is refused by camp-first and by camp-split), so the list of worlds is the composition,
+  # and a world dropped from it is a line no probe holds.
+  # Declared limit: the two positive controls have no world of their own. A worker_tpl that refuses
+  # a whole template is red by the rule below and by the wording each negative control demands;
+  # they stay because they say which of the two failed.
+  cp "$T_KEEP/campaign.md" "$box/camp.md"
+  awk '{ print } $0 == "## Lotes" { print ""; print "## Outra seção" }' "$T_KEEP/campaign.md" > "$box/camp-cut.md"
+  awk '$0 == "## Lotes" { print "## Lotes antigos"; next } { print } END { print ""; print "## Lotes" }' \
+    "$T_KEEP/campaign.md" > "$box/camp-near.md"
+  awk '$0 == "## Lotes" { held = 1; next } held == 1 && /^\|/ { tbl = 1 }
+       held == 1 && tbl && !/^\|/ { print "## Lotes"; print ""; held = 2 } { print }' \
+    "$T_KEEP/campaign.md" > "$box/camp-above.md"
+  awk '{ print } $0 == "## Lotes" { print ""; print "| Nota |"; print "|---|"; print "| x |" }' \
+    "$T_KEEP/campaign.md" > "$box/camp-first.md"
+  awk '{ print } /^\|---\|/ && !cut { cut = 1; print "" }' "$T_KEEP/campaign.md" > "$box/camp-split.md"
+  { grep -qx '## Outra seção' "$box/camp-cut.md" \
+      && [ "$(tail -n 1 "$box/camp-near.md")" = '## Lotes' ] && grep -qx '## Lotes antigos' "$box/camp-near.md" \
+      && [ "$(grep -nx '## Lotes' "$box/camp-above.md" | cut -d: -f1)" -gt "$(grep -n '^| Lot |' "$box/camp-above.md" | cut -d: -f1)" ] \
+      && grep -qx '| Nota |' "$box/camp-first.md" \
+      && [ "$(awk 'p { print "<" $0 ">"; exit } /^\|---\|/ { p = 1 }' "$box/camp-split.md")" = '<>' ]; } 2>/dev/null \
+    || broken "a world of the lots control was not built — the probe below would read an unchanged copy"
+  tpl_world camp.md - "${CAMPAIGN_TPL[@]}" \
+    || broken "worker_tpl refused templates/campaign.md as it is — the controls below would read any failure as the rule's"
+  for w in camp-cut camp-near camp-above camp-first; do
+    tpl_world "$w.md" "$LOTS_HEADER" "${CAMPAIGN_TPL[@]}" \
+      || broken "$w.md is not refused at the lots header, and lots_table (bin/sdd-worker) reads no lot in it"
+  done
+  tpl_world camp-split.md "$LOTS_ROW" "${CAMPAIGN_TPL[@]}" \
+    || broken "camp-split.md is not refused at the lots row, with no row in the first table under ## Lotes, where lots_table reads none"
+  printf '  ok    worker templates: a lot row counts only in the first table under ## Lotes, as lots_table reads it\n'
 
   rm -rf "$box"
   T="$T_KEEP"; fails="$fails_keep"; CHECKS_RUN="$run_keep"
@@ -512,6 +643,14 @@ for v in "$T"/todo.md "$T"/todo.*.md; do
   fi
 done
 check todo.pt-BR.md '^## ' "the pt-BR variant this repo's OUTPUT_LANG seeds from"
+
+echo "== the worker templates =="
+worker_tpl campaign.md "campaign.md carries the lots table and the harness and model keys" \
+  "${CAMPAIGN_TPL[@]}"
+worker_tpl delegation.md "delegation.md carries level, lots, expires, both ceilings and an empty signed" \
+  "${DELEGATION_TPL[@]}"
+worker_tpl missao.md "missao.md offers the optional campaign and lot keys" \
+  'fm:^campaign: ' 'fm:^lot: '
 
 REVIEW_MARK="$CHECKS_RUN"
 REVIEW_ASSERTIONS=0

@@ -1792,3 +1792,339 @@ and the human decides (ADR 0002). Same convention as a `blocked` increment.
 **The reminder:** when a target repo's pipeline completes, `sdd run` prints one dim line if the
 current kit version has missions without a verdict yet — pull, not push: the human is the
 kanban, and the line disappears once the verdict exists.
+
+## The worker
+
+The runner owns **one** mission: its phases, its gates, its ledger rows. The **campaign worker**
+owns a queue of them — an interactive session that plans, approves, runs, reviews and merges one
+mission after another, inside a level of autonomy the owner signed
+([ADR 0022](adr/0022-the-worker-is-a-session-orchestrator.md), which revises D1, D2 and D5 of the
+worker roadmap of 2026-09-22 and sets its timer-fired tick aside). It is not the Bash worker of
+[checkout ownership](#checkout-ownership), the process the coordination supervisor watches: one
+word, two things, and `CONTEXT.md` keeps them apart.
+
+Two files make it:
+
+- `commands/sdd-worker.md` is the loop the session follows: before every act it asks the program,
+  then acts through the commands that already exist (`/sdd-plan`, `sdd approve`, `sdd run`, `gh`),
+  and appends one line to the campaign's `journal.md`. It also writes the five stops, what no level
+  grants, and how the session keeps its own context window for a whole night.
+- `bin/sdd-worker` answers, from artifacts, the questions that used to be the model's reading and
+  went wrong four times on record — a review receipt matched by the clock instead of the sha, a
+  watcher whose `pgrep -f` matched itself, a bot out of quota read as "reviewed", a checker that
+  read 20 of 21 units. It answers and signs; it never launches a run, opens a pull request or
+  merges, and it never writes what the runner owns: it reads the frontmatter of `00-missao.md`, the
+  ledger, `gh` and the review bot's machine comment. Its sensor is `tests/check-worker.sh`, with the
+  `mut_WORKER_*` entries of the mutation catalogue.
+
+### A campaign directory
+
+Any directory of the target repo — the convention is `docs/campaigns/<YYYYMMDD>-<slug>/`, and the
+kit's own live under `docs/superpowers/campaigns/` — holding three files. No config key names it:
+every verb but `pr-ready` takes it as its first argument and finds the repo root by
+`git -C <dir> rev-parse --show-toplevel`; `HANDOFF_DIR` comes from that root's `.sdd/config.sh`,
+read in a subshell that stands in the root, so a relative include resolves against its own
+checkout. `ON_ESCALATION_CMD` and `BUDGET_MISSION_USD` are read the same way, but in the
+`.sdd/config.sh` of the root and of each linked worktree that holds a mission of the campaign at the
+root's `HANDOFF_DIR`, and of no other — the narrow set: `sdd run` runs a mission in its worktree and
+reads that checkout's file (rule 6 of the effective level, and `budget`), and a worktree that holds
+no mission of the campaign runs no `sdd run` of it, so its file, which sourcing would execute, is
+never read. A worktree of the set whose `HANDOFF_DIR` is not the root's, the two compared as the
+runner reads them (every leading `./` and every trailing `/` dropped), stops `budget`
+(`no spend — …`), `next` (`unread: …`) and `level` (`unread: …`, for a signed level above
+`assisted`; an `assisted` delegation reads no worktree), rc 1 and naming both files: the runner
+there would look for its missions elsewhere.
+
+- `campaign.md` (`templates/campaign.md`): frontmatter `campaign:` (the id, the directory's name),
+  `title:`, `date:`, `harness:`, `plan_model:` and `exec_model:`; then the heading `## Lotes` over a
+  table with one row per lot in queue order — `L<n>`, a title, a ceiling (`-` or a level name) and
+  an item count —, and one `### L<n>` per lot with its items as `- [ ] <title>`. A `◆ ` right after
+  the box marks an item whose open choice the planner makes and the pull request lists for the
+  owner's acceptance.
+- `delegation.md` (`templates/delegation.md`): only the frontmatter is read — `campaign:`, `level:`,
+  `lots:` (`all`, or lots of the table of the `campaign.md` beside it, separated by spaces),
+  `expires:` (`YYYY-MM-DD HH:MM`, local time),
+  `budget_mission_usd:`, `budget_campaign_usd:` and `signed:`. A value is the text after the first
+  `: `, trailing blanks removed, no quotes; a `<…>` placeholder of the template is therefore
+  illegible. The id is the directory's name: the `campaign:` of this file and of the `campaign.md`
+  beside it are both read against it, `.`, a trailing slash and a symlink naming the directory
+  itself, so a campaign renamed or copied under another name answers `assisted` until both files
+  say the new name.
+- `journal.md`: one line per event, append-only, its instant taken from `date`. No verb reads it;
+  it is the trail of what the session did.
+
+A lot finds its mission through the mission's own artifact: `00-missao.md` declares `campaign:` and
+`lot:` in its frontmatter (two optional keys of `templates/missao.md`), and its `branch:` names the
+pull request. There is no state file: the next act is derived from the queue, the missions and the
+pull requests. A mission is found on disk, in the checkout of the campaign and in every linked
+worktree of its repo, since a lot's mission runs in its own worktree until the merge; and after the
+merge in the base, the tree of the upstream of the branch the campaign's checkout has checked out,
+read through git (`for-each-ref`, `ls-tree`, `show`) as the last fetch left it. So a merged mission
+whose worktree was removed while that checkout was behind is still the campaign's: `next` does not
+plan its lot again and `budget` still counts its spend, and a mission on disk and in the base is one
+mission. An upstream that is set and does not read stops `budget`, `level` and `next` with rc 1,
+naming it — an upstream `[gone]` among them (as `%(upstream:track)` prints it: the remote branch
+deleted after the merge and pruned by a fetch), whose ref `%(upstream)` still prints and whose
+`git ls-tree` exits 128; a checkout on a detached HEAD or on a branch with no upstream reads no
+base, and a mission merged after the last fetch is not in it until the next one.
+
+### The ladder and the table of acts
+
+Five cumulative levels, one definition in the program: `assisted` < `pr` < `plan` < `merge` < `full`.
+A name outside the ladder is no level. The table of acts is the second definition, written
+positively: an act is allowed because the table names a level at or below the effective one, never
+because nothing refused it, and a word the table does not name is rc 2, never "allowed".
+
+| Act | Lowest level that grants it |
+|---|---|
+| `run`, `pr`, `review` | `pr` |
+| `plan` | `plan` |
+| `merge`, `postmerge` | `merge` |
+| `approve` | `full` |
+
+Under `assisted` the session proposes each act and waits for the owner's yes.
+
+**The effective level** (`sdd-worker level`) — the first rule that matches decides:
+
+1. no `delegation.md` → `assisted — no delegation`;
+2. illegible — one of the six keys missing or empty, a `campaign:` here or in the `campaign.md`
+   beside it that is not the directory's name (no `campaign.md` included), a level off the ladder,
+   a `lots:` that is neither `all` nor a list of lots the table of that `campaign.md` has (the
+   template's `<all, ou L1 L2 …>` among them: its first word is no lot), an `expires:` that is not `YYYY-MM-DD HH:MM` or that the clock does not have (`date -d` has to
+   give it back as written, so `2026-11-31 10:00` and `99:99` are refused), a ceiling that is not a
+   number → `assisted — illegible`;
+3. `signed:` empty → `assisted — unsigned`;
+4. the digest in `signed:` differs from the one recomputed → `assisted — edited after signing`;
+5. `expires:` not after now → `assisted — expired`;
+6. above `assisted`, with `ON_ESCALATION_CMD` empty in the `.sdd/config.sh` of the campaign's
+   checkout or of a linked worktree that holds a mission of the campaign, or no config at all →
+   `assisted — no pager`, naming that file: the campaign's checkout first, then each of those
+   worktrees, since `sdd run` runs a mission in its worktree and pages from that checkout's file
+   (the set `budget` reads); a set that does not read — `git worktree list` fails, or a worktree of
+   the set sets another `HANDOFF_DIR` — is `assisted — unread: …`, and `level` leaves rc 1;
+7. with `--lot`: a lot outside `lots:`, or with no row in the table → `assisted — lot not covered`;
+8. with `--lot`: a lot ceiling lower than the signed level → that level, `— capped by the lot`. A
+   ceiling never raises the level, and one that is not a level caps the lot at `assisted`;
+9. otherwise the signed level, `— signed until <expires>`.
+
+Every rule reads ONE copy of the two files, made before the first: the digest is checked over the
+copy and the level, the lots and the ceiling granted are read from it, so an edit landing while the
+verb reads is never granted under the old signature, and the next call reads it as edited after
+signing. A copy that cannot be made (no `TMPDIR` to make it in) is `assisted — unread: …`, rc 1.
+
+**The lot of an act.** `allows` answers at the effective level of the act's lot, and the lot of an
+act on a mission that exists — `run`, `pr`, `review`, `merge`, `postmerge`, and `approve`, which
+`sdd approve` runs on a mission already planned — comes from the mission: `--mission <mission-dir>`
+names the mission's folder, the one `pr-ready` reads, and the lot is the `lot:` of its
+`00-missao.md`, never a word of the call. A `--lot` the session passed was a label:
+`allows <campaign-dir> merge --lot L1` over the pull request of the `L6a`, capped at `plan`,
+answered `allowed`. Only `plan`, which comes before the mission it makes, is asked with `--lot`. A
+call with neither flag, with the other one, with an empty value, or with a folder that holds no
+`00-missao.md` is rc 2, naming what the act takes; a mission whose `campaign:` is not the
+campaign's, or whose `lot:` is empty, asks, `assisted`, naming its file, and so does one whose lot
+is outside `lots:` or the table (`… — lot not covered: …, the lot: of <file>`): none is read as an
+act with no lot, which would answer the signed level over every ceiling. The folder is read where
+the call points: one outside the campaign's missions that declares its campaign and a lot is read
+as a mission of that lot.
+
+**The signature.** `sdd-worker delegate` prints what it grants: the six `key: value` lines, then
+one `ceiling <lot>: <ceiling>` line per row of the lots table of the `campaign.md` beside it, in
+the order of the queue. It asks `Sign this delegation? [y/N] ` on stderr and reads one line of
+stdin. Only `y` signs: it writes `signed: <YYYY-MM-DD HH:MM> <digest>`, the digest being the first
+12 hex of the `sha256sum` of those lines, in that order, each ending in a newline — so a delegation
+edited after signing is no delegation, and neither is one whose campaign lifted or lowered a lot's
+ceiling, or gained or lost a lot, after it. A lot's ceiling is what keeps its approval from being
+delegated, and it lives in a file the owner does not sign: the digest is what puts it under the
+signature. A lot's title and count and its items are not signed, since the campaign strikes them as
+it goes. It does not commit; its last line names the `git add` and `git commit` to
+run. No character on stdin is rc 66 and writes nothing, the contract of `sdd approve`; an illegible
+or already expired delegation is refused before the question, with rc 1. An edit saved while the
+signature is being written is kept, and nothing is signed (rc 1): the file is compared, right
+before the move that writes it, with a copy taken before the write. `level: assisted` may be
+signed, and grants nothing.
+
+**The clock.** One function gives the instant, `date '+%Y-%m-%d %H:%M'`. The seam `SDD_WORKER_NOW`
+replaces it only when it is **later** than the real clock: it lets the sensor move time forward and
+watch a delegation expire, and it never brings an expired one back.
+
+### The six verbs
+
+A call of the wrong shape, an unknown verb or a directory that is not there prints the usage on
+stderr and leaves rc 2. The reason of an answer comes after ` — `.
+
+| Call | Stdout | rc |
+|---|---|---|
+| `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible, expired, changed after it was shown (it signs the terms it showed) or while the signature was written, or a write that failed; 66 nothing on stdin |
+| `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0; 1 on `assisted — unread: …`, when the checkouts of the campaign do not read or no copy of the terms can be made |
+| `sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`, and `sdd-worker allows <campaign-dir> plan --lot L<n>` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner, a mission of another campaign, with no `lot:` or with a lot not covered among them; 2 not an act, no flag or the flag the act does not take, or a folder with no `00-missao.md` (every act is of one lot, and the lot's ceiling is the act's) |
+| `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling, with room for one run; 1 at or above it, with less of it left than the signed mission cap (`no room — …`), no ceiling or spend to read (`no spend — …`, the checkouts or the base that do not read among them), or `no mission cap — …` when the signed mission cap is zero or below one cent, or the config of the campaign's checkout or of a mission's worktree would beat it |
+| `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts or the base do not read); 3 when `gh` did not answer |
+| `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
+
+**`budget`** sums, with `jq` (never `awk`: under pt-BR the `mawk` reads `1.99` as 1), the `cost_usd`
+of the ledger rows (`${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`) whose `mission` is one of the
+campaign's: the folders under the repo's `HANDOFF_DIR` whose `00-missao.md` declares exactly that
+`campaign:`, in the campaign's checkout, in every linked worktree of the repo and in the base (the
+tree of the upstream of the branch that checkout has checked out), each mission once (a
+`git worktree list` that fails is `no spend — <the call> failed (rc <n>)`, and an upstream that does
+not read is one of three lines: `no spend — the upstream of <checkout> does not read: git
+for-each-ref failed (rc <n>)`, with no ref to name, when the branches do not list;
+`no spend — the upstream <upstream> of <checkout> does not read: git ls-tree <upstream> failed
+(rc <n>)`, or `git show <upstream>:<path>` in the place of the `ls-tree`, when its tree does not
+read, an upstream `[gone]` among them; and `no spend — no copy of the upstream <upstream> of
+<checkout> could be made under <TMPDIR>` — each rc 1, never a smaller sum). Money is counted in
+cents: the sum and the ceiling each go through `* 100 | round` before
+they are compared, so `0.10 + 0.70`, a binary `0.7999999999999999`, reaches a ceiling of `0.80`, and
+both are printed from those cents. An absent ledger is zero spent. The mission cap it prints is the
+signed `budget_mission_usd:` as written, never rounded (`%.2f` would print `0.004` as `0.00`, the
+runner's no ceiling): the value the session passes to `sdd run` as `BUDGET_MISSION_USD`. The runner
+sources the `.sdd/config.sh` of the checkout it runs in over that environment: a line there that
+assigns the key wins (the starter assigns `150`). The session runs it in the mission's worktree,
+and a worktree cut from a commit that still has the line keeps it after the owner deletes it in the
+campaign's checkout. So `budget` reads the file of the campaign's checkout and of each worktree
+that holds a mission of the campaign (the narrow set), each from its own checkout, the way the
+runner does, with the signed cap in the environment, and answers `no mission cap — <file> sets
+BUDGET_MISSION_USD=<value>, …`, rc 1, naming the first file whose value the runner would apply
+above the signed cap or at zero (no ceiling), or would refuse — the runner takes digits and at most
+one dot, so `1e2`, `+5` and a blank, which `jq` reads as numbers, are `… which sdd run refuses as no
+number`; one at or below it is the stricter ceiling, and holds. A signed `budget_mission_usd:` of
+zero is no ceiling for the runner too, and one below one cent is no cap the cents can hold: each
+stops `budget` before any `.sdd/config.sh` is read, naming the delegation: `no mission cap —
+<delegation.md> signs budget_mission_usd: 0, …`.
+
+**The campaign ceiling is a hard limit.** Below the ceiling, `budget` holds what is left of it, the
+ceiling's cents less the sum's, against the signed mission cap, in cents from its text: a fraction
+of a cent rounds up, and nothing goes through a `%.2f` or a binary product (`1.10 * 100` is
+`110.00000000000001`). A left below the cap is rc 1, on the line
+`no room — campaign US$ <spent> of <ceiling> leaves US$ <left>, below the mission cap US$ <cap> …`,
+since the next run may spend up to its cap; a left equal to it opens the run, and the campaign then
+ends at its ceiling exactly. The cap compared is the signed one, because the cap the runner applies
+never passes the signed (a config that would set it higher stops `budget` first) and one below it
+only spends less. So the campaign may end with up to one mission cap unused, and passes the one
+signed only by the phase the runner may spend past its own cap, by the spend of a mission `budget`
+does not find, and by the spend of the orchestrating session and of its subagents, which is
+outside both ceilings (all three in Declared limits). `budget` does not know the act it comes
+before, so the stop holds before every one, a merge among them.
+
+**`next`** walks the lots in table order and stops at the first one not merged: no mission → `plan`;
+a mission whose `aprovacao:` the runner's `gate_PLAN` would not admit (only `auto` and `humano-…`
+pass) → `approve`; approved, with no pull request on its `branch:` → `run`; an open pull request →
+`review`; only closed ones → `stop … pull request closed without merge`; every lot merged →
+`done - -`. The pull requests come from `gh pr list --head <branch> --state all --json
+number,state,isCrossRepository`, and only the repository's own count: `--head` matches a branch's
+name alone, and a pull request from a fork's branch of the same name (`isCrossRepository` true) is
+never the lot's. The merge is read before the approval: a lot whose pull request merged is done even
+when a copy of its mission left in an old worktree is not approved, and a mission that names a
+branch is asked about even when it is not approved. Declared limit: `--head` matches a name, never
+its use, so a merged pull request of an earlier use of the same branch name makes the lot done;
+measured on 2026-11-19, 0 of 161 merged pull requests of the kit share a head name with another of
+its 162 pull requests, so it stays a limit and not a fix. The measure is
+`gh pr list --state all --limit 1000 --json state,headRefName --jq '. as $a | [.[] |
+select(.state == "MERGED")] as $m | [$m[] | .headRefName as $h | select([$a[] |
+select(.headRefName == $h)] | length > 1)] |
+"\(length) of \($m | length) merged, \($a | length) in all"'`, run in the kit's checkout, which
+printed `0 of 161 merged, 162 in all`. A `gh` that
+fails, or answers off its contract, is rc 3 with no act — "could not read" never becomes "no pull
+request", which would send the session to run the lot again. Two missions on one lot, an approved
+mission with no branch, no `campaign.md`, a `campaign:` in it that is not the directory's name (an
+empty one and the template's placeholder among them, both values named) and an empty queue stop,
+with rc 1.
+
+**`pr-ready`** reads the pull request head (`headRefOid`) and requires five items on that one sha,
+naming the first that fails:
+
+1. `review`: the round is the one **committed at the head**, never a copy on disk: the mission
+   folder holds nothing `git status` lists (modified, staged, untracked or ignored), and with
+   item 5 the round read is the round the merge takes. The newest `40-review-r<N>.md` of the
+   mission folder, by number, names `reviewed_head: <sha>` in its frontmatter; every `Grade` cell
+   under `### Overall Grade`, the row split as `gate_REVIEW` splits it (a `\|` is a pipe of its
+   cell), is exactly `A`, the header and the separator known by the shape of the line (the
+   separator's every cell `:?-+:?`, the header the first row, its criterion `Criterion`), never by
+   the grade; the table has a row for each of the eight names of the table of
+   `templates/review.md` (the seven criteria and `Overall`: `REVIEW_CRITERIA` in the worker, held
+   equal to the template by `tests/check-worker.sh`), found by the criterion cell with its `*` and
+   backticks removed, never counted, so a round that leaves one out is not ready and the reason
+   names it: an `A` in every row present is not an `A` in every criterion, and a row beyond the
+   eight is held to `A` like the rest; no `Rationale` cell, and not the `gate:` of the
+   frontmatter (absent included), is a fill-in by the rule
+   `gate_REVIEW` applies (`placeholder`, copied into the worker and held equal to the runner's by
+   `tests/check-worker.sh`); the reviewed head is an ancestor of the head (the head itself
+   included); and every commit of `<reviewed_head>..<head>`, each against each parent, touches only
+   paths under the mission folder (`git diff-tree -r -m`, no rename followed), so a change undone
+   later and the resolution of a merge count;
+2. `codex`: of the comments of `chatgpt-codex-connector[bot]`, read with `--paginate`, the newest
+   one carrying `codex-review-state:v1` parses and is for the head, `completed`, with
+   `has_unresolved_findings` false; a newest one that does not parse is not ready, never an older
+   one read in its place. A receipt anybody else posts does not count, and no other bot's review is
+   read, so a bot out of quota neither blocks nor counts as a review;
+3. `threads`: no review thread unresolved, and no more of them than the hundred read;
+4. `mergeable`: the pull request is `OPEN` and `MERGEABLE`;
+5. `head`: the local `HEAD` is that sha.
+
+The `ready <sha>` line is what the session passes to `gh pr merge --merge --match-head-commit`. The
+method — a merge commit, never a squash — belongs to the command that merges, and
+`commands/sdd-worker.md` writes it. The five items are read one after the other, never at once, so
+the session reads `pr-ready` again immediately before `gh pr merge`.
+
+**What `pr-ready` does not read.** The body of a review, where 18 of the 38 findings CodeRabbit
+left on PR #414 lived; a review in state `CHANGES_REQUESTED` that carries no inline comment; and the
+`local/ci` status of the head, the suite's result published as a commit status. The bar it applies
+(§3 of `docs/superpowers/specs/2026-11-16-o-worker-merge-delegado.md`, decision 9 of the mission)
+names review threads alone, so none of the three keeps a pull request from `ready` once its five
+items hold. Reading them is a sixth item, which changes the bar: it is open in `TODO.md`, with the
+question of who writes `local/ci` in the worker's loop, since an item that no act writes would be a
+gate nobody can satisfy.
+
+**`reviewed_head:` is the worker's key, on purpose.** The rounds the REVIEW phase of `sdd run`
+writes do not carry it, and `templates/review.md` does not name it. So after a run `pr-ready`
+answers `not-ready review: the newest round names no head` until the session makes its own round
+over the head and writes it with the key: the owner's bar is higher than the pipeline's (every
+criterion A, no tolerance for prose), and the worker's round is what applies it. A round
+`gate_REVIEW` passes may fail `pr-ready`; never the reverse on the grade alone.
+
+### Declared limits (ADR 0022)
+
+- The signature proves an answer on stdin, not a person: an agent with a shell passes, the limit
+  `sdd approve` has too.
+- The ceilings read the ledger of this machine, and the spend of the orchestrating session and of
+  its subagents is outside both.
+- The campaign ceiling holds against the mission caps, not against the runner's overrun: the
+  runner reads its spend before a phase opens, so a phase may spend past `BUDGET_MISSION_USD`, and
+  the campaign past its ceiling by that much. The room `budget` keeps is one run's, and the loop
+  launches one run at a time.
+- A campaign's missions are matched by id, not by repository.
+- `budget`, `level` above `assisted`, and `next` source the `.sdd/config.sh` of the campaign's
+  checkout and of each linked worktree that holds a mission of the campaign, and of no other (the
+  narrow set, the owner's choice in the r5): a worktree with none runs no `sdd run` of the
+  campaign, and its file is never executed. Two consequences: a worktree whose branch carries a
+  merged copy of a mission of the campaign holds one, and is read; and a worktree whose
+  `HANDOFF_DIR` is not the root's keeps its missions where the root's does not look, so it is out
+  of the set, its missions are not counted, and its file is not read.
+- The base those verbs read is the upstream of the branch the campaign's checkout has checked out,
+  as the last fetch left it, read at that checkout's `HANDOFF_DIR`; its `.sdd/config.sh` is never
+  sourced, since no `sdd run` runs in it. A detached HEAD or a branch with no upstream reads no base,
+  and a merged mission whose worktree was removed is then found nowhere until the checkout takes the
+  base in; a branch whose upstream is not the base reads that branch's tree.
+- A mission of the campaign that never reached the base and whose worktree was removed is found
+  nowhere, and its spend leaves the sum: a pull request closed without merge, or a mission dropped
+  after a `budget-exhausted`, is on disk in its worktree alone, its branch is no base, and the
+  ledger names no campaign. So `budget` answers a smaller sum, rc 0, and the campaign may pass its
+  ceiling by that spend. Until the ledger carries the campaign (the direction is in `TODO.md`),
+  remove the worktree of a mission that will not reach the base only after signing a campaign
+  ceiling lower by what it spent, the sum of the `cost_usd` of the ledger lines whose `mission` is
+  its id.
+- In a target whose `.sdd/config.sh` assigns `BUDGET_MISSION_USD` above the signed cap, or leaves
+  `ON_ESCALATION_CMD` empty, the worker only fails closed (`no mission cap`, `assisted — no pager`):
+  the file wins over the environment, and making the signed values win there needs the runner's
+  config precedence, which ADR 0022 does not change.
+- `pr-ready` reads its five items one after the other: a receipt, a thread or the mergeability can
+  change between two reads on the same sha, and `--match-head-commit` holds the sha only. A ready
+  is good for the merge that follows it at once, never for one later.
+- `sdd approve` under `full` still writes `humano-YYYY-MM-DD`; the trail is the campaign journal.
+- Visual acceptance is never the worker's. Deleting a branch or a worktree, and pushing to the
+  default branch, are in no level.
+- A mission of the kit runs by `sdd run` in the mission's linked worktree, through the `sdd` on the
+  PATH — the main checkout, which the mission does not edit; from the main checkout it stays
+  forbidden. The kit's `gate_PR` leaves rc 2 when only the mutation stamp is missing, which the
+  worker reads as it reads an rc 0: the pull request is open, and its `pr` act comes next.
+- The Codex harness is the next mission: nothing here opens a phase outside `claude -p`.

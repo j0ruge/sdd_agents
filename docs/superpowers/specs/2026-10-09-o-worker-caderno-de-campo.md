@@ -80,3 +80,10 @@ Uma linha por missão, escrita depois do merge. Colunas que só um humano preenc
 - O D5 ("merge segue humano") ganha uma opção de **merge delegado**? Em 2026-11-16 o dono delegou
   os merges de uma noite, e o fluxo que rodou — o checklist de "tudo ok", a regra de parada e os
   fatos M1–M9 — está em [`2026-11-16-o-worker-merge-delegado.md`](2026-11-16-o-worker-merge-delegado.md).
+
+**Respondidas em 2026-11-17 pela [ADR 0022](../../adr/0022-the-worker-is-a-session-orchestrator.md),
+três por decisão e a quarta por exclusão:** o D1 cai, e o worker planeja do nível `plan` para cima
+(§6); o kit fixo não é degrau, é o `sdd` do PATH, o checkout principal que a missão não edita (§7);
+o D5 ganha o merge delegado, do nível `merge` para cima (§5); e a missão sem jornada num repo com
+interface fica para o W4 (`ENV_UP_CMD`), que a missão `20261117-o-worker-orquestrador` deixou fora
+de escopo.

@@ -44,6 +44,7 @@ the CLI is killed; it is released automatically when the last descendant exits. 
 ```bash
 # git clone https://github.com/j0ruge/sdd_agents.git   # PRIVATE repository
 export PATH="$HOME/repos/sdd_agents/bin:$PATH"     # or ln -s .../bin/sdd ~/.local/bin/sdd
+                                                   #   (and .../bin/sdd-worker beside it, for the worker)
 
 cd ~/repos/my-project
 sdd install            # creates .sdd/config.sh and copies .claude/agents/sdd-*.md
@@ -112,6 +113,9 @@ sdd run <mission> --max-phases 2    # stop after N phases
 
 sdd adr new --slug <s> --spec <path>  # reserve the next free ADR id (O_EXCL) and write both sides of the link
 sdd adr check [--mission <m>]         # read the links back; rc 0 clean, 1 violation, 2 bad configuration
+
+sdd-worker <verb> <dir> [args]        # the campaign worker's verbs (delegate, level, allows, budget, next, pr-ready);
+                                      #   they answer from artifacts and never act — see below
 ```
 
 `sdd approve <mission>` is the human gate with a command instead of a hand edit. It prints what you
@@ -150,6 +154,23 @@ Set `SPEC_DIR` if the repo keeps a SpecKit-style tree, and the same two-way chec
 `<SPEC_DIR>/*/spec.md`. The grammar, the two scopes and the CI/SpecKit recipes are in
 [`docs/pipeline.md`](docs/pipeline.md#adr-traceability); the decision itself is
 [ADR 0008](docs/adr/0008-adr-ids-are-allocated-and-links-are-checked.md).
+
+`sdd-worker` lives beside `sdd` in the kit's `bin/`, and it is the program of the **campaign
+worker** ([ADR 0022](docs/adr/0022-the-worker-is-a-session-orchestrator.md)): an interactive
+session, following `commands/sdd-worker.md`, that takes a queue of missions through plan, approval,
+run, review and merge inside a delegation the owner signed with `sdd-worker delegate` — a file with
+a level (`assisted` < `pr` < `plan` < `merge` < `full`), the lots it covers, an end and two
+ceilings. The verbs only answer: the effective level, whether an act fits it, the spend, the next
+act, and whether a pull request meets the merge bar on its head sha. An absent, unsigned, expired
+or illegible delegation answers `assisted`, and then the worker does nothing alone. With the
+`bin/` directory on the `PATH`, `sdd-worker` is there too; with only `sdd` symlinked, link
+`sdd-worker` as well, or call it by the path `commands/sdd-worker.md` resolves:
+`"$(dirname "$(readlink -f "$(command -v sdd)")")/sdd-worker"`. The session command itself is not
+installed by anything: neither `sdd install` nor `sdd-link-agents` touches `commands/`, so a session
+has `/sdd-worker` only where Claude Code finds the file, in `~/.claude/commands/` or the repo's
+`.claude/commands/`, linked by hand:
+`ln -s ~/repos/sdd_agents/commands/sdd-worker.md ~/.claude/commands/`. The contracts, the rules and
+the declared limits are in [`docs/pipeline.md`](docs/pipeline.md#the-worker).
 
 `sdd run` and `sdd retry` put you on the branch the plan declares (`branch:` in `00-missao.md`)
 before the first gate — checking it out, or cutting it from where you stand. A `<…>` placeholder or
@@ -220,7 +241,8 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | [`config/schema.md`](config/schema.md) | every `.sdd/config.sh` key, with its default and why |
 | [`CONTEXT.md`](CONTEXT.md) | glossary of the kit's own vocabulary, and the decisions resolved in interview |
 | [`agents/`](agents/) | the 8 agents (open markdown — portable to other harnesses) |
-| [`templates/`](templates/) | mission, plan, handoff, checkpoint, review, PR body |
+| [`templates/`](templates/) | mission, plan, handoff, checkpoint, review, PR body, campaign, delegation |
+| [`commands/`](commands/) | the session commands: `/sdd-plan` (planning, with you present) and `/sdd-worker` (the campaign loop) |
 | [`CLAUDE.md`](CLAUDE.md) | conventions for whoever (human or agent) works on **this** kit |
 | [`KAIZEN_LOG.md`](KAIZEN_LOG.md) | history of improvements with a measured before/after |
 | [`TODO.md`](TODO.md) | findings about the kit itself, recorded by any agent |
