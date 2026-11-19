@@ -337,14 +337,30 @@ executor_agent_probes() {
   # it looks at the tree, so a session opens over an uncommitted edit of the human's and was told to
   # throw it away, and uncommitted work has no other copy: the KAIZEN_LOG.md entry of 2026-08-14 on
   # the sensor of the sensor measured a `git checkout` that undid a sabotage and took the whole
-  # implementation with it. Only a mutant its `.bak` confirms goes back, by `mv`; every other change
+  # implementation with it. Only a mutant its `.bak` confirms goes back, by `cp`; every other change
   # stays where it is, and a red one of them explains stops the line.
   if [ -n "$left" ] && grep -qF 'diff <file>.bak <file>' <<< "$left" \
-     && grep -qF 'mv <file>.bak <file>' <<< "$left" && grep -qF 'stays exactly as it is' <<< "$left" \
+     && grep -qF 'cp <file>.bak <file> && rm <file>.bak' <<< "$left" && grep -qF 'stays exactly as it is' <<< "$left" \
      && grep -qF 'never `git restore`' <<< "$left" && grep -qF 'mark your increment `blocked`' <<< "$left" \
      && ! grep -qF 'undo what you did not write' <<< "$left"; then
     pass "hat: the executor puts back only a mutant its .bak confirms, leaves every other change it did not write in place, and stops on a red one of them explains"
   else fail "hat: sdd-executor puts back a leftover no .bak confirms, tells the session to undo uncommitted changes whose owner it cannot tell, or no longer stops the line on a red one of them explains"; fi
+  # L1 item D (TODO.md): an executor run as a subagent of a relay closed the last increment and came
+  # back without 20-handoff-exec.md, and outside the runner no gate says so. Section 5 makes section 6
+  # part of the same increment; section 7 makes the answer say whether the handoff was written.
+  local s5 s7
+  s5="$(awk '/^## 5\. /{s=1; next} s && /^## /{s=0} s' "$ex")"
+  s7="$(awk '/^## 7\. /{s=1; next} s && /^## /{s=0} s' "$ex")"
+  if grep -qF 'part of this same increment' <<< "$s5" && grep -qF '20-handoff-exec.md' <<< "$s5" \
+     && grep -qF 'whether `20-handoff-exec.md` was written' <<< "$s7"; then
+    pass "hat: the executor writes 20-handoff-exec.md in the increment that leaves no row pending, and its answer says whether it did"
+  else fail "hat: sdd-executor no longer makes the handoff part of the increment that leaves no row pending, or its answer no longer says whether it was written"; fi
+  # L1 item E (TODO.md): a mutant put back with mv keeps the old mtime, an incremental build (MSBuild,
+  # make) does not recompile, and the unmutated run after it measures the last mutant's binary.
+  if grep -qF 'cp <file>.bak <file> && rm <file>.bak' "$ex" && grep -qF 'keeps the old mtime' "$ex" \
+     && ! grep -qF 'mv <file>.bak <file>' "$ex"; then
+    pass "hat: the executor restores a mutant with cp and rm, so an incremental build sees a new mtime"
+  else fail "hat: sdd-executor restores a mutant with mv, which keeps the old mtime, or no longer says why cp"; fi
 }
 
 # One hat promised a measurement nobody makes, and another was silent where its boundary needed a

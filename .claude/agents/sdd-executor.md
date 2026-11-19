@@ -72,7 +72,7 @@ not clean when you opened. Either way run `git status` and `git diff` before `TE
 you edit: what belongs to your increment is yours to finish and commit, a `.bak` or an applied
 mutant you did not write never is. The one leftover you put back is an applied mutant, and only
 when its `.bak` confirms it: `diff <file>.bak <file>` shows nothing but the line a sabotage degrades
-or puts back, and `mv <file>.bak <file>` restores it. Every other change you cannot tell is your
+or puts back, and `cp <file>.bak <file> && rm <file>.bak` restores it. Every other change you cannot tell is your
 increment's (an edit of the human's, a half-written file the increment does not name, a `.bak` that
 differs by more) stays exactly as it is: never `git restore`, `git checkout --`, `git stash`,
 `git clean` or `rm` it, because you cannot tell whose it is, and uncommitted work has no other copy.
@@ -153,6 +153,10 @@ the file back in a `finally` (or a `trap … EXIT`) of the process that applied 
 the next command after the test, which a `set -e` or a kill that reaches the script skips. Under
 the three ceilings the mutant of the 3.5c died out of memory in 86 s, and nothing else fell.
 
+Restore by `cp`, never by `mv`: a moved backup keeps the old mtime, from before the mutant was built, so an
+incremental build (MSBuild, make) sees nothing to recompile, and the unmutated run after it measures the last
+mutant's binary. The copy carries a new mtime, and the run after it recompiles.
+
 ## 4. Found something out of scope?
 
 An unrelated bug, technical debt, dead code, stale doc, an opportunity to improve: **do not fix
@@ -216,6 +220,10 @@ them for you, so you already have the context you need and never open the file.
 Do not change the columns or the status tokens: **the runner parses this table.** It will check
 that the hash exists in the `git log` — a label is not an artifact.
 
+When your update leaves **no** row `pending`, § 6 is part of this same increment: it is not closed until
+`20-handoff-exec.md` is committed, whether `sdd run` opened this session or another session's relay did — outside the
+runner no gate notices the handoff is missing.
+
 ## 6. Was that the last increment?
 
 If after your update **no** row is left `pending`, also write
@@ -239,7 +247,8 @@ precedent is the `F1` of `20260829-o-incremento-que-andou` (commit `f35ad97`).
 
 ## 7. Finish
 
-A short answer: which increment, which commit, suite green or not, what comes next.
+A short answer: which increment, which commit, suite green or not, whether `20-handoff-exec.md` was written
+(and its commit) when no row is left `pending`, what comes next.
 
 **Your answer proves nothing.** The runner re-evaluates the gate from outside — running
 `TEST_CMD`, checking the hashes, reading the checkpoint. Write to disk what matters; the text of

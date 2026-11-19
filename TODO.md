@@ -831,7 +831,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão interativa que lançou a run da 3.6f do `dotp-remake` (2026-11-14)
 
 - [ ] **A sabotagem devolve o mutante com `mv`, e o build incremental mede o binário do mutante** —
-  `agents/sdd-executor.md:75` (`mv <file>.bak <file>`) — o `mv` devolve ao arquivo o mtime de antes do build
+  `agents/sdd-executor.md:75` (`cp <file>.bak <file>`) — o `mv` devolve ao arquivo o mtime de antes do build
   do mutante: o MSBuild (e o make e afins) não recompila, e a medida sem mutante de depois roda contra o
   binário do último mutante. No R1 da 3.6f do `dotp-remake` ela saiu vermelha em 4 s, com a dll do sexto
   mutante; com `touch` nos três arquivos, 133/133 verdes (`~/.wt/exec-3-6f/r1/k2/summary.txt`). Direção:
