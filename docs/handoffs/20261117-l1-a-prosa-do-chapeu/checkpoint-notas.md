@@ -28,3 +28,5 @@
 - 2026-11-19 17:03 · `I3` · I3 red: hat: the reviewer waits for a slow command in the foreground, under a ceiling below the Bash limit → FAIL antes da prosa
 - 2026-11-19 17:03 · `I3` · I3 red: hat: the reviewer writes a probe outside the repo by heredoc, and a test filter that matches nothing is a failure → FAIL antes da prosa
 - 2026-11-19 17:03 · `I3` · install --force respondeu `updated`, sem CHECKOUT-BUSY; a 1ª suíte saiu vermelha só no check-health (sensor sozinho, check-hat rc 1) porque editei as asserções Red com ela em curso; refeita depois da prosa: suite green, 0 FAIL
+- 2026-11-19 17:30 · `I4` · I4 red: hat: the docs phase turns a lesson its own log calls recurrent into a proposed rule, or writes why not → FAIL antes da prosa
+- 2026-11-19 17:30 · `I4` · install --force respondeu `updated`, sem CHECKOUT-BUSY; âncoras 103 medidas, 0 fora do alvo; suíte verde antes (14m54s) e depois, 0 FAIL
