@@ -38,3 +38,5 @@
 - 2026-11-19 18:41 · `I6` · âncoras J e K re-apontadas (`git clone`, `[b]in/sdd run`): 103 medidas, 0 fora do alvo; suíte verde antes e depois, 0 FAIL (a 1ª depois foi cortada pelo teto de 590 s do comando, e refeita destacada)
 - 2026-11-19 18:53 · `I7` · I7 red: todo.md e todo.pt-BR.md: a number that changes goes in the body, never in the title → FAIL antes da prosa
 - 2026-11-19 18:53 · `I7` · esqueleto das duas sementes intacto e 0 achados de forma; âncoras 103 medidas, 0 fora do alvo; suíte verde depois, 0 FAIL
+- 2026-11-19 19:06 · `I8` · I8 red: help: the sdd why entry of sdd help does not say that its gate runs TEST_CMD for EXEC, QA or REVIEW → FAIL antes da prosa (e de novo com o literal partido na quebra de linha, refeito numa linha só)
+- 2026-11-19 19:06 · `I8` · âncoras de bin/sdd re-apontadas no TODO.md (12436→12448, 12471→12474, 12729→12732 ×2, 12361→12370): 103 medidas, 0 fora do alvo; suíte verde depois, 0 FAIL, 904 mutantes aplicáveis
