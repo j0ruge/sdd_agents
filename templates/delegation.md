@@ -69,10 +69,19 @@ e o teto de missão, quando o resto é menor: o `run` seguinte pode gastar até 
 do da campanha. Resto igual ao teto de missão ainda abre o `run`, e a campanha termina no teto. A
 comparação é com o teto assinado, porque o que o runner aplica nunca passa dele (o `budget` já para
 num `.sdd/config.sh` que o passa). Assim a campanha pode acabar com até um teto de missão sem usar,
-e só passa do assinado pelo que o runner gasta além do próprio teto: ele lê o gasto antes de abrir
-cada fase, e uma fase pode gastar além do `BUDGET_MISSION_USD`. A parada vale antes de todo ato, o
-merge incluso; para seguir, assine um teto de campanha maior ou um teto de missão de no máximo o que
-resta.
+e só passa do assinado por dois gastos: o que o runner gasta além do próprio teto (ele lê o gasto
+antes de abrir cada fase, e uma fase pode gastar além do `BUDGET_MISSION_USD`) e o de uma missão que
+o `budget` não acha, no parágrafo abaixo. A parada vale antes de todo ato, o merge incluso; para
+seguir, assine um teto de campanha maior ou um teto de missão de no máximo o que resta.
+
+Uma missão da campanha que nunca chegou à base e cujo worktree foi removido não é achada, e
+o gasto dela sai da soma: um PR fechado sem merge, ou uma missão largada depois de um
+`budget-exhausted`, fica no disco só no worktree dela, a branch dela não é a base, e o ledger não
+sabe de campanha. O `budget` responde então uma soma menor, com rc 0, e a campanha pode passar do
+teto por esse gasto. Até o ledger saber de campanha (a direção está no `TODO.md` do kit),
+remova o worktree de uma missão que não vai chegar à base só depois de
+assinar um teto de campanha menor pelo que ela gastou: a soma do `cost_usd` das linhas do ledger
+com o id dela.
 
 ## Como assinar
 

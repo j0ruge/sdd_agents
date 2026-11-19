@@ -1991,8 +1991,9 @@ since the next run may spend up to its cap; a left equal to it opens the run, an
 ends at its ceiling exactly. The cap compared is the signed one, because the cap the runner applies
 never passes the signed (a config that would set it higher stops `budget` first) and one below it
 only spends less. So the campaign may end with up to one mission cap unused, and passes the one
-signed only by the phase the runner may spend past its own cap (Declared limits). `budget` does not
-know the act it comes before, so the stop holds before every one, a merge among them.
+signed only by the phase the runner may spend past its own cap and by the spend of a mission
+`budget` does not find (both in Declared limits). `budget` does not know the act it comes before,
+so the stop holds before every one, a merge among them.
 
 **`next`** walks the lots in table order and stops at the first one not merged: no mission → `plan`;
 a mission whose `aprovacao:` the runner's `gate_PLAN` would not admit (only `auto` and `humano-…`
@@ -2088,6 +2089,14 @@ criterion A, no tolerance for prose), and the worker's round is what applies it.
   sourced, since no `sdd run` runs in it. A detached HEAD or a branch with no upstream reads no base,
   and a merged mission whose worktree was removed is then found nowhere until the checkout takes the
   base in; a branch whose upstream is not the base reads that branch's tree.
+- A mission of the campaign that never reached the base and whose worktree was removed is found
+  nowhere, and its spend leaves the sum: a pull request closed without merge, or a mission dropped
+  after a `budget-exhausted`, is on disk in its worktree alone, its branch is no base, and the
+  ledger names no campaign. So `budget` answers a smaller sum, rc 0, and the campaign may pass its
+  ceiling by that spend. Until the ledger carries the campaign (the direction is in `TODO.md`),
+  remove the worktree of a mission that will not reach the base only after signing a campaign
+  ceiling lower by what it spent, the sum of the `cost_usd` of the ledger lines whose `mission` is
+  its id.
 - In a target whose `.sdd/config.sh` assigns `BUDGET_MISSION_USD` above the signed cap, or leaves
   `ON_ESCALATION_CMD` empty, the worker only fails closed (`no mission cap`, `assisted — no pager`):
   the file wins over the environment, and making the signed values win there needs the runner's

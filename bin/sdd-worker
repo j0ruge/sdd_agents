@@ -678,6 +678,15 @@ base_copies() {
 # `git fetch`, was fetched first); a root on a branch whose upstream is not the base reads that
 # branch's tree; and a base that keeps the missions outside the root's HANDOFF_DIR holds none the set
 # sees, as a worktree whose HANDOFF_DIR is not the root's.
+# A mission that never reached the base, its pull request closed without merge or the mission
+# dropped, is on disk in its worktree and in no other place the set reads: a mission that
+# never reached the base and whose worktree was removed is found nowhere, and its spend leaves the
+# sum budget answers, rc 0 (achado #1 of the r7). Its branch may still carry it, here and in the
+# remote, and no branch but the root's upstream is read; the ledger names no campaign, so no reader
+# of the spend finds it another way. The source the owner chose is in TODO.md (the session line of
+# the ledger carrying campaign:, which the runner reads from the 00-missao.md); until it lands,
+# remove the worktree of a mission that will not reach the base only after signing a
+# campaign ceiling lower by what it spent.
 campaign_set() {
   local root="$1" id="$2" hd whd wt m held
   SET_DIRS=(); SET_CHECKOUTS=("$root"); SET_WHY=""
@@ -755,6 +764,11 @@ campaign_set() {
 # below the signed cap (the fail-safe side: the owner deletes the line); a worktree made after this
 # call is not read, and the loop of commands/sdd-worker.md calls budget on every turn, so the turn
 # that runs a mission reads the worktree its plan made.
+# And a mission of the campaign that never reached the base and whose worktree was removed is found
+# nowhere, and its spend leaves the sum (campaign_set says why): budget answers a smaller sum, rc 0,
+# and the campaign may pass its ceiling by that spend. Until the ledger carries the campaign
+# (TODO.md), remove the worktree of a mission that will not reach the base only after signing a
+# campaign ceiling lower by what it spent.
 cmd_budget() {
   [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
   local dir="${1%/}" f root cap mcap run wt p ledger out spent ceiling reached short left
