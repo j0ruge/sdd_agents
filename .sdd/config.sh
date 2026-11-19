@@ -39,6 +39,12 @@ MODEL_DOCS="opus"
 MODEL_PUBLISH="sonnet"
 MODEL_TICKET="sonnet"
 
+# Piloto do effort (L1, 2026-11-19): o executor e a DOCS em medium; a REVIEW e a QA seguem nas
+# settings (xhigh), para o juiz nao mudar enquanto se mede o executor. Uma variavel por vez: a
+# REVIEW em medium e a missao seguinte, se a r1 desta nao achar regressao nascida do executor.
+EFFORT_EXEC="medium"
+EFFORT_DOCS="medium"
+
 QA_MAX_ITER=3
 REVIEW_MAX_ITER=3
 EXEC_MAX_RETRY=1
