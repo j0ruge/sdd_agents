@@ -933,6 +933,22 @@ doc_operator_probes() {
   fi
 }
 
+# --- sdd help: the why entry says its gate runs the suite (TODO item N) ---------------------------
+# `sdd why <m> EXEC` in magic_tutor was cut at the Bash tool's 2 min and could be read as a failed
+# gate: the help said "print why that phase's gate did not pass" and nothing about the gate RUNNING
+# TEST_CMD, which `sdd boot` already says. The probe reads the real `sdd help` output: the line that
+# opens with `  sdd why ` plus its continuation lines (20 or more leading spaces).
+help_probes() {
+  local out blk
+  out="$("$ROOT/bin/sdd" help 2>&1)" || true
+  blk="$(awk '/^  sdd why /{on=1; print; next} on && /^                    /{print; next} {on=0}' <<< "$out")"
+  if [ -n "$blk" ] && grep -qF 'TEST_CMD' <<< "$blk" && grep -qF 'EXEC, QA or REVIEW' <<< "$blk"; then
+    pass "help: sdd why says its gate runs TEST_CMD for EXEC, QA or REVIEW, as sdd boot does"
+  else
+    fail "help: the sdd why entry of sdd help does not say that its gate runs TEST_CMD for EXEC, QA or REVIEW"
+  fi
+}
+
 
 # --- the publisher and the mutation stamp (#142, #198; ADR 0015 §1) ------------------------------
 # The stamp is not headless. `sdd health` runs for twenty to fifty minutes; the publisher was told to
@@ -1281,6 +1297,7 @@ doc_finding_prs_probes
 doc_operator_probes
 publisher_stamp_probes
 boot_probes
+help_probes
 release_probes
 release_stamps_probes
 selftest || exit $?
