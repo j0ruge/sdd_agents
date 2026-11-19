@@ -290,7 +290,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`bin/sdd:2201`) compara com o `$DEFAULT_BRANCH`. No `sales_quote`, cuja base é a `develop`, o planner pode deixar
   `kaizen_log` sem `skipped` numa missão na base, e quem recusa é o `gate_PLAN` (ou o `gate_DOCS` de um `--phase`
   forçado): falha fechada, mas o consumidor está fora da suíte do kit (D15). Direção: a frase nomeia o
-  `DEFAULT_BRANCH` do alvo, e não o literal `main`.
+  `DEFAULT_BRANCH` do alvo, e não o literal `main`. RESOLVED by 2b01f33.
   — descoberto pelo Codex no yokoten `JRC-Brasil/sales_quote#484`, sobre a cópia do `bad6168` (2026-10-15)
 
 - [ ] **A primeira instalação semeia o `TODO.md` em inglês, qualquer que seja o idioma** — `bin/sdd:6251`
@@ -398,7 +398,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o último: ele commitou o `I11 done` (`508c4c9`, 19:48) e devolveu o relatório sem o handoff, que só veio quando o
   relay pediu (`ae3cc8e`, 19:52). Pelo `sdd run`, o gate do EXEC acusa a falta; fora dele, nada acusa. Direção: o
   §5 avisa que, sem linha `pending`, o §6 faz parte do mesmo incremento, e o relatório final do executor diz se o
-  handoff foi escrito.
+  handoff foi escrito. RESOLVED by abe5808.
   — descoberto pelo relay da missão `20261021-dica-mais-rapida` do `magic_tutor` (2026-10-21)
 
 - [ ] **O chapéu não pode declarar MCP, e o executor fica sem o REA** — `bin/sdd:5520` (`--strict-mcp-config`) —
@@ -458,7 +458,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   ela mesma dizia "terceira vez em três fatias" (o estado novo sem os leitores antigos) e não virou linha ⛔ com texto
   proposto para `.claude/rules/`, que a DOCS só escreve como proposta. Só a rodada `/codereview` sobre a DOCS pegou
   (MEDIUM), e o relay padronizou à mão (`859acf9` no alvo). Direção: lição que o próprio log chama de reincidente vira
-  linha ⛔ com texto proposto, ou leva o motivo escrito de não virar.
+  linha ⛔ com texto proposto, ou leva o motivo escrito de não virar. RESOLVED by 781fe39.
   — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
 
 - [ ] **O 3º caso do §0 do QA está só no caminho com interface, e o sem interface chega a ele igual** —
@@ -466,7 +466,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mas o §0 o põe "on the **with interface** path", e a tabela do §0 manda a sessão sem interface percorrer a
   jornada; quem a segura é o §2 ("never walk"). No `20261103-perfil-por-tipo` do `magic_tutor`, sem interface,
   a QA parou certa pelo §2; a que parar no §0 gasta a sessão percorrendo. Direção: o 3º caso nos dois
-  caminhos, apontando o §2.
+  caminhos, apontando o §2. RESOLVED by 40c836b.
   — descoberto por `sdd-qa` na missão `20261103-perfil-por-tipo` do `magic_tutor` (2026-11-03)
 
 - [ ] **O remédio do `qa: skipped` refutado apaga, com o handoff, os achados fora de escopo dele** —
@@ -640,7 +640,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O README chama o repositório de privado, e ele é público** — `README.md:45` (`git clone`) — o
   comentário do `git clone` diz "PRIVATE repository", e `gh repo view j0ruge/sdd_agents` responde
   `"isPrivate": false`; quem instala pode concluir que precisa de acesso concedido ou de token. Direção: tirar
-  o comentário, ou trocá-lo pelo que for verdade, com a data.
+  o comentário, ou trocá-lo pelo que for verdade, com a data. RESOLVED by 596627b.
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
 
 - [ ] **O `sdd run` diz que commita na base quando a TICKET vai cortar o branch antes** — `bin/sdd:6415`
@@ -680,7 +680,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sem dizer como saber que acabou. Na 3.5d do `dotp-remake` o relay vigiou com `pgrep -f 'sdd run <missão>'`, que
   casa com a shell do vigia (o padrão está no argv dela); o fim veio da linha `✓ pipeline complete` do log. A
   armadilha está em handoffs do kit desde 2026-08-26, nunca no doc do operador. Direção: o doc dá o
-  `[b]in/sdd run` ou o PID do líder do `setsid`, e a linha de fim do log.
+  `[b]in/sdd run` ou o PID do líder do `setsid`, e a linha de fim do log. RESOLVED by 596627b.
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
 - [ ] **O lembrete do `sdd kaizen` não vê o backlog nem diz o custo** — `bin/sdd:11860` (`kaizen_reminder`) — no
@@ -711,7 +711,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   da 0.4.0 do `lighthouse_project` (`pt-BR`), a 1ª devolução veio inteira em inglês apesar do prompt de delegação em
   pt-BR, e outra abriu em inglês depois de um lembrete: o relay teria de traduzir, e traduzir é parafrasear. Causa não
   verificada. Direção: o `## Language` estende o `OUTPUT_LANG` às devoluções, com um caso que o meça.
-  Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md` — relay do `/sdd-plan` (2026-10-14)
+  Fonte: `lighthouse_project/docs/handoffs/2026-10-14-planejar-0-4-0.md`. RESOLVED by 2b01f33.
+  — relay do `/sdd-plan` (2026-10-14)
 
 ### Custo e escala
 
@@ -757,28 +758,29 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `dotp-remake`: `20261024-plano-3-5-b-auras-e-equipamento` (2026-10-25) e
   `20261031-plano-3-5-c-nao-pode-protecao-e-prevencao` (2026-11-01). Na segunda, a saída dos mutantes foi lida em
   primeiro plano com `timeout 590 bash -c 'until /usr/bin/grep -q "^rc=" <saída>; do sleep 5; done'`. Direção:
-  esse laço no chapéu, com teto abaixo dos 10 min do Bash. — descoberto pela retro do `codereview` (fila do
-  `retrofit-watch`) nas REVIEW do `dotp-remake` (2026-11-02)
+  esse laço no chapéu, com teto abaixo dos 10 min do Bash. RESOLVED by b51657d.
+  — descoberto pela retro do `codereview` (fila do `retrofit-watch`) nas REVIEW do `dotp-remake` (2026-11-02)
 - [ ] **A sonda do revisor fora do repo vai por `Write`, que o `acceptEdits` nega, e filtro sem teste sai rc 0** —
   `agents/sdd-reviewer.md:87` (`Reproduce before you conclude`) — o chapéu manda reproduzir sem dizer onde gravar
   a cópia descartável. O `Write` em `~/.wt/…` volta negado (de propósito: `bin/sdd:5305`), e o heredoc pelo
   Bash resolve. Na REVIEW da `20261023-plano-3-4-b-ate-o-fim-do-turno` do `dotp-remake` (2026-10-24), o
   `dotnet test --filter` lançado junto rodou sem o arquivo: "No test matches the given testcase filter", rc 0,
   um verde que só o turno seguinte notou. Negado também na 3.5b, 3.5c e 3.5d. Direção: "sonda fora do repo por
-  heredoc" no chapéu, e filtro que não acha teste conta como falha.
+  heredoc" no chapéu, e filtro que não acha teste conta como falha. RESOLVED by b51657d.
   — descoberto pela retro do `codereview` (fila do `retrofit-watch`) nas REVIEW do `dotp-remake` (2026-11-02)
 - [ ] **Uma medida no título de um item troca a chave do espelho a cada medição** — `templates/todo.pt-BR.md:17`
   (`**<título>**`) — o `todo-to-github-issues` usa o título como chave. No `magic_tutor`, o item "O docs/monitor.md
   tem 501 linhas…" foi a 520 e a 547 em três sessões (2026-10-21 e 2026-10-22). A cada medição saiu `ORPHAN` + `CREATE`,
   e a chave da j0ruge/magic_tutor#39 foi trocada à mão três vezes (hoje o título diz 795). A skill diz isso desde a
-  2.9.0; a semente, não. Direção: uma linha no formato, nas duas variantes: número que muda vai no corpo.
+  2.9.0; a semente, não. Direção: uma linha no formato, nas duas variantes:
+  número que muda vai no corpo. RESOLVED by bc8710f.
   — descoberto pela retro do `todo-to-github-issues` (fila do `retrofit-watch`) no `magic_tutor` (2026-11-02)
 - [ ] **A Check de um item novo no `TODO_FILE` fixa o título e obriga a duplicar** — `agents/sdd-planner.md:100`
   (`RECURRED`) — no plano `20261103-perfil-por-tipo` do `magic_tutor`, a Check do I10 conta
   `grep -m1 -c 'O Jev ao vivo por tipo de decisão' TODO.md` → `1`. Antes da execução entrou um item aberto sobre o
   mesmo assunto (o 84 do `TODO.md` de lá): para ficar verde, o executor teria de abrir uma duplicata, contra a regra
   da `RECURRED`, e o `--check`/`--red` medem o texto, não a duplicata. Direção: a Check de item novo aceita também
-  a entrada `RECURRED` num aberto equivalente, e o planner lê os abertos ao escrevê-la.
+  a entrada `RECURRED` num aberto equivalente, e o planner lê os abertos ao escrevê-la. RESOLVED by 2b01f33.
   — descoberto pela retro do `sdd` no plano `20261103-perfil-por-tipo` do `magic_tutor` (2026-11-03)
 
 - [ ] **O plano que executa fora do `sdd run` promete o gate do EXEC sem o `20-handoff-exec.md`** —
@@ -794,7 +796,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `sdd boot` e o `run --dry-run` avisam que os gates rodam o `TEST_CMD`, e o `sdd status` oferece `--no-gates`; o
   `sdd why` parece só ler o disco. No `magic_tutor`, `sdd why 20261106-rapido-sem-arestas EXEC` passou dos 2 min do
   prazo padrão do Bash (o `gate-exec-test` das 18:14 levou 2 min 11 s) e foi cortado: uma sessão pode ler o corte como
-  gate reprovado. Direção: uma linha na ajuda, como a do `sdd boot`, dizendo quais fases rodam o `TEST_CMD`.
+  gate reprovado. Direção: uma linha na ajuda, como a do `sdd boot`,
+  dizendo quais fases rodam o `TEST_CMD`. RESOLVED by c02da26.
   — descoberto pelo relay da missão `20261106-rapido-sem-arestas` do `magic_tutor` (2026-11-06)
 
 - [ ] **O `gh pr edit` que o publisher e o `gate_PR` mandam usar não edita o corpo no `gh` 2.45** —
@@ -818,7 +821,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   dos dois lê os threads. No #391 o `mergeable_state` dizia `clean` e o check do CodeRabbit `success`, e um Major
   dele sobre o head (`agents/sdd-executor.md:75`) seguia `isResolved: false`, postado 3 h antes do handoff que
   apontava o merge como próximo passo; só a consulta `reviewThreads` do GraphQL o mostrou. Direção: o passo 7
-  exige `unresolved: 0` contado no head, com o comando ao lado.
+  exige `unresolved: 0` contado no head, com o comando ao lado. RESOLVED by 596627b.
   — descoberto pela sessão interativa do merge da missão `20261112-as-reincidentes-primeiro` (2026-11-13)
 
 - [ ] **O `sdd run` num worktree do alvo manda `install --force`, e o que falta é o `link-agents`** —
@@ -836,7 +839,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   binário do último mutante. No R1 da 3.6f do `dotp-remake` ela saiu vermelha em 4 s, com a dll do sexto
   mutante; com `touch` nos três arquivos, 133/133 verdes (`~/.wt/exec-3-6f/r1/k2/summary.txt`). Direção:
   restaurar com `cp <file>.bak <file> && rm <file>.bak` (ou `touch` depois do `mv`), e o chapéu dizer que a
-  medida sem mutante de depois recompila. Fonte: o `20-handoff-exec.md` da 3.6f, no `dotp-remake`
+  medida sem mutante de depois recompila. Fonte: o `20-handoff-exec.md` da 3.6f, no `dotp-remake` RESOLVED by abe5808.
   — descoberto por `sdd-executor` no R1 da `20261111-plano-3-6-f-gatilho-atrasado-e-conjurar-de-graca` (2026-11-15)
 
 - [ ] **O `/sdd-plan` não diz o que fazer com respostas do grill delegadas por escrito** —
