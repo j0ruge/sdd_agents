@@ -690,6 +690,29 @@ planner_agent_probes() {
   fi
 }
 
+# L1 (20261117-l1-a-prosa-do-chapeu), items F and G of TODO.md. F: the reviewer has neither Monitor
+# nor ScheduleWakeup, and the harness blocks a long foreground sleep, so "poll it in this same turn"
+# named no way to wait; the hat now gives one foreground loop under the 10 min Bash ceiling. G: a
+# disposable copy outside the repo written by Write comes back denied under acceptEdits, and a test
+# filter that matches nothing exits 0, which read as green. Read by section; the catalogue cannot
+# reach it — the same limit as executor_agent_probes, and the Red is in the mission notes.
+reviewer_agent_probes() {
+  local agent="$ROOT/agents/sdd-reviewer.md" sdie s3
+  sdie="$(awk '/^### Two ways this session dies/{s=1; next} s && /^##/{s=0} s' "$agent")"
+  s3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF "timeout 590 bash -c 'until grep -q \"^rc=\" <output>; do sleep 5; done'" <<< "$sdie" \
+     && grep -qF 'Monitor' <<< "$sdie"; then
+    pass "hat: the reviewer waits for a slow command in the foreground, under a ceiling below the Bash limit"
+  else
+    fail "hat: sdd-reviewer no longer says how to wait for a slow command without Monitor, in a foreground loop under the Bash ceiling"
+  fi
+  if grep -qF 'heredoc' <<< "$s3" && grep -qF 'matches no test' <<< "$s3"; then
+    pass "hat: the reviewer writes a probe outside the repo by heredoc, and a test filter that matches nothing is a failure"
+  else
+    fail "hat: sdd-reviewer no longer says to write a probe outside the repo by heredoc, or that a test filter matching nothing is a failure"
+  fi
+}
+
 command_worktree_probes() {
   local cmd="$ROOT/commands/sdd-plan.md" sec
   sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
@@ -1182,6 +1205,7 @@ fi
 census_probes
 executor_agent_probes
 planner_agent_probes
+reviewer_agent_probes
 hat_promise_probes
 command_approval_probes
 command_relay_probes

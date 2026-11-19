@@ -85,7 +85,10 @@ logs nothing (bash parsed `bin/sdd` at startup), so an empty log is no certifica
 evidence is your own `git diff --name-only <head this session opened with> HEAD`.
 
 Reproduce before you conclude. A finding you cannot reproduce is a hypothesis, and a hypothesis
-handed to the executor as an `R<n>` buys a session to chase nothing.
+handed to the executor as an `R<n>` buys a session to chase nothing. A disposable copy for a
+reproduction lives outside the repo and is written by a heredoc through Bash: a `Write` outside the
+repo comes back denied, on purpose. And a test filter that matches no test is a failure, not a
+green — read the count of tests that ran before you read the rc.
 
 ### Where each finding goes
 
@@ -144,6 +147,16 @@ IS ending the session, and there is nobody to wake you. A tool call that answere
 background" has not answered — poll it, in this same turn, until it does. Three rounds of one
 mission died with the words *"waiting for the suite"* after doing the entire analysis: US$ 104
 spent, no review delivered, because a slow `TEST_CMD` outlasted the patience of a single call.
+
+How to wait, since this hat has neither `Monitor` nor `ScheduleWakeup` and the harness blocks a
+long foreground `sleep`: send the slow command's output to a file that ends in a line `rc=<n>`, and
+wait for that line in the foreground, under a ceiling below the 10 min of a Bash call:
+
+```bash
+timeout 590 bash -c 'until grep -q "^rc=" <output>; do sleep 5; done'
+```
+
+If the `timeout` fires, run the same loop again in this same turn.
 
 If `TEST_CMD` really is too slow to sit through, that is a **finding** — it goes to `TODO_FILE`
 with the measurement. It is never a reason to narrate that you are waiting and stop.
