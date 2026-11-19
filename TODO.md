@@ -146,10 +146,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O PR sem conflito ainda quebra o `TODO.md` do alvo quando a missão paralela entra antes** —
   `agents/sdd-publisher.md:48` (`status: blocked`) — o publisher só para no conflito textual, o GitHub dá
   `MERGEABLE CLEAN` e o `TEST_CMD` mede o HEAD, não a mescla. O `j0ruge/magic_tutor#254` moveu o `descrever` da
-  `monitor/bancada.py` de 122 a 140, e a âncora do item 150 do `j0ruge/magic_tutor#259` ficou fora do alvo, o que
-  trava o espelho das issues (`b8cf0cc` a refez); no `j0ruge/magic_tutor#176` (2026-11-04), dois itens 85. Direção:
-  antes do push, o publisher mede a árvore de `git merge-tree --write-tree origin/<base> HEAD` (o `--anchors` e o
-  número de item repetido) e para com `status: blocked` quando ela falha.
+  `monitor/bancada.py` meia hora antes de o `j0ruge/magic_tutor#259` abrir, com o item 150 ancorado no lugar velho
+  (o espelho das issues trava; `b8cf0cc`); no `j0ruge/magic_tutor#176` (2026-11-04), dois itens 85. Direção: antes do
+  push, o publisher mede a árvore de `git merge-tree --write-tree origin/<base> HEAD` (`--anchors` e número repetido) e
+  para com `status: blocked`; a base que anda depois do push fica descoberta até quem faz o merge refazer essa medida.
   — descoberto pela sessão que acompanhou o `sdd run` no `magic_tutor` (2026-11-18)
 
 ### Contrato e configuração
