@@ -728,6 +728,22 @@ docs_agent_probes() {
   fi
 }
 
+# L1 (20261117-l1-a-prosa-do-chapeu), item I of TODO.md: a declared `qa: skipped` sends the phase
+# straight to this session on both paths, but section 0 put the third case on the with-interface
+# path only, and its table told the without-interface session to walk the journey. The hat now puts
+# the case on both paths, pointing at section 2. Read by section, the old sentence refused too; the
+# catalogue cannot reach it — the same limit as executor_agent_probes, Red in the mission notes.
+qa_agent_probes() {
+  local s0
+  s0="$(awk '/^## 0\. /{s=1; next} s && /^## /{s=0} s' "$ROOT/agents/sdd-qa.md")"
+  if grep -qF 'There is a third case, on **both** paths' <<< "$s0" && grep -qF 'never to walk' <<< "$s0" \
+     && ! grep -qF 'on the **with interface** path: the plan declares' <<< "$s0"; then
+    pass "hat: the qa hat sends a declared qa: skipped to the confirmation of section 2 on both paths"
+  else
+    fail "hat: sdd-qa no longer puts the declared qa: skipped case on both paths of section 0, pointing at the confirmation of section 2"
+  fi
+}
+
 command_worktree_probes() {
   local cmd="$ROOT/commands/sdd-plan.md" sec
   sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
@@ -1222,6 +1238,7 @@ executor_agent_probes
 planner_agent_probes
 reviewer_agent_probes
 docs_agent_probes
+qa_agent_probes
 hat_promise_probes
 command_approval_probes
 command_relay_probes
