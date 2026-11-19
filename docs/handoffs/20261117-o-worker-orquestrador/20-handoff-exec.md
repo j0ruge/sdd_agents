@@ -133,8 +133,11 @@ escolheu a recomendada (`a1f98d3`): o R18, a suíte e a r9.
 
 ## Boot da próxima fase
 
-**Depois do `R18`: a r8 fecha o seu lote, e a próxima é a r9, a rodada delta do worker.** Ela
-segue a mesma régua do dono de 20:30, a nota `REVIEW` do `checkpoint-notas.md` (`aebbc70`):
+**Depois da r10 (`491a976`, A em todo critério, nenhum R): a próxima é o `merge`.** A r9 e a r10
+fecharam o R18, o R19 e o R20, e a r10 leu também o merge da `main` (`f59dc42`). O ato é o `merge` do
+`commands/sdd-worker.md`: `pr-ready` no head do PR #414, lido de novo logo antes do `gh pr merge`, e o
+merge é do dono. O que segue é o registro de como a r9 foi aberta. Ela seguiu a mesma régua do dono de
+20:30, a nota `REVIEW` do `checkpoint-notas.md` (`aebbc70`):
 - lê só `67fb6f9..HEAD` e confere se os achados #1 e #2 da r8 fecharam como o R18 dizia;
 - invoca `/codereview:codereview base=67fb6f9290bab52fdb474dce7765c36de3b8fc1b`;
 - existe só porque o `pr-ready` recusa commit fora da pasta da missão depois do `reviewed_head:`;
@@ -142,7 +145,8 @@ segue a mesma régua do dono de 20:30, a nota `REVIEW` do `checkpoint-notas.md` 
 
 Antes dela, a sessão orquestradora relê os Checks `done` e roda a suíte inteira no head. O merge
 continua com o dono. O que mudou desde a r8 não é visível para quem usa o kit: nenhuma resposta de
-verbo mudou. O R18 mexeu num fixture e no cabeçalho do sensor, num comentário do `bin/sdd-worker`, no `KAIZEN_LOG.md` e na âncora de um item do `TODO.md`.
+verbo mudou. O R18 mexeu num fixture e no cabeçalho do sensor, num comentário do `bin/sdd-worker`,
+no `KAIZEN_LOG.md` e na âncora de um item do `TODO.md`.
 
 E o que mudou na r7:
 
