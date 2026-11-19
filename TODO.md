@@ -882,6 +882,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando o dono pede uma missão fora dela: sem `lot:` o `allows` dá `assisted`, com um `lot:` alheio o merge dá
   aquele lote por feito, e uma linha nova no `campaign.md` depois da assinatura muda o digest. Medido, diferencial
   sobre a delegação assinada de `cc8509a` com e sem a linha `L1b`: o L1 em voo passa a `edited after signing`.
+  Com o L1b já planejado (17:58), o `next` responde `ahead plan L2` sem derivar o `approve` dele.
   Direção: o ato `plan` diz a rota (a linha e o `lots:` no mesmo commit, assinados antes de chegar à `main`).
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-19)
 
