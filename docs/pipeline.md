@@ -1830,9 +1830,10 @@ root's `HANDOFF_DIR`, and of no other — the narrow set: `sdd run` runs a missi
 reads that checkout's file (rule 6 of the effective level, and `budget`), and a worktree that holds
 no mission of the campaign runs no `sdd run` of it, so its file, which sourcing would execute, is
 never read. A worktree of the set whose `HANDOFF_DIR` is not the root's, the two compared as the
-runner reads them (every leading `./` and every trailing `/` dropped), stops `budget`, `level` and
-`next` (rc 1, `unread: …`, naming both files): the runner there would look for its missions
-elsewhere.
+runner reads them (every leading `./` and every trailing `/` dropped), stops `budget`
+(`no spend — …`), `next` (`unread: …`) and `level` (`unread: …`, for a signed level above
+`assisted`; an `assisted` delegation reads no worktree), rc 1 and naming both files: the runner
+there would look for its missions elsewhere.
 
 - `campaign.md` (`templates/campaign.md`): frontmatter `campaign:` (the id, the directory's name),
   `title:`, `date:`, `harness:`, `plan_model:` and `exec_model:`; then the heading `## Lotes` over a
