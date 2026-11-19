@@ -877,6 +877,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   coluna Mitigação aponta o incremento e o Check, ou "adiado → <missão>", e o PLAN-AUTO reprova a linha sem nenhum.
   — descoberto pelo dono e pelo relay na missão `20261116-plano-7-b-o-palco-3d` (2026-11-17)
 
+- [ ] **A missão pedida fora da fila da campanha não tem rota, e a linha nova derruba a delegação** —
+  `commands/sdd-worker.md:117` (`lot: <L>`) — o ato `plan` só conhece lote da tabela, e nada diz o que fazer
+  quando o dono pede uma missão fora dela: sem `lot:` o `allows` dá `assisted`, com um `lot:` alheio o merge dá
+  aquele lote por feito, e uma linha nova no `campaign.md` depois da assinatura muda o digest. Medido, diferencial
+  sobre a delegação assinada de `cc8509a` com e sem a linha `L1b`: o L1 em voo passa a `edited after signing`.
+  Direção: o ato `plan` diz a rota (a linha e o `lots:` no mesmo commit, assinados antes de chegar à `main`).
+  — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-19)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
