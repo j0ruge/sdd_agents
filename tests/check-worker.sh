@@ -323,6 +323,12 @@
 #       campaign_set and cmd_budget, the Declared limits of docs/pipeline.md and the section of the
 #       campaign ceiling in templates/delegation.md write the limit and what the owner does until a
 #       source exists (achado #1 of the r7)
+#   R70 HANDOFF_DIR is compared as the runner reads it, every leading ./ and every trailing /
+#       dropped (load_config): `./docs/handoffs/` in the campaign checkout and `docs/handoffs` in the
+#       worktree of its mission, the inverse with the ./ and the / repeated, and each written on one
+#       side alone, give budget and level the whole answers of the same spelling on both sides, a
+#       differential; two folders that differ still stop both with rc 1, naming the two as the runner
+#       reads them (P2 of the Codex on PR #414, over f8e3e02)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33,
 # R60 and R63 to R68 carry their own negative control: each checker runs on the files, where it has
@@ -502,7 +508,7 @@
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
 # `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `narrow: `, `listed: `,
 # `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `criteria: `, `gone: `,
-# `stamp: `, `reuse: `, `blind: `, `cut: `, `ceiling: `, `derived: `, `discarded: `, `command: ` and
+# `stamp: `, `reuse: `, `blind: `, `cut: `, `ceiling: `, `derived: `, `discarded: `, `spelling: `, `command: ` and
 # `docs: `) prints exactly the assertions the mission plan or the fix increment that opened it names —
 # the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
 # the census in check-health.sh holds that clause.
@@ -4907,6 +4913,69 @@ if [ -z "$got" ]; then
 else
   fail 'discarded: a mission that never reached the base and whose worktree was removed leaves the sum of budget, rc 0, and campaign_set, cmd_budget, docs/pipeline.md and the template declare it with what the owner does' \
     'each removal its whole line and rc 0, the limit and the remedy in the four places, and each sabotaged copy naming what it lost' "$got"
+fi
+
+# --- R70: HANDOFF_DIR read as the runner reads it -----------------------------------------------
+# load_config normalises HANDOFF_DIR before any reader sees it (bin/sdd: every leading ./ and every
+# trailing / dropped), so `./docs/handoffs/` in the campaign checkout and `docs/handoffs` in the
+# worktree of one of its missions are one folder to the runner; campaign_set compared the two as
+# written, and budget answered `no spend` with rc 1 and level lowered the signed pr to `assisted —
+# unread` (P2 of the Codex on PR #414, over f8e3e02). One repo and a linked worktree w cut from it
+# holding the campaign's one mission; campaign c-spell signed at pr, mission cap 40, campaign cap
+# 100. budget and level are asked from the repo's cwd, and each world's two answers are compared
+# whole with those of the world whose two spellings are the same, a differential:
+#   same      `docs/handoffs` on both sides, pinned to its two answers so the comparison is not of
+#             two equal wrongs
+#   root      the campaign checkout's `./docs/handoffs/`, the worktree's `docs/handoffs`
+#   worktree  the campaign checkout's `docs/handoffs`, the worktree's `././docs/handoffs//`
+#   split     the campaign checkout's `./docs/handoffs`, the worktree's `docs/handoffs/`
+# Two folders that differ (`./docs/handoffs/` against `docs/missions/`) still stop both, rc 1,
+# naming the two as the runner reads them.
+got=""
+SC="$BOX/spell"; SW="$BOX/spell-w"
+mkdir -p "$SC/.sdd" "$SC/docs/campaigns"
+git init -q -b main "$SC"
+printf 'HANDOFF_DIR="docs/handoffs"\nON_ESCALATION_CMD="true"\n' > "$SC/.sdd/config.sh"
+git -C "$SC" add .sdd/config.sh
+git -C "$SC" -c user.name=fixture -c user.email=fixture@example.com commit -q -m fixture
+git -C "$SC" worktree add -q -b feat/spell-w "$SW" > /dev/null 2>&1 \
+  || got="fixture: the worktree w was not created"
+lot_mission "$SW" 20990801-spell-w c-spell L1 '' -
+d="$(campaign c-spell pr "$FAR" 40 100)"
+sign "$d"
+cp -a "$d" "$SC/docs/campaigns/"
+d="$SC/docs/campaigns/c-spell"
+# spell_world <campaign checkout's HANDOFF_DIR> <worktree's HANDOFF_DIR> — writes the two configs and
+# asks budget (under NUM_POISON) and level of d from the repo's cwd; PUBLISHES SPELL, the two
+# answers as `rc <n>: <line>`, one per line. Called, never substituted.
+spell_world() {
+  printf 'HANDOFF_DIR="%s"\nON_ESCALATION_CMD="true"\n' "$1" > "$SC/.sdd/config.sh"
+  printf 'HANDOFF_DIR="%s"\nON_ESCALATION_CMD="true"\n' "$2" > "$SW/.sdd/config.sh"
+  LC_ALL="$NUM_POISON" W_CWD="$SC" worker budget "$d"
+  SPELL="rc $W_RC: $W_OUT"
+  W_CWD="$SC" worker level "$d"
+  SPELL="$SPELL"$'\n'"rc $W_RC: $W_OUT"
+}
+spell_world docs/handoffs docs/handoffs
+same="$SPELL"
+want="rc 0: $(camp_line 0.00 100.00 1 40)"$'\n'"rc 0: level pr — signed until $FAR"
+[ "$same" = "$want" ] || got="${got:+$got; }same: '${same//$'\n'/ / }' (want '${want//$'\n'/ / }')"
+for w in 'root|./docs/handoffs/|docs/handoffs' 'worktree|docs/handoffs|././docs/handoffs//' \
+         'split|./docs/handoffs|docs/handoffs/'; do
+  IFS='|' read -r l a b <<< "$w"
+  spell_world "$a" "$b"
+  [ "$SPELL" = "$same" ] \
+    || got="${got:+$got; }$l: '${SPELL//$'\n'/ / }' (want the same spelling's '${same//$'\n'/ / }')"
+done
+why="HANDOFF_DIR 'docs/missions' in $SW/.sdd/config.sh is not the campaign checkout's 'docs/handoffs' ($SC/.sdd/config.sh)"
+spell_world ./docs/handoffs/ docs/missions/
+want="rc 1: no spend — $why"$'\n'"rc 1: level assisted — unread: $why"
+[ "$SPELL" = "$want" ] || got="${got:+$got; }apart: '${SPELL//$'\n'/ / }' (want '${want//$'\n'/ / }')"
+if [ -z "$got" ]; then
+  pass 'spelling: a HANDOFF_DIR with a leading ./ or a trailing / on either side of the set is the folder the runner reads, budget and level answering as with one spelling, and two folders that differ still stop both naming them as the runner reads them'
+else
+  fail 'spelling: a HANDOFF_DIR with a leading ./ or a trailing / on either side of the set is the folder the runner reads, budget and level answering as with one spelling, and two folders that differ still stop both naming them as the runner reads them' \
+    'the three spellings each the whole answers of the same one, and docs/missions rc 1 for both verbs naming the two normalised' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

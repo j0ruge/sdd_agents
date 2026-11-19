@@ -7463,6 +7463,13 @@ mut_WORKER_discarded_remedy_dropped() {
   sed -i '/^# budget <campaign-dir>/,/^cmd_budget() {$/ s/remove the worktree of a mission that will not reach the base only after/remove the worktree of a mission that will not reach the base after/' \
     "${1%/*}/sdd-worker"
 }
+# campaign_set compares the HANDOFF_DIR of a worktree of the set as written again, and the runner
+# reads it normalised (load_config): `././docs/handoffs//` there and `docs/handoffs` in the campaign
+# checkout are one folder to the runner, and budget and level stop on them with rc 1, `no spend` and
+# `assisted — unread` (P2 of the Codex on PR #414). Caught by "spelling: …" (check-worker.sh).
+mut_WORKER_handoff_dir_unnormalized() {
+  sed -i '/^campaign_set() {/,/^}/ { /^      dir_normalise whd$/d }' "${1%/*}/sdd-worker"
+}
 
 CATALOG=(
   COORD_adr_external_spec
@@ -8368,6 +8375,7 @@ CATALOG=(
   WORKER_derived_missing_file_asks
   WORKER_discarded_limit_dropped
   WORKER_discarded_remedy_dropped
+  WORKER_handoff_dir_unnormalized
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

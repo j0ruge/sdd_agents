@@ -162,7 +162,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
-  `bin/sdd-worker:1214` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
+  `bin/sdd-worker:1229` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
   nomeia threads: 18 dos 38 achados do CodeRabbit no PR #414 moravam no corpo das revisões, e um PR com eles,
   com uma `CHANGES_REQUESTED` sem inline ou com o `local/ci` vermelho dá `ready`. Ler os três é um sexto item,
   que muda a régua e não tem dono: nenhum ato do laço publica o `local/ci`, e sem quem o escreva o item é gate
@@ -180,7 +180,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-19)
 
 - [ ] **O `budget` esquece calado o gasto de uma missão que nunca chegou à base e cujo worktree saiu** —
-  `bin/sdd-worker:690` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
+  `bin/sdd-worker:703` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
   PR fechado sem merge ou a missão largada e o worktree removido, o `budget` dá US$ 0.00 no lugar dos US$ 85 do
   ledger, rc 0, e o teto que o R14 chama de limite duro passa por esse gasto. O R16 só o declara. Direção
   (decisão do dono na pendência 1 da r7): a linha `session` do ledger ganha `campaign:`, que o runner lê do

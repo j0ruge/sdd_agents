@@ -334,6 +334,19 @@ config_key() {
     . ./.sdd/config.sh > /dev/null 2>&1 < /dev/null; printf '%s' "${!key-}" ) || true
 }
 
+# dir_normalise <var> — normalises, in place, the directory key held in the variable named <var> as
+# load_config normalises HANDOFF_DIR (bin/sdd: every leading ./ and every trailing / dropped), the
+# spelling the runner reads and git prints paths in. ONE definition for every reader here that
+# compares the key or uses it as a path (base_copies, campaign_set): `./docs/handoffs/` and
+# `docs/handoffs` are one folder to the runner, and were two to a comparison of the raw values (P2 of
+# the Codex on PR #414). Called, never substituted.
+dir_normalise() {
+  local _dn="${!1}"
+  while [ "${_dn#./}" != "$_dn" ]; do _dn="${_dn#./}"; done
+  while [ "${_dn%/}" != "$_dn" ]; do _dn="${_dn%/}"; done
+  printf -v "$1" '%s' "$_dn"
+}
+
 # lots_table <campaign.md> — one line `<lot> <ceiling>` per row of the table under the `## Lotes`
 # heading, in the order of the queue. The two columns are found by their header names (`Lot`,
 # `Ceiling`), the separator row is skipped, and the table ends at its first line that is not a
@@ -611,7 +624,7 @@ checkouts_of() {
 # program exits (tmp_sweep, BASE_TMP); BASE_UP is the upstream's full name, and a reason that names a
 # copy names it `<upstream>:<path>`, never the copy (cmd_next). A folder is one of <handoff-dir>
 # itself, as `<handoff-dir>/*/00-missao.md` finds them on disk, and <handoff-dir> is normalised as
-# load_config normalises HANDOFF_DIR (a leading ./ and a trailing / dropped), the spelling git prints
+# load_config normalises HANDOFF_DIR (dir_normalise), the spelling git prints
 # the paths in. rc 0 and no copy when there is no upstream: a detached HEAD, or a branch with none
 # set. Returns 1, with the reason in BASE_WHY, when the upstream does not read — a for-each-ref, an
 # ls-tree or a show that fails, before printing or after, each judged by its rc — or no temporary
@@ -632,8 +645,7 @@ base_copies() {
   fi
   trap tmp_sweep EXIT
   BASE_COPY="$BASE_TMP/tree"
-  while [ "${hd#./}" != "$hd" ]; do hd="${hd#./}"; done
-  while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
+  dir_normalise hd
   git -C "$root" ls-tree -r -z --name-only "$up" -- "$hd/" > "$BASE_TMP/list" || rc=$?
   if [ "$rc" -ne 0 ]; then BASE_WHY="the upstream $up of $root does not read: git ls-tree $up failed (rc $rc)"; return 1; fi
   while IFS= read -r -d '' e; do
@@ -663,8 +675,9 @@ base_copies() {
 # is no checkout: no `sdd run` runs in it, so its file is never sourced, and it is read at the root's
 # HANDOFF_DIR, the set's.
 # Returns 1, with the reason in SET_WHY, when the worktrees do not list, when a checkout of the set
-# other than <root> sets a HANDOFF_DIR that is not the root's (the runner there would look for its
-# missions where the worker does not), or when the base does not read (an upstream set whose
+# other than <root> sets a HANDOFF_DIR that is not the root's, the two compared as the runner reads
+# them (dir_normalise: `./docs/handoffs/` is `docs/handoffs`), since the runner there would look for
+# its missions where the worker does not, or when the base does not read (an upstream set whose
 # for-each-ref, ls-tree or show fails, or no temporary directory for its copies): a base that was not
 # read is never a base with no mission. An empty <id> finds no mission, since it would match every
 # mission that belongs to no campaign; no verb reaches that branch (a legible delegation and the
@@ -697,6 +710,7 @@ campaign_set() {
   if ! checkouts_of "$root"; then SET_WHY="$CHECKOUTS_WHY"; return 1; fi
   hd="$(config_key "$root" HANDOFF_DIR)"
   hd="${hd:-docs/handoffs}"
+  dir_normalise hd
   for wt in "${CHECKOUTS[@]}"; do
     held=""
     for m in "$wt/$hd"/*/00-missao.md; do
@@ -706,6 +720,7 @@ campaign_set() {
       SET_CHECKOUTS+=("$wt")
       whd="$(config_key "$wt" HANDOFF_DIR)"
       whd="${whd:-docs/handoffs}"
+      dir_normalise whd
       if [ "$whd" != "$hd" ]; then
         SET_WHY="HANDOFF_DIR '$whd' in $wt/.sdd/config.sh is not the campaign checkout's '$hd' ($root/.sdd/config.sh)"
         return 1
