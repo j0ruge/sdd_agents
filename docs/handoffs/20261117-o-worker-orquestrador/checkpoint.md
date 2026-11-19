@@ -1,6 +1,6 @@
 ---
 missao: 20261117-o-worker-orquestrador
-atualizado: 2026-11-19 12:04
+atualizado: 2026-11-19 13:01
 ---
 
 # Checkpoint — O worker orquestrador
