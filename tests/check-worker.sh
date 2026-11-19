@@ -457,9 +457,10 @@
 # - Each place is read by its limit and its remedy alone, the template by fragments (its prose is
 #   pt-BR, and this file is English surface): the cases, the reason, the ceiling passed by that
 #   spend and the ledger sum the owner reads, around them, are unread, and so are the two sentences
-#   that say the campaign passes the signed ceiling only by the runner's overrun and by this spend
-#   (the paragraph of docs/pipeline.md that opens on `**The campaign ceiling is a hard limit.**`,
-#   and the template's), connecting prose as in R63 to R66.
+#   that say the campaign passes the signed ceiling only by three spends: the runner's overrun, this
+#   spend, and the orchestrating session's and its subagents' (the paragraph of docs/pipeline.md
+#   that opens on `**The campaign ceiling is a hard limit.**`, and the template's), connecting prose
+#   as in R63 to R66.
 # - next is not asked. Measured once for the R16, in a copy with a gh stub: the closed mission
 #   found answers `stop L1 <id> — pull request closed without merge: #7`, rc 1, and once its
 #   worktree goes, `plan L1 - — no mission of campaign <id> declares lot: L1`, rc 0. That is the
