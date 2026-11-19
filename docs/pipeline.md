@@ -1907,6 +1907,21 @@ copy and the level, the lots and the ceiling granted are read from it, so an edi
 verb reads is never granted under the old signature, and the next call reads it as edited after
 signing. A copy that cannot be made (no `TMPDIR` to make it in) is `assisted — unread: …`, rc 1.
 
+**The lot of an act.** `allows` answers at the effective level of the act's lot, and the lot of an
+act on a mission that exists — `run`, `pr`, `review`, `merge`, `postmerge`, and `approve`, which
+`sdd approve` runs on a mission already planned — comes from the mission: `--mission <mission-dir>`
+names the mission's folder, the one `pr-ready` reads, and the lot is the `lot:` of its
+`00-missao.md`, never a word of the call. A `--lot` the session passed was a label:
+`allows <campaign-dir> merge --lot L1` over the pull request of the `L6a`, capped at `plan`,
+answered `allowed`. Only `plan`, which comes before the mission it makes, is asked with `--lot`. A
+call with neither flag, with the other one, with an empty value, or with a folder that holds no
+`00-missao.md` is rc 2, naming what the act takes; a mission whose `campaign:` is not the
+campaign's, or whose `lot:` is empty, asks, `assisted`, naming its file, and so does one whose lot
+is outside `lots:` or the table (`… — lot not covered: …, the lot: of <file>`): none is read as an
+act with no lot, which would answer the signed level over every ceiling. The folder is read where
+the call points: one outside the campaign's missions that declares its campaign and a lot is read
+as a mission of that lot.
+
 **The signature.** `sdd-worker delegate` prints what it grants: the six `key: value` lines, then
 one `ceiling <lot>: <ceiling>` line per row of the lots table of the `campaign.md` beside it, in
 the order of the queue. It asks `Sign this delegation? [y/N] ` on stderr and reads one line of
@@ -1936,7 +1951,7 @@ stderr and leaves rc 2. The reason of an answer comes after ` — `.
 |---|---|---|
 | `sdd-worker delegate <campaign-dir>` | the six keys and the lot ceilings, then `signed <file> — commit it: …` or `not signed — <reason>` | 0 signed, or the answer was not `y`; 1 illegible, expired, changed after it was shown (it signs the terms it showed) or while the signature was written, or a write that failed; 66 nothing on stdin |
 | `sdd-worker level <campaign-dir> [--lot L<n>]` | `level <name> — <reason>` | 0; 1 on `assisted — unread: …`, when the checkouts of the campaign do not read or no copy of the terms can be made |
-| `sdd-worker allows <campaign-dir> <act> --lot L<n>` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner; 2 not an act, or no `--lot` (every act is of one lot, and the lot's ceiling is the act's) |
+| `sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`, and `sdd-worker allows <campaign-dir> plan --lot L<n>` | `allowed <act> at <level>`, or `ask <act> needs <floor>, effective <level> — <reason>` | 0 allowed; 1 back to the owner, a mission of another campaign, with no `lot:` or with a lot not covered among them; 2 not an act, no flag or the flag the act does not take, or a folder with no `00-missao.md` (every act is of one lot, and the lot's ceiling is the act's) |
 | `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling, with room for one run; 1 at or above it, with less of it left than the signed mission cap (`no room — …`), no ceiling or spend to read (`no spend — …`, the checkouts or the base that do not read among them), or `no mission cap — …` when the signed mission cap is zero or below one cent, or the config of the campaign's checkout or of a mission's worktree would beat it |
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts or the base do not read); 3 when `gh` did not answer |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |

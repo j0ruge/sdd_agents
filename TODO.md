@@ -162,7 +162,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
-  `bin/sdd-worker:1137` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
+  `bin/sdd-worker:1196` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
   nomeia threads: 18 dos 38 achados do CodeRabbit no PR #414 moravam no corpo das revisões, e um PR com eles,
   com uma `CHANGES_REQUESTED` sem inline ou com o `local/ci` vermelho dá `ready`. Ler os três é um sexto item,
   que muda a régua e não tem dono: nenhum ato do laço publica o `local/ci`, e sem quem o escreva o item é gate
@@ -585,7 +585,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
 
 - [ ] **O `delegate` imprime o `git add` com o caminho cru, que não é comando num checkout com espaço ou aspa** —
-  `bin/sdd-worker:303` (`git add %q`) — o dono copia `signed … — commit it: git add <arquivo> && git commit …`, e
+  `bin/sdd-worker:312` (`git add %q`) — o dono copia `signed … — commit it: git add <arquivo> && git commit …`, e
   sob o veneno do R58 do `tests/check-worker.sh` (`[ci]q"x @&*$1\`) a linha colada numa shell parte o caminho no
   espaço e abre uma aspa que não fecha; o id da campanha entra cru no `-m "…"` também. Direção: caminho e id saem
   por `%q`, e o R2 do sensor roda a linha e confere que o `git add` recebe um argumento só. RESOLVED by cbaf6be

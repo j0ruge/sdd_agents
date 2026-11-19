@@ -10,7 +10,7 @@
 #
 #   delegate   show a campaign's delegation, ask, and sign it
 #   level      the effective level of autonomy, with the reason
-#   allows     whether one act fits that level
+#   allows     whether one act fits that level, the lot of an act on a mission read from the mission
 #   budget     what the campaign spent against its two ceilings
 #   next       the next act of the campaign
 #   pr-ready   whether a pull request meets the owner's five-item bar on its head sha
@@ -30,6 +30,12 @@ DELEGATION_KEYS=(campaign level lots expires budget_mission_usd budget_campaign_
 # grants it, and an act is allowed because the table names a level at or below the effective one —
 # never because nothing refused it. A word the table does not name is no act at all.
 ACTS=(run:pr pr:pr review:pr plan:plan merge:merge postmerge:merge approve:full)
+# The acts asked by lot, ONE definition and positive: the acts that come before the mission they are
+# about, so no artifact holds their lot yet. Every other act of ACTS is on a mission that exists, and
+# is asked by the mission's folder: its lot is the lot: of that mission's 00-missao.md, never a word
+# the session passes (decision 3 of the owner on the review r6). An act joins this list only by being
+# written here, so a new act of ACTS is asked by its mission.
+LOT_ACTS=(plan)
 # The one author whose receipt counts for pr-ready: anybody can comment on a pull request of a
 # public repo, and a receipt somebody pasted is not a review.
 CODEX_LOGIN='chatgpt-codex-connector[bot]'
@@ -39,7 +45,10 @@ usage() {
 usage: sdd-worker <verb> <args>
   delegate <campaign-dir>                      show the delegation, ask, and sign it
   level    <campaign-dir> [--lot L<n>]         the effective level of autonomy, with the reason
-  allows   <campaign-dir> <act> --lot L<n>     whether the act fits the effective level of its lot
+  allows   <campaign-dir> <act> --mission <mission-dir>
+                                               whether the act fits the effective level of the lot
+                                               the mission's 00-missao.md declares
+  allows   <campaign-dir> plan --lot L<n>      whether planning the lot fits its effective level
   budget   <campaign-dir>                      the campaign's spend against its ceilings
   next     <campaign-dir>                      the next act of the campaign
   pr-ready <mission-dir> <pr>                  whether the pull request is ready on its head sha
@@ -377,8 +386,10 @@ tmp_sweep() {
   [ -z "${BASE_TMP:-}" ] || rm -rf -- "$BASE_TMP"
 }
 
-# effective_level <campaign-dir> [<lot>] — the level the worker may act at, PUBLISHED in LEVEL,
-# with the reason in LEVEL_WHY. The first rule that matches decides, in this order, and every rule
+# effective_level <campaign-dir> [<lot> [<from>]] — the level the worker may act at, PUBLISHED in
+# LEVEL, with the reason in LEVEL_WHY. <from> says where <lot> was read (allows passes `the lot: of
+# <mission>/00-missao.md`), and the two reasons of a lot not covered end in it, so the owner reads
+# which file named the lot. The first rule that matches decides, in this order, and every rule
 # that refuses answers assisted: a delegation that does not hold means "do nothing alone", never
 # "do what it says". LEVEL_STOP is set when the answer is assisted because the set of checkouts did
 # not read (campaign_set), or because no copy of the terms could be made: that is no answer about
@@ -393,7 +404,7 @@ tmp_sweep() {
 # what is both checked and granted, and it grants only when its digest is the signed one. The
 # reasons name the campaign's files, never the copy.
 effective_level() {
-  local dir="${1%/}" lot="${2:-}" src f signed want exp lv root wt lots w found="" l c cr sr
+  local dir="${1%/}" lot="${2:-}" from="${3:+, $3}" src f signed want exp lv root wt lots w found="" l c cr sr
   local -a words=()
   LEVEL=assisted
   LEVEL_STOP=""
@@ -441,14 +452,14 @@ effective_level() {
     if [ "$lots" != all ]; then
       read -ra words <<< "$lots"
       for w in "${words[@]}"; do [ "$w" = "$lot" ] && found=1; done
-      if [ -z "$found" ]; then LEVEL_WHY="lot not covered: $lot is not in lots: $lots"; return 0; fi
+      if [ -z "$found" ]; then LEVEL_WHY="lot not covered: $lot is not in lots: $lots$from"; return 0; fi
     fi
     found=""
     while read -r l c; do
       if [ "$l" = "$lot" ]; then found=1; break; fi
     done < <(lots_table "$src/campaign.md")
     if [ -z "$found" ]; then
-      LEVEL_WHY="lot not covered: $dir/campaign.md has no row for $lot"; return 0
+      LEVEL_WHY="lot not covered: $dir/campaign.md has no row for $lot$from"; return 0
     fi
     if [ "$c" != - ]; then
       if ! cr="$(ladder_rank "$c")"; then
@@ -492,20 +503,34 @@ act_floor() {
   return 1
 }
 
-# allows <campaign-dir> <act> --lot L<n> — whether <act> fits the effective level of the lot: rc 0
-# and `allowed`, or rc 1 and `ask`, naming the level the act needs and the reason of the effective
-# one, so the owner reads why it came back. A word the table does not name is a usage error (rc 2,
-# nothing on stdout): read as any level, it would be allowed at the top. The --lot is required, and
-# its absence is a usage error too: every act of a campaign is an act of one lot, the lot's ceiling
-# is the act's, and an act asked with no lot would answer the signed level over every ceiling of the
-# queue — the argument the session would have to remember is the reading this program takes from it.
+# allows <campaign-dir> <act> --mission <mission-dir> | allows <campaign-dir> plan --lot L<n> —
+# whether <act> fits the effective level of its lot: rc 0 and `allowed`, or rc 1 and `ask`, naming
+# the level the act needs and the reason of the effective one, so the owner reads why it came back.
+# A word the table does not name is a usage error (rc 2, nothing on stdout): read as any level, it
+# would be allowed at the top. Every act of a campaign is an act of one lot, and the lot's ceiling is
+# the act's. The lot of an act on a mission that exists (every act but those of LOT_ACTS: run, pr,
+# review, merge, postmerge and approve, `sdd approve` being run on a mission already planned) is the
+# lot: of <mission-dir>/00-missao.md, never a word of the call: a --lot the session passed was a
+# label, and `merge --lot L1` over the pull request of L6a, capped at plan, was allowed (decision 3
+# of the owner on the review r6). Only plan, which comes before the mission it makes, is asked by
+# --lot. A call with neither, with the other flag, with an empty value, or a <mission-dir> that holds
+# no 00-missao.md is a usage error, naming what the act takes: read as no lot, it would answer the
+# signed level over every ceiling of the queue. A mission that is not this campaign's (its campaign:
+# is not the directory's name, campaign_name, as id_is_dir reads the id) or whose lot: is empty asks,
+# assisted, naming its file, and a lot it declares outside lots: or the table asks the same way
+# (effective_level, told the file): each is an answer about the artifacts, which the owner fixes, and
+# none is read as a mission with no lot.
+# Declared limit: the folder is read where the caller points, so one outside the campaign's
+# missions (campaign_set) that declares its campaign and a lot is read as a mission of that lot; the
+# lot now comes from the folder of the mission the act is about — the mission `sdd run` and `sdd
+# approve` are given, the folder `pr-ready` reads, which holds it to the pull request by the head of
+# its checkout —, not from a word the call carries.
 # A rank that does not compare asks, never allows: that world is a floor off the ladder, which only
 # an edit of ACTS could write, so no probe reaches it from outside.
 cmd_allows() {
-  local lot="" need
+  local need by=mission e flag arg why lot="" mf="" mc id given="${3:-}" val="${4:-}"
   case "$#" in
-    2) printf 'sdd-worker: allows needs --lot L<n>: every act is of one lot, and its ceiling caps the act\n' >&2; usage; return 2 ;;
-    4) [ "$3" = --lot ] && [ -n "$4" ] || { usage; return 2; }; lot="$4" ;;
+    2 | 4) : ;;
     *) usage; return 2 ;;
   esac
   [ -d "$1" ] || { usage; return 2; }
@@ -513,7 +538,41 @@ cmd_allows() {
     printf "sdd-worker: '%s' is not an act (%s)\n" "$2" "${ACTS[*]%%:*}" >&2
     usage; return 2
   fi
-  effective_level "$1" "$lot"
+  for e in "${LOT_ACTS[@]}"; do [ "$e" != "$2" ] || by=lot; done
+  if [ "$by" = lot ]; then
+    flag=--lot; arg='--lot L<n>'; why='a plan comes before the mission it makes, and the ceiling of its lot caps it'
+  else
+    flag=--mission; arg='--mission <mission-dir>'
+    why="the lot of an act on a mission is the lot: its 00-missao.md declares, never a word of the call"
+  fi
+  if [ "$given" != "$flag" ]; then
+    printf 'sdd-worker: allows %s takes %s%s: %s\n' "$2" "$arg" "${given:+, not $given}" "$why" >&2
+    usage; return 2
+  fi
+  [ -n "$val" ] || { usage; return 2; }
+  why=""
+  if [ "$by" = lot ]; then
+    lot="$val"
+  else
+    mf="${val%/}/00-missao.md"
+    if [ ! -f "$mf" ]; then
+      printf 'sdd-worker: %s does not exist: --mission takes the folder of a mission\n' "$mf" >&2
+      usage; return 2
+    fi
+    id="$(campaign_name "$1")"
+    mc="$(fm_value "$mf" campaign)"
+    lot="$(fm_value "$mf" lot)"
+    if [ "$mc" != "$id" ]; then
+      why="another campaign's mission: $mf declares campaign: '$mc', and the campaign is '$id'"
+    elif [ -z "$lot" ]; then
+      why="no lot: $mf declares no lot:, and an act on a mission is an act of its lot"
+    fi
+  fi
+  if [ -n "$why" ]; then
+    LEVEL=assisted; LEVEL_WHY="$why"
+  else
+    effective_level "$1" "$lot" "${mf:+the lot: of $mf}"
+  fi
   if [ "$(ladder_rank "$LEVEL")" -ge "$(ladder_rank "$need")" ] 2>/dev/null; then
     printf 'allowed %s at %s\n' "$2" "$LEVEL"
     return 0

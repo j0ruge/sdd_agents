@@ -18,9 +18,13 @@ through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, 
 - `sdd-worker delegate <campaign-dir>` is the owner's, never yours: it shows the delegation, asks,
   and signs it. You never answer its question.
 - `sdd-worker level <campaign-dir> [--lot L<n>]`: the effective level of autonomy, with the reason.
-- `sdd-worker allows <campaign-dir> <act> --lot L<n>`: rc 0, the act is yours alone; rc 1, it goes
-  back to the owner, and the line names the level it needs. With no `--lot` it is rc 2: every act
-  is of one lot, and the lot's ceiling is the act's.
+- `sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`: rc 0, the act is yours alone;
+  rc 1, it goes back to the owner, and the line names the level it needs. Every act is of one lot,
+  and the lot's ceiling is the act's: the lot of an act on a mission is the `lot:` of
+  `<mission-dir>/00-missao.md`, never a word you pass. `<mission-dir>` is the mission's folder,
+  `<HANDOFF_DIR>/<mission>` in the worktree it runs in: the folder `pr-ready` reads too. Only
+  `plan`, which comes before its mission, is asked by lot:
+  `sdd-worker allows <campaign-dir> plan --lot L<n>`. Any other call is rc 2.
 - `sdd-worker budget <campaign-dir>`: the campaign's spend against its ceiling, and the mission cap.
 - `sdd-worker next <campaign-dir>`: the next act of the campaign, derived from the disk and `gh`.
 - `sdd-worker pr-ready <mission-dir> <pr>`: `ready <sha>` only when the five-item bar holds on the
@@ -66,10 +70,11 @@ or be edited, between two acts, and the answer of the last turn is not the answe
    line; rc 3 is a `gh` that did not answer: wait and ask again, and never read it as "no pull
    request". A second line `ahead plan <lot>` lets the next lot be planned while this one runs or is
    reviewed, when its own `plan` act is allowed.
-3. `sdd-worker allows <campaign-dir> <act> --lot <lot>`: rc 0, the act is yours; rc 1, propose it to
-   the owner, with the exact command, and wait for his yes. The yes is for that act alone: with it,
-   go back to 1, and when steps 1 and 2 bring the same act again, the yes stands for this step's
-   rc 0; another act asks again.
+3. `sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`, on the folder of the mission
+   `next` named, or `sdd-worker allows <campaign-dir> plan --lot <lot>` for a plan: rc 0, the act is
+   yours; rc 1, propose it to the owner, with the exact command, and wait for his yes. The yes is
+   for that act alone: with it, go back to 1, and when steps 1 and 2 bring the same act again, the
+   yes stands for this step's rc 0; another act asks again.
 4. The act, as the section below writes it.
 5. One line in `<campaign-dir>/journal.md`, append-only: `- <instant> · <lot> · <act> · <outcome>`,
    the instant from `date '+%Y-%m-%d %H:%M'` run in the same batch of commands, never from memory.
@@ -126,7 +131,7 @@ branch has no upstream:
 
 ### `approve`
 
-`sdd-worker allows <campaign-dir> approve --lot <L>`
+`sdd-worker allows <campaign-dir> approve --mission <mission-dir>`
 
 Measure again before approving: `tests/check-checkpoint.sh --check <checkpoint>` and
 `--red <checkpoint>` by the kit's path, the `--red` in the background and waited for its last line.
@@ -137,7 +142,7 @@ directory, then run `printf 'y\n' | sdd approve <mission>` in the mission's work
 
 ### `run`
 
-`sdd-worker allows <campaign-dir> run --lot <L>`
+`sdd-worker allows <campaign-dir> run --mission <mission-dir>`
 
 Launch `sdd run` in the mission's worktree, detached from this session, with the mission cap that
 `budget` printed, and keep the PID it echoes. The runner sources the `.sdd/config.sh` of the
@@ -175,7 +180,7 @@ stop (the mission ceiling).
 
 ### `pr`
 
-`sdd-worker allows <campaign-dir> pr --lot <L>`
+`sdd-worker allows <campaign-dir> pr --mission <mission-dir>`
 
 The run's PR phase opens the pull request; this act is what its body owes the owner. It lists the
 grill answers that touch his rules, and declares every bot but Codex that did not review (no quota,
@@ -186,7 +191,7 @@ branch with `gh pr create`, never by a push to the base.
 
 ### `review`
 
-`sdd-worker allows <campaign-dir> review --lot <L>`
+`sdd-worker allows <campaign-dir> review --mission <mission-dir>`
 
 In the mission's worktree, bring the base in (`git fetch`, then `git merge origin/<base>`), run the
 suite (`TEST_CMD`), and make the review round through a subagent that writes the report to a file
@@ -202,9 +207,10 @@ head.
 
 ### `merge`
 
-`sdd-worker allows <campaign-dir> merge --lot <L>`
+`sdd-worker allows <campaign-dir> merge --mission <mission-dir>`
 
-Run `sdd-worker pr-ready <mission-dir> <pr>`. Only `ready <sha>` (rc 0) merges, and the merge is
+Run `sdd-worker pr-ready <mission-dir> <pr>`, on the folder its `allows` call read. Only
+`ready <sha>` (rc 0) merges, and the merge is
 `gh pr merge <pr> --merge --match-head-commit <sha>` with that very sha: always a merge commit, never
 a squash or a rebase, which would orphan every `RESOLVED by <hash>` the branch wrote. An rc 1 names
 the item that failed: go back to the act that fixes it, never around it. An rc 3 is a `gh` that did
@@ -212,7 +218,7 @@ not answer: wait and ask again.
 
 ### `postmerge`
 
-`sdd-worker allows <campaign-dir> postmerge --lot <L>`
+`sdd-worker allows <campaign-dir> postmerge --mission <mission-dir>`
 
 What the merge leaves for the base (the roadmap, `TODO.md`, `KAIZEN_LOG.md`) goes in a pull request
 of its own, from a branch cut from the updated base, never a push to it; it gets its own review

@@ -41,7 +41,8 @@
 #       outside `lots:`, or with no row in the table, is assisted; a --lot with no lot is rc 2
 #   R11 `allows`, over a delegation signed at each of the five levels, answers the table of acts of
 #       the mission plan (kept HERE, never read from the program) in every one of the 35 cells, on
-#       a lot with no ceiling (every act is asked with --lot, R39):
+#       a lot with no ceiling (plan asked with --lot, every other act with --mission of a mission of
+#       that lot, R68):
 #       `allowed <act> at <level>` with rc 0, or `ask <act> needs <floor>, effective <level> — …`
 #       with rc 1
 #   R12 a word the table does not name — a near miss of an act, a level's name, an entry of the
@@ -110,7 +111,8 @@
 #   R30 commands/sdd-worker.md writes a call of every verb bin/sdd-worker dispatches — the verbs are
 #       read from the program's main(), so a verb it gains is a verb the command owes
 #   R31 each of the seven acts of the table kept HERE has one heading in the command, and the first
-#       line under it is the literal `sdd-worker allows <campaign-dir> <act> --lot <L>`
+#       line under it is the literal `sdd-worker allows <campaign-dir> plan --lot <L>` for plan and
+#       `sdd-worker allows <campaign-dir> <act> --mission <mission-dir>` for every other act (R68)
 #   R32 the command writes the five stops (one numbered line each, with the pager and the journal),
 #       the never list and the context rules, each phrase on a line of its own section; the fifth
 #       stop names the `campaign US$` line of budget, a measured spend, the lines that measured
@@ -147,9 +149,10 @@
 #       too — the template's own, an empty one, a quoted one —, and an absent one, since a round
 #       with reviewed_head: is the worker's own; a fill-in in a table after the grade table changes
 #       nothing
-#   R39 `allows` with no --lot is rc 2, nothing on stdout and the lot named on stderr, for each of
-#       the seven acts, under a full delegation that allows approve on a lot with no ceiling and caps
-#       it on a lot at plan: an act asked with no lot would answer over every ceiling of the queue
+#   R39 `allows` with no lot — no --lot for plan, no --mission for the others — is rc 2, nothing on
+#       stdout and the flag the act takes named on stderr, for each of the seven acts, under a full
+#       delegation that allows approve on a mission of a lot with no ceiling and caps it on one of a
+#       lot at plan: an act asked with no lot would answer over every ceiling of the queue
 #   R40 `delegate` signs what it showed: the delegation edited while the question is open (a FIFO
 #       on stdin) is `not signed`, rc 1, the file as the edit left it; the same FIFO with no edit
 #       signs, so the refusal is the edit's
@@ -302,6 +305,15 @@
 #       names it; the comment above cmd_budget and docs/pipeline.md write the rule, the signed cap's
 #       reason and the phase the runner may spend past its cap, and templates/delegation.md names the
 #       line (achado #3 and decision 2 of the owner on the r6)
+#   R68 the lot of an act on a mission that exists (run, pr, review, merge, postmerge, approve) is the
+#       lot: of the 00-missao.md of the folder --mission names, never a word of the call: under merge,
+#       merge on a mission of L6a, capped at plan, asks, and on one of L1 it is allowed; under full,
+#       approve the same; each of the six asked with --lot is rc 2 naming --mission, and plan asked
+#       with --mission is rc 2 naming --lot; a mission whose lot: is empty, whose lot: is the
+#       template's placeholder, of another campaign, of a lot outside lots: or with no row in the
+#       table asks, assisted, naming its file, never read as no lot; a folder with no 00-missao.md,
+#       and none, are rc 2 naming the file; plan --lot answers as before, its lot not covered naming
+#       no mission (decision 3 of the owner on the r6)
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33,
 # R60 and R63 to R67 carry their own negative control: each checker runs on the files, where it has
@@ -414,6 +426,16 @@
 #   bar, the reason an item with no owner would be a gate nobody can satisfy) can go and leave
 #   `blind:` green, and so can the connecting prose of the other three.
 #
+# Declared limits of R68, no probe:
+# - derived_usage asks for an empty stdout, and no world of its own reaches it: every refusal of
+#   allows goes to stderr, by a printf >&2 or by usage(), and a refusal moved to stdout loses its
+#   phrase on stderr first, which the same probe reads (the usage itself on stdout is R1's).
+# - The mission folders of the probes are made outside every checkout, and a folder inside the
+#   campaign's set is never asked for: allows reads the folder where the call points (the limit
+#   bin/sdd-worker declares above cmd_allows), so no world tells the two apart.
+# - derived_missing reads through tree_primitive too, and its call dropped alone is green (the
+#   pass of the R15), the limit of R63 to R66 above.
+#
 # Declared limits of R67, no probe:
 # - templates/delegation.md also writes the cap left unused and the phase the runner may spend past
 #   its own cap, in this repo's OUTPUT_LANG, and this file is English surface (tests/check-lang.sh
@@ -437,9 +459,9 @@
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
 # `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `narrow: `, `listed: `,
 # `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `criteria: `, `gone: `,
-# `stamp: `, `reuse: `, `blind: `, `cut: `, `ceiling: `, `command: ` and `docs: `) prints exactly
-# the assertions the mission plan or the fix increment that opened it names — the checkpoint counts
-# them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
+# `stamp: `, `reuse: `, `blind: `, `cut: `, `ceiling: `, `derived: `, `command: ` and `docs: `) prints
+# exactly the assertions the mission plan or the fix increment that opened it names — the checkpoint
+# counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
 # the census in check-health.sh holds that clause.
 #
 # Usage: tests/check-worker.sh   (exit 0 = every verb answers what its rule says)
@@ -942,6 +964,49 @@ else
     'the lower of the signed level and the ceiling, assisted where the lot is not covered' "$got"
 fi
 
+# --- missions: the fixtures ---------------------------------------------------------------------
+H=docs/handoffs
+
+# lot_mission <checkout> <id> <campaign> <lot> <branch> <approval> — a mission folder of <campaign>
+# and <lot> under the checkout's docs/handoffs, made from the kit's own template; an <approval> of
+# `-` leaves aprovacao: empty and `=` keeps the template's placeholder. Only the frontmatter is
+# edited, so a template whose lot: or branch: key moved leaves its placeholder and the probe that
+# finds the mission goes red.
+lot_mission() {
+  local ap="$6"
+  [ "$ap" != - ] || ap=""
+  mkdir -p "$1/$H/$2"
+  sed "2,/^---\$/ {
+         s@^missao: .*@missao: $2@
+         s@^campaign: .*@campaign: $3@
+         s@^lot: .*@lot: $4@
+         s@^branch: .*@branch: $5@
+       }" "$ROOT/templates/missao.md" > "$1/$H/$2/00-missao.md"
+  [ "$ap" = = ] || sed -i "2,/^---\$/ s@^aprovacao: .*@aprovacao: $ap@" "$1/$H/$2/00-missao.md"
+}
+
+# act_mission <campaign-dir> <lot> — the folder of a mission of the campaign of <campaign-dir> (the
+# last segment of its path, its id) on <lot>, made by lot_mission under $BOX/acts: outside every
+# checkout of the fixture, so no budget and no next of any campaign finds it. A choice, not a need
+# of today's probes (measured in the sabotage pass of the R15: made inside the fixture repo, every
+# probe stays green): it keeps a later world of budget or next over the same campaigns from counting
+# them. Prints its path. An act on a mission is asked with --mission, and its
+# lot is the lot: of that folder (R68).
+act_mission() {
+  local id="${1%/}"
+  id="${id##*/}"
+  lot_mission "$BOX/acts" "$id-$2" "$id" "$2" '' -
+  printf '%s\n' "$BOX/acts/$H/$id-$2"
+}
+
+# act_args <act> <lot> <mission-dir> — PUBLISHES ACT_ARGS, what follows the campaign in an allows call
+# of <act>: `plan --lot <lot>`, since a plan comes before its mission, and `<act> --mission
+# <mission-dir>` for every other act, which is on a mission that exists. The split is kept HERE and
+# never read from the program (R68). Called, never substituted: the array would die in a subshell.
+act_args() {
+  if [ "$1" = plan ]; then ACT_ARGS=("$1" --lot "$2"); else ACT_ARGS=("$1" --mission "$3"); fi
+}
+
 # --- allows: the fixtures -----------------------------------------------------------------------
 # The table of acts as the mission plan writes it, kept HERE and never read from the program: one
 # row per act, the lowest level that grants it, then one letter per level of the ladder in order
@@ -967,20 +1032,23 @@ allows_is() {
 
 # --- R11: five levels by seven acts -------------------------------------------------------------
 # Every cell asked of a delegation signed at its level, in a repo with a pager, on L1 (the
-# template's lot with no ceiling), and counted: the count is the witness that the 35 cells were
-# asked, since a loop that asked none leaves got empty.
+# template's lot with no ceiling) — plan by --lot L1, every other act by --mission of a mission of
+# L1 (act_args, R68) — and counted: the count is the witness that the 35 cells were asked, since a
+# loop that asked none leaves got empty.
 got=""; cells=0
 for i in "${!LEVELS[@]}"; do
   lv="${LEVELS[$i]}"
   d="$(campaign "a-$lv" "$lv" "$FAR" 25 200)"
   sign "$d"
+  m="$(act_mission "$d" L1)"
   for row in "${ACT_TABLE[@]}"; do
     read -r act floor yes <<< "$row"
     before="$got"
+    act_args "$act" L1 "$m"
     if [ "${yes:$i:1}" = y ]; then
-      allows_is "$lv/$act" 0 "allowed $act at $lv" "$d" "$act" --lot L1
+      allows_is "$lv/$act" 0 "allowed $act at $lv" "$d" "${ACT_ARGS[@]}"
     else
-      allows_is "$lv/$act" 1 "ask $act needs $floor, effective $lv — signed until $FAR" "$d" "$act" --lot L1
+      allows_is "$lv/$act" 1 "ask $act needs $floor, effective $lv — signed until $FAR" "$d" "${ACT_ARGS[@]}"
     fi
     [ "$got" != "$before" ] || cells=$((cells + 1))
   done
@@ -999,16 +1067,19 @@ fi
 # the stderr names the word. The near misses: an unknown word, a capital, a prefix, two acts in one
 # argument, a glob, a level's name, an entry of the table as the program may write it, and nothing.
 # The calls of the wrong shape ride along: no act, a --lot with no lot, a misspelt flag, and a
-# directory that is not there.
+# directory that is not there — asked with the flag its act takes (R68), so the directory is what
+# refuses it.
 got=""
 d="$REPO/docs/campaigns/a-full"
+m="$(act_mission "$REPO/docs/campaigns/a-nowhere" L1)"
 for act in frobnicate Merge merg 'run pr' '*' assisted 'run:pr' ''; do
   worker allows "$d" "$act" --lot L1
   { [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -qF "'$act' is not an act" <<< "$W_ERR" \
       && grep -q '^usage: sdd-worker ' <<< "$W_ERR"; } \
     || got="${got:+$got; }act '$act': rc $W_RC, stdout '$W_OUT', stderr '${W_ERR%%$'\n'*}'"
 done
-for args in "$d" "$d|run|--lot" "$d|run|--lit|L1" "$REPO/docs/campaigns/a-nowhere|run|--lot|L1"; do
+for args in "$d" "$d|run|--lot" "$d|run|--lit|L1" "$REPO/docs/campaigns/a-nowhere|plan|--lot|L1" \
+            "$REPO/docs/campaigns/a-nowhere|run|--mission|$m"; do
   IFS='|' read -ra a <<< "$args"
   worker allows "${a[@]}"
   { [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -q '^usage: sdd-worker ' <<< "$W_ERR"; } \
@@ -1026,8 +1097,9 @@ fi
 # between the act and an allow: absent, the template, unsigned, expired (a seam one minute past
 # FAR), edited after signing (lots narrowed), and no pager (the same signed file copied to
 # the repo whose config sets none). The three signed ones are first witnessed allowing approve. Each
-# world asks for each of the seven acts, effective assisted, with its own reason — and the count is
-# the witness that the 42 were asked.
+# world asks for each of the seven acts, effective assisted, with its own reason — plan by --lot L1,
+# the others by --mission of a mission of L1 of that campaign (act_args) — and the count is the
+# witness that the 42 were asked.
 got=""; asks=0
 mkdir -p "$REPO/docs/campaigns/a-absent" "$REPO/docs/campaigns/a-template"
 cp "$ROOT/templates/delegation.md" "$REPO/docs/campaigns/a-template/delegation.md"
@@ -1035,7 +1107,7 @@ campaign a-unsigned full "$FAR" 25 200 > /dev/null
 for id in a-expiring a-edited a-pager; do
   d="$(campaign "$id" full "$FAR" 25 200)"
   sign "$d"
-  allows_is "$id before" 0 'allowed approve at full' "$d" approve --lot L1
+  allows_is "$id before" 0 'allowed approve at full' "$d" approve --mission "$(act_mission "$d" L1)"
 done
 sed -i '2,/^---$/ s@^lots: all$@lots: L1@' "$REPO/docs/campaigns/a-edited/delegation.md"
 cp -a "$REPO/docs/campaigns/a-pager" "$NOPAGER/docs/campaigns/"
@@ -1044,11 +1116,13 @@ for w in "a-absent||no delegation" "a-template||illegible: " "a-unsigned||unsign
          "$NOPAGER/docs/campaigns/a-pager||no pager"; do
   IFS='|' read -r id seam why <<< "$w"
   if [[ "$id" == /* ]]; then d="$id"; else d="$REPO/docs/campaigns/$id"; fi
+  m="$(act_mission "$d" L1)"
   for row in "${ACT_TABLE[@]}"; do
     read -r act floor _ <<< "$row"
     before="$got"
+    act_args "$act" L1 "$m"
     SDD_WORKER_NOW="$seam" allows_is "${id##*/}/$act" 1 \
-      "ask $act needs $floor, effective assisted — $why" "$d" "$act" --lot L1
+      "ask $act needs $floor, effective assisted — $why" "$d" "${ACT_ARGS[@]}"
     [ "$got" != "$before" ] || asks=$((asks + 1))
   done
 done
@@ -1064,16 +1138,16 @@ fi
 # A full delegation over three lots: no ceiling, merge, full. On L1 and L3 approve is allowed at
 # full — the witness that the delegation grants it; on L2 it is asked, and merge is
 # allowed there at merge, so the cap is the lot's ceiling and not a refusal of the lot. A lot the
-# table has no row for asks too.
+# table has no row for asks too. Each act is asked on a mission of its lot (act_mission, R68).
 got=""
 d="$(campaign a-lots full "$FAR" 25 200)"
 set_lots "$d/campaign.md" 'L1:-' 'L2:merge' 'L3:full'
 sign "$d"
-allows_is 'L1, no ceiling' 0 'allowed approve at full' "$d" approve --lot L1
-allows_is 'L3, ceiling full' 0 'allowed approve at full' "$d" approve --lot L3
-allows_is 'L2, approve' 1 'ask approve needs full, effective merge — capped by the lot' "$d" approve --lot L2
-allows_is 'L2, merge' 0 'allowed merge at merge' "$d" merge --lot L2
-allows_is 'L9, no row' 1 'ask approve needs full, effective assisted — lot not covered' "$d" approve --lot L9
+allows_is 'L1, no ceiling' 0 'allowed approve at full' "$d" approve --mission "$(act_mission "$d" L1)"
+allows_is 'L3, ceiling full' 0 'allowed approve at full' "$d" approve --mission "$(act_mission "$d" L3)"
+allows_is 'L2, approve' 1 'ask approve needs full, effective merge — capped by the lot' "$d" approve --mission "$(act_mission "$d" L2)"
+allows_is 'L2, merge' 0 'allowed merge at merge' "$d" merge --mission "$(act_mission "$d" L2)"
+allows_is 'L9, no row' 1 'ask approve needs full, effective assisted — lot not covered' "$d" approve --mission "$(act_mission "$d" L9)"
 if [ -z "$got" ]; then
   pass 'allows: the lot ceiling stops approve on a capped lot under full'
 else
@@ -1120,10 +1194,11 @@ for w in 's-lift|s/^| L6 | lote L6 | plan | 1 |$/| L6 | lote L6 | - | 1 |/' \
   sl=L6; [ "$id" = s-lift ] || sl=L7
   level_is "$id after" 'level assisted — edited after signing' "$d"
   level_is "$id after, $sl" 'level assisted — edited after signing' "$d" --lot "$sl"
+  m="$(act_mission "$d" "$sl")"
   allows_is "$id, approve" 1 'ask approve needs full, effective assisted — edited after signing' \
-    "$d" approve --lot "$sl"
+    "$d" approve --mission "$m"
   allows_is "$id, merge" 1 'ask merge needs merge, effective assisted — edited after signing' \
-    "$d" merge --lot "$sl"
+    "$d" merge --mission "$m"
 done
 if [ -z "$got" ]; then
   pass 'seal: a lot ceiling lifted or a lot added after signing answers assisted, and the delegate shows each ceiling'
@@ -1171,8 +1246,6 @@ budget_is() {
   [ "$W_RC" = "$rc" ] && [[ "$W_OUT" != *$'\n'* ]] && [[ "$W_OUT" == "$want"* ]] \
     || got="${got:+$got; }$label: rc $W_RC, '$W_OUT' (want rc $rc, '$want…')"
 }
-
-H=docs/handoffs
 
 # --- R15: the campaign's missions and no other --------------------------------------------------
 # Campaign b-sum owns three missions: two in the fixture repo, one only in a linked worktree of it
@@ -1348,24 +1421,6 @@ else
 fi
 
 # --- next: the fixtures -------------------------------------------------------------------------
-# lot_mission <checkout> <id> <campaign> <lot> <branch> <approval> — a mission folder of <campaign>
-# and <lot> under the checkout's docs/handoffs, made from the kit's own template; an <approval> of
-# `-` leaves aprovacao: empty and `=` keeps the template's placeholder. Only the frontmatter is
-# edited, so a template whose lot: or branch: key moved leaves its placeholder and the probe that
-# finds the mission goes red.
-lot_mission() {
-  local ap="$6"
-  [ "$ap" != - ] || ap=""
-  mkdir -p "$1/$H/$2"
-  sed "2,/^---\$/ {
-         s@^missao: .*@missao: $2@
-         s@^campaign: .*@campaign: $3@
-         s@^lot: .*@lot: $4@
-         s@^branch: .*@branch: $5@
-       }" "$ROOT/templates/missao.md" > "$1/$H/$2/00-missao.md"
-  [ "$ap" = = ] || sed -i "2,/^---\$/ s@^aprovacao: .*@aprovacao: $ap@" "$1/$H/$2/00-missao.md"
-}
-
 # The gh stub answers the one question next asks, `gh pr list --head <branch> --state all --json
 # <fields>`, from $BOX/prs/<branch>: a JSON array in the shape the real gh printed on 2026-11-18 for
 # `gh pr list --head feat/o-revisor-so-acha --state all --json number,state,isCrossRepository` in
@@ -1985,14 +2040,16 @@ verbs_missing() {
 }
 
 # acts_unpreceded <file> — each act of ACT_TABLE whose heading `### \`<act>\`` is not in the file
-# exactly once, or whose first non-blank line under it is not its allows call, written whole.
+# exactly once, or whose first non-blank line under it is not its allows call, written whole: by
+# --lot for plan and by --mission for every other act (act_args, R68).
 acts_unpreceded() {
   local row act n first
   for row in "${ACT_TABLE[@]}"; do
     act="${row%% *}"
+    act_args "$act" '<L>' '<mission-dir>'
     n="$(grep -cxF "### \`$act\`" "$1" 2>/dev/null)"
     first="$(awk -v h="### \`$act\`" '$0 == h { on = 1; next } on && NF { print; exit }' "$1" 2>/dev/null)"
-    [ "$n" = 1 ] && [ "$first" = "\`sdd-worker allows <campaign-dir> $act --lot <L>\`" ] \
+    [ "$n" = 1 ] && [ "$first" = "\`sdd-worker allows <campaign-dir> ${ACT_ARGS[*]}\`" ] \
       || printf '%s\n' "$act"
   done
 }
@@ -2072,10 +2129,12 @@ fi
 got=""
 m="$(acts_unpreceded "$COMMAND")"
 [ -z "$m" ] || got="not preceded: ${m//$'\n'/ }"
-control 'review call deleted' acts_unpreceded review '/^`sdd-worker allows <campaign-dir> review --lot <L>`$/d'
-control 'run call names plan' acts_unpreceded run 's/^`sdd-worker allows <campaign-dir> run --lot/`sdd-worker allows <campaign-dir> plan --lot/'
+control 'review call deleted' acts_unpreceded review '/^`sdd-worker allows <campaign-dir> review --mission <mission-dir>`$/d'
+control 'run call names plan' acts_unpreceded run 's/^`sdd-worker allows <campaign-dir> run --mission/`sdd-worker allows <campaign-dir> plan --mission/'
 control 'plan call after prose' acts_unpreceded plan 's/^\(`sdd-worker allows <campaign-dir> plan --lot <L>`\)$/Plan first.\n\n\1/'
-control 'approve call partial' acts_unpreceded approve 's/^`sdd-worker allows <campaign-dir> approve --lot <L>`$/`sdd-worker allows <campaign-dir> approve`/'
+control 'approve call partial' acts_unpreceded approve 's/^`sdd-worker allows <campaign-dir> approve --mission <mission-dir>`$/`sdd-worker allows <campaign-dir> approve`/'
+control 'merge call by lot' acts_unpreceded merge 's/^`sdd-worker allows <campaign-dir> merge --mission <mission-dir>`$/`sdd-worker allows <campaign-dir> merge --lot <L>`/'
+control 'plan call by mission' acts_unpreceded plan 's/^`sdd-worker allows <campaign-dir> plan --lot <L>`$/`sdd-worker allows <campaign-dir> plan --mission <mission-dir>`/'
 control 'merge heading twice' acts_unpreceded merge '$a\
 \
 ### `merge`\
@@ -2324,7 +2383,8 @@ for w in "g-renamed|campaign: 'g-moved' in $C/g-renamed/delegation.md is not the
          "g-lone|$C/g-lone/campaign.md does not exist"; do
   IFS='|' read -r id why <<< "$w"
   level_is "$id" "level assisted — illegible: $why" "$C/$id"
-  allows_is "$id" 1 "ask approve needs full, effective assisted — illegible: $why" "$C/$id" approve --lot L1
+  allows_is "$id" 1 "ask approve needs full, effective assisted — illegible: $why" "$C/$id" approve \
+    --mission "$(act_mission "$C/$id" L1)"
   budget_is "$id" 1 "no ceiling — illegible: $why" "$C/$id"
 done
 cp "$C/g-renamed/delegation.md" "$BOX/g-renamed.before"
@@ -2485,23 +2545,30 @@ fi
 
 # --- R39: an act asked with no lot ----------------------------------------------------------------
 # Every act of a campaign is an act of one of its lots, and a lot's ceiling is the act's (R14): an
-# act asked with no --lot would answer the signed level over every ceiling of the queue. A full
-# delegation over L1 (no ceiling) and L6 (plan), signed and first witnessed allowing approve on L1
-# and capping it on L6, so the refusal that follows is the missing lot's: each of the seven acts
-# asked with no --lot is rc 2, nothing on stdout, and the stderr names the lot it needs, in its own
-# line and in the usage — the usage alone is what every call of the wrong shape prints. The count
+# act asked with no lot would answer the signed level over every ceiling of the queue. A full
+# delegation over L1 (no ceiling) and L6 (plan), signed and first witnessed allowing approve on a
+# mission of L1 and capping it on one of L6, so the refusal that follows is the missing lot's: each
+# of the seven acts asked with no lot — no --lot for plan, no --mission for the six acts on a mission
+# (R68) — is rc 2, nothing on stdout, and the stderr names the flag the act takes, in its own line
+# and in the usage — the usage alone is what every call of the wrong shape prints. The count
 # witnesses the seven.
 got=""; nolot=0
 d="$(campaign o-nolot full "$FAR" 25 200)"
 set_lots "$d/campaign.md" 'L1:-' 'L6:plan'
 sign "$d"
-allows_is 'L1, approve' 0 'allowed approve at full' "$d" approve --lot L1
-allows_is 'L6, approve' 1 'ask approve needs full, effective plan — capped by the lot' "$d" approve --lot L6
+allows_is 'L1, approve' 0 'allowed approve at full' "$d" approve --mission "$(act_mission "$d" L1)"
+allows_is 'L6, approve' 1 'ask approve needs full, effective plan — capped by the lot' "$d" approve \
+  --mission "$(act_mission "$d" L6)"
 for row in "${ACT_TABLE[@]}"; do
   read -r act _ <<< "$row"
+  if [ "$act" = plan ]; then
+    takes='--lot L<n>'; uline='allows   <campaign-dir> plan --lot L<n> '
+  else
+    takes='--mission <mission-dir>'; uline='allows   <campaign-dir> <act> --mission <mission-dir>'
+  fi
   worker allows "$d" "$act"
-  if [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -qF 'sdd-worker: allows needs --lot L<n>' <<< "$W_ERR" \
-     && grep -qF 'allows   <campaign-dir> <act> --lot L<n> ' <<< "$W_ERR"; then
+  if [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -qF "sdd-worker: allows $act takes $takes: " <<< "$W_ERR" \
+     && grep -qF "$uline" <<< "$W_ERR"; then
     nolot=$((nolot + 1))
   else
     got="${got:+$got; }$act with no lot: rc $W_RC, stdout '$W_OUT', stderr '${W_ERR%%$'\n'*}'"
@@ -2509,10 +2576,10 @@ for row in "${ACT_TABLE[@]}"; do
 done
 [ "$nolot" = 7 ] || got="${got:+$got; }$nolot of 7 acts refused with no lot"
 if [ -z "$got" ]; then
-  pass 'lot: an act asked with no --lot is rc 2 and never allowed, under a full delegation with a lot capped at plan'
+  pass 'lot: an act asked with no lot, by --lot for plan or --mission for the others, is rc 2 and never allowed, under a full delegation with a lot capped at plan'
 else
-  fail 'lot: an act asked with no --lot is rc 2 and never allowed, under a full delegation with a lot capped at plan' \
-    'rc 2, nothing on stdout, the --lot named on stderr, for each of the seven acts' "$got"
+  fail 'lot: an act asked with no lot, by --lot for plan or --mission for the others, is rc 2 and never allowed, under a full delegation with a lot capped at plan' \
+    'rc 2, nothing on stdout, the flag the act takes named on stderr, for each of the seven acts' "$got"
 fi
 
 # --- R40: the delegate signs what it showed ------------------------------------------------------
@@ -2744,12 +2811,12 @@ fi
 # ON_ESCALATION_CMD empty, two linked worktrees cut from that commit — m holds the campaign's
 # mission, x holds none —; campaign p-pager signed at pr, its lot L1 with no ceiling:
 #   m        the pager in the campaign's checkout and in x, m's left empty: assisted naming m's
-#            file, and `allows run --lot L1` asks
+#            file, and `allows run` on a mission of L1 asks
 #   x        the pager in the campaign's checkout and in m, x's left empty: the signed pr — x holds
 #            no mission of the campaign, no `sdd run` of it pages from there, and its file is never
 #            read (the narrow set, R49)
 #   inverse  the pager in both worktrees, the campaign's checkout left empty: assisted naming its file
-#   control  the pager in every checkout: the signed pr, and `allows run --lot L1` allowed, so each
+#   control  the pager in every checkout: the signed pr, and `allows run` on L1 allowed, so each
 #            stop is a file's empty pager and nothing else
 #   nogit    the same file copied outside any git checkout, asked from the cwd of P with the pager
 #            everywhere: assisted naming `(no repo)`, never a checkout of the cwd's repo; the signed
@@ -2788,14 +2855,15 @@ pager_is() {
 }
 nopage='level assisted — no pager: ON_ESCALATION_CMD is empty in'
 pager_is m "$pager" "$nopager" "$pager" "$nopage $PM/.sdd/config.sh"
+pm1="$(act_mission "$d" L1)"
 allows_is m-run 1 "ask run needs pr, effective assisted — no pager: ON_ESCALATION_CMD is empty in $PM/.sdd/config.sh" \
-  "$d" run --lot L1
+  "$d" run --mission "$pm1"
 [ "$W_OUT" = "ask run needs pr, effective assisted — no pager: ON_ESCALATION_CMD is empty in $PM/.sdd/config.sh" ] \
   || got="${got:+$got; }m-run: the line is not the whole answer: '$W_OUT'"
 pager_is x "$pager" "$pager" "$nopager" "level pr — signed until $FAR"
 pager_is inverse "$nopager" "$pager" "$pager" "$nopage $P/.sdd/config.sh"
 pager_is control "$pager" "$pager" "$pager" "level pr — signed until $FAR"
-allows_is control-run 0 'allowed run at pr' "$d" run --lot L1
+allows_is control-run 0 'allowed run at pr' "$d" run --mission "$pm1"
 mkdir -p "$BOX/nogit"
 cp -a "$d" "$REPO/docs/campaigns/l-pager-assisted" "$BOX/nogit/"
 W_CWD="$P" level_is nogit "$nopage (no repo)/.sdd/config.sh" "$BOX/nogit/p-pager"
@@ -3084,7 +3152,7 @@ fi
 # campaign's mission (L1, not approved and with no branch, so next answers approve and asks no gh),
 # o a mission of another campaign, x none —; campaign n-narrow signed at pr, mission cap 40,
 # campaign cap 100.
-# budget, level, `allows run --lot L1` and next are each asked from the cwd of the repo, the marks
+# budget, level, `allows run` on m's mission and next are each asked from the cwd of the repo, the marks
 # cleared before each:
 #   control  every config clean, m's touching a mark of its own: each verb gives its answer, whole,
 #            and leaves m's mark — the set is read
@@ -3111,7 +3179,7 @@ d="$(campaign n-narrow pr "$FAR" 40 100)"
 sign "$d"
 cp -a "$d" "$NR/docs/campaigns/"
 d="$NR/docs/campaigns/n-narrow"
-# four_ask <dir> — budget, level, `allows run --lot L1` and next asked of <dir> from the cwd of NR,
+# four_ask <dir> — budget, level, `allows run` on m's mission and next asked of <dir> from the cwd of NR,
 # the marks cleared before each; PUBLISHES FOUR, one `<verb>: rc <rc> '<stdout>' marks <names>` line
 # per verb. Called, never substituted: under `$( )` the global would die with the subshell.
 four_ask() {
@@ -3121,7 +3189,7 @@ four_ask() {
     rm -f "$BOX"/narrow-mark-*
     case "$v" in
       budget) LC_ALL="$NUM_POISON" W_CWD="$NR" worker budget "$1" ;;
-      allows) W_CWD="$NR" worker allows "$1" run --lot L1 ;;
+      allows) W_CWD="$NR" worker allows "$1" run --mission "$NR-m/$H/20990501-n-m" ;;
       *) W_CWD="$NR" worker "$v" "$1" ;;
     esac
     mk=""
@@ -3370,7 +3438,7 @@ fi
 #   all-plus  `all L1`, all among other words
 # Each is refused by delegate before the question (rc 1, the file unchanged, the word named), and,
 # signed here by hand with the digest the contract defines (digest_of, which the control below holds
-# equal to the program's), level --lot L1 answers assisted — illegible, allows approve --lot L1 asks
+# equal to the program's), level --lot L1 answers assisted — illegible, allows approve on L1 asks
 # and budget has no ceiling, each naming the word. The controls: `L1 L2` signs through delegate and
 # answers full on L1 and plan on L2, and `L2` signs and answers plan on L2 and not covered on L1.
 got=""
@@ -3396,7 +3464,8 @@ for w in "lt-template|$tplval|<all," 'lt-ghost|L1 L3|L3' 'lt-allplus|all L1|all'
   sed -i "2,/^---\$/ s@^signed:.*@signed: $now_sig $(digest_of "$id" full "$val" "$FAR" 25 200 'L1 -' 'L2 plan')@" \
     "$d/delegation.md"
   level_is "$id" "level assisted — illegible: $why" "$d" --lot L1
-  allows_is "$id" 1 "ask approve needs full, effective assisted — illegible: $why" "$d" approve --lot L1
+  allows_is "$id" 1 "ask approve needs full, effective assisted — illegible: $why" "$d" approve \
+    --mission "$(act_mission "$d" L1)"
   budget_is "$id" 1 "no ceiling — illegible: $why" "$d"
 done
 d="$(campaign lt-list full "$FAR" 25 200)"
@@ -3626,7 +3695,7 @@ fi
 # and, when asked, then applies one edit to one file and leaves a mark, an edit landing right after
 # the digest:
 #   ceiling  a full delegation over L1 (no ceiling) and L2 at plan, L2's ceiling lifted to `-` after
-#            the digest: level --lot L2 answers plan — capped by the lot, and allows approve --lot L2
+#            the digest: level --lot L2 answers plan — capped by the lot, and allows approve on L2
 #            asks; asked again with no edit, the lifted file is edited after signing
 #   level    a merge delegation, its level: raised to full after the digest: level answers merge
 # Each is first asked through the same sha256sum with no edit, and the mark proves the edit landed.
@@ -3668,9 +3737,10 @@ PATH="$BOX/sumshim:$PATH" SDD_SUM_SHIM_FILE="$d/campaign.md" SDD_SUM_SHIM_SED="$
   || got="${got:+$got; }fixture: the ceiling of L2 was not lifted after the digest"
 level_is 'ceiling lifted, asked again' 'level assisted — edited after signing' "$d" --lot L2
 cp "$BOX/on-ceiling.signed" "$d/campaign.md"
+m="$(act_mission "$d" L2)"
 PATH="$BOX/sumshim:$PATH" SDD_SUM_SHIM_FILE="$d/campaign.md" SDD_SUM_SHIM_SED="$lift" \
   allows_is 'approve, the ceiling lifted after the digest' 1 \
-  'ask approve needs full, effective plan — capped by the lot' "$d" approve --lot L2
+  'ask approve needs full, effective plan — capped by the lot' "$d" approve --mission "$m"
 d="$(campaign on-level merge "$FAR" 25 200)"
 sign "$d"
 PATH="$BOX/sumshim:$PATH" level_is 'level, no edit' "level merge — signed until $FAR" "$d"
@@ -3719,7 +3789,7 @@ PATH="$BOX/catshim:$PATH" SDD_CAT_SHIM_DIR="$d" SDD_CAT_SHIM_BEFORE="$lift" \
   || got="${got:+$got; }fixture: the ceiling was not put back after the copy"
 mkdir -p "$BOX/terms-tmp"
 TMPDIR="$BOX/terms-tmp" worker level "$d" --lot L2
-TMPDIR="$BOX/terms-tmp" worker allows "$d" approve --lot L2
+TMPDIR="$BOX/terms-tmp" worker allows "$d" approve --mission "$(act_mission "$d" L2)"
 TMPDIR="$BOX/terms-tmp" worker level "$REPO/docs/campaigns/on-ren2"
 [ -z "$(ls -A "$BOX/terms-tmp")" ] || got="${got:+$got; }the copies were left under TMPDIR: $(ls -A "$BOX/terms-tmp")"
 d="$(campaign on-notmp full "$FAR" 25 200)"
@@ -3867,7 +3937,7 @@ fi
 # is a README.md and not a 00-missao.md, and a mission of another campaign; and a folder of no
 # campaign whose name carries a backslash, which a read that is not raw turns into a path git
 # does not have. Another branch tracks origin/stale, the base as it was before any mission, so the
-# upstream read is the checked-out branch's and no other's. Budget, level, `allows run --lot L1`
+# upstream read is the checked-out branch's and no other's. Budget, level, `allows run` on L1
 # and next are asked from the cwd of another repo, whose main tracks nothing, and gh answers only
 # from the checkout:
 #   flight   the worktree alive, the base without the mission: the answer of today
@@ -3916,6 +3986,9 @@ set_lots "$d/campaign.md" 'L1:-' 'L2:-'
 sign "$d"
 cp -a "$d" "$GN/docs/campaigns/"
 d="$GN/docs/campaigns/g-gone"
+# The mission allows is asked about (R68) lives outside every checkout, so the worlds that remove
+# the worktree of L1 still have it to ask about.
+GM="$(act_mission "$d" L1)"
 gn worktree add -q -b gone-l1 "$GN-l1" > /dev/null 2>&1 || got="${got:+$got; }fixture: the worktree of L1 was not created"
 lot_mission "$GN-l1" "$M1" g-gone L1 gone-l1 humano-2099-01-01
 lot_mission "$GN-l1" archive/20990903-g-deep g-gone L2 gone-deep humano-2099-01-01
@@ -3946,7 +4019,7 @@ exec "$real" "$@"
 SHIM
 } > "$BOX/gitshim-gone/git"
 chmod +x "$BOX/gitshim-gone/git"
-# gone_ask <dir> — budget, level, `allows run --lot L1` and next asked of <dir> from the cwd of the
+# gone_ask <dir> — budget, level, `allows run` on L1 and next asked of <dir> from the cwd of the
 # fixture repo, whose main tracks nothing, next under the gh stub of GN; PUBLISHES GONE, one
 # `<verb>: rc <rc> '<stdout>'` line per verb. Called, never substituted: under `$( )` the global
 # would die with the subshell.
@@ -3956,7 +4029,7 @@ gone_ask() {
   for v in budget level allows next; do
     case "$v" in
       budget) LC_ALL="$NUM_POISON" W_CWD="$REPO" worker budget "$1" ;;
-      allows) W_CWD="$REPO" worker allows "$1" run --lot L1 ;;
+      allows) W_CWD="$REPO" worker allows "$1" run --mission "$GM" ;;
       *) PATH="$BOX/stub-gone:$PATH" W_CWD="$REPO" worker "$v" "$1" ;;
     esac
     GONE+="$v: rc $W_RC '$W_OUT'"$'\n'
@@ -4437,6 +4510,195 @@ if [ -z "$got" ]; then
 else
   fail 'ceiling: budget stops on a no room line when what is left of the campaign ceiling, in cents, is below the signed mission cap, opens at an equal one, and the command, docs/pipeline.md, the template and cmd_budget write the rule' \
     'each world its whole line and rc, the signed cap compared, each phrase in its place, and each sabotaged copy naming what it lost' "$got"
+fi
+
+# --- R68: the lot of an act on a mission is the mission's ----------------------------------------
+# The lot used to be a word of the call, and the session wrote it: `allows <campaign> merge --lot L1`
+# over the pull request of L6a, capped at plan, answered `allowed merge at merge` (decision 3 of the
+# owner on the r6). An act on a mission that exists — run, pr, review, merge, postmerge and approve —
+# is asked with --mission <folder>, and its lot is the lot: of that folder's 00-missao.md; only plan,
+# which comes before its mission, is asked with --lot. Two campaigns of the fixture repo, whose
+# missions are folders outside every checkout (act_mission), so the ask is the folder's and nothing
+# else's:
+#   dv-merge  signed at merge, lots: L1 L6a, over L1 (no ceiling), L6a (plan) and L2 (no ceiling, a
+#             row of the table outside lots:). merge on L6a's mission asks, capped by the lot, and on
+#             L1's it is allowed: the witness that the delegation grants merge, and so it is with the
+#             campaign given with a trailing slash, whose name is still the mission's campaign:
+#             (campaign_name); a fifth argument is the usage. Each of the six acts
+#             on a mission asked with --lot L1 is rc 2, nothing on stdout, the act and --mission named
+#             on stderr with the usage line of --mission, and merge among them is the reproduction.
+#             A mission with an empty lot:, one whose lot: is the template's placeholder (read out of
+#             templates/missao.md HERE), one of another campaign and one of L2 each ask, assisted,
+#             naming its file — none of them is read as a mission with no lot, which would answer the
+#             signed level over every ceiling. A folder with no 00-missao.md, and none at all, are rc
+#             2 naming the file; plan with --mission is rc 2 naming --lot, and plan --lot '' is the
+#             usage. plan with --lot answers as before: allowed at plan on L6a and at merge on L1,
+#             and on L2 an ask that names no mission, since none was read
+#   dv-full   signed at full over L1 and L6a, lots: all: approve, the act the ladder grants last, is
+#             asked on L6a's mission and allowed on L1's; a mission of L9, a lot the table has no row
+#             for, asks naming its file, and plan --lot L9 asks naming no mission
+# Every ask is the whole line, so a reason naming the wrong file, or no file, differs; a folder given
+# with a trailing slash names the file once. The count witnesses the six acts refused with --lot.
+got=""
+# derived_is <label> <rc> <want> <args...> — runs allows <args...>; appends to got unless it left
+# <rc> and the one line <want> on stdout, whole.
+derived_is() {
+  local label="$1" rc="$2" want="$3"; shift 3
+  worker allows "$@"
+  [ "$W_RC" = "$rc" ] && [ "$W_OUT" = "$want" ] \
+    || got="${got:+$got; }$label: rc $W_RC, '$W_OUT' (want rc $rc, '$want')"
+}
+# derived_usage <label> <phrase> <usage line> <args...> — runs allows <args...>; appends to got
+# unless it left rc 2, nothing on stdout, and a stderr carrying <phrase> and <usage line>, each a
+# literal.
+derived_usage() {
+  local label="$1" phrase="$2" uline="$3"; shift 3
+  worker allows "$@"
+  { [ "$W_RC" = 2 ] && [ -z "$W_OUT" ] && grep -qF -- "$phrase" <<< "$W_ERR" \
+      && grep -qF -- "$uline" <<< "$W_ERR"; } \
+    || got="${got:+$got; }$label: rc $W_RC, stdout '$W_OUT', stderr '${W_ERR%%$'\n'*}' (want rc 2, '$phrase')"
+}
+UM='allows   <campaign-dir> <act> --mission <mission-dir>'
+UL='allows   <campaign-dir> plan --lot L<n> '
+cap6='capped by the lot: the ceiling of L6a is plan'
+d="$(campaign dv-merge merge "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L6a:plan' 'L2:-'
+sed -i '2,/^---$/ s@^lots: .*@lots: L1 L6a@' "$d/delegation.md"
+sign "$d"
+m1="$(act_mission "$d" L1)"; m6="$(act_mission "$d" L6a)"; m2="$(act_mission "$d" L2)"
+derived_is 'merge, the mission of L6a' 1 "ask merge needs merge, effective plan — $cap6" "$d" merge --mission "$m6"
+derived_is 'merge, the mission of L1' 0 'allowed merge at merge' "$d" merge --mission "$m1"
+derived_is 'merge, the campaign with a trailing slash' 0 'allowed merge at merge' "$d/" merge --mission "$m1"
+derived_usage 'merge, a fifth argument' 'usage: sdd-worker ' "$UM" "$d" merge --mission "$m1" --lot L1
+nolot=0
+for row in "${ACT_TABLE[@]}"; do
+  read -r act _ <<< "$row"
+  [ "$act" != plan ] || continue
+  before="$got"
+  derived_usage "$act --lot L1" "sdd-worker: allows $act takes --mission <mission-dir>, not --lot: " "$UM" \
+    "$d" "$act" --lot L1
+  [ "$got" != "$before" ] || nolot=$((nolot + 1))
+done
+[ "$nolot" = 6 ] || got="${got:+$got; }$nolot of 6 acts on a mission refused --lot"
+lot_mission "$BOX/acts" dv-merge-nolot dv-merge '' '' -
+mission "$BOX/acts" "$H" dv-merge-tpl dv-merge
+lot_mission "$BOX/acts" dv-merge-other dv-other L1 '' -
+mn="$BOX/acts/$H/dv-merge-nolot"; mt="$BOX/acts/$H/dv-merge-tpl"; mo="$BOX/acts/$H/dv-merge-other"
+tpl="$(sed -n '2,/^---$/ s/^lot: //p' "$ROOT/templates/missao.md")"
+{ [ -n "$tpl" ] && [ "$(sed -n '2,/^---$/ s/^lot: //p' "$mt/00-missao.md")" = "$tpl" ] \
+    && grep -qx 'lot: *' "$mn/00-missao.md" && grep -qx 'lot: L1' "$mo/00-missao.md"; } \
+  || got="${got:+$got; }fixture: the lot: of the three missions did not land"
+derived_is 'no lot' 1 \
+  "ask merge needs merge, effective assisted — no lot: $mn/00-missao.md declares no lot:, and an act on a mission is an act of its lot" \
+  "$d" merge --mission "$mn/"
+derived_is "the template's lot" 1 \
+  "ask merge needs merge, effective assisted — lot not covered: $tpl is not in lots: L1 L6a, the lot: of $mt/00-missao.md" \
+  "$d" merge --mission "$mt"
+derived_is 'another campaign' 1 \
+  "ask merge needs merge, effective assisted — another campaign's mission: $mo/00-missao.md declares campaign: 'dv-other', and the campaign is 'dv-merge'" \
+  "$d" merge --mission "$mo"
+derived_is 'a lot outside lots:' 1 \
+  "ask merge needs merge, effective assisted — lot not covered: L2 is not in lots: L1 L6a, the lot: of $m2/00-missao.md" \
+  "$d" merge --mission "$m2"
+mkdir -p "$BOX/acts/empty"
+derived_usage 'no 00-missao.md' \
+  "sdd-worker: $BOX/acts/empty/00-missao.md does not exist: --mission takes the folder of a mission" "$UM" \
+  "$d" merge --mission "$BOX/acts/empty"
+derived_usage 'no folder' \
+  "sdd-worker: $BOX/acts/nowhere/00-missao.md does not exist: --mission takes the folder of a mission" "$UM" \
+  "$d" merge --mission "$BOX/acts/nowhere"
+derived_usage 'plan --mission' 'sdd-worker: allows plan takes --lot L<n>, not --mission: ' "$UL" "$d" plan --mission "$m6"
+derived_usage "plan --lot ''" 'usage: sdd-worker ' "$UL" "$d" plan --lot ''
+derived_is 'plan --lot L6a' 0 'allowed plan at plan' "$d" plan --lot L6a
+derived_is 'plan --lot L1' 0 'allowed plan at merge' "$d" plan --lot L1
+derived_is 'plan --lot L2' 1 'ask plan needs plan, effective assisted — lot not covered: L2 is not in lots: L1 L6a' \
+  "$d" plan --lot L2
+d="$(campaign dv-full full "$FAR" 25 200)"
+set_lots "$d/campaign.md" 'L1:-' 'L6a:plan'
+sign "$d"
+m1="$(act_mission "$d" L1)"; m6="$(act_mission "$d" L6a)"; m9="$(act_mission "$d" L9)"
+derived_is 'approve, the mission of L6a' 1 "ask approve needs full, effective plan — $cap6" "$d" approve --mission "$m6"
+derived_is 'approve, the mission of L1' 0 'allowed approve at full' "$d" approve --mission "$m1"
+derived_is 'approve, a mission of L9' 1 \
+  "ask approve needs full, effective assisted — lot not covered: $d/campaign.md has no row for L9, the lot: of $m9/00-missao.md" \
+  "$d" approve --mission "$m9"
+derived_is 'plan --lot L9' 1 "ask plan needs plan, effective assisted — lot not covered: $d/campaign.md has no row for L9" \
+  "$d" plan --lot L9
+# The prose the program does not reach. derived_missing <root> — what the command, docs/pipeline.md
+# and the comment of cmd_allows do not write, one item per line: `derived: <file>: <act> --lot` for
+# each call of allows in the command or in docs/pipeline.md that passes --lot to an act other than
+# plan (the old spelling, wherever it stands: R31 reads only the line under each act's heading),
+# `derived: loop` (step 3 of the loop writes the call by --mission), `derived: pipeline row` (the
+# allows row of the table of verbs writes it), `derived: pipeline lot` (the paragraph DERIVED_PIPE
+# says the lot is the lot: of the mission's 00-missao.md, never a word of the call, and declares
+# that a folder is read where the call points: `derived: pipeline limit`), `derived: merge` (the
+# merge act runs pr-ready on the folder its allows call read, the link that holds the lot to the pull
+# request) and `derived: cmd_allows` (the comment right above cmd_allows says the lot is never a word
+# of the call, and declares the same limit: `derived: cmd_allows limit`).
+DERIVED_CALL='`sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`'
+DERIVED_PIPE='**The lot of an act.**'
+derived_missing() {
+  local c="$1/commands/sdd-worker.md" p="$1/docs/pipeline.md" f a s
+  for f in "$c" "$p"; do
+    while read -r a; do
+      [ "$a" = plan ] || printf 'derived: %s: %s --lot\n' "${f##*/}" "$a"
+    done < <(grep -oE 'sdd-worker allows <campaign-dir> [^ `]+ --lot' "$f" 2>/dev/null | awk '{ print $4 }')
+  done
+  grep -qF "$DERIVED_CALL" <<< "$(item_of "$(section "$c" 'The loop' 2>/dev/null)" '3. ')" || printf 'derived: loop\n'
+  s="$(section "$p" 'The worker' 2>/dev/null)"
+  grep -qF "$DERIVED_CALL" <<< "$(grep -F '| `sdd-worker allows ' <<< "$s")" || printf 'derived: pipeline row\n'
+  s="$(para_of "$s" "$DERIVED_PIPE")"
+  grep -qF 'the lot is the `lot:` of its `00-missao.md`, never a word of the call' <<< "$s" \
+    || printf 'derived: pipeline lot\n'
+  grep -qF 'The folder is read where the call points' <<< "$s" || printf 'derived: pipeline limit\n'
+  grep -qF 'on the folder its `allows` call read' <<< "$(act_of "$c" merge | squeeze)" || printf 'derived: merge\n'
+  s="$(comment_of "$1/bin/sdd-worker" cmd_allows)"
+  grep -qF 'never a word of the call' <<< "$s" || printf 'derived: cmd_allows\n'
+  grep -qF 'Declared limit: the folder is read where the caller points' <<< "$s" || printf 'derived: cmd_allows limit\n'
+}
+m="$(derived_missing "$ROOT")"
+[ -z "$m" ] || got="${got:+$got; }missing: ${m//$'\n'/, }"
+tree_control 'loop: back to --lot' derived_missing $'derived: sdd-worker.md: <act> --lot\nderived: loop' "$C13" \
+  's/^3\. `sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`,/3. `sdd-worker allows <campaign-dir> <act> --lot <lot>`,/'
+tree_control 'loop: the call only in step 4' derived_missing 'derived: loop' "$C13" \
+  's/^3\. `sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`,/3. The allows call,/
+s/^4\. The act, as the section below writes it\./4. The act (`sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`)./'
+tree_control 'an act by --lot' derived_missing 'derived: sdd-worker.md: review --lot' "$C13" \
+  's/^`sdd-worker allows <campaign-dir> review --mission <mission-dir>`$/`sdd-worker allows <campaign-dir> review --lot <L>`/'
+tree_control 'pipeline: row back to --lot' derived_missing $'derived: pipeline.md: <act> --lot\nderived: pipeline row' docs/pipeline.md \
+  '/^| `sdd-worker allows / s/`sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`/`sdd-worker allows <campaign-dir> <act> --lot L<n>`/'
+tree_control 'pipeline: the call only in the prose' derived_missing 'derived: pipeline row' docs/pipeline.md \
+  '/^| `sdd-worker allows / s/`sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`/`sdd-worker allows`/
+s/^\*\*The lot of an act\.\*\* /\*\*The lot of an act.\*\* (`sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`) /'
+tree_control 'pipeline: the paragraph renamed' derived_missing $'derived: pipeline lot\nderived: pipeline limit' docs/pipeline.md \
+  's/^\*\*The lot of an act\.\*\*/**The lot.**/'
+tree_control 'pipeline: the word of the call' derived_missing 'derived: pipeline lot' docs/pipeline.md \
+  's/`00-missao.md`, never a word of the call/`00-missao.md`, or a word of the call/'
+tree_control 'pipeline: the limit dropped' derived_missing 'derived: pipeline limit' docs/pipeline.md \
+  's/ The folder is read where$//'
+tree_control 'pipeline: the limit only before the paragraph' derived_missing 'derived: pipeline limit' docs/pipeline.md \
+  's/ The folder is read where$//
+/^\*\*The lot of an act\.\*\*/i\
+The folder is read where the call points.\
+'
+tree_control 'merge: no folder' derived_missing 'derived: merge' "$C13" 's/, on the folder its `allows` call read\. Only$/. Only/'
+tree_control 'merge: the folder only in postmerge' derived_missing 'derived: merge' "$C13" \
+  's/, on the folder its `allows` call read\. Only$/. Only/
+/^What the merge leaves for the base/ s/^/Run it on the folder its `allows` call read. /'
+tree_control 'comment: the word of the call' derived_missing 'derived: cmd_allows' "$W13" \
+  '/^cmd_allows() {$/,$ !s/never a word of the call/or a word of the call/'
+tree_control 'comment: the limit dropped' derived_missing 'derived: cmd_allows limit' "$W13" \
+  's/^# Declared limit: the folder is read where the caller points/# The folder is read where the caller points/'
+tree_control 'comment: cut off by a blank line' derived_missing $'derived: cmd_allows\nderived: cmd_allows limit' "$W13" \
+  's/^cmd_allows() {$/\n&/'
+tree_primitive derived_missing 'derived: sdd-worker.md: review --lot' "$C13" \
+  's/^`sdd-worker allows <campaign-dir> review --mission <mission-dir>`$/`sdd-worker allows <campaign-dir> review --lot <L>`/
+s/^3\. `sdd-worker allows <campaign-dir> <act> --mission <mission-dir>`,/3. The allows call,/'
+if [ -z "$got" ]; then
+  pass 'derived: the lot of an act on a mission is the lot: of its 00-missao.md, --lot on it and --mission on plan are rc 2, a mission with no lot, of another campaign or of a lot not covered asks naming its file, and plan --lot answers as before'
+else
+  fail 'derived: the lot of an act on a mission is the lot: of its 00-missao.md, --lot on it and --mission on plan are rc 2, a mission with no lot, of another campaign or of a lot not covered asks naming its file, and plan --lot answers as before' \
+    'each ask its whole line, each refusal rc 2 naming its flag or file, plan --lot as before' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

@@ -6904,11 +6904,11 @@ mut_WORKER_allows_unknown_act() {
 mut_WORKER_allows_merge_at_plan() {
   sed -i '/^ACTS=(/ s@ merge:merge @ merge:plan @' "${1%/*}/sdd-worker"
 }
-# The --lot of allows dropped on the way to the effective level: a lot capped below the signed level
+# The lot of allows dropped on the way to the effective level: a lot capped below the signed level
 # is allowed what the delegation grants elsewhere. Caught by "allows: the lot ceiling stops approve
 # on a capped lot under full" (check-worker.sh).
 mut_WORKER_allows_ignores_lot() {
-  sed -i '/^cmd_allows() {/,/^}/ s@^  effective_level "\$1" "\$lot"$@  effective_level "$1"@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_allows() {/,/^}/ s@^    effective_level "\$1" "\$lot" @    effective_level "$1" "" @' "${1%/*}/sdd-worker"
 }
 # The filter of the campaign's missions dropped from the sum: every line of the ledger counts, other
 # campaigns' and other repos' included. Caught by "budget: the sum counts the campaign's missions and
@@ -7050,12 +7050,16 @@ mut_WORKER_rationale_unread() {
 mut_WORKER_rationale_gate_unread() {
   sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if placeholder "\$gv"; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
-# An act asked with no --lot answers the signed level again, over every ceiling of the queue: under
-# full, approve is allowed with the L6 of the kit's campaign capped at plan (achado #3 of the
-# mission's review r1). Caught by "lot: an act asked with no --lot is rc 2 and never allowed, under a
-# full delegation with a lot capped at plan" (check-worker.sh).
+# An act asked with no lot answers the signed level again, over every ceiling of the queue: the flag
+# and its value made optional, a plan asked with no --lot is allowed under full with the L6 of the
+# kit's campaign capped at plan (achado #3 of the mission's review r1). Caught by "lot: an act asked
+# with no lot, by --lot for plan or --mission for the others, is rc 2 and never allowed, under a full
+# delegation with a lot capped at plan" (check-worker.sh).
 mut_WORKER_lot_optional() {
-  sed -i '/^cmd_allows() {/,/^}/ s@^    2) printf .sdd-worker: allows needs --lot.*@    2) : ;;@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_allows() {/,/^}/ {
+    s@^  if \[ "\$given" != "\$flag" \]; then$@  if [ -n "$given" ] \&\& [ "$given" != "$flag" ]; then@
+    s@^  \[ -n "\$val" \] || { usage; return 2; }$@  :@
+  }' "${1%/*}/sdd-worker"
 }
 # The terms are no longer read again after the yes: a delegation edited while the question is open
 # is signed as it stands, not as it was shown (achado #4 of the mission's review r1). Caught by
@@ -7406,6 +7410,41 @@ mut_WORKER_ceiling_effective_compared() {
 # (check-worker.sh), the item cmd_budget rule.
 mut_WORKER_ceiling_rule_dropped() {
   sed -i '/^# `no room — campaign US\$ <spent> of <ceiling>/d' "${1%/*}/sdd-worker"
+}
+# The lot of every act read from the call again, the flag the session passed deciding how: `merge
+# --lot L1` over the pull request of the L6a capped at plan is allowed at merge (decision 3 of the
+# owner on the mission's review r6). Caught by "derived: …" (check-worker.sh), the reproduction.
+mut_WORKER_derived_lot_label() {
+  sed -i '/^cmd_allows() {/,/^}/ s#^  for e in "\${LOT_ACTS\[@\]}"; do \[ "\$e" != "\$2" \] || by=lot; done$#  [ "$given" != --lot ] || by=lot#' "${1%/*}/sdd-worker"
+}
+# The campaign of the mission unchecked: a mission of another campaign on L1 is read as a mission of
+# this one, and merge is allowed. Caught by "derived: …" (check-worker.sh), the world another
+# campaign.
+mut_WORKER_derived_campaign_unchecked() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^    if \[ "\$mc" != "\$id" \]; then$@    if false; then@' "${1%/*}/sdd-worker"
+}
+# A mission whose lot: is empty is read as no lot, which answers the signed level over every ceiling.
+# Caught by "derived: …" (check-worker.sh), the world no lot.
+mut_WORKER_derived_no_lot_as_none() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^    elif \[ -z "\$lot" \]; then$@    elif false; then@' "${1%/*}/sdd-worker"
+}
+# The file that named the lot left out of the reason of a lot not covered: the owner reads a lot and
+# not where it came from. Caught by "derived: …" (check-worker.sh), the worlds of the template's lot,
+# of L2 and of L9.
+mut_WORKER_derived_from_unnamed() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^    effective_level "\$1" "\$lot" "\${mf:+the lot: of \$mf}"$@    effective_level "$1" "$lot"@' "${1%/*}/sdd-worker"
+}
+# plan taken out of the acts asked by lot: a plan, whose mission does not exist yet, can no longer be
+# asked at all. Caught by "allows: the five levels by the seven acts answer the table, 35 of 35" and
+# by "derived: …" (check-worker.sh).
+mut_WORKER_derived_plan_by_mission() {
+  sed -i 's@^LOT_ACTS=(plan)$@LOT_ACTS=()@' "${1%/*}/sdd-worker"
+}
+# A folder with no 00-missao.md read as a mission: it asks, as a mission of another campaign,
+# instead of naming the file as the usage error it is. Caught by "derived: …" (check-worker.sh), the
+# worlds no 00-missao.md and no folder.
+mut_WORKER_derived_missing_file_asks() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^    if \[ ! -f "\$mf" \]; then$@    if false; then@' "${1%/*}/sdd-worker"
 }
 
 CATALOG=(
@@ -8304,6 +8343,12 @@ CATALOG=(
   WORKER_ceiling_equal_stops
   WORKER_ceiling_effective_compared
   WORKER_ceiling_rule_dropped
+  WORKER_derived_lot_label
+  WORKER_derived_campaign_unchecked
+  WORKER_derived_no_lot_as_none
+  WORKER_derived_from_unnamed
+  WORKER_derived_plan_by_mission
+  WORKER_derived_missing_file_asks
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
