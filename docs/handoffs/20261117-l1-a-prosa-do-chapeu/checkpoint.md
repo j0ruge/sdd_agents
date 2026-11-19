@@ -1,6 +1,6 @@
 ---
 missao: 20261117-l1-a-prosa-do-chapeu
-atualizado: 2026-11-19 16:21
+atualizado: 2026-11-19 16:32
 ---
 
 # Checkpoint — L1: a prosa do chapéu e dos docs
@@ -22,7 +22,7 @@ atualizado: 2026-11-19 16:21
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | O planner: a base pelo DEFAULT_BRANCH, a devolução no idioma, a Check que aceita RECURRED (itens A, B, C) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md; c=$?; echo "$(grep -c '^  ok    hat: the planner names the base branch by DEFAULT_BRANCH of the target, never by the literal main' <<< "$o") $(grep -c '^  ok    hat: the planner writes every hand-back to the relay in OUTPUT_LANG' <<< "$o") $(grep -c '^  ok    hat: a planner Check for a new TODO_FILE item also accepts a RECURRED entry on an equivalent open item' <<< "$o") $c"` → `1 1 1 0` | done | 2b01f33 |
-| I2 | O executor: o handoff no mesmo incremento, e o mutante restaurado com cp (itens D, E) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-executor.md .claude/agents/sdd-executor.md; c=$?; echo "$(grep -c '^  ok    hat: the executor writes 20-handoff-exec.md in the increment that leaves no row pending, and its answer says whether it did' <<< "$o") $(grep -c '^  ok    hat: the executor restores a mutant with cp and rm, so an incremental build sees a new mtime' <<< "$o") $c"` → `1 1 0` | pending | — |
+| I2 | O executor: o handoff no mesmo incremento, e o mutante restaurado com cp (itens D, E) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-executor.md .claude/agents/sdd-executor.md; c=$?; echo "$(grep -c '^  ok    hat: the executor writes 20-handoff-exec.md in the increment that leaves no row pending, and its answer says whether it did' <<< "$o") $(grep -c '^  ok    hat: the executor restores a mutant with cp and rm, so an incremental build sees a new mtime' <<< "$o") $c"` → `1 1 0` | done | abe5808 |
 | I3 | O revisor: esperar sem Monitor, e a sonda fora do repo (itens F, G) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-reviewer.md .claude/agents/sdd-reviewer.md; c=$?; echo "$(grep -c '^  ok    hat: the reviewer waits for a slow command in the foreground, under a ceiling below the Bash limit' <<< "$o") $(grep -c '^  ok    hat: the reviewer writes a probe outside the repo by heredoc, and a test filter that matches nothing is a failure' <<< "$o") $c"` → `1 1 0` | pending | — |
 | I4 | A DOCS: a lição reincidente ganha destino (item H) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-docs.md .claude/agents/sdd-docs.md; c=$?; echo "$(grep -c '^  ok    hat: the docs phase turns a lesson its own log calls recurrent into a proposed rule, or writes why not' <<< "$o") $c"` → `1 0` | pending | — |
 | I5 | A QA: o qa: skipped confirma nos dois caminhos (item I) | `o=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-qa.md .claude/agents/sdd-qa.md; c=$?; echo "$(grep -c '^  ok    hat: the qa hat sends a declared qa: skipped to the confirmation of section 2 on both paths' <<< "$o") $c"` → `1 0` | pending | — |
