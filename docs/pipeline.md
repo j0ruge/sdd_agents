@@ -1825,13 +1825,14 @@ every verb but `pr-ready` takes it as its first argument and finds the repo root
 `git -C <dir> rev-parse --show-toplevel`; `HANDOFF_DIR` comes from that root's `.sdd/config.sh`,
 read in a subshell that stands in the root, so a relative include resolves against its own
 checkout. `ON_ESCALATION_CMD` and `BUDGET_MISSION_USD` are read the same way, but in the
-`.sdd/config.sh` of the root and of each linked worktree that holds a mission of the campaign, and
-of no other — the narrow set: `sdd run` runs a mission in its worktree and reads that checkout's
-file (rule 6 of the effective level, and `budget`), and a worktree that holds no mission of the
-campaign runs no `sdd run` of it, so its file, which sourcing would execute, is never read. A
-worktree of the set whose `HANDOFF_DIR` is not the root's, the two compared as the runner reads
-them (every leading `./` and every trailing `/` dropped), stops `budget`, `level` and `next` (rc 1,
-`unread: …`, naming both files): the runner there would look for its missions elsewhere.
+`.sdd/config.sh` of the root and of each linked worktree that holds a mission of the campaign at the
+root's `HANDOFF_DIR`, and of no other — the narrow set: `sdd run` runs a mission in its worktree and
+reads that checkout's file (rule 6 of the effective level, and `budget`), and a worktree that holds
+no mission of the campaign runs no `sdd run` of it, so its file, which sourcing would execute, is
+never read. A worktree of the set whose `HANDOFF_DIR` is not the root's, the two compared as the
+runner reads them (every leading `./` and every trailing `/` dropped), stops `budget`, `level` and
+`next` (rc 1, `unread: …`, naming both files): the runner there would look for its missions
+elsewhere.
 
 - `campaign.md` (`templates/campaign.md`): frontmatter `campaign:` (the id, the directory's name),
   `title:`, `date:`, `harness:`, `plan_model:` and `exec_model:`; then the heading `## Lotes` over a
