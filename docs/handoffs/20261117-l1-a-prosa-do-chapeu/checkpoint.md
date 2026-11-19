@@ -1,6 +1,6 @@
 ---
 missao: 20261117-l1-a-prosa-do-chapeu
-atualizado: 2026-11-19 19:06
+atualizado: 2026-11-19 19:31
 ---
 
 # Checkpoint — L1: a prosa do chapéu e dos docs
@@ -29,7 +29,7 @@ atualizado: 2026-11-19 19:06
 | I6 | Os docs do operador: o README, o sdd run destacado e os threads abertos (itens J, K, L) | `o=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    doc: the README shows the clone line without calling the repository private' <<< "$o") $(grep -c '^  ok    doc: failure-modes.md finds a detached sdd run without matching the watcher, and says how to wait for its end' <<< "$o") $(grep -c '^  ok    doc: the finding-PR recipe merges only with zero unresolved review threads on the head, with the command beside it' <<< "$o")"` → `1 1 1` | done | 596627b |
 | I7 | As duas sementes do TODO.md: número que muda não vai no título (item M) | `o=$(bash tests/check-templates.sh 2>&1); grep -c '^  ok    todo.*: a number that changes goes in the body, never in the title' <<< "$o"` → `2` | done | bc8710f |
 | I8 | A ajuda do sdd why diz que o gate roda a suíte (item N) | `o=$(bash tests/check-hat.sh 2>&1); grep -c '^  ok    help: sdd why says its gate runs TEST_CMD for EXEC, QA or REVIEW, as sdd boot does' <<< "$o"` → `1` | done | c02da26 |
-| I9 | Fecho: RESOLVED by nos 14 itens e o 20-handoff-exec.md | `b=$(git show origin/main:TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `14` | pending | — |
+| I9 | Fecho: RESOLVED by nos 14 itens e o 20-handoff-exec.md | `b=$(git show origin/main:TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `14` | done | c27e8c7 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele

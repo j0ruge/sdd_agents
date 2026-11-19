@@ -40,3 +40,4 @@
 - 2026-11-19 18:53 · `I7` · esqueleto das duas sementes intacto e 0 achados de forma; âncoras 103 medidas, 0 fora do alvo; suíte verde depois, 0 FAIL
 - 2026-11-19 19:06 · `I8` · I8 red: help: the sdd why entry of sdd help does not say that its gate runs TEST_CMD for EXEC, QA or REVIEW → FAIL antes da prosa (e de novo com o literal partido na quebra de linha, refeito numa linha só)
 - 2026-11-19 19:06 · `I8` · âncoras de bin/sdd re-apontadas no TODO.md (12436→12448, 12471→12474, 12729→12732 ×2, 12361→12370): 103 medidas, 0 fora do alvo; suíte verde depois, 0 FAIL, 904 mutantes aplicáveis
+- 2026-11-19 19:31 · `I9` · I9 red: Check → 0 antes; 14 depois; 4 linhas requebradas (120 col) e o item F mantido em 8 linhas; check-todo --check rc 0, --anchors 103 medidas, 0 fora do alvo; suíte verde (destacada, rc 0, 0 FAIL); 20-handoff-exec.md em c8251cc
