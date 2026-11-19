@@ -42,3 +42,4 @@
 - 2026-11-19 19:06 · `I8` · âncoras de bin/sdd re-apontadas no TODO.md (12436→12448, 12471→12474, 12729→12732 ×2, 12361→12370): 103 medidas, 0 fora do alvo; suíte verde depois, 0 FAIL, 904 mutantes aplicáveis
 - 2026-11-19 19:31 · `I9` · I9 red: Check → 0 antes; 14 depois; 4 linhas requebradas (120 col) e o item F mantido em 8 linhas; check-todo --check rc 0, --anchors 103 medidas, 0 fora do alvo; suíte verde (destacada, rc 0, 0 FAIL); 20-handoff-exec.md em c8251cc
 - 2026-11-19 20:03 · `QA` · jornada de 5 passos no terminal verde, 0 achados, 0 F<n>; suíte verde rc 0, 0 FAIL; 30-handoff-qa.md status: done
+- 2026-11-19 20:35 · `R1` · nasceu do achado #1 da r1 (MEDIUM, reproduzido): timeout 590 do laço de espera numa chamada Bash de prazo padrão foi para segundo plano aos 120 s; com timeout 600000 segurou 590 s
