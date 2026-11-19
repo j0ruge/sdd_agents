@@ -1,0 +1,1416 @@
+#!/usr/bin/env bash
+# sdd-worker — the verbs of the campaign worker (ADR 0022).
+#
+# The worker is a SESSION that orchestrates a campaign: it plans, approves, runs `sdd run`, opens
+# the pull request, reviews it and merges, inside a level of autonomy the owner signed. The
+# questions that decide those acts used to be the model's reading, and the reading was wrong four
+# times on record (a Codex receipt matched by the hour instead of the sha, a watcher whose `pgrep -f`
+# matched itself, a bot with no quota read as "reviewed", a checker that read 20 of 21 units). This
+# program answers them from artifacts instead:
+#
+#   delegate   show a campaign's delegation, ask, and sign it
+#   level      the effective level of autonomy, with the reason
+#   allows     whether one act fits that level, the lot of an act on a mission read from the mission
+#   budget     what the campaign spent against its two ceilings
+#   next       the next act of the campaign
+#   pr-ready   whether a pull request meets the owner's five-item bar on its head sha
+#
+# Every verb but `delegate` only reads. None of them acts: launching `sdd run`, opening the pull
+# request and merging stay with the session, through the commands that already exist.
+# The runner (`bin/sdd`) owns ONE mission; this program owns the campaign and never writes what the
+# runner owns. The sensor is tests/check-worker.sh.
+set -euo pipefail
+
+# The ladder of autonomy, lowest first, ONE definition: a name outside it is not a level.
+LADDER=(assisted pr plan merge full)
+# The six keys of a delegation, in the order the digest reads them. `signed:` is not among them: it
+# is where the digest is written.
+DELEGATION_KEYS=(campaign level lots expires budget_mission_usd budget_campaign_usd)
+# The table of acts, ONE definition and positive: each act is written with the lowest level that
+# grants it, and an act is allowed because the table names a level at or below the effective one —
+# never because nothing refused it. A word the table does not name is no act at all.
+ACTS=(run:pr pr:pr review:pr plan:plan merge:merge postmerge:merge approve:full)
+# The acts asked by lot, ONE definition and positive: the acts that come before the mission they are
+# about, so no artifact holds their lot yet. Every other act of ACTS is on a mission that exists, and
+# is asked by the mission's folder: its lot is the lot: of that mission's 00-missao.md, never a word
+# the session passes (decision 3 of the owner on the review r6). An act joins this list only by being
+# written here, so a new act of ACTS is asked by its mission.
+LOT_ACTS=(plan)
+# The one author whose receipt counts for pr-ready: anybody can comment on a pull request of a
+# public repo, and a receipt somebody pasted is not a review.
+CODEX_LOGIN='chatgpt-codex-connector[bot]'
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: sdd-worker <verb> <args>
+  delegate <campaign-dir>                      show the delegation, ask, and sign it
+  level    <campaign-dir> [--lot L<n>]         the effective level of autonomy, with the reason
+  allows   <campaign-dir> <act> --mission <mission-dir>
+                                               whether the act fits the effective level of the lot
+                                               the mission's 00-missao.md declares
+  allows   <campaign-dir> plan --lot L<n>      whether planning the lot fits its effective level
+  budget   <campaign-dir>                      the campaign's spend against its ceilings
+  next     <campaign-dir>                      the next act of the campaign
+  pr-ready <mission-dir> <pr>                  whether the pull request is ready on its head sha
+USAGE
+}
+
+# now — the local instant, to the minute. ONE clock for every verb. SDD_WORKER_NOW replaces the
+# real clock only when it is LATER than it: the seam lets the sensor move time forward and watch a
+# delegation expire, and never brings an expired one back. The two instants are compared by their
+# digits, never as text under the locale's collation; a value with no digits fails the test and
+# leaves the real clock.
+now() {
+  local real seam="${SDD_WORKER_NOW:-}"
+  real="$(date '+%Y-%m-%d %H:%M')"
+  if [ "${seam//[!0-9]/}" -gt "${real//[!0-9]/}" ] 2>/dev/null; then
+    printf '%s\n' "$seam"
+  else
+    printf '%s\n' "$real"
+  fi
+}
+
+# fm_value <file> <key> — the value of <key> in the frontmatter of <file>: the text after the `: `
+# that follows the key on the first line starting with `<key>:`, trailing blanks removed. Prints
+# nothing when the file opens with no `---`, when the frontmatter is never closed, or when the key
+# is absent; a key whose colon is not followed by a space reads empty. ONE reader for every verb:
+# two readers of one fact would let a sabotaged one hide behind the other.
+fm_value() {
+  awk -v key="$2" '
+    NR == 1 { if ($0 != "---") exit; next }
+    $0 == "---" { if (found) print val; exit }
+    !found && index($0, key ":") == 1 {
+      found = 1; val = ""
+      if (index($0, ": ") == length(key) + 1) val = substr($0, length(key) + 3)
+      sub(/[ \t\r]+$/, "", val)
+    }' "$1"
+}
+
+# ladder_rank <name> — the position of <name> on the ladder, 0 for assisted; prints nothing and
+# returns 1 when <name> is not exactly one of the five levels. Positive: a level is a level because
+# the ladder names it, never because nothing refused it.
+ladder_rank() {
+  local i
+  for i in "${!LADDER[@]}"; do
+    [ "${LADDER[$i]}" = "$1" ] && { printf '%s\n' "$i"; return 0; }
+  done
+  return 1
+}
+
+# on_ladder <name> — 0 when <name> is a level. It is ladder_rank and nothing else, so the two can
+# never disagree about what a level is.
+on_ladder() { ladder_rank "$1" > /dev/null; }
+
+# campaign_name <campaign-dir> — the name of the directory a campaign lives in, resolved: `.`, a
+# trailing slash and a symlink all name the directory itself. Empty when it does not resolve.
+campaign_name() {
+  local p
+  p="$(readlink -f -- "$1")" || true
+  printf '%s\n' "${p##*/}"
+}
+
+# id_is_dir <campaign-dir> <file> — 0 when <file> exists and its campaign: is the name of
+# <campaign-dir> (campaign_name); otherwise 1, with both values PUBLISHED in ID_WHY. The contract
+# writes the id three times (the directory, campaign.md and delegation.md), and a reader of one of
+# them alone lets two campaigns cross: budget summing the missions of one id while next walks the
+# queue of another, or the template's placeholder read as an id. ONE rule, for the two files of
+# the delegation and for next. Called, never substituted: under `$( )` the reason would die with
+# the subshell.
+id_is_dir() {
+  local name v
+  name="$(campaign_name "$1")"
+  if [ ! -f "$2" ]; then ID_WHY="$2 does not exist"; return 1; fi
+  v="$(fm_value "$2" campaign)"
+  if [ "$v" != "$name" ]; then ID_WHY="campaign: '$v' in $2 is not the directory's name '$name'"; return 1; fi
+}
+
+# delegation_legible <campaign-dir> — 0 when the six keys of its delegation.md are present and not
+# empty, the campaign: of that file and of the campaign.md beside it is the directory's name
+# (id_is_dir), the level is on the ladder, lots is `all` or a list of words each of which is a lot
+# of the table of that campaign.md (lots_table), expires is a local instant to the minute that the
+# clock has — it comes back from `date -d` as it went, so 2026-11-31 and 99:99 are not instants —
+# and both ceilings are numbers; otherwise 1, with the first rule that failed PUBLISHED in
+# ILLEGIBLE_WHY. Called, never substituted: under `$( )` the reason would die with the subshell. A
+# `<…>` placeholder of the template fails one of these rules: the one of lots: (`<all, ou L1 L2 …>`
+# and the words after them) holds the words L1 and L2, which a reader that only looked for the asked
+# lot among the words found, and a full delegation left with it granted approve on the uncapped L1
+# (achado #1 of the r5); its first word, `<all,`, is no lot.
+# Declared limit: the comparison of what `date` gives back has no world on GNU date 9, which refuses
+# every instant of this shape it does not have (minute 60, hour 24, a gap of summer time, measured)
+# and gives the others back as written; it stays for a `date` that rolls 24:00 over to the next day.
+delegation_legible() {
+  local dir="${1%/}" f k v rt w l found
+  local -a words=() table=()
+  f="$dir/delegation.md"
+  ILLEGIBLE_WHY=""
+  for k in "${DELEGATION_KEYS[@]}"; do
+    v="$(fm_value "$f" "$k")"
+    if [ -z "$v" ]; then ILLEGIBLE_WHY="$k is missing or empty"; return 1; fi
+  done
+  for k in delegation.md campaign.md; do
+    if ! id_is_dir "$dir" "$dir/$k"; then ILLEGIBLE_WHY="$ID_WHY"; return 1; fi
+  done
+  v="$(fm_value "$f" level)"
+  if ! on_ladder "$v"; then
+    ILLEGIBLE_WHY="level '$v' is not on the ladder (${LADDER[*]})"; return 1
+  fi
+  v="$(fm_value "$f" lots)"
+  if [ "$v" != all ]; then
+    while read -r l _; do table+=("$l"); done < <(lots_table "$dir/campaign.md")
+    read -ra words <<< "$v"
+    for w in "${words[@]}"; do
+      found=""
+      for l in ${table[@]+"${table[@]}"}; do [ "$l" != "$w" ] || found=1; done
+      if [ -z "$found" ]; then
+        ILLEGIBLE_WHY="lots '$v' is neither all nor a list of the lots of $dir/campaign.md: '$w' has no row"
+        return 1
+      fi
+    done
+  fi
+  v="$(fm_value "$f" expires)"
+  if ! [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]]; then
+    ILLEGIBLE_WHY="expires '$v' is not YYYY-MM-DD HH:MM"; return 1
+  fi
+  if ! rt="$(date -d "$v" '+%Y-%m-%d %H:%M' 2> /dev/null)" || [ "$rt" != "$v" ]; then
+    ILLEGIBLE_WHY="expires '$v' is no instant on the clock"; return 1
+  fi
+  for k in budget_mission_usd budget_campaign_usd; do
+    v="$(fm_value "$f" "$k")"
+    if ! [[ "$v" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+      ILLEGIBLE_WHY="$k '$v' is not a number"; return 1
+    fi
+  done
+}
+
+# expired <instant> — 0 when <instant> is not after now. Both sides go to their twelve digits and
+# are compared as numbers, never as text under the locale's collation.
+expired() {
+  local n
+  n="$(now)"
+  [ "${1//[!0-9]/}" -le "${n//[!0-9]/}" ]
+}
+
+# delegation_terms <campaign-dir> — what a signature grants, one line each: the six keys of the
+# delegation, `key: value` in the order of DELEGATION_KEYS, then one `ceiling <lot>: <ceiling>` per
+# row of the lots table of the campaign.md beside it, in the order of the queue (lots_table, the one
+# reader of the queue). A lot's ceiling is what keeps its approval from being delegated, and it lives
+# in a file the owner does not sign: outside the seal, an edit of the table would lift a capped lot
+# to the signed level, or bring in a lot the owner never saw, under a signature that still holds.
+# The titles, the counts and the items are not in it, since the campaign strikes them as it goes.
+# ONE definition for the three readers: the delegate that shows it and signs its digest, and the
+# level that checks it.
+delegation_terms() {
+  local dir="${1%/}" k l c
+  for k in "${DELEGATION_KEYS[@]}"; do printf '%s: %s\n' "$k" "$(fm_value "$dir/delegation.md" "$k")"; done
+  while read -r l c; do printf 'ceiling %s: %s\n' "$l" "$c"; done < <(lots_table "$dir/campaign.md")
+}
+
+# terms_digest <terms> — the first 12 hex of the sha256 of <terms>, one newline after each line:
+# the ONE spelling of the hash, for the terms read now and for the terms the delegate showed.
+terms_digest() { printf '%s\n' "$1" | sha256sum | cut -c1-12; }
+
+# delegation_digest <campaign-dir> — the digest of delegation_terms, read now.
+delegation_digest() { terms_digest "$(delegation_terms "$1")"; }
+
+# delegation_write_signed <file> <line> — the frontmatter's `signed:` line replaced by <line>, or
+# <line> added before the closing `---` when the key is absent. The body is never touched, and the
+# file keeps its mode: the new content is written beside it and moved over it. A copy of the file is
+# taken before the new content is written, and the file is compared with that copy right before the
+# move: an edit saved in between (the owner's editor, a `git pull`) is kept, and nothing is signed —
+# the move would have put the older text over it (achado #23 of the r5). Returns 1 with the reason
+# PUBLISHED in WRITE_WHY: the file changed, or a step of the write failed (naming the step). Called,
+# never substituted.
+# Declared limit: an edit saved between the comparison and the move is still lost. The window is two
+# system calls wide, and closing it needs a lock the owner's editor would honour, which no editor
+# shares with this program; the world that lands an edit there (an `mv` first on the PATH) is built
+# by no probe, because it is not closed.
+delegation_write_signed() {
+  local f="$1" seen tmp
+  WRITE_WHY=""
+  if ! seen="$(mktemp "${f%/*}/.delegation.XXXXXX")" || ! tmp="$(mktemp "${f%/*}/.delegation.XXXXXX")"; then
+    [ -z "$seen" ] || rm -f "$seen"
+    WRITE_WHY="the signature was not written: no temporary file could be made in ${f%/*}"; return 1
+  fi
+  if ! cp -- "$f" "$seen" || ! awk -v line="$2" '
+         NR == 1 { fm = 1; print; next }
+         fm && !done && index($0, "signed:") == 1 { print line; done = 1; next }
+         fm && $0 == "---" { if (!done) print line; fm = 0; done = 1 }
+         { print }' "$f" > "$tmp" \
+     || ! chmod --reference="$f" "$tmp"; then
+    rm -f "$seen" "$tmp"
+    WRITE_WHY="the signature was not written: the signed copy of $f could not be made"; return 1
+  fi
+  if ! cmp -s "$seen" "$f"; then
+    rm -f "$seen" "$tmp"
+    WRITE_WHY="the delegation changed while the signature was written; the change is kept and nothing was signed"
+    return 1
+  fi
+  if ! mv -f "$tmp" "$f"; then
+    rm -f "$seen" "$tmp"
+    WRITE_WHY="the signature was not written: $tmp could not be moved over $f"; return 1
+  fi
+  rm -f "$seen"
+}
+
+# delegate <campaign-dir> — show what a signature grants (the six keys of the delegation and the
+# ceiling of each lot, delegation_terms), ask on stderr, read ONE line of stdin, and sign only on a
+# yes. It refuses before asking what it could never sign (rc 1): no
+# delegation, an illegible one, or one whose instant already passed. The stdin contract is the one
+# of `sdd approve`: a pipe is an answer, no TTY is required, and no character at all is not a no —
+# nobody was asked — so it is rc 66 and nothing is written. It does not read .sdd/config.sh and it
+# does not commit: the commit is the owner's trail, and the line it prints says how.
+# It signs what it showed: the terms are kept as they were printed, read again after the yes, and a
+# change in between (the owner's editor, a `git pull` in the checkout) signs nothing (rc 1); the
+# digest written is the one of the terms shown, so an edit after that re-read leaves a signature the
+# file no longer matches, which level reads as edited after signing. An edit saved while the
+# signature is being written is kept, and nothing is signed (rc 1, delegation_write_signed, which
+# declares the window it leaves); so is a write that fails, naming the step.
+cmd_delegate() {
+  [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
+  local f="${1%/}/delegation.md" ans="" got=0 id shown
+  if [ ! -f "$f" ]; then
+    printf 'not signed — no delegation at %s\n' "$f"
+    return 1
+  fi
+  shown="$(delegation_terms "$1")"
+  printf '%s\n' "$shown"
+  if ! delegation_legible "$1"; then
+    printf 'not signed — illegible: %s\n' "$ILLEGIBLE_WHY"
+    return 1
+  fi
+  if expired "$(fm_value "$f" expires)"; then
+    printf 'not signed — expired: %s is not after %s\n' "$(fm_value "$f" expires)" "$(now)"
+    return 1
+  fi
+  printf 'Sign this delegation? [y/N] ' >&2
+  # `|| got=$?`: with stdin closed `read` returns non-zero, and `set -e` would end the verb here.
+  read -r ans || got=$?
+  # The prompt ends with no newline; a terminal supplies one on Enter, a pipe does not.
+  printf '\n' >&2
+  if [ "$got" -ne 0 ] && [ -z "$ans" ]; then
+    printf 'not signed — no answer reached the prompt: stdin closed before a character was read\n'
+    return 66
+  fi
+  # A partial line with no newline is an answer that arrived, and it is not a yes.
+  [ "$got" -eq 0 ] || ans=""
+  case "$ans" in
+    y | Y | yes | Yes | YES) : ;;
+    *) printf 'not signed — the answer was not y, and nothing was written\n'; return 0 ;;
+  esac
+  if [ "$(delegation_terms "$1")" != "$shown" ]; then
+    printf 'not signed — the delegation changed after it was shown, and nothing was written: run delegate again\n'
+    return 1
+  fi
+  if ! delegation_write_signed "$f" "signed: $(now) $(terms_digest "$shown")"; then
+    printf 'not signed — %s: run delegate again\n' "$WRITE_WHY"
+    return 1
+  fi
+  id="$(fm_value "$f" campaign)"
+  # The owner pastes the command, so what it takes from outside, the path and the id (a directory's
+  # name), goes through %q: a blank, a quote or a `$` in either stays inside one word. The message's
+  # constant part is single-quoted, and the id joins it as the next part of the same word.
+  printf "signed %s — commit it: git add %q && git commit -m 'chore(campaign): sign the delegation of '%q\n" \
+    "$f" "$f" "$id"
+}
+
+# repo_root <dir> — the top of the git checkout that holds <dir>; empty outside one.
+repo_root() { git -C "$1" rev-parse --show-toplevel 2>/dev/null || true; }
+
+# config_key <root> <key> [<env>] — the value of <key> in <root>/.sdd/config.sh, read by sourcing the
+# file in a subshell, the way the runner loads it: nothing the file sets leaks into this program.
+# The subshell stands in <root> first, where the session launches `sdd run` (`cd <worktree> && …`):
+# a relative include in the file resolves against its own checkout, never against the cwd of the
+# caller. Empty when there is no root, no file, no such key, or a root it cannot enter. With <env>,
+# the answer is what the runner
+# reads when it is launched with <key>=<env> in its environment: the file sources over that value,
+# so a line that assigns the key wins and one that does not leaves <env> — and so does no file. The
+# caller's own value of <key> never reaches that reading. ONE reader for every key a verb needs.
+config_key() {
+  local cfg="$1/.sdd/config.sh" key="$2"
+  if [ -z "$1" ] || [ ! -f "$cfg" ]; then [ "$#" -lt 3 ] || printf '%s' "$3"; return 0; fi
+  # shellcheck disable=SC1090,SC1091
+  ( set +eu; CDPATH='' cd -- "$1" || exit 0
+    [ "$#" -lt 3 ] || printf -v "$key" '%s' "$3"
+    . ./.sdd/config.sh > /dev/null 2>&1 < /dev/null; printf '%s' "${!key-}" ) || true
+}
+
+# dir_normalise <var> — normalises, in place, the directory key held in the variable named <var> as
+# load_config normalises HANDOFF_DIR (bin/sdd: every leading ./ and every trailing / dropped), the
+# spelling the runner reads and git prints paths in. ONE definition for every reader here that
+# compares the key or uses it as a path (base_copies, campaign_set): `./docs/handoffs/` and
+# `docs/handoffs` are one folder to the runner, and were two to a comparison of the raw values (P2 of
+# the Codex on PR #414). Called, never substituted.
+dir_normalise() {
+  local _dn="${!1}"
+  while [ "${_dn#./}" != "$_dn" ]; do _dn="${_dn#./}"; done
+  while [ "${_dn%/}" != "$_dn" ]; do _dn="${_dn%/}"; done
+  printf -v "$1" '%s' "$_dn"
+}
+
+# lots_table <campaign.md> — one line `<lot> <ceiling>` per row of the table under the `## Lotes`
+# heading, in the order of the queue. The two columns are found by their header names (`Lot`,
+# `Ceiling`), the separator row is skipped, and the table ends at its first line that is not a
+# row. Prints nothing when the file or the table is absent. ONE reader of the queue.
+lots_table() {
+  [ -f "$1" ] || return 0
+  awk '
+    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
+    $0 == "## Lotes" { sec = 1; next }
+    !sec { next }
+    /^## / { exit }
+    substr($0, 1, 1) != "|" { if (hdr) exit; next }
+    {
+      n = split($0, c, "|")
+      if (!hdr) {
+        for (i = 2; i < n; i++) { h = trim(c[i]); if (h == "Lot") lc = i; if (h == "Ceiling") cc = i }
+        hdr = 1; next
+      }
+      if (trim(c[2]) ~ /^:?-+:?$/) next
+      if (lc && cc) print trim(c[lc]), trim(c[cc])
+    }' "$1"
+}
+
+# terms_copy <campaign-dir> — PUBLISHES TERMS_COPY, a directory named as the campaign's
+# (campaign_name, so the id rule reads the same) inside a new temporary directory, holding one copy
+# of its delegation.md and of its campaign.md, the latter only when the campaign has one. A file that
+# does not read leaves an empty copy, which every reader takes as the other verbs take the file
+# itself: illegible, with the same reason. Returns 1 when the temporary directory cannot be made.
+# The temporary directory goes when the program exits (the trap on EXIT, tmp_sweep, TERMS_TMP): one
+# copy per process, and level and allows each make one. Called, never substituted.
+terms_copy() {
+  local dir="${1%/}"
+  TERMS_COPY=""
+  TERMS_TMP="$(mktemp -d "${TMPDIR:-/tmp}/sdd-worker-terms.XXXXXX")" || return 1
+  trap tmp_sweep EXIT
+  TERMS_COPY="$TERMS_TMP/$(campaign_name "$dir")"
+  mkdir -p -- "$TERMS_COPY" || return 1
+  cat -- "$dir/delegation.md" > "$TERMS_COPY/delegation.md"
+  [ ! -f "$dir/campaign.md" ] || cat -- "$dir/campaign.md" > "$TERMS_COPY/campaign.md"
+  # A read that failed is the empty copy above, never a copy that was not made.
+  return 0
+}
+
+# tmp_sweep — removes the temporary directories this process made, the copy of the terms
+# (terms_copy, TERMS_TMP) and the copies of the base (base_copies, BASE_TMP): the ONE trap on EXIT of
+# the program, which each maker sets. Two traps would be one, the second replacing the first, and
+# level makes both copies.
+tmp_sweep() {
+  [ -z "${TERMS_TMP:-}" ] || rm -rf -- "$TERMS_TMP"
+  [ -z "${BASE_TMP:-}" ] || rm -rf -- "$BASE_TMP"
+}
+
+# effective_level <campaign-dir> [<lot> [<from>]] — the level the worker may act at, PUBLISHED in
+# LEVEL, with the reason in LEVEL_WHY. <from> says where <lot> was read (allows passes `the lot: of
+# <mission>/00-missao.md`), and the two reasons of a lot not covered end in it, so the owner reads
+# which file named the lot. The first rule that matches decides, in this order, and every rule
+# that refuses answers assisted: a delegation that does not hold means "do nothing alone", never
+# "do what it says". LEVEL_STOP is set when the answer is assisted because the set of checkouts did
+# not read (campaign_set), or because no copy of the terms could be made: that is no answer about
+# the delegation, and level leaves rc 1 on it.
+# Called, never substituted: under `$( )` the globals would die with the
+# subshell. The lot's ceiling only ever lowers the level.
+# Every term is read from ONE copy of the two files (terms_copy), made before the first rule: the
+# digest is checked over the copy and the level, the lots and the lot's ceiling it grants are read
+# from the same copy, so an edit landing between two readings of the files is never granted under
+# the old signature (achado #25 of the r5). Asked again, the edited files are edited after signing.
+# The two files are copied one after the other: a copy whose halves come from two instants is still
+# what is both checked and granted, and it grants only when its digest is the signed one. The
+# reasons name the campaign's files, never the copy.
+effective_level() {
+  local dir="${1%/}" lot="${2:-}" from="${3:+, $3}" src f signed want exp lv root wt lots w found="" l c cr sr
+  local -a words=()
+  LEVEL=assisted
+  LEVEL_STOP=""
+  if [ ! -f "$dir/delegation.md" ]; then LEVEL_WHY="no delegation: $dir/delegation.md does not exist"; return 0; fi
+  if ! terms_copy "$dir"; then
+    LEVEL_STOP=1; LEVEL_WHY="unread: no copy of the terms of $dir could be made under ${TMPDIR:-/tmp}"; return 0
+  fi
+  src="$TERMS_COPY"
+  f="$src/delegation.md"
+  if ! delegation_legible "$src"; then LEVEL_WHY="illegible: ${ILLEGIBLE_WHY//"$src"/"$dir"}"; return 0; fi
+  signed="$(fm_value "$f" signed)"
+  if [ -z "$signed" ]; then LEVEL_WHY="unsigned: the signed: line is empty"; return 0; fi
+  want="$(delegation_digest "$src")"
+  if [ "${signed##* }" != "$want" ]; then
+    LEVEL_WHY="edited after signing: signed ${signed##* }, the six keys and the lot ceilings now give $want"
+    return 0
+  fi
+  exp="$(fm_value "$f" expires)"
+  if expired "$exp"; then LEVEL_WHY="expired: $exp is not after $(now)"; return 0; fi
+  lv="$(fm_value "$f" level)"
+  root="$(repo_root "$dir")"
+  if [ "$lv" != assisted ] && [ -z "$root" ]; then
+    LEVEL_WHY="no pager: ON_ESCALATION_CMD is empty in (no repo)/.sdd/config.sh"; return 0
+  fi
+  # The runner pages from the .sdd/config.sh of the checkout it runs in, and the session launches it
+  # in the mission's worktree: so the pager of each checkout of the set is read (campaign_set, the
+  # set budget reads: the campaign's checkout first, then each worktree that holds a mission of the
+  # campaign), and the first one that is empty is the one named. A set that does not read is
+  # assisted with LEVEL_STOP, naming why.
+  # Declared limit: a worktree made after this call is not read, and the loop of
+  # commands/sdd-worker.md asks allows before every act, so the run of a mission reads the worktree
+  # its plan made.
+  if [ "$lv" != assisted ]; then
+    if ! campaign_set "$root" "$(fm_value "$f" campaign)"; then
+      LEVEL_STOP=1; LEVEL_WHY="unread: $SET_WHY"; return 0
+    fi
+    for wt in "${SET_CHECKOUTS[@]}"; do
+      if [ -z "$(config_key "$wt" ON_ESCALATION_CMD)" ]; then
+        LEVEL_WHY="no pager: ON_ESCALATION_CMD is empty in $wt/.sdd/config.sh"; return 0
+      fi
+    done
+  fi
+  if [ -n "$lot" ]; then
+    lots="$(fm_value "$f" lots)"
+    if [ "$lots" != all ]; then
+      read -ra words <<< "$lots"
+      for w in "${words[@]}"; do [ "$w" = "$lot" ] && found=1; done
+      if [ -z "$found" ]; then LEVEL_WHY="lot not covered: $lot is not in lots: $lots$from"; return 0; fi
+    fi
+    found=""
+    while read -r l c; do
+      if [ "$l" = "$lot" ]; then found=1; break; fi
+    done < <(lots_table "$src/campaign.md")
+    if [ -z "$found" ]; then
+      LEVEL_WHY="lot not covered: $dir/campaign.md has no row for $lot$from"; return 0
+    fi
+    if [ "$c" != - ]; then
+      if ! cr="$(ladder_rank "$c")"; then
+        LEVEL_WHY="capped by the lot: the ceiling '$c' of $lot is not a level"; return 0
+      fi
+      sr="$(ladder_rank "$lv")"
+      if [ "$cr" -lt "$sr" ]; then
+        LEVEL="$c"; LEVEL_WHY="capped by the lot: the ceiling of $lot is $c"; return 0
+      fi
+    fi
+  fi
+  LEVEL="$lv"
+  LEVEL_WHY="signed until $exp"
+}
+
+# level <campaign-dir> [--lot L<n>] — the effective level, and why, on one line; rc 0 whatever the
+# answer, since assisted is an answer and not an error — but for the one assisted that is no answer:
+# the checkouts of the campaign did not read (`unread: …`, LEVEL_STOP), rc 1. A --lot with no lot is
+# a usage error: read as no lot, it would answer the uncapped level to a caller that asked about
+# one lot.
+cmd_level() {
+  local lot=""
+  case "$#" in
+    1) : ;;
+    3) [ "$2" = --lot ] && [ -n "$3" ] || { usage; return 2; }; lot="$3" ;;
+    *) usage; return 2 ;;
+  esac
+  [ -d "$1" ] || { usage; return 2; }
+  effective_level "$1" "$lot"
+  printf 'level %s — %s\n' "$LEVEL" "$LEVEL_WHY"
+  [ -z "$LEVEL_STOP" ] || return 1
+}
+
+# act_floor <act> — the lowest level that grants <act>, read from ACTS; prints nothing and returns
+# 1 when the table does not name <act> exactly.
+act_floor() {
+  local e
+  for e in "${ACTS[@]}"; do
+    [ "${e%%:*}" = "$1" ] && { printf '%s\n' "${e#*:}"; return 0; }
+  done
+  return 1
+}
+
+# allows <campaign-dir> <act> --mission <mission-dir> | allows <campaign-dir> plan --lot L<n> —
+# whether <act> fits the effective level of its lot: rc 0 and `allowed`, or rc 1 and `ask`, naming
+# the level the act needs and the reason of the effective one, so the owner reads why it came back.
+# A word the table does not name is a usage error (rc 2, nothing on stdout): read as any level, it
+# would be allowed at the top. Every act of a campaign is an act of one lot, and the lot's ceiling is
+# the act's. The lot of an act on a mission that exists (every act but those of LOT_ACTS: run, pr,
+# review, merge, postmerge and approve, `sdd approve` being run on a mission already planned) is the
+# lot: of <mission-dir>/00-missao.md, never a word of the call: a --lot the session passed was a
+# label, and `merge --lot L1` over the pull request of L6a, capped at plan, was allowed (decision 3
+# of the owner on the review r6). Only plan, which comes before the mission it makes, is asked by
+# --lot. A call with neither, with the other flag, with an empty value, or a <mission-dir> that holds
+# no 00-missao.md is a usage error, naming what the act takes: read as no lot, it would answer the
+# signed level over every ceiling of the queue. A mission that is not this campaign's (its campaign:
+# is not the directory's name, campaign_name, as id_is_dir reads the id) or whose lot: is empty asks,
+# assisted, naming its file, and a lot it declares outside lots: or the table asks the same way
+# (effective_level, told the file): each is an answer about the artifacts, which the owner fixes, and
+# none is read as a mission with no lot.
+# Declared limit: the folder is read where the caller points, so one outside the campaign's
+# missions (campaign_set) that declares its campaign and a lot is read as a mission of that lot; the
+# lot now comes from the folder of the mission the act is about — the mission `sdd run` and `sdd
+# approve` are given, the folder `pr-ready` reads, which holds it to the pull request by the head of
+# its checkout —, not from a word the call carries.
+# A rank that does not compare asks, never allows: that world is a floor off the ladder, which only
+# an edit of ACTS could write, so no probe reaches it from outside.
+cmd_allows() {
+  local need by=mission e flag arg why lot="" mf="" mc id given="${3:-}" val="${4:-}"
+  case "$#" in
+    2 | 4) : ;;
+    *) usage; return 2 ;;
+  esac
+  [ -d "$1" ] || { usage; return 2; }
+  if ! need="$(act_floor "$2")"; then
+    printf "sdd-worker: '%s' is not an act (%s)\n" "$2" "${ACTS[*]%%:*}" >&2
+    usage; return 2
+  fi
+  for e in "${LOT_ACTS[@]}"; do [ "$e" != "$2" ] || by=lot; done
+  if [ "$by" = lot ]; then
+    flag=--lot; arg='--lot L<n>'; why='a plan comes before the mission it makes, and the ceiling of its lot caps it'
+  else
+    flag=--mission; arg='--mission <mission-dir>'
+    why="the lot of an act on a mission is the lot: its 00-missao.md declares, never a word of the call"
+  fi
+  if [ "$given" != "$flag" ]; then
+    printf 'sdd-worker: allows %s takes %s%s: %s\n' "$2" "$arg" "${given:+, not $given}" "$why" >&2
+    usage; return 2
+  fi
+  [ -n "$val" ] || { usage; return 2; }
+  why=""
+  if [ "$by" = lot ]; then
+    lot="$val"
+  else
+    mf="${val%/}/00-missao.md"
+    if [ ! -f "$mf" ]; then
+      printf 'sdd-worker: %s does not exist: --mission takes the folder of a mission\n' "$mf" >&2
+      usage; return 2
+    fi
+    id="$(campaign_name "$1")"
+    mc="$(fm_value "$mf" campaign)"
+    lot="$(fm_value "$mf" lot)"
+    if [ "$mc" != "$id" ]; then
+      why="another campaign's mission: $mf declares campaign: '$mc', and the campaign is '$id'"
+    elif [ -z "$lot" ]; then
+      why="no lot: $mf declares no lot:, and an act on a mission is an act of its lot"
+    fi
+  fi
+  if [ -n "$why" ]; then
+    LEVEL=assisted; LEVEL_WHY="$why"
+  else
+    effective_level "$1" "$lot" "${mf:+the lot: of $mf}"
+  fi
+  if [ "$(ladder_rank "$LEVEL")" -ge "$(ladder_rank "$need")" ] 2>/dev/null; then
+    printf 'allowed %s at %s\n' "$2" "$LEVEL"
+    return 0
+  fi
+  printf 'ask %s needs %s, effective %s — %s\n' "$2" "$need" "$LEVEL" "$LEVEL_WHY"
+  return 1
+}
+
+# ledger_path — the autonomy ledger the runner writes, one JSON line per event, machine-wide: the
+# spelling of autonomy_log_path in bin/sdd, so the two never name two files.
+ledger_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
+
+# checkouts_of <root> — PUBLISHES CHECKOUTS: <root>, then every worktree of its repository, each
+# once. A mission of a campaign runs in a worktree of its own, and its folder reaches the checkout
+# that holds the campaign only with the merge: a reader of <root> alone would not see it in flight.
+# Returns 1, with the call and its rc in CHECKOUTS_WHY, when `git worktree list` does not run —
+# before printing or after: a listing judged by what it printed would leave <root> alone in it, and
+# budget would sum fewer missions, level read fewer pagers and next plan a lot in flight again, in
+# silence. git's own message stays on stderr. Called, never substituted: under `$( )` both globals
+# would die with the subshell.
+checkouts_of() {
+  local out rc=0
+  out="$(git -C "$1" worktree list --porcelain)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    CHECKOUTS_WHY="git -C $1 worktree list --porcelain failed (rc $rc)"
+    return 1
+  fi
+  mapfile -t CHECKOUTS < <({ printf '%s\n' "$1"; sed -n 's/^worktree //p' <<< "$out"; } | awk '!seen[$0]++')
+}
+
+# base_copies <root> <handoff-dir> <id> — PUBLISHES BASE_DIRS, a copy of the folder of every mission
+# of campaign <id> the base carries: the tree of the upstream of the branch checked out in <root>,
+# read by git (for-each-ref, ls-tree and show), whether or not the mission's worktree is still there
+# and whether or not <root> took the base in. A copy holds the mission's 00-missao.md as `git show
+# <upstream>:<path>` prints it, at BASE_COPY/<path>, in a temporary directory that goes when the
+# program exits (tmp_sweep, BASE_TMP); BASE_UP is the upstream's full name, and a reason that names a
+# copy names it `<upstream>:<path>`, never the copy (cmd_next). A folder is one of <handoff-dir>
+# itself, as `<handoff-dir>/*/00-missao.md` finds them on disk, and <handoff-dir> is normalised as
+# load_config normalises HANDOFF_DIR (dir_normalise), the spelling git prints
+# the paths in. rc 0 and no copy when there is no upstream: a detached HEAD, or a branch with none
+# set. Returns 1, with the reason in BASE_WHY, when the upstream does not read — a for-each-ref, an
+# ls-tree or a show that fails, before printing or after, each judged by its rc — or no temporary
+# directory can be made for the copies. An upstream `[gone]` (as %(upstream:track) prints it: the
+# remote branch deleted after the merge and pruned by a fetch) is one that does not read: %(upstream)
+# still prints its ref, the ls-tree of that ref exits 128, and budget, level and next stop, naming
+# it. Called, never substituted.
+base_copies() {
+  local root="$1" hd="$2" id="$3" out up e rc=0
+  BASE_DIRS=(); BASE_WHY=""; BASE_UP=""; BASE_COPY=""
+  out="$(git -C "$root" for-each-ref --format='%(HEAD)%(upstream)' refs/heads/)" || rc=$?
+  if [ "$rc" -ne 0 ]; then BASE_WHY="the upstream of $root does not read: git for-each-ref failed (rc $rc)"; return 1; fi
+  up="$(sed -n 's/^\*//p' <<< "$out")"
+  [ -n "$up" ] || return 0
+  BASE_UP="$up"
+  if ! BASE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/sdd-worker-base.XXXXXX")"; then
+    BASE_WHY="no copy of the upstream $up of $root could be made under ${TMPDIR:-/tmp}"; return 1
+  fi
+  trap tmp_sweep EXIT
+  BASE_COPY="$BASE_TMP/tree"
+  dir_normalise hd
+  git -C "$root" ls-tree -r -z --name-only "$up" -- "$hd/" > "$BASE_TMP/list" || rc=$?
+  if [ "$rc" -ne 0 ]; then BASE_WHY="the upstream $up of $root does not read: git ls-tree $up failed (rc $rc)"; return 1; fi
+  while IFS= read -r -d '' e; do
+    case "${e#"$hd/"}" in */*/*) continue ;; */00-missao.md) : ;; *) continue ;; esac
+    mkdir -p -- "$BASE_COPY/${e%/*}"
+    git -C "$root" show "$up:$e" > "$BASE_COPY/$e" || rc=$?
+    if [ "$rc" -ne 0 ]; then BASE_WHY="the upstream $up of $root does not read: git show $up:$e failed (rc $rc)"; return 1; fi
+    [ "$(fm_value "$BASE_COPY/$e" campaign)" != "$id" ] || BASE_DIRS+=("$BASE_COPY/${e%/*}")
+  done < "$BASE_TMP/list"
+}
+
+# campaign_set <root> <id> — PUBLISHES SET_DIRS and SET_CHECKOUTS, ONE definition of what a verb
+# reads for campaign <id>. SET_DIRS is the folder of every copy of every mission of the campaign: the
+# folders under HANDOFF_DIR (the root's; docs/handoffs when unset) of every checkout of the root's
+# repository (checkouts_of) whose 00-missao.md declares exactly `campaign: <id>`, then a copy of each
+# such folder the base carries (base_copies: the tree of the upstream of the root's branch) — budget
+# counts their ids, next reads their copies. A mission runs in a worktree of its own and reaches the
+# root's checkout only when the root takes the base in, and the owner may remove a merged worktree
+# before that: read on disk alone, such a mission was found nowhere, next planned its lot again and
+# budget forgot its spend (achado #2 of the r6). A mission found on disk and in the base is one
+# mission with two copies, as one held by two checkouts is: budget and next read mission ids, each
+# once. SET_CHECKOUTS is the checkouts whose .sdd/config.sh a verb may
+# source: <root>, then each worktree that holds one of SET_DIRS, and no other — the narrow set the
+# owner chose (achado #3 of the r5). Sourcing runs the file as shell, and `sdd run` reads the file of
+# the checkout it runs in, the campaign's or the worktree of one of its missions: a worktree that
+# holds none runs no `sdd run` of this campaign, so its file is never executed, for any key. The base
+# is no checkout: no `sdd run` runs in it, so its file is never sourced, and it is read at the root's
+# HANDOFF_DIR, the set's.
+# Returns 1, with the reason in SET_WHY, when the worktrees do not list, when a checkout of the set
+# other than <root> sets a HANDOFF_DIR that is not the root's, the two compared as the runner reads
+# them (dir_normalise: `./docs/handoffs/` is `docs/handoffs`), since the runner there would look for
+# its missions where the worker does not, or when the base does not read (an upstream set whose
+# for-each-ref, ls-tree or show fails, or no temporary directory for its copies): a base that was not
+# read is never a base with no mission. An empty <id> finds no mission, since it would match every
+# mission that belongs to no campaign; no verb reaches that branch (a legible delegation and the
+# campaign.md next walks both name their directory, id_is_dir), and it is kept because it decides
+# what an empty id answers: no mission, never all. Called, never substituted.
+# Declared limits: a worktree whose HANDOFF_DIR is not the root's keeps its missions where the glob
+# of the root's does not look, so it holds none the set sees, is not read, and its missions are not
+# counted; a worktree whose branch carries a merged copy of a mission of the campaign holds one, and
+# is read. The base is the upstream of the branch the root has checked out, as the last fetch left
+# it: a root on a detached HEAD, or on a branch with no upstream set, reads no base, and a merged
+# mission whose worktree went is found nowhere until the root takes the base in — what every verb
+# answered before the base was read; a mission merged after the last fetch is not in it either (a
+# worktree removed once its merge is proved against the base, `git merge-base --is-ancestor` after a
+# `git fetch`, was fetched first); a root on a branch whose upstream is not the base reads that
+# branch's tree; and a base that keeps the missions outside the root's HANDOFF_DIR holds none the set
+# sees, as a worktree whose HANDOFF_DIR is not the root's.
+# A mission that never reached the base, its pull request closed without merge or the mission
+# dropped, is on disk in its worktree and in no other place the set reads: a mission that
+# never reached the base and whose worktree was removed is found nowhere, and its spend leaves the
+# sum budget answers, rc 0 (achado #1 of the r7). Its branch may still carry it, here and in the
+# remote, and no branch but the root's upstream is read; the ledger names no campaign, so no reader
+# of the spend finds it another way. The source the owner chose is in TODO.md (the session line of
+# the ledger carrying campaign:, which the runner reads from the 00-missao.md); until it lands,
+# remove the worktree of a mission that will not reach the base only after signing a
+# campaign ceiling lower by what it spent.
+campaign_set() {
+  local root="$1" id="$2" hd whd wt m held
+  SET_DIRS=(); SET_CHECKOUTS=("$root"); SET_WHY=""
+  [ -n "$root" ] && [ -n "$id" ] || return 0
+  if ! checkouts_of "$root"; then SET_WHY="$CHECKOUTS_WHY"; return 1; fi
+  hd="$(config_key "$root" HANDOFF_DIR)"
+  hd="${hd:-docs/handoffs}"
+  dir_normalise hd
+  for wt in "${CHECKOUTS[@]}"; do
+    held=""
+    for m in "$wt/$hd"/*/00-missao.md; do
+      if [ -f "$m" ] && [ "$(fm_value "$m" campaign)" = "$id" ]; then SET_DIRS+=("${m%/00-missao.md}"); held=1; fi
+    done
+    if [ -n "$held" ] && [ "$wt" != "$root" ]; then
+      SET_CHECKOUTS+=("$wt")
+      whd="$(config_key "$wt" HANDOFF_DIR)"
+      whd="${whd:-docs/handoffs}"
+      dir_normalise whd
+      if [ "$whd" != "$hd" ]; then
+        SET_WHY="HANDOFF_DIR '$whd' in $wt/.sdd/config.sh is not the campaign checkout's '$hd' ($root/.sdd/config.sh)"
+        return 1
+      fi
+    fi
+  done
+  if ! base_copies "$root" "$hd" "$id"; then SET_WHY="$BASE_WHY"; return 1; fi
+  SET_DIRS+=(${BASE_DIRS[@]+"${BASE_DIRS[@]}"})
+}
+
+# budget <campaign-dir> — what the campaign spent against its ceiling: the cost_usd of every ledger
+# line whose mission is one of the campaign's (the delegation's campaign:, campaign_set), summed by jq
+# — never by awk, whose mawk reads 1.99 as 1 under pt-BR — against budget_campaign_usd, and the
+# mission cap the worker passes to `sdd run` as BUDGET_MISSION_USD. Money is counted in cents: the
+# sum and the ceiling each go through `* 100 | round` before they are compared, so 0.10 + 0.70, a
+# binary 0.7999999999999999, reaches a ceiling of 0.80; both are printed from those cents, and the
+# mission cap is printed as signed, the very value `run` hands the runner (a `%.2f` of 0.015 would
+# hand it 0.01 or 0.02).
+# rc 0 below the ceiling with room for one run (below); rc 1 at it or above it, on no room for a
+# run, and rc 1 for every answer it cannot have — no
+# delegation or an illegible one (no ceiling), a directory outside a git checkout, a set of checkouts
+# that does not read (campaign_set: the worktrees do not list, a HANDOFF_DIR of the set is not the
+# root's, or the base does not read) or a ledger that does not read (no spend): a spend that could
+# not be read is never zero. A mission merged into the base counts whether or not its worktree is
+# still there (campaign_set reads the base), so its spend is never forgotten when the worktree goes. A missing ledger is the one zero, since nothing ran yet. rc 1 too, and no mission cap, when
+# the signed cap is zero, which the runner reads as no ceiling, or below one cent, the unit the
+# worker counts in: the stop names the delegation, the one place that sets it, before any config is
+# read. And when the runner would not apply the signed one: it sources the .sdd/config.sh of the
+# checkout it runs in over its environment, so a file that assigns BUDGET_MISSION_USD above the
+# signed cap, or to a zero (no ceiling), beats the value the session passes, and one off the
+# runner's own grammar (digits and at most one dot: `1e2`, `+5`, a blank) is refused by it, though jq
+# reads it as a number; a value at or below the signed cap is the stricter one, and holds. The
+# session launches `sdd run` in the mission's worktree, not in the campaign's checkout, and a worktree
+# cut from a commit that still sets the key keeps the line the owner deleted here: so the file of
+# each checkout of the set is read (campaign_set: the campaign's checkout, then each worktree that
+# holds a mission of the campaign, and no other), and the first that would beat the signed cap is
+# the one the stop names.
+# The campaign ceiling is a hard limit (achado #3 and decision 2 of the owner on the r6): below it,
+# budget also holds what is left (the ceiling's cents less the sum's) against the signed mission
+# cap, and a left below that cap is rc 1, on
+# `no room — campaign US$ <spent> of <ceiling> leaves US$ <left>, below the mission cap US$ <cap> …`:
+# the next run may spend up to its cap, and would pass the ceiling. A left equal to the cap opens
+# the run, and the campaign then ends at its ceiling exactly; a spend that reached the ceiling is
+# the campaign line, rc 1, before any of this. The cap goes to cents from its text as signed, never
+# through a %.2f nor a binary product (1.10 * 100 is 110.00000000000001), and a fraction of a cent
+# rounds up: a run capped at 0.014 may spend more than the one cent left. The cap compared is the
+# signed one, not the one the runner applies, because that one never passes the signed (a config
+# that would set it higher stops budget above) and one below it only spends less: so a campaign may
+# end with up to one mission cap unused, and passes the one signed only by three spends: what the
+# runner spends past its own cap in a phase and the spend of a mission that budget does not find
+# (one that never reached the base and whose worktree was removed), both in Declared limits below,
+# and the spend of the orchestrating session and of its subagents, outside both ceilings. budget
+# does not know the act that follows it, so the stop holds before every act, a merge of a lot whose
+# run is over among them.
+# Declared limits: the runner reads its own spend before a phase opens, so a phase may spend past
+# BUDGET_MISSION_USD, and the campaign past its ceiling by that much; the room is one run's, and the
+# loop of commands/sdd-worker.md launches one run at a time; a line is matched by its mission id
+# alone, so a mission of the same id in another repo is counted too (the fail-safe side: more
+# spend, an earlier stop); a malformed line is skipped
+# (`fromjson?`, as the runner reads the ledger), and its cost with it; the ceiling is read whether or
+# not the delegation is signed — whether the worker may act on it is the level's question; an empty
+# BUDGET_MISSION_USD in the file stops, though the runner fills it with its default, which may be
+# below the signed cap (the fail-safe side: the owner deletes the line); a worktree made after this
+# call is not read, and the loop of commands/sdd-worker.md calls budget on every turn, so the turn
+# that runs a mission reads the worktree its plan made.
+# And a mission of the campaign that never reached the base and whose worktree was removed is found
+# nowhere, and its spend leaves the sum (campaign_set says why): budget answers a smaller sum, rc 0,
+# and the campaign may pass its ceiling by that spend. Until the ledger carries the campaign
+# (TODO.md), remove the worktree of a mission that will not reach the base only after signing a
+# campaign ceiling lower by what it spent.
+cmd_budget() {
+  [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
+  local dir="${1%/}" f root cap mcap run wt p ledger out spent ceiling reached short left
+  local -a ms=()
+  f="$dir/delegation.md"
+  if [ ! -f "$f" ]; then printf 'no ceiling — no delegation: %s does not exist\n' "$f"; return 1; fi
+  if ! delegation_legible "$dir"; then printf 'no ceiling — illegible: %s\n' "$ILLEGIBLE_WHY"; return 1; fi
+  mcap="$(fm_value "$f" budget_mission_usd)"
+  # A legible cap is digits with an optional fraction, so it is above zero when a digit is.
+  if ! [[ "$mcap" =~ [1-9] ]]; then
+    printf 'no mission cap — %s signs budget_mission_usd: %s, which sdd run reads as no ceiling;' "$f" "$mcap"
+    printf ' sign a cap above 0\n'
+    return 1
+  fi
+  # Below one cent: zeros before the point and the two digits after it, a digit above zero later on.
+  if [[ "$mcap" =~ ^0+\.00 ]]; then
+    printf 'no mission cap — %s signs budget_mission_usd: %s, below one cent; sign a cap of at least 0.01\n' \
+      "$f" "$mcap"
+    return 1
+  fi
+  root="$(repo_root "$dir")"
+  if [ -z "$root" ]; then printf 'no spend — %s is not inside a git checkout\n' "$dir"; return 1; fi
+  if ! campaign_set "$root" "$(fm_value "$f" campaign)"; then printf 'no spend — %s\n' "$SET_WHY"; return 1; fi
+  for wt in "${SET_CHECKOUTS[@]}"; do
+    run="$(config_key "$wt" BUDGET_MISSION_USD "$mcap")"
+    # The runner's grammar of the key, as load_config writes it: empty takes its default (below),
+    # and a character off the digits and the dot, a lone dot or a second dot is refused by name.
+    case "$run" in
+      *[!0-9.]* | . | *.*.*)
+        printf 'no mission cap — %s sets BUDGET_MISSION_USD=%s, which sdd run refuses as no number;' \
+          "$wt/.sdd/config.sh" "$run"
+        printf ' delete the line, or set it above 0 and at most %s\n' "$mcap"
+        return 1 ;;
+    esac
+    if ! jq -en --arg r "$run" --arg s "$mcap" '($r | tonumber) as $r | $r > 0 and $r <= ($s | tonumber)' \
+         > /dev/null 2>&1; then
+      printf 'no mission cap — %s sets BUDGET_MISSION_USD=%s, which sdd run applies over the signed' \
+        "$wt/.sdd/config.sh" "$run"
+      printf ' budget_mission_usd: %s; delete the line, or set it above 0 and at most that\n' "$mcap"
+      return 1
+    fi
+  done
+  mapfile -t ms < <(for p in ${SET_DIRS[@]+"${SET_DIRS[@]}"}; do printf '%s\n' "${p##*/}"; done | awk '!seen[$0]++')
+  cap="$(fm_value "$f" budget_campaign_usd)"
+  ledger="$(ledger_path)"
+  [ -e "$ledger" ] || ledger=/dev/null
+  # The mission cap's cents come from its text (digits, and a fraction the legible grammar allows):
+  # the whole part times 100, the first two digits of the fraction, and one more cent when a digit
+  # after those two is above zero.
+  if ! out="$(jq -nrR --arg cap "$cap" --arg m "$mcap" --args '
+         [inputs | fromjson? | select(type == "object" and (.mission | IN($ARGS.positional[])))
+          | .cost_usd | numbers] | add // 0
+         | (. * 100 | round) as $spent | ($cap | tonumber * 100 | round) as $ceiling
+         | ($m | split(".") | (.[0] | tonumber) * 100 + ((.[1] // "") + "00" | .[0:2] | tonumber) + (if (.[1] // "") | .[2:] | test("[1-9]") then 1 else 0 end)) as $mission
+         | "\($spent) \($ceiling) \($spent >= $ceiling) \($ceiling - $spent < $mission)"' ${ms[@]+"${ms[@]}"} < "$ledger")"; then
+    printf 'no spend — the ledger %s does not read\n' "$ledger"; return 1
+  fi
+  read -r spent ceiling reached short <<< "$out"
+  if [ "$reached" != true ] && [ "$short" = true ]; then
+    left=$((ceiling - spent))
+    printf 'no room — campaign US$ %d.%02d of %d.%02d leaves US$ %d.%02d, below the mission cap US$ %s a run may spend;' \
+      "$((spent / 100))" "$((spent % 100))" "$((ceiling / 100))" "$((ceiling % 100))" "$((left / 100))" "$((left % 100))" "$mcap"
+    printf ' sign a higher budget_campaign_usd, or a budget_mission_usd of at most %d.%02d\n' "$((left / 100))" "$((left % 100))"
+    return 1
+  fi
+  printf 'campaign US$ %d.%02d of %d.%02d — %d mission(s); mission cap US$ %s\n' \
+    "$((spent / 100))" "$((spent % 100))" "$((ceiling / 100))" "$((ceiling % 100))" "${#ms[@]}" "$mcap"
+  if [ "$reached" = true ]; then return 1; fi
+}
+
+# approved <00-missao.md> — 0 when its aprovacao: is one the runner's gate_PLAN admits: auto, or
+# humano-<date>. Positive, and the runner's own grammar: an empty value, or the template's
+# placeholder, is a plan nobody approved.
+approved() {
+  case "$(fm_value "$1" aprovacao)" in auto | humano-*) return 0 ;; *) return 1 ;; esac
+}
+
+# lot_of <lot> <mission-dir...> — PUBLISHES LOT_DIRS, every copy among <mission-dir...> whose
+# 00-missao.md declares exactly `lot: <lot>`, and LOT_IDS, their distinct mission ids. Called, never
+# substituted: under `$( )` both arrays would die with the subshell.
+lot_of() {
+  local lot="$1" p i seen
+  shift
+  LOT_DIRS=(); LOT_IDS=()
+  for p in "$@"; do
+    [ "$(fm_value "$p/00-missao.md" lot)" = "$lot" ] || continue
+    LOT_DIRS+=("$p")
+    seen=""
+    for i in ${LOT_IDS[@]+"${LOT_IDS[@]}"}; do [ "$i" != "${p##*/}" ] || seen=1; done
+    [ -n "$seen" ] || LOT_IDS+=("${p##*/}")
+  done
+}
+
+# pr_states <root> <branch> — the pull requests of the repository whose head is <branch>, PUBLISHED
+# in PR_STATES as one `<number> <state>` per line, from `gh pr list --head <branch> --state all
+# --json number,state,isCrossRepository` run at <root>, the checkout gh infers the repository from.
+# `--head` matches the branch's name alone, and a fork can push a branch of that name: a merged pull
+# request from a fork read as the lot's would make the lot done while it never ran (achado #6 of the
+# r5). So only the elements whose isCrossRepository is false are the repository's own, and the
+# others are left out. Returns 1, with the reason in GH_WHY, when gh failed or answered anything but
+# one array whose every element has a state of OPEN, CLOSED or MERGED and an isCrossRepository that
+# is a boolean — an empty answer included: an answer that was not read is never "no pull request",
+# which would send a lot to run again, and an element that does not say whose it is is not read as
+# the repository's or as a fork's. An element that is not an object makes jq itself fail on
+# `.state`, so no rule of its own says so; the number is only printed.
+pr_states() {
+  local out rc=0
+  out="$(CDPATH='' cd -- "$1" && gh pr list --head "$2" --state all --json number,state,isCrossRepository)" || rc=$?
+  if [ "$rc" -ne 0 ]; then GH_WHY="gh pr list --head $2 failed (rc $rc)"; return 1; fi
+  if ! PR_STATES="$(jq -rn 'input
+         | if type == "array"
+              and all(.[]; (.state | IN("OPEN", "CLOSED", "MERGED")) and (.isCrossRepository | type) == "boolean")
+           then .[] | select(.isCrossRepository == false) | "\(.number) \(.state)"
+           else error("off the contract") end' 2> /dev/null <<< "$out")"; then
+    GH_WHY="gh pr list --head $2 answered no array of pull requests in a known state and repository: '${out:0:80}'"
+    return 1
+  fi
+}
+
+# next <campaign-dir> — the next act of the campaign, from the queue, the campaign's missions and gh.
+# It walks the lots of campaign.md in the order of the table and stops at the first one not merged:
+# no mission → plan; a mission not approved → approve; approved with no pull request → run; a pull
+# request open → review; only closed ones → stop. A merged pull request of the repository (never a
+# fork's, pr_states) makes the lot done, and a queue whose every lot is merged is done. The merge is
+# read before the approval, whenever a copy names the branch: a copy of a mission left in an old
+# linked worktree keeps the aprovacao: it had before the plan was approved, and asked about first it
+# stopped the campaign on approve over a lot merged long ago (achado #7 of the r5); so a mission with
+# a branch costs a gh call even when it is not approved, and a gh that does not answer there is rc 3,
+# never approve. When the act is run or review and the lot after it has no
+# mission, a second line says the session may plan that one ahead. rc 0; rc 1 when the line is
+# stop; rc 3, and no act at all, when gh did not answer. What next cannot decide stops it, naming
+# why: no campaign.md, a campaign: that is not the directory's name (id_is_dir: an empty one and the
+# template's placeholder among them), a directory outside a git checkout, an empty queue, two
+# missions on one lot, and an approved mission with no branch — `gh pr list --head ''` lists every
+# pull request of the repo, and one merged anywhere would read as this lot's.
+# A mission is found as budget finds them (campaign_set), in the campaign's checkout, in every
+# linked worktree and in the base, so a lot in flight is never planned again, nor a lot merged
+# after its worktree went; a set that does not read (the worktrees do not list, a HANDOFF_DIR of the
+# set is not the root's, or the base does not read) stops, `unread: …`, rc 1. A copy of the base is
+# named in the act as git names it, `<upstream>:<path>`, never as the temporary copy that was read.
+# Copies of one mission are one mission, approved only
+# when every copy is: approve is the act the ladder grants last, run is not. Declared limits: the
+# branch read is the first copy's that names one; and `--head` matches a name, never its use, so
+# a merged pull request of an earlier use of the same branch name makes the lot done (achado #5 of
+# the mission's review r6) — measured on 2026-11-19, 0 of 161 merged pull requests of the kit share
+# a head name with another of its 162 pull requests, so it stays a limit and not a fix. The measure,
+# run in the kit's checkout, printed `0 of 161 merged, 162 in all`:
+#   gh pr list --state all --limit 1000 --json state,headRefName --jq '. as $a | [.[] |
+#   select(.state == "MERGED")] as $m | [$m[] | .headRefName as $h | select([$a[] |
+#   select(.headRefName == $h)] | length > 1)] |
+#   "\(length) of \($m | length) merged, \($a | length) in all"'
+cmd_next() {
+  [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
+  local dir="${1%/}" cf id root l i m p pend branch act="" ahead="" n s merged open closed
+  local -a lots=() dirs=()
+  cf="$dir/campaign.md"
+  if [ ! -f "$cf" ]; then printf 'stop - - — no campaign: %s does not exist\n' "$cf"; return 1; fi
+  if ! id_is_dir "$dir" "$cf"; then printf 'stop - - — illegible: %s\n' "$ID_WHY"; return 1; fi
+  id="$(fm_value "$cf" campaign)"
+  root="$(repo_root "$dir")"
+  if [ -z "$root" ]; then printf 'stop - - — %s is not inside a git checkout\n' "$dir"; return 1; fi
+  while read -r l _; do lots+=("$l"); done < <(lots_table "$cf")
+  if [ "${#lots[@]}" -eq 0 ]; then
+    printf 'stop - - — the queue is empty: no row under ## Lotes in %s\n' "$cf"; return 1
+  fi
+  if ! campaign_set "$root" "$id"; then printf 'stop - - — unread: %s\n' "$SET_WHY"; return 1; fi
+  dirs=(${SET_DIRS[@]+"${SET_DIRS[@]}"})
+  for i in "${!lots[@]}"; do
+    l="${lots[$i]}"
+    lot_of "$l" ${dirs[@]+"${dirs[@]}"}
+    if [ "${#LOT_IDS[@]}" -eq 0 ]; then act="plan $l - — no mission of campaign $id declares lot: $l"; break; fi
+    if [ "${#LOT_IDS[@]}" -gt 1 ]; then
+      act="stop $l - — more than one mission declares lot: $l (${LOT_IDS[*]})"; break
+    fi
+    m="${LOT_IDS[0]}"
+    pend=""
+    for p in "${LOT_DIRS[@]}"; do
+      if ! approved "$p/00-missao.md"; then
+        pend="$p"; break
+      fi
+    done
+    branch=""
+    for p in "${LOT_DIRS[@]}"; do
+      branch="$(fm_value "$p/00-missao.md" branch)"
+      [ -z "$branch" ] || break
+    done
+    merged=""; open=""; closed=""
+    if [ -n "$branch" ]; then
+      if ! pr_states "$root" "$branch"; then
+        printf 'sdd-worker: %s — no act is named: an answer that was not read is never "no pull request"\n' \
+          "$GH_WHY" >&2
+        return 3
+      fi
+      while read -r n s; do
+        case "$s" in MERGED) merged="$merged #$n" ;; OPEN) open="$open #$n" ;; CLOSED) closed="$closed #$n" ;; esac
+      done <<< "$PR_STATES"
+    fi
+    if [ -n "$merged" ]; then continue; fi
+    if [ -n "$pend" ]; then
+      act="approve $l $m — not approved: $pend/00-missao.md has aprovacao: '$(fm_value "$pend/00-missao.md" aprovacao)'"
+      break
+    fi
+    if [ -z "$branch" ]; then act="stop $l $m — the mission names no branch: ${LOT_DIRS[0]}/00-missao.md"; break; fi
+    if [ -n "$open" ]; then act="review $l $m — pull request$open is open on $branch"
+    elif [ -n "$closed" ]; then act="stop $l $m — pull request closed without merge:$closed"
+    else act="run $l $m — approved, and no pull request of the repository has the head $branch"
+    fi
+    break
+  done
+  [ -n "$act" ] || act="done - - — every lot of the queue is merged (${#lots[@]} lot(s))"
+  [ -z "${BASE_COPY:-}" ] || act="${act//"$BASE_COPY/"/"$BASE_UP:"}"
+  case "$act" in
+    run\ * | review\ *)
+      if [ "$((i + 1))" -lt "${#lots[@]}" ]; then
+        lot_of "${lots[$((i + 1))]}" ${dirs[@]+"${dirs[@]}"}
+        [ "${#LOT_IDS[@]}" -gt 0 ] || ahead="ahead plan ${lots[$((i + 1))]}"
+      fi ;;
+  esac
+  printf '%s\n' "$act"
+  [ -z "$ahead" ] || printf '%s\n' "$ahead"
+  case "$act" in stop\ *) return 1 ;; esac
+}
+
+# newest_round <mission-dir> — the 40-review-r<N>.md of highest N, compared as a number: r10 is newer
+# than r9, which a glob sorts the other way. Prints nothing when there is none.
+newest_round() {
+  local f n best=-1 out=""
+  for f in "$1"/40-review-r*.md; do
+    n="${f##*/40-review-r}"; n="${n%.md}"
+    [[ "$n" =~ ^[0-9]+$ ]] || continue
+    if [ "$n" -gt "$best" ]; then best="$n"; out="$f"; fi
+  done
+  [ -z "$out" ] || printf '%s\n' "$out"
+}
+
+# GRADE_ROW_AWK — cells(<row>, <array>): the cells of a row of the grade table, split as the runner's
+# gate_REVIEW splits it (the escaped_pipe and the rejoin of bin/sdd, copied): GFM writes a pipe
+# inside a cell as `\|`, so a piece whose run of trailing backslashes is ODD is joined to the next,
+# its last backslash given back as the pipe; an EVEN run (`\\`, a literal backslash) sits against a
+# real delimiter. The array is emptied first, since it is the caller's: a row with fewer cells
+# would read the cells the row before it left.
+# Cut at every `|`, a criterion holding `\|` moved a B out of the Grade column and left an A there,
+# and the fill-in `<why \| in one sentence>` was judged by `<why \`, which reads as a sentence:
+# both pass a round gate_REVIEW refuses. tests/check-worker.sh reads the runner's split out of
+# bin/sdd and holds the two equal on the same rows (its `pipe:` family). Returns the number of
+# pieces, the one before the first pipe included.
+# graded(<array>, <n>) — 1 when the cells cells() left are a criterion row of the grade table, 0 when
+# they are its header or its separator, both known by the shape of the line and NEVER by the grade:
+# the separator is the row whose every cell is `:?-+:?` (an empty piece after a closing pipe is no
+# cell), and the header is the first row of the table, its criterion reading `Criterion`. Decided by
+# the grade, a criterion graded `---` or `Grade` was skipped, and a round with no grade for it read
+# as graded A (achado #8 of the mission's review r5). Counts the rows in `rows_seen`, so a reader
+# calls it once per table row of the section. gate_REVIEW decides by the criterion cell instead, a
+# reading that never drops a named criterion; here a row it skips (`| --- | B | … |`) is read.
+GRADE_ROW_AWK='
+function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
+function escaped_pipe(s,   t) { t = s; sub(/\\+$/, "", t); return (length(s) - length(t)) % 2 }
+function cells(row, f,   raw, rawn, i, n) {
+  split("", f)
+  rawn = split(row, raw, "|")
+  n = 0
+  for (i = 1; i <= rawn; i++) {
+    if (n > 0 && escaped_pipe(f[n])) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
+    else { f[++n] = raw[i] }
+  }
+  return n
+}
+function graded(f, n,   i, last, sep, c) {
+  rows_seen++
+  last = (trim(f[n]) == "") ? n - 1 : n
+  sep = 1
+  for (i = 2; i <= last; i++) if (trim(f[i]) !~ /^:?-+:?$/) sep = 0
+  if (sep) return 0
+  c = f[2]; gsub(/[*`]/, "", c)
+  if (rows_seen == 1 && trim(c) == "Criterion") return 0
+  return 1
+}
+'
+
+# REVIEW_CRITERIA — the rows of the `### Overall Grade` table of templates/review.md, one per line
+# and in its order: the seven criteria of the codereview skill and Overall, each as its criterion
+# cell reads once its `*` and backticks are removed and its blanks trimmed (the template writes the
+# Overall row in bold). The one definition of what the review item requires a row of: an A in every
+# row present is not an A in every criterion, and a round with the Overall row alone was ready
+# (achado #1 of the mission's review r6). tests/check-worker.sh reads it out of this file and holds
+# it equal to the template's rows (its `criteria:` family), so a criterion the template gains or
+# loses turns the sensor red, never this verb silent.
+REVIEW_CRITERIA='Code Quality (Zen)
+Type Safety
+Error Handling
+Security
+Performance
+Test Coverage
+Documentation
+Overall'
+
+# round_grades <round> — the Grade cell of every row of the table under `### Overall Grade`, one per
+# line, read as the runner's gate_REVIEW reads it: the third column of the row as cells() splits it,
+# a row indented or not, its bold and code-span marks removed; the header row and the separator are
+# skipped by their shape (graded), and the read ends at the next heading. An empty cell prints
+# <empty>. Prints nothing when the section has no row.
+round_grades() {
+  awk "$GRADE_ROW_AWK"'
+    /^###[ \t]+Overall Grade/ { sec = 1; next }
+    !sec { next }
+    /^#+[ \t]/ { exit }
+    $0 !~ /^[ \t]*\|/ { next }
+    {
+      n = cells($0, c)
+      if (!graded(c, n)) next
+      g = c[3]; gsub(/[*`]/, "", g); g = trim(g)
+      print (g == "" ? "<empty>" : g)
+    }' "$1"
+}
+
+# PLACEHOLDER_AWK — a COPY of the runner's (PLACEHOLDER_AWK in bin/sdd, the rule gate_REVIEW applies
+# to every Rationale cell and to the gate: of a round): the refused set of fill-ins, written by a
+# model in place of a sentence. The rule lives in two programs, so tests/check-worker.sh reads the
+# runner's out of bin/sdd and holds the two equal on the same cells (its `rationale:` family): a
+# change to one that the other does not follow turns the sensor red. The function is the runner's,
+# line for line; its comments are shortened.
+PLACEHOLDER_AWK='
+# Refused: an EMPTY cell; the whole cell wrapped in angle brackets, which is how the `### Overall
+# Grade` table of templates/review.md ships its fill-ins; a bare ellipsis; and the bare fill-in
+# words below. It targets the WHOLE cell, never the presence of a character — a real sentence
+# containing <A> is a real sentence. NOT refused: `clean`, `n/a` and `—`, the terse rationales of
+# the codereview skill, which mean measured-with-nothing-to-say.
+function placeholder(s,   u, w) {
+  if (s == "") return 1
+  if (s ~ /^<.*>$/) return 1
+  u = toupper(s)
+  # `—` is E2 80 94 and mawk is byte-oriented, so the rule below sees three bytes with no letter.
+  if (s == "—") return 0
+  # A cell with no letter and no digit says nothing: `-`, `?`, `.`, `--`, `...` and `…`.
+  if (u !~ /[[:alnum:]]/) return 1
+  # The WORD, not the spelling: `TODO:` and `TBD.` are the bare words with punctuation.
+  w = u; gsub(/[^[:alnum:]]/, "", w)
+  if (w == "PREENCHER" || w == "TODO" || w == "TBD" || w == "FIXME" || w == "XXX" ||
+      w == "WIP" || w == "FILLME") return 1
+  return 0
+}
+'
+# placeholder <text> — rc 0 when <text> is a fill-in that says nothing, by the copy above. Through
+# ENVIRON and never `awk -v`, which runs escape sequences.
+placeholder() { SDD_PLACEHOLDER_TEXT="$1" awk "$PLACEHOLDER_AWK"' BEGIN { exit placeholder(ENVIRON["SDD_PLACEHOLDER_TEXT"]) ? 0 : 1 }'; }
+
+# round_unjustified <round> — the first row under `### Overall Grade` whose Rationale is a fill-in
+# (placeholder), as `<criterion><TAB><rationale>`, the rationale read as gate_REVIEW reads it: the
+# fourth column of the row as cells() splits it, a `\|` inside it given back as the pipe, its `*`
+# and backticks removed, its blanks trimmed, `<empty>` for an empty one. The header and the
+# separator are skipped by their shape (graded) and the read ends at the next heading, like
+# round_grades. Prints nothing when every row is justified.
+round_unjustified() {
+  awk "$PLACEHOLDER_AWK$GRADE_ROW_AWK"'
+    /^###[ \t]+Overall Grade/ { sec = 1; next }
+    !sec { next }
+    /^#+[ \t]/ { exit }
+    /^[ \t]*\|/ {
+      n = cells($0, c)
+      if (!graded(c, n)) next
+      r = c[4]; gsub(/[*`]/, "", r); r = trim(r)
+      if (placeholder(r)) { print trim(c[2]) "\t" (r == "" ? "<empty>" : r); exit }
+    }' "$1"
+}
+
+# round_missing <round> — the names of REVIEW_CRITERIA that no row under `### Overall Grade` carries,
+# in that order, joined by `, `: a row carries a name when its criterion cell, as cells() splits it,
+# its `*` and backticks removed and its blanks trimmed, is that name exactly. A name is found, never
+# counted, so a criterion written twice stands in for none left out. The header and the separator
+# are skipped by their shape (graded) and the read ends at the next heading, like round_grades.
+# Prints nothing when every criterion has a row.
+round_missing() {
+  SDD_REVIEW_CRITERIA="$REVIEW_CRITERIA" awk "$GRADE_ROW_AWK"'
+    /^###[ \t]+Overall Grade/ { sec = 1; next }
+    !sec { next }
+    /^#+[ \t]/ { exit }
+    /^[ \t]*\|/ {
+      n = cells($0, c)
+      if (!graded(c, n)) next
+      k = c[2]; gsub(/[*`]/, "", k); seen[trim(k)] = 1
+    }
+    END {
+      m = split(ENVIRON["SDD_REVIEW_CRITERIA"], want, "\n")
+      for (i = 1; i <= m; i++) if (!(want[i] in seen)) out = out (out == "" ? "" : ", ") want[i]
+      if (out != "") print out
+    }' "$1"
+}
+
+# gh_at <root> <args...> — gh run at <root>, the checkout gh infers the repository from; its stdout
+# PUBLISHED in GH_OUT and its rc in GH_RC. Returns 1 when gh failed. Called, never substituted.
+gh_at() {
+  local root="$1"
+  shift
+  GH_RC=0
+  GH_OUT="$(CDPATH='' cd -- "$root" && gh "$@")" || GH_RC=$?
+  [ "$GH_RC" -eq 0 ]
+}
+
+# gh_unread <what> — the stderr line for an answer gh did not give. The caller leaves rc 3 and
+# nothing on stdout: an answer that was not read is never ready, nor a not-ready to set out to fix.
+gh_unread() {
+  printf 'sdd-worker: %s — no item is named: an answer that was not read is never ready\n' "$1" >&2
+}
+
+# pr-ready <mission-dir> <pr> — whether pull request <pr> meets the owner's bar on its head sha:
+# `ready <sha>` and rc 0 when the five items hold, else `not-ready <item>: <reason>` and rc 1 for the
+# first that fails, in this order:
+#   review     the newest 40-review-r<N>.md of the mission folder (by number) grades A in every row
+#              of `### Overall Grade` (its header and its separator known by the shape of the line,
+#              never by the grade), and has a row for every criterion of REVIEW_CRITERIA (an A in
+#              every row present is not an A in every criterion), with no Rationale and no gate:
+#              that is a fill-in by the rule of gate_REVIEW (placeholder); it names
+#              `reviewed_head: <sha>`, an ancestor of the head (the head itself among them), and
+#              every commit after that sha touches the mission folder alone — read commit by
+#              commit and against each parent, so a change undone
+#              later and a merge's resolution count, and renames not followed, so a move into the
+#              folder is a change outside it; and the mission folder holds nothing git has not
+#              committed (modified, staged, untracked or ignored), so with the head item the round
+#              read is the round the head carries;
+#   codex      the newest comment of the Codex bot that carries `codex-review-state:v1`, read from
+#              every page, parses and is for the head, completed, with no unresolved finding;
+#   threads    every review thread is resolved, and every one was read;
+#   mergeable  the pull request is OPEN and MERGEABLE;
+#   head       the local HEAD of the mission's checkout is the head.
+# rc 3, and nothing on stdout, when gh failed or answered off its contract. The `ready` line carries
+# the sha the caller passes to `gh pr merge --merge --match-head-commit`; the method (a merge commit,
+# never a squash) is the merging command's, not this verb's. No bot's review is read but the Codex
+# state, so a bot with no quota neither blocks nor counts as a review. The `reviewed_head:` key is the
+# worker's own round's: a round the runner's REVIEW phase wrote names no head, and is not ready.
+# Declared limits: the five items are read one after the other, never at once — a receipt, a thread
+# or the mergeability can change between two reads on the same sha, which --match-head-commit does
+# not see (achado #13 of the mission's review r5) —, so whoever merges reads pr-ready again
+# immediately before `gh pr merge`, and a ready read earlier is no ready; a path git still quotes
+# under core.quotePath=false (a control byte, a quote or a backslash in its name) never matches the
+# mission folder, the fail-safe side; and only the first hundred threads are read, which is why a
+# pull request with more is not ready.
+# What it does not read, since the bar it applies (§3 of
+# docs/superpowers/specs/2026-11-16-o-worker-merge-delegado.md, decision 9 of the mission) names
+# review threads alone: the body of a review (18 of the 38 findings CodeRabbit left on PR #414
+# lived there), a review in state `CHANGES_REQUESTED` that carries no inline comment, and the
+# `local/ci` status of the head, so none of them keeps a pull request from ready. A sixth item that
+# reads them changes the bar, and it is open in TODO.md with the question of who writes `local/ci`
+# in the worker's loop: an item that no act writes would be a gate nobody can satisfy.
+cmd_pr_ready() {
+  [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
+  local dir="${1%/}" pr="$2" root view head state mergeable round rh g unjust missing gv prefix changed p repo verdict
+  local anc commits c dirty
+  local threads open total seen unseen here
+  local -a grades=()
+  root="$(repo_root "$dir")"
+  if [ -z "$root" ]; then printf 'not-ready review: %s is not inside a git checkout\n' "$dir"; return 1; fi
+  if ! gh_at "$root" pr view "$pr" --json headRefOid,mergeable,state; then
+    gh_unread "gh pr view $pr failed (rc $GH_RC)"; return 3
+  fi
+  # A head that is not a full sha, or no object at all, makes jq fail; a state or a mergeability
+  # that is absent reads null, which the mergeable item refuses.
+  if ! view="$(jq -rn 'input | if (.headRefOid | test("^[0-9a-f]{40}$"))
+           then "\(.headRefOid) \(.state) \(.mergeable)" else error("off the contract") end' 2> /dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh pr view $pr answered no pull request with a full head sha: '${GH_OUT:0:80}'"; return 3
+  fi
+  read -r head state mergeable <<< "$view"
+
+  round="$(newest_round "$dir")"
+  if [ -z "$round" ]; then printf 'not-ready review: no 40-review-r<N>.md in %s\n' "$dir"; return 1; fi
+  rh="$(fm_value "$round" reviewed_head)"
+  if [ -z "$rh" ]; then
+    printf 'not-ready review: the newest round names no head — %s has no reviewed_head:\n' "$round"; return 1
+  fi
+  if ! [[ "$rh" =~ ^[0-9a-f]{7,40}$ ]] || ! git -C "$root" rev-parse -q --verify "$rh^{commit}" > /dev/null; then
+    printf "not-ready review: the reviewed head '%s' of %s is no commit of this checkout\n" "$rh" "$round"; return 1
+  fi
+  mapfile -t grades < <(round_grades "$round")
+  if [ "${#grades[@]}" -eq 0 ]; then
+    printf 'not-ready review: %s has no grade under ### Overall Grade\n' "$round"; return 1
+  fi
+  for g in "${grades[@]}"; do
+    if [ "$g" != A ]; then printf 'not-ready review: %s grades %s, and every row must read A\n' "$round" "$g"; return 1; fi
+  done
+  unjust="$(round_unjustified "$round")"
+  if [ -n "$unjust" ]; then
+    printf 'not-ready review: %s: %s grades A with a placeholder rationale (%s) — a grade no sentence supports is a label\n' \
+      "$round" "${unjust%%$'\t'*}" "${unjust#*$'\t'}"
+    return 1
+  fi
+  missing="$(round_missing "$round")"
+  if [ -n "$missing" ]; then
+    printf 'not-ready review: %s has no row for %s under ### Overall Grade — every criterion must read A, and a partial review is not a review\n' \
+      "$round" "$missing"
+    return 1
+  fi
+  # The gate: by the same rule, its surrounding quotes stripped as the runner's frontmatter reader
+  # does. Absent reads empty, and fails: gate_REVIEW leaves an absent gate: alone for the rounds that
+  # predate the key, and a round that names reviewed_head: is the worker's own, made from the template.
+  gv="$(fm_value "$round" gate)"; gv="${gv#[\"\']}"; gv="${gv%[\"\']}"
+  if placeholder "$gv"; then
+    printf "not-ready review: the gate: of %s is a placeholder or absent ('%s') — it carries the evidence the round closed\n" \
+      "$round" "$gv"
+    return 1
+  fi
+  prefix="$(git -C "$dir" rev-parse --show-prefix)"
+  if [ -z "$prefix" ]; then
+    printf 'not-ready review: the mission folder %s is the root of its checkout\n' "$dir"; return 1
+  fi
+  # The head carries the commit the round read: --is-ancestor answers 0 for an ancestor, the head
+  # itself among them, 1 for a commit the head does not carry, and anything else when it cannot
+  # read the two — a head this checkout has not fetched.
+  anc=0; git -C "$root" merge-base --is-ancestor "$rh" "$head" 2> /dev/null || anc=$?
+  if [ "$anc" -eq 1 ]; then
+    printf 'not-ready review: the reviewed head %s of %s is not an ancestor of the head %s — the pull request does not carry the commit the round read\n' \
+      "$rh" "$round" "$head"
+    return 1
+  fi
+  if [ "$anc" -ne 0 ]; then
+    printf 'not-ready review: git merge-base --is-ancestor %s %s does not run here — is the pull request head fetched?\n' "$rh" "$head"
+    return 1
+  fi
+  # Every commit after the reviewed head, oldest first, each against each of its parents (-m: the
+  # resolution of a merge is a change too) — never the diff between the two ends, which does not see
+  # a change made and undone after the round. diff-tree is plumbing: it follows no rename unless
+  # asked (-M), whatever diff.renames says, so a move into the folder lists the path it left.
+  if ! commits="$(git -C "$root" rev-list --reverse "$rh..$head" 2> /dev/null)"; then
+    printf 'not-ready review: git rev-list %s..%s does not run here\n' "$rh" "$head"; return 1
+  fi
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    if ! changed="$(git -C "$root" -c core.quotePath=false diff-tree -r -m --no-commit-id --name-only "$c" 2> /dev/null)"; then
+      printf 'not-ready review: git diff-tree %s does not run here\n' "$c"; return 1
+    fi
+    while IFS= read -r p; do
+      if [ -n "$p" ] && [[ "$p" != "$prefix"* ]]; then
+        printf 'not-ready review: %s changed in %s after the reviewed head %s, outside %s\n' "$p" "$c" "$rh" "$prefix"; return 1
+      fi
+    done <<< "$changed"
+  done <<< "$commits"
+  # The merge takes the head, never the disk: the round above was read from the disk, and with the
+  # head item below it is the round the head carries only when the mission folder holds nothing git
+  # has not committed — modified, staged, untracked (whatever status.showUntrackedFiles says) or
+  # ignored. The first entry is named with its status.
+  if ! dirty="$(git -C "$dir" -c core.quotePath=false status --porcelain --untracked-files=all --ignored -- . 2> /dev/null)"; then
+    printf 'not-ready review: git status does not run in %s\n' "$dir"; return 1
+  fi
+  if [ -n "$dirty" ]; then
+    dirty="${dirty%%$'\n'*}"
+    printf "not-ready review: %s in the mission folder is not committed (status '%s') — the merge takes the head, never the disk\n" \
+      "${dirty:3}" "${dirty:0:2}"
+    return 1
+  fi
+
+  if ! gh_at "$root" repo view --json nameWithOwner -q .nameWithOwner; then
+    gh_unread "gh repo view failed (rc $GH_RC)"; return 3
+  fi
+  repo="$GH_OUT"
+  if ! [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    gh_unread "gh repo view answered '${repo:0:80}', not <owner>/<name>"; return 3
+  fi
+  if ! gh_at "$root" api --paginate "repos/$repo/issues/$pr/comments"; then
+    gh_unread "gh api --paginate repos/$repo/issues/$pr/comments failed (rc $GH_RC)"; return 3
+  fi
+  # The pages are arrays, one after the other, as --paginate prints them; a comment of another shape
+  # makes jq fail. The receipt is the newest comment of the bot that CARRIES the marker, chosen before
+  # its payload is parsed: one whose payload does not parse (cut short, or no code_review object) is a
+  # receipt that says nothing — never one to skip, which would let an older receipt decide (achado
+  # #11 of the mission's review r5). A comment of the bot without the marker is no receipt.
+  if ! verdict="$(jq -rn --arg head "$head" --arg login "$CODEX_LOGIN" '
+         [inputs] | if length > 0 and all(.[]; type == "array") then [.[][]] else error("off the contract") end
+         | [.[] | select(.user.login == $login) | .body | select(contains("codex-review-state:v1"))]
+         | last
+         | if . == null then "no receipt of \($login) on the pull request"
+           else (try ([capture("codex-review-state:v1 (?<s>\\{.*\\}) -->")][0].s | fromjson | .code_review) catch null) as $r
+           | if ($r | type) != "object" then "the newest receipt of \($login) does not parse"
+             elif $r.commit_sha != $head then "the newest receipt of \($login) is for \($r.commit_sha), not the head \($head)"
+             elif $r.status != "completed" then "the newest receipt of \($login) is \($r.status), not completed"
+             elif $r.has_unresolved_findings != false then "the newest receipt of \($login) has unresolved findings (\($r.has_unresolved_findings))"
+             else "ok" end end' 2> /dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh api --paginate repos/$repo/issues/$pr/comments answered no pages of comments: '${GH_OUT:0:80}'"
+    return 3
+  fi
+  if [ "$verdict" != ok ]; then printf 'not-ready codex: %s\n' "$verdict"; return 1; fi
+
+  if ! gh_at "$root" api graphql -f \
+       "query=query{repository(owner:\"${repo%%/*}\",name:\"${repo#*/}\"){pullRequest(number:$pr){reviewThreads(first:100){totalCount nodes{isResolved}}}}}"; then
+    gh_unread "gh api graphql (the review threads of #$pr) failed (rc $GH_RC)"; return 3
+  fi
+  if ! threads="$(jq -rn 'input | .data.repository.pullRequest.reviewThreads
+         | if (.totalCount | type) == "number" and (.nodes | type) == "array"
+              and all(.nodes[]; (.isResolved | type) == "boolean")
+           then "\([.nodes[] | select(.isResolved == false)] | length) \(.totalCount) \(.nodes | length) \((.nodes | length) < .totalCount)"
+           else error("off the contract") end' 2> /dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh api graphql answered no review threads of #$pr: '${GH_OUT:0:80}'"; return 3
+  fi
+  read -r open total seen unseen <<< "$threads"
+  if [ "$open" -ne 0 ]; then
+    printf 'not-ready threads: %s of %s review thread(s) not resolved\n' "$open" "$total"; return 1
+  fi
+  if [ "$unseen" != false ]; then
+    printf 'not-ready threads: %s of %s review threads read, the rest unseen\n' "$seen" "$total"; return 1
+  fi
+
+  if [ "$state" != OPEN ] || [ "$mergeable" != MERGEABLE ]; then
+    printf 'not-ready mergeable: the pull request is %s and %s, not OPEN and MERGEABLE\n' "$state" "$mergeable"
+    return 1
+  fi
+
+  here="$(git -C "$root" rev-parse -q --verify HEAD || true)"
+  if [ "$here" != "$head" ]; then
+    printf 'not-ready head: the local HEAD %s is not the pull request head %s\n' "${here:-(none)}" "$head"; return 1
+  fi
+  printf 'ready %s\n' "$head"
+}
+
+main() {
+  case "${1:-}" in
+    delegate) shift; cmd_delegate "$@" ;;
+    level) shift; cmd_level "$@" ;;
+    allows) shift; cmd_allows "$@" ;;
+    budget) shift; cmd_budget "$@" ;;
+    next) shift; cmd_next "$@" ;;
+    pr-ready) shift; cmd_pr_ready "$@" ;;
+    *) usage; return 2 ;;
+  esac
+}
+
+{ main "$@"; exit $?; }

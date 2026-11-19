@@ -22,6 +22,12 @@ ferramenta ou de gate, não frase de prompt — frase é lembrete, gate é regra
 **Onde mora hoje.** Sete chapéus em `agents/*.md`, carregados por `--agent` em `run_phase()`;
 `boot_prompt()` injeta fase, missão, `OUTPUT_LANG`, ordem de leitura e tarefa; `phase_extra()`
 acrescenta restrição só para REVIEW e QA.
+Desde `20261117-o-worker-orquestrador` ([ADR 0022](../../docs/adr/0022-the-worker-is-a-session-orchestrator.md))
+há um prompt fora dos chapéus: `commands/sdd-worker.md`, o laço de uma sessão **interativa** que
+orquestra uma campanha. Ele segue a mesma régua: os juízos que decidem um ato (a delegação vale, o
+ato cabe no nível, o PR está pronto neste sha) não são frase do comando, são verbos do
+`bin/sdd-worker`, que respondem por artefato, com sensor (`tests/check-worker.sh`) e mutantes
+`mut_WORKER_*`.
 
 **Dívida declarada.** "O revisor não toca código" e "o publisher não mergeia" são frases; o
 runner avisava (`REVIEW-EDITED-CODE`); desde `20260903-a-fronteira-do-chapeu` ele **para** (`hat-crossed`). A regra "nunca encerre o turno com trabalho em
@@ -176,8 +182,9 @@ julgam prosa (`Documentation`, `Overall`), nomeados positivamente; achado de pro
 `TODO_FILE`, não compra rodada.
 
 **Onde mora hoje.** O componente mais forte do kit: `gate_<FASE>` por artefato (`TEST_CMD`, grep
-no checkpoint, `git log`, `gh pr view`); Check por incremento; **dezesseis** sensores em
-`tests/run-all.sh` (o décimo sexto é `check-coordination.sh`); catálogo de mutação com carimbo no
+no checkpoint, `git log`, `gh pr view`); Check por incremento; **dezessete** sensores em
+`tests/run-all.sh` (o décimo sétimo é `check-worker.sh`, desde `20261117-o-worker-orquestrador`);
+catálogo de mutação com carimbo no
 `sdd health` (a chave lê `bin/ tests/ templates/ config/ agents/` — `agents/` desde a ADR 0015 §1,
 porque o runner lê cada chapéu dali); guarda de kit em quatro portas. Desde `20260917-o-numero-do-adr-nao-e-prosa` o
 `gate_PLAN` também cobra o `adr:` sob `ADR_CHECK=block`, e o comentário do gate **nomeia o dono do
@@ -245,6 +252,12 @@ nesta máquina sobre uma regra que não faz nada. É também o sensor do dia em 
 sintaxe da regra. Custa uma sessão haiku por preflight: US$ 0,002 (US$ 0,00197 medidos em
 2026-10-20 às 22:59, Claude Code 2.1.304, com a regra lendo o template) e uns 6 s (as sondas p5 e p6
 do grill, 16:24).
+Desde `20261117-o-worker-orquestrador` (ADR 0022 §5) o merge delegado também é gate por artefato,
+fora do runner: `sdd-worker pr-ready` responde `ready <sha>` só com os cinco itens verdadeiros no
+mesmo sha (a rodada mais nova da missão com A em todo critério e um `reviewed_head:` do qual até o
+head só a pasta da missão mudou, o recibo `codex-review-state:v1` do Codex `completed` nesse sha e sem achado aberto, nenhum thread
+aberto, `MERGEABLE`, o `HEAD` local), e nomeia o primeiro que falha. A tabela de notas dele é mais
+estrita que a do `gate_REVIEW` de propósito: nenhuma tolerância de prosa.
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
@@ -285,6 +298,12 @@ os dois lados do vínculo; `sdd adr check` lê de volta, em dois escopos. A rota
 o próprio kit roda sob `ADR_CHECK=block`: as 14 missões anteriores ao mecanismo declaram `adr:`
 (três apontam para a ADR de que nasceram — 0003, 0004 e 0006, que ganharam `Spec:` —, onze dizem
 `none`), e o `sdd adr check` responde rc 0 sem nenhuma missão indecisa.
+Desde `20261117-o-worker-orquestrador` (ADR 0022) a delegação de uma campanha tem rota e dono:
+deixou de ser palavra dita numa sessão (que valia "nesta sessão" e, na 5a do `dotp-remake`, foi
+marcada "usada e esgotada" à mão numa memória do agente) e é o `delegation.md` versionado no
+repo-alvo, assinado pelo dono e relido antes de todo ato. O que a sessão orquestradora fez mora no
+`journal.md` da campanha (uma linha por evento, append-only, hora de `date`), e a sessão nova
+retoma por `sdd-worker level` e `next`, sem memória.
 
 **Dívida declarada.** As ADRs 0001, 0002, 0005 e 0007 do kit seguem sem `Spec:` — nenhuma
 nasceu de uma pasta de missão, e escrever a origem seria inventá-la; o limite está no comentário do
@@ -390,7 +409,11 @@ principal do kit, e o `kit_guard_check` de todo `sdd run` de alvo compara o `HEA
 alvo para aquela corrida com `KIT-TOUCHED`. Por isso o `/sdd-plan` (passo 2 de *Before anything
 else*) escreve a missão do kit num worktree ligado, e a sessão **interativa** a executa lá — nunca
 um `sdd run` a partir do checkout principal; dentro dele `health`, `preflight` e `install` rodam
-por `./bin/sdd`. Desde o lote 6 (#236, ADR 0017) o `sdd kaizen` obedece à mesma regra por recusa
+por `./bin/sdd`. Desde a ADR 0022 §7, sob o worker da campanha, a missão do kit roda também por
+`sdd run` **no worktree ligado** dela, pelo `sdd` do PATH (o checkout principal, que a missão não
+edita); a partir do checkout principal continua proibido. A primeira corrida medida,
+`20261117-o-worker-orquestrador`, fez 24 sessões até a REVIEW r4 sem nenhuma `kit-touched`,
+`hat-crossed`, `foreign-commit` nem `session-died`. Desde o lote 6 (#236, ADR 0017) o `sdd kaizen` obedece à mesma regra por recusa
 do runner, não por frase: a corrida real morre antes da sessão no checkout para onde o `sdd` do PATH
 resolve (`kit_checkout_targets_run`) e nomeia o `git worktree add`; a projeção avisa e segue. Medido: worktree sujo e com commit deixa o carimbo do principal em
 `89df2e5|false`; o mesmo arquivo no principal, `|true`. É posse do checkout, não isolamento de
@@ -496,8 +519,23 @@ Desde `20261012-a-rota-da-qa` (ADR 0018 §3) a porta do PLAN mostra o que o huma
 novo (`--check`/`--red`), renderiza o plano e conta as respostas do grill, `N (recommended) of M`,
 pelo leitor da D22 sobre as linhas `- answer:` das decisões — a escolha do humano passa a ser
 medida, nunca escrita à mão.
+Desde `20261117-o-worker-orquestrador` (ADR 0022) a campanha tem a sua porta humana com artefato:
+a assinatura da delegação (`sdd-worker delegate` mostra as seis chaves e o teto de cada lote,
+pergunta, só `y` assina, e sai 66 sem escrever nada quando não lê resposta, o contrato do
+`sdd approve`). A delegação tem fim (`expires:`), dois tetos em dólar e cinco níveis cumulativos
+(`assisted` < `pr` < `plan` < `merge` < `full`); toda falha dela vale `assisted`, e acima de
+`assisted` também vale o `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` do checkout da campanha ou
+de um worktree que guarda missão dela (o conjunto estreito: worktree sem missão da campanha não é
+lido, e ler o arquivo seria executá-lo). As paradas do worker (sem recibo do Codex 60 min depois do pedido, nota abaixo de A depois de
+3 rodadas, conflito no merge fora do `TODO.md` e da catraca, e os dois tetos) chamam o mesmo pager.
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
 anterior desta seção dizia que não existia, e estava errada (foi o comando do incidente das 18:45).
 O que falta é o inverso: `--phase X` sem `--max-phases` segue em frente, e a DOCS emendou sozinha
 depois da r4 em 2026-09-02.
+Da delegação: a assinatura prova uma resposta no stdin, não uma pessoa (o limite do
+`sdd approve`); o gasto da sessão orquestradora e dos subagentes fica fora dos dois tetos; sob
+`full` o `sdd approve` grava `humano-…`, e a trilha é o diário da campanha; e num alvo cujo
+`.sdd/config.sh` fixa o `BUDGET_MISSION_USD` acima do teto assinado, ou deixa o
+`ON_ESCALATION_CMD` vazio, o worker só falha fechado, porque fazer a delegação valer ali pede
+mexer na precedência de config do `bin/sdd`.

@@ -6850,6 +6850,627 @@ mut_RUN_boot_leftovers_rule_widened() {
   sed -i "/^boot_prompt() {/,/^}/ s@What belongs to the work of this phase is yours to finish and commit;@What you did not write is not yours: never commit another session's change;@" "$1"
 }
 
+# The campaign worker (ADR 0022) — bin/sdd-worker, measured by tests/check-worker.sh. The "$1" of
+# every mutant is the copy of bin/sdd; these edit its neighbour, like mut_COORD_* do.
+# A verb the program does not know leaves rc 0, the shape a caller reads as an answer. Caught by
+# "usage: no verb and an unknown verb print the usage and leave rc 2" (check-worker.sh).
+mut_WORKER_unknown_verb_accepted() {
+  sed -i '/^main() {/,/^}/ s@^    \*) usage; return 2 ;;$@    *) usage; return 0 ;;@' "${1%/*}/sdd-worker"
+}
+# A stdin that closed before a single character reads as a yes: the delegation is signed with nobody
+# asked. Caught by "delegate: no answer on stdin leaves rc 66 and writes nothing" (check-worker.sh).
+mut_WORKER_delegate_signs_without_answer() {
+  sed -i '/^cmd_delegate() {/,/^}/ s@^    return 66$@    ans=y; got=0@' "${1%/*}/sdd-worker"
+}
+# The expiry check dropped: a delegation whose instant already passed is asked about and signed.
+# Caught by "delegate: n, an expired instant, an undefined level and a missing ceiling sign nothing"
+# (check-worker.sh).
+mut_WORKER_delegate_signs_expired() {
+  sed -i '/^cmd_delegate() {/,/^}/ s@^  if expired @  if false \&\& expired @' "${1%/*}/sdd-worker"
+}
+# The path of the commit line printed raw again (achado of the R9, closed in the R10): pasted in a
+# checkout whose path has a blank or a quote, the line is no command, or `git add` gets the wrong
+# words. Caught by "delegate: an answer of y signs with a digest of the other fields"
+# (check-worker.sh), which runs the line under a git first on the PATH.
+mut_WORKER_delegate_commit_path_raw() {
+  sed -i '/^cmd_delegate() {/,/^}/ s@commit it: git add %q && @commit it: git add %s \&\& @' "${1%/*}/sdd-worker"
+}
+# The expiry check of the effective level dropped: a delegation whose instant passed goes on
+# granting its level. Caught by "level: absent, illegible, unsigned and expired each answer assisted
+# and say why" (check-worker.sh).
+mut_WORKER_level_ignores_expiry() {
+  sed -i '/^effective_level() {/,/^}/ s@^  if expired "\$exp"; then@  if false \&\& expired "$exp"; then@' "${1%/*}/sdd-worker"
+}
+# The digest comparison dropped: a delegation edited after the owner signed it — its level raised,
+# its lots widened — grants what the edit says. Caught by "level: a delegation edited after signing
+# answers assisted" (check-worker.sh).
+mut_WORKER_level_ignores_digest() {
+  sed -i '/^effective_level() {/,/^}/ s@^  if \[ "\${signed##\* }" != "\$want" \]; then@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The lot's ceiling replaces the signed level whenever the two differ, so a ceiling above the
+# signed level raises it. Caught by "level: the lot ceiling lowers the level and never raises it,
+# and an uncovered lot is assisted" (check-worker.sh).
+mut_WORKER_level_ceiling_raises() {
+  sed -i '/^effective_level() {/,/^}/ s@^      if \[ "\$cr" -lt "\$sr" \]; then@      if [ "$cr" -ne "$sr" ]; then@' "${1%/*}/sdd-worker"
+}
+# A word the table of acts does not name reads as an act any level grants, so under a delegation
+# above assisted it is allowed. Caught by "allows: an act outside the table leaves rc 2 and is never
+# allowed" (check-worker.sh).
+mut_WORKER_allows_unknown_act() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^  if ! need="\$(act_floor "\$2")"; then@  if ! need="$(act_floor "$2" || echo assisted)"; then@' "${1%/*}/sdd-worker"
+}
+# The table of acts moves merge down a step: a delegation signed at plan merges alone. Caught by
+# "allows: the five levels by the seven acts answer the table, 35 of 35" (check-worker.sh).
+mut_WORKER_allows_merge_at_plan() {
+  sed -i '/^ACTS=(/ s@ merge:merge @ merge:plan @' "${1%/*}/sdd-worker"
+}
+# The lot of allows dropped on the way to the effective level: a lot capped below the signed level
+# is allowed what the delegation grants elsewhere. Caught by "allows: the lot ceiling stops approve
+# on a capped lot under full" (check-worker.sh).
+mut_WORKER_allows_ignores_lot() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^    effective_level "\$1" "\$lot" @    effective_level "$1" "" @' "${1%/*}/sdd-worker"
+}
+# The filter of the campaign's missions dropped from the sum: every line of the ledger counts, other
+# campaigns' and other repos' included. Caught by "budget: the sum counts the campaign's missions and
+# no other" (check-worker.sh).
+mut_WORKER_budget_counts_every_mission() {
+  sed -i '/^cmd_budget() {/,/^}/ s@ and (\.mission | IN(\$ARGS\.positional\[\]))@@' "${1%/*}/sdd-worker"
+}
+# The ceiling never stops: a campaign at its ceiling or above it answers rc 0, and the worker goes on
+# spending. Caught by "budget: at the ceiling or above it the verb leaves rc 1" (check-worker.sh).
+mut_WORKER_budget_never_stops() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if \[ "\$reached" = true \]; then return 1; fi$@  if false; then return 1; fi@' "${1%/*}/sdd-worker"
+}
+# A gh that failed reads as an empty list: "I could not read" becomes "there is no pull request",
+# and the lot is sent to run again. Caught by "next: a gh that does not answer leaves rc 3, and a
+# pull request closed without merge stops" (check-worker.sh).
+mut_WORKER_next_gh_failure_reads_no_pr() {
+  sed -i '/^pr_states() {/,/^}/ s@^  if \[ "\$rc" -ne 0 \]; then GH_WHY=.*; return 1; fi$@  [ "$rc" -eq 0 ] || out="[]"@' "${1%/*}/sdd-worker"
+}
+# The approval check dropped from the walk: a mission nobody approved is run. Caught by "next: a lot
+# with no mission is planned, and one with an empty approval is approved" (check-worker.sh).
+mut_WORKER_next_skips_approval() {
+  sed -i '/^cmd_next() {/,/^}/ s@^      if ! approved "\$p/00-missao.md"; then$@      if false; then@' "${1%/*}/sdd-worker"
+}
+# A merged pull request no longer makes its lot done: the walk stops at a lot already merged instead
+# of going past it. Caught by "next: a merged lot is skipped, and a campaign with every lot merged is
+# done" (check-worker.sh).
+mut_WORKER_next_ignores_merged() {
+  sed -i '/^cmd_next() {/,/^}/ s@^    if \[ -n "\$merged" \]; then continue; fi$@    if false; then continue; fi@' "${1%/*}/sdd-worker"
+}
+# A round graded B in a row passes the review item: the owner's bar drops to the pipeline's. Caught
+# by "pr-ready: a grade below A, a round that names no head, and code after the reviewed head each
+# fail review" (check-worker.sh).
+mut_WORKER_ready_grade_b_passes() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^    if \[ "\$g" != A \]; then@    if [ "$g" != A ] \&\& [ "$g" != B ]; then@' "${1%/*}/sdd-worker"
+}
+# The receipt's sha is no longer compared with the head: a Codex review of an older commit reads as
+# a review of this one — the receipt matched by the hour (M13). Caught by "pr-ready: a receipt for
+# another sha, an unfinished one and an unresolved finding each fail codex" (check-worker.sh).
+mut_WORKER_ready_codex_any_sha() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^\( *\)elif \$r\.commit_sha != \$head then@\1elif false then@' "${1%/*}/sdd-worker"
+}
+# An unresolved review thread no longer stops the merge. Caught by "pr-ready: one open thread fails
+# threads" (check-worker.sh).
+mut_WORKER_ready_threads_unread() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$open" -ne 0 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The state and the mergeability are no longer read: a conflicting or closed pull request is ready.
+# Caught by "pr-ready: a conflicting or closed pull request fails mergeable" (check-worker.sh).
+mut_WORKER_ready_unmergeable_passes() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$state" != OPEN \] || \[ "\$mergeable" != MERGEABLE \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The local HEAD is no longer compared with the pull request's: the session answers ready over a
+# checkout that is not the head it reviewed. Caught by "pr-ready: a local HEAD that is not the pull
+# request head fails head" (check-worker.sh).
+mut_WORKER_ready_head_unchecked() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$here" != "\$head" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The lot ceilings leave the seal: the digest covers the six keys only, so lifting the plan ceiling
+# of a lot after signing full delegates its approval under a signature that still holds (Q1 of the
+# mission's QA). Caught by "delegate: an answer of y signs with a digest of the other fields" and by
+# "seal: a lot ceiling lifted or a lot added after signing answers assisted, and the delegate shows
+# each ceiling" (check-worker.sh).
+mut_WORKER_seal_ceilings_unsigned() {
+  sed -i '/^delegation_terms() {/,/^}/ { /lots_table/d }' "${1%/*}/sdd-worker"
+}
+# The ceilings are signed and not shown: the owner answers y to a grant whose caps the question never
+# put in front of them. Caught by "seal: a lot ceiling lifted or a lot added after signing answers
+# assisted, and the delegate shows each ceiling" (check-worker.sh).
+mut_WORKER_seal_ceilings_unshown() {
+  sed -i '/^cmd_delegate() {/,/^}/ s@^  printf .%s\\n. "\$shown"$@  grep -v "^ceiling " <<< "$shown"@' "${1%/*}/sdd-worker"
+}
+# The campaign: of a file is no longer compared with the directory's name: a campaign renamed after
+# signing, or a campaign.md turned to another id, answers the signed level, and next walks the
+# queue of the template's placeholder (Q2 of the mission's QA). Caught by "legible: a campaign: that
+# is not its directory's name, in either file, is illegible to every verb and stops next"
+# (check-worker.sh).
+mut_WORKER_legible_id_unchecked() {
+  sed -i '/^id_is_dir() {/,/^}/ s@^  if \[ "\$v" != "\$name" \]; then@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The delegation reads its own campaign: and not the campaign.md's: budget sums the missions of one
+# id while next walks the queue of another (the J6 of the mission's QA). Caught by "legible: a
+# campaign: that is not its directory's name, in either file, is illegible to every verb and stops
+# next" (check-worker.sh).
+mut_WORKER_legible_campaign_md_unread() {
+  sed -i '/^delegation_legible() {/,/^}/ s@^  for k in delegation\.md campaign\.md; do$@  for k in delegation.md; do@' "${1%/*}/sdd-worker"
+}
+# The delegation reads the campaign.md's campaign: and not its own: budget sums the missions of the
+# id the delegation names, while next walks the queue of the directory's. Caught by "legible: a
+# campaign: that is not its directory's name, in either file, is illegible to every verb and stops
+# next" (check-worker.sh).
+mut_WORKER_legible_delegation_md_unread() {
+  sed -i '/^delegation_legible() {/,/^}/ s@^  for k in delegation\.md campaign\.md; do$@  for k in campaign.md; do@' "${1%/*}/sdd-worker"
+}
+# next no longer checks the id of the campaign.md it walks: the template's placeholder is a queue
+# to plan, rc 0. Caught by "legible: a campaign: that is not its directory's name, in either file,
+# is illegible to every verb and stops next" (check-worker.sh).
+mut_WORKER_legible_next_id_unchecked() {
+  sed -i '/^cmd_next() {/,/^}/ { /id_is_dir/d }' "${1%/*}/sdd-worker"
+}
+# An expires: of the right shape is an instant whether or not the clock has it: 2099-11-31 and
+# 99:99 are signed and read back as the deadline (Q3 of the mission's QA). Caught by "legible: an
+# expires: the clock does not have is illegible to level and refused by delegate, and a leap day
+# signs" (check-worker.sh).
+mut_WORKER_legible_instant_unchecked() {
+  sed -i '/^delegation_legible() {/,/^}/ s@^  if ! rt="\$(date -d .*; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The repo's config is no longer read for the mission cap: budget prints the signed cap while the
+# starter's BUDGET_MISSION_USD=150 is the one sdd run applies, since the file sources over the
+# environment (achado #1 of the mission's review r1). Caught by "cap: a repo config that sets
+# BUDGET_MISSION_USD above the signed mission cap, or to 0, stops budget and names the key"
+# (check-worker.sh).
+mut_WORKER_cap_file_unread() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^    if ! jq -en --arg r "\$run"@    if false \&\& ! jq -en --arg r "$run"@' "${1%/*}/sdd-worker"
+}
+# The cap is read under the caller's own environment instead of the signed value: a session that
+# exported BUDGET_MISSION_USD=999 reads it back as the repo's, and a file silent on the key stops
+# budget. Caught by "cap: a repo config that sets BUDGET_MISSION_USD above the signed mission cap,
+# or to 0, stops budget and names the key" (check-worker.sh).
+mut_WORKER_cap_caller_env_leaks() {
+  sed -i '/^config_key() {/,/^}/ s@^    \[ "\$#" -lt 3 \] || printf -v "\$key" .%s. "\$3"$@    :@' "${1%/*}/sdd-worker"
+}
+# A zero in the repo's config holds as a cap: BUDGET_MISSION_USD=0 is no ceiling for the runner, and
+# the worker would launch a mission with none. Caught by "cap: a repo config that sets
+# BUDGET_MISSION_USD above the signed mission cap, or to 0, stops budget and names the key"
+# (check-worker.sh).
+mut_WORKER_cap_zero_holds() {
+  sed -i '/^cmd_budget() {/,/^}/ s@ as \$r | \$r > 0 and @ as $r | $r >= 0 and @' "${1%/*}/sdd-worker"
+}
+# A round graded A whose Rationale is a fill-in passes the review item: the `<…>` of the template on
+# every row reads as a review, the round gate_REVIEW refuses (achado #2 of the mission's review r1).
+# Caught by "rationale: a round graded A with a placeholder rationale or gate: fails review, by the
+# rule of gate_REVIEW" (check-worker.sh).
+mut_WORKER_rationale_unread() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ -n "\$unjust" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The gate: of the round is no longer judged: `gate: <…>`, the template's own, carries no evidence
+# and reads ready. Caught by "rationale: a round graded A with a placeholder rationale or gate: fails
+# review, by the rule of gate_REVIEW" (check-worker.sh).
+mut_WORKER_rationale_gate_unread() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if placeholder "\$gv"; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# An act asked with no lot answers the signed level again, over every ceiling of the queue: the flag
+# and its value made optional, a plan asked with no --lot is allowed under full with the L6 of the
+# kit's campaign capped at plan (achado #3 of the mission's review r1). Caught by "lot: an act asked
+# with no lot, by --lot for plan or --mission for the others, is rc 2 and never allowed, under a full
+# delegation with a lot capped at plan" (check-worker.sh).
+mut_WORKER_lot_optional() {
+  sed -i '/^cmd_allows() {/,/^}/ {
+    s@^  if \[ "\$given" != "\$flag" \]; then$@  if [ -n "$given" ] \&\& [ "$given" != "$flag" ]; then@
+    s@^  \[ -n "\$val" \] || { usage; return 2; }$@  :@
+  }' "${1%/*}/sdd-worker"
+}
+# The terms are no longer read again after the yes: a delegation edited while the question is open
+# is signed as it stands, not as it was shown (achado #4 of the mission's review r1). Caught by
+# "shown: a delegation edited while the question is open is not signed, and the same y with no edit
+# signs" (check-worker.sh).
+mut_WORKER_shown_terms_unchecked() {
+  sed -i '/^cmd_delegate() {/,/^}/ s@^  if \[ "\$(delegation_terms "\$1")" != "\$shown" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# Only the campaign's checkout is read for the mission cap again: `sdd run` runs in the mission's
+# worktree and loads that checkout's .sdd/config.sh, so a worktree cut from a commit that still sets
+# BUDGET_MISSION_USD=150 beats the signed 40 while budget prints it (achado #1 of the mission's
+# review r2). Caught by "worktree: a mission worktree whose config sets BUDGET_MISSION_USD above the
+# signed cap stops budget and names that file, and a worktree with no mission of the campaign is not
+# read" (check-worker.sh).
+mut_WORKER_worktree_root_only() {
+  sed -i '/^cmd_budget() {/,/^}/ s|^  for wt in "\${SET_CHECKOUTS\[@\]}"; do$|  for wt in "$root"; do|' "${1%/*}/sdd-worker"
+}
+# The stop names the campaign's file whatever checkout beat the cap: the owner told to delete a line
+# that is not there, and the worktree's left in place. Caught by "worktree: a mission worktree whose
+# config sets BUDGET_MISSION_USD above the signed cap stops budget and names that file, and a
+# worktree with no mission of the campaign is not read" (check-worker.sh).
+mut_WORKER_worktree_file_misnamed() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^        "\$wt/\.sdd/config\.sh" "\$run"$@        "$root/.sdd/config.sh" "$run"@' "${1%/*}/sdd-worker"
+}
+# The rationale is cut at every `|` again: the fill-in `<why \| in one sentence>`, which
+# gate_REVIEW refuses, is judged by `<why \` and reads as a sentence (achado #2 of the mission's
+# review r2). Caught by "pipe: a grade row holding an escaped pipe is read as gate_REVIEW splits it,
+# so a fill-in rationale with one fails review" (check-worker.sh).
+mut_WORKER_pipe_cut_raw() {
+  sed -i '/^round_unjustified() {/,/^}/ s@^      n = cells(\$0, c)$@      n = split($0, c, "|")@' "${1%/*}/sdd-worker"
+}
+# The grade is cut at every `|` again: a criterion holding `\|` moves its B out of the Grade column
+# and leaves an A there, a round gate_REVIEW refuses read as graded A. Caught by "pipe: a grade row
+# holding an escaped pipe is read as gate_REVIEW splits it, so a fill-in rationale with one fails
+# review" (check-worker.sh).
+mut_WORKER_pipe_grades_cut_raw() {
+  sed -i '/^round_grades() {/,/^}/ s@^      n = cells(\$0, c)$@      n = split($0, c, "|")@' "${1%/*}/sdd-worker"
+}
+# The rejoin asks "does the piece end in a backslash" instead of the parity of the run: `\\|`, a
+# literal backslash against a real delimiter, glues two cells, and an A row reads its rationale as
+# the grade. Caught by "pipe: a grade row holding an escaped pipe is read as gate_REVIEW splits it,
+# so a fill-in rationale with one fails review" (check-worker.sh).
+mut_WORKER_pipe_parity_lost() {
+  sed -i "/^GRADE_ROW_AWK='\$/,/^'\$/ s@return (length(s) - length(t)) % 2 }@return (length(s) - length(t)) > 0 }@" "${1%/*}/sdd-worker"
+}
+# A signed mission cap of zero, which the runner reads as no ceiling, is no longer stopped at the
+# delegation: the stop falls to the loop over the configs and accuses a .sdd/config.sh that does
+# not set the key (achado #3 of the mission's review r2). Caught by "zero: a signed mission cap of
+# zero stops budget naming the delegation, never a config that does not set it" (check-worker.sh).
+mut_WORKER_zero_signed_unchecked() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if ! \[\[ "\$mcap" =~ \[1-9\] \]\]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# Only the campaign's checkout is read for the pager again: `sdd run` runs in the mission's worktree
+# and pages from that checkout's .sdd/config.sh, so a worktree that leaves ON_ESCALATION_CMD empty
+# stops the line with rc 3 and nobody is told, while level answers the signed pr (achado #1 of the
+# mission's review r3). Caught by "pager: a mission worktree whose config leaves ON_ESCALATION_CMD
+# empty lowers the level to assisted and names that file, and a worktree with no mission of the
+# campaign is not read" (check-worker.sh).
+mut_WORKER_pager_root_only() {
+  sed -i '/^effective_level() {/,/^}/ s|^    for wt in "\${SET_CHECKOUTS\[@\]}"; do$|    for wt in "$root"; do|' "${1%/*}/sdd-worker"
+}
+# The stop names the campaign's file whatever checkout has no pager: the owner told to write a
+# pager that is already there, and the worktree's left empty. Caught by "pager: a mission worktree
+# whose config leaves ON_ESCALATION_CMD empty lowers the level to assisted and names that file, and a
+# worktree with no mission of the campaign is not read" (check-worker.sh).
+mut_WORKER_pager_file_misnamed() {
+  sed -i '/^effective_level() {/,/^}/ s@ is empty in \$wt/\.sdd/config\.sh"; return 0$@ is empty in $root/.sdd/config.sh"; return 0@' "${1%/*}/sdd-worker"
+}
+# The separator is known by its grade cell again, not by every cell: a criterion graded `---` is
+# skipped as a separator, and the round reads as graded A with no grade for it (achado #8 of the
+# mission's review r5). Caught by "sep: the header and the separator are known by the shape of the
+# line, so a criterion graded --- is read and is not A" (check-worker.sh).
+mut_WORKER_sep_by_grade() {
+  sed -i "/^GRADE_ROW_AWK='\$/,/^'\$/ s@^  for (i = 2; i <= last; i++) if (trim(f\[i\]) !~ /^:?-+:?\$/) sep = 0\$@  if (trim(f[3]) !~ /^:?-+:?\$/) sep = 0@" "${1%/*}/sdd-worker"
+}
+# The header is any row whose criterion reads `Criterion`, not only the first: a criterion row so
+# named, graded B, is skipped. Caught by "sep: the header and the separator are known by the shape
+# of the line, so a criterion graded --- is read and is not A" (check-worker.sh).
+mut_WORKER_sep_header_anywhere() {
+  sed -i "/^GRADE_ROW_AWK='\$/,/^'\$/ s@^  if (rows_seen == 1 \&\& trim(c) == \"Criterion\") return 0\$@  if (trim(c) == \"Criterion\") return 0@" "${1%/*}/sdd-worker"
+}
+# The rationale reader skips a row by its criterion cell again: `| --- | A | --- |`, graded A by the
+# grade reader, has its fill-in rationale never read. Caught by "sep: the header and the separator
+# are known by the shape of the line, so a criterion graded --- is read and is not A" (check-worker.sh).
+mut_WORKER_sep_unjustified_by_criterion() {
+  sed -i '/^round_unjustified() {/,/^}/ s@^      if (!graded(c, n)) next$@      if (trim(c[2]) ~ /^:?-+:?$/) next@' "${1%/*}/sdd-worker"
+}
+# The mission folder is no longer checked for what git has not committed: a round on disk graded A
+# authorizes the merge of a head whose round grades B (achado #18 of the mission's review r5).
+# Caught by "committed: a mission folder with a change not committed, staged, untracked or ignored
+# fails review" (check-worker.sh).
+mut_WORKER_committed_unchecked() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ -n "\$dirty" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# An ignored file of the mission folder is no longer seen: a round the repo's ignore rules hide is
+# read from the disk and never carried by the head. Caught by "committed: a mission folder with a
+# change not committed, staged, untracked or ignored fails review" (check-worker.sh).
+mut_WORKER_committed_ignored_unseen() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@ status --porcelain --untracked-files=all --ignored -- \. @ status --porcelain --untracked-files=all -- . @' "${1%/*}/sdd-worker"
+}
+# The reviewed head no longer has to be an ancestor of the head: a round over a commit the pull
+# request dropped reads as a review of this history (achado #9 of the mission's review r5). Caught
+# by "range: a commit after the reviewed head that touches code, a merge resolution and a reviewed
+# head the pull request does not carry each fail review" (check-worker.sh).
+mut_WORKER_range_ancestry_unchecked() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$anc" -eq 1 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# Each commit of the range is judged by the diff between the two ends again: a change to code made
+# after the round and reverted before the head is never seen (achado #10 of the mission's review r5).
+# Caught by "range: a commit after the reviewed head that touches code, a merge resolution and a
+# reviewed head the pull request does not carry each fail review" (check-worker.sh).
+mut_WORKER_range_endpoints_only() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@ diff-tree -r -m --no-commit-id --name-only "\$c" @ diff --no-renames --name-only "$rh" "$head" @' "${1%/*}/sdd-worker"
+}
+# A merge commit of the range is read with no diff, as git shows one by default: the resolution of
+# a merge whose two parents touch the mission folder alone changes code unseen. Caught by "range: a
+# commit after the reviewed head that touches code, a merge resolution and a reviewed head the pull
+# request does not carry each fail review" (check-worker.sh).
+mut_WORKER_range_merge_unseen() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@ diff-tree -r -m --no-commit-id @ diff-tree -r --no-commit-id @' "${1%/*}/sdd-worker"
+}
+# The receipt's payload is matched before the newest is chosen again: a newest receipt cut short
+# drops out, and an older receipt for the head decides (achado #11 of the mission's review r5).
+# Caught by "receipt: the newest comment of the bot with the marker is the receipt, and one that does
+# not parse fails codex" (check-worker.sh).
+mut_WORKER_receipt_parsed_first() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@| \.body | select(contains("codex-review-state:v1"))\]@| .body | select(test("codex-review-state:v1 \\\\{.*\\\\} -->"))]@' "${1%/*}/sdd-worker"
+}
+# Every comment of the bot is a receipt, the marker no longer asked for: a remark of the bot after
+# its receipt for the head reads as a receipt that does not parse. Caught by "receipt: the newest
+# comment of the bot with the marker is the receipt, and one that does not parse fails codex"
+# (check-worker.sh).
+mut_WORKER_receipt_any_comment() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@| \.body | select(contains("codex-review-state:v1"))\]@| .body]@' "${1%/*}/sdd-worker"
+}
+
+# Every worktree of the repo joins the set again, whether or not it holds a mission of the
+# campaign: budget and level execute the .sdd/config.sh of a branch where no `sdd run` of the
+# campaign runs, and its cap, pager and HANDOFF_DIR decide the answer (achado #3 of the mission's
+# review r5). Caught by "narrow: budget, level, allows and next read the config of the campaign's
+# checkout and of the worktrees that hold a mission of it, and of no other" (check-worker.sh).
+mut_WORKER_narrow_every_checkout() {
+  sed -i '/^campaign_set() {/,/^}/ s@^    if \[ -n "\$held" \] && \[ "\$wt" != "\$root" \]; then$@    if [ "$wt" != "$root" ]; then@' "${1%/*}/sdd-worker"
+}
+# A git worktree list that failed reads as a list with the campaign's checkout alone: budget sums
+# fewer missions, level reads fewer pagers, next plans a lot in flight again (achado #24 of the
+# mission's review r5). Caught by "listed: a git worktree list that fails, before or after printing,
+# stops budget, level and next with rc 1 naming the call, and allows asks" (check-worker.sh).
+mut_WORKER_listed_failure_swallowed() {
+  sed -i '/^checkouts_of() {/,/^}/ s@^  if \[ "\$rc" -ne 0 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# budget goes on past a set that did not read, over the campaign's checkout alone: zero missions
+# and rc 0 where the listing failed. Caught by "listed: a git worktree list that fails, before or
+# after printing, stops budget, level and next with rc 1 naming the call, and allows asks"
+# (check-worker.sh).
+mut_WORKER_listed_budget_goes_on() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if ! campaign_set "\$root" "\$(fm_value "\$f" campaign)"; then printf .no spend — %s\\n. "\$SET_WHY"; return 1; fi$@  campaign_set "$root" "$(fm_value "$f" campaign)" || :@' "${1%/*}/sdd-worker"
+}
+# The sum is compared with the ceiling as binary floats again, not in cents: 0.10 + 0.70 sums to
+# 0.7999999999999999 and never reaches a ceiling of 0.80 (achado #4 of the mission's review r5).
+# Caught by "spend: the spend reaches its ceiling in cents, the mission cap is printed as signed and
+# refused below one cent, and a config value the runner refuses stops budget" (check-worker.sh).
+mut_WORKER_spend_float_compare() {
+  sed -i '/^cmd_budget() {/,/^}/ s@| "\\(\$spent) \\(\$ceiling) \\(\$spent >= \$ceiling) @| "\\($spent) \\($ceiling) \\(. >= ($cap | tonumber)) @' "${1%/*}/sdd-worker"
+}
+# The mission cap is printed with two decimals again, not as signed: 0.015 reaches `sdd run` as
+# 0.01 or 0.02, and 0.004 as 0.00, the runner's no ceiling (achado #5 of the mission's review r5).
+# Caught by "spend: the spend reaches its ceiling in cents, the mission cap is printed as signed and
+# refused below one cent, and a config value the runner refuses stops budget" (check-worker.sh).
+mut_WORKER_spend_cap_rounded() {
+  sed -i '/^cmd_budget() {/,/^}/ s| "\${#ms\[@\]}" "\$mcap"$| "${#ms[@]}" "$(LC_ALL=C printf %.2f "$mcap")"|' "${1%/*}/sdd-worker"
+}
+# A signed mission cap below one cent holds again: 0.004 is a cap the cents of the campaign cannot
+# hold, and `%.2f` used to print it as the runner's no ceiling (achado #5 of the mission's review
+# r5). Caught by "spend: the spend reaches its ceiling in cents, the mission cap is printed as signed
+# and refused below one cent, and a config value the runner refuses stops budget" (check-worker.sh).
+mut_WORKER_spend_below_cent_holds() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if \[\[ "\$mcap" =~ ^0+\\\.00 \]\]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The runner's grammar of BUDGET_MISSION_USD is no longer applied to the config: 1e2, +5 or a
+# blank, which jq reads as numbers and the runner refuses, hold as a cap (achado #21 of the
+# mission's review r5). Caught by "spend: the spend reaches its ceiling in cents, the mission cap is
+# printed as signed and refused below one cent, and a config value the runner refuses stops budget"
+# (check-worker.sh).
+mut_WORKER_spend_grammar_unchecked() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^      \*\[!0-9\.\]\* | \. | \*\.\*\.\*)$@      __no_value_is_this__)@' "${1%/*}/sdd-worker"
+}
+# The config is sourced from the cwd of the caller again: a relative include in a worktree's file
+# reads the caller's checkout, or nothing, and the cap and pager of the worktree are missed
+# (achado #38 of the mission's review r5). Caught by "cwd: a config is sourced from its own
+# checkout, and a HANDOFF_DIR in the set other than the campaign checkout's stops budget, level and
+# next naming the file" (check-worker.sh).
+mut_WORKER_cwd_caller_cwd() {
+  sed -i -e '/^config_key() {/,/^}/ s@^  ( set +eu; CDPATH=.. cd -- "\$1" || exit 0$@  ( set +eu@' \
+    -e '/^config_key() {/,/^}/ s@^    \. \./\.sdd/config\.sh > /dev/null@    . "$cfg" > /dev/null@' "${1%/*}/sdd-worker"
+}
+# A HANDOFF_DIR in a worktree of the set other than the root's is no longer read: the runner there
+# looks for its missions where the worker does not, and budget, level and next answer as if it
+# agreed (achado #37 of the mission's review r5). Caught by "cwd: a config is sourced from its own
+# checkout, and a HANDOFF_DIR in the set other than the campaign checkout's stops budget, level and
+# next naming the file" (check-worker.sh).
+mut_WORKER_cwd_handoff_dir_unchecked() {
+  sed -i '/^campaign_set() {/,/^}/ s@^      if \[ "\$whd" != "\$hd" \]; then$@      if false; then@' "${1%/*}/sdd-worker"
+}
+# The lots: of a delegation is no longer read against the table: the template's own value, whose
+# words L1 and L2 the asked lot finds, signs, and a full delegation left with it approves the
+# uncapped L1 (achado #1 of the mission's review r5). Caught by "lots: a lots: that is not all or a
+# list of the table's lots, the template's own among them, is illegible to every verb"
+# (check-worker.sh).
+mut_WORKER_lots_unchecked() {
+  sed -i '/^delegation_legible() {/,/^}/ s@^  if \[ "\$v" != all \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The word all is taken among other words: `all L1` reads as a list whose words are all lots, and
+# signs. Caught by "lots: a lots: that is not all or a list of the table's lots, the template's own
+# among them, is illegible to every verb" (check-worker.sh).
+mut_WORKER_lots_all_among_words() {
+  sed -i '/^delegation_legible() {/,/^}/ s#^      for l in \${table\[@\]+"\${table\[@\]}"}; do#      for l in all ${table[@]+"${table[@]}"}; do#' "${1%/*}/sdd-worker"
+}
+# A pull request from a fork is counted as the lot's again: one merged from a branch of the same
+# name makes the lot done while it never ran (achado #6 of the mission's review r5). Caught by
+# "fork: a pull request from a fork is not the lot's, and an answer that does not say whose it is
+# is not read" (check-worker.sh).
+mut_WORKER_fork_counted() {
+  sed -i '/^pr_states() {/,/^}/ s@then \.\[\] | select(\.isCrossRepository == false) | @then .[] | @' "${1%/*}/sdd-worker"
+}
+# An element that does not say whose it is is read as a fork's: an answer off the contract hides
+# the repository's own merged pull request, and the lot is sent to run again. Caught by "fork: a
+# pull request from a fork is not the lot's, and an answer that does not say whose it is is not
+# read" (check-worker.sh).
+mut_WORKER_fork_field_unchecked() {
+  sed -i '/^pr_states() {/,/^}/ s@ and (\.isCrossRepository | type) == "boolean")$@)@' "${1%/*}/sdd-worker"
+}
+# The merge is read only for a mission every copy of which is approved, the old order: a stale copy
+# in an old worktree stops the campaign on approve over a lot merged long ago (achado #7 of the
+# mission's review r5). Caught by "stale: a lot whose pull request merged is done though a stale
+# copy is not approved, and the merge is read before approve" (check-worker.sh).
+mut_WORKER_stale_merge_after_approval() {
+  sed -i '/^cmd_next() {/,/^}/ s@^    if \[ -n "\$branch" \]; then$@    if [ -n "$branch" ] \&\& [ -z "$pend" ]; then@' "${1%/*}/sdd-worker"
+}
+# The file is no longer compared with the copy the signature was written from: an edit saved
+# between the copy and the move is lost under the move, and the file is signed (achado #23 of the
+# mission's review r5). Caught by "kept: an edit saved while the signature is written is kept and
+# nothing is signed, and a write that fails says so" (check-worker.sh).
+mut_WORKER_kept_unchecked() {
+  sed -i '/^delegation_write_signed() {/,/^}/ s@^  if ! cmp -s "\$seen" "\$f"; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The effective level reads the campaign's files again instead of its one copy: an edit landing
+# after the digest is granted under the old signature (achado #25 of the mission's review r5).
+# Caught by "once: the level, the lots and the ceilings a verb authorizes are the ones whose digest
+# it checked" (check-worker.sh).
+mut_WORKER_once_reads_live() {
+  sed -i '/^effective_level() {/,/^}/ s@^  src="\$TERMS_COPY"$@  src="$dir"@' "${1%/*}/sdd-worker"
+}
+# The review item no longer asks for a row of every criterion: a round whose grade table carries
+# the bold Overall row alone, graded A, is ready (achado #1 of the mission's review r6).
+# Caught by "criteria: a round that leaves out the row of a criterion fails review and names it, an A
+# in every row present is not an A in every criterion" (check-worker.sh).
+mut_WORKER_criteria_unchecked() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ -n "\$missing" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The criteria are counted, not found: a round with one criterion written twice in place of another
+# carries eight rows and reads as graded on every criterion.
+# Caught by "criteria: a round that leaves out the row of a criterion fails review and names it, an A
+# in every row present is not an A in every criterion" (check-worker.sh).
+mut_WORKER_criteria_counted() {
+  sed -i -e '/^round_missing() {/,/^}/ s@ seen\[trim(k)\] = 1$@ rows++@' \
+    -e '/^round_missing() {/,/^}/ s@if (!(want\[i\] in seen))@if (i > rows)@' "${1%/*}/sdd-worker"
+}
+# The criteria reader no longer stops at the next heading: a criterion row moved below the grade
+# table, into the findings, counts as graded.
+# Caught by "criteria: a round that leaves out the row of a criterion fails review and names it, an A
+# in every row present is not an A in every criterion" (check-worker.sh).
+mut_WORKER_criteria_past_heading() {
+  sed -i '/^round_missing() {/,/^}/ s@^\(    /^#+\[ \\t]/ \){ exit }$@\1{ next }@' "${1%/*}/sdd-worker"
+}
+# The base is no longer read: a mission merged into it whose worktree was removed, with the
+# campaign's checkout behind, is found nowhere, next plans its lot again and budget forgets its
+# spend (achado #2 of the mission's review r6). Caught by "gone: a merged mission whose worktree was
+# removed is found in the base, counted once, and a base that does not read stops budget, level and
+# next" (check-worker.sh).
+mut_WORKER_gone_base_unread() {
+  sed -i '/^campaign_set() {/,/^}/ s@^  if ! base_copies "\$root" "\$hd" "\$id"; then SET_WHY="\$BASE_WHY"; return 1; fi$@  BASE_DIRS=()@' "${1%/*}/sdd-worker"
+}
+# A base that does not read is read as a base with no mission: an upstream whose ref is gone, or a
+# git that fails on it, leaves the set on disk alone, a smaller sum and a lot planned again, in
+# silence. Caught by "gone: a merged mission whose worktree was removed is found in the base, counted
+# once, and a base that does not read stops budget, level and next" (check-worker.sh).
+mut_WORKER_gone_failure_swallowed() {
+  sed -i '/^campaign_set() {/,/^}/ s@^  if ! base_copies "\$root" "\$hd" "\$id"; then SET_WHY="\$BASE_WHY"; return 1; fi$@  base_copies "$root" "$hd" "$id" || :@' "${1%/*}/sdd-worker"
+}
+# The act names the temporary copy of the base it read, a file that goes when the verb exits, in
+# place of `<upstream>:<path>`. Caught by "gone: a merged mission whose worktree was removed is found
+# in the base, counted once, and a base that does not read stops budget, level and next"
+# (check-worker.sh).
+mut_WORKER_gone_copy_shown() {
+  sed -i '/^cmd_next() {/,/^}/ s@^  \[ -z "\${BASE_COPY:-}" \] || act=.*$@  :@' "${1%/*}/sdd-worker"
+}
+# The comment of cmd_next stops declaring that a merged pull request of an earlier use of the same
+# branch name makes the lot done (achado #5 of the mission's review r6): the limit is kept, and
+# silent. Caught by "reuse: cmd_next and docs/pipeline.md declare that a merged pull request of an
+# earlier use of the branch name makes the lot done, with the measure" (check-worker.sh).
+mut_WORKER_reuse_limit_dropped() {
+  sed -i '/^# a merged pull request of an earlier use of the same branch name makes the lot done/d' "${1%/*}/sdd-worker"
+}
+# The comment of cmd_pr_ready stops naming the CHANGES_REQUESTED review with no inline comment among
+# what the verb does not read (decision 1 of the owner on the mission's review r6). Caught by
+# "blind: cmd_pr_ready and docs/pipeline.md declare what pr-ready does not read — the body of a
+# review, a CHANGES_REQUESTED with no inline comment, local/ci — and point at TODO.md"
+# (check-worker.sh).
+mut_WORKER_blind_limit_dropped() {
+  sed -i '/^# .*`CHANGES_REQUESTED` that carries no inline comment/d' "${1%/*}/sdd-worker"
+}
+# The campaign ceiling is read between acts again (achado #3 of the mission's review r6): with
+# 9.50 left of 200 and a mission cap of 40, budget answers rc 0 and the next run may end past the
+# ceiling. Caught by "ceiling: budget stops on a no room line when what is left of the campaign
+# ceiling, in cents, is below the signed mission cap, opens at an equal one, and the command,
+# docs/pipeline.md, the template and cmd_budget write the rule" (check-worker.sh).
+mut_WORKER_ceiling_room_unchecked() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if \[ "\$reached" != true \] && \[ "\$short" = true \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# The mission cap made cents by a rounded binary product: 0.014 becomes one cent, which the one cent
+# left holds, and the run capped there may spend 0.004 past the ceiling. Caught by "ceiling: …"
+# (check-worker.sh), the world sub.
+mut_WORKER_ceiling_cap_rounded() {
+  sed -i '/^cmd_budget() {/,/^}/ s@^         | (\$m | split("\.") | .* as \$mission$@         | ($m | tonumber * 100 | round) as $mission@' "${1%/*}/sdd-worker"
+}
+# What is left compared with the cap as binary floats, not in cents: 1.40 less 0.10 + 0.20 is
+# 1.0999999999999999, below a cap of 1.10, and a run that fits is refused (and 8.51 less 8.50 is
+# below 0.01). Caught by "budget: at the ceiling or above it the verb leaves rc 1" and by
+# "ceiling: …", the world binary (check-worker.sh).
+mut_WORKER_ceiling_float_compare() {
+  sed -i '/^cmd_budget() {/,/^}/ s@ \\(\$ceiling - \$spent < \$mission)"@ \\(($cap | tonumber) - . < ($m | tonumber))"@' "${1%/*}/sdd-worker"
+}
+# A left equal to the mission cap stops: the run that would end the campaign at its ceiling exactly
+# is refused. Caught by "budget: at the ceiling or above it the verb leaves rc 1" (the boundary
+# leaves one cent, the cap of 0.01) and by "ceiling: …", the world equal (check-worker.sh).
+mut_WORKER_ceiling_equal_stops() {
+  sed -i '/^cmd_budget() {/,/^}/ s@ \\(\$ceiling - \$spent < \$mission)"@ \\($ceiling - $spent <= $mission)"@' "${1%/*}/sdd-worker"
+}
+# The cap compared is the last one a .sdd/config.sh of the set assigns, not the signed one: 12.5
+# in the config fits the 20.00 left under a signed 40, and budget opens a run the rule says it
+# stops. Caught by "ceiling: …" (check-worker.sh), the world strict.
+mut_WORKER_ceiling_effective_compared() {
+  sed -i '/^cmd_budget() {/,/^}/ s@ --arg m "\$mcap" --args .$@ --arg m "$run" --args '"'"'@' "${1%/*}/sdd-worker"
+}
+# The comment of cmd_budget stops writing the no room line (decision 2 of the owner on the
+# mission's review r6): the rule is kept, and its line goes unsaid. Caught by "ceiling: …"
+# (check-worker.sh), the item cmd_budget rule.
+mut_WORKER_ceiling_rule_dropped() {
+  sed -i '/^# `no room — campaign US\$ <spent> of <ceiling>/d' "${1%/*}/sdd-worker"
+}
+# The lot of every act read from the call again, the flag the session passed deciding how: `merge
+# --lot L1` over the pull request of the L6a capped at plan is allowed at merge (decision 3 of the
+# owner on the mission's review r6). Caught by "derived: …" (check-worker.sh), the reproduction.
+mut_WORKER_derived_lot_label() {
+  sed -i '/^cmd_allows() {/,/^}/ s#^  for e in "\${LOT_ACTS\[@\]}"; do \[ "\$e" != "\$2" \] || by=lot; done$#  [ "$given" != --lot ] || by=lot#' "${1%/*}/sdd-worker"
+}
+# The campaign of the mission unchecked: a mission of another campaign on L1 is read as a mission of
+# this one, and merge is allowed. Caught by "derived: …" (check-worker.sh), the world another
+# campaign.
+mut_WORKER_derived_campaign_unchecked() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^    if \[ "\$mc" != "\$id" \]; then$@    if false; then@' "${1%/*}/sdd-worker"
+}
+# A mission whose lot: is empty is read as no lot, which answers the signed level over every ceiling.
+# Caught by "derived: …" (check-worker.sh), the world no lot.
+mut_WORKER_derived_no_lot_as_none() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^    elif \[ -z "\$lot" \]; then$@    elif false; then@' "${1%/*}/sdd-worker"
+}
+# The file that named the lot left out of the reason of a lot not covered: the owner reads a lot and
+# not where it came from. Caught by "derived: …" (check-worker.sh), the worlds of the template's lot,
+# of L2 and of L9.
+mut_WORKER_derived_from_unnamed() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^    effective_level "\$1" "\$lot" "\${mf:+the lot: of \$mf}"$@    effective_level "$1" "$lot"@' "${1%/*}/sdd-worker"
+}
+# plan taken out of the acts asked by lot: a plan, whose mission does not exist yet, can no longer be
+# asked at all. Caught by "allows: the five levels by the seven acts answer the table, 35 of 35" and
+# by "derived: …" (check-worker.sh).
+mut_WORKER_derived_plan_by_mission() {
+  sed -i 's@^LOT_ACTS=(plan)$@LOT_ACTS=()@' "${1%/*}/sdd-worker"
+}
+# A folder with no 00-missao.md read as a mission: it asks, as a mission of another campaign,
+# instead of naming the file as the usage error it is. Caught by "derived: …" (check-worker.sh), the
+# worlds no 00-missao.md and no folder.
+mut_WORKER_derived_missing_file_asks() {
+  sed -i '/^cmd_allows() {/,/^}/ s@^    if \[ ! -f "\$mf" \]; then$@    if false; then@' "${1%/*}/sdd-worker"
+}
+# The header of campaign_set stops declaring that a mission of the campaign that never reached the
+# base and whose worktree was removed is found nowhere, and that its spend leaves the sum (achado #1
+# of the mission's review r7): the limit is kept, and silent. Caught by "discarded: a mission that
+# never reached the base and whose worktree was removed leaves the sum of budget, rc 0, and
+# campaign_set, cmd_budget, docs/pipeline.md and the template declare it with what the owner does"
+# (check-worker.sh).
+mut_WORKER_discarded_limit_dropped() {
+  sed -i '/^# campaign_set <root> <id>/,/^campaign_set() {$/ { /^# never reached the base and whose worktree was removed is found nowhere/d }' \
+    "${1%/*}/sdd-worker"
+}
+# The comment of cmd_budget stops telling the owner what to do until a source of that mission
+# exists: remove its worktree only after signing a campaign ceiling lower by what it spent. Caught
+# by "discarded: …" (check-worker.sh).
+mut_WORKER_discarded_remedy_dropped() {
+  sed -i '/^# budget <campaign-dir>/,/^cmd_budget() {$/ s/remove the worktree of a mission that will not reach the base only after/remove the worktree of a mission that will not reach the base after/' \
+    "${1%/*}/sdd-worker"
+}
+# campaign_set compares the HANDOFF_DIR of a worktree of the set as written again, and the runner
+# reads it normalised (load_config): `././docs/handoffs//` there and `docs/handoffs` in the campaign
+# checkout are one folder to the runner, and budget and level stop on them with rc 1, `no spend` and
+# `assisted — unread` (P2 of the Codex on PR #414). Caught by "spelling: …" (check-worker.sh).
+mut_WORKER_handoff_dir_unnormalized() {
+  sed -i '/^campaign_set() {/,/^}/ { /^      dir_normalise whd$/d }' "${1%/*}/sdd-worker"
+}
+
 CATALOG=(
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
@@ -7664,6 +8285,97 @@ CATALOG=(
   RUN_leftovers_never_retired
   RUN_boot_dirt_blamed_on_dead_session
   RUN_boot_leftovers_rule_widened
+  WORKER_unknown_verb_accepted
+  WORKER_delegate_signs_without_answer
+  WORKER_delegate_signs_expired
+  WORKER_delegate_commit_path_raw
+  WORKER_level_ignores_expiry
+  WORKER_level_ignores_digest
+  WORKER_level_ceiling_raises
+  WORKER_allows_unknown_act
+  WORKER_allows_merge_at_plan
+  WORKER_allows_ignores_lot
+  WORKER_budget_counts_every_mission
+  WORKER_budget_never_stops
+  WORKER_next_gh_failure_reads_no_pr
+  WORKER_next_skips_approval
+  WORKER_next_ignores_merged
+  WORKER_ready_grade_b_passes
+  WORKER_ready_codex_any_sha
+  WORKER_ready_threads_unread
+  WORKER_ready_unmergeable_passes
+  WORKER_ready_head_unchecked
+  WORKER_seal_ceilings_unsigned
+  WORKER_seal_ceilings_unshown
+  WORKER_legible_id_unchecked
+  WORKER_legible_campaign_md_unread
+  WORKER_legible_delegation_md_unread
+  WORKER_legible_next_id_unchecked
+  WORKER_legible_instant_unchecked
+  WORKER_cap_file_unread
+  WORKER_cap_caller_env_leaks
+  WORKER_cap_zero_holds
+  WORKER_rationale_unread
+  WORKER_rationale_gate_unread
+  WORKER_lot_optional
+  WORKER_shown_terms_unchecked
+  WORKER_worktree_root_only
+  WORKER_worktree_file_misnamed
+  WORKER_pipe_cut_raw
+  WORKER_pipe_grades_cut_raw
+  WORKER_pipe_parity_lost
+  WORKER_zero_signed_unchecked
+  WORKER_pager_root_only
+  WORKER_pager_file_misnamed
+  WORKER_sep_by_grade
+  WORKER_sep_header_anywhere
+  WORKER_sep_unjustified_by_criterion
+  WORKER_committed_unchecked
+  WORKER_committed_ignored_unseen
+  WORKER_range_ancestry_unchecked
+  WORKER_range_endpoints_only
+  WORKER_range_merge_unseen
+  WORKER_receipt_parsed_first
+  WORKER_receipt_any_comment
+  WORKER_narrow_every_checkout
+  WORKER_listed_failure_swallowed
+  WORKER_listed_budget_goes_on
+  WORKER_spend_float_compare
+  WORKER_spend_cap_rounded
+  WORKER_spend_below_cent_holds
+  WORKER_spend_grammar_unchecked
+  WORKER_cwd_caller_cwd
+  WORKER_cwd_handoff_dir_unchecked
+  WORKER_lots_unchecked
+  WORKER_lots_all_among_words
+  WORKER_fork_counted
+  WORKER_fork_field_unchecked
+  WORKER_stale_merge_after_approval
+  WORKER_kept_unchecked
+  WORKER_once_reads_live
+  WORKER_criteria_unchecked
+  WORKER_criteria_counted
+  WORKER_criteria_past_heading
+  WORKER_gone_base_unread
+  WORKER_gone_failure_swallowed
+  WORKER_gone_copy_shown
+  WORKER_reuse_limit_dropped
+  WORKER_blind_limit_dropped
+  WORKER_ceiling_room_unchecked
+  WORKER_ceiling_cap_rounded
+  WORKER_ceiling_float_compare
+  WORKER_ceiling_equal_stops
+  WORKER_ceiling_effective_compared
+  WORKER_ceiling_rule_dropped
+  WORKER_derived_lot_label
+  WORKER_derived_campaign_unchecked
+  WORKER_derived_no_lot_as_none
+  WORKER_derived_from_unnamed
+  WORKER_derived_plan_by_mission
+  WORKER_derived_missing_file_asks
+  WORKER_discarded_limit_dropped
+  WORKER_discarded_remedy_dropped
+  WORKER_handoff_dir_unnormalized
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
@@ -7697,8 +8409,11 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # since "skip the document that is missing" is the fail-open this repo forbids — so the control
   # run went red and every mutant would have scored by vacuity. Measured, not feared: that is how
   # this line was born. Two files, and they keep the sandbox a faithful kit instead of making a
-  # documentation rule optional.
-  cp "$ROOT/CLAUDE.md" "$ROOT/TODO.md" "$1/"
+  # documentation rule optional. `README.md` and `CONTEXT.md` joined them the same way: the docs
+  # probe of check-worker.sh reads both from its own kit root, and without them the control run of
+  # `--only WORKER_unknown_verb_accepted check-worker.sh` went red on that probe — measured in
+  # 20261117-o-worker-orquestrador, I10. Read, never mutated: out of the stamp key.
+  cp "$ROOT/CLAUDE.md" "$ROOT/TODO.md" "$ROOT/README.md" "$ROOT/CONTEXT.md" "$1/"
   # `docs/adr` and NOT `docs`: check-kaizen.sh asserts the runner still names ADR 0003, and the
   # sabotage that strips the citation has to be able to kill it INSIDE a mutant. Three small files,
   # against a `docs/` tree whose handoffs are megabytes and which no sensor here reads — the
@@ -7759,6 +8474,13 @@ apply_mutant() {
      && ! python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' \
           "$box/bin/sdd-coordination.py" 2>>"$box.log"; then
     echo "the mutant is not valid Python" >> "$box.log"
+    return 91
+  fi
+  # bin/sdd-worker the same way, parsed only when this mutant changed it: a mutant that left it
+  # unparseable would die in check-worker.sh at the first call and score `caught` for a crash.
+  if ! cmp -s "$ROOT/bin/sdd-worker" "$box/bin/sdd-worker" \
+     && ! bash -n "$box/bin/sdd-worker" 2>>"$box.log"; then
+    echo "the mutant is not valid bash" >> "$box.log"
     return 91
   fi
   return 0
@@ -8070,6 +8792,7 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }
   anchor_control_invalid()    { printf 'if\n' >> "$1"; }
   anchor_control_invalid_py() { printf 'def\n' >> "${1%/*}/sdd-coordination.py"; }
+  anchor_control_invalid_worker() { printf 'if\n' >> "${1%/*}/sdd-worker"; }
   anchor_one() { # anchor_one <name> <function> — writes <box>.rc like run_mutant, for the same scoring
     local box="$WORK/$1" arc=0
     anchor_box "$box"
@@ -8095,7 +8818,7 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
     done
     [ "$broken" -eq 0 ]
   }
-  for ctl in noop:90 invalid:91 invalid_py:91; do
+  for ctl in noop:90 invalid:91 invalid_py:91 invalid_worker:91; do
     anchor_box "$WORK/_control_${ctl%%:*}"
     crc=0; apply_mutant "anchor_control_${ctl%%:*}" "$WORK/_control_${ctl%%:*}" || crc=$?
     if [ "$crc" != "${ctl##*:}" ]; then

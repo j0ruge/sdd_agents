@@ -9,6 +9,8 @@ adr: <none | TBD | docs/adr/NNNN-slug.md — allocate it with `sdd adr new --slu
 ddd: <aplicado | n/a>
 qa: <vazio, ou skipped quando o grill decide que o diff não chega ao usuário — só o literal skipped desvia a rota da QA; a justificativa vai nas Decisões do grill>
 kaizen_log: <vazio, ou skipped quando o K8 é ✗ com o humano — só o literal skipped dispensa a entrada do KAIZEN_LOG.md>
+campaign: <vazio, ou o id da campanha a que esta missão pertence>
+lot: <vazio, ou o lote dela na campanha: L<n>>
 ---
 
 # Missão — <título>
