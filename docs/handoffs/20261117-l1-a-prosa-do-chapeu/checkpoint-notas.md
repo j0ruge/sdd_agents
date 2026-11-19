@@ -36,3 +36,5 @@
 - 2026-11-19 18:41 · `I6` · I6 red: doc: failure-modes.md finds a detached sdd run without matching the watcher, and says how to wait for its end → FAIL antes da prosa
 - 2026-11-19 18:41 · `I6` · I6 red: doc: the finding-PR recipe merges only with zero unresolved review threads on the head, with the command beside it → FAIL antes da prosa
 - 2026-11-19 18:41 · `I6` · âncoras J e K re-apontadas (`git clone`, `[b]in/sdd run`): 103 medidas, 0 fora do alvo; suíte verde antes e depois, 0 FAIL (a 1ª depois foi cortada pelo teto de 590 s do comando, e refeita destacada)
+- 2026-11-19 18:53 · `I7` · I7 red: todo.md e todo.pt-BR.md: a number that changes goes in the body, never in the title → FAIL antes da prosa
+- 2026-11-19 18:53 · `I7` · esqueleto das duas sementes intacto e 0 achados de forma; âncoras 103 medidas, 0 fora do alvo; suíte verde depois, 0 FAIL
