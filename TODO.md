@@ -179,6 +179,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r7.md` — descoberto por `sdd-reviewer` na
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
+- [ ] **O PR sem conflito ainda quebra o `TODO.md` do alvo quando a missão paralela entra antes** —
+  `agents/sdd-publisher.md:48` (`status: blocked`) — o publisher só para no conflito textual, o GitHub dá
+  `MERGEABLE CLEAN` e o `TEST_CMD` mede o HEAD, não a mescla. O `j0ruge/magic_tutor#254` moveu o `descrever` da
+  `monitor/bancada.py` meia hora antes de o `j0ruge/magic_tutor#259` abrir, com o item 150 ancorado no lugar velho
+  (o espelho das issues trava; `b8cf0cc`); no `j0ruge/magic_tutor#176` (2026-11-04), dois itens 85. Direção: antes do
+  push, o publisher mede a árvore de `git merge-tree --write-tree origin/<base> HEAD` (`--anchors` e número repetido) e
+  para com `status: blocked`; a base que anda depois do push fica descoberta até quem faz o merge refazer essa medida.
+  — descoberto pela sessão que acompanhou o `sdd run` no `magic_tutor` (2026-11-18)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
@@ -189,6 +198,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   planner (ou o `--check`) avisa o incremento EXEC que toca `.claude/`, e o executor deixa o texto proposto ao
   humano no PR, como o `sdd-docs`. Fonte: `20-handoff-exec.md:167` da missão.
   — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-20)
+  RECURRED 1: magic_tutor/20261118-o-que-a-mesa-nao-diz (2026-11-18)
 
 - [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
   (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
