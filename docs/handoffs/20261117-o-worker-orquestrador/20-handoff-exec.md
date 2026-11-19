@@ -142,7 +142,7 @@ segue a mesma régua do dono de 20:30, a nota `REVIEW` do `checkpoint-notas.md` 
 
 Antes dela, a sessão orquestradora relê os Checks `done` e roda a suíte inteira no head. O merge
 continua com o dono. O que mudou desde a r8 não é visível para quem usa o kit: nenhuma resposta de
-verbo mudou. O R18 mexeu num fixture do sensor, num comentário do `bin/sdd-worker` e no `KAIZEN_LOG.md`.
+verbo mudou. O R18 mexeu num fixture e no cabeçalho do sensor, num comentário do `bin/sdd-worker`, no `KAIZEN_LOG.md` e na âncora de um item do `TODO.md`.
 
 E o que mudou na r7:
 
