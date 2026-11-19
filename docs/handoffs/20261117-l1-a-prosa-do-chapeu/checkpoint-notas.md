@@ -18,3 +18,7 @@
 
 - 2026-11-17 18:42 · `PLAN` · plano escrito sobre `7ea43e3`; a `main` já estava em `380ffb0` (PR 412, catraca 85). Antes do `sdd run`: `git fetch origin && git merge origin/main` por quem lança a corrida (pendência 1 do `00-missao.md`).
 - 2026-11-17 18:42 · `PLAN` · espelho de chapéu só por `./bin/sdd install --force`, com o `./`; se responder `CHECKOUT-BUSY`, anote o comando e a saída aqui, marque `blocked` e pare.
+- 2026-11-19 16:21 · `I1` · I1 red: hat: the planner names the base branch by DEFAULT_BRANCH of the target, never by the literal main → FAIL antes da prosa (junto, o K8 de hat_promise_probes ficou vermelho pelo literal trocado, como o plano previa)
+- 2026-11-19 16:21 · `I1` · I1 red: hat: the planner writes every hand-back to the relay in OUTPUT_LANG → FAIL antes da prosa
+- 2026-11-19 16:21 · `I1` · I1 red: hat: a planner Check for a new TODO_FILE item also accepts a RECURRED entry on an equivalent open item → FAIL antes da prosa
+- 2026-11-19 16:21 · `I1` · `./bin/sdd install --force` dentro da corrida respondeu `ok   agent sdd-planner.md updated (--force)`, rc 0, sem CHECKOUT-BUSY; âncoras 103 medidas, 0 fora do alvo; suíte verde antes e depois
