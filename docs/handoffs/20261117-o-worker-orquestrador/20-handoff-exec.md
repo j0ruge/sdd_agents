@@ -2,9 +2,9 @@
 missao: 20261117-o-worker-orquestrador
 fase: EXEC
 status: done
-sessao: d3155206-6105-47c1-8491-1c5016eff8fb (subagente sdd-executor do R10, lançado pela sessão orquestradora, fora do runner)
-data: 2026-11-18 16:15
-gate: "no 4650aff, sensor a sensor (a suíte inteira, tests/run-all.sh, é da sessão orquestradora, que a roda no fim da r5): tests/check-worker.sh → rc 0, worker verbs: 58 probe(s) em 32 famílias, command: 4 linhas, delegate: 3; grep -c '^mut_WORKER_' tests/check-mutation.sh → 68; check-mutation.sh --anchors → all 881 mutants still apply and leave valid code; check-mutation.sh --only WORKER_delegate_commit_path_raw check-worker.sh → dies (rc 1); tests/check-todo.sh → 86 finding(s), every anchor on target; check-lang, check-templates, check-checkpoint e check-pipefail rc 0; shellcheck -S warning limpo nos três arquivos de código tocados; checkpoint 23 de 23 done (I1–I11, F1, F2, R1–R10)"
+sessao: bb1a20e4-8709-4b15-9215-8c829f18ec82 (a sessão orquestradora, fora do runner, escreve a seção da r6 depois do subagente sdd-executor do R15)
+data: 2026-11-18 21:39
+gate: "no 769b593, sensor a sensor, pela sessão orquestradora (a suíte inteira, tests/run-all.sh, roda no head deste handoff antes da r7): tests/check-worker.sh → rc 0, worker verbs: 66 probe(s) em 40 famílias, nenhuma linha FAIL, 90 s; grep -c '^mut_WORKER_' tests/check-mutation.sh → 88; tests/check-todo.sh → rc 0, 90 finding(s), every anchor on target, e --anchors 90 measured, 0 off target; os Checks de R15, I4, I5, I9, R8 e R10 relidos no 1e2f1cd pelo run-checks.py → os seis no esperado, rc 0; pelo subagente do R15, no 170f818: check-mutation.sh --anchors 901 de 901, os oito mutantes novos ou reancorados mortos por --only, shellcheck -S warning limpo; checkpoint 28 de 28 done (I1–I11, F1, F2, R1–R15)"
 ---
 
 # Handoff — EXEC — O worker orquestrador
@@ -14,18 +14,20 @@ gate: "no 4650aff, sensor a sensor (a suíte inteira, tests/run-all.sh, é da se
 
 ## TL;DR
 
-Os onze incrementos, os dois consertos da QA (`F1`, `F2`) e os dez da REVIEW (`R1`–`R10`) estão
-feitos; `R6`–`R10` consertam os 28 achados reais do CodeRabbit no PR #414 (r5): o `pr-ready`, o teto
-e o pager no conjunto estreito, o `next` e o `delegate`, os sensores sob `TMPDIR` hostil, e o comando,
-que agora escreve as transições que o `next` não deriva. O sensor tem 58 asserções em 32 famílias e
-68 mutantes; a suíte inteira no head é da sessão orquestradora, e nada foi empurrado depois da r5.
+Os onze incrementos, os dois consertos da QA (`F1`, `F2`) e os quinze da REVIEW (`R1`–`R15`) estão
+feitos. `R6`–`R10` consertam os 28 achados reais do CodeRabbit no PR #414 (r5). `R11`–`R15` consertam
+os seis da r6 e as quatro decisões do dono das 17:05: o `pr-ready` exige os oito critérios, a missão
+mergeada sem worktree segue da campanha (lida na base), o teto da campanha é limite duro (`no room`),
+e o lote de um ato sobre uma missão sai do `lot:` dela (`allows … --mission`). O sensor tem 66
+asserções em 40 famílias e 88 mutantes; a suíte inteira no head é da sessão orquestradora, que a roda
+antes da r7, e nada foi empurrado depois da r5.
 
 ## Estado do repo
 
-- **Branch:** `feat/o-worker-orquestrador`, upstream `origin/feat/o-worker-orquestrador` no `3b8c711` (o head do PR #414), 20 commits à frente, nada empurrado depois da r5
-- **Último commit de código:** `5fbddec` `docs(worker): o comando escreve as transições, e a prosa diz o que o código faz`; o checkpoint do R10 em `4650aff`, e este handoff num commit logo depois
+- **Branch:** `feat/o-worker-orquestrador`, upstream `origin/feat/o-worker-orquestrador` no `3b8c711` (o head do PR #414), 39 commits à frente antes deste handoff, nada empurrado depois da r5
+- **Último commit de código:** `170f818` `fix(worker): o lote de um ato sobre uma missão sai da missão, não da sessão` (R15); o checkpoint dele em `1e2f1cd`, o `TODO.md` da retro da r6 em `769b593`, e este handoff num commit logo depois
 - **Working tree:** limpo depois do commit do handoff
-- **Suíte:** a última corrida inteira é a do `0976b0d` (r5: rc 0, 2140 `ok`, 854 mutantes aplicam); de `R6` a `R10` cada sessão rodou os sensores que tocou, não a suíte, por ordem da sessão orquestradora, que a roda no fim
+- **Suíte:** a última corrida inteira é a do `c12c871` (antes da r6: rc 0, 2156 `ok`, anchors 881 de 881, 14 min 5 s); de `R11` a `R15` cada sessão rodou os sensores que tocou, não a suíte, e a sessão orquestradora a roda no head deste handoff antes da r7
 - **E2E:** não há `E2E_CMD`: o kit é bash e markdown, sem interface
 
 ## O que foi feito
@@ -70,13 +72,25 @@ que agora escreve as transições que o `next` não deriva. O sensor tem 58 asse
 - `cbaf6be` — R10, o achado do `4a71667`: o caminho e o id da linha de commit do `delegate` saem por `%q`; o sensor roda a linha sob um git falso no PATH (R59) e cobra um argumento por palavra, nada depois de um add que falha e o newline final; mutante `mut_WORKER_delegate_commit_path_raw`
 - `5fbddec` — R10 (#12, #14 a #17, #19, #20, #30 a #35): o comando ganha `## The transitions` (`run` → `pr` → `review` → `merge`, e toda espera de volta ao `budget`), o lançamento por `setsid -w`, a `campaign-ceiling` só para o gasto medido e as linhas que não mediram nomeadas pelo que o verbo imprimiu, o diagnóstico por variável, o `exec_model:` e o `MODEL_EXEC`, o diário fora do checkout do `sdd` do PATH com corrida viva, o recibo do Codex obrigatório na ADR §5, o L6 da campanha do kit em L6a a L6k (um item cada, teto `plan`), e a frase do README e a do `CLAUDE.md` conferidas contra o código. Linha nova `command: ` (R60) e a R32 cobrando #30 e #31; o item do `TODO.md` ganha `RESOLVED by cbaf6be`
 
+### Rodada r6 da REVIEW (`R11` a `R15`, dos achados #1 a #6 do `40-review-r6.md` e das decisões do dono das 17:05)
+
+A r6 é a primeira rodada do worker com `reviewed_head:` (`d99302e`), e deu B por dois HIGH. As quatro
+decisões do dono sobre as pendências dela (`71dc576`) refizeram o R13 e criaram o R14 e o R15.
+
+- `6c77751` — R11 (#1, HIGH): o item `review` do `pr-ready` recusa a rodada a que falta a linha de um dos oito critérios do `templates/review.md` (`REVIEW_CRITERIA`, uma definição, na grafia do template) e nomeia todos os ausentes; o critério escrito duas vezes não cobre o que falta, e linha a mais continua tendo de ser A. Família `criteria: ` (R61), três mutantes `mut_WORKER_criteria_*`. O `gate_REVIEW` do runner tem a mesma régua e está no `TODO.md` desde `d99302e`
+- `254867c` — R12 (#2, HIGH): o `campaign_set` lê também a base (a árvore do upstream do branch do checkout da campanha, pelo git) e materializa o `00-missao.md` de cada missão dela, então o lote mergeado cujo worktree saiu não é replanejado pelo `next` e o gasto dele conta no `budget`; missão em disco e na base é uma só. Upstream que não lê para `budget`, `level` e `next` com rc 1, nomeando-o. Família `gone: ` (R62), três mutantes `mut_WORKER_gone_*`
+- `ddcef9d` — R13 (#4 a #6, decisões 1 e 4), prosa e limites: o rc 2 do kit (PR aberto, só o carimbo faltando) leva ao ato `pr` como o rc 0; o `next` declara que o `--head` casa o nome da branch, não o uso (0 de 160 PRs do kit dividem o nome); o `pr-ready` declara o que não lê (o corpo de uma revisão, a `CHANGES_REQUESTED` sem comentário, o `local/ci`), e o sexto item vai ao `TODO.md` (catraca 88 → 89); o ato `plan` diz quem corta o worktree num alvo, e o `approve` roda no worktree da missão. A ADR 0022 §2 e o `KAIZEN_LOG.md` (quinze `R<n>`) acompanham. Famílias `stamp: `, `reuse: `, `blind: ` e `cut: ` (R63 a R66), dois mutantes
+- `7113bbe` — R14 (#3, decisão 2): o teto da campanha é limite duro: abaixo dele, o `budget` sai rc 1 com `no room — campaign US$ <gasto> of <teto> leaves US$ <resto>, below the mission cap …` quando o resto, em centavos, não cabe o teto de missão assinado (resto igual ainda abre o run); o comando avisa essa linha como `no-room`, separada da `campaign-ceiling`. Família `ceiling: ` (R67), seis mutantes `mut_WORKER_ceiling_*`
+- `170f818` — R15 (decisão 3, nascida da pendência 3 da r6): o `allows` ganha `--mission <dir>`, e o lote de todo ato sobre uma missão que existe (`run`, `pr`, `review`, `merge`, `postmerge` e `approve`) é o `lot:` do `00-missao.md` dela; `--lot` nesses atos é rc 2, e só o `plan` (`LOT_ACTS=(plan)`, escrita positivamente) segue com `--lot`. Missão sem `lot:`, de outra campanha ou de lote fora de `lots:` ou da tabela pergunta (rc 1, nomeando o arquivo); pasta sem `00-missao.md` é rc 2. Família `derived: ` (R68), seis mutantes `mut_WORKER_derived_*`, e o `allows_ignores_lot` e o `lot_optional` reancorados
+- `769b593` — a retro da sessão orquestradora sobre a r6, aprovada pelo dono: `RECURRED 1` no item do LOW sem destino, e um item novo sobre a rodada que não passa `base=` à skill (catraca 89 → 90)
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
 | `bin/sdd-worker` | o programa: `delegate`, `level`, `allows`, `budget`, `next`, `pr-ready` |
-| `tests/check-worker.sh` | o sensor, 58 asserções em 32 famílias (as da QA e as da REVIEW inclusas, até as de `R6`–`R10`), com controle negativo nas famílias de prosa (`command: ` e `docs: `) |
-| `tests/check-mutation.sh` | 68 mutantes `mut_WORKER_*` no `CATALOG` |
+| `tests/check-worker.sh` | o sensor, 66 asserções em 40 famílias (as da QA e as da REVIEW inclusas, até as de `R11`–`R15`), com controle negativo nas famílias de prosa (`command: `, `docs: `, `stamp: `, `reuse: `, `blind: `, `cut: ` e a metade de prosa de `ceiling: ` e `derived: `) |
+| `tests/check-mutation.sh` | 88 mutantes `mut_WORKER_*` no `CATALOG` |
 | `tests/fixtures/codex-review-state.txt` | o comentário de máquina do Codex, copiado do PR 409 (proveniência no sensor) |
 | `commands/sdd-worker.md` | o comando da sessão orquestradora: o laço, `## The transitions`, os sete atos, as cinco paradas |
 | `templates/campaign.md`, `templates/delegation.md` | os dois contratos da campanha |
@@ -86,26 +100,24 @@ que agora escreve as transições que o `next` não deriva. O sensor tem 58 asse
 
 ## Boot da próxima fase
 
-**Depois do `R10`: a r5 fecha os seus cinco incrementos.** A r5 é rodada de achados, sem
-`reviewed_head:`, então o `pr-ready` espera a rodada do worker sobre o head novo, e o merge fica com
-o dono (o CodeRabbit comentou: o merge delegado não vale, decisão 1 da r5). Antes de empurrar, a
-sessão orquestradora roda a suíte inteira. Se uma rodada nova revisar o diff `b661436..4650aff`, o
-que mudou e é visível:
+**Depois do `R15`: a r6 fecha os seus cinco incrementos, e a próxima é a r7, a rodada delta do
+worker.** Pela régua do dono de 20:30 (nota `REVIEW` do `checkpoint-notas.md`, `aebbc70`), a r7 lê só
+`d99302e..HEAD` e se cada achado da r6 fechou como o R dele dizia, invocando
+`/codereview:codereview base=d99302ecf69c7538834f98051ceda65085664d31`; só CRITICAL/HIGH, ou MEDIUM
+reproduzido num verbo de confiança, abre rodada. Antes dela, a sessão orquestradora relê os Checks
+`done` e roda a suíte inteira no head. O merge continua com o dono. O que mudou e é visível:
 
-- **`delegate`** (R10) imprime `signed <arquivo> — commit it: git add <%q do arquivo> && git commit
-  -m 'chore(campaign): sign the delegation of '<%q do id>`: colada numa shell, ela é um comando em
-  qualquer checkout.
-- **`commands/sdd-worker.md`** (R10): `## The transitions` (quatro linhas), o passo 2 do laço tira o
-  ato dali antes do `next`, o passo 3 diz que o sim do dono vale só para o ato aprovado, o passo 6
-  volta ao `budget` depois de toda espera, e o lançamento é `setsid -w`. A `campaign-ceiling` só para
-  `campaign US$ … of …`; `no ceiling — …`, `no spend — …` e o `stop …` do `next` param como
-  `no-ceiling`, `no-spend` e `next-stop`.
-- **A campanha do kit** (R10): o `next` e o `level` leem L6a a L6k; `bin/sdd-worker level
-  docs/superpowers/campaigns/20261117-zerar-as-issues` segue `level assisted — illegible: expires …`.
-- **`pr-ready`, `budget`, `level`, `next`** (R6 a R8): as respostas novas estão nas linhas `R6`–`R8`
-  do `checkpoint.md` e nas notas delas.
+- **`allows`** (R15): ato sobre missão pergunta por `allows <campanha> <ato> --mission <pasta>`, e o
+  lote é o `lot:` do `00-missao.md` dela; `--lot` nesses atos é rc 2. Só `plan` leva `--lot`.
+- **`budget`** (R14): a linha nova `no room — campaign US$ … leaves US$ …, below the mission cap …`,
+  rc 1, que o comando avisa como `no-room`.
+- **`pr-ready`** (R11): recusa a rodada a que falta um dos oito critérios, nomeando todos.
+- **`budget`, `level`, `next`** (R12): leem também a base, pelo upstream do branch do checkout da
+  campanha; upstream que não lê é rc 1, nomeando-o.
+- **`commands/sdd-worker.md`** (R13 a R15): a linha do rc 2 em `## The transitions`, o corte do
+  worktree no ato `plan`, o `approve` no worktree da missão, o `no-room` e o `--mission` em cada ato.
 
-As escolhas, os limites e cada sabotagem de `R6`–`R10` estão nas notas do `checkpoint-notas.md`.
+As escolhas, os limites e cada sabotagem de `R11`–`R15` estão nas notas do `checkpoint-notas.md`.
 
 **O que vale desde a primeira QA, num repo sem interface.** O que é visível para quem usa o kit:
 
@@ -119,8 +131,11 @@ As escolhas, os limites e cada sabotagem de `R6`–`R10` estão nas notas do `ch
 - **A campanha real.** Os comandos abaixo, rodados da raiz do worktree, respondem assim hoje:
   `bin/sdd-worker level docs/superpowers/campaigns/20261117-zerar-as-issues` →
   `level assisted — illegible: expires '<YYYY-MM-DD HH:MM, hora local>' is not YYYY-MM-DD HH:MM`;
-  `budget` → `no ceiling — illegible: …`, rc 1; `allows … run --lot L1` → `ask run needs pr, effective assisted — …`, rc 1;
-  `next` → `run L1 20261117-l1-a-prosa-do-chapeu — approved, and no pull request has the head fix/l1-a-prosa-do-chapeu`
+  `budget` → `no ceiling — illegible: …`, rc 1;
+  `allows … run --mission /home/joruge/repos/sdd_agents-l1/docs/handoffs/20261117-l1-a-prosa-do-chapeu` →
+  `ask run needs pr, effective assisted — …`, rc 1 (o `allows … run --lot L1` é rc 2 desde o R15);
+  `allows … plan --lot L2` → `ask plan needs plan, effective assisted — …`, rc 1;
+  `next` → `run L1 20261117-l1-a-prosa-do-chapeu — approved, and no pull request of the repository has the head fix/l1-a-prosa-do-chapeu`
   e `ahead plan L2`, rc 0. O `next` acha a missão do L1 porque ela já existe, aprovada (`469971a`), no
   worktree `/home/joruge/repos/sdd_agents-l1`: é o desenho do I7 (as missões são lidas também nos
   worktrees ligados), não um defeito.
@@ -161,6 +176,7 @@ worktree ligado, sem `KIT-TOUCHED`, `hat-crossed` nem escalada no `pipeline.log`
 - **A quarta pergunta do §4 do caderno** (missão sem jornada num repo com interface) não foi decidida pela ADR 0022: o caderno a registra como deixada ao W4 (`ENV_UP_CMD`). Decidir se vira missão é seu
 - **A missão do L1 já existe aprovada** (`20261117-l1-a-prosa-do-chapeu`, `469971a`, no worktree `~/repos/sdd_agents-l1`): com a delegação assinada, o primeiro ato do worker é `run L1`, não `plan L1`
 - **O Check do I9 espera `3`, e a família `command:` imprime `4` desde o R10**, cujo Check (`4`) conta a mesma família: o mesmo conflito entre duas células do plano que o R9 teve com o I1 (acertado em `5565a41`). Acertado pela sessão orquestradora em `995c4ad` (o esperado do I9 passa a `4`)
+- **O `--mission` do R15 vale para seis atos, não só para o `merge` da decisão 3:** `run`, `pr`, `review`, `merge`, `postmerge` e `approve` tiram o lote do `00-missao.md`, porque é nos lotes de teto `plan` (L6a a L6k) que o lote dito pela sessão deixava passar também o `run` e a aprovação. Se o dono quiser só o `merge`, é uma linha a mais no `LOT_ACTS` por ato, com os probes da família `derived: ` acompanhando
 
 ## Riscos e não-feitos
 
@@ -182,7 +198,7 @@ worktree ligado, sem `KIT-TOUCHED`, `hat-crossed` nem escalada no `pipeline.log`
   Dois limites no comentário do `effective_level`: worktree sem pasta (prunable) lê sem pager até o
   `git worktree prune` (o lado seguro), e worktree criado depois da chamada não é lido (o laço
   pergunta `allows` antes de cada ato).
-- **A catraca está em 86** (`todo-findings 86`): a `b05d039` da `main` a levou a 85 e o R9 a 86; o item do R9 tem `RESOLVED by cbaf6be` e só sai depois do merge, provado por `git merge-base --is-ancestor`. O R10 acrescentou uma linha `RECURRED` ao item do `/sdd-plan` (o #34 é a mesma classe), que não conta.
+- **A catraca está em 90** (`todo-findings 90`): a `b05d039` da `main` a levou a 85, o R9 a 86, a `c90ffc7` (os Checks `done` que nenhum sensor relê) a 87, a `d99302e` (o `gate_REVIEW` que aprova a tabela a que falta um critério) a 88, o R13 (o que o `pr-ready` não lê) a 89 e a `769b593` (a rodada que não passa `base=` à skill) a 90; o item do R9 tem `RESOLVED by cbaf6be` e só sai depois do merge, provado por `git merge-base --is-ancestor`. O R10 e a `769b593` acrescentaram linhas `RECURRED`, que não contam.
 - **O comando tem prosa que nenhum probe lê** (R10): o `exec_model:` e o `MODEL_EXEC`, o diário fora do checkout do `sdd` do PATH e o recibo do Codex no ato `pr` foram conferidos à mão contra o código e relidos em todo lugar que repete a frase; o probe cobre as transições, o `setsid -w` e as paradas.
 
 ## Achados fora de escopo
