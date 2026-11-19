@@ -713,6 +713,21 @@ reviewer_agent_probes() {
   fi
 }
 
+# L1 (20261117-l1-a-prosa-do-chapeu), item H of TODO.md: a KAIZEN_LOG.md entry that called its own
+# lesson recurrent stayed in the log, and the next mission repeated it. The hat now sends such a
+# lesson to a proposed rule (a ⛔ row, section 5) or makes the entry say why not. Read by section;
+# the catalogue cannot reach it — the same limit as executor_agent_probes, Red in the mission notes.
+docs_agent_probes() {
+  local s3
+  s3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$ROOT/agents/sdd-docs.md")"
+  if grep -qF 'recurrent' <<< "$s3" && grep -qF '`⛔` row with its proposed text' <<< "$s3" \
+     && grep -qF 'the reason it does not become a rule' <<< "$s3"; then
+    pass "hat: the docs phase turns a lesson its own log calls recurrent into a proposed rule, or writes why not"
+  else
+    fail "hat: sdd-docs no longer sends a lesson its KAIZEN_LOG entry calls recurrent to a proposed rule, or to a written reason why not"
+  fi
+}
+
 command_worktree_probes() {
   local cmd="$ROOT/commands/sdd-plan.md" sec
   sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
@@ -1206,6 +1221,7 @@ census_probes
 executor_agent_probes
 planner_agent_probes
 reviewer_agent_probes
+docs_agent_probes
 hat_promise_probes
 command_approval_probes
 command_relay_probes
