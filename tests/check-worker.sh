@@ -451,8 +451,9 @@
 #
 # Declared limits of R69, no probe:
 # - The family pins a limit, not a rule: the day a source finds the two missions (the session line
-#   of the ledger carrying campaign:, in TODO.md), its world turns red, and the declaration and the
-#   pinned answers change in that commit.
+#   of the ledger carrying campaign:, in TODO.md), its world turns red, since the three ledger lines
+#   of the fixture carry campaign: "di-gone" already, and the declaration and the pinned answers
+#   change in that commit.
 # - Each place is read by its limit and its remedy alone, the template by fragments (its prose is
 #   pt-BR, and this file is English surface): the cases, the reason, the ceiling passed by that
 #   spend and the ledger sum the owner reads, around them, are unread, and so are the two sentences
@@ -4745,7 +4746,7 @@ fi
 # --- R69: the spend of a mission that never reached the base and whose worktree went -------------
 # A mission of the campaign that never reached the base, its pull request closed without merge or the
 # mission dropped, is in the set only while its worktree is there: once the owner removes it, no
-# source of the set keeps it (the disk and the base), and the ledger names no campaign, so budget
+# source of the set keeps it (the disk and the base), and budget reads no campaign in the ledger, so it
 # answers a smaller sum with rc 0 (achado #1 of the review r7). The source is the owner's decision
 # (pending 1 of the r7: the session line of the ledger carries campaign:, which the runner reads from
 # the 00-missao.md, a change to bin/sdd), and it is in TODO.md; until it lands the limit is declared,
@@ -4756,6 +4757,8 @@ fi
 #            without merge: after its worktree goes the mission is still in git, in its branch and in
 #            origin's, and nowhere the set reads
 #   dropped  never pushed, a mission left after a budget-exhausted
+# Each spends in one session line of the ledger carrying campaign: "di-gone", as the runner will write
+# it from that source; budget reads no campaign today, so the field changes no answer pinned here.
 # budget is asked with the three alive (102.00, 3 missions), with merged's worktree removed (the
 # same), then closed's (17.00, 2) and dropped's (10.00, 1): each removal of a mission that never
 # reached the base takes its spend out of the sum, rc 0 throughout, the answer of today written HERE
@@ -4788,7 +4791,7 @@ for x in merged:L1:10 closed:L2:85 dropped:L3:7; do
   lot_mission "$DN-$w" "2099120$n-di-$w" di-gone "$l" "di-$w" humano-2099-01-01
   git -C "$DN-$w" add -A "$H"
   git -C "$DN-$w" -c user.name=fixture -c user.email=fixture@example.com commit -q -m "$w"
-  spent "2099120$n-di-$w" session "$c" >> "$SDD_STATE_DIR/autonomy-log.jsonl"
+  spent "2099120$n-di-$w" session "$c" | jq -c '. + {campaign: "di-gone"}' >> "$SDD_STATE_DIR/autonomy-log.jsonl"
 done
 git -C "$DN-merged" push -q origin HEAD:main 2> /dev/null || got="${got:+$got; }fixture: di-merged was not pushed to origin's main"
 git -C "$DN-closed" push -q origin HEAD:refs/heads/di-closed 2> /dev/null \

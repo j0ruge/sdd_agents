@@ -162,7 +162,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
-  `bin/sdd-worker:1210` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
+  `bin/sdd-worker:1214` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
   nomeia threads: 18 dos 38 achados do CodeRabbit no PR #414 moravam no corpo das revisões, e um PR com eles,
   com uma `CHANGES_REQUESTED` sem inline ou com o `local/ci` vermelho dá `ready`. Ler os três é um sexto item,
   que muda a régua e não tem dono: nenhum ato do laço publica o `local/ci`, e sem quem o escreva o item é gate

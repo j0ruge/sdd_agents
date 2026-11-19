@@ -754,8 +754,12 @@ campaign_set() {
 # rounds up: a run capped at 0.014 may spend more than the one cent left. The cap compared is the
 # signed one, not the one the runner applies, because that one never passes the signed (a config
 # that would set it higher stops budget above) and one below it only spends less: so a campaign may
-# end with up to one mission cap unused, never past the one signed. budget does not know the act
-# that follows it, so the stop holds before every act, a merge of a lot whose run is over among them.
+# end with up to one mission cap unused, and passes the one signed only by three spends: what the
+# runner spends past its own cap in a phase and the spend of a mission that budget does not find
+# (one that never reached the base and whose worktree was removed), both in Declared limits below,
+# and the spend of the orchestrating session and of its subagents, outside both ceilings. budget
+# does not know the act that follows it, so the stop holds before every act, a merge of a lot whose
+# run is over among them.
 # Declared limits: the runner reads its own spend before a phase opens, so a phase may spend past
 # BUDGET_MISSION_USD, and the campaign past its ceiling by that much; the room is one run's, and the
 # loop of commands/sdd-worker.md launches one run at a time; a line is matched by its mission id
