@@ -2,9 +2,9 @@
 missao: 20261117-o-worker-orquestrador
 fase: EXEC
 status: done
-sessao: bb1a20e4-8709-4b15-9215-8c829f18ec82 (a sessão orquestradora, fora do runner, escreve a seção da r6 depois do subagente sdd-executor do R15)
-data: 2026-11-18 21:39
-gate: "no 769b593, sensor a sensor, pela sessão orquestradora (a suíte inteira, tests/run-all.sh, roda no head deste handoff antes da r7): tests/check-worker.sh → rc 0, worker verbs: 66 probe(s) em 40 famílias, nenhuma linha FAIL, 90 s; grep -c '^mut_WORKER_' tests/check-mutation.sh → 88; tests/check-todo.sh → rc 0, 90 finding(s), every anchor on target, e --anchors 90 measured, 0 off target; os Checks de R15, I4, I5, I9, R8 e R10 relidos no 1e2f1cd pelo run-checks.py → os seis no esperado, rc 0; pelo subagente do R15, no 170f818: check-mutation.sh --anchors 901 de 901, os oito mutantes novos ou reancorados mortos por --only, shellcheck -S warning limpo; checkpoint 28 de 28 done (I1–I11, F1, F2, R1–R15)"
+sessao: ca2c615d-f566-467c-a40f-214652493596 (a sessão orquestradora, fora do runner, escreve a seção da r7 depois do subagente sdd-executor do R17)
+data: 2026-11-19 00:19
+gate: "no 35a0753 com a ADR em a8b09ee, sensor a sensor, pela sessão orquestradora (a suíte inteira, tests/run-all.sh, roda no head deste handoff antes da r8): tests/check-worker.sh → rc 0, worker verbs: 67 probe(s) em 41 famílias, nenhuma linha FAIL, 95 s; grep -c '^mut_WORKER_' tests/check-mutation.sh → 90; tests/check-todo.sh → rc 0, 91 finding(s), every anchor on target; tests/check-lang.sh e tests/check-adr.sh rc 0; pelo subagente do R16, no 998d077: check-mutation.sh --anchors 903 de 903, os dois mutantes discarded mortos por --only, os Checks I6 R7 R12 R14 no esperado; pelo do R17, no af6b320: os Checks R12 R13 R16 no esperado, shellcheck -S warning limpo; checkpoint 30 de 30 done (I1–I11, F1, F2, R1–R17)"
 ---
 
 # Handoff — EXEC — O worker orquestrador
@@ -14,20 +14,21 @@ gate: "no 769b593, sensor a sensor, pela sessão orquestradora (a suíte inteira
 
 ## TL;DR
 
-Os onze incrementos, os dois consertos da QA (`F1`, `F2`) e os quinze da REVIEW (`R1`–`R15`) estão
+Os onze incrementos, os dois consertos da QA (`F1`, `F2`) e os dezessete da REVIEW (`R1`–`R17`) estão
 feitos. `R6`–`R10` consertam os 28 achados reais do CodeRabbit no PR #414 (r5). `R11`–`R15` consertam
 os seis da r6 e as quatro decisões do dono das 17:05: o `pr-ready` exige os oito critérios, a missão
 mergeada sem worktree segue da campanha (lida na base), o teto da campanha é limite duro (`no room`),
-e o lote de um ato sobre uma missão sai do `lot:` dela (`allows … --mission`). O sensor tem 66
-asserções em 40 famílias e 88 mutantes; a suíte inteira no head é da sessão orquestradora, que a roda
-antes da r7, e nada foi empurrado depois da r5.
+e o lote de um ato sobre uma missão sai do `lot:` dela (`allows … --mission`). `R16` e `R17` fecham
+a r7: o `budget` declara a missão largada que ele não acha, e um lote de cinco LOW. O sensor tem 67
+asserções em 41 famílias e 90 mutantes; a suíte inteira no head é da sessão orquestradora, que a roda
+antes da r8, e nada foi empurrado depois da r5.
 
 ## Estado do repo
 
-- **Branch:** `feat/o-worker-orquestrador`, upstream `origin/feat/o-worker-orquestrador` no `3b8c711` (o head do PR #414), 39 commits à frente antes deste handoff, nada empurrado depois da r5
-- **Último commit de código:** `170f818` `fix(worker): o lote de um ato sobre uma missão sai da missão, não da sessão` (R15); o checkpoint dele em `1e2f1cd`, o `TODO.md` da retro da r6 em `769b593`, e este handoff num commit logo depois
+- **Branch:** `feat/o-worker-orquestrador`, upstream `origin/feat/o-worker-orquestrador` no `3b8c711` (o head do PR #414), 47 commits à frente antes deste handoff, nada empurrado depois da r5
+- **Último commit de código:** `af6b320` `fix(worker): o lote de LOW da r7 — o upstream que não lê, a medida com o comando, o terceiro gasto` (R17); o checkpoint dele em `35a0753`, a ADR 0022 §8 em `a8b09ee`, e este handoff num commit logo depois
 - **Working tree:** limpo depois do commit do handoff
-- **Suíte:** a última corrida inteira é a do `c12c871` (antes da r6: rc 0, 2156 `ok`, anchors 881 de 881, 14 min 5 s); de `R11` a `R15` cada sessão rodou os sensores que tocou, não a suíte, e a sessão orquestradora a roda no head deste handoff antes da r7
+- **Suíte:** a última corrida inteira é a do `3a77d92` (antes da r7: rc 0, 2164 `ok`, anchors 901 de 901, 14 min 32 s); o `R16` e o `R17` rodaram os sensores que tocaram, não a suíte, e a sessão orquestradora a roda no head deste handoff antes da r8
 - **E2E:** não há `E2E_CMD`: o kit é bash e markdown, sem interface
 
 ## O que foi feito
@@ -84,13 +85,24 @@ decisões do dono sobre as pendências dela (`71dc576`) refizeram o R13 e criara
 - `170f818` — R15 (decisão 3, nascida da pendência 3 da r6): o `allows` ganha `--mission <dir>`, e o lote de todo ato sobre uma missão que existe (`run`, `pr`, `review`, `merge`, `postmerge` e `approve`) é o `lot:` do `00-missao.md` dela; `--lot` nesses atos é rc 2, e só o `plan` (`LOT_ACTS=(plan)`, escrita positivamente) segue com `--lot`. Missão sem `lot:`, de outra campanha ou de lote fora de `lots:` ou da tabela pergunta (rc 1, nomeando o arquivo); pasta sem `00-missao.md` é rc 2. Família `derived: ` (R68), seis mutantes `mut_WORKER_derived_*`, e o `allows_ignores_lot` e o `lot_optional` reancorados
 - `769b593` — a retro da sessão orquestradora sobre a r6, aprovada pelo dono: `RECURRED 1` no item do LOW sem destino, e um item novo sobre a rodada que não passa `base=` à skill (catraca 89 → 90)
 
+### Rodada r7 da REVIEW (`R16`, `R17`, dos achados #1 a #6 do `40-review-r7.md` e da decisão do dono das 23:15)
+
+A r7 é a primeira rodada delta (`d99302e..3a77d92`, `base=` passado à skill), pela régua do dono das
+20:30. Ela deu B por um MEDIUM reproduzido no `budget` e abriu um lote de cinco LOW. A pendência 1
+dela voltou com a recomendada (`e59e163`): a fonte da missão largada é o `campaign:` na linha
+`session` do ledger, que pede o `bin/sdd` e por isso vai ao `TODO.md`.
+
+- `998d077` — R16 (#1, MEDIUM): o `budget` declara que uma missão da campanha que nunca chegou à base e cujo worktree saiu não é achada, e que o gasto dela sai da soma. A frase está no cabeçalho do `campaign_set`, no comentário do `cmd_budget`, nos Declared limits do `docs/pipeline.md` e no `templates/delegation.md`. O remédio escrito é assinar um teto de campanha menor pelo que ela gastou antes de remover o worktree, porque manter o worktree trava o `next` em `stop … closed without merge` (medido com um `gh` falso). O item vai ao `TODO.md` como fail-open, com a direção do dono (catraca 90 → 91). Família `discarded: ` (R69), que fixa as respostas de hoje (102 → 102 → 17 → 10) e fica vermelha no dia em que o ledger levar a campanha; dois mutantes `mut_WORKER_discarded_*`
+- `af6b320` — R17 (#2 a #6, lote de LOW, sem sabotagem nem mutante): a linha do upstream que não lê cobre as três grafias que o código imprime, e o upstream `[gone]` fica nomeado no `base_copies` e no `docs/pipeline.md`; a medida do reuso de nome de branch ganha o comando ao lado (`0 of 161 merged pull requests`, de 162, em 2026-11-19 00:00); o template e o `docs/pipeline.md` contam o terceiro gasto fora dos tetos, o da sessão que orquestra e dos subagentes dela; a frase do R11 acima passa a "a mesma lacuna"; o cabeçalho do sensor conta a R68. Uma sexta parte, que o R16 achou: o `KAIZEN_LOG.md` passa a contar dezessete `R<n>`
+- `a8b09ee` — a sessão orquestradora acerta a ADR 0022 §8 e as Consequences, que ainda diziam que a campanha só passa do teto pelo excesso do runner (o subagente do R17 apontou e deixou fora do lote)
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
 | `bin/sdd-worker` | o programa: `delegate`, `level`, `allows`, `budget`, `next`, `pr-ready` |
-| `tests/check-worker.sh` | o sensor, 66 asserções em 40 famílias (as da QA e as da REVIEW inclusas, até as de `R11`–`R15`), com controle negativo nas famílias de prosa (`command: `, `docs: `, `stamp: `, `reuse: `, `blind: `, `cut: ` e a metade de prosa de `ceiling: ` e `derived: `) |
-| `tests/check-mutation.sh` | 88 mutantes `mut_WORKER_*` no `CATALOG` |
+| `tests/check-worker.sh` | o sensor, 67 asserções em 41 famílias (as da QA e as da REVIEW inclusas, até a `discarded: ` do `R16`), com controle negativo nas famílias de prosa (`command: `, `docs: `, `stamp: `, `reuse: `, `blind: `, `cut: `, `discarded: ` e a metade de prosa de `ceiling: ` e `derived: `) |
+| `tests/check-mutation.sh` | 90 mutantes `mut_WORKER_*` no `CATALOG` |
 | `tests/fixtures/codex-review-state.txt` | o comentário de máquina do Codex, copiado do PR 409 (proveniência no sensor) |
 | `commands/sdd-worker.md` | o comando da sessão orquestradora: o laço, `## The transitions`, os sete atos, as cinco paradas |
 | `templates/campaign.md`, `templates/delegation.md` | os dois contratos da campanha |
@@ -100,12 +112,21 @@ decisões do dono sobre as pendências dela (`71dc576`) refizeram o R13 e criara
 
 ## Boot da próxima fase
 
-**Depois do `R15`: a r6 fecha os seus cinco incrementos, e a próxima é a r7, a rodada delta do
-worker.** Pela régua do dono de 20:30 (nota `REVIEW` do `checkpoint-notas.md`, `aebbc70`), a r7 lê só
-`d99302e..HEAD` e se cada achado da r6 fechou como o R dele dizia, invocando
-`/codereview:codereview base=d99302ecf69c7538834f98051ceda65085664d31`; só CRITICAL/HIGH, ou MEDIUM
-reproduzido num verbo de confiança, abre rodada. Antes dela, a sessão orquestradora relê os Checks
-`done` e roda a suíte inteira no head. O merge continua com o dono. O que mudou e é visível:
+**Depois do `R17`: a r7 fecha os seus dois incrementos, e a próxima é a r8, a rodada delta do
+worker.** Pela mesma régua do dono de 20:30 (nota `REVIEW` do `checkpoint-notas.md`, `aebbc70`), a r8
+lê só `3a77d92..HEAD` e se cada achado da r7 fechou como o R dele dizia, invocando
+`/codereview:codereview base=3a77d92647a2df7b6b1ab4002ab9095bcff839dd`. Ela confere também o lote
+R17, porque existe pelo R16. Só CRITICAL/HIGH, ou MEDIUM reproduzido num verbo de confiança, abre
+rodada. Antes dela, a sessão orquestradora relê os Checks `done` e roda a suíte inteira no head. O
+merge continua com o dono. O que mudou e é visível desde a r7:
+
+- **`budget`** (R16): nenhuma resposta mudou. A missão que nunca chegou à base e cujo worktree saiu
+  segue fora da soma, e agora o limite está escrito nos quatro lugares onde quem lê o `budget` lê,
+  com o remédio (assinar um teto menor antes de remover o worktree).
+- **`docs/pipeline.md`, `templates/delegation.md`, ADR 0022 §8** (R17, `a8b09ee`): o upstream
+  `[gone]` nomeado como upstream que não lê, e os três gastos que passam o teto da campanha.
+
+E o que mudou na r6:
 
 - **`allows`** (R15): ato sobre missão pergunta por `allows <campanha> <ato> --mission <pasta>`, e o
   lote é o `lot:` do `00-missao.md` dela; `--lot` nesses atos é rc 2. Só `plan` leva `--lot`.
@@ -117,7 +138,7 @@ reproduzido num verbo de confiança, abre rodada. Antes dela, a sessão orquestr
 - **`commands/sdd-worker.md`** (R13 a R15): a linha do rc 2 em `## The transitions`, o corte do
   worktree no ato `plan`, o `approve` no worktree da missão, o `no-room` e o `--mission` em cada ato.
 
-As escolhas, os limites e cada sabotagem de `R11`–`R15` estão nas notas do `checkpoint-notas.md`.
+As escolhas, os limites e cada sabotagem de `R11`–`R17` estão nas notas do `checkpoint-notas.md`.
 
 **O que vale desde a primeira QA, num repo sem interface.** O que é visível para quem usa o kit:
 
@@ -177,6 +198,7 @@ worktree ligado, sem `KIT-TOUCHED`, `hat-crossed` nem escalada no `pipeline.log`
 - **A missão do L1 já existe aprovada** (`20261117-l1-a-prosa-do-chapeu`, `469971a`, no worktree `~/repos/sdd_agents-l1`): com a delegação assinada, o primeiro ato do worker é `run L1`, não `plan L1`
 - **O Check do I9 espera `3`, e a família `command:` imprime `4` desde o R10**, cujo Check (`4`) conta a mesma família: o mesmo conflito entre duas células do plano que o R9 teve com o I1 (acertado em `5565a41`). Acertado pela sessão orquestradora em `995c4ad` (o esperado do I9 passa a `4`)
 - **O `--mission` do R15 vale para seis atos, não só para o `merge` da decisão 3:** `run`, `pr`, `review`, `merge`, `postmerge` e `approve` tiram o lote do `00-missao.md`, porque é nos lotes de teto `plan` (L6a a L6k) que o lote dito pela sessão deixava passar também o `run` e a aprovação. Se o dono quiser só o `merge`, é uma linha a mais no `LOT_ACTS` por ato, com os probes da família `derived: ` acompanhando
+- **A missão largada da campanha** (pendência 1 da r7, decidida às 23:15 com a recomendada): a linha `session` do ledger ganha `campaign:`, lida pelo runner do `00-missao.md`, e o `budget` soma por ela. Pede o `bin/sdd`, que esta missão não edita, e está no `TODO.md` (item do R16, no `campaign_set`). Até lá, quem remove o worktree de uma missão que não chegará à base assina antes um teto de campanha menor pelo que ela gastou
 
 ## Riscos e não-feitos
 
