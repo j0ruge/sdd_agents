@@ -171,7 +171,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **Nenhum ato do worker resolve os threads de review, e o item `threads` do `pr-ready` fica sem dono** —
-  `commands/sdd-worker.md:216` (`merge`) — um rc 1 do `pr-ready` manda voltar "ao ato que conserta o item", e
+  `commands/sdd-worker.md:216` (`merge`) — um rc 1 do `pr-ready` manda voltar "to the act that fixes it", e
   para `not-ready threads` não há ato: o `review` conserta o que a rodada acha e pede o `@codex review`, mas nada
   resolve o thread de bot cujo achado um commit já fechou. No PR #414 os R6–R10 consertaram os achados do
   CodeRabbit e os 20 threads seguiram abertos (princípio 1: item que nenhum ato escreve). Direção: o `review`
@@ -196,6 +196,31 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   push, o publisher mede a árvore de `git merge-tree --write-tree origin/<base> HEAD` (`--anchors` e número repetido) e
   para com `status: blocked`; a base que anda depois do push fica descoberta até quem faz o merge refazer essa medida.
   — descoberto pela sessão que acompanhou o `sdd run` no `magic_tutor` (2026-11-18)
+
+- [ ] **Os leitores da tabela de notas seguem lendo depois da linha em branco, no worker e no runner** —
+  `bin/sdd-worker:1095` (`round_grades`) — ele, o `round_unjustified` e o `round_missing` pulam a linha que não
+  é de tabela e seguem até o próximo heading: uma linha de critério solta abaixo da tabela, na mesma seção
+  `### Overall Grade`, conta. O `gate_REVIEW` do `bin/sdd` lê igual, e consertar só o worker quebra a paridade
+  que o `check-worker.sh` segura. Direção: parar na primeira linha fora da tabela, nos três e no runner, com probe.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 6 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O mutante `range_ancestry_unchecked` só troca a mensagem, e o ancestral segue conferido** —
+  `tests/check-mutation.sh:7167` (`mut_WORKER_range_ancestry_unchecked`) — ele desliga o `"$anc" -eq 1` do
+  `cmd_pr_ready`, e o `"$anc" -ne 0` logo abaixo recusa o mesmo rc 1 com outra frase: o catálogo o pega pela
+  mensagem, e o mundo que o comentário dele promete (uma rodada sobre um commit que o PR largou) nunca é montado.
+  Direção: trocar também o `-ne 0` por `-gt 1`, provado por `--only WORKER_range_ancestry_unchecked check-worker.sh`.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 13 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **Os probes de nota do `pr-ready` passariam pelo item `dirty` com o leitor de nota frouxo** —
+  `tests/check-worker.sh:1904` (`ready_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
+  tabela sem linha editam o `40-review-r2.md` sem `land` e casam só `not-ready review: `, e o `dirty` também
+  reprova a árvore suja com esse prefixo: um `pr-ready` que aceitasse B ou A- seguiria vermelho pelo motivo
+  errado. Direção: `land` depois de cada edição e exigir o texto do ramo (`grades B`, `has no row for`), como a
+  sonda do `deadbeefdead` já faz.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 16 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 ### Contrato e configuração
 
@@ -491,6 +516,70 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `index.lock`; com `GIT_OPTIONAL_LOCKS=0`, 0 de 4685. O `kit_guard_tree` (`bin/sdd:4285`) já usa a variável.
   Direção: a mesma variável na leitura do `session_leftovers`.
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
+
+- [ ] **O `config_key` do worker põe o valor do ambiente sem `export`, e o filho que o config abre lê vazio** —
+  `bin/sdd-worker:328` (`config_key`) — o `printf -v "$key"` vale só para o shell que sourceia o `.sdd/config.sh`,
+  e o runner lançado com a chave no ambiente a recebe exportada: um config que escolhe o teto num `bash -c` ou
+  num `$(…)` dá o default (150) ao `budget` e o 40 ao `sdd run` (reproduzido: o filho lê `[]`, e com `export`
+  antes, `[40]`). Direção: `export "$key"` depois do `printf -v`, antes de sourcear.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 1 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O `effective_level` confere o `expires:` antes do conjunto e publica o nível depois dele** —
+  `bin/sdd-worker:439` (`expired`) — o `expired "$exp"` roda antes do `campaign_set` e do `checkouts_of`, e o
+  `LEVEL` acima de `assisted`, o teto do lote incluso, sai depois: a delegação que vence nessa janela (de
+  milissegundos, não reproduzida) ainda dá o nível assinado. O laço pergunta `allows` antes de cada ato, o que
+  estreita a janela sem fechá-la. Direção: reler o `expired` logo antes de publicar um `LEVEL` acima de `assisted`.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 2 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O `checkouts_of` lê o `worktree list` sem `-z`, e o worktree com quebra de linha no caminho some** —
+  `bin/sdd-worker:609` (`checkouts_of`) — o git 2.43 imprime o caminho cru, e o `sed 's/^worktree //p'` parte
+  `…/wt` + `nl` em `…/wt` e uma linha solta (reproduzido): a missão desse worktree some calada do `budget`, do
+  `level` e do `next`. Direção: `--porcelain -z`, lido por NUL e com o rc guardado; o `-z` pede git 2.36+, então
+  antes decidir a versão mínima do git no kit.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 3 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O `pr_states` descarta o PR de fork depois de o `gh pr list` cortar a lista em 30** —
+  `bin/sdd-worker:901` (`pr_states`) — o `gh pr list --head <branch> --state all` roda sem `--limit` (o padrão é
+  30) e o `isCrossRepository` é lido depois do corte: com 30 PRs de fork na mesma branch, o PR da missão fica fora
+  e o `next` não o vê. Direção: `--limit 1000`, ou parar com veredito não lido quando a contagem bater no limite.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 5 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O yes do dono no passo 3 do laço do worker vale para o ato e não amarra o sha do merge** —
+  `commands/sdd-worker.md:77` (`sdd-worker allows`) — "the yes stands for this step's rc 0" deixa o yes de um
+  `merge` dado sobre o head A valer para o head B, quando os passos 1 e 2 trazem o mesmo ato. O `pr-ready` ainda
+  exige rodada A e recibo do Codex no B; o risco é o dono não ter visto o B. Direção: o yes só se reaproveita com
+  campanha, lote, missão, PR e comando iguais, e no `merge` também o sha.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 7 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **O `postmerge` manda a linha do journal nomear o PR do que sobra para a base, sem dizer o que ela leva** —
+  `commands/sdd-worker.md:226` (`postmerge`) — o `next` não deriva esse ato, e a frase não exige o número do PR de
+  acompanhamento nem o estado da revisão dele: a sessão que retoma do journal não sabe se o PR abriu nem se a
+  rodada dele fechou. Direção: a linha do merge traz o número do PR e `review pendente`, e a sessão retomada o
+  conclui antes de chamar o `next`.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 8 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **A parada do worker roda o `budget` de novo para montar o `SDD_GATE_WHY` do pager** —
+  `commands/sdd-worker.md:239` (`sdd-worker budget`) — o `why` sai de rodar outra vez o verbo cuja linha parou o
+  laço, e entre as duas leituras o teto pode ter subido ou um gasto entrado: o pager recebe uma linha que não é a
+  que parou. Direção: guardar a saída do verbo no momento da parada (arquivo ou variável do mesmo lote) e reusá-la
+  no journal e no `SDD_GATE_WHY`.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 9 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+
+- [ ] **Uma edição do `.sdd/config.sh` durante a fase tira o teto de missão que a delegação assinou** —
+  `templates/delegation.md:72` (`BUDGET_MISSION_USD`) — o `config_reload` do runner relê o arquivo a cada volta, e
+  a sessão que grava `BUDGET_MISSION_USD=0` desliga o teto nas voltas seguintes; o `budget` só roda entre atos. O
+  template diz que a campanha só passa do assinado por três gastos, e este é um quarto. Direção: declarar o limite
+  já, no `bin/sdd-worker` e no template; o conserto de verdade (o runner guardar o teto do lançamento) muda a
+  precedência do `config_reload` e é decisão do dono.
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 12 — descoberto pelo
+  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 ### Saída humana e cosmética
 
