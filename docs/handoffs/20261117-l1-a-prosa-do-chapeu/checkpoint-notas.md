@@ -32,3 +32,7 @@
 - 2026-11-19 17:30 · `I4` · install --force respondeu `updated`, sem CHECKOUT-BUSY; âncoras 103 medidas, 0 fora do alvo; suíte verde antes (14m54s) e depois, 0 FAIL
 - 2026-11-19 18:05 · `I5` · I5 red: hat: the qa hat sends a declared qa: skipped to the confirmation of section 2 on both paths → FAIL antes da prosa
 - 2026-11-19 18:05 · `I5` · install --force respondeu `updated`, sem CHECKOUT-BUSY; âncoras 103 medidas, 0 fora do alvo; suíte verde antes e depois, 0 FAIL
+- 2026-11-19 18:41 · `I6` · I6 red: doc: the README shows the clone line without calling the repository private → FAIL antes da prosa
+- 2026-11-19 18:41 · `I6` · I6 red: doc: failure-modes.md finds a detached sdd run without matching the watcher, and says how to wait for its end → FAIL antes da prosa
+- 2026-11-19 18:41 · `I6` · I6 red: doc: the finding-PR recipe merges only with zero unresolved review threads on the head, with the command beside it → FAIL antes da prosa
+- 2026-11-19 18:41 · `I6` · âncoras J e K re-apontadas (`git clone`, `[b]in/sdd run`): 103 medidas, 0 fora do alvo; suíte verde antes e depois, 0 FAIL (a 1ª depois foi cortada pelo teto de 590 s do comando, e refeita destacada)
