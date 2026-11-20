@@ -162,7 +162,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
-  `bin/sdd-worker:1229` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
+  `bin/sdd-worker:1242` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
   nomeia threads: 18 dos 38 achados do CodeRabbit no PR #414 moravam no corpo das revisões, e um PR com eles,
   com uma `CHANGES_REQUESTED` sem inline ou com o `local/ci` vermelho dá `ready`. Ler os três é um sexto item,
   que muda a régua e não tem dono: nenhum ato do laço publica o `local/ci`, e sem quem o escreva o item é gate
@@ -180,7 +180,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-19)
 
 - [ ] **O `budget` esquece calado o gasto de uma missão que nunca chegou à base e cujo worktree saiu** —
-  `bin/sdd-worker:703` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
+  `bin/sdd-worker:716` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
   PR fechado sem merge ou a missão largada e o worktree removido, o `budget` dá US$ 0.00 no lugar dos US$ 85 do
   ledger, rc 0, e o teto que o R14 chama de limite duro passa por esse gasto. O R16 só o declara. Direção
   (decisão do dono na pendência 1 da r7): a linha `session` do ledger ganha `campaign:`, que o runner lê do
@@ -206,7 +206,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O mutante `range_ancestry_unchecked` só troca a mensagem, e o ancestral segue conferido** —
-  `tests/check-mutation.sh:7167` (`mut_WORKER_range_ancestry_unchecked`) — ele desliga o `"$anc" -eq 1` do
+  `tests/check-mutation.sh:7178` (`mut_WORKER_range_ancestry_unchecked`) — ele desliga o `"$anc" -eq 1` do
   `cmd_pr_ready`, e o `"$anc" -ne 0` logo abaixo recusa o mesmo rc 1 com outra frase: o catálogo o pega pela
   mensagem, e o mundo que o comentário dele promete (uma rodada sobre um commit que o PR largou) nunca é montado.
   Direção: trocar também o `-ne 0` por `-gt 1`, provado por `--only WORKER_range_ancestry_unchecked check-worker.sh`.
@@ -493,7 +493,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O `effective_level` confere o `expires:` antes do conjunto e publica o nível depois dele** —
-  `bin/sdd-worker:439` (`expired`) — o `expired "$exp"` roda antes do `campaign_set` e do `checkouts_of`, e o
+  `bin/sdd-worker:452` (`expired`) — o `expired "$exp"` roda antes do `campaign_set` e do `checkouts_of`, e o
   `LEVEL` acima de `assisted`, o teto do lote incluso, sai depois: a delegação que vence nessa janela (de
   milissegundos, não reproduzida) ainda dá o nível assinado. O laço pergunta `allows` antes de cada ato, o que
   estreita a janela sem fechá-la. Direção: reler o `expired` logo antes de publicar um `LEVEL` acima de `assisted`.

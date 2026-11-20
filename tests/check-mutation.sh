@@ -6966,6 +6966,17 @@ mut_WORKER_ready_unmergeable_passes() {
 mut_WORKER_ready_head_unchecked() {
   sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$here" != "\$head" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
+# reviewed_head: is read raw again: a round gate_REVIEW passes with the key in quotes is no commit to
+# pr-ready (CodeRabbit on PR #452). Caught by "pr-ready: a reviewed head in quotes or padded reads as
+# the runner reads it" (check-worker.sh).
+mut_WORKER_ready_head_read_raw() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@rh="\$(fm_scalar "\$round" reviewed_head)"@rh="$(fm_value "$round" reviewed_head)"@' "${1%/*}/sdd-worker"
+}
+# The blanks before a value are kept again, so a padded key keeps its opening quote and is no
+# commit. Caught by the padded world of the same assertion.
+mut_WORKER_scalar_blanks_kept() {
+  sed -i '/^fm_scalar() {/,/^}/ { /^  v="\${v#"\${v%%/d }' "${1%/*}/sdd-worker"
+}
 # The lot ceilings leave the seal: the digest covers the six keys only, so lifting the plan ceiling
 # of a lot after signing full delegates its approval under a signature that still holds (Q1 of the
 # mission's QA). Caught by "delegate: an answer of y signs with a digest of the other fields" and by
@@ -8395,6 +8406,8 @@ CATALOG=(
   WORKER_ready_threads_unread
   WORKER_ready_unmergeable_passes
   WORKER_ready_head_unchecked
+  WORKER_ready_head_read_raw
+  WORKER_scalar_blanks_kept
   WORKER_seal_ceilings_unsigned
   WORKER_seal_ceilings_unshown
   WORKER_legible_id_unchecked

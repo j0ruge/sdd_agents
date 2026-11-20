@@ -1895,6 +1895,29 @@ else
   fail 'pr-ready: all five true at one sha answers ready with the full sha' "ready $B, rc 0" "$got"
 fi
 
+# --- the reviewed head as the runner reads it --------------------------------------------------
+# gate_REVIEW reads reviewed_head: through the runner's frontmatter reader, which trims the blanks
+# around the value and then strips one quote from each end; pr-ready read the text after `: ` raw,
+# so a round the gate passes with `reviewed_head: "<sha>"` was "no commit" here (CodeRabbit on PR
+# #452). Two worlds, each the good-under one with the key respelled — in double quotes, and padded
+# in single quotes —, and the fixture proves first that the round carries that spelling.
+got=""
+round "$MD/40-review-r2.md" "\"$B\""
+grep -qx "reviewed_head: \"$B\"" "$MD/40-review-r2.md" || got="fixture: r2 does not quote its head"
+land good-quoted
+ready_is 'a head in double quotes' 0 "ready $HEADNOW" good-quoted
+ready_reset
+round "$MD/40-review-r2.md" "  '$B'"
+grep -qx "reviewed_head:   '$B'" "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 does not pad and single-quote its head"
+land good-padded
+ready_is 'a head padded and in single quotes' 0 "ready $HEADNOW" good-padded
+ready_reset
+if [ -z "$got" ]; then
+  pass 'pr-ready: a reviewed head in quotes or padded reads as the runner reads it'
+else
+  fail 'pr-ready: a reviewed head in quotes or padded reads as the runner reads it' 'ready <head>, rc 0, for each spelling' "$got"
+fi
+
 # --- R24: the review item -----------------------------------------------------------------------
 # Each world breaks the newest round (r2) and leaves r1 — graded A, naming A — as it is, so a reader
 # of any round but the newest answers ready. Every other item is true in the good world.
