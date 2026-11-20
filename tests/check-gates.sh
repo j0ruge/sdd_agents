@@ -2827,6 +2827,32 @@ if [[ "$rb_out" == full* ]] && grep -qF 'not an ancestor of HEAD' <<< "$rb_out";
   pass "review-base: a reviewed_head: the HEAD does not carry answers full"
 else fail "review-base: a reviewed_head: the HEAD does not carry answers full" "full — … not an ancestor of HEAD" "$rb_out"; fi
 
+# A round git does not carry is no base (CodeRabbit on PR #452): a session that wrote it and died
+# leaves it on disk, the gate refuses the tree, and the retry would review only the delta from a
+# head no finished round read. Three worlds — the round modified after its commit, untracked, and
+# untracked under an ignore rule —, and the same round committed is the witness that answers base=.
+# Each world proves first that git sees the round as it says (a probe of the wrong state is mute).
+rb_rel="docs/handoffs/$MISSION/40-review-r12.md"
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+rb_cm="$(review_base_of)"
+printf '\nnota\n' >> "$MDIR/40-review-r12.md"
+rb_st="$(git status --porcelain -- "$MDIR/40-review-r12.md")"; rb_mod="$(review_base_of)"
+git checkout -q -- "$MDIR/40-review-r12.md"
+git rm -q --cached "$MDIR/40-review-r12.md" && git commit -qm "chore: untrack review r12" >/dev/null
+rb_st="$rb_st|$(git status --porcelain -- "$MDIR/40-review-r12.md")"; rb_unt="$(review_base_of)"
+printf '%s\n' "$rb_rel" >> .git/info/exclude
+rb_st="$rb_st|$(git status --porcelain --untracked-files=all --ignored -- "$MDIR/40-review-r12.md")"
+rb_ign="$(review_base_of)"
+sed -i '$d' .git/info/exclude; rm -f "$MDIR/40-review-r12.md"
+rb_want='full — 40-review-r12.md is not committed'
+if [ "$rb_st" = " M $rb_rel|?? $rb_rel|!! $rb_rel" ] \
+   && [[ "$rb_cm" == "base=$rb_head "* ]] && [ "$rb_mod" = "$rb_want" ] && [ "$rb_unt" = "$rb_want" ] \
+   && [ "$rb_ign" = "$rb_want" ]; then
+  pass "delta base: a round git does not carry — modified, untracked or ignored — answers full and names it"
+else fail "delta base: a round git does not carry — modified, untracked or ignored — answers full and names it" \
+  "status ' M …|?? …|!! …', committed base=$rb_head …, then '$rb_want' three times" \
+  "status '$rb_st'; committed '$rb_cm'; modified '$rb_mod'; untracked '$rb_unt'; ignored '$rb_ign'"; fi
+
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 git checkout -q -b l1b-side
 echo side > l1b-side.txt; git add -A && git commit -qm "chore: side" >/dev/null

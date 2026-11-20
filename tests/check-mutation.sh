@@ -7473,7 +7473,7 @@ mut_WORKER_handoff_dir_unnormalized() {
 
 # The delta round (ADR 0023): review_base_line is the one judgement `sdd review-base` and the REVIEW
 # boot prompt read. Each mutant drops one of its rules; caught by the "review-base: …" assertions
-# of check-gates.sh (rules 2–5) and by the query probe of check-coordination.sh (the lock).
+# of check-gates.sh (rules 3–6) and by the query probe of check-coordination.sh (the lock).
 mut_RUN_review_base_absent_as_base() {
   sed -i '/^review_base_line()/,/^}/ s|if ! frontmatter_has "$last" reviewed_head; then|if false; then|' "$1"
 }
@@ -7485,6 +7485,17 @@ mut_RUN_review_base_ancestry_unchecked() {
 }
 mut_RUN_review_base_merge_ignored() {
   sed -i '/^review_base_line()/,/^}/ s|if \[ -n "$merge" \]; then|if false; then|' "$1"
+}
+# A round git does not carry is a base again: the retry of a session that wrote its round and died
+# reviews only the delta from a head no finished round read (CodeRabbit on PR #452). Caught by
+# "delta base: a round git does not carry …" (check-gates.sh), which reads all three worlds.
+mut_RUN_review_base_uncommitted_round() {
+  sed -i '/^review_base_line()/,/^}/ s|^  if \[ -n "$st" \]; then$|  if false; then|' "$1"
+}
+# The ignore rules hide the round again: an ignored round on disk reads as committed. Caught by the
+# ignored world of the same assertion.
+mut_RUN_review_base_ignored_round_unseen() {
+  sed -i '/^review_base_line()/,/^}/ s| status --porcelain --untracked-files=all --ignored -- "$last" | status --porcelain --untracked-files=all -- "$last" |' "$1"
 }
 mut_RUN_review_prompt_delta_dropped() {
   sed -i '/^phase_extra()/,/^}/ s|^    review_delta_prompt ;;$|    ;;|' "$1"
@@ -7520,6 +7531,8 @@ CATALOG=(
   RUN_review_base_commit_unchecked
   RUN_review_base_ancestry_unchecked
   RUN_review_base_merge_ignored
+  RUN_review_base_uncommitted_round
+  RUN_review_base_ignored_round_unseen
   RUN_review_prompt_delta_dropped
   COORD_adr_external_spec
   COORD_adr_spec_logical_path

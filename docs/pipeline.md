@@ -403,8 +403,8 @@ without the key passes, as the older ones did. One function, `review_base_line`,
 round and answers `base=<sha> — <round> …` or `full — <reason>`. The REVIEW boot prompt carries
 that line, so the session invokes `/codereview:codereview base=<sha>`, because the argument limits
 the skill and a sentence does not. `sdd review-base <mission>` prints the same line without running a
-gate or the suite. No earlier round, no key, a wrong key or a merge after it makes the round full,
-and the prompt says why. In a delta round, a finding in code the delta did not touch goes to the
+gate or the suite. No earlier round, a round git does not carry, no key, a wrong key or a merge
+after it makes the round full, and the prompt says why. In a delta round, a finding in code the delta did not touch goes to the
 `TODO_FILE`, never to an `R<n>`.
 
 Nothing in the runner had to learn about the prefix. `current_phase()` walks

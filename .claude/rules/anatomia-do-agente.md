@@ -147,8 +147,9 @@ Desde `20261119-l1b-a-rodada-delta` ([ADR 0023](../../docs/adr/0023-the-next-rou
 o orçamento vale também para o diff da REVIEW: da segunda rodada em diante o `phase_extra REVIEW`
 (`review_delta_prompt`) escreve a linha do `review_base_line`, e a sessão invoca
 `/codereview:codereview base=<sha>` sobre o `reviewed_head:` da rodada anterior, com essa rodada nomeada
-como a lista dos achados abertos; sem rodada anterior, sem a chave, chave errada ou um merge depois
-dela, a rodada é inteira e o prompt diz por quê. O delta se impõe pelo argumento da skill, nunca por
+como a lista dos achados abertos; sem rodada anterior, rodada que o git não carrega (a sessão que a
+escreveu morreu), sem a chave, chave errada ou um merge depois dela, a rodada é inteira e o prompt
+diz por quê. O delta se impõe pelo argumento da skill, nunca por
 frase (r7 do #414). O mesmo juízo responde por `sdd review-base <missão>`, que o ato `review` do worker
 passa ao subagente. A medida em dinheiro (r≥2/r1, antes 1,0 a 1,5) é do L2.
 Desde `20260922-o-motivo-da-fase` o boot também diz **por que** a fase

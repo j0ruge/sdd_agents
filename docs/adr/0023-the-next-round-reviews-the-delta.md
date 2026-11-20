@@ -41,6 +41,8 @@ What that costs, measured:
    newest `40-review-r<N>.md` and prints one line. The first field is the contract:
    `base=<40 hex>` or `full`. The rest names the round or the reason, for the human. In order:
    - no round: `full`;
+   - the round is not committed (modified, staged, untracked or ignored): `full`. A session that
+     wrote its round and died would otherwise hand the retry a base no finished round read;
    - no key: `full`;
    - the value is not a commit: `full`;
    - the commit is not an ancestor of `HEAD`: `full`;
