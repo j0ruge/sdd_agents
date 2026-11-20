@@ -700,7 +700,10 @@ reviewer_agent_probes() {
   local agent="$ROOT/agents/sdd-reviewer.md" sdie s3
   sdie="$(awk '/^### Two ways this session dies/{s=1; next} s && /^##/{s=0} s' "$agent")"
   s3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
-  if grep -qF "timeout 590 bash -c 'until grep -q \"^rc=\" <output>; do sleep 5; done'" <<< "$sdie" \
+  # The status has a file of its own (CodeRabbit on PR 446, at 4fc4ddd): a `rc=` line in the
+  # command's output, or a last line with no newline, ended the wait early or never.
+  if grep -qF "timeout 590 bash -c 'until [ -s <rcfile> ]; do sleep 5; done'" <<< "$sdie" \
+     && grep -qF 'echo "$?" > <rcfile>' <<< "$sdie" && ! grep -qF 'until grep -q "^rc="' <<< "$sdie" \
      && grep -qF 'Monitor' <<< "$sdie"; then
     pass "hat: the reviewer waits for a slow command in the foreground, under a ceiling below the Bash limit"
   else
@@ -955,6 +958,14 @@ doc_operator_probes() {
     pass "doc: failure-modes.md finds a detached sdd run with options before the mission, and warns the log's last line may be an older run's"
   else
     fail "doc: failure-modes.md misses a detached sdd run started with options before the mission, or reads the log's last line as this run's stop"
+  fi
+  # r3 of PR 446 and CodeRabbit at 4fc4ddd: a run forced with --phase writes no PHASE line, and a
+  # run that lost the journal carries on with a one-shot warning, so its last line is not the stop.
+  if [ -n "$sec" ] && grep -qF 'forced with `--phase`' <<< "$sec" \
+     && grep -qF 'cannot be written' <<< "$sec"; then
+    pass "doc: failure-modes.md says a run forced with --phase, or one that lost its journal, leaves a last line that is not its stop"
+  else
+    fail "doc: failure-modes.md reads the journal's last line as the stop of a run forced with --phase, or of one that lost its journal"
   fi
   if grep -qF 'reviewThreads' "$fp" && grep -qF 'isResolved' "$fp" && grep -qF 'unresolved: 0' "$fp"; then
     pass "doc: the finding-PR recipe merges only with zero unresolved review threads on the head, with the command beside it"

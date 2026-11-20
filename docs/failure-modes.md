@@ -811,10 +811,14 @@ A detached run tells you nothing when it ends, so find it and wait for its PID.
 (`sdd run --phase EXEC <mission>`), and a wrapper on the PATH shows as a second line;
 `tail --pid=<pid> -f /dev/null` returns when that process is gone. Then read the end in the run's
 redirected output: the line `✓ pipeline complete` is the good end; without it, the last line of
-`.sdd/logs/<mission>/pipeline.log` says where it stopped, if that line is this run's. A run killed
-before it derived its first phase (deriving can run the whole `TEST_CMD`) writes no line of its own,
-unless it had to switch branch, and the file is then absent or ends on an older run's line: compare
-the line's time with the launch. Never wait with
+`.sdd/logs/<mission>/pipeline.log` says where it stopped, if that line is this run's and the run
+could write it. A run killed before it derived its first phase (deriving can run the whole
+`TEST_CMD`) writes no line of its own, unless it had to switch branch, and neither does a run
+forced with `--phase` killed before its first session ends, since it derives nothing and writes no
+`PHASE` line: the file is then absent or ends on an older run's line, so compare the line's time
+with the launch. A run that lost the journal mid-way carries on without it, and its redirected
+output says `the pipeline journal at … cannot be written`: the journal's last line is then where
+the writing stopped, not where the run did. Never wait with
 `pgrep -f 'sdd run <mission>'` in a loop: that pattern is in the argv of the very shell that
 waits, so it matches itself and the loop never ends.
 

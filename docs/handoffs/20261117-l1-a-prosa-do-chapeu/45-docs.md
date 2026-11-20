@@ -69,6 +69,12 @@ Nenhum item novo no `TODO.md`.
 | nenhum termo de domínio novo | `CONTEXT.md` | n/a | as frases novas usam termos que o glossário já tem (`RECURRED`, `DEFAULT_BRANCH`, `qa: skipped`) |
 | `docs/handoffs/20261117-l1-a-prosa-do-chapeu/*` | — | n/a | artefatos da própria missão |
 
+> **Depois desta fase** (nota do chore de pós-merge, 2026-11-20): o ato `review` do worker mudou
+> `agents/sdd-docs.md`, `agents/sdd-reviewer.md` e `docs/failure-modes.md` em `729fbf6` (os seis achados do
+> CodeRabbit no PR #446) e somou 3 asserções ao `tests/check-hat.sh`, 19 no total. O chore refez a receita de
+> espera do revisor e o texto `⛔` abaixo com um arquivo de status próprio (três Minor do CodeRabbit no `4fc4ddd`)
+> e somou mais 1, 20 no total.
+
 ## Texto proposto
 <!-- sdd:proposed -->
 
@@ -80,11 +86,11 @@ for your own check, stop before you end the turn."), acrescente:
 > A Bash call stops waiting at its own `timeout`: 120 000 ms by default, 600 000 ms at most, and past it the
 > command moves to the background. A command that may pass 2 min goes in a call whose `timeout` parameter
 > is raised to 600000; one that may pass 10 min (the whole `TEST_CMD`, a `sdd why` of EXEC, QA or REVIEW)
-> runs detached as `( <command>; echo "rc=$?" ) > <file> 2>&1 &`, keeping its `$!` as `<pid>`, and the
-> session waits on that file in the foreground with
-> `timeout 590 bash -c 'until grep -q "^rc=" <file>; do sleep 5; done'` in a call with `timeout: 600000`.
+> runs detached as `rm -f <rcfile>; ( <command> > <output> 2>&1; echo "$?" > <rcfile> ) &`, keeping its `$!`
+> as `<pid>`, and the session waits for the status file in the foreground with
+> `timeout 590 bash -c 'until [ -s <rcfile> ]; do sleep 5; done'` in a call with `timeout: 600000`.
 > When that wait times out and `kill -0 <pid>` says the command is still alive, the session runs the same
-> wait again, in this same turn; when it is gone and the file has no `rc=` line, the command died, and the
+> wait again, in this same turn; when it is gone and `<rcfile>` is still empty, the command died, and the
 > session reports it as failed instead of waiting again.
 
 Porquê: nesta missão o teto voltou três vezes (o item N, a suíte do executor no I6 e no I9, e o R1 da r1), e a

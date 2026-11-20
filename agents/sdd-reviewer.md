@@ -149,13 +149,16 @@ mission died with the words *"waiting for the suite"* after doing the entire ana
 spent, no review delivered, because a slow `TEST_CMD` outlasted the patience of a single call.
 
 How to wait, since this hat has neither `Monitor` nor `ScheduleWakeup` and the harness blocks a
-long foreground `sleep`: send the slow command's output to a file that ends in a line `rc=<n>`, and
-wait for that line in the foreground, under a ceiling below the 10 min of a Bash call:
+long foreground `sleep`: send the slow command's output to one file and its exit status to another,
+and wait for the status file in the foreground, under a ceiling below the 10 min of a Bash call:
 
 ```bash
-( <command>; echo "rc=$?" ) > <output> 2>&1 & echo "pid=$!"
-timeout 590 bash -c 'until grep -q "^rc=" <output>; do sleep 5; done'
+rm -f <rcfile>; ( <command> > <output> 2>&1; echo "$?" > <rcfile> ) & echo "pid=$!"
+timeout 590 bash -c 'until [ -s <rcfile> ]; do sleep 5; done'
 ```
+
+The status has a file of its own because the output belongs to the command: a line of it that
+starts with `rc=`, or a last line with no newline, would end a wait on the output early, or never.
 
 Run the wait in a foreground call whose own time limit is at least 10 min. In Claude Code that is a
 Bash call whose `timeout` parameter is raised to its ceiling, `timeout: 600000`: the 10 min are the
@@ -163,8 +166,8 @@ ceiling of a Bash call, not its default, and left at the default of 120 000 ms t
 the background at 120 s, which is the "running in background" answer above (reproduced in the r1
 of `20261117-l1-a-prosa-do-chapeu`). If the `timeout` fires and `kill -0 <pid>` says the command is
 still alive, run the same wait again, in a call with the same limit, in this same turn. If it is
-gone and the file has no `rc=` line, it died before writing one: stop waiting, and report the run
-as failed in the round's `gate:`, with the file's last lines.
+gone and `<rcfile>` is still empty, it died before writing one: stop waiting, and report the run
+as failed in the round's `gate:`, with the last lines of `<output>`.
 
 If `TEST_CMD` really is too slow to sit through, that is a **finding** — it goes to `TODO_FILE`
 with the measurement. It is never a reason to narrate that you are waiting and stop.
