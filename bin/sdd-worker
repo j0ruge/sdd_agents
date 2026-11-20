@@ -1259,7 +1259,11 @@ cmd_pr_ready() {
   if [ -z "$rh" ]; then
     printf 'not-ready review: the newest round names no head — %s has no reviewed_head:\n' "$round"; return 1
   fi
-  if ! [[ "$rh" =~ ^[0-9a-f]{7,40}$ ]] || ! git -C "$root" rev-parse -q --verify "$rh^{commit}" > /dev/null; then
+  # 7–64 hex, the shape review_head_ok of the runner reads (a SHA-256 repository writes 64), so one
+  # key has one grammar in both programs. Declared limit, no probe: the head pr-ready measures the
+  # round against is GitHub's headRefOid, 40 hex by the contract read above, so a 64-hex key can name
+  # no commit of a checkout this verb answers ready for, and the 64 here has no world of its own.
+  if ! [[ "$rh" =~ ^[0-9a-f]{7,64}$ ]] || ! git -C "$root" rev-parse -q --verify "$rh^{commit}" > /dev/null; then
     printf "not-ready review: the reviewed head '%s' of %s is no commit of this checkout\n" "$rh" "$round"; return 1
   fi
   mapfile -t grades < <(round_grades "$round")

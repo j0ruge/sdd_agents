@@ -6,7 +6,7 @@ status: <done | blocked>
 sessao: <uuid da sessão que produziu esta rodada — serve para --resume>
 data: <YYYY-MM-DD HH:MM>
 gate: <a evidência de que o gate desta rodada passou — TEST_CMD resumido e árvore limpa, não adjetivo>
-reviewed_head: <o `git rev-parse HEAD` que a rodada leu antes de revisar, 40 hex — a próxima rodada revisa só o delta a partir dele>
+reviewed_head: <o `git rev-parse HEAD` que a rodada leu antes de revisar, o sha inteiro (40 hex; 64 num repositório SHA-256) — a próxima rodada revisa só o delta a partir dele>
 ---
 
 # Review — rodada r<N> — <título da missão>

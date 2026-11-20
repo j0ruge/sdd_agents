@@ -246,10 +246,10 @@ it with the round's real evidence (summarised `TEST_CMD` output, tree state), ne
 template's `<…>`. Absent it is left alone — rounds older than the field exist — but PRESENT is
 judged whatever its value, so the key written and left blank fails just like `<…>` does.
 
-`reviewed_head:` is the `git rev-parse HEAD` you ran in section 1, all 40 hex (ADR 0023). The gate
-refuses a value that is no commit, one the HEAD does not carry, and a round committed after code
-outside this hat's `writes:` changed since that sha; an absent key passes, and the next round is a
-full one.
+`reviewed_head:` is the `git rev-parse HEAD` you ran in section 1, the full sha as it printed it (40
+hex; 64 in a SHA-256 repository; ADR 0023). The gate refuses a value that is no commit, one the
+HEAD does not carry, and a round committed after code outside this hat's `writes:` changed since
+that sha; an absent key passes, and the next round is a full one.
 
 Also include: the round's findings by severity, **which of them became which `R<n>`** (the section
 `## Incrementos de conserto (R<n>)` of the template), what was refuted (with evidence) and what went

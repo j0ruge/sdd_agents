@@ -30,7 +30,8 @@ fails=0
 SDD_STATE_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-state-XXXXXX")"
 export SDD_STATE_DIR="$SDD_STATE_FIX"
 CLOSE_REMOTE_DIR=""
-trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX" ${CLOSE_REMOTE_DIR:+"$CLOSE_REMOTE_DIR"}' EXIT
+SHA256_FIX=""
+trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX" ${CLOSE_REMOTE_DIR:+"$CLOSE_REMOTE_DIR"} ${SHA256_FIX:+"$SHA256_FIX"}' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -2906,6 +2907,37 @@ assert_phase "gate_REVIEW: reviewed_head reads the commit that added the round, 
 rm -f "$MDIR/40-review-r12.md" l1b-outside.txt l1b-doc.txt
 git add -A && git commit -qm "chore: drop the r12 fixture" >/dev/null
 assert_phase "with the r12 fixture gone the mission is back at DOCS" "DOCS"
+
+# SHA-256 (CodeRabbit on PR #452): a repository made with --object-format=sha256 writes 64-hex
+# commit ids, which rev-parse, merge-base and diff accept, and the shape guards of review_base_line
+# and review_head_ok read that real commit as "no commit". The world is real — git builds it since
+# 2.29, and preflight asks for 2.31+ —: a repository of its own with the fixture's config, a commit
+# (the head the round read), code after it, and the round naming that head. review-base answers
+# base=<the 64 hex>, and the gate reaches the range rule, which only a value the shape and the
+# existence checks let through can reach.
+SHA256_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-sha256-XXXXXX")"
+s256_head=""
+if ( cd "$SHA256_FIX" && git init -q --object-format=sha256 -b main \
+     && git config user.email fixture@example.com && git config user.name Fixture \
+     && mkdir -p .sdd "docs/handoffs/$MISSION" && cp "$FIX/.sdd/config.sh" .sdd/config.sh \
+     && echo one > code.txt && git add -A && git commit -qm init ) >/dev/null 2>&1; then
+  s256_head="$(git -C "$SHA256_FIX" rev-parse HEAD)"
+  echo two > "$SHA256_FIX/code.txt"; git -C "$SHA256_FIX" commit -qam "code after the reviewed head"
+  printf -- '---\nfase: REVIEW\nrodada: 1\nreviewed_head: %s\n---\n\n# Review r1\n\n### Overall Grade\n\n| Criterion | Grade | Rationale |\n|---|---|---|\n| Code Quality (Zen) | A | clean |\n' \
+    "$s256_head" > "$SHA256_FIX/docs/handoffs/$MISSION/40-review-r1.md"
+  git -C "$SHA256_FIX" add -A && git -C "$SHA256_FIX" commit -qm "review r1"
+fi
+s256_base="$( ( cd "$SHA256_FIX" && "$SDD" review-base "$MISSION" 2>&1 ) || true )"
+s256_why="$( ( cd "$SHA256_FIX" && "$SDD" why "$MISSION" REVIEW 2>&1 ) || true )"
+if [ "${#s256_head}" -eq 64 ] && [[ "$s256_base" == "base=$s256_head — 40-review-r1.md "* ]]; then
+  pass "delta base: the 64-hex reviewed_head of a SHA-256 repository is a base"
+else fail "delta base: the 64-hex reviewed_head of a SHA-256 repository is a base" \
+  "a 64-hex head (got ${#s256_head} digits) and base=$s256_head — 40-review-r1.md …" "$s256_base"; fi
+if [ "${#s256_head}" -eq 64 ] && grep -qF '40-review-r1.md: code.txt changed between reviewed_head' <<< "$s256_why" \
+   && ! grep -qF 'is no commit' <<< "$s256_why"; then
+  pass "gate_REVIEW: a 64-hex reviewed_head of a SHA-256 repository reaches the range rule"
+else fail "gate_REVIEW: a 64-hex reviewed_head of a SHA-256 repository reaches the range rule" \
+  "a 64-hex head and '40-review-r1.md: code.txt changed between reviewed_head …', never 'is no commit'" "$s256_why"; fi
 
 # --- DOCS ------------------------------------------------------------------
 echo "== DOCS phase =="

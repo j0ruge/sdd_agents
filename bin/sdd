@@ -12990,14 +12990,14 @@ blocks the transition, say what it is and stop — but do not stop to request pe
 }
 
 # review_base_line — the ONE judgement of the delta round (ADR 0023): prints one line, by the first
-# rule that matches. The first word is the contract (`base=<40 hex>` or `full`); the rest is for the
-# human. Readers: `sdd review-base` (the worker's review act) and review_delta_prompt (phase_extra).
+# rule that matches. The first word is the contract (`base=<full sha>` or `full`); the rest is for
+# the human. Readers: `sdd review-base` (the worker's review act) and review_delta_prompt (phase_extra).
 # Pure: it only prints, publishes no global, and is safe to read through `$( )`. Every git capture
 # is guarded, because under `set -euo pipefail` a non-zero rc kills the process at the assignment.
 #   1. no 40-review-r*.md                      → full — no earlier round
 #   2. the latest is not committed             → full — it is not committed
 #   3. the latest has no reviewed_head:        → full — it has no reviewed_head:
-#   4. not 7–40 hex, or not a commit           → full — it is no commit
+#   4. not 7–64 hex, or not a commit           → full — it is no commit
 #   5. not an ancestor of HEAD                 → full — not an ancestor
 #   6. a merge in <reviewed_head>..HEAD        → full — the merge would pour the base into the delta
 #   7. otherwise                               → base=<sha>
@@ -13020,7 +13020,9 @@ review_base_line() {
     printf 'full — %s has no reviewed_head:\n' "$name"; return 0
   fi
   v="$(frontmatter "$last" reviewed_head)"
-  if [[ "$v" =~ ^[0-9a-f]{7,40}$ ]]; then
+  # 64, not 40: a repository made with --object-format=sha256 writes 64-hex commit ids (the shape
+  # gate_EXEC already reads for the Commit cell). One shape for both readers, review_head_ok below.
+  if [[ "$v" =~ ^[0-9a-f]{7,64}$ ]]; then
     sha="$(git -C "$REPO_ROOT" rev-parse -q --verify "$v^{commit}" 2>/dev/null || true)"
   fi
   [ -n "$sha" ] || { printf "full — the reviewed_head: of %s is no commit ('%s')\n" "$name" "$v"; return 0; }
@@ -13071,7 +13073,7 @@ review_delta_prompt() {
 # round wrote is the head it read, or the next round would review a delta that skips code. rc 0 when
 # the key is ABSENT (the rounds written before the key, decision 4); otherwise each refusal publishes
 # GATE_WHY, starting with the round's basename (historic_rounds reads that prefix), and returns 1:
-#   1. not 7–40 hex, or not a commit
+#   1. not 7–64 hex, or not a commit
 #   2. not an ancestor of HEAD
 #   3. a path outside `hat_writes REVIEW` changed between the key and the commit of the round
 # The commit of the round is the one that ADDED it (--diff-filter=A, r1 of l1b): sdd-docs writes the
@@ -13083,7 +13085,7 @@ review_head_ok() {
   frontmatter_has "$round" reviewed_head || return 0
   name="$(basename "$round")"
   v="$(frontmatter "$round" reviewed_head)"
-  if [[ "$v" =~ ^[0-9a-f]{7,40}$ ]]; then
+  if [[ "$v" =~ ^[0-9a-f]{7,64}$ ]]; then
     sha="$(git -C "$REPO_ROOT" rev-parse -q --verify "$v^{commit}" 2>/dev/null || true)"
   fi
   if [ -z "$sha" ]; then

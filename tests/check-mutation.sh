@@ -7497,6 +7497,12 @@ mut_RUN_review_base_uncommitted_round() {
 mut_RUN_review_base_ignored_round_unseen() {
   sed -i '/^review_base_line()/,/^}/ s| status --porcelain --untracked-files=all --ignored -- "$last" | status --porcelain --untracked-files=all -- "$last" |' "$1"
 }
+# The shape is capped at 40 hex again: the 64-hex head of a SHA-256 repository reads as no commit,
+# and every round there is full (CodeRabbit on PR #452). Caught by "delta base: the 64-hex
+# reviewed_head of a SHA-256 repository is a base" (check-gates.sh).
+mut_RUN_review_base_sha256_refused() {
+  sed -i '/^review_base_line()/,/^}/ s|\^\[0-9a-f\]{7,64}\$|^[0-9a-f]{7,40}$|' "$1"
+}
 mut_RUN_review_prompt_delta_dropped() {
   sed -i '/^phase_extra()/,/^}/ s|^    review_delta_prompt ;;$|    ;;|' "$1"
 }
@@ -7519,6 +7525,11 @@ mut_REVIEW_head_reads_last_touch() {
 mut_REVIEW_head_absent_refused() {
   sed -i '/^review_head_ok()/,/^}/ s|frontmatter_has "$round" reviewed_head \|\| return 0|frontmatter_has "$round" reviewed_head \|\| return 1|' "$1"
 }
+# The gate's shape is capped at 40 hex again: a SHA-256 repository's round is refused as no commit.
+# Caught by "gate_REVIEW: a 64-hex reviewed_head of a SHA-256 repository reaches the range rule".
+mut_REVIEW_head_sha256_refused() {
+  sed -i '/^review_head_ok()/,/^}/ s|\^\[0-9a-f\]{7,64}\$|^[0-9a-f]{7,40}$|' "$1"
+}
 
 CATALOG=(
   REVIEW_head_sha_unchecked
@@ -7526,6 +7537,7 @@ CATALOG=(
   REVIEW_head_range_unchecked
   REVIEW_head_reads_last_touch
   REVIEW_head_absent_refused
+  REVIEW_head_sha256_refused
   COORD_review_base_locked
   RUN_review_base_absent_as_base
   RUN_review_base_commit_unchecked
@@ -7533,6 +7545,7 @@ CATALOG=(
   RUN_review_base_merge_ignored
   RUN_review_base_uncommitted_round
   RUN_review_base_ignored_round_unseen
+  RUN_review_base_sha256_refused
   RUN_review_prompt_delta_dropped
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
