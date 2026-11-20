@@ -777,10 +777,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-19)
 
 - [ ] **A regra do teto da chamada `Bash` mora no revisor, e não no `turn_rule` de toda fase** —
-  `bin/sdd:3375` (`turn_rule`) — a chamada `Bash` do harness para de esperar aos 120 s por padrão (600 s
-  no máximo), e no L1 isso voltou três vezes: o `sdd why … EXEC` cortado aos 2 min, a suíte do executor no
-  I6 e no I9, e o R1 da r1. Só o `sdd-reviewer` e a ajuda do `sdd why` dizem a regra. Direção: aplicar ao
-  `turn_rule` o texto `⛔` da seção `bin/sdd` do `45-docs.md` do L1, com asserção no `tests/check-dry-run.sh`.
+  `bin/sdd:3375` (`turn_rule`) — a chamada `Bash` do harness para de esperar aos 120 s (600 s no máximo),
+  e no L1 isso voltou três vezes: o item N (o `sdd why … EXEC` cortado aos 2 min no `magic_tutor`), a
+  suíte do executor no I6 e no I9, e o R1 da r1. Só o revisor e a ajuda do `sdd why` dizem a regra.
+  Direção: aplicar ao `turn_rule` o texto `⛔` do `45-docs.md` do L1, com asserção no `tests/check-dry-run.sh`.
   Fonte: `docs/handoffs/20261117-l1-a-prosa-do-chapeu/45-docs.md`
   — descoberto por `sdd-docs` na missão `20261117-l1-a-prosa-do-chapeu` (2026-11-19)
 

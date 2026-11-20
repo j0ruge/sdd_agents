@@ -25,7 +25,8 @@ sim do dono (a delegação na `main` ainda era `pr`).
 O chore `chore/l1-pos-merge` cobre:
 - três Minor do CodeRabbit no `4fc4ddd`, que levaram a espera do revisor e o texto `⛔` a um arquivo
   de status próprio, e à ressalva do journal no `failure-modes.md`;
-- os LOW da r3;
+- 4 dos 5 LOW da r3. O quinto, opcional, ficou de fora, porque a frase do `agents/sdd-docs.md` é
+  condicional e vale para o `CLAUDE.md` do alvo;
 - o fecho no `KAIZEN_LOG.md` e no roteiro;
 - os 14 itens apagados e a catraca de 104 para 91;
 - o item novo do `turn_rule`, que dá rota à linha `⛔` do `45-docs.md`, com o sim do dono;

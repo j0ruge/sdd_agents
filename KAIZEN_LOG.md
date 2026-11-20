@@ -44,7 +44,7 @@ reincidente: vira linha `⛔` no `45-docs.md` desta missão, com texto proposto 
 carimbo, que missão do kit dispensa. O ato `review` do worker consertou os 6 achados do CodeRabbit em
 `729fbf6`, com 3 asserções novas. A rodada delta r3 deu A em todo critério, o recibo do Codex veio
 limpo no `4fc4ddd`, e o PR #446 entrou por merge commit em `91a7524`, com o sim do dono, porque a
-delegação na `main` era `pr`. Três Minor do CodeRabbit sobre o `4fc4ddd` e os 5 LOW da r3 foram para o
+delegação na `main` era `pr`. Três Minor do CodeRabbit sobre o `4fc4ddd` e 4 dos 5 LOW da r3 foram para o
 chore de pós-merge, junto com os 14 itens e a catraca. Fica para medir o lote seguinte, que a campanha
 compara com este.
 

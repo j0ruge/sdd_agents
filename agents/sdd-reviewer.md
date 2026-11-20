@@ -159,6 +159,8 @@ timeout 590 bash -c 'until [ -s <rcfile> ]; do sleep 5; done'
 
 The status has a file of its own because the output belongs to the command: a line of it that
 starts with `rc=`, or a last line with no newline, would end a wait on the output early, or never.
+Both files live outside the repository, in a directory from `mktemp -d`: inside it, a path your
+`writes:` does not cover and git does not ignore stops the line as `hat-crossed`.
 
 Run the wait in a foreground call whose own time limit is at least 10 min. In Claude Code that is a
 Bash call whose `timeout` parameter is raised to its ceiling, `timeout: 600000`: the 10 min are the

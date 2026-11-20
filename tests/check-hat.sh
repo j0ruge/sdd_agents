@@ -701,9 +701,11 @@ reviewer_agent_probes() {
   sdie="$(awk '/^### Two ways this session dies/{s=1; next} s && /^##/{s=0} s' "$agent")"
   s3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
   # The status has a file of its own (CodeRabbit on PR 446, at 4fc4ddd): a `rc=` line in the
-  # command's output, or a last line with no newline, ended the wait early or never.
+  # command's output, or a last line with no newline, ended the wait early or never. Both files live
+  # in a `mktemp -d` (r4 of the L1 post-merge): inside the repo they are paths outside `writes:`.
   if grep -qF "timeout 590 bash -c 'until [ -s <rcfile> ]; do sleep 5; done'" <<< "$sdie" \
      && grep -qF 'echo "$?" > <rcfile>' <<< "$sdie" && ! grep -qF 'until grep -q "^rc="' <<< "$sdie" \
+     && grep -qF 'mktemp -d' <<< "$sdie" \
      && grep -qF 'Monitor' <<< "$sdie"; then
     pass "hat: the reviewer waits for a slow command in the foreground, under a ceiling below the Bash limit"
   else

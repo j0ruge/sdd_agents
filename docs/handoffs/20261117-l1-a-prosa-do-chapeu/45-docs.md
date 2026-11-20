@@ -91,7 +91,8 @@ for your own check, stop before you end the turn."), acrescente:
 > `timeout 590 bash -c 'until [ -s <rcfile> ]; do sleep 5; done'` in a call with `timeout: 600000`.
 > When that wait times out and `kill -0 <pid>` says the command is still alive, the session runs the same
 > wait again, in this same turn; when it is gone and `<rcfile>` is still empty, the command died, and the
-> session reports it as failed instead of waiting again.
+> session reports it as failed instead of waiting again. Both files live in a directory from `mktemp -d`,
+> outside the repository, where no hat's `writes:` is asked.
 
 Porquê: nesta missão o teto voltou três vezes (o item N, a suíte do executor no I6 e no I9, e o R1 da r1), e a
 regra só existe hoje no chapéu do revisor (R1) e na ajuda do `sdd why` (item N). O `turn_rule` fala a toda
