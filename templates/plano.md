@@ -12,9 +12,11 @@ data: <YYYY-MM-DD>
 ## Contexto verificado (não re-descobrir)
 
 <Fatos do repo confirmados durante o planejamento: caminhos, comandos que funcionam, versões,
-pitfalls conhecidos. Cada linha economiza uma exploração cara em sessão headless.>
+pitfalls conhecidos. Cada linha economiza uma exploração cara em sessão headless. Ao lado de toda
+contagem e de toda âncora vai o comando que a mediu: o aceite do `/sdd-plan` roda de novo uma
+amostra deles, e fato sem comando não se reconfere.>
 
-- <fato> — `arquivo:linha` / saída do comando
+- <fato> — `arquivo:linha`, ou `<comando que mediu>` → `<o que ele imprimiu>` ao lado de toda contagem
 
 ## Arquitetura da mudança
 

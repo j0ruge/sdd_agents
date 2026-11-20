@@ -245,7 +245,8 @@ and it never paraphrases either side.
 
 1. Run `sdd why <mission> PLAN` and show its line. It validates the gate without spending a session.
 2. If it says `plan approved (auto)` or `plan approved (humano-…)`, say so: there is nothing to
-   approve. Go to step 4.
+   approve, though under `auto` step 4 still has the branch to cut and the mission to commit. Go
+   to step 4.
 3. If `aprovacao:` is empty, first show the human what they are approving, in this order:
    1. **Measure again.** From the repository root, run
       `tests/check-checkpoint.sh --check <checkpoint>` and `--red <checkpoint>` by the kit's path
@@ -257,6 +258,13 @@ and it never paraphrases either side.
       tool cuts at two minutes by default and ten at most: run it **in the background** and wait
       for its last line, `<n> pending Check(s), every one red at HEAD`. A run without that line
       (cut, killed, silent) counts as **not measured** and goes back to the planner, like a `FAIL`.
+      Re-run a sample of the commands the verified context records — the section
+      `## Contexto verificado` of `01-plano.md`, where the planner writes the command beside every
+      count and anchor —, at least three, or all of them when there are fewer, and show each line
+      beside the output the plan records. An output that differs goes back to the planner before
+      the question, like a `FAIL`; a count or an anchor with no command beside it goes back too.
+      Measured in `dotp-remake` 3.3a: "22 `MutableEvents.Add` in 12 files" were 10 files, and only
+      the relay's own `grep -rc` caught it, because `--check` and `--red` never read a fact.
    2. **Render the plan** on the screen, shaped like a `superpowers:writing-plans` plan — they read
       the plan, not your summary of it: a header with **Goal**, **Architecture** and
       **Tech Stack**; the global constraints (scope, out of scope, the grill decisions); each increment
@@ -308,7 +316,19 @@ and it never paraphrases either side.
    planner included, may also write `TODO_FILE` and `tests/health-baseline.txt` (`HAT_WRITES_BASE`
    in `bin/sdd` — principle 5 sends a finding there), and no command commits those. Run
    `git status --porcelain -- <HANDOFF_DIR>/<mission> <TODO_FILE> tests/health-baseline.txt` and
-   show its lines.
+   show its lines. Then run `git status --porcelain` with no path, and show what it lists outside
+   those three: a file the plan depends on (the plan cites it as existing, and the session that
+   executes will look for it) is committed on the mission branch with the rest, by the bullet that
+   applies below; anything else is named to the human, never committed and never deleted. Measured
+   in `dotp-remake` 3.5e: the planner wrote a survey under `docs/knowledge/` that the plan cites,
+   `sdd approve` did not commit it, and only the whole `git status` showed it.
+   - **Under `auto`** (`sdd why` said `plan approved (auto)`) → nobody cut the branch or committed
+     the mission: `sdd approve` was never run. Move to the `branch:` of `00-missao.md` with
+     `git switch -c <branch>`, or `git switch <branch>` when it already exists, commit there the
+     mission directory and the file `adr:` names, then follow **On the mission branch** for the
+     rest, and tell the human that the next step is `sdd run <mission>`. Measured in `magic_tutor`:
+     `plan approved (auto)` with the mission directory untracked on `main`, and the relay cut the
+     branch and committed by hand, with no rule for it.
    - **On the mission branch** (`git branch --show-current` is the `branch:` of `00-missao.md`,
      where `sdd approve` leaves you) → commit what it lists with `git add -- <paths>` and
      `git commit -- <paths>`, never `-a`. Findings in `TODO_FILE` go in their own commit, which

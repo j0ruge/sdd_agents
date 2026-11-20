@@ -486,6 +486,7 @@ check missao.md '^\| d \|.*tests/check-checkpoint\.sh --red' "PLAN-AUTO criterio
 
 echo "== templates/plano.md =="
 check plano.md '^## Contexto verificado'      "section 'Contexto verificado'"
+check plano.md 'comando que mediu'            "the verified context records the command beside each measured fact"
 check plano.md '^## Arquitetura da mudança'   "section 'Arquitetura da mudança'"
 check plano.md '^## Incrementos'              "section 'Incrementos'"
 check plano.md '\*\*Check:\*\*'               "per-increment 'Check' field"

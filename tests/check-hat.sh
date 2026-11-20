@@ -969,6 +969,41 @@ command_grill_probes() {
   fi
 }
 
+# --- /sdd-plan and the planner: the acceptance (lot L2, items 4, 5, 10) -------------------------
+# Three gaps of the acceptance. In dotp-remake 3.3a the plan counted "22 MutableEvents.Add in 12
+# files" and they were 10 files, caught only because the relay sampled it with grep -rc: the
+# acceptance measured --check and --red again, never a fact of the verified context. A fact with no
+# command beside it cannot be re-checked, and a recorded command nobody runs is still a label (item
+# 4, both halves). In magic_tutor `sdd why` said `plan approved (auto)` with the mission folder
+# untracked on main: `sdd approve` commits nothing under auto, and step 4 had no branch for it (item
+# 5). In dotp-remake 3.5e step 4 read only three paths of git status, and a file the plan cites as
+# existing was left uncommitted (item 10). Read by section: the relay's in "When the artifacts
+# exist", the planner's half of item 4 in § 2, where the verified context is written.
+command_acceptance_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" agent="$ROOT/agents/sdd-planner.md" art s2
+  art="$(awk '/^## When the artifacts exist/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  s2="$(awk '/^## 2\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'Re-run a sample of the commands the verified context records' <<< "$art" \
+     && grep -qF 'at least three, or all of them when there are fewer' <<< "$art" \
+     && grep -qF 'beside every count and every anchor, the command that measured it' <<< "$s2"; then
+    pass "command: /sdd-plan re-runs a sample of the commands the verified context records, and the planner writes the command beside every count and anchor"
+  else
+    fail "command: /sdd-plan no longer re-runs a sample of the commands the verified context records, or the planner no longer writes the command beside every count and anchor"
+  fi
+  if grep -qF 'git switch -c <branch>' <<< "$art" \
+     && grep -qF 'the next step is `sdd run <mission>`' <<< "$art"; then
+    pass "command: /sdd-plan cuts the mission branch and commits the mission under auto, and names sdd run as the next step"
+  else
+    fail "command: /sdd-plan no longer cuts the mission branch and commits the mission under auto, or no longer names sdd run as the next step"
+  fi
+  if grep -qF 'Then run `git status --porcelain` with no path' <<< "$art" \
+     && grep -qF 'a file the plan depends on' <<< "$art"; then
+    pass "command: /sdd-plan reads the whole git status after the approval, and commits on the mission branch a file the plan depends on"
+  else
+    fail "command: /sdd-plan reads only three paths of git status after the approval, or no longer commits on the mission branch a file the plan depends on"
+  fi
+}
+
 # --- /sdd-plan and the planner: no question behind a live background task (item B, 3 returns) ---
 # The harness tells the relay that a subagent stopped only when it stops with no live child in the
 # background (probe of dotp-remake 3.5c). In magic_tutor Q3, Q4 and Q7 were the end of a planner
@@ -1437,6 +1472,7 @@ command_branch_cwd_probes
 command_planner_unregistered_probes
 command_before_probes
 command_grill_probes
+command_acceptance_probes
 background_question_probes
 doc_finding_prs_probes
 doc_operator_probes

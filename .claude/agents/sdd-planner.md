@@ -105,6 +105,11 @@ Everything you verify goes into the **"context already verified (do not re-disco
 exploration the headless session will **not** have to repeat. It is the highest-return item of the
 whole plan.
 
+Write, beside every count and every anchor, the command that measured it and what it printed
+(`` `<command>` → `<output>` ``): the acceptance of `/sdd-plan` re-runs a sample of those commands, and a fact
+with no command beside it cannot be re-checked by anyone. Measured in `dotp-remake` 3.3a: "22
+`MutableEvents.Add` in 12 files" were 10 files, and only the relay's own `grep -rc` caught it.
+
 An unverified fact does not go in. "It's probably like this" costs more later than the check costs
 now — and the repo's `TODO.md` may be stale: confirm before planning on top of it. A finding the
 grill or the gemba turns up that does not fit this mission goes to `TODO_FILE` (principle 5); one
