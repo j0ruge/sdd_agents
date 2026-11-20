@@ -1,6 +1,6 @@
 ---
 missao: 20261119-l1b-a-rodada-delta
-atualizado: 2026-11-20 09:01
+atualizado: 2026-11-20 09:52
 ---
 
 # Checkpoint — L1b: a rodada delta
@@ -49,7 +49,7 @@ atualizado: 2026-11-20 09:01
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | O juízo do delta e o verbo sdd review-base | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    review-base: ' <<< "$o"` → `5` | done | 1ffe344 |
-| I2 | O prompt da REVIEW diz qual rodada é, e o achado fora do delta | `o=$(bash tests/check-dry-run.sh 2>&1); g=$(bash tests/check-gates.sh 2>&1); h=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    the REVIEW boot prompt of a first round orders a full review and says why' <<< "$o") $(grep -c '^  ok    the REVIEW boot prompt of a delta round carries base= and names the round' <<< "$g") $(grep -c '^  ok    reviewer hat: a delta round sends a finding outside the delta to the TODO_FILE' <<< "$h")"` → `1 1 1` | pending | — |
+| I2 | O prompt da REVIEW diz qual rodada é, e o achado fora do delta | `o=$(bash tests/check-dry-run.sh 2>&1); g=$(bash tests/check-gates.sh 2>&1); h=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    the REVIEW boot prompt of a first round orders a full review and says why' <<< "$o") $(grep -c '^  ok    the REVIEW boot prompt of a delta round carries base= and names the round' <<< "$g") $(grep -c '^  ok    reviewer hat: a delta round sends a finding outside the delta to the TODO_FILE' <<< "$h")"` → `1 1 1` | done | 963e181 |
 | I3 | A rodada grava o head, e o gate confere | `o=$(bash tests/check-gates.sh 2>&1); echo "$(grep -c '^  ok    gate_REVIEW: reviewed_head' <<< "$o") $(grep -c '^reviewed_head: ' templates/review.md)"` → `5 1` | pending | — |
 | I4 | O ato review do worker usa o delta, e os docs param de dizer o contrário | `o=$(bash tests/check-worker.sh 2>&1); echo "$(grep -c '^  ok    command: the review act passes the line of sdd review-base to its subagent' <<< "$o") $(grep -q 'sdd review-base' docs/pipeline.md; echo $?)"` → `1 0` | pending | — |
 | I5 | Fecho: RESOLVED by no #436 e o 20-handoff-exec.md | `o=$(grep -A8 -F 'A rodada de revisão relê a missão inteira, porque o chapéu não passa' TODO.md); echo "$(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$o") $(test -f docs/handoffs/20261119-l1b-a-rodada-delta/20-handoff-exec.md; echo $?)"` → `1 0` | pending | — |
