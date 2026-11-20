@@ -90,7 +90,7 @@ O que segue abaixo é o boot escrito para a r1, ainda válido.
   o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    review-base: ' <<< "$o"          # 5
   grep -c '^  ok    gate_REVIEW: reviewed_head' <<< "$o"                                # 6 (5 do I3 + 1 do R1)
   grep -c '^  ok    the REVIEW boot prompt of a delta round carries base= and names the round' <<< "$o"   # 1
-  ./bin/sdd review-base 20261119-l1b-a-rodada-delta     # full — no earlier round
+  ./bin/sdd review-base 20261119-l1b-a-rodada-delta     # base=a6f1817… — 40-review-r1.md reviewed this head (na r1: full — no earlier round)
   bash tests/run-all.sh                                 # rc 0
   ```
 
