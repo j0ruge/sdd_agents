@@ -692,8 +692,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   código que nenhum R tocou. Medido no PR #414: rodada ~1h30, R de 45–55 min fosse HIGH ou prosa, e a
   rodada do runner nem grava o head que revisou. Direção: a rodada grava o head (como o `reviewed_head:`
   do worker) e a seguinte invoca com `base=` e os achados abertos; LOW fora do delta vai ao TODO (D15).
-  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
-  orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-18)
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` RESOLVED by a3d0b72 —
+  descoberto pela sessão orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O plano que executa fora do `sdd run` promete o gate do EXEC sem o `20-handoff-exec.md`** —
   `bin/sdd:1541` (`20-handoff-exec.md`) — a decisão 3 da `20261106-rapido-sem-arestas` do `magic_tutor` dizia: "com
