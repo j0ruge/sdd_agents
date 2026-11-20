@@ -22,6 +22,29 @@ writes the artifacts from memory, and their headings are the contract the gates 
    Do not invent a `HANDOFF_DIR`, and do not create the config yourself: `sdd install` derives
    `DEFAULT_BRANCH` and `TEST_CMD` from the repo, and a hand-written stub would carry neither.
 
+   **Then read the checkout, before anything is written or delegated.** Read `HANDOFF_DIR` and
+   `DEFAULT_BRANCH` from that config here (step 3 still reports them, later), and run, at the root,
+   `git status --porcelain`, `git branch --show-current` and `ls <HANDOFF_DIR>`. When that directory
+   holds a mission folder, also run `sdd status --no-gates <mission>` with the name of any one of them:
+   it takes no lock and refuses to run without a mission name, and a `CHECKOUT-OWNER` line in its
+   answer means another command holds this checkout. With no mission folder at all, run
+   `pgrep -af '[b]in/sdd run'` instead. Show the human one line with what you read, then take the
+   first of these exits that applies:
+   - **Another command holds the checkout** (a `CHECKOUT-OWNER` line, or a live `sdd run` of this
+     repository): step 2 applies, even outside the kit. The planner writing here would put a foreign
+     `00-missao.md` inside that run's phase, which its hat guard reads as the phase's own writing
+     (`HAT-CROSSED`), and every commit of the run would move the `HEAD` the relay watches.
+   - **A dirty tree with no command holding the checkout, or a branch other than `DEFAULT_BRANCH`:**
+     stop, and ask the human which base the mission is cut from — go on here, switch branch, or a
+     worktree. Never clean, stash or switch branch yourself: the dirty paths may be another
+     session's work, and a mission cut from another branch inherits its commits. In `ui24_agent` the
+     checkout was on the branch of an open PR, and the planner would have read a checkout that is
+     not the base.
+   - **A folder in `HANDOFF_DIR` already covers the topic:** stop, and show the human that folder
+     and what `sdd status --no-gates` says of it. In `dotp-remake` 3.6d the tree held twelve paths
+     of a plan another session was executing by hand, and the folder of 3.6d already existed,
+     merged: only the relay's own `git status` and `git log` held the planner.
+
 2. **If this checkout is the kit that `sdd` runs from, move to a linked worktree before writing
    anything.** Resolve `sdd="$(readlink -f "$(command -v sdd)")"` and compare it with the root from
    step 1: when it lies under that root (`case "$sdd" in "$root"/*)` — the slash keeps a sibling
@@ -55,7 +78,16 @@ writes the artifacts from memory, and their headings are the contract the gates 
      so both outlive `git worktree remove` (ADR 0021).
 
    When `sdd` is not on the PATH, or resolves outside this root, skip this step: no run of another
-   repository executes this checkout.
+   repository executes this checkout. The one exception is the first exit of step 1: when another
+   command holds this checkout, this step applies to any repository.
+
+   **In a target with a run in flight** (step 1 found another command holding the checkout), the same
+   `git fetch` and the same `git worktree add ../<repo>-<slug> --no-track -b <provisional> origin/<DEFAULT_BRANCH>`
+   apply, the worktree is the repository root for every step below, and one line tells the human its
+   path and branch. What belongs to the kit alone — `health`, `preflight` and `install` as
+   `./bin/sdd`, the killer map and the stamp — does not apply. In `lighthouse_project` the relay
+   planned piece C this way while M2 ran `sdd run` in the main checkout, and M2's `pipeline.log`
+   closed with no `HAT-CROSSED` nor `FOREIGN-COMMIT`.
 
 3. From that config, read `HANDOFF_DIR`, `OUTPUT_LANG`, `DEFAULT_BRANCH`, `TODO_FILE` and
    `JIRA_ENABLED`. Report them back in one line, so the user sees what the session is about to
@@ -105,7 +137,20 @@ When step 2 moved you, hand the planner two more orders, and hold it to them:
   human the paths and the `HEAD` that changed, and never delete or reset anything there yourself —
   a path in that checkout may belong to another writer. In batch 9 a relative `2>e` of the
   planner left `?? e` in the main checkout, and a target's `sdd run` in flight would have stopped
-  with `KIT-TOUCHED` (rc 3).
+  with `KIT-TOUCHED` (rc 3). When the worktree exists because a run holds the main checkout (the
+  first exit of step 1), compare at each hand-back only the paths outside the directory of the mission in flight,
+  and do not stop on a `HEAD` that run moves: its commits and its mission's files are its own, and
+  stopping on them stops the grill for nothing.
+
+When step 2 did not move you, record the same two — `git status --porcelain` and
+`git rev-parse HEAD`, at the repository root — before you delegate, and again at every hand-back. A
+path that changed outside the mission's directory, or a `HEAD` you did not move, you show the human
+as above. A commit you make yourself during the grill (the human asked for a line in a roadmap,
+say) changes the base the planner measured: send the new `HEAD` to the planner with the next answer,
+never in a message of its own (*Nothing else resumes the planner*, in the next section). In
+`dotp-remake` 3.2c the relay committed `b674421` after the planner had measured the suite at
+`d6d6cf8`, and the plan recorded the right base only because the new `HEAD` went with the next
+answer.
 
 The planner conducts the brainstorm and the grill **with the human present** — through you, as the
 next section says, because it cannot reach the human on its own. Do not plan on their behalf, and

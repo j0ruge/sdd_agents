@@ -881,6 +881,48 @@ command_planner_unregistered_probes() {
   fi
 }
 
+# --- /sdd-plan: the reading of the checkout before anything is delegated (lot L2, items 11, 8, 7, 3) --
+# Step 2 guarded only the checkout of the kit, and only inside a `sdd run`. In four targets the relay
+# held the damage on its own: in dotp-remake 3.6d the tree carried 12 paths of a plan another session
+# executed by hand, and the folder of 3.6d already existed, merged (item 11); in ui24_agent the
+# checkout was on the branch of an open PR, and the mission would have been cut from it (item 8); in
+# lighthouse_project a `sdd run` held the main checkout, the relay planned from a worktree and watched
+# only what that run could not change (item 7); in dotp-remake 3.2c, with no worktree, the relay's own
+# commit moved the HEAD the planner had measured, and the plan was right only because the new HEAD
+# went with the next answer (item 3). One pair per item, so a red names which rule went missing; each
+# literal is read in the section whose reader follows it, since a rule moved out of it is read too late.
+command_before_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" before_sec then_sec
+  before_sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  then_sec="$(awk '/^## Then/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  if grep -qF 'ls <HANDOFF_DIR>' <<< "$before_sec" \
+     && grep -qF 'already covers the topic' <<< "$before_sec" \
+     && grep -qF 'A dirty tree with no command holding the checkout' <<< "$before_sec"; then
+    pass "command: /sdd-plan reads the tree and the missions on disk before it delegates, and stops on a dirty tree or a topic already planned"
+  else
+    fail "command: /sdd-plan no longer reads the tree and the missions on disk before it delegates (ls <HANDOFF_DIR>), or no longer stops on a dirty tree or on a topic a folder already covers"
+  fi
+  if grep -qF 'git branch --show-current' <<< "$before_sec" \
+     && grep -qF 'ask the human which base the mission is cut from' <<< "$before_sec"; then
+    pass "command: /sdd-plan compares the current branch with DEFAULT_BRANCH before the planner reads the repository, and asks for the base when they differ"
+  else
+    fail "command: /sdd-plan no longer compares the current branch with DEFAULT_BRANCH before the planner reads the repository, or no longer asks the human for the base when they differ"
+  fi
+  if grep -qF 'sdd status --no-gates <mission>' <<< "$before_sec" \
+     && grep -qF 'CHECKOUT-OWNER' <<< "$before_sec" \
+     && grep -qF 'outside the directory of the mission in flight' <<< "$then_sec"; then
+    pass "command: /sdd-plan moves to a worktree when another command holds the checkout, and watches only what that run cannot change"
+  else
+    fail "command: /sdd-plan no longer moves to a worktree when another command holds the checkout (sdd status --no-gates, CHECKOUT-OWNER), or watches the main checkout without leaving out what that run changes"
+  fi
+  if grep -qF 'When step 2 did not move you, record the same two' <<< "$then_sec" \
+     && grep -qF 'send the new `HEAD` to the planner with the next answer' <<< "$then_sec"; then
+    pass "command: /sdd-plan records status and HEAD at every hand-back without a worktree too, and sends its own commit to the planner with the next answer"
+  else
+    fail "command: /sdd-plan no longer records status and HEAD at every hand-back without a worktree, or no longer sends its own commit to the planner with the next answer"
+  fi
+}
+
 # --- /sdd-plan and the planner: no question behind a live background task (item B, 3 returns) ---
 # The harness tells the relay that a subagent stopped only when it stops with no live child in the
 # background (probe of dotp-remake 3.5c). In magic_tutor Q3, Q4 and Q7 were the end of a planner
@@ -1347,6 +1389,7 @@ command_worktree_probes
 command_worktree_return_probes
 command_branch_cwd_probes
 command_planner_unregistered_probes
+command_before_probes
 background_question_probes
 doc_finding_prs_probes
 doc_operator_probes
