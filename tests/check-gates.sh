@@ -30,7 +30,8 @@ fails=0
 SDD_STATE_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-state-XXXXXX")"
 export SDD_STATE_DIR="$SDD_STATE_FIX"
 CLOSE_REMOTE_DIR=""
-trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX" ${CLOSE_REMOTE_DIR:+"$CLOSE_REMOTE_DIR"}' EXIT
+SHA256_FIX=""
+trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX" ${CLOSE_REMOTE_DIR:+"$CLOSE_REMOTE_DIR"} ${SHA256_FIX:+"$SHA256_FIX"}' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -2781,6 +2782,196 @@ fi
 rm -f "$MDIR/40-review-r11.md"
 git add -A && git commit -qm "chore: drop the r11 fixture" >/dev/null
 assert_phase "with the Rationale fixture gone the mission is back at DOCS" "DOCS"
+
+# The delta round (ADR 0023, mission 20261119-l1b-a-rodada-delta). `sdd review-base` and the REVIEW
+# boot prompt read ONE judgement, review_base_line: from the second round on, the round reviews
+# base=<the reviewed_head: of the round before>..HEAD; when the key is missing, wrong or a merge
+# entered after it, the round is a full one and the line says why. Every world writes r12, the
+# latest round by version, with the frontmatter of write_r11 and reviewed_head: as its LAST key.
+write_r12() { # write_r12 <reviewed_head value | @absent@>
+  local rh="$1" c
+  # Each world is a NEW round: review_head_ok reads the commit that ADDED the round (R1), so a
+  # rewrite in place would leave every world judged against the first write.
+  if [ -f "$MDIR/40-review-r12.md" ]; then
+    git rm -q "$MDIR/40-review-r12.md" && git commit -qm "chore: drop review r12" >/dev/null
+  fi
+  {
+    printf -- '---\nfase: REVIEW\nrodada: 12\ngate: %s\n' 'tests/run-all.sh: suite green, 559 assertions, tree clean'
+    [ "$rh" = '@absent@' ] || printf 'reviewed_head: %s\n' "$rh"
+    printf -- '---\n\n# Review r12\n\n### Overall Grade\n\n'
+    printf '| Criterion | Grade | Rationale |\n|-----------|-------|-----------|\n'
+    for c in "${i3_rows[@]}"; do printf '| %s | A | clean |\n' "$c"; done
+    printf '| **Overall** | **A** | clean |\n'
+  } > "$MDIR/40-review-r12.md"
+  git add -A && git commit -qm "chore: review r12" >/dev/null
+}
+review_base_of() { ( cd "$FIX" && "$SDD" review-base "$MISSION" 2>&1 ) || true; }
+
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"; rb_out="$(review_base_of)"
+if [[ "$rb_out" == "base=$rb_head "* ]] && grep -qF '40-review-r12.md' <<< "$rb_out"; then
+  pass "review-base: a round with reviewed_head: answers base=<that sha>"
+else fail "review-base: a round with reviewed_head: answers base=<that sha>" "base=$rb_head … 40-review-r12.md" "$rb_out"; fi
+
+write_r12 '@absent@'; rb_out="$(review_base_of)"
+if [[ "$rb_out" == full* ]] && grep -qF '40-review-r12.md has no reviewed_head:' <<< "$rb_out"; then
+  pass "review-base: a round without reviewed_head: answers full and names it"
+else fail "review-base: a round without reviewed_head: answers full and names it" "full — 40-review-r12.md has no reviewed_head:" "$rb_out"; fi
+
+write_r12 'zzz'; rb_out="$(review_base_of)"
+if [[ "$rb_out" == full* ]] && grep -qF 'is no commit' <<< "$rb_out"; then
+  pass "review-base: a reviewed_head: that is no commit answers full"
+else fail "review-base: a reviewed_head: that is no commit answers full" "full — … is no commit" "$rb_out"; fi
+
+rb_orphan="$(git commit-tree "$(git hash-object -t tree /dev/null)" -m orphan)"
+write_r12 "$rb_orphan"; rb_out="$(review_base_of)"
+if [[ "$rb_out" == full* ]] && grep -qF 'not an ancestor of HEAD' <<< "$rb_out"; then
+  pass "review-base: a reviewed_head: the HEAD does not carry answers full"
+else fail "review-base: a reviewed_head: the HEAD does not carry answers full" "full — … not an ancestor of HEAD" "$rb_out"; fi
+
+# A round git does not carry is no base (CodeRabbit on PR #452): a session that wrote it and died
+# leaves it on disk, the gate refuses the tree, and the retry would review only the delta from a
+# head no finished round read. Three worlds — the round modified after its commit, untracked, and
+# untracked under an ignore rule —, and the same round committed is the witness that answers base=.
+# Each world proves first that git sees the round as it says (a probe of the wrong state is mute).
+rb_rel="docs/handoffs/$MISSION/40-review-r12.md"
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+rb_cm="$(review_base_of)"
+printf '\nnota\n' >> "$MDIR/40-review-r12.md"
+rb_st="$(git status --porcelain -- "$MDIR/40-review-r12.md")"; rb_mod="$(review_base_of)"
+git checkout -q -- "$MDIR/40-review-r12.md"
+git rm -q --cached "$MDIR/40-review-r12.md" && git commit -qm "chore: untrack review r12" >/dev/null
+rb_st="$rb_st|$(git status --porcelain -- "$MDIR/40-review-r12.md")"; rb_unt="$(review_base_of)"
+printf '%s\n' "$rb_rel" >> .git/info/exclude
+rb_st="$rb_st|$(git status --porcelain --untracked-files=all --ignored -- "$MDIR/40-review-r12.md")"
+rb_ign="$(review_base_of)"
+sed -i '$d' .git/info/exclude; rm -f "$MDIR/40-review-r12.md"
+rb_want='full — 40-review-r12.md is not committed'
+if [ "$rb_st" = " M $rb_rel|?? $rb_rel|!! $rb_rel" ] \
+   && [[ "$rb_cm" == "base=$rb_head "* ]] && [ "$rb_mod" = "$rb_want" ] && [ "$rb_unt" = "$rb_want" ] \
+   && [ "$rb_ign" = "$rb_want" ]; then
+  pass "delta base: a round git does not carry — modified, untracked or ignored — answers full and names it"
+else fail "delta base: a round git does not carry — modified, untracked or ignored — answers full and names it" \
+  "status ' M …|?? …|!! …', committed base=$rb_head …, then '$rb_want' three times" \
+  "status '$rb_st'; committed '$rb_cm'; modified '$rb_mod'; untracked '$rb_unt'; ignored '$rb_ign'"; fi
+
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+git checkout -q -b l1b-side
+echo side > l1b-side.txt; git add -A && git commit -qm "chore: side" >/dev/null
+git checkout -q main
+git merge -q --no-edit --no-ff l1b-side >/dev/null
+git branch -q -D l1b-side
+rb_merge="$(git rev-parse --short HEAD)"; rb_out="$(review_base_of)"
+if [[ "$rb_out" == full* ]] && grep -qF "$rb_merge" <<< "$rb_out"; then
+  pass "review-base: a merge after the reviewed head answers full and names the merge"
+else fail "review-base: a merge after the reviewed head answers full and names the merge" "full — merge $rb_merge …" "$rb_out"; fi
+
+# The REVIEW boot prompt reads the same judgement (I2). r12 is written after the merge, so the merge
+# is outside its interval. The round's name alone proves nothing — item 4 of the boot already names
+# the latest handoff, which is this r12 — so the probe reads a literal only the delta line has.
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+rb_out="$( ( cd "$FIX" && "$SDD" boot "$MISSION" REVIEW 2>&1 ) || true )"
+if grep -qF "/codereview:codereview base=$rb_head" <<< "$rb_out" \
+   && grep -qF 'read 40-review-r12.md for the findings it left open' <<< "$rb_out"; then
+  pass "the REVIEW boot prompt of a delta round carries base= and names the round"
+else fail "the REVIEW boot prompt of a delta round carries base= and names the round" "/codereview:codereview base=$rb_head … read 40-review-r12.md for the findings it left open" "$(grep -F 'round' <<< "$rb_out" || true)"; fi
+
+# gate_REVIEW checks the key the round wrote (I3, review_head_ok): a key that is present and wrong
+# is refused, an absent one passes (the rounds before the key). Each world gives exactly ONE ok line
+# that starts with `gate_REVIEW: reviewed_head` — the phase of a refusal is asserted under another
+# phrase. The refusals run before the suite, so their reasons name the round, not TEST_CMD.
+write_r12 'zzz'
+assert_why "gate_REVIEW: reviewed_head that is no sha is refused, naming the round" REVIEW "40-review-r12\.md: reviewed_head 'zzz' is no commit"
+assert_phase "r12 with a wrong reviewed_head (zzz): the mission stays at REVIEW" "REVIEW"
+
+write_r12 "$rb_orphan"
+assert_why "gate_REVIEW: reviewed_head the HEAD does not carry is refused" REVIEW "40-review-r12\.md: reviewed_head [0-9a-f]+ is not an ancestor of HEAD"
+
+rb_head="$(git rev-parse HEAD)"
+echo outside > l1b-outside.txt; git add -A && git commit -qm "chore: code after the reviewed head" >/dev/null
+write_r12 "$rb_head"
+assert_why "gate_REVIEW: reviewed_head with code changed before the round commit is refused" REVIEW "40-review-r12\.md: l1b-outside\.txt changed between reviewed_head"
+
+# The round's commit is read with no signature output (CodeRabbit on PR #452): under
+# log.showSignature=true, git log prints the verification of a signed commit before its %H line,
+# the capture carried both, git diff refused the pair, its error was discarded, and the empty list
+# passed the round over l1b-outside.txt. The world signs the round's commit with a throwaway ssh
+# key (no allowed-signers file, so git prints "No signature" for it) and turns the config on in the
+# fixture repo; the witness is that git log there really prints more than the hash.
+ssh-keygen -q -t ed25519 -N '' -C fixture -f "$FIX/.git/l1b-sig" </dev/null >/dev/null 2>&1
+git -c gpg.format=ssh -c user.signingkey="$FIX/.git/l1b-sig" commit -q --amend --no-edit -S >/dev/null 2>&1
+git config log.showSignature true
+rb_sig="$(git log -1 --diff-filter=A --format=%H -- "$MDIR/40-review-r12.md" 2>/dev/null || true)"
+if [ "$(wc -l <<< "$rb_sig")" -gt 1 ] && [ "$(tail -1 <<< "$rb_sig")" = "$(git rev-parse HEAD)" ]; then
+  pass "fixture: under log.showSignature=true git log prints more than the hash of the signed round commit"
+else fail "fixture: under log.showSignature=true git log prints more than the hash of the signed round commit" \
+  "a signature line, then $(git rev-parse HEAD)" "$rb_sig"; fi
+assert_why "gate_REVIEW: the round's commit is read with no signature output, and the range still refuses" REVIEW "40-review-r12\.md: l1b-outside\.txt changed between reviewed_head"
+git config --unset log.showSignature
+
+write_r12 '@absent@'
+assert_phase "gate_REVIEW: reviewed_head absent still passes, as the rounds before the key" "DOCS"
+
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+assert_phase "gate_REVIEW: reviewed_head the round read, with only its own files after it, passes" "DOCS"
+
+# A range diff that fails refuses the round, fail closed (CodeRabbit on PR #452): its error was
+# discarded, the path loop read nothing, and a round the gate could not read passed. The world is a
+# git first on the PATH that fails exactly the range diff of review_head_ok (`-C <root> diff
+# --name-only …`) and hands every other call to the real git; the witness is that it does both.
+mkdir -p "$FIX/.git/l1b-gitstub"
+cat > "$FIX/.git/l1b-gitstub/git" <<STUB
+#!/usr/bin/env bash
+if [ "\${3:-}" = diff ] && [ "\${4:-}" = --name-only ]; then echo "fatal: stub: the range diff fails" >&2; exit 128; fi
+exec "$(command -v git)" "\$@"
+STUB
+chmod +x "$FIX/.git/l1b-gitstub/git"
+rb_rc=0; "$FIX/.git/l1b-gitstub/git" -C "$FIX" diff --name-only HEAD HEAD >/dev/null 2>&1 || rb_rc=$?
+if [ "$rb_rc" -eq 128 ] && [ "$("$FIX/.git/l1b-gitstub/git" -C "$FIX" rev-parse HEAD)" = "$(git rev-parse HEAD)" ]; then
+  pass "fixture: the git stub fails the range diff and answers every other call"
+else fail "fixture: the git stub fails the range diff and answers every other call" "rc 128 and the HEAD" "rc $rb_rc"; fi
+PATH="$FIX/.git/l1b-gitstub:$PATH" assert_why "gate_REVIEW: a range diff that fails refuses the round, naming it" REVIEW "40-review-r12\.md: git diff cannot list what changed between reviewed_head"
+
+# R1 (r1 of 20261119-l1b-a-rodada-delta): a later phase may touch the round together with code it
+# owns — sdd-docs writes the mission folder and docs/** in one commit. The round's commit is the one
+# that ADDED it, so that later commit is outside the interval and the green gate stays green.
+printf 'nota da DOCS\n' >> "$MDIR/40-review-r12.md"; echo doc > l1b-doc.txt
+git add -A && git commit -qm "docs: touch the round and a doc" >/dev/null
+assert_phase "gate_REVIEW: reviewed_head reads the commit that added the round, not a later one that touched it" "DOCS"
+
+rm -f "$MDIR/40-review-r12.md" l1b-outside.txt l1b-doc.txt
+git add -A && git commit -qm "chore: drop the r12 fixture" >/dev/null
+assert_phase "with the r12 fixture gone the mission is back at DOCS" "DOCS"
+
+# SHA-256 (CodeRabbit on PR #452): a repository made with --object-format=sha256 writes 64-hex
+# commit ids, which rev-parse, merge-base and diff accept, and the shape guards of review_base_line
+# and review_head_ok read that real commit as "no commit". The world is real — git builds it since
+# 2.29, and preflight asks for 2.31+ —: a repository of its own with the fixture's config, a commit
+# (the head the round read), code after it, and the round naming that head. review-base answers
+# base=<the 64 hex>, and the gate reaches the range rule, which only a value the shape and the
+# existence checks let through can reach.
+SHA256_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-sha256-XXXXXX")"
+s256_head=""
+if ( cd "$SHA256_FIX" && git init -q --object-format=sha256 -b main \
+     && git config user.email fixture@example.com && git config user.name Fixture \
+     && mkdir -p .sdd "docs/handoffs/$MISSION" && cp "$FIX/.sdd/config.sh" .sdd/config.sh \
+     && echo one > code.txt && git add -A && git commit -qm init ) >/dev/null 2>&1; then
+  s256_head="$(git -C "$SHA256_FIX" rev-parse HEAD)"
+  echo two > "$SHA256_FIX/code.txt"; git -C "$SHA256_FIX" commit -qam "code after the reviewed head"
+  printf -- '---\nfase: REVIEW\nrodada: 1\nreviewed_head: %s\n---\n\n# Review r1\n\n### Overall Grade\n\n| Criterion | Grade | Rationale |\n|---|---|---|\n| Code Quality (Zen) | A | clean |\n' \
+    "$s256_head" > "$SHA256_FIX/docs/handoffs/$MISSION/40-review-r1.md"
+  git -C "$SHA256_FIX" add -A && git -C "$SHA256_FIX" commit -qm "review r1"
+fi
+s256_base="$( ( cd "$SHA256_FIX" && "$SDD" review-base "$MISSION" 2>&1 ) || true )"
+s256_why="$( ( cd "$SHA256_FIX" && "$SDD" why "$MISSION" REVIEW 2>&1 ) || true )"
+if [ "${#s256_head}" -eq 64 ] && [[ "$s256_base" == "base=$s256_head — 40-review-r1.md "* ]]; then
+  pass "delta base: the 64-hex reviewed_head of a SHA-256 repository is a base"
+else fail "delta base: the 64-hex reviewed_head of a SHA-256 repository is a base" \
+  "a 64-hex head (got ${#s256_head} digits) and base=$s256_head — 40-review-r1.md …" "$s256_base"; fi
+if [ "${#s256_head}" -eq 64 ] && grep -qF '40-review-r1.md: code.txt changed between reviewed_head' <<< "$s256_why" \
+   && ! grep -qF 'is no commit' <<< "$s256_why"; then
+  pass "gate_REVIEW: a 64-hex reviewed_head of a SHA-256 repository reaches the range rule"
+else fail "gate_REVIEW: a 64-hex reviewed_head of a SHA-256 repository reaches the range rule" \
+  "a 64-hex head and '40-review-r1.md: code.txt changed between reviewed_head …', never 'is no commit'" "$s256_why"; fi
 
 # --- DOCS ------------------------------------------------------------------
 echo "== DOCS phase =="

@@ -681,7 +681,8 @@ try:
     busy(repo, "install", extra={"SDD_STATE_DIR": str(work / "different-state")},
          name="state directory cannot split checkout ownership")
     for args in [("status", "20260101-one", "--no-gates"),
-                 ("census", "20260101-one"), ("autonomy",), ("kaizen", "--series"),
+                 ("census", "20260101-one"), ("review-base", "20260101-one"),
+                 ("autonomy",), ("kaizen", "--series"),
                  ("adr", "check"), ("help",), ("version",)]:
         result = run(repo, *args)
         check("query stays available: " + " ".join(args),

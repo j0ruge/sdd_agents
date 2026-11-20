@@ -83,6 +83,8 @@ sdd status <mission>         # where it stands, what is missing, why it stalled 
                              #   `sdd note-manual` that records it
 sdd why <mission> [PHASE]    # why that phase's gate did not pass — start any diagnosis here
 sdd phase <mission>          # print only the current phase (or DONE) — for scripts
+sdd review-base <mission>    # base=<sha> when the next REVIEW round can review only the delta since the
+                             #   reviewed_head: of the latest round, or full and why — no gate, no suite (ADR 0023)
 sdd retry <mission>          # retry the current phase with a fresh session
 sdd close <mission>          # post-merge: close the JIRA issue (a real paid session — since 2026-09-11
                              #   it writes its own ledger row, `event:"close"`, cost included), then

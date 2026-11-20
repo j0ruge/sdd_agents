@@ -162,7 +162,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
-  `bin/sdd-worker:1229` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
+  `bin/sdd-worker:1242` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
   nomeia threads: 18 dos 38 achados do CodeRabbit no PR #414 moravam no corpo das revisões, e um PR com eles,
   com uma `CHANGES_REQUESTED` sem inline ou com o `local/ci` vermelho dá `ready`. Ler os três é um sexto item,
   que muda a régua e não tem dono: nenhum ato do laço publica o `local/ci`, e sem quem o escreva o item é gate
@@ -180,7 +180,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-19)
 
 - [ ] **O `budget` esquece calado o gasto de uma missão que nunca chegou à base e cujo worktree saiu** —
-  `bin/sdd-worker:703` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
+  `bin/sdd-worker:716` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
   PR fechado sem merge ou a missão largada e o worktree removido, o `budget` dá US$ 0.00 no lugar dos US$ 85 do
   ledger, rc 0, e o teto que o R14 chama de limite duro passa por esse gasto. O R16 só o declara. Direção
   (decisão do dono na pendência 1 da r7): a linha `session` do ledger ganha `campaign:`, que o runner lê do
@@ -206,7 +206,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O mutante `range_ancestry_unchecked` só troca a mensagem, e o ancestral segue conferido** —
-  `tests/check-mutation.sh:7167` (`mut_WORKER_range_ancestry_unchecked`) — ele desliga o `"$anc" -eq 1` do
+  `tests/check-mutation.sh:7178` (`mut_WORKER_range_ancestry_unchecked`) — ele desliga o `"$anc" -eq 1` do
   `cmd_pr_ready`, e o `"$anc" -ne 0` logo abaixo recusa o mesmo rc 1 com outra frase: o catálogo o pega pela
   mensagem, e o mundo que o comentário dele promete (uma rodada sobre um commit que o PR largou) nunca é montado.
   Direção: trocar também o `-ne 0` por `-gt 1`, provado por `--only WORKER_range_ancestry_unchecked check-worker.sh`.
@@ -270,7 +270,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `measure.sh` dela não os roda). O `/codereview` lê a pasta como a evidência da fase e mediu de novo no
   `34aa349` (mesmos valores). Direção: cada medida citada salva a saída onde o `gate:` diz, ou o `gate:` a exclui.
   — descoberto pelo relay do `sdd run` na missão `20261024-plano-3-5-b-auras-e-equipamento` (2026-10-25)
-- [ ] **O platô da REVIEW lê só as letras, e pararia um laço que converge** — `agents/sdd-reviewer.md:62`
+- [ ] **O platô da REVIEW lê só as letras, e pararia um laço que converge** — `agents/sdd-reviewer.md:68`
   (`Overall Grade`) — "as mesmas letras da rodada anterior" é platô, mas não separa o achado que a rodada
   não fechou do material que entrou entre as rodadas sem ser `R<n>`, nem da classe que a varredura pulou. No
   `lighthouse_project` a REVIEW ficou em B de r3 a r6, cada rodada com um achado real e menor, fechado pelo
@@ -493,7 +493,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O `effective_level` confere o `expires:` antes do conjunto e publica o nível depois dele** —
-  `bin/sdd-worker:439` (`expired`) — o `expired "$exp"` roda antes do `campaign_set` e do `checkouts_of`, e o
+  `bin/sdd-worker:452` (`expired`) — o `expired "$exp"` roda antes do `campaign_set` e do `checkouts_of`, e o
   `LEVEL` acima de `assisted`, o teto do lote incluso, sai depois: a delegação que vence nessa janela (de
   milissegundos, não reproduzida) ainda dá o nível assinado. O laço pergunta `allows` antes de cada ato, o que
   estreita a janela sem fechá-la. Direção: reler o `expired` logo antes de publicar um `LEVEL` acima de `assisted`.
@@ -678,7 +678,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
 
-- [ ] **O revisor não tem destino para o LOW que não move a nota** — `agents/sdd-reviewer.md:95`
+- [ ] **O revisor não tem destino para o LOW que não move a nota** — `agents/sdd-reviewer.md:106`
   (`MEDIUM/LOW, cheap`) — a tabela manda todo MEDIUM/LOW barato para um `R<n>` de lote, mas a escala do
   `codereview` dá A com "minor MEDIUM/LOW", e as rodadas deixam o LOW no relatório com motivo escrito: na
   `20261028-whf-162-jdb-na-descricao` do `warehouse_explorer_web`, 11 LOW na r1, 2 na r2 e 6 na r3, e o gate
@@ -693,8 +693,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   código que nenhum R tocou. Medido no PR #414: rodada ~1h30, R de 45–55 min fosse HIGH ou prosa, e a
   rodada do runner nem grava o head que revisou. Direção: a rodada grava o head (como o `reviewed_head:`
   do worker) e a seguinte invoca com `base=` e os achados abertos; LOW fora do delta vai ao TODO (D15).
-  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
-  orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-18)
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` RESOLVED by a3d0b72 —
+  descoberto pela sessão orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O plano que executa fora do `sdd run` promete o gate do EXEC sem o `20-handoff-exec.md`** —
   `bin/sdd:1541` (`20-handoff-exec.md`) — a decisão 3 da `20261106-rapido-sem-arestas` do `magic_tutor` dizia: "com

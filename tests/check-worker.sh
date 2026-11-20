@@ -148,7 +148,7 @@
 #       the text each cell leaves once its `*` and backticks are stripped, and pr-ready agrees with
 #       it on every cell (a differential: the rule lives in two programs); the gate: of the round
 #       too — the template's own, an empty one, a quoted one —, and an absent one, since a round
-#       with reviewed_head: is the worker's own; a fill-in in a table after the grade table changes
+#       with reviewed_head: is made from the template; a fill-in in a table after the grade table changes
 #       nothing
 #   R39 `allows` with no lot — no --lot for plan, no --mission for the others — is rc 2, nothing on
 #       stdout and the flag the act takes named on stderr, for each of the seven acts, under a full
@@ -1740,13 +1740,13 @@ gitc() { git -C "$RR" -c user.name=fixture -c user.email=fixture@example.com "$@
 
 # round <file> <reviewed head> — a review round copied from templates/review.md: every row of the
 # `### Overall Grade` table graded A (the bold of the Overall row kept) with a rationale RUN_RAT that
-# is a sentence, the frontmatter's gate: filled with RUN_GATE, and `reviewed_head:` added under it —
+# is a sentence, the frontmatter's gate: filled with RUN_GATE, and the template's `reviewed_head:` set —
 # none when the head is `-`. The template ships its rationales and its gate: as fill-ins, which the
 # review item refuses (R38).
 RUN_RAT='measured, nothing to say'
 RUN_GATE='tests/run-all.sh rc 0, the tree clean'
 round() {
-  sed -e "2,/^---\$/ s@^gate: .*@gate: $RUN_GATE\nreviewed_head: $2@" \
+  sed -e "2,/^---\$/ s@^gate: .*@gate: $RUN_GATE@" -e "2,/^---\$/ s@^reviewed_head: .*@reviewed_head: $2@" \
       -e "s@| <A> | <[^|]*> |@| A | $RUN_RAT |@" \
       -e "s@| \*\*<A>\*\* | <[^|]*> |@| **A** | $RUN_RAT |@" "$ROOT/templates/review.md" > "$1"
   [ "$2" != - ] || sed -i '2,/^---$/ { /^reviewed_head:/d }' "$1"
@@ -1893,6 +1893,29 @@ if [ -z "$got" ]; then
   pass 'pr-ready: all five true at one sha answers ready with the full sha'
 else
   fail 'pr-ready: all five true at one sha answers ready with the full sha' "ready $B, rc 0" "$got"
+fi
+
+# --- the reviewed head as the runner reads it --------------------------------------------------
+# gate_REVIEW reads reviewed_head: through the runner's frontmatter reader, which trims the blanks
+# around the value and then strips one quote from each end; pr-ready read the text after `: ` raw,
+# so a round the gate passes with `reviewed_head: "<sha>"` was "no commit" here (CodeRabbit on PR
+# #452). Two worlds, each the good-under one with the key respelled — in double quotes, and padded
+# in single quotes —, and the fixture proves first that the round carries that spelling.
+got=""
+round "$MD/40-review-r2.md" "\"$B\""
+grep -qx "reviewed_head: \"$B\"" "$MD/40-review-r2.md" || got="fixture: r2 does not quote its head"
+land good-quoted
+ready_is 'a head in double quotes' 0 "ready $HEADNOW" good-quoted
+ready_reset
+round "$MD/40-review-r2.md" "  '$B'"
+grep -qx "reviewed_head:   '$B'" "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 does not pad and single-quote its head"
+land good-padded
+ready_is 'a head padded and in single quotes' 0 "ready $HEADNOW" good-padded
+ready_reset
+if [ -z "$got" ]; then
+  pass 'pr-ready: a reviewed head in quotes or padded reads as the runner reads it'
+else
+  fail 'pr-ready: a reviewed head in quotes or padded reads as the runner reads it' 'ready <head>, rc 0, for each spelling' "$got"
 fi
 
 # --- R24: the review item -----------------------------------------------------------------------
@@ -2312,6 +2335,16 @@ else
     'each row once in its section, the loop reading it, every setsid in code with -w, and each sabotaged copy naming what it lost' "$got"
 fi
 
+# The review act reads the delta from the runner (ADR 0023): its subsection names `sdd review-base`,
+# and no longer says the runner's rounds carry no reviewed_head:, which stopped being true.
+rsec="$(awk '/^### `review`/{s=1; next} s && /^##+ /{s=0} s' "$COMMAND")"
+if grep -qF 'sdd review-base' <<< "$rsec" && ! grep -qF 'carry no `reviewed_head:`' <<< "$rsec"; then
+  pass 'command: the review act passes the line of sdd review-base to its subagent'
+else
+  fail 'command: the review act passes the line of sdd review-base to its subagent' \
+    'the ### `review` subsection names sdd review-base and drops "carry no `reviewed_head:`"' "$rsec"
+fi
+
 # --- docs: the documentation and the vocabulary -------------------------------------------------
 # Four documents name the worker, and each is prose no mutant of bin/ reaches, so the checker carries
 # its own negative control, like the command's. What each owes is read from the sensor's ladder and
@@ -2524,7 +2557,7 @@ fi
 # Then the gate: of r2, judged by the same rule: the template's own, an empty one and the
 # template's quoted (the runner strips the quotes) fail; the filled one is ready; and an absent one
 # fails too — the runner leaves it alone for the rounds that predate the key, and a round with
-# reviewed_head: is the worker's own, made from the template. The template's table as shipped, its
+# reviewed_head: is made from the template (ADR 0023). The template's table as shipped, its
 # eight rows graded A and left `<…>` (the round of the finding), is one line naming the first row.
 # The counter-world: a fill-in left in the findings table, after the grade table, changes nothing.
 got=""
