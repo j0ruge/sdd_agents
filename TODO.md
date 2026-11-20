@@ -784,6 +784,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261117-l1-a-prosa-do-chapeu/45-docs.md`
   — descoberto por `sdd-docs` na missão `20261117-l1-a-prosa-do-chapeu` (2026-11-19)
 
+- [ ] **O planner manda chamar duas skills que a sessão pode não listar** — `agents/sdd-planner.md:41`
+  (`Skill(grilling)`) — o § 1 manda `Skill(grilling)` e `Skill(domain-modeling)` e diz que o `grill-with-docs` é o
+  pacote que "the model cannot invoke". No planner do L2 (subagente, Claude Code 2.1.327) a lista de skills trazia
+  o `grill-with-docs` (cópia avulsa em `~/.claude/skills/`, sem `disable-model-invocation`) e nenhuma das duas, que
+  só existem no clone do marketplace, sem plugin instalado; o grill seguiu só pelas regras do chapéu. Direção: o
+  § 1 manda chamar a forma que a sessão lista, e o `sdd preflight` avisa quando nenhuma está instalada.
+  — descoberto por `sdd-planner` na missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-20)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
