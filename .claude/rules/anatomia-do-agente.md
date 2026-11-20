@@ -151,7 +151,8 @@ como a lista dos achados abertos; sem rodada anterior, rodada que o git não car
 escreveu morreu), sem a chave, chave errada ou um merge depois dela, a rodada é inteira e o prompt
 diz por quê. O delta se impõe pelo argumento da skill, nunca por
 frase (r7 do #414). O mesmo juízo responde por `sdd review-base <missão>`, que o ato `review` do worker
-passa ao subagente. A medida em dinheiro (r≥2/r1, antes 1,0 a 1,5) é do L2.
+passa ao subagente; ele roda sem a trava do checkout, então o `git status` da rodada não commitada
+leva `GIT_OPTIONAL_LOCKS=0` e não reescreve o índice (r3 da missão). A medida em dinheiro (r≥2/r1, antes 1,0 a 1,5) é do L2.
 Desde `20260922-o-motivo-da-fase` o boot também diz **por que** a fase
 foi aberta: a linha `Why this phase:` carrega o `GATE_WHY` que o `derive_phase` publicou (chamado,
 nunca `$( )`), ou diz `forced from the CLI` quando o runner não derivou a fase — o executor da

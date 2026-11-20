@@ -2854,6 +2854,24 @@ else fail "delta base: a round git does not carry — modified, untracked or ign
   "status ' M …|?? …|!! …', committed base=$rb_head …, then '$rb_want' three times" \
   "status '$rb_st'; committed '$rb_cm'; modified '$rb_mod'; untracked '$rb_unt'; ignored '$rb_ign'"; fi
 
+# The query writes nothing (r3 of 20261119-l1b-a-rodada-delta): `sdd review-base` runs without the
+# checkout lock, and the git status of rule 2 took index.lock and rewrote the index under any
+# session committing in the same checkout. The world is a committed round whose stat git recorded
+# no longer matches the file (an older mtime, same bytes); the witness is that a plain git status
+# on that same state, run AFTER the query, does rewrite the index — a probe of a state git would not
+# refresh is mute. The index is read by inode, mtime and size: git writes it by lock and rename.
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+touch -d '1 minute ago' "$MDIR/40-review-r12.md"
+rb_ix0="$(LC_ALL=C stat -c '%i %.9Y %s' .git/index)"; rb_out="$(review_base_of)"
+rb_ix1="$(LC_ALL=C stat -c '%i %.9Y %s' .git/index)"
+git status --porcelain --untracked-files=all --ignored -- "$MDIR/40-review-r12.md" >/dev/null
+rb_ix2="$(LC_ALL=C stat -c '%i %.9Y %s' .git/index)"
+if [ "$rb_ix0" = "$rb_ix1" ] && [ "$rb_ix1" != "$rb_ix2" ] && [[ "$rb_out" == "base=$rb_head "* ]]; then
+  pass "delta base: the query leaves the index as it found it, where a plain git status rewrites it"
+else fail "delta base: the query leaves the index as it found it, where a plain git status rewrites it" \
+  "index '$rb_ix0' before and after the query, a different one after git status, and base=$rb_head …" \
+  "before '$rb_ix0', after the query '$rb_ix1', after git status '$rb_ix2'; query '$rb_out'"; fi
+
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 git checkout -q -b l1b-side
 echo side > l1b-side.txt; git add -A && git commit -qm "chore: side" >/dev/null

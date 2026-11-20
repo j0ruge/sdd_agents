@@ -53,7 +53,9 @@ What that costs, measured:
    `phase_extra REVIEW` turns the line into the order the session follows:
    `/codereview:codereview base=<sha>`, naming the previous round as the list of open findings, or
    a full round with the reason. `sdd review-base <mission>` prints the same line. It runs no gate
-   and no suite, and it is admitted without the checkout lock.
+   and no suite, and it is admitted without the checkout lock, so it writes nothing: the
+   `git status` of the second case runs with `GIT_OPTIONAL_LOCKS=0`, or it would take `index.lock`
+   and rewrite the index under a session committing in the same checkout (r3 of the mission).
 3. **A merge in the range makes the round full.** The skill reviews `base..HEAD`. A merge of the
    base branch would pour everything that came with it into the delta. Under `sdd run` nobody
    merges between rounds.

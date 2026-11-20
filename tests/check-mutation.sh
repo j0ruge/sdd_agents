@@ -7508,6 +7508,12 @@ mut_RUN_review_base_uncommitted_round() {
 mut_RUN_review_base_ignored_round_unseen() {
   sed -i '/^review_base_line()/,/^}/ s| status --porcelain --untracked-files=all --ignored -- "$last" | status --porcelain --untracked-files=all -- "$last" |' "$1"
 }
+# The status of rule 2 takes git's optional locks again: the query, admitted without the checkout
+# lock, takes index.lock and rewrites the index (r3 of 20261119-l1b-a-rodada-delta). Caught by
+# "delta base: the query leaves the index as it found it, …" (check-gates.sh).
+mut_RUN_review_base_status_locks_index() {
+  sed -i '/^review_base_line()/,/^}/ s|st="$(GIT_OPTIONAL_LOCKS=0 git -C "$REPO_ROOT" status |st="$(git -C "$REPO_ROOT" status |' "$1"
+}
 # The shape is capped at 40 hex again: the 64-hex head of a SHA-256 repository reads as no commit,
 # and every round there is full (CodeRabbit on PR #452). Caught by "delta base: the 64-hex
 # reviewed_head of a SHA-256 repository is a base" (check-gates.sh).
@@ -7571,6 +7577,7 @@ CATALOG=(
   RUN_review_base_merge_ignored
   RUN_review_base_uncommitted_round
   RUN_review_base_ignored_round_unseen
+  RUN_review_base_status_locks_index
   RUN_review_base_sha256_refused
   RUN_review_prompt_delta_dropped
   COORD_adr_external_spec
