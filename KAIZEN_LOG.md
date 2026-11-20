@@ -39,8 +39,14 @@ a receita de espera do revisor, escrita no I3, não subir o `timeout` da própri
 reincidente: vira linha `⛔` no `45-docs.md` desta missão, com texto proposto para o `turn_rule` do
 `boot_prompt()` em `bin/sdd`, que fala a toda fase e que esta missão não pode editar (decisão 1).
 
-**O que fica para medir** (pendente): o PR e o merge do L1 por merge commit; o chore que apaga os 14
-itens e desce a catraca; e o L2, que a campanha compara com este.
+**O fecho** (2026-11-19 23:50, nota do chore de pós-merge): a DOCS e a PR somaram 2 sessões
+(US$ 1,95 e US$ 0,45), e a corrida fechou com **15** sessões e **US$ 20,22**, saindo com rc 2 só pelo
+carimbo, que missão do kit dispensa. O ato `review` do worker consertou os 6 achados do CodeRabbit em
+`729fbf6`, com 3 asserções novas. A rodada delta r3 deu A em todo critério, o recibo do Codex veio
+limpo no `4fc4ddd`, e o PR #446 entrou por merge commit em `91a7524`, com o sim do dono, porque a
+delegação na `main` era `pr`. Três Minor do CodeRabbit sobre o `4fc4ddd` e 4 dos 5 LOW da r3 foram para o
+chore de pós-merge, junto com os 14 itens e a catraca. Fica para medir o lote seguinte, que a campanha
+compara com este.
 
 ---
 
