@@ -142,7 +142,16 @@ o `checkpoint.md` é só a tabela, e as notas moram em `checkpoint-notas.md` (ap
 o boot **inlina** as últimas `BOOT_NOTES_TAIL=10` (`boot_notes_tail`) e manda não abrir o arquivo;
 **nomeia** o handoff mais recente (`mission_latest_handoff`, sobre a mesma `latest_matching` do gate
 de REVIEW) e inlina só `## TL;DR` + a seção de boot (`handoff_boot_sections`); nomeia os templates
-da fase (`phase_templates`). Desde `20260922-o-motivo-da-fase` o boot também diz **por que** a fase
+da fase (`phase_templates`).
+Desde `20261119-l1b-a-rodada-delta` ([ADR 0023](../../docs/adr/0023-the-next-round-reviews-the-delta.md))
+o orçamento vale também para o diff da REVIEW: da segunda rodada em diante o `phase_extra REVIEW`
+(`review_delta_prompt`) escreve a linha do `review_base_line`, e a sessão invoca
+`/codereview:codereview base=<sha>` sobre o `reviewed_head:` da rodada anterior, com essa rodada nomeada
+como a lista dos achados abertos; sem rodada anterior, sem a chave, chave errada ou um merge depois
+dela, a rodada é inteira e o prompt diz por quê. O delta se impõe pelo argumento da skill, nunca por
+frase (r7 do #414). O mesmo juízo responde por `sdd review-base <missão>`, que o ato `review` do worker
+passa ao subagente. A medida em dinheiro (r≥2/r1, antes 1,0 a 1,5) é do L2.
+Desde `20260922-o-motivo-da-fase` o boot também diz **por que** a fase
 foi aberta: a linha `Why this phase:` carrega o `GATE_WHY` que o `derive_phase` publicou (chamado,
 nunca `$( )`), ou diz `forced from the CLI` quando o runner não derivou a fase — o executor da
 `20260921-amep-backend-0-1-0` abriu sem linha `pending` e sem motivo, e fez commit no-op. Desde
@@ -252,6 +261,10 @@ nesta máquina sobre uma regra que não faz nada. É também o sensor do dia em 
 sintaxe da regra. Custa uma sessão haiku por preflight: US$ 0,002 (US$ 0,00197 medidos em
 2026-10-20 às 22:59, Claude Code 2.1.304, com a regra lendo o template) e uns 6 s (as sondas p5 e p6
 do grill, 16:24).
+Desde `20261119-l1b-a-rodada-delta` (ADR 0023) o `gate_REVIEW` lê o `reviewed_head:` da rodada
+(`review_head_ok`): recusa a chave presente e errada (não é commit, o `HEAD` não a carrega, ou código
+fora do `hat_writes REVIEW` mudou entre ela e o commit que **adicionou** a rodada) e aceita a rodada sem
+a chave, como as antigas.
 Desde `20261117-o-worker-orquestrador` (ADR 0022 §5) o merge delegado também é gate por artefato,
 fora do runner: `sdd-worker pr-ready` responde `ready <sha>` só com os cinco itens verdadeiros no
 mesmo sha (a rodada mais nova da missão com A em todo critério e um `reviewed_head:` do qual até o
