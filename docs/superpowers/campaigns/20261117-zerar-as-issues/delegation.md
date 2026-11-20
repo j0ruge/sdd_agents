@@ -5,7 +5,7 @@ lots: all
 expires: 2026-11-26 18:00
 budget_mission_usd: 60
 budget_campaign_usd: 500
-signed: 2026-11-20 08:59 f76dad9d13d3
+signed: 2026-11-20 19:55 3c18dce6c02e
 ---
 
 # Delegação — Zerar as issues do kit
@@ -53,9 +53,10 @@ Para o worker agir sozinho, depois do merge da missão que o construiu:
 Delegação ausente, ilegível, sem assinatura, editada depois de assinada ou vencida vale `assisted`.
 Acima de `assisted`, um `ON_ESCALATION_CMD` vazio no `.sdd/config.sh` do checkout da campanha ou de
 um worktree que guarda missão dela (onde o `sdd run` da missão roda e avisa) também vale
-`assisted`: uma noite sem ninguém olhando precisa de um aviso que chegue. Os L6a a L6k desta
-campanha têm teto `plan` no `campaign.md`: neles o nível efetivo nunca passa de `plan`, qualquer que
-seja o assinado.
+`assisted`: uma noite sem ninguém olhando precisa de um aviso que chegue. O teto de um lote na
+tabela do `campaign.md` limita o nível efetivo nele, qualquer que seja o assinado. Os L6a a L6k desta
+campanha nasceram com teto `plan` e subiram a `-` em 2026-11-20, por ordem do dono: hoje nenhum lote
+tem teto abaixo do nível assinado.
 
 ## Como assinar
 
