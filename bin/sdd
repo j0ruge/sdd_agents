@@ -3186,7 +3186,7 @@ Grade A on every criterion and tolerates B on the ones graded on prose (REVIEW_P
 Documentation, Overall): a finding that is prose alone goes to the TODO_FILE, never to an R<n> —
 a prose fix writes new prose for the next round to grade, and that loop does not converge.
 EOF
-    ;;
+    review_delta_prompt ;;
     QA:plan|QA:exec) cat <<'EOF'
 
 The skill above owns the docs/qa/ tree — follow its instructions. When you finish, commit what
@@ -12990,7 +12990,7 @@ blocks the transition, say what it is and stop — but do not stop to request pe
 
 # review_base_line — the ONE judgement of the delta round (ADR 0023): prints one line, by the first
 # rule that matches. The first word is the contract (`base=<40 hex>` or `full`); the rest is for the
-# human. Readers: `sdd review-base` (the worker's review act) and, from I2 on, phase_extra REVIEW.
+# human. Readers: `sdd review-base` (the worker's review act) and review_delta_prompt (phase_extra).
 # Pure: it only prints, publishes no global, and is safe to read through `$( )`. Every git capture
 # is guarded, because under `set -euo pipefail` a non-zero rc kills the process at the assignment.
 #   1. no 40-review-r*.md                      → full — no earlier round
@@ -13031,6 +13031,28 @@ cmd_review_base() {
   load_config
   resolve_mission "${1:-}"
   review_base_line
+}
+
+# review_delta_prompt — the delta line of the REVIEW boot prompt (ADR 0023), read off the ONE
+# judgement review_base_line. Called by phase_extra REVIEW, inside the `$( )` of boot_prompt, so it
+# only prints. The two literals the probes read (`/codereview:codereview base=<sha>` and
+# `read <round> for the findings it left open`; `FULL round (<why>)`) each stay on one line.
+review_delta_prompt() {
+  local line sha round
+  line="$(review_base_line)"
+  case "${line%% *}" in
+    base=*)
+      sha="${line%% *}"; sha="${sha#base=}"
+      round="$(awk '{print $3}' <<< "$line")"
+      printf '\nThis is a DELTA round. Invoke /codereview:codereview base=%s — the argument, not this\n' "$sha"
+      printf 'sentence, limits the skill to the delta — and read %s for the findings it left open.\n' "$round"
+      printf 'A finding in code the delta did not touch goes to the TODO_FILE, never to an R<n>; the one\n'
+      printf 'read outside the delta is a grep for the old spelling of an interface the delta changed.\n'
+      ;;
+    *)
+      printf '\nThis is a FULL round (%s): invoke /codereview:codereview over the mission diff.\n' "${line#full — }"
+      ;;
+  esac
 }
 
 

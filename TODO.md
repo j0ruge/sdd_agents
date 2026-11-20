@@ -270,7 +270,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `measure.sh` dela não os roda). O `/codereview` lê a pasta como a evidência da fase e mediu de novo no
   `34aa349` (mesmos valores). Direção: cada medida citada salva a saída onde o `gate:` diz, ou o `gate:` a exclui.
   — descoberto pelo relay do `sdd run` na missão `20261024-plano-3-5-b-auras-e-equipamento` (2026-10-25)
-- [ ] **O platô da REVIEW lê só as letras, e pararia um laço que converge** — `agents/sdd-reviewer.md:62`
+- [ ] **O platô da REVIEW lê só as letras, e pararia um laço que converge** — `agents/sdd-reviewer.md:68`
   (`Overall Grade`) — "as mesmas letras da rodada anterior" é platô, mas não separa o achado que a rodada
   não fechou do material que entrou entre as rodadas sem ser `R<n>`, nem da classe que a varredura pulou. No
   `lighthouse_project` a REVIEW ficou em B de r3 a r6, cada rodada com um achado real e menor, fechado pelo
@@ -677,7 +677,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
 
-- [ ] **O revisor não tem destino para o LOW que não move a nota** — `agents/sdd-reviewer.md:95`
+- [ ] **O revisor não tem destino para o LOW que não move a nota** — `agents/sdd-reviewer.md:106`
   (`MEDIUM/LOW, cheap`) — a tabela manda todo MEDIUM/LOW barato para um `R<n>` de lote, mas a escala do
   `codereview` dá A com "minor MEDIUM/LOW", e as rodadas deixam o LOW no relatório com motivo escrito: na
   `20261028-whf-162-jdb-na-descricao` do `warehouse_explorer_web`, 11 LOW na r1, 2 na r2 e 6 na r3, e o gate

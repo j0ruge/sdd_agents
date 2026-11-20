@@ -7486,6 +7486,9 @@ mut_RUN_review_base_ancestry_unchecked() {
 mut_RUN_review_base_merge_ignored() {
   sed -i '/^review_base_line()/,/^}/ s|if \[ -n "$merge" \]; then|if false; then|' "$1"
 }
+mut_RUN_review_prompt_delta_dropped() {
+  sed -i '/^phase_extra()/,/^}/ s|^    review_delta_prompt ;;$|    ;;|' "$1"
+}
 mut_COORD_review_base_locked() {
   sed -i '/^coordination_enter()/,/^}/ s/^    boot|note-manual|/    review-base|boot|note-manual|/' "$1"
 }
@@ -7496,6 +7499,7 @@ CATALOG=(
   RUN_review_base_commit_unchecked
   RUN_review_base_ancestry_unchecked
   RUN_review_base_merge_ignored
+  RUN_review_prompt_delta_dropped
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
   COORD_signal_repeated

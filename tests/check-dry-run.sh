@@ -561,6 +561,14 @@ else
   fail "the REVIEW boot prompt sends findings to R increments and never fixes in-session" \
        "a prompt naming the R<n> increment the finding becomes" "no mention of an R<n> increment"
 fi
+# ADR 0023: the fixture mission has no round on disk, so review_base_line answers "full — no earlier
+# round" and the prompt has to say so — the delta world is in check-gates.sh, which writes rounds.
+if grep -qF 'FULL round (no earlier round)' <<< "$review_prompt"; then
+  pass "the REVIEW boot prompt of a first round orders a full review and says why"
+else
+  fail "the REVIEW boot prompt of a first round orders a full review and says why" \
+       "a line 'This is a FULL round (no earlier round): …'" "no FULL round line"
+fi
 
 echo "== the turn rule reaches every phase, from one definition =="
 # Measured 2026-09-02 (20260902-o-rascunho-legado-fala-cru, phase PR): two sdd-publisher sessions

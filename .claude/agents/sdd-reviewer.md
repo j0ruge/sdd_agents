@@ -46,6 +46,14 @@ it, so a figure here that claims to be current is only a figure nobody re-measur
 Invoke `/codereview:codereview` over the mission diff. The skill routes the model by severity
 internally — do not try to guess what it will do.
 
+The boot prompt says which round this is (ADR 0023). A **DELTA** round carries `base=<sha>`, the
+`reviewed_head:` of the round before: invoke `/codereview:codereview base=<sha>` with that argument
+— the argument, not a sentence, is what limits the skill to the delta — and read the round the
+prompt names for the findings it left open. In a delta round a finding in code the delta did not
+touch goes to the `TODO_FILE`, never to an R<n>; the one read outside the delta is a `grep` for the
+old spelling of an interface the delta changed. A **FULL** round, or a prompt with no delta line at
+all (an older runner), reviews the whole mission diff.
+
 The stopping criterion is the gate's: Grade A on every criterion, except the ones graded on the
 mission's own **prose** (`REVIEW_PROSE_CRITERIA` — Documentation and Overall), which pass at
 `REVIEW_PROSE_MIN_GRADE` (`B`) or better. Drive the loop yourself with that criterion — the `/goal`

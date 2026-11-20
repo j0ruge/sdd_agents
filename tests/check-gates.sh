@@ -2833,6 +2833,16 @@ if [[ "$rb_out" == full* ]] && grep -qF "$rb_merge" <<< "$rb_out"; then
   pass "review-base: a merge after the reviewed head answers full and names the merge"
 else fail "review-base: a merge after the reviewed head answers full and names the merge" "full — merge $rb_merge …" "$rb_out"; fi
 
+# The REVIEW boot prompt reads the same judgement (I2). r12 is written after the merge, so the merge
+# is outside its interval. The round's name alone proves nothing — item 4 of the boot already names
+# the latest handoff, which is this r12 — so the probe reads a literal only the delta line has.
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+rb_out="$( ( cd "$FIX" && "$SDD" boot "$MISSION" REVIEW 2>&1 ) || true )"
+if grep -qF "/codereview:codereview base=$rb_head" <<< "$rb_out" \
+   && grep -qF 'read 40-review-r12.md for the findings it left open' <<< "$rb_out"; then
+  pass "the REVIEW boot prompt of a delta round carries base= and names the round"
+else fail "the REVIEW boot prompt of a delta round carries base= and names the round" "/codereview:codereview base=$rb_head … read 40-review-r12.md for the findings it left open" "$(grep -F 'round' <<< "$rb_out" || true)"; fi
+
 rm -f "$MDIR/40-review-r12.md"
 git add -A && git commit -qm "chore: drop the r12 fixture" >/dev/null
 assert_phase "with the r12 fixture gone the mission is back at DOCS" "DOCS"
