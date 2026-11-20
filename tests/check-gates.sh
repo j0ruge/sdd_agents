@@ -2782,6 +2782,61 @@ rm -f "$MDIR/40-review-r11.md"
 git add -A && git commit -qm "chore: drop the r11 fixture" >/dev/null
 assert_phase "with the Rationale fixture gone the mission is back at DOCS" "DOCS"
 
+# The delta round (ADR 0023, mission 20261119-l1b-a-rodada-delta). `sdd review-base` and the REVIEW
+# boot prompt read ONE judgement, review_base_line: from the second round on, the round reviews
+# base=<the reviewed_head: of the round before>..HEAD; when the key is missing, wrong or a merge
+# entered after it, the round is a full one and the line says why. Every world writes r12, the
+# latest round by version, with the frontmatter of write_r11 and reviewed_head: as its LAST key.
+write_r12() { # write_r12 <reviewed_head value | @absent@>
+  local rh="$1" c
+  {
+    printf -- '---\nfase: REVIEW\nrodada: 12\ngate: %s\n' 'tests/run-all.sh: suite green, 559 assertions, tree clean'
+    [ "$rh" = '@absent@' ] || printf 'reviewed_head: %s\n' "$rh"
+    printf -- '---\n\n# Review r12\n\n### Overall Grade\n\n'
+    printf '| Criterion | Grade | Rationale |\n|-----------|-------|-----------|\n'
+    for c in "${i3_rows[@]}"; do printf '| %s | A | clean |\n' "$c"; done
+    printf '| **Overall** | **A** | clean |\n'
+  } > "$MDIR/40-review-r12.md"
+  git add -A && git commit -qm "chore: review r12" >/dev/null
+}
+review_base_of() { ( cd "$FIX" && "$SDD" review-base "$MISSION" 2>&1 ) || true; }
+
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"; rb_out="$(review_base_of)"
+if [[ "$rb_out" == "base=$rb_head "* ]] && grep -qF '40-review-r12.md' <<< "$rb_out"; then
+  pass "review-base: a round with reviewed_head: answers base=<that sha>"
+else fail "review-base: a round with reviewed_head: answers base=<that sha>" "base=$rb_head … 40-review-r12.md" "$rb_out"; fi
+
+write_r12 '@absent@'; rb_out="$(review_base_of)"
+if [[ "$rb_out" == full* ]] && grep -qF '40-review-r12.md has no reviewed_head:' <<< "$rb_out"; then
+  pass "review-base: a round without reviewed_head: answers full and names it"
+else fail "review-base: a round without reviewed_head: answers full and names it" "full — 40-review-r12.md has no reviewed_head:" "$rb_out"; fi
+
+write_r12 'zzz'; rb_out="$(review_base_of)"
+if [[ "$rb_out" == full* ]] && grep -qF 'is no commit' <<< "$rb_out"; then
+  pass "review-base: a reviewed_head: that is no commit answers full"
+else fail "review-base: a reviewed_head: that is no commit answers full" "full — … is no commit" "$rb_out"; fi
+
+rb_orphan="$(git commit-tree "$(git hash-object -t tree /dev/null)" -m orphan)"
+write_r12 "$rb_orphan"; rb_out="$(review_base_of)"
+if [[ "$rb_out" == full* ]] && grep -qF 'not an ancestor of HEAD' <<< "$rb_out"; then
+  pass "review-base: a reviewed_head: the HEAD does not carry answers full"
+else fail "review-base: a reviewed_head: the HEAD does not carry answers full" "full — … not an ancestor of HEAD" "$rb_out"; fi
+
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+git checkout -q -b l1b-side
+echo side > l1b-side.txt; git add -A && git commit -qm "chore: side" >/dev/null
+git checkout -q main
+git merge -q --no-edit --no-ff l1b-side >/dev/null
+git branch -q -D l1b-side
+rb_merge="$(git rev-parse --short HEAD)"; rb_out="$(review_base_of)"
+if [[ "$rb_out" == full* ]] && grep -qF "$rb_merge" <<< "$rb_out"; then
+  pass "review-base: a merge after the reviewed head answers full and names the merge"
+else fail "review-base: a merge after the reviewed head answers full and names the merge" "full — merge $rb_merge …" "$rb_out"; fi
+
+rm -f "$MDIR/40-review-r12.md"
+git add -A && git commit -qm "chore: drop the r12 fixture" >/dev/null
+assert_phase "with the r12 fixture gone the mission is back at DOCS" "DOCS"
+
 # --- DOCS ------------------------------------------------------------------
 echo "== DOCS phase =="
 # The gate reads the Status COLUMN of the table, not the loose word: a 45-docs.md that names

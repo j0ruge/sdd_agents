@@ -12329,6 +12329,8 @@ USAGE
   sdd boot <mission> <PHASE> print the boot prompt that phase would be given, and exit. No
                              session, no cost — but it derives the phase, so the gates run
                              TEST_CMD (and E2E_CMD past EXEC); avoid it during a live 'sdd run'
+  sdd review-base <mission>  base=<sha> when the next REVIEW round can review only the delta since
+                             the reviewed_head: of the latest round, or full and why. No gate, no suite
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the
@@ -12574,6 +12576,7 @@ main() {
     autonomy)  cmd_autonomy "$@" ;;
     census)    cmd_census "$@" ;;
     boot)      cmd_boot "$@" ;;
+    review-base) cmd_review_base "$@" ;;
     kaizen)    cmd_kaizen "$@" ;;
     adr)       cmd_adr "$@" ;;
     version|--version|-v) cmd_version ;;
@@ -12983,6 +12986,51 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   fi
   bad "$issue is still open — JIRA does not confirm the close (the session may have only asked for confirmation); see $close_logs"
   return 1
+}
+
+# review_base_line — the ONE judgement of the delta round (ADR 0023): prints one line, by the first
+# rule that matches. The first word is the contract (`base=<40 hex>` or `full`); the rest is for the
+# human. Readers: `sdd review-base` (the worker's review act) and, from I2 on, phase_extra REVIEW.
+# Pure: it only prints, publishes no global, and is safe to read through `$( )`. Every git capture
+# is guarded, because under `set -euo pipefail` a non-zero rc kills the process at the assignment.
+#   1. no 40-review-r*.md                      → full — no earlier round
+#   2. the latest has no reviewed_head:        → full — it has no reviewed_head:
+#   3. not 7–40 hex, or not a commit           → full — it is no commit
+#   4. not an ancestor of HEAD                 → full — not an ancestor
+#   5. a merge in <reviewed_head>..HEAD        → full — the merge would pour the base into the delta
+#   6. otherwise                               → base=<sha>
+review_base_line() {
+  local last name v sha="" short merge
+  last="$(latest_matching "$MISSION_DIR/40-review-r*.md")"
+  [ -n "$last" ] || { printf 'full — no earlier round\n'; return 0; }
+  name="$(basename "$last")"
+  if ! frontmatter_has "$last" reviewed_head; then
+    printf 'full — %s has no reviewed_head:\n' "$name"; return 0
+  fi
+  v="$(frontmatter "$last" reviewed_head)"
+  if [[ "$v" =~ ^[0-9a-f]{7,40}$ ]]; then
+    sha="$(git -C "$REPO_ROOT" rev-parse -q --verify "$v^{commit}" 2>/dev/null || true)"
+  fi
+  [ -n "$sha" ] || { printf "full — the reviewed_head: of %s is no commit ('%s')\n" "$name" "$v"; return 0; }
+  short="$(git -C "$REPO_ROOT" rev-parse --short "$sha" 2>/dev/null || true)"
+  if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
+    printf 'full — the reviewed_head: of %s (%s) is not an ancestor of HEAD\n' "$name" "$short"; return 0
+  fi
+  merge="$(git -C "$REPO_ROOT" rev-list --merges -n 1 "$sha..HEAD" 2>/dev/null || true)"
+  if [ -n "$merge" ]; then
+    printf 'full — merge %s entered after %s\n' "$(git -C "$REPO_ROOT" rev-parse --short "$merge" 2>/dev/null || true)" "$name"
+    return 0
+  fi
+  printf 'base=%s — %s reviewed this head; its findings are the open ones\n' "$sha" "$name"
+}
+
+# sdd review-base <mission> — print review_base_line for the mission and exit 0 (`full` is an
+# answer, not an error). Runs no gate and no suite, so it takes no lock: the `*)` arm of
+# coordination_enter already admits it, and COORD_review_base_locked holds that.
+cmd_review_base() {
+  load_config
+  resolve_mission "${1:-}"
+  review_base_line
 }
 
 

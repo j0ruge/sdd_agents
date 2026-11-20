@@ -7471,7 +7471,31 @@ mut_WORKER_handoff_dir_unnormalized() {
   sed -i '/^campaign_set() {/,/^}/ { /^      dir_normalise whd$/d }' "${1%/*}/sdd-worker"
 }
 
+# The delta round (ADR 0023): review_base_line is the one judgement `sdd review-base` and the REVIEW
+# boot prompt read. Each mutant drops one of its rules; caught by the "review-base: …" assertions
+# of check-gates.sh (rules 2–5) and by the query probe of check-coordination.sh (the lock).
+mut_RUN_review_base_absent_as_base() {
+  sed -i '/^review_base_line()/,/^}/ s|if ! frontmatter_has "$last" reviewed_head; then|if false; then|' "$1"
+}
+mut_RUN_review_base_commit_unchecked() {
+  sed -i '/^review_base_line()/,/^}/ s|\[ -n "$sha" \] \|\| { printf "full|[ -n "$v" ] \|\| { printf "full|' "$1"
+}
+mut_RUN_review_base_ancestry_unchecked() {
+  sed -i '/^review_base_line()/,/^}/ s|if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then|if false; then|' "$1"
+}
+mut_RUN_review_base_merge_ignored() {
+  sed -i '/^review_base_line()/,/^}/ s|if \[ -n "$merge" \]; then|if false; then|' "$1"
+}
+mut_COORD_review_base_locked() {
+  sed -i '/^coordination_enter()/,/^}/ s/^    boot|note-manual|/    review-base|boot|note-manual|/' "$1"
+}
+
 CATALOG=(
+  COORD_review_base_locked
+  RUN_review_base_absent_as_base
+  RUN_review_base_commit_unchecked
+  RUN_review_base_ancestry_unchecked
+  RUN_review_base_merge_ignored
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
   COORD_signal_repeated
