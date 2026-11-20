@@ -887,7 +887,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `tests/check-autonomy.sh:1515` lê `effort=xhigh` onde espera `effort=settings`. A corrida do L2 foi lançada com
   `EFFORT_EXEC=xhigh sdd run`: a suíte sai com 2 vermelhos, e o `gate_EXEC`, que roda o `TEST_CMD` por `eval` no
   mesmo ambiente, não fica verde enquanto ele durar. Direção: os dois sensores tiram do ambiente as chaves que o
-  fixture declara ausentes antes de montá-lo, numa definição só, no molde do `tests/isolate-git.sh`.
+  fixture declara ausentes, numa definição só, no molde do `tests/isolate-git.sh`. RESOLVED by d48f7c9
   — descoberto por `sdd-executor` no I1 da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-20)
 
 ## Decidido — não reabrir
