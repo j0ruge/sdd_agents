@@ -580,7 +580,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O `sdd status` manda `sdd run` com o app fora do ar, e a fase fechada volta a pendente** — `bin/sdd:8119`
   (`run: sdd run`) — com o `30-handoff-qa.md` em `done`, o `gate_QA` refaz a e2e ao vivo; app caído vira `· QA`,
   `next phase: QA` e `run: sdd run`, embora o motivo diga "no session can start it" (`:1867`). Esse `sdd run`
-  compra uma sessão `QA:close` (opus no alvo) antes de escalar `app-down` (`tests/check-autonomy.sh:2557`), e cada
+  compra uma sessão `QA:close` (opus no alvo) antes de escalar `app-down` (`tests/check-autonomy.sh:2564`), e cada
   leitura roda a e2e, que no `lighthouse_project` grava uma demanda e gasta um número da sequência. Direção: o
   status lê o `GATE_APP_DOWN` e diz "fechada, e2e não re-verificável agora: app fora", com o remédio da escalada.
   — descoberto por `sessão coordenadora` na missão `20261013-amep-alignment-review` (2026-10-14)
@@ -882,9 +882,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261118-plano-7-c-o-hud-e-a-pilha` do `dotp-remake` (2026-11-20)
 
 - [ ] **Dois sensores leem o `EFFORT_*` do ambiente de quem chama, e a suíte fica vermelha sob `EFFORT_EXEC=xhigh`** —
-  `tests/check-dry-run.sh:505` (`effort_of`) — o fixture apaga as chaves `EFFORT_*` do config, mas a variável que o
+  `tests/check-dry-run.sh:511` (`effort_of`) — o fixture apaga as chaves `EFFORT_*` do config, mas a variável que o
   lançamento exportou chega à projeção (`expected: - - - - -`, `got: xhigh - - - -`), e o par de
-  `tests/check-autonomy.sh:1508` lê `effort=xhigh` onde espera `effort=settings`. A corrida do L2 foi lançada com
+  `tests/check-autonomy.sh:1515` lê `effort=xhigh` onde espera `effort=settings`. A corrida do L2 foi lançada com
   `EFFORT_EXEC=xhigh sdd run`: a suíte sai com 2 vermelhos, e o `gate_EXEC`, que roda o `TEST_CMD` por `eval` no
   mesmo ambiente, não fica verde enquanto ele durar. Direção: os dois sensores tiram do ambiente as chaves que o
   fixture declara ausentes antes de montá-lo, numa definição só, no molde do `tests/isolate-git.sh`.
