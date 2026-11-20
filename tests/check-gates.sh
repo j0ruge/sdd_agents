@@ -2956,18 +2956,39 @@ assert_phase "gate_REVIEW: reviewed_head absent still passes, as the rounds befo
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 assert_phase "gate_REVIEW: reviewed_head the round read, with only its own files after it, passes" "DOCS"
 
+# A path git quotes is still the path (r3 of 20261119-l1b-a-rodada-delta): under core.quotePath, the
+# default, git diff --name-only prints a non-ASCII name between quotes with octal escapes, the glob
+# of the reviewer's writes: does not match it, and the gate refused a round the hat guard
+# (hat_diff_names, which turns the option off) accepted. The world is a non-ASCII note inside the
+# mission folder, committed between the reviewed head and the round. The fixture sets the option
+# true, so a global false cannot disarm the world, and the witness is that a plain git diff there
+# prints the note quoted. The name is built from its bytes, so this file stays ASCII.
+rb_na="$MDIR/notes-$(printf '\303\274').md"
+git config core.quotePath true
+rb_head="$(git rev-parse HEAD)"
+printf 'note\n' > "$rb_na"; git add -A && git commit -qm "docs: a non-ASCII note in the mission folder" >/dev/null
+write_r12 "$rb_head"
+rb_q="$(git diff --name-only "$rb_head" HEAD)"
+if grep -qF 'notes-\303\274.md"' <<< "$rb_q"; then
+  pass "fixture: a plain git diff prints the non-ASCII note quoted, with octal escapes"
+else fail "fixture: a plain git diff prints the non-ASCII note quoted, with octal escapes" '"…/notes-\303\274.md"' "$rb_q"; fi
+assert_phase "gate_REVIEW: a non-ASCII path inside the reviewer's writes: in the range passes" "DOCS"
+git config --unset core.quotePath
+git rm -q "$rb_na" && git commit -qm "chore: drop the non-ASCII note" >/dev/null
+
 # A range diff that fails refuses the round, fail closed (CodeRabbit on PR #452): its error was
 # discarded, the path loop read nothing, and a round the gate could not read passed. The world is a
-# git first on the PATH that fails exactly the range diff of review_head_ok (`-C <root> diff
-# --name-only …`) and hands every other call to the real git; the witness is that it does both.
+# git first on the PATH that fails exactly the range diff of review_head_ok (`-C <root>
+# -c core.quotePath=false diff --name-only …`) and hands every other call to the real git; the
+# witness is that it does both.
 mkdir -p "$FIX/.git/l1b-gitstub"
 cat > "$FIX/.git/l1b-gitstub/git" <<STUB
 #!/usr/bin/env bash
-if [ "\${3:-}" = diff ] && [ "\${4:-}" = --name-only ]; then echo "fatal: stub: the range diff fails" >&2; exit 128; fi
+if [ "\${3:-}" = -c ] && [ "\${4:-}" = core.quotePath=false ] && [ "\${5:-}" = diff ] && [ "\${6:-}" = --name-only ]; then echo "fatal: stub: the range diff fails" >&2; exit 128; fi
 exec "$(command -v git)" "\$@"
 STUB
 chmod +x "$FIX/.git/l1b-gitstub/git"
-rb_rc=0; "$FIX/.git/l1b-gitstub/git" -C "$FIX" diff --name-only HEAD HEAD >/dev/null 2>&1 || rb_rc=$?
+rb_rc=0; "$FIX/.git/l1b-gitstub/git" -C "$FIX" -c core.quotePath=false diff --name-only HEAD HEAD >/dev/null 2>&1 || rb_rc=$?
 if [ "$rb_rc" -eq 128 ] && [ "$("$FIX/.git/l1b-gitstub/git" -C "$FIX" rev-parse HEAD)" = "$(git rev-parse HEAD)" ]; then
   pass "fixture: the git stub fails the range diff and answers every other call"
 else fail "fixture: the git stub fails the range diff and answers every other call" "rc 128 and the HEAD" "rc $rb_rc"; fi

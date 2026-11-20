@@ -7562,6 +7562,14 @@ mut_REVIEW_head_signature_shown() {
 mut_REVIEW_head_diff_failure_passes() {
   sed -i '/^review_head_ok()/,/^}/ s|"$sha" "$rc_commit" 2>/dev/null)"; then|"$sha" "$rc_commit" 2>/dev/null \|\| true)"; then|' "$1"
 }
+# The range is listed with git's default quoting again: a non-ASCII name inside the reviewer's
+# writes: comes back quoted, matches no glob, and the round is refused (r3 of
+# 20261119-l1b-a-rodada-delta). Caught by "gate_REVIEW: a non-ASCII path inside the reviewer's
+# writes: in the range passes" (check-gates.sh), and by the range-diff stub, which fails the spelling
+# with the option only.
+mut_REVIEW_head_range_quoted() {
+  sed -i '/^review_head_ok()/,/^}/ s| -c core.quotePath=false diff --name-only "$sha" "$rc_commit"| diff --name-only "$sha" "$rc_commit"|' "$1"
+}
 # The gate's shape is capped at 40 hex again: a SHA-256 repository's round is refused as no commit.
 # Caught by "gate_REVIEW: a 64-hex reviewed_head of a SHA-256 repository reaches the range rule".
 mut_REVIEW_head_sha256_refused() {
@@ -7577,6 +7585,7 @@ CATALOG=(
   REVIEW_head_sha256_refused
   REVIEW_head_signature_shown
   REVIEW_head_diff_failure_passes
+  REVIEW_head_range_quoted
   COORD_review_base_locked
   RUN_review_base_absent_as_base
   RUN_review_base_commit_unchecked

@@ -13088,6 +13088,9 @@ review_delta_prompt() {
 # it on, git log prints the verification of a signed commit before the %H line, and the capture
 # carried both. And a range diff that fails refuses the round (rule 4): its error discarded, the
 # loop read nothing and passed a round the gate could not read — fail closed, never open.
+# The range is listed with core.quotePath=false, the spelling of hat_diff_names (r3 of l1b): with
+# the default, a non-ASCII name inside the reviewer's writes: came back quoted with octal escapes,
+# matched no glob, and the gate refused a round the hat guard had accepted.
 review_head_ok() {
   local round="$1" name v sha="" short rc_commit p globs changed=""
   frontmatter_has "$round" reviewed_head || return 0
@@ -13107,7 +13110,7 @@ review_head_ok() {
   fi
   rc_commit="$(git -C "$REPO_ROOT" -c log.showSignature=false log -1 --diff-filter=A --format=%H -- "$round" 2>/dev/null || true)"
   [ -n "$rc_commit" ] || return 0
-  if ! changed="$(git -C "$REPO_ROOT" diff --name-only "$sha" "$rc_commit" 2>/dev/null)"; then
+  if ! changed="$(git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$sha" "$rc_commit" 2>/dev/null)"; then
     GATE_WHY="$name: git diff cannot list what changed between reviewed_head $short and the round's commit — the gate does not pass a round it cannot read"
     return 1
   fi
