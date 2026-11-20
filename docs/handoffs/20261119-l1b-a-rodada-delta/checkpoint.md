@@ -1,6 +1,6 @@
 ---
 missao: 20261119-l1b-a-rodada-delta
-atualizado: 2026-11-20 11:16
+atualizado: 2026-11-20 12:19
 ---
 
 # Checkpoint — L1b: a rodada delta
@@ -53,6 +53,7 @@ atualizado: 2026-11-20 11:16
 | I3 | A rodada grava o head, e o gate confere | `o=$(bash tests/check-gates.sh 2>&1); echo "$(grep -c '^  ok    gate_REVIEW: reviewed_head' <<< "$o") $(grep -c '^reviewed_head: ' templates/review.md)"` → `5 1` | done | 1d23ca7 |
 | I4 | O ato review do worker usa o delta, e os docs param de dizer o contrário | `o=$(bash tests/check-worker.sh 2>&1); echo "$(grep -c '^  ok    command: the review act passes the line of sdd review-base to its subagent' <<< "$o") $(grep -q 'sdd review-base' docs/pipeline.md; echo $?)"` → `1 0` | done | a3d0b72 |
 | I5 | Fecho: RESOLVED by no #436 e o 20-handoff-exec.md | `o=$(grep -A8 -F 'A rodada de revisão relê a missão inteira, porque o chapéu não passa' TODO.md); echo "$(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$o") $(test -f docs/handoffs/20261119-l1b-a-rodada-delta/20-handoff-exec.md; echo $?)"` → `1 0` | done | 7f7e32f |
+| R1 | achado #1 da r1: o review_head_ok lê o commit que adicionou a rodada, não o último que a tocou | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    gate_REVIEW: reviewed_head reads the commit that added the round, not a later one that touched it' <<< "$o"` → `1` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
