@@ -50,3 +50,5 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+- 2026-11-20 16:52 · `I1` · Red `0 0 0 0` (4 FAIL, só os da família nova `command_before_probes`) → Green `1 1 1 1`, `check-hat.sh` rc 0 com 128 linhas `ok`; 10 âncoras do `TODO.md` re-apontadas pelo deslocamento (+23, +32, +45), a do item 9 pela frase dela (linha 178), não pela menção nova a `Nothing else resumes the planner` (150); commit `256e9d4`
+- 2026-11-20 16:52 · `I1` · ⚠️ `TEST_CMD` vermelho antes e depois do I1, só por ambiente: o `EFFORT_EXEC=xhigh` exportado no lançamento (pendência 10) vaza para o `check-dry-run.sh` e o `check-autonomy.sh` (2 FAIL, os mesmos nas duas corridas); com `env -u EFFORT_EXEC -u CLAUDE_EFFORT` os dois saem rc 0, 0 FAIL. O `gate_EXEC` roda o `TEST_CMD` por `eval` no mesmo ambiente e não fica verde nesta corrida sem conserto: achado no `TODO.md` em `1c8de6a` (catraca 102 → 103). Decide o humano: consertar os dois sensores ou relançar sem a variável exportada
