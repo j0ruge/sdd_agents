@@ -923,6 +923,52 @@ command_before_probes() {
   fi
 }
 
+# --- /sdd-plan and the planner: the grill from both sides (lot L2, items 2, 9, 6, 13) ------------
+# Four rules the relay held on its own. In dotp-remake 3.2c the session of the relay died with a
+# question pending, the call came back "its outcome is unknown", and in the new session a SendMessage
+# to the old planner's id came back `Resuming agent` with the grill intact (item 2). In ui24_agent a
+# background suite of the planner ended after its hand-back, and the planner asked question 1 again
+# with the human's answer already with the relay (item 9). In magic_tutor decision 7 came out
+# `- answer: (recommended)` with `aprovacao: auto` before Q7 reached the human, and the status read
+# `plan approved (auto)` (item 6). In dotp-remake 7b the owner's handoff ordered the grill answered
+# with the recommended option, and no rule said when such an order holds (item 13). One pair per
+# item, each literal read in the section whose reader follows it: the relay's in "Relaying the
+# grill", the acceptance's in "When the artifacts exist", the planner's in § 1.
+command_grill_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" agent="$ROOT/agents/sdd-planner.md" relay art s1
+  relay="$(awk '/^## Relaying the grill to the human/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  art="$(awk '/^## When the artifacts exist/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  s1="$(awk '/^## 1\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'its outcome is unknown' <<< "$relay" \
+     && grep -qF 'ask the human the pending question again' <<< "$relay" \
+     && grep -qF 'resume the same planner by its id' <<< "$relay"; then
+    pass "command: /sdd-plan resumes the same planner by id after the session of the relay died, and asks the pending question again"
+  else
+    fail "command: /sdd-plan no longer resumes the same planner by its id after the session of the relay died, or reads a call whose outcome is unknown as answered"
+  fi
+  if grep -qF 'A hand-back that repeats a question you already relayed' <<< "$relay" \
+     && grep -qF 'repeat it unchanged and say that it is a repeat' <<< "$s1"; then
+    pass "command: /sdd-plan and the planner treat a question repeated after a background job as one question, asked of the human once"
+  else
+    fail "command: /sdd-plan takes a question the planner repeated after a background job to the human again, or the planner no longer says that the repeat is one"
+  fi
+  if grep -qF 'exceeds the answers you handed back' <<< "$relay" \
+     && grep -qF 'only after the relay handed that answer back' <<< "$s1"; then
+    pass "command: /sdd-plan counts the answer marks at every hand-back and stops on one it did not deliver, and the planner marks only an answer it received"
+  else
+    fail "command: /sdd-plan no longer counts the answer marks at every hand-back, or the planner marks an answer the relay never handed back"
+  fi
+  if grep -qF 'Grill answers delegated in writing' <<< "$relay" \
+     && grep -qF 'only with the recommended option' <<< "$relay" \
+     && grep -qF 'A question with no recommended option' <<< "$relay" \
+     && grep -qF 'how many of the `M` were delegated' <<< "$art" \
+     && grep -qF 'delegated in writing' <<< "$s1"; then
+    pass "command: /sdd-plan answers a grill question for the human only under a written order of theirs, with the recommended option, and shows the delegated answers at the acceptance"
+  else
+    fail "command: /sdd-plan answers a grill question for the human without a written order of theirs or with another option than the recommended one, or no longer shows the delegated answers at the acceptance"
+  fi
+}
+
 # --- /sdd-plan and the planner: no question behind a live background task (item B, 3 returns) ---
 # The harness tells the relay that a subagent stopped only when it stops with no live child in the
 # background (probe of dotp-remake 3.5c). In magic_tutor Q3, Q4 and Q7 were the end of a planner
@@ -1390,6 +1436,7 @@ command_worktree_return_probes
 command_branch_cwd_probes
 command_planner_unregistered_probes
 command_before_probes
+command_grill_probes
 background_question_probes
 doc_finding_prs_probes
 doc_operator_probes

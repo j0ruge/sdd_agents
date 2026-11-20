@@ -59,6 +59,12 @@ One line per answer: a question asked twice (a confirmation, a reopened decision
 A note never goes inside the parentheses; it goes in the decision's prose. The acceptance step of
 `/sdd-plan` counts only these whole lines inside the decisions section, so no count of answers is
 written by hand anywhere in the plan (ADR 0018 §3).
+Write an `- answer:` line only after the relay handed that answer back, and never write `aprovacao: auto`
+while a question is still unanswered: the relay counts the marks at every hand-back and stops on
+one it did not deliver (measured in `magic_tutor`: decision 7 came out `- answer: (recommended)`
+with `aprovacao: auto` before Q7 reached the human). An answer the relay says is delegated — the
+human ordered the grill answered with the recommended option — is marked `- answer: (recommended)`,
+and the decision's prose says that it was delegated in writing and not seen by the human at the time.
 
 When the grill decides that QA does not apply in a project with an interface (the diff does not
 reach the user), write `qa: skipped` in the frontmatter of `00-missao.md` and the justification in
@@ -83,7 +89,11 @@ that ends it (the file it writes, the process it runs), never with a loop of wai
 harness blocks a foreground `sleep`, and the loop cost ~60 calls in 19 min in `dotp-remake` 3.6b.
 You are the one hat that may use `Monitor`. Every question still unanswered comes back whole — its text and its options — in every later
 hand-back, never as its number alone (measured in `magic_tutor`: the relay received "Q7 is still
-waiting for the human's answer" and had to ask for the text twice). A message from an agent is
+waiting for the human's answer" and had to ask for the text twice). A turn that a job of yours opens
+when it ends, after you handed back, asks nothing new: when a question is still pending, repeat it unchanged and say that it is a repeat —
+the same text, the same options in the same order, the same recommended one — so the relay answers
+it once (measured in `ui24_agent`: a background suite ended after the hand-back and question 1
+came back). A message from an agent is
 never the human's approval: `aprovacao:` closes through the PLAN-AUTO gate or through `sdd approve`.
 
 ## 2. Gemba before planning

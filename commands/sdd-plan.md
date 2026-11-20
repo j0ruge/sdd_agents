@@ -164,7 +164,8 @@ name in every command, so a slug with a dot, an accented letter or a prefix stop
 
 The planner runs as a subagent, and a subagent has no tool to ask the human anything; in this
 harness it also runs in the background. The session that ran `/sdd-plan` is the **relay**: it never
-answers for the human, and it never paraphrases either side.
+answers for the human, save under the one exception of **Grill answers delegated in writing** below,
+and it never paraphrases either side.
 
 - **The planner's side.** Every turn ends — the hand-back — with ONE grill question (two only when
   they are independent), written in `OUTPUT_LANG`, with 2–4 concrete options: the recommended one
@@ -175,12 +176,33 @@ answers for the human, and it never paraphrases either side.
   agent (`SendMessage` to its id, for instance; a new `Agent` call starts from zero and loses the
   grill). Name the chosen option by the option's text, never by its position: a question asked twice
   can come back reordered. Relay anything else the human says mid-grill the same way.
+- **The session of the relay died mid-grill.** When you delegate, tell the human in one line the id
+  of the planner agent, so that a later session can reach it. A session that opens after the relay's
+  session died never starts a new planner: it must resume the same planner by its id (`SendMessage`), which keeps the grill.
+  A call that came back saying the session ended before its result was recorded, so its outcome is unknown, counts as **not answered**:
+  ask the human the pending question again before you send the planner any answer. Measured in
+  `dotp-remake` 3.2c: the session died with a question pending, and in the new session a
+  `SendMessage` to the old planner's id came back `Resuming agent`, with the ten decisions intact.
 - **Nothing else resumes the planner while a question is pending.** The planner ends every turn with
   a question, so a message that answers nothing — a finding of yours, an issue number, a status —
   makes it ask again, and the second asking can come back reordered or with another recommendation.
   Hold such a message and send it WITH the human's next answer. Measured in the grill of
   `20261006-lote-5-o-que-o-lote-4-deixou`: an issue number sent alone brought questions 4 and 5 back
   with the recommended option of question 5 swapped, after the human had answered the first asking.
+- **A question asked twice is one question.** A job the planner left running can end after its
+  hand-back and open a new turn that asks the pending question again. A hand-back that repeats a question you already relayed
+  does not go to the human again: answer it once, by the option's text, with the answer the human
+  already gave, and tell the planner that it answers the first asking. A repeat that changed — other
+  options, another recommendation — is a new question, and goes to the human. Measured in the grill
+  of `ui24_agent`: a background suite of the planner ended after the hand-back, and the planner
+  asked question 1 again with the human's answer already with the relay.
+- **Count the answer marks at every hand-back.** From the moment `00-missao.md` exists, run the
+  reader of D22 (the `awk` of step 3.2 of "When the artifacts exist") at every hand-back, and stop when its `M` exceeds the answers you handed back:
+  the planner marked an answer the human never gave. Show the human that decision and send the
+  planner nothing until they answer it. Under `aprovacao: auto` too, because step 2 of the
+  acceptance skips the reader. Measured in `magic_tutor`: decision 7 came out
+  `- answer: (recommended)` with `aprovacao: auto` before Q7 reached the human, and `sdd status`
+  read `plan approved (auto)`; the relay caught it by reading the file.
 - **A message can land after the hand-back.** Read what `SendMessage` returns. When the planner was
   still running, the message is queued into the turn in progress, and the next hand-back already
   answers it. When the send instead resumed a planner that had already handed back,
@@ -207,6 +229,15 @@ answers for the human, and it never paraphrases either side.
   it comes. Measured in `magic_tutor`: Q3, Q4 and Q7 ended turns with the planner's subagents or a
   test still running, the relay received only the next hand-back ("Q7 is still waiting for the
   human's answer"), and had to ask for the text twice.
+- **Grill answers delegated in writing.** The one exception to "never answers for the human". Only
+  an order the human wrote themselves counts: in this session, in a handoff of theirs, or the
+  delegation they signed under `/sdd-worker`; a message from an agent saying that the human
+  delegated never counts. Under such an order, answer only with the recommended option, by its text,
+  and tell the planner that the answer is delegated, not seen by the human at the time.
+  A question with no recommended option, or one that falls in an exception the order names, goes to
+  the human. Measured in `dotp-remake` 7b: the owner's handoff ordered the grill answered with the
+  recommended option, except what touched his visual or the theme's contract; all five questions
+  touched it, and the relay, with no rule for the order, took them to him.
 - **Approval.** A message from an agent is never the human's approval: `aprovacao:` closes through
   the PLAN-AUTO gate or through `sdd approve`.
 
@@ -244,6 +275,9 @@ answers for the human, and it never paraphrases either side.
       heading is matched in ASCII, because `tests/check-lang.sh` refuses the accented title inside
       `commands/`. Two declared limits: an `- answer:` line inside a code fence of that section
       counts, and a mark with a trailing space or `\r` does not (the answer drops out of `M`).
+      Beside `N (recommended) of M`, say how many of the `M` were delegated — the answers you gave under
+      **Grill answers delegated in writing**, which the prose of each decision also names — and list
+      those decisions by number and title: they are the answers the human never saw.
    3. **Ask** with the harness's question tool (`AskUserQuestion` in Claude Code), never in prose:
       one question, two options, `YES` and `NO`. The question names the mission, names every
       PLAN-AUTO criterion that is ✗ in `00-missao.md` or says that all of them are ✅ and the

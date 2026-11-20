@@ -243,7 +243,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   das issues do `sales_quote` (2026-10-09)
 - [ ] **A prosa congelada diz a regra 2 e o teto de largura mais estritos que os sensores** —
   `templates/checkpoint.md:27` (`check-x.sh`) — desde o lote 8 a regra 2 lê a variável e aceita `'^ *✓ '`,
-  e o teto isenta a linha que só carrega a âncora; o template e o `agents/sdd-planner.md:111` ainda dizem só
+  e o teto isenta a linha que só carrega a âncora; o template e o `agents/sdd-planner.md:121` ainda dizem só
   `^  ok    `, e o `templates/todo.pt-BR.md:24`, o `templates/todo.md:24` e o `agents/sdd-executor.md:174`,
   "nenhuma linha passa de 120". Não falha aberta, mas a saída só aparece na mensagem de FAIL. Direção: as
   cinco frases dizem a regra nova quando o congelamento cair.
@@ -315,14 +315,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte.
   — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
 - [ ] **O aceite do `/sdd-plan` mede de novo os Checks, nunca os fatos do contexto verificado** —
-  `commands/sdd-plan.md:219` (`Measure again`) — o passo roda `--check` e `--red`, e a contagem que o plano cita passa
+  `commands/sdd-plan.md:250` (`Measure again`) — o passo roda `--check` e `--red`, e a contagem que o plano cita passa
   sem medida: "22 `MutableEvents.Add` em 12 arquivos" (`01-plano.md`, `00-missao.md` e ADR 0007 da 3.3a do
   `dotp-remake`) eram 10 arquivos, e o relay só pegou porque conferiu por amostra com `grep -rc`. Na 3.2c, dois fatos
   sem medida (a Lobotomy, a 701.8) chegaram ao EXEC. Direção: o aceite reconfere por amostra as contagens e âncoras do
   contexto, ou o planner grava ao lado de cada contagem o comando que a mediu.
   — descoberto pelo relay do `/sdd-plan` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
 - [ ] **Sob `aprovacao: auto` o `/sdd-plan` deixa a missão sem commit na base e cala o passo seguinte** —
-  `commands/sdd-plan.md:283` (`Anywhere else`) — no `magic_tutor` o `sdd why` deu `plan approved (auto)` com a
+  `commands/sdd-plan.md:319` (`Anywhere else`) — no `magic_tutor` o `sdd why` deu `plan approved (auto)` com a
   pasta da missão em `??` na `main`: sem `sdd approve` ninguém corta a branch nem commita, e o passo 4 só diz
   "commit nothing". O planner supôs que o `sdd run` levaria a pasta sem rastreio; o relay leu o
   `ensure_mission_branch`, cortou a branch e commitou à mão, e o `sdd preflight` deu "working tree clean". Direção:
@@ -420,7 +420,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
 
 - [ ] **O relay não prevê que o job em background do planner repete a pergunta já feita** —
-  `commands/sdd-plan.md:176` (`Nothing else resumes the planner`)
+  `commands/sdd-plan.md:186` (`Nothing else resumes the planner`)
   — a regra cobre a mensagem do relay que não responde nada, não o fim de um job que o próprio planner lançou. No
   grill do `ui24_agent` a suíte em background terminou depois da hand-back, e o planner devolveu a pergunta 1 de
   novo, com a resposta do humano já com o relay. Sem dano, porque a resposta nomeou a opção pelo texto. Direção:
@@ -443,7 +443,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   manda levar antes os achados do kit ao `TODO.md` do kit, ou o runner os colhe antes do `git rm`.
   — descoberto pela retro do `sdd` no `20261103-perfil-por-tipo` do `magic_tutor` (2026-11-03)
 
-- [ ] **O aceite do `/sdd-plan` só olha três caminhos no `git status`** — `commands/sdd-plan.md:272`
+- [ ] **O aceite do `/sdd-plan` só olha três caminhos no `git status`** — `commands/sdd-plan.md:308`
   (`HAT_WRITES_BASE`) — o passo 4 lista a pasta da missão, o `TODO_FILE` e a catraca, e não diz o que fazer com o
   resto. Na 3.5e do `dotp-remake`, o planner escreveu o levantamento do `.exe` em `docs/knowledge/`, fora do
   `writes:` dele; o `sdd approve` não o commitou, e o plano o dá por existente. Só o `git status` inteiro o mostrou,
@@ -731,7 +731,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão interativa que lançou a run da 3.6f do `dotp-remake` (2026-11-14)
 
 - [ ] **O `/sdd-plan` não diz o que fazer com respostas do grill delegadas por escrito** —
-  `commands/sdd-plan.md:258` (`An approval given before the plan`) — a regra só trata da aprovação antes do plano.
+  `commands/sdd-plan.md:294` (`An approval given before the plan`) — a regra só trata da aprovação antes do plano.
   No `dotp-remake`, o handoff da 7b trazia a ordem escrita do dono ("o grill é respondido com a recomendada"), menos
   o que mexe no visual dele ou no contrato do tema; o relay levou as 5 perguntas ao dono, porque todas tocavam isso.
   Sem regra, o relay decide sozinho se responde pelo humano, e "Relaying the grill" manda nunca responder. Direção:
@@ -834,7 +834,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261117-plano-7-b1-a-mesa-cheia` do `dotp-remake` (2026-11-18)
 
 - [ ] **O leitor D22 do aceite tira da conta, calado, o `- answer:` que leva nota depois do parêntese** —
-  `commands/sdd-plan.md:234` (`N (recommended) of M`) — o `awk` casa só a linha inteira (`\)$`), e a linha
+  `commands/sdd-plan.md:265` (`N (recommended) of M`) — o `awk` casa só a linha inteira (`\)$`), e a linha
   `- answer: (recommended) — nota` some do `N` e do `M`. Na 7b2 do `dotp-remake`, 8 das 10 respostas tinham nota
   na mesma linha e a conta deu `2 (recommended) of 2`; com as notas numa linha `Revisão:` embaixo, `10 of 10`. A
   regra do planner (`agents/sdd-planner.md:58`) proíbe nota dentro do parêntese, não depois. Direção: o leitor
