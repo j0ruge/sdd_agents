@@ -62,3 +62,4 @@
 - 2026-11-20 13:11 · `R1` · R1 sabotage: --diff-filter=A retirado (mut_REVIEW_head_reads_last_touch) → gate_REVIEW: reviewed_head reads the commit that added the round, not a later one that touched it (--only contra check-gates.sh rc 1)
 - 2026-11-20 13:11 · `R1` · R1 sabotage: o git rm do write_r12 neutralizado → os três mundos de intervalo do gate_REVIEW: reviewed_head vermelhos (rc 1, timeout 600 s, setsid)
 - 2026-11-20 13:43 · `REVIEW` · r2 delta sobre a6f1817..64a5e5f: achado #1 da r1 fechado em c6c381f (mutante REVIEW_head_reads_last_touch morre); 1 LOW sem rota (Check do I3 responde 6 1); nenhum R<n>; A em todos os critérios; suíte rc 0
+- 2026-11-20 14:00 · `DOCS` · README (sdd review-base), verbete Rodada delta no CONTEXT.md e F6 da gaveta em e6941d6; ⛔ na .claude/rules/anatomia-do-agente.md (§ 3 e § 4) com texto proposto; KAIZEN_LOG n/a (kaizen_log: skipped); nenhum item novo no TODO.md
