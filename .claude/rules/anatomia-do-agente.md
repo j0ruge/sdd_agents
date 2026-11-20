@@ -265,8 +265,9 @@ sintaxe da regra. Custa uma sessão haiku por preflight: US$ 0,002 (US$ 0,00197 
 do grill, 16:24).
 Desde `20261119-l1b-a-rodada-delta` (ADR 0023) o `gate_REVIEW` lê o `reviewed_head:` da rodada
 (`review_head_ok`): recusa a chave presente e errada (não é commit, o `HEAD` não a carrega, ou código
-fora do `hat_writes REVIEW` mudou entre ela e o commit que **adicionou** a rodada) e aceita a rodada sem
-a chave, como as antigas.
+fora do `hat_writes REVIEW` mudou entre ela e o commit que **adicionou** a rodada), recusa também a
+rodada cujo intervalo o `git diff` não consegue listar (falha fechada: rodada que o gate não lê não
+passa), e aceita a rodada sem a chave, como as antigas.
 Desde `20261117-o-worker-orquestrador` (ADR 0022 §5) o merge delegado também é gate por artefato,
 fora do runner: `sdd-worker pr-ready` responde `ready <sha>` só com os cinco itens verdadeiros no
 mesmo sha (a rodada mais nova da missão com A em todo critério e um `reviewed_head:` do qual até o

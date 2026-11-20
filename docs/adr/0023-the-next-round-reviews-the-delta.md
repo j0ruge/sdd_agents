@@ -59,12 +59,13 @@ What that costs, measured:
 3. **A merge in the range makes the round full.** The skill reviews `base..HEAD`. A merge of the
    base branch would pour everything that came with it into the delta. Under `sdd run` nobody
    merges between rounds.
-4. **`gate_REVIEW` checks a key that is present, and accepts one that is absent.** It refuses three
+4. **`gate_REVIEW` checks a key that is present, and accepts one that is absent.** It refuses four
    cases, each naming the round:
    - a value that is not a commit;
    - a commit `HEAD` does not carry;
    - a path outside `hat_writes REVIEW` (the mission directory, the `TODO_FILE` and the ratchet)
-     changed between that commit and the round's own commit.
+     changed between that commit and the round's own commit;
+   - a range `git diff` cannot list. The gate fails closed: a round it cannot read does not pass.
 
    The check is cheap and runs before the suite. A round without the key passes as it does today,
    and the next round is full.

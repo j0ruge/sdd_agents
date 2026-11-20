@@ -398,8 +398,8 @@ needs a human. The session commits **only** the round report, the checkpoint and
 
 **From the second round on, the round reviews the delta (ADR 0023).** Each round writes the
 `git rev-parse HEAD` it read as `reviewed_head:`, and `gate_REVIEW` refuses a value that is no
-commit, one the `HEAD` does not carry, or code changed between it and the round's commit; a round
-without the key passes, as the older ones did. One function, `review_base_line`, reads the newest
+commit, one the `HEAD` does not carry, code changed between it and the round's commit, or a range
+`git diff` cannot list (fail closed); a round without the key passes, as the older ones did. One function, `review_base_line`, reads the newest
 round and answers `base=<sha> — <round> …` or `full — <reason>`. The REVIEW boot prompt carries
 that line, so the session invokes `/codereview:codereview base=<sha>`, because the argument limits
 the skill and a sentence does not. `sdd review-base <mission>` prints the same line without running a
