@@ -33,6 +33,9 @@ it, so a figure here that claims to be current is only a figure nobody re-measur
 
 ## 1. Load the state
 
+Before reading anything, run `git rev-parse HEAD`: that sha is the `reviewed_head:` of this
+round's frontmatter, the head it read, and the next round reviews only the delta from it.
+
 1. `docs/handoffs/<mission>/00-missao.md` and `01-plano.md` — what was supposed to be done.
 2. `docs/handoffs/<mission>/20-handoff-exec.md` and `30-handoff-qa.md` — what was done and what QA
    saw. **Having the QA report in hand changes the review**: a finding QA already covered with a
@@ -45,6 +48,14 @@ it, so a figure here that claims to be current is only a figure nobody re-measur
 
 Invoke `/codereview:codereview` over the mission diff. The skill routes the model by severity
 internally — do not try to guess what it will do.
+
+The boot prompt says which round this is (ADR 0023). A **DELTA** round carries `base=<sha>`, the
+`reviewed_head:` of the round before: invoke `/codereview:codereview base=<sha>` with that argument
+— the argument, not a sentence, is what limits the skill to the delta — and read the round the
+prompt names for the findings it left open. In a delta round a finding in code the delta did not
+touch goes to the `TODO_FILE`, never to an R<n>; the one read outside the delta is a `grep` for the
+old spelling of an interface the delta changed. A **FULL** round, or a prompt with no delta line at
+all (an older runner), reviews the whole mission diff.
 
 The stopping criterion is the gate's: Grade A on every criterion, except the ones graded on the
 mission's own **prose** (`REVIEW_PROSE_CRITERIA` — Documentation and Overall), which pass at
@@ -234,6 +245,11 @@ The same refusal covers the `gate:` frontmatter field, which is the other half o
 it with the round's real evidence (summarised `TEST_CMD` output, tree state), never with the
 template's `<…>`. Absent it is left alone — rounds older than the field exist — but PRESENT is
 judged whatever its value, so the key written and left blank fails just like `<…>` does.
+
+`reviewed_head:` is the `git rev-parse HEAD` you ran in section 1, the full sha as it printed it (40
+hex; 64 in a SHA-256 repository; ADR 0023). The gate refuses a value that is no commit, one the
+HEAD does not carry, and a round committed after code outside this hat's `writes:` changed since
+that sha; an absent key passes, and the next round is a full one.
 
 Also include: the round's findings by severity, **which of them became which `R<n>`** (the section
 `## Incrementos de conserto (R<n>)` of the template), what was refuted (with evidence) and what went

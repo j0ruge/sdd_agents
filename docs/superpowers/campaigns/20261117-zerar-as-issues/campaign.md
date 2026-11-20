@@ -35,6 +35,8 @@ exec_model: opus
 | L3 | Gates do fim da linha | - | 13 |
 | L4 | Preflight, health e sensores | - | 14 |
 | L5 | Saída humana e contrato do runner | - | 17 |
+| L5b | O worker e os verbos dele | - | 14 |
+| L5c | O runner: as notas, o plano e o turno | - | 7 |
 | L6a | O carimbo tudo ou nada | plan | 1 |
 | L6b | A prosa da DOCS sem revisão | plan | 1 |
 | L6c | O plano que manda editar em `.claude/` | plan | 1 |
@@ -147,6 +149,43 @@ exec_model: opus
 - [ ] O `CHECKOUT-BUSY` do `sdd status` não aponta o `--no-gates`, que lê o disco com a run em voo
 - [ ] ◆ O `sdd adr new` dá a uma branch o número que outra branch sem merge já usa
 
+### L5b — O worker e os verbos dele
+
+> Nasceu em 2026-11-20, pedido do dono ("continuar na missão do /sdd-worker full até zerar a
+> catraca"): os itens que a missão `20261117-o-worker-orquestrador` e o L1 abriram no `TODO.md`
+> depois desta fila, quase todos do `bin/sdd-worker`, do `commands/sdd-worker.md` e dos sensores
+> dele. Entraram na tabela antes da assinatura nova, com o L5c, porque uma linha nova depois dela
+> muda o digest e a delegação inteira volta a valer `assisted`.
+
+- [ ] ◆ O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`
+- [ ] Nenhum ato do worker resolve os threads de review, e o item `threads` do `pr-ready` fica sem dono
+- [ ] O `budget` esquece calado o gasto de uma missão que nunca chegou à base e cujo worktree saiu
+- [ ] O mutante `range_ancestry_unchecked` só troca a mensagem, e o ancestral segue conferido
+- [ ] Os probes de nota do `pr-ready` passariam pelo item `dirty` com o leitor de nota frouxo
+- [ ] O `config_key` do worker põe o valor do ambiente sem `export`, e o filho que o config abre lê vazio
+- [ ] O `effective_level` confere o `expires:` antes do conjunto e publica o nível depois dele
+- [ ] O `checkouts_of` lê o `worktree list` sem `-z`, e o worktree com quebra de linha no caminho some
+- [ ] O `pr_states` descarta o PR de fork depois de o `gh pr list` cortar a lista em 30
+- [ ] O yes do dono no passo 3 do laço do worker vale para o ato e não amarra o sha do merge
+- [ ] O `postmerge` manda a linha do journal nomear o PR do que sobra para a base, sem dizer o que ela leva
+- [ ] A parada do worker roda o `budget` de novo para montar o `SDD_GATE_WHY` do pager
+- [ ] Uma edição do `.sdd/config.sh` durante a fase tira o teto de missão que a delegação assinou
+- [ ] ◆ A missão pedida fora da fila da campanha não tem rota, e a linha nova derruba a delegação
+
+### L5c — O runner: as notas, o plano e o turno
+
+> Nasceu com o L5b, pelo mesmo pedido: os itens do `bin/sdd`, dos chapéus e dos templates que
+> ficaram fora da fila. Os dois primeiros leem a mesma tabela de notas que o `pr-ready` do L5b, e
+> vão juntos para a paridade entre o runner e o worker não se quebrar no meio.
+
+- [ ] Os leitores da tabela de notas seguem lendo depois da linha em branco, no worker e no runner
+- [ ] O `gate_REVIEW` aprova a tabela de notas a que falta um critério
+- [ ] Nenhum sensor relê os Checks `done`, e o R que estende a família de um I o deixa vermelho calado
+- [ ] O PR sem conflito ainda quebra o `TODO.md` do alvo quando a missão paralela entra antes
+- [ ] O `sdd approve` deixa fora do commit o que o planner escreveu fora da pasta da missão
+- [ ] Mitigação de risco do plano sem incremento se perde, e a REVIEW dá A mesmo assim
+- [ ] A regra do teto da chamada `Bash` mora no revisor, e não no `turn_rule` de toda fase
+
 ### L6a a L6k — Desenho, um lote por item
 
 > Itens de desenho, com teto `plan`: as escolhas deles não são tomadas por um grill sem o dono. Um
@@ -205,9 +244,9 @@ exec_model: opus
 
 ## Os itens marcados com ◆ (decisão 8)
 
-Os 24 itens com `◆` deixam uma escolha em aberto. Sob delegação, o grill da missão segue a opção
+Os 26 itens com `◆` deixam uma escolha em aberto (24 da fila de 2026-11-17 e 2 do L5b, de 2026-11-20). Sob delegação, o grill da missão segue a opção
 recomendada pelo planner, e o corpo do PR lista cada um deles, com a escolha feita, para o aceite
-do dono. Por lote: L1 nenhum, L2 3, L3 5, L4 3, L5 6, e 7 nos L6a a L6k (um em cada um dos L6b, L6c,
+do dono. Por lote: L1 nenhum, L2 3, L3 5, L4 3, L5 6, L5b 2, L5c nenhum, e 7 nos L6a a L6k (um em cada um dos L6b, L6c,
 L6d, L6f, L6g, L6i e L6k), onde o teto `plan` faz o dono aprovar cada plano antes do EXEC.
 
 ## A régua do "tudo ok" (decisão 9)

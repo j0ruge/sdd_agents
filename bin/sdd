@@ -2103,6 +2103,7 @@ gate_REVIEW() {
   if [ -n "$offending" ]; then
     GATE_WHY="$(basename "$last"): $offending — the gate requires Grade A on every criterion"; return 1
   fi
+  review_head_ok "$last" || return 1
   if ! run_check_cmd "$TEST_CMD" "gate-review-test"; then
     GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
@@ -3186,7 +3187,7 @@ Grade A on every criterion and tolerates B on the ones graded on prose (REVIEW_P
 Documentation, Overall): a finding that is prose alone goes to the TODO_FILE, never to an R<n> —
 a prose fix writes new prose for the next round to grade, and that loop does not converge.
 EOF
-    ;;
+    review_delta_prompt ;;
     QA:plan|QA:exec) cat <<'EOF'
 
 The skill above owns the docs/qa/ tree — follow its instructions. When you finish, commit what
@@ -12329,6 +12330,8 @@ USAGE
   sdd boot <mission> <PHASE> print the boot prompt that phase would be given, and exit. No
                              session, no cost — but it derives the phase, so the gates run
                              TEST_CMD (and E2E_CMD past EXEC); avoid it during a live 'sdd run'
+  sdd review-base <mission>  base=<sha> when the next REVIEW round can review only the delta since
+                             the reviewed_head: of the latest round, or full and why. No gate, no suite
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the
@@ -12574,6 +12577,7 @@ main() {
     autonomy)  cmd_autonomy "$@" ;;
     census)    cmd_census "$@" ;;
     boot)      cmd_boot "$@" ;;
+    review-base) cmd_review_base "$@" ;;
     kaizen)    cmd_kaizen "$@" ;;
     adr)       cmd_adr "$@" ;;
     version|--version|-v) cmd_version ;;
@@ -12983,6 +12987,136 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   fi
   bad "$issue is still open — JIRA does not confirm the close (the session may have only asked for confirmation); see $close_logs"
   return 1
+}
+
+# review_base_line — the ONE judgement of the delta round (ADR 0023): prints one line, by the first
+# rule that matches. The first word is the contract (`base=<full sha>` or `full`); the rest is for
+# the human. Readers: `sdd review-base` (the worker's review act) and review_delta_prompt (phase_extra).
+# Pure: it only prints, publishes no global, and is safe to read through `$( )`. Every git capture
+# is guarded, because under `set -euo pipefail` a non-zero rc kills the process at the assignment.
+#   1. no 40-review-r*.md                      → full — no earlier round
+#   2. the latest is not committed             → full — it is not committed
+#   3. the latest has no reviewed_head:        → full — it has no reviewed_head:
+#   4. not 7–64 hex, or not a commit           → full — it is no commit
+#   5. not an ancestor of HEAD                 → full — not an ancestor
+#   6. a merge in <reviewed_head>..HEAD        → full — the merge would pour the base into the delta
+#   7. otherwise                               → base=<sha>
+# Rule 2 (CodeRabbit on PR #452): a session that wrote its round and died leaves it on disk, the
+# gate refuses the tree, and the retry would review only the delta from a head no finished round
+# read. Modified, staged, untracked and ignored each print a status line; a status that fails
+# proves nothing committed either, and says so. A committed round is a base, findings or not.
+review_base_line() {
+  local last name v sha="" short merge st
+  last="$(latest_matching "$MISSION_DIR/40-review-r*.md")"
+  [ -n "$last" ] || { printf 'full — no earlier round\n'; return 0; }
+  name="$(basename "$last")"
+  if ! st="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all --ignored -- "$last" 2>/dev/null)"; then
+    printf 'full — git status cannot say whether %s is committed\n' "$name"; return 0
+  fi
+  if [ -n "$st" ]; then
+    printf 'full — %s is not committed\n' "$name"; return 0
+  fi
+  if ! frontmatter_has "$last" reviewed_head; then
+    printf 'full — %s has no reviewed_head:\n' "$name"; return 0
+  fi
+  v="$(frontmatter "$last" reviewed_head)"
+  # 64, not 40: a repository made with --object-format=sha256 writes 64-hex commit ids (the shape
+  # gate_EXEC already reads for the Commit cell). One shape for both readers, review_head_ok below.
+  if [[ "$v" =~ ^[0-9a-f]{7,64}$ ]]; then
+    sha="$(git -C "$REPO_ROOT" rev-parse -q --verify "$v^{commit}" 2>/dev/null || true)"
+  fi
+  [ -n "$sha" ] || { printf "full — the reviewed_head: of %s is no commit ('%s')\n" "$name" "$v"; return 0; }
+  short="$(git -C "$REPO_ROOT" rev-parse --short "$sha" 2>/dev/null || true)"
+  if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
+    printf 'full — the reviewed_head: of %s (%s) is not an ancestor of HEAD\n' "$name" "$short"; return 0
+  fi
+  merge="$(git -C "$REPO_ROOT" rev-list --merges -n 1 "$sha..HEAD" 2>/dev/null || true)"
+  if [ -n "$merge" ]; then
+    printf 'full — merge %s entered after %s\n' "$(git -C "$REPO_ROOT" rev-parse --short "$merge" 2>/dev/null || true)" "$name"
+    return 0
+  fi
+  printf 'base=%s — %s reviewed this head; its findings are the open ones\n' "$sha" "$name"
+}
+
+# sdd review-base <mission> — print review_base_line for the mission and exit 0 (`full` is an
+# answer, not an error). Runs no gate and no suite, so it takes no lock: the `*)` arm of
+# coordination_enter already admits it, and COORD_review_base_locked holds that.
+cmd_review_base() {
+  load_config
+  resolve_mission "${1:-}"
+  review_base_line
+}
+
+# review_delta_prompt — the delta line of the REVIEW boot prompt (ADR 0023), read off the ONE
+# judgement review_base_line. Called by phase_extra REVIEW, inside the `$( )` of boot_prompt, so it
+# only prints. The two literals the probes read (`/codereview:codereview base=<sha>` and
+# `read <round> for the findings it left open`; `FULL round (<why>)`) each stay on one line.
+review_delta_prompt() {
+  local line sha round
+  line="$(review_base_line)"
+  case "${line%% *}" in
+    base=*)
+      sha="${line%% *}"; sha="${sha#base=}"
+      round="$(awk '{print $3}' <<< "$line")"
+      printf '\nThis is a DELTA round. Invoke /codereview:codereview base=%s — the argument, not this\n' "$sha"
+      printf 'sentence, limits the skill to the delta — and read %s for the findings it left open.\n' "$round"
+      printf 'A finding in code the delta did not touch goes to the TODO_FILE, never to an R<n>; the one\n'
+      printf 'read outside the delta is a grep for the old spelling of an interface the delta changed.\n'
+      ;;
+    *)
+      printf '\nThis is a FULL round (%s): invoke /codereview:codereview over the mission diff.\n' "${line#full — }"
+      ;;
+  esac
+}
+
+# review_head_ok <round> — the gate's half of the delta round (ADR 0023): the reviewed_head: the
+# round wrote is the head it read, or the next round would review a delta that skips code. rc 0 when
+# the key is ABSENT (the rounds written before the key, decision 4); otherwise each refusal publishes
+# GATE_WHY, starting with the round's basename (historic_rounds reads that prefix), and returns 1:
+#   1. not 7–64 hex, or not a commit
+#   2. not an ancestor of HEAD
+#   3. a path outside `hat_writes REVIEW` changed between the key and the commit of the round
+#   4. git diff cannot list that interval
+# The commit of the round is the one that ADDED it (--diff-filter=A, r1 of l1b): sdd-docs writes the
+# mission folder and docs/** in one commit, and reading the LAST commit to touch the round would put
+# that later code inside the interval and refuse a round the gate had already passed.
+# An uncommitted round (no commit adds it) passes here: the dirty-tree refusal below it covers it.
+# The commit is read with log.showSignature off for this query alone (CodeRabbit on PR #452): with
+# it on, git log prints the verification of a signed commit before the %H line, and the capture
+# carried both. And a range diff that fails refuses the round (rule 4): its error discarded, the
+# loop read nothing and passed a round the gate could not read — fail closed, never open.
+review_head_ok() {
+  local round="$1" name v sha="" short rc_commit p globs changed=""
+  frontmatter_has "$round" reviewed_head || return 0
+  name="$(basename "$round")"
+  v="$(frontmatter "$round" reviewed_head)"
+  if [[ "$v" =~ ^[0-9a-f]{7,64}$ ]]; then
+    sha="$(git -C "$REPO_ROOT" rev-parse -q --verify "$v^{commit}" 2>/dev/null || true)"
+  fi
+  if [ -z "$sha" ]; then
+    GATE_WHY="$name: reviewed_head '$v' is no commit — write the git rev-parse HEAD the round read, or leave the key out"
+    return 1
+  fi
+  short="$(git -C "$REPO_ROOT" rev-parse --short "$sha" 2>/dev/null || true)"
+  if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
+    GATE_WHY="$name: reviewed_head $short is not an ancestor of HEAD — the branch does not carry the commit the round read"
+    return 1
+  fi
+  rc_commit="$(git -C "$REPO_ROOT" -c log.showSignature=false log -1 --diff-filter=A --format=%H -- "$round" 2>/dev/null || true)"
+  [ -n "$rc_commit" ] || return 0
+  if ! changed="$(git -C "$REPO_ROOT" diff --name-only "$sha" "$rc_commit" 2>/dev/null)"; then
+    GATE_WHY="$name: git diff cannot list what changed between reviewed_head $short and the round's commit — the gate does not pass a round it cannot read"
+    return 1
+  fi
+  globs="$(hat_writes REVIEW)"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    if ! hat_path_allowed "$p" "$globs"; then
+      GATE_WHY="$name: $p changed between reviewed_head $short and the round's commit — the round did not read that code"
+      return 1
+    fi
+  done <<< "$changed"
+  return 0
 }
 
 

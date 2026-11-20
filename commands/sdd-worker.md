@@ -194,14 +194,17 @@ branch with `gh pr create`, never by a push to the base.
 `sdd-worker allows <campaign-dir> review --mission <mission-dir>`
 
 In the mission's worktree, bring the base in (`git fetch`, then `git merge origin/<base>`), run the
-suite (`TEST_CMD`), and make the review round through a subagent that writes the report to a file
-and returns only the grade table, each grade with its one-sentence rationale. Write the round as
+suite (`TEST_CMD`), then run `sdd review-base <mission>` and hand its one line to the subagent that
+makes the review round: on `base=<sha> — <round> …` it invokes `/codereview:codereview base=<sha>`
+and reads that round for the findings it left open; on `full — <reason>` the round is whole (a merge
+of the base after the last round makes it whole, by the same rule). The subagent writes the report
+to a file and returns only the grade table, each grade with its one-sentence rationale. Write the round as
 `<HANDOFF_DIR>/<mission>/40-review-r<N>.md`, one above the newest, with `reviewed_head: <sha>` in
 its frontmatter, the `git rev-parse HEAD` the round read, and the suite's result in `gate:`.
 `pr-ready` refuses a round whose rationale or `gate:` is still a fill-in of `templates/review.md`,
 and one whose grade table leaves out the row of any of its eight criteria.
-The rounds the runner's REVIEW phase writes carry no `reviewed_head:`, so `pr-ready` waits for this
-one. Fix what the round finds and review again, until every criterion is A. Commit and push the
+The runner's REVIEW rounds write `reviewed_head:` too, but a commit after it outside the mission
+folder (the DOCS phase's) leaves `pr-ready` waiting for this one. Fix what the round finds and review again, until every criterion is A. Commit and push the
 round, then ask `@codex review` on the pull request, always, and wait for its receipt on the new
 head.
 

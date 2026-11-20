@@ -6966,6 +6966,17 @@ mut_WORKER_ready_unmergeable_passes() {
 mut_WORKER_ready_head_unchecked() {
   sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$here" != "\$head" \]; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
+# reviewed_head: is read raw again: a round gate_REVIEW passes with the key in quotes is no commit to
+# pr-ready (CodeRabbit on PR #452). Caught by "pr-ready: a reviewed head in quotes or padded reads as
+# the runner reads it" (check-worker.sh).
+mut_WORKER_ready_head_read_raw() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@rh="\$(fm_scalar "\$round" reviewed_head)"@rh="$(fm_value "$round" reviewed_head)"@' "${1%/*}/sdd-worker"
+}
+# The blanks before a value are kept again, so a padded key keeps its opening quote and is no
+# commit. Caught by the padded world of the same assertion.
+mut_WORKER_scalar_blanks_kept() {
+  sed -i '/^fm_scalar() {/,/^}/ { /^  v="\${v#"\${v%%/d }' "${1%/*}/sdd-worker"
+}
 # The lot ceilings leave the seal: the digest covers the six keys only, so lifting the plan ceiling
 # of a lot after signing full delegates its approval under a signature that still holds (Q1 of the
 # mission's QA). Caught by "delegate: an answer of y signs with a digest of the other fields" and by
@@ -7471,7 +7482,97 @@ mut_WORKER_handoff_dir_unnormalized() {
   sed -i '/^campaign_set() {/,/^}/ { /^      dir_normalise whd$/d }' "${1%/*}/sdd-worker"
 }
 
+# The delta round (ADR 0023): review_base_line is the one judgement `sdd review-base` and the REVIEW
+# boot prompt read. Each mutant drops one of its rules; caught by the "review-base: …" assertions
+# of check-gates.sh (rules 3–6) and by the query probe of check-coordination.sh (the lock).
+mut_RUN_review_base_absent_as_base() {
+  sed -i '/^review_base_line()/,/^}/ s|if ! frontmatter_has "$last" reviewed_head; then|if false; then|' "$1"
+}
+mut_RUN_review_base_commit_unchecked() {
+  sed -i '/^review_base_line()/,/^}/ s|\[ -n "$sha" \] \|\| { printf "full|[ -n "$v" ] \|\| { printf "full|' "$1"
+}
+mut_RUN_review_base_ancestry_unchecked() {
+  sed -i '/^review_base_line()/,/^}/ s|if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then|if false; then|' "$1"
+}
+mut_RUN_review_base_merge_ignored() {
+  sed -i '/^review_base_line()/,/^}/ s|if \[ -n "$merge" \]; then|if false; then|' "$1"
+}
+# A round git does not carry is a base again: the retry of a session that wrote its round and died
+# reviews only the delta from a head no finished round read (CodeRabbit on PR #452). Caught by
+# "delta base: a round git does not carry …" (check-gates.sh), which reads all three worlds.
+mut_RUN_review_base_uncommitted_round() {
+  sed -i '/^review_base_line()/,/^}/ s|^  if \[ -n "$st" \]; then$|  if false; then|' "$1"
+}
+# The ignore rules hide the round again: an ignored round on disk reads as committed. Caught by the
+# ignored world of the same assertion.
+mut_RUN_review_base_ignored_round_unseen() {
+  sed -i '/^review_base_line()/,/^}/ s| status --porcelain --untracked-files=all --ignored -- "$last" | status --porcelain --untracked-files=all -- "$last" |' "$1"
+}
+# The shape is capped at 40 hex again: the 64-hex head of a SHA-256 repository reads as no commit,
+# and every round there is full (CodeRabbit on PR #452). Caught by "delta base: the 64-hex
+# reviewed_head of a SHA-256 repository is a base" (check-gates.sh).
+mut_RUN_review_base_sha256_refused() {
+  sed -i '/^review_base_line()/,/^}/ s|\^\[0-9a-f\]{7,64}\$|^[0-9a-f]{7,40}$|' "$1"
+}
+mut_RUN_review_prompt_delta_dropped() {
+  sed -i '/^phase_extra()/,/^}/ s|^    review_delta_prompt ;;$|    ;;|' "$1"
+}
+mut_COORD_review_base_locked() {
+  sed -i '/^coordination_enter()/,/^}/ s/^    boot|note-manual|/    review-base|boot|note-manual|/' "$1"
+}
+# review_head_ok is the gate's half (I3): each rule has its world in check-gates.sh.
+mut_REVIEW_head_sha_unchecked() {
+  sed -i '/^review_head_ok()/,/^}/ s|if \[ -z "$sha" \]; then|if false; then|' "$1"
+}
+mut_REVIEW_head_ancestry_unchecked() {
+  sed -i '/^review_head_ok()/,/^}/ s|if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then|if false; then|' "$1"
+}
+mut_REVIEW_head_range_unchecked() {
+  sed -i '/^review_head_ok()/,/^}/ s|if ! hat_path_allowed "$p" "$globs"; then|if false; then|' "$1"
+}
+mut_REVIEW_head_reads_last_touch() {
+  sed -i '/^review_head_ok()/,/^}/ s| log -1 --diff-filter=A --format=%H -- "$round"| log -1 --format=%H -- "$round"|' "$1"
+}
+mut_REVIEW_head_absent_refused() {
+  sed -i '/^review_head_ok()/,/^}/ s|frontmatter_has "$round" reviewed_head \|\| return 0|frontmatter_has "$round" reviewed_head \|\| return 1|' "$1"
+}
+# The commit of the round is read with the repo's log.showSignature again: a signed round's capture
+# carries the verification line, the range diff fails, and the round is refused for the wrong
+# reason (CodeRabbit on PR #452). Caught by "gate_REVIEW: the round's commit is read with no
+# signature output, and the range still refuses" (check-gates.sh), which names l1b-outside.txt.
+mut_REVIEW_head_signature_shown() {
+  sed -i '/^review_head_ok()/,/^}/ s| -c log.showSignature=false log -1 | log -1 |' "$1"
+}
+# A range diff that fails is discarded again, as before the fix: the loop reads nothing and the
+# round passes, fail open. Caught by "gate_REVIEW: a range diff that fails refuses the round, naming
+# it" (check-gates.sh), under a git stub that fails exactly that diff.
+mut_REVIEW_head_diff_failure_passes() {
+  sed -i '/^review_head_ok()/,/^}/ s|"$sha" "$rc_commit" 2>/dev/null)"; then|"$sha" "$rc_commit" 2>/dev/null \|\| true)"; then|' "$1"
+}
+# The gate's shape is capped at 40 hex again: a SHA-256 repository's round is refused as no commit.
+# Caught by "gate_REVIEW: a 64-hex reviewed_head of a SHA-256 repository reaches the range rule".
+mut_REVIEW_head_sha256_refused() {
+  sed -i '/^review_head_ok()/,/^}/ s|\^\[0-9a-f\]{7,64}\$|^[0-9a-f]{7,40}$|' "$1"
+}
+
 CATALOG=(
+  REVIEW_head_sha_unchecked
+  REVIEW_head_ancestry_unchecked
+  REVIEW_head_range_unchecked
+  REVIEW_head_reads_last_touch
+  REVIEW_head_absent_refused
+  REVIEW_head_sha256_refused
+  REVIEW_head_signature_shown
+  REVIEW_head_diff_failure_passes
+  COORD_review_base_locked
+  RUN_review_base_absent_as_base
+  RUN_review_base_commit_unchecked
+  RUN_review_base_ancestry_unchecked
+  RUN_review_base_merge_ignored
+  RUN_review_base_uncommitted_round
+  RUN_review_base_ignored_round_unseen
+  RUN_review_base_sha256_refused
+  RUN_review_prompt_delta_dropped
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
   COORD_signal_repeated
@@ -8305,6 +8406,8 @@ CATALOG=(
   WORKER_ready_threads_unread
   WORKER_ready_unmergeable_passes
   WORKER_ready_head_unchecked
+  WORKER_ready_head_read_raw
+  WORKER_scalar_blanks_kept
   WORKER_seal_ceilings_unsigned
   WORKER_seal_ceilings_unshown
   WORKER_legible_id_unchecked

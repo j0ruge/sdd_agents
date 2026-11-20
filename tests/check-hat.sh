@@ -1327,6 +1327,18 @@ executor_agent_probes
 planner_agent_probes
 reviewer_agent_probes
 docs_agent_probes
+# ADR 0023, decision 9: the reviewer hat names the delta round's argument and where a finding in code
+# the delta did not touch goes. Read off section 2 only, so a word elsewhere in the hat does not count.
+reviewer_delta_probes() {
+  local agent="$ROOT/agents/sdd-reviewer.md" sec
+  sec="$(awk '/^## 2\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'base=' <<< "$sec" && grep -qF 'never to an R<n>' <<< "$sec"; then
+    pass "reviewer hat: a delta round sends a finding outside the delta to the TODO_FILE"
+  else
+    fail "reviewer hat: a delta round sends a finding outside the delta to the TODO_FILE"
+  fi
+}
+
 qa_agent_probes
 hat_promise_probes
 command_approval_probes
@@ -1343,6 +1355,7 @@ boot_probes
 help_probes
 release_probes
 release_stamps_probes
+reviewer_delta_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2

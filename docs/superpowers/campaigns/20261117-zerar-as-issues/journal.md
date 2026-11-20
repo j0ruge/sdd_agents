@@ -21,3 +21,22 @@ Uma linha por evento, só acrescentada: `- <instante> · <lote> · <ato> · <des
 - 2026-11-20 00:01 · L1 · postmerge · sim do dono (mergeia o #445, depois o chore); worktree ~/.wt/sdd_agents-l1-pos-merge (chore/l1-pos-merge, de 91a7524); leva de prosa commitada (3 Minor do CodeRabbit + LOW da r3, 2 asserções Red→verde); TODO.md e catraca esperam o #445
 - 2026-11-20 01:31 · L1 L1b · delegate · PR #445 mergeado pelo worker a pedido do dono ("se já puder dar merge, faça e o worker deve assumir"): a0b6fdb; level full até 2026-11-26 18:00
 - 2026-11-20 01:32 · L1 · postmerge · main (a0b6fdb) trazida ao chore; 14 itens RESOLVED by apagados (todos ancestrais da main), item novo do turn_rule (sim do dono), catraca 104 → 91
+- 2026-11-20 01:48 · L1 · postmerge · PR #447 aberto (chore/l1-pos-merge, 90b5906), suíte rc 0 (2186 ok), local/ci success; allows review e merge rc 0 (full); rodada r4 por subagente em voo
+- 2026-11-20 01:56 · L1 · postmerge · r4 A em todo critério (e475346, reviewed_head 90b5906), 4 LOW; CodeRabbit 1 Minor (o LOW 4), Copilot sem cota; leva em 4622a6c (Red do mktemp -d); suíte no 4622a6c em voo, depois rodada delta r5
+- 2026-11-20 02:12 · L1 · postmerge · suíte rc 0 no 4622a6c (2186 ok, local/ci), r5 delta (sonnet) A sem achado (a4315f5, reviewed_head 4622a6c); thread do CodeRabbit resolvido pelo id lido; @codex review às 02:12 no a4315f5
+- 2026-11-20 02:15 · L1 · postmerge · recibo do Codex completed sem achado no a4315f5 (02:14); pr-ready ready a4315f5; allows merge rc 0 (full); PR #447 mergeado (336640e), primeiro merge delegado, autorizado pelo dono ("o worker deve assumir")
+- 2026-11-20 02:17 · L1 · postmerge · espelho 91 ↔ 91: criadas #448 e #449, 14 órfãs fechadas como concluídas (fixed by), 4 âncoras; plano final create=0 update=0 orphans=0
+- 2026-11-20 02:17 · L1b · run · next run L1b e allows run rc 0 (full), mas NÃO lançado: créditos da semana e EFFORT_* são do dono (o config do worktree não fixa effort, iria em xhigh); main (336640e) trazida ao branch (334e0d0), --check ok, --red em voo
+- 2026-11-20 02:28 · L1b · run · --red 5 de 5 vermelhos no 334e0d0 (main trazida), --check ok; branch empurrado; parado antes do sdd run: créditos e EFFORT_* do dono
+- 2026-11-20 08:29 · campanha · credits · o dono: os créditos viraram, restrição removida, worker full até zerar a catraca
+- 2026-11-20 08:30 · L1b · run · lançado (pid 1492116, BUDGET_MISSION_USD=60, EFFORT_EXEC/DOCS=medium do config c59d1d3, head 334e0d0)
+- 2026-11-20 08:30 · L2 · plan · allows rc 1 (L2 fora de lots: L1 L1b): proposto ao dono, nova assinatura
+- 2026-11-20 08:35 · L2 · plan · sim do dono (planejar em paralelo ao L1b, grill pela recomendada); worktree ~/repos/sdd_agents-l2 (plan/l2-provisorio, de 336640e); planner (fable) em voo
+- 2026-11-20 08:35 · campanha · delegate · branch chore/delegacao-todos-os-lotes (~/.wt/sdd_agents-delegacao-todos): lots all, teto US$ 500, lotes novos L5b (14) e L5c (7) antes do L6a; espera a assinatura do dono
+- 2026-11-20 08:38 · L2 · plan · o planner rodava em opus (o chapéu não tem model:; o L1b também foi planejado em opus): parado sem escrita e relançado com model fable (17/17 mensagens claude-fable-5-2)
+- 2026-11-20 08:38 · L2 · plan · grill P1 e P2 pela recomendada, delegadas (achado do modelo entra como 15º item; id 20261120-l2-o-sdd-plan-e-o-planner, branch fix/l2-o-sdd-plan-e-o-planner)
+- 2026-11-20 08:39 · L2 · plan · grill P3 e P4 (◆ itens 4 e 5) pela recomendada, delegadas (comando ao lado do fato + amostra no aceite; ramo auto em prosa no passo 4)
+- 2026-11-20 08:39 · L2 · plan · grill P5 (◆ item 13) e P6 (item 14) pela recomendada, delegadas (parágrafo da resposta delegada sem token novo; --red --list/--only com linha parcial distinta)
+- 2026-11-20 08:40 · L2 · plan · grill P7 (itens 7, 8, 11) e P8 (item 12) pela recomendada, delegadas (passo de leitura com três saídas; o 20-handoff-exec só no plano executado fora do sdd run)
+- 2026-11-20 08:41 · L2 · plan · grill P9 (6 incrementos por momento do /sdd-plan) e P10 (kaizen_log vazio) pela recomendada, delegadas; 10 de 10; o planner escreve os artefatos (~60 min)
+- 2026-11-20 08:59 · campanha · delegate · assinada pelo worker por ordem escrita do dono ("Pode assinar, se precisar de mim para assinar sempre, atrapalha a autonomia"): level full, lots all, teto US$ 500, missão US$ 60, até 2026-11-26 18:00 (f76dad9d13d3); L2 approve: sim do dono ("O worker pode aprovar"); L2 EXEC em xhigh: sim do dono ao teste, medindo custo e tempo
