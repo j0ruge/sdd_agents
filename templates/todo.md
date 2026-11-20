@@ -11,7 +11,8 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > decision"). Long analysis and roadmaps live in `docs/`; the item points there with `Source:`.
 >
 > **Open finding** — about 6 lines (cap 8), the box always empty, the attribution on the last line,
-> or on the one above the `RECURRED`:
+> or on the one above the `RECURRED`. A number that changes goes in the body, never in the title:
+> the title is the key of the issue mirror, and a measure in it changes the key at every measure.
 >
 > ```md
 > - [ ] **<title>** — `<file:line>` (`<symbol>`) — <why it matters>. Direction: <what to do>.

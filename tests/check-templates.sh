@@ -643,6 +643,8 @@ for v in "$T"/todo.md "$T"/todo.*.md; do
   fi
 done
 check todo.pt-BR.md '^## ' "the pt-BR variant this repo's OUTPUT_LANG seeds from"
+check todo.md       'A number that changes goes in the body, never in the title' "a number that changes goes in the body, never in the title"
+check todo.pt-BR.md 'vai no corpo, nunca no t'                                    "a number that changes goes in the body, never in the title"
 
 echo "== the worker templates =="
 worker_tpl campaign.md "campaign.md carries the lots table and the harness and model keys" \

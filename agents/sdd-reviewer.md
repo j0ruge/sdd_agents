@@ -85,7 +85,10 @@ logs nothing (bash parsed `bin/sdd` at startup), so an empty log is no certifica
 evidence is your own `git diff --name-only <head this session opened with> HEAD`.
 
 Reproduce before you conclude. A finding you cannot reproduce is a hypothesis, and a hypothesis
-handed to the executor as an `R<n>` buys a session to chase nothing.
+handed to the executor as an `R<n>` buys a session to chase nothing. A disposable copy for a
+reproduction lives outside the repo and is written by a heredoc through Bash: a `Write` outside the
+repo comes back denied, on purpose. And a test filter that matches no test is a failure, not a
+green — read the count of tests that ran before you read the rc.
 
 ### Where each finding goes
 
@@ -144,6 +147,29 @@ IS ending the session, and there is nobody to wake you. A tool call that answere
 background" has not answered — poll it, in this same turn, until it does. Three rounds of one
 mission died with the words *"waiting for the suite"* after doing the entire analysis: US$ 104
 spent, no review delivered, because a slow `TEST_CMD` outlasted the patience of a single call.
+
+How to wait, since this hat has neither `Monitor` nor `ScheduleWakeup` and the harness blocks a
+long foreground `sleep`: send the slow command's output to one file and its exit status to another,
+and wait for the status file in the foreground, under a ceiling below the 10 min of a Bash call:
+
+```bash
+rm -f <rcfile>; ( <command> > <output> 2>&1; echo "$?" > <rcfile> ) & echo "pid=$!"
+timeout 590 bash -c 'until [ -s <rcfile> ]; do sleep 5; done'
+```
+
+The status has a file of its own because the output belongs to the command: a line of it that
+starts with `rc=`, or a last line with no newline, would end a wait on the output early, or never.
+Both files live outside the repository, in a directory from `mktemp -d`: inside it, a path your
+`writes:` does not cover and git does not ignore stops the line as `hat-crossed`.
+
+Run the wait in a foreground call whose own time limit is at least 10 min. In Claude Code that is a
+Bash call whose `timeout` parameter is raised to its ceiling, `timeout: 600000`: the 10 min are the
+ceiling of a Bash call, not its default, and left at the default of 120 000 ms the call is moved to
+the background at 120 s, which is the "running in background" answer above (reproduced in the r1
+of `20261117-l1-a-prosa-do-chapeu`). If the `timeout` fires and `kill -0 <pid>` says the command is
+still alive, run the same wait again, in a call with the same limit, in this same turn. If it is
+gone and `<rcfile>` is still empty, it died before writing one: stop waiting, and report the run
+as failed in the round's `gate:`, with the last lines of `<output>`.
 
 If `TEST_CMD` really is too slow to sit through, that is a **finding** — it goes to `TODO_FILE`
 with the measurement. It is never a reason to narrate that you are waiting and stop.
