@@ -2789,6 +2789,11 @@ assert_phase "with the Rationale fixture gone the mission is back at DOCS" "DOCS
 # latest round by version, with the frontmatter of write_r11 and reviewed_head: as its LAST key.
 write_r12() { # write_r12 <reviewed_head value | @absent@>
   local rh="$1" c
+  # Each world is a NEW round: review_head_ok reads the commit that ADDED the round (R1), so a
+  # rewrite in place would leave every world judged against the first write.
+  if [ -f "$MDIR/40-review-r12.md" ]; then
+    git rm -q "$MDIR/40-review-r12.md" && git commit -qm "chore: drop review r12" >/dev/null
+  fi
   {
     printf -- '---\nfase: REVIEW\nrodada: 12\ngate: %s\n' 'tests/run-all.sh: suite green, 559 assertions, tree clean'
     [ "$rh" = '@absent@' ] || printf 'reviewed_head: %s\n' "$rh"
@@ -2865,7 +2870,14 @@ assert_phase "gate_REVIEW: reviewed_head absent still passes, as the rounds befo
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 assert_phase "gate_REVIEW: reviewed_head the round read, with only its own files after it, passes" "DOCS"
 
-rm -f "$MDIR/40-review-r12.md" l1b-outside.txt
+# R1 (r1 of 20261119-l1b-a-rodada-delta): a later phase may touch the round together with code it
+# owns — sdd-docs writes the mission folder and docs/** in one commit. The round's commit is the one
+# that ADDED it, so that later commit is outside the interval and the green gate stays green.
+printf 'nota da DOCS\n' >> "$MDIR/40-review-r12.md"; echo doc > l1b-doc.txt
+git add -A && git commit -qm "docs: touch the round and a doc" >/dev/null
+assert_phase "gate_REVIEW: reviewed_head reads the commit that added the round, not a later one that touched it" "DOCS"
+
+rm -f "$MDIR/40-review-r12.md" l1b-outside.txt l1b-doc.txt
 git add -A && git commit -qm "chore: drop the r12 fixture" >/dev/null
 assert_phase "with the r12 fixture gone the mission is back at DOCS" "DOCS"
 

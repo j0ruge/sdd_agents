@@ -13063,7 +13063,10 @@ review_delta_prompt() {
 #   1. not 7–40 hex, or not a commit
 #   2. not an ancestor of HEAD
 #   3. a path outside `hat_writes REVIEW` changed between the key and the commit of the round
-# An uncommitted round (no commit touches it) passes here: the dirty-tree refusal below it covers it.
+# The commit of the round is the one that ADDED it (--diff-filter=A, r1 of l1b): sdd-docs writes the
+# mission folder and docs/** in one commit, and reading the LAST commit to touch the round would put
+# that later code inside the interval and refuse a round the gate had already passed.
+# An uncommitted round (no commit adds it) passes here: the dirty-tree refusal below it covers it.
 review_head_ok() {
   local round="$1" name v sha="" short rc_commit p globs
   frontmatter_has "$round" reviewed_head || return 0
@@ -13081,7 +13084,7 @@ review_head_ok() {
     GATE_WHY="$name: reviewed_head $short is not an ancestor of HEAD — the branch does not carry the commit the round read"
     return 1
   fi
-  rc_commit="$(git -C "$REPO_ROOT" log -1 --format=%H -- "$round" 2>/dev/null || true)"
+  rc_commit="$(git -C "$REPO_ROOT" log -1 --diff-filter=A --format=%H -- "$round" 2>/dev/null || true)"
   [ -n "$rc_commit" ] || return 0
   globs="$(hat_writes REVIEW)"
   while IFS= read -r p; do
