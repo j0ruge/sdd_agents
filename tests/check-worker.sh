@@ -1740,13 +1740,13 @@ gitc() { git -C "$RR" -c user.name=fixture -c user.email=fixture@example.com "$@
 
 # round <file> <reviewed head> — a review round copied from templates/review.md: every row of the
 # `### Overall Grade` table graded A (the bold of the Overall row kept) with a rationale RUN_RAT that
-# is a sentence, the frontmatter's gate: filled with RUN_GATE, and `reviewed_head:` added under it —
+# is a sentence, the frontmatter's gate: filled with RUN_GATE, and the template's `reviewed_head:` set —
 # none when the head is `-`. The template ships its rationales and its gate: as fill-ins, which the
 # review item refuses (R38).
 RUN_RAT='measured, nothing to say'
 RUN_GATE='tests/run-all.sh rc 0, the tree clean'
 round() {
-  sed -e "2,/^---\$/ s@^gate: .*@gate: $RUN_GATE\nreviewed_head: $2@" \
+  sed -e "2,/^---\$/ s@^gate: .*@gate: $RUN_GATE@" -e "2,/^---\$/ s@^reviewed_head: .*@reviewed_head: $2@" \
       -e "s@| <A> | <[^|]*> |@| A | $RUN_RAT |@" \
       -e "s@| \*\*<A>\*\* | <[^|]*> |@| **A** | $RUN_RAT |@" "$ROOT/templates/review.md" > "$1"
   [ "$2" != - ] || sed -i '2,/^---$/ { /^reviewed_head:/d }' "$1"

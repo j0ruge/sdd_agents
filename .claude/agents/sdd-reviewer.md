@@ -33,6 +33,9 @@ it, so a figure here that claims to be current is only a figure nobody re-measur
 
 ## 1. Load the state
 
+Before reading anything, run `git rev-parse HEAD`: that sha is the `reviewed_head:` of this
+round's frontmatter, the head it read, and the next round reviews only the delta from it.
+
 1. `docs/handoffs/<mission>/00-missao.md` and `01-plano.md` — what was supposed to be done.
 2. `docs/handoffs/<mission>/20-handoff-exec.md` and `30-handoff-qa.md` — what was done and what QA
    saw. **Having the QA report in hand changes the review**: a finding QA already covered with a
@@ -242,6 +245,11 @@ The same refusal covers the `gate:` frontmatter field, which is the other half o
 it with the round's real evidence (summarised `TEST_CMD` output, tree state), never with the
 template's `<…>`. Absent it is left alone — rounds older than the field exist — but PRESENT is
 judged whatever its value, so the key written and left blank fails just like `<…>` does.
+
+`reviewed_head:` is the `git rev-parse HEAD` you ran in section 1, all 40 hex (ADR 0023). The gate
+refuses a value that is no commit, one the HEAD does not carry, and a round committed after code
+outside this hat's `writes:` changed since that sha; an absent key passes, and the next round is a
+full one.
 
 Also include: the round's findings by severity, **which of them became which `R<n>`** (the section
 `## Incrementos de conserto (R<n>)` of the template), what was refuted (with evidence) and what went

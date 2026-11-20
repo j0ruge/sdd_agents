@@ -2103,6 +2103,7 @@ gate_REVIEW() {
   if [ -n "$offending" ]; then
     GATE_WHY="$(basename "$last"): $offending — the gate requires Grade A on every criterion"; return 1
   fi
+  review_head_ok "$last" || return 1
   if ! run_check_cmd "$TEST_CMD" "gate-review-test"; then
     GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
@@ -13053,6 +13054,44 @@ review_delta_prompt() {
       printf '\nThis is a FULL round (%s): invoke /codereview:codereview over the mission diff.\n' "${line#full — }"
       ;;
   esac
+}
+
+# review_head_ok <round> — the gate's half of the delta round (ADR 0023): the reviewed_head: the
+# round wrote is the head it read, or the next round would review a delta that skips code. rc 0 when
+# the key is ABSENT (the rounds written before the key, decision 4); otherwise each refusal publishes
+# GATE_WHY, starting with the round's basename (historic_rounds reads that prefix), and returns 1:
+#   1. not 7–40 hex, or not a commit
+#   2. not an ancestor of HEAD
+#   3. a path outside `hat_writes REVIEW` changed between the key and the commit of the round
+# An uncommitted round (no commit touches it) passes here: the dirty-tree refusal below it covers it.
+review_head_ok() {
+  local round="$1" name v sha="" short rc_commit p globs
+  frontmatter_has "$round" reviewed_head || return 0
+  name="$(basename "$round")"
+  v="$(frontmatter "$round" reviewed_head)"
+  if [[ "$v" =~ ^[0-9a-f]{7,40}$ ]]; then
+    sha="$(git -C "$REPO_ROOT" rev-parse -q --verify "$v^{commit}" 2>/dev/null || true)"
+  fi
+  if [ -z "$sha" ]; then
+    GATE_WHY="$name: reviewed_head '$v' is no commit — write the git rev-parse HEAD the round read, or leave the key out"
+    return 1
+  fi
+  short="$(git -C "$REPO_ROOT" rev-parse --short "$sha" 2>/dev/null || true)"
+  if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
+    GATE_WHY="$name: reviewed_head $short is not an ancestor of HEAD — the branch does not carry the commit the round read"
+    return 1
+  fi
+  rc_commit="$(git -C "$REPO_ROOT" log -1 --format=%H -- "$round" 2>/dev/null || true)"
+  [ -n "$rc_commit" ] || return 0
+  globs="$(hat_writes REVIEW)"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    if ! hat_path_allowed "$p" "$globs"; then
+      GATE_WHY="$name: $p changed between reviewed_head $short and the round's commit — the round did not read that code"
+      return 1
+    fi
+  done < <(git -C "$REPO_ROOT" diff --name-only "$sha" "$rc_commit" 2>/dev/null || true)
+  return 0
 }
 
 

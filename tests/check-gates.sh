@@ -2843,7 +2843,29 @@ if grep -qF "/codereview:codereview base=$rb_head" <<< "$rb_out" \
   pass "the REVIEW boot prompt of a delta round carries base= and names the round"
 else fail "the REVIEW boot prompt of a delta round carries base= and names the round" "/codereview:codereview base=$rb_head … read 40-review-r12.md for the findings it left open" "$(grep -F 'round' <<< "$rb_out" || true)"; fi
 
-rm -f "$MDIR/40-review-r12.md"
+# gate_REVIEW checks the key the round wrote (I3, review_head_ok): a key that is present and wrong
+# is refused, an absent one passes (the rounds before the key). Each world gives exactly ONE ok line
+# that starts with `gate_REVIEW: reviewed_head` — the phase of a refusal is asserted under another
+# phrase. The refusals run before the suite, so their reasons name the round, not TEST_CMD.
+write_r12 'zzz'
+assert_why "gate_REVIEW: reviewed_head that is no sha is refused, naming the round" REVIEW "40-review-r12\.md: reviewed_head 'zzz' is no commit"
+assert_phase "r12 with a wrong reviewed_head (zzz): the mission stays at REVIEW" "REVIEW"
+
+write_r12 "$rb_orphan"
+assert_why "gate_REVIEW: reviewed_head the HEAD does not carry is refused" REVIEW "40-review-r12\.md: reviewed_head [0-9a-f]+ is not an ancestor of HEAD"
+
+rb_head="$(git rev-parse HEAD)"
+echo outside > l1b-outside.txt; git add -A && git commit -qm "chore: code after the reviewed head" >/dev/null
+write_r12 "$rb_head"
+assert_why "gate_REVIEW: reviewed_head with code changed before the round commit is refused" REVIEW "40-review-r12\.md: l1b-outside\.txt changed between reviewed_head"
+
+write_r12 '@absent@'
+assert_phase "gate_REVIEW: reviewed_head absent still passes, as the rounds before the key" "DOCS"
+
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+assert_phase "gate_REVIEW: reviewed_head the round read, with only its own files after it, passes" "DOCS"
+
+rm -f "$MDIR/40-review-r12.md" l1b-outside.txt
 git add -A && git commit -qm "chore: drop the r12 fixture" >/dev/null
 assert_phase "with the r12 fixture gone the mission is back at DOCS" "DOCS"
 

@@ -7492,8 +7492,25 @@ mut_RUN_review_prompt_delta_dropped() {
 mut_COORD_review_base_locked() {
   sed -i '/^coordination_enter()/,/^}/ s/^    boot|note-manual|/    review-base|boot|note-manual|/' "$1"
 }
+# review_head_ok is the gate's half (I3): each rule has its world in check-gates.sh.
+mut_REVIEW_head_sha_unchecked() {
+  sed -i '/^review_head_ok()/,/^}/ s|if \[ -z "$sha" \]; then|if false; then|' "$1"
+}
+mut_REVIEW_head_ancestry_unchecked() {
+  sed -i '/^review_head_ok()/,/^}/ s|if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then|if false; then|' "$1"
+}
+mut_REVIEW_head_range_unchecked() {
+  sed -i '/^review_head_ok()/,/^}/ s|if ! hat_path_allowed "$p" "$globs"; then|if false; then|' "$1"
+}
+mut_REVIEW_head_absent_refused() {
+  sed -i '/^review_head_ok()/,/^}/ s|frontmatter_has "$round" reviewed_head \|\| return 0|frontmatter_has "$round" reviewed_head \|\| return 1|' "$1"
+}
 
 CATALOG=(
+  REVIEW_head_sha_unchecked
+  REVIEW_head_ancestry_unchecked
+  REVIEW_head_range_unchecked
+  REVIEW_head_absent_refused
   COORD_review_base_locked
   RUN_review_base_absent_as_base
   RUN_review_base_commit_unchecked
