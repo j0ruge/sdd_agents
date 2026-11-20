@@ -30,6 +30,7 @@ exec_model: opus
 | Lot | Título | Ceiling | Itens |
 |---|---|---|---|
 | L1 | Prosa de chapéu e docs (piloto) | - | 14 |
+| L1b | A rodada delta | - | 1 |
 | L2 | O `/sdd-plan` e o planner | - | 14 |
 | L3 | Gates do fim da linha | - | 13 |
 | L4 | Preflight, health e sensores | - | 14 |
@@ -66,6 +67,15 @@ exec_model: opus
 - [ ] A ajuda do `sdd why` não diz que a fase EXEC roda a suíte inteira
 - [ ] A receita de merge dos PRs de achado não conta os threads de revisão abertos no head
 - [ ] A sabotagem devolve o mutante com `mv`, e o build incremental mede o binário do mutante
+
+### L1b — A rodada delta
+
+> Nasceu depois da campanha, pedido do dono em 2026-11-19 no `/sdd-plan` da leva de aceleração
+> (grill, pergunta 2): um lote próprio logo depois do L1, para o `next` achá-lo na fila sem dar o
+> L2 por feito. Entrou na tabela antes da assinatura, porque uma linha nova depois dela muda o
+> digest e a delegação inteira volta a valer `assisted`.
+
+- [ ] A rodada de revisão relê a missão inteira, porque o chapéu não passa `base=` à skill
 
 ### L2 — O `/sdd-plan` e o planner
 
