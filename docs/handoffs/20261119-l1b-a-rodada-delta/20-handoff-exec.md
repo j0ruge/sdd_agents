@@ -4,7 +4,8 @@ fase: EXEC
 status: done
 sessao: 0ebc5bba-4917-40b6-a2ad-cea438824a90
 data: 2026-11-20 11:16
-gate: "tests/run-all.sh rc=0 (suite green, 2203 linhas ok, 0 FAIL); Check do I5 → 1 0; check-todo.sh --check TODO.md rc 0 (91 achados); --anchors 91 medidas, 0 off target; sdd review-base da missão → full — no earlier round"
+atualizado: 2026-11-20 13:10
+gate: "R1 (c6c381f): tests/run-all.sh rc=0 (suite green, 0 FAIL), --anchors 915 mutantes aplicam, --only REVIEW_head_reads_last_touch contra check-gates.sh rc 1; I5: tests/run-all.sh rc=0 (suite green, 2203 linhas ok, 0 FAIL); Check do I5 → 1 0; check-todo.sh --check TODO.md rc 0 (91 achados); --anchors 91 medidas, 0 off target; sdd review-base da missão → full — no earlier round"
 ---
 
 # Handoff — EXEC — L1b: a rodada delta
@@ -18,7 +19,8 @@ Os cinco incrementos estão `done`. Da segunda rodada em diante a REVIEW revisa 
 o `reviewed_head:` da rodada anterior (`review_base_line`, uma definição) e o prompt manda
 `/codereview:codereview base=<sha>`. O `sdd review-base <missão>` responde o mesmo juízo ao worker, o
 `gate_REVIEW` confere a chave, e o #436 do `TODO.md` ganhou `RESOLVED by a3d0b72`. Suíte verde.
-A próxima fase é a REVIEW r1, que **continua inteira** (ainda não há rodada anterior).
+A r1 achou 1 MEDIUM, consertado no `R1` (`c6c381f`): o `review_head_ok` lê o commit que **adicionou**
+a rodada. A próxima fase é a REVIEW r2, a primeira **delta** (`base=a6f1817`).
 
 ## Estado do repo
 
@@ -32,7 +34,7 @@ A próxima fase é a REVIEW r1, que **continua inteira** (ainda não há rodada 
 
 - `1ffe344` — I1: `review_base_line` (o juízo do delta: `base=<40 hex>` e a rodada, ou `full` e o
   motivo: sem rodada, sem chave, chave que não é sha, não ancestral, merge no intervalo) e o verbo
-  `sdd review-base <missão>`, que pega o lock do checkout. 5 asserções em `check-gates.sh`, 5 mutantes.
+  `sdd review-base <missão>`, consulta admitida sem o lock do checkout (braço `*)` do `coordination_enter`). 5 asserções em `check-gates.sh`, 5 mutantes.
 - `963e181` — I2: `review_delta_prompt`, chamado pelo `phase_extra REVIEW`: rodada 1 diz `full` e o
   motivo; rodada delta leva `base=` e nomeia a rodada anterior como lista de achados abertos. O chapéu
   do revisor manda o achado fora do delta ao `TODO_FILE`, nunca a um `R<n>`. 3 asserções, 1 mutante.
@@ -44,6 +46,17 @@ A próxima fase é a REVIEW r1, que **continua inteira** (ainda não há rodada 
   `reviewed_head:`) para de dizer que a chave é só do worker. 1 asserção `command:`.
 - o commit `docs(todo)` deste handoff — I5: `RESOLVED by a3d0b72` no item #436 do `TODO.md` (dentro da linha `Fonte:`, antes do
   descoberto-por; título intacto, item fica, catraca não muda) e este handoff.
+
+## Consertos da REVIEW r1
+
+- `c6c381f` — R1 (achado #1 da r1, MEDIUM): o `review_head_ok` tomava como commit da rodada o
+  **último** que tocou o `40-review-rN.md`; uma DOCS que corrigisse a rodada junto com um doc reprovava
+  o `gate_REVIEW` já verde. Agora é o que a **adicionou** (`--diff-filter=A`), como o comentário e a
+  ADR 0023 já diziam. O `write_r12` do `check-gates.sh` recria a rodada a cada mundo, um mundo novo
+  prova que o commit posterior fica fora do intervalo, e o mutante `REVIEW_head_reads_last_touch`
+  entrou no catálogo. Sabotagens nas notas.
+- Achado #3 da r1 (LOW, prosa deste handoff): a linha do I1 dizia que o `sdd review-base` pega o lock;
+  corrigida acima. O #2 (LOW, a resolução do sha escrita duas vezes) fica como está, sem rota.
 
 ## Artefatos
 
@@ -59,7 +72,11 @@ A próxima fase é a REVIEW r1, que **continua inteira** (ainda não há rodada 
 
 ## Boot da próxima fase
 
-Próxima fase: **REVIEW r1** (não há QA de interface: a mudança é do runner e dos chapéus).
+Próxima fase: **REVIEW r2**, delta sobre `a6f1817..` (o `reviewed_head:` da r1). O delta é o
+`c6c381f` mais os artefatos da missão; leia o `40-review-r1.md` para o achado que ele deixou aberto.
+`./bin/sdd review-base 20261119-l1b-a-rodada-delta` → `base=a6f1817… — 40-review-r1.md reviewed this head`.
+O que segue abaixo é o boot escrito para a r1, ainda válido.
+
 
 - O que chega a quem usa o kit: o verbo novo `sdd review-base <missão>` (na ajuda do `sdd`), a linha
   nova do prompt da REVIEW (`full — <motivo>` na r1; `base=<sha>` e a rodada anterior da r2 em diante),
@@ -71,7 +88,7 @@ Próxima fase: **REVIEW r1** (não há QA de interface: a mudança é do runner 
 
   ```bash
   o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    review-base: ' <<< "$o"          # 5
-  grep -c '^  ok    gate_REVIEW: reviewed_head' <<< "$o"                                # 5
+  grep -c '^  ok    gate_REVIEW: reviewed_head' <<< "$o"                                # 6 (5 do I3 + 1 do R1)
   grep -c '^  ok    the REVIEW boot prompt of a delta round carries base= and names the round' <<< "$o"   # 1
   ./bin/sdd review-base 20261119-l1b-a-rodada-delta     # full — no earlier round
   bash tests/run-all.sh                                 # rc 0
