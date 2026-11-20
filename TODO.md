@@ -769,6 +769,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: o ato `plan` diz a rota (a linha e o `lots:` no mesmo commit, assinados antes de chegar à `main`).
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-19)
 
+- [ ] **O ato `review` do worker mergeia a base antes da rodada, e o `review-base` responde `full` toda vez** —
+  `commands/sdd-worker.md:196` (`bring the base in`) — o ato manda `git merge origin/<base>` e só depois
+  pergunta ao `sdd review-base`, que lê um merge depois da última rodada como rodada inteira; então a rodada
+  do worker, a mais cara, só é delta quando a `main` não andou. Medido na r3 do #452: `full — merge 59be5eb
+  entered after 40-review-r2.md`, 30 arquivos e 2 086 linhas, onde a branch andara 11 commits desde o
+  `reviewed_head:` da r2. Direção: o `review-base` aceita o merge cujo lado da base não toca caminho que a
+  branch mudou, ou o ato só mergeia a base quando o PR não é `MERGEABLE`.
+  — descoberto pela sessão orquestradora na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
+
 - [ ] **A regra do teto da chamada `Bash` mora no revisor, e não no `turn_rule` de toda fase** —
   `bin/sdd:3375` (`turn_rule`) — a chamada `Bash` do harness para de esperar aos 120 s (600 s no máximo),
   e no L1 isso voltou três vezes: o item N (o `sdd why … EXEC` cortado aos 2 min no `magic_tutor`), a
