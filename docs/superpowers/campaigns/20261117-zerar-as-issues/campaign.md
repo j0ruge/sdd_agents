@@ -35,7 +35,7 @@ exec_model: opus
 | L3 | Gates do fim da linha | - | 13 |
 | L4 | Preflight, health e sensores | - | 14 |
 | L5 | Saída humana e contrato do runner | - | 17 |
-| L5b | O worker e os verbos dele | - | 15 |
+| L5b | O worker e os verbos dele | - | 16 |
 | L5c | O runner: as notas, o plano e o turno | - | 7 |
 | L6a | O carimbo tudo ou nada | - | 1 |
 | L6b | A prosa da DOCS sem revisão | - | 1 |
@@ -172,6 +172,7 @@ exec_model: opus
 - [ ] Uma edição do `.sdd/config.sh` durante a fase tira o teto de missão que a delegação assinou
 - [ ] ◆ A missão pedida fora da fila da campanha não tem rota, e a linha nova derruba a delegação
 - [ ] O ato `review` do worker mergeia a base antes da rodada, e o `review-base` responde `full` toda vez
+- [ ] O merge delegado não confere que o corpo do PR lista as escolhas do grill
 
 ### L5c — O runner: as notas, o plano e o turno
 

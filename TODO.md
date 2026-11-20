@@ -778,6 +778,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   branch mudou, ou o ato só mergeia a base quando o PR não é `MERGEABLE`.
   — descoberto pela sessão orquestradora na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
+- [ ] **O merge delegado não confere que o corpo do PR lista as escolhas do grill** —
+  `commands/sdd-worker.md:186` (`grill answers that touch his rules`) — sob delegação o aceite do dono sobre as
+  escolhas do grill vem depois do merge, pelo corpo do PR, e quem o escreve é o ato `pr`, que o `next` não deriva
+  (todo PR aberto vira `review`). O `cmd_pr_ready` lê do PR só `headRefOid,mergeable,state`, e o único `.body`
+  dele é o dos comentários do Codex: um lote pode mergear sem o registro que o dono aceitaria.
+  Direção: o `pr-ready` confere no corpo uma linha por decisão `- answer:` do `00-missao.md` da missão.
+  — descoberto pelo `coderabbitai` no PR #455, na campanha `20261117-zerar-as-issues` (2026-11-20)
+
 - [ ] **A regra do teto da chamada `Bash` mora no revisor, e não no `turn_rule` de toda fase** —
   `bin/sdd:3375` (`turn_rule`) — a chamada `Bash` do harness para de esperar aos 120 s (600 s no máximo),
   e no L1 isso voltou três vezes: o item N (o `sdd why … EXEC` cortado aos 2 min no `magic_tutor`), a
