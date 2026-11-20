@@ -35,7 +35,7 @@ exec_model: opus
 | L3 | Gates do fim da linha | - | 13 |
 | L4 | Preflight, health e sensores | - | 14 |
 | L5 | Saída humana e contrato do runner | - | 17 |
-| L5b | O worker e os verbos dele | - | 14 |
+| L5b | O worker e os verbos dele | - | 15 |
 | L5c | O runner: as notas, o plano e o turno | - | 7 |
 | L6a | O carimbo tudo ou nada | plan | 1 |
 | L6b | A prosa da DOCS sem revisão | plan | 1 |
@@ -171,6 +171,7 @@ exec_model: opus
 - [ ] A parada do worker roda o `budget` de novo para montar o `SDD_GATE_WHY` do pager
 - [ ] Uma edição do `.sdd/config.sh` durante a fase tira o teto de missão que a delegação assinou
 - [ ] ◆ A missão pedida fora da fila da campanha não tem rota, e a linha nova derruba a delegação
+- [ ] O ato `review` do worker mergeia a base antes da rodada, e o `review-base` responde `full` toda vez
 
 ### L5c — O runner: as notas, o plano e o turno
 

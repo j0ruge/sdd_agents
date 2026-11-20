@@ -2854,6 +2854,48 @@ else fail "delta base: a round git does not carry — modified, untracked or ign
   "status ' M …|?? …|!! …', committed base=$rb_head …, then '$rb_want' three times" \
   "status '$rb_st'; committed '$rb_cm'; modified '$rb_mod'; untracked '$rb_unt'; ignored '$rb_ign'"; fi
 
+# The query writes nothing (r3 of 20261119-l1b-a-rodada-delta): `sdd review-base` runs without the
+# checkout lock, and the git status of rule 2 took index.lock and rewrote the index under any
+# session committing in the same checkout. The world is a committed round whose stat git recorded
+# no longer matches the file (an older mtime, same bytes); the witness is that a plain git status
+# on that same state, run AFTER the query, does rewrite the index — a probe of a state git would not
+# refresh is mute. The index is read by inode, mtime and size: git writes it by lock and rename.
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+touch -d '1 minute ago' "$MDIR/40-review-r12.md"
+rb_ix0="$(LC_ALL=C stat -c '%i %.9Y %s' .git/index)"; rb_out="$(review_base_of)"
+rb_ix1="$(LC_ALL=C stat -c '%i %.9Y %s' .git/index)"
+git status --porcelain --untracked-files=all --ignored -- "$MDIR/40-review-r12.md" >/dev/null
+rb_ix2="$(LC_ALL=C stat -c '%i %.9Y %s' .git/index)"
+if [ "$rb_ix0" = "$rb_ix1" ] && [ "$rb_ix1" != "$rb_ix2" ] && [[ "$rb_out" == "base=$rb_head "* ]]; then
+  pass "delta base: the query leaves the index as it found it, where a plain git status rewrites it"
+else fail "delta base: the query leaves the index as it found it, where a plain git status rewrites it" \
+  "index '$rb_ix0' before and after the query, a different one after git status, and base=$rb_head …" \
+  "before '$rb_ix0', after the query '$rb_ix1', after git status '$rb_ix2'; query '$rb_out'"; fi
+
+# A git status that fails proves nothing committed either (rule 2 of review_base_line, r3 of
+# 20261119-l1b-a-rodada-delta): read as an empty answer, the round on disk would be a base. The
+# world is a committed round with a good reviewed_head: and a git first on the PATH that fails
+# exactly the status of rule 2 (`-C <root> status --porcelain --untracked-files=all --ignored …`)
+# and hands every other call to the real git; the witnesses are that it does both, and that the
+# same world without it answers base=.
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+mkdir -p "$FIX/.git/l1b-statusstub"
+cat > "$FIX/.git/l1b-statusstub/git" <<STUB
+#!/usr/bin/env bash
+if [ "\${3:-}" = status ] && [ "\${4:-}" = --porcelain ] && [ "\${5:-}" = --untracked-files=all ] && [ "\${6:-}" = --ignored ]; then echo "fatal: stub: the status of the round fails" >&2; exit 128; fi
+exec "$(command -v git)" "\$@"
+STUB
+chmod +x "$FIX/.git/l1b-statusstub/git"
+rb_rc=0; "$FIX/.git/l1b-statusstub/git" -C "$FIX" status --porcelain --untracked-files=all --ignored -- "$MDIR" >/dev/null 2>&1 || rb_rc=$?
+rb_cm="$(review_base_of)"; rb_out="$(PATH="$FIX/.git/l1b-statusstub:$PATH" review_base_of)"
+rb_want='full — git status cannot say whether 40-review-r12.md is committed'
+if [ "$rb_rc" -eq 128 ] && [ "$("$FIX/.git/l1b-statusstub/git" -C "$FIX" rev-parse HEAD)" = "$(git rev-parse HEAD)" ] \
+   && [[ "$rb_cm" == "base=$rb_head "* ]] && [ "$rb_out" = "$rb_want" ]; then
+  pass "delta base: a git status that fails answers full and names the round, where git answering gives base="
+else fail "delta base: a git status that fails answers full and names the round, where git answering gives base=" \
+  "stub rc 128 and the HEAD; base=$rb_head … without it; '$rb_want' under it" \
+  "stub rc $rb_rc; without it '$rb_cm'; under it '$rb_out'"; fi
+
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 git checkout -q -b l1b-side
 echo side > l1b-side.txt; git add -A && git commit -qm "chore: side" >/dev/null
@@ -2914,18 +2956,39 @@ assert_phase "gate_REVIEW: reviewed_head absent still passes, as the rounds befo
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 assert_phase "gate_REVIEW: reviewed_head the round read, with only its own files after it, passes" "DOCS"
 
+# A path git quotes is still the path (r3 of 20261119-l1b-a-rodada-delta): under core.quotePath, the
+# default, git diff --name-only prints a non-ASCII name between quotes with octal escapes, the glob
+# of the reviewer's writes: does not match it, and the gate refused a round the hat guard
+# (hat_diff_names, which turns the option off) accepted. The world is a non-ASCII note inside the
+# mission folder, committed between the reviewed head and the round. The fixture sets the option
+# true, so a global false cannot disarm the world, and the witness is that a plain git diff there
+# prints the note quoted. The name is built from its bytes, so this file stays ASCII.
+rb_na="$MDIR/notes-$(printf '\303\274').md"
+git config core.quotePath true
+rb_head="$(git rev-parse HEAD)"
+printf 'note\n' > "$rb_na"; git add -A && git commit -qm "docs: a non-ASCII note in the mission folder" >/dev/null
+write_r12 "$rb_head"
+rb_q="$(git diff --name-only "$rb_head" HEAD)"
+if grep -qF 'notes-\303\274.md"' <<< "$rb_q"; then
+  pass "fixture: a plain git diff prints the non-ASCII note quoted, with octal escapes"
+else fail "fixture: a plain git diff prints the non-ASCII note quoted, with octal escapes" '"…/notes-\303\274.md"' "$rb_q"; fi
+assert_phase "gate_REVIEW: a non-ASCII path inside the reviewer's writes: in the range passes" "DOCS"
+git config --unset core.quotePath
+git rm -q "$rb_na" && git commit -qm "chore: drop the non-ASCII note" >/dev/null
+
 # A range diff that fails refuses the round, fail closed (CodeRabbit on PR #452): its error was
 # discarded, the path loop read nothing, and a round the gate could not read passed. The world is a
-# git first on the PATH that fails exactly the range diff of review_head_ok (`-C <root> diff
-# --name-only …`) and hands every other call to the real git; the witness is that it does both.
+# git first on the PATH that fails exactly the range diff of review_head_ok (`-C <root>
+# -c core.quotePath=false diff --name-only …`) and hands every other call to the real git; the
+# witness is that it does both.
 mkdir -p "$FIX/.git/l1b-gitstub"
 cat > "$FIX/.git/l1b-gitstub/git" <<STUB
 #!/usr/bin/env bash
-if [ "\${3:-}" = diff ] && [ "\${4:-}" = --name-only ]; then echo "fatal: stub: the range diff fails" >&2; exit 128; fi
+if [ "\${3:-}" = -c ] && [ "\${4:-}" = core.quotePath=false ] && [ "\${5:-}" = diff ] && [ "\${6:-}" = --name-only ]; then echo "fatal: stub: the range diff fails" >&2; exit 128; fi
 exec "$(command -v git)" "\$@"
 STUB
 chmod +x "$FIX/.git/l1b-gitstub/git"
-rb_rc=0; "$FIX/.git/l1b-gitstub/git" -C "$FIX" diff --name-only HEAD HEAD >/dev/null 2>&1 || rb_rc=$?
+rb_rc=0; "$FIX/.git/l1b-gitstub/git" -C "$FIX" -c core.quotePath=false diff --name-only HEAD HEAD >/dev/null 2>&1 || rb_rc=$?
 if [ "$rb_rc" -eq 128 ] && [ "$("$FIX/.git/l1b-gitstub/git" -C "$FIX" rev-parse HEAD)" = "$(git rev-parse HEAD)" ]; then
   pass "fixture: the git stub fails the range diff and answers every other call"
 else fail "fixture: the git stub fails the range diff and answers every other call" "rc 128 and the HEAD" "rc $rb_rc"; fi
