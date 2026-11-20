@@ -148,7 +148,7 @@
 #       the text each cell leaves once its `*` and backticks are stripped, and pr-ready agrees with
 #       it on every cell (a differential: the rule lives in two programs); the gate: of the round
 #       too — the template's own, an empty one, a quoted one —, and an absent one, since a round
-#       with reviewed_head: is the worker's own; a fill-in in a table after the grade table changes
+#       with reviewed_head: is made from the template; a fill-in in a table after the grade table changes
 #       nothing
 #   R39 `allows` with no lot — no --lot for plan, no --mission for the others — is rc 2, nothing on
 #       stdout and the flag the act takes named on stderr, for each of the seven acts, under a full
@@ -2312,6 +2312,16 @@ else
     'each row once in its section, the loop reading it, every setsid in code with -w, and each sabotaged copy naming what it lost' "$got"
 fi
 
+# The review act reads the delta from the runner (ADR 0023): its subsection names `sdd review-base`,
+# and no longer says the runner's rounds carry no reviewed_head:, which stopped being true.
+rsec="$(awk '/^### `review`/{s=1; next} s && /^##+ /{s=0} s' "$COMMAND")"
+if grep -qF 'sdd review-base' <<< "$rsec" && ! grep -qF 'carry no `reviewed_head:`' <<< "$rsec"; then
+  pass 'command: the review act passes the line of sdd review-base to its subagent'
+else
+  fail 'command: the review act passes the line of sdd review-base to its subagent' \
+    'the ### `review` subsection names sdd review-base and drops "carry no `reviewed_head:`"' "$rsec"
+fi
+
 # --- docs: the documentation and the vocabulary -------------------------------------------------
 # Four documents name the worker, and each is prose no mutant of bin/ reaches, so the checker carries
 # its own negative control, like the command's. What each owes is read from the sensor's ladder and
@@ -2524,7 +2534,7 @@ fi
 # Then the gate: of r2, judged by the same rule: the template's own, an empty one and the
 # template's quoted (the runner strips the quotes) fail; the filled one is ready; and an absent one
 # fails too — the runner leaves it alone for the rounds that predate the key, and a round with
-# reviewed_head: is the worker's own, made from the template. The template's table as shipped, its
+# reviewed_head: is made from the template (ADR 0023). The template's table as shipped, its
 # eight rows graded A and left `<…>` (the round of the finding), is one line naming the first row.
 # The counter-world: a fill-in left in the findings table, after the grade table, changes nothing.
 got=""

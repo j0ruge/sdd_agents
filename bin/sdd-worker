@@ -1218,8 +1218,8 @@ gh_unread() {
 # rc 3, and nothing on stdout, when gh failed or answered off its contract. The `ready` line carries
 # the sha the caller passes to `gh pr merge --merge --match-head-commit`; the method (a merge commit,
 # never a squash) is the merging command's, not this verb's. No bot's review is read but the Codex
-# state, so a bot with no quota neither blocks nor counts as a review. The `reviewed_head:` key is the
-# worker's own round's: a round the runner's REVIEW phase wrote names no head, and is not ready.
+# state, so a bot with no quota neither blocks nor counts as a review. Both programs write `reviewed_head:`
+# (ADR 0023); a runner round with a DOCS commit after it, outside the mission folder, is not ready.
 # Declared limits: the five items are read one after the other, never at once — a receipt, a thread
 # or the mergeability can change between two reads on the same sha, which --match-head-commit does
 # not see (achado #13 of the mission's review r5) —, so whoever merges reads pr-ready again
@@ -1283,7 +1283,7 @@ cmd_pr_ready() {
   fi
   # The gate: by the same rule, its surrounding quotes stripped as the runner's frontmatter reader
   # does. Absent reads empty, and fails: gate_REVIEW leaves an absent gate: alone for the rounds that
-  # predate the key, and a round that names reviewed_head: is the worker's own, made from the template.
+  # predate the key, and a round that names reviewed_head: is made from the template (ADR 0023).
   gv="$(fm_value "$round" gate)"; gv="${gv#[\"\']}"; gv="${gv%[\"\']}"
   if placeholder "$gv"; then
     printf "not-ready review: the gate: of %s is a placeholder or absent ('%s') — it carries the evidence the round closed\n" \

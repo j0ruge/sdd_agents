@@ -396,6 +396,17 @@ needs a human. The session commits **only** the round report, the checkpoint and
 `TODO_FILE`, as for every hat that writes there, a finding already open gains an entry on the item's
 `RECURRED` line (`templates/todo.md`), never a new item, and one already decided goes to the human.
 
+**From the second round on, the round reviews the delta (ADR 0023).** Each round writes the
+`git rev-parse HEAD` it read as `reviewed_head:`, and `gate_REVIEW` refuses a value that is no
+commit, one the `HEAD` does not carry, or code changed between it and the round's commit; a round
+without the key passes, as the older ones did. One function, `review_base_line`, reads the newest
+round and answers `base=<sha> — <round> …` or `full — <reason>`. The REVIEW boot prompt carries
+that line, so the session invokes `/codereview:codereview base=<sha>`, because the argument limits
+the skill and a sentence does not. `sdd review-base <mission>` prints the same line without running a
+gate or the suite. No earlier round, no key, a wrong key or a merge after it makes the round full,
+and the prompt says why. In a delta round, a finding in code the delta did not touch goes to the
+`TODO_FILE`, never to an `R<n>`.
+
 Nothing in the runner had to learn about the prefix. `current_phase()` walks
 `PLAN TICKET EXEC QA REVIEW DOCS PR` and returns the first red gate, so a pending `R<n>` fails
 `gate_EXEC` two phases before `gate_REVIEW` is read, `sdd-executor` closes it in TDD with a context
@@ -2075,11 +2086,13 @@ items hold. Reading them is a sixth item, which changes the bar: it is open in `
 question of who writes `local/ci` in the worker's loop, since an item that no act writes would be a
 gate nobody can satisfy.
 
-**`reviewed_head:` is the worker's key, on purpose.** The rounds the REVIEW phase of `sdd run`
-writes do not carry it, and `templates/review.md` does not name it. So after a run `pr-ready`
-answers `not-ready review: the newest round names no head` until the session makes its own round
-over the head and writes it with the key: the owner's bar is higher than the pipeline's (every
-criterion A, no tolerance for prose), and the worker's round is what applies it. A round
+**`reviewed_head:` is one key for two programs (ADR 0023).** Since `20261119-l1b-a-rodada-delta`
+`templates/review.md` names it, the REVIEW rounds of `sdd run` write it, and `gate_REVIEW` checks it.
+`pr-ready` still asks for more: every commit after it touches only the mission folder. The DOCS
+phase writes outside that folder, so after a run `pr-ready` still waits until the session makes its
+own round over the head. The owner's bar is higher than the pipeline's (every criterion A, no
+tolerance for prose), and the worker's round is what applies it. Its review act asks
+`sdd review-base <mission>` for the delta, like the REVIEW phase. A round
 `gate_REVIEW` passes may fail `pr-ready`; never the reverse on the grade alone.
 
 ### Declared limits (ADR 0022)
