@@ -548,6 +548,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 12 — descoberto pelo
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
+- [ ] **O `/sdd-plan` não confere o branch em que o alvo está, e o `sdd approve` corta a missão dele** —
+  `commands/sdd-plan.md:60` (`From that config`) — no `magic_tutor` (sem worktree: o `sdd` fica fora do alvo) o
+  checkout estava na `feat/untapped-contra`, com 2 commits sem push e alheios à missão. O passo 2 só olha o kit, e o
+  "names the branch you stand on" vem na aprovação, com os artefatos já escritos. O relay voltou à `main` à mão antes
+  de delegar; sem isso, a branch da missão nasceria dos commits alheios, e o PR os levaria. Direção: o passo 3 diz o
+  branch atual e, fora do `DEFAULT_BRANCH` e do `branch:` da missão, para e oferece voltar a ele ou abrir worktree.
+  — descoberto pelo relay do `/sdd-plan` no `magic_tutor` (2026-11-20)
+
 ### Saída humana e cosmética
 
 - [ ] **O "Como verificar" do PR copia o `$SDD_HOME` do `TEST_CMD`, e o comando falha fora do runner** —
