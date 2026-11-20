@@ -807,10 +807,14 @@ environment cleaned of the parent harness (`env -u CLAUDECODE …`) — never as
 an agent session, which is what a memory watchdog reaps first. Then `sdd run <mission>` again.
 
 A detached run tells you nothing when it ends, so find it and wait for its PID.
-`pgrep -af '[b]in/sdd run <mission>'` lists it (a wrapper on the PATH shows as a second line);
+`pgrep -af '[b]in/sdd run .*<mission>'` lists it, options before the mission included
+(`sdd run --phase EXEC <mission>`), and a wrapper on the PATH shows as a second line;
 `tail --pid=<pid> -f /dev/null` returns when that process is gone. Then read the end in the run's
 redirected output: the line `✓ pipeline complete` is the good end; without it, the last line of
-`.sdd/logs/<mission>/pipeline.log` says where it stopped. Never wait with
+`.sdd/logs/<mission>/pipeline.log` says where it stopped, if that line is this run's. A run killed
+before it derived its first phase (deriving can run the whole `TEST_CMD`) writes no line of its own,
+unless it had to switch branch, and the file is then absent or ends on an older run's line: compare
+the line's time with the launch. Never wait with
 `pgrep -f 'sdd run <mission>'` in a loop: that pattern is in the argv of the very shell that
 waits, so it matches itself and the loop never ends.
 

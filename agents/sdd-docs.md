@@ -58,8 +58,10 @@ and decides nothing (ADR 0018 §4).
 
 A lesson the entry itself calls recurrent ("the third time", "again", the same failure as an
 earlier mission) does not stay only in the log, where the next mission repeats it. Either it becomes
-a `⛔` row with its proposed text for `.claude/rules/` or `CLAUDE.md`, by the rule of § 5, or the
-entry writes the reason it does not become a rule.
+a rule, or the entry writes the reason it does not become a rule. A rule for `CLAUDE.md` you write
+straight into `CLAUDE.md`, which your `writes:` covers, and mark its row ✅ with the hash:
+`gate_DOCS` refuses a `⛔` row on a document this hat writes. A rule for a path your `writes:` does
+not cover (`.claude/rules/`, `bin/sdd`) becomes a `⛔` row with its proposed text, by the rule of § 5.
 
 On rules and `CLAUDE.md`: **SDCA** — standardising requires confirming in the file that the change
 is there. Did the convention really change? Write it. Did it not? Do not write it. A rule invented

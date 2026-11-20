@@ -80,8 +80,12 @@ for your own check, stop before you end the turn."), acrescente:
 > A Bash call stops waiting at its own `timeout`: 120 000 ms by default, 600 000 ms at most, and past it the
 > command moves to the background. A command that may pass 2 min goes in a call whose `timeout` parameter
 > is raised to 600000; one that may pass 10 min (the whole `TEST_CMD`, a `sdd why` of EXEC, QA or REVIEW)
-> runs detached, writing `rc=$?` to a file, and the session waits on that file in the foreground with
+> runs detached as `( <command>; echo "rc=$?" ) > <file> 2>&1 &`, keeping its `$!` as `<pid>`, and the
+> session waits on that file in the foreground with
 > `timeout 590 bash -c 'until grep -q "^rc=" <file>; do sleep 5; done'` in a call with `timeout: 600000`.
+> When that wait times out and `kill -0 <pid>` says the command is still alive, the session runs the same
+> wait again, in this same turn; when it is gone and the file has no `rc=` line, the command died, and the
+> session reports it as failed instead of waiting again.
 
 Porquê: nesta missão o teto voltou três vezes (o item N, a suíte do executor no I6 e no I9, e o R1 da r1), e a
 regra só existe hoje no chapéu do revisor (R1) e na ajuda do `sdd why` (item N). O `turn_rule` fala a toda

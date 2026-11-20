@@ -153,14 +153,18 @@ long foreground `sleep`: send the slow command's output to a file that ends in a
 wait for that line in the foreground, under a ceiling below the 10 min of a Bash call:
 
 ```bash
+( <command>; echo "rc=$?" ) > <output> 2>&1 & echo "pid=$!"
 timeout 590 bash -c 'until grep -q "^rc=" <output>; do sleep 5; done'
 ```
 
-Run that loop in a Bash call whose own `timeout` parameter is raised to its ceiling,
-`timeout: 600000`. The 10 min are the ceiling of a Bash call, not its default: left at the default
-of 120 000 ms, the call is moved to the background at 120 s, which is the "running in background"
-answer above (reproduced in the r1 of `20261117-l1-a-prosa-do-chapeu`). If the `timeout` fires, run
-the same loop again, in a call with the same parameter, in this same turn.
+Run the wait in a foreground call whose own time limit is at least 10 min. In Claude Code that is a
+Bash call whose `timeout` parameter is raised to its ceiling, `timeout: 600000`: the 10 min are the
+ceiling of a Bash call, not its default, and left at the default of 120 000 ms the call is moved to
+the background at 120 s, which is the "running in background" answer above (reproduced in the r1
+of `20261117-l1-a-prosa-do-chapeu`). If the `timeout` fires and `kill -0 <pid>` says the command is
+still alive, run the same wait again, in a call with the same limit, in this same turn. If it is
+gone and the file has no `rc=` line, it died before writing one: stop waiting, and report the run
+as failed in the round's `gate:`, with the file's last lines.
 
 If `TEST_CMD` really is too slow to sit through, that is a **finding** — it goes to `TODO_FILE`
 with the measurement. It is never a reason to narrate that you are waiting and stop.

@@ -713,6 +713,13 @@ reviewer_agent_probes() {
   else
     fail "hat: sdd-reviewer gives the wait loop without raising the Bash call's own timeout, so it goes to the background at 120 s"
   fi
+  # CodeRabbit on PR 446: agents/*.md stay portable, so the 600000 is Claude Code's spelling of a
+  # 10-min foreground limit; and a writer of rc= that died ends the wait as a failure, not a new wait.
+  if grep -qF 'at least 10 min' <<< "$sdie" && grep -qF 'kill -0' <<< "$sdie"; then
+    pass "hat: the reviewer's wait reads in any harness and stops when the writer of rc= is gone"
+  else
+    fail "hat: sdd-reviewer's wait names only the Claude Code parameter, or waits again after the writer of rc= died"
+  fi
   if grep -qF 'heredoc' <<< "$s3" && grep -qF 'matches no test' <<< "$s3"; then
     pass "hat: the reviewer writes a probe outside the repo by heredoc, and a test filter that matches nothing is a failure"
   else
@@ -732,6 +739,14 @@ docs_agent_probes() {
     pass "hat: the docs phase turns a lesson its own log calls recurrent into a proposed rule, or writes why not"
   else
     fail "hat: sdd-docs no longer sends a lesson its KAIZEN_LOG entry calls recurrent to a proposed rule, or to a written reason why not"
+  fi
+  # CodeRabbit on PR 446: gate_DOCS refuses a ⛔ row on a document the hat writes, and CLAUDE.md is
+  # in its writes:, so the lesson for CLAUDE.md is written there, and the ⛔ is for a path outside.
+  if grep -qF 'straight into `CLAUDE.md`' <<< "$s3" \
+     && ! grep -qF 'for `.claude/rules/` or `CLAUDE.md`' <<< "$s3"; then
+    pass "hat: the docs phase writes a recurrent lesson for CLAUDE.md itself, and keeps the ⛔ row for a path outside its writes:"
+  else
+    fail "hat: sdd-docs routes a recurrent lesson for CLAUDE.md through a ⛔ row, which gate_DOCS refuses on a document the hat writes"
   fi
 }
 
@@ -932,6 +947,14 @@ doc_operator_probes() {
     pass "doc: failure-modes.md finds a detached sdd run without matching the watcher, and says how to wait for its end"
   else
     fail "doc: the vanished-sdd-run section of failure-modes.md is missing, still greps for bin/sdd run, or lost the [b]in pgrep, the tail --pid= wait or the pipeline complete end"
+  fi
+  # CodeRabbit on PR 446: `sdd run --phase EXEC <mission>` puts options before the mission, and a
+  # run killed before its first derivation leaves the last line of an older run in pipeline.log.
+  if [ -n "$sec" ] && grep -qF "pgrep -af '[b]in/sdd run .*<mission>'" <<< "$sec" \
+     && grep -qF 'writes no line of its own' <<< "$sec"; then
+    pass "doc: failure-modes.md finds a detached sdd run with options before the mission, and warns the log's last line may be an older run's"
+  else
+    fail "doc: failure-modes.md misses a detached sdd run started with options before the mission, or reads the log's last line as this run's stop"
   fi
   if grep -qF 'reviewThreads' "$fp" && grep -qF 'isResolved' "$fp" && grep -qF 'unresolved: 0' "$fp"; then
     pass "doc: the finding-PR recipe merges only with zero unresolved review threads on the head, with the command beside it"
