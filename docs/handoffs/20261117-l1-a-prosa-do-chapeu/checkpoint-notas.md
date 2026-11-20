@@ -44,3 +44,4 @@
 - 2026-11-19 20:03 · `QA` · jornada de 5 passos no terminal verde, 0 achados, 0 F<n>; suíte verde rc 0, 0 FAIL; 30-handoff-qa.md status: done
 - 2026-11-19 20:35 · `R1` · nasceu do achado #1 da r1 (MEDIUM, reproduzido): timeout 590 do laço de espera numa chamada Bash de prazo padrão foi para segundo plano aos 120 s; com timeout 600000 segurou 590 s
 - 2026-11-19 20:52 · `R1` · R1 red: hat: the reviewer runs the wait loop in a Bash call whose own timeout is raised to 600000 ms → FAIL antes da prosa; R de prosa, sem sabotagem (parágrafo relido, única repetição é o corpo do item F do TODO.md); âncoras 103 medidas, 0 fora do alvo; suíte verde rc 0, 0 FAIL; commit 772540c
+- 2026-11-19 21:16 · `REVIEW` · r2 (delta 517eeac..3f7ad8c): 0 achados, R1 conferido (Check 1 0, sabotagem em cópia reprova), nota A em todo critério; suíte verde rc 0, 0 FAIL
