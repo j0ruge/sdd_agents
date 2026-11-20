@@ -50,7 +50,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   pelas fixtures de teste" com "o compilador lista"; o `tsc --noEmit` do backend exclui `__tests__` e saiu
   rc 0 com testes ainda na assinatura velha. Executor que confia no verde deixa chamador quebrado, que o
   Vitest (sem checagem de tipo) só pega se tropeçar em runtime. Direção: o planner roda no PLAN, contra o
-  que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks.
+  que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks. RESOLVED by 8a21366
   — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
 
 - [ ] **Nada avisa que o clone do kit está velho ou fora da `main`** — `bin/sdd:4167` (`autonomy_kit_stamp`) —
@@ -305,21 +305,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   session ended before this call's result was recorded, so its outcome is unknown". Na sessão nova, o `SendMessage` ao
   id do planner antigo voltou `Resuming agent`, e os artefatos saíram com as 10 decisões do grill intactas. Sem o passo
   escrito, o relay abre um planner novo e perde o grill, ou dá por respondida a pergunta de resultado desconhecido.
-  Direção: o passo manda perguntar de novo o que estava pendente e retomar o mesmo agente pelo id.
+  Direção: o passo manda perguntar de novo o que estava pendente e retomar o mesmo agente pelo id. RESOLVED by 9bea822
   — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
 - [ ] **Commit do relay no meio do grill muda o HEAD que o planner mediu, e só o worktree é vigiado** —
   `commands/sdd-plan.md:138` (`rev-parse HEAD`) — na 3.2c do `dotp-remake` (sem worktree: o `sdd` fica fora do alvo) o
   dono pediu no grill uma linha no roadmap, e o relay commitou `b674421` na branch da missão depois de o planner medir
   a suíte em `d6d6cf8`. O relay mandou o HEAD novo junto da resposta seguinte, e o plano registrou a base certa. Sem
   isso, o plano cita uma base que não é o HEAD da aprovação. Direção: gravar `status` e `rev-parse` a cada hand-back
-  vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte.
+  vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte. RESOLVED by 256e9d4
   — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
 - [ ] **O aceite do `/sdd-plan` mede de novo os Checks, nunca os fatos do contexto verificado** —
   `commands/sdd-plan.md:256` (`Measure again`) — o passo roda `--check` e `--red`, e a contagem que o plano cita passa
   sem medida: "22 `MutableEvents.Add` em 12 arquivos" (`01-plano.md`, `00-missao.md` e ADR 0007 da 3.3a do
   `dotp-remake`) eram 10 arquivos, e o relay só pegou porque conferiu por amostra com `grep -rc`. Na 3.2c, dois fatos
   sem medida (a Lobotomy, a 701.8) chegaram ao EXEC. Direção: o aceite reconfere por amostra as contagens e âncoras do
-  contexto, ou o planner grava ao lado de cada contagem o comando que a mediu.
+  contexto, ou o planner grava ao lado de cada contagem o comando que a mediu. RESOLVED by 96d1bc5
   — descoberto pelo relay do `/sdd-plan` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
 - [ ] **Sob `aprovacao: auto` o `/sdd-plan` deixa a missão sem commit na base e cala o passo seguinte** —
   `commands/sdd-plan.md:352` (`Anywhere else`) — no `magic_tutor` o `sdd why` deu `plan approved (auto)` com a
@@ -327,14 +327,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   "commit nothing". O planner supôs que o `sdd run` levaria a pasta sem rastreio; o relay leu o
   `ensure_mission_branch`, cortou a branch e commitou à mão, e o `sdd preflight` deu "working tree clean". Direção:
   um ramo `auto` no passo 4 (cortar o `branch:` e commitar a pasta antes do `sdd run`), ou o `sdd approve` aceitar
-  `auto` e fazer só isso.
+  `auto` e fazer só isso. RESOLVED by 96d1bc5
   — descoberto pelo relay do `/sdd-plan` na missão `20261020-lote-de-consertos` do `magic_tutor` (2026-10-20)
 - [ ] **O planner marca o `- answer:` de pergunta que o humano não viu, e sob `auto` o gate já lê aprovado** —
   `agents/sdd-planner.md:53` (`Mark each answer`) — no `magic_tutor`, a decisão 7 ("confirmadas em bloco") saiu
   `- answer: (recommended)` com `aprovacao: auto` antes de a Q7 chegar ao humano, e o `sdd status` leu
   `plan approved (auto)`; o relay pegou lendo o arquivo. O `gate_PLAN` não lê as respostas (ADR 0018), e sob `auto`
   o passo 2 de "When the artifacts exist" pula o leitor D22. Direção: o relay roda o D22 a cada devolução e para
-  quando o `M` passa das respostas que entregou; o planner escreve `- answer:` e `auto` só depois da resposta.
+  quando o `M` passa das respostas que entregou;
+  o planner escreve `- answer:` e `auto` só depois da resposta. RESOLVED by 9bea822
   — descoberto pelo relay do `/sdd-plan` na missão `20261024-narracao-e-mesa` do `magic_tutor` (2026-10-24)
 
 - [ ] **Num repo sem interface, a QA para em `BLOCKED` ao seguir a própria instrução de escrever o teste do achado** —
@@ -373,7 +374,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`bin/sdd:4616`) acusaria o `00-missao.md` alheio na fase em curso (`HAT-CROSSED`); e a regra do relay de parar
   quando o `HEAD` do checkout muda dispara à toa, porque a corrida commita lá. O relay abriu um worktree e vigiou só
   o que não era da M2: o `pipeline.log` dela fechou sem `HAT-CROSSED` nem `FOREIGN-COMMIT`. Direção: o passo 2
-  vale com `sdd run` vivo no alvo, e a checagem do relay nomeia o que a corrida pode mudar.
+  vale com `sdd run` vivo no alvo, e a checagem do relay nomeia o que a corrida pode mudar. RESOLVED by 256e9d4
   — descoberto pelo relay do `/sdd-plan` na missão `20261020-amep-anexo-na-demanda` (2026-10-20)
 - [ ] **Numa worktree sem o `.venv`, o gate do EXEC lê o `TEST_CMD` que não rodou como suíte vermelha** —
   `bin/sdd:1526` (`run_check_cmd`) — o `.venv` é ignorado pelo git, então a worktree nasce sem ele, e o
@@ -416,7 +417,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   branch da missão. No `ui24_agent` o checkout estava em `retrofit-ui24-operator-mcp-vivo`, com a PR
   j0ruge/ui24-agent#83 aberta: o planner leria um checkout que não é a base, e a missão nasceria com commits de outra
   PR. Direção: no passo 3, comparar `git branch --show-current` com o `DEFAULT_BRANCH` e, se divergir, perguntar a base
-  ao humano antes de delegar.
+  ao humano antes de delegar. RESOLVED by 256e9d4
   — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
 
 - [ ] **O relay não prevê que o job em background do planner repete a pergunta já feita** —
@@ -424,7 +425,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — a regra cobre a mensagem do relay que não responde nada, não o fim de um job que o próprio planner lançou. No
   grill do `ui24_agent` a suíte em background terminou depois da hand-back, e o planner devolveu a pergunta 1 de
   novo, com a resposta do humano já com o relay. Sem dano, porque a resposta nomeou a opção pelo texto. Direção:
-  o relay responde uma vez e cita a primeira pergunta; o planner não fecha turno de job repetindo pergunta aberta.
+  o relay responde uma vez e cita a primeira pergunta;
+  o planner não fecha turno de job repetindo pergunta aberta. RESOLVED by 9bea822
   — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
 
 - [ ] **A linha `kit:` do handoff não tem quem a transporte** — `agents/sdd-publisher.md:69` (`TODO_FILE`) — o
@@ -448,7 +450,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   resto. Na 3.5e do `dotp-remake`, o planner escreveu o levantamento do `.exe` em `docs/knowledge/`, fora do
   `writes:` dele; o `sdd approve` não o commitou, e o plano o dá por existente. Só o `git status` inteiro o mostrou,
   e o `sdd preflight` recusaria depois, com `working tree dirty` e sem dizer por quê. Direção: o passo 4 roda o
-  `git status --porcelain` inteiro e manda commitar na branch da missão o arquivo de que o plano depende.
+  `git status --porcelain` inteiro e manda commitar na branch da missão
+  o arquivo de que o plano depende. RESOLVED by 96d1bc5
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
 
 - [ ] **A citação "ADR 0018" do kit colide com o ADR 0018 do alvo** — `templates/missao.md:43` (`ADR 0018 §3`) — o
@@ -464,7 +467,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   só vale dentro de um `sdd run`. Ao abrir a 3.6d do `dotp-remake` por um handoff velho, a árvore tinha 6 `M` e 6 `??`
   na `plano-3-6-e`, que uma sessão do Codex executava à mão, e a pasta da 3.6d já existia, mergeada em
   j0ruge/dotp-remake#28. Só o `git status` e o `git log` do relay seguraram o planner. Direção: o "Before anything
-  else" roda o `git status --porcelain`, lista o `HANDOFF_DIR` e para com árvore suja ou tópico já em pasta.
+  else" roda o `git status --porcelain`, lista o `HANDOFF_DIR`
+  e para com árvore suja ou tópico já em pasta. RESOLVED by 256e9d4
   — descoberto por `sdd-plan` (relay) depois da missão `20261111-plano-3-6-d-custos-e-ciclagem` (2026-11-11)
 
 - [ ] **O `PR #N aberto` que a fase PR escreve no roadmap e no `KAIZEN_LOG.md` envelhece no merge** —
@@ -702,7 +706,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   incrementos feitos pelo superpowers, o `sdd why` deu "every increment done and the suite green, but
   20-handoff-exec.md is missing", e o relay escreveu o handoff à mão (`templates/handoff.md`). O `docs/plan-only.md`
   não cobre a volta ao `sdd run`, e o `sdd-executor` nem entra nesse fluxo. Direção: o `plan-only.md` lista o que o
-  gate lê, e o planner põe o handoff no fim do último incremento.
+  gate lê, e o planner põe o handoff no fim do último incremento. RESOLVED by 8a21366
   — descoberto pelo relay da missão `20261106-rapido-sem-arestas` do `magic_tutor` (2026-11-06)
 
 - [ ] **O `gh pr edit` que o publisher e o `gate_PR` mandam usar não edita o corpo no `gh` 2.45** —
@@ -735,7 +739,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   No `dotp-remake`, o handoff da 7b trazia a ordem escrita do dono ("o grill é respondido com a recomendada"), menos
   o que mexe no visual dele ou no contrato do tema; o relay levou as 5 perguntas ao dono, porque todas tocavam isso.
   Sem regra, o relay decide sozinho se responde pelo humano, e "Relaying the grill" manda nunca responder. Direção:
-  um parágrafo irmão do da aprovação antecipada: ordem do humano, da sessão ou do handoff, e as exceções vão a ele.
+  um parágrafo irmão do da aprovação antecipada:
+  ordem do humano, da sessão ou do handoff, e as exceções vão a ele. RESOLVED by 9bea822
   — descoberto pelo relay do `/sdd-plan` na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
 
 - [ ] **O `--red` do aceite pode rodar ao lado da run de outra missão na mesma máquina, sem aviso** —
@@ -743,7 +748,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   run da 7a com o planner da 7b ao lado desceu a 1137 MB livres de 7,7 GB (6 de 802 amostras de 30 s abaixo de
   2 GB); um `--red` com build e Godot por cima disputaria a memória e a janela do Godot (a run da 3.5c já morreu de
   OOM). E o `--red` abre as janelas que os Checks abrem, sem listá-las antes nem deixar pular. Direção: o "Measure
-  again" avisa quando há `sdd run` em voo na máquina e adia o `--red`; o `--red` ganha `--list` e `--only <ids>`.
+  again" avisa quando há `sdd run` em voo na máquina e adia o `--red`;
+  o `--red` ganha `--list` e `--only <ids>`. RESOLVED by 972a482
   — descoberto pelo relay do `/sdd-plan` na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
 
 - [ ] **O `sdd adr new` dá a uma branch o número que outra branch sem merge já usa** —
