@@ -42,7 +42,10 @@ MODEL_TICKET="sonnet"
 # Piloto do effort (L1, 2026-11-19): o executor e a DOCS em medium; a REVIEW e a QA seguem nas
 # settings (xhigh), para o juiz nao mudar enquanto se mede o executor. Uma variavel por vez: a
 # REVIEW em medium e a missao seguinte, se a r1 desta nao achar regressao nascida do executor.
-EFFORT_EXEC="medium"
+# Teste do effort do L2 (2026-11-20, pedido do dono): o EXEC em xhigh contra o L1 em medium, com a
+# DOCS, a REVIEW e a QA paradas. O valor vem do ambiente do lancamento (EFFORT_EXEC=xhigh sdd run ...);
+# sem ele, segue medium. O config_reload restaura a foto do ambiente a cada volta, entao vale a corrida toda.
+EFFORT_EXEC="${EFFORT_EXEC:-medium}"
 EFFORT_DOCS="medium"
 
 QA_MAX_ITER=3
