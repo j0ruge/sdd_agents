@@ -7514,6 +7514,13 @@ mut_RUN_review_base_ignored_round_unseen() {
 mut_RUN_review_base_status_locks_index() {
   sed -i '/^review_base_line()/,/^}/ s|st="$(GIT_OPTIONAL_LOCKS=0 git -C "$REPO_ROOT" status |st="$(git -C "$REPO_ROOT" status |' "$1"
 }
+# A git status that fails is discarded: the empty answer reads as a committed round, and the round
+# on disk becomes a base (r3 of 20261119-l1b-a-rodada-delta). Caught by "delta base: a git status
+# that fails answers full and names the round, …" (check-gates.sh), under a git stub that fails
+# exactly that status.
+mut_RUN_review_base_status_failure_committed() {
+  sed -i '/^review_base_line()/,/^}/ s|--ignored -- "$last" 2>/dev/null)"; then|--ignored -- "$last" 2>/dev/null \|\| true)"; then|' "$1"
+}
 # The shape is capped at 40 hex again: the 64-hex head of a SHA-256 repository reads as no commit,
 # and every round there is full (CodeRabbit on PR #452). Caught by "delta base: the 64-hex
 # reviewed_head of a SHA-256 repository is a base" (check-gates.sh).
@@ -7578,6 +7585,7 @@ CATALOG=(
   RUN_review_base_uncommitted_round
   RUN_review_base_ignored_round_unseen
   RUN_review_base_status_locks_index
+  RUN_review_base_status_failure_committed
   RUN_review_base_sha256_refused
   RUN_review_prompt_delta_dropped
   COORD_adr_external_spec

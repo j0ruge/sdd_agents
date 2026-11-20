@@ -2872,6 +2872,30 @@ else fail "delta base: the query leaves the index as it found it, where a plain 
   "index '$rb_ix0' before and after the query, a different one after git status, and base=$rb_head …" \
   "before '$rb_ix0', after the query '$rb_ix1', after git status '$rb_ix2'; query '$rb_out'"; fi
 
+# A git status that fails proves nothing committed either (rule 2 of review_base_line, r3 of
+# 20261119-l1b-a-rodada-delta): read as an empty answer, the round on disk would be a base. The
+# world is a committed round with a good reviewed_head: and a git first on the PATH that fails
+# exactly the status of rule 2 (`-C <root> status --porcelain --untracked-files=all --ignored …`)
+# and hands every other call to the real git; the witnesses are that it does both, and that the
+# same world without it answers base=.
+rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
+mkdir -p "$FIX/.git/l1b-statusstub"
+cat > "$FIX/.git/l1b-statusstub/git" <<STUB
+#!/usr/bin/env bash
+if [ "\${3:-}" = status ] && [ "\${4:-}" = --porcelain ] && [ "\${5:-}" = --untracked-files=all ] && [ "\${6:-}" = --ignored ]; then echo "fatal: stub: the status of the round fails" >&2; exit 128; fi
+exec "$(command -v git)" "\$@"
+STUB
+chmod +x "$FIX/.git/l1b-statusstub/git"
+rb_rc=0; "$FIX/.git/l1b-statusstub/git" -C "$FIX" status --porcelain --untracked-files=all --ignored -- "$MDIR" >/dev/null 2>&1 || rb_rc=$?
+rb_cm="$(review_base_of)"; rb_out="$(PATH="$FIX/.git/l1b-statusstub:$PATH" review_base_of)"
+rb_want='full — git status cannot say whether 40-review-r12.md is committed'
+if [ "$rb_rc" -eq 128 ] && [ "$("$FIX/.git/l1b-statusstub/git" -C "$FIX" rev-parse HEAD)" = "$(git rev-parse HEAD)" ] \
+   && [[ "$rb_cm" == "base=$rb_head "* ]] && [ "$rb_out" = "$rb_want" ]; then
+  pass "delta base: a git status that fails answers full and names the round, where git answering gives base="
+else fail "delta base: a git status that fails answers full and names the round, where git answering gives base=" \
+  "stub rc 128 and the HEAD; base=$rb_head … without it; '$rb_want' under it" \
+  "stub rc $rb_rc; without it '$rb_cm'; under it '$rb_out'"; fi
+
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 git checkout -q -b l1b-side
 echo side > l1b-side.txt; git add -A && git commit -qm "chore: side" >/dev/null
