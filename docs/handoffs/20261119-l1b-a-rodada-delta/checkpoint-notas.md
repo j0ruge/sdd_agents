@@ -51,3 +51,4 @@
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
 - 2026-11-19 18:18 · `PLAN` · ADR 0023 alocada e escrita (decisão 10). O teste de autocontenção (sessão nova, só leitura) achou 4 bloqueios e 9 lacunas no I1–I3, todos corrigidos no `01-plano.md`; os Checks não mudaram, e o `--red` das 17:53 segue valendo
+- 2026-11-20 09:01 · `I1` · `review_base_line` e `sdd review-base` no fim do `bin/sdd`; 5 asserções no check-gates.sh e 5 mutantes provados por --only (4 contra check-gates.sh, COORD_review_base_locked contra check-coordination.sh); suíte verde; âncoras do TODO.md 0 off target
