@@ -1,11 +1,11 @@
 ---
 campaign: 20261117-zerar-as-issues
 level: full
-lots: L1 L1b
+lots: all
 expires: 2026-11-26 18:00
 budget_mission_usd: 60
-budget_campaign_usd: 100
-signed: 2026-11-19 17:20 ce7d609fb257
+budget_campaign_usd: 500
+signed: 2026-11-20 08:59 f76dad9d13d3
 ---
 
 # Delegação — Zerar as issues do kit
