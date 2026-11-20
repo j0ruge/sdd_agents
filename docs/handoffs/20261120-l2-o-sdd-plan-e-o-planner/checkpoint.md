@@ -1,6 +1,6 @@
 ---
 missao: 20261120-l2-o-sdd-plan-e-o-planner
-atualizado: 2026-11-20 19:39
+atualizado: 2026-11-20 20:04
 ---
 
 # Checkpoint — L2: o `/sdd-plan` e o planner
@@ -53,7 +53,7 @@ atualizado: 2026-11-20 19:39
 | I3 | O aceite: a amostra do contexto verificado, o ramo auto e o git status inteiro (itens 4, 5, 10) | `o=$(bash tests/check-hat.sh 2>&1); t=$(bash tests/check-templates.sh 2>&1); cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md; c=$?; echo "$(grep -c '^  ok    command: /sdd-plan re-runs a sample of the commands the verified context records, and the planner writes the command beside every count and anchor' <<< "$o") $(grep -c '^  ok    command: /sdd-plan cuts the mission branch and commits the mission under auto, and names sdd run as the next step' <<< "$o") $(grep -c '^  ok    command: /sdd-plan reads the whole git status after the approval, and commits on the mission branch a file the plan depends on' <<< "$o") $(grep -c '^  ok    plano.md: the verified context records the command beside each measured fact' <<< "$t") $c"` → `1 1 1 1 0` | done | 96d1bc5 |
 | I4 | O planner e o modelo: o sensor da mitigação, o handoff fora do sdd run e o model: do chapéu (itens 1, 12, 15) | `o=$(bash tests/check-hat.sh 2>&1); t=$(bash tests/check-templates.sh 2>&1); cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md; c=$?; echo "$(grep -c '^  ok    hat: the planner runs at PLAN the sensor a risk mitigation names, against what the mitigation protects' <<< "$o") $(grep -c '^  ok    plano.md: a mitigation that names a sensor carries the command run against its target' <<< "$t") $(grep -c '^  ok    hat: a plan executed outside sdd run ends its last increment by writing 20-handoff-exec.md, and promises no EXEC gate without it' <<< "$o") $(grep -c '^  ok    doc: plan-only.md says what gate_EXEC reads before a mission executed by hand goes back to sdd run' <<< "$o") $(grep -c '^  ok    hat: the planner declares its model in the frontmatter, and /sdd-plan passes the model when it delegates' <<< "$o") $c"` → `1 1 1 1 1 0` | done | 8a21366 |
 | I5 | O --red: --list, --only e o aviso de corrida viva no aceite (item 14) | `k=$(bash tests/check-checkpoint.sh 2>&1); o=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    rule: --red --list runs no Check, and --red --only never says every one' <<< "$k") $(grep -c '^  ok    command: /sdd-plan looks for a live sdd run before the --red of the acceptance, and never reads a partial --red as measured' <<< "$o")"` → `1 1` | done | 972a482 |
-| I6 | Fecho: RESOLVED by nos 14 itens e o 20-handoff-exec.md | `b=$(git show "$(git merge-base HEAD origin/main)":TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `14` | pending | — |
+| I6 | Fecho: RESOLVED by nos 14 itens e o 20-handoff-exec.md | `b=$(git show "$(git merge-base HEAD origin/main)":TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `14` | done | df7b55e |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
