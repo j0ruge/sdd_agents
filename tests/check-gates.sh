@@ -2891,11 +2891,45 @@ echo outside > l1b-outside.txt; git add -A && git commit -qm "chore: code after 
 write_r12 "$rb_head"
 assert_why "gate_REVIEW: reviewed_head with code changed before the round commit is refused" REVIEW "40-review-r12\.md: l1b-outside\.txt changed between reviewed_head"
 
+# The round's commit is read with no signature output (CodeRabbit on PR #452): under
+# log.showSignature=true, git log prints the verification of a signed commit before its %H line,
+# the capture carried both, git diff refused the pair, its error was discarded, and the empty list
+# passed the round over l1b-outside.txt. The world signs the round's commit with a throwaway ssh
+# key (no allowed-signers file, so git prints "No signature" for it) and turns the config on in the
+# fixture repo; the witness is that git log there really prints more than the hash.
+ssh-keygen -q -t ed25519 -N '' -C fixture -f "$FIX/.git/l1b-sig" </dev/null >/dev/null 2>&1
+git -c gpg.format=ssh -c user.signingkey="$FIX/.git/l1b-sig" commit -q --amend --no-edit -S >/dev/null 2>&1
+git config log.showSignature true
+rb_sig="$(git log -1 --diff-filter=A --format=%H -- "$MDIR/40-review-r12.md" 2>/dev/null || true)"
+if [ "$(wc -l <<< "$rb_sig")" -gt 1 ] && [ "$(tail -1 <<< "$rb_sig")" = "$(git rev-parse HEAD)" ]; then
+  pass "fixture: under log.showSignature=true git log prints more than the hash of the signed round commit"
+else fail "fixture: under log.showSignature=true git log prints more than the hash of the signed round commit" \
+  "a signature line, then $(git rev-parse HEAD)" "$rb_sig"; fi
+assert_why "gate_REVIEW: the round's commit is read with no signature output, and the range still refuses" REVIEW "40-review-r12\.md: l1b-outside\.txt changed between reviewed_head"
+git config --unset log.showSignature
+
 write_r12 '@absent@'
 assert_phase "gate_REVIEW: reviewed_head absent still passes, as the rounds before the key" "DOCS"
 
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 assert_phase "gate_REVIEW: reviewed_head the round read, with only its own files after it, passes" "DOCS"
+
+# A range diff that fails refuses the round, fail closed (CodeRabbit on PR #452): its error was
+# discarded, the path loop read nothing, and a round the gate could not read passed. The world is a
+# git first on the PATH that fails exactly the range diff of review_head_ok (`-C <root> diff
+# --name-only …`) and hands every other call to the real git; the witness is that it does both.
+mkdir -p "$FIX/.git/l1b-gitstub"
+cat > "$FIX/.git/l1b-gitstub/git" <<STUB
+#!/usr/bin/env bash
+if [ "\${3:-}" = diff ] && [ "\${4:-}" = --name-only ]; then echo "fatal: stub: the range diff fails" >&2; exit 128; fi
+exec "$(command -v git)" "\$@"
+STUB
+chmod +x "$FIX/.git/l1b-gitstub/git"
+rb_rc=0; "$FIX/.git/l1b-gitstub/git" -C "$FIX" diff --name-only HEAD HEAD >/dev/null 2>&1 || rb_rc=$?
+if [ "$rb_rc" -eq 128 ] && [ "$("$FIX/.git/l1b-gitstub/git" -C "$FIX" rev-parse HEAD)" = "$(git rev-parse HEAD)" ]; then
+  pass "fixture: the git stub fails the range diff and answers every other call"
+else fail "fixture: the git stub fails the range diff and answers every other call" "rc 128 and the HEAD" "rc $rb_rc"; fi
+PATH="$FIX/.git/l1b-gitstub:$PATH" assert_why "gate_REVIEW: a range diff that fails refuses the round, naming it" REVIEW "40-review-r12\.md: git diff cannot list what changed between reviewed_head"
 
 # R1 (r1 of 20261119-l1b-a-rodada-delta): a later phase may touch the round together with code it
 # owns — sdd-docs writes the mission folder and docs/** in one commit. The round's commit is the one

@@ -7525,6 +7525,19 @@ mut_REVIEW_head_reads_last_touch() {
 mut_REVIEW_head_absent_refused() {
   sed -i '/^review_head_ok()/,/^}/ s|frontmatter_has "$round" reviewed_head \|\| return 0|frontmatter_has "$round" reviewed_head \|\| return 1|' "$1"
 }
+# The commit of the round is read with the repo's log.showSignature again: a signed round's capture
+# carries the verification line, the range diff fails, and the round is refused for the wrong
+# reason (CodeRabbit on PR #452). Caught by "gate_REVIEW: the round's commit is read with no
+# signature output, and the range still refuses" (check-gates.sh), which names l1b-outside.txt.
+mut_REVIEW_head_signature_shown() {
+  sed -i '/^review_head_ok()/,/^}/ s| -c log.showSignature=false log -1 | log -1 |' "$1"
+}
+# A range diff that fails is discarded again, as before the fix: the loop reads nothing and the
+# round passes, fail open. Caught by "gate_REVIEW: a range diff that fails refuses the round, naming
+# it" (check-gates.sh), under a git stub that fails exactly that diff.
+mut_REVIEW_head_diff_failure_passes() {
+  sed -i '/^review_head_ok()/,/^}/ s|"$sha" "$rc_commit" 2>/dev/null)"; then|"$sha" "$rc_commit" 2>/dev/null \|\| true)"; then|' "$1"
+}
 # The gate's shape is capped at 40 hex again: a SHA-256 repository's round is refused as no commit.
 # Caught by "gate_REVIEW: a 64-hex reviewed_head of a SHA-256 repository reaches the range rule".
 mut_REVIEW_head_sha256_refused() {
@@ -7538,6 +7551,8 @@ CATALOG=(
   REVIEW_head_reads_last_touch
   REVIEW_head_absent_refused
   REVIEW_head_sha256_refused
+  REVIEW_head_signature_shown
+  REVIEW_head_diff_failure_passes
   COORD_review_base_locked
   RUN_review_base_absent_as_base
   RUN_review_base_commit_unchecked
