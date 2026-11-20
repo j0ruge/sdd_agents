@@ -48,6 +48,11 @@ MODEL_TICKET="sonnet"
 EFFORT_EXEC="${EFFORT_EXEC:-medium}"
 EFFORT_DOCS="medium"
 
+# Leitura fora do repo (ADR 0019 §2): a REVIEW carrega a skill codereview do cache de plugins, e sem a
+# regra o harness nega o Read das references dela (DENIED na r2 do L1b, 2026-11-20; RECURRED 2 do item
+# do READ_EXTRA no TODO.md). Entrada que o sdd preflight nomeou, so leitura.
+READ_EXTRA="$HOME/.claude/plugins/cache/chewiesoft-marketplace/codereview"
+
 QA_MAX_ITER=3
 REVIEW_MAX_ITER=3
 EXEC_MAX_RETRY=1
