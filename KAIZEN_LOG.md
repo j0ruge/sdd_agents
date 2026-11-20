@@ -4,6 +4,46 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-11-19 — O L1, primeiro lote que o worker roda sozinho: 14 achados de prosa ganham frase e asserção
+
+**Missão:** `20261117-l1-a-prosa-do-chapeu`, o L1 da campanha `20261117-zerar-as-issues` e o piloto
+do worker (ADR 0022): rodou por `sdd run` no worktree ligado do kit, sob a delegação `pr` só do L1
+assinada às 15:15, com o executor e a DOCS em effort `medium` e a QA e a REVIEW nas settings.
+Nove incrementos do plano e um `R<n>` da REVIEW (o R1 da r1).
+
+**Antes** (medido no merge-base `cc8509a`):
+- **14** itens abertos no `TODO.md` cujo conserto é uma frase num chapéu, num doc do operador, nas
+  sementes do `TODO.md` ou na ajuda do `sdd why`; **0** sensores sobre essas frases (o catálogo de
+  mutação sabota `bin/sdd` e não alcança prosa);
+- **0** itens com `RESOLVED by` no `TODO.md`.
+
+**Depois** (medido no head da DOCS, em 2026-11-19 21:32):
+- **16** asserções novas, cada uma vermelha antes da sua frase: 14 em `tests/check-hat.sh` (as 13 do
+  plano mais a do R1; o sensor imprime **119** linhas `ok`) e 2 em `tests/check-templates.sh` (uma por
+  semente);
+- **14** itens com `RESOLVED by <hash>`, títulos byte a byte iguais; `tests/check-todo.sh --check` →
+  103 achados, todas as âncoras no alvo; catraca sem mudar (desce no chore de depois do merge);
+- os cinco chapéus editados iguais ao espelho (`cmp -s` rc 0); suíte verde em todo gate.
+
+**A corrida** (`pipeline.log` da missão, 16:00 → 21:17): **13** sessões, **US$ 17,82**, 4 h 34 min de
+sessão: EXEC 10 sessões, US$ 13,21 (as 9 do plano e a do R1); QA 1, US$ 1,20; REVIEW 2, US$ 3,41 (r1
+com nota B e um MEDIUM, r2 com nota A). **Nenhuma** parada (nenhuma `kit-touched`, `hat-crossed`,
+`foreign-commit`, `session-died` ou `budget-exhausted`), **0** linhas `DENIED` no journal. Para
+comparar: a missão anterior no mesmo arranjo (`20261117-o-worker-orquestrador`, código) fez 24
+sessões e US$ 119,74 até a r4.
+
+**O que a execução ensinou:** o teto da chamada `Bash` do harness (120 s por padrão, 600 s no
+máximo) apareceu três vezes na mesma missão: é o item N (o `sdd why … EXEC` cortado aos 2 min), o
+executor teve de rodar a suíte destacada no I6 e no I9 porque ela não cabe em 590 s, e o R1 nasceu de
+a receita de espera do revisor, escrita no I3, não subir o `timeout` da própria chamada. É lição
+reincidente: vira linha `⛔` no `45-docs.md` desta missão, com texto proposto para o `turn_rule` do
+`boot_prompt()` em `bin/sdd`, que fala a toda fase e que esta missão não pode editar (decisão 1).
+
+**O que fica para medir** (pendente): o PR e o merge do L1 por merge commit; o chore que apaga os 14
+itens e desce a catraca; e o L2, que a campanha compara com este.
+
+---
+
 ## 2026-11-18 — A delegação deixa de ser palavra: seis verbos que respondem por artefato
 
 **Missão:** `20261117-o-worker-orquestrador` ([ADR 0022](docs/adr/0022-the-worker-is-a-session-orchestrator.md)),

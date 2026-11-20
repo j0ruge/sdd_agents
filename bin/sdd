@@ -12367,7 +12367,10 @@ LEDGER OPTIONS (`autonomy` and `kaizen`)
 
 FOR SCRIPTS
   sdd phase <mission>        print only the current phase (or DONE)
-  sdd why <mission> [PHASE]  print why that phase's gate did not pass
+  sdd why <mission> [PHASE]  print why that phase's gate did not pass. The gate RUNS:
+                             for EXEC, QA or REVIEW, or with no PHASE (it derives the phase),
+                             that is the whole TEST_CMD (and E2E_CMD for QA), as in 'sdd boot' —
+                             a cut by a timeout is not a failed gate
 
 `run` OPTIONS
   --dry-run                  print the boot prompts and exit, spending no tokens and touching

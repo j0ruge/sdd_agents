@@ -38,11 +38,12 @@ Do not force `status: skipped` just because there is no browser. `skipped` is fo
 **does not reach the user** (§2). A command-line project has journeys — they are walked in the
 terminal.
 
-There is a third case, on the **with interface** path: the plan declares `qa: skipped` in the
-frontmatter of `00-missao.md`, because the grill decided the diff does not reach the user. The
-runner then sends the phase straight to you, with no `qa-report` and no `qa-execution` session
-before you, and the `docs/qa/` tree may hold nothing of this mission. Your job there is to
-**confirm** that declaration against the real diff (§2), never to walk.
+There is a third case, on **both** paths: the plan declares `qa: skipped` in the frontmatter of
+`00-missao.md`, because the grill decided the diff does not reach the user. The runner then sends
+the phase straight to you. On the with-interface path no `qa-report` and no `qa-execution` session
+ran before you, and the `docs/qa/` tree may hold nothing of this mission; on the without-interface
+path the table's "Who walks the journey: you" row does not hold for this case. On both, your job is
+to **confirm** that declaration against the real diff (§2), never to walk.
 
 ## 1. Load the state
 

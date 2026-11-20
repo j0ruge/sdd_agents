@@ -337,14 +337,30 @@ executor_agent_probes() {
   # it looks at the tree, so a session opens over an uncommitted edit of the human's and was told to
   # throw it away, and uncommitted work has no other copy: the KAIZEN_LOG.md entry of 2026-08-14 on
   # the sensor of the sensor measured a `git checkout` that undid a sabotage and took the whole
-  # implementation with it. Only a mutant its `.bak` confirms goes back, by `mv`; every other change
+  # implementation with it. Only a mutant its `.bak` confirms goes back, by `cp`; every other change
   # stays where it is, and a red one of them explains stops the line.
   if [ -n "$left" ] && grep -qF 'diff <file>.bak <file>' <<< "$left" \
-     && grep -qF 'mv <file>.bak <file>' <<< "$left" && grep -qF 'stays exactly as it is' <<< "$left" \
+     && grep -qF 'cp <file>.bak <file> && rm <file>.bak' <<< "$left" && grep -qF 'stays exactly as it is' <<< "$left" \
      && grep -qF 'never `git restore`' <<< "$left" && grep -qF 'mark your increment `blocked`' <<< "$left" \
      && ! grep -qF 'undo what you did not write' <<< "$left"; then
     pass "hat: the executor puts back only a mutant its .bak confirms, leaves every other change it did not write in place, and stops on a red one of them explains"
   else fail "hat: sdd-executor puts back a leftover no .bak confirms, tells the session to undo uncommitted changes whose owner it cannot tell, or no longer stops the line on a red one of them explains"; fi
+  # L1 item D (TODO.md): an executor run as a subagent of a relay closed the last increment and came
+  # back without 20-handoff-exec.md, and outside the runner no gate says so. Section 5 makes section 6
+  # part of the same increment; section 7 makes the answer say whether the handoff was written.
+  local s5 s7
+  s5="$(awk '/^## 5\. /{s=1; next} s && /^## /{s=0} s' "$ex")"
+  s7="$(awk '/^## 7\. /{s=1; next} s && /^## /{s=0} s' "$ex")"
+  if grep -qF 'part of this same increment' <<< "$s5" && grep -qF '20-handoff-exec.md' <<< "$s5" \
+     && grep -qF 'whether `20-handoff-exec.md` was written' <<< "$s7"; then
+    pass "hat: the executor writes 20-handoff-exec.md in the increment that leaves no row pending, and its answer says whether it did"
+  else fail "hat: sdd-executor no longer makes the handoff part of the increment that leaves no row pending, or its answer no longer says whether it was written"; fi
+  # L1 item E (TODO.md): a mutant put back with mv keeps the old mtime, an incremental build (MSBuild,
+  # make) does not recompile, and the unmutated run after it measures the last mutant's binary.
+  if grep -qF 'cp <file>.bak <file> && rm <file>.bak' "$ex" && grep -qF 'keeps the old mtime' "$ex" \
+     && ! grep -qF 'mv <file>.bak <file>' "$ex"; then
+    pass "hat: the executor restores a mutant with cp and rm, so an incremental build sees a new mtime"
+  else fail "hat: sdd-executor restores a mutant with mv, which keeps the old mtime, or no longer says why cp"; fi
 }
 
 # One hat promised a measurement nobody makes, and another was silent where its boundary needed a
@@ -380,7 +396,7 @@ hat_promise_probes() {
   p3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$pl")"
   p8="$(awk '/^## 8\. /{s=1; next} s && /^## /{s=0} s' "$pl")"
   if grep -qF '`kaizen_log: skipped` in the frontmatter of `00-missao.md`; the K8 row alone dispenses nothing' <<< "$p3" \
-     && grep -qF 'Naming the base branch itself (`main`) is a decision too, and passes, unless' <<< "$p8" \
+     && grep -qF 'Naming the base branch itself (the `DEFAULT_BRANCH` of the target) is a decision too, and passes, unless' <<< "$p8" \
      && grep -qF '`kaizen_log: skipped` with the human, or give the mission its own branch' <<< "$p8"; then
     pass "hat: the planner knows a mission on the base branch cannot promise K8, and writes K8 ✗ as kaizen_log: skipped"
   else fail "hat: sdd-planner no longer writes K8 ✗ as kaizen_log: skipped, or no longer knows a mission on the base branch cannot promise K8"; fi
@@ -646,6 +662,108 @@ planner_agent_probes() {
   else
     fail "hat: templates/missao.md or docs/pipeline.md went back to auto-approving an all-✅ plan, against § 6 of sdd-planner"
   fi
+  # L1 (20261117-l1-a-prosa-do-chapeu), items A, B and C. A: § 8 called the base `main`, and a
+  # target can have another DEFAULT_BRANCH, which is what k8_base_refusal compares. B: the relay
+  # hands the planner's text on verbatim, so a hand-back in another language than OUTPUT_LANG is a
+  # paraphrase the human never asked for. C: a Check that fixes the title of a new TODO_FILE item
+  # forces a duplicate when an equivalent item opens between the plan and the execution.
+  local s4 s8 slang
+  s4="$(awk '/^## 4\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  s8="$(awk '/^## 8\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  slang="$(awk '/^## Language/{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'itself (the `DEFAULT_BRANCH` of the target) is a decision too, and passes, unless' <<< "$s8" \
+     && ! grep -qF 'itself (`main`)' "$agent"; then
+    pass "hat: the planner names the base branch by DEFAULT_BRANCH of the target, never by the literal main"
+  else
+    fail "hat: sdd-planner calls the base branch main again, instead of the DEFAULT_BRANCH of the target"
+  fi
+  if grep -qF 'every hand-back to the relay' <<< "$slang" && grep -qF 'OUTPUT_LANG' <<< "$s1"; then
+    pass "hat: the planner writes every hand-back to the relay in OUTPUT_LANG"
+  else
+    fail "hat: sdd-planner no longer says that every hand-back to the relay goes in the OUTPUT_LANG of the target"
+  fi
+  if grep -qF 'an equivalent open item' <<< "$s4" && grep -qF 'RECURRED' <<< "$s4" \
+     && grep -qF 'read the open items' <<< "$s4"; then
+    pass "hat: a planner Check for a new TODO_FILE item also accepts a RECURRED entry on an equivalent open item"
+  else
+    fail "hat: sdd-planner writes a Check that fixes the title of a new TODO_FILE item again, with no RECURRED way out"
+  fi
+}
+
+# L1 (20261117-l1-a-prosa-do-chapeu), items F and G of TODO.md. F: the reviewer has neither Monitor
+# nor ScheduleWakeup, and the harness blocks a long foreground sleep, so "poll it in this same turn"
+# named no way to wait; the hat now gives one foreground loop under the 10 min Bash ceiling. G: a
+# disposable copy outside the repo written by Write comes back denied under acceptEdits, and a test
+# filter that matches nothing exits 0, which read as green. Read by section; the catalogue cannot
+# reach it — the same limit as executor_agent_probes, and the Red is in the mission notes.
+reviewer_agent_probes() {
+  local agent="$ROOT/agents/sdd-reviewer.md" sdie s3
+  sdie="$(awk '/^### Two ways this session dies/{s=1; next} s && /^##/{s=0} s' "$agent")"
+  s3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF "timeout 590 bash -c 'until grep -q \"^rc=\" <output>; do sleep 5; done'" <<< "$sdie" \
+     && grep -qF 'Monitor' <<< "$sdie"; then
+    pass "hat: the reviewer waits for a slow command in the foreground, under a ceiling below the Bash limit"
+  else
+    fail "hat: sdd-reviewer no longer says how to wait for a slow command without Monitor, in a foreground loop under the Bash ceiling"
+  fi
+  # R1 of the r1 review: 10 min is the Bash ceiling, not its default. Without the call's own
+  # timeout raised, the loop above went to the background at 120 s (reproduced, 40-review-r1.md).
+  if grep -qF '`timeout: 600000`' <<< "$sdie" && grep -qF '120 000 ms' <<< "$sdie"; then
+    pass "hat: the reviewer runs the wait loop in a Bash call whose own timeout is raised to 600000 ms"
+  else
+    fail "hat: sdd-reviewer gives the wait loop without raising the Bash call's own timeout, so it goes to the background at 120 s"
+  fi
+  # CodeRabbit on PR 446: agents/*.md stay portable, so the 600000 is Claude Code's spelling of a
+  # 10-min foreground limit; and a writer of rc= that died ends the wait as a failure, not a new wait.
+  if grep -qF 'at least 10 min' <<< "$sdie" && grep -qF 'kill -0' <<< "$sdie"; then
+    pass "hat: the reviewer's wait reads in any harness and stops when the writer of rc= is gone"
+  else
+    fail "hat: sdd-reviewer's wait names only the Claude Code parameter, or waits again after the writer of rc= died"
+  fi
+  if grep -qF 'heredoc' <<< "$s3" && grep -qF 'matches no test' <<< "$s3"; then
+    pass "hat: the reviewer writes a probe outside the repo by heredoc, and a test filter that matches nothing is a failure"
+  else
+    fail "hat: sdd-reviewer no longer says to write a probe outside the repo by heredoc, or that a test filter matching nothing is a failure"
+  fi
+}
+
+# L1 (20261117-l1-a-prosa-do-chapeu), item H of TODO.md: a KAIZEN_LOG.md entry that called its own
+# lesson recurrent stayed in the log, and the next mission repeated it. The hat now sends such a
+# lesson to a proposed rule (a ⛔ row, section 5) or makes the entry say why not. Read by section;
+# the catalogue cannot reach it — the same limit as executor_agent_probes, Red in the mission notes.
+docs_agent_probes() {
+  local s3
+  s3="$(awk '/^## 3\. /{s=1; next} s && /^## /{s=0} s' "$ROOT/agents/sdd-docs.md")"
+  if grep -qF 'recurrent' <<< "$s3" && grep -qF '`⛔` row with its proposed text' <<< "$s3" \
+     && grep -qF 'the reason it does not become a rule' <<< "$s3"; then
+    pass "hat: the docs phase turns a lesson its own log calls recurrent into a proposed rule, or writes why not"
+  else
+    fail "hat: sdd-docs no longer sends a lesson its KAIZEN_LOG entry calls recurrent to a proposed rule, or to a written reason why not"
+  fi
+  # CodeRabbit on PR 446: gate_DOCS refuses a ⛔ row on a document the hat writes, and CLAUDE.md is
+  # in its writes:, so the lesson for CLAUDE.md is written there, and the ⛔ is for a path outside.
+  if grep -qF 'straight into `CLAUDE.md`' <<< "$s3" \
+     && ! grep -qF 'for `.claude/rules/` or `CLAUDE.md`' <<< "$s3"; then
+    pass "hat: the docs phase writes a recurrent lesson for CLAUDE.md itself, and keeps the ⛔ row for a path outside its writes:"
+  else
+    fail "hat: sdd-docs routes a recurrent lesson for CLAUDE.md through a ⛔ row, which gate_DOCS refuses on a document the hat writes"
+  fi
+}
+
+# L1 (20261117-l1-a-prosa-do-chapeu), item I of TODO.md: a declared `qa: skipped` sends the phase
+# straight to this session on both paths, but section 0 put the third case on the with-interface
+# path only, and its table told the without-interface session to walk the journey. The hat now puts
+# the case on both paths, pointing at section 2. Read by section, the old sentence refused too; the
+# catalogue cannot reach it — the same limit as executor_agent_probes, Red in the mission notes.
+qa_agent_probes() {
+  local s0
+  s0="$(awk '/^## 0\. /{s=1; next} s && /^## /{s=0} s' "$ROOT/agents/sdd-qa.md")"
+  if grep -qF 'There is a third case, on **both** paths' <<< "$s0" && grep -qF 'never to walk' <<< "$s0" \
+     && ! grep -qF 'on the **with interface** path: the plan declares' <<< "$s0"; then
+    pass "hat: the qa hat sends a declared qa: skipped to the confirmation of section 2 on both paths"
+  else
+    fail "hat: sdd-qa no longer puts the declared qa: skipped case on both paths of section 0, pointing at the confirmation of section 2"
+  fi
 }
 
 command_worktree_probes() {
@@ -804,6 +922,60 @@ doc_finding_prs_probes() {
     pass "doc: the queue of finding PRs has its recipe, and the TODO header points at it"
   else
     fail "doc: docs/finding-prs.md is missing or lost a step of the recipe (merge of origin/main, the recount, todo-findings, --check --baseline origin/main, --match-head-commit), or the TODO.md header no longer points at it"
+  fi
+}
+
+# --- the operator docs (items J, K, L of 20261117-l1-a-prosa-do-chapeu) ---------------------------
+# J: the README clone line called the repository PRIVATE, and it is public. K: the Symptom of the
+# vanished `sdd run` searched with `grep 'bin/sdd run'`, which finds its own grep, and a wait loop on
+# `pgrep -f 'sdd run <mission>'` matches the shell that waits, so it never ends; the section now
+# finds it by `[b]in/sdd run`, waits by `tail --pid=` and names `pipeline complete` as the end.
+# L: PR 391 nearly merged with a Major still open on the head while mergeable_state and a bot check
+# were green; step 7 of the recipe counts the unresolved review threads first.
+doc_operator_probes() {
+  local readme="$ROOT/README.md" fm="$ROOT/docs/failure-modes.md" fp="$ROOT/docs/finding-prs.md" sec
+  if grep -qxF '# git clone https://github.com/j0ruge/sdd_agents.git' "$readme" \
+     && ! grep -qF 'PRIVATE' "$readme"; then
+    pass "doc: the README shows the clone line without calling the repository private"
+  else
+    fail "doc: the README clone line is gone or the README calls the repository PRIVATE"
+  fi
+  sec="$(awk '/^## The `sdd run` process itself disappeared/{on=1; print; next} on && /^## /{on=0} on' "$fm")"
+  if [ -n "$sec" ] && grep -qF "pgrep -af '[b]in/sdd run" <<< "$sec" \
+     && grep -qF 'tail --pid=' <<< "$sec" && grep -qF 'pipeline complete' <<< "$sec" \
+     && ! grep -qF "grep 'bin/sdd run'" <<< "$sec"; then
+    pass "doc: failure-modes.md finds a detached sdd run without matching the watcher, and says how to wait for its end"
+  else
+    fail "doc: the vanished-sdd-run section of failure-modes.md is missing, still greps for bin/sdd run, or lost the [b]in pgrep, the tail --pid= wait or the pipeline complete end"
+  fi
+  # CodeRabbit on PR 446: `sdd run --phase EXEC <mission>` puts options before the mission, and a
+  # run killed before its first derivation leaves the last line of an older run in pipeline.log.
+  if [ -n "$sec" ] && grep -qF "pgrep -af '[b]in/sdd run .*<mission>'" <<< "$sec" \
+     && grep -qF 'writes no line of its own' <<< "$sec"; then
+    pass "doc: failure-modes.md finds a detached sdd run with options before the mission, and warns the log's last line may be an older run's"
+  else
+    fail "doc: failure-modes.md misses a detached sdd run started with options before the mission, or reads the log's last line as this run's stop"
+  fi
+  if grep -qF 'reviewThreads' "$fp" && grep -qF 'isResolved' "$fp" && grep -qF 'unresolved: 0' "$fp"; then
+    pass "doc: the finding-PR recipe merges only with zero unresolved review threads on the head, with the command beside it"
+  else
+    fail "doc: docs/finding-prs.md merges without counting the unresolved review threads on the head (reviewThreads, isResolved, unresolved: 0)"
+  fi
+}
+
+# --- sdd help: the why entry says its gate runs the suite (TODO item N) ---------------------------
+# `sdd why <m> EXEC` in magic_tutor was cut at the Bash tool's 2 min and could be read as a failed
+# gate: the help said "print why that phase's gate did not pass" and nothing about the gate RUNNING
+# TEST_CMD, which `sdd boot` already says. The probe reads the real `sdd help` output: the line that
+# opens with `  sdd why ` plus its continuation lines (20 or more leading spaces).
+help_probes() {
+  local out blk
+  out="$("$ROOT/bin/sdd" help 2>&1)" || true
+  blk="$(awk '/^  sdd why /{on=1; print; next} on && /^                    /{print; next} {on=0}' <<< "$out")"
+  if [ -n "$blk" ] && grep -qF 'TEST_CMD' <<< "$blk" && grep -qF 'EXEC, QA or REVIEW' <<< "$blk"; then
+    pass "help: sdd why says its gate runs TEST_CMD for EXEC, QA or REVIEW, as sdd boot does"
+  else
+    fail "help: the sdd why entry of sdd help does not say that its gate runs TEST_CMD for EXEC, QA or REVIEW"
   fi
 }
 
@@ -1140,6 +1312,9 @@ fi
 census_probes
 executor_agent_probes
 planner_agent_probes
+reviewer_agent_probes
+docs_agent_probes
+qa_agent_probes
 hat_promise_probes
 command_approval_probes
 command_relay_probes
@@ -1149,8 +1324,10 @@ command_branch_cwd_probes
 command_planner_unregistered_probes
 background_question_probes
 doc_finding_prs_probes
+doc_operator_probes
 publisher_stamp_probes
 boot_probes
+help_probes
 release_probes
 release_stamps_probes
 selftest || exit $?

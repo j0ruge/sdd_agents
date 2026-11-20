@@ -56,6 +56,13 @@ not count, and citing the mission in an entry that already exists does not count
 `n/a` only when the plan declares `kaizen_log: skipped`; the K8 row of the plan's checklist is prose
 and decides nothing (ADR 0018 §4).
 
+A lesson the entry itself calls recurrent ("the third time", "again", the same failure as an
+earlier mission) does not stay only in the log, where the next mission repeats it. Either it becomes
+a rule, or the entry writes the reason it does not become a rule. A rule for `CLAUDE.md` you write
+straight into `CLAUDE.md`, which your `writes:` covers, and mark its row ✅ with the hash:
+`gate_DOCS` refuses a `⛔` row on a document this hat writes. A rule for a path your `writes:` does
+not cover (`.claude/rules/`, `bin/sdd`) becomes a `⛔` row with its proposed text, by the rule of § 5.
+
 On rules and `CLAUDE.md`: **SDCA** — standardising requires confirming in the file that the change
 is there. Did the convention really change? Write it. Did it not? Do not write it. A rule invented
 by an agent is debt the next agent will obey without questioning.
