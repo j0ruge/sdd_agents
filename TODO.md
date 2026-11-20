@@ -792,6 +792,29 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   § 1 manda chamar a forma que a sessão lista, e o `sdd preflight` avisa quando nenhuma está instalada.
   — descoberto por `sdd-planner` na missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-20)
 
+- [ ] **O harness recusa o `rm` cujo alvo é um `$(…)`, e o `turn_rule` não avisa** — `bin/sdd:3375`
+  (`turn_rule`) — no Claude Code 2.1.327 o `claude -p` nega a chamada `Bash` inteira quando um `rm` apaga a
+  saída de uma substituição de comando ("cannot be auto-allowed by permission rules"). Na REVIEW r1 do L1b a
+  negativa levou junto o `git add` e o `git commit` da rodada; a sessão refez com o caminho literal, ao custo de
+  um turno, e uma que não refaça deixa a rodada fora do commit. Direção: uma frase no `turn_rule` (rodar a
+  substituição antes e apagar o caminho literal), com asserção no `tests/check-dry-run.sh`.
+  — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
+
+- [ ] **O `sdd preflight` não olha os hooks que toda fase carrega, e só avisa da skill que a fase usa** —
+  `bin/sdd:6546` (`cmd_preflight`) — as fases rodam com `--setting-sources user,project,local`, e os hooks do
+  humano entram em toda sessão: no L1b, 3 `SessionStart` em cada uma das 8 sessões, um com 3 604 B de saída no
+  contexto. Um hook que falhe, demore ou negue uma ferramenta pega todas as fases, e o preflight não os lista; a
+  skill de que uma fase depende (`codereview`, `ticket`, `qa-*`) ausente é só `warn`. Direção, pedida pelo dono:
+  listar os hooks por evento (rc e bytes, pela sonda) e reprovar a skill de uma fase que vai rodar.
+  — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
+
+- [ ] **O ato `run` do worker lança o `sdd run` sem rodar o `sdd preflight`** — `commands/sdd-worker.md:163`
+  (`setsid`) — e o `cmd_run` também não o chama, então a corrida de uma noite descobre na primeira fase o que as
+  sondas achariam em segundos: sessão expirada, chapéu velho, skill ausente, hook quebrado. Custo a decidir no
+  grill: o preflight roda o `TEST_CMD` inteiro, que no kit é a suíte toda. Direção, pedida pelo dono: o ato `run`
+  roda o `sdd preflight` no worktree da missão antes de lançar, e para no `_fail`.
+  — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
