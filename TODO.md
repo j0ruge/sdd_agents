@@ -634,6 +634,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sessão, e a TICKET (LH-9) e a EXEC seguiram. Direção: a ajuda mostra essa forma e onde ler o log, ou um
   `--detach` que a faz e imprime o caminho do log.
   — descoberto por `retrofit-watch` na missão `20261020-amep-anexo-na-demanda` do `lighthouse_project` (2026-10-21)
+  RECURRED 1: dotp-remake/20261118-plano-7-c-o-hud-e-a-pilha (2026-11-20)
 
 - [ ] **O lembrete do `sdd kaizen` não vê o backlog nem diz o custo** — `bin/sdd:11860` (`kaizen_reminder`) — no
   fim do `sdd run`, a função só olha a série de autonomia e se já há veredito do `kit_sha`. Ela não lê o
@@ -751,7 +752,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   planner criou 0026 e 0027 vazios para pular, apagou-os, e saiu 0028. Sem isso, a colisão só aparece no merge.
   Direção: `--after <n>`, ou ler também os `docs/adr/` das outras branches e worktrees do repositório.
   — descoberto pelo planner na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
-  RECURRED 1: dotp-remake/20261117-plano-7-b1-a-mesa-cheia (2026-11-17)
+  RECURRED 2: dotp-remake/20261117-plano-7-b1-a-mesa-cheia (2026-11-17); dotp-remake/20261119-plano-7-d-o-movimento-e-os-efeitos (2026-11-19)
 
 - [ ] **O `sdd approve` deixa fora do commit o que o planner escreveu fora da pasta da missão** —
   `bin/sdd:9210` (`cmd_approve`) — o commit leva só a pasta e o ADR. No `dotp-remake`, o planner da 7b1 deixou a página
@@ -783,6 +784,65 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: aplicar ao `turn_rule` o texto `⛔` do `45-docs.md` do L1, com asserção no `tests/check-dry-run.sh`.
   Fonte: `docs/handoffs/20261117-l1-a-prosa-do-chapeu/45-docs.md`
   — descoberto por `sdd-docs` na missão `20261117-l1-a-prosa-do-chapeu` (2026-11-19)
+
+- [ ] **O `failure-modes.md` só conhece o `blocked` da suíte vermelha, e não o da parada que o plano manda** —
+  `docs/failure-modes.md:131` (`found the suite red`) — a seção diz que a linha para "sem abrir sessão", porque a
+  suíte de um incremento anterior ficou vermelha. Na 7b1 do `dotp-remake` o executor parou o I3 depois de uma
+  sessão, num portão fora da faixa, e a decisão era do dono (o I8 parou do mesmo jeito); na 7c, o I9 parou no
+  "Quando parar" do plano. O conserto verificado: a decisão no `01-plano.md` aprovado, o incremento em `pending`,
+  um commit (`34738a8`, `b9fb061`) e o `sdd run`. Direção: a seção ganha essa causa, o sintoma e esse conserto.
+  — descoberto pelo relay da missão `20261117-plano-7-b1-a-mesa-cheia` do `dotp-remake` (2026-11-17)
+  RECURRED 1: dotp-remake/20261118-plano-7-c-o-hud-e-a-pilha (2026-11-20)
+
+- [ ] **O `--budget-override` não aparece no `sdd run --help`, e quem o ensina é o `BLOCKED` do teto** —
+  `bin/sdd:12379` (`--max-phases <N>`) — as opções do `run` na ajuda são `--dry-run`, `--phase` e `--max-phases`;
+  a opção é lida no `cmd_run` (`:9647`) e no `cmd_retry` (`:10367`), e só o motivo do teto a nomeia (`:6118`),
+  depois de a linha parar. Na 7b1 e na 7b2 do `dotp-remake` o teto de US$ 150 parou a run antes do PR, e o relance
+  saiu dessa mensagem e do `docs/pipeline.md:1150`. Medido na `origin/main` `336640e`. Direção: a ajuda do `run`
+  e a do `retry` listam `--budget-override`, com a nota de intervenção que ele escreve.
+  — descoberto pelo relay da missão `20261117-plano-7-b1-a-mesa-cheia` do `dotp-remake` (2026-11-18)
+
+- [ ] **O leitor D22 do aceite tira da conta, calado, o `- answer:` que leva nota depois do parêntese** —
+  `commands/sdd-plan.md:189` (`N (recommended) of M`) — o `awk` casa só a linha inteira (`\)$`), e a linha
+  `- answer: (recommended) — nota` some do `N` e do `M`. Na 7b2 do `dotp-remake`, 8 das 10 respostas tinham nota
+  na mesma linha e a conta deu `2 (recommended) of 2`; com as notas numa linha `Revisão:` embaixo, `10 of 10`. A
+  regra do planner (`agents/sdd-planner.md:58`) proíbe nota dentro do parêntese, não depois. Direção: o leitor
+  conta toda linha `- answer:` da seção e nomeia a que não tem a forma inteira; o planner proíbe texto depois.
+  — descoberto pelo relay na missão `20261117-plano-7-b2-o-selo-e-o-combate` do `dotp-remake` (2026-11-18)
+
+- [ ] **O `⛔` que o humano aplica não tem grafia que o `gate_DOCS` aceite, e a DOCS roda de novo** —
+  `bin/sdd:2180` (`cell == "n/a"`) — a célula passa só com `✅`, `n/a` ou `⛔` exatos, e nada diz como marcar o `⛔`
+  já aplicado. Na 7b1 do `dotp-remake` o relay aplicou o texto (`756d51b`) e escreveu `⛔ → aplicado em 756d51b`;
+  a run, ainda viva depois do PR, leu a célula como pendente, abriu uma DOCS de US$ 1,23 e a trocou por `✅` com o
+  hash (`9c373d2`). Direção: a linha `- [ ] ⛔` do corpo do PR (`agents/sdd-publisher.md:71`) e o
+  `docs/pipeline.md:486` dizem que o `⛔` aplicado vira `✅` com o hash do commit.
+  — descoberto pelo relay da missão `20261117-plano-7-b1-a-mesa-cheia` do `dotp-remake` (2026-11-18)
+
+- [ ] **A run segue viva depois de abrir o PR e rederiva tudo, e quem mexe no worktree antes do `rc` colide** —
+  `bin/sdd:9741` (`derive_phase`) — o PR é a última fase, mas o laço volta à derivação, que roda o `TEST_CMD` nos
+  gates e reabre a fase cujo artefato mudou. Na 7b1 do `dotp-remake` o PR abriu às 06:04, o relay commitou às
+  06:06, a DOCS rodou de novo e o `rc=0` saiu às 06:21; na 7b2, 5,5 min de derivação depois do PR. O `ok gate PR`
+  não avisa que a run continua. Direção: depois do `gate_PR`, uma linha diz que a run ainda deriva e manda esperar
+  o `rc`, e o `docs/failure-modes.md` ensina o mesmo; ou a run sai no `gate_PR` sem rederivar.
+  — descoberto pelo relay da missão `20261117-plano-7-b1-a-mesa-cheia` do `dotp-remake` (2026-11-18)
+
+- [ ] **O teto da missão não soma a sessão que o ambiente matou junto com o runner** —
+  `bin/sdd:6084` (`mission_cost_usd`) — a soma lê o `cost_usd=` das linhas do journal, e a linha da sessão só é
+  escrita quando ela volta (`:5698`): morta junto com a run, não há linha, e sem `result` o custo vira `?`, que
+  conta zero (`:5642`). Na 7b2 do `dotp-remake` a `5c6a936f` morreu no corte de luz, e 90,21 + 64,82 deram os
+  155,03 do teto; na 7c a `159ca22a` (115 mensagens, 32,7 M de cache-read; a `5e44e390` leu 31,2 M e custou
+  US$ 12,40) não tem linha. Direção: o `config/schema.md:290` declara o furo, e o `LEFTOVER` avisa o gasto órfão.
+  — descoberto pelo relay da missão `20261117-plano-7-b2-o-selo-e-o-combate` do `dotp-remake` (2026-11-19)
+  RECURRED 1: dotp-remake/20261118-plano-7-c-o-hud-e-a-pilha (2026-11-20)
+
+- [ ] **O `failure-modes.md` solta a run com `setsid nohup`, e assim ela segue filha da tarefa que o host mata** —
+  `docs/failure-modes.md:805` (`setsid nohup`) — sem `-f`, o `setsid` de um shell sem job control fica no mesmo
+  PID, filho do shell (medido: com `-w` o `PPID` é o shell; com `-f`, um pai fora dele). Na 7c do `dotp-remake`, o
+  `setsid -w nohup sdd run …` numa tarefa de fundo do Claude Code morreu no corte de memória com a sessão ociosa:
+  `run-2.log` sem `rc=`, a `159ca22a` (I6) aberta, 47 entradas sujas. `git stash -u` e o relance por `setsid -f`
+  passaram pelo corte das 02:05; na 7b2, depois do corte de luz, tree limpo e relance bastaram. Direção: a seção
+  dá o `setsid -f` e diz o que fazer com o incremento pela metade (o boot o nomeia, ou `git stash -u`).
+  — descoberto pelo relay da missão `20261118-plano-7-c-o-hud-e-a-pilha` do `dotp-remake` (2026-11-20)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
