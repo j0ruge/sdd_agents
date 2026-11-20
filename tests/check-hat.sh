@@ -1031,6 +1031,16 @@ command_acceptance_probes() {
   else
     fail "command: /sdd-plan reads only three paths of git status after the approval, or no longer commits on the mission branch a file the plan depends on"
   fi
+  # Item 14 of lot L2: the --red of the acceptance ran its Checks beside the run of another mission
+  # on the same machine, with no warning. The relay looks for a live run first, and a --red --only
+  # (which ends with a line of its own, measured in check-checkpoint.sh) never closes the step.
+  if grep -qF "pgrep -af '[b]in/sdd run'" <<< "$art" \
+     && grep -qF 'postpone the `--red`' <<< "$art" \
+     && grep -qF 'never counts as measured' <<< "$art"; then
+    pass "command: /sdd-plan looks for a live sdd run before the --red of the acceptance, and never reads a partial --red as measured"
+  else
+    fail "command: /sdd-plan runs the --red of the acceptance without looking for a live sdd run, or reads a partial --red as measured"
+  fi
 }
 
 # --- /sdd-plan and the planner: no question behind a live background task (item B, 3 returns) ---

@@ -263,6 +263,14 @@ and it never paraphrases either side.
       tool cuts at two minutes by default and ten at most: run it **in the background** and wait
       for its last line, `<n> pending Check(s), every one red at HEAD`. A run without that line
       (cut, killed, silent) counts as **not measured** and goes back to the planner, like a `FAIL`.
+      Before the `--red`, run `pgrep -af '[b]in/sdd run'`: a line it prints is an `sdd run` alive on
+      this machine, and the Checks would run beside it, with the windows they open and the suites
+      they start. Show the line to the human, and either postpone the `--red` until that run ends or
+      ask whether to run it anyway; the `--check` runs either way. `--red <checkpoint> --list` prints
+      the id and the command of every pending Check without running one: show it first, so the human
+      sees what the `--red` would open. `--red <checkpoint> --only <id>[,<id>…]` runs only the Checks
+      it names and ends with `<k> of <n> pending Check(s) run, … — a partial measure`. That run
+      never counts as measured: only the whole run's last line closes this sub-step.
       Re-run a sample of the commands the verified context records — the section
       `## Contexto verificado` of `01-plano.md`, where the planner writes the command beside every
       count and anchor —, at least three, or all of them when there are fewer, and show each line

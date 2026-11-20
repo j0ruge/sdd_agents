@@ -86,7 +86,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `TODO.md`, como a base permite. Direção: o `cmd_kaizen` passa pela guarda, com probe, e o chapéu nomeia a base.
   — descoberto por `sdd-kaizen` na missão `20261020-a-sessao-le-o-que-o-boot-manda` (2026-10-20)
 
-- [ ] **O `atualizado:` do checkpoint aceita hora inventada, até no futuro** — `tests/check-checkpoint.sh:1560`
+- [ ] **O `atualizado:` do checkpoint aceita hora inventada, até no futuro** — `tests/check-checkpoint.sh:1573`
   (`check_one`) — a regra "todo carimbo sai do `date`" só está no `boot_prompt` (`bin/sdd:3365`), que a sessão
   interativa não lê, e o `--check` não olha o campo. Na peça C do `lighthouse_project`, as rodadas do `/codereview`
   gravaram 15:30, 17:10, 18:00 e 18:40 em commits das 12:43 às 12:52 (`-0300`, autor igual a commit), e o
@@ -145,7 +145,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `codereview` na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-08)
 
 - [ ] **Nenhum sensor relê os Checks `done`, e o R que estende a família de um I o deixa vermelho calado** —
-  `tests/check-checkpoint.sh:1616` (`red_one`) — o `--red` roda só as linhas `pending`. Na r5 do worker, o R9 e
+  `tests/check-checkpoint.sh:1634` (`red_one`) — o `--red` roda só as linhas `pending`. Na r5 do worker, o R9 e
   o R10 puseram linhas nas famílias `worker templates:` e `command:`, que o I1 e o I9 contavam com número exato:
   os dois ficaram vermelhos no head sem aviso, achados por um script da sessão (`5565a41`, `995c4ad`). Direção:
   um `--green <checkpoint>` que roda o Check de cada linha `done` e nomeia a que não dá o esperado, e o
@@ -322,7 +322,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   contexto, ou o planner grava ao lado de cada contagem o comando que a mediu.
   — descoberto pelo relay do `/sdd-plan` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
 - [ ] **Sob `aprovacao: auto` o `/sdd-plan` deixa a missão sem commit na base e cala o passo seguinte** —
-  `commands/sdd-plan.md:344` (`Anywhere else`) — no `magic_tutor` o `sdd why` deu `plan approved (auto)` com a
+  `commands/sdd-plan.md:352` (`Anywhere else`) — no `magic_tutor` o `sdd why` deu `plan approved (auto)` com a
   pasta da missão em `??` na `main`: sem `sdd approve` ninguém corta a branch nem commita, e o passo 4 só diz
   "commit nothing". O planner supôs que o `sdd run` levaria a pasta sem rastreio; o relay leu o
   `ensure_mission_branch`, cortou a branch e commitou à mão, e o `sdd preflight` deu "working tree clean". Direção:
@@ -443,7 +443,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   manda levar antes os achados do kit ao `TODO.md` do kit, ou o runner os colhe antes do `git rm`.
   — descoberto pela retro do `sdd` no `20261103-perfil-por-tipo` do `magic_tutor` (2026-11-03)
 
-- [ ] **O aceite do `/sdd-plan` só olha três caminhos no `git status`** — `commands/sdd-plan.md:321`
+- [ ] **O aceite do `/sdd-plan` só olha três caminhos no `git status`** — `commands/sdd-plan.md:329`
   (`HAT_WRITES_BASE`) — o passo 4 lista a pasta da missão, o `TODO_FILE` e a catraca, e não diz o que fazer com o
   resto. Na 3.5e do `dotp-remake`, o planner escreveu o levantamento do `.exe` em `docs/knowledge/`, fora do
   `writes:` dele; o `sdd approve` não o commitou, e o plano o dá por existente. Só o `git status` inteiro o mostrou,
@@ -731,7 +731,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão interativa que lançou a run da 3.6f do `dotp-remake` (2026-11-14)
 
 - [ ] **O `/sdd-plan` não diz o que fazer com respostas do grill delegadas por escrito** —
-  `commands/sdd-plan.md:307` (`An approval given before the plan`) — a regra só trata da aprovação antes do plano.
+  `commands/sdd-plan.md:315` (`An approval given before the plan`) — a regra só trata da aprovação antes do plano.
   No `dotp-remake`, o handoff da 7b trazia a ordem escrita do dono ("o grill é respondido com a recomendada"), menos
   o que mexe no visual dele ou no contrato do tema; o relay levou as 5 perguntas ao dono, porque todas tocavam isso.
   Sem regra, o relay decide sozinho se responde pelo humano, e "Relaying the grill" manda nunca responder. Direção:
@@ -739,7 +739,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay do `/sdd-plan` na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
 
 - [ ] **O `--red` do aceite pode rodar ao lado da run de outra missão na mesma máquina, sem aviso** —
-  `tests/check-checkpoint.sh:1616` (`red_one`) — na esteira do `dotp-remake` (planejar a N+1 durante a run da N), a
+  `tests/check-checkpoint.sh:1634` (`red_one`) — na esteira do `dotp-remake` (planejar a N+1 durante a run da N), a
   run da 7a com o planner da 7b ao lado desceu a 1137 MB livres de 7,7 GB (6 de 802 amostras de 30 s abaixo de
   2 GB); um `--red` com build e Godot por cima disputaria a memória e a janela do Godot (a run da 3.5c já morreu de
   OOM). E o `--red` abre as janelas que os Checks abrem, sem listá-las antes nem deixar pular. Direção: o "Measure
@@ -834,7 +834,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261117-plano-7-b1-a-mesa-cheia` do `dotp-remake` (2026-11-18)
 
 - [ ] **O leitor D22 do aceite tira da conta, calado, o `- answer:` que leva nota depois do parêntese** —
-  `commands/sdd-plan.md:278` (`N (recommended) of M`) — o `awk` casa só a linha inteira (`\)$`), e a linha
+  `commands/sdd-plan.md:286` (`N (recommended) of M`) — o `awk` casa só a linha inteira (`\)$`), e a linha
   `- answer: (recommended) — nota` some do `N` e do `M`. Na 7b2 do `dotp-remake`, 8 das 10 respostas tinham nota
   na mesma linha e a conta deu `2 (recommended) of 2`; com as notas numa linha `Revisão:` embaixo, `10 of 10`. A
   regra do planner (`agents/sdd-planner.md:59`) proíbe nota dentro do parêntese, não depois. Direção: o leitor
