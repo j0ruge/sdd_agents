@@ -492,6 +492,7 @@ check plano.md '^## Incrementos'              "section 'Incrementos'"
 check plano.md '\*\*Check:\*\*'               "per-increment 'Check' field"
 check plano.md '\*\*Sensor durável:\*\*'      "per-increment 'Sensor durável' field"
 check plano.md '^## Riscos e não-feitos'      "section 'Riscos e não-feitos'"
+check plano.md 'mitigação que cita um sensor' "a mitigation that names a sensor carries the command run against its target"
 check plano.md '^## Verificação end-to-end'   "section 'Verificação end-to-end'"
 
 echo "== templates/checkpoint.md =="

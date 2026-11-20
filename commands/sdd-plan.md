@@ -110,6 +110,11 @@ command came with no argument), the repository root it writes under (the worktre
 you), the config values from step 3, and the absolute template paths from step 4 — stated as *the*
 templates to start from, never as examples.
 
+Pass the model too, as the model of the subagent call: the campaign's `plan_model:` when `/sdd-worker` runs this command, else the `model:` of the hat (`fable`).
+Without it the subagent inherits the model of this session, whatever the hat says: measured by the
+relay in the kit's lots L1b and L2 (2026-11-19 and 2026-11-20), whose planners opened on
+`claude-opus-5-5` until the second was stopped and relaunched with the model in the call.
+
 **When the agent type is not registered** (`Agent type 'sdd-planner' not found`, or the type is
 missing from the list of agents this session offers): the harness reads that list when the session
 opens, so an agent installed after it opened, or linked in a child of the directory it opened in,

@@ -688,6 +688,35 @@ planner_agent_probes() {
   else
     fail "hat: sdd-planner writes a Check that fixes the title of a new TODO_FILE item again, with no RECURRED way out"
   fi
+  # Lot L2, items 1, 12 and 15. Item 1: in lighthouse_project LH-5 a plan mitigated "the signature
+  # change spreads through the test fixtures" with "the compiler lists them", and the backend's
+  # `tsc --noEmit` excludes __tests__, so it said rc 0 with tests still on the old signature: § 2
+  # runs the sensor a mitigation names, at PLAN, against what it protects. Item 12: in magic_tutor a
+  # plan promised the EXEC gate for increments done outside sdd run, and `sdd why` answered that
+  # 20-handoff-exec.md was missing: § 4 writes that step only when the grill decides the plan runs
+  # outside sdd run, because under it the executor already writes the file. Item 15: the hat said
+  # "Runs on Fable" and nothing carried the model, so the subagent inherited the session's (the
+  # planner of L1b ran on Opus). This proves the FILE, not that the harness opens the subagent on
+  # Fable: that needs a real session (the pending list of the mission).
+  if grep -qF 'A mitigation that names a sensor' <<< "$s2" && grep -qF 'against what it protects' <<< "$s2"; then
+    pass "hat: the planner runs at PLAN the sensor a risk mitigation names, against what the mitigation protects"
+  else
+    fail "hat: sdd-planner no longer runs at PLAN the sensor a risk mitigation names, against what the mitigation protects"
+  fi
+  if grep -qF 'executed outside `sdd run`' <<< "$s4" && grep -qF '20-handoff-exec.md' <<< "$s4" \
+     && grep -qF 'promises no EXEC gate without it' <<< "$s4"; then
+    pass "hat: a plan executed outside sdd run ends its last increment by writing 20-handoff-exec.md, and promises no EXEC gate without it"
+  else
+    fail "hat: sdd-planner no longer ends a plan executed outside sdd run by writing 20-handoff-exec.md, or promises the EXEC gate without it"
+  fi
+  local sthen
+  sthen="$(awk '/^## Then/{s=1; next} s && /^## /{s=0} s' "$ROOT/commands/sdd-plan.md")"
+  if [ "$(fm_value "$agent" model)" = fable ] && grep -qF 'plan_model:' <<< "$sthen" \
+     && grep -qF 'as the model of the subagent call' <<< "$sthen"; then
+    pass "hat: the planner declares its model in the frontmatter, and /sdd-plan passes the model when it delegates"
+  else
+    fail "hat: sdd-planner no longer declares model: fable in its frontmatter, or /sdd-plan no longer passes the model when it delegates"
+  fi
 }
 
 # L1 (20261117-l1-a-prosa-do-chapeu), items F and G of TODO.md. F: the reviewer has neither Monitor
@@ -1050,6 +1079,25 @@ doc_finding_prs_probes() {
     pass "doc: the queue of finding PRs has its recipe, and the TODO header points at it"
   else
     fail "doc: docs/finding-prs.md is missing or lost a step of the recipe (merge of origin/main, the recount, todo-findings, --check --baseline origin/main, --match-head-commit), or the TODO.md header no longer points at it"
+  fi
+}
+
+# --- docs/plan-only.md: going back to sdd run (lot L2, item 12) ----------------------------------
+# In magic_tutor the increments of a plan were done by another tool, outside sdd run, and `sdd why`
+# answered "every increment done and the suite green, but 20-handoff-exec.md is missing": the relay
+# wrote the handoff by hand. plan-only.md did not cover the way back. The section quotes the gate's
+# own message, and that message is read in bin/sdd too, so a gate that changes it turns this red
+# instead of leaving the doc quoting a sentence nobody prints.
+doc_plan_only_probes() {
+  local doc="$ROOT/docs/plan-only.md" msg sec
+  msg='every increment done and the suite green, but 20-handoff-exec.md is missing'
+  sec="$(awk '/^## Going back to `sdd run`$/{s=1; next} s && /^## /{s=0} s' "$doc")"
+  if grep -qxF '## Going back to `sdd run`' "$doc" \
+     && grep -qF "$msg" <<< "$sec" && grep -qF "$msg" "$ROOT/bin/sdd" \
+     && grep -qF 'sdd why <mission> EXEC' <<< "$sec"; then
+    pass "doc: plan-only.md says what gate_EXEC reads before a mission executed by hand goes back to sdd run"
+  else
+    fail "doc: plan-only.md has no section on going back to sdd run, or it lost the message gate_EXEC prints for a missing 20-handoff-exec.md, or sdd why <mission> EXEC"
   fi
 }
 
@@ -1475,6 +1523,7 @@ command_grill_probes
 command_acceptance_probes
 background_question_probes
 doc_finding_prs_probes
+doc_plan_only_probes
 doc_operator_probes
 publisher_stamp_probes
 boot_probes

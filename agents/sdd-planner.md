@@ -4,6 +4,7 @@ description: >-
   Plans an sdd mission WITH the human present: brainstorm, grill, kaizen/DDD validation and the
   self-contained plan. Produces 00-missao.md, 01-plano.md and checkpoint.md — the three artifacts
   every headless phase depends on. Runs on Fable, interactive. Never implements.
+model: fable
 disallowedTools: "ScheduleWakeup"
 permissionsDeny: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*)"
 writes: "$HANDOFF_DIR/$MISSION/**, $ADR_DIR/**"
@@ -110,6 +111,14 @@ Write, beside every count and every anchor, the command that measured it and wha
 with no command beside it cannot be re-checked by anyone. Measured in `dotp-remake` 3.3a: "22
 `MutableEvents.Add` in 12 files" were 10 files, and only the relay's own `grep -rc` caught it.
 
+A mitigation that names a sensor ("the compiler lists them", "the suite catches it") goes into the table of risks only after you run that sensor here, at PLAN, against what it protects,
+and the mitigation carries the command and what it printed — the proof `--red` already gives a
+Check (§ 4). A sensor named and never run is a label: in `lighthouse_project` LH-5 a plan mitigated
+a signature change that spreads through the test fixtures with "the compiler lists them", and the
+backend's `tsc --noEmit` excludes `__tests__`, so it said rc 0 with tests still on the old
+signature. When the run shows the sensor does not reach the target, the mitigation names one that
+does, or the risk stays open in the table.
+
 An unverified fact does not go in. "It's probably like this" costs more later than the check costs
 now — and the repo's `TODO.md` may be stale: confirm before planning on top of it. A finding the
 grill or the gemba turns up that does not fit this mission goes to `TODO_FILE` (principle 5); one
@@ -191,6 +200,15 @@ Every increment needs:
   open questions for the human in `00-missao.md` (the last section of its template), or to the next
   mission. In the table it would be a `pending` that never closes, or a `blocked` that stops the
   whole line.
+- **the handoff, when the plan is executed outside `sdd run`.** When the grill decides that the
+  increments are executed outside `sdd run` — by a session that is not the `sdd-executor`, another
+  tool, or the human by hand — the last increment ends by writing `20-handoff-exec.md` from the
+  `handoff.md` of the templates directory, and the plan promises no EXEC gate without it: with every
+  row `done` and the suite green, `gate_EXEC` still refuses a mission with no handoff
+  (`docs/plan-only.md`, *Going back to `sdd run`*). Under `sdd run` the step does not go in, because
+  the executor already writes that file, and the step twice is two owners for one artifact.
+  Measured in `magic_tutor`: a plan said that with every increment `done` the gate passed and
+  `sdd run` started at QA, and `sdd why` answered that `20-handoff-exec.md` was missing.
 
 The table goes to `checkpoint.md`; the why of each slice stays in `01-plano.md`.
 

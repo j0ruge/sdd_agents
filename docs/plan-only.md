@@ -90,6 +90,35 @@ aprovacao: humano aprovou o plano em 2026-09-08 (grill de 8 perguntas + DDD + Ka
 It cost nothing there only because the runner was never invoked. Write the value with
 `sdd approve`, never by hand: that is the failure the command exists to end.
 
+## Going back to `sdd run`
+
+A mission planned here can have its increments executed by something other than the
+`sdd-executor` (another tool, a session of its own, the human by hand) and then be handed to
+`sdd run` for QA, REVIEW and the PR. The runner derives the phase from the artifacts, so `sdd run`
+starts past EXEC only when `gate_EXEC` passes, and the gate reads, in this order:
+
+- under `ADR_CHECK=block`, the `adr:` of `00-missao.md` still resolving on disk;
+- every row of the `checkpoint.md` table `done`, each with the bare short hash of a commit in the
+  history of `HEAD` (a word, a hash that does not exist or one outside the branch is refused);
+- no row `blocked`;
+- `TEST_CMD` green;
+- `20-handoff-exec.md` in the mission folder, written from the kit's `templates/handoff.md`, with
+  its `## TL;DR` at most 20 lines (`HANDOFF_TLDR_MAX_LINES` in `bin/sdd`).
+
+The last one is the step a run outside `sdd run` forgets: under the runner the `sdd-executor`
+writes the handoff in the increment that leaves no row `pending`, and nothing else does. With
+everything above it true, the gate answers
+
+    every increment done and the suite green, but 20-handoff-exec.md is missing
+
+which is what `magic_tutor` read after a plan had promised that the run would start at QA. A plan
+the grill decides to execute outside `sdd run` carries that step at the end of its last increment
+(§ 4 of `agents/sdd-planner.md`). Before you launch, ask the gate:
+
+```bash
+sdd why <mission> EXEC         # evaluates gate_EXEC — it runs the whole TEST_CMD, so it takes as long as the suite
+```
+
 ## Why the target repository holds no templates
 
 `sdd install` deliberately ships the agents and the config to the target, and **never the

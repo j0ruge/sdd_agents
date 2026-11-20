@@ -42,7 +42,7 @@ de por que só cabe checagem manual efêmera aqui>
 
 | Risco | Probabilidade | Mitigação |
 |---|---|---|
-| <o quê> | <alta/média/baixa> | <o que fazemos se acontecer> |
+| <o quê> | <alta/média/baixa> | <o que fazemos se acontecer; mitigação que cita um sensor traz o comando rodado contra o alvo e a saída> |
 
 ## Verificação end-to-end
 
