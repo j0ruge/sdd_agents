@@ -487,6 +487,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `index.lock`; com `GIT_OPTIONAL_LOCKS=0`, 0 de 4685. O `kit_guard_tree` (`bin/sdd:4285`) já usa a variável.
   Direção: a mesma variável na leitura do `session_leftovers`.
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
+  RECURRED 1: sdd_agents/20261119-l1b-a-rodada-delta (2026-11-20)
 
 - [ ] **O `config_key` do worker põe o valor do ambiente sem `export`, e o filho que o config abre lê vazio** —
   `bin/sdd-worker:328` (`config_key`) — o `printf -v "$key"` vale só para o shell que sourceia o `.sdd/config.sh`,
@@ -691,15 +692,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela retro do `codereview` na r3 da `20261028-whf-162-jdb-na-descricao` (2026-10-30)
   RECURRED 1: sdd_agents/20261117-o-worker-orquestrador (2026-11-18)
 
-- [ ] **A rodada de revisão relê a missão inteira, porque o chapéu não passa `base=` à skill** —
-  `agents/sdd-reviewer.md:46` (`over the mission diff`) — a `/codereview:codereview` só revisa o delta com
-  `base=<head da rodada anterior>`; sem ele usa o merge-base com a `main`, e cada rodada acha LOW novo em
-  código que nenhum R tocou. Medido no PR #414: rodada ~1h30, R de 45–55 min fosse HIGH ou prosa, e a
-  rodada do runner nem grava o head que revisou. Direção: a rodada grava o head (como o `reviewed_head:`
-  do worker) e a seguinte invoca com `base=` e os achados abertos; LOW fora do delta vai ao TODO (D15).
-  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` RESOLVED by a3d0b72 —
-  descoberto pela sessão orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-18)
-
 - [ ] **O plano que executa fora do `sdd run` promete o gate do EXEC sem o `20-handoff-exec.md`** —
   `bin/sdd:1541` (`20-handoff-exec.md`) — a decisão 3 da `20261106-rapido-sem-arestas` do `magic_tutor` dizia: "com
   todos os incrementos `done` e os commits no histórico, o `gate_EXEC` passa e o `sdd run` começa na QA". Com os
@@ -782,6 +774,23 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Com o L1b já planejado (17:58), o `next` responde `ahead plan L2` sem derivar o `approve` dele.
   Direção: o ato `plan` diz a rota (a linha e o `lots:` no mesmo commit, assinados antes de chegar à `main`).
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-19)
+
+- [ ] **O ato `review` do worker mergeia a base antes da rodada, e o `review-base` responde `full` toda vez** —
+  `commands/sdd-worker.md:196` (`bring the base in`) — o ato manda `git merge origin/<base>` e só depois
+  pergunta ao `sdd review-base`, que lê um merge depois da última rodada como rodada inteira; então a rodada
+  do worker, a mais cara, só é delta quando a `main` não andou. Medido na r3 do #452: `full — merge 59be5eb
+  entered after 40-review-r2.md`, 30 arquivos e 2 086 linhas, onde a branch andara 11 commits desde o
+  `reviewed_head:` da r2. Direção: o `review-base` aceita o merge cujo lado da base não toca caminho que a
+  branch mudou, ou o ato só mergeia a base quando o PR não é `MERGEABLE`.
+  — descoberto pela sessão orquestradora na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
+
+- [ ] **O merge delegado não confere que o corpo do PR lista as escolhas do grill** —
+  `commands/sdd-worker.md:186` (`grill answers that touch his rules`) — sob delegação o aceite do dono sobre as
+  escolhas do grill vem depois do merge, pelo corpo do PR, e quem o escreve é o ato `pr`, que o `next` não deriva
+  (todo PR aberto vira `review`). O `cmd_pr_ready` lê do PR só `headRefOid,mergeable,state`, e o único `.body`
+  dele é o dos comentários do Codex: um lote pode mergear sem o registro que o dono aceitaria.
+  Direção: o `pr-ready` confere no corpo uma linha por decisão `- answer:` do `00-missao.md` da missão.
+  — descoberto pelo `coderabbitai` no PR #455, na campanha `20261117-zerar-as-issues` (2026-11-20)
 
 - [ ] **A regra do teto da chamada `Bash` mora no revisor, e não no `turn_rule` de toda fase** —
   `bin/sdd:3375` (`turn_rule`) — a chamada `Bash` do harness para de esperar aos 120 s (600 s no máximo),

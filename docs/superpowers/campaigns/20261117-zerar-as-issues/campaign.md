@@ -24,8 +24,8 @@ exec_model: opus
 ## Lotes
 
 > Na ordem da fila: o `next` percorre a tabela de cima para baixo e para no primeiro lote que não
-> está mergeado. Os L6a a L6k têm teto `plan`: qualquer que seja o nível assinado, o worker planeja
-> a missão de cada um e nunca a aprova nem a mergeia sozinho.
+> está mergeado. Nenhum lote tem teto abaixo do nível assinado (`-`): os L6a a L6k nasceram com teto
+> `plan` e subiram a `-` em 2026-11-20, por ordem do dono (*"sim, quero que rodam sozinhos"*).
 
 | Lot | Título | Ceiling | Itens |
 |---|---|---|---|
@@ -35,19 +35,19 @@ exec_model: opus
 | L3 | Gates do fim da linha | - | 13 |
 | L4 | Preflight, health e sensores | - | 14 |
 | L5 | Saída humana e contrato do runner | - | 17 |
-| L5b | O worker e os verbos dele | - | 14 |
+| L5b | O worker e os verbos dele | - | 16 |
 | L5c | O runner: as notas, o plano e o turno | - | 7 |
-| L6a | O carimbo tudo ou nada | plan | 1 |
-| L6b | A prosa da DOCS sem revisão | plan | 1 |
-| L6c | O plano que manda editar em `.claude/` | plan | 1 |
-| L6d | O veredito da QA depois de um R<n> | plan | 1 |
-| L6e | O platô da REVIEW que lê só as letras | plan | 1 |
-| L6f | A QA sem interface que para em `BLOCKED` | plan | 1 |
-| L6g | A guarda do kit e o merge só de docs | plan | 1 |
-| L6h | O chapéu sem MCP | plan | 1 |
-| L6i | O remédio do `qa: skipped` refutado | plan | 1 |
-| L6j | O incremento de quase 1 h sem `Monitor` | plan | 1 |
-| L6k | O LOW que não move a nota | plan | 1 |
+| L6a | O carimbo tudo ou nada | - | 1 |
+| L6b | A prosa da DOCS sem revisão | - | 1 |
+| L6c | O plano que manda editar em `.claude/` | - | 1 |
+| L6d | O veredito da QA depois de um R<n> | - | 1 |
+| L6e | O platô da REVIEW que lê só as letras | - | 1 |
+| L6f | A QA sem interface que para em `BLOCKED` | - | 1 |
+| L6g | A guarda do kit e o merge só de docs | - | 1 |
+| L6h | O chapéu sem MCP | - | 1 |
+| L6i | O remédio do `qa: skipped` refutado | - | 1 |
+| L6j | O incremento de quase 1 h sem `Monitor` | - | 1 |
+| L6k | O LOW que não move a nota | - | 1 |
 
 ### L1 — Prosa de chapéu e docs (piloto)
 
@@ -171,6 +171,8 @@ exec_model: opus
 - [ ] A parada do worker roda o `budget` de novo para montar o `SDD_GATE_WHY` do pager
 - [ ] Uma edição do `.sdd/config.sh` durante a fase tira o teto de missão que a delegação assinou
 - [ ] ◆ A missão pedida fora da fila da campanha não tem rota, e a linha nova derruba a delegação
+- [ ] O ato `review` do worker mergeia a base antes da rodada, e o `review-base` responde `full` toda vez
+- [ ] O merge delegado não confere que o corpo do PR lista as escolhas do grill
 
 ### L5c — O runner: as notas, o plano e o turno
 
@@ -188,15 +190,15 @@ exec_model: opus
 
 ### L6a a L6k — Desenho, um lote por item
 
-> Itens de desenho, com teto `plan`: as escolhas deles não são tomadas por um grill sem o dono. Um
-> lote por item, e uma missão por lote (decisão do dono na r5 da missão
+> Itens de desenho. Nasceram com teto `plan`, para que as escolhas deles não fossem tomadas por um
+> grill sem o dono; desde 2026-11-20 o teto é `-`, por ordem do dono. Um lote por item, e uma missão por lote (decisão do dono na r5 da missão
 > `20261117-o-worker-orquestrador`): o `next` acha a missão de um lote pelo `lot:` e dá o lote por
 > feito no merge dela, então um lote de onze itens fecharia no primeiro merge, com dez abertos.
 >
 > A decisão 8 vale para os sete `◆` daqui como para os outros: sob delegação, o grill segue a opção
-> recomendada pelo planner, e o corpo do PR lista a escolha para o aceite do dono. O que segura a
-> escolha é o teto `plan`: o worker planeja, e o dono lê e aprova cada plano (`sdd approve`) antes
-> de o EXEC começar, e mergeia ele mesmo.
+> recomendada pelo planner, e o corpo do PR lista a escolha para o aceite do dono. Com o teto em `-`,
+> o worker planeja, aprova e mergeia cada lote como os outros, e o aceite do dono sobre essas escolhas
+> vem depois do merge, pelo corpo do PR.
 
 #### L6a — O carimbo tudo ou nada
 
@@ -247,11 +249,12 @@ exec_model: opus
 Os 26 itens com `◆` deixam uma escolha em aberto (24 da fila de 2026-11-17 e 2 do L5b, de 2026-11-20). Sob delegação, o grill da missão segue a opção
 recomendada pelo planner, e o corpo do PR lista cada um deles, com a escolha feita, para o aceite
 do dono. Por lote: L1 nenhum, L2 3, L3 5, L4 3, L5 6, L5b 2, L5c nenhum, e 7 nos L6a a L6k (um em cada um dos L6b, L6c,
-L6d, L6f, L6g, L6i e L6k), onde o teto `plan` faz o dono aprovar cada plano antes do EXEC.
+L6d, L6f, L6g, L6i e L6k). Até 2026-11-20 o teto `plan` fazia o dono aprovar cada um desses planos
+antes do EXEC; com o teto em `-`, o aceite dele vem pelo corpo do PR, como nos outros lotes.
 
 ## A régua do "tudo ok" (decisão 9)
 
-O worker só mergeia (nível `merge` ou acima, e nunca nos L6a a L6k) com os cinco itens verdadeiros
+O worker só mergeia (nível `merge` ou acima, os L6a a L6k inclusos desde 2026-11-20) com os cinco itens verdadeiros
 no mesmo sha, lidos por `bin/sdd-worker pr-ready <dir-da-missão> <pr>`, que responde `ready <sha>`:
 
 1. a rodada de revisão mais nova nomeia o head (`reviewed_head:`) e dá A em todo critério, cada A

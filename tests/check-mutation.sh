@@ -7508,6 +7508,19 @@ mut_RUN_review_base_uncommitted_round() {
 mut_RUN_review_base_ignored_round_unseen() {
   sed -i '/^review_base_line()/,/^}/ s| status --porcelain --untracked-files=all --ignored -- "$last" | status --porcelain --untracked-files=all -- "$last" |' "$1"
 }
+# The status of rule 2 takes git's optional locks again: the query, admitted without the checkout
+# lock, takes index.lock and rewrites the index (r3 of 20261119-l1b-a-rodada-delta). Caught by
+# "delta base: the query leaves the index as it found it, …" (check-gates.sh).
+mut_RUN_review_base_status_locks_index() {
+  sed -i '/^review_base_line()/,/^}/ s|st="$(GIT_OPTIONAL_LOCKS=0 git -C "$REPO_ROOT" status |st="$(git -C "$REPO_ROOT" status |' "$1"
+}
+# A git status that fails is discarded: the empty answer reads as a committed round, and the round
+# on disk becomes a base (r3 of 20261119-l1b-a-rodada-delta). Caught by "delta base: a git status
+# that fails answers full and names the round, …" (check-gates.sh), under a git stub that fails
+# exactly that status.
+mut_RUN_review_base_status_failure_committed() {
+  sed -i '/^review_base_line()/,/^}/ s|--ignored -- "$last" 2>/dev/null)"; then|--ignored -- "$last" 2>/dev/null \|\| true)"; then|' "$1"
+}
 # The shape is capped at 40 hex again: the 64-hex head of a SHA-256 repository reads as no commit,
 # and every round there is full (CodeRabbit on PR #452). Caught by "delta base: the 64-hex
 # reviewed_head of a SHA-256 repository is a base" (check-gates.sh).
@@ -7549,6 +7562,14 @@ mut_REVIEW_head_signature_shown() {
 mut_REVIEW_head_diff_failure_passes() {
   sed -i '/^review_head_ok()/,/^}/ s|"$sha" "$rc_commit" 2>/dev/null)"; then|"$sha" "$rc_commit" 2>/dev/null \|\| true)"; then|' "$1"
 }
+# The range is listed with git's default quoting again: a non-ASCII name inside the reviewer's
+# writes: comes back quoted, matches no glob, and the round is refused (r3 of
+# 20261119-l1b-a-rodada-delta). Caught by "gate_REVIEW: a non-ASCII path inside the reviewer's
+# writes: in the range passes" (check-gates.sh), and by the range-diff stub, which fails the spelling
+# with the option only.
+mut_REVIEW_head_range_quoted() {
+  sed -i '/^review_head_ok()/,/^}/ s| -c core.quotePath=false diff --name-only "$sha" "$rc_commit"| diff --name-only "$sha" "$rc_commit"|' "$1"
+}
 # The gate's shape is capped at 40 hex again: a SHA-256 repository's round is refused as no commit.
 # Caught by "gate_REVIEW: a 64-hex reviewed_head of a SHA-256 repository reaches the range rule".
 mut_REVIEW_head_sha256_refused() {
@@ -7564,6 +7585,7 @@ CATALOG=(
   REVIEW_head_sha256_refused
   REVIEW_head_signature_shown
   REVIEW_head_diff_failure_passes
+  REVIEW_head_range_quoted
   COORD_review_base_locked
   RUN_review_base_absent_as_base
   RUN_review_base_commit_unchecked
@@ -7571,6 +7593,8 @@ CATALOG=(
   RUN_review_base_merge_ignored
   RUN_review_base_uncommitted_round
   RUN_review_base_ignored_round_unseen
+  RUN_review_base_status_locks_index
+  RUN_review_base_status_failure_committed
   RUN_review_base_sha256_refused
   RUN_review_prompt_delta_dropped
   COORD_adr_external_spec
