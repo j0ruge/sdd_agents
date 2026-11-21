@@ -98,9 +98,11 @@ A mission planned here can have its increments executed by something other than 
 starts past EXEC only when `gate_EXEC` passes, and the gate reads, in this order:
 
 - under `ADR_CHECK=block`, the `adr:` of `00-missao.md` still resolving on disk;
-- every row of the `checkpoint.md` table `done`, each with the bare short hash of a commit in the
-  history of `HEAD` (a word, a hash that does not exist or one outside the branch is refused);
+- each row `done` of the `checkpoint.md` table carrying the bare short hash of a commit in the
+  history of `HEAD` (a word, a hash that does not exist or one outside the branch is refused), and
+  each row with a status the gate knows (`pending`, `doing`, `done`, `blocked`);
 - no row `blocked`;
+- no row `pending` or `doing`;
 - `TEST_CMD` green;
 - `20-handoff-exec.md` in the mission folder, written from the kit's `templates/handoff.md`, with
   its `## TL;DR` at most 20 lines (`HANDOFF_TLDR_MAX_LINES` in `bin/sdd`).
