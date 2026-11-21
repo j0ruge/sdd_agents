@@ -18,6 +18,14 @@ FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-XXXXXX")"
 MISSION="20260101-fixture"
 MDIR=""
 fails=0
+# load_config keeps an exported EFFORT_* when the file sets none, and the close regime below reads
+# `unset:-` and `effort=settings` off a fixture with no EFFORT_* in its config: under
+# `EFFORT_TICKET=xhigh` this sensor came out with 2 FAIL (r3 of 20261120-l2-o-sdd-plan-e-o-planner),
+# the third reader of the class d48f7c9 closed in check-dry-run.sh and check-autonomy.sh. Same
+# spelling: cleared by prefix, so a phase key the runner adds later is cleared with no list to edit;
+# armed first, so dropping the clear turns the close pair red on every machine.
+export EFFORT_TICKET=xhigh
+while IFS= read -r effort_var; do unset "$effort_var"; done < <(compgen -v EFFORT_)
 
 # The Jidoka assertion below runs a REAL (non-dry) `sdd run`, which writes an autonomy ledger row
 # on the blocked-increment path. run-all.sh already exports SDD_STATE_DIR for every test it runs,
