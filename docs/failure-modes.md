@@ -194,7 +194,10 @@ escalates on the declaration itself instead of routing it through the fingerprin
 that, a phase nobody could satisfy was charged a **second** session to prove the same thing twice —
 and a session that failed the gate but committed something honest read as progress and bought
 another lap. That is a deliberate Jidoka, filed in the ledger as `kind: handoff-blocked` alongside
-`increment-blocked`, not as friction.
+`increment-blocked`, not as friction. Since `20261121-l3-gates-do-fim-da-linha` the same token stops
+the line in two more places: `50-pr.md` (read before the `pr_url:`) and the newest REVIEW round. In
+a round, `blocked` means the round could not be done or waits on a human decision; a round with
+findings is `done` with its real grade.
 
 **What you do:** read the handoff the message names. What it needs from a human is written in its
 "Decisions for a Human" section. Take the decisions, set the handoff's `status:` back, and run
@@ -1015,8 +1018,74 @@ refuses it, because nothing would ever create the branch.
 deciding which of two intents wins — human judgement. An automatic rebase here is the cheapest way
 to lose somebody else's work.
 
-**What you do:** resolve the conflict by hand, then `sdd run <mission>` for the PR phase to carry
-on.
+**What you do:** on the mission branch, `git merge origin/<DEFAULT_BRANCH>` and resolve the
+conflict there — **never a rebase**: the checkpoint and the handoffs cite hashes that `gate_EXEC`
+looks up in the history of `HEAD`, and a rebase takes them out of it. Then remove the `status:` line
+from `50-pr.md` and `sdd run <mission>` for the PR phase to carry on. Since
+`20261121-l3-gates-do-fim-da-linha` the blocked `50-pr.md` stops the line itself (`handoff-blocked`,
+rc 3, see the section above), and the reason names this merge.
+
+---
+
+## A gate says `TEST_CMD did not run (rc 126/127 …)`
+
+**Symptom:** `gate_EXEC`, `gate_QA` or `gate_REVIEW` refuses with `TEST_CMD did not run (rc 127: …)
+— the suite never started`, usually in a linked worktree; a second lap over the same tree stops as
+`no-work` before opening a session.
+
+**Cause:** the shell could not start the command (no such file, no execute bit). A linked worktree
+is born without ignored paths such as `.venv` or `node_modules`, and a `TEST_CMD` that names one
+exits 127 there. Since `20261121-l3-gates-do-fim-da-linha` this is its own reason
+(`test_cmd_red_why`), not "the suite is red".
+
+**What you do:** give the tree what the line of the reason names (create the `.venv`, run the
+install), then `sdd run` again. Do not hand it to a session: no agent fixes a missing environment
+by editing code. Over a dirty tree the reason reads `…, or stopped at its first step, over a DIRTY
+working tree` and the line stops (rc 3, `dirty-tree`): a log of one line cannot tell a command that
+never started from a silent first step followed by a missing one, so commit what belongs to the
+mission or `git restore` what does not, as well. An exit 127 **after** the log printed output (one
+of the suite's own commands is missing) is read as a suite that started, and says so; that suite ran against the tree, so over a
+dirty tree the dirty-tree stop answers instead. An exit 126 or 127 with no output at all is read as
+a red suite, citing its log: the shell always writes its own message when it cannot start a
+command, so a silent one is the suite's own exit status.
+
+---
+
+## REVIEW reopens after a round graded A
+
+**Symptom:** the newest `40-review-r<N>.md` has A in every criterion, and `gate_REVIEW` still refuses,
+naming a short sha and a path committed after the round.
+
+**Cause:** since `20261121-l3-gates-do-fim-da-linha` (ADR 0024) code committed after the round
+reopens the phase (`review_later_code_ok`): a commit that is not a merge, newer than the one that
+added the round, touched a path outside the `writes:` of the REVIEW and DOCS hats. The round did not
+see that code.
+
+**What you do:** below `REVIEW_MAX_ITER`, nothing by hand — the next derived lap opens a delta round
+(ADR 0023) over that code, and that round, a fresh review of the head, is what clears the refusal.
+Reverting the commit does **not** clear it: the gate reads each commit after the round, never the
+net diff, so the commit and its revert both stay in the range, and the head after the revert still
+needs that fresh round. At the ceiling the derived lap opens no round (the line stops as
+`BLOCKED in REVIEW`, rounds counted in total on disk); ask for the round explicitly with
+`sdd run <mission> --phase REVIEW`, which the ceiling does not refuse. Prose the DOCS phase writes,
+a merge of the base and a mission already in the base do not reopen.
+
+---
+
+## The `PR` gate refuses: the head of the PR, or `verified_head:`
+
+**Symptom:** `gate_PR` refuses with the PR head and the mission head side by side, or says that
+`verified_head:` in `50-pr.md` does not cover the head.
+
+**Cause:** since `20261121-l3-gates-do-fim-da-linha` (ADR 0024) the gate reads `headRefOid` and
+compares it with the head of the mission (`mission_tip`), and reads the sha the publisher ran step 2
+on. A commit pushed after the verification, outside the mission folder, leaves the PR on code
+nobody verified.
+
+**What you do:** a head that differs is a `git push` away. A stale `verified_head:` is the
+publisher's next lap: it runs step 2 again on the head and rewrites the sha. The value is a hex sha,
+never a ref: `HEAD` or a branch name would resolve to the head itself and is refused as no commit
+sha. A merged PR is not compared.
 
 ---
 

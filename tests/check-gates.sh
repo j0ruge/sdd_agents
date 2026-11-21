@@ -39,7 +39,7 @@ SDD_STATE_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-state-XXXXXX")"
 export SDD_STATE_DIR="$SDD_STATE_FIX"
 CLOSE_REMOTE_DIR=""
 SHA256_FIX=""
-trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX" ${CLOSE_REMOTE_DIR:+"$CLOSE_REMOTE_DIR"} ${SHA256_FIX:+"$SHA256_FIX"}' EXIT
+trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX" ${CLOSE_REMOTE_DIR:+"$CLOSE_REMOTE_DIR"} ${SHA256_FIX:+"$SHA256_FIX"} ${NORUN_DIR:+"$NORUN_DIR"}' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -357,6 +357,89 @@ assert_why   "EXEC reports the red suite" "EXEC" "TEST_CMD failed"
 sed -i 's|^TEST_CMD="false"|TEST_CMD="true"|' .sdd/config.sh
 assert_phase "TEST_CMD green again hands the mission back to QA" "QA"
 
+# A TEST_CMD that did NOT RUN is not a red suite (item 5 of L3, 20261121-l3-gates-do-fim-da-linha).
+# A worktree is born without ignored paths: `.venv/bin/python` does not exist there, the shell exits
+# 127, and the gate read it as a suite that failed. Two worlds, 127 (a relative path the tree
+# misses) and 126 (a file with no execute bit), and each reason is read for what it must say AND
+# for what it must not: `TEST_CMD failed` is the other branch, and a `.log` would make the reason
+# unstable from lap to lap, so no_work_check could never stop the second lap over the same tree.
+# Read over a CLEAN tree (norun_why_clean): over a dirty one gate_EXEC keeps the dirty-tree
+# stop with a sentence of its own (Codex P2 on PR #458), which the `sdd run` pair further down
+# counts. gate_QA and gate_REVIEW have no dirty-tree stop, and read norun_why's dirty tree alike.
+NORUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sdd-norun-XXXXXX")"
+printf '#!/bin/sh\nexit 0\n' > "$NORUN_DIR/noexec"; chmod 644 "$NORUN_DIR/noexec"
+norun_why() { # norun_why <TEST_CMD> <PHASE> — the reason, with TEST_CMD swapped and put back
+  local w
+  sed -i "s|^TEST_CMD=\"true\"|TEST_CMD=\"$1\"|" .sdd/config.sh
+  # LC_ALL=C: the shell that eval's the TEST_CMD translates its strerror, and the line read below
+  # is the English one.
+  w="$( cd "$FIX" && LC_ALL=C "$SDD" why "$MISSION" "$2" 2>&1 )" || true
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"true\"|" .sdd/config.sh
+  printf '%s' "$w"
+}
+norun_why_clean() { # norun_why_clean <TEST_CMD> <PHASE> — norun_why with the swap COMMITTED, and the way back too
+  local w
+  sed -i "s|^TEST_CMD=\"true\"|TEST_CMD=\"$1\"|" .sdd/config.sh
+  git add .sdd/config.sh && git commit -qm "chore: TEST_CMD swapped over a clean tree" >/dev/null
+  w="$( cd "$FIX" && LC_ALL=C "$SDD" why "$MISSION" "$2" 2>&1 )" || true
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"true\"|" .sdd/config.sh
+  git add .sdd/config.sh && git commit -qm "chore: TEST_CMD put back" >/dev/null
+  printf '%s' "$w"
+}
+norun_ok() { # norun_ok <reason> <rc> <the line the log carries> — 0 when the reason is the right one
+  grep -qF "TEST_CMD did not run (rc $2: " <<< "$1" && grep -qF "$3" <<< "$1" \
+    && grep -qF 'this tree misses what the command names' <<< "$1" \
+    && ! grep -qF 'TEST_CMD failed' <<< "$1" && ! grep -qF '.log' <<< "$1"
+}
+nr127="$(norun_why_clean '.venv/bin/python -m pytest' EXEC)"
+nr126="$(norun_why_clean "$NORUN_DIR/noexec" EXEC)"
+if norun_ok "$nr127" 127 'No such file or directory' && norun_ok "$nr126" 126 'Permission denied' \
+   && grep -qF 'the suite never started' <<< "$nr127" && ! grep -qF 'DIRTY' <<< "$nr127$nr126"; then
+  pass "gate_EXEC says the TEST_CMD did not run when it exits 126 or 127, and names what the tree misses"
+else
+  fail "gate_EXEC says the TEST_CMD did not run when it exits 126 or 127, and names what the tree misses" \
+    "TEST_CMD did not run (rc 127: … No such file …) and (rc 126: … Permission denied …), 'never started', no 'TEST_CMD failed', no .log, no DIRTY" \
+    "127: $nr127 ‖ 126: $nr126"
+fi
+assert_phase "TEST_CMD put back after the did-not-run worlds hands the mission back to QA" "QA"
+# A TEST_CMD that STARTED and then hit a missing command also exits 127 (`bash -c 'true; x'`), and
+# "the suite never started" would be false about it (finding #1 of r1). The reason still cites no
+# .log, so no_work_check can stop the second lap over the same tree. Read over a CLEAN tree: that
+# suite ran against the tree, so over a dirty one the dirty-tree stop answers (the pair below).
+nr127s="$(norun_why_clean 'echo the suite started; sdd_r1_no_such_command' EXEC)"
+if grep -qF 'rc 127: ' <<< "$nr127s" && grep -qF 'after it printed output' <<< "$nr127s" \
+   && ! grep -qF 'never started' <<< "$nr127s" && ! grep -qF 'TEST_CMD failed' <<< "$nr127s" \
+   && ! grep -qF '.log' <<< "$nr127s" && ! grep -qF 'DIRTY' <<< "$nr127s"; then
+  pass "gate_EXEC does not say the suite never started for a TEST_CMD that printed output before it exited 127"
+else
+  fail "gate_EXEC does not say the suite never started for a TEST_CMD that printed output before it exited 127" \
+    "rc 127, 'after it printed output', no 'never started', no 'TEST_CMD failed', no .log, no DIRTY" "$nr127s"
+fi
+# The other half (CodeRabbit 4654284448 on PR #458): the same suite over a DIRTY tree — the config
+# edit of norun_why is not committed — keeps the dirty-tree stop, with the dirty-tree sentence. A
+# suite that did not run keeps the stop too, with a sentence of its own (Codex P2 on PR #458): the
+# `sdd run` pair of the dirty-tree differential, further down, counts that one.
+nr127sd="$(norun_why 'echo the suite started; sdd_r1_no_such_command' EXEC)"
+if grep -qF 'TEST_CMD failed (echo the suite started; sdd_r1_no_such_command) over a DIRTY working tree' <<< "$nr127sd" \
+   && ! grep -qF 'after it printed output' <<< "$nr127sd"; then
+  pass "gate_EXEC keeps the dirty-tree stop for a TEST_CMD that started and then exited 127"
+else
+  fail "gate_EXEC keeps the dirty-tree stop for a TEST_CMD that started and then exited 127" \
+    "'TEST_CMD failed (…) over a DIRTY working tree', no 'after it printed output'" "$nr127sd"
+fi
+# A 127 with NO output is no shell refusing to start anything — bash always writes its message, and
+# the log takes stderr — so it is the suite's own exit status, read as a red suite with its log
+# (CodeRabbit 4654284445 on PR #458). Over a clean tree, so the dirty-tree stop cannot answer for it.
+nr127z="$(norun_why_clean 'exit 127' EXEC)"
+if grep -qE 'TEST_CMD failed \(exit 127\) — see [^ ]*gate-exec-test-[^ ]*\.log$' <<< "$nr127z" \
+   && ! grep -qF 'did not run' <<< "$nr127z" && ! grep -qF 'DIRTY' <<< "$nr127z"; then
+  pass "gate_EXEC reads a TEST_CMD that exited 127 with no output as a red suite, citing its log"
+else
+  fail "gate_EXEC reads a TEST_CMD that exited 127 with no output as a red suite, citing its log" \
+    "'TEST_CMD failed (exit 127) — see …gate-exec-test-….log', no 'did not run', no DIRTY" "$nr127z"
+fi
+assert_phase "TEST_CMD put back after the started and silent worlds hands the mission back to QA" "QA"
+
 # Jidoka: a `blocked` increment escalates ON THE SPOT, without burning a session.
 # `sdd run` decides that before invoking claude, so this test spends no tokens.
 #
@@ -474,6 +557,25 @@ if grep -q "session(s) without satisfying the gate" <<< "$out_dirty"; then
        "no budget-exhaustion text" "$(grep -m1 'session(s) without' <<< "$out_dirty")"
 else
   pass "the escalation is the dirty-tree branch, not budget exhaustion"
+fi
+# The same dirty tree with a TEST_CMD the shell could not start (Codex P2 on PR #458): a log of one
+# line holds the shell's message alone, and cannot tell a command that never started from one that
+# ran a silent first step and then stopped (`printf x > f; no_such_cmd`). The did-not-run reading is
+# a heuristic, so over a dirty tree the stop holds too, and its sentence says the two are not told
+# apart. Counted like the pair above: exit 3, no session, and the sentence of THIS branch.
+sed -i 's|^TEST_CMD="false"|TEST_CMD=".venv/bin/python -m pytest"|' .sdd/config.sh
+out_norun_dirty="$( cd "$FIX" && LC_ALL=C "$SDD" run "$MISSION" 2>&1 )"; rc_norun_dirty=$?
+n_norun_dirty="$(sessions_spent)"
+sed -i 's|^TEST_CMD=.*|TEST_CMD="false"|' .sdd/config.sh
+if [ "$rc_norun_dirty" -eq 3 ] && [ "$n_norun_dirty" -eq "$n_dirty" ] \
+   && grep -qF 'TEST_CMD did not run (rc 127: ' <<< "$out_norun_dirty" \
+   && grep -qF 'or stopped at its first step, over a DIRTY working tree' <<< "$out_norun_dirty" \
+   && ! grep -qF 'the suite never started' <<< "$out_norun_dirty"; then
+  pass "a dirty tree with a TEST_CMD that did not run escalates too (exit 3, no session spent)"
+else
+  fail "a dirty tree with a TEST_CMD that did not run escalates too (exit 3, no session spent)" \
+       "exit 3, 'did not run (rc 127: …), or stopped at its first step, over a DIRTY working tree', no 'never started', no new session" \
+       "exit $rc_norun_dirty, $n_dirty → $n_norun_dirty log(s): $(tail -3 <<< "$out_norun_dirty")"
 fi
 git checkout -- file.txt
 sed -i 's|^TEST_CMD="false"|TEST_CMD="true"|' .sdd/config.sh
@@ -1969,6 +2071,87 @@ if [ "$floor_ok" = "1" ]; then
     assert_why "the same page carrying APP_EXPECT reads as the app answering" "QA" \
                "with the app answering at 127\.0\.0\.1:$PAGE_PORT"
     sed -i '/^APP_EXPECT=/d' .sdd/config.sh
+
+    # --- the history of each red e2e case (item 10 of L3) -----------------------------------
+    # Only on the `up` arm: with the app down every case falls, and the history would say nothing.
+    # PROVENANCE: the failed block is copied from the end of
+    # /home/joruge/repos/sales_quote/.sdd/logs/20260830-o-rascunho-fantasma-do-mount/gate-qa-e2e-20260830-172116-xrg0TF.log
+    # (the blank line before the counter is part of it), and the `✓` line of a case that PASSED
+    # from …/20261018-silencios-do-formulario-e-dos-dialogos/gate-qa-e2e-20261018-183347-pPGzue.log.
+    # The title of both is Portuguese text in the real log: here each line is cut after the second
+    # ` › ` and `title` is written in its place (tests/check-lang.sh), since the parser never reads it.
+    # Every evaluation of the gate writes a new gate-qa-e2e-*.log, and the script has made over a
+    # hundred before this world: only THOSE are removed (pipeline.log lives beside them and other
+    # assertions read it), and the red world is evaluated ONCE, since a second evaluation would
+    # count the log of the first.
+    hist_red=$'\n  1 failed\n    [chromium] › e2e/sq113-copia-de-itens-persiste.spec.ts:121:7 › title\n  88 passed (5.0m)'
+    hist_green=$'  ✓  172 [chromium] › e2e/sq113-copia-de-itens-persiste.spec.ts:121:7 › title\n\n  4 skipped\n  168 passed (9.2m)'
+    hist_now=$'\n  2 failed\n    [chromium] › e2e/sq113-copia-de-itens-persiste.spec.ts:121:7 › title\n    [chromium] › e2e/sq98-vocabulario-do-pagamento.spec.ts:101:7 › title\n  87 passed (5.0m)'
+    hist_seed() {   # <name suffix> <content>: one earlier e2e gate log of another mission
+      mkdir -p "$FIX/.sdd/logs/20200101-another-mission"
+      printf '%s\n' "$2" > "$FIX/.sdd/logs/20200101-another-mission/gate-qa-e2e-20200101-$1.log"
+    }
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    hist_seed 100000-aaaaaa "$hist_red"; hist_seed 100100-bbbbbb "$hist_red"
+    hist_seed 100200-cccccc "$hist_green"
+    printf '%s\n' "$hist_now" > "$page_dir/e2e.out"
+    sed -i 's|^E2E_CMD=.*|E2E_CMD="cat .page/e2e.out; false"|' .sdd/config.sh
+    hist_got="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+    hist_1='sq113-copia-de-itens-persiste\.spec\.ts:121 already failed in 2 of the last 3 e2e gate logs'
+    hist_2='sq98-vocabulario-do-pagamento\.spec\.ts:101 never failed in the last 3 e2e gate logs'
+    if grep -qE "with the app answering at 127\.0\.0\.1:$PAGE_PORT" <<< "$hist_got" \
+       && grep -qE "$hist_1" <<< "$hist_got" && grep -qE "$hist_2" <<< "$hist_got"; then
+      pass "gate_QA says how often each red e2e case already failed in the earlier e2e gate logs"
+    else
+      fail "gate_QA says how often each red e2e case already failed in the earlier e2e gate logs" \
+           "/$hist_1/ and /$hist_2/ on the up arm" "$hist_got"
+    fi
+    # The other half: a log with no failed block adds nothing (the reason is today's, ending in the
+    # log), and a case that only ever PASSED before counts as never failed — the `✓` line carries
+    # the same file:line outside any block.
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    hist_seed 100000-aaaaaa "$hist_red"
+    printf 'Running 89 tests using 1 worker\n  89 passed (5.0m)\n' > "$page_dir/e2e.out"
+    hist_none="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    hist_seed 100200-cccccc "$hist_green"
+    printf '%s\n' "$hist_red" > "$page_dir/e2e.out"
+    hist_passed="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+    if grep -qE 'is in the log\. See [^ ]*gate-qa-e2e-[^ ]*\.log$' <<< "$hist_none" \
+       && ! grep -q 'e2e gate logs' <<< "$hist_none" \
+       && grep -qE 'sq113-copia-de-itens-persiste\.spec\.ts:121 never failed in the last 1 e2e gate logs' <<< "$hist_passed"; then
+      pass "gate_QA adds nothing for a log with no failed block, and counts no case that passed"
+    else
+      fail "gate_QA adds nothing for a log with no failed block, and counts no case that passed" \
+           "today's reason with no block, and 'never failed in the last 1' over a passed case" \
+           "$hist_none"$'\n---\n'"$hist_passed"
+    fi
+    # A project with no name (CodeRabbit 4654284439 on PR #458): Playwright writes the
+    # `[<project>] › ` prefix only for a named project. PROVENANCE: formatTestTitle in
+    # /home/joruge/repos/sales_quote/node_modules/playwright/lib/reporters/base.js (playwright
+    # 1.58.2), `const projectTitle = projectName ? \`[${projectLabel}${projectName}] › \` : ""`, and
+    # the summary of the same file indents each case of the `N failed` block by four spaces — the
+    # lines of hist_red with the prefix cut, since no log on this machine has an unnamed project.
+    hist_red_bare=$'\n  1 failed\n    e2e/sq113-copia-de-itens-persiste.spec.ts:121:7 › title\n  88 passed (5.0m)'
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    hist_seed 100000-aaaaaa "$hist_red_bare"
+    printf '%s\n' "$hist_red_bare" > "$page_dir/e2e.out"
+    hist_bare="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+    assert_eq "gate_QA reads the failed block of a Playwright project with no name" "1" \
+      "$(grep -cE 'sq113-copia-de-itens-persiste\.spec\.ts:121 already failed in 1 of the last 1 e2e gate logs' <<< "$hist_bare")$(grep -q 'e2e gate logs' <<< "$hist_bare" || printf ' — %s' "$hist_bare")"
+    # The log this evaluation wrote is left out by file identity (CodeRabbit 4654284443 on PR #458):
+    # `/<mission>`, which the CLI accepts, keeps `logs//<id>/` in the path the gate holds, find
+    # prints `logs/<id>/`, and the spelling test counted the current failure as an earlier one —
+    # `2 of the last 2` over one earlier log.
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    hist_seed 100000-aaaaaa "$hist_red"
+    printf '%s\n' "$hist_red" > "$page_dir/e2e.out"
+    hist_slash="$( cd "$FIX" && "$SDD" why "/$MISSION" QA 2>&1 )"
+    assert_eq "gate_QA leaves the log it just wrote out of the history when the mission is named with a leading slash" "1|0" \
+      "$(grep -cE 'sq113-copia-de-itens-persiste\.spec\.ts:121 already failed in 1 of the last 1 e2e gate logs' <<< "$hist_slash")|$(grep -c 'of the last 2' <<< "$hist_slash")"
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    rm -rf "$FIX/.sdd/logs/20200101-another-mission" "$page_dir/e2e.out"
+    sed -i 's|^E2E_CMD=.*|E2E_CMD="false"|' .sdd/config.sh
     stop_page_server
   fi
 fi
@@ -2101,6 +2284,11 @@ assert_eq "no interface: deferred still does not block, and the reason still nam
   "$noif_phase named:$( grep -cF '1 deferred (visible, not blocking): BUG-20260104-noif' <<< "$noif_why" ) branch:$( grep -cF 'without a browser interface' <<< "$noif_why" )"
 rm -f "$NOIF_BUG"
 assert_phase "no interface, the registry is clean again" "REVIEW"
+# The QA half of the did-not-run reason (item 5 of L3): here gate_QA reaches the suite, so the
+# reason it gives for a TEST_CMD that cannot start is read now; the REVIEW half is read where
+# gate_REVIEW reaches it, and the assertion is written there.
+norun_qa="$(norun_why '.venv/bin/python -m pytest' QA)"
+assert_phase "QA: TEST_CMD put back after the did-not-run world" "REVIEW"
 
 # skipped short-circuits everything
 cp "$MDIR/30-handoff-qa.md" "$MDIR/30.bak"
@@ -2791,6 +2979,26 @@ rm -f "$MDIR/40-review-r11.md"
 git add -A && git commit -qm "chore: drop the r11 fixture" >/dev/null
 assert_phase "with the Rationale fixture gone the mission is back at DOCS" "DOCS"
 
+# A newest round that declares `status: blocked` arms the marker cmd_run stops on (item 6 of
+# 20261121-l3-gates-do-fim-da-linha): an all-A round that said blocked passed as done. The witness
+# is the same round with `status: done`, which passes; the reason opens with the round's name, the
+# prefix historic_rounds reads. check-autonomy.sh proves the marker stops the line.
+write_r11 "clean" "tests/run-all.sh: suite green"
+sed -i 's/^rodada: 11$/rodada: 11\nstatus: done/' "$MDIR/40-review-r11.md"; commit_r11
+rbk_done="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+sed -i 's/^status: done$/status: blocked/' "$MDIR/40-review-r11.md"; commit_r11
+rbk_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+rbk_why="$( cd "$FIX" && "$SDD" why "$MISSION" REVIEW 2>&1 )"
+rm -f "$MDIR/40-review-r11.md"
+git add -A && git commit -qm "chore: drop the blocked r11" >/dev/null
+if [ "$rbk_done" = DOCS ] && [ "$rbk_phase" = REVIEW ] \
+   && grep -qF '40-review-r11.md: status: blocked' <<< "$rbk_why"; then
+  pass "gate_REVIEW arms the blocked marker on a round that declares status blocked"
+else fail "gate_REVIEW arms the blocked marker on a round that declares status blocked" \
+  "DOCS with status done, REVIEW and '40-review-r11.md: status: blocked' with status blocked" \
+  "$rbk_done / $rbk_phase — $rbk_why"; fi
+assert_phase "with the blocked round gone the mission is back at DOCS" "DOCS"
+
 # The delta round (ADR 0023, mission 20261119-l1b-a-rodada-delta). `sdd review-base` and the REVIEW
 # boot prompt read ONE judgement, review_base_line: from the second round on, the round reviews
 # base=<the reviewed_head: of the round before>..HEAD; when the key is missing, wrong or a merge
@@ -2968,6 +3176,17 @@ assert_phase "gate_REVIEW: reviewed_head absent still passes, as the rounds befo
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 assert_phase "gate_REVIEW: reviewed_head the round read, with only its own files after it, passes" "DOCS"
 
+# The REVIEW half of the did-not-run reason (item 5 of L3): a round at A with a valid reviewed_head:,
+# so gate_REVIEW reaches the suite. The QA half was read where gate_QA reaches it (norun_qa).
+norun_review="$(norun_why "$NORUN_DIR/noexec" REVIEW)"
+if norun_ok "$norun_qa" 127 'No such file or directory' && norun_ok "$norun_review" 126 'Permission denied'; then
+  pass "gate_QA and gate_REVIEW say the same of a TEST_CMD that did not run"
+else
+  fail "gate_QA and gate_REVIEW say the same of a TEST_CMD that did not run" \
+    "TEST_CMD did not run (rc …) in both, no 'TEST_CMD failed', no .log" "QA: $norun_qa ‖ REVIEW: $norun_review"
+fi
+assert_phase "gate_REVIEW: TEST_CMD put back after the did-not-run world" "DOCS"
+
 # A path git quotes is still the path (r3 of 20261119-l1b-a-rodada-delta): under core.quotePath, the
 # default, git diff --name-only prints a non-ASCII name between quotes with octal escapes, the glob
 # of the reviewer's writes: does not match it, and the gate refused a round the hat guard
@@ -3016,6 +3235,58 @@ assert_phase "gate_REVIEW: reviewed_head reads the commit that added the round, 
 rm -f "$MDIR/40-review-r12.md" l1b-outside.txt l1b-doc.txt
 git add -A && git commit -qm "chore: drop the r12 fixture" >/dev/null
 assert_phase "with the r12 fixture gone the mission is back at DOCS" "DOCS"
+
+# Code committed after the round reopens REVIEW (ADR 0024, decision 4; mission
+# 20261121-l3-gates-do-fim-da-linha). The fixture's main is the DEFAULT_BRANCH, where the
+# `--not <base>` of review_later_code_ok empties every range and no world could turn red, so these
+# worlds run on a mission branch of their own, one world per reset of it, and come back to main.
+# The assertion above (reviewed_head reads the commit that ADDED the round) stays on main: it
+# commits code after r12 and passes only because that code is in the base.
+l3_main="$(git rev-parse HEAD)"
+git checkout -q -b missao/l3-later
+l3_start="$(git rev-parse HEAD)"
+l3_world() { # l3_world <reviewed_head value | @head@ | @absent@> — r12 on l3_start
+  git reset -q --hard "$l3_start"
+  if [ "$1" = '@head@' ]; then write_r12 "$(git rev-parse HEAD)"; else write_r12 "$1"; fi
+}
+l3_phase() { ( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 ) || true; }
+l3_why() { ( cd "$FIX" && "$SDD" why "$MISSION" REVIEW 2>&1 ) || true; }
+l3_code() { echo "$1" > l3-code.txt; git add -A && git commit -qm "feat: code after the round" >/dev/null; }
+
+l3_world '@head@'; l3_code one
+l3_sha="$(git rev-parse --short HEAD)"; l3_p="$(l3_phase)"; l3_w="$(l3_why)"
+if [ "$l3_p" = REVIEW ] \
+   && grep -qF "40-review-r12.md: l3-code.txt changed in $l3_sha, committed after the round" <<< "$l3_w" \
+   && ! grep -qF 'changed between' <<< "$l3_w"; then
+  pass "gate_REVIEW reopens the phase for code committed after the round, and names the commit and the path"
+else fail "gate_REVIEW reopens the phase for code committed after the round, and names the commit and the path" \
+  "REVIEW and '40-review-r12.md: l3-code.txt changed in $l3_sha, committed after the round', never 'changed between'" \
+  "$l3_p — $l3_w"; fi
+
+# Four worlds that pass: (1) later commits only in the mission folder and in README.md, which the
+# REVIEW and DOCS hats write; (2) a merge of the base whose code is already in the base; (3) a
+# round with no reviewed_head followed by code; (4) the mission already merged, its HEAD in the base.
+l3_seen=""
+l3_world '@head@'
+printf 'later\n' > "$MDIR/l3-notes.md"; printf 'readme\n' >> README.md
+git add -A && git commit -qm "docs: the mission folder and the README" >/dev/null
+l3_seen+="1:$(l3_phase) "
+l3_world '@head@'
+git checkout -q main; echo base > l3-base.txt; git add -A && git commit -qm "feat: code on the base" >/dev/null
+git checkout -q missao/l3-later; git merge -q --no-ff --no-edit main >/dev/null
+l3_seen+="2:$(l3_phase) "
+git update-ref refs/heads/main "$l3_main"
+l3_world '@absent@'; l3_code three
+l3_seen+="3:$(l3_phase) "
+l3_world '@head@'; l3_code four
+git update-ref refs/heads/main HEAD
+l3_seen+="4:$(l3_phase)"
+git update-ref refs/heads/main "$l3_main"
+assert_eq "gate_REVIEW passes later commits in what the REVIEW and DOCS hats write, a merge of the base, a merged mission and a round with no reviewed_head" \
+  "1:DOCS 2:DOCS 3:DOCS 4:DOCS" "$l3_seen"
+
+git checkout -q main; git branch -q -D missao/l3-later
+assert_eq "fixture: the later-code worlds leave main where they found it" "$l3_main" "$(git rev-parse HEAD)"
 
 # SHA-256 (CodeRabbit on PR #452): a repository made with --object-format=sha256 writes 64-hex
 # commit ids, which rev-parse, merge-base and diff accept, and the shape guards of review_base_line
@@ -3221,6 +3492,47 @@ for k8_i in "${!K8_MW[@]}"; do
 done
 assert_eq "kaizen-log: no Markdown form of K8 in the checklist dispenses the entry without the key" \
   "13 13 -" "$k8_built $k8_docs ${k8_missed:--}"
+# The branch the mission declares, read from another branch (ADR 0024, decision 5). In the
+# warehouse_explorer_web the same mission read `✓` from master and `·` from a later branch with a
+# commit of its own: K8 measured HEAD, not the branch: of 00-missao.md. World A: the declared branch
+# has no entry and a later branch brings one — refused, naming the declared branch; its inverse
+# passes. World B: the declared branch already in the base, then gone, read from a later branch with
+# a commit of its own and no entry — an empty range, so it passes. Each world goes back to k8_start.
+k8_later() { # k8_later <builder> — missao/k8-later on the current commit, one commit of <builder>
+  git checkout -q -B missao/k8-later
+  "$@"
+  git add -A && git commit -qm "chore: a later branch"
+}
+k8_side() { printf 'later\n' > later.txt; }
+k8_entry() { k8_w11; }
+git reset -q --hard "$k8_start"
+k8_later k8_entry
+k8_a_ph="$(cd "$FIX" && "$SDD" phase "$MISSION" 2>&1)"
+k8_a_why="$(cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1)"
+k8_a_named=0
+grep -qF 'the mission branch (missao/k8-entry) adds no KAIZEN_LOG.md entry of its own' <<< "$k8_a_why" && k8_a_named=1
+git checkout -q missao/k8-entry
+k8_world k8_w11
+k8_later k8_side
+k8_a_inv="$(cd "$FIX" && "$SDD" phase "$MISSION" 2>&1)"
+assert_eq "K8 measures the branch the mission declares when HEAD is on another branch, and names it" \
+  "DOCS 1 PR" "$k8_a_ph $k8_a_named $k8_a_inv"
+git checkout -q missao/k8-entry
+git reset -q --hard "$k8_start"
+git checkout -q main
+git merge -q --ff-only missao/k8-entry
+git checkout -q missao/k8-entry
+k8_later k8_side
+k8_b_in="$(cd "$FIX" && "$SDD" phase "$MISSION" 2>&1)"
+git checkout -q main
+git reset -q --hard "$k8_start^"
+git branch -q -D missao/k8-entry
+git checkout -q missao/k8-later
+k8_b_gone="$(cd "$FIX" && "$SDD" phase "$MISSION" 2>&1)"
+assert_eq "K8 reads an empty range when the declared branch is gone or already in the base" \
+  "PR PR" "$k8_b_in $k8_b_gone"
+git checkout -q -b missao/k8-entry "$k8_start"
+git branch -q -D missao/k8-later
 git reset -q --hard "$k8_start"
 git checkout -q main
 git branch -q -D missao/k8-entry
@@ -3671,9 +3983,11 @@ EOF
 # gate_PR asks `gh` whether the PR is real, and no test may touch the network.
 cat > "$FIX/.stub/gh" <<'STUB'
 #!/usr/bin/env bash
-# Answers the one question gate_PR asks: `gh pr view <url> --json url --jq .url`.
+# Answers the first question gate_PR asks: `gh pr view <url> --json url,state,headRefOid` — the url,
+# the state (OPEN) and the head, which is the fixture's HEAD at the time of the call.
 [ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
-printf '%s\n' "${3:-}"
+printf '%s\nOPEN\n' "${3:-}"
+git rev-parse HEAD
 STUB
 chmod +x "$FIX/.stub/gh"
 printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\n---\n# PR\n' > "$MDIR/50-pr.md"
@@ -3693,13 +4007,22 @@ cp "$MDIR/45-docs.md" "$SDD_STATE_FIX/docs-before-pr.md"
 mkdir -p "$FIX/.sdd/logs"
 cat > "$FIX/.stub/gh" <<STUB
 #!/usr/bin/env bash
-# Answers what gate_PR asks: \`--json url --jq .url\` (is the PR real?) and, when 45-docs.md carries
-# ⛔ rows, \`--json state,body --jq '.state, .body'\` (the state line, then the body).
+# Answers what gate_PR asks: \`--json url,state,headRefOid\` (is the PR real, in which state, at which
+# head?) and, when 45-docs.md carries ⛔ rows, \`--json state,body --jq '.state, .body'\` (the state
+# line, then the body). The head is the fixture's HEAD at the time of the call, unless pr-head pins
+# another; the state is OPEN unless pr-state says otherwise.
 [ "\${1:-}" = "pr" ] && [ "\${2:-}" = "view" ] || { echo "unexpected gh call: \$*" >&2; exit 9; }
+# Every call is logged, one line each, so the KIT block can count the reads of the body.
+printf '%s\\n' "\$*" >> "$FIX/.sdd/logs/gh-calls"
 case " \$* " in
+  *" --json url,state,headRefOid "*)
+    printf '%s\\n' "\${3:-}"
+    cat "$FIX/.sdd/logs/pr-state" 2>/dev/null || printf 'OPEN\\n'
+    cat "$FIX/.sdd/logs/pr-head" 2>/dev/null || git -C "$FIX" rev-parse HEAD ;;
   *" --json state,body "*)
     [ -e "$FIX/.sdd/logs/pr-body-fails" ] && exit 4
-    cat "$FIX/.sdd/logs/pr-state" 2>/dev/null || printf 'OPEN\n'
+    # pr-body-state answers this call alone: the PR that merged between the two calls.
+    cat "$FIX/.sdd/logs/pr-body-state" 2>/dev/null || cat "$FIX/.sdd/logs/pr-state" 2>/dev/null || printf 'OPEN\n'
     cat "$FIX/.sdd/logs/pr-body" 2>/dev/null || true ;;
   *) printf '%s\n' "\${3:-}" ;;
 esac
@@ -3726,10 +4049,189 @@ assert_eq "gate_PR refuses a ⛔ document named only outside a ⛔ line of the b
 # and buy a publisher session on it.
 printf 'MERGED\n' > "$FIX/.sdd/logs/pr-state"
 assert_phase "gate_PR does not re-read the body of a merged PR" "DONE"
+# ...and does not even ask for it: the body read below answers MERGED too, so the phase alone cannot
+# tell the first call's skip from the second's; the stub's log can.
+rm -f "$FIX/.sdd/logs/gh-calls"
+( cd "$FIX" && "$SDD" why "$MISSION" PR >/dev/null 2>&1 ) || true
+assert_eq "gate_PR asks gh for no body of a merged PR" "0" \
+  "$(grep -c 'state,body' "$FIX/.sdd/logs/gh-calls" 2>/dev/null || true)"
 rm -f "$FIX/.sdd/logs/pr-state"
+# The PR merged BETWEEN the two calls (CodeRabbit 4654284464 on PR #458): the first answers OPEN, the
+# body read answers MERGED. A finished mission, so the ⛔ the body lacks refuses nothing; the state
+# line is no body text either.
+printf 'MERGED\n' > "$FIX/.sdd/logs/pr-body-state"
+prbm_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+prbm_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+rm -f "$FIX/.sdd/logs/pr-body-state"
+assert_eq "gate_PR skips the blocked-row and kit checks when the body read says the PR merged after the first call" \
+  "DONE|0" "$prbm_phase|$(grep -c 'does not carry' <<< "$prbm_why")"
 cp "$SDD_STATE_FIX/docs-before-pr.md" "$MDIR/45-docs.md"
 rm -f "$FIX/.sdd/logs/pr-body"
 git add -A && git commit -qm "chore: docs without a ⛔ again" >/dev/null
+
+# 1d. HEAD — the PR has to carry what the mission closed (ADR 0024, decisions 1 and 2; items 1 and 2
+#     of 20261121-l3-gates-do-fim-da-linha). gate_PR reads the head of the PR in the same gh call that
+#     confirms it, and compares it with mission_tip; and a verified_head: in 50-pr.md is the sha the
+#     publisher ran step 2 on, which the head has to carry with nothing but the mission folder after it.
+PRH_HEAD="$(git rev-parse HEAD)"
+PRH_OLD="$(git rev-parse HEAD~1)"
+printf '%s\n' "$PRH_OLD" > "$FIX/.sdd/logs/pr-head"
+prh_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+prh_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+rm -f "$FIX/.sdd/logs/pr-head"
+if [ "$prh_phase" = PR ] && grep -qF "is at ${PRH_OLD:0:7}, and the mission is at ${PRH_HEAD:0:7}" <<< "$prh_why" \
+   && grep -qF "git push" <<< "$prh_why"; then
+  pass "gate_PR refuses a pull request whose head is not the head of the mission, and names both"
+else fail "gate_PR refuses a pull request whose head is not the head of the mission, and names both" \
+  "PR, 'is at ${PRH_OLD:0:7}, and the mission is at ${PRH_HEAD:0:7}', 'git push'" "$prh_phase — $prh_why"; fi
+# verified_head: before a commit of code, refused naming the path; after it, with only the mission
+# folder committed since, passed — the differential pair, so neither half passes by the regime.
+cp "$MDIR/50-pr.md" "$SDD_STATE_FIX/50-pr-before-verified.md"
+PRV_BEFORE="$(git rev-parse HEAD)"
+printf 'code committed after the checks\n' > "$FIX/later-code.txt"
+git add -A && git commit -qm "feat: code after the checks of step 2" >/dev/null
+PRV_AFTER="$(git rev-parse HEAD)"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\nverified_head: %s\n---\n# PR\n' "$PRV_BEFORE" > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md verified before the code" >/dev/null
+prv_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+prv_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\nverified_head: %s\n---\n# PR\n' "$PRV_AFTER" > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md verified after the code" >/dev/null
+prv_phase2="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+# The same world named `/<mission>`, which the CLI accepts and keeps literal (CodeRabbit 4654284463
+# on PR #458): the prefix of the mission folder carried `//`, git prints single slashes, and the
+# commit of 50-pr.md read as outside the folder.
+prv_phase_ls="$( cd "$FIX" && "$SDD" phase "/$MISSION" 2>&1 )"
+prv_why_ls="$( cd "$FIX" && "$SDD" why "/$MISSION" PR 2>&1 )"
+assert_eq "gate_PR admits a later commit in the mission folder when the mission is named with a leading slash" \
+  "DONE" "$prv_phase_ls$( [ "$prv_phase_ls" = DONE ] || printf ' — %s' "$prv_why_ls" )"
+# A ref that moves is no verified_head (CodeRabbit 4654284456 on PR #458): `HEAD` resolves to the
+# head itself, the range from the head to the head is empty, and later-code.txt — committed after
+# PRV_BEFORE, the checks' real sha — passed. Refused by name, as review_head_ok refuses a
+# reviewed_head: that is no hex sha.
+cp "$MDIR/50-pr.md" "$SDD_STATE_FIX/50-pr-verified-after.md"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\nverified_head: HEAD\n---\n# PR\n' > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md names a ref as verified_head" >/dev/null
+prv_ref_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+prv_ref_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+assert_eq "gate_PR refuses a verified_head that is a ref and not a sha" "PR|1" \
+  "$prv_ref_phase|$(grep -c "verified_head 'HEAD', which is no commit sha" <<< "$prv_ref_why")"
+# A tracked file MOVED into the mission folder after the checks (CodeRabbit 4654284461 on PR #458):
+# with rename detection the diff listed only the destination, inside the folder, and the path the
+# file left outside it went unread. Same commit as the record, the shape a publisher lap would take.
+PRV_MV="$(git rev-parse HEAD)"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\nverified_head: %s\n---\n# PR\n' "$PRV_MV" > "$MDIR/50-pr.md"
+git mv "$FIX/later-code.txt" "$MDIR/later-code.txt"
+git add -A && git commit -qm "chore: later-code.txt moved into the mission folder after the checks" >/dev/null
+prv_mv_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+prv_mv_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+git mv "$MDIR/later-code.txt" "$FIX/later-code.txt"
+cp "$SDD_STATE_FIX/50-pr-verified-after.md" "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: later-code.txt back at the root, 50-pr.md verified after the code" >/dev/null
+assert_eq "gate_PR reads the path a file left when it moved into the mission folder after verified_head" "PR|1" \
+  "$prv_mv_phase|$(grep -c "50-pr.md: later-code.txt changed between verified_head ${PRV_MV:0:7} and the head" <<< "$prv_mv_why")"
+# The same world with HANDOFF_DIR written with a trailing slash (finding #2 of r1): the prefix of the
+# mission folder carried `//`, the commit of 50-pr.md read as outside it, and the publisher rewrote
+# verified_head on every lap.
+sed -i 's|^HANDOFF_DIR="docs/handoffs"$|HANDOFF_DIR="docs/handoffs/"|' "$FIX/.sdd/config.sh"
+prv_slash_cfg="$(grep -c '^HANDOFF_DIR="docs/handoffs/"$' "$FIX/.sdd/config.sh" || true)"
+prv_phase3="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+prv_why3="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+sed -i 's|^HANDOFF_DIR="docs/handoffs/"$|HANDOFF_DIR="docs/handoffs"|' "$FIX/.sdd/config.sh"
+cp "$SDD_STATE_FIX/50-pr-before-verified.md" "$MDIR/50-pr.md"
+rm -f "$FIX/later-code.txt"
+git add -A && git commit -qm "chore: 50-pr.md without verified_head again" >/dev/null
+if [ "$prv_phase" = PR ] && grep -qF "later-code.txt changed between verified_head ${PRV_BEFORE:0:7} and the head" <<< "$prv_why" \
+   && grep -qF '50-pr.md' <<< "$prv_why" && [ "$prv_phase2" = DONE ]; then
+  pass "gate_PR refuses a verified_head that does not cover the head, and passes when only the mission folder changed after it"
+else fail "gate_PR refuses a verified_head that does not cover the head, and passes when only the mission folder changed after it" \
+  "PR naming later-code.txt and ${PRV_BEFORE:0:7}, then DONE" "$prv_phase — $prv_why — then $prv_phase2"; fi
+assert_eq "gate_PR admits a later commit in the mission folder when HANDOFF_DIR ends in a slash" \
+  "1|DONE" "$prv_slash_cfg|$prv_phase3$( [ "$prv_phase3" = DONE ] || printf ' — %s' "$prv_why3" )"
+# No verified_head passes (the records older than the key); a MERGED PR is not compared at all.
+prn_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+printf 'MERGED\n' > "$FIX/.sdd/logs/pr-state"
+printf '%s\n' "$PRH_OLD" > "$FIX/.sdd/logs/pr-head"
+prm_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+rm -f "$FIX/.sdd/logs/pr-state" "$FIX/.sdd/logs/pr-head"
+assert_eq "gate_PR passes a 50-pr.md with no verified_head, and does not read the head of a merged pull request" \
+  "DONE|DONE" "$prn_phase|$prm_phase"
+# A head gh answered with no readable state and sha is its own refusal: "is at" would be a sentence
+# about a head nobody read.
+printf 'garbage\n' > "$FIX/.sdd/logs/pr-state"
+printf 'not-a-sha\n' > "$FIX/.sdd/logs/pr-head"
+pru_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+pru_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+rm -f "$FIX/.sdd/logs/pr-state" "$FIX/.sdd/logs/pr-head"
+assert_eq "gate_PR says it could not read the head, never that the head differs" "PR|1|0" \
+  "$pru_phase|$(grep -c 'could not read the head of PR' <<< "$pru_why")|$(grep -c 'is at' <<< "$pru_why")"
+
+# 1e. KIT — every `- kit:` line of the handoffs travels in the PR body (item 8 of
+#     20261121-l3-gates-do-fim-da-linha): a finding about the kit born in a target repo reaches the
+#     human there, or is lost. Two real lines in 20-handoff-exec.md, one more inside a fence and one
+#     inside a quote, which do not count: if they did, the gate would ask for 4.
+cp "$MDIR/20-handoff-exec.md" "$SDD_STATE_FIX/exec-before-kit.md"
+printf '\n## Achados fora de escopo\n\n- kit: the first finding about the kit\n  - kit: the second one, nested\n\n```md\n- kit: an example inside a fence\n```\n\n> - kit: an example inside a quote\n' >> "$MDIR/20-handoff-exec.md"
+git add -A && git commit -qm "chore: the handoff carries two kit lines" >/dev/null
+printf '## Out of scope\n\n- kit: the first finding about the kit\n' > "$FIX/.sdd/logs/pr-body"
+pk1_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+pk1_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+printf '## Out of scope\n\n- kit: the first finding about the kit\n- [ ] kit: the second one, nested\n' > "$FIX/.sdd/logs/pr-body"
+pk2_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+if [ "$pk1_phase" = PR ] && grep -qF 'carries 1 of the 2 kit: line(s) of the handoffs' <<< "$pk1_why" \
+   && grep -qF 'gh api -X PATCH' <<< "$pk1_why" && [ "$pk2_phase" = DONE ]; then
+  pass "gate_PR refuses a body with fewer kit lines than the handoffs of the mission, and counts none in a quote or a fence"
+else fail "gate_PR refuses a body with fewer kit lines than the handoffs of the mission, and counts none in a quote or a fence" \
+  "PR, 'carries 1 of the 2 kit: line(s) of the handoffs', then DONE" "$pk1_phase — $pk1_why — then $pk2_phase"; fi
+# The body is counted by the same fence rule (CodeRabbit 4654284466 on PR #458): one real line and a
+# `- kit:` example inside a code block of the body pay for one finding, not two.
+printf '## Out of scope\n\n- kit: the first finding about the kit\n\n```md\n- kit: an example inside a fence\n```\n' > "$FIX/.sdd/logs/pr-body"
+pkf_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+pkf_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+assert_eq "gate_PR counts no kit line inside a fence of the PR body" "PR|1" \
+  "$pkf_phase|$(grep -c 'carries 1 of the 2 kit: line(s) of the handoffs' <<< "$pkf_why")"
+# ONE read of the body for the ⛔ rows and the kit lines together, and none without either: the
+# differential pair, counted on the gh stub's log.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: a ⛔ beside the kit lines" >/dev/null
+printf -- '- [ ] ⛔ `.claude/rules/x.md` — apply\n- kit: the first finding about the kit\n- kit: the second one, nested\n' > "$FIX/.sdd/logs/pr-body"
+rm -f "$FIX/.sdd/logs/gh-calls"
+( cd "$FIX" && "$SDD" why "$MISSION" PR >/dev/null 2>&1 ) || true
+pkb_both="$(grep -c 'state,body' "$FIX/.sdd/logs/gh-calls" 2>/dev/null || true)"
+cp "$SDD_STATE_FIX/docs-before-pr.md" "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: the kit lines alone" >/dev/null
+rm -f "$FIX/.sdd/logs/gh-calls"
+( cd "$FIX" && "$SDD" why "$MISSION" PR >/dev/null 2>&1 ) || true
+pkb_kit="$(grep -c 'state,body' "$FIX/.sdd/logs/gh-calls" 2>/dev/null || true)"
+cp "$SDD_STATE_FIX/exec-before-kit.md" "$MDIR/20-handoff-exec.md"
+rm -f "$FIX/.sdd/logs/pr-body"
+git add -A && git commit -qm "chore: no ⛔ and no kit lines again" >/dev/null
+rm -f "$FIX/.sdd/logs/gh-calls"
+( cd "$FIX" && "$SDD" why "$MISSION" PR >/dev/null 2>&1 ) || true
+pkn_none="$(grep -c 'state,body' "$FIX/.sdd/logs/gh-calls" 2>/dev/null || true)"
+pkn_view="$(grep -c 'url,state,headRefOid' "$FIX/.sdd/logs/gh-calls" 2>/dev/null || true)"
+assert_eq "gate_PR reads the body once for the blocked rows and the kit lines, and not at all without either" \
+  "1|1|0|1" "${pkb_both:-0}|${pkb_kit:-0}|${pkn_none:-0}|${pkn_view:-0}"
+
+# 1c. BLOCKED — a 50-pr.md that declares `status: blocked` (the publisher stopped on a conflict with
+#     the base) arms the marker cmd_run stops on, BEFORE the pr_url is read: a blocked 50-pr.md has
+#     no PR, and refusing it for the missing pr_url bought a second publisher session (item 6 of
+#     20261121-l3-gates-do-fim-da-linha). The reason names the way out — a merge of the base, never
+#     a rebase (item 7). check-autonomy.sh proves the marker stops the line; this proves the reason.
+cp "$MDIR/50-pr.md" "$SDD_STATE_FIX/50-pr-before-blocked.md"
+printf -- '---\nfase: PR\nstatus: blocked\n---\n# PR\n\nconflict with the base\n' > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md declares blocked" >/dev/null
+pb_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+pb_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+cp "$SDD_STATE_FIX/50-pr-before-blocked.md" "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md is done again" >/dev/null
+if [ "$pb_phase" = PR ] && grep -qF '50-pr.md has status: blocked' <<< "$pb_why" \
+   && grep -qF "git merge origin/main" <<< "$pb_why" && grep -qF 'never rebase' <<< "$pb_why" \
+   && ! grep -qF 'pr_url' <<< "$pb_why"; then
+  pass "gate_PR arms the blocked marker on a 50-pr.md that declares status blocked, and names the merge of the base"
+else fail "gate_PR arms the blocked marker on a 50-pr.md that declares status blocked, and names the merge of the base" \
+  "PR, '50-pr.md has status: blocked', 'git merge origin/main', 'never rebase', no pr_url" "$pb_phase — $pb_why"; fi
+assert_phase "and with status done again the PR closes as before" "DONE"
 
 # 2. SCOPE — the catalogue is here and nothing on disk says it ever ran green. Demanding the
 #    ABSENCE of the earlier requirements' markers is what proves the gate reached the stamp
