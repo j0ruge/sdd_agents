@@ -18,6 +18,14 @@ FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-XXXXXX")"
 MISSION="20260101-fixture"
 MDIR=""
 fails=0
+# load_config keeps an exported EFFORT_* when the file sets none, and the close regime below reads
+# `unset:-` and `effort=settings` off a fixture with no EFFORT_* in its config: under
+# `EFFORT_TICKET=xhigh` this sensor came out with 2 FAIL (r3 of 20261120-l2-o-sdd-plan-e-o-planner),
+# the third reader of the class d48f7c9 closed in check-dry-run.sh and check-autonomy.sh. Same
+# spelling: cleared by prefix, so a phase key the runner adds later is cleared with no list to edit;
+# armed first, so dropping the clear turns the close pair red on every machine.
+export EFFORT_TICKET=xhigh
+while IFS= read -r effort_var; do unset "$effort_var"; done < <(compgen -v EFFORT_)
 
 # The Jidoka assertion below runs a REAL (non-dry) `sdd run`, which writes an autonomy ledger row
 # on the blocked-increment path. run-all.sh already exports SDD_STATE_DIR for every test it runs,
@@ -2860,11 +2868,15 @@ else fail "delta base: a round git does not carry — modified, untracked or ign
 # no longer matches the file (an older mtime, same bytes); the witness is that a plain git status
 # on that same state, run AFTER the query, does rewrite the index — a probe of a state git would not
 # refresh is mute. The index is read by inode, mtime and size: git writes it by lock and rename.
+# Both runs drop GIT_OPTIONAL_LOCKS (r4 of l1b): exported by the caller, it kept the plain git status
+# from writing, so the witness went red over a correct kit, and it kept the query from writing too,
+# so a kit that dropped the variable passed. tests/isolate-git.sh does not clear it: it is not in
+# `git rev-parse --local-env-vars`.
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 touch -d '1 minute ago' "$MDIR/40-review-r12.md"
-rb_ix0="$(LC_ALL=C stat -c '%i %.9Y %s' .git/index)"; rb_out="$(review_base_of)"
+rb_ix0="$(LC_ALL=C stat -c '%i %.9Y %s' .git/index)"; rb_out="$( unset GIT_OPTIONAL_LOCKS; review_base_of )"
 rb_ix1="$(LC_ALL=C stat -c '%i %.9Y %s' .git/index)"
-git status --porcelain --untracked-files=all --ignored -- "$MDIR/40-review-r12.md" >/dev/null
+env -u GIT_OPTIONAL_LOCKS git status --porcelain --untracked-files=all --ignored -- "$MDIR/40-review-r12.md" >/dev/null
 rb_ix2="$(LC_ALL=C stat -c '%i %.9Y %s' .git/index)"
 if [ "$rb_ix0" = "$rb_ix1" ] && [ "$rb_ix1" != "$rb_ix2" ] && [[ "$rb_out" == "base=$rb_head "* ]]; then
   pass "delta base: the query leaves the index as it found it, where a plain git status rewrites it"

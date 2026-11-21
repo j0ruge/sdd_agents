@@ -45,14 +45,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C8) — descoberto na faxina das
   issues do `sales_quote` (2026-10-09)
 
-- [ ] **A mitigação de risco que cita um sensor não prova que ele cobre o alvo** — `templates/plano.md:43`
-  (`Mitigação`) — o plano da LH-5 do `lighthouse_project` mitigou "a troca de assinatura do port espalha
-  pelas fixtures de teste" com "o compilador lista"; o `tsc --noEmit` do backend exclui `__tests__` e saiu
-  rc 0 com testes ainda na assinatura velha. Executor que confia no verde deixa chamador quebrado, que o
-  Vitest (sem checagem de tipo) só pega se tropeçar em runtime. Direção: o planner roda no PLAN, contra o
-  que ela protege, o sensor que uma mitigação nomeia, como o `--red` já faz com os Checks. RESOLVED by 8a21366
-  — descoberto por `retrofit-watch` na missão `20261013-amep-alignment-review` (2026-10-13)
-
 - [ ] **Nada avisa que o clone do kit está velho ou fora da `main`** — `bin/sdd:4167` (`autonomy_kit_stamp`) —
   o runner grava o SHA e a sujeira do `SDD_HOME` no journal, mas nada os compara com o upstream, e as seis
   linhas do `sdd health --release` também não. No `ui24_agent`, o `~/repos/sdd_agents` estava numa branch
@@ -300,44 +292,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
   RECURRED 1: sdd_agents/20261117-o-worker-orquestrador (2026-11-18)
 
-- [ ] **O `/sdd-plan` não diz o que fazer quando a sessão do relay cai no meio do grill** — `commands/sdd-plan.md:166`
-  (`Relaying the grill`) — na 3.2c do `dotp-remake` a sessão caiu com uma pergunta pendente, e a chamada voltou "the
-  session ended before this call's result was recorded, so its outcome is unknown". Na sessão nova, o `SendMessage` ao
-  id do planner antigo voltou `Resuming agent`, e os artefatos saíram com as 10 decisões do grill intactas. Sem o passo
-  escrito, o relay abre um planner novo e perde o grill, ou dá por respondida a pergunta de resultado desconhecido.
-  Direção: o passo manda perguntar de novo o que estava pendente e retomar o mesmo agente pelo id. RESOLVED by 9bea822
-  — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
-- [ ] **Commit do relay no meio do grill muda o HEAD que o planner mediu, e só o worktree é vigiado** —
-  `commands/sdd-plan.md:138` (`rev-parse HEAD`) — na 3.2c do `dotp-remake` (sem worktree: o `sdd` fica fora do alvo) o
-  dono pediu no grill uma linha no roadmap, e o relay commitou `b674421` na branch da missão depois de o planner medir
-  a suíte em `d6d6cf8`. O relay mandou o HEAD novo junto da resposta seguinte, e o plano registrou a base certa. Sem
-  isso, o plano cita uma base que não é o HEAD da aprovação. Direção: gravar `status` e `rev-parse` a cada hand-back
-  vale também sem worktree, e o commit do relay vai ao planner com a resposta seguinte. RESOLVED by 256e9d4
-  — descoberto pelo relay do `/sdd-plan` na missão `20261019-plano-3-2-c-perguntas-na-resolucao` (2026-10-20)
-- [ ] **O aceite do `/sdd-plan` mede de novo os Checks, nunca os fatos do contexto verificado** —
-  `commands/sdd-plan.md:256` (`Measure again`) — o passo roda `--check` e `--red`, e a contagem que o plano cita passa
-  sem medida: "22 `MutableEvents.Add` em 12 arquivos" (`01-plano.md`, `00-missao.md` e ADR 0007 da 3.3a do
-  `dotp-remake`) eram 10 arquivos, e o relay só pegou porque conferiu por amostra com `grep -rc`. Na 3.2c, dois fatos
-  sem medida (a Lobotomy, a 701.8) chegaram ao EXEC. Direção: o aceite reconfere por amostra as contagens e âncoras do
-  contexto, ou o planner grava ao lado de cada contagem o comando que a mediu. RESOLVED by 96d1bc5
-  — descoberto pelo relay do `/sdd-plan` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
-- [ ] **Sob `aprovacao: auto` o `/sdd-plan` deixa a missão sem commit na base e cala o passo seguinte** —
-  `commands/sdd-plan.md:352` (`Anywhere else`) — no `magic_tutor` o `sdd why` deu `plan approved (auto)` com a
-  pasta da missão em `??` na `main`: sem `sdd approve` ninguém corta a branch nem commita, e o passo 4 só diz
-  "commit nothing". O planner supôs que o `sdd run` levaria a pasta sem rastreio; o relay leu o
-  `ensure_mission_branch`, cortou a branch e commitou à mão, e o `sdd preflight` deu "working tree clean". Direção:
-  um ramo `auto` no passo 4 (cortar o `branch:` e commitar a pasta antes do `sdd run`), ou o `sdd approve` aceitar
-  `auto` e fazer só isso. RESOLVED by 96d1bc5
-  — descoberto pelo relay do `/sdd-plan` na missão `20261020-lote-de-consertos` do `magic_tutor` (2026-10-20)
-- [ ] **O planner marca o `- answer:` de pergunta que o humano não viu, e sob `auto` o gate já lê aprovado** —
-  `agents/sdd-planner.md:53` (`Mark each answer`) — no `magic_tutor`, a decisão 7 ("confirmadas em bloco") saiu
-  `- answer: (recommended)` com `aprovacao: auto` antes de a Q7 chegar ao humano, e o `sdd status` leu
-  `plan approved (auto)`; o relay pegou lendo o arquivo. O `gate_PLAN` não lê as respostas (ADR 0018), e sob `auto`
-  o passo 2 de "When the artifacts exist" pula o leitor D22. Direção: o relay roda o D22 a cada devolução e para
-  quando o `M` passa das respostas que entregou;
-  o planner escreve `- answer:` e `auto` só depois da resposta. RESOLVED by 9bea822
-  — descoberto pelo relay do `/sdd-plan` na missão `20261024-narracao-e-mesa` do `magic_tutor` (2026-10-24)
-
 - [ ] **Num repo sem interface, a QA para em `BLOCKED` ao seguir a própria instrução de escrever o teste do achado** —
   `agents/sdd-qa.md:11` (`writes:`) — o § 3 manda o achado de lógica virar teste da suíte do `TEST_CMD` (linha 107),
   e o `writes:` não cobre a suíte. No `magic_tutor`, a `QA:close` da `20261024-mesa-e-escolhas` (1522 s, US$ 7,96)
@@ -368,14 +322,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   com `--phase REVIEW`: 2 das 6 intervenções da missão. É o espelho do D21, em que só `F<n>` reabre a QA. Direção: a
   rodada grava o commit revisado, e código commitado depois dele reabre a REVIEW ou é nomeado no motivo do gate.
   — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
-- [ ] **O `/sdd-plan` só manda para worktree no checkout do kit, não com outra missão em voo no alvo** —
-  `commands/sdd-plan.md:53` (`KIT-TOUCHED`) — no `lighthouse_project` a M2 (`sdd run`, LH-8) rodava no checkout
-  principal quando o humano pediu o plano da peça C. Pelo passo 2 o planner escreveria ali, e o `hat_guard_check`
-  (`bin/sdd:4616`) acusaria o `00-missao.md` alheio na fase em curso (`HAT-CROSSED`); e a regra do relay de parar
-  quando o `HEAD` do checkout muda dispara à toa, porque a corrida commita lá. O relay abriu um worktree e vigiou só
-  o que não era da M2: o `pipeline.log` dela fechou sem `HAT-CROSSED` nem `FOREIGN-COMMIT`. Direção: o passo 2
-  vale com `sdd run` vivo no alvo, e a checagem do relay nomeia o que a corrida pode mudar. RESOLVED by 256e9d4
-  — descoberto pelo relay do `/sdd-plan` na missão `20261020-amep-anexo-na-demanda` (2026-10-20)
 - [ ] **Numa worktree sem o `.venv`, o gate do EXEC lê o `TEST_CMD` que não rodou como suíte vermelha** —
   `bin/sdd:1526` (`run_check_cmd`) — o `.venv` é ignorado pelo git, então a worktree nasce sem ele, e o
   `.venv/bin/python` relativo do `TEST_CMD` não existe. No `magic_tutor` (missão `20261021-dica-mais-rapida`,
@@ -411,24 +357,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   contrato passa a indicar `git merge origin/<base>`, e o `BLOCKED` do PR diz o mesmo sem depender da sessão.
   — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
 
-- [ ] **Com o passo 2 pulado, o `/sdd-plan` não olha o branch antes de o planner ler o repo** —
-  `commands/sdd-plan.md:79` (`skip this step`)
-  — com o kit fora do alvo, o branch atual só aparece na pergunta de aprovação, e o `sdd approve` corta dele a
-  branch da missão. No `ui24_agent` o checkout estava em `retrofit-ui24-operator-mcp-vivo`, com a PR
-  j0ruge/ui24-agent#83 aberta: o planner leria um checkout que não é a base, e a missão nasceria com commits de outra
-  PR. Direção: no passo 3, comparar `git branch --show-current` com o `DEFAULT_BRANCH` e, se divergir, perguntar a base
-  ao humano antes de delegar. RESOLVED by 256e9d4
-  — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
-
-- [ ] **O relay não prevê que o job em background do planner repete a pergunta já feita** —
-  `commands/sdd-plan.md:191` (`Nothing else resumes the planner`)
-  — a regra cobre a mensagem do relay que não responde nada, não o fim de um job que o próprio planner lançou. No
-  grill do `ui24_agent` a suíte em background terminou depois da hand-back, e o planner devolveu a pergunta 1 de
-  novo, com a resposta do humano já com o relay. Sem dano, porque a resposta nomeou a opção pelo texto. Direção:
-  o relay responde uma vez e cita a primeira pergunta;
-  o planner não fecha turno de job repetindo pergunta aberta. RESOLVED by 9bea822
-  — descoberto por `retrofit-watch` no `ui24_agent`, missão `20261024-fase8-preamp-fisico` (2026-10-24)
-
 - [ ] **A linha `kit:` do handoff não tem quem a transporte** — `agents/sdd-publisher.md:69` (`TODO_FILE`) — o
   `templates/handoff.md:63-65` manda o achado do kit numa missão de alvo morar no handoff, marcado `kit:`, levado por
   "um humano ou a triagem do `sdd kaizen`"; mas o publisher lê todo handoff (`:25`) e o contrato dele só chama de
@@ -445,15 +373,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   manda levar antes os achados do kit ao `TODO.md` do kit, ou o runner os colhe antes do `git rm`.
   — descoberto pela retro do `sdd` no `20261103-perfil-por-tipo` do `magic_tutor` (2026-11-03)
 
-- [ ] **O aceite do `/sdd-plan` só olha três caminhos no `git status`** — `commands/sdd-plan.md:329`
-  (`HAT_WRITES_BASE`) — o passo 4 lista a pasta da missão, o `TODO_FILE` e a catraca, e não diz o que fazer com o
-  resto. Na 3.5e do `dotp-remake`, o planner escreveu o levantamento do `.exe` em `docs/knowledge/`, fora do
-  `writes:` dele; o `sdd approve` não o commitou, e o plano o dá por existente. Só o `git status` inteiro o mostrou,
-  e o `sdd preflight` recusaria depois, com `working tree dirty` e sem dizer por quê. Direção: o passo 4 roda o
-  `git status --porcelain` inteiro e manda commitar na branch da missão
-  o arquivo de que o plano depende. RESOLVED by 96d1bc5
-  — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-5-e-custos-terrenos-e-exilio-ligado` (2026-11-07)
-
 - [ ] **A citação "ADR 0018" do kit colide com o ADR 0018 do alvo** — `templates/missao.md:43` (`ADR 0018 §3`) — o
   template e os contratos citam o ADR do kit só pelo número: 12 citações em `templates/missao.md`,
   `agents/sdd-planner.md`, `sdd-docs.md`, `sdd-publisher.md` e `sdd-kaizen.md`. A frase do PLAN-AUTO vai para o
@@ -461,15 +380,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   para o ADR errado, e o planner a reescreveu à mão ("ADR 0018 §3 do kit `sdd`"). Os dois `templates/todo*.md:26` já
   nomeiam o kit, com link. Direção: as outras 12 seguem o molde do `todo.md:26`.
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-07)
-
-- [ ] **O `/sdd-plan` delega ao planner sem olhar a árvore do alvo nem as missões que já existem** —
-  `commands/sdd-plan.md:15` (`show-toplevel`) — o passo 2 só protege o checkout do kit (`KIT-TOUCHED`), e essa guarda
-  só vale dentro de um `sdd run`. Ao abrir a 3.6d do `dotp-remake` por um handoff velho, a árvore tinha 6 `M` e 6 `??`
-  na `plano-3-6-e`, que uma sessão do Codex executava à mão, e a pasta da 3.6d já existia, mergeada em
-  j0ruge/dotp-remake#28. Só o `git status` e o `git log` do relay seguraram o planner. Direção: o "Before anything
-  else" roda o `git status --porcelain`, lista o `HANDOFF_DIR`
-  e para com árvore suja ou tópico já em pasta. RESOLVED by 256e9d4
-  — descoberto por `sdd-plan` (relay) depois da missão `20261111-plano-3-6-d-custos-e-ciclagem` (2026-11-11)
 
 - [ ] **O `PR #N aberto` que a fase PR escreve no roadmap e no `KAIZEN_LOG.md` envelhece no merge** —
   `bin/sdd:12732` (`close_return_home`) — o head do PR grava o estado dele em doc durável, e nada o lista depois do
@@ -485,7 +395,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `docs/pipeline.md:51` promete que um monitor que o consulte não derruba a run: só vale para a trava do checkout.
   Num repo de rascunho, com um `git status` em laço ao lado, 1505 de 5216 `git add` falharam com `File exists` no
   `index.lock`; com `GIT_OPTIONAL_LOCKS=0`, 0 de 4685. O `kit_guard_tree` (`bin/sdd:4285`) já usa a variável.
-  Direção: a mesma variável na leitura do `session_leftovers`.
+  Direção: a mesma variável na leitura do `session_leftovers` e no `git status` do `pr-ready` (`bin/sdd-worker:1349`).
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
   RECURRED 1: sdd_agents/20261119-l1b-a-rodada-delta (2026-11-20)
 
@@ -692,15 +602,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela retro do `codereview` na r3 da `20261028-whf-162-jdb-na-descricao` (2026-10-30)
   RECURRED 1: sdd_agents/20261117-o-worker-orquestrador (2026-11-18)
 
-- [ ] **O plano que executa fora do `sdd run` promete o gate do EXEC sem o `20-handoff-exec.md`** —
-  `bin/sdd:1541` (`20-handoff-exec.md`) — a decisão 3 da `20261106-rapido-sem-arestas` do `magic_tutor` dizia: "com
-  todos os incrementos `done` e os commits no histórico, o `gate_EXEC` passa e o `sdd run` começa na QA". Com os
-  incrementos feitos pelo superpowers, o `sdd why` deu "every increment done and the suite green, but
-  20-handoff-exec.md is missing", e o relay escreveu o handoff à mão (`templates/handoff.md`). O `docs/plan-only.md`
-  não cobre a volta ao `sdd run`, e o `sdd-executor` nem entra nesse fluxo. Direção: o `plan-only.md` lista o que o
-  gate lê, e o planner põe o handoff no fim do último incremento. RESOLVED by 8a21366
-  — descoberto pelo relay da missão `20261106-rapido-sem-arestas` do `magic_tutor` (2026-11-06)
-
 - [ ] **O `gh pr edit` que o publisher e o `gate_PR` mandam usar não edita o corpo no `gh` 2.45** —
   `agents/sdd-publisher.md:83` (`gh pr edit`) — no PR #391 deste kit, `gh pr edit 391 --body-file <arquivo>` saiu
   rc 1 com `GraphQL: Projects (classic) is being deprecated … (repository.pullRequest.projectCards)`, e o corpo
@@ -725,24 +626,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: com o `--git-dir` diferente do `--git-common-dir`, esta mensagem e a do `--dry-run` (`:5520`)
   nomeiam o `sdd link-agents`.
   — descoberto pela sessão interativa que lançou a run da 3.6f do `dotp-remake` (2026-11-14)
-
-- [ ] **O `/sdd-plan` não diz o que fazer com respostas do grill delegadas por escrito** —
-  `commands/sdd-plan.md:315` (`An approval given before the plan`) — a regra só trata da aprovação antes do plano.
-  No `dotp-remake`, o handoff da 7b trazia a ordem escrita do dono ("o grill é respondido com a recomendada"), menos
-  o que mexe no visual dele ou no contrato do tema; o relay levou as 5 perguntas ao dono, porque todas tocavam isso.
-  Sem regra, o relay decide sozinho se responde pelo humano, e "Relaying the grill" manda nunca responder. Direção:
-  um parágrafo irmão do da aprovação antecipada:
-  ordem do humano, da sessão ou do handoff, e as exceções vão a ele. RESOLVED by 9bea822
-  — descoberto pelo relay do `/sdd-plan` na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
-
-- [ ] **O `--red` do aceite pode rodar ao lado da run de outra missão na mesma máquina, sem aviso** —
-  `tests/check-checkpoint.sh:1634` (`red_one`) — na esteira do `dotp-remake` (planejar a N+1 durante a run da N), a
-  run da 7a com o planner da 7b ao lado desceu a 1137 MB livres de 7,7 GB (6 de 802 amostras de 30 s abaixo de
-  2 GB); um `--red` com build e Godot por cima disputaria a memória e a janela do Godot (a run da 3.5c já morreu de
-  OOM). E o `--red` abre as janelas que os Checks abrem, sem listá-las antes nem deixar pular. Direção: o "Measure
-  again" avisa quando há `sdd run` em voo na máquina e adia o `--red`;
-  o `--red` ganha `--list` e `--only <ids>`. RESOLVED by 972a482
-  — descoberto pelo relay do `/sdd-plan` na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
 
 - [ ] **O `sdd adr new` dá a uma branch o número que outra branch sem merge já usa** —
   `bin/sdd:8723` (`adr_next_id`) — o MAX+1 só lê o `docs/adr/` do checkout. No `dotp-remake`, a 6a (ADR 0026) e a
@@ -775,7 +658,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: o ato `plan` diz a rota (a linha e o `lots:` no mesmo commit, assinados antes de chegar à `main`).
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-19)
 
-- [ ] **O ato `review` do worker mergeia a base antes da rodada, e o `review-base` responde `full` toda vez** —
+- [ ] **O ato `review` do worker mergeia a base antes da rodada, e o `review-base` dá `full` quando a `main` andou** —
   `commands/sdd-worker.md:196` (`bring the base in`) — o ato manda `git merge origin/<base>` e só depois
   pergunta ao `sdd review-base`, que lê um merge depois da última rodada como rodada inteira; então a rodada
   do worker, a mais cara, só é delta quando a `main` não andou. Medido na r3 do #452: `full — merge 59be5eb
@@ -831,6 +714,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   roda o `sdd preflight` no worktree da missão antes de lançar, e para no `_fail`.
   — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
+- [ ] **O worker lê o `budget-exhausted` como o teto da missão, e o runner grava o mesmo `kind` no teto da fase** —
+  `commands/sdd-worker.md:178` (`the mission ceiling`) — o `bin/sdd` grava `budget-exhausted` para os dois tetos e
+  deixa o `gate_why` dizer qual (`bin/sdd:6077`). O ato `run` e a parada 4 do comando leem o `kind` sozinho como
+  `mission-ceiling`. No L2, às 23:56, a fase PR esgotou as sessões dela (2 publishers sem `pr_url:`) com US$ 37 de
+  60 gastos, e o ledger diz `budget-exhausted`. Um worker que lesse o ledger pararia a campanha pelo teto errado.
+  Direção: o ato `run` separa os dois pelo `gate_why`, ou o runner ganha um `kind` próprio para o teto da fase.
+  — descoberto por `sdd-worker` no pós-merge da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-21)
+
 - [ ] **O `failure-modes.md` só conhece o `blocked` da suíte vermelha, e não o da parada que o plano manda** —
   `docs/failure-modes.md:131` (`found the suite red`) — a seção diz que a linha para "sem abrir sessão", porque a
   suíte de um incremento anterior ficou vermelha. Na 7b1 do `dotp-remake` o executor parou o I3 depois de uma
@@ -849,7 +740,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261117-plano-7-b1-a-mesa-cheia` do `dotp-remake` (2026-11-18)
 
 - [ ] **O leitor D22 do aceite tira da conta, calado, o `- answer:` que leva nota depois do parêntese** —
-  `commands/sdd-plan.md:286` (`N (recommended) of M`) — o `awk` casa só a linha inteira (`\)$`), e a linha
+  `commands/sdd-plan.md:296` (`N (recommended) of M`) — o `awk` casa só a linha inteira (`\)$`), e a linha
   `- answer: (recommended) — nota` some do `N` e do `M`. Na 7b2 do `dotp-remake`, 8 das 10 respostas tinham nota
   na mesma linha e a conta deu `2 (recommended) of 2`; com as notas numa linha `Revisão:` embaixo, `10 of 10`. A
   regra do planner (`agents/sdd-planner.md:59`) proíbe nota dentro do parêntese, não depois. Direção: o leitor
@@ -890,28 +781,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   dá o `setsid -f` e diz o que fazer com o incremento pela metade (o boot o nomeia, ou `git stash -u`).
   — descoberto pelo relay da missão `20261118-plano-7-c-o-hud-e-a-pilha` do `dotp-remake` (2026-11-20)
 
-- [ ] **Dois sensores leem o `EFFORT_*` do ambiente de quem chama, e a suíte fica vermelha sob `EFFORT_EXEC=xhigh`** —
-  `tests/check-dry-run.sh:511` (`effort_of`) — o fixture apaga as chaves `EFFORT_*` do config, mas a variável que o
-  lançamento exportou chega à projeção (`expected: - - - - -`, `got: xhigh - - - -`), e o par de
-  `tests/check-autonomy.sh:1515` lê `effort=xhigh` onde espera `effort=settings`. A corrida do L2 foi lançada com
-  `EFFORT_EXEC=xhigh sdd run`: a suíte sai com 2 vermelhos, e o `gate_EXEC`, que roda o `TEST_CMD` por `eval` no
-  mesmo ambiente, não fica verde enquanto ele durar. Direção: os dois sensores tiram do ambiente as chaves que o
-  fixture declara ausentes, numa definição só, no molde do `tests/isolate-git.sh`. RESOLVED by d48f7c9
-  — descoberto por `sdd-executor` no I1 da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-20)
-
 - [ ] **Sem pasta de missão, o passo 1 do `/sdd-plan` lê corrida de qualquer repo como dona do checkout** —
   `commands/sdd-plan.md:31` (`pgrep -af '[b]in/sdd run'`) — o `pgrep` casa todo `sdd run` da máquina, e a saída
   "outro comando segura o checkout" fala de "a live `sdd run` of this repository": um alvo alheio rodando manda o
   relay cortar um worktree que não precisava. Falha para o lado seguro, mas custa uma pergunta e um worktree.
   Direção: casar o pid com este repo (o `cwd` em `/proc/<pid>/cwd`), ou mostrar a linha ao humano e deixá-lo decidir.
-  Fonte: `docs/handoffs/20261120-l2-o-sdd-plan-e-o-planner/40-review-r1.md`
-  — descoberto por `sdd-reviewer` na r1 da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-20)
-
-- [ ] **O `docs/plan-only.md` diz a ordem do `gate_EXEC` e a lista não segue a ordem do gate** —
-  `docs/plan-only.md:98` (`gate_EXEC`) — "reads, in this order" junta num item a validação do hash de cada linha
-  `done` e a recusa de linha `pending`, que o gate roda em pontos diferentes, e põe o `blocked` depois das duas,
-  quando o gate o conta antes da `pending`. Quem lê uma recusa de `blocked` não a acha no item que a nomeia.
-  Direção: separar o item em dois e seguir a ordem do `bin/sdd`, ou tirar o "in this order". RESOLVED by 0da9417
   Fonte: `docs/handoffs/20261120-l2-o-sdd-plan-e-o-planner/40-review-r1.md`
   — descoberto por `sdd-reviewer` na r1 da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-20)
 

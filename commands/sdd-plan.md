@@ -113,9 +113,12 @@ you), the config values from step 3, and the absolute template paths from step 4
 templates to start from, never as examples.
 
 Pass the model too, as the model of the subagent call: the campaign's `plan_model:` when `/sdd-worker` runs this command, else the `model:` of the hat (`fable`).
-Without it the subagent inherits the model of this session, whatever the hat says: measured by the
-relay in the kit's lots L1b and L2 (2026-11-19 and 2026-11-20), whose planners opened on
-`claude-opus-5-5` until the second was stopped and relaunched with the model in the call.
+Measured by the relay in the kit's lots L1b and L2 (2026-11-19 and 2026-11-20), while the hat
+carried no `model:` in its frontmatter and only its prose said Fable: without the model in the call
+the subagent inherited the model of this session, and both planners opened on `claude-opus-5-5`
+until the second was stopped and relaunched with the model in the call. With the `model: fable`
+the hat declares now, what the harness does without the model in the call is not measured yet
+(pending item 4 of `20261120-l2-o-sdd-plan-e-o-planner`), so the call keeps carrying it.
 
 **When the agent type is not registered** (`Agent type 'sdd-planner' not found`, or the type is
 missing from the list of agents this session offers): the harness reads that list when the session
@@ -343,7 +346,14 @@ and it never paraphrases either side.
    in `dotp-remake` 3.5e: the planner wrote a survey under `docs/knowledge/` that the plan cites,
    `sdd approve` did not commit it, and only the whole `git status` showed it.
    - **Under `auto`** (`sdd why` said `plan approved (auto)`) → nobody cut the branch or committed
-     the mission: `sdd approve` was never run. Move to the `branch:` of `00-missao.md` with
+     the mission: `sdd approve` was never run. A `branch:` of `00-missao.md` that is empty
+     or still the `<...>` placeholder names no branch to cut (the hat admits it only under
+     `JIRA_ENABLED=true`, where the TICKET phase creates the branch and writes it back):
+     switch to nothing, and commit the mission directory and the file `adr:` names on the branch
+     you stand on, as `sdd approve` does in this case, telling the human when that branch is
+     `DEFAULT_BRANCH`. The TICKET phase cuts the mission branch from there, and commits only
+     `10-ticket.md` and `00-missao.md`, so nothing else would bring the plan along; tell the human
+     that the next step is `sdd run <mission>`. Otherwise move to that `branch:` with
      `git switch -c <branch>`, or `git switch <branch>` when it already exists, commit there the
      mission directory and the file `adr:` names, then follow **On the mission branch** for the
      rest, and tell the human that the next step is `sdd run <mission>`. Measured in `magic_tutor`:

@@ -33,10 +33,10 @@ exec_model: opus
 | L1b | A rodada delta | - | 1 |
 | L2 | O `/sdd-plan` e o planner | - | 14 |
 | L3 | Gates do fim da linha | - | 13 |
-| L4 | Preflight, health e sensores | - | 14 |
+| L4 | Preflight, health e sensores | - | 15 |
 | L5 | Saída humana e contrato do runner | - | 17 |
-| L5b | O worker e os verbos dele | - | 16 |
-| L5c | O runner: as notas, o plano e o turno | - | 7 |
+| L5b | O worker e os verbos dele | - | 18 |
+| L5c | O runner: as notas, o plano e o turno | - | 9 |
 | L6a | O carimbo tudo ou nada | - | 1 |
 | L6b | A prosa da DOCS sem revisão | - | 1 |
 | L6c | O plano que manda editar em `.claude/` | - | 1 |
@@ -128,6 +128,7 @@ exec_model: opus
 - [ ] O `sdd preflight` imprime "printf: erro de escrita: Pipe quebrado" com a `READ_EXTRA` preenchida
 - [ ] O lint da suíte se pula sem o `shellcheck`, e a `main` já tem 4 avisos que ele reprova
 - [ ] O `sdd run` num worktree do alvo manda `install --force`, e o que falta é o `link-agents`
+- [ ] O `sdd preflight` não olha os hooks que toda fase carrega, e só avisa da skill que a fase usa
 
 ### L5 — Saída humana e contrato do runner
 
@@ -171,8 +172,10 @@ exec_model: opus
 - [ ] A parada do worker roda o `budget` de novo para montar o `SDD_GATE_WHY` do pager
 - [ ] Uma edição do `.sdd/config.sh` durante a fase tira o teto de missão que a delegação assinou
 - [ ] ◆ A missão pedida fora da fila da campanha não tem rota, e a linha nova derruba a delegação
-- [ ] O ato `review` do worker mergeia a base antes da rodada, e o `review-base` responde `full` toda vez
+- [ ] O ato `review` do worker mergeia a base antes da rodada, e o `review-base` dá `full` quando a `main` andou
 - [ ] O merge delegado não confere que o corpo do PR lista as escolhas do grill
+- [ ] O ato `run` do worker lança o `sdd run` sem rodar o `sdd preflight`
+- [ ] O worker lê o `budget-exhausted` como o teto da missão, e o runner grava o mesmo `kind` no teto da fase
 
 ### L5c — O runner: as notas, o plano e o turno
 
@@ -187,6 +190,8 @@ exec_model: opus
 - [ ] O `sdd approve` deixa fora do commit o que o planner escreveu fora da pasta da missão
 - [ ] Mitigação de risco do plano sem incremento se perde, e a REVIEW dá A mesmo assim
 - [ ] A regra do teto da chamada `Bash` mora no revisor, e não no `turn_rule` de toda fase
+- [ ] O harness recusa o `rm` cujo alvo é um `$(…)`, e o `turn_rule` não avisa
+- [ ] O planner manda chamar duas skills que a sessão pode não listar
 
 ### L6a a L6k — Desenho, um lote por item
 
