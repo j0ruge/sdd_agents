@@ -1,6 +1,6 @@
 ---
 missao: 20261120-l2-o-sdd-plan-e-o-planner
-atualizado: 2026-11-20 22:32
+atualizado: 2026-11-20 22:54
 ---
 
 # Checkpoint — L2: o `/sdd-plan` e o planner
