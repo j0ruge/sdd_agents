@@ -890,6 +890,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   fixture declara ausentes, numa definição só, no molde do `tests/isolate-git.sh`. RESOLVED by d48f7c9
   — descoberto por `sdd-executor` no I1 da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-20)
 
+- [ ] **Sem pasta de missão, o passo 1 do `/sdd-plan` lê corrida de qualquer repo como dona do checkout** —
+  `commands/sdd-plan.md:31` (`pgrep -af '[b]in/sdd run'`) — o `pgrep` casa todo `sdd run` da máquina, e a saída
+  "outro comando segura o checkout" fala de "a live `sdd run` of this repository": um alvo alheio rodando manda o
+  relay cortar um worktree que não precisava. Falha para o lado seguro, mas custa uma pergunta e um worktree.
+  Direção: casar o pid com este repo (o `cwd` em `/proc/<pid>/cwd`), ou mostrar a linha ao humano e deixá-lo decidir.
+  Fonte: `docs/handoffs/20261120-l2-o-sdd-plan-e-o-planner/40-review-r1.md`
+  — descoberto por `sdd-reviewer` na r1 da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-20)
+
+- [ ] **O `docs/plan-only.md` diz a ordem do `gate_EXEC` e a lista não segue a ordem do gate** —
+  `docs/plan-only.md:98` (`gate_EXEC`) — "reads, in this order" junta num item a validação do hash de cada linha
+  `done` e a recusa de linha `pending`, que o gate roda em pontos diferentes, e põe o `blocked` depois das duas,
+  quando o gate o conta antes da `pending`. Quem lê uma recusa de `blocked` não a acha no item que a nomeia.
+  Direção: separar o item em dois e seguir a ordem do `bin/sdd`, ou tirar o "in this order".
+  Fonte: `docs/handoffs/20261120-l2-o-sdd-plan-e-o-planner/40-review-r1.md`
+  — descoberto por `sdd-reviewer` na r1 da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-20)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
