@@ -714,6 +714,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   roda o `sdd preflight` no worktree da missão antes de lançar, e para no `_fail`.
   — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
+- [ ] **O worker lê o `budget-exhausted` como o teto da missão, e o runner grava o mesmo `kind` no teto da fase** —
+  `commands/sdd-worker.md:178` (`the mission ceiling`) — o `bin/sdd` grava `budget-exhausted` para os dois tetos e
+  deixa o `gate_why` dizer qual (`bin/sdd:6077`). O ato `run` e a parada 4 do comando leem o `kind` sozinho como
+  `mission-ceiling`. No L2, às 23:56, a fase PR esgotou as sessões dela (2 publishers sem `pr_url:`) com US$ 37 de
+  60 gastos, e o ledger diz `budget-exhausted`. Um worker que lesse o ledger pararia a campanha pelo teto errado.
+  Direção: o ato `run` separa os dois pelo `gate_why`, ou o runner ganha um `kind` próprio para o teto da fase.
+  — descoberto por `sdd-worker` no pós-merge da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-21)
+
 - [ ] **O `failure-modes.md` só conhece o `blocked` da suíte vermelha, e não o da parada que o plano manda** —
   `docs/failure-modes.md:131` (`found the suite red`) — a seção diz que a linha para "sem abrir sessão", porque a
   suíte de um incremento anterior ficou vermelha. Na 7b1 do `dotp-remake` o executor parou o I3 depois de uma
