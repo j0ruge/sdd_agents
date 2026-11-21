@@ -2972,6 +2972,18 @@ mut_PRE_dirty_paths_unnamed() {
 mut_PRE_dirty_exclude_always_named() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^    if ! grep -qv '"'"'^?? '"'"' <<< "\$_pf_dirty"; then$|    if true; then|' "$1"
 }
+# L4 item 6: the Bash probe's ok reads the answer again, not the Bash tool_result.
+mut_PRE_bash_probe_reads_answer() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    elif \[ "\$probe_ran" = ran \] && \[ -n "\$probe_init" \]; then$|    elif grep -q '"'"'sdd-preflight-ok'"'"' <<< "$probe_answer" \&\& [ -n "$probe_init" ]; then|' "$1"
+}
+# L4 item 6: any tool_use counts as the Bash call, whatever its name.
+mut_PRE_bash_probe_any_tool_result() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|select(.type == "tool_use" and .name == "Bash") \| .id \] as \$ids$|select(.type == "tool_use") \| .id ] as $ids|' "$1"
+}
+# L4 item 6: the ok claims the tool list with no init line behind it.
+mut_PRE_bash_probe_tool_list_blind() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|executes commands (a Bash tool_result carried the marker; no init line, so the tool list was not read)|executes commands (OAuth + Bash in the tool list + permission)|' "$1"
+}
 mut_PRE_template_outcome_default_green() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
 }
@@ -8133,6 +8145,9 @@ CATALOG=(
   PRE_read_rules_cover_stream_read
   PRE_dirty_paths_unnamed
   PRE_dirty_exclude_always_named
+  PRE_bash_probe_reads_answer
+  PRE_bash_probe_any_tool_result
+  PRE_bash_probe_tool_list_blind
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent

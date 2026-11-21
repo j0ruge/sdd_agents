@@ -6999,14 +6999,14 @@ cmd_preflight() {
   # those with no settings, and this one boots with the settings a phase boots with. The hat is the
   # mirror in .claude/agents/ when installed, because that is the copy the harness loads, and the
   # probe reads two artifacts here: `Bash` on the stream's init line (the tool
-  # list the session actually got) and the marker in the result (the permission to run it), plus a
+  # list the session actually got) and the marker in a Bash tool_result (the command really ran), plus a
   # third below it, the money keys of the result line (issue 87). No
   # init line and no answer is the old "did not answer"; an init line without Bash names the hat.
   # ONE hat, the executor's, by cost: eight sessions per preflight is not a preflight. The other
   # seven declare the same key shape, and tests/check-hat.sh R3 refuses the mix-up in every file;
   # what this probe adds is the harness's reading of it, which no sensor on the declaration can see.
   if command -v claude >/dev/null 2>&1; then
-    local hat probe_stream probe_init probe_answer probe_tools probe_result probe_silent=""
+    local hat probe_stream probe_init probe_answer probe_tools probe_result probe_ran probe_silent=""
     local -a probe_agent=()
     hat="$(phase_hat EXEC)"
     if [ -n "$hat" ] && [ -f "$REPO_ROOT/.claude/agents/$hat.md" ]; then probe_agent=(--agent "$hat"); fi
@@ -7019,6 +7019,19 @@ cmd_preflight() {
     probe_init="$( jq -c 'select(.type == "system" and .subtype == "init")' <<< "$probe_stream" 2>/dev/null | head -1 )" || probe_init=""
     probe_answer="$( jq -r 'select(.type == "result") | .result // ""' <<< "$probe_stream" 2>/dev/null | tail -1 )" || probe_answer=""
     probe_tools="$( jq -r '.tools // [] | join(" ")' <<< "$probe_init" 2>/dev/null )" || probe_tools=""
+    # The `ok` reads the artifact, never the answer (L4 item 6): a tool_result with no is_error whose
+    # tool_use_id is that of a Bash tool_use, and whose content (a string, or a list of text blocks)
+    # carries the marker. The answer alone is the model's text, and a model can repeat a marker it
+    # never ran. Same matching by tool_use_id as the template probe below.
+    probe_ran="$( jq -rs '
+        def text_of: if type == "string" then . else ([ .[]? | select(.type == "text") | .text ] | join("\n")) end;
+        . as $s
+        | [ $s[] | select(.type == "assistant") | .message.content[]?
+            | select(.type == "tool_use" and .name == "Bash") | .id ] as $ids
+        | if any($s[] | select(.type == "user") | .message.content[]?
+                 | select(.type == "tool_result" and (.tool_use_id as $t | $ids | index($t)) != null);
+                 .is_error != true and ((.content | text_of) // "" | contains("sdd-preflight-ok")))
+          then "ran" else "none" end' <<< "$probe_stream" 2>/dev/null )" || probe_ran=none
     # Herestrings for the same reason as the Jidoka in cmd_run: `printf | grep -q` returns 141
     # under `pipefail` when the grep MATCHES, so the success branch is the one that loses the race.
     if [ -z "$probe_init" ] && [ -z "$probe_answer" ]; then
@@ -7030,8 +7043,15 @@ cmd_preflight() {
         A permission rule such as Bash(git push:*) in the hat's disallowedTools: strips the tool whole on
         Claude Code 2.1.263+; rules belong in permissionsDeny: (tests/check-hat.sh R3), and the mirror in
         .claude/agents/ has to carry the fix ('sdd install --force')."
-    elif grep -q 'sdd-preflight-ok' <<< "$probe_answer"; then
+    elif [ "$probe_ran" = ran ] && [ -n "$probe_init" ]; then
       ok "headless session under the ${hat:-<no>} hat executes commands (OAuth + Bash in the tool list + permission)"
+    elif [ "$probe_ran" = ran ]; then
+      ok "headless session under the ${hat:-<no>} hat executes commands (a Bash tool_result carried the marker; no init line, so the tool list was not read)"
+    elif grep -q 'sdd-preflight-ok' <<< "$probe_answer"; then
+      _fail "the headless session answered the marker with no Bash call behind it — no tool_result of a Bash
+        tool_use in the stream carries sdd-preflight-ok, so the model repeated the text without running the
+        command (or the call failed). The phases may not run the suite nor commit; check ALLOWED_TOOLS
+        and the hat's permissionsDeny:."
     else
       _fail "the headless session CANNOT execute commands — the phases will not run the suite
         nor commit. Answer received: $(printf '%s' "$probe_answer" | head -c 120)

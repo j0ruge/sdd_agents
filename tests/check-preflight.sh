@@ -314,7 +314,21 @@ cat > "$FIX/.stub/result-real.jsonl" <<'EOF'
 {"duration_api_ms":12808,"stop_reason":"end_turn","session_id":"a74f8a14-6262-426e-89af-0dc22f5f6f15","total_cost_usd":0.0083415,"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":33165,"output_tokens":1003,"output_tokens_details":{"thinking_tokens":785},"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":"not_available","iterations":[{"input_tokens":10,"output_tokens":1003,"cache_read_input_tokens":33165,"cache_creation_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":10,"outputTokens":1003,"cacheReadInputTokens":33165,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0083415,"contextWindow":200000,"maxOutputTokens":32000,"thinkingTokens":785,"canonicalModel":"claude-haiku-4-5","provider":"firstParty","costBasis":"list"}},"permission_denials":[],"terminal_reason":"completed","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subagent_stats":{"spawned":0,"requested":{"background":0,"foreground":0,"unset":0},"started_in_background":0,"max_depth":0,"spawned_by_subagents":0,"completed":0,"failed":0,"killed":{"parent":0,"user":0,"system":0},"refused":{"depth_limit":0,"concurrency_limit":0,"budget":0},"by_type":{}},"is_error":false,"num_turns":1,"subtype":"success","api_error_status":null,"result":"I can't run that command. The sdd-executor role has a non-negotiable rule: **Never `git push`, never open a PR, never merge — that belongs to another phase.**\n\nThis is a core constraint, not a suggestion. The executor's job is to:\n\n1. **Write code** and commit locally (via `git commit`)\n2. **Update the checkpoint** with the commit hash\n3. **Stop**\n\nPushing to the remote is the **Publisher phase's responsibility** — it reads the checkpoint, verifies the commits exist locally, and pushes. That separation is deliberate: it prevents accidental pushes of incomplete work and keeps phases independent.\n\nIf you need to push the current `main` branch, you should:\n- Close this executor session (if one is running)\n- Use the Publisher phase, or\n- Push manually from your own terminal with `git push origin main`\n\nIs there something else I should be doing as the executor for the current mission?","ttft_ms":9642,"type":"result","duration_ms":12837,"uuid":"e786808c-558c-460c-b316-63b513121fc7","ttft_stream_ms":1688,"time_to_request_ms":28,"first_content_frame_ms":2020,"queued_turn_count":0}
 EOF
 jq -c '.tools -= ["Bash"]' "$FIX/.stub/init-with-bash.jsonl" > "$FIX/.stub/init-no-bash.jsonl"
-jq -c '.result = "sdd-preflight-ok"' "$FIX/.stub/result-real.jsonl" > "$FIX/.stub/result-ok.jsonl"
+# The Bash call itself (L4 item 6): the probe's `ok` reads the tool_result of a Bash tool_use, never
+# the answer. PROVENANCE: the two content blocks are the ones of a real stream of this probe,
+# captured while planning 20261121-l4-preflight-health-e-sensores (Claude Code 2.1.327, the
+# runner's own command with --agent sdd-executor, rc 0) and quoted in its 01-plano.md ("Um stream
+# real dessa sonda"), with the id swapped; the envelopes are the assistant/user lines of the same
+# shape as tpl-deny-use.jsonl/tpl-deny-result.jsonl below. Every stub that cats result-ok.jsonl
+# now carries the call before the result line, as the real stream does.
+cat > "$FIX/.stub/bash-call.jsonl" <<'EOF'
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_X","name":"Bash","input":{"command":"bash -c 'echo sdd-preflight-ok'","description":"Run the preflight marker"}}]},"parent_tool_use_id":null}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_X","content":"sdd-preflight-ok","is_error":false}]},"parent_tool_use_id":null}
+EOF
+{ cat "$FIX/.stub/bash-call.jsonl"; jq -c '.result = "sdd-preflight-ok"' "$FIX/.stub/result-real.jsonl"; } \
+  > "$FIX/.stub/result-ok.jsonl"
+# The answer alone, with no call behind it: the stub this sensor used before item 6.
+jq -c '.result = "sdd-preflight-ok"' "$FIX/.stub/result-real.jsonl" > "$FIX/.stub/result-answer-only.jsonl"
 
 # Stub A: Bash whatever the flags. The POSITIVE control — without it a probe that failed every
 # session would satisfy every "lacks" below.
@@ -326,6 +340,50 @@ out_hat_ok="$( "$SDD" preflight 2>&1 )"
 assert_has "a session with Bash in its tool list passes the probe, under the executor hat" \
   "headless session under the sdd-executor hat executes commands" "$out_hat_ok"
 assert_lacks "and is not reported as a hat without a shell" "has NO Bash" "$out_hat_ok"
+
+# --- the Bash probe reads the command it ran (L4 item 6) ---
+# bash_stub <init file or -> <stream> — every claude call answers <init> (none for -) then <stream>.
+bash_stub() {
+  local init="$1"; [ "$init" = - ] && init=/dev/null
+  printf '#!/bin/sh\ncat "%s" "%s"\n' "$init" "$2" > "$FIX/.stub/claude"
+}
+BP_OK="ok   headless session under the sdd-executor hat executes commands"
+BP_REPEAT="fail  the headless session answered the marker with no Bash call behind it"
+BP_CANNOT="fail  the headless session CANNOT execute commands"
+bp_verdict() { # <output> → ok=N,repeat=N,cannot=N
+  printf 'ok=%s,repeat=%s,cannot=%s' "$(grep -cF -- "$BP_OK" <<< "$1")" \
+    "$(grep -cF -- "$BP_REPEAT" <<< "$1")" "$(grep -cF -- "$BP_CANNOT" <<< "$1")"
+}
+# The worlds are DERIVED from the capture with jq, never typed: the marker in the tool_result of a
+# Read call, the same Bash call with is_error, and a Bash call whose result lacks the marker.
+{ jq -c '(.message.content[]? | select(.type == "tool_use") | .name) |= "Read"' "$FIX/.stub/bash-call.jsonl"
+  cat "$FIX/.stub/result-answer-only.jsonl"; } > "$FIX/.stub/bp-other-tool.jsonl"
+{ jq -c '(.message.content[]? | select(.type == "tool_result") | .is_error) |= true' "$FIX/.stub/bash-call.jsonl"
+  cat "$FIX/.stub/result-answer-only.jsonl"; } > "$FIX/.stub/bp-errored.jsonl"
+{ jq -c '(.message.content[]? | select(.type == "tool_result") | .content) |= [{"type":"text","text":"command not found"}]' \
+    "$FIX/.stub/bash-call.jsonl"
+  cat "$FIX/.stub/result-answer-only.jsonl"; } > "$FIX/.stub/bp-no-marker.jsonl"
+# The same Bash call with the content as a LIST of text blocks: still the marker.
+{ jq -c '(.message.content[]? | select(.type == "tool_result") | .content) |= [{"type":"text","text":"sdd-preflight-ok"}]' \
+    "$FIX/.stub/bash-call.jsonl"
+  cat "$FIX/.stub/result-answer-only.jsonl"; } > "$FIX/.stub/bp-list.jsonl"
+bp_all=""
+for w in result-ok bp-list bp-other-tool bp-errored bp-no-marker; do
+  bash_stub "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/$w.jsonl"
+  bp_all="$bp_all $w:$(bp_verdict "$( "$SDD" preflight 2>&1 )")"
+done
+assert_eq "preflight says the Bash probe executes only when a Bash tool_result of the stream carries the marker" \
+  " result-ok:ok=1,repeat=0,cannot=0 bp-list:ok=1,repeat=0,cannot=0 bp-other-tool:ok=0,repeat=1,cannot=0 bp-errored:ok=0,repeat=1,cannot=0 bp-no-marker:ok=0,repeat=1,cannot=0" \
+  "$bp_all"
+bash_stub "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/result-answer-only.jsonl"
+out_bp_answer="$( "$SDD" preflight 2>&1 )"
+assert_eq "preflight fails a Bash probe whose answer repeats the marker with no Bash call behind it" \
+  "ok=0,repeat=1,cannot=0" "$(bp_verdict "$out_bp_answer")"
+bash_stub - "$FIX/.stub/result-ok.jsonl"
+out_bp_noinit="$( "$SDD" preflight 2>&1 )"
+assert_eq "preflight claims Bash in the tool list only over an init line" \
+  "noinit:ok=1,list=0 init:ok=1,list=1" \
+  "noinit:ok=$(grep -cF -- "$BP_OK" <<< "$out_bp_noinit"),list=$(grep -cF 'Bash in the tool list' <<< "$out_bp_noinit") init:ok=$(grep -cF -- "$BP_OK" <<< "$out_hat_ok"),list=$(grep -cF 'Bash in the tool list' <<< "$out_hat_ok")"
 
 # Stub B: no Bash when asked AS THE HAT, Bash otherwise — the harness of 2026-09-06.
 cat > "$FIX/.stub/claude" <<STUB
