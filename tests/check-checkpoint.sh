@@ -399,7 +399,7 @@
 #   94  a checkpoint named on the command line is missing or unreadable
 #   95  --red: the checkpoint is not inside a git work tree, so there is no root to run from
 #   96  unknown option (for --red, also an argument after the checkpoint that is no mode, and an
-#       --only whose list is missing, empty or holds an empty id)
+#       --only whose list is missing, empty, or holds an empty id, a space or a line break)
 
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
@@ -1725,7 +1725,10 @@ red_one() {
 # red_args --red <checkpoint> [--list | --only <id>[,<id>…]] — the argument grammar of --red, in one
 # place. Two arguments are the whole run, unchanged. Anything else after the checkpoint is an unknown
 # option, rc 96, as everywhere in this file: before the modes existed it was ignored, so a typo ran
-# every Check. An empty list, an empty id in it and a missing list are one case, rc 96 too.
+# every Check. An empty list, an empty id in it and a missing list are one case, rc 96 too. So is a
+# list with a space or a line break in it: red_one splits the list with `read`, which stops at the
+# first line, and matches the run against the whole string, so `I1\nI2` ran 0 Checks and said ok
+# (r1 of L2). The refusal does not echo the list, whose line break would split the message.
 red_args() {
   local path="${2-}"
   case "$#" in 1|2) red_one "$path"; return $? ;; esac
@@ -1747,6 +1750,9 @@ red_args() {
         ''|,*|*,|*,,*)
             fail "--red --only needs a list of ids, comma-separated and none of them empty: '${4-}'"
             return 96 ;;
+        *[[:space:]]*)
+            fail "--red --only takes one argument of ids split by commas, with no space or line break in it"
+            return 96 ;;
       esac
       red_one "$path" only "$4"; return $? ;;
   esac
@@ -1767,7 +1773,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=443
+PROBE_FLOOR=447
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -3412,6 +3418,18 @@ ARGV
   probe '--red --only with an empty list is refused' 96 'none of them empty' "$rf" --red --only ''
   probe '--red --only with an empty id in its list is refused' 96 'none of them empty' \
     "$rf" --red --only I1,
+  # A line break split the list in two before r1 of L2: the pre-pass read only its first line and
+  # the run matched the whole string, so `I1\nI2` ran 0 Checks and ended with ok, rc 0. A space was
+  # refused by name, rc 1, as an id that is no row. Both are now the grammar's refusal, before any
+  # Check runs; the notran probe is the half the message cannot say.
+  probe '--red --only with a line break in its list is refused' 96 'no space or line break' \
+    "$rf" --red --only $'I1\nI2'
+  probe_on '--red --only with a line break in its list runs no Check' 96 notran "$w1" \
+    "$rf" --red --only $'I1\nI2'
+  probe '--red --only with a space in its list is refused' 96 'no space or line break' \
+    "$rf" --red --only 'I1, I2'
+  probe '--red --only with a tab in its list is refused' 96 'no space or line break' \
+    "$rf" --red --only $'I1\t'
   probe 'a third argument to --red that is no mode is refused' 96 'unknown option' "$rf" --red --all
   probe '--red --list takes no fourth argument' 96 'unknown option' "$rf" --red --list I1
   probe '--red --only takes no fifth argument' 96 'unknown option' "$rf" --red --only I1 --list
