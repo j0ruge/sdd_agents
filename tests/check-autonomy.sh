@@ -26,6 +26,13 @@ SDD="$ROOT/bin/sdd"
 FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-autonomy-XXXXXX")"
 MISSION="20260101-fixture"
 fails=0
+# load_config keeps an exported EFFORT_* when the file sets none, and the effort pair below reads
+# `effort=settings` off a fixture with no EFFORT_* in its config: a run launched as
+# `EFFORT_EXEC=xhigh sdd run` handed its own gate a suite red on that line (L2, 2026-11-20). Cleared
+# by prefix, so a phase key the runner adds later is cleared with no list to edit; armed first, so
+# dropping the clear turns the pair red on every machine, not only where a launch exports one.
+export EFFORT_EXEC=xhigh EFFORT_QA=xhigh EFFORT_REVIEW=xhigh EFFORT_DOCS=xhigh EFFORT_PUBLISH=xhigh
+while IFS= read -r effort_var; do unset "$effort_var"; done < <(compgen -v EFFORT_)
 
 # Everything this file writes that is NOT part of the target repo lives here, deliberately OUTSIDE
 # $FIX — which becomes the fixture's git working tree below. The instrument must not end up inside

@@ -107,6 +107,18 @@
 #                                                the checkpoint's repository; refuse one already green,
 #                                                one outside the strict form, one that prints nothing.
 #                                                Run by the planner, never by run-all.sh)
+#        tests/check-checkpoint.sh --red <checkpoint> --list
+#                                               (run no Check: print `  <id>  <command>` for every
+#                                                pending row, so the relay sees what --red would
+#                                                open; the same refusals of shape, rc 93 with no
+#                                                pending row. Run by the planner, never by run-all.sh)
+#        tests/check-checkpoint.sh --red <checkpoint> --only <id>[,<id>…]
+#                                               (run only the named pending Checks, under the same
+#                                                refusals; an id that is no pending row is refused
+#                                                before any Check runs. The last line says
+#                                                `<k> of <n> … — a partial measure`, never `every one
+#                                                red at HEAD`, even when the list names them all.
+#                                                Run by the planner, never by run-all.sh)
 #
 # ── Known limits, stated so nobody re-discovers them as surprises ──────────────────────────────
 # NOT measured: a Check that reads a sensor WITHOUT merging stderr and greps for the assertion
@@ -386,7 +398,8 @@
 #   93  a floor was breached (the scan was vacuous; for --red, no pending row)
 #   94  a checkpoint named on the command line is missing or unreadable
 #   95  --red: the checkpoint is not inside a git work tree, so there is no root to run from
-#   96  unknown option
+#   96  unknown option (for --red, also an argument after the checkpoint that is no mode, and an
+#       --only whose list is missing, empty, or holds an empty id, a space or a line break)
 
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"
@@ -1613,8 +1626,15 @@ red_cell() {
   [ -n "$RED_EXP" ]
 }
 
-red_one() { # red_one <checkpoint> — 0 every pending Check is red at HEAD; 1 one is not; 93/94/95
-  local path="${1-}" label top rows nf id st chk out rc got want n=0 bad=0
+# red_one <checkpoint> [whole | list | only <id>[,<id>…]] — 0 every pending Check is red at HEAD (or
+# listed, or the named ones red); 1 one is not; 93/94/95. The mode comes from red_args, which owns the
+# argument grammar. `list` runs nothing; `only` runs the named Checks and ends with a line of its own,
+# because `every one red at HEAD` is what the acceptance and PLAN-AUTO read, and a partial measure
+# must never print it — not even when the list names every pending row.
+red_one() {
+  local path="${1-}" mode="${2-whole}" ids="${3-}" label top rows nf id st chk out rc got want
+  local n=0 k=0 bad=0 i p hit
+  local -a named=() pend=()
   if [ -z "$path" ] || [ ! -r "$path" ]; then
     fail "checkpoint not readable: ${path:-<none>}"
     return 94
@@ -1627,6 +1647,30 @@ red_one() { # red_one <checkpoint> — 0 every pending Check is red at HEAD; 1 o
     return 95
   fi
   rows="$(rows_of "$path")"
+  # --only checks its ids against the pending rows BEFORE any Check runs: an id that names no pending
+  # row is a typo or a closed increment, and running the others first would open the very windows
+  # the relay reached for --only to spare. Each id is compared WHOLE, as an element of an array and
+  # never as a piece of a joined string: an id with a comma in it (`I1,I2`) is then a row no --only
+  # list can name, and the selector below reads the same array (CodeRabbit on #456).
+  if [ "$mode" = only ]; then
+    while IFS=$'\t' read -r nf id st chk; do
+      if [ -n "$nf" ] && [ "$nf" -eq 7 ] && [ "$st" = pending ]; then pend+=("$id"); fi
+    done <<< "$rows"
+    if [ "${#pend[@]}" -eq 0 ]; then
+      fail "$label has no pending row — --red measured nothing"
+      return 93
+    fi
+    IFS=, read -ra named <<< "$ids"
+    for i in "${named[@]}"; do
+      hit=0
+      for p in "${pend[@]}"; do [ "$p" = "$i" ] && { hit=1; break; }; done
+      if [ "$hit" -eq 0 ]; then
+        fail "$label: --red --only names $i, which is not a pending row — no Check was run"
+        bad=$((bad + 1))
+      fi
+    done
+    [ "$bad" -eq 0 ] || return 1
+  fi
   while IFS=$'\t' read -r nf id st chk; do
     [ -n "$nf" ] || continue
     if [ "$nf" -eq 0 ]; then
@@ -1643,9 +1687,21 @@ red_one() { # red_one <checkpoint> — 0 every pending Check is red at HEAD; 1 o
     fi
     [ "$st" = pending ] || continue
     n=$((n + 1))
+    if [ "$mode" = only ]; then
+      hit=0
+      for i in "${named[@]}"; do [ "$i" = "$id" ] && { hit=1; break; }; done
+      [ "$hit" -eq 1 ] || continue
+      k=$((k + 1))
+    fi
     if ! red_cell "$chk"; then
       fail "$label: $id has a Check outside the strict form \`command\` → \`expected\` — --red cannot run it, so nothing says it is red"
       bad=$((bad + 1)); continue
+    fi
+    # printf and never pass: a listed command is not a verdict, and must not wear the ok prefix a
+    # mission Check anchors on.
+    if [ "$mode" = list ]; then
+      printf '  %s  %s\n' "$id" "$RED_CMD"
+      continue
     fi
     out="$(CDPATH='' cd -- "$top" && bash -c "$RED_CMD" 2>/dev/null < /dev/null)"; rc=$?
     got="$(red_norm "$out")"; want="$(red_norm "$RED_EXP")"
@@ -1664,8 +1720,50 @@ red_one() { # red_one <checkpoint> — 0 every pending Check is red at HEAD; 1 o
     return 93
   fi
   [ "$bad" -eq 0 ] || return 1
-  pass "$label: $n pending Check(s), every one red at HEAD"
+  case "$mode" in
+    list) pass "$label: $n pending Check(s) listed, none run" ;;
+    only) pass "$label: $k of $n pending Check(s) run, each red at HEAD; $((n - k)) not run — a partial measure" ;;
+    *)    pass "$label: $n pending Check(s), every one red at HEAD" ;;
+  esac
   return 0
+}
+
+# red_args --red <checkpoint> [--list | --only <id>[,<id>…]] — the argument grammar of --red, in one
+# place. Two arguments are the whole run, unchanged. Anything else after the checkpoint is an unknown
+# option, rc 96, as everywhere in this file: before the modes existed it was ignored, so a typo ran
+# every Check. An empty list, an empty id in it and a missing list are one case, rc 96 too. So is a
+# list with a space or a line break in it: red_one splits the list with `read`, which stops at the
+# first line, and matches the run against the whole string, so `I1\nI2` ran 0 Checks and said ok
+# (r1 of L2). The refusal does not echo the list, whose line break would split the message.
+red_args() {
+  local path="${2-}"
+  case "$#" in 1|2) red_one "$path"; return $? ;; esac
+  case "$3" in
+    --list)
+      if [ "$#" -ne 3 ]; then
+        fail "unknown option after --red <checkpoint> --list: $4 (see the usage header)"
+        return 96
+      fi
+      red_one "$path" list; return $? ;;
+    --only)
+      if [ "$#" -gt 4 ]; then
+        fail "unknown option after --red <checkpoint> --only <ids>: $5 (see the usage header)"
+        return 96
+      fi
+      case "${4-}" in
+        -*) fail "unknown option after --red <checkpoint> --only: $4 (see the usage header)"
+            return 96 ;;
+        ''|,*|*,|*,,*)
+            fail "--red --only needs a list of ids, comma-separated and none of them empty: '${4-}'"
+            return 96 ;;
+        *[[:space:]]*)
+            fail "--red --only takes one argument of ids split by commas, with no space or line break in it"
+            return 96 ;;
+      esac
+      red_one "$path" only "$4"; return $? ;;
+  esac
+  fail "unknown option after --red <checkpoint>: $3 (see the usage header)"
+  return 96
 }
 
 # --- selftest ----------------------------------------------------------------------------------
@@ -1681,7 +1779,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=412
+PROBE_FLOOR=450
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1693,13 +1791,15 @@ fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
 # selftest green (the sabotage pass of lote 8, 2026-10-15). Tight, like PROBE_FLOOR, and the same
 # shape as rule_end in check-todo.sh.
 RULE_LINES=0
-RULE_FLOOR=9
+RULE_FLOOR=10
 rule_ok() { pass "rule: $1"; RULE_LINES=$((RULE_LINES + 1)); }
 
-probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode]
+probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode [arg…]]
   local desc="$1" want_rc="$2" want_txt="$3" target="$4" mode="${5---check}" out rc
+  local -a extra=("${@:6}")
   PROBES=$((PROBES + 1))
-  out="$( "$SELF_PATH" "$mode" "$target" 2>&1 )"; rc=$?
+  # `${extra[@]+…}`: bash 4.0-4.3 call an empty array unbound under `set -u` (issue #223).
+  out="$( "$SELF_PATH" "$mode" "$target" ${extra[@]+"${extra[@]}"} 2>&1 )"; rc=$?
   if [ "$rc" -ne "$want_rc" ]; then
     printf 'SENSOR-BROKEN: %s — wanted rc %s, got %s\n%s\n' "$desc" "$want_rc" "$rc" "$out" >&2
     FAILS=$((FAILS + 1)); fail_rc 90; return 0
@@ -1708,6 +1808,38 @@ probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode]
     printf 'SENSOR-BROKEN: %s — rc was right but the message never said "%s"\n%s\n' \
       "$desc" "$want_txt" "$out" >&2
     FAILS=$((FAILS + 1)); fail_rc 91; return 0
+  fi
+  return 0
+}
+
+# probe_on <desc> <want_rc> <how> <what> <target> <mode> [arg…] — the half probe() cannot say.
+# probe() proves a text is PRESENT; this one asserts, on the same kind of child run and with the
+# same accounting, one of: `line` (an exact whole line of the output), `last` (the last line,
+# exactly), `absent` (the text appears nowhere), `ran` / `notran` (the witness file a fixture Check
+# touches exists, or does not, after the run; removed before it, so an earlier run cannot answer).
+probe_on() {
+  local desc="$1" want_rc="$2" how="$3" what="$4" target="$5" mode="$6" out rc held=0
+  shift 6
+  PROBES=$((PROBES + 1))
+  case "$how" in ran|notran) rm -f -- "$what" ;; esac
+  out="$( "$SELF_PATH" "$mode" "$target" "$@" 2>&1 )"; rc=$?
+  if [ "$rc" -ne "$want_rc" ]; then
+    printf 'SENSOR-BROKEN: %s — wanted rc %s, got %s\n%s\n' "$desc" "$want_rc" "$rc" "$out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 90; return 0
+  fi
+  case "$how" in
+    line)   grep -qxF -- "$what" <<< "$out" && held=1 ;;
+    last)   [ "${out##*$'\n'}" = "$what" ] && held=1 ;;
+    absent) grep -qF -- "$what" <<< "$out" || held=1 ;;
+    ran)    [ -e "$what" ] && held=1 ;;
+    notran) [ -e "$what" ] || held=1 ;;
+    *)      printf 'SENSOR-BROKEN: %s — probe_on has no assertion "%s"\n' "$desc" "$how" >&2
+            FAILS=$((FAILS + 1)); fail_rc 90; return 0 ;;
+  esac
+  if [ "$held" -ne 1 ]; then
+    printf 'SENSOR-BROKEN: %s — rc was right but "%s %s" did not hold\n%s\n' \
+      "$desc" "$how" "$what" "$out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
   fi
   return 0
 }
@@ -3252,6 +3384,114 @@ ARGV
   # claims a group that just failed.
   [ "$FAILS" -eq "$red_f0" ] && \
     rule_ok "a Check already green at HEAD is refused by --red ($((PROBES - red_p0)) probe(s))"
+
+  # ── --red --list and --red --only: the two modes a relay reaches for beside a live run (lot L2) ──
+  # --list runs nothing and says what the --red would open; --only runs the Checks it names and
+  # ends with a line that is NOT the whole run's, so a partial measure cannot pass for the one the
+  # acceptance and PLAN-AUTO read. The fixture Checks touch a witness file at the repository root,
+  # and the probes read the FILE for what ran, never the message: a sabotage that runs every Check
+  # and prints the same lines is caught by the file. The first probe is the witness's own control.
+  local rl_p0="$PROBES" rl_f0="$FAILS" w1="$red/ran-I1" w2="$red/ran-I2"
+  local part1='  ok    checkpoint.md: 1 of 2 pending Check(s) run, each red at HEAD; 1 not run — a partial measure'
+  cp_head "$rf"
+  cp_row "$rf" I1 '`touch ran-I1; echo 0` → `1`' pending
+  cp_row "$rf" I2 '`touch ran-I2; echo 0` → `1`' pending
+  cp_row "$rf" I3 '`echo 1` → `1`' 'done'
+  probe_on 'the whole --red runs every pending Check, so the witness file can say what ran' 0 \
+    ran "$w2" "$rf" --red
+  probe_on '--red --list prints the id and the command of a pending Check, as a line of its own' 0 \
+    line '  I1  touch ran-I1; echo 0' "$rf" --red --list
+  probe_on '--red --list runs no Check' 0 notran "$w1" "$rf" --red --list
+  probe_on '--red --list ends with its own line, which is not a verdict on any Check' 0 \
+    last '  ok    checkpoint.md: 2 pending Check(s) listed, none run' "$rf" --red --list
+  probe_on '--red --list never lists a done row' 0 absent '  I3  ' "$rf" --red --list
+  probe_on '--red --only runs the Check it names' 0 ran "$w1" "$rf" --red --only I1
+  probe_on '--red --only never runs a Check it does not name' 0 notran "$w2" "$rf" --red --only I1
+  probe_on '--red --only ends with the partial line' 0 last "$part1" "$rf" --red --only I1
+  probe_on '--red --only naming every pending Check still ends with the partial line' 0 \
+    last '  ok    checkpoint.md: 2 of 2 pending Check(s) run, each red at HEAD; 0 not run — a partial measure' \
+    "$rf" --red --only I1,I2
+  probe_on '--red --only naming every pending Check never says every one red at HEAD' 0 \
+    absent 'every one red at HEAD' "$rf" --red --only I1,I2
+  probe_on '--red --only counts a repeated id once' 0 last "$part1" "$rf" --red --only I1,I1
+  probe '--red --only refuses, by name, an id that is no row' 1 'names I9, which is not a pending row' \
+    "$rf" --red --only I9
+  probe '--red --only refuses, by name, the id of a done row' 1 'names I3, which is not a pending row' \
+    "$rf" --red --only I3
+  probe_on '--red --only refuses an id that is no pending row before it runs any Check' 1 \
+    notran "$w1" "$rf" --red --only I1,I9
+  probe '--red --only with no list is refused' 96 'none of them empty' "$rf" --red --only
+  probe '--red --only with an empty list is refused' 96 'none of them empty' "$rf" --red --only ''
+  probe '--red --only with an empty id in its list is refused' 96 'none of them empty' \
+    "$rf" --red --only I1,
+  # A line break split the list in two before r1 of L2: the pre-pass read only its first line and
+  # the run matched the whole string, so `I1\nI2` ran 0 Checks and ended with ok, rc 0. A space was
+  # refused by name, rc 1, as an id that is no row. Both are now the grammar's refusal, before any
+  # Check runs; the notran probe is the half the message cannot say.
+  probe '--red --only with a line break in its list is refused' 96 'no space or line break' \
+    "$rf" --red --only $'I1\nI2'
+  probe_on '--red --only with a line break in its list runs no Check' 96 notran "$w1" \
+    "$rf" --red --only $'I1\nI2'
+  probe '--red --only with a space in its list is refused' 96 'no space or line break' \
+    "$rf" --red --only 'I1, I2'
+  probe '--red --only with a tab in its list is refused' 96 'no space or line break' \
+    "$rf" --red --only $'I1\t'
+  probe 'a third argument to --red that is no mode is refused' 96 'unknown option' "$rf" --red --all
+  probe '--red --list takes no fourth argument' 96 'unknown option' "$rf" --red --list I1
+  probe '--red --only takes no fifth argument' 96 'unknown option' "$rf" --red --only I1 --list
+  probe 'the two modes together are refused' 96 'unknown option' "$rf" --red --only --list
+  # An id is matched WHOLE, in the pre-pass and in the selector alike (CodeRabbit on #456). The
+  # pre-pass used to join the pending ids with commas and look for the name between two of them, so
+  # a pending row `I1,I2` made `--only I1` pass, and the selector, which matched the row against the
+  # joined list, ran nothing: `0 of 1 pending Check(s) run`, rc 0. With `I1`, `I2` and `I1,I2` all
+  # pending, `--only I1,I2` ran the third row too, which it never named.
+  local rc_w="$red/ran-c"
+  cp_head "$rf"
+  cp_row "$rf" 'I1,I2' '`touch ran-c; echo 0` → `1`' pending
+  cp_row "$rf" I3 '`touch ran-I3; echo 0` → `1`' pending
+  probe '--red --only refuses an id that only a pending id with a comma holds' 1 \
+    'names I1, which is not a pending row' "$rf" --red --only I1
+  probe_on '--red --only naming a piece of a pending id with a comma runs no Check' 1 notran "$rc_w" \
+    "$rf" --red --only I1
+  cp_head "$rf"
+  cp_row "$rf" I1 '`touch ran-I1; echo 0` → `1`' pending
+  cp_row "$rf" I2 '`touch ran-I2; echo 0` → `1`' pending
+  cp_row "$rf" 'I1,I2' '`touch ran-c; echo 0` → `1`' pending
+  probe_on '--red --only never runs the pending row whose id joins two named ids with a comma' 0 \
+    notran "$rc_w" "$rf" --red --only I1,I2
+  # The strict-form refusal belongs to the Checks a mode reads: every pending one for --list, the
+  # named ones for --only. The row-shape refusals come before the Status is read, so they hold for
+  # every row in both modes, named or not.
+  cp_head "$rf"
+  cp_row "$rf" I1 '`touch ran-I1; echo 0` → `1`' pending
+  cp_row "$rf" I2 '`bash tests/run-all.sh` → verde' pending
+  probe '--red --list refuses a pending Check outside the strict form' 1 \
+    'I2 has a Check outside the strict form' "$rf" --red --list
+  probe_on '--red --list with a refusal never prints its last line' 1 \
+    absent 'listed, none run' "$rf" --red --list
+  probe_on '--red --only leaves alone a Check outside the strict form that it does not name' 0 \
+    last "$part1" "$rf" --red --only I1
+  probe '--red --only refuses a named Check outside the strict form' 1 \
+    'I2 has a Check outside the strict form' "$rf" --red --only I2
+  cp_head "$rf"
+  cp_row "$rf" I1 '`touch ran-I1; echo 0` → `1`' pending
+  cp_row "$rf" I2 '`echo 1` → `1`' pending
+  probe '--red --only refuses a named Check already green at HEAD' 1 'I2 is already green at HEAD' \
+    "$rf" --red --only I2
+  probe_on '--red --only with a refusal never prints its last line' 1 \
+    absent 'pending Check(s) run' "$rf" --red --only I1,I2
+  cp_head "$rf"
+  cp_row "$rf" I1 '`touch ran-I1; echo 0` → `1`' pending
+  printf '| I2 | slice | `echo 0` → `1` | pending\n' >> "$rf"
+  probe '--red --only refuses a short row it does not name' 1 'row I2 has fewer than five cells' \
+    "$rf" --red --only I1
+  probe '--red --list refuses a short row' 1 'row I2 has fewer than five cells' "$rf" --red --list
+  cp_head "$rf"; cp_row "$rf" I1 '`echo 1` → `1`' 'done'
+  probe '--red --list over no pending row measured nothing' 93 'has no pending row' "$rf" --red --list
+  probe '--red --only over no pending row measured nothing' 93 'has no pending row' \
+    "$rf" --red --only I1
+  [ "$FAILS" -eq "$rl_f0" ] && \
+    rule_ok "--red --list runs no Check, and --red --only never says every one red at HEAD ($((PROBES - rl_p0)) probe(s))"
   # bash 4.0-4.3 call an EMPTY array unbound under `set -u`, and the kit promises bash 4+ (issue
   # #223): `"${w[*]}"` over a Check that printed nothing killed red_norm with `w[*]: unbound
   # variable` on stderr — measured in docker bash:4.3, the verdict right only because the dead
@@ -3298,7 +3538,7 @@ case "${1:-}" in
   --check)    check_one "${2-}"; exit $? ;;
   --scan)     scan "${2-}"; exit $? ;;
   --calibrate) calibrate "${2-}"; exit $? ;;
-  --red)      red_one "${2-}"; exit $? ;;
+  --red)      red_args "$@"; exit $? ;;
   '')         selftest || exit $?
               rc=0
               calibrate "$ROOT" || rc=1

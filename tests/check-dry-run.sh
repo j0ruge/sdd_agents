@@ -26,6 +26,12 @@ fails=0
 # The READ_EXTRA block below compares a run WITH the key against the runs without it, so a value in
 # the caller's environment would be read as the runner adding rules nobody declared.
 unset READ_EXTRA
+# EFFORT_* too: the effort block asserts "no EFFORT_* configured", and a run launched as
+# `EFFORT_EXEC=xhigh sdd run` handed its own gate a suite red on that line (L2, 2026-11-20). Cleared
+# by prefix, so a phase key the runner adds later is cleared with no list to edit; armed first, so
+# dropping the clear turns the effort block red on every machine, not only where a launch exports one.
+export EFFORT_EXEC=xhigh EFFORT_QA=xhigh EFFORT_REVIEW=xhigh EFFORT_DOCS=xhigh EFFORT_PUBLISH=xhigh
+while IFS= read -r effort_var; do unset "$effort_var"; done < <(compgen -v EFFORT_)
 
 # This file exercises the REAL (non-dry) blocked-escalation path below, which writes an autonomy
 # ledger row. run-all.sh already exports SDD_STATE_DIR for every test it runs, but a standalone

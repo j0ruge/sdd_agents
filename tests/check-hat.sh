@@ -688,6 +688,35 @@ planner_agent_probes() {
   else
     fail "hat: sdd-planner writes a Check that fixes the title of a new TODO_FILE item again, with no RECURRED way out"
   fi
+  # Lot L2, items 1, 12 and 15. Item 1: in lighthouse_project LH-5 a plan mitigated "the signature
+  # change spreads through the test fixtures" with "the compiler lists them", and the backend's
+  # `tsc --noEmit` excludes __tests__, so it said rc 0 with tests still on the old signature: § 2
+  # runs the sensor a mitigation names, at PLAN, against what it protects. Item 12: in magic_tutor a
+  # plan promised the EXEC gate for increments done outside sdd run, and `sdd why` answered that
+  # 20-handoff-exec.md was missing: § 4 writes that step only when the grill decides the plan runs
+  # outside sdd run, because under it the executor already writes the file. Item 15: the hat said
+  # "Runs on Fable" and nothing carried the model, so the subagent inherited the session's (the
+  # planner of L1b ran on Opus). This proves the FILE, not that the harness opens the subagent on
+  # Fable: that needs a real session (the pending list of the mission).
+  if grep -qF 'A mitigation that names a sensor' <<< "$s2" && grep -qF 'against what it protects' <<< "$s2"; then
+    pass "hat: the planner runs at PLAN the sensor a risk mitigation names, against what the mitigation protects"
+  else
+    fail "hat: sdd-planner no longer runs at PLAN the sensor a risk mitigation names, against what the mitigation protects"
+  fi
+  if grep -qF 'executed outside `sdd run`' <<< "$s4" && grep -qF '20-handoff-exec.md' <<< "$s4" \
+     && grep -qF 'promises no EXEC gate without it' <<< "$s4"; then
+    pass "hat: a plan executed outside sdd run ends its last increment by writing 20-handoff-exec.md, and promises no EXEC gate without it"
+  else
+    fail "hat: sdd-planner no longer ends a plan executed outside sdd run by writing 20-handoff-exec.md, or promises the EXEC gate without it"
+  fi
+  local sthen
+  sthen="$(awk '/^## Then/{s=1; next} s && /^## /{s=0} s' "$ROOT/commands/sdd-plan.md")"
+  if [ "$(fm_value "$agent" model)" = fable ] && grep -qF 'plan_model:' <<< "$sthen" \
+     && grep -qF 'as the model of the subagent call' <<< "$sthen"; then
+    pass "hat: the planner declares its model in the frontmatter, and /sdd-plan passes the model when it delegates"
+  else
+    fail "hat: sdd-planner no longer declares model: fable in its frontmatter, or /sdd-plan no longer passes the model when it delegates"
+  fi
 }
 
 # L1 (20261117-l1-a-prosa-do-chapeu), items F and G of TODO.md. F: the reviewer has neither Monitor
@@ -881,6 +910,159 @@ command_planner_unregistered_probes() {
   fi
 }
 
+# --- /sdd-plan: the reading of the checkout before anything is delegated (lot L2, items 11, 8, 7, 3) --
+# Step 2 guarded only the checkout of the kit, and only inside a `sdd run`. In four targets the relay
+# held the damage on its own: in dotp-remake 3.6d the tree carried 12 paths of a plan another session
+# executed by hand, and the folder of 3.6d already existed, merged (item 11); in ui24_agent the
+# checkout was on the branch of an open PR, and the mission would have been cut from it (item 8); in
+# lighthouse_project a `sdd run` held the main checkout, the relay planned from a worktree and watched
+# only what that run could not change (item 7); in dotp-remake 3.2c, with no worktree, the relay's own
+# commit moved the HEAD the planner had measured, and the plan was right only because the new HEAD
+# went with the next answer (item 3). One pair per item, so a red names which rule went missing; each
+# literal is read in the section whose reader follows it, since a rule moved out of it is read too late.
+command_before_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" before_sec then_sec
+  before_sec="$(awk '/^## Before anything else/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  then_sec="$(awk '/^## Then/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  if grep -qF 'ls <HANDOFF_DIR>' <<< "$before_sec" \
+     && grep -qF 'already covers the topic' <<< "$before_sec" \
+     && grep -qF 'A dirty tree with no command holding the checkout' <<< "$before_sec"; then
+    pass "command: /sdd-plan reads the tree and the missions on disk before it delegates, and stops on a dirty tree or a topic already planned"
+  else
+    fail "command: /sdd-plan no longer reads the tree and the missions on disk before it delegates (ls <HANDOFF_DIR>), or no longer stops on a dirty tree or on a topic a folder already covers"
+  fi
+  if grep -qF 'git branch --show-current' <<< "$before_sec" \
+     && grep -qF 'ask the human which base the mission is cut from' <<< "$before_sec"; then
+    pass "command: /sdd-plan compares the current branch with DEFAULT_BRANCH before the planner reads the repository, and asks for the base when they differ"
+  else
+    fail "command: /sdd-plan no longer compares the current branch with DEFAULT_BRANCH before the planner reads the repository, or no longer asks the human for the base when they differ"
+  fi
+  if grep -qF 'sdd status --no-gates <mission>' <<< "$before_sec" \
+     && grep -qF 'CHECKOUT-OWNER' <<< "$before_sec" \
+     && grep -qF 'outside the directory of the mission in flight' <<< "$then_sec"; then
+    pass "command: /sdd-plan moves to a worktree when another command holds the checkout, and watches only what that run cannot change"
+  else
+    fail "command: /sdd-plan no longer moves to a worktree when another command holds the checkout (sdd status --no-gates, CHECKOUT-OWNER), or watches the main checkout without leaving out what that run changes"
+  fi
+  # CodeRabbit on #456, two rules. The exits are taken in order, so the topic one has to come before
+  # the checkout-owner one: the folder of a mission in flight is in this checkout, and the worktree
+  # cut from the base does not have it. And a run that holds the main checkout edits the product
+  # there uncommitted, which nothing attributes: the relay names a changed tracked file and stops only
+  # on a new untracked path. The order is read by line number, never by presence.
+  local topic_at owner_at
+  topic_at="$(awk -v p='already covers the topic' 'index($0, p) { print NR; exit }' <<< "$before_sec")"
+  owner_at="$(awk -v p='**Another command holds the checkout**' 'index($0, p) { print NR; exit }' <<< "$before_sec")"
+  if [ -n "$topic_at" ] && [ -n "$owner_at" ] && [ "$topic_at" -lt "$owner_at" ] \
+     && grep -qF 'This exit comes' <<< "$before_sec"; then
+    pass "command: /sdd-plan stops on a topic already planned before it takes the worktree route of a held checkout"
+  else
+    fail "command: /sdd-plan takes the worktree route of a held checkout before it looks for a folder that already covers the topic, whose mission in flight the worktree would not have"
+  fi
+  if grep -qF 'So do not stop on a tracked' <<< "$then_sec" \
+     && grep -qF 'on a new untracked path (`??`) outside that directory' <<< "$then_sec"; then
+    pass "command: /sdd-plan names a tracked file the run in the main checkout changed, and stops only on a new untracked path"
+  else
+    fail "command: /sdd-plan stops the grill on every uncommitted edit of the run that holds the main checkout, or no longer stops on the untracked path the planner leaves"
+  fi
+  if grep -qF 'When step 2 did not move you, record the same two' <<< "$then_sec" \
+     && grep -qF 'send the new `HEAD` to the planner with the next answer' <<< "$then_sec"; then
+    pass "command: /sdd-plan records status and HEAD at every hand-back without a worktree too, and sends its own commit to the planner with the next answer"
+  else
+    fail "command: /sdd-plan no longer records status and HEAD at every hand-back without a worktree, or no longer sends its own commit to the planner with the next answer"
+  fi
+}
+
+# --- /sdd-plan and the planner: the grill from both sides (lot L2, items 2, 9, 6, 13) ------------
+# Four rules the relay held on its own. In dotp-remake 3.2c the session of the relay died with a
+# question pending, the call came back "its outcome is unknown", and in the new session a SendMessage
+# to the old planner's id came back `Resuming agent` with the grill intact (item 2). In ui24_agent a
+# background suite of the planner ended after its hand-back, and the planner asked question 1 again
+# with the human's answer already with the relay (item 9). In magic_tutor decision 7 came out
+# `- answer: (recommended)` with `aprovacao: auto` before Q7 reached the human, and the status read
+# `plan approved (auto)` (item 6). In dotp-remake 7b the owner's handoff ordered the grill answered
+# with the recommended option, and no rule said when such an order holds (item 13). One pair per
+# item, each literal read in the section whose reader follows it: the relay's in "Relaying the
+# grill", the acceptance's in "When the artifacts exist", the planner's in § 1.
+command_grill_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" agent="$ROOT/agents/sdd-planner.md" relay art s1
+  relay="$(awk '/^## Relaying the grill to the human/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  art="$(awk '/^## When the artifacts exist/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  s1="$(awk '/^## 1\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'its outcome is unknown' <<< "$relay" \
+     && grep -qF 'ask the human the pending question again' <<< "$relay" \
+     && grep -qF 'resume the same planner by its id' <<< "$relay"; then
+    pass "command: /sdd-plan resumes the same planner by id after the session of the relay died, and asks the pending question again"
+  else
+    fail "command: /sdd-plan no longer resumes the same planner by its id after the session of the relay died, or reads a call whose outcome is unknown as answered"
+  fi
+  if grep -qF 'A hand-back that repeats a question you already relayed' <<< "$relay" \
+     && grep -qF 'repeat it unchanged and say that it is a repeat' <<< "$s1"; then
+    pass "command: /sdd-plan and the planner treat a question repeated after a background job as one question, asked of the human once"
+  else
+    fail "command: /sdd-plan takes a question the planner repeated after a background job to the human again, or the planner no longer says that the repeat is one"
+  fi
+  if grep -qF 'exceeds the answers you handed back' <<< "$relay" \
+     && grep -qF 'only after the relay handed that answer back' <<< "$s1"; then
+    pass "command: /sdd-plan counts the answer marks at every hand-back and stops on one it did not deliver, and the planner marks only an answer it received"
+  else
+    fail "command: /sdd-plan no longer counts the answer marks at every hand-back, or the planner marks an answer the relay never handed back"
+  fi
+  if grep -qF 'Grill answers delegated in writing' <<< "$relay" \
+     && grep -qF 'only with the recommended option' <<< "$relay" \
+     && grep -qF 'A question with no recommended option' <<< "$relay" \
+     && grep -qF 'how many of the `M` were delegated' <<< "$art" \
+     && grep -qF 'delegated in writing' <<< "$s1"; then
+    pass "command: /sdd-plan answers a grill question for the human only under a written order of theirs, with the recommended option, and shows the delegated answers at the acceptance"
+  else
+    fail "command: /sdd-plan answers a grill question for the human without a written order of theirs or with another option than the recommended one, or no longer shows the delegated answers at the acceptance"
+  fi
+}
+
+# --- /sdd-plan and the planner: the acceptance (lot L2, items 4, 5, 10) -------------------------
+# Three gaps of the acceptance. In dotp-remake 3.3a the plan counted "22 MutableEvents.Add in 12
+# files" and they were 10 files, caught only because the relay sampled it with grep -rc: the
+# acceptance measured --check and --red again, never a fact of the verified context. A fact with no
+# command beside it cannot be re-checked, and a recorded command nobody runs is still a label (item
+# 4, both halves). In magic_tutor `sdd why` said `plan approved (auto)` with the mission folder
+# untracked on main: `sdd approve` commits nothing under auto, and step 4 had no branch for it (item
+# 5). In dotp-remake 3.5e step 4 read only three paths of git status, and a file the plan cites as
+# existing was left uncommitted (item 10). Read by section: the relay's in "When the artifacts
+# exist", the planner's half of item 4 in § 2, where the verified context is written.
+command_acceptance_probes() {
+  local cmd="$ROOT/commands/sdd-plan.md" agent="$ROOT/agents/sdd-planner.md" art s2
+  art="$(awk '/^## When the artifacts exist/{s=1; next} s && /^## /{s=0} s' "$cmd")"
+  s2="$(awk '/^## 2\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'Re-run a sample of the commands the verified context records' <<< "$art" \
+     && grep -qF 'at least three, or all of them when there are fewer' <<< "$art" \
+     && grep -qF 'beside every count and every anchor, the command that measured it' <<< "$s2"; then
+    pass "command: /sdd-plan re-runs a sample of the commands the verified context records, and the planner writes the command beside every count and anchor"
+  else
+    fail "command: /sdd-plan no longer re-runs a sample of the commands the verified context records, or the planner no longer writes the command beside every count and anchor"
+  fi
+  if grep -qF 'git switch -c <branch>' <<< "$art" \
+     && grep -qF 'the next step is `sdd run <mission>`' <<< "$art"; then
+    pass "command: /sdd-plan cuts the mission branch and commits the mission under auto, and names sdd run as the next step"
+  else
+    fail "command: /sdd-plan no longer cuts the mission branch and commits the mission under auto, or no longer names sdd run as the next step"
+  fi
+  if grep -qF 'Then run `git status --porcelain` with no path' <<< "$art" \
+     && grep -qF 'a file the plan depends on' <<< "$art"; then
+    pass "command: /sdd-plan reads the whole git status after the approval, and commits on the mission branch a file the plan depends on"
+  else
+    fail "command: /sdd-plan reads only three paths of git status after the approval, or no longer commits on the mission branch a file the plan depends on"
+  fi
+  # Item 14 of lot L2: the --red of the acceptance ran its Checks beside the run of another mission
+  # on the same machine, with no warning. The relay looks for a live run first, and a --red --only
+  # (which ends with a line of its own, measured in check-checkpoint.sh) never closes the step.
+  if grep -qF "pgrep -af '[b]in/sdd run'" <<< "$art" \
+     && grep -qF 'postpone the `--red`' <<< "$art" \
+     && grep -qF 'never counts as measured' <<< "$art"; then
+    pass "command: /sdd-plan looks for a live sdd run before the --red of the acceptance, and never reads a partial --red as measured"
+  else
+    fail "command: /sdd-plan runs the --red of the acceptance without looking for a live sdd run, or reads a partial --red as measured"
+  fi
+}
+
 # --- /sdd-plan and the planner: no question behind a live background task (item B, 3 returns) ---
 # The harness tells the relay that a subagent stopped only when it stops with no live child in the
 # background (probe of dotp-remake 3.5c). In magic_tutor Q3, Q4 and Q7 were the end of a planner
@@ -927,6 +1109,25 @@ doc_finding_prs_probes() {
     pass "doc: the queue of finding PRs has its recipe, and the TODO header points at it"
   else
     fail "doc: docs/finding-prs.md is missing or lost a step of the recipe (merge of origin/main, the recount, todo-findings, --check --baseline origin/main, --match-head-commit), or the TODO.md header no longer points at it"
+  fi
+}
+
+# --- docs/plan-only.md: going back to sdd run (lot L2, item 12) ----------------------------------
+# In magic_tutor the increments of a plan were done by another tool, outside sdd run, and `sdd why`
+# answered "every increment done and the suite green, but 20-handoff-exec.md is missing": the relay
+# wrote the handoff by hand. plan-only.md did not cover the way back. The section quotes the gate's
+# own message, and that message is read in bin/sdd too, so a gate that changes it turns this red
+# instead of leaving the doc quoting a sentence nobody prints.
+doc_plan_only_probes() {
+  local doc="$ROOT/docs/plan-only.md" msg sec
+  msg='every increment done and the suite green, but 20-handoff-exec.md is missing'
+  sec="$(awk '/^## Going back to `sdd run`$/{s=1; next} s && /^## /{s=0} s' "$doc")"
+  if grep -qxF '## Going back to `sdd run`' "$doc" \
+     && grep -qF "$msg" <<< "$sec" && grep -qF "$msg" "$ROOT/bin/sdd" \
+     && grep -qF 'sdd why <mission> EXEC' <<< "$sec"; then
+    pass "doc: plan-only.md says what gate_EXEC reads before a mission executed by hand goes back to sdd run"
+  else
+    fail "doc: plan-only.md has no section on going back to sdd run, or it lost the message gate_EXEC prints for a missing 20-handoff-exec.md, or sdd why <mission> EXEC"
   fi
 }
 
@@ -1347,8 +1548,12 @@ command_worktree_probes
 command_worktree_return_probes
 command_branch_cwd_probes
 command_planner_unregistered_probes
+command_before_probes
+command_grill_probes
+command_acceptance_probes
 background_question_probes
 doc_finding_prs_probes
+doc_plan_only_probes
 doc_operator_probes
 publisher_stamp_probes
 boot_probes

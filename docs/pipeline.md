@@ -177,7 +177,10 @@ open, checklists, self-containment, a Check per increment that is red at HEAD, t
 `adr:` decision) **with evidence**. The red is measured by the kit's
 `tests/check-checkpoint.sh --red <checkpoint>`, which the planner runs and no gate does: it executes
 each pending Check from the repo root and refuses one already green, one outside the strict form
-`` `command` → `expected` ``, and one that prints nothing. Closing the six is not the approval: under
+`` `command` → `expected` ``, and one that prints nothing. Two modes only look or sample:
+`--red <checkpoint> --list` prints the id and command of each pending Check and runs none, and
+`--red <checkpoint> --only <id>[,<id>…]` runs the named ones and ends with a partial line, never
+`every one red at HEAD` — only the whole run counts as measured (`commands/sdd-plan.md`). Closing the six is not the approval: under
 `/sdd-plan` the planner leaves `aprovacao:` empty even with all of them ✅, and the human reads the
 plan in the acceptance step and approves with `sdd approve`. The planner writes `auto` only when the
 human asked for it in the grill — then the grill is the approval, because the human was present and
@@ -1003,7 +1006,9 @@ by itself.
 ## Models per phase
 
 Opus where there is judgement (EXEC, QA, REVIEW, DOCS), Sonnet where the task is mechanical (PR,
-TICKET), Fable in interactive planning. The cost exception is **explicit in the config**, never
+TICKET), Fable in interactive planning — declared as `model: fable` in the frontmatter of
+`agents/sdd-planner.md`, and passed by `/sdd-plan` in the subagent call, which otherwise inherits
+the model of the session that calls it. The cost exception is **explicit in the config**, never
 silent — `MODEL_PUBLISH="sonnet"` is there to be read and challenged.
 
 Effort follows the same map, one `EFFORT_<PHASE>` key per `MODEL_<PHASE>`. Empty (the default)

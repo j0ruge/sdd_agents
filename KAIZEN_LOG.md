@@ -4,6 +4,64 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-11-20 — O L2: quinze regras do `/sdd-plan` e do planner ganham texto e asserção, com o EXEC em `xhigh`
+
+**Missão:** `20261120-l2-o-sdd-plan-e-o-planner`, o L2 da campanha `20261117-zerar-as-issues`,
+segunda corrida do worker sobre o kit: `sdd run` no worktree ligado, EXEC com `EFFORT_EXEC=xhigh`
+vindo do ambiente do lançamento (o padrão do `.sdd/config.sh` segue `medium`), DOCS em `medium`, QA
+e REVIEW nas settings. Seis incrementos do plano, um I7 nascido do gate vermelho e um `R<n>` (o R1
+da r1).
+
+**Antes** (medido no merge-base `079bc39`):
+- **14** itens abertos no `TODO.md` sobre o `/sdd-plan` e o `sdd-planner`, mais um 15º sem linha (o
+  chapéu dizia "Runs on Fable" e nenhum `agents/*.md` tinha `model:`); **0** asserções sobre essas
+  frases;
+- o `--red` só media inteiro: nenhum modo de listar sem rodar nem de rodar uma parte;
+  `PROBE_FLOOR=412` no `tests/check-checkpoint.sh`;
+- `tests/check-todo.sh --count` → **98**.
+
+**Depois** (medido no head da DOCS, em 2026-11-20 23:08):
+- **19** asserções novas: 16 `pass` em `tests/check-hat.sh` (o sensor imprime **140** linhas `ok`,
+  0 `FAIL`), 2 em `tests/check-templates.sh` e a linha `rule:` do `--red --list`/`--only` no
+  selftest do `check-checkpoint.sh` (`PROBE_FLOOR=447`, com os 4 probes do R1);
+- `model: fable` no frontmatter do chapéu, espelho igual (`cmp -s` rc 0); o efeito no subagente
+  só se mede no primeiro `/sdd-plan` depois do merge (pendência 4 do `00-missao.md`);
+- **15** itens com `RESOLVED by` (os 14 do lote e o dos sensores do `EFFORT_*`), mais o de prosa do
+  `docs/plan-only.md`, fechado na DOCS; `--count` → **105**, todas as âncoras no alvo (os 7 a mais
+  são achados que a corrida registrou; a catraca desce no chore de depois do merge).
+
+**A corrida, lado a lado** (ledger `~/.sdd/autonomy-log.jsonl`, linhas `session`, somadas com `jq` e
+`LC_ALL=C awk`; os números do L1 e do worker foram reconferidos no mesmo ledger e batem com o
+`00-missao.md`):
+
+| Medida | L1 (EXEC em `medium`) | L2 (EXEC em `xhigh`) | Worker (EXEC em `xhigh`) |
+|---|---|---|---|
+| Relógio, do lançamento ao `sdd run rc=` | 6 h 22 min | 16:20 → 23:05 até abrir a DOCS (6 h 45 min); o total fecha no diário da campanha | 16 h 44 min |
+| Sessões e custo | 15, US$ 20,22 | 11 até a DOCS, US$ 34,56 | 26, US$ 127,77 |
+| Minutos por sessão de EXEC | 22,8 (10 sessões) | **37,9** (8 sessões, 5 h 04 min) | 40,7 (18 sessões) |
+| US$ por sessão de EXEC | US$ 1,32 (US$ 13,21) | **US$ 3,49** (US$ 27,89) | US$ 4,83 (US$ 87,03) |
+| Rodadas de REVIEW e incrementos | 9 I e 1 R; r1 B → R1 → r2 A | 6 I, 1 I do gate e 1 R; r1 B → R1 → r2 A (Documentation B, prosa) | 11 I e 22 R |
+| Do PR aberto ao merge | 1 h 44 min (#446) | fecha depois do merge, no diário | cerca de 27 h |
+
+QA 1 sessão (US$ 1,50), REVIEW 2 (US$ 5,16). Nenhuma parada (`kit-touched`, `hat-crossed`,
+`foreign-commit`, `session-died`, `budget-exhausted`); **2** linhas `DENIED` no journal, as duas em
+`/tmp` (um `Read` e um `Write` de sabotagem).
+
+**Leitura:** com o mesmo gênero de trabalho e a mesma quantidade de laços de revisão (uma volta de
+`R<n>`, duas rodadas), o EXEC do L2, em `xhigh`, custou **1,66×** o tempo e **2,6×** o dinheiro por sessão do
+L1. Uma das 8 sessões de EXEC (o I7, US$ 3,85, 45 min) existiu por causa da própria variável: dois
+sensores liam o `EFFORT_*` herdado, e a suíte ficou vermelha sob `EFFORT_EXEC=xhigh`.
+
+Duas ressalvas (a primeira corrige a do `00-missao.md`, que dizia que o L2 contra o L1 isolava o effort):
+- **A comparação é observacional e não isola o effort.** O L2 e o L1 são do mesmo gênero (prosa com
+  asserção), da mesma semana e da mesma suíte, mas o trabalho e o número de incrementos diferem, e
+  dividir por sessão não controla isso (CodeRabbit no #456). O worker foi código novo e entra para
+  mostrar onde o tempo foi (o laço de revisão: 22 R, 27 h do PR ao merge).
+- Cada `gate_EXEC` roda a suíte inteira, que cresce com o tempo, e os lotes não têm o mesmo número de
+  incrementos (9 no L1, 6 no L2): por isso a medida é **por sessão**, nunca o total.
+
+---
+
 ## 2026-11-19 — O L1, primeiro lote que o worker roda sozinho: 14 achados de prosa ganham frase e asserção
 
 **Missão:** `20261117-l1-a-prosa-do-chapeu`, o L1 da campanha `20261117-zerar-as-issues` e o piloto

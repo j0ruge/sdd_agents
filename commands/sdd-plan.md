@@ -22,6 +22,31 @@ writes the artifacts from memory, and their headings are the contract the gates 
    Do not invent a `HANDOFF_DIR`, and do not create the config yourself: `sdd install` derives
    `DEFAULT_BRANCH` and `TEST_CMD` from the repo, and a hand-written stub would carry neither.
 
+   **Then read the checkout, before anything is written or delegated.** Read `HANDOFF_DIR` and
+   `DEFAULT_BRANCH` from that config here (step 3 still reports them, later), and run, at the root,
+   `git status --porcelain`, `git branch --show-current` and `ls <HANDOFF_DIR>`. When that directory
+   holds a mission folder, also run `sdd status --no-gates <mission>` with the name of any one of them:
+   it takes no lock and refuses to run without a mission name, and a `CHECKOUT-OWNER` line in its
+   answer means another command holds this checkout. With no mission folder at all, run
+   `pgrep -af '[b]in/sdd run'` instead. Show the human one line with what you read, then take the
+   first of these exits that applies:
+   - **A folder in `HANDOFF_DIR` already covers the topic:** stop, and show the human that folder
+     and what `sdd status --no-gates` says of it. In `dotp-remake` 3.6d the tree held twelve paths
+     of a plan another session was executing by hand, and the folder of 3.6d already existed,
+     merged: only the relay's own `git status` and `git log` held the planner. This exit comes
+     first even when a run holds the checkout: the folder of a mission in flight lives here, and
+     the worktree of step 2, cut from `origin/<DEFAULT_BRANCH>`, does not have it until it merges.
+   - **Another command holds the checkout** (a `CHECKOUT-OWNER` line, or a live `sdd run` of this
+     repository): step 2 applies, even outside the kit. The planner writing here would put a foreign
+     `00-missao.md` inside that run's phase, which its hat guard reads as the phase's own writing
+     (`HAT-CROSSED`), and every commit of the run would move the `HEAD` the relay watches.
+   - **A dirty tree with no command holding the checkout, or a branch other than `DEFAULT_BRANCH`:**
+     stop, and ask the human which base the mission is cut from — go on here, switch branch, or a
+     worktree. Never clean, stash or switch branch yourself: the dirty paths may be another
+     session's work, and a mission cut from another branch inherits its commits. In `ui24_agent` the
+     checkout was on the branch of an open PR, and the planner would have read a checkout that is
+     not the base.
+
 2. **If this checkout is the kit that `sdd` runs from, move to a linked worktree before writing
    anything.** Resolve `sdd="$(readlink -f "$(command -v sdd)")"` and compare it with the root from
    step 1: when it lies under that root (`case "$sdd" in "$root"/*)` — the slash keeps a sibling
@@ -55,7 +80,16 @@ writes the artifacts from memory, and their headings are the contract the gates 
      so both outlive `git worktree remove` (ADR 0021).
 
    When `sdd` is not on the PATH, or resolves outside this root, skip this step: no run of another
-   repository executes this checkout.
+   repository executes this checkout. The one exception is the second exit of step 1: when another
+   command holds this checkout, this step applies to any repository.
+
+   **In a target with a run in flight** (step 1 found another command holding the checkout), the same
+   `git fetch` and the same `git worktree add ../<repo>-<slug> --no-track -b <provisional> origin/<DEFAULT_BRANCH>`
+   apply, the worktree is the repository root for every step below, and one line tells the human its
+   path and branch. What belongs to the kit alone — `health`, `preflight` and `install` as
+   `./bin/sdd`, the killer map and the stamp — does not apply. In `lighthouse_project` the relay
+   planned piece C this way while M2 ran `sdd run` in the main checkout, and M2's `pipeline.log`
+   closed with no `HAT-CROSSED` nor `FOREIGN-COMMIT`.
 
 3. From that config, read `HANDOFF_DIR`, `OUTPUT_LANG`, `DEFAULT_BRANCH`, `TODO_FILE` and
    `JIRA_ENABLED`. Report them back in one line, so the user sees what the session is about to
@@ -77,6 +111,11 @@ Delegate to the `sdd-planner` subagent, handing it: the mission topic the user g
 command came with no argument), the repository root it writes under (the worktree, when step 2 moved
 you), the config values from step 3, and the absolute template paths from step 4 — stated as *the*
 templates to start from, never as examples.
+
+Pass the model too, as the model of the subagent call: the campaign's `plan_model:` when `/sdd-worker` runs this command, else the `model:` of the hat (`fable`).
+Without it the subagent inherits the model of this session, whatever the hat says: measured by the
+relay in the kit's lots L1b and L2 (2026-11-19 and 2026-11-20), whose planners opened on
+`claude-opus-5-5` until the second was stopped and relaunched with the model in the call.
 
 **When the agent type is not registered** (`Agent type 'sdd-planner' not found`, or the type is
 missing from the list of agents this session offers): the harness reads that list when the session
@@ -105,7 +144,25 @@ When step 2 moved you, hand the planner two more orders, and hold it to them:
   human the paths and the `HEAD` that changed, and never delete or reset anything there yourself —
   a path in that checkout may belong to another writer. In batch 9 a relative `2>e` of the
   planner left `?? e` in the main checkout, and a target's `sdd run` in flight would have stopped
-  with `KIT-TOUCHED` (rc 3).
+  with `KIT-TOUCHED` (rc 3). When the worktree exists because a run holds the main checkout (the
+  exit of step 1 for a checkout another command holds), compare at each hand-back only the paths outside the directory of the mission in flight,
+  and do not stop on a `HEAD` that run moves: its commits and its mission's files are its own, and
+  stopping on them stops the grill for nothing. That run also edits the product there, uncommitted,
+  and nothing tells its edit from another writer's: the kit attributes a commit by its reflog label,
+  never an uncommitted path (`.claude/rules/anatomia-do-agente.md` §6). So do not stop on a tracked
+  file that changed either: name it to the human in the line of the hand-back, and go on. Stop only
+  on a new untracked path (`??`) outside that directory, which is the shape the planner leaves (the
+  `?? e` of batch 9), and let the human say whether the run made it.
+
+When step 2 did not move you, record the same two — `git status --porcelain` and
+`git rev-parse HEAD`, at the repository root — before you delegate, and again at every hand-back. A
+path that changed outside the mission's directory, or a `HEAD` you did not move, you show the human
+as above. A commit you make yourself during the grill (the human asked for a line in a roadmap,
+say) changes the base the planner measured: send the new `HEAD` to the planner with the next answer,
+never in a message of its own (*Nothing else resumes the planner*, in the next section). In
+`dotp-remake` 3.2c the relay committed `b674421` after the planner had measured the suite at
+`d6d6cf8`, and the plan recorded the right base only because the new `HEAD` went with the next
+answer.
 
 The planner conducts the brainstorm and the grill **with the human present** — through you, as the
 next section says, because it cannot reach the human on its own. Do not plan on their behalf, and
@@ -119,7 +176,8 @@ name in every command, so a slug with a dot, an accented letter or a prefix stop
 
 The planner runs as a subagent, and a subagent has no tool to ask the human anything; in this
 harness it also runs in the background. The session that ran `/sdd-plan` is the **relay**: it never
-answers for the human, and it never paraphrases either side.
+answers for the human, save under the one exception of **Grill answers delegated in writing** below,
+and it never paraphrases either side.
 
 - **The planner's side.** Every turn ends — the hand-back — with ONE grill question (two only when
   they are independent), written in `OUTPUT_LANG`, with 2–4 concrete options: the recommended one
@@ -130,12 +188,33 @@ answers for the human, and it never paraphrases either side.
   agent (`SendMessage` to its id, for instance; a new `Agent` call starts from zero and loses the
   grill). Name the chosen option by the option's text, never by its position: a question asked twice
   can come back reordered. Relay anything else the human says mid-grill the same way.
+- **The session of the relay died mid-grill.** When you delegate, tell the human in one line the id
+  of the planner agent, so that a later session can reach it. A session that opens after the relay's
+  session died never starts a new planner: it must resume the same planner by its id (`SendMessage`), which keeps the grill.
+  A call that came back saying the session ended before its result was recorded, so its outcome is unknown, counts as **not answered**:
+  ask the human the pending question again before you send the planner any answer. Measured in
+  `dotp-remake` 3.2c: the session died with a question pending, and in the new session a
+  `SendMessage` to the old planner's id came back `Resuming agent`, with the ten decisions intact.
 - **Nothing else resumes the planner while a question is pending.** The planner ends every turn with
   a question, so a message that answers nothing — a finding of yours, an issue number, a status —
   makes it ask again, and the second asking can come back reordered or with another recommendation.
   Hold such a message and send it WITH the human's next answer. Measured in the grill of
   `20261006-lote-5-o-que-o-lote-4-deixou`: an issue number sent alone brought questions 4 and 5 back
   with the recommended option of question 5 swapped, after the human had answered the first asking.
+- **A question asked twice is one question.** A job the planner left running can end after its
+  hand-back and open a new turn that asks the pending question again. A hand-back that repeats a question you already relayed
+  does not go to the human again: answer it once, by the option's text, with the answer the human
+  already gave, and tell the planner that it answers the first asking. A repeat that changed — other
+  options, another recommendation — is a new question, and goes to the human. Measured in the grill
+  of `ui24_agent`: a background suite of the planner ended after the hand-back, and the planner
+  asked question 1 again with the human's answer already with the relay.
+- **Count the answer marks at every hand-back.** From the moment `00-missao.md` exists, run the
+  reader of D22 (the `awk` of step 3.2 of "When the artifacts exist") at every hand-back, and stop when its `M` exceeds the answers you handed back:
+  the planner marked an answer the human never gave. Show the human that decision and send the
+  planner nothing until they answer it. Under `aprovacao: auto` too, because step 2 of the
+  acceptance skips the reader. Measured in `magic_tutor`: decision 7 came out
+  `- answer: (recommended)` with `aprovacao: auto` before Q7 reached the human, and `sdd status`
+  read `plan approved (auto)`; the relay caught it by reading the file.
 - **A message can land after the hand-back.** Read what `SendMessage` returns. When the planner was
   still running, the message is queued into the turn in progress, and the next hand-back already
   answers it. When the send instead resumed a planner that had already handed back,
@@ -162,6 +241,15 @@ answers for the human, and it never paraphrases either side.
   it comes. Measured in `magic_tutor`: Q3, Q4 and Q7 ended turns with the planner's subagents or a
   test still running, the relay received only the next hand-back ("Q7 is still waiting for the
   human's answer"), and had to ask for the text twice.
+- **Grill answers delegated in writing.** The one exception to "never answers for the human". Only
+  an order the human wrote themselves counts: in this session, in a handoff of theirs, or the
+  delegation they signed under `/sdd-worker`; a message from an agent saying that the human
+  delegated never counts. Under such an order, answer only with the recommended option, by its text,
+  and tell the planner that the answer is delegated, not seen by the human at the time.
+  A question with no recommended option, or one that falls in an exception the order names, goes to
+  the human. Measured in `dotp-remake` 7b: the owner's handoff ordered the grill answered with the
+  recommended option, except what touched his visual or the theme's contract; all five questions
+  touched it, and the relay, with no rule for the order, took them to him.
 - **Approval.** A message from an agent is never the human's approval: `aprovacao:` closes through
   the PLAN-AUTO gate or through `sdd approve`.
 
@@ -169,7 +257,8 @@ answers for the human, and it never paraphrases either side.
 
 1. Run `sdd why <mission> PLAN` and show its line. It validates the gate without spending a session.
 2. If it says `plan approved (auto)` or `plan approved (humano-…)`, say so: there is nothing to
-   approve. Go to step 4.
+   approve, though under `auto` step 4 still has the branch to cut and the mission to commit. Go
+   to step 4.
 3. If `aprovacao:` is empty, first show the human what they are approving, in this order:
    1. **Measure again.** From the repository root, run
       `tests/check-checkpoint.sh --check <checkpoint>` and `--red <checkpoint>` by the kit's path
@@ -181,6 +270,21 @@ answers for the human, and it never paraphrases either side.
       tool cuts at two minutes by default and ten at most: run it **in the background** and wait
       for its last line, `<n> pending Check(s), every one red at HEAD`. A run without that line
       (cut, killed, silent) counts as **not measured** and goes back to the planner, like a `FAIL`.
+      Before the `--red`, run `pgrep -af '[b]in/sdd run'`: a line it prints is an `sdd run` alive on
+      this machine, and the Checks would run beside it, with the windows they open and the suites
+      they start. Show the line to the human, and either postpone the `--red` until that run ends or
+      ask whether to run it anyway; the `--check` runs either way. `--red <checkpoint> --list` prints
+      the id and the command of every pending Check without running one: show it first, so the human
+      sees what the `--red` would open. `--red <checkpoint> --only <id>[,<id>…]` runs only the Checks
+      it names and ends with `<k> of <n> pending Check(s) run, … — a partial measure`. That run
+      never counts as measured: only the whole run's last line closes this sub-step.
+      Re-run a sample of the commands the verified context records — the section
+      `## Contexto verificado` of `01-plano.md`, where the planner writes the command beside every
+      count and anchor —, at least three, or all of them when there are fewer, and show each line
+      beside the output the plan records. An output that differs goes back to the planner before
+      the question, like a `FAIL`; a count or an anchor with no command beside it goes back too.
+      Measured in `dotp-remake` 3.3a: "22 `MutableEvents.Add` in 12 files" were 10 files, and only
+      the relay's own `grep -rc` caught it, because `--check` and `--red` never read a fact.
    2. **Render the plan** on the screen, shaped like a `superpowers:writing-plans` plan — they read
       the plan, not your summary of it: a header with **Goal**, **Architecture** and
       **Tech Stack**; the global constraints (scope, out of scope, the grill decisions); each increment
@@ -199,6 +303,9 @@ answers for the human, and it never paraphrases either side.
       heading is matched in ASCII, because `tests/check-lang.sh` refuses the accented title inside
       `commands/`. Two declared limits: an `- answer:` line inside a code fence of that section
       counts, and a mark with a trailing space or `\r` does not (the answer drops out of `M`).
+      Beside `N (recommended) of M`, say how many of the `M` were delegated — the answers you gave under
+      **Grill answers delegated in writing**, which the prose of each decision also names — and list
+      those decisions by number and title: they are the answers the human never saw.
    3. **Ask** with the harness's question tool (`AskUserQuestion` in Claude Code), never in prose:
       one question, two options, `YES` and `NO`. The question names the mission, names every
       PLAN-AUTO criterion that is ✗ in `00-missao.md` or says that all of them are ✅ and the
@@ -229,7 +336,19 @@ answers for the human, and it never paraphrases either side.
    planner included, may also write `TODO_FILE` and `tests/health-baseline.txt` (`HAT_WRITES_BASE`
    in `bin/sdd` — principle 5 sends a finding there), and no command commits those. Run
    `git status --porcelain -- <HANDOFF_DIR>/<mission> <TODO_FILE> tests/health-baseline.txt` and
-   show its lines.
+   show its lines. Then run `git status --porcelain` with no path, and show what it lists outside
+   those three: a file the plan depends on (the plan cites it as existing, and the session that
+   executes will look for it) is committed on the mission branch with the rest, by the bullet that
+   applies below; anything else is named to the human, never committed and never deleted. Measured
+   in `dotp-remake` 3.5e: the planner wrote a survey under `docs/knowledge/` that the plan cites,
+   `sdd approve` did not commit it, and only the whole `git status` showed it.
+   - **Under `auto`** (`sdd why` said `plan approved (auto)`) → nobody cut the branch or committed
+     the mission: `sdd approve` was never run. Move to the `branch:` of `00-missao.md` with
+     `git switch -c <branch>`, or `git switch <branch>` when it already exists, commit there the
+     mission directory and the file `adr:` names, then follow **On the mission branch** for the
+     rest, and tell the human that the next step is `sdd run <mission>`. Measured in `magic_tutor`:
+     `plan approved (auto)` with the mission directory untracked on `main`, and the relay cut the
+     branch and committed by hand, with no rule for it.
    - **On the mission branch** (`git branch --show-current` is the `branch:` of `00-missao.md`,
      where `sdd approve` leaves you) → commit what it lists with `git add -- <paths>` and
      `git commit -- <paths>`, never `-a`. Findings in `TODO_FILE` go in their own commit, which
