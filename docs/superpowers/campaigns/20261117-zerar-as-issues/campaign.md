@@ -171,7 +171,7 @@ exec_model: opus
 - [ ] A parada do worker roda o `budget` de novo para montar o `SDD_GATE_WHY` do pager
 - [ ] Uma edição do `.sdd/config.sh` durante a fase tira o teto de missão que a delegação assinou
 - [ ] ◆ A missão pedida fora da fila da campanha não tem rota, e a linha nova derruba a delegação
-- [ ] O ato `review` do worker mergeia a base antes da rodada, e o `review-base` responde `full` toda vez
+- [ ] O ato `review` do worker mergeia a base antes da rodada, e o `review-base` dá `full` quando a `main` andou
 - [ ] O merge delegado não confere que o corpo do PR lista as escolhas do grill
 
 ### L5c — O runner: as notas, o plano e o turno
