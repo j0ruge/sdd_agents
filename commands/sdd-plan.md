@@ -113,9 +113,12 @@ you), the config values from step 3, and the absolute template paths from step 4
 templates to start from, never as examples.
 
 Pass the model too, as the model of the subagent call: the campaign's `plan_model:` when `/sdd-worker` runs this command, else the `model:` of the hat (`fable`).
-Without it the subagent inherits the model of this session, whatever the hat says: measured by the
-relay in the kit's lots L1b and L2 (2026-11-19 and 2026-11-20), whose planners opened on
-`claude-opus-5-5` until the second was stopped and relaunched with the model in the call.
+Measured by the relay in the kit's lots L1b and L2 (2026-11-19 and 2026-11-20), while the hat
+carried no `model:` in its frontmatter and only its prose said Fable: without the model in the call
+the subagent inherited the model of this session, and both planners opened on `claude-opus-5-5`
+until the second was stopped and relaunched with the model in the call. With the `model: fable`
+the hat declares now, what the harness does without the model in the call is not measured yet
+(pending item 4 of `20261120-l2-o-sdd-plan-e-o-planner`), so the call keeps carrying it.
 
 **When the agent type is not registered** (`Agent type 'sdd-planner' not found`, or the type is
 missing from the list of agents this session offers): the harness reads that list when the session
