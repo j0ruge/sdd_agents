@@ -4,6 +4,45 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-11-21 — O L3: os gates do fim da linha leem o head que conferem, com a EXEC de volta a `medium`
+
+**Missão:** `20261121-l3-gates-do-fim-da-linha`, o L3 da campanha `20261117-zerar-as-issues`
+([ADR 0024](docs/adr/0024-the-end-of-line-gates-read-the-head-they-check.md)). Primeira corrida
+depois do veredito do effort (entrada logo abaixo): EXEC em `medium`, o padrão do `.sdd/config.sh`,
+lançada sem `EFFORT_*` no ambiente. Nove incrementos do plano e um `R<n>` (o R1 da r1).
+
+**Antes** (merge-base `a0004df`): os 13 itens do `TODO.md` sobre os gates de EXEC, QA, REVIEW, DOCS
+e PR e o corpo do PR sem conserto; o `gate_PR` pedia ao `gh` só `--json url`; nenhuma leitura do
+código commitado depois da rodada de REVIEW; o K8 lia o `HEAD`; o `status: blocked` do `50-pr.md` e
+da rodada não parava a linha; `grep -c '^mut_' tests/check-mutation.sh` → **926**.
+
+**Depois** (head da branch): os 13 itens com `RESOLVED by <hash>`; 32 asserções novas (as 30 do
+plano e as 2 do R1) em `check-gates.sh`, `check-autonomy.sh`, `check-hat.sh` e
+`check-templates.sh`; `grep -c '^mut_' tests/check-mutation.sh` → **943** (os 16 do plano e o
+`mut_PR_kit_lines_counted_in_fence` do R1), cada um provado por `--only`. A catraca não desce aqui
+(`todo-findings 91` antes e depois): os 13 saem no chore de depois do merge.
+
+**O custo da EXEC ao lado do L2 e do L1** (`~/.sdd/autonomy-log.jsonl`, linhas `session` com
+`phase: EXEC`, somadas com `jq`; o L2 sem a sessão `3672ea89`, como na entrada abaixo):
+
+| Missão | Effort da EXEC | Sessões (I + R) | Duração total | Por sessão | US$ da EXEC | US$ por sessão | US$ por item | `R<n>` |
+|---|---|---|---|---|---|---|---|---|
+| L1 | `medium` | 10 (9 + 1) | 13 697 s | 1 370 s | 13,21 | 1,32 | 0,94 (14) | 1 |
+| L2 | `xhigh` | 7 (6 + 1) | 15 501 s | 2 214 s | 24,04 | 3,43 | 1,72 (14) | 1 |
+| L3 | `medium` | 10 (9 + 1) | 30 819 s | 3 082 s | 27,32 | 2,73 | 2,10 (13) | 1 |
+
+**Ressalva, e é ela que manda na leitura:** o L3 é código de gate com mutante, e cada sessão roda a
+suíte inteira (uns 16 min nesta máquina, nota do I9) e o `--only` de cada mutante; o L1 e o L2 foram
+prosa com asserção. A comparação não isola o effort: o L3 em `medium` custou menos por sessão que o
+L2 em `xhigh` (2,73 contra 3,43) fazendo trabalho mais pesado, e mais que o L1 em `medium` (2,73
+contra 1,32), que era mais leve. O veredito de voltar a `medium` não é refutado, e também não é
+provado por esta corrida.
+
+**A rodada delta, segunda medida** (a entrada abaixo pedia "o próximo lote com duas rodadas"): no L3
+a r1 do runner (inteira) custou US$ 4,02 e a r2 (delta, `base=58c1274`) US$ 1,58, razão **0,39**,
+contra 0,36 no L2 e 0,61 e 0,97 nos L1 e L1b sem delta. Duas corridas com o delta, as duas abaixo de
+0,4: confirma a direção, com a mesma forma nas duas (r1 B com um R1 de lote, r2 A).
+
 ## 2026-11-21 — O veredito do effort da EXEC (volta a `medium`) e a rodada delta medida em dinheiro
 
 **Origem:** o chore pós-merge do L2 (`20261120-l2-o-sdd-plan-e-o-planner`, PR #456), campanha
