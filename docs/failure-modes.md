@@ -1058,9 +1058,14 @@ reopens the phase (`review_later_code_ok`): a commit that is not a merge, newer 
 added the round, touched a path outside the `writes:` of the REVIEW and DOCS hats. The round did not
 see that code.
 
-**What you do:** nothing by hand — the next lap opens a delta round (ADR 0023) over that code. If
-the commit should not be on the branch, revert it there instead. Prose the DOCS phase writes, a
-merge of the base and a mission already in the base do not reopen.
+**What you do:** below `REVIEW_MAX_ITER`, nothing by hand — the next derived lap opens a delta round
+(ADR 0023) over that code, and that round, a fresh review of the head, is what clears the refusal.
+Reverting the commit does **not** clear it: the gate reads each commit after the round, never the
+net diff, so the commit and its revert both stay in the range, and the head after the revert still
+needs that fresh round. At the ceiling the derived lap opens no round (the line stops as
+`BLOCKED in REVIEW`, rounds counted in total on disk); ask for the round explicitly with
+`sdd run <mission> --phase REVIEW`, which the ceiling does not refuse. Prose the DOCS phase writes,
+a merge of the base and a mission already in the base do not reopen.
 
 ---
 

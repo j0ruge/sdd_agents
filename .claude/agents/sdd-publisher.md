@@ -93,7 +93,10 @@ target repo. Fill it **from what is in the handoffs**, inventing nothing and sof
 Title: the repo's convention (`<type>(<scope>): <what>`), with the issue key when there is one.
 
 **The PR already exists?** `50-pr.md` names it and the boot prompt says why the phase reopened —
-usually a body that misses a `⛔` item, or a head behind the mission. Never open a second PR: fix the
+usually a body that misses a `⛔` item, or a head behind the mission. A reason that names
+`verified_head:` comes first, because `gate_PR` checks it before the body: the head carries new code
+since that sha, so take the way back of step 5 (run the checks of step 2 again on the head, rewrite
+`verified_head:`, commit `50-pr.md` alone, `git push`), and only then fix the body. Never open a second PR: fix the
 body in place with `gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -F body=@<file>` (`<n>` is the
 number at the end of the url; `gh` fills the owner and the repo from the directory), never `gh pr edit`, which fails on gh 2.45 and leaves the body as it was.
 

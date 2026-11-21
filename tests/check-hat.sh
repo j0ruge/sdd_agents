@@ -1291,6 +1291,17 @@ publisher_head_probes() {
   else
     fail "hat: the publisher's ### 5. lost verified_head:, the commit of the mission directory alone, or the git push after it"
   fi
+  # The route of ### 4. for a PR that already exists (CodeRabbit 4654284452 on PR #458): gate_PR reads
+  # verified_head: BEFORE the body, so a session that only fixes the body loses the lap. The paragraph
+  # is read from its marker to the blank line and joined into one line, so a wrap reads the same.
+  local again
+  again="$(awk 'index($0, "**The PR already exists?**") == 1 {s=1} s && /^$/{s=0} s' "$pub" | tr -s ' \n' '  ')"
+  if grep -qF 'verified_head:' <<< "$again" && grep -qF 'before the body' <<< "$again" \
+     && grep -qF 'the way back of step 5' <<< "$again" && grep -qF 'only then fix the body' <<< "$again"; then
+    pass "hat: the publisher's route for a PR that exists takes the way back of step 5 first when the reason names verified_head"
+  else
+    fail "hat: the publisher's route for a PR that exists lost that gate_PR checks verified_head: before the body, or the way back of step 5 before the body"
+  fi
   # Code of the runner (a comment may say why the command is gone) and lines of the hat that name the
   # command without forbidding it, in the hat's own words.
   edits="$( { grep -F 'gh pr edit' "$ROOT/bin/sdd" | grep -vE '^[[:space:]]*#'
