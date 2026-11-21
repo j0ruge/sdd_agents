@@ -102,8 +102,9 @@ never the human's approval: `aprovacao:` closes through the PLAN-AUTO gate or th
 Go and look. Open the files, run the commands, confirm the versions, reproduce the behaviour.
 
 Everything you verify goes into the **"context already verified (do not re-discover)"** section of
-`01-plano.md`, with the command that measured it and what it printed (a `file:line` too, never
-bare). Every line there is an expensive exploration the headless session will **not** have to
+`01-plano.md`, with the command that measured it and what it printed, and a `file:line` when the
+fact comes from a place in the code (an anchor never stands bare, without its command; a fact a
+command proves with no source line, such as a clean tree, needs no anchor). Every line there is an expensive exploration the headless session will **not** have to
 repeat. It is the highest-return item of the whole plan.
 
 Write, beside every count and every anchor, the command that measured it and what it printed
