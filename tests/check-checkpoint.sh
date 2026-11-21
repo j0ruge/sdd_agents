@@ -1779,7 +1779,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=450
+PROBE_FLOOR=452
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -3445,10 +3445,15 @@ ARGV
   # a pending row `I1,I2` made `--only I1` pass, and the selector, which matched the row against the
   # joined list, ran nothing: `0 of 1 pending Check(s) run`, rc 0. With `I1`, `I2` and `I1,I2` all
   # pending, `--only I1,I2` ran the third row too, which it never named.
+  # Each fixture opens with the whole --red as the control of its notran probe (r3 of L2): the
+  # Check of the row `I1,I2` can create ran-c, so a notran that holds says the selector skipped the
+  # row, never that the witness could not be written.
   local rc_w="$red/ran-c"
   cp_head "$rf"
   cp_row "$rf" 'I1,I2' '`touch ran-c; echo 0` → `1`' pending
   cp_row "$rf" I3 '`touch ran-I3; echo 0` → `1`' pending
+  probe_on 'the whole --red runs the pending row whose id holds a comma, so ran-c can say what ran' 0 \
+    ran "$rc_w" "$rf" --red
   probe '--red --only refuses an id that only a pending id with a comma holds' 1 \
     'names I1, which is not a pending row' "$rf" --red --only I1
   probe_on '--red --only naming a piece of a pending id with a comma runs no Check' 1 notran "$rc_w" \
@@ -3457,6 +3462,8 @@ ARGV
   cp_row "$rf" I1 '`touch ran-I1; echo 0` → `1`' pending
   cp_row "$rf" I2 '`touch ran-I2; echo 0` → `1`' pending
   cp_row "$rf" 'I1,I2' '`touch ran-c; echo 0` → `1`' pending
+  probe_on 'beside I1 and I2, the whole --red still runs the pending row I1,I2' 0 \
+    ran "$rc_w" "$rf" --red
   probe_on '--red --only never runs the pending row whose id joins two named ids with a comma' 0 \
     notran "$rc_w" "$rf" --red --only I1,I2
   # The strict-form refusal belongs to the Checks a mode reads: every pending one for --list, the
