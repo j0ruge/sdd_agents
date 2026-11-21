@@ -1,6 +1,6 @@
 ---
 missao: 20261121-l4-preflight-health-e-sensores
-atualizado: 2026-11-21 04:29
+atualizado: 2026-11-21 18:29
 ---
 
 # Checkpoint — L4: preflight, health e sensores
@@ -48,7 +48,7 @@ atualizado: 2026-11-21 04:29
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | O preflight sem ruído de pipe, e a árvore suja com os caminhos (itens 12 e 11) | `o=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    preflight prints no write error with READ_EXTRA filled under a caller that ignores SIGPIPE' <<< "$o") $(grep -c '^  ok    preflight names the dirty paths, and the exclude file only when every one of them is untracked' <<< "$o")"` → `1 1` | pending | — |
+| I1 | O preflight sem ruído de pipe, e a árvore suja com os caminhos (itens 12 e 11) | `o=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    preflight prints no write error with READ_EXTRA filled under a caller that ignores SIGPIPE' <<< "$o") $(grep -c '^  ok    preflight names the dirty paths, and the exclude file only when every one of them is untracked' <<< "$o")"` → `1 1` | done | 81f6ec6 |
 | I2 | A sonda do Bash dá ok pelo comando rodado (item 6) | `o=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    preflight says the Bash probe executes only when a Bash tool_result of the stream carries the marker' <<< "$o") $(grep -c '^  ok    preflight fails a Bash probe whose answer repeats the marker with no Bash call behind it' <<< "$o") $(grep -c '^  ok    preflight claims Bash in the tool list only over an init line' <<< "$o")"` → `1 1 1` | pending | — |
 | I3 | Os hooks que toda fase carrega, e a skill pelo .skills da init (item 15) | `o=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    preflight lists the hooks the probe session ran, one line per event, with the count, the exit codes and the bytes' <<< "$o") $(grep -c '^  ok    preflight warns by name about a hook that exits non-zero or does not report success, and only about it' <<< "$o") $(grep -c '^  ok    preflight fails a skill a phase will invoke when the init line of the probe does not list it' <<< "$o") $(grep -c '^  ok    preflight says nothing about hooks or the skills list without an init line' <<< "$o")"` → `1 1 1 1` | pending | — |
 | I4 | O preflight mede a forma do TODO_FILE (item 1) | `o=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    preflight measures the shape of TODO_FILE by itself: ok when clean, a warning with the count when not, never a failure' <<< "$o") $(grep -c '^  ok    preflight names the opt-in line with --baseline only when TEST_CMD does not carry check-todo.sh' <<< "$o") $(grep -c '^  ok    preflight says the shape of TODO_FILE was not measured when the file or the sensor is missing' <<< "$o")"` → `1 1 1` | pending | — |

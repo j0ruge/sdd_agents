@@ -50,3 +50,4 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+- 2026-11-21 18:29 · `EXEC` · I1 em `81f6ec6`: `read_rules_cover` lê a lista com `mapfile` (Red: 2 linhas `printf: ` com 400 entradas sob `trap '' PIPE`); a árvore suja nomeia até 10 caminhos e o `info/exclude` (por `git rev-parse --git-path`) só quando todos são `??`; PRE_read_rules_cover_stream_read, PRE_dirty_paths_unnamed e PRE_dirty_exclude_always_named caught by check-preflight.sh; 30 âncoras do TODO.md remapeadas pelo diff; suíte verde (957 mutantes aplicam)
