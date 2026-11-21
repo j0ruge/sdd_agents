@@ -1011,18 +1011,18 @@ run_check_cmd() {
 # no_work_check ignores a reason that cites one (gate_why_cites_log), so a stable reason is what
 # lets the second lap over the same tree stop as no-work before it buys a session. The owner of what
 # the reason asks for is the human, whose tree it is; the gate asks no new artifact of anyone.
-# A TEST_CMD that STARTED and then hit a missing command exits 127 too (`true; no_such_cmd`), and
-# "never started" would be false about it (finding #1 of r1 of L3): a log with more than one
-# non-empty line printed something before the shell's own message, and gets a sentence of its own,
-# as stable as the other. One line is the shell's message alone, in any locale. NO line is no
-# evidence at all: the shell always writes its message when it cannot start a command, and the log
-# takes stderr, so a silent 126/127 is the suite's own exit status (a wrapper's `exit 127`) and reads
-# as a red suite, citing its log (CodeRabbit 4654284445 on PR #458).
-# DECLARED LIMIT: one line is a heuristic, not proof that nothing ran. A TEST_CMD whose first step
-# is silent and whose next one is missing (`printf x > f; no_such_cmd`) leaves the same one line, so
-# "never started" can be false about it, and nothing in the log tells the two apart (Codex P2 on PR
-# #458). The cost of that error is a reading, not a session: gate_EXEC passes `dirty` when the tree
-# is dirty, the sentence then says the two are not told apart, and the dirty-tree stop holds.
+# A TEST_CMD that STARTED then hit a missing command exits 127 too (`echo x; no_such_cmd`): a log
+# with more than one non-empty line printed something before the shell's own message, so "never
+# started" would be false (finding #1 of r1 of L3), and it gets a sentence of its own, as stable.
+# NO line is no evidence: the shell always writes its message when it cannot start a command, and
+# the log takes stderr, so a silent 126/127 is the suite's own exit status (a wrapper's `exit 127`)
+# and reads as a red suite, citing its log (CodeRabbit 4654284445 on PR #458).
+# DECLARED LIMITS. One line is READ as the shell's message, in any locale, with no proof: a silent
+# step before a missing one (`true; no_such_cmd`, `printf x > f; no_such_cmd`; Codex P2 on #458) or
+# a wrapper that prints one line and exits 127 leaves that same line, costing a reading, never a
+# session: over a dirty tree gate_EXEC passes `dirty`, the sentence says the two are not told apart,
+# and the stop holds. The reason keeps the FIRST 200 bytes of the line, which bash opens with the
+# bin/sdd path: a long one cuts off the command and its strerror (r3 #4 of L3), never the reading.
 # Returns 0 ONLY when it wrote a did-not-run reason, which gate_QA and gate_REVIEW read like any
 # other and gate_EXEC reads to choose its sentence — over a clean tree it is the reason; over a
 # dirty one the stop still holds. 1 for a red suite and for a suite that started and then stopped:
@@ -10205,7 +10205,7 @@ cmd_run() {
         dim "  The line stopped on purpose: the working tree is dirty and the suite did not pass."
         dim "  A session would run against the same uncommitted changes and fail the same way."
         dim "  Commit what belongs to the mission, or 'git restore' what does not, then 'sdd run'."
-        pipeline_log_line "$(date -Iseconds)  BLOCKED  EXEC  red suite over a dirty working tree"
+        pipeline_log_line "$(date -Iseconds)  BLOCKED  EXEC  suite did not pass over a dirty working tree"
         autonomy_blocked_row "dirty-tree" "EXEC" "$GATE_WHY"
         return 3
       fi
