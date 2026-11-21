@@ -2,9 +2,9 @@
 missao: 20261120-l2-o-sdd-plan-e-o-planner
 fase: EXEC
 status: done
-sessao: 3672ea89-1b7b-4e93-b75c-cf7e6ae1b22a
-data: 2026-11-20 21:01
-gate: "I7 (d48f7c9, 748bea0): no ambiente da corrida (EFFORT_EXEC=xhigh e CLAUDE_EFFORT=xhigh exportados) tests/run-all.sh → suite green, rc=0, 0 linhas ^  FAIL, 2231 linhas ^  ok (20:41 → 20:56, sobre o TODO.md com o RESOLVED by do I7); antes do d48f7c9, no mesmo ambiente, 2 suite(s) failed (gate-exec-test-20261120-200512-nriksi.log: check-dry-run e check-autonomy, só os 2 de ambiente); Check do I7 → 1 1; o do I6 → 15 (os 14 do I6 e o do I7); check-checkpoint.sh --check → 7 row(s), 6 under the anchor rule, none blind; check-todo.sh --check TODO.md → 103 finding(s), all within 8 lines, carrying anchor + date, every anchor on target, rc 0; --anchors → 103 measured, 0 off target. I6 (c0afc7ba): os seis Checks → 1 1 1 1 / 1 1 1 1 0 / 1 1 1 1 0 / 1 1 1 1 1 0 / 1 1 / 14; 14 of 14 títulos byte a byte iguais"
+sessao: 24fa924e-7e20-46ec-9272-8d91f0e5a90e
+data: 2026-11-20 22:31
+gate: "R1 (502ab59), da r1 da REVIEW: no ambiente da corrida (EFFORT_EXEC=xhigh e CLAUDE_EFFORT=xhigh exportados) tests/run-all.sh → suite green, rc=0, 0 linhas ^  FAIL, 2231 linhas ^  ok (22:10 → 22:30); na base da sessão (33c78db), o mesmo resultado (21:59 → 22:09); Check do R1 → 96 (era 0); check-checkpoint.sh rc 0, linha rule: --red --list com 35 probes, PROBE_FLOOR 447; sabotagem 9 de 10 mortos, o 10º é o piso de volta a 443, declarado; check-todo.sh --anchors → 105 measured, 0 off target. I7 (d48f7c9, 748bea0): no ambiente da corrida (EFFORT_EXEC=xhigh e CLAUDE_EFFORT=xhigh exportados) tests/run-all.sh → suite green, rc=0, 0 linhas ^  FAIL, 2231 linhas ^  ok (20:41 → 20:56, sobre o TODO.md com o RESOLVED by do I7); antes do d48f7c9, no mesmo ambiente, 2 suite(s) failed (gate-exec-test-20261120-200512-nriksi.log: check-dry-run e check-autonomy, só os 2 de ambiente); Check do I7 → 1 1; o do I6 → 15 (os 14 do I6 e o do I7); check-checkpoint.sh --check → 7 row(s), 6 under the anchor rule, none blind; check-todo.sh --check TODO.md → 103 finding(s), all within 8 lines, carrying anchor + date, every anchor on target, rc 0; --anchors → 103 measured, 0 off target. I6 (c0afc7ba): os seis Checks → 1 1 1 1 / 1 1 1 1 0 / 1 1 1 1 0 / 1 1 1 1 1 0 / 1 1 / 14; 14 of 14 títulos byte a byte iguais"
 ---
 
 # Handoff — EXEC — L2: o `/sdd-plan` e o planner
@@ -19,13 +19,15 @@ asserção, o `--red` ganhou `--list` e `--only`, e os 14 itens do `TODO.md` car
 O I7, fora do plano, consertou os dois sensores que liam o `EFFORT_*` do ambiente (`d48f7c9`): a
 suíte agora sai verde também com `EFFORT_EXEC=xhigh` exportado, que é como o `gate_EXEC` a roda.
 O Check do I6 passou a responder `15` (os 14 e o do I7). A QA é no terminal.
+Depois da r1 da REVIEW, o R1 (`502ab59`) fechou o achado #1: o `--red --only` recusa, com rc 96 e
+antes de rodar qualquer Check, a lista de ids com espaço ou quebra de linha. A próxima é a r2.
 
 ## Estado do repo
 
 - **Branch:** `fix/l2-o-sdd-plan-e-o-planner`, à frente de `origin/fix/l2-o-sdd-plan-e-o-planner` (nada empurrado nesta fase)
-- **Último commit:** o deste handoff com o checkpoint; os do I7 são `d48f7c9` `fix(tests): os dois sensores do effort limpam o EFFORT_* herdado de quem chama` e `748bea0` (o `RESOLVED by` do item)
+- **Último commit:** o deste handoff com o checkpoint; o do R1 é `502ab59` `fix(tests): o --red --only recusa a lista de ids com espaço ou quebra de linha`; os do I7 são `d48f7c9` e `748bea0` (o `RESOLVED by` do item)
 - **Working tree:** limpo
-- **Suíte:** `tests/run-all.sh` no ambiente da corrida (`EFFORT_EXEC=xhigh` e `CLAUDE_EFFORT=xhigh` exportados) → `suite green`, rc 0, 0 `FAIL`, 2231 linhas `ok` (20:41 → 20:56). Com `env -u EFFORT_EXEC -u CLAUDE_EFFORT` ela já saía verde no I6
+- **Suíte:** `tests/run-all.sh` no ambiente da corrida (`EFFORT_EXEC=xhigh` e `CLAUDE_EFFORT=xhigh` exportados) → `suite green`, rc 0, 0 `FAIL`, 2231 linhas `ok`, no I7 (20:41 → 20:56) e de novo depois do R1 (22:10 → 22:30). Com `env -u EFFORT_EXEC -u CLAUDE_EFFORT` ela já saía verde no I6
 - **E2E:** `E2E_CMD` vazio: o kit não tem interface
 
 ## O que foi feito
@@ -39,6 +41,7 @@ O Check do I6 passou a responder `15` (os 14 e o do I7). A QA é no terminal.
 | I5 | `972a482` | 14 | `--red <cp> --list` e `--red <cp> --only <ids>` no `tests/check-checkpoint.sh`, com 31 probes e a linha `rule:` do selftest; o "Measure again" procura `sdd run` vivo antes do `--red` |
 | I6 | `df7b55e` | os 14 | `RESOLVED by <hash>` em cada item, com o hash do incremento que o fechou |
 | I7 | `d48f7c9` | o do `1c8de6a` | fora do plano: `tests/check-dry-run.sh` e `tests/check-autonomy.sh` limpam do próprio ambiente toda variável `EFFORT_*` antes do fixture; `RESOLVED by` em `748bea0` |
+| R1 | `502ab59` | nenhum (achado #1 da r1) | o `red_args` recusa, com rc 96, a lista do `--only` que tem espaço, tab ou quebra de linha; 4 probes no selftest |
 
 Fora dos incrementos, nesta fase: `1c8de6a` registrou no `TODO.md` o achado dos dois sensores que
 leem o `EFFORT_*` do ambiente (catraca 102 → 103). Os commits `chore(checkpoint)` só fecham linhas.
@@ -70,6 +73,26 @@ No I6, seis itens (6, 9, 10, 11, 13 e 14) tinham a última linha do corpo cheia 
 fecha a nova última linha, nenhuma palavra do corpo mudou, e esses itens ficaram com 8 linhas, o
 teto. Os outros oito levam o token no fim da linha que já existia.
 
+### A r1 da REVIEW: o R1
+
+O achado #1 da `40-review-r1.md` era um fail-open do `--red --only`. O `red_one` partia a lista com
+`IFS=, read -ra`, que para na primeira linha, e o laço de execução casava contra a string inteira.
+Por isso `--only $'I1\nI2'` validava só o I1, não rodava Check nenhum e saía com
+`ok … 0 of 2 pending Check(s) run`, rc 0.
+
+- **O conserto (`502ab59`).** Um ramo novo no `red_args`, `*[[:space:]]*`, recusa a lista com
+  rc 96 e com a frase `no space or line break`, antes de o `red_one` abrir. A mensagem não ecoa a
+  lista, porque a quebra de linha partiria a mensagem em duas. O espaço já era recusado antes, só
+  que pelo nome do id e com rc 1. Agora entra na mesma recusa da gramática, como o R1 pedia.
+- **Selftest.** São 4 probes novos: a quebra de linha, a quebra de linha sem rodar Check (pelo
+  arquivo-testemunha), o espaço e o tab. O `PROBE_FLOOR` foi de 443 para 447.
+- **Sabotagem**, com teto (grupo próprio, 180 s, 4 GB, restauração por `cp` num `finally`). Morreram
+  9 de 10 mutantes: a classe estreitada a espaço, a quebra de linha ou `[[:blank:]]`, o ramo
+  removido, a mensagem reescrita ou apagada, o ramo devolvendo 1 ou caindo no `red_one`, e um probe
+  apagado (rc 92). Sobreviveu o `PROBE_FLOOR` de volta a 443, porque o piso é um mínimo. Quem mede o
+  aperto dele é o mutante do probe apagado. Uma linha por mutante nas notas.
+- O `TODO.md` não mudou: o achado #1 foi direto para o R1, sem item.
+
 ## Artefatos
 
 | Arquivo | O que contém |
@@ -78,7 +101,7 @@ teto. Os outros oito levam o token no fim da linha que já existia.
 | `agents/sdd-planner.md` e o espelho `.claude/agents/sdd-planner.md` | as regras do planner nos §§ 1, 2 e 4 e a chave `model: fable`; `cmp -s` rc 0 |
 | `templates/plano.md` | o comando ao lado do fato medido e a mitigação que nomeia sensor |
 | `docs/plan-only.md` | o que o `gate_EXEC` lê antes de uma missão executada à mão voltar ao `sdd run` |
-| `tests/check-checkpoint.sh` | `--red --list`, `--red --only`, `probe_on`, `red_args`; `PROBE_FLOOR` 443, `RULE_FLOOR` 10 |
+| `tests/check-checkpoint.sh` | `--red --list`, `--red --only`, `probe_on`, `red_args` (com a recusa do R1); `PROBE_FLOOR` 447, `RULE_FLOOR` 10 |
 | `tests/check-hat.sh` | 16 asserções novas (140 linhas `ok` hoje) |
 | `tests/check-templates.sh` | 2 asserções do `plano.md` |
 | `tests/check-dry-run.sh` e `tests/check-autonomy.sh` | o I7: o `EFFORT_*` do ambiente armado e limpo no topo |
@@ -87,8 +110,23 @@ teto. Os outros oito levam o token no fim da linha que já existia.
 
 ## Boot da próxima fase
 
-A QA desta missão é **no terminal**: o kit não tem interface, e `qa:` do `00-missao.md` está vazio,
-então o `sdd-qa` percorre a jornada da seção "Verificação end-to-end" do `01-plano.md`, em ordem:
+**A próxima é a r2 da REVIEW, sobre o delta.** A r1 gravou `reviewed_head: 2fc48ac…`, e desde então
+entraram o `33c78db` (a própria r1: o `40-review-r1.md`, o checkpoint, as notas, o `TODO.md` e a
+catraca 103 → 105), o `502ab59` (o R1, só `tests/check-checkpoint.sh`) e o commit deste handoff.
+O código do delta é um arquivo:
+
+1. O Check do R1: `bash tests/check-checkpoint.sh --red docs/handoffs/20261120-l2-o-sdd-plan-e-o-planner/checkpoint.md --only $'R1\nR1' >/dev/null 2>&1; echo $?`
+   → `96`. Com a linha R1 `done`, o `--only R1` puro sai 93 (não há linha `pending`). É a recusa
+   do `red_args`, que roda antes do `red_one` e não depende do checkpoint.
+2. `bash tests/check-checkpoint.sh; echo $?` → `0`, com a linha
+   `ok    rule: --red --list runs no Check, and --red --only never says every one red at HEAD (35 probe(s))`.
+3. O que olhar no diff do `502ab59`: o ramo `*[[:space:]]*` vem depois do de lista vazia e do `-*`,
+   e a frase dele não ecoa o valor. Os 4 probes ficam logo abaixo do `with an empty id`, sobre o
+   fixture de I1 e I2 `pending`. O comentário do código de saída 96 (`:402`) foi reescrito sem mudar
+   o número de linhas, e por isso as âncoras `:1573` e `:1634` do `TODO.md` não se moveram.
+
+A jornada da QA, que já rodou verde e sem achados, fica no `30-handoff-qa.md`. Os passos abaixo são
+os que ela percorreu, e continuam valendo para quem quiser reproduzi-la:
 
 1. **A suíte, no ambiente que a QA herdar.** Desde o I7 ela sai verde com ou sem `EFFORT_*`
    exportado; registre no relatório o que `env | grep -E '^(EFFORT_|CLAUDE_EFFORT)'` mostrou e o
