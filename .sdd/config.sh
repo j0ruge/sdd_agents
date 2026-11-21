@@ -54,8 +54,10 @@ EFFORT_DOCS="medium"
 # So com um HOME que a gramatica do READ_EXTRA aceita (read_extra_dir_ok: absoluto, nomes de letras,
 # digitos, '.', '_' e '-'): com espaco, '+' ou '//' no HOME o load_config recusa a entrada e mata todo
 # comando do kit (CodeRabbit no #456). Nesse HOME a chave fica vazia e o sdd preflight avisa da skill.
-case "$HOME" in
-  [!/]*|*[!A-Za-z0-9._/-]*|*//*|*/|*/.|*/..|*/./*|*/../*) ;;
+# O HOME nao definido ou vazio cai no mesmo braco: sob o set -u do runner, um "$HOME" cru matava o
+# source (r3 do L2), e o sdd status --no-gates, que nao le o ledger, morria por este arquivo.
+case "${HOME:-}" in
+  ''|[!/]*|*[!A-Za-z0-9._/-]*|*//*|*/|*/.|*/..|*/./*|*/../*) ;;
   *) READ_EXTRA="$HOME/.claude/plugins/cache/chewiesoft-marketplace/codereview" ;;
 esac
 

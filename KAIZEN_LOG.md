@@ -4,6 +4,50 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-11-21 — O veredito do effort da EXEC (volta a `medium`) e a rodada delta medida em dinheiro
+
+**Origem:** o chore pós-merge do L2 (`20261120-l2-o-sdd-plan-e-o-planner`, PR #456), campanha
+`20261117-zerar-as-issues`. Duas medidas que a missão deixou para depois do merge, lidas do ledger
+(`~/.sdd/autonomy-log.jsonl`, `LC_ALL=C`, linhas `session`) e do log da corrida.
+
+**1. O effort da EXEC.** O critério foi escrito antes do resultado (2026-11-20 20:40, pedido do dono:
+*"quando fechar esse vamos voltar ao exec com esforço medium se passar na análise"*). O `xhigh` fica
+só se o L2 fechar a REVIEW com 0 `R<n>` e em até 2 rodadas, um ganho de qualidade que pague o custo
+por item maior.
+
+| Missão | Effort da EXEC | Sessões de EXEC (I + R) | Duração total | US$ da EXEC | US$ por item | `R<n>` | REVIEW do runner |
+|---|---|---|---|---|---|---|---|
+| L1 | `medium` | 10 (9 + 1) | 13 697 s | 13,21 | 0,94 | 1 | 2 sessões, US$ 3,41 |
+| L1b | `medium` | 6 (5 + 1) | 12 841 s | 11,29 | (1 item) | 1 | 2 sessões, US$ 4,40 |
+| L2 | `xhigh` | 7 (6 + 1) | 15 501 s | 24,04 | 1,72 | 1 | 2 sessões (r1 B → R1 → r2 A), US$ 5,16 |
+
+Fora da conta: a sessão `3672ea89` (2 710 s, US$ 3,85), que consertou os dois sensores que herdavam o
+`EFFORT_EXEC` exportado no lançamento.
+
+**Veredito pelo critério:** o L2 teve 1 `R<n>`, como o L1 e o L1b, e a mesma forma de REVIEW. O
+`xhigh` custou 1,8× por item e não comprou a qualidade que o critério mede. A medida aqui é **por
+item**, e não por sessão como na entrada do L2 logo abaixo (2,6× por sessão, com o I7 dentro), porque
+foi o "por item" que o critério fixou antes do resultado. O veredito vale pelas duas, porque ele lê a
+contagem de `R<n>`. A EXEC volta a `medium`
+do L3 em diante, lançada sem exportar `EFFORT_*` e sem o `CLAUDE_EFFORT` do ambiente da sessão
+interativa. A comparação é observacional, com a ressalva da entrada do L2: o trabalho e o número de
+incrementos diferem entre os lotes.
+
+**2. A rodada delta (ADR 0023) em dinheiro.** No L2 a r2 do runner custou US$ 1,36 e a r1 US$ 3,80:
+uma razão r2/r1 de **0,36**. O "antes" que o § 3 da `.claude/rules/anatomia-do-agente.md` cita, 1,0 a
+1,5, vem da missão do worker, que era código novo com 22 `R<n>`. Os dois lotes da própria campanha
+anteriores ao delta são o controle mais próximo, pelo mesmo ledger (runners sem o `079bc39`, o
+primeiro com delta: `git merge-base --is-ancestor 079bc39 <runner_sha>` → rc 1 nos dois):
+
+| Missão | Runner | r1 | r2 | r2/r1 |
+|---|---|---|---|---|
+| L1 | `cc8509a`, sem delta | US$ 2,11 | US$ 1,30 | 0,61 |
+| L1b | `336640e`, sem delta | US$ 2,24 | US$ 2,16 | 0,97 |
+| L2 | `079bc39`, com delta | US$ 3,80 | US$ 1,36 | **0,36** |
+
+Parte da queda o L1 já mostrava sem o delta: a r2 sai mais barata quando a r1 deixou um conserto só. É
+uma corrida com o delta, e o próximo lote com duas rodadas confirma ou refuta.
+
 ## 2026-11-20 — O L2: quinze regras do `/sdd-plan` e do planner ganham texto e asserção, com o EXEC em `xhigh`
 
 **Missão:** `20261120-l2-o-sdd-plan-e-o-planner`, o L2 da campanha `20261117-zerar-as-issues`,
@@ -29,6 +73,11 @@ da r1).
 - **15** itens com `RESOLVED by` (os 14 do lote e o dos sensores do `EFFORT_*`), mais o de prosa do
   `docs/plan-only.md`, fechado na DOCS; `--count` → **105**, todas as âncoras no alvo (os 7 a mais
   são achados que a corrida registrou; a catraca desce no chore de depois do merge).
+
+**No merge da branch** (`6198b68`, medido em 2026-11-21), os dois números andaram depois da DOCS:
+- `PROBE_FLOOR=450`: o `00b8fad` somou os 3 probes do `--only` que o CodeRabbit pediu no #456;
+- `--count` → **106**: o merge `4b60b47` trouxe da `main` o item do #455, e o delta da própria
+  branch segue +7 (99 no merge-base de então, `daf51f9`, para 106).
 
 **A corrida, lado a lado** (ledger `~/.sdd/autonomy-log.jsonl`, linhas `session`, somadas com `jq` e
 `LC_ALL=C awk`; os números do L1 e do worker foram reconferidos no mesmo ledger e batem com o

@@ -16,7 +16,8 @@ pitfalls conhecidos. Cada linha economiza uma exploração cara em sessão headl
 contagem e de toda âncora vai o comando que a mediu: o aceite do `/sdd-plan` roda de novo uma
 amostra deles, e fato sem comando não se reconfere.>
 
-- <fato> — `arquivo:linha`, ou `<comando que mediu>` → `<o que ele imprimiu>` ao lado de toda contagem
+- <fato> — `<comando que mediu>` → `<o que ele imprimiu>`, ao lado de toda contagem e de toda âncora
+  `arquivo:linha` (a âncora sem o comando volta ao planner no aceite)
 
 ## Arquitetura da mudança
 

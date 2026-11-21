@@ -42,6 +42,8 @@ What that costs, measured:
    `base=<full sha>` (40 hex, or 64 in a SHA-256 repository) or `full`. The rest names the round or
    the reason, for the human. In order:
    - no round: `full`;
+   - `git status` cannot say whether the round is committed (it fails): `full`. A status that
+     fails proves nothing committed either;
    - the round is not committed (modified, staged, untracked or ignored): `full`. A session that
      wrote its round and died would otherwise hand the retry a base no finished round read;
    - no key: `full`;
@@ -54,8 +56,9 @@ What that costs, measured:
    `/codereview:codereview base=<sha>`, naming the previous round as the list of open findings, or
    a full round with the reason. `sdd review-base <mission>` prints the same line. It runs no gate
    and no suite, and it is admitted without the checkout lock, so it writes nothing: the
-   `git status` of the second case runs with `GIT_OPTIONAL_LOCKS=0`, or it would take `index.lock`
-   and rewrite the index under a session committing in the same checkout (r3 of the mission).
+   `git status` the second and third cases read runs with `GIT_OPTIONAL_LOCKS=0`, or it would take
+   `index.lock` and rewrite the index under a session committing in the same checkout (r3 of the
+   mission).
 3. **A merge in the range makes the round full.** The skill reviews `base..HEAD`. A merge of the
    base branch would pour everything that came with it into the delta. Under `sdd run` nobody
    merges between rounds.
