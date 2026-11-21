@@ -1633,8 +1633,8 @@ red_cell() {
 # must never print it — not even when the list names every pending row.
 red_one() {
   local path="${1-}" mode="${2-whole}" ids="${3-}" label top rows nf id st chk out rc got want
-  local n=0 k=0 bad=0 pend=',' i
-  local -a named=()
+  local n=0 k=0 bad=0 i p hit
+  local -a named=() pend=()
   if [ -z "$path" ] || [ ! -r "$path" ]; then
     fail "checkpoint not readable: ${path:-<none>}"
     return 94
@@ -1649,22 +1649,25 @@ red_one() {
   rows="$(rows_of "$path")"
   # --only checks its ids against the pending rows BEFORE any Check runs: an id that names no pending
   # row is a typo or a closed increment, and running the others first would open the very windows
-  # the relay reached for --only to spare.
+  # the relay reached for --only to spare. Each id is compared WHOLE, as an element of an array and
+  # never as a piece of a joined string: an id with a comma in it (`I1,I2`) is then a row no --only
+  # list can name, and the selector below reads the same array (CodeRabbit on #456).
   if [ "$mode" = only ]; then
     while IFS=$'\t' read -r nf id st chk; do
-      if [ -n "$nf" ] && [ "$nf" -eq 7 ] && [ "$st" = pending ]; then pend="$pend$id,"; fi
+      if [ -n "$nf" ] && [ "$nf" -eq 7 ] && [ "$st" = pending ]; then pend+=("$id"); fi
     done <<< "$rows"
-    if [ "$pend" = ',' ]; then
+    if [ "${#pend[@]}" -eq 0 ]; then
       fail "$label has no pending row — --red measured nothing"
       return 93
     fi
     IFS=, read -ra named <<< "$ids"
     for i in "${named[@]}"; do
-      case "$pend" in
-        *",$i,"*) ;;
-        *) fail "$label: --red --only names $i, which is not a pending row — no Check was run"
-           bad=$((bad + 1)) ;;
-      esac
+      hit=0
+      for p in "${pend[@]}"; do [ "$p" = "$i" ] && { hit=1; break; }; done
+      if [ "$hit" -eq 0 ]; then
+        fail "$label: --red --only names $i, which is not a pending row — no Check was run"
+        bad=$((bad + 1))
+      fi
     done
     [ "$bad" -eq 0 ] || return 1
   fi
@@ -1685,7 +1688,10 @@ red_one() {
     [ "$st" = pending ] || continue
     n=$((n + 1))
     if [ "$mode" = only ]; then
-      case ",$ids," in *",$id,"*) k=$((k + 1)) ;; *) continue ;; esac
+      hit=0
+      for i in "${named[@]}"; do [ "$i" = "$id" ] && { hit=1; break; }; done
+      [ "$hit" -eq 1 ] || continue
+      k=$((k + 1))
     fi
     if ! red_cell "$chk"; then
       fail "$label: $id has a Check outside the strict form \`command\` → \`expected\` — --red cannot run it, so nothing says it is red"
@@ -1773,7 +1779,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=447
+PROBE_FLOOR=450
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -3434,6 +3440,25 @@ ARGV
   probe '--red --list takes no fourth argument' 96 'unknown option' "$rf" --red --list I1
   probe '--red --only takes no fifth argument' 96 'unknown option' "$rf" --red --only I1 --list
   probe 'the two modes together are refused' 96 'unknown option' "$rf" --red --only --list
+  # An id is matched WHOLE, in the pre-pass and in the selector alike (CodeRabbit on #456). The
+  # pre-pass used to join the pending ids with commas and look for the name between two of them, so
+  # a pending row `I1,I2` made `--only I1` pass, and the selector, which matched the row against the
+  # joined list, ran nothing: `0 of 1 pending Check(s) run`, rc 0. With `I1`, `I2` and `I1,I2` all
+  # pending, `--only I1,I2` ran the third row too, which it never named.
+  local rc_w="$red/ran-c"
+  cp_head "$rf"
+  cp_row "$rf" 'I1,I2' '`touch ran-c; echo 0` → `1`' pending
+  cp_row "$rf" I3 '`touch ran-I3; echo 0` → `1`' pending
+  probe '--red --only refuses an id that only a pending id with a comma holds' 1 \
+    'names I1, which is not a pending row' "$rf" --red --only I1
+  probe_on '--red --only naming a piece of a pending id with a comma runs no Check' 1 notran "$rc_w" \
+    "$rf" --red --only I1
+  cp_head "$rf"
+  cp_row "$rf" I1 '`touch ran-I1; echo 0` → `1`' pending
+  cp_row "$rf" I2 '`touch ran-I2; echo 0` → `1`' pending
+  cp_row "$rf" 'I1,I2' '`touch ran-c; echo 0` → `1`' pending
+  probe_on '--red --only never runs the pending row whose id joins two named ids with a comma' 0 \
+    notran "$rc_w" "$rf" --red --only I1,I2
   # The strict-form refusal belongs to the Checks a mode reads: every pending one for --list, the
   # named ones for --only. The row-shape refusals come before the Status is read, so they hold for
   # every row in both modes, named or not.
