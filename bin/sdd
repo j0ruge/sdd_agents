@@ -877,6 +877,58 @@ app_probe() {
   return 0
 }
 
+# e2e_failed_keys <log>: the `<file>:<line>` of each case in the Playwright `N failed` block of a
+# log, one per line, each once. The block runs from `^  <n> failed$` to the next `^  <n> <word>`
+# (flaky, skipped, passed, did not run, interrupted); a case line is
+# `    [<project>] › <file>:<line>:<column> › <title>`. A `✓` line of a case that PASSED carries the
+# same file:line outside any block, and that is why the block, and not the log, is read.
+# The separators are found with index()/substr(): mawk is byte-based, and a negated class over
+# the multibyte `›` would negate its bytes (CLAUDE.md). DECLARED LIMIT: only the Playwright format
+# is read; any other runner yields no key, and the reason stays the one of before.
+e2e_failed_keys() {
+  awk '
+    /^  [0-9]+ failed$/ { inb = 1; next }
+    inb && /^  [0-9]+ [a-z]/ { inb = 0; next }
+    inb && /^    \[/ {
+      s = $0; i = index(s, "] › "); if (!i) next
+      s = substr(s, i + length("] › ")); j = index(s, " › "); if (j) s = substr(s, 1, j - 1)
+      if (s !~ /:[0-9]+:[0-9]+$/) next
+      sub(/:[0-9]+$/, "", s)
+      if (!(s in seen)) { seen[s] = 1; print s }
+    }' "$1" 2>/dev/null || true
+}
+
+# e2e_red_history <log>: the sentence the up arm of gate_QA adds for each red case of <log> —
+# how many of the earlier e2e gate logs (every mission of this repo, the 50 newest by file name,
+# which carries the date and time; this log left out) had that case in their failed block. Up to
+# five cases, then `and <m> more`. Prints NOTHING with no failed block in <log> or no earlier
+# log, so the reason stays byte for byte the one of before. Stdout only, no global: it is read as
+# `$( )`. DECLARED LIMIT: the `<n>` is the logs this machine keeps.
+e2e_red_history() {
+  local log="$1" keys f n=0 shown=0 key k total counts out="" sep=""
+  local -a all=() prior=()
+  keys="$(e2e_failed_keys "$log")"
+  [ -n "$keys" ] || return 0
+  mapfile -t all < <(find "$REPO_ROOT/.sdd/logs" -mindepth 2 -maxdepth 2 -type f \
+                       -name 'gate-qa-e2e-*.log' -printf '%f\t%p\n' 2>/dev/null \
+                     | LC_ALL=C sort | cut -f2- || true)
+  for f in ${all[@]+"${all[@]}"}; do [ "$f" = "$log" ] || prior+=("$f"); done
+  [ "${#prior[@]}" -le 50 ] || prior=("${prior[@]: -50}")
+  n="${#prior[@]}"
+  [ "$n" -gt 0 ] || return 0
+  counts="$(for f in "${prior[@]}"; do e2e_failed_keys "$f"; done)"
+  total="$(grep -c . <<< "$keys" || true)"
+  while IFS= read -r key; do
+    [ "$shown" -lt 5 ] || break
+    k="$(grep -cxF -- "$key" <<< "$counts" || true)"
+    if [ "$k" -gt 0 ]; then out+="$sep$key already failed in $k of the last $n e2e gate logs"
+    else out+="$sep$key never failed in the last $n e2e gate logs"; fi
+    sep="; "; shown=$(( shown + 1 ))
+  done <<< "$keys"
+  [ "$total" -le 5 ] || out+="; and $(( total - 5 )) more"
+  printf '%s' "$out"
+}
+
 # Runs a config command at the root of the target repo; returns its exit code.
 # Output goes to the mission log (when there is a mission) — it never pollutes the runner stdout.
 #
@@ -1959,6 +2011,11 @@ gate_QA() {
         # database sits behind a port that answers — so the sentence names what it cleared and
         # sends the reader to the log for the rest.
         GATE_WHY="E2E_CMD failed ($E2E_CMD) with the app answering at $label — APP_URL is not the cause; whatever is (a broken assertion, or something behind the port, like a stopped database) is in the log. See $e2e_log"
+        # The history of each red case, before the `See`: a case that already fell before this
+        # mission is not the mission's, and the sdd-qa read that out of the logs by hand (item 10).
+        local hist
+        hist="$(e2e_red_history "$e2e_log")"
+        [ -z "$hist" ] || GATE_WHY="${GATE_WHY% See "$e2e_log"} $hist. See $e2e_log"
         ;;
       wrong)
         # Something answers, and it is not this product: the same escalation as a dead app, with no

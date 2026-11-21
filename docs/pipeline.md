@@ -352,6 +352,11 @@ issue #205 it passed as `done`. The conditions:
   (`app_probe`): nothing listening at `APP_URL`, or a 2xx page that does not carry `APP_EXPECT` — another
   product on the same port — stops the line as `app-down` (see the `kind` column), because no session
   may start or stop an environment. `sdd preflight` asks the same question before a mission starts.
+  When the app answers, the reason also says, for each red case of the Playwright `N failed` block
+  (up to five, keyed `<file>:<line>`), how many of the earlier `gate-qa-e2e-*.log` of this repo (the
+  50 newest, every mission) had it in their own failed block: `… already failed in 2 of the last 3
+  e2e gate logs`, or `never failed …` — a case that fell before the mission is not the mission's.
+  No failed block, another runner's format or no earlier log adds nothing (`e2e_red_history`).
 
 `wont-fix` and `invalid` do **not** block: they are a recorded human decision, not a pending
 defect. Neither does an `open` bug marked `Closable by: human`, or `Closable by: deferred` with the

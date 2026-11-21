@@ -2003,6 +2003,64 @@ if [ "$floor_ok" = "1" ]; then
     assert_why "the same page carrying APP_EXPECT reads as the app answering" "QA" \
                "with the app answering at 127\.0\.0\.1:$PAGE_PORT"
     sed -i '/^APP_EXPECT=/d' .sdd/config.sh
+
+    # --- the history of each red e2e case (item 10 of L3) -----------------------------------
+    # Only on the `up` arm: with the app down every case falls, and the history would say nothing.
+    # PROVENANCE: the failed block is copied from the end of
+    # /home/joruge/repos/sales_quote/.sdd/logs/20260830-o-rascunho-fantasma-do-mount/gate-qa-e2e-20260830-172116-xrg0TF.log
+    # (the blank line before the counter is part of it), and the `✓` line of a case that PASSED
+    # from …/20261018-silencios-do-formulario-e-dos-dialogos/gate-qa-e2e-20261018-183347-pPGzue.log.
+    # The title of both is Portuguese text in the real log: here each line is cut after the second
+    # ` › ` and `title` is written in its place (tests/check-lang.sh), since the parser never reads it.
+    # Every evaluation of the gate writes a new gate-qa-e2e-*.log, and the script has made over a
+    # hundred before this world: only THOSE are removed (pipeline.log lives beside them and other
+    # assertions read it), and the red world is evaluated ONCE, since a second evaluation would
+    # count the log of the first.
+    hist_red=$'\n  1 failed\n    [chromium] › e2e/sq113-copia-de-itens-persiste.spec.ts:121:7 › title\n  88 passed (5.0m)'
+    hist_green=$'  ✓  172 [chromium] › e2e/sq113-copia-de-itens-persiste.spec.ts:121:7 › title\n\n  4 skipped\n  168 passed (9.2m)'
+    hist_now=$'\n  2 failed\n    [chromium] › e2e/sq113-copia-de-itens-persiste.spec.ts:121:7 › title\n    [chromium] › e2e/sq98-vocabulario-do-pagamento.spec.ts:101:7 › title\n  87 passed (5.0m)'
+    hist_seed() {   # <name suffix> <content>: one earlier e2e gate log of another mission
+      mkdir -p "$FIX/.sdd/logs/20200101-another-mission"
+      printf '%s\n' "$2" > "$FIX/.sdd/logs/20200101-another-mission/gate-qa-e2e-20200101-$1.log"
+    }
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    hist_seed 100000-aaaaaa "$hist_red"; hist_seed 100100-bbbbbb "$hist_red"
+    hist_seed 100200-cccccc "$hist_green"
+    printf '%s\n' "$hist_now" > "$page_dir/e2e.out"
+    sed -i 's|^E2E_CMD=.*|E2E_CMD="cat .page/e2e.out; false"|' .sdd/config.sh
+    hist_got="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+    hist_1='sq113-copia-de-itens-persiste\.spec\.ts:121 already failed in 2 of the last 3 e2e gate logs'
+    hist_2='sq98-vocabulario-do-pagamento\.spec\.ts:101 never failed in the last 3 e2e gate logs'
+    if grep -qE "with the app answering at 127\.0\.0\.1:$PAGE_PORT" <<< "$hist_got" \
+       && grep -qE "$hist_1" <<< "$hist_got" && grep -qE "$hist_2" <<< "$hist_got"; then
+      pass "gate_QA says how often each red e2e case already failed in the earlier e2e gate logs"
+    else
+      fail "gate_QA says how often each red e2e case already failed in the earlier e2e gate logs" \
+           "/$hist_1/ and /$hist_2/ on the up arm" "$hist_got"
+    fi
+    # The other half: a log with no failed block adds nothing (the reason is today's, ending in the
+    # log), and a case that only ever PASSED before counts as never failed — the `✓` line carries
+    # the same file:line outside any block.
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    hist_seed 100000-aaaaaa "$hist_red"
+    printf 'Running 89 tests using 1 worker\n  89 passed (5.0m)\n' > "$page_dir/e2e.out"
+    hist_none="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    hist_seed 100200-cccccc "$hist_green"
+    printf '%s\n' "$hist_red" > "$page_dir/e2e.out"
+    hist_passed="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+    if grep -qE 'is in the log\. See [^ ]*gate-qa-e2e-[^ ]*\.log$' <<< "$hist_none" \
+       && ! grep -q 'e2e gate logs' <<< "$hist_none" \
+       && grep -qE 'sq113-copia-de-itens-persiste\.spec\.ts:121 never failed in the last 1 e2e gate logs' <<< "$hist_passed"; then
+      pass "gate_QA adds nothing for a log with no failed block, and counts no case that passed"
+    else
+      fail "gate_QA adds nothing for a log with no failed block, and counts no case that passed" \
+           "today's reason with no block, and 'never failed in the last 1' over a passed case" \
+           "$hist_none"$'\n---\n'"$hist_passed"
+    fi
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    rm -rf "$FIX/.sdd/logs/20200101-another-mission" "$page_dir/e2e.out"
+    sed -i 's|^E2E_CMD=.*|E2E_CMD="false"|' .sdd/config.sh
     stop_page_server
   fi
 fi

@@ -1429,6 +1429,14 @@ mut_QA_hostport_no_ipv6() {
   sed -i 's@^    \\\[\*\\]:\*) host="${rest#\\\[}"; host="${host%%\\]:\*}"; port="${rest##\*\\]:}" ;;$@    "no-bracketed-port-arm") : ;;@' "$1"
 }
 
+# L3 item 10: the up arm of gate_QA says how often each red e2e case already failed before.
+mut_QA_e2e_history_uncounted() {      # the history is no longer added to the reason
+  sed -i 's@^        \[ -z "\$hist" \] || GATE_WHY=@        true || GATE_WHY=@' "$1"
+}
+mut_QA_e2e_history_counts_passed() {  # the count reads the whole log, not the failed block
+  sed -i '/^e2e_red_history() {/,/^}/ s@e2e_failed_keys "\$f"; done)"$@grep -oE "› [^ ]+:[0-9]+:[0-9]+" "$f" | sed -E "s/^› //; s/:[0-9]+$//" | sort -u; done)"@' "$1"
+}
+
 mut_REVIEW_stops_at_h3() {
   sed -i 's|.*inside && /\^#{1,6}\[\[:space:\]\]/ { exit }.*|      inside \&\& /^###[[:space:]]/ { exit }|' "$1"
 }
@@ -7872,6 +7880,8 @@ CATALOG=(
   QA_hostport_keeps_fragment
   QA_hostport_keeps_userinfo
   QA_hostport_no_ipv6
+  QA_e2e_history_uncounted
+  QA_e2e_history_counts_passed
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_every_row_as_prose
