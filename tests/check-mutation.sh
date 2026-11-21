@@ -2998,6 +2998,15 @@ mut_PRE_skill_init_blind() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^      if jq -e '"'"'(.skills \| type) == "array"'"'"' <<< "\$probe_init" >/dev/null 2>&1; then$|      if true; then|' "$1"
   sed -i '/^cmd_preflight() {/,/^}/ s|^    if \[ -n "\$probe_init" \]; then$|    if true; then|' "$1"
 }
+mut_PRE_todo_shape_unmeasured() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|warn "the shape of TODO_FILE was not measured|: "the shape of TODO_FILE was not measured|' "$1"
+}
+mut_PRE_todo_shape_fails() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^        warn "TODO_FILE does not hold its shape|        _fail "TODO_FILE does not hold its shape|' "$1"
+}
+mut_PRE_todo_optin_always_named() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          \*check-todo.sh\*) ;;$|          *check-todo.sh-never*) ;;|' "$1"
+}
 mut_PRE_template_outcome_default_green() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
 }
@@ -8166,6 +8175,9 @@ CATALOG=(
   PRE_hook_failure_silent
   PRE_skill_absent_from_init_warned
   PRE_skill_init_blind
+  PRE_todo_shape_unmeasured
+  PRE_todo_shape_fails
+  PRE_todo_optin_always_named
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent

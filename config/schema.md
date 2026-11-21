@@ -70,7 +70,11 @@ command (`$SDD_HOME` is the runner's own variable, visible to the command it eva
 fails only on what the base branch did not already have: on 2026-10-05, under the designated-symbol
 rule, `sales_quote` and `lighthouse_project` carried 209 and 127 inherited violations and both
 answered `0 new`. `--allow-empty` keeps a freshly installed repo, whose `TODO.md` has no finding
-yet, from failing on the empty file. Declared limits:
+yet, from failing on the empty file. `sdd preflight` measures the shape by itself, opt-in or not:
+it runs the same sensor on `TODO_FILE` (without `--baseline`) and answers ok when clean, a warning
+with the count and the first violations when not — never a failure — and names this line when
+`TEST_CMD` does not carry `check-todo.sh`; a missing file or sensor is said as "not measured". The
+preflight only warns; the opt-in is what **stops** the line. Declared limits:
 
 - the line works where the runner runs `TEST_CMD` — `gate_EXEC`, `gate_QA`, `gate_REVIEW` and
   `sdd preflight`. Typed outside the runner, `$SDD_HOME` is empty and the line fails loudly (rc 127,

@@ -7383,6 +7383,39 @@ cmd_preflight() {
         && … && npm test), unless leaving them out is deliberate." ;;
   esac
 
+  # --- the shape of TODO_FILE (L4 item 1) ---
+  # The opt-in of config/schema.md runs check-todo.sh inside TEST_CMD, and a target that never typed
+  # it was measured by nobody: sales_quote and lighthouse_project carried 209 and 127 violations for
+  # missions. So the preflight runs the kit's own sensor by itself, from REPO_ROOT (the anchors
+  # resolve against the repo). A WARN and never a _fail: those repos would sit red until a clean-up.
+  # The opt-in is what STOPS the line, so it is named only where TEST_CMD does not carry it; a file
+  # or a sensor that is missing, or an rc the sensor does not document, is said as "not measured",
+  # so a silence here is never read as an ok.
+  local todo_sensor="$SDD_HOME/tests/check-todo.sh" todo_out todo_rc=0 todo_n todo_first
+  if [ ! -f "$todo_sensor" ]; then
+    warn "the shape of TODO_FILE was not measured ($TODO_FILE): the kit at $SDD_HOME has no tests/check-todo.sh"
+  elif [ ! -f "$REPO_ROOT/$TODO_FILE" ]; then
+    warn "the shape of TODO_FILE was not measured ($TODO_FILE): $TODO_FILE does not exist in $REPO_ROOT — 'sdd install' seeds it from templates/todo.md"
+  else
+    todo_out="$( cd "$REPO_ROOT" && bash "$todo_sensor" --check "$TODO_FILE" --allow-empty 2>&1 )" || todo_rc=$?
+    case "$todo_rc" in
+      0) ok "TODO_FILE holds its shape ($TODO_FILE): $(sed -n 's/^  ok    //p' <<< "$todo_out" | head -n 1)" ;;
+      1)
+        todo_n="$(sed -n 's/^\([0-9][0-9]*\) shape violation(s)$/\1/p' <<< "$todo_out" | head -n 1)"
+        todo_first="$(grep '^  line ' <<< "$todo_out" | head -n 3 || true)"
+        warn "TODO_FILE does not hold its shape ($TODO_FILE): ${todo_n:-?} shape violation(s), the first:
+$todo_first
+        Read them all: bash \"$todo_sensor\" --check \"$TODO_FILE\" --allow-empty"
+        case "$TEST_CMD" in
+          *check-todo.sh*) ;;
+          *) warn "nothing stops the line on the shape of $TODO_FILE: TEST_CMD does not run check-todo.sh.
+        The opt-in of config/schema.md appends, inside single quotes, to TEST_CMD:
+        bash \"\$SDD_HOME/tests/check-todo.sh\" --check \"\$TODO_FILE\" --allow-empty --baseline \"origin/\$DEFAULT_BRANCH\"" ;;
+        esac ;;
+      *) warn "the shape of TODO_FILE was not measured ($TODO_FILE): check-todo.sh answered rc $todo_rc — $(head -n 1 <<< "$todo_out")" ;;
+    esac
+  fi
+
   # DEFAULT_BRANCH is the base of `gh pr create` in the PR phase — the LAST phase, after EXEC, QA,
   # REVIEW and DOCS have all been paid for. Nothing ever asked the repository whether the branch was
   # there: load_config demands only a non-empty value, and warn_if_on_base_branch only compares it

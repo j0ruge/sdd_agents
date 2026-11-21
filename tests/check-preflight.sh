@@ -1513,6 +1513,57 @@ fi
 cp "$PROBE/TODO.md.bak" TODO.md
 mv .sdd/config.sh.bak .sdd/config.sh
 
+# --- the shape of TODO_FILE, measured by preflight itself (L4 item 1) ---------
+# The block above proves the opt-in works once a target has typed it; nothing measured a target
+# that never did, and sales_quote and lighthouse_project carried 209 and 127 violations for
+# missions. So the preflight runs the kit's check-todo.sh on TODO_FILE by itself: ok when clean, a
+# WARN with the count when not (never a fail — those two repos would sit red until a clean-up),
+# the opt-in line only when TEST_CMD does not already carry the sensor, and a "not measured" warn
+# when the file or the sensor is missing, so a silence is never read as an ok. Four worlds: the
+# seeded TODO.md, the same with one malformed finding (2 violations: no anchor, no date), that one
+# under a TEST_CMD naming check-todo.sh (never run: the first command is green), TODO.md deleted,
+# and a kit copy with no tests/ at all.
+echo "== the shape of TODO_FILE, measured by preflight itself =="
+cp .sdd/config.sh .sdd/config.sh.bak
+cp TODO.md "$PROBE/TODO.md.bak"
+TS_OK='ok   TODO_FILE holds its shape (TODO.md)'
+TS_WARN='warn  TODO_FILE does not hold its shape (TODO.md): 2 shape violation(s)'
+TS_OPTIN='--check "$TODO_FILE" --allow-empty --baseline "origin/$DEFAULT_BRANCH"'
+TS_UNMEASURED='warn  the shape of TODO_FILE was not measured (TODO.md)'
+ts_cmd() { { grep -v '^TEST_CMD=' .sdd/config.sh.bak; printf "TEST_CMD='%s'\n" "$1"; } > .sdd/config.sh; }
+ts_count() { grep -cF -- "$1" <<< "$2" || true; }
+ts_cmd "\"$PROBE/suite-green.sh\""
+# A blank line keeps the shape and dirties the tree as the malformed finding does, so the fail count
+# the two worlds compare differs only by what the shape block says.
+printf '\n' >> TODO.md
+ts_clean="$( "$SDD" preflight 2>&1 )"
+sed -i '/^<!-- sdd:open -->$/a - [ ] **a finding with no anchor and no date**' TODO.md
+ts_bad="$( "$SDD" preflight 2>&1 )"
+ts_cmd "\"$PROBE/suite-green.sh\" || bash \"\$SDD_HOME/tests/check-todo.sh\" --check \"\$TODO_FILE\""
+ts_carried="$( "$SDD" preflight 2>&1 )"
+ts_cmd "\"$PROBE/suite-green.sh\""
+rm -f TODO.md
+ts_gone="$( "$SDD" preflight 2>&1 )"
+cp "$PROBE/TODO.md.bak" TODO.md
+TS_KIT="$FIX/.stub/todo-shape-kit"
+mkdir -p "$TS_KIT/bin"
+cp "$SDD" "$ROOT/bin/sdd-coordination.py" "$TS_KIT/bin/"
+ln -sfn "$ROOT/agents" "$TS_KIT/agents"
+ln -sfn "$ROOT/templates" "$TS_KIT/templates"
+ts_nosensor="$( "$TS_KIT/bin/sdd" preflight 2>&1 )"
+fc_clean="$(failed_count "$ts_clean")"; fc_bad="$(failed_count "$ts_bad")"
+assert_eq "preflight measures the shape of TODO_FILE by itself: ok when clean, a warning with the count when not, never a failure" \
+  "clean ok=1 warn=0 / bad ok=0 warn=1 / fails ${fc_clean:-0}" \
+  "clean ok=$(ts_count "$TS_OK" "$ts_clean") warn=$(ts_count "$TS_WARN" "$ts_clean") / bad ok=$(ts_count "$TS_OK" "$ts_bad") warn=$(ts_count "$TS_WARN" "$ts_bad") / fails ${fc_bad:-0}"
+assert_eq "preflight names the opt-in line with --baseline only when TEST_CMD does not carry check-todo.sh" \
+  "clean 0 / bad 1 / carried warn=1 optin=0" \
+  "clean $(ts_count "$TS_OPTIN" "$ts_clean") / bad $(ts_count "$TS_OPTIN" "$ts_bad") / carried warn=$(ts_count "$TS_WARN" "$ts_carried") optin=$(ts_count "$TS_OPTIN" "$ts_carried")"
+assert_eq "preflight says the shape of TODO_FILE was not measured when the file or the sensor is missing" \
+  "gone 1 file=1 ok=0 / no sensor 1 sensor=1 ok=0" \
+  "gone $(ts_count "$TS_UNMEASURED" "$ts_gone") file=$(ts_count "TODO.md does not exist" "$ts_gone") ok=$(ts_count "$TS_OK" "$ts_gone") / no sensor $(ts_count "$TS_UNMEASURED" "$ts_nosensor") sensor=$(ts_count "has no tests/check-todo.sh" "$ts_nosensor") ok=$(ts_count "$TS_OK" "$ts_nosensor")"
+cp "$PROBE/TODO.md.bak" TODO.md
+mv .sdd/config.sh.bak .sdd/config.sh
+
 # --- third-party skills the phases depend on --------------------------------
 # Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
 # sub-steps boot `qa-report` and `qa-execution`, and REVIEW loads `codereview`. A missing one is
