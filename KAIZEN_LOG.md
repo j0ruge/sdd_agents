@@ -48,13 +48,15 @@ QA 1 sessão (US$ 1,50), REVIEW 2 (US$ 5,16). Nenhuma parada (`kit-touched`, `ha
 `/tmp` (um `Read` e um `Write` de sabotagem).
 
 **Leitura:** com o mesmo gênero de trabalho e a mesma quantidade de laços de revisão (uma volta de
-`R<n>`, duas rodadas), o EXEC em `xhigh` custou **1,66×** o tempo e **2,6×** o dinheiro por sessão do
+`R<n>`, duas rodadas), o EXEC do L2, em `xhigh`, custou **1,66×** o tempo e **2,6×** o dinheiro por sessão do
 L1. Uma das 8 sessões de EXEC (o I7, US$ 3,85, 45 min) existiu por causa da própria variável: dois
 sensores liam o `EFFORT_*` herdado, e a suíte ficou vermelha sob `EFFORT_EXEC=xhigh`.
 
-Duas ressalvas, as do `00-missao.md`:
-- **Quem isola o effort é o L2 contra o L1**: prosa com asserção, mesma semana, mesma suíte. O worker
-  foi código novo e entra para mostrar onde o tempo foi (o laço de revisão: 22 R, 27 h do PR ao merge).
+Duas ressalvas (a primeira corrige a do `00-missao.md`, que dizia que o L2 contra o L1 isolava o effort):
+- **A comparação é observacional e não isola o effort.** O L2 e o L1 são do mesmo gênero (prosa com
+  asserção), da mesma semana e da mesma suíte, mas o trabalho e o número de incrementos diferem, e
+  dividir por sessão não controla isso (CodeRabbit no #456). O worker foi código novo e entra para
+  mostrar onde o tempo foi (o laço de revisão: 22 R, 27 h do PR ao merge).
 - Cada `gate_EXEC` roda a suíte inteira, que cresce com o tempo, e os lotes não têm o mesmo número de
   incrementos (9 no L1, 6 no L2): por isso a medida é **por sessão**, nunca o total.
 
