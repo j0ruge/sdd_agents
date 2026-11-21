@@ -115,7 +115,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   registra só "`gh pr view <url> --json url → ok`", sem o head empurrado nem a saída. Um push que falhou deixa o
   PR no commit velho e o gate verde. Voltou no PR `j0ruge/dotp-remake#23` (o LOW 15 da r3 do `/codereview`,
   sobre o `50-pr.md` da 3.5d). Vizinho de "A REVIEW aprovada não vê o código que entrou depois dela". Direção:
-  o gate compara o `headRefOid` com o HEAD da missão, e o `gate:` registra o head e a saída.
+  o gate compara o `headRefOid` com o HEAD da missão, e o `gate:` registra o head e a saída. RESOLVED by 5da09d6.
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
 - [ ] **`PR #N` de outro repositório passa pelo `check-todo.sh` e vira link errado na issue** —
@@ -253,14 +253,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Actions, o `local/ci` publicado no sha anterior deixa de cobrir a cabeça); fora do commit, suja a árvore. No
   `lighthouse_project` o `sdd-publisher` o deixou fora, e a sessão coordenadora o commitou (`fe5f1ae`), rodou o
   gate de novo e republicou o `local/ci`. Direção: o contrato diz onde o registro mora e, se ele entra no PR,
-  que a verificação do passo 2 corre de novo na cabeça final.
+  que a verificação do passo 2 corre de novo na cabeça final. RESOLVED by 5da09d6.
   — descoberto por `sessão coordenadora` na missão `20261013-amep-alignment-review` (2026-10-14)
 - [ ] **O `gate:` cita saídas que a pasta de evidência da fase não guarda** — `templates/handoff.md:7` (`gate:`)
   — o template pede "comando + saída resumida" e não diz onde fica a saída inteira. Na DOCS da 3.5b do
   `dotp-remake`, o `gate:` do `45-docs.md` cita os três modos do `check-todo.sh` e um `grep -c 'RESOLVED by'`,
   medidos no `d343861`, e fecha com "Saídas em ~/.wt/docs-3-5b/"; a pasta não tem nenhum dos quatro (o
   `measure.sh` dela não os roda). O `/codereview` lê a pasta como a evidência da fase e mediu de novo no
-  `34aa349` (mesmos valores). Direção: cada medida citada salva a saída onde o `gate:` diz, ou o `gate:` a exclui.
+  `34aa349` (mesmos valores). Direção: cada medida citada salva a saída onde o `gate:` diz,
+  ou o `gate:` a exclui. RESOLVED by b912a33.
   — descoberto pelo relay do `sdd run` na missão `20261024-plano-3-5-b-auras-e-equipamento` (2026-10-25)
 - [ ] **O platô da REVIEW lê só as letras, e pararia um laço que converge** — `agents/sdd-reviewer.md:68`
   (`Overall Grade`) — "as mesmas letras da rodada anterior" é platô, mas não separa o achado que a rodada
@@ -320,7 +321,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   a nota da última rodada e não compara o commit que ela revisou com o HEAD. No lighthouse o F5–F8 (emenda E1–E6)
   e o R3 (P2 do Codex no PR JRC-Brasil/lighthouse_project#29) entraram depois da r2 em A, e o humano forçou a r3 e a r4
   com `--phase REVIEW`: 2 das 6 intervenções da missão. É o espelho do D21, em que só `F<n>` reabre a QA. Direção: a
-  rodada grava o commit revisado, e código commitado depois dele reabre a REVIEW ou é nomeado no motivo do gate.
+  rodada grava o commit revisado, e código commitado depois dele reabre a REVIEW ou é nomeado
+  no motivo do gate. RESOLVED by 7be7b47.
   — descoberto por `sdd-kaizen` na missão `20261014-amep-entrada-em-dois-niveis` (2026-10-20)
 - [ ] **Numa worktree sem o `.venv`, o gate do EXEC lê o `TEST_CMD` que não rodou como suíte vermelha** —
   `bin/sdd:1641` (`run_check_cmd`) — o `.venv` é ignorado pelo git, então a worktree nasce sem ele, e o
@@ -328,7 +330,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   worktree `~/.wt/mt-19`) o log `gate-exec-test-20261021-195209-*.log` traz só `.venv/bin/python: No such file or
   directory` (rc 127), e o `GATE_WHY` dizia `TEST_CMD failed`, como se a suíte tivesse reprovado. O contorno foi um
   link `.venv` para o venv do checkout principal e a linha `.venv` no `.git/info/exclude`. Direção: o rc 127 ganha
-  um `GATE_WHY` próprio ("o `TEST_CMD` nem rodou"), que nomeia o que faltou na árvore.
+  um `GATE_WHY` próprio ("o `TEST_CMD` nem rodou"), que nomeia o que faltou na árvore. RESOLVED by 83b2b3e.
   — descoberto pelo relay da missão `20261021-dica-mais-rapida` do `magic_tutor` (2026-10-21)
 
 - [ ] **O chapéu não pode declarar MCP, e o executor fica sem o REA** — `bin/sdd:5782` (`--strict-mcp-config`) —
@@ -345,7 +347,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   com `status: blocked`. O commit contou como avanço ("carrying on"), e uma 2ª sessão (`e5ab0aaf`, US$ 0,12)
   reconferiu o mesmo conflito antes do `BLOCKED`. O `templates/review.md` também declara `blocked`, e o
   `gate_REVIEW` não o lê: lá, a sessão repetida seria a da REVIEW (não medido). Direção: os dois gates armam o
-  marcador, pelo contrato escrito acima do `GATE_HANDOFF_BLOCKED`.
+  marcador, pelo contrato escrito acima do `GATE_HANDOFF_BLOCKED`. RESOLVED by c42fa76.
   — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
 
 - [ ] **O publisher bloqueado manda o humano fazer `git rebase`, e o rebase tira os hashes dos handoffs da história** —
@@ -354,7 +356,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   checkpoint e os handoffs citam hashes, e o `gate_EXEC` exige cada `Commit` na história do `HEAD`
   (`bin/sdd:1538`). Depois do rebase, o run seguinte para no EXEC (`no_work_check`, forma b), e o humano
   reescreve 9 células (pelo código, não medido). Lá, o merge da base destravou (`c6f043c`). Direção: o
-  contrato passa a indicar `git merge origin/<base>`, e o `BLOCKED` do PR diz o mesmo sem depender da sessão.
+  contrato indica `git merge origin/<base>`, e o `BLOCKED` do PR diz o mesmo sem a sessão. RESOLVED by c42fa76.
   — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
 
 - [ ] **A linha `kit:` do handoff não tem quem a transporte** — `agents/sdd-publisher.md:77` (`TODO_FILE`) — o
@@ -363,7 +365,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   achado fora de escopo o que foi para o `TODO_FILE`, sem falar de `kit:`, e o `sdd-kaizen` só tria o `TODO.md` do kit
   (`agents/sdd-kaizen.md:209-211`). Na 3.4b, o `kit:` do `45-docs.md:187` (o item "O `sdd approve` commita o ADR do
   `adr:` sem tirar o `proposed`") não chegou ao PR j0ruge/dotp-remake#19 nem a este arquivo até o relay ler o handoff.
-  Direção: o publisher lista os `kit:` dos handoffs no PR, para o humano levar, e o `gate_PR` confere a contagem.
+  Direção: o publisher lista os `kit:` dos handoffs no PR, e o `gate_PR` confere a contagem. RESOLVED by 5e8b000.
   — descoberto por `sessão coordenadora` na missão `20261023-plano-3-4-b-ate-o-fim-do-turno` (2026-10-24)
 
 - [ ] **O remédio do `qa: skipped` refutado apaga, com o handoff, os achados fora de escopo dele** —
@@ -470,7 +472,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   troca `$TODO_FILE` e `$DEFAULT_BRANCH` pelo valor, mas deixa o `$SDD_HOME`, que só existe dentro do `sdd`
   (`bin/sdd:68`). No PR j0ruge/magic_tutor#72, a linha do `check-todo.sh` colada numa shell deu rc 127
   (`/tests/check-todo.sh`), e o `sdd preflight`, que roda o mesmo `TEST_CMD` com o ambiente do runner, deu ok. Direção:
-  o "how to verify" manda rodar o gate por `sdd preflight`, ou só usa o que a shell do leitor tem.
+  o "how to verify" manda rodar o gate por `sdd preflight`, ou só usa o que a shell do leitor tem. RESOLVED by 5e8b000.
   — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-23)
 
 - [ ] **O `sdd preflight` reprova a árvore suja sem dizer os caminhos, nem que eram só não versionados** —
@@ -484,7 +486,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:1994` (`gate-qa-e2e`) —
   um caso intermitente anterior à missão devolve a fase ao `sdd-qa`, que gasta o começo descobrindo isso:
   no alvo, o `frete-ipi.spec.ts:319` já tinha caído duas vezes, com os logs de gate em disco. Direção: o
-  `GATE_WHY` cita quantas vezes cada caso vermelho já caiu nos logs `gate-qa-e2e` anteriores.
+  `GATE_WHY` cita quantas vezes cada caso vermelho já caiu nos logs `gate-qa-e2e` anteriores. RESOLVED by 45c8434.
   Fonte: `docs/handoffs/20261012-a-rota-da-qa/00-missao.md` — achado `kit:` do `sdd-qa` em
   `20261005-mascaras-ncm-e-painel`, transportado por `sdd-kaizen` (2026-10-12)
 
@@ -516,7 +518,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   passa (intervalo vazio, resíduo declarado); lida de um branch posterior com commit próprio, a DOCS fica `·`
   com "the mission branch adds no KAIZEN_LOG.md entry". Medido no `warehouse_explorer_web`: `✓` no `master`
   8015fb7, `·` no `chore/pos-whf-162` 64a2cdb, mesma missão. O `sdd run` não cai nisso (troca para o branch).
-  Direção: medir o intervalo do `branch:` declarado, ou dar intervalo vazio quando ele já está na base.
+  Direção: medir o intervalo do `branch:` declarado, ou dar intervalo vazio quando ele já está
+  na base. RESOLVED by 66a9bd0.
   — descoberto por `sessão interativa` no pós-merge da missão `20261028-whf-162-jdb-na-descricao` (2026-10-30)
 
 - [ ] **O `sdd run` diz que commita na base quando a TICKET vai cortar o branch antes** — `bin/sdd:6677`
@@ -531,7 +534,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`decisions for a human`) — a união das perguntas abertas dos handoffs traz as do `00-missao.md`, escritas antes da
   corrida, sem conferir o desfecho. No PR j0ruge/dotp-remake#13 (3.3a) saiu "Decidir sobre a diferença entre a nota B da
   REVIEW do kit e a nota A do Fluxo de entrega", e o `40-review-r1.md` deu A em todo critério; o relay corrigiu o corpo
-  à mão. Direção: a pendência do plano que um handoff posterior responde sai, ou vai junto da resposta.
+  à mão. Direção: a pendência do plano que um handoff posterior responde sai, ou vai junto da
+  resposta. RESOLVED by 5e8b000.
   — descoberto pelo relay do `sdd run` na missão `20261020-plano-3-3-a-motor-de-gatilhos` (2026-10-20)
 
 - [ ] **O `sdd preflight` imprime "printf: erro de escrita: Pipe quebrado" com a `READ_EXTRA` preenchida** —
@@ -607,7 +611,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   rc 1 com `GraphQL: Projects (classic) is being deprecated … (repository.pullRequest.projectCards)`, e o corpo
   ficou como estava; `gh api -X PATCH repos/<dono>/<repo>/pulls/<n> -F body=@<arquivo>` trocou. O motivo do
   `gate_PR` sobre os `⛔` manda o mesmo comando ao publisher, dono do corpo: a volta que conserta o PR falha.
-  Direção: as duas instruções passam ao PATCH da REST (`gh` mais novo não medido).
+  Direção: as duas instruções passam ao PATCH da REST (`gh` mais novo não medido). RESOLVED by 5da09d6.
   — descoberto pela sessão interativa da missão `20261112-as-reincidentes-primeiro` (2026-11-12)
 
 - [ ] **O lint da suíte se pula sem o `shellcheck`, e a `main` já tem 4 avisos que ele reprova** —
