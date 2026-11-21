@@ -50,3 +50,4 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+- 2026-11-21 04:36 · `EXEC` · I1 em `83b2b3e`: RUN_test_cmd_not_run_reads_red caught by check-gates.sh; desvio do plano: sem linha em inglês no log (o shell traduz o strerror sob pt-BR, medido nesta máquina) o motivo cita a última linha não vazia do log, e o probe roda com LC_ALL=C; duas referências cruzadas a `docs/pipeline.md:N` no TODO.md corrigidas à mão (1150→1161, 486→497)
