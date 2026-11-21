@@ -346,7 +346,10 @@ and it never paraphrases either side.
    in `dotp-remake` 3.5e: the planner wrote a survey under `docs/knowledge/` that the plan cites,
    `sdd approve` did not commit it, and only the whole `git status` showed it.
    - **Under `auto`** (`sdd why` said `plan approved (auto)`) → nobody cut the branch or committed
-     the mission: `sdd approve` was never run. Move to the `branch:` of `00-missao.md` with
+     the mission: `sdd approve` was never run. A `branch:` of `00-missao.md` that is empty
+     or still the `<...>` placeholder names no branch to cut (the hat admits it only under
+     `JIRA_ENABLED=true`, where the TICKET phase creates the branch and writes it back):
+     switch to nothing and follow **Anywhere else**. Otherwise move to that `branch:` with
      `git switch -c <branch>`, or `git switch <branch>` when it already exists, commit there the
      mission directory and the file `adr:` names, then follow **On the mission branch** for the
      rest, and tell the human that the next step is `sdd run <mission>`. Measured in `magic_tutor`:

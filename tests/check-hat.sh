@@ -1045,6 +1045,15 @@ command_acceptance_probes() {
   else
     fail "command: /sdd-plan no longer cuts the mission branch and commits the mission under auto, or no longer names sdd run as the next step"
   fi
+  # Finding 5 of the r3 of L2: the hat admits an empty or placeholder `branch:` under
+  # JIRA_ENABLED=true (the TICKET phase creates the branch), and a relay that followed the auto
+  # bullet as written would cut a branch named after the placeholder.
+  if grep -qF 'or still the `<...>` placeholder names no branch to cut' <<< "$art" \
+     && grep -qF 'switch to nothing and follow **Anywhere else**' <<< "$art"; then
+    pass "command: /sdd-plan under auto cuts no branch from an empty or placeholder branch:, and follows Anywhere else"
+  else
+    fail "command: /sdd-plan under auto would cut a branch named after an empty or placeholder branch:"
+  fi
   if grep -qF 'Then run `git status --porcelain` with no path' <<< "$art" \
      && grep -qF 'a file the plan depends on' <<< "$art"; then
     pass "command: /sdd-plan reads the whole git status after the approval, and commits on the mission branch a file the plan depends on"
