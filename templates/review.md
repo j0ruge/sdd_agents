@@ -2,10 +2,10 @@
 missao: <YYYYMMDD>-<slug>
 fase: REVIEW
 rodada: <N — 1, 2, 3…; o arquivo se chama 40-review-r<N>.md>
-status: <done | blocked>
+status: <done | blocked — blocked só para a rodada que não pôde ser feita ou que espera decisão humana; rodada com achados é done, com a nota real>
 sessao: <uuid da sessão que produziu esta rodada — serve para --resume>
 data: <YYYY-MM-DD HH:MM>
-gate: <a evidência de que o gate desta rodada passou — TEST_CMD resumido e árvore limpa, não adjetivo>
+gate: <a evidência de que o gate desta rodada passou — TEST_CMD resumido e árvore limpa; cada medida com o comando inteiro e o sha em que rodou, para ser refeita; "saídas em <caminho>" só quando o arquivo está lá>
 reviewed_head: <o `git rev-parse HEAD` que a rodada leu antes de revisar, o sha inteiro (40 hex; 64 num repositório SHA-256) — a próxima rodada revisa só o delta a partir dele>
 ---
 

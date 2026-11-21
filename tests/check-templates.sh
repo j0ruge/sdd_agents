@@ -558,6 +558,11 @@ check handoff.md '^## Boot da próxima fase'   "section 'Boot da próxima fase'"
 check handoff.md '^## Pendências / Decisions for a Human' "open-questions section"
 check handoff.md '^## Riscos e não-feitos'    "section 'Riscos e não-feitos'"
 check handoff.md '^## Achados fora de escopo' "section 'Achados fora de escopo'"
+# Item 3 of 20261121-l3-gates-do-fim-da-linha: the gate: field cited outputs the evidence folder of
+# the phase did not keep, so nobody could open or rerun them. A measure is cited with its whole
+# command and the sha it ran on, or by the path that holds the output.
+check handoff.md '^gate: <.*o comando inteiro e o sha em que rodou' \
+  "the gate field cites a measure with its command and the sha it ran on, or the path that holds the output"
 # The handoff is the ONLY carrier a kit finding has when the mission's repo is not the kit — the
 # session is forbidden to write into the kit's own TODO.md, so a template that lost this line would
 # leave the instruction pointing at a slot that does not exist.
@@ -587,6 +592,21 @@ check pr-body.md '^## Riscos e não-feitos'    "section 'Riscos e não-feitos'"
 # ran, never that the repository has no CI (CodeRabbit on PR #391): no workflow in
 # .github/workflows/ does not prove there is none, since CI can live elsewhere.
 check pr-body.md '^\*\*Sensores novos\*\* \(<rodam no CI a partir deste PR \| rodam na suíte local, pelo `<TEST_CMD>`>\):$' "the new-sensors line promises CI only as one of two fill-ins, and never claims there is no CI"
+# Items 8, 9 and 12 of 20261121-l3-gates-do-fim-da-linha: the body has a place for every `- kit:` line
+# of the handoffs (gate_PR counts them), for a question of the plan a later handoff answered (ticked,
+# with the answer), and for the `sdd preflight` line of a TEST_CMD that cites a runner variable. Three
+# literals on three different lines, and check() reads one regex: so this one is written by hand.
+# The third is the sentence of the "Como verificar" comment, never the bare command: another section
+# that cites `sdd preflight` would leave that rule with no probe (finding #5 of r1 of L3).
+CHECKS_RUN=$((CHECKS_RUN + 1))
+if grep -qF -- '- kit: <a linha completa do handoff>' "$T/pr-body.md" \
+   && grep -qF -- '- [x] <pendência do plano já respondida> — <a resposta em uma linha>' "$T/pr-body.md" \
+   && grep -qF 'a linha do gate é `sdd preflight`' "$T/pr-body.md"; then
+  pass "pr-body.md: the body has a place for the kit lines, the answered question and the preflight line"
+else
+  printf '  FAIL pr-body.md: missing the place for the kit lines, the answered question or the preflight line\n' >&2
+  fails=$((fails + 1))
+fi
 
 # == templates/review.md ==
 #
@@ -687,6 +707,14 @@ review_check '^## Pendências / Decisions for a Human' "section 'Pendências / D
 review_check '^## Achados da rodada'   "section 'Achados da rodada'"
 review_check '^## O que foi refutado'  "section 'O que foi refutado'"
 review_check '^## Achados fora de escopo' "section 'Achados fora de escopo'"
+# Item 3 of the same mission, the same rule on the other half of the seal (see handoff.md above).
+review_check '^gate: <.*o comando inteiro e o sha em que rodou' \
+  "the gate field cites a measure with its command and the sha it ran on, or the path that holds the output"
+# Item 6 of 20261121-l3-gates-do-fim-da-linha: gate_REVIEW stops the line on `status: blocked`, so
+# the template says what the word means — 53 of the 55 rounds on disk already wrote `done` for a
+# round with findings, and the two that wrote `blocked` had to carry on.
+review_check '^status: <done \| blocked — blocked só para a rodada que não pôde ser feita ou que espera decisão humana; rodada com achados é done, com a nota real>' \
+  "status blocked is the round that could not be done, never the round with findings"
 # Since `20260901-o-revisor-so-acha` the round does not fix: every finding that must be fixed is
 # written into the checkpoint as an `R<n>` increment and the EXEC phase closes it. The section is
 # what the reviewer copies the row shape from, and a round that lost it has nowhere to record the
@@ -723,10 +751,12 @@ refute review.md "$FORBIDDEN_POINTER" \
 # vacuity every sensor in this suite carries a floor against.
 REVIEW_ASSERTIONS=$((CHECKS_RUN - REVIEW_MARK))
 # 23 → 24 in `20260901-o-revisor-so-acha`, with the `## Incrementos de conserto` section, then
-# 24 → 26 in the F1 of the same mission, with the two `refute` rules above. A floor left behind
+# 24 → 26 in the F1 of the same mission, with the two `refute` rules above, then 26 → 27 in the I2
+# of `20261121-l3-gates-do-fim-da-linha`, with the `status:` rule, then 27 → 28 in the I8 of the
+# same mission, with the `gate:` rule. A floor left behind
 # still PASSES while describing a smaller surface than the one it reads, which is the same
 # fail-open as a floor of zero — recounted in the commit that adds the rule, never later.
-REVIEW_FLOOR=26
+REVIEW_FLOOR=28
 if [ "$REVIEW_ASSERTIONS" -lt "$REVIEW_FLOOR" ]; then
   printf '  FAIL review.md: only %d assertion(s) ran, expected at least %d — a clean report over\n' \
     "$REVIEW_ASSERTIONS" "$REVIEW_FLOOR" >&2

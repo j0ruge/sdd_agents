@@ -1246,6 +1246,74 @@ publisher_stamp_probes() {
   fi
 }
 
+# What the PR body carries from the handoffs (items 8, 9 and 12 of 20261121-l3-gates-do-fim-da-linha).
+# Each bullet of ### 4. is read from its own marker to the next bullet and joined into one line, so a
+# rule moved to another bullet, or wrapped between its words, reads red. The kit lines are counted by
+# gate_PR (check-gates.sh); the other two rules no gate can read, so the hat carries them.
+publisher_body_probes() {
+  local pub="$ROOT/agents/sdd-publisher.md" b
+  bullet() { awk -v m="$1" 'index($0, "- **" m "**") == 1 {s=1; print; next} s && /^- \*\*/{s=0} s && /^$/{s=0} s' "$pub" | tr -s ' \n' '  '; }
+  b="$(bullet 'out-of-scope findings')"
+  if grep -qF 'TODO_FILE' <<< "$b" && grep -qF -- '- kit:' <<< "$b" && grep -qF 'whole, one line each' <<< "$b" \
+     && grep -qF 'the runner counts them' <<< "$b"; then
+    pass "hat: the publisher carries every kit line of the handoffs into the body of the pull request, whole"
+  else
+    fail "hat: the publisher's out-of-scope bullet lost the kit lines of the handoffs, 'whole, one line each', or that the runner counts them"
+  fi
+  b="$(bullet 'how to verify')"
+  if grep -qF "only what the reader's shell runs" <<< "$b" && grep -qF 'sdd preflight' <<< "$b" \
+     && grep -qF "it runs TEST_CMD in the runner's environment" <<< "$b" && grep -qF '$SDD_HOME' <<< "$b"; then
+    pass "hat: the publisher writes in how to verify only what the shell of the reader runs, and sends a TEST_CMD with a runner variable to sdd preflight"
+  else
+    fail "hat: the publisher's how-to-verify bullet lost 'only what the reader's shell runs', or the sdd preflight line for a TEST_CMD that cites a runner variable"
+  fi
+  b="$(bullet 'decisions for a human')"
+  if grep -qF '00-missao.md' <<< "$b" && grep -qF -- '- [x]' <<< "$b" \
+     && grep -qF 'the answer in one line and the file that gave it' <<< "$b" && grep -qF 'never disappears' <<< "$b"; then
+    pass "hat: the publisher keeps a question of the plan that a later handoff answered, ticked and with the answer"
+  else
+    fail "hat: the publisher's decisions bullet lost the answered question of 00-missao.md, ticked with the answer and the file, kept in the list"
+  fi
+}
+
+# The head the PR carries (ADR 0024, decisions 2 and 3; items 2 and 13 of
+# 20261121-l3-gates-do-fim-da-linha). gate_PR reads verified_head: off 50-pr.md, and only the publisher
+# can write it, commit the record where nothing but the mission folder moves, and push it; and the
+# body of an open PR is edited through the REST PATCH, because `gh pr edit` fails on gh 2.45 and
+# leaves the body as it was. Every line that still names `gh pr edit` has to be the one forbidding it.
+publisher_head_probes() {
+  local pub="$ROOT/agents/sdd-publisher.md" rec edits
+  rec="$(awk '/^### 5\. /{on=1; next} /^### /{on=0} on' "$pub")"
+  if [ -n "$rec" ] && grep -qF 'verified_head:' <<< "$rec" \
+     && grep -qF 'in a commit that touches the mission directory alone' <<< "$rec" \
+     && grep -qF 'git push' <<< "$rec"; then
+    pass "hat: the publisher records verified_head, commits 50-pr.md alone in the mission folder and pushes it"
+  else
+    fail "hat: the publisher's ### 5. lost verified_head:, the commit of the mission directory alone, or the git push after it"
+  fi
+  # The route of ### 4. for a PR that already exists (CodeRabbit 4654284452 on PR #458): gate_PR reads
+  # verified_head: BEFORE the body, so a session that only fixes the body loses the lap. The paragraph
+  # is read from its marker to the blank line and joined into one line, so a wrap reads the same.
+  local again
+  again="$(awk 'index($0, "**The PR already exists?**") == 1 {s=1} s && /^$/{s=0} s' "$pub" | tr -s ' \n' '  ')"
+  if grep -qF 'verified_head:' <<< "$again" && grep -qF 'before the body' <<< "$again" \
+     && grep -qF 'the way back of step 5' <<< "$again" && grep -qF 'only then fix the body' <<< "$again"; then
+    pass "hat: the publisher's route for a PR that exists takes the way back of step 5 first when the reason names verified_head"
+  else
+    fail "hat: the publisher's route for a PR that exists lost that gate_PR checks verified_head: before the body, or the way back of step 5 before the body"
+  fi
+  # Code of the runner (a comment may say why the command is gone) and lines of the hat that name the
+  # command without forbidding it, in the hat's own words.
+  edits="$( { grep -F 'gh pr edit' "$ROOT/bin/sdd" | grep -vE '^[[:space:]]*#'
+              grep -F 'gh pr edit' "$pub" | grep -vF 'never `gh pr edit`'; } || true)"
+  if grep -qF 'gh api -X PATCH' "$pub" && grep -qF 'gh api -X PATCH' "$ROOT/bin/sdd" \
+     && [ -z "$edits" ]; then
+    pass "hat: the publisher and gate_PR edit the body of a pull request through the REST PATCH"
+  else
+    fail "hat: the publisher or gate_PR does not name 'gh api -X PATCH', or still sends the body to 'gh pr edit'"
+  fi
+}
+
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
 # PROVENANCE: the three lines below were captured on 2026-09-04 on Claude Code 2.1.260 with
 #     claude -p 'Read docs/handoffs/x/00-missao.md with the Read tool, then reply with exactly: OK' \
@@ -1552,6 +1620,41 @@ reviewer_delta_probes() {
   fi
 }
 
+# Items 6 and 7 of 20261121-l3-gates-do-fim-da-linha. The publisher stopped on a conflict names the
+# way out, a merge of the base, never a rebase: the checkpoint and the handoffs cite commit hashes
+# gate_EXEC looks up in the history of HEAD. The paragraph is read from its own bold lead to the next
+# blank line and joined into one line, so a wrap cannot hide the words. The reviewer writes
+# `status: blocked` only for a round that could not be done: gate_REVIEW now stops the line on it.
+blocked_way_out_probes() {
+  local pub="$ROOT/agents/sdd-publisher.md" rev="$ROOT/agents/sdd-reviewer.md" par sec
+  par="$(awk '/^\*\*Conflict with the base/{s=1} s && /^$/{exit} s' "$pub" | tr -s ' \n' '  ')"
+  if grep -qF 'status: blocked' <<< "$par" && grep -qF 'git merge origin/<DEFAULT_BRANCH>' <<< "$par" \
+     && grep -qF 'never `git rebase`' <<< "$par"; then
+    pass "hat: the publisher names the merge of the base as the way out of a conflict, never a rebase"
+  else
+    fail "hat: the publisher names the merge of the base as the way out of a conflict, never a rebase"
+  fi
+  sec="$(awk '/^## 4\. /{s=1; next} s && /^## /{s=0} s' "$rev")"
+  if grep -qF '`status: blocked` is only for a round that could not be done or that waits for a human decision, never for a round that has findings: that one is `done`, with its real grades' <<< "$sec"; then
+    pass "hat: the reviewer writes status blocked only for a round that could not be done, never for one with findings"
+  else
+    fail "hat: the reviewer writes status blocked only for a round that could not be done, never for one with findings"
+  fi
+}
+
+# Item 4 of 20261121-l3-gates-do-fim-da-linha (ADR 0024, decision 4). gate_REVIEW now reopens the
+# phase for code committed after the round, and the reviewer reads it in section 4, in the paragraph
+# of reviewed_head:, on one physical line.
+reviewer_later_code_probes() {
+  local rev="$ROOT/agents/sdd-reviewer.md" sec
+  sec="$(awk '/^## 4\. /{s=1; next} s && /^## /{s=0} s' "$rev")"
+  if grep -qF 'Code committed after the round reopens REVIEW: the gate reads the commits after the one that added the round, and a path outside what this hat and the DOCS hat write refuses it' <<< "$sec"; then
+    pass "hat: the reviewer is told that code committed after the round reopens REVIEW"
+  else
+    fail "hat: the reviewer is told that code committed after the round reopens REVIEW"
+  fi
+}
+
 qa_agent_probes
 hat_promise_probes
 command_approval_probes
@@ -1568,11 +1671,15 @@ doc_finding_prs_probes
 doc_plan_only_probes
 doc_operator_probes
 publisher_stamp_probes
+publisher_head_probes
+publisher_body_probes
 boot_probes
 help_probes
 release_probes
 release_stamps_probes
 reviewer_delta_probes
+blocked_way_out_probes
+reviewer_later_code_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2

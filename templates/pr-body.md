@@ -10,6 +10,10 @@
 
 ## Como verificar
 
+<!-- Só o que o shell do leitor roda. Quando o TEST_CMD cita uma variável do runner ($SDD_HOME,
+     $TODO_FILE, $DEFAULT_BRANCH), a linha do gate é `sdd preflight`: ele roda o TEST_CMD no
+     ambiente do runner. Os comandos próprios do projeto seguem literais. -->
+
 ```bash
 <comandos que provam que funciona, na ordem>
 ```
@@ -36,6 +40,7 @@
 > Não bloqueiam este PR; são escolhas que exigem julgamento humano.
 
 - [ ] <pendência — contexto — onde decidir>
+- [x] <pendência do plano já respondida> — <a resposta em uma linha> (`<handoff>`)
 - [ ] ⛔ `<documento da linha ⛔ do 45-docs.md>` — aplicar antes do merge o texto proposto pela DOCS:
   > <o texto da seção `<!-- sdd:proposed -->`, citado>
 
@@ -44,6 +49,7 @@
 <Registrados no `TODO.md`; viram candidatas a missões futuras.>
 
 - <o quê> — `arquivo:linha`
+- kit: <a linha completa do handoff>
 
 ## Riscos e não-feitos
 

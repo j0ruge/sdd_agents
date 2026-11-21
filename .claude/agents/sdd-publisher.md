@@ -48,6 +48,11 @@ the stamp is all its gate misses, the runner stops on its own with rc 2 and hand
 **Conflict with the base? Stop.** Write `50-pr.md` with `status: blocked` and the reason. You do
 not resolve conflicts: resolving a conflict is deciding which of two intents wins, and that is
 human judgement. An automatic rebase here is the cheapest way to lose somebody else's work.
+The reason names the way out: the human runs `git merge origin/<DEFAULT_BRANCH>` on the mission
+branch, and never `git rebase`, because the checkpoint and the handoffs cite commit hashes that
+`gate_EXEC` looks up in the history of `HEAD`, and a rebase takes them out of it. `gate_PR` stops the
+line on that `status: blocked`, with no second publisher session; the human removes the line after
+the merge.
 
 ### 4. Open the PR
 
@@ -56,7 +61,10 @@ in the templates directory your boot prompt names — a bare `templates/` resolv
 target repo. Fill it **from what is in the handoffs**, inventing nothing and softening nothing:
 
 - **what changed** — in product language, not commit language;
-- **how to verify** — the commands, in order;
+- **how to verify** — the commands, in order, and only what the reader's shell runs: a command
+  that cites a variable of the runner (`$SDD_HOME`, `$TODO_FILE`, `$DEFAULT_BRANCH`) does not run
+  in the reader's terminal. When the `TEST_CMD` cites one, the line of the gate is `sdd preflight`,
+  which says it runs TEST_CMD in the runner's environment; the project's own commands stay literal;
 - **evidence** — the table with each phase's result and the link to the artifact;
 - **new sensors** — the tests and specs this PR adds, and where they run: say they run in CI
   from this PR onwards only when the target holds a workflow in `.github/workflows/`; without
@@ -69,8 +77,14 @@ target repo. Fill it **from what is in the handoffs**, inventing nothing and sof
   proposed text quoted, as a checklist item the human applies before the merge — a path the
   harness refused the DOCS session, which only the human may write. One item per document, the
   `⛔` and the document's name on the same line (`- [ ] ⛔ \`<document>\` — …`): the runner reads
-  the body back, and a `⛔` document not named on a `⛔` line fails `gate_PR`;
-- **out-of-scope findings** — what went to `TODO_FILE`;
+  the body back, and a `⛔` document not named on a `⛔` line fails `gate_PR`. Check each question
+  of `00-missao.md` against the later handoffs: one a later handoff answered stays in the list,
+  ticked (`- [x]`), with the answer in one line and the file that gave it — it never disappears;
+  the others stay `- [ ]`;
+- **out-of-scope findings** — what went to `TODO_FILE`, and every `- kit:` line of the handoffs,
+  whole, one line each (`- kit: <the line as the handoff wrote it>`): a finding about the kit born
+  in a target repo reaches the human here or is lost, and the runner counts them — a body with fewer
+  `- kit:` lines than the handoffs fails `gate_PR`;
 - **the order before the merge** — only in a repo that owns `tests/check-mutation.sh`, as this line:
   `> Before the merge: every review bot → their fixes in one batch → ./bin/sdd health → sdd run <mission>`
 - **risks and not-dones** — honest. If QA was `skipped`, say so and why. If the review closed as
@@ -79,8 +93,12 @@ target repo. Fill it **from what is in the handoffs**, inventing nothing and sof
 Title: the repo's convention (`<type>(<scope>): <what>`), with the issue key when there is one.
 
 **The PR already exists?** `50-pr.md` names it and the boot prompt says why the phase reopened —
-usually a body that misses a `⛔` item. Never open a second PR: fix the body in place with
-`gh pr edit <url> --body-file <file>`.
+usually a body that misses a `⛔` item, or a head behind the mission. A reason that names
+`verified_head:` comes first, because `gate_PR` checks it before the body: the head carries new code
+since that sha, so take the way back of step 5 (run the checks of step 2 again on the head, rewrite
+`verified_head:`, commit `50-pr.md` alone, `git push`), and only then fix the body. Never open a second PR: fix the
+body in place with `gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -F body=@<file>` (`<n>` is the
+number at the end of the url; `gh` fills the owner and the repo from the directory), never `gh pr edit`, which fails on gh 2.45 and leaves the body as it was.
 
 ### 5. Record it
 
@@ -92,10 +110,20 @@ missao: <slug>
 fase: PR
 status: done
 pr_url: https://github.com/<org>/<repo>/pull/<n>
+verified_head: <the git rev-parse HEAD on which step 2 ran, the full sha>
 data: <YYYY-MM-DD HH:MM>
-gate: "gh pr view <url> --json url → ok"
+gate: "gh pr view <url> --json headRefOid → <sha>, the head pushed"
 ---
 ```
+
+Commit `50-pr.md` in a commit that touches the mission directory alone, and `git push` after it, so
+the head of the PR is the head of the mission. `gate_PR` reads the head of the PR and refuses one
+that is not the head of the mission; it refuses a `verified_head:` that is no commit, that the head
+does not carry, or with a path outside the mission directory changed between it and the head.
+
+The way back: the PR is open and the head carries new code since your `verified_head:` — run the
+checks of step 2 again on the head, rewrite `verified_head:` with the new sha, commit `50-pr.md`
+alone, and `git push`.
 
 The runner confirms the PR **through `gh`**, not through your file. A `pr_url` that does not exist
 fails the gate — and it is good that it does.

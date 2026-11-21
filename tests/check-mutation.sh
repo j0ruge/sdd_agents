@@ -839,6 +839,31 @@ mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measu
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
 
+# Item 5 of L3 (20261121-l3-gates-do-fim-da-linha): the arm of rc 126/127 reads red again — a
+# TEST_CMD that never started is reported as a suite that failed, and a worktree with no .venv
+# buys sessions against a suite that never ran.
+mut_RUN_test_cmd_not_run_reads_red() {
+  sed -i '/^test_cmd_red_why()/,/^}/ s|GATE_WHY="TEST_CMD did not run|GATE_WHY="TEST_CMD failed|' "$1"
+}
+# CodeRabbit 4654284445 and 4654284448 on PR #458: a 126/127 with no output at all reads as a suite
+# that did not run again (no shell message is no evidence of one), and a suite that STARTED and then
+# stopped on a command skips the dirty-tree stop again, buying a session over the same dirty tree.
+mut_RUN_test_cmd_silent_reads_not_run() {
+  sed -i '/^test_cmd_red_why()/,/^}/ s|^      if \[ "\${printed:-0}" -gt 0 \]; then$|      if true; then|' "$1"
+}
+mut_RUN_test_cmd_started_skips_dirty() {
+  sed -i '/^test_cmd_red_why()/,/^}/ { /GATE_WHY="TEST_CMD stopped on a command/ { n; s|^          return 1$|          return 0| } }' "$1"
+}
+# Codex P2 on PR #458: a suite read as did-not-run skips the dirty-tree stop again (a log of one
+# line is a heuristic, and a silent first step leaves the same line), so a session opens over the
+# dirty tree; and the sentence of that stop forgets the two readings cannot be told apart.
+mut_RUN_test_cmd_not_run_skips_dirty() {
+  sed -i '/^gate_EXEC()/,/^}/ s|^      \[ -z "\$exec_dirty" \] \|\| GATE_EXEC_DIRTY=1$|      :|' "$1"
+}
+mut_RUN_test_cmd_not_run_dirty_unsaid() {
+  sed -i '/^test_cmd_red_why()/,/^}/ s|^        if \[ "\${1:-}" = dirty \]; then$|        if false; then|' "$1"
+}
+
 # Historical bug 1 (SQ-97 pilot, ~US$ 15 a round): the skill emits
 # `- **Started:** <ts> · **Status:** in-progress`, and the gate required `**Status:**` to OPEN the
 # line. It never matched; the runner re-ran qa-execution forever.
@@ -919,7 +944,7 @@ mut_DOCS_k8_ignored() {                       # worlds 1–7, 9, 12, 14–16, 18
   sed -i '/^gate_DOCS() {/,/^}/ s@^  if \[ "\$(frontmatter "\$MISSION_DIR/00-missao.md" kaizen_log)" != skipped \]; then$@  if false; then@' "$1"
 }
 mut_DOCS_k8_presence_is_enough() {            # the empty tree as the base: every line is new
-  sed -i '/^gate_DOCS() {/,/^}/ s@-U1000000 "\$k8_b" HEAD@-U1000000 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD@' "$1"
+  sed -i '/^gate_DOCS() {/,/^}/ s@-U1000000 "\$k8_b" "\$k8_tip"@-U1000000 4b825dc642cb6eb9a060e54bf8d69288fbee4904 "$k8_tip"@' "$1"
 }
 mut_DOCS_k8_reads_deleted_lines() {           # world 8: a deleted `-## ` splits the block
   sed -i '/^gate_DOCS() {/,/^}/ s@t != " " && t != "+" { next }@t != " " \&\& t != "+" \&\& t != "-" { next }@' "$1"
@@ -941,6 +966,12 @@ mut_DOCS_k8_cite_no_left_boundary() {         # world 9: `revisita-<id>` cites t
 }
 mut_DOCS_k8_cite_no_right_boundary() {        # world 9: `<id>-extra` and `<id>s` cite the mission
   sed -i '/^gate_DOCS() {/,/^}/ s@ && substr(s, p + length(m), 1) !~ /\[A-Za-z0-9_-\]/@@' "$1"
+}
+mut_DOCS_k8_reads_head_off_branch() {         # the K8 head goes back to HEAD: a later branch is measured
+  sed -i '/^gate_DOCS() {/,/^}/ s@^    k8_tip="\$(mission_tip)"$@    k8_tip="$(git -C "$REPO_ROOT" rev-parse HEAD)"@' "$1"
+}
+mut_DOCS_k8_gone_branch_refused() {           # an empty mission tip falls back to HEAD instead of skipping
+  sed -i '/^gate_DOCS() {/,/^}/ s@^    \[ -z "\$k8_tip" \] || mapfile@    k8_tip="${k8_tip:-HEAD}"; mapfile@' "$1"
 }
 mut_DOCS_k8_cite_first_only() {               # world 10: the whole id after three longer ones is missed
   sed -i '/^gate_DOCS() {/,/^}/ s@while ((i@if ((i@' "$1"
@@ -1416,6 +1447,23 @@ mut_QA_hostport_no_ipv6() {
   sed -i 's@^    \\\[\*\\]:\*) host="${rest#\\\[}"; host="${host%%\\]:\*}"; port="${rest##\*\\]:}" ;;$@    "no-bracketed-port-arm") : ;;@' "$1"
 }
 
+# L3 item 10: the up arm of gate_QA says how often each red e2e case already failed before.
+mut_QA_e2e_history_uncounted() {      # the history is no longer added to the reason
+  sed -i 's@^        \[ -z "\$hist" \] || GATE_WHY=@        true || GATE_WHY=@' "$1"
+}
+mut_QA_e2e_history_counts_passed() {  # the count reads the whole log, not the failed block
+  sed -i '/^e2e_red_history() {/,/^}/ s@e2e_failed_keys "\$f"; done)"$@grep -oE "› [^ ]+:[0-9]+:[0-9]+" "$f" | sed -E "s/^› //; s/:[0-9]+$//" | sort -u; done)"@' "$1"
+}
+# CodeRabbit on PR #458. 4654284439: a case line must open with `[<project>]` again, and a project
+# with no name — which Playwright writes with no prefix — yields no key. 4654284443: this log is left
+# out by spelling again, and `/<mission>` counts the current failure as an earlier one.
+mut_QA_e2e_unnamed_project_dropped() {
+  sed -i '/^e2e_failed_keys() {/,/^}/ s@^    inb && /\^    \[\^ \]/ {$@    inb \&\& /^    \\[/ {@' "$1"
+}
+mut_QA_e2e_current_log_by_spelling() {
+  sed -i '/^e2e_red_history() {/,/^}/ s@\[ "\$f" -ef "\$log" \]@[ "$f" = "$log" ]@' "$1"
+}
+
 mut_REVIEW_stops_at_h3() {
   sed -i 's|.*inside && /\^#{1,6}\[\[:space:\]\]/ { exit }.*|      inside \&\& /^###[[:space:]]/ { exit }|' "$1"
 }
@@ -1551,16 +1599,16 @@ mut_PR_stamp_blind() {
 # The PR body stops being read for the ⛔ rows of 45-docs.md (codereview of 2026-09-28): the rule
 # change reaches the human only if the publisher remembered, and a body without it merges green.
 mut_PR_blocked_docs_not_carried() {
-  sed -i '/^gate_PR()/,/^}/ s@grep -qF -- "\$doc" <<< "\$body" || carried_missing@true || carried_missing@' "$1"
+  sed -i '/^gate_PR()/,/^}/ s@grep -qF -- "\$doc" <<< "\$blocked_body" || carried_missing@true || carried_missing@' "$1"
 }
 mut_PR_blocked_docs_anywhere() {        # the ⛔ document counts wherever the body names it (review r2)
   sed -i '/^gate_PR()/,/^}/ s@grep -F .⛔. <<< @grep -F "" <<< @' "$1"
 }
 mut_PR_merged_rechecked() {             # a merged PR's body is read again, and a finished mission reopens
-  sed -i '/^gate_PR()/,/^}/ s@if \[ "\$pr_state" = MERGED \]; then break; fi@:@' "$1"
+  sed -i '/^  local docs=() kit_n=0 kit_k=0 blocked_body$/,/^}/ s@^  if \[ "\$pr_live_state" != MERGED \]; then$@  if true; then@' "$1"
 }
 mut_PR_body_unread_is_missing() {       # a body gh could not read is reported as one lacking the ⛔
-  sed -i '/^gate_PR()/,/^}/ s@^        if \[ "\$body_rc" -ne 0 \]; then$@        if false; then@' "$1"
+  sed -i '/^gate_PR()/,/^}/ s@^      if \[ "\$body_rc" -ne 0 \]; then$@      if false; then@' "$1"
 }
 
 # The key stops being a function of the CONTENT alone and starts following HEAD as well. Deliberately
@@ -2412,6 +2460,87 @@ mut_RUN_blocked_retry_not_escalated() {
 # `3|2|blocked|no-progress` on the blocked half and dies.
 mut_RUN_ticket_blocked_not_armed() {
   sed -i '/^gate_TICKET() {$/,/^}$/ s|^    GATE_HANDOFF_BLOCKED=1$|    GATE_HANDOFF_BLOCKED=0|' "$1"
+}
+
+# The two setters of 20261121-l3-gates-do-fim-da-linha (item 6), on the same mould: the arm still
+# refuses, with the same reason, and the marker stays 0 — so the run buys the second session and
+# lands on `no-progress`. Caught by the REVIEW and PR pairs of tests/check-autonomy.sh.
+mut_RUN_pr_blocked_not_armed() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^      GATE_HANDOFF_BLOCKED=1$|      GATE_HANDOFF_BLOCKED=0|' "$1"
+}
+mut_RUN_review_blocked_not_armed() {
+  sed -i '/^gate_REVIEW() {$/,/^}$/ s|^    GATE_HANDOFF_BLOCKED=1$|    GATE_HANDOFF_BLOCKED=0|' "$1"
+}
+# gate_PR reads the head of the PR (ADR 0024; I3 of 20261121-l3-gates-do-fim-da-linha): the
+# comparison with mission_tip always agrees; verified_head: is never read; a MERGED PR is compared
+# too; and a head gh answered unreadably passes on to the comparison.
+mut_PR_head_unread() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^    if \[ -n "\$tip" \] \&\& \[ "\$pr_head" != "\$tip" \]; then$|    if [ -n "$tip" ] \&\& false; then|' "$1"
+}
+mut_PR_verified_head_unchecked() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^    if \[ -n "\$tip" \] \&\& frontmatter_has "\$p" verified_head; then$|    if false; then|' "$1"
+}
+# The head guard ALONE (CodeRabbit 4654284475 on PR #458): the range ends at the locals of the body
+# block, so the second `!= MERGED` — the body's, which PR_merged_rechecked owns — is left as it is,
+# and no body assertion can kill this mutant for the head's sake.
+mut_PR_merged_head_read() {
+  sed -i '/^gate_PR() {$/,/^  local docs=() kit_n=0 kit_k=0 blocked_body$/ s|^  if \[ "\$pr_live_state" != MERGED \]; then$|  if true; then|' "$1"
+}
+# CodeRabbit on PR #458, three rules of the verified_head: check. 4654284456: a ref that moves
+# (`HEAD`) is resolved again, and the range from the head to the head passes. 4654284461: rename
+# detection comes back, and a file moved into the mission folder hides the path it left.
+# 4654284463: the prefix reads the mission argument raw, and `/<mission>` refuses the publisher's
+# own commit.
+mut_PR_verified_head_ref_admitted() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^      if \[\[ "\$vh" =~ \^\[0-9a-f\]{7,64}\$ \]\]; then$|      if true; then|' "$1"
+}
+mut_PR_verified_head_renames_hidden() {
+  sed -i '/^gate_PR() {$/,/^}$/ s| diff --no-renames --name-only "\$vc" "\$tip"| diff --name-only "$vc" "$tip"|' "$1"
+}
+mut_PR_verified_head_mission_arg_raw() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^      mdir_rel="\$HANDOFF_DIR/\$(mission_id "\$MISSION")/"$|      mdir_rel="$HANDOFF_DIR/$MISSION/"|' "$1"
+}
+# CodeRabbit on PR #458, the body block. 4654284464: the state line of the body read is no longer
+# read, and a PR that merged between the two calls is refused for a body nobody edits any more.
+# 4654284466: the body is counted with no fence rule, and an example in a code block pays for a
+# finding the body dropped.
+mut_PR_body_merged_state_ignored() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^      if \[ "\$body_state" != MERGED \]; then$|      if true; then|' "$1"
+}
+mut_PR_body_kit_lines_counted_in_fence() {
+  sed -i '/^gate_PR() {$/,/^}$/ { /^            fence { next }$/d }' "$1"
+}
+# Item 4 of 20261121-l3-gates-do-fim-da-linha (ADR 0024, decision 4): code committed after the round
+# reopens REVIEW. Three mutants, one per rule of review_later_code_ok: the function passes every
+# round; the DOCS writes: leaves the admitted paths (the world of the README.md commit catches it);
+# the --not of the base refs goes away (the merge of the base and the merged mission catch it).
+mut_REVIEW_later_code_unread() {
+  sed -i '/^review_later_code_ok() {$/,/^}$/ s|^  frontmatter_has "\$round" reviewed_head \|\| return 0$|  return 0|' "$1"
+}
+mut_REVIEW_later_docs_writes_counted() {
+  sed -i '/^review_later_code_ok() {$/,/^}$/ s|^  if \[ -n "\$gr" \] \&\& \[ -n "\$gd" \]; then globs="\$gr, \$gd"; else globs=""; fi$|  if [ -n "$gr" ]; then globs="$gr"; else globs=""; fi|' "$1"
+}
+mut_REVIEW_later_merged_mission_refused() {
+  sed -i '/^review_later_code_ok() {$/,/^}$/ s| --not \${bases\[@\]+"\${bases\[@\]}"}||' "$1"
+}
+
+mut_PR_head_unreadable_passes() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^  if \[ -z "\$pr_live_state" \] \|\| ! \[\[ "\$pr_head" =~ ^\[0-9a-f\]{40,64}\$ \]\]; then$|  if false; then|' "$1"
+}
+
+# The kit lines of the handoffs (item 8 of 20261121-l3-gates-do-fim-da-linha). Without the
+# comparison a body that dropped a finding about the kit merges and the finding is lost; with a quote
+# counted, the template's own example (`> - kit:`) would owe the body a phantom line.
+mut_PR_kit_lines_uncounted() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^          if \[ "\${kit_k:-0}" -lt "\$kit_n" \]; then$|          if false; then|' "$1"
+}
+mut_PR_kit_lines_counted_in_quote() {
+  sed -i '/^mission_kit_lines() {$/,/^}$/ s|^    /\^\[ \\t\]\*- kit:/ { n++ }$|    /^[ \\t>]*- kit:/ { n++ }|' "$1"
+}
+# The other half of "counts none in a quote or a fence" (finding #4 of r1 of L3): without the fence
+# rule a `- kit:` line inside a code block of a handoff owes the body a line nobody wrote.
+mut_PR_kit_lines_counted_in_fence() {
+  sed -i '/^mission_kit_lines() {$/,/^}$/ { /^    fence { next }$/d }' "$1"
 }
 
 # Door 1 of the app-down escalation, and the sibling of RUN_blocked_not_escalated above in every
@@ -7667,6 +7796,11 @@ CATALOG=(
   EXEC_done_without_commit
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
+  RUN_test_cmd_not_run_reads_red
+  RUN_test_cmd_silent_reads_not_run
+  RUN_test_cmd_started_skips_dirty
+  RUN_test_cmd_not_run_skips_dirty
+  RUN_test_cmd_not_run_dirty_unsaid
   EXEC_escaped_pipe_blind
   EXEC_pipeless_row_skipped
   EXEC_pipeless_reads_past_the_table
@@ -7741,6 +7875,8 @@ CATALOG=(
   DOCS_k8_fence_blind
   DOCS_k8_cite_no_left_boundary
   DOCS_k8_cite_no_right_boundary
+  DOCS_k8_reads_head_off_branch
+  DOCS_k8_gone_branch_refused
   DOCS_k8_cite_first_only
   DOCS_k8_cite_unpadded
   DOCS_k8_key_ignored
@@ -7817,6 +7953,10 @@ CATALOG=(
   QA_hostport_keeps_fragment
   QA_hostport_keeps_userinfo
   QA_hostport_no_ipv6
+  QA_e2e_history_uncounted
+  QA_e2e_history_counts_passed
+  QA_e2e_unnamed_project_dropped
+  QA_e2e_current_log_by_spelling
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_every_row_as_prose
@@ -7906,6 +8046,23 @@ CATALOG=(
   RUN_blocked_not_escalated
   RUN_blocked_retry_not_escalated
   RUN_ticket_blocked_not_armed
+  RUN_pr_blocked_not_armed
+  PR_head_unread
+  PR_verified_head_unchecked
+  PR_merged_head_read
+  PR_head_unreadable_passes
+  PR_kit_lines_uncounted
+  PR_kit_lines_counted_in_quote
+  PR_kit_lines_counted_in_fence
+  PR_verified_head_ref_admitted
+  PR_verified_head_renames_hidden
+  PR_verified_head_mission_arg_raw
+  PR_body_merged_state_ignored
+  PR_body_kit_lines_counted_in_fence
+  REVIEW_later_code_unread
+  REVIEW_later_docs_writes_counted
+  REVIEW_later_merged_mission_refused
+  RUN_review_blocked_not_armed
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated
   RUN_session_died_not_escalated
