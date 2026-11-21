@@ -1601,6 +1601,19 @@ blocked_way_out_probes() {
   fi
 }
 
+# Item 4 of 20261121-l3-gates-do-fim-da-linha (ADR 0024, decision 4). gate_REVIEW now reopens the
+# phase for code committed after the round, and the reviewer reads it in section 4, in the paragraph
+# of reviewed_head:, on one physical line.
+reviewer_later_code_probes() {
+  local rev="$ROOT/agents/sdd-reviewer.md" sec
+  sec="$(awk '/^## 4\. /{s=1; next} s && /^## /{s=0} s' "$rev")"
+  if grep -qF 'Code committed after the round reopens REVIEW: the gate reads the commits after the one that added the round, and a path outside what this hat and the DOCS hat write refuses it' <<< "$sec"; then
+    pass "hat: the reviewer is told that code committed after the round reopens REVIEW"
+  else
+    fail "hat: the reviewer is told that code committed after the round reopens REVIEW"
+  fi
+}
+
 qa_agent_probes
 hat_promise_probes
 command_approval_probes
@@ -1624,6 +1637,7 @@ release_probes
 release_stamps_probes
 reviewer_delta_probes
 blocked_way_out_probes
+reviewer_later_code_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2

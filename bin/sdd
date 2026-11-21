@@ -2186,6 +2186,7 @@ gate_REVIEW() {
     GATE_WHY="$(basename "$last"): $offending — the gate requires Grade A on every criterion"; return 1
   fi
   review_head_ok "$last" || return 1
+  review_later_code_ok "$last" || return 1
   if ! run_check_cmd "$TEST_CMD" "gate-review-test"; then
     test_cmd_red_why || true; return 1
   fi
@@ -13282,6 +13283,55 @@ review_head_ok() {
       return 1
     fi
   done <<< "$changed"
+  return 0
+}
+
+# review_later_code_ok <round> — code committed AFTER the round reopens REVIEW (ADR 0024, decision 4).
+# review_head_ok reads the interval up to the commit that added the round; this reads the commits
+# after it: `rev-list <that commit>..HEAD --not <mission_base_refs>`, and the first path one of them
+# touches outside `hat_writes REVIEW` and `hat_writes DOCS` refuses, naming the path and the commit.
+# The owner of the artifact the refusal asks for is sdd-reviewer, who writes the next round — a delta
+# from this round's reviewed_head (ADR 0023). rc 0 with no reviewed_head (the older rounds; a wrong
+# one was refused by review_head_ok just above), with no commit that adds the round (the dirty-tree
+# refusal below covers it), and with an empty list (the merged mission, and the one that did not
+# move). No --no-merges: diff-tree without -m prints no path for a merge commit (git 2.43.0), and
+# what a merge of the base brought is outside the range through the --not. A rev-list or a
+# diff-tree that fails refuses (fail closed).
+# Declared limits (ADR 0024): the DOCS writes: is admitted whole — it is wider than docs, and
+# narrowing it is lot L6b of the campaign; and the resolution of a merge of the base is not read
+# (sdd-worker pr-ready reads it). A name git quotes under core.quotePath=false refuses, as in
+# review_head_ok: the fail-safe side.
+review_later_code_ok() {
+  local round="$1" name rc_commit commits c paths p globs short
+  local -a bases=()
+  frontmatter_has "$round" reviewed_head || return 0
+  rc_commit="$(git -C "$REPO_ROOT" -c log.showSignature=false log -1 --diff-filter=A --format=%H -- "$round" 2>/dev/null || true)"
+  [ -n "$rc_commit" ] || return 0
+  name="$(basename "$round")"
+  mapfile -t bases < <(mission_base_refs)
+  if ! commits="$(git -C "$REPO_ROOT" rev-list --reverse "$rc_commit..HEAD" --not ${bases[@]+"${bases[@]}"} 2>/dev/null)"; then
+    GATE_WHY="$name: git rev-list cannot list the commits after the round — the gate does not pass a round it cannot read"
+    return 1
+  fi
+  local gr gd
+  gr="$(hat_writes REVIEW)"; gd="$(hat_writes DOCS)"
+  # An empty answer is "writes anywhere" (hat_writes), so a hat with no writes: admits every path.
+  if [ -n "$gr" ] && [ -n "$gd" ]; then globs="$gr, $gd"; else globs=""; fi
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    if ! paths="$(git -C "$REPO_ROOT" -c core.quotePath=false diff-tree --no-commit-id --name-only -r "$c" 2>/dev/null)"; then
+      GATE_WHY="$name: git diff-tree cannot list what $c changed after the round — the gate does not pass a round it cannot read"
+      return 1
+    fi
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      if ! hat_path_allowed "$p" "$globs"; then
+        short="$(git -C "$REPO_ROOT" rev-parse --short "$c" 2>/dev/null || true)"
+        GATE_WHY="$name: $p changed in ${short:-$c}, committed after the round — code no later hat writes reopens REVIEW; the next round is a delta from the round's reviewed_head"
+        return 1
+      fi
+    done <<< "$paths"
+  done <<< "$commits"
   return 0
 }
 

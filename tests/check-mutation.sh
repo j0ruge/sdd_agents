@@ -2442,6 +2442,20 @@ mut_PR_verified_head_unchecked() {
 mut_PR_merged_head_read() {
   sed -i '/^gate_PR() {$/,/^}$/ s|^  if \[ "\$pr_live_state" != MERGED \]; then$|  if true; then|' "$1"
 }
+# Item 4 of 20261121-l3-gates-do-fim-da-linha (ADR 0024, decision 4): code committed after the round
+# reopens REVIEW. Three mutants, one per rule of review_later_code_ok: the function passes every
+# round; the DOCS writes: leaves the admitted paths (the world of the README.md commit catches it);
+# the --not of the base refs goes away (the merge of the base and the merged mission catch it).
+mut_REVIEW_later_code_unread() {
+  sed -i '/^review_later_code_ok() {$/,/^}$/ s|^  frontmatter_has "\$round" reviewed_head \|\| return 0$|  return 0|' "$1"
+}
+mut_REVIEW_later_docs_writes_counted() {
+  sed -i '/^review_later_code_ok() {$/,/^}$/ s|^  if \[ -n "\$gr" \] \&\& \[ -n "\$gd" \]; then globs="\$gr, \$gd"; else globs=""; fi$|  if [ -n "$gr" ]; then globs="$gr"; else globs=""; fi|' "$1"
+}
+mut_REVIEW_later_merged_mission_refused() {
+  sed -i '/^review_later_code_ok() {$/,/^}$/ s| --not \${bases\[@\]+"\${bases\[@\]}"}||' "$1"
+}
+
 mut_PR_head_unreadable_passes() {
   sed -i '/^gate_PR() {$/,/^}$/ s|^  if \[ -z "\$pr_live_state" \] \|\| ! \[\[ "\$pr_head" =~ ^\[0-9a-f\]{40,64}\$ \]\]; then$|  if false; then|' "$1"
 }
@@ -7944,6 +7958,9 @@ CATALOG=(
   PR_verified_head_unchecked
   PR_merged_head_read
   PR_head_unreadable_passes
+  REVIEW_later_code_unread
+  REVIEW_later_docs_writes_counted
+  REVIEW_later_merged_mission_refused
   RUN_review_blocked_not_armed
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated

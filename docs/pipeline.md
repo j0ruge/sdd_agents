@@ -421,7 +421,7 @@ round ends in `budget-exhausted` (or a draft PR under `PUBLISH_ON_REVIEW_BLOCKED
 **From the second round on, the round reviews the delta (ADR 0023).** Each round writes the
 `git rev-parse HEAD` it read as `reviewed_head:`, and `gate_REVIEW` refuses a value that is no
 commit, one the `HEAD` does not carry, code changed between it and the round's commit, or a range
-`git diff` cannot list (fail closed); a round without the key passes, as the older ones did. One function, `review_base_line`, reads the newest
+`git diff` cannot list (fail closed); a round without the key passes, as the older ones did. Code committed **after** the round reopens REVIEW (ADR 0024, decision 4): `review_later_code_ok` reads `rev-list <the commit that added the round>..HEAD --not <the base refs>`, and the first path a commit touches outside the `writes:` of the REVIEW and DOCS hats refuses, naming the path and the short sha; a merge of the base, a mission already in the base and a round without the key pass, and a `rev-list` or `diff-tree` that fails refuses. Declared limits: the DOCS `writes:` is admitted whole, and the resolution of a merge of the base is not read (`sdd-worker pr-ready` reads it). One function, `review_base_line`, reads the newest
 round and answers `base=<sha> — <round> …` or `full — <reason>`. The REVIEW boot prompt carries
 that line, so the session invokes `/codereview:codereview base=<sha>`, because the argument limits
 the skill and a sentence does not. `sdd review-base <mission>` prints the same line without running a

@@ -3087,6 +3087,58 @@ rm -f "$MDIR/40-review-r12.md" l1b-outside.txt l1b-doc.txt
 git add -A && git commit -qm "chore: drop the r12 fixture" >/dev/null
 assert_phase "with the r12 fixture gone the mission is back at DOCS" "DOCS"
 
+# Code committed after the round reopens REVIEW (ADR 0024, decision 4; mission
+# 20261121-l3-gates-do-fim-da-linha). The fixture's main is the DEFAULT_BRANCH, where the
+# `--not <base>` of review_later_code_ok empties every range and no world could turn red, so these
+# worlds run on a mission branch of their own, one world per reset of it, and come back to main.
+# The assertion above (reviewed_head reads the commit that ADDED the round) stays on main: it
+# commits code after r12 and passes only because that code is in the base.
+l3_main="$(git rev-parse HEAD)"
+git checkout -q -b missao/l3-later
+l3_start="$(git rev-parse HEAD)"
+l3_world() { # l3_world <reviewed_head value | @head@ | @absent@> — r12 on l3_start
+  git reset -q --hard "$l3_start"
+  if [ "$1" = '@head@' ]; then write_r12 "$(git rev-parse HEAD)"; else write_r12 "$1"; fi
+}
+l3_phase() { ( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 ) || true; }
+l3_why() { ( cd "$FIX" && "$SDD" why "$MISSION" REVIEW 2>&1 ) || true; }
+l3_code() { echo "$1" > l3-code.txt; git add -A && git commit -qm "feat: code after the round" >/dev/null; }
+
+l3_world '@head@'; l3_code one
+l3_sha="$(git rev-parse --short HEAD)"; l3_p="$(l3_phase)"; l3_w="$(l3_why)"
+if [ "$l3_p" = REVIEW ] \
+   && grep -qF "40-review-r12.md: l3-code.txt changed in $l3_sha, committed after the round" <<< "$l3_w" \
+   && ! grep -qF 'changed between' <<< "$l3_w"; then
+  pass "gate_REVIEW reopens the phase for code committed after the round, and names the commit and the path"
+else fail "gate_REVIEW reopens the phase for code committed after the round, and names the commit and the path" \
+  "REVIEW and '40-review-r12.md: l3-code.txt changed in $l3_sha, committed after the round', never 'changed between'" \
+  "$l3_p — $l3_w"; fi
+
+# Four worlds that pass: (1) later commits only in the mission folder and in README.md, which the
+# REVIEW and DOCS hats write; (2) a merge of the base whose code is already in the base; (3) a
+# round with no reviewed_head followed by code; (4) the mission already merged, its HEAD in the base.
+l3_seen=""
+l3_world '@head@'
+printf 'later\n' > "$MDIR/l3-notes.md"; printf 'readme\n' >> README.md
+git add -A && git commit -qm "docs: the mission folder and the README" >/dev/null
+l3_seen+="1:$(l3_phase) "
+l3_world '@head@'
+git checkout -q main; echo base > l3-base.txt; git add -A && git commit -qm "feat: code on the base" >/dev/null
+git checkout -q missao/l3-later; git merge -q --no-ff --no-edit main >/dev/null
+l3_seen+="2:$(l3_phase) "
+git update-ref refs/heads/main "$l3_main"
+l3_world '@absent@'; l3_code three
+l3_seen+="3:$(l3_phase) "
+l3_world '@head@'; l3_code four
+git update-ref refs/heads/main HEAD
+l3_seen+="4:$(l3_phase)"
+git update-ref refs/heads/main "$l3_main"
+assert_eq "gate_REVIEW passes later commits in what the REVIEW and DOCS hats write, a merge of the base, a merged mission and a round with no reviewed_head" \
+  "1:DOCS 2:DOCS 3:DOCS 4:DOCS" "$l3_seen"
+
+git checkout -q main; git branch -q -D missao/l3-later
+assert_eq "fixture: the later-code worlds leave main where they found it" "$l3_main" "$(git rev-parse HEAD)"
+
 # SHA-256 (CodeRabbit on PR #452): a repository made with --object-format=sha256 writes 64-hex
 # commit ids, which rev-parse, merge-base and diff accept, and the shape guards of review_base_line
 # and review_head_ok read that real commit as "no commit". The world is real — git builds it since

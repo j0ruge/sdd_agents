@@ -255,6 +255,8 @@ hex; 64 in a SHA-256 repository; ADR 0023). The gate refuses a value that is no 
 HEAD does not carry, a round committed after code outside this hat's `writes:` changed since that
 sha, and, failing closed, a round whose range `git diff` cannot list; an absent key passes, and the
 next round is a full one.
+Code committed after the round reopens REVIEW: the gate reads the commits after the one that added the round, and a path outside what this hat and the DOCS hat write refuses it
+(the merge of the base and the mission already in the base pass), and the next round is a delta from this round's `reviewed_head:`.
 
 Also include: the round's findings by severity, **which of them became which `R<n>`** (the section
 `## Incrementos de conserto (R<n>)` of the template), what was refuted (with evidence) and what went
