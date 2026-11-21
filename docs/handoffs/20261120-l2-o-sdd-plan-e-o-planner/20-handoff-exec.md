@@ -2,9 +2,9 @@
 missao: 20261120-l2-o-sdd-plan-e-o-planner
 fase: EXEC
 status: done
-sessao: c0afc7ba-4721-4cc3-b270-3a41bfa9b30e
-data: 2026-11-20 20:03
-gate: "I6: env -u EFFORT_EXEC -u CLAUDE_EFFORT tests/run-all.sh → suite green, rc=0, 0 linhas ^  FAIL, 2231 linhas ^  ok (19:51, sobre o TODO.md do I6); no ambiente da corrida (EFFORT_EXEC=xhigh e CLAUDE_EFFORT=xhigh exportados) tests/run-all.sh → 2 suite(s) failed, rc=1, só check-dry-run (with no EFFORT_* configured, no phase carries --effort) e check-autonomy (covered: the journal records effort=settings…), os mesmos 2 de ambiente do I1 (TODO.md, 1c8de6a); os seis Checks do checkpoint → 1 1 1 1 / 1 1 1 1 0 / 1 1 1 1 0 / 1 1 1 1 1 0 / 1 1 / 14; check-todo.sh --check TODO.md → 103 finding(s), all within 8 lines, carrying anchor + date, every anchor on target, rc 0; --anchors → 103 measured, 0 off target; 14 of 14 títulos byte a byte iguais"
+sessao: 3672ea89-1b7b-4e93-b75c-cf7e6ae1b22a
+data: 2026-11-20 21:01
+gate: "I7 (d48f7c9, 748bea0): no ambiente da corrida (EFFORT_EXEC=xhigh e CLAUDE_EFFORT=xhigh exportados) tests/run-all.sh → suite green, rc=0, 0 linhas ^  FAIL, 2231 linhas ^  ok (20:41 → 20:56, sobre o TODO.md com o RESOLVED by do I7); antes do d48f7c9, no mesmo ambiente, 2 suite(s) failed (gate-exec-test-20261120-200512-nriksi.log: check-dry-run e check-autonomy, só os 2 de ambiente); Check do I7 → 1 1; o do I6 → 15 (os 14 do I6 e o do I7); check-checkpoint.sh --check → 7 row(s), 6 under the anchor rule, none blind; check-todo.sh --check TODO.md → 103 finding(s), all within 8 lines, carrying anchor + date, every anchor on target, rc 0; --anchors → 103 measured, 0 off target. I6 (c0afc7ba): os seis Checks → 1 1 1 1 / 1 1 1 1 0 / 1 1 1 1 0 / 1 1 1 1 1 0 / 1 1 / 14; 14 of 14 títulos byte a byte iguais"
 ---
 
 # Handoff — EXEC — L2: o `/sdd-plan` e o planner
@@ -14,18 +14,18 @@ gate: "I6: env -u EFFORT_EXEC -u CLAUDE_EFFORT tests/run-all.sh → suite green,
 
 ## TL;DR
 
-Os seis incrementos estão `done`: as 15 regras do `/sdd-plan` e do planner têm texto e asserção, e
-o `--red` ganhou `--list` e `--only`. As 19 asserções novas estão verdes e os 14 itens do `TODO.md`
-carregam `RESOLVED by`. ⚠️ A suíte só fica verde **sem** o `EFFORT_EXEC`/`CLAUDE_EFFORT` exportado:
-no ambiente desta corrida ela sai com 2 FAIL de ambiente (`check-dry-run`, `check-autonomy`), e o
-`gate_EXEC` os lê. A decisão é do humano (Pendência 1); a QA é no terminal.
+Os seis incrementos do plano estão `done`: as 15 regras do `/sdd-plan` e do planner têm texto e
+asserção, o `--red` ganhou `--list` e `--only`, e os 14 itens do `TODO.md` carregam `RESOLVED by`.
+O I7, fora do plano, consertou os dois sensores que liam o `EFFORT_*` do ambiente (`d48f7c9`): a
+suíte agora sai verde também com `EFFORT_EXEC=xhigh` exportado, que é como o `gate_EXEC` a roda.
+O Check do I6 passou a responder `15` (os 14 e o do I7). A QA é no terminal.
 
 ## Estado do repo
 
 - **Branch:** `fix/l2-o-sdd-plan-e-o-planner`, à frente de `origin/fix/l2-o-sdd-plan-e-o-planner` (nada empurrado nesta fase)
-- **Último commit:** o deste handoff com o checkpoint; o do incremento é `df7b55e` `docs(todo): RESOLVED by nos 14 itens do L2, cada um com o hash do incremento que o fechou`
+- **Último commit:** o deste handoff com o checkpoint; os do I7 são `d48f7c9` `fix(tests): os dois sensores do effort limpam o EFFORT_* herdado de quem chama` e `748bea0` (o `RESOLVED by` do item)
 - **Working tree:** limpo
-- **Suíte:** `tests/run-all.sh` → com `env -u EFFORT_EXEC -u CLAUDE_EFFORT`: `suite green`, rc 0, 0 `FAIL`, 2231 linhas `ok`. No ambiente da corrida: `2 suite(s) failed`, rc 1, só os 2 de ambiente
+- **Suíte:** `tests/run-all.sh` no ambiente da corrida (`EFFORT_EXEC=xhigh` e `CLAUDE_EFFORT=xhigh` exportados) → `suite green`, rc 0, 0 `FAIL`, 2231 linhas `ok` (20:41 → 20:56). Com `env -u EFFORT_EXEC -u CLAUDE_EFFORT` ela já saía verde no I6
 - **E2E:** `E2E_CMD` vazio: o kit não tem interface
 
 ## O que foi feito
@@ -38,9 +38,32 @@ no ambiente desta corrida ela sai com 2 FAIL de ambiente (`check-dry-run`, `chec
 | I4 | `8a21366` | 1, 12, (15) | o planner roda o sensor que uma mitigação nomeia, escreve o passo do `20-handoff-exec.md` em plano executado fora do `sdd run` (`docs/plan-only.md`), e declara `model: fable` no frontmatter |
 | I5 | `972a482` | 14 | `--red <cp> --list` e `--red <cp> --only <ids>` no `tests/check-checkpoint.sh`, com 31 probes e a linha `rule:` do selftest; o "Measure again" procura `sdd run` vivo antes do `--red` |
 | I6 | `df7b55e` | os 14 | `RESOLVED by <hash>` em cada item, com o hash do incremento que o fechou |
+| I7 | `d48f7c9` | o do `1c8de6a` | fora do plano: `tests/check-dry-run.sh` e `tests/check-autonomy.sh` limpam do próprio ambiente toda variável `EFFORT_*` antes do fixture; `RESOLVED by` em `748bea0` |
 
 Fora dos incrementos, nesta fase: `1c8de6a` registrou no `TODO.md` o achado dos dois sensores que
 leem o `EFFORT_*` do ambiente (catraca 102 → 103). Os commits `chore(checkpoint)` só fecham linhas.
+
+### A volta do gate: o I7
+
+O `gate_EXEC` reprovou depois do I6 (`TEST_CMD failed`, `gate-exec-test-20261120-200512-nriksi.log`):
+a corrida roda com `EFFORT_EXEC=xhigh` exportado (pendência 10 do `00-missao.md`), o `load_config`
+guarda a chave exportada quando o arquivo não a declara, e os dois sensores afirmavam "nenhum
+`EFFORT_*` configurado" sobre um fixture que só apagava as chaves do config. O runner abriu o EXEC
+sem linha `pending`, e o contrato do executor manda consertar a suíte quando é ela que o gate nomeia;
+por isso a Pendência 1 do I6 não ficou para o humano.
+
+- **O conserto (`d48f7c9`).** Os dois sensores, logo no topo, armam cinco `EFFORT_*` com `xhigh` e
+  depois apagam toda variável de prefixo `EFFORT_` (`compgen -v EFFORT_`), no molde do
+  `unset READ_EXTRA` que o `check-dry-run.sh` já tinha. O prefixo dispensa lista: uma chave de fase
+  que o runner ganhar depois sai junto. O veneno armado é o que mede a limpeza em toda máquina.
+- **A direção do item dizia "numa definição só", e o conserto são dois sítios iguais.** Um arquivo
+  `tests/*.sh` novo, sourçado pelos dois, moveria o `LINT_FLOOR`, o piso do `check-pipefail.sh` e o
+  fixture dele por duas linhas sem lista a sincronizar. A REVIEW pode discordar.
+- **Sabotagem**, em ambiente limpo e com teto: sem a limpeza, 2 FAIL no `check-dry-run.sh` e 1 no
+  `check-autonomy.sh`; com a limpeza estreitada a `unset EFFORT_EXEC`, 2 FAIL no primeiro e o segundo
+  sobrevive, porque o par dele lê só a linha de EXEC e as outras chaves não movem asserção nenhuma.
+- **O Check do I6 responde `15`.** Ele conta os `RESOLVED by` novos contra o merge-base, e o item do
+  I7 é o 15º. A linha do I6 e o `df7b55e` ficaram como estavam.
 
 No I6, seis itens (6, 9, 10, 11, 13 e 14) tinham a última linha do corpo cheia demais para o
 `RESOLVED by` sem passar de 120 caracteres: a linha foi quebrada numa fronteira de frase, o token
@@ -58,7 +81,8 @@ teto. Os outros oito levam o token no fim da linha que já existia.
 | `tests/check-checkpoint.sh` | `--red --list`, `--red --only`, `probe_on`, `red_args`; `PROBE_FLOOR` 443, `RULE_FLOOR` 10 |
 | `tests/check-hat.sh` | 16 asserções novas (140 linhas `ok` hoje) |
 | `tests/check-templates.sh` | 2 asserções do `plano.md` |
-| `TODO.md` | âncoras re-apontadas a cada incremento, `RESOLVED by` nos 14 itens, e o achado do `1c8de6a` |
+| `tests/check-dry-run.sh` e `tests/check-autonomy.sh` | o I7: o `EFFORT_*` do ambiente armado e limpo no topo |
+| `TODO.md` | âncoras re-apontadas a cada incremento, `RESOLVED by` nos 14 itens, e o achado do `1c8de6a`, resolvido no I7 |
 | `docs/handoffs/20261120-l2-o-sdd-plan-e-o-planner/checkpoint-notas.md` | Red, Green e sabotagem de cada incremento |
 
 ## Boot da próxima fase
@@ -66,11 +90,12 @@ teto. Os outros oito levam o token no fim da linha que já existia.
 A QA desta missão é **no terminal**: o kit não tem interface, e `qa:` do `00-missao.md` está vazio,
 então o `sdd-qa` percorre a jornada da seção "Verificação end-to-end" do `01-plano.md`, em ordem:
 
-1. **Antes de qualquer suíte, o ambiente.** Se `env | grep -E '^(EFFORT_|CLAUDE_EFFORT)'` mostrar
-   alguma variável, a suíte sai com os 2 FAIL de ambiente do `TODO.md` (`1c8de6a`), que não são
-   desta missão. A medida que vale é `env -u EFFORT_EXEC -u CLAUDE_EFFORT tests/run-all.sh`
-   (cerca de 11 min nesta máquina); registre as duas no relatório, sem misturá-las.
-2. Os seis Checks do `checkpoint.md`, um a um (cada um imprime o esperado da célula).
+1. **A suíte, no ambiente que a QA herdar.** Desde o I7 ela sai verde com ou sem `EFFORT_*`
+   exportado; registre no relatório o que `env | grep -E '^(EFFORT_|CLAUDE_EFFORT)'` mostrou e o
+   resultado de `tests/run-all.sh` (cerca de 15 min nesta máquina, 20:41 → 20:56 no I7).
+2. Os sete Checks do `checkpoint.md`, um a um. Seis imprimem o esperado da célula; o do I6 imprime
+   `15`, não `14`, porque o item do I7 é o 15º `RESOLVED by` novo da branch (seção "A volta do
+   gate: o I7"). O do I7 leva uns 5 min, porque roda o `check-autonomy.sh` inteiro.
 3. O espelho e o frontmatter: `cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md; echo $?`
    → `0`, e `git diff origin/main -- agents/sdd-planner.md` mostra no frontmatter só a linha
    `model: fable`.
@@ -93,14 +118,13 @@ mudou.
 
 ## Pendências / Decisions for a Human
 
-- **O `gate_EXEC` desta corrida lê a suíte vermelha, por ambiente.** A corrida foi lançada com
-  `EFFORT_EXEC=xhigh` exportado (pendência 10 do `00-missao.md`, a variável do teste de effort), e
-  dois sensores leem a variável do ambiente de quem chama: `tests/check-dry-run.sh`
-  (`with no EFFORT_* configured, no phase carries --effort`) e `tests/check-autonomy.sh`
-  (`covered: the journal records effort=settings…`). Sem a variável, rc 0. Duas saídas, as duas do
-  humano: consertar os dois sensores (a direção está no item do `TODO.md`, `1c8de6a`; é `tests/`,
-  fora do escopo desta missão) ou relançar sem a variável exportada, o que põe em `medium` qualquer
-  incremento `F`/`R` que a QA ou a REVIEW abrirem e muda a variável medida.
+- **Aceitar o I7, que não estava no plano.** Ele toca `tests/check-dry-run.sh` e
+  `tests/check-autonomy.sh`, fora dos arquivos da missão, porque o `gate_EXEC` não fecharia de outro
+  jeito sem relançar a corrida sem a variável do teste de effort (pendência 10). O corpo do PR deve
+  listá-lo ao lado das escolhas da pendência 3 do `00-missao.md`. A Pendência 1 do I6 (consertar
+  os sensores ou relançar) está fechada pelo `d48f7c9`.
+- **O item do `TODO.md` do I7 entra no chore de depois do merge** com os outros 14: tem
+  `RESOLVED by d48f7c9`, e a catraca segue em 103 até lá.
 - As pendências 1 a 10 do `00-missao.md` seguem como estão; nenhuma foi fechada nesta fase.
 
 ## Riscos e não-feitos
@@ -120,5 +144,7 @@ mudou.
 
 - Dois sensores leem o `EFFORT_*` do ambiente de quem chama → `TODO.md`, seção `<!-- sdd:open -->`,
   `1c8de6a` (item "Dois sensores leem o `EFFORT_*` do ambiente de quem chama, e a suíte fica
-  vermelha sob `EFFORT_EXEC=xhigh`").
-- No I6, nenhum achado novo.
+  vermelha sob `EFFORT_EXEC=xhigh`"). Consertado no I7 (`d48f7c9`), `RESOLVED by` em `748bea0`.
+- No I6 e no I7, nenhum achado novo. A mesma classe vale para qualquer chave de config exportada
+  sobre um fixture que afirma a ausência dela; hoje só o `READ_EXTRA` e o `EFFORT_*` têm limpeza, e
+  nenhuma outra asserção medida reprova por isso. Não virou item: não há defeito medido.

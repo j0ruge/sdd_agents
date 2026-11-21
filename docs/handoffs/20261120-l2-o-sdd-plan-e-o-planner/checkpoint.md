@@ -1,6 +1,6 @@
 ---
 missao: 20261120-l2-o-sdd-plan-e-o-planner
-atualizado: 2026-11-20 20:04
+atualizado: 2026-11-20 21:02
 ---
 
 # Checkpoint — L2: o `/sdd-plan` e o planner
@@ -54,6 +54,7 @@ atualizado: 2026-11-20 20:04
 | I4 | O planner e o modelo: o sensor da mitigação, o handoff fora do sdd run e o model: do chapéu (itens 1, 12, 15) | `o=$(bash tests/check-hat.sh 2>&1); t=$(bash tests/check-templates.sh 2>&1); cmp -s agents/sdd-planner.md .claude/agents/sdd-planner.md; c=$?; echo "$(grep -c '^  ok    hat: the planner runs at PLAN the sensor a risk mitigation names, against what the mitigation protects' <<< "$o") $(grep -c '^  ok    plano.md: a mitigation that names a sensor carries the command run against its target' <<< "$t") $(grep -c '^  ok    hat: a plan executed outside sdd run ends its last increment by writing 20-handoff-exec.md, and promises no EXEC gate without it' <<< "$o") $(grep -c '^  ok    doc: plan-only.md says what gate_EXEC reads before a mission executed by hand goes back to sdd run' <<< "$o") $(grep -c '^  ok    hat: the planner declares its model in the frontmatter, and /sdd-plan passes the model when it delegates' <<< "$o") $c"` → `1 1 1 1 1 0` | done | 8a21366 |
 | I5 | O --red: --list, --only e o aviso de corrida viva no aceite (item 14) | `k=$(bash tests/check-checkpoint.sh 2>&1); o=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    rule: --red --list runs no Check, and --red --only never says every one' <<< "$k") $(grep -c '^  ok    command: /sdd-plan looks for a live sdd run before the --red of the acceptance, and never reads a partial --red as measured' <<< "$o")"` → `1 1` | done | 972a482 |
 | I6 | Fecho: RESOLVED by nos 14 itens e o 20-handoff-exec.md | `b=$(git show "$(git merge-base HEAD origin/main)":TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `14` | done | df7b55e |
+| I7 | Fora do plano, pela volta do gate: os dois sensores do effort limpam o EFFORT_* herdado de quem chama (item do TODO.md, 1c8de6a) | `o=$(EFFORT_EXEC=xhigh bash tests/check-dry-run.sh 2>&1); a=$(EFFORT_EXEC=xhigh bash tests/check-autonomy.sh 2>&1); echo "$(grep -c '^  ok    with no EFFORT_\* configured, no phase carries --effort' <<< "$o") $(grep -c '^  ok    covered: the journal records effort=settings with no EFFORT_\* and the configured value with one' <<< "$a")"` → `1 1` | done | d48f7c9 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
