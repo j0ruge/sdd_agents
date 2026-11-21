@@ -944,6 +944,26 @@ command_before_probes() {
   else
     fail "command: /sdd-plan no longer moves to a worktree when another command holds the checkout (sdd status --no-gates, CHECKOUT-OWNER), or watches the main checkout without leaving out what that run changes"
   fi
+  # CodeRabbit on #456, two rules. The exits are taken in order, so the topic one has to come before
+  # the checkout-owner one: the folder of a mission in flight is in this checkout, and the worktree
+  # cut from the base does not have it. And a run that holds the main checkout edits the product
+  # there uncommitted, which nothing attributes: the relay names a changed tracked file and stops only
+  # on a new untracked path. The order is read by line number, never by presence.
+  local topic_at owner_at
+  topic_at="$(awk -v p='already covers the topic' 'index($0, p) { print NR; exit }' <<< "$before_sec")"
+  owner_at="$(awk -v p='**Another command holds the checkout**' 'index($0, p) { print NR; exit }' <<< "$before_sec")"
+  if [ -n "$topic_at" ] && [ -n "$owner_at" ] && [ "$topic_at" -lt "$owner_at" ] \
+     && grep -qF 'This exit comes' <<< "$before_sec"; then
+    pass "command: /sdd-plan stops on a topic already planned before it takes the worktree route of a held checkout"
+  else
+    fail "command: /sdd-plan takes the worktree route of a held checkout before it looks for a folder that already covers the topic, whose mission in flight the worktree would not have"
+  fi
+  if grep -qF 'So do not stop on a tracked' <<< "$then_sec" \
+     && grep -qF 'on a new untracked path (`??`) outside that directory' <<< "$then_sec"; then
+    pass "command: /sdd-plan names a tracked file the run in the main checkout changed, and stops only on a new untracked path"
+  else
+    fail "command: /sdd-plan stops the grill on every uncommitted edit of the run that holds the main checkout, or no longer stops on the untracked path the planner leaves"
+  fi
   if grep -qF 'When step 2 did not move you, record the same two' <<< "$then_sec" \
      && grep -qF 'send the new `HEAD` to the planner with the next answer' <<< "$then_sec"; then
     pass "command: /sdd-plan records status and HEAD at every hand-back without a worktree too, and sends its own commit to the planner with the next answer"

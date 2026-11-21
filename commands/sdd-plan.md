@@ -30,6 +30,12 @@ writes the artifacts from memory, and their headings are the contract the gates 
    answer means another command holds this checkout. With no mission folder at all, run
    `pgrep -af '[b]in/sdd run'` instead. Show the human one line with what you read, then take the
    first of these exits that applies:
+   - **A folder in `HANDOFF_DIR` already covers the topic:** stop, and show the human that folder
+     and what `sdd status --no-gates` says of it. In `dotp-remake` 3.6d the tree held twelve paths
+     of a plan another session was executing by hand, and the folder of 3.6d already existed,
+     merged: only the relay's own `git status` and `git log` held the planner. This exit comes
+     first even when a run holds the checkout: the folder of a mission in flight lives here, and
+     the worktree of step 2, cut from `origin/<DEFAULT_BRANCH>`, does not have it until it merges.
    - **Another command holds the checkout** (a `CHECKOUT-OWNER` line, or a live `sdd run` of this
      repository): step 2 applies, even outside the kit. The planner writing here would put a foreign
      `00-missao.md` inside that run's phase, which its hat guard reads as the phase's own writing
@@ -40,10 +46,6 @@ writes the artifacts from memory, and their headings are the contract the gates 
      session's work, and a mission cut from another branch inherits its commits. In `ui24_agent` the
      checkout was on the branch of an open PR, and the planner would have read a checkout that is
      not the base.
-   - **A folder in `HANDOFF_DIR` already covers the topic:** stop, and show the human that folder
-     and what `sdd status --no-gates` says of it. In `dotp-remake` 3.6d the tree held twelve paths
-     of a plan another session was executing by hand, and the folder of 3.6d already existed,
-     merged: only the relay's own `git status` and `git log` held the planner.
 
 2. **If this checkout is the kit that `sdd` runs from, move to a linked worktree before writing
    anything.** Resolve `sdd="$(readlink -f "$(command -v sdd)")"` and compare it with the root from
@@ -78,7 +80,7 @@ writes the artifacts from memory, and their headings are the contract the gates 
      so both outlive `git worktree remove` (ADR 0021).
 
    When `sdd` is not on the PATH, or resolves outside this root, skip this step: no run of another
-   repository executes this checkout. The one exception is the first exit of step 1: when another
+   repository executes this checkout. The one exception is the second exit of step 1: when another
    command holds this checkout, this step applies to any repository.
 
    **In a target with a run in flight** (step 1 found another command holding the checkout), the same
@@ -143,9 +145,14 @@ When step 2 moved you, hand the planner two more orders, and hold it to them:
   a path in that checkout may belong to another writer. In batch 9 a relative `2>e` of the
   planner left `?? e` in the main checkout, and a target's `sdd run` in flight would have stopped
   with `KIT-TOUCHED` (rc 3). When the worktree exists because a run holds the main checkout (the
-  first exit of step 1), compare at each hand-back only the paths outside the directory of the mission in flight,
+  exit of step 1 for a checkout another command holds), compare at each hand-back only the paths outside the directory of the mission in flight,
   and do not stop on a `HEAD` that run moves: its commits and its mission's files are its own, and
-  stopping on them stops the grill for nothing.
+  stopping on them stops the grill for nothing. That run also edits the product there, uncommitted,
+  and nothing tells its edit from another writer's: the kit attributes a commit by its reflog label,
+  never an uncommitted path (`.claude/rules/anatomia-do-agente.md` §6). So do not stop on a tracked
+  file that changed either: name it to the human in the line of the hand-back, and go on. Stop only
+  on a new untracked path (`??`) outside that directory, which is the shape the planner leaves (the
+  `?? e` of batch 9), and let the human say whether the run made it.
 
 When step 2 did not move you, record the same two — `git status --porcelain` and
 `git rev-parse HEAD`, at the repository root — before you delegate, and again at every hand-back. A
