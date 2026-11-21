@@ -902,7 +902,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `docs/plan-only.md:98` (`gate_EXEC`) — "reads, in this order" junta num item a validação do hash de cada linha
   `done` e a recusa de linha `pending`, que o gate roda em pontos diferentes, e põe o `blocked` depois das duas,
   quando o gate o conta antes da `pending`. Quem lê uma recusa de `blocked` não a acha no item que a nomeia.
-  Direção: separar o item em dois e seguir a ordem do `bin/sdd`, ou tirar o "in this order".
+  Direção: separar o item em dois e seguir a ordem do `bin/sdd`, ou tirar o "in this order". RESOLVED by 0da9417
   Fonte: `docs/handoffs/20261120-l2-o-sdd-plan-e-o-planner/40-review-r1.md`
   — descoberto por `sdd-reviewer` na r1 da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-20)
 
