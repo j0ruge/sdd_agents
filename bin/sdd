@@ -6486,6 +6486,69 @@ phase_budget() {
   esac
 }
 
+# todo_template_for <OUTPUT_LANG> → the kit template install seeds TODO_FILE from: the variant
+# templates/todo.<lang>.md when the kit has one, the English templates/todo.md otherwise. One
+# definition, read by the seed of cmd_install and by the preamble verdict below.
+todo_template_for() {
+  if [ -n "$1" ] && [ -f "$SDD_HOME/templates/todo.$1.md" ]; then
+    printf '%s\n' "$SDD_HOME/templates/todo.$1.md"
+  else
+    printf '%s\n' "$SDD_HOME/templates/todo.md"
+  fi
+}
+
+# todo_preamble_verdict <file> <OUTPUT_LANG> — CALLED, never read through $( ): it publishes
+# TODO_PREAMBLE_VERDICT (current | stale | author | unknown), TODO_PREAMBLE_REV and _DATE (for a
+# stale one) and TODO_PREAMBLE_TEMPLATE. install seeds TODO_FILE once and never rewrites it, so a
+# target keeps the preamble of the kit it was installed from while the template moves on (L4 item
+# 10). The preamble is the file from line 1 up to its first <!-- sdd:open -->, inclusive. Equal to
+# the template on disk is `current`; else equal to the template at some revision of the kit's git is
+# `stale` (the newest such revision); equal to none is `author` — a preamble somebody wrote, like the
+# kit's own, which must not warn forever, so comparing with today's template alone was refused. A
+# file with no marker, or a kit that is not a git checkout of its own (a copy inside another repo
+# would answer with that repo's history), is `unknown`. Declared limit: an old preamble edited by
+# hand reads as `author`, so it stays quiet.
+todo_preamble_verdict() {
+  TODO_PREAMBLE_VERDICT=unknown TODO_PREAMBLE_REV="" TODO_PREAMBLE_DATE=""
+  TODO_PREAMBLE_TEMPLATE="$(todo_template_for "$2")"
+  local re='^<!-- sdd:open -->[[:space:]]*$' home top mine rel log rev date text
+  [ -f "$1" ] && [ -f "$TODO_PREAMBLE_TEMPLATE" ] || return 0
+  grep -qE "$re" "$1" || return 0
+  home="$(CDPATH='' cd -P "$SDD_HOME" 2>/dev/null && pwd)" || return 0
+  top="$(git -C "$home" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ "$top" = "$home" ] || return 0
+  mine="$(sed "/$re/q" "$1")"
+  if [ "$mine" = "$(sed "/$re/q" "$TODO_PREAMBLE_TEMPLATE")" ]; then
+    TODO_PREAMBLE_VERDICT=current
+    return 0
+  fi
+  rel="templates/${TODO_PREAMBLE_TEMPLATE##*/}"
+  log="$(git -C "$home" log --format='%H %ad' --date=short -- "$rel" 2>/dev/null)" || log=""
+  while read -r rev date; do
+    [ -n "$rev" ] || continue
+    text="$(git -C "$home" show "${rev}:$rel" 2>/dev/null)" || continue
+    if [ "$mine" = "$(sed "/$re/q" <<< "$text")" ]; then
+      TODO_PREAMBLE_VERDICT=stale TODO_PREAMBLE_REV="${rev:0:7}" TODO_PREAMBLE_DATE="$date"
+      return 0
+    fi
+  done <<< "$log"
+  TODO_PREAMBLE_VERDICT=author
+}
+
+# todo_preamble_say <label> <file> <OUTPUT_LANG> — the verdict in words, the same in sdd preflight
+# and in the `preserved` arm of sdd install. A stale preamble is a WARN with the diff to run, and
+# the file is never rewritten: below the marker it holds somebody's findings. `unknown` says nothing.
+todo_preamble_say() {
+  todo_preamble_verdict "$2" "$3"
+  local t="templates/${TODO_PREAMBLE_TEMPLATE##*/}"
+  case "$TODO_PREAMBLE_VERDICT" in
+    current) ok "the preamble of $1 is the one of $t of today" ;;
+    stale) warn "the preamble of $1 is the one of $t at $TODO_PREAMBLE_REV ($TODO_PREAMBLE_DATE), older than the template of today — preserved, never rewritten. See what changed:
+        diff <(sed '/^<!-- sdd:open -->/q' \"$2\") <(sed '/^<!-- sdd:open -->/q' \"$TODO_PREAMBLE_TEMPLATE\")" ;;
+    author) dim "  the preamble of $1 matches no revision of $t — an author's preamble, left as it is" ;;
+  esac
+}
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -6626,10 +6689,8 @@ cmd_install() {
   # English templates/todo.md when no variant exists for that language. Every variant carries the
   # same two markers (tests/check-templates.sh holds them to one structure), so the sensor and the
   # agents read any of them the same way; only the prose a human reads changes.
-  local seed="$SDD_HOME/templates/todo.md"
-  if [ -n "$inst_lang" ] && [ -f "$SDD_HOME/templates/todo.$inst_lang.md" ]; then
-    seed="$SDD_HOME/templates/todo.$inst_lang.md"
-  fi
+  local seed
+  seed="$(todo_template_for "$inst_lang")"
   [ -f "$seed" ] || die "the TODO.md seed is missing from the kit: $seed"
   # The blob of the seed this command wrote before the two-section skeleton, byte for byte. A file
   # still equal to it holds no finding, so replacing it loses nothing; one byte different and it is
@@ -6651,6 +6712,7 @@ cmd_install() {
     warn "$inst_todo predates the two-section skeleton (no <!-- sdd:open --> marker) — preserved; migrate it by hand from templates/$(basename "$seed")"
   else
     ok "$inst_todo already exists (preserved)"
+    todo_preamble_say "$inst_todo" "$REPO_ROOT/$inst_todo" "$inst_lang"
   fi
 
   local a name target changed=0
@@ -7415,6 +7477,7 @@ $todo_first
       *) warn "the shape of TODO_FILE was not measured ($TODO_FILE): check-todo.sh answered rc $todo_rc — $(head -n 1 <<< "$todo_out")" ;;
     esac
   fi
+  [ ! -f "$REPO_ROOT/$TODO_FILE" ] || todo_preamble_say "$TODO_FILE" "$REPO_ROOT/$TODO_FILE" "${OUTPUT_LANG:-}"
 
   # DEFAULT_BRANCH is the base of `gh pr create` in the PR phase — the LAST phase, after EXEC, QA,
   # REVIEW and DOCS have all been paid for. Nothing ever asked the repository whether the branch was

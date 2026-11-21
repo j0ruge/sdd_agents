@@ -1564,6 +1564,73 @@ assert_eq "preflight says the shape of TODO_FILE was not measured when the file 
 cp "$PROBE/TODO.md.bak" TODO.md
 mv .sdd/config.sh.bak .sdd/config.sh
 
+# --- the preamble of TODO_FILE against the revisions of the template (L4 item 10) ---
+# install seeds TODO.md once and never rewrites it, so a target keeps the preamble of the kit it was
+# installed from while the template moves on, and nothing said so. The preamble (line 1 up to the
+# first <!-- sdd:open -->) is compared with the template of today and with the one of every revision
+# in the kit's git: today's is an ok, an older one a WARN naming the revision, its date and the diff
+# to run (the file left byte for byte), and none at all an author's preamble said in one dim line —
+# the kit's own TODO.md is one, and it must not warn forever. The mutation sandbox copies the kit
+# WITHOUT git, so the probe never leans on the real kit's history: a copy of the kit with a git of its
+# own, two commits (an old preamble, then today's), run by the bin/sdd of the copy; and a second copy
+# with no .git — inside the fixture repo, so a git that answers for the wrong tree is caught too.
+echo "== the preamble of TODO_FILE against the revisions of the template =="
+cp TODO.md "$PROBE/TODO.md.bak"
+PK="$FIX/.stub/preamble-kit"
+mkdir -p "$PK/bin"
+cp "$SDD" "$ROOT/bin/sdd-coordination.py" "$PK/bin/"
+ln -sfn "$ROOT/agents" "$PK/agents"
+cp -r "$ROOT/templates" "$ROOT/config" "$PK/"
+sed -i '3s/.*/An OLD preamble line, as an older kit wrote it./' "$PK/templates/todo.md"
+( cd "$PK" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" && git add -A \
+    && GIT_AUTHOR_DATE='2026-01-02T10:00:00' GIT_COMMITTER_DATE='2026-01-02T10:00:00' git commit -qm "old preamble" \
+    && cp "$ROOT/templates/todo.md" templates/todo.md && git add -A \
+    && GIT_AUTHOR_DATE='2026-02-03T10:00:00' GIT_COMMITTER_DATE='2026-02-03T10:00:00' git commit -qm "today's preamble" ) >/dev/null 2>&1
+PK_OLD="$(git -C "$PK" rev-parse --short=7 HEAD~1 2>/dev/null)"
+PKN="$FIX/.stub/preamble-kit-nogit"
+cp -a "$PK" "$PKN"; rm -rf "$PKN/.git"
+PA_OK='ok   the preamble of TODO.md is the one of templates/todo.md of today'
+PA_STALE="warn  the preamble of TODO.md is the one of templates/todo.md at $PK_OLD (2026-01-02), older than the template of today"
+PA_DIFF="diff <(sed '/^<!-- sdd:open -->/q' "
+PA_AUTHOR='the preamble of TODO.md matches no revision of templates/todo.md'
+PA_ANY='the preamble of TODO.md'
+pa_count() { grep -cF -- "$1" <<< "$2" || true; }
+cp "$ROOT/templates/todo.md" TODO.md
+pa_cur="$( "$PK/bin/sdd" preflight 2>&1 )"
+pa_cur_nogit="$( "$PKN/bin/sdd" preflight 2>&1 )"
+git -C "$PK" show "HEAD~1:templates/todo.md" > TODO.md
+pa_before="$(md5sum < TODO.md)"
+pa_stale="$( "$PK/bin/sdd" preflight 2>&1 )"
+pa_after="$(md5sum < TODO.md)"
+pa_stale_nogit="$( "$PKN/bin/sdd" preflight 2>&1 )"
+sed '3s/.*/A line the author wrote by hand./' "$ROOT/templates/todo.md" > TODO.md
+pa_author="$( "$PK/bin/sdd" preflight 2>&1 )"
+# The same two first worlds through install, over a repo of its own.
+PI="$FIX/.stub/preamble-install"
+mkdir -p "$PI"
+( cd "$PI" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" && echo x > f && git add -A && git commit -qm init ) >/dev/null 2>&1
+cp "$ROOT/templates/todo.md" "$PI/TODO.md"
+pi_cur="$( cd "$PI" && "$PK/bin/sdd" install 2>&1 )"
+git -C "$PK" show "HEAD~1:templates/todo.md" > "$PI/TODO.md"
+pi_before="$(md5sum < "$PI/TODO.md")"
+pi_stale="$( cd "$PI" && "$PK/bin/sdd" install 2>&1 )"
+pi_after="$(md5sum < "$PI/TODO.md")"
+assert_eq "the TODO preamble equal to the template of today is ok, in preflight and in install" \
+  "preflight 1 install 1" \
+  "preflight $(pa_count "$PA_OK" "$pa_cur") install $(pa_count "$PA_OK" "$pi_cur")"
+assert_eq "the TODO preamble equal to an older revision of the template is a warning with the revision, its date and the diff to run, and the file is not rewritten" \
+  "rev 7 / preflight warn=1 diff=1 ok=0 same=1 / install warn=1 diff=1 same=1" \
+  "rev ${#PK_OLD} / preflight warn=$(pa_count "$PA_STALE" "$pa_stale") diff=$(pa_count "$PA_DIFF" "$pa_stale") ok=$(pa_count "$PA_OK" "$pa_stale") same=$([ "$pa_before" = "$pa_after" ] && echo 1 || echo 0) / install warn=$(pa_count "$PA_STALE" "$pi_stale") diff=$(pa_count "$PA_DIFF" "$pi_stale") same=$([ "$pi_before" = "$pi_after" ] && echo 1 || echo 0)"
+assert_eq "the TODO preamble equal to no revision of the template is an author preamble, said in one neutral line" \
+  "author=1 warn=0 any=1" \
+  "author=$(pa_count "$PA_AUTHOR" "$pa_author") warn=$(grep -c "^  warn  $PA_ANY" <<< "$pa_author") any=$(pa_count "$PA_ANY" "$pa_author")"
+assert_eq "a kit that is not a git checkout answers nothing about the TODO preamble" \
+  "current 0 ran=1 / stale 0 ran=1" \
+  "current $(pa_count "$PA_ANY" "$pa_cur_nogit") ran=$(pa_count "the shape of TODO_FILE was not measured" "$pa_cur_nogit") / stale $(pa_count "$PA_ANY" "$pa_stale_nogit") ran=$(pa_count "the shape of TODO_FILE was not measured" "$pa_stale_nogit")"
+cp "$PROBE/TODO.md.bak" TODO.md
+
 # --- third-party skills the phases depend on --------------------------------
 # Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
 # sub-steps boot `qa-report` and `qa-execution`, and REVIEW loads `codereview`. A missing one is

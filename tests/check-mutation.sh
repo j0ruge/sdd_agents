@@ -3007,6 +3007,15 @@ mut_PRE_todo_shape_fails() {
 mut_PRE_todo_optin_always_named() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          \*check-todo.sh\*) ;;$|          *check-todo.sh-never*) ;;|' "$1"
 }
+mut_PRE_todo_preamble_stale_silent() {
+  sed -i '/^todo_preamble_say() {/,/^}/ s|^    stale) warn "the preamble of|    stale) : "the preamble of|' "$1"
+}
+mut_PRE_todo_preamble_author_warned() {
+  sed -i '/^todo_preamble_say() {/,/^}/ s|^    author) dim "  the preamble of|    author) warn "the preamble of|' "$1"
+}
+mut_INSTALL_todo_preamble_unchecked() {
+  sed -i '/^cmd_install() {/,/^}/ s|^    todo_preamble_say "\$inst_todo"|    : todo_preamble_say "$inst_todo"|' "$1"
+}
 mut_PRE_template_outcome_default_green() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
 }
@@ -8178,6 +8187,9 @@ CATALOG=(
   PRE_todo_shape_unmeasured
   PRE_todo_shape_fails
   PRE_todo_optin_always_named
+  PRE_todo_preamble_stale_silent
+  PRE_todo_preamble_author_warned
+  INSTALL_todo_preamble_unchecked
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent
