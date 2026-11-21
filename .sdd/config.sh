@@ -51,7 +51,13 @@ EFFORT_DOCS="medium"
 # Leitura fora do repo (ADR 0019 §2): a REVIEW carrega a skill codereview do cache de plugins, e sem a
 # regra o harness nega o Read das references dela (DENIED na r2 do L1b, 2026-11-20; RECURRED 2 do item
 # do READ_EXTRA no TODO.md). Entrada que o sdd preflight nomeou, so leitura.
-READ_EXTRA="$HOME/.claude/plugins/cache/chewiesoft-marketplace/codereview"
+# So com um HOME que a gramatica do READ_EXTRA aceita (read_extra_dir_ok: absoluto, nomes de letras,
+# digitos, '.', '_' e '-'): com espaco, '+' ou '//' no HOME o load_config recusa a entrada e mata todo
+# comando do kit (CodeRabbit no #456). Nesse HOME a chave fica vazia e o sdd preflight avisa da skill.
+case "$HOME" in
+  [!/]*|*[!A-Za-z0-9._/-]*|*//*|*/|*/.|*/..|*/./*|*/../*) ;;
+  *) READ_EXTRA="$HOME/.claude/plugins/cache/chewiesoft-marketplace/codereview" ;;
+esac
 
 QA_MAX_ITER=3
 REVIEW_MAX_ITER=3
