@@ -269,6 +269,20 @@ Desde `20261119-l1b-a-rodada-delta` (ADR 0023) o `gate_REVIEW` lê o `reviewed_h
 fora do `hat_writes REVIEW` mudou entre ela e o commit que **adicionou** a rodada), recusa também a
 rodada cujo intervalo o `git diff` não consegue listar (falha fechada: rodada que o gate não lê não
 passa), e aceita a rodada sem a chave, como as antigas.
+Desde `20261121-l3-gates-do-fim-da-linha` ([ADR 0024](../../docs/adr/0024-the-end-of-line-gates-read-the-head-they-check.md),
+que emenda a 0023) os gates do fim da linha leem o head que conferem. O `gate_REVIEW` reabre a fase
+quando um commit da missão posterior ao da rodada, que não é merge, toca caminho fora do `writes:` da
+REVIEW e da DOCS (`review_later_code_ok`), nomeando o commit e o caminho; a prosa da DOCS fica para o
+L6b, e a resolução de um merge da base fica com o `sdd-worker pr-ready`. O `gate_PR` exige o
+`headRefOid` do PR igual à ponta da missão (`mission_tip`: o `HEAD` no `branch:` declarado, senão a
+ponta desse branch) e, com o `verified_head:` do `50-pr.md`, que só a pasta da missão mudou entre o sha
+em que o publisher rodou a suíte e esse head; PR `MERGED` não é comparado. O K8 do `gate_DOCS` mede a
+mesma `mission_tip`, e o branch apagado ou já na base dá intervalo vazio. O `status: blocked` do
+`50-pr.md` e da rodada mais nova arma o `GATE_HANDOFF_BLOCKED` (rc 3, `handoff-blocked`); na rodada,
+`blocked` é a que não pôde ser feita ou espera decisão humana. Um `TEST_CMD` que sai 126 ou 127 sem
+ter começado tem motivo próprio (`test_cmd_red_why`), nunca "suíte vermelha". Cada leitura tem
+asserção em `tests/check-gates.sh` e um mutante no catálogo (`mut_PR_head_unread`,
+`mut_REVIEW_later_code_unread`, `mut_DOCS_k8_reads_head_off_branch`, entre os 17 da missão).
 Desde `20261117-o-worker-orquestrador` (ADR 0022 §5) o merge delegado também é gate por artefato,
 fora do runner: `sdd-worker pr-ready` responde `ready <sha>` só com os cinco itens verdadeiros no
 mesmo sha (a rodada mais nova da missão com A em todo critério e um `reviewed_head:` do qual até o

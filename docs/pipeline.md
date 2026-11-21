@@ -242,6 +242,25 @@ already refused an undecided one, so what reaches here is a mission whose ADR wa
 human approved the plan. This asks whether it still is — an ADR deleted or renamed after approval
 stops the line instead of leaving the pipeline building against a decision that no longer exists.
 
+**A `TEST_CMD` that did not run is not a red suite.** Exit 126 or 127 is the shell saying the
+command could not start (no execute bit, no such file), and a linked worktree is born without the
+ignored paths a command often names (`.venv`, `node_modules`). Since
+`20261121-l3-gates-do-fim-da-linha` the reason says `TEST_CMD did not run (rc <rc>: <line>)`, with
+the line of the log that says so (the English `No such file or directory`, `not found` or
+`Permission denied`, or else the last non-empty line, since the shell translates its message), and
+never cites the log: the log name changes every run, and a stable reason is what lets the second
+lap over the same tree stop as `no-work` before it buys a session. It comes before the dirty-tree
+sentence, which would be false for it, and over a clean tree it is the reason. Over a dirty tree it
+still arms the dirty-tree stop: "did not run" is read from a log of one line, which a silent first
+step followed by a missing command leaves too, so the reason says
+`TEST_CMD did not run (rc <rc>: <line>), or stopped at its first step, over a DIRTY working tree`
+and no session opens over the uncommitted changes. Two exits 126/127 are not that one: a log with more than one non-empty
+line printed output before the shell's message, so the suite started — over a clean tree it says
+so, and over a dirty tree the dirty-tree stop answers, since that suite ran against the tree; and
+a log with no line at all carries no shell message, so it reads `TEST_CMD failed`, citing its log.
+One definition (`test_cmd_red_why`) writes these reasons for `gate_EXEC`, `gate_QA` and
+`gate_REVIEW`; any other non-zero exit still reads `TEST_CMD failed`.
+
 **Jidoka:** any `blocked` increment escalates **on the spot** — no retry, no consuming the phase's
 session budget. The executor marks `blocked` when the suite is red because of an earlier
 increment. The reason is in the checkpoint's execution notes.
@@ -341,6 +360,14 @@ issue #205 it passed as `done`. The conditions:
   (`app_probe`): nothing listening at `APP_URL`, or a 2xx page that does not carry `APP_EXPECT` — another
   product on the same port — stops the line as `app-down` (see the `kind` column), because no session
   may start or stop an environment. `sdd preflight` asks the same question before a mission starts.
+  When the app answers, the reason also says, for each red case of the Playwright `N failed` block
+  (up to five, keyed `<file>:<line>`), how many of the earlier `gate-qa-e2e-*.log` of this repo (the
+  50 newest, every mission, this mission's own earlier runs included) had that `<file>:<line>` in
+  their own failed block: `… already failed in 2 of the last 3 e2e gate logs`, or `never failed …`.
+  It is a location match, not a cause: the test at that line may have been rewritten since, and
+  whether the failure is the mission's stays the QA's call. The case line is read with or without
+  the `[<project>] › ` prefix, which Playwright writes only for a named project. No failed block,
+  another runner's format or no earlier log adds nothing (`e2e_red_history`).
 
 `wont-fix` and `invalid` do **not** block: they are a recorded human decision, not a pending
 defect. Neither does an `open` bug marked `Closable by: human`, or `Closable by: deferred` with the
@@ -399,10 +426,18 @@ needs a human. The session commits **only** the round report, the checkpoint and
 `TODO_FILE`, as for every hat that writes there, a finding already open gains an entry on the item's
 `RECURRED` line (`templates/todo.md`), never a new item, and one already decided goes to the human.
 
+**`status: blocked` on the newest round stops the line** (`handoff-blocked`, rc 3, since
+`20261121-l3-gates-do-fim-da-linha`), read before the TL;DR cap and the grades, with a reason that
+opens with the round's name (`40-review-r<N>.md: status: blocked`). The word means a round that could
+not be done or that waits for a human decision — never a round with findings, which is `done` with
+its real grades (`templates/review.md`, `agents/sdd-reviewer.md` § 4). Only `blocked` is read; any
+other value passes as before. Above the `REVIEW_MAX_ITER` ceiling the marker is not read, and the
+round ends in `budget-exhausted` (or a draft PR under `PUBLISH_ON_REVIEW_BLOCKED=draft`).
+
 **From the second round on, the round reviews the delta (ADR 0023).** Each round writes the
 `git rev-parse HEAD` it read as `reviewed_head:`, and `gate_REVIEW` refuses a value that is no
 commit, one the `HEAD` does not carry, code changed between it and the round's commit, or a range
-`git diff` cannot list (fail closed); a round without the key passes, as the older ones did. One function, `review_base_line`, reads the newest
+`git diff` cannot list (fail closed); a round without the key passes, as the older ones did. Code committed **after** the round reopens REVIEW (ADR 0024, decision 4): `review_later_code_ok` reads `rev-list <the commit that added the round>..HEAD --not <the base refs>`, and the first path a commit touches outside the `writes:` of the REVIEW and DOCS hats refuses, naming the path and the short sha; a merge of the base, a mission already in the base and a round without the key pass, and a `rev-list` or `diff-tree` that fails refuses. Declared limits: the DOCS `writes:` is admitted whole, and the resolution of a merge of the base is not read (`sdd-worker pr-ready` reads it). One function, `review_base_line`, reads the newest
 round and answers `base=<sha> — <round> …` or `full — <reason>`. The REVIEW boot prompt carries
 that line, so the session invokes `/codereview:codereview base=<sha>`, because the argument limits
 the skill and a sentence does not. `sdd review-base <mission>` prints the same line without running a
@@ -525,7 +560,11 @@ the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is 
 Unless the frontmatter of `00-missao.md` declares the literal `kaizen_log: skipped` (decided with the
 human in the grill; the K8 row of the checklist is prose and dispenses nothing), the mission branch
 must add an **entry** of its own: a `## ` block of `KAIZEN_LOG.md` whose heading and one line citing
-the mission's whole id are both new in the diff of each merge-base to HEAD. The base already cites
+the mission's whole id are both new in the diff of each merge-base to the head of the mission. That
+head is the branch `00-missao.md` declares, not the one you are on (ADR 0024, decision 5): read
+from a later branch, K8 still measures the declared branch, and the refusal names it
+(`the mission branch (<branch>) adds no …`); a declared branch that is gone, or already in the
+base, is an empty range. The base already cites
 every mission born of the kaizen loop, so a new citation in an old entry, a renamed heading, a
 heading inside a code fence, a longer id that contains the mission's and a reverted entry do not
 count. No base, or an empty range (the mission on the base, or merged), gives the answer of before.
@@ -536,15 +575,52 @@ The owner is `sdd-docs` (`KAIZEN_LOG.md` is in its `writes:`), or an EXEC increm
 **Passes when:** `50-pr.md` exists with `pr_url:` **and** `gh pr view <url>` confirms the PR
 exists. A file claiming a PR that does not exist fails — and it is good that it does.
 
+**The PR has to carry what the mission closed** (ADR 0024, since `20261121-l3-gates-do-fim-da-linha`).
+The same `gh` call reads the state and the head (`--json url,state,headRefOid`); a url confirmed with
+no readable state and sha is its own refusal (`could not read the head of PR …`), never "the head
+differs". An open or closed PR whose `headRefOid` is not `mission_tip` — `HEAD` when no branch is
+declared or `HEAD` is on it, else the local or the `origin` ref of the declared branch, else nothing
+and no comparison — is refused with both shas and `git push` as the way out. A `verified_head:` in
+`50-pr.md`, the sha the publisher ran step 2 on, is refused when it is no commit sha (7 to 64
+lowercase hex, the rule of `reviewed_head:`: a ref such as `HEAD` would resolve to the head itself),
+when the head does not carry it, or when a path outside `<HANDOFF_DIR>/<mission>/` changed between
+it and the head — listed with `--no-renames`, so a file moved into the folder still shows the path
+it left; a diff git cannot list refuses too; absent, it passes. The owner is `sdd-publisher`, who commits
+`50-pr.md` alone in the mission folder and pushes it, and on a lap runs step 2 again and rewrites the
+sha. A **merged** PR is not compared.
+
+**`status: blocked` in `50-pr.md` stops the line** (`handoff-blocked`, rc 3, since
+`20261121-l3-gates-do-fim-da-linha`), read **before** the `pr_url:` — a blocked `50-pr.md` has no PR,
+and refusing it for the missing url bought a second publisher session. The reason names the way out
+of a conflict with the base: `git merge origin/<DEFAULT_BRANCH>` on the mission branch, never a
+rebase, because the checkpoint and the handoffs cite hashes `gate_EXEC` looks up in the history of
+`HEAD`; then the human removes the `status:` line and runs `sdd run`. Present, the enum is read
+positively (`done` or `blocked`, any other value refused by name); absent, it passes.
+
 **When `45-docs.md` carries `⛔` rows, the PR body has to name each of their documents on a line
 that carries `⛔`** — the template's checklist item, read with `gh pr view <url> --json state,body`;
 a name elsewhere in the body (under "what changed") is not an item the human applies. `gate_DOCS`
 proves the proposal exists on disk; this is what proves it reached the human. The owner is
-`sdd-publisher`: a lap refused here edits the body (`gh pr edit`), never opens a second PR. A body
+`sdd-publisher`: a lap refused here edits the body through the REST PATCH
+(`gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -F body=@<file>`; `gh pr edit` fails on gh 2.45 and
+leaves the body as it was), never opens a second PR. A body
 gh cannot read is its own refusal, and a **merged** PR is not read at all — a body edited after the
 merge would derive a finished mission back to PR. The rows come from `docs_checklist_rows`, the same
 reader `gate_DOCS` decides on (one `⛔` cell naming several documents is one row per document), so
 the two gates cannot disagree about which documents are `⛔`.
+
+**When the handoffs carry `- kit:` lines, the PR body has to carry at least as many** (since
+`20261121-l3-gates-do-fim-da-linha`). A finding about the kit born in a target repo travels on a
+`- kit:` line of the handoff, and the PR body is where the human who carries it across reads it.
+`mission_kit_lines` counts the lines of `<HANDOFF_DIR>/<mission>/[0-9][0-9]-*.md` — minus
+`00-missao.md`, `01-plano.md` and `50-pr.md` — that open with blanks and `- kit:`, outside any fence;
+the template's example lives in a quote (`> - kit:`) and does not count. The body counts
+`- kit:` and `- [ ] kit:` lines outside any fence, by the same fence rule, so an example in a code
+block of the body pays for no finding; fewer is refused with both numbers and the REST PATCH as
+the way out. A count, never the text. The body is read **once** for the `⛔` rows and the `kit:`
+lines, and not at all when there is neither; a body gh cannot read says that neither was checked.
+Same owner, `sdd-publisher`; a **merged** PR is not read — by the first call, and again when the
+body's own answer says `MERGED` (the PR merged between the two calls).
 
 **In a repo that owns a mutation catalogue there is one more requirement, and it is checked last:**
 the key of the current **tracked** content of `bin/ tests/ templates/ config/ agents/` minus the

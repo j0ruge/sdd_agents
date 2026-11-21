@@ -877,6 +877,66 @@ app_probe() {
   return 0
 }
 
+# e2e_failed_keys <log>: the `<file>:<line>` of each case in the Playwright `N failed` block of a
+# log, one per line, each once. The block runs from `^  <n> failed$` to the next `^  <n> <word>`
+# (flaky, skipped, passed, did not run, interrupted); a case line is
+# `    [<project>] › <file>:<line>:<column> › <title>`, and `    <file>:<line>:<column> › <title>`
+# when the project has no name: Playwright writes the `[<project>] › ` prefix only for a named one
+# (`projectName ? … : ""` in formatTestTitle, lib/reporters/base.js of playwright 1.58.2;
+# CodeRabbit 4654284439 on PR #458). A `✓` line of a case that PASSED carries the
+# same file:line outside any block, and that is why the block, and not the log, is read.
+# The separators are found with index()/substr(): mawk is byte-based, and a negated class over
+# the multibyte `›` would negate its bytes (CLAUDE.md). DECLARED LIMIT: only the Playwright format
+# is read; any other runner yields no key, and the reason stays the one of before.
+e2e_failed_keys() {
+  awk '
+    /^  [0-9]+ failed$/ { inb = 1; next }
+    inb && /^  [0-9]+ [a-z]/ { inb = 0; next }
+    inb && /^    [^ ]/ {
+      s = substr($0, 5)
+      if (substr(s, 1, 1) == "[") { i = index(s, "] › "); if (!i) next; s = substr(s, i + length("] › ")) }
+      j = index(s, " › "); if (j) s = substr(s, 1, j - 1)
+      if (s !~ /:[0-9]+:[0-9]+$/) next
+      sub(/:[0-9]+$/, "", s)
+      if (!(s in seen)) { seen[s] = 1; print s }
+    }' "$1" 2>/dev/null || true
+}
+
+# e2e_red_history <log>: the sentence the up arm of gate_QA adds for each red case of <log> —
+# how many of the earlier e2e gate logs (every mission of this repo, the 50 newest by file name,
+# which carries the date and time; this log left out) had that case in their failed block. Up to
+# five cases, then `and <m> more`. Prints NOTHING with no failed block in <log> or no earlier
+# log, so the reason stays byte for byte the one of before. Stdout only, no global: it is read as
+# `$( )`. DECLARED LIMIT: the `<n>` is the logs this machine keeps.
+e2e_red_history() {
+  local log="$1" keys f n=0 shown=0 key k total counts out="" sep=""
+  local -a all=() prior=()
+  keys="$(e2e_failed_keys "$log")"
+  [ -n "$keys" ] || return 0
+  mapfile -t all < <(find "$REPO_ROOT/.sdd/logs" -mindepth 2 -maxdepth 2 -type f \
+                       -name 'gate-qa-e2e-*.log' -printf '%f\t%p\n' 2>/dev/null \
+                     | LC_ALL=C sort | cut -f2- || true)
+  # This log is left out by FILE IDENTITY, never by spelling: find prints `.sdd/logs/<id>/…`, and the
+  # log a gate holds is `$(log_dir)/…`, which keeps the `/<mission>` the CLI accepts as `logs//<id>/…`
+  # (MISSION stays literal, see resolve_mission) — the string test counted the current failure as an
+  # earlier one, even on the first run (CodeRabbit 4654284443 on PR #458).
+  for f in ${all[@]+"${all[@]}"}; do [ "$f" -ef "$log" ] || prior+=("$f"); done
+  [ "${#prior[@]}" -le 50 ] || prior=("${prior[@]: -50}")
+  n="${#prior[@]}"
+  [ "$n" -gt 0 ] || return 0
+  counts="$(for f in "${prior[@]}"; do e2e_failed_keys "$f"; done)"
+  total="$(grep -c . <<< "$keys" || true)"
+  while IFS= read -r key; do
+    [ "$shown" -lt 5 ] || break
+    k="$(grep -cxF -- "$key" <<< "$counts" || true)"
+    if [ "$k" -gt 0 ]; then out+="$sep$key already failed in $k of the last $n e2e gate logs"
+    else out+="$sep$key never failed in the last $n e2e gate logs"; fi
+    sep="; "; shown=$(( shown + 1 ))
+  done <<< "$keys"
+  [ "$total" -le 5 ] || out+="; and $(( total - 5 )) more"
+  printf '%s' "$out"
+}
+
 # Runs a config command at the root of the target repo; returns its exit code.
 # Output goes to the mission log (when there is a mission) — it never pollutes the runner stdout.
 #
@@ -886,6 +946,9 @@ app_probe() {
 declare -A _CHECK_RC=()
 declare -A _CHECK_LOG=()
 LAST_CHECK_LOG=""
+# The rc of the last run_check_cmd, on BOTH paths (the execution and the memo), beside
+# LAST_CHECK_LOG: test_cmd_red_why reads it to tell a suite that did not start from a red one.
+LAST_CHECK_RC=0
 # Set to 1 by the full face of `sdd status` and by nothing else (item I of TODO.md): see the line
 # that reads it in run_check_cmd.
 CHECK_ANNOUNCE=0
@@ -895,6 +958,7 @@ run_check_cmd() {
   [ -n "$cmd" ] || return 0
   if [ -n "${_CHECK_RC[$cmd]+x}" ]; then
     LAST_CHECK_LOG="${_CHECK_LOG[$cmd]}"
+    LAST_CHECK_RC="${_CHECK_RC[$cmd]}"
     return "${_CHECK_RC[$cmd]}"
   fi
   # The page that asks "where am I" says it is about to wait, and for what. Measured in ui24_agent:
@@ -932,7 +996,63 @@ run_check_cmd() {
   _CHECK_RC[$cmd]="$rc"
   _CHECK_LOG[$cmd]="$logfile"
   LAST_CHECK_LOG="$logfile"
+  LAST_CHECK_RC="$rc"
   return "$rc"
+}
+
+# The one definition of the reason a gate gives for a TEST_CMD that came back non-zero, read by the
+# four sites of gate_EXEC, gate_QA and gate_REVIEW right after run_check_cmd (item 5 of L3,
+# 20261121-l3-gates-do-fim-da-linha). CALLED, never substituted: it publishes GATE_WHY.
+#
+# rc 126 and 127 are the shell saying the command could not be started (no execute bit, no such
+# file): a worktree is born without ignored paths such as .venv or node_modules, and the gate read
+# `.venv/bin/python: No such file or directory` as a suite that failed. That reason cites the line
+# of the log that says so instead of the log: every log name is unique per execution, and
+# no_work_check ignores a reason that cites one (gate_why_cites_log), so a stable reason is what
+# lets the second lap over the same tree stop as no-work before it buys a session. The owner of what
+# the reason asks for is the human, whose tree it is; the gate asks no new artifact of anyone.
+# A TEST_CMD that STARTED and then hit a missing command exits 127 too (`true; no_such_cmd`), and
+# "never started" would be false about it (finding #1 of r1 of L3): a log with more than one
+# non-empty line printed something before the shell's own message, and gets a sentence of its own,
+# as stable as the other. One line is the shell's message alone, in any locale. NO line is no
+# evidence at all: the shell always writes its message when it cannot start a command, and the log
+# takes stderr, so a silent 126/127 is the suite's own exit status (a wrapper's `exit 127`) and reads
+# as a red suite, citing its log (CodeRabbit 4654284445 on PR #458).
+# DECLARED LIMIT: one line is a heuristic, not proof that nothing ran. A TEST_CMD whose first step
+# is silent and whose next one is missing (`printf x > f; no_such_cmd`) leaves the same one line, so
+# "never started" can be false about it, and nothing in the log tells the two apart (Codex P2 on PR
+# #458). The cost of that error is a reading, not a session: gate_EXEC passes `dirty` when the tree
+# is dirty, the sentence then says the two are not told apart, and the dirty-tree stop holds.
+# Returns 0 ONLY when it wrote a did-not-run reason, which gate_QA and gate_REVIEW read like any
+# other and gate_EXEC reads to choose its sentence — over a clean tree it is the reason; over a
+# dirty one the stop still holds. 1 for a red suite and for a suite that started and then stopped:
+# that one RAN against the tree, so the dirty-tree stop holds over it (CodeRabbit 4654284448 on
+# PR #458), and on a clean tree its own sentence is what gate_EXEC keeps.
+test_cmd_red_why() { # test_cmd_red_why [dirty]
+  local line="" printed=""
+  case "$LAST_CHECK_RC" in
+    126|127)
+      printed="$(grep -c -v '^[[:space:]]*$' "$LAST_CHECK_LOG" 2>/dev/null)" || true
+      if [ "${printed:-0}" -gt 0 ]; then
+        line="$(grep -E 'No such file or directory|not found|Permission denied' "$LAST_CHECK_LOG" 2>/dev/null | tail -n 1 | cut -b 1-200)" || true
+        # The shell translates strerror under the operator's locale (measured on a pt-BR machine,
+        # where the line is no longer English), so a log with no English line still gives its last
+        # non-empty line, which is the shell's own message.
+        [ -n "$line" ] || line="$(grep -v '^[[:space:]]*$' "$LAST_CHECK_LOG" 2>/dev/null | tail -n 1 | cut -b 1-200)" || true
+        if [ "$printed" -gt 1 ]; then
+          GATE_WHY="TEST_CMD stopped on a command it could not start (rc $LAST_CHECK_RC${line:+: $line}) after it printed output — the suite started, so read its log for how far it got; this tree misses what that command names (a worktree is born without ignored paths such as .venv or node_modules)"
+          return 1
+        fi
+        if [ "${1:-}" = dirty ]; then
+          GATE_WHY="TEST_CMD did not run (rc $LAST_CHECK_RC${line:+: $line}), or stopped at its first step, over a DIRTY working tree — the log holds the shell's message alone, which cannot tell the two apart, so the line stops before a session runs over uncommitted changes nobody approved; this tree misses what the command names (a worktree is born without ignored paths such as .venv or node_modules)"
+        else
+          GATE_WHY="TEST_CMD did not run (rc $LAST_CHECK_RC${line:+: $line}) — the suite never started, so this is not a red suite; this tree misses what the command names (a worktree is born without ignored paths such as .venv or node_modules)"
+        fi
+        return 0
+      fi ;;
+  esac
+  GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"
+  return 1
 }
 
 # Invalidates the sensor cache — called after any phase that touched the repo.
@@ -990,6 +1110,29 @@ mission_base_refs() {
     seen+="$c "
     printf '%s\n' "$c"
   done
+}
+
+# mission_tip — the head of the mission, the full sha, or NOTHING when it cannot be named (ADR 0024,
+# decision 1). ONE definition, read by gate_PR (is the PR at the head of the mission?) and by the K8
+# check of gate_DOCS. The first rule that matches: no branch declared in 00-missao.md (read by
+# mission_branch_declared, never a second copy of its rule) or HEAD on the declared branch → HEAD;
+# refs/heads/<branch> → that commit; refs/remotes/origin/<branch> → that commit; otherwise nothing,
+# and the reader skips the comparison instead of comparing against a guess.
+#
+# Pure (prints, sets no global), so it is safe to read as `$(mission_tip)`. Every capture is guarded.
+mission_tip() {
+  local want cur r c
+  want="$(mission_branch_declared)"
+  cur="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || true)"
+  if [ -z "$want" ] || [ "$cur" = "$want" ]; then
+    git -C "$REPO_ROOT" rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null || true
+    return 0
+  fi
+  for r in "refs/heads/$want" "refs/remotes/origin/$want"; do
+    c="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "$r^{commit}" 2>/dev/null || true)"
+    if [ -n "$c" ]; then printf '%s\n' "$c"; return 0; fi
+  done
+  return 0
 }
 
 # path_in_commits <path> [<commit>...] — rc 0 when <path> exists in the tree of any <commit>.
@@ -1354,12 +1497,19 @@ GATE_EXEC_DIRTY=0
 #
 # CONTRACT for whoever teaches a second gate the token: reset it at the entry of THAT gate, never
 # at a call site. `current_phase` walks every gate in order, so a marker left set by an evaluation
-# two phases ago would escalate a phase whose own handoff says nothing of the kind. Two setters
-# today — gate_QA, and gate_TICKET since 2026-09-06 — each resetting it on entry, and the only
-# reader is handoff_blocked_escalation. The second setter RE-DERIVES the property below rather
-# than inheriting it: the walk visits TICKET before QA; a gate that passes leaves the marker 0; a
-# gate that arms it fails, and the walk stops at the first failure, so no later gate runs over an
-# armed marker; and every lap that finds it armed returns 3. No new path leaves a lap with it set.
+# two phases ago would escalate a phase whose own handoff says nothing of the kind. Four setters
+# today — gate_QA, gate_TICKET since 2026-09-06, and gate_REVIEW and gate_PR since
+# 20261121-l3-gates-do-fim-da-linha (the newest round, and 50-pr.md) — each resetting it on entry,
+# and the only reader is handoff_blocked_escalation. The two newest setters RE-DERIVE the property
+# below rather than inheriting it: the walk visits TICKET, QA, REVIEW and PR in that order; a gate
+# that passes leaves the marker 0; a gate that arms it fails, and the walk stops at the first
+# failure, so no later gate runs over an armed marker; and every lap that finds it armed returns 3.
+# Both doors of cmd_run read it for every phase, REVIEW and PR included — neither is skipped.
+# ⚠️ One path does leave a lap with it armed, and it is declared rather than fixed: above the REVIEW
+# ceiling cmd_run calls `gate_REVIEW || true` and never reads the marker, so a `blocked` round at the
+# ceiling ends in `budget-exhausted`, or, under PUBLISH_ON_REVIEW_BLOCKED=draft, forces a PR lap —
+# whose gate_PR resets the marker on entry before either door reads it, so the draft PR carries the
+# round's real grade and nothing escalates for a phase whose handoff did not say blocked.
 #
 # That reader is called from BOTH doors of cmd_run's loop — the first pass and the inline retry —
 # and the second door is not symmetry for its own sake. With only the first, the marker outlived
@@ -1524,18 +1674,32 @@ gate_EXEC() {
   if [ "$pending" -gt 0 ]; then GATE_WHY="$pending of $total increment(s) still to execute"; return 1; fi
 
   if ! run_check_cmd "$TEST_CMD" "gate-exec-test"; then
+    # A suite that did not run comes BEFORE the dirty-tree sentence ("the uncommitted changes are
+    # what the suite is running against"), which would be false for it, and gets its own. It still
+    # arms GATE_EXEC_DIRTY over a dirty tree: "did not run" is read from a log of one line, which a
+    # silent first step leaves too, so the stop holds and no session opens over the dirty tree
+    # (Codex P2 on PR #458). A suite that started and then stopped on a command it could not start
+    # ran against the tree, and falls through to the stop below with the dirty-tree sentence.
+    local exec_dirty=""
+    exec_dirty="$( cd "$REPO_ROOT" && git status --porcelain )" || exec_dirty=""
+    if test_cmd_red_why ${exec_dirty:+dirty}; then
+      [ -z "$exec_dirty" ] || GATE_EXEC_DIRTY=1
+      return 1
+    fi
     # A phase that DIED leaves its work uncommitted, and the suite then runs over a working tree
     # nobody approved. Every increment reads `done`, so the runner re-derives EXEC, opens another
     # session against the same red suite, and `state_fingerprint` — HEAD, the mission listing and
     # the checkpoint's md5 — cannot see a dirty tree, so `attempts` resets on every `sdd run` and
     # the lap costs a full EXEC session, for ever. The marker below is what turns that into an
-    # escalation in cmd_run, before a session is opened.
-    if [ -n "$( cd "$REPO_ROOT" && git status --porcelain )" ]; then
+    # escalation in cmd_run, before a session is opened. The tree is the one read above, once.
+    if [ -n "$exec_dirty" ]; then
       GATE_EXEC_DIRTY=1
       GATE_WHY="TEST_CMD failed ($TEST_CMD) over a DIRTY working tree — the uncommitted changes are what the suite is running against; a session cannot fix what it cannot see. See $LAST_CHECK_LOG"
       return 1
     fi
-    GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
+    # A clean tree keeps the reason test_cmd_red_why wrote above: a red suite, or one that started
+    # and then stopped on a command it could not start.
+    return 1
   fi
   [ -f "$MISSION_DIR/20-handoff-exec.md" ] \
     || { GATE_WHY="every increment done and the suite green, but 20-handoff-exec.md is missing"; return 1; }
@@ -1863,7 +2027,7 @@ gate_QA() {
     return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
-    GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
+    test_cmd_red_why || true; return 1
   fi
   # The composed `if` above is left INTACT and the probe goes in the body, which is the whole
   # design: the app is asked about only on the path where the e2e has ALREADY come back red.
@@ -1892,6 +2056,14 @@ gate_QA() {
         # database sits behind a port that answers — so the sentence names what it cleared and
         # sends the reader to the log for the rest.
         GATE_WHY="E2E_CMD failed ($E2E_CMD) with the app answering at $label — APP_URL is not the cause; whatever is (a broken assertion, or something behind the port, like a stopped database) is in the log. See $e2e_log"
+        # The history of each red case, before the `See`: where the same `<file>:<line>` sat in the
+        # failed block of earlier e2e logs, this mission's own earlier runs included — a location
+        # match the sdd-qa read out of the logs by hand (item 10). It attributes nothing: the test at
+        # that line may have been rewritten since, and who broke it stays the QA's call
+        # (CodeRabbit 4654284471 on PR #458).
+        local hist
+        hist="$(e2e_red_history "$e2e_log")"
+        [ -z "$hist" ] || GATE_WHY="${GATE_WHY% See "$e2e_log"} $hist. See $e2e_log"
         ;;
       wrong)
         # Something answers, and it is not this product: the same escalation as a dead app, with no
@@ -1948,6 +2120,8 @@ gate_REVIEW() {
   # visible: a reset written here is overwritten three lines later, and sabotaging it away leaves
   # the suite green — measured. Redundant rules get removed rather than probed (CLAUDE.md). Move
   # the publication below a `return` and this comment stops being true; the reset comes back with it.
+  # GATE_HANDOFF_BLOCKED is another global with the OPPOSITE rule: reset here, armed below.
+  GATE_HANDOFF_BLOCKED=0
   local last; last="$(latest_matching "$MISSION_DIR/40-review-r*.md")"
   # PUBLISHED HERE, as soon as the round file is resolved — and the asymmetry with EXEC's
   # `pending_after`, which is published only after the gate has validated, is deliberate. EXEC's
@@ -1967,6 +2141,19 @@ gate_REVIEW() {
   # `rounds_after > rounds_before` is false, so the row falls back to `moved`, as it did before
   # these fields existed.
   [ -n "$last" ] || { GATE_WHY="no 40-review-r<N>.md"; return 1; }
+  # `blocked` on the NEWEST round is the reviewer saying the round could not be done or waits for a
+  # human decision (agents/sdd-reviewer.md § 4; templates/review.md) — never a round with findings,
+  # which is `done` with its real grades. The owner of the round is sdd-reviewer; only a human sets
+  # it back. This marker HAS a reset on entry, unlike GATE_REVIEW_ROUNDS above: it is armed below
+  # the publication, so a refusal from another arm must not inherit an earlier evaluation's 1 — the
+  # reset is the first line of the function, see the contract over GATE_HANDOFF_BLOCKED. Read before the TL;DR cap and the grades: an all-A round
+  # that said blocked passed as done (item 6 of 20261121-l3-gates-do-fim-da-linha). The reason OPENS
+  # with the round's name, the prefix historic_rounds reads. Declared limit: only `blocked` is read;
+  # the positive enum of the round's status stays out (1 of the 55 rounds on disk says `continua`).
+  if [ "$(frontmatter "$last" status)" = "blocked" ]; then
+    GATE_HANDOFF_BLOCKED=1
+    GATE_WHY="$(basename "$last"): status: blocked"; return 1
+  fi
   handoff_tldr_ok "$last" || return 1
 
   # Documented anchor: the "### Overall Grade" section of the codereview skill (contract
@@ -2104,8 +2291,9 @@ gate_REVIEW() {
     GATE_WHY="$(basename "$last"): $offending — the gate requires Grade A on every criterion"; return 1
   fi
   review_head_ok "$last" || return 1
+  review_later_code_ok "$last" || return 1
   if ! run_check_cmd "$TEST_CMD" "gate-review-test"; then
-    GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
+    test_cmd_red_why || true; return 1
   fi
   # The scope's second half is HAT_WRITES_BASE, read through the same hat_expand every hat's
   # frontier is, so the two cannot drift: the reviewer's hat declares it writes the backlog
@@ -2321,19 +2509,26 @@ gate_DOCS() {
   # dies on an empty name; `.` and a byte >= 0x80 count as a boundary, exact because no id can hold
   # them. No base, or an empty range (HEAD on the base, merged, unrelated): today's answer, the
   # shape of mission_qa_report.
+  # The range ends at the head of the MISSION, never at HEAD (ADR 0024, decision 5): read from a later
+  # branch with a commit of its own, HEAD measured that branch, and the same mission read `✓` from the
+  # base and `·` from the later branch. mission_tip names the declared branch; when it names nothing
+  # (the branch is gone, locally and on origin) the range is empty and K8 passes, the shape of a
+  # declared branch already in the base. The reason names the branch it measured (HEAD with no branch:).
   if [ "$(frontmatter "$MISSION_DIR/00-missao.md" kaizen_log)" != skipped ]; then
     local k8_why; k8_why="$(k8_base_refusal)"; [ -z "$k8_why" ] || { GATE_WHY="$k8_why"; return 1; }
     local -a k8_nots=() k8_bases=()
-    local k8_c k8_b k8_patch
-    mapfile -t k8_nots < <(mission_base_refs)
+    local k8_c k8_b k8_patch k8_tip k8_name
+    k8_tip="$(mission_tip)"
+    k8_name="$(mission_branch_declared)"; k8_name="${k8_name:-HEAD}"
+    [ -z "$k8_tip" ] || mapfile -t k8_nots < <(mission_base_refs)
     for k8_c in ${k8_nots[@]+"${k8_nots[@]}"}; do
-      k8_b="$(git -C "$REPO_ROOT" merge-base HEAD "$k8_c" 2>/dev/null || true)"
+      k8_b="$(git -C "$REPO_ROOT" merge-base "$k8_tip" "$k8_c" 2>/dev/null || true)"
       [ -z "$k8_b" ] || k8_bases+=("$k8_b")
     done
     if [ "${#k8_bases[@]}" -gt 0 ] \
-        && [ -n "$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not "${k8_nots[@]}" 2>/dev/null || true)" ]; then
+        && [ -n "$(git -C "$REPO_ROOT" rev-list -n 1 "$k8_tip" --not "${k8_nots[@]}" 2>/dev/null || true)" ]; then
       for k8_b in "${k8_bases[@]}"; do
-        k8_patch="$(git -C "$REPO_ROOT" diff-tree -p --no-color --no-ext-diff -U1000000 "$k8_b" HEAD -- KAIZEN_LOG.md 2>/dev/null || true)"
+        k8_patch="$(git -C "$REPO_ROOT" diff-tree -p --no-color --no-ext-diff -U1000000 "$k8_b" "$k8_tip" -- KAIZEN_LOG.md 2>/dev/null || true)"
         if ! SDD_K8_MISSION="$(mission_id "$MISSION")" awk "$FENCE_AWK"'
           function cites_id(s, m,   p, i) {
             s = " " s
@@ -2351,7 +2546,7 @@ gate_DOCS() {
           t == "+" && hnew && cites_id(l, m) { found = 1 }
           END { exit !found }
         ' <<< "$k8_patch"; then
-          GATE_WHY="00-missao.md does not declare kaizen_log: skipped in its frontmatter (the K8 row of the checklist is prose and dispenses nothing) and the mission branch adds no KAIZEN_LOG.md entry of its own — a '## ' heading new in the branch whose block has a new line citing $MISSION as a whole id (a longer id that contains it does not count); write the entry, citing the mission, with the before and after the plan names, or declare kaizen_log: skipped with the human"
+          GATE_WHY="00-missao.md does not declare kaizen_log: skipped in its frontmatter (the K8 row of the checklist is prose and dispenses nothing) and the mission branch ($k8_name) adds no KAIZEN_LOG.md entry of its own — a '## ' heading new in the branch whose block has a new line citing $MISSION as a whole id (a longer id that contains it does not count); write the entry, citing the mission, with the before and after the plan names, or declare kaizen_log: skipped with the human"
           return 1
         fi
       done
@@ -2628,55 +2823,197 @@ GATE_PR_STAMP_WHY=""
 # cmd_run branches on it to name the remedy, never on the prose of GATE_PR_STAMP_WHY.
 GATE_PR_STAMP_IMPOSSIBLE=""
 
+# mission_kit_lines — how many `- kit:` lines the handoffs of the mission carry, outside any fence
+# (item 8 of 20261121-l3-gates-do-fim-da-linha). A finding about the kit born in a target repo
+# travels in the handoff, on a line marked `kit:` (agents/sdd-executor.md § 4), and a human or the
+# `sdd kaizen` triage carries it across — from the PR body, the one place the human reads before the
+# merge. The handoffs are `$MISSION_DIR/[0-9][0-9]-*.md` minus the plan (00, 01) and 50-pr.md, which
+# is the publisher's record and not a handoff. The template's example lives in a quote (`> - kit:`)
+# and does not match: the line opens with blanks and the dash, nothing else. Only prints, so it may
+# be read through `$( )`.
+mission_kit_lines() {
+  local f files=()
+  for f in "$MISSION_DIR"/[0-9][0-9]-*.md; do
+    [ -f "$f" ] || continue
+    case "${f##*/}" in 00-missao.md|01-plano.md|50-pr.md) continue ;; esac
+    files+=("$f")
+  done
+  [ "${#files[@]}" -gt 0 ] || { echo 0; return 0; }
+  awk "$FENCE_AWK"'
+    FNR == 1 { fence = 0 }
+    { fence_line($0) }
+    fence { next }
+    /^[ \t]*- kit:/ { n++ }
+    END { print n + 0 }
+  ' "${files[@]}"
+}
+
 gate_PR() {
+  GATE_HANDOFF_BLOCKED=0
   GATE_PR_STAMP_WHY=""
   GATE_PR_STAMP_IMPOSSIBLE=""
   local p="$MISSION_DIR/50-pr.md"
   [ -f "$p" ] || { GATE_WHY="missing 50-pr.md"; return 1; }
+  # `blocked` is the publisher saying it stopped before the PR — a conflict with the base, which is
+  # human judgement (agents/sdd-publisher.md, "Conflict with the base"). The owner of the artifact is
+  # sdd-publisher, who writes 50-pr.md; the owner of the way out is the human, who merges the base
+  # and removes the line. Read BEFORE the pr_url: a blocked 50-pr.md has no PR, and refusing it for
+  # the missing pr_url bought a second publisher session to re-read its own refusal (item 6 of
+  # 20261121-l3-gates-do-fim-da-linha). The reason names the merge and refuses the rebase (item 7):
+  # gate_EXEC looks the checkpoint's hashes up in the history of HEAD, and a rebase rewrites them.
+  # The enum is read POSITIVELY when the key is present (`done` or `blocked`); absent passes, as the
+  # records and fixtures older than the key do.
+  local pst
+  if frontmatter_has "$p" status; then
+    pst="$(frontmatter "$p" status)"
+    if [ "$pst" = "blocked" ]; then
+      GATE_HANDOFF_BLOCKED=1
+      GATE_WHY="50-pr.md has status: blocked — if it stopped on a conflict with the base, merge the base into the mission branch ('git merge origin/$DEFAULT_BRANCH') and never rebase: the checkpoint and the handoffs cite commit hashes that gate_EXEC looks up in the history of HEAD; then remove the status line of 50-pr.md and 'sdd run'"
+      return 1
+    fi
+    if [ "$pst" != "done" ]; then
+      GATE_WHY="50-pr.md has invalid status '$pst' (use done|blocked)"; return 1
+    fi
+  fi
   local url; url="$(frontmatter "$p" pr_url)"
   [ -n "$url" ] || { GATE_WHY="50-pr.md has no 'pr_url:' in the frontmatter"; return 1; }
-  local live
-  live="$( cd "$REPO_ROOT" && gh pr view "$url" --json url --jq .url 2>/dev/null )" || true
+  # ONE gh call confirms the PR and reads where it stands (ADR 0024, decisions 1 and 2; items 1 and 2
+  # of 20261121-l3-gates-do-fim-da-linha): the url, the state and the head. Proving the PR exists said
+  # nothing about what it carries, and a PR one push behind the mission passed and merged without the
+  # last increments. The owner of both artifacts is sdd-publisher: it pushes the mission branch, and
+  # it writes verified_head: — the sha it ran step 2 on — committing 50-pr.md alone in the mission
+  # folder and pushing that commit; a lap refused here runs step 2 again on the head, rewrites the
+  # sha, commits and pushes. Three outcomes, each its own sentence: gh does not confirm the url; gh
+  # confirms it and the state and the sha do not read; read.
+  local live pr_view pr_live_state pr_head tip vh vc changed outside mdir_rel diff_rc=0
+  pr_view="$( cd "$REPO_ROOT" && gh pr view "$url" --json url,state,headRefOid --jq '.url, .state, .headRefOid' 2>/dev/null )" || true
+  live="$(sed -n 1p <<< "$pr_view")"
+  pr_live_state="$(sed -n 2p <<< "$pr_view")"
+  pr_head="$(sed -n 3p <<< "$pr_view")"
   [ -n "$live" ] || { GATE_WHY="gh does not confirm PR $url — 50-pr.md may be lying"; return 1; }
+  case "$pr_live_state" in OPEN|CLOSED|MERGED) ;; *) pr_live_state="" ;; esac
+  if [ -z "$pr_live_state" ] || ! [[ "$pr_head" =~ ^[0-9a-f]{40,64}$ ]]; then
+    GATE_WHY="could not read the head of PR $live (gh confirmed the url, and no state and sha came back) — run 'gh pr view $url --json state,headRefOid'"
+    return 1
+  fi
+  # A MERGED PR is not compared: what it carries is in the base now, and a head that moved after the
+  # merge would derive a finished mission back to PR — the reason the ⛔ check below skips it too.
+  if [ "$pr_live_state" != MERGED ]; then
+    tip="$(mission_tip)"
+    if [ -n "$tip" ] && [ "$pr_head" != "$tip" ]; then
+      GATE_WHY="PR $live is at ${pr_head:0:7}, and the mission is at ${tip:0:7} — push the mission branch ('git push'); the PR must carry what the mission closed"
+      return 1
+    fi
+    # verified_head: absent passes, as the records older than the key do. Present, it is a commit
+    # the head carries with nothing outside the mission folder after it; a diff git could not list
+    # refuses (fail closed), as rule 4 of review_head_ok does. The value is a hex sha before git
+    # resolves it, the rule review_head_ok applies to reviewed_head: — a ref that moves (`HEAD`, the
+    # branch name) resolves to the head itself, and the range from the head to the head is empty
+    # whatever was pushed after the checks (CodeRabbit 4654284456 on PR #458).
+    if [ -n "$tip" ] && frontmatter_has "$p" verified_head; then
+      vh="$(frontmatter "$p" verified_head)"
+      vc=""
+      if [[ "$vh" =~ ^[0-9a-f]{7,64}$ ]]; then
+        vc="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "$vh^{commit}" 2>/dev/null || true)"
+      fi
+      if [ -z "$vc" ]; then
+        GATE_WHY="50-pr.md has verified_head '$vh', which is no commit sha of this repository (a hex sha, never a ref) — run the checks of step 2 again on the head and write the new sha"
+        return 1
+      fi
+      if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$vc" "$tip" 2>/dev/null; then
+        GATE_WHY="50-pr.md has verified_head ${vc:0:7}, which the head ${tip:0:7} does not carry — run the checks of step 2 again on the head and write the new sha"
+        return 1
+      fi
+      # --no-renames: with rename detection on (the porcelain default), a tracked file moved
+      # unchanged into the mission folder lists only its destination, and the path it left outside
+      # the folder went unread (CodeRabbit 4654284461 on PR #458). Each side of a move is listed, so
+      # a move wholly inside the folder still passes.
+      changed="$(git -C "$REPO_ROOT" -c core.quotePath=false diff --no-renames --name-only "$vc" "$tip" 2>/dev/null)" || diff_rc=$?
+      if [ "$diff_rc" -ne 0 ]; then
+        GATE_WHY="50-pr.md: git could not list what changed between verified_head ${vc:0:7} and the head ${tip:0:7} (rc $diff_rc) — the gate refuses what it cannot read"
+        return 1
+      fi
+      # The id without its slashes (mission_id): `/<mission>`, which the CLI accepts, kept `//` in
+      # the prefix, git prints single slashes, and the publisher's own 50-pr.md read as outside the
+      # folder on every lap (CodeRabbit 4654284463 on PR #458).
+      mdir_rel="$HANDOFF_DIR/$(mission_id "$MISSION")/"
+      # The prefix is anchored (index() == 1, a literal, never a regex): a path that only CONTAINS
+      # the mission folder further in is still outside it.
+      outside="$(awk -v pre="$mdir_rel" 'NF && index($0, pre) != 1 { print; exit }' <<< "$changed")"
+      if [ -n "$outside" ]; then
+        GATE_WHY="50-pr.md: $outside changed between verified_head ${vc:0:7} and the head — run the checks of step 2 again on the head and write the new sha"
+        return 1
+      fi
+    fi
+  fi
 
   # The ⛔ rows of 45-docs.md reach the human in the PR body, or not at all (ADR 0013; codereview of
   # 2026-09-28). gate_DOCS proves each has a proposal on disk; only the publisher's prompt carried it
   # into the PR, and a body without it merged with the rule change unapplied and nothing red. The
-  # owner is sdd-publisher, who writes the body: a lap refused here EDITS it (`gh pr edit`), never
-  # opens a second PR. The name has to sit on a line that carries `⛔` — the template's checklist
+  # owner is sdd-publisher, who writes the body: a lap refused here EDITS it through the REST PATCH
+  # (item 13: the porcelain edit fails on gh 2.45 and leaves the body as it was), never opens a second PR. The name has to sit on a line that carries `⛔` — the template's checklist
   # item — and not anywhere in the body: a name in "what changed" is not an item the human applies
   # (review r2). It proves the item is there, never that the quote under it is whole. The rows come
-  # from docs_checklist_rows, the same reader gate_DOCS decides on, and the body is asked for only
-  # when there is a ⛔ to look for. A MERGED PR is not read: the check is for the window before the
-  # merge, and a body edited afterwards would derive a finished mission back to PR and buy a
-  # publisher session on it — the reason mission_qa_report keeps its empty-range answer.
-  local docs_file="$MISSION_DIR/45-docs.md" rows row doc body="" body_read=0 body_rc=0 carried_missing="" pr_state
-  if [ -f "$docs_file" ]; then
-    rows="$(docs_checklist_rows "$docs_file")"
-    while IFS= read -r row; do
-      case "$row" in B\|*) doc="${row#B|}" ;; *) continue ;; esac
-      # An unnamed ⛔ is gate_DOCS's refusal, and an empty pattern would match any body.
-      [[ "$doc" =~ [[:alnum:]] ]] || continue
-      if [ "$body_read" -eq 0 ]; then
-        body="$( cd "$REPO_ROOT" && gh pr view "$url" --json state,body --jq '.state, .body' 2>/dev/null )" || body_rc=$?
-        body_read=1
-        # A body gh could not READ is its own refusal: "does not carry" would be a sentence about a
-        # body nobody saw, and it would send the publisher to edit a PR that may be fine.
-        if [ "$body_rc" -ne 0 ]; then
-          GATE_WHY="gh could not read the body of PR $live (rc $body_rc) — the ⛔ rows of 45-docs.md are not checked; run 'gh pr view $url --json body'"
+  # from docs_checklist_rows, the same reader gate_DOCS decides on.
+  # The `- kit:` lines of the handoffs travel the same road (item 8): the body has to carry at least
+  # as many `- kit:` lines (a `- [ ] kit:` counts) as mission_kit_lines counts — a count, never the
+  # text, so a line reworded in the body still passes. Same owner, same remedy.
+  # The body is asked for ONCE for both, and not at all when there is neither a ⛔ nor a kit line to
+  # look for. A MERGED PR is not read: the check is for the window before the merge, and a body
+  # edited afterwards would derive a finished mission back to PR and buy a publisher session on it —
+  # the reason mission_qa_report keeps its empty-range answer.
+  local docs_file="$MISSION_DIR/45-docs.md" rows="" row doc body="" body_rc=0 body_state="" carried_missing=""
+  local docs=() kit_n=0 kit_k=0 blocked_body
+  if [ "$pr_live_state" != MERGED ]; then
+    if [ -f "$docs_file" ]; then
+      rows="$(docs_checklist_rows "$docs_file")"
+      while IFS= read -r row; do
+        case "$row" in B\|*) doc="${row#B|}" ;; *) continue ;; esac
+        # An unnamed ⛔ is gate_DOCS's refusal, and an empty pattern would match any body.
+        [[ "$doc" =~ [[:alnum:]] ]] || continue
+        docs+=("$doc")
+      done <<< "$rows"
+    fi
+    kit_n="$(mission_kit_lines)"
+    if [ "${#docs[@]}" -gt 0 ] || [ "$kit_n" -gt 0 ]; then
+      body="$( cd "$REPO_ROOT" && gh pr view "$url" --json state,body --jq '.state, .body' 2>/dev/null )" || body_rc=$?
+      # A body gh could not READ is its own refusal: "does not carry" would be a sentence about a
+      # body nobody saw, and it would send the publisher to edit a PR that may be fine.
+      if [ "$body_rc" -ne 0 ]; then
+        GATE_WHY="gh could not read the body of PR $live (rc $body_rc) — the ⛔ rows and the kit: lines are not checked; run 'gh pr view $url --json body'"
+        return 1
+      fi
+      # The first line is the state, read AGAIN: a PR merged between the two gh calls answers
+      # MERGED here, and that is a finished mission — the ⛔ and kit: checks are for the window
+      # before the merge (above), and the stamp below still runs (CodeRabbit 4654284464 on PR #458).
+      # What is left is the body.
+      body_state="${body%%$'\n'*}"
+      case "$body" in *$'\n'*) body="${body#*$'\n'}" ;; *) body="" ;; esac
+      if [ "$body_state" != MERGED ]; then
+        blocked_body="$(grep -F '⛔' <<< "$body" || true)"
+        for doc in ${docs[@]+"${docs[@]}"}; do
+          grep -qF -- "$doc" <<< "$blocked_body" || carried_missing+="${carried_missing:+, }$doc"
+        done
+        if [ -n "$carried_missing" ]; then
+          GATE_WHY="PR $live does not carry the ⛔ proposal(s) of 45-docs.md: $carried_missing — the human applies them from the PR's decisions; edit its body ('gh api -X PATCH repos/{owner}/{repo}/pulls/${live##*/} -F body=@<file>'), never open a second PR"
           return 1
         fi
-        pr_state="${body%%$'\n'*}"
-        if [ "$pr_state" = MERGED ]; then break; fi
-        # The first line is the state; what is left is the body, kept only where it carries a ⛔.
-        case "$body" in *$'\n'*) body="${body#*$'\n'}" ;; *) body="" ;; esac
-        body="$(grep -F '⛔' <<< "$body" || true)"
+        if [ "$kit_n" -gt 0 ]; then
+          # Outside any fence, by the rule mission_kit_lines counts the handoffs with: a `- kit:`
+          # example in a code block of the body paid for a real finding the body dropped
+          # (CodeRabbit 4654284466 on PR #458).
+          kit_k="$(awk "$FENCE_AWK"'
+            { fence_line($0) }
+            fence { next }
+            /^[ \t]*- (\[[ xX]\] )?kit:/ { n++ }
+            END { print n + 0 }
+          ' <<< "$body" || true)"
+          if [ "${kit_k:-0}" -lt "$kit_n" ]; then
+            GATE_WHY="PR $live carries ${kit_k:-0} of the $kit_n kit: line(s) of the handoffs — a finding about the kit travels in the PR body or is lost; copy each line whole and edit the body ('gh api -X PATCH repos/{owner}/{repo}/pulls/${live##*/} -F body=@<file>')"
+            return 1
+          fi
+        fi
       fi
-      grep -qF -- "$doc" <<< "$body" || carried_missing+="${carried_missing:+, }$doc"
-    done <<< "$rows"
-    if [ -n "$carried_missing" ]; then
-      GATE_WHY="PR $live does not carry the ⛔ proposal(s) of 45-docs.md: $carried_missing — the human applies them from the PR's decisions; edit its body ('gh pr edit'), never open a second PR"
-      return 1
     fi
   fi
 
@@ -9865,7 +10202,7 @@ cmd_run() {
       if [ "$GATE_EXEC_DIRTY" = "1" ]; then
         info ""
         bad "BLOCKED in EXEC — $GATE_WHY"
-        dim "  The line stopped on purpose: the working tree is dirty and the suite is red."
+        dim "  The line stopped on purpose: the working tree is dirty and the suite did not pass."
         dim "  A session would run against the same uncommitted changes and fail the same way."
         dim "  Commit what belongs to the mission, or 'git restore' what does not, then 'sdd run'."
         pipeline_log_line "$(date -Iseconds)  BLOCKED  EXEC  red suite over a dirty working tree"
@@ -13125,6 +13462,58 @@ review_head_ok() {
       return 1
     fi
   done <<< "$changed"
+  return 0
+}
+
+# review_later_code_ok <round> — code committed AFTER the round reopens REVIEW (ADR 0024, decision 4).
+# review_head_ok reads the interval up to the commit that added the round; this reads the commits
+# after it: `rev-list <that commit>..HEAD --not <mission_base_refs>`, and the first path one of them
+# touches outside `hat_writes REVIEW` and `hat_writes DOCS` refuses, naming the path and the commit.
+# The owner of the artifact the refusal asks for is sdd-reviewer, who writes the next round — a delta
+# from this round's reviewed_head (ADR 0023). rc 0 with no reviewed_head (the older rounds; a wrong
+# one was refused by review_head_ok just above), with no commit that adds the round, and with an
+# empty list (the merged mission, and the one that did not move). No adding commit is two worlds: an
+# uncommitted round, which the dirty-tree check of gate_REVIEW refuses after the suite; and a round
+# that came in through a merge, which `git log` without -m lists no path for — its later code is not
+# read, a declared limit (finding #3 of r1 of L3): the reviewer commits its round on the mission
+# branch, and no hat of the kit brings one in by a merge. No --no-merges: diff-tree without -m prints no path for a merge commit (git 2.43.0), and
+# what a merge of the base brought is outside the range through the --not. A rev-list or a
+# diff-tree that fails refuses (fail closed).
+# Declared limits (ADR 0024): the DOCS writes: is admitted whole — it is wider than docs, and
+# narrowing it is lot L6b of the campaign; and the resolution of a merge of the base is not read
+# (sdd-worker pr-ready reads it). A name git quotes under core.quotePath=false refuses, as in
+# review_head_ok: the fail-safe side.
+review_later_code_ok() {
+  local round="$1" name rc_commit commits c paths p globs short
+  local -a bases=()
+  frontmatter_has "$round" reviewed_head || return 0
+  rc_commit="$(git -C "$REPO_ROOT" -c log.showSignature=false log -1 --diff-filter=A --format=%H -- "$round" 2>/dev/null || true)"
+  [ -n "$rc_commit" ] || return 0
+  name="$(basename "$round")"
+  mapfile -t bases < <(mission_base_refs)
+  if ! commits="$(git -C "$REPO_ROOT" rev-list --reverse "$rc_commit..HEAD" --not ${bases[@]+"${bases[@]}"} 2>/dev/null)"; then
+    GATE_WHY="$name: git rev-list cannot list the commits after the round — the gate does not pass a round it cannot read"
+    return 1
+  fi
+  local gr gd
+  gr="$(hat_writes REVIEW)"; gd="$(hat_writes DOCS)"
+  # An empty answer is "writes anywhere" (hat_writes), so a hat with no writes: admits every path.
+  if [ -n "$gr" ] && [ -n "$gd" ]; then globs="$gr, $gd"; else globs=""; fi
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    if ! paths="$(git -C "$REPO_ROOT" -c core.quotePath=false diff-tree --no-commit-id --name-only -r "$c" 2>/dev/null)"; then
+      GATE_WHY="$name: git diff-tree cannot list what $c changed after the round — the gate does not pass a round it cannot read"
+      return 1
+    fi
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      if ! hat_path_allowed "$p" "$globs"; then
+        short="$(git -C "$REPO_ROOT" rev-parse --short "$c" 2>/dev/null || true)"
+        GATE_WHY="$name: $p changed in ${short:-$c}, committed after the round — code no later hat writes reopens REVIEW; the next round is a delta from the round's reviewed_head"
+        return 1
+      fi
+    done <<< "$paths"
+  done <<< "$commits"
   return 0
 }
 
