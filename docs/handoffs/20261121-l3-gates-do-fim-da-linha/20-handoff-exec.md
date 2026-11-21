@@ -2,9 +2,9 @@
 missao: 20261121-l3-gates-do-fim-da-linha
 fase: EXEC
 status: done
-sessao: bccfae31-c040-4129-a618-36aa9d7c8e0e
-data: 2026-11-21 11:39
-gate: "`tests/run-all.sh` em e8d7f4b → rc 0, `suite green`, `grep -cE '^  FAIL'` → 0, `anchors: all 942 mutants still apply and leave valid code` (saída em /tmp/l3-i9-post.log, que não sobrevive à máquina; refaça o comando); `bash tests/check-todo.sh --check TODO.md` em e8d7f4b → rc 0, `91 finding(s), all within 8 lines`; `bash tests/check-todo.sh --anchors TODO.md` em e8d7f4b → `91 measured, 0 off target`; o Check do I9 em e8d7f4b → `13`; o `grep -cE` dos 16 mutantes do plano em `tests/check-mutation.sh` em e8d7f4b → `16`; `cmp -s` de `agents/sdd-publisher.md` e `agents/sdd-reviewer.md` com o espelho em e8d7f4b → 0 e 0"
+sessao: a51cbac1-a294-4256-8a6f-e0c09097bb07
+data: 2026-11-21 13:47
+gate: "`tests/run-all.sh` em d4c4e97 (R1) → rc 0, `suite green`, `grep -cE '^  FAIL'` → 0, `anchors: all 943 mutants still apply and leave valid code` (saída em /tmp/l3-r1-post.log, que não sobrevive à máquina; refaça o comando); o Check do R1 em d4c4e97 → `1 1 0 1 1`; `tests/check-mutation.sh --only PR_kit_lines_counted_in_fence check-gates.sh` em d4c4e97 → `PR_kit_lines_counted_in_fence — check-gates.sh dies (rc 1)`; `bash tests/check-todo.sh` em d4c4e97 → sem FAIL. Antes, no I9: `tests/run-all.sh` em e8d7f4b → rc 0, `91 finding(s), all within 8 lines`, `91 measured, 0 off target`, o Check do I9 → `13`"
 ---
 
 # Handoff — EXEC — L3: gates do fim da linha
@@ -19,6 +19,8 @@ Os nove incrementos estão `done`. Cinco gates (`gate_EXEC`, `gate_QA`, `gate_RE
 templates ganharam as regras que nenhum gate consegue cobrar. Os 13 itens do `TODO.md` levam
 `RESOLVED by`. Suíte verde. A QA não usa navegador: é a jornada de terminal do § Verificação
 end-to-end do `01-plano.md`, sobre a missão do L2, que já está mergeada.
+Depois da r1 da REVIEW (nota B), o `R1` de lote fechou os achados #1–#5 em `d4c4e97`; o #2
+se mostrou refutado no código (o `load_config` já normaliza a barra), e ficou só o probe.
 
 ## Estado do repo
 
@@ -40,6 +42,25 @@ end-to-end do `01-plano.md`, sobre a missão do L2, que já está mergeada.
 - `5e8b000` — I7 (itens 8, 9 e 12): o corpo do PR leva as linhas `kit:` dos handoffs (o `gate_PR` as conta, menos as que estão numa citação ou numa cerca), um "Como verificar" que a shell do leitor roda e a pendência respondida
 - `b912a33` — I8 (item 3): o `gate:` do `handoff.md` e do `review.md` só cita medida com o comando e o sha, ou a saída que está no caminho
 - `e8d7f4b` — I9: `RESOLVED by` nos 13 itens; seis corpos refeitos para o token caber nos 120 caracteres
+
+## Rodada r1 da REVIEW — o R1
+
+- `d4c4e97` — R1 (achados #1–#5 de `40-review-r1.md`):
+  - #1: um rc 126/127 cujo log tem mais de uma linha não vazia não diz mais "the suite never
+    started": ganha a frase `TEST_CMD stopped on a command it could not start (…) after it printed
+    output`, estável (sem citar o log) e antes do ramo da árvore suja, como a outra;
+  - #2: **refutado no código** — o `load_config` tira a barra final do `HANDOFF_DIR` e recusa `\`
+    (`adr_dir_ok`), então o `mdir_rel` do `gate_PR` nunca leva `//`. O probe novo do `check-gates.sh`
+    nasceu verde e ficou como regressão; a sabotagem do strip da barra no `load_config` o deixa
+    vermelho. Nenhuma mudança no `gate_PR`;
+  - #3: sai o comentário falso do `review_later_code_ok`; a rodada que entrou por merge virou limite
+    declarado no próprio comentário;
+  - #4: mutante `mut_PR_kit_lines_counted_in_fence`, pego pelo `check-gates.sh`;
+  - #5: a asserção do `pr-body.md` lê ``a linha do gate é `sdd preflight` ``, não o comando solto
+    (sabotado: sem a frase no template, a asserção nova reprova e a antiga passava).
+- Sabotagem em cópias isoladas, sob `timeout 900` e `RLIMIT_AS` de 4 GiB, controle verde: as cinco
+  linhas de código do #1 e o strip da barra, todas pegas (notas do checkpoint).
+- 53 âncoras `bin/sdd:N` do `TODO.md` deslocadas pelos hunks do diff.
 
 ## Artefatos
 
