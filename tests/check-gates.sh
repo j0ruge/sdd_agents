@@ -392,16 +392,49 @@ fi
 assert_phase "TEST_CMD put back after the did-not-run worlds hands the mission back to QA" "QA"
 # A TEST_CMD that STARTED and then hit a missing command also exits 127 (`bash -c 'true; x'`), and
 # "the suite never started" would be false about it (finding #1 of r1). The reason still cites no
-# .log, so no_work_check can stop the second lap over the same tree.
-nr127s="$(norun_why 'echo the suite started; sdd_r1_no_such_command' EXEC)"
+# .log, so no_work_check can stop the second lap over the same tree. Read over a CLEAN tree: that
+# suite ran against the tree, so over a dirty one the dirty-tree stop answers (the pair below).
+norun_why_clean() { # norun_why_clean <TEST_CMD> <PHASE> — norun_why with the swap COMMITTED, and the way back too
+  local w
+  sed -i "s|^TEST_CMD=\"true\"|TEST_CMD=\"$1\"|" .sdd/config.sh
+  git add .sdd/config.sh && git commit -qm "chore: TEST_CMD swapped over a clean tree" >/dev/null
+  w="$( cd "$FIX" && LC_ALL=C "$SDD" why "$MISSION" "$2" 2>&1 )" || true
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"true\"|" .sdd/config.sh
+  git add .sdd/config.sh && git commit -qm "chore: TEST_CMD put back" >/dev/null
+  printf '%s' "$w"
+}
+nr127s="$(norun_why_clean 'echo the suite started; sdd_r1_no_such_command' EXEC)"
 if grep -qF 'rc 127: ' <<< "$nr127s" && grep -qF 'after it printed output' <<< "$nr127s" \
    && ! grep -qF 'never started' <<< "$nr127s" && ! grep -qF 'TEST_CMD failed' <<< "$nr127s" \
-   && ! grep -qF '.log' <<< "$nr127s"; then
+   && ! grep -qF '.log' <<< "$nr127s" && ! grep -qF 'DIRTY' <<< "$nr127s"; then
   pass "gate_EXEC does not say the suite never started for a TEST_CMD that printed output before it exited 127"
 else
   fail "gate_EXEC does not say the suite never started for a TEST_CMD that printed output before it exited 127" \
-    "rc 127, 'after it printed output', no 'never started', no 'TEST_CMD failed', no .log" "$nr127s"
+    "rc 127, 'after it printed output', no 'never started', no 'TEST_CMD failed', no .log, no DIRTY" "$nr127s"
 fi
+# The other half (CodeRabbit 4654284448 on PR #458): the same suite over a DIRTY tree — the config
+# edit of norun_why is not committed — keeps the dirty-tree stop. Only a suite that never started
+# skips it, and the 126/127 worlds above are that one, over the same dirty tree.
+nr127sd="$(norun_why 'echo the suite started; sdd_r1_no_such_command' EXEC)"
+if grep -qF 'TEST_CMD failed (echo the suite started; sdd_r1_no_such_command) over a DIRTY working tree' <<< "$nr127sd" \
+   && ! grep -qF 'after it printed output' <<< "$nr127sd"; then
+  pass "gate_EXEC keeps the dirty-tree stop for a TEST_CMD that started and then exited 127"
+else
+  fail "gate_EXEC keeps the dirty-tree stop for a TEST_CMD that started and then exited 127" \
+    "'TEST_CMD failed (…) over a DIRTY working tree', no 'after it printed output'" "$nr127sd"
+fi
+# A 127 with NO output is no shell refusing to start anything — bash always writes its message, and
+# the log takes stderr — so it is the suite's own exit status, read as a red suite with its log
+# (CodeRabbit 4654284445 on PR #458). Over a clean tree, so the dirty-tree stop cannot answer for it.
+nr127z="$(norun_why_clean 'exit 127' EXEC)"
+if grep -qE 'TEST_CMD failed \(exit 127\) — see [^ ]*gate-exec-test-[^ ]*\.log$' <<< "$nr127z" \
+   && ! grep -qF 'did not run' <<< "$nr127z" && ! grep -qF 'DIRTY' <<< "$nr127z"; then
+  pass "gate_EXEC reads a TEST_CMD that exited 127 with no output as a red suite, citing its log"
+else
+  fail "gate_EXEC reads a TEST_CMD that exited 127 with no output as a red suite, citing its log" \
+    "'TEST_CMD failed (exit 127) — see …gate-exec-test-….log', no 'did not run', no DIRTY" "$nr127z"
+fi
+assert_phase "TEST_CMD put back after the started and silent worlds hands the mission back to QA" "QA"
 
 # Jidoka: a `blocked` increment escalates ON THE SPOT, without burning a session.
 # `sdd run` decides that before invoking claude, so this test spends no tokens.

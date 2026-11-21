@@ -845,6 +845,15 @@ mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measu
 mut_RUN_test_cmd_not_run_reads_red() {
   sed -i '/^test_cmd_red_why()/,/^}/ s|GATE_WHY="TEST_CMD did not run|GATE_WHY="TEST_CMD failed|' "$1"
 }
+# CodeRabbit 4654284445 and 4654284448 on PR #458: a 126/127 with no output at all reads as a suite
+# that did not run again (no shell message is no evidence of one), and a suite that STARTED and then
+# stopped on a command skips the dirty-tree stop again, buying a session over the same dirty tree.
+mut_RUN_test_cmd_silent_reads_not_run() {
+  sed -i '/^test_cmd_red_why()/,/^}/ s|^      if \[ "\${printed:-0}" -gt 0 \]; then$|      if true; then|' "$1"
+}
+mut_RUN_test_cmd_started_skips_dirty() {
+  sed -i '/^test_cmd_red_why()/,/^}/ { /GATE_WHY="TEST_CMD stopped on a command/ { n; s|^          return 1$|          return 0| } }' "$1"
+}
 
 # Historical bug 1 (SQ-97 pilot, ~US$ 15 a round): the skill emits
 # `- **Started:** <ts> · **Status:** in-progress`, and the gate required `**Status:**` to OPEN the
@@ -7743,6 +7752,8 @@ CATALOG=(
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
   RUN_test_cmd_not_run_reads_red
+  RUN_test_cmd_silent_reads_not_run
+  RUN_test_cmd_started_skips_dirty
   EXEC_escaped_pipe_blind
   EXEC_pipeless_row_skipped
   EXEC_pipeless_reads_past_the_table

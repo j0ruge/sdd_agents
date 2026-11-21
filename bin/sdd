@@ -1006,25 +1006,32 @@ run_check_cmd() {
 # A TEST_CMD that STARTED and then hit a missing command exits 127 too (`true; no_such_cmd`), and
 # "never started" would be false about it (finding #1 of r1 of L3): a log with more than one
 # non-empty line printed something before the shell's own message, and gets a sentence of its own,
-# as stable as the other. One line is the shell's message alone, in any locale.
-# Returns 0 when it wrote one of the two could-not-start reasons, 1 when it wrote the reason of a
-# red suite.
+# as stable as the other. One line is the shell's message alone, in any locale. NO line is no
+# evidence at all: the shell always writes its message when it cannot start a command, and the log
+# takes stderr, so a silent 126/127 is the suite's own exit status (a wrapper's `exit 127`) and reads
+# as a red suite, citing its log (CodeRabbit 4654284445 on PR #458).
+# Returns 0 ONLY when it wrote the did-not-run reason — the one case where gate_EXEC skips its
+# dirty-tree stop, since nothing ran against the tree. 1 for a red suite and for a suite that started
+# and then stopped: that one RAN against the tree, so the dirty-tree stop still holds over it
+# (CodeRabbit 4654284448 on PR #458), and on a clean tree its own sentence is what gate_EXEC keeps.
 test_cmd_red_why() {
   local line="" printed=""
   case "$LAST_CHECK_RC" in
     126|127)
-      line="$(grep -E 'No such file or directory|not found|Permission denied' "$LAST_CHECK_LOG" 2>/dev/null | tail -n 1 | cut -b 1-200)" || true
-      # The shell translates strerror under the operator's locale (measured on a pt-BR machine,
-      # where the line is no longer English), so a log with no English line still gives its last
-      # non-empty line, which is the shell's own message.
-      [ -n "$line" ] || line="$(grep -v '^[[:space:]]*$' "$LAST_CHECK_LOG" 2>/dev/null | tail -n 1 | cut -b 1-200)" || true
       printed="$(grep -c -v '^[[:space:]]*$' "$LAST_CHECK_LOG" 2>/dev/null)" || true
-      if [ "${printed:-0}" -gt 1 ]; then
-        GATE_WHY="TEST_CMD stopped on a command it could not start (rc $LAST_CHECK_RC${line:+: $line}) after it printed output — the suite started, so read its log for how far it got; this tree misses what that command names (a worktree is born without ignored paths such as .venv or node_modules)"
+      if [ "${printed:-0}" -gt 0 ]; then
+        line="$(grep -E 'No such file or directory|not found|Permission denied' "$LAST_CHECK_LOG" 2>/dev/null | tail -n 1 | cut -b 1-200)" || true
+        # The shell translates strerror under the operator's locale (measured on a pt-BR machine,
+        # where the line is no longer English), so a log with no English line still gives its last
+        # non-empty line, which is the shell's own message.
+        [ -n "$line" ] || line="$(grep -v '^[[:space:]]*$' "$LAST_CHECK_LOG" 2>/dev/null | tail -n 1 | cut -b 1-200)" || true
+        if [ "$printed" -gt 1 ]; then
+          GATE_WHY="TEST_CMD stopped on a command it could not start (rc $LAST_CHECK_RC${line:+: $line}) after it printed output — the suite started, so read its log for how far it got; this tree misses what that command names (a worktree is born without ignored paths such as .venv or node_modules)"
+          return 1
+        fi
+        GATE_WHY="TEST_CMD did not run (rc $LAST_CHECK_RC${line:+: $line}) — the suite never started, so this is not a red suite; this tree misses what the command names (a worktree is born without ignored paths such as .venv or node_modules)"
         return 0
-      fi
-      GATE_WHY="TEST_CMD did not run (rc $LAST_CHECK_RC${line:+: $line}) — the suite never started, so this is not a red suite; this tree misses what the command names (a worktree is born without ignored paths such as .venv or node_modules)"
-      return 0 ;;
+      fi ;;
   esac
   GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"
   return 1
@@ -1651,7 +1658,8 @@ gate_EXEC() {
   if ! run_check_cmd "$TEST_CMD" "gate-exec-test"; then
     # A suite that never started comes BEFORE the dirty tree, and does not arm GATE_EXEC_DIRTY: the
     # dirty-tree sentence ("the uncommitted changes are what the suite is running against") would
-    # be false for a suite that did not run at all.
+    # be false for a suite that did not run at all. Only that one: a suite that started and then
+    # stopped on a command it could not start ran against the tree, and falls through to the stop.
     if test_cmd_red_why; then return 1; fi
     # A phase that DIED leaves its work uncommitted, and the suite then runs over a working tree
     # nobody approved. Every increment reads `done`, so the runner re-derives EXEC, opens another
@@ -1664,7 +1672,9 @@ gate_EXEC() {
       GATE_WHY="TEST_CMD failed ($TEST_CMD) over a DIRTY working tree — the uncommitted changes are what the suite is running against; a session cannot fix what it cannot see. See $LAST_CHECK_LOG"
       return 1
     fi
-    test_cmd_red_why || true; return 1
+    # A clean tree keeps the reason test_cmd_red_why wrote above: a red suite, or one that started
+    # and then stopped on a command it could not start.
+    return 1
   fi
   [ -f "$MISSION_DIR/20-handoff-exec.md" ] \
     || { GATE_WHY="every increment done and the suite green, but 20-handoff-exec.md is missing"; return 1; }

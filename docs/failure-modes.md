@@ -1041,7 +1041,10 @@ exits 127 there. Since `20261121-l3-gates-do-fim-da-linha` this is its own reaso
 **What you do:** give the tree what the line of the reason names (create the `.venv`, run the
 install), then `sdd run` again. Do not hand it to a session: no agent fixes a missing environment
 by editing code. An exit 127 **after** the log printed output (one of the suite's own commands is
-missing) is read as a suite that started, and says so.
+missing) is read as a suite that started, and says so; that suite ran against the tree, so over a
+dirty tree the dirty-tree stop answers instead. An exit 126 or 127 with no output at all is read as
+a red suite, citing its log: the shell always writes its own message when it cannot start a
+command, so a silent one is the suite's own exit status.
 
 ---
 

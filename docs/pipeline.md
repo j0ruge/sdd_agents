@@ -250,8 +250,12 @@ the line of the log that says so (the English `No such file or directory`, `not 
 `Permission denied`, or else the last non-empty line, since the shell translates its message), and
 never cites the log: the log name changes every run, and a stable reason is what lets the second
 lap over the same tree stop as `no-work` before it buys a session. It comes before the dirty-tree
-branch and does not arm it. One definition (`test_cmd_red_why`) writes this reason for `gate_EXEC`,
-`gate_QA` and `gate_REVIEW`; any other non-zero exit still reads `TEST_CMD failed`.
+branch and does not arm it. Two exits 126/127 are not that one: a log with more than one non-empty
+line printed output before the shell's message, so the suite started — over a clean tree it says
+so, and over a dirty tree the dirty-tree stop answers, since that suite ran against the tree; and
+a log with no line at all carries no shell message, so it reads `TEST_CMD failed`, citing its log.
+One definition (`test_cmd_red_why`) writes these reasons for `gate_EXEC`, `gate_QA` and
+`gate_REVIEW`; any other non-zero exit still reads `TEST_CMD failed`.
 
 **Jidoka:** any `blocked` increment escalates **on the spot** — no retry, no consuming the phase's
 session budget. The executor marks `blocked` when the suite is red because of an earlier
