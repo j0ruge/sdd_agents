@@ -854,6 +854,15 @@ mut_RUN_test_cmd_silent_reads_not_run() {
 mut_RUN_test_cmd_started_skips_dirty() {
   sed -i '/^test_cmd_red_why()/,/^}/ { /GATE_WHY="TEST_CMD stopped on a command/ { n; s|^          return 1$|          return 0| } }' "$1"
 }
+# Codex P2 on PR #458: a suite read as did-not-run skips the dirty-tree stop again (a log of one
+# line is a heuristic, and a silent first step leaves the same line), so a session opens over the
+# dirty tree; and the sentence of that stop forgets the two readings cannot be told apart.
+mut_RUN_test_cmd_not_run_skips_dirty() {
+  sed -i '/^gate_EXEC()/,/^}/ s|^      \[ -z "\$exec_dirty" \] \|\| GATE_EXEC_DIRTY=1$|      :|' "$1"
+}
+mut_RUN_test_cmd_not_run_dirty_unsaid() {
+  sed -i '/^test_cmd_red_why()/,/^}/ s|^        if \[ "\${1:-}" = dirty \]; then$|        if false; then|' "$1"
+}
 
 # Historical bug 1 (SQ-97 pilot, ~US$ 15 a round): the skill emits
 # `- **Started:** <ts> · **Status:** in-progress`, and the gate required `**Status:**` to OPEN the
@@ -7790,6 +7799,8 @@ CATALOG=(
   RUN_test_cmd_not_run_reads_red
   RUN_test_cmd_silent_reads_not_run
   RUN_test_cmd_started_skips_dirty
+  RUN_test_cmd_not_run_skips_dirty
+  RUN_test_cmd_not_run_dirty_unsaid
   EXEC_escaped_pipe_blind
   EXEC_pipeless_row_skipped
   EXEC_pipeless_reads_past_the_table

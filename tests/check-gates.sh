@@ -363,7 +363,9 @@ assert_phase "TEST_CMD green again hands the mission back to QA" "QA"
 # misses) and 126 (a file with no execute bit), and each reason is read for what it must say AND
 # for what it must not: `TEST_CMD failed` is the other branch, and a `.log` would make the reason
 # unstable from lap to lap, so no_work_check could never stop the second lap over the same tree.
-# The config edit is left uncommitted on purpose: the dirty-tree branch must not win either.
+# Read over a CLEAN tree (norun_why_clean): over a dirty one gate_EXEC keeps the dirty-tree
+# stop with a sentence of its own (Codex P2 on PR #458), which the `sdd run` pair further down
+# counts. gate_QA and gate_REVIEW have no dirty-tree stop, and read norun_why's dirty tree alike.
 NORUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sdd-norun-XXXXXX")"
 printf '#!/bin/sh\nexit 0\n' > "$NORUN_DIR/noexec"; chmod 644 "$NORUN_DIR/noexec"
 norun_why() { # norun_why <TEST_CMD> <PHASE> — the reason, with TEST_CMD swapped and put back
@@ -375,25 +377,6 @@ norun_why() { # norun_why <TEST_CMD> <PHASE> — the reason, with TEST_CMD swapp
   sed -i "s|^TEST_CMD=.*|TEST_CMD=\"true\"|" .sdd/config.sh
   printf '%s' "$w"
 }
-norun_ok() { # norun_ok <reason> <rc> <the line the log carries> — 0 when the reason is the right one
-  grep -qF "TEST_CMD did not run (rc $2: " <<< "$1" && grep -qF "$3" <<< "$1" \
-    && grep -qF 'this tree misses what the command names' <<< "$1" \
-    && ! grep -qF 'TEST_CMD failed' <<< "$1" && ! grep -qF '.log' <<< "$1"
-}
-nr127="$(norun_why '.venv/bin/python -m pytest' EXEC)"
-nr126="$(norun_why "$NORUN_DIR/noexec" EXEC)"
-if norun_ok "$nr127" 127 'No such file or directory' && norun_ok "$nr126" 126 'Permission denied'; then
-  pass "gate_EXEC says the TEST_CMD did not run when it exits 126 or 127, and names what the tree misses"
-else
-  fail "gate_EXEC says the TEST_CMD did not run when it exits 126 or 127, and names what the tree misses" \
-    "TEST_CMD did not run (rc 127: … No such file …) and (rc 126: … Permission denied …), no 'TEST_CMD failed', no .log" \
-    "127: $nr127 ‖ 126: $nr126"
-fi
-assert_phase "TEST_CMD put back after the did-not-run worlds hands the mission back to QA" "QA"
-# A TEST_CMD that STARTED and then hit a missing command also exits 127 (`bash -c 'true; x'`), and
-# "the suite never started" would be false about it (finding #1 of r1). The reason still cites no
-# .log, so no_work_check can stop the second lap over the same tree. Read over a CLEAN tree: that
-# suite ran against the tree, so over a dirty one the dirty-tree stop answers (the pair below).
 norun_why_clean() { # norun_why_clean <TEST_CMD> <PHASE> — norun_why with the swap COMMITTED, and the way back too
   local w
   sed -i "s|^TEST_CMD=\"true\"|TEST_CMD=\"$1\"|" .sdd/config.sh
@@ -403,6 +386,26 @@ norun_why_clean() { # norun_why_clean <TEST_CMD> <PHASE> — norun_why with the 
   git add .sdd/config.sh && git commit -qm "chore: TEST_CMD put back" >/dev/null
   printf '%s' "$w"
 }
+norun_ok() { # norun_ok <reason> <rc> <the line the log carries> — 0 when the reason is the right one
+  grep -qF "TEST_CMD did not run (rc $2: " <<< "$1" && grep -qF "$3" <<< "$1" \
+    && grep -qF 'this tree misses what the command names' <<< "$1" \
+    && ! grep -qF 'TEST_CMD failed' <<< "$1" && ! grep -qF '.log' <<< "$1"
+}
+nr127="$(norun_why_clean '.venv/bin/python -m pytest' EXEC)"
+nr126="$(norun_why_clean "$NORUN_DIR/noexec" EXEC)"
+if norun_ok "$nr127" 127 'No such file or directory' && norun_ok "$nr126" 126 'Permission denied' \
+   && grep -qF 'the suite never started' <<< "$nr127" && ! grep -qF 'DIRTY' <<< "$nr127$nr126"; then
+  pass "gate_EXEC says the TEST_CMD did not run when it exits 126 or 127, and names what the tree misses"
+else
+  fail "gate_EXEC says the TEST_CMD did not run when it exits 126 or 127, and names what the tree misses" \
+    "TEST_CMD did not run (rc 127: … No such file …) and (rc 126: … Permission denied …), 'never started', no 'TEST_CMD failed', no .log, no DIRTY" \
+    "127: $nr127 ‖ 126: $nr126"
+fi
+assert_phase "TEST_CMD put back after the did-not-run worlds hands the mission back to QA" "QA"
+# A TEST_CMD that STARTED and then hit a missing command also exits 127 (`bash -c 'true; x'`), and
+# "the suite never started" would be false about it (finding #1 of r1). The reason still cites no
+# .log, so no_work_check can stop the second lap over the same tree. Read over a CLEAN tree: that
+# suite ran against the tree, so over a dirty one the dirty-tree stop answers (the pair below).
 nr127s="$(norun_why_clean 'echo the suite started; sdd_r1_no_such_command' EXEC)"
 if grep -qF 'rc 127: ' <<< "$nr127s" && grep -qF 'after it printed output' <<< "$nr127s" \
    && ! grep -qF 'never started' <<< "$nr127s" && ! grep -qF 'TEST_CMD failed' <<< "$nr127s" \
@@ -413,8 +416,9 @@ else
     "rc 127, 'after it printed output', no 'never started', no 'TEST_CMD failed', no .log, no DIRTY" "$nr127s"
 fi
 # The other half (CodeRabbit 4654284448 on PR #458): the same suite over a DIRTY tree — the config
-# edit of norun_why is not committed — keeps the dirty-tree stop. Only a suite that never started
-# skips it, and the 126/127 worlds above are that one, over the same dirty tree.
+# edit of norun_why is not committed — keeps the dirty-tree stop, with the dirty-tree sentence. A
+# suite that did not run keeps the stop too, with a sentence of its own (Codex P2 on PR #458): the
+# `sdd run` pair of the dirty-tree differential, further down, counts that one.
 nr127sd="$(norun_why 'echo the suite started; sdd_r1_no_such_command' EXEC)"
 if grep -qF 'TEST_CMD failed (echo the suite started; sdd_r1_no_such_command) over a DIRTY working tree' <<< "$nr127sd" \
    && ! grep -qF 'after it printed output' <<< "$nr127sd"; then
@@ -553,6 +557,25 @@ if grep -q "session(s) without satisfying the gate" <<< "$out_dirty"; then
        "no budget-exhaustion text" "$(grep -m1 'session(s) without' <<< "$out_dirty")"
 else
   pass "the escalation is the dirty-tree branch, not budget exhaustion"
+fi
+# The same dirty tree with a TEST_CMD the shell could not start (Codex P2 on PR #458): a log of one
+# line holds the shell's message alone, and cannot tell a command that never started from one that
+# ran a silent first step and then stopped (`printf x > f; no_such_cmd`). The did-not-run reading is
+# a heuristic, so over a dirty tree the stop holds too, and its sentence says the two are not told
+# apart. Counted like the pair above: exit 3, no session, and the sentence of THIS branch.
+sed -i 's|^TEST_CMD="false"|TEST_CMD=".venv/bin/python -m pytest"|' .sdd/config.sh
+out_norun_dirty="$( cd "$FIX" && LC_ALL=C "$SDD" run "$MISSION" 2>&1 )"; rc_norun_dirty=$?
+n_norun_dirty="$(sessions_spent)"
+sed -i 's|^TEST_CMD=.*|TEST_CMD="false"|' .sdd/config.sh
+if [ "$rc_norun_dirty" -eq 3 ] && [ "$n_norun_dirty" -eq "$n_dirty" ] \
+   && grep -qF 'TEST_CMD did not run (rc 127: ' <<< "$out_norun_dirty" \
+   && grep -qF 'or stopped at its first step, over a DIRTY working tree' <<< "$out_norun_dirty" \
+   && ! grep -qF 'the suite never started' <<< "$out_norun_dirty"; then
+  pass "a dirty tree with a TEST_CMD that did not run escalates too (exit 3, no session spent)"
+else
+  fail "a dirty tree with a TEST_CMD that did not run escalates too (exit 3, no session spent)" \
+       "exit 3, 'did not run (rc 127: …), or stopped at its first step, over a DIRTY working tree', no 'never started', no new session" \
+       "exit $rc_norun_dirty, $n_dirty → $n_norun_dirty log(s): $(tail -3 <<< "$out_norun_dirty")"
 fi
 git checkout -- file.txt
 sed -i 's|^TEST_CMD="false"|TEST_CMD="true"|' .sdd/config.sh

@@ -250,7 +250,11 @@ the line of the log that says so (the English `No such file or directory`, `not 
 `Permission denied`, or else the last non-empty line, since the shell translates its message), and
 never cites the log: the log name changes every run, and a stable reason is what lets the second
 lap over the same tree stop as `no-work` before it buys a session. It comes before the dirty-tree
-branch and does not arm it. Two exits 126/127 are not that one: a log with more than one non-empty
+sentence, which would be false for it, and over a clean tree it is the reason. Over a dirty tree it
+still arms the dirty-tree stop: "did not run" is read from a log of one line, which a silent first
+step followed by a missing command leaves too, so the reason says
+`TEST_CMD did not run (rc <rc>: <line>), or stopped at its first step, over a DIRTY working tree`
+and no session opens over the uncommitted changes. Two exits 126/127 are not that one: a log with more than one non-empty
 line printed output before the shell's message, so the suite started — over a clean tree it says
 so, and over a dirty tree the dirty-tree stop answers, since that suite ran against the tree; and
 a log with no line at all carries no shell message, so it reads `TEST_CMD failed`, citing its log.
