@@ -171,6 +171,24 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
   orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-19)
 
+- [ ] **O LOW de comportamento que a rodada do worker manda ao chore volta como achado do Codex** —
+  `commands/sdd-worker.md:207` (`Fix what the round finds`) — sob a régua A (decisão do dono, 2026-11-18) o
+  LOW vai ao chore, mas o item `codex` do `pr-ready` pede recibo sem achado aberto. Duas vezes o Codex deu P2
+  a um LOW deixado ao chore e a rodada voltou ao PR: no PR #457 (`af6d490`, um dos LOW da r4) e no PR #458
+  (`f2559cb`, o LOW 3 da r3, consertado em `3000409`; 38 min do recibo ao merge). Os três LOW só de
+  comentário da r5 do PR #460 ele não levantou. Direção (decisão do dono, toca a régua A): o `review` conserta
+  na leva o LOW que nomeia entrada e saída errada; só o de prosa ou registro vai ao chore, como no `sdd-reviewer`.
+  — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
+
+- [ ] **O `pr-ready` conta como fechado o thread que o próprio bot resolveu, sem resposta do worker** —
+  `bin/sdd-worker:1391` (`reviewThreads`) — o item `threads` lê só o `isResolved`. No PR #458, 14 dos 16
+  threads foram resolvidos pelo `coderabbitai[bot]`, 12 sem resposta do worker, com o bot sem cota (`Review
+  limit reached` sobre `4ef8e23..f2559cb`), e o verbo deu `ready`. Os 12 eram consertos reais, mas o thread
+  que o bot fecha porque a linha mudou passa calado. Vizinho de "Nenhum ato do worker resolve os threads".
+  Direção: ler `resolvedBy` e os autores, e contar como aberto, pelo id, o thread resolvido por outra conta
+  sem resposta da conta do PR.
+  — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
+
 - [ ] **O `budget` esquece calado o gasto de uma missão que nunca chegou à base e cujo worktree saiu** —
   `bin/sdd-worker:716` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
   PR fechado sem merge ou a missão largada e o worktree removido, o `budget` dá US$ 0.00 no lugar dos US$ 85 do
@@ -719,6 +737,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   TICKET (reproduzido num repo de rascunho na r5). O aviso cala no único caso que perde o plano. Direção: com o
   placeholder, avisar fora da base e calar nela, um caso de cada lado no bloco 3c do `check-gates.sh`.
   — descoberto pela r5 da REVIEW do worker na missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-21)
+
+- [ ] **O `/sdd-plan` manda dizer ao humano o id do planner, e o harness proíbe citá-lo na resposta** —
+  `commands/sdd-plan.md:195` (`planner agent`) — o resultado do `Agent` no Claude Code manda não citar o id
+  numa resposta ao usuário. O relay do L5 (2026-11-21 18:11) seguiu o harness e gravou o id num arquivo do
+  scratchpad, que o handoff dele aponta; a retomada pelo id noutra sessão já está medida (3.2c do
+  `dotp-remake`). Quem segue o comando expõe o id, e quem segue o harness perde o grill se a sessão cai sem
+  handoff. Direção: o relay grava o id em disco (o handoff dele, ou a linha do diário da campanha) e diz ao
+  humano onde está, nunca o id na resposta.
+  — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
