@@ -926,7 +926,7 @@ mut_DOCS_k8_ignored() {                       # worlds 1–7, 9, 12, 14–16, 18
   sed -i '/^gate_DOCS() {/,/^}/ s@^  if \[ "\$(frontmatter "\$MISSION_DIR/00-missao.md" kaizen_log)" != skipped \]; then$@  if false; then@' "$1"
 }
 mut_DOCS_k8_presence_is_enough() {            # the empty tree as the base: every line is new
-  sed -i '/^gate_DOCS() {/,/^}/ s@-U1000000 "\$k8_b" HEAD@-U1000000 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD@' "$1"
+  sed -i '/^gate_DOCS() {/,/^}/ s@-U1000000 "\$k8_b" "\$k8_tip"@-U1000000 4b825dc642cb6eb9a060e54bf8d69288fbee4904 "$k8_tip"@' "$1"
 }
 mut_DOCS_k8_reads_deleted_lines() {           # world 8: a deleted `-## ` splits the block
   sed -i '/^gate_DOCS() {/,/^}/ s@t != " " && t != "+" { next }@t != " " \&\& t != "+" \&\& t != "-" { next }@' "$1"
@@ -948,6 +948,12 @@ mut_DOCS_k8_cite_no_left_boundary() {         # world 9: `revisita-<id>` cites t
 }
 mut_DOCS_k8_cite_no_right_boundary() {        # world 9: `<id>-extra` and `<id>s` cite the mission
   sed -i '/^gate_DOCS() {/,/^}/ s@ && substr(s, p + length(m), 1) !~ /\[A-Za-z0-9_-\]/@@' "$1"
+}
+mut_DOCS_k8_reads_head_off_branch() {         # the K8 head goes back to HEAD: a later branch is measured
+  sed -i '/^gate_DOCS() {/,/^}/ s@^    k8_tip="\$(mission_tip)"$@    k8_tip="$(git -C "$REPO_ROOT" rev-parse HEAD)"@' "$1"
+}
+mut_DOCS_k8_gone_branch_refused() {           # an empty mission tip falls back to HEAD instead of skipping
+  sed -i '/^gate_DOCS() {/,/^}/ s@^    \[ -z "\$k8_tip" \] || mapfile@    k8_tip="${k8_tip:-HEAD}"; mapfile@' "$1"
 }
 mut_DOCS_k8_cite_first_only() {               # world 10: the whole id after three longer ones is missed
   sed -i '/^gate_DOCS() {/,/^}/ s@while ((i@if ((i@' "$1"
@@ -7788,6 +7794,8 @@ CATALOG=(
   DOCS_k8_fence_blind
   DOCS_k8_cite_no_left_boundary
   DOCS_k8_cite_no_right_boundary
+  DOCS_k8_reads_head_off_branch
+  DOCS_k8_gone_branch_refused
   DOCS_k8_cite_first_only
   DOCS_k8_cite_unpadded
   DOCS_k8_key_ignored

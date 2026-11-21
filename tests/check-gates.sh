@@ -3343,6 +3343,47 @@ for k8_i in "${!K8_MW[@]}"; do
 done
 assert_eq "kaizen-log: no Markdown form of K8 in the checklist dispenses the entry without the key" \
   "13 13 -" "$k8_built $k8_docs ${k8_missed:--}"
+# The branch the mission declares, read from another branch (ADR 0024, decision 5). In the
+# warehouse_explorer_web the same mission read `✓` from master and `·` from a later branch with a
+# commit of its own: K8 measured HEAD, not the branch: of 00-missao.md. World A: the declared branch
+# has no entry and a later branch brings one — refused, naming the declared branch; its inverse
+# passes. World B: the declared branch already in the base, then gone, read from a later branch with
+# a commit of its own and no entry — an empty range, so it passes. Each world goes back to k8_start.
+k8_later() { # k8_later <builder> — missao/k8-later on the current commit, one commit of <builder>
+  git checkout -q -B missao/k8-later
+  "$@"
+  git add -A && git commit -qm "chore: a later branch"
+}
+k8_side() { printf 'later\n' > later.txt; }
+k8_entry() { k8_w11; }
+git reset -q --hard "$k8_start"
+k8_later k8_entry
+k8_a_ph="$(cd "$FIX" && "$SDD" phase "$MISSION" 2>&1)"
+k8_a_why="$(cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1)"
+k8_a_named=0
+grep -qF 'the mission branch (missao/k8-entry) adds no KAIZEN_LOG.md entry of its own' <<< "$k8_a_why" && k8_a_named=1
+git checkout -q missao/k8-entry
+k8_world k8_w11
+k8_later k8_side
+k8_a_inv="$(cd "$FIX" && "$SDD" phase "$MISSION" 2>&1)"
+assert_eq "K8 measures the branch the mission declares when HEAD is on another branch, and names it" \
+  "DOCS 1 PR" "$k8_a_ph $k8_a_named $k8_a_inv"
+git checkout -q missao/k8-entry
+git reset -q --hard "$k8_start"
+git checkout -q main
+git merge -q --ff-only missao/k8-entry
+git checkout -q missao/k8-entry
+k8_later k8_side
+k8_b_in="$(cd "$FIX" && "$SDD" phase "$MISSION" 2>&1)"
+git checkout -q main
+git reset -q --hard "$k8_start^"
+git branch -q -D missao/k8-entry
+git checkout -q missao/k8-later
+k8_b_gone="$(cd "$FIX" && "$SDD" phase "$MISSION" 2>&1)"
+assert_eq "K8 reads an empty range when the declared branch is gone or already in the base" \
+  "PR PR" "$k8_b_in $k8_b_gone"
+git checkout -q -b missao/k8-entry "$k8_start"
+git branch -q -D missao/k8-later
 git reset -q --hard "$k8_start"
 git checkout -q main
 git branch -q -D missao/k8-entry

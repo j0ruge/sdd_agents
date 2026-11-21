@@ -2404,19 +2404,26 @@ gate_DOCS() {
   # dies on an empty name; `.` and a byte >= 0x80 count as a boundary, exact because no id can hold
   # them. No base, or an empty range (HEAD on the base, merged, unrelated): today's answer, the
   # shape of mission_qa_report.
+  # The range ends at the head of the MISSION, never at HEAD (ADR 0024, decision 5): read from a later
+  # branch with a commit of its own, HEAD measured that branch, and the same mission read `✓` from the
+  # base and `·` from the later branch. mission_tip names the declared branch; when it names nothing
+  # (the branch is gone, locally and on origin) the range is empty and K8 passes, the shape of a
+  # declared branch already in the base. The reason names the branch it measured (HEAD with no branch:).
   if [ "$(frontmatter "$MISSION_DIR/00-missao.md" kaizen_log)" != skipped ]; then
     local k8_why; k8_why="$(k8_base_refusal)"; [ -z "$k8_why" ] || { GATE_WHY="$k8_why"; return 1; }
     local -a k8_nots=() k8_bases=()
-    local k8_c k8_b k8_patch
-    mapfile -t k8_nots < <(mission_base_refs)
+    local k8_c k8_b k8_patch k8_tip k8_name
+    k8_tip="$(mission_tip)"
+    k8_name="$(mission_branch_declared)"; k8_name="${k8_name:-HEAD}"
+    [ -z "$k8_tip" ] || mapfile -t k8_nots < <(mission_base_refs)
     for k8_c in ${k8_nots[@]+"${k8_nots[@]}"}; do
-      k8_b="$(git -C "$REPO_ROOT" merge-base HEAD "$k8_c" 2>/dev/null || true)"
+      k8_b="$(git -C "$REPO_ROOT" merge-base "$k8_tip" "$k8_c" 2>/dev/null || true)"
       [ -z "$k8_b" ] || k8_bases+=("$k8_b")
     done
     if [ "${#k8_bases[@]}" -gt 0 ] \
-        && [ -n "$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not "${k8_nots[@]}" 2>/dev/null || true)" ]; then
+        && [ -n "$(git -C "$REPO_ROOT" rev-list -n 1 "$k8_tip" --not "${k8_nots[@]}" 2>/dev/null || true)" ]; then
       for k8_b in "${k8_bases[@]}"; do
-        k8_patch="$(git -C "$REPO_ROOT" diff-tree -p --no-color --no-ext-diff -U1000000 "$k8_b" HEAD -- KAIZEN_LOG.md 2>/dev/null || true)"
+        k8_patch="$(git -C "$REPO_ROOT" diff-tree -p --no-color --no-ext-diff -U1000000 "$k8_b" "$k8_tip" -- KAIZEN_LOG.md 2>/dev/null || true)"
         if ! SDD_K8_MISSION="$(mission_id "$MISSION")" awk "$FENCE_AWK"'
           function cites_id(s, m,   p, i) {
             s = " " s
@@ -2434,7 +2441,7 @@ gate_DOCS() {
           t == "+" && hnew && cites_id(l, m) { found = 1 }
           END { exit !found }
         ' <<< "$k8_patch"; then
-          GATE_WHY="00-missao.md does not declare kaizen_log: skipped in its frontmatter (the K8 row of the checklist is prose and dispenses nothing) and the mission branch adds no KAIZEN_LOG.md entry of its own — a '## ' heading new in the branch whose block has a new line citing $MISSION as a whole id (a longer id that contains it does not count); write the entry, citing the mission, with the before and after the plan names, or declare kaizen_log: skipped with the human"
+          GATE_WHY="00-missao.md does not declare kaizen_log: skipped in its frontmatter (the K8 row of the checklist is prose and dispenses nothing) and the mission branch ($k8_name) adds no KAIZEN_LOG.md entry of its own — a '## ' heading new in the branch whose block has a new line citing $MISSION as a whole id (a longer id that contains it does not count); write the entry, citing the mission, with the before and after the plan names, or declare kaizen_log: skipped with the human"
           return 1
         fi
       done

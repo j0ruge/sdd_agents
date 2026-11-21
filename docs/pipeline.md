@@ -544,7 +544,11 @@ the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is 
 Unless the frontmatter of `00-missao.md` declares the literal `kaizen_log: skipped` (decided with the
 human in the grill; the K8 row of the checklist is prose and dispenses nothing), the mission branch
 must add an **entry** of its own: a `## ` block of `KAIZEN_LOG.md` whose heading and one line citing
-the mission's whole id are both new in the diff of each merge-base to HEAD. The base already cites
+the mission's whole id are both new in the diff of each merge-base to the head of the mission. That
+head is the branch `00-missao.md` declares, not the one you are on (ADR 0024, decision 5): read
+from a later branch, K8 still measures the declared branch, and the refusal names it
+(`the mission branch (<branch>) adds no …`); a declared branch that is gone, or already in the
+base, is an empty range. The base already cites
 every mission born of the kaizen loop, so a new citation in an old entry, a renamed heading, a
 heading inside a code fence, a longer id that contains the mission's and a reverted entry do not
 count. No base, or an empty range (the mission on the base, or merged), gives the answer of before.
