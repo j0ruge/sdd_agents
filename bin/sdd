@@ -6986,6 +6986,23 @@ cmd_preflight() {
         grant every directory it matches. Move the kit to a literal path. See kit_read_rules and ADR 0019 §1."
   fi
 
+  # --- the third-party skills the phases boot: the list, read by the probe and by the block below ---
+  # The subset of KIT_THIRD_PARTY_SKILLS this config boots headless (the planner's three are
+  # interactive); the full list is what `sdd health --release` line 2 asks an origin for. Each one in
+  # the FORM its phase invokes it by, which is where skill_findable looks (Codex r7 on PR #315):
+  # REVIEW invokes `/codereview:codereview` (agents/sdd-reviewer.md), the skill of the codereview
+  # plugin; TICKET invokes `/ticket` (agents/sdd-ticket.md) and the QA sub-steps `/qa-report` and
+  # `/qa-execution` (phase_slash), all three plain. That is a second spelling of what the hats and
+  # phase_slash write, and no comment makes it the same one: check-preflight.sh compares the list
+  # preflight prints with the invocations it reads off those files. KIT_THIRD_PARTY_SKILLS lists
+  # names, so the check below holds it to the part after the `:`.
+  local -a wanted=(codereview:codereview)   # REVIEW runs in every mission
+  [ "$JIRA_ENABLED" = "true" ] && wanted+=(ticket)
+  { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && wanted+=(qa-report qa-execution)
+  for sk in "${wanted[@]}"; do
+    case " $KIT_THIRD_PARTY_SKILLS " in *" ${sk#*:} "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
+  done
+
   # --- authentication + the hat's shell ---
   # Sanity, permission and the hat in one shot. "claude -p answers" does NOT cover the failure
   # mode that matters: the phase session has to EXECUTE (run the suite, commit); `acceptEdits`
@@ -7069,6 +7086,49 @@ cmd_preflight() {
       else
         _fail "the session's result line has no numeric total_cost_usd or num_turns — run_phase, sdd census,
         sdd close and the mission budget read them, and would go blind. Keys it got: $(jq -r 'keys | join(" ")' <<< "$probe_result" 2>/dev/null | head -c 300)"
+      fi
+    fi
+
+    # The hooks every phase loads, and the skills the harness loaded (L4 item 15). The same stream,
+    # paid already: the hook_response lines of the hooks every session runs (settings user, project
+    # and local, as a phase boots), and the init line's `.skills`, the harness's own answer about what
+    # it loaded — the directory search of the skills block below is a convention, this is the fact.
+    # Both read only over an init line, and the skills only when `.skills` is a list (the predicate
+    # is written positively): a stream with no init, or an init without the key, asserts nothing.
+    # A hook that exits non-zero warns and never fails: exit 2 is how a hook blocks, on purpose. The
+    # duration of each hook, and the hooks that do not fire in this session, are not measured.
+    # Sensor: tests/check-preflight.sh.
+    if [ -n "$probe_init" ]; then
+      local hk_rows hk_ev hk_n hk_codes hk_bytes hk_name hk_rc hk_out hk_err
+      hk_rows="$( jq -rs '[ .[] | select(.type == "system" and .subtype == "hook_response") ]
+          | group_by(.hook_event)[]
+          | [ (.[0].hook_event // "?"), (length | tostring), ([ .[].exit_code | tostring ] | join(" ")),
+              ([ .[].output // "" | utf8bytelength ] | add | tostring) ] | join("\t")' <<< "$probe_stream" 2>/dev/null )" || hk_rows=""
+      if [ -n "$hk_rows" ]; then
+        while IFS=$'\t' read -r hk_ev hk_n hk_codes hk_bytes; do
+          dim "  ---  hooks the probe session ran — $hk_ev: $hk_n hook(s), exit codes $hk_codes, $hk_bytes bytes into the context of every session"
+        done <<< "$hk_rows"
+      else
+        dim "  ---  the probe session ran no hook"
+      fi
+      hk_rows="$( jq -r 'select(.type == "system" and .subtype == "hook_response")
+          | select(.exit_code != 0 or .outcome != "success")
+          | [ (.hook_name // .hook_event // "?"), (.exit_code | tostring), (.outcome // "?" | tostring),
+              ((.stderr // "") | tostring | split("\n")[0]) ] | join("\t")' <<< "$probe_stream" 2>/dev/null )" || hk_rows=""
+      if [ -n "$hk_rows" ]; then
+        while IFS=$'\t' read -r hk_name hk_rc hk_out hk_err; do
+          warn "hook $hk_name exited $hk_rc ($hk_out) in the probe session, and every phase loads it: ${hk_err:-(no stderr)}"
+        done <<< "$hk_rows"
+      fi
+      if jq -e '(.skills | type) == "array"' <<< "$probe_init" >/dev/null 2>&1; then
+        local sk_init sk_phase
+        for sk_init in "${wanted[@]}"; do
+          jq -e --arg s "$sk_init" '.skills | index($s) != null' <<< "$probe_init" >/dev/null 2>&1 && continue
+          case "$sk_init" in codereview:*) sk_phase=REVIEW ;; ticket) sk_phase=TICKET ;; *) sk_phase=QA ;; esac
+          _fail "skill $sk_init, which the $sk_phase phase invokes, is not in the skills list of the probe session's
+        init line: the harness did not load it, and the phase will boot without it. Install it (or the plugin
+        that carries it) where the harness loads skills from."
+        done
       fi
     fi
 
@@ -7354,21 +7414,8 @@ cmd_preflight() {
   # pipeline will not use is how an operator learns to skip reading warnings.
   local sk skills_root missing_skills=""
   skills_root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
-  # The subset of KIT_THIRD_PARTY_SKILLS this config boots headless (the planner's three are
-  # interactive); the full list is what `sdd health --release` line 2 asks an origin for. Each one in
-  # the FORM its phase invokes it by, which is where skill_findable looks (Codex r7 on PR #315):
-  # REVIEW invokes `/codereview:codereview` (agents/sdd-reviewer.md), the skill of the codereview
-  # plugin; TICKET invokes `/ticket` (agents/sdd-ticket.md) and the QA sub-steps `/qa-report` and
-  # `/qa-execution` (phase_slash), all three plain. That is a second spelling of what the hats and
-  # phase_slash write, and no comment makes it the same one: check-preflight.sh compares the list
-  # preflight prints with the invocations it reads off those files. KIT_THIRD_PARTY_SKILLS lists
-  # names, so the check below holds it to the part after the `:`.
-  local -a wanted=(codereview:codereview)   # REVIEW runs in every mission
-  [ "$JIRA_ENABLED" = "true" ] && wanted+=(ticket)
-  { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && wanted+=(qa-report qa-execution)
-  for sk in "${wanted[@]}"; do
-    case " $KIT_THIRD_PARTY_SKILLS " in *" ${sk#*:} "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
-  done
+  # `wanted` is defined above the Bash probe, one definition for the probe's init line and for this
+  # block (L4 item 15).
   # A skill found is not a skill the phases can READ: its references live outside the repo, and the
   # session gets only kit_read_rules' rules (ADR 0019 §2). The harness checks the path asked for AND
   # the resolved one, so the directory found and its `readlink -f` must both be covered; a skill

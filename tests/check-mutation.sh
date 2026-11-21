@@ -2984,6 +2984,20 @@ mut_PRE_bash_probe_any_tool_result() {
 mut_PRE_bash_probe_tool_list_blind() {
   sed -i '/^cmd_preflight() {/,/^}/ s|executes commands (a Bash tool_result carried the marker; no init line, so the tool list was not read)|executes commands (OAuth + Bash in the tool list + permission)|' "$1"
 }
+# L4 item 15: the hooks and the skills the probe session's init line carries.
+mut_PRE_hooks_unlisted() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          dim "  ---  hooks the probe session ran — |          : "  ---  hooks the probe session ran — |' "$1"
+}
+mut_PRE_hook_failure_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s/| select(.exit_code != 0 or .outcome != "success")$/| select(false)/' "$1"
+}
+mut_PRE_skill_absent_from_init_warned() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "skill \$sk_init, which the|          warn "skill $sk_init, which the|' "$1"
+}
+mut_PRE_skill_init_blind() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^      if jq -e '"'"'(.skills \| type) == "array"'"'"' <<< "\$probe_init" >/dev/null 2>&1; then$|      if true; then|' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    if \[ -n "\$probe_init" \]; then$|    if true; then|' "$1"
+}
 mut_PRE_template_outcome_default_green() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
 }
@@ -8148,6 +8162,10 @@ CATALOG=(
   PRE_bash_probe_reads_answer
   PRE_bash_probe_any_tool_result
   PRE_bash_probe_tool_list_blind
+  PRE_hooks_unlisted
+  PRE_hook_failure_silent
+  PRE_skill_absent_from_init_warned
+  PRE_skill_init_blind
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent

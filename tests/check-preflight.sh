@@ -385,6 +385,55 @@ assert_eq "preflight claims Bash in the tool list only over an init line" \
   "noinit:ok=1,list=0 init:ok=1,list=1" \
   "noinit:ok=$(grep -cF -- "$BP_OK" <<< "$out_bp_noinit"),list=$(grep -cF 'Bash in the tool list' <<< "$out_bp_noinit") init:ok=$(grep -cF -- "$BP_OK" <<< "$out_hat_ok"),list=$(grep -cF 'Bash in the tool list' <<< "$out_hat_ok")"
 
+# --- the hooks every phase loads, and the skills the harness loaded (L4 item 15) ---
+# The same probe stream carries the hook_response lines of the hooks every session runs, and the
+# `.skills` list of the init line, which is the harness's answer about what it loaded — not the
+# directory convention skill_findable reads. PROVENANCE: the keys and values are those of the real
+# stream captured at PLAN, 2026-11-21, Claude Code 2.1.327, mission
+# 20261121-l4-preflight-health-e-sensores (its 01-plano.md, the section on the hooks of that stream: three
+# SessionStart hooks named SessionStart:startup, exit_code 0, outcome success, 3604, 0 and 0 bytes
+# of output). The stream itself is not in the repository (it carries the owner's paths). The output
+# strings are built with jq to the measured lengths; the failing hook is DERIVED from the green one.
+hook_line() { # <id> <bytes> → one hook_response line of the captured shape
+  jq -cn --arg id "$1" --argjson n "$2" '{type:"system",subtype:"hook_response",hook_id:$id,
+    hook_name:"SessionStart:startup",hook_event:"SessionStart",output:("x" * $n // ""),stdout:("x" * $n // ""),
+    stderr:"",exit_code:0,outcome:"success",uuid:("u-" + $id),session_id:"s"}'
+}
+{ hook_line h1 3604; hook_line h2 0; hook_line h3 0; } > "$FIX/.stub/hooks-green.jsonl"
+{ hook_line h1 3604
+  hook_line h2 0 | jq -c '.exit_code = 2 | .outcome = "error" | .stderr = "hook-boom: no such file\nsecond line"'
+  hook_line h3 0; } > "$FIX/.stub/hooks-one-red.jsonl"
+jq -c '.skills -= ["codereview:codereview"]' "$FIX/.stub/init-with-bash.jsonl" > "$FIX/.stub/init-no-review.jsonl"
+jq -c 'del(.skills)' "$FIX/.stub/init-with-bash.jsonl" > "$FIX/.stub/init-no-skills-key.jsonl"
+hk_world() { # <init file or -> <hooks file> → the preflight output over that stream
+  local init="$1"; [ "$init" = - ] && init=/dev/null
+  cat "$2" "$FIX/.stub/result-ok.jsonl" > "$FIX/.stub/hk-stream.jsonl"
+  printf '#!/bin/sh\ncat "%s" "%s"\n' "$init" "$FIX/.stub/hk-stream.jsonl" > "$FIX/.stub/claude"
+  "$SDD" preflight 2>&1
+}
+fails_of() { local l; l="$(grep -oE '[0-9]+ check\(s\) failed' <<< "$1" | tail -1)"; printf '%s' "${l%% *}"; }
+HK_LINE="SessionStart: 3 hook(s), exit codes 0 0 0, 3604 bytes into the context of every session"
+HK_ANY="hook(s), exit codes"
+HK_WARN="warn  hook SessionStart:startup"
+SK_FAIL="fail  skill codereview:codereview, which the REVIEW phase invokes, is not in the skills list"
+out_hk_green="$(hk_world "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/hooks-green.jsonl")"
+out_hk_red="$(hk_world "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/hooks-one-red.jsonl")"
+out_sk_noreview="$(hk_world "$FIX/.stub/init-no-review.jsonl" "$FIX/.stub/hooks-green.jsonl")"
+out_sk_nokey="$(hk_world "$FIX/.stub/init-no-skills-key.jsonl" "$FIX/.stub/hooks-green.jsonl")"
+out_hk_noinit="$(hk_world - "$FIX/.stub/hooks-green.jsonl")"
+assert_eq "preflight lists the hooks the probe session ran, one line per event, with the count, the exit codes and the bytes" \
+  "green:line=1,any=1 none:any=0,saw-none=1" \
+  "green:line=$(grep -cF -- "$HK_LINE" <<< "$out_hk_green"),any=$(grep -cF -- "$HK_ANY" <<< "$out_hk_green") none:any=$(grep -cF -- "$HK_ANY" <<< "$out_hat_ok"),saw-none=$(grep -cF 'the probe session ran no hook' <<< "$out_hat_ok")"
+assert_eq "preflight warns by name about a hook that exits non-zero or does not report success, and only about it" \
+  "green:warn=0 red:warn=1,stderr=1,codes=1" \
+  "green:warn=$(grep -cF -- "$HK_WARN" <<< "$out_hk_green") red:warn=$(grep -cF -- "$HK_WARN" <<< "$out_hk_red"),stderr=$(grep -cF 'hook-boom: no such file' <<< "$out_hk_red"),codes=$(grep -cF 'exit codes 0 2 0' <<< "$out_hk_red")"
+assert_eq "preflight fails a skill a phase will invoke when the init line of the probe does not list it" \
+  "listed:fail=0 absent:fail=1,more=1" \
+  "listed:fail=$(grep -cF -- "$SK_FAIL" <<< "$out_hk_green") absent:fail=$(grep -cF -- "$SK_FAIL" <<< "$out_sk_noreview"),more=$(( $(fails_of "$out_sk_noreview") - $(fails_of "$out_hk_green") ))"
+assert_eq "preflight says nothing about hooks or the skills list without an init line" \
+  "noinit:hooks=0,saw-none=0,skill=0 nokey:skill=0" \
+  "noinit:hooks=$(grep -cF -- "$HK_ANY" <<< "$out_hk_noinit"),saw-none=$(grep -cF 'the probe session ran no hook' <<< "$out_hk_noinit"),skill=$(grep -cF 'is not in the skills list' <<< "$out_hk_noinit") nokey:skill=$(grep -cF 'is not in the skills list' <<< "$out_sk_nokey")"
+
 # Stub B: no Bash when asked AS THE HAT, Bash otherwise — the harness of 2026-09-06.
 cat > "$FIX/.stub/claude" <<STUB
 #!/bin/sh
