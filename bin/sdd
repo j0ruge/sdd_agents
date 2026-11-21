@@ -13090,7 +13090,10 @@ review_delta_prompt() {
 # loop read nothing and passed a round the gate could not read — fail closed, never open.
 # The range is listed with core.quotePath=false, the spelling of hat_diff_names (r3 of l1b): with
 # the default, a non-ASCII name inside the reviewer's writes: came back quoted with octal escapes,
-# matched no glob, and the gate refused a round the hat guard had accepted.
+# matched no glob, and the gate refused a round the hat guard had accepted. Declared limit (r4 of
+# l1b): a name git still quotes under core.quotePath=false (a control byte, a double quote or a
+# backslash in it) comes back between quotes, matches no glob and refuses the round, the fail-safe
+# side; pr-ready in bin/sdd-worker declares the same limit.
 review_head_ok() {
   local round="$1" name v sha="" short rc_commit p globs changed=""
   frontmatter_has "$round" reviewed_head || return 0
