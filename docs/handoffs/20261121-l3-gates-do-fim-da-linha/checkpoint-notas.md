@@ -51,3 +51,4 @@
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
 - 2026-11-21 04:36 · `EXEC` · I1 em `83b2b3e`: RUN_test_cmd_not_run_reads_red caught by check-gates.sh; desvio do plano: sem linha em inglês no log (o shell traduz o strerror sob pt-BR, medido nesta máquina) o motivo cita a última linha não vazia do log, e o probe roda com LC_ALL=C; duas referências cruzadas a `docs/pipeline.md:N` no TODO.md corrigidas à mão (1150→1161, 486→497)
+- 2026-11-21 05:32 · `EXEC` · I2 em `c42fa76`: RUN_pr_blocked_not_armed e RUN_review_blocked_not_armed caught by check-autonomy.sh; o reset do marcador no gate_REVIEW é a 1ª linha da função (o plano o punha depois de resolver a rodada, e a rodada ausente não o zeraria); o par de autonomia força a fase com --phase e sobe o REVIEW_MAX_ITER só para o par; dez referências cruzadas do TODO.md corrigidas à mão (o remap.py as lista como NOT-REWRITTEN)
