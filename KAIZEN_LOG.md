@@ -30,6 +30,11 @@ da r1).
   `docs/plan-only.md`, fechado na DOCS; `--count` → **105**, todas as âncoras no alvo (os 7 a mais
   são achados que a corrida registrou; a catraca desce no chore de depois do merge).
 
+**No merge da branch** (`6198b68`, medido em 2026-11-21), os dois números andaram depois da DOCS:
+- `PROBE_FLOOR=450`: o `00b8fad` somou os 3 probes do `--only` que o CodeRabbit pediu no #456;
+- `--count` → **106**: o merge `4b60b47` trouxe da `main` o item do #455, e o delta da própria
+  branch segue +7 (99 no merge-base de então, `daf51f9`, para 106).
+
 **A corrida, lado a lado** (ledger `~/.sdd/autonomy-log.jsonl`, linhas `session`, somadas com `jq` e
 `LC_ALL=C awk`; os números do L1 e do worker foram reconferidos no mesmo ledger e batem com o
 `00-missao.md`):
