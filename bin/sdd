@@ -1003,9 +1003,14 @@ run_check_cmd() {
 # no_work_check ignores a reason that cites one (gate_why_cites_log), so a stable reason is what
 # lets the second lap over the same tree stop as no-work before it buys a session. The owner of what
 # the reason asks for is the human, whose tree it is; the gate asks no new artifact of anyone.
-# Returns 0 when it wrote the did-not-run reason, 1 when it wrote the reason of a red suite.
+# A TEST_CMD that STARTED and then hit a missing command exits 127 too (`true; no_such_cmd`), and
+# "never started" would be false about it (finding #1 of r1 of L3): a log with more than one
+# non-empty line printed something before the shell's own message, and gets a sentence of its own,
+# as stable as the other. One line is the shell's message alone, in any locale.
+# Returns 0 when it wrote one of the two could-not-start reasons, 1 when it wrote the reason of a
+# red suite.
 test_cmd_red_why() {
-  local line=""
+  local line="" printed=""
   case "$LAST_CHECK_RC" in
     126|127)
       line="$(grep -E 'No such file or directory|not found|Permission denied' "$LAST_CHECK_LOG" 2>/dev/null | tail -n 1 | cut -b 1-200)" || true
@@ -1013,6 +1018,11 @@ test_cmd_red_why() {
       # where the line is no longer English), so a log with no English line still gives its last
       # non-empty line, which is the shell's own message.
       [ -n "$line" ] || line="$(grep -v '^[[:space:]]*$' "$LAST_CHECK_LOG" 2>/dev/null | tail -n 1 | cut -b 1-200)" || true
+      printed="$(grep -c -v '^[[:space:]]*$' "$LAST_CHECK_LOG" 2>/dev/null)" || true
+      if [ "${printed:-0}" -gt 1 ]; then
+        GATE_WHY="TEST_CMD stopped on a command it could not start (rc $LAST_CHECK_RC${line:+: $line}) after it printed output — the suite started, so read its log for how far it got; this tree misses what that command names (a worktree is born without ignored paths such as .venv or node_modules)"
+        return 0
+      fi
       GATE_WHY="TEST_CMD did not run (rc $LAST_CHECK_RC${line:+: $line}) — the suite never started, so this is not a red suite; this tree misses what the command names (a worktree is born without ignored paths such as .venv or node_modules)"
       return 0 ;;
   esac
@@ -13396,9 +13406,12 @@ review_head_ok() {
 # touches outside `hat_writes REVIEW` and `hat_writes DOCS` refuses, naming the path and the commit.
 # The owner of the artifact the refusal asks for is sdd-reviewer, who writes the next round — a delta
 # from this round's reviewed_head (ADR 0023). rc 0 with no reviewed_head (the older rounds; a wrong
-# one was refused by review_head_ok just above), with no commit that adds the round (the dirty-tree
-# refusal below covers it), and with an empty list (the merged mission, and the one that did not
-# move). No --no-merges: diff-tree without -m prints no path for a merge commit (git 2.43.0), and
+# one was refused by review_head_ok just above), with no commit that adds the round, and with an
+# empty list (the merged mission, and the one that did not move). No adding commit is two worlds: an
+# uncommitted round, which the dirty-tree check of gate_REVIEW refuses after the suite; and a round
+# that came in through a merge, which `git log` without -m lists no path for — its later code is not
+# read, a declared limit (finding #3 of r1 of L3): the reviewer commits its round on the mission
+# branch, and no hat of the kit brings one in by a merge. No --no-merges: diff-tree without -m prints no path for a merge commit (git 2.43.0), and
 # what a merge of the base brought is outside the range through the --not. A rev-list or a
 # diff-tree that fails refuses (fail closed).
 # Declared limits (ADR 0024): the DOCS writes: is admitted whole — it is wider than docs, and

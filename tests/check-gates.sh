@@ -390,6 +390,18 @@ else
     "127: $nr127 ‖ 126: $nr126"
 fi
 assert_phase "TEST_CMD put back after the did-not-run worlds hands the mission back to QA" "QA"
+# A TEST_CMD that STARTED and then hit a missing command also exits 127 (`bash -c 'true; x'`), and
+# "the suite never started" would be false about it (finding #1 of r1). The reason still cites no
+# .log, so no_work_check can stop the second lap over the same tree.
+nr127s="$(norun_why 'echo the suite started; sdd_r1_no_such_command' EXEC)"
+if grep -qF 'rc 127: ' <<< "$nr127s" && grep -qF 'after it printed output' <<< "$nr127s" \
+   && ! grep -qF 'never started' <<< "$nr127s" && ! grep -qF 'TEST_CMD failed' <<< "$nr127s" \
+   && ! grep -qF '.log' <<< "$nr127s"; then
+  pass "gate_EXEC does not say the suite never started for a TEST_CMD that printed output before it exited 127"
+else
+  fail "gate_EXEC does not say the suite never started for a TEST_CMD that printed output before it exited 127" \
+    "rc 127, 'after it printed output', no 'never started', no 'TEST_CMD failed', no .log" "$nr127s"
+fi
 
 # Jidoka: a `blocked` increment escalates ON THE SPOT, without burning a session.
 # `sdd run` decides that before invoking claude, so this test spends no tokens.
@@ -3991,6 +4003,14 @@ prv_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\nverified_head: %s\n---\n# PR\n' "$PRV_AFTER" > "$MDIR/50-pr.md"
 git add -A && git commit -qm "chore: 50-pr.md verified after the code" >/dev/null
 prv_phase2="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+# The same world with HANDOFF_DIR written with a trailing slash (finding #2 of r1): the prefix of the
+# mission folder carried `//`, the commit of 50-pr.md read as outside it, and the publisher rewrote
+# verified_head on every lap.
+sed -i 's|^HANDOFF_DIR="docs/handoffs"$|HANDOFF_DIR="docs/handoffs/"|' "$FIX/.sdd/config.sh"
+prv_slash_cfg="$(grep -c '^HANDOFF_DIR="docs/handoffs/"$' "$FIX/.sdd/config.sh" || true)"
+prv_phase3="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+prv_why3="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+sed -i 's|^HANDOFF_DIR="docs/handoffs/"$|HANDOFF_DIR="docs/handoffs"|' "$FIX/.sdd/config.sh"
 cp "$SDD_STATE_FIX/50-pr-before-verified.md" "$MDIR/50-pr.md"
 rm -f "$FIX/later-code.txt"
 git add -A && git commit -qm "chore: 50-pr.md without verified_head again" >/dev/null
@@ -3999,6 +4019,8 @@ if [ "$prv_phase" = PR ] && grep -qF "later-code.txt changed between verified_he
   pass "gate_PR refuses a verified_head that does not cover the head, and passes when only the mission folder changed after it"
 else fail "gate_PR refuses a verified_head that does not cover the head, and passes when only the mission folder changed after it" \
   "PR naming later-code.txt and ${PRV_BEFORE:0:7}, then DONE" "$prv_phase — $prv_why — then $prv_phase2"; fi
+assert_eq "gate_PR admits a later commit in the mission folder when HANDOFF_DIR ends in a slash" \
+  "1|DONE" "$prv_slash_cfg|$prv_phase3$( [ "$prv_phase3" = DONE ] || printf ' — %s' "$prv_why3" )"
 # No verified_head passes (the records older than the key); a MERGED PR is not compared at all.
 prn_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 printf 'MERGED\n' > "$FIX/.sdd/logs/pr-state"

@@ -596,10 +596,12 @@ check pr-body.md '^\*\*Sensores novos\*\* \(<rodam no CI a partir deste PR \| ro
 # of the handoffs (gate_PR counts them), for a question of the plan a later handoff answered (ticked,
 # with the answer), and for the `sdd preflight` line of a TEST_CMD that cites a runner variable. Three
 # literals on three different lines, and check() reads one regex: so this one is written by hand.
+# The third is the sentence of the "Como verificar" comment, never the bare command: another section
+# that cites `sdd preflight` would leave that rule with no probe (finding #5 of r1 of L3).
 CHECKS_RUN=$((CHECKS_RUN + 1))
 if grep -qF -- '- kit: <a linha completa do handoff>' "$T/pr-body.md" \
    && grep -qF -- '- [x] <pendência do plano já respondida> — <a resposta em uma linha>' "$T/pr-body.md" \
-   && grep -qF 'sdd preflight' "$T/pr-body.md"; then
+   && grep -qF 'a linha do gate é `sdd preflight`' "$T/pr-body.md"; then
   pass "pr-body.md: the body has a place for the kit lines, the answered question and the preflight line"
 else
   printf '  FAIL pr-body.md: missing the place for the kit lines, the answered question or the preflight line\n' >&2

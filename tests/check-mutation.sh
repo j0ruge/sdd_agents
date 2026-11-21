@@ -2483,6 +2483,11 @@ mut_PR_kit_lines_uncounted() {
 mut_PR_kit_lines_counted_in_quote() {
   sed -i '/^mission_kit_lines() {$/,/^}$/ s|^    /\^\[ \\t\]\*- kit:/ { n++ }$|    /^[ \\t>]*- kit:/ { n++ }|' "$1"
 }
+# The other half of "counts none in a quote or a fence" (finding #4 of r1 of L3): without the fence
+# rule a `- kit:` line inside a code block of a handoff owes the body a line nobody wrote.
+mut_PR_kit_lines_counted_in_fence() {
+  sed -i '/^mission_kit_lines() {$/,/^}$/ { /^    fence { next }$/d }' "$1"
+}
 
 # Door 1 of the app-down escalation, and the sibling of RUN_blocked_not_escalated above in every
 # respect: same range, same neutralisation, and the line substituted is textually distinct so
@@ -7988,6 +7993,7 @@ CATALOG=(
   PR_head_unreadable_passes
   PR_kit_lines_uncounted
   PR_kit_lines_counted_in_quote
+  PR_kit_lines_counted_in_fence
   REVIEW_later_code_unread
   REVIEW_later_docs_writes_counted
   REVIEW_later_merged_mission_refused
