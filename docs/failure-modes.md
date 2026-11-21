@@ -1075,8 +1075,9 @@ on. A commit pushed after the verification, outside the mission folder, leaves t
 nobody verified.
 
 **What you do:** a head that differs is a `git push` away. A stale `verified_head:` is the
-publisher's next lap: it runs step 2 again on the head and rewrites the sha. A merged PR is not
-compared.
+publisher's next lap: it runs step 2 again on the head and rewrites the sha. The value is a hex sha,
+never a ref: `HEAD` or a branch name would resolve to the head itself and is refused as no commit
+sha. A merged PR is not compared.
 
 ---
 

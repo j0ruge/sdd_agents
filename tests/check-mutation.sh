@@ -2471,8 +2471,35 @@ mut_PR_head_unread() {
 mut_PR_verified_head_unchecked() {
   sed -i '/^gate_PR() {$/,/^}$/ s|^    if \[ -n "\$tip" \] \&\& frontmatter_has "\$p" verified_head; then$|    if false; then|' "$1"
 }
+# The head guard ALONE (CodeRabbit 4654284475 on PR #458): the range ends at the locals of the body
+# block, so the second `!= MERGED` — the body's, which PR_merged_rechecked owns — is left as it is,
+# and no body assertion can kill this mutant for the head's sake.
 mut_PR_merged_head_read() {
-  sed -i '/^gate_PR() {$/,/^}$/ s|^  if \[ "\$pr_live_state" != MERGED \]; then$|  if true; then|' "$1"
+  sed -i '/^gate_PR() {$/,/^  local docs=() kit_n=0 kit_k=0 blocked_body$/ s|^  if \[ "\$pr_live_state" != MERGED \]; then$|  if true; then|' "$1"
+}
+# CodeRabbit on PR #458, three rules of the verified_head: check. 4654284456: a ref that moves
+# (`HEAD`) is resolved again, and the range from the head to the head passes. 4654284461: rename
+# detection comes back, and a file moved into the mission folder hides the path it left.
+# 4654284463: the prefix reads the mission argument raw, and `/<mission>` refuses the publisher's
+# own commit.
+mut_PR_verified_head_ref_admitted() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^      if \[\[ "\$vh" =~ \^\[0-9a-f\]{7,64}\$ \]\]; then$|      if true; then|' "$1"
+}
+mut_PR_verified_head_renames_hidden() {
+  sed -i '/^gate_PR() {$/,/^}$/ s| diff --no-renames --name-only "\$vc" "\$tip"| diff --name-only "$vc" "$tip"|' "$1"
+}
+mut_PR_verified_head_mission_arg_raw() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^      mdir_rel="\$HANDOFF_DIR/\$(mission_id "\$MISSION")/"$|      mdir_rel="$HANDOFF_DIR/$MISSION/"|' "$1"
+}
+# CodeRabbit on PR #458, the body block. 4654284464: the state line of the body read is no longer
+# read, and a PR that merged between the two calls is refused for a body nobody edits any more.
+# 4654284466: the body is counted with no fence rule, and an example in a code block pays for a
+# finding the body dropped.
+mut_PR_body_merged_state_ignored() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^      if \[ "\$body_state" != MERGED \]; then$|      if true; then|' "$1"
+}
+mut_PR_body_kit_lines_counted_in_fence() {
+  sed -i '/^gate_PR() {$/,/^}$/ { /^            fence { next }$/d }' "$1"
 }
 # Item 4 of 20261121-l3-gates-do-fim-da-linha (ADR 0024, decision 4): code committed after the round
 # reopens REVIEW. Three mutants, one per rule of review_later_code_ok: the function passes every
@@ -2496,7 +2523,7 @@ mut_PR_head_unreadable_passes() {
 # comparison a body that dropped a finding about the kit merges and the finding is lost; with a quote
 # counted, the template's own example (`> - kit:`) would owe the body a phantom line.
 mut_PR_kit_lines_uncounted() {
-  sed -i '/^gate_PR() {$/,/^}$/ s|^        if \[ "\${kit_k:-0}" -lt "\$kit_n" \]; then$|        if false; then|' "$1"
+  sed -i '/^gate_PR() {$/,/^}$/ s|^          if \[ "\${kit_k:-0}" -lt "\$kit_n" \]; then$|          if false; then|' "$1"
 }
 mut_PR_kit_lines_counted_in_quote() {
   sed -i '/^mission_kit_lines() {$/,/^}$/ s|^    /\^\[ \\t\]\*- kit:/ { n++ }$|    /^[ \\t>]*- kit:/ { n++ }|' "$1"
@@ -8016,6 +8043,11 @@ CATALOG=(
   PR_kit_lines_uncounted
   PR_kit_lines_counted_in_quote
   PR_kit_lines_counted_in_fence
+  PR_verified_head_ref_admitted
+  PR_verified_head_renames_hidden
+  PR_verified_head_mission_arg_raw
+  PR_body_merged_state_ignored
+  PR_body_kit_lines_counted_in_fence
   REVIEW_later_code_unread
   REVIEW_later_docs_writes_counted
   REVIEW_later_merged_mission_refused

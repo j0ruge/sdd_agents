@@ -2889,24 +2889,37 @@ gate_PR() {
     fi
     # verified_head: absent passes, as the records older than the key do. Present, it is a commit
     # the head carries with nothing outside the mission folder after it; a diff git could not list
-    # refuses (fail closed), as rule 4 of review_head_ok does.
+    # refuses (fail closed), as rule 4 of review_head_ok does. The value is a hex sha before git
+    # resolves it, the rule review_head_ok applies to reviewed_head: — a ref that moves (`HEAD`, the
+    # branch name) resolves to the head itself, and the range from the head to the head is empty
+    # whatever was pushed after the checks (CodeRabbit 4654284456 on PR #458).
     if [ -n "$tip" ] && frontmatter_has "$p" verified_head; then
       vh="$(frontmatter "$p" verified_head)"
-      vc="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "$vh^{commit}" 2>/dev/null || true)"
+      vc=""
+      if [[ "$vh" =~ ^[0-9a-f]{7,64}$ ]]; then
+        vc="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "$vh^{commit}" 2>/dev/null || true)"
+      fi
       if [ -z "$vc" ]; then
-        GATE_WHY="50-pr.md has verified_head '$vh', which is no commit of this repository — run the checks of step 2 again on the head and write the new sha"
+        GATE_WHY="50-pr.md has verified_head '$vh', which is no commit sha of this repository (a hex sha, never a ref) — run the checks of step 2 again on the head and write the new sha"
         return 1
       fi
       if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$vc" "$tip" 2>/dev/null; then
         GATE_WHY="50-pr.md has verified_head ${vc:0:7}, which the head ${tip:0:7} does not carry — run the checks of step 2 again on the head and write the new sha"
         return 1
       fi
-      changed="$(git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$vc" "$tip" 2>/dev/null)" || diff_rc=$?
+      # --no-renames: with rename detection on (the porcelain default), a tracked file moved
+      # unchanged into the mission folder lists only its destination, and the path it left outside
+      # the folder went unread (CodeRabbit 4654284461 on PR #458). Each side of a move is listed, so
+      # a move wholly inside the folder still passes.
+      changed="$(git -C "$REPO_ROOT" -c core.quotePath=false diff --no-renames --name-only "$vc" "$tip" 2>/dev/null)" || diff_rc=$?
       if [ "$diff_rc" -ne 0 ]; then
         GATE_WHY="50-pr.md: git could not list what changed between verified_head ${vc:0:7} and the head ${tip:0:7} (rc $diff_rc) — the gate refuses what it cannot read"
         return 1
       fi
-      mdir_rel="$HANDOFF_DIR/$MISSION/"
+      # The id without its slashes (mission_id): `/<mission>`, which the CLI accepts, kept `//` in
+      # the prefix, git prints single slashes, and the publisher's own 50-pr.md read as outside the
+      # folder on every lap (CodeRabbit 4654284463 on PR #458).
+      mdir_rel="$HANDOFF_DIR/$(mission_id "$MISSION")/"
       # The prefix is anchored (index() == 1, a literal, never a regex): a path that only CONTAINS
       # the mission folder further in is still outside it.
       outside="$(awk -v pre="$mdir_rel" 'NF && index($0, pre) != 1 { print; exit }' <<< "$changed")"
@@ -2932,7 +2945,7 @@ gate_PR() {
   # look for. A MERGED PR is not read: the check is for the window before the merge, and a body
   # edited afterwards would derive a finished mission back to PR and buy a publisher session on it —
   # the reason mission_qa_report keeps its empty-range answer.
-  local docs_file="$MISSION_DIR/45-docs.md" rows="" row doc body="" body_rc=0 carried_missing=""
+  local docs_file="$MISSION_DIR/45-docs.md" rows="" row doc body="" body_rc=0 body_state="" carried_missing=""
   local docs=() kit_n=0 kit_k=0 blocked_body
   if [ "$pr_live_state" != MERGED ]; then
     if [ -f "$docs_file" ]; then
@@ -2953,21 +2966,35 @@ gate_PR() {
         GATE_WHY="gh could not read the body of PR $live (rc $body_rc) — the ⛔ rows and the kit: lines are not checked; run 'gh pr view $url --json body'"
         return 1
       fi
-      # The first line is the state, which the first gh call already read; what is left is the body.
+      # The first line is the state, read AGAIN: a PR merged between the two gh calls answers
+      # MERGED here, and that is a finished mission — the ⛔ and kit: checks are for the window
+      # before the merge (above), and the stamp below still runs (CodeRabbit 4654284464 on PR #458).
+      # What is left is the body.
+      body_state="${body%%$'\n'*}"
       case "$body" in *$'\n'*) body="${body#*$'\n'}" ;; *) body="" ;; esac
-      blocked_body="$(grep -F '⛔' <<< "$body" || true)"
-      for doc in ${docs[@]+"${docs[@]}"}; do
-        grep -qF -- "$doc" <<< "$blocked_body" || carried_missing+="${carried_missing:+, }$doc"
-      done
-      if [ -n "$carried_missing" ]; then
-        GATE_WHY="PR $live does not carry the ⛔ proposal(s) of 45-docs.md: $carried_missing — the human applies them from the PR's decisions; edit its body ('gh api -X PATCH repos/{owner}/{repo}/pulls/${live##*/} -F body=@<file>'), never open a second PR"
-        return 1
-      fi
-      if [ "$kit_n" -gt 0 ]; then
-        kit_k="$(grep -cE '^[[:space:]]*- (\[[ xX]\] )?kit:' <<< "$body" || true)"
-        if [ "${kit_k:-0}" -lt "$kit_n" ]; then
-          GATE_WHY="PR $live carries ${kit_k:-0} of the $kit_n kit: line(s) of the handoffs — a finding about the kit travels in the PR body or is lost; copy each line whole and edit the body ('gh api -X PATCH repos/{owner}/{repo}/pulls/${live##*/} -F body=@<file>')"
+      if [ "$body_state" != MERGED ]; then
+        blocked_body="$(grep -F '⛔' <<< "$body" || true)"
+        for doc in ${docs[@]+"${docs[@]}"}; do
+          grep -qF -- "$doc" <<< "$blocked_body" || carried_missing+="${carried_missing:+, }$doc"
+        done
+        if [ -n "$carried_missing" ]; then
+          GATE_WHY="PR $live does not carry the ⛔ proposal(s) of 45-docs.md: $carried_missing — the human applies them from the PR's decisions; edit its body ('gh api -X PATCH repos/{owner}/{repo}/pulls/${live##*/} -F body=@<file>'), never open a second PR"
           return 1
+        fi
+        if [ "$kit_n" -gt 0 ]; then
+          # Outside any fence, by the rule mission_kit_lines counts the handoffs with: a `- kit:`
+          # example in a code block of the body paid for a real finding the body dropped
+          # (CodeRabbit 4654284466 on PR #458).
+          kit_k="$(awk "$FENCE_AWK"'
+            { fence_line($0) }
+            fence { next }
+            /^[ \t]*- (\[[ xX]\] )?kit:/ { n++ }
+            END { print n + 0 }
+          ' <<< "$body" || true)"
+          if [ "${kit_k:-0}" -lt "$kit_n" ]; then
+            GATE_WHY="PR $live carries ${kit_k:-0} of the $kit_n kit: line(s) of the handoffs — a finding about the kit travels in the PR body or is lost; copy each line whole and edit the body ('gh api -X PATCH repos/{owner}/{repo}/pulls/${live##*/} -F body=@<file>')"
+            return 1
+          fi
         fi
       fi
     fi

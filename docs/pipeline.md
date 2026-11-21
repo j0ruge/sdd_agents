@@ -577,9 +577,11 @@ no readable state and sha is its own refusal (`could not read the head of PR …
 differs". An open or closed PR whose `headRefOid` is not `mission_tip` — `HEAD` when no branch is
 declared or `HEAD` is on it, else the local or the `origin` ref of the declared branch, else nothing
 and no comparison — is refused with both shas and `git push` as the way out. A `verified_head:` in
-`50-pr.md`, the sha the publisher ran step 2 on, is refused when it is no commit, when the head does
-not carry it, or when a path outside `<HANDOFF_DIR>/<mission>/` changed between it and the head (a
-diff git cannot list refuses too); absent, it passes. The owner is `sdd-publisher`, who commits
+`50-pr.md`, the sha the publisher ran step 2 on, is refused when it is no commit sha (7 to 64
+lowercase hex, the rule of `reviewed_head:`: a ref such as `HEAD` would resolve to the head itself),
+when the head does not carry it, or when a path outside `<HANDOFF_DIR>/<mission>/` changed between
+it and the head — listed with `--no-renames`, so a file moved into the folder still shows the path
+it left; a diff git cannot list refuses too; absent, it passes. The owner is `sdd-publisher`, who commits
 `50-pr.md` alone in the mission folder and pushes it, and on a lap runs step 2 again and rewrites the
 sha. A **merged** PR is not compared.
 
@@ -609,10 +611,12 @@ the two gates cannot disagree about which documents are `⛔`.
 `mission_kit_lines` counts the lines of `<HANDOFF_DIR>/<mission>/[0-9][0-9]-*.md` — minus
 `00-missao.md`, `01-plano.md` and `50-pr.md` — that open with blanks and `- kit:`, outside any fence;
 the template's example lives in a quote (`> - kit:`) and does not count. The body counts
-`- kit:` and `- [ ] kit:` lines; fewer is refused with both numbers and the REST PATCH as the way
-out. A count, never the text. The body is read **once** for the `⛔` rows and the `kit:` lines, and
-not at all when there is neither; a body gh cannot read says that neither was checked. Same owner,
-`sdd-publisher`; a **merged** PR is not read.
+`- kit:` and `- [ ] kit:` lines outside any fence, by the same fence rule, so an example in a code
+block of the body pays for no finding; fewer is refused with both numbers and the REST PATCH as
+the way out. A count, never the text. The body is read **once** for the `⛔` rows and the `kit:`
+lines, and not at all when there is neither; a body gh cannot read says that neither was checked.
+Same owner, `sdd-publisher`; a **merged** PR is not read — by the first call, and again when the
+body's own answer says `MERGED` (the PR merged between the two calls).
 
 **In a repo that owns a mutation catalogue there is one more requirement, and it is checked last:**
 the key of the current **tracked** content of `bin/ tests/ templates/ config/ agents/` minus the

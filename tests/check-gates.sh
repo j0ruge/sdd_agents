@@ -3998,7 +3998,8 @@ case " \$* " in
     cat "$FIX/.sdd/logs/pr-head" 2>/dev/null || git -C "$FIX" rev-parse HEAD ;;
   *" --json state,body "*)
     [ -e "$FIX/.sdd/logs/pr-body-fails" ] && exit 4
-    cat "$FIX/.sdd/logs/pr-state" 2>/dev/null || printf 'OPEN\n'
+    # pr-body-state answers this call alone: the PR that merged between the two calls.
+    cat "$FIX/.sdd/logs/pr-body-state" 2>/dev/null || cat "$FIX/.sdd/logs/pr-state" 2>/dev/null || printf 'OPEN\n'
     cat "$FIX/.sdd/logs/pr-body" 2>/dev/null || true ;;
   *) printf '%s\n' "\${3:-}" ;;
 esac
@@ -4025,7 +4026,22 @@ assert_eq "gate_PR refuses a ⛔ document named only outside a ⛔ line of the b
 # and buy a publisher session on it.
 printf 'MERGED\n' > "$FIX/.sdd/logs/pr-state"
 assert_phase "gate_PR does not re-read the body of a merged PR" "DONE"
+# ...and does not even ask for it: the body read below answers MERGED too, so the phase alone cannot
+# tell the first call's skip from the second's; the stub's log can.
+rm -f "$FIX/.sdd/logs/gh-calls"
+( cd "$FIX" && "$SDD" why "$MISSION" PR >/dev/null 2>&1 ) || true
+assert_eq "gate_PR asks gh for no body of a merged PR" "0" \
+  "$(grep -c 'state,body' "$FIX/.sdd/logs/gh-calls" 2>/dev/null || true)"
 rm -f "$FIX/.sdd/logs/pr-state"
+# The PR merged BETWEEN the two calls (CodeRabbit 4654284464 on PR #458): the first answers OPEN, the
+# body read answers MERGED. A finished mission, so the ⛔ the body lacks refuses nothing; the state
+# line is no body text either.
+printf 'MERGED\n' > "$FIX/.sdd/logs/pr-body-state"
+prbm_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+prbm_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+rm -f "$FIX/.sdd/logs/pr-body-state"
+assert_eq "gate_PR skips the blocked-row and kit checks when the body read says the PR merged after the first call" \
+  "DONE|0" "$prbm_phase|$(grep -c 'does not carry' <<< "$prbm_why")"
 cp "$SDD_STATE_FIX/docs-before-pr.md" "$MDIR/45-docs.md"
 rm -f "$FIX/.sdd/logs/pr-body"
 git add -A && git commit -qm "chore: docs without a ⛔ again" >/dev/null
@@ -4059,6 +4075,38 @@ prv_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\nverified_head: %s\n---\n# PR\n' "$PRV_AFTER" > "$MDIR/50-pr.md"
 git add -A && git commit -qm "chore: 50-pr.md verified after the code" >/dev/null
 prv_phase2="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+# The same world named `/<mission>`, which the CLI accepts and keeps literal (CodeRabbit 4654284463
+# on PR #458): the prefix of the mission folder carried `//`, git prints single slashes, and the
+# commit of 50-pr.md read as outside the folder.
+prv_phase_ls="$( cd "$FIX" && "$SDD" phase "/$MISSION" 2>&1 )"
+prv_why_ls="$( cd "$FIX" && "$SDD" why "/$MISSION" PR 2>&1 )"
+assert_eq "gate_PR admits a later commit in the mission folder when the mission is named with a leading slash" \
+  "DONE" "$prv_phase_ls$( [ "$prv_phase_ls" = DONE ] || printf ' — %s' "$prv_why_ls" )"
+# A ref that moves is no verified_head (CodeRabbit 4654284456 on PR #458): `HEAD` resolves to the
+# head itself, the range from the head to the head is empty, and later-code.txt — committed after
+# PRV_BEFORE, the checks' real sha — passed. Refused by name, as review_head_ok refuses a
+# reviewed_head: that is no hex sha.
+cp "$MDIR/50-pr.md" "$SDD_STATE_FIX/50-pr-verified-after.md"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\nverified_head: HEAD\n---\n# PR\n' > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md names a ref as verified_head" >/dev/null
+prv_ref_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+prv_ref_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+assert_eq "gate_PR refuses a verified_head that is a ref and not a sha" "PR|1" \
+  "$prv_ref_phase|$(grep -c "verified_head 'HEAD', which is no commit sha" <<< "$prv_ref_why")"
+# A tracked file MOVED into the mission folder after the checks (CodeRabbit 4654284461 on PR #458):
+# with rename detection the diff listed only the destination, inside the folder, and the path the
+# file left outside it went unread. Same commit as the record, the shape a publisher lap would take.
+PRV_MV="$(git rev-parse HEAD)"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\nverified_head: %s\n---\n# PR\n' "$PRV_MV" > "$MDIR/50-pr.md"
+git mv "$FIX/later-code.txt" "$MDIR/later-code.txt"
+git add -A && git commit -qm "chore: later-code.txt moved into the mission folder after the checks" >/dev/null
+prv_mv_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+prv_mv_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+git mv "$MDIR/later-code.txt" "$FIX/later-code.txt"
+cp "$SDD_STATE_FIX/50-pr-verified-after.md" "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: later-code.txt back at the root, 50-pr.md verified after the code" >/dev/null
+assert_eq "gate_PR reads the path a file left when it moved into the mission folder after verified_head" "PR|1" \
+  "$prv_mv_phase|$(grep -c "50-pr.md: later-code.txt changed between verified_head ${PRV_MV:0:7} and the head" <<< "$prv_mv_why")"
 # The same world with HANDOFF_DIR written with a trailing slash (finding #2 of r1): the prefix of the
 # mission folder carried `//`, the commit of 50-pr.md read as outside it, and the publisher rewrote
 # verified_head on every lap.
@@ -4112,6 +4160,13 @@ if [ "$pk1_phase" = PR ] && grep -qF 'carries 1 of the 2 kit: line(s) of the han
   pass "gate_PR refuses a body with fewer kit lines than the handoffs of the mission, and counts none in a quote or a fence"
 else fail "gate_PR refuses a body with fewer kit lines than the handoffs of the mission, and counts none in a quote or a fence" \
   "PR, 'carries 1 of the 2 kit: line(s) of the handoffs', then DONE" "$pk1_phase — $pk1_why — then $pk2_phase"; fi
+# The body is counted by the same fence rule (CodeRabbit 4654284466 on PR #458): one real line and a
+# `- kit:` example inside a code block of the body pay for one finding, not two.
+printf '## Out of scope\n\n- kit: the first finding about the kit\n\n```md\n- kit: an example inside a fence\n```\n' > "$FIX/.sdd/logs/pr-body"
+pkf_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+pkf_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+assert_eq "gate_PR counts no kit line inside a fence of the PR body" "PR|1" \
+  "$pkf_phase|$(grep -c 'carries 1 of the 2 kit: line(s) of the handoffs' <<< "$pkf_why")"
 # ONE read of the body for the ⛔ rows and the kit lines together, and none without either: the
 # differential pair, counted on the gh stub's log.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
