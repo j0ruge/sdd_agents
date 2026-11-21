@@ -1387,12 +1387,19 @@ GATE_EXEC_DIRTY=0
 #
 # CONTRACT for whoever teaches a second gate the token: reset it at the entry of THAT gate, never
 # at a call site. `current_phase` walks every gate in order, so a marker left set by an evaluation
-# two phases ago would escalate a phase whose own handoff says nothing of the kind. Two setters
-# today — gate_QA, and gate_TICKET since 2026-09-06 — each resetting it on entry, and the only
-# reader is handoff_blocked_escalation. The second setter RE-DERIVES the property below rather
-# than inheriting it: the walk visits TICKET before QA; a gate that passes leaves the marker 0; a
-# gate that arms it fails, and the walk stops at the first failure, so no later gate runs over an
-# armed marker; and every lap that finds it armed returns 3. No new path leaves a lap with it set.
+# two phases ago would escalate a phase whose own handoff says nothing of the kind. Four setters
+# today — gate_QA, gate_TICKET since 2026-09-06, and gate_REVIEW and gate_PR since
+# 20261121-l3-gates-do-fim-da-linha (the newest round, and 50-pr.md) — each resetting it on entry,
+# and the only reader is handoff_blocked_escalation. The two newest setters RE-DERIVE the property
+# below rather than inheriting it: the walk visits TICKET, QA, REVIEW and PR in that order; a gate
+# that passes leaves the marker 0; a gate that arms it fails, and the walk stops at the first
+# failure, so no later gate runs over an armed marker; and every lap that finds it armed returns 3.
+# Both doors of cmd_run read it for every phase, REVIEW and PR included — neither is skipped.
+# ⚠️ One path does leave a lap with it armed, and it is declared rather than fixed: above the REVIEW
+# ceiling cmd_run calls `gate_REVIEW || true` and never reads the marker, so a `blocked` round at the
+# ceiling ends in `budget-exhausted`, or, under PUBLISH_ON_REVIEW_BLOCKED=draft, forces a PR lap —
+# whose gate_PR resets the marker on entry before either door reads it, so the draft PR carries the
+# round's real grade and nothing escalates for a phase whose handoff did not say blocked.
 #
 # That reader is called from BOTH doors of cmd_run's loop — the first pass and the inline retry —
 # and the second door is not symmetry for its own sake. With only the first, the marker outlived
@@ -1985,6 +1992,8 @@ gate_REVIEW() {
   # visible: a reset written here is overwritten three lines later, and sabotaging it away leaves
   # the suite green — measured. Redundant rules get removed rather than probed (CLAUDE.md). Move
   # the publication below a `return` and this comment stops being true; the reset comes back with it.
+  # GATE_HANDOFF_BLOCKED is another global with the OPPOSITE rule: reset here, armed below.
+  GATE_HANDOFF_BLOCKED=0
   local last; last="$(latest_matching "$MISSION_DIR/40-review-r*.md")"
   # PUBLISHED HERE, as soon as the round file is resolved — and the asymmetry with EXEC's
   # `pending_after`, which is published only after the gate has validated, is deliberate. EXEC's
@@ -2004,6 +2013,19 @@ gate_REVIEW() {
   # `rounds_after > rounds_before` is false, so the row falls back to `moved`, as it did before
   # these fields existed.
   [ -n "$last" ] || { GATE_WHY="no 40-review-r<N>.md"; return 1; }
+  # `blocked` on the NEWEST round is the reviewer saying the round could not be done or waits for a
+  # human decision (agents/sdd-reviewer.md § 4; templates/review.md) — never a round with findings,
+  # which is `done` with its real grades. The owner of the round is sdd-reviewer; only a human sets
+  # it back. This marker HAS a reset on entry, unlike GATE_REVIEW_ROUNDS above: it is armed below
+  # the publication, so a refusal from another arm must not inherit an earlier evaluation's 1 — the
+  # reset is the first line of the function, see the contract over GATE_HANDOFF_BLOCKED. Read before the TL;DR cap and the grades: an all-A round
+  # that said blocked passed as done (item 6 of 20261121-l3-gates-do-fim-da-linha). The reason OPENS
+  # with the round's name, the prefix historic_rounds reads. Declared limit: only `blocked` is read;
+  # the positive enum of the round's status stays out (1 of the 55 rounds on disk says `continua`).
+  if [ "$(frontmatter "$last" status)" = "blocked" ]; then
+    GATE_HANDOFF_BLOCKED=1
+    GATE_WHY="$(basename "$last"): status: blocked"; return 1
+  fi
   handoff_tldr_ok "$last" || return 1
 
   # Documented anchor: the "### Overall Grade" section of the codereview skill (contract
@@ -2666,10 +2688,32 @@ GATE_PR_STAMP_WHY=""
 GATE_PR_STAMP_IMPOSSIBLE=""
 
 gate_PR() {
+  GATE_HANDOFF_BLOCKED=0
   GATE_PR_STAMP_WHY=""
   GATE_PR_STAMP_IMPOSSIBLE=""
   local p="$MISSION_DIR/50-pr.md"
   [ -f "$p" ] || { GATE_WHY="missing 50-pr.md"; return 1; }
+  # `blocked` is the publisher saying it stopped before the PR — a conflict with the base, which is
+  # human judgement (agents/sdd-publisher.md, "Conflict with the base"). The owner of the artifact is
+  # sdd-publisher, who writes 50-pr.md; the owner of the way out is the human, who merges the base
+  # and removes the line. Read BEFORE the pr_url: a blocked 50-pr.md has no PR, and refusing it for
+  # the missing pr_url bought a second publisher session to re-read its own refusal (item 6 of
+  # 20261121-l3-gates-do-fim-da-linha). The reason names the merge and refuses the rebase (item 7):
+  # gate_EXEC looks the checkpoint's hashes up in the history of HEAD, and a rebase rewrites them.
+  # The enum is read POSITIVELY when the key is present (`done` or `blocked`); absent passes, as the
+  # records and fixtures older than the key do.
+  local pst
+  if frontmatter_has "$p" status; then
+    pst="$(frontmatter "$p" status)"
+    if [ "$pst" = "blocked" ]; then
+      GATE_HANDOFF_BLOCKED=1
+      GATE_WHY="50-pr.md has status: blocked — if it stopped on a conflict with the base, merge the base into the mission branch ('git merge origin/$DEFAULT_BRANCH') and never rebase: the checkpoint and the handoffs cite commit hashes that gate_EXEC looks up in the history of HEAD; then remove the status line of 50-pr.md and 'sdd run'"
+      return 1
+    fi
+    if [ "$pst" != "done" ]; then
+      GATE_WHY="50-pr.md has invalid status '$pst' (use done|blocked)"; return 1
+    fi
+  fi
   local url; url="$(frontmatter "$p" pr_url)"
   [ -n "$url" ] || { GATE_WHY="50-pr.md has no 'pr_url:' in the frontmatter"; return 1; }
   local live

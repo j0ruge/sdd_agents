@@ -2276,6 +2276,60 @@ cp "$OUTSIDE/00-missao.before-ticket" "$MDIR/00-missao.md"
 rm -f "$MDIR/10-ticket.md"
 git add -A && git commit -qm "chore: JIRA off again, ticket gone"
 
+# --- ...and so do the newest REVIEW round and 50-pr.md ------------------------
+# Item 6 of 20261121-l3-gates-do-fim-da-linha: gate_PR read a blocked 50-pr.md as "no pr_url" and
+# gate_REVIEW read a blocked all-A round as done, so the publisher stopped on a conflict was bought
+# a second session to read its own refusal. Same pair as TICKET's, same dead stub; the fixture is
+# parked at QA, so each run FORCES its phase — a forced lap goes through the same two doors (the
+# first pass and the inline retry). The ceiling is lifted for the pair, or a round already on disk
+# would end the REVIEW run in budget-exhausted before any gate armed; config comes back after.
+echo "== status: blocked in the newest round and in 50-pr.md escalates on the first session too =="
+cp .sdd/config.sh "$OUTSIDE/config.before-l3-blocked"
+printf 'REVIEW_MAX_ITER=9\n' >> .sdd/config.sh
+l3_rn=$(( $(find "$MDIR" -maxdepth 1 -name '40-review-r*.md' | wc -l) + 1 ))
+l3_round="$MDIR/40-review-r$l3_rn.md"
+l3_round_doc() { # l3_round_doc <status> <with the grade table: 1|0>
+  printf -- '---\nfase: REVIEW\nrodada: %s\nstatus: %s\ngate: tests/run-all.sh green\n---\n\n## TL;DR\n\nround\n' "$l3_rn" "$1"
+  [ "$2" = 1 ] || return 0
+  printf '\n### Overall Grade\n\n| Criterion | Grade | Rationale |\n|-----------|-------|-----------|\n| **Overall** | **A** | clean |\n'
+}
+: > "$LEDGER"
+l3_round_doc blocked 1 > "$l3_round"
+git add -A && git commit -qm "chore: the newest round declares blocked"
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+review_blocked="$(blocked_shape "$rc")"
+review_blocked_phase="$(jq -r -s '[.[] | select(.event == "blocked")][0].phase' "$LEDGER")"
+: > "$LEDGER"
+# The ordinary half: a round with no grade table, refused for that and nothing else.
+l3_round_doc "done" 0 > "$l3_round"
+git add -A && git commit -qm "chore: the newest round has no grade table"
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+review_ordinary="$(blocked_shape "$rc")"
+rm -f "$l3_round"
+git add -A && git commit -qm "chore: the round is gone"
+assert_eq "REVIEW: status blocked in the newest round escalates as handoff-blocked with no further round" \
+  "3|1|blocked|handoff-blocked|REVIEW · 3|2|blocked|no-progress" \
+  "$review_blocked|$review_blocked_phase · $review_ordinary"
+
+: > "$LEDGER"
+printf -- '---\nfase: PR\nstatus: blocked\n---\n\nconflict with the base\n' > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md declares blocked"
+"$SDD" run "$MISSION" --phase PR >/dev/null 2>&1; rc=$?
+pr_blocked="$(blocked_shape "$rc")"
+pr_blocked_phase="$(jq -r -s '[.[] | select(.event == "blocked")][0].phase' "$LEDGER")"
+: > "$LEDGER"
+# The ordinary half: a done 50-pr.md with no pr_url.
+printf -- '---\nfase: PR\nstatus: done\n---\n' > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md without a pr_url"
+"$SDD" run "$MISSION" --phase PR >/dev/null 2>&1; rc=$?
+pr_ordinary="$(blocked_shape "$rc")"
+rm -f "$MDIR/50-pr.md"
+cp "$OUTSIDE/config.before-l3-blocked" .sdd/config.sh
+git add -A && git commit -qm "chore: 50-pr.md gone, the ceiling back"
+assert_eq "PR: status blocked in 50-pr.md escalates as handoff-blocked with no second publisher session" \
+  "3|1|blocked|handoff-blocked|PR · 3|2|blocked|no-progress" \
+  "$pr_blocked|$pr_blocked_phase · $pr_ordinary"
+
 # --- ...and a `--max-phases` ceiling does not turn that into rc 0 -----------
 # Door 1 used to sit BELOW the ceiling check, so `sdd run --max-phases 1` against this very
 # handoff opened and paid for a QA session, armed the marker, and returned **0**: no ledger row,

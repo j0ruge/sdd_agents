@@ -2830,6 +2830,26 @@ rm -f "$MDIR/40-review-r11.md"
 git add -A && git commit -qm "chore: drop the r11 fixture" >/dev/null
 assert_phase "with the Rationale fixture gone the mission is back at DOCS" "DOCS"
 
+# A newest round that declares `status: blocked` arms the marker cmd_run stops on (item 6 of
+# 20261121-l3-gates-do-fim-da-linha): an all-A round that said blocked passed as done. The witness
+# is the same round with `status: done`, which passes; the reason opens with the round's name, the
+# prefix historic_rounds reads. check-autonomy.sh proves the marker stops the line.
+write_r11 "clean" "tests/run-all.sh: suite green"
+sed -i 's/^rodada: 11$/rodada: 11\nstatus: done/' "$MDIR/40-review-r11.md"; commit_r11
+rbk_done="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+sed -i 's/^status: done$/status: blocked/' "$MDIR/40-review-r11.md"; commit_r11
+rbk_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+rbk_why="$( cd "$FIX" && "$SDD" why "$MISSION" REVIEW 2>&1 )"
+rm -f "$MDIR/40-review-r11.md"
+git add -A && git commit -qm "chore: drop the blocked r11" >/dev/null
+if [ "$rbk_done" = DOCS ] && [ "$rbk_phase" = REVIEW ] \
+   && grep -qF '40-review-r11.md: status: blocked' <<< "$rbk_why"; then
+  pass "gate_REVIEW arms the blocked marker on a round that declares status blocked"
+else fail "gate_REVIEW arms the blocked marker on a round that declares status blocked" \
+  "DOCS with status done, REVIEW and '40-review-r11.md: status: blocked' with status blocked" \
+  "$rbk_done / $rbk_phase — $rbk_why"; fi
+assert_phase "with the blocked round gone the mission is back at DOCS" "DOCS"
+
 # The delta round (ADR 0023, mission 20261119-l1b-a-rodada-delta). `sdd review-base` and the REVIEW
 # boot prompt read ONE judgement, review_base_line: from the second round on, the round reviews
 # base=<the reviewed_head: of the round before>..HEAD; when the key is missing, wrong or a merge
@@ -3780,6 +3800,26 @@ rm -f "$FIX/.sdd/logs/pr-state"
 cp "$SDD_STATE_FIX/docs-before-pr.md" "$MDIR/45-docs.md"
 rm -f "$FIX/.sdd/logs/pr-body"
 git add -A && git commit -qm "chore: docs without a ⛔ again" >/dev/null
+
+# 1c. BLOCKED — a 50-pr.md that declares `status: blocked` (the publisher stopped on a conflict with
+#     the base) arms the marker cmd_run stops on, BEFORE the pr_url is read: a blocked 50-pr.md has
+#     no PR, and refusing it for the missing pr_url bought a second publisher session (item 6 of
+#     20261121-l3-gates-do-fim-da-linha). The reason names the way out — a merge of the base, never
+#     a rebase (item 7). check-autonomy.sh proves the marker stops the line; this proves the reason.
+cp "$MDIR/50-pr.md" "$SDD_STATE_FIX/50-pr-before-blocked.md"
+printf -- '---\nfase: PR\nstatus: blocked\n---\n# PR\n\nconflict with the base\n' > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md declares blocked" >/dev/null
+pb_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+pb_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+cp "$SDD_STATE_FIX/50-pr-before-blocked.md" "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md is done again" >/dev/null
+if [ "$pb_phase" = PR ] && grep -qF '50-pr.md has status: blocked' <<< "$pb_why" \
+   && grep -qF "git merge origin/main" <<< "$pb_why" && grep -qF 'never rebase' <<< "$pb_why" \
+   && ! grep -qF 'pr_url' <<< "$pb_why"; then
+  pass "gate_PR arms the blocked marker on a 50-pr.md that declares status blocked, and names the merge of the base"
+else fail "gate_PR arms the blocked marker on a 50-pr.md that declares status blocked, and names the merge of the base" \
+  "PR, '50-pr.md has status: blocked', 'git merge origin/main', 'never rebase', no pr_url" "$pb_phase — $pb_why"; fi
+assert_phase "and with status done again the PR closes as before" "DONE"
 
 # 2. SCOPE — the catalogue is here and nothing on disk says it ever ran green. Demanding the
 #    ABSENCE of the earlier requirements' markers is what proves the gate reached the stamp

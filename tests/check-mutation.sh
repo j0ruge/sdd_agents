@@ -2421,6 +2421,16 @@ mut_RUN_ticket_blocked_not_armed() {
   sed -i '/^gate_TICKET() {$/,/^}$/ s|^    GATE_HANDOFF_BLOCKED=1$|    GATE_HANDOFF_BLOCKED=0|' "$1"
 }
 
+# The two setters of 20261121-l3-gates-do-fim-da-linha (item 6), on the same mould: the arm still
+# refuses, with the same reason, and the marker stays 0 — so the run buys the second session and
+# lands on `no-progress`. Caught by the REVIEW and PR pairs of tests/check-autonomy.sh.
+mut_RUN_pr_blocked_not_armed() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^      GATE_HANDOFF_BLOCKED=1$|      GATE_HANDOFF_BLOCKED=0|' "$1"
+}
+mut_RUN_review_blocked_not_armed() {
+  sed -i '/^gate_REVIEW() {$/,/^}$/ s|^    GATE_HANDOFF_BLOCKED=1$|    GATE_HANDOFF_BLOCKED=0|' "$1"
+}
+
 # Door 1 of the app-down escalation, and the sibling of RUN_blocked_not_escalated above in every
 # respect: same range, same neutralisation, and the line substituted is textually distinct so
 # neither mutant can apply to the other's door.
@@ -7914,6 +7924,8 @@ CATALOG=(
   RUN_blocked_not_escalated
   RUN_blocked_retry_not_escalated
   RUN_ticket_blocked_not_armed
+  RUN_pr_blocked_not_armed
+  RUN_review_blocked_not_armed
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated
   RUN_session_died_not_escalated

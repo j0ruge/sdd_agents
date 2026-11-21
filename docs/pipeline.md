@@ -410,6 +410,14 @@ needs a human. The session commits **only** the round report, the checkpoint and
 `TODO_FILE`, as for every hat that writes there, a finding already open gains an entry on the item's
 `RECURRED` line (`templates/todo.md`), never a new item, and one already decided goes to the human.
 
+**`status: blocked` on the newest round stops the line** (`handoff-blocked`, rc 3, since
+`20261121-l3-gates-do-fim-da-linha`), read before the TL;DR cap and the grades, with a reason that
+opens with the round's name (`40-review-r<N>.md: status: blocked`). The word means a round that could
+not be done or that waits for a human decision — never a round with findings, which is `done` with
+its real grades (`templates/review.md`, `agents/sdd-reviewer.md` § 4). Only `blocked` is read; any
+other value passes as before. Above the `REVIEW_MAX_ITER` ceiling the marker is not read, and the
+round ends in `budget-exhausted` (or a draft PR under `PUBLISH_ON_REVIEW_BLOCKED=draft`).
+
 **From the second round on, the round reviews the delta (ADR 0023).** Each round writes the
 `git rev-parse HEAD` it read as `reviewed_head:`, and `gate_REVIEW` refuses a value that is no
 commit, one the `HEAD` does not carry, code changed between it and the round's commit, or a range
@@ -546,6 +554,14 @@ The owner is `sdd-docs` (`KAIZEN_LOG.md` is in its `writes:`), or an EXEC increm
 
 **Passes when:** `50-pr.md` exists with `pr_url:` **and** `gh pr view <url>` confirms the PR
 exists. A file claiming a PR that does not exist fails — and it is good that it does.
+
+**`status: blocked` in `50-pr.md` stops the line** (`handoff-blocked`, rc 3, since
+`20261121-l3-gates-do-fim-da-linha`), read **before** the `pr_url:` — a blocked `50-pr.md` has no PR,
+and refusing it for the missing url bought a second publisher session. The reason names the way out
+of a conflict with the base: `git merge origin/<DEFAULT_BRANCH>` on the mission branch, never a
+rebase, because the checkpoint and the handoffs cite hashes `gate_EXEC` looks up in the history of
+`HEAD`; then the human removes the `status:` line and runs `sdd run`. Present, the enum is read
+positively (`done` or `blocked`, any other value refused by name); absent, it passes.
 
 **When `45-docs.md` carries `⛔` rows, the PR body has to name each of their documents on a line
 that carries `⛔`** — the template's checklist item, read with `gh pr view <url> --json state,body`;

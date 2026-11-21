@@ -2,7 +2,7 @@
 missao: <YYYYMMDD>-<slug>
 fase: REVIEW
 rodada: <N — 1, 2, 3…; o arquivo se chama 40-review-r<N>.md>
-status: <done | blocked>
+status: <done | blocked — blocked só para a rodada que não pôde ser feita ou que espera decisão humana; rodada com achados é done, com a nota real>
 sessao: <uuid da sessão que produziu esta rodada — serve para --resume>
 data: <YYYY-MM-DD HH:MM>
 gate: <a evidência de que o gate desta rodada passou — TEST_CMD resumido e árvore limpa, não adjetivo>

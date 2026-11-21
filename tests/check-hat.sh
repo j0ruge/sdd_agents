@@ -1552,6 +1552,28 @@ reviewer_delta_probes() {
   fi
 }
 
+# Items 6 and 7 of 20261121-l3-gates-do-fim-da-linha. The publisher stopped on a conflict names the
+# way out, a merge of the base, never a rebase: the checkpoint and the handoffs cite commit hashes
+# gate_EXEC looks up in the history of HEAD. The paragraph is read from its own bold lead to the next
+# blank line and joined into one line, so a wrap cannot hide the words. The reviewer writes
+# `status: blocked` only for a round that could not be done: gate_REVIEW now stops the line on it.
+blocked_way_out_probes() {
+  local pub="$ROOT/agents/sdd-publisher.md" rev="$ROOT/agents/sdd-reviewer.md" par sec
+  par="$(awk '/^\*\*Conflict with the base/{s=1} s && /^$/{exit} s' "$pub" | tr -s ' \n' '  ')"
+  if grep -qF 'status: blocked' <<< "$par" && grep -qF 'git merge origin/<DEFAULT_BRANCH>' <<< "$par" \
+     && grep -qF 'never `git rebase`' <<< "$par"; then
+    pass "hat: the publisher names the merge of the base as the way out of a conflict, never a rebase"
+  else
+    fail "hat: the publisher names the merge of the base as the way out of a conflict, never a rebase"
+  fi
+  sec="$(awk '/^## 4\. /{s=1; next} s && /^## /{s=0} s' "$rev")"
+  if grep -qF '`status: blocked` is only for a round that could not be done or that waits for a human decision, never for a round that has findings: that one is `done`, with its real grades' <<< "$sec"; then
+    pass "hat: the reviewer writes status blocked only for a round that could not be done, never for one with findings"
+  else
+    fail "hat: the reviewer writes status blocked only for a round that could not be done, never for one with findings"
+  fi
+}
+
 qa_agent_probes
 hat_promise_probes
 command_approval_probes
@@ -1573,6 +1595,7 @@ help_probes
 release_probes
 release_stamps_probes
 reviewer_delta_probes
+blocked_way_out_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2

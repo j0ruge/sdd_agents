@@ -687,6 +687,11 @@ review_check '^## Pendências / Decisions for a Human' "section 'Pendências / D
 review_check '^## Achados da rodada'   "section 'Achados da rodada'"
 review_check '^## O que foi refutado'  "section 'O que foi refutado'"
 review_check '^## Achados fora de escopo' "section 'Achados fora de escopo'"
+# Item 6 of 20261121-l3-gates-do-fim-da-linha: gate_REVIEW stops the line on `status: blocked`, so
+# the template says what the word means — 53 of the 55 rounds on disk already wrote `done` for a
+# round with findings, and the two that wrote `blocked` had to carry on.
+review_check '^status: <done \| blocked — blocked só para a rodada que não pôde ser feita ou que espera decisão humana; rodada com achados é done, com a nota real>' \
+  "status blocked is the round that could not be done, never the round with findings"
 # Since `20260901-o-revisor-so-acha` the round does not fix: every finding that must be fixed is
 # written into the checkpoint as an `R<n>` increment and the EXEC phase closes it. The section is
 # what the reviewer copies the row shape from, and a round that lost it has nowhere to record the
@@ -723,10 +728,11 @@ refute review.md "$FORBIDDEN_POINTER" \
 # vacuity every sensor in this suite carries a floor against.
 REVIEW_ASSERTIONS=$((CHECKS_RUN - REVIEW_MARK))
 # 23 → 24 in `20260901-o-revisor-so-acha`, with the `## Incrementos de conserto` section, then
-# 24 → 26 in the F1 of the same mission, with the two `refute` rules above. A floor left behind
+# 24 → 26 in the F1 of the same mission, with the two `refute` rules above, then 26 → 27 in the I2
+# of `20261121-l3-gates-do-fim-da-linha`, with the `status:` rule. A floor left behind
 # still PASSES while describing a smaller surface than the one it reads, which is the same
 # fail-open as a floor of zero — recounted in the commit that adds the rule, never later.
-REVIEW_FLOOR=26
+REVIEW_FLOOR=27
 if [ "$REVIEW_ASSERTIONS" -lt "$REVIEW_FLOOR" ]; then
   printf '  FAIL review.md: only %d assertion(s) ran, expected at least %d — a clean report over\n' \
     "$REVIEW_ASSERTIONS" "$REVIEW_FLOOR" >&2

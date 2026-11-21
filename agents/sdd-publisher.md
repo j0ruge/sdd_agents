@@ -48,6 +48,11 @@ the stamp is all its gate misses, the runner stops on its own with rc 2 and hand
 **Conflict with the base? Stop.** Write `50-pr.md` with `status: blocked` and the reason. You do
 not resolve conflicts: resolving a conflict is deciding which of two intents wins, and that is
 human judgement. An automatic rebase here is the cheapest way to lose somebody else's work.
+The reason names the way out: the human runs `git merge origin/<DEFAULT_BRANCH>` on the mission
+branch, and never `git rebase`, because the checkpoint and the handoffs cite commit hashes that
+`gate_EXEC` looks up in the history of `HEAD`, and a rebase takes them out of it. `gate_PR` stops the
+line on that `status: blocked`, with no second publisher session; the human removes the line after
+the merge.
 
 ### 4. Open the PR
 
