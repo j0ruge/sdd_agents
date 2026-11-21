@@ -839,6 +839,13 @@ mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measu
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
 
+# Item 5 of L3 (20261121-l3-gates-do-fim-da-linha): the arm of rc 126/127 reads red again — a
+# TEST_CMD that never started is reported as a suite that failed, and a worktree with no .venv
+# buys sessions against a suite that never ran.
+mut_RUN_test_cmd_not_run_reads_red() {
+  sed -i '/^test_cmd_red_why()/,/^}/ s|GATE_WHY="TEST_CMD did not run|GATE_WHY="TEST_CMD failed|' "$1"
+}
+
 # Historical bug 1 (SQ-97 pilot, ~US$ 15 a round): the skill emits
 # `- **Started:** <ts> · **Status:** in-progress`, and the gate required `**Status:**` to OPEN the
 # line. It never matched; the runner re-ran qa-execution forever.
@@ -7667,6 +7674,7 @@ CATALOG=(
   EXEC_done_without_commit
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
+  RUN_test_cmd_not_run_reads_red
   EXEC_escaped_pipe_blind
   EXEC_pipeless_row_skipped
   EXEC_pipeless_reads_past_the_table

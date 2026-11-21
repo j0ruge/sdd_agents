@@ -242,6 +242,17 @@ already refused an undecided one, so what reaches here is a mission whose ADR wa
 human approved the plan. This asks whether it still is — an ADR deleted or renamed after approval
 stops the line instead of leaving the pipeline building against a decision that no longer exists.
 
+**A `TEST_CMD` that did not run is not a red suite.** Exit 126 or 127 is the shell saying the
+command could not start (no execute bit, no such file), and a linked worktree is born without the
+ignored paths a command often names (`.venv`, `node_modules`). Since
+`20261121-l3-gates-do-fim-da-linha` the reason says `TEST_CMD did not run (rc <rc>: <line>)`, with
+the line of the log that says so (the English `No such file or directory`, `not found` or
+`Permission denied`, or else the last non-empty line, since the shell translates its message), and
+never cites the log: the log name changes every run, and a stable reason is what lets the second
+lap over the same tree stop as `no-work` before it buys a session. It comes before the dirty-tree
+branch and does not arm it. One definition (`test_cmd_red_why`) writes this reason for `gate_EXEC`,
+`gate_QA` and `gate_REVIEW`; any other non-zero exit still reads `TEST_CMD failed`.
+
 **Jidoka:** any `blocked` increment escalates **on the spot** — no retry, no consuming the phase's
 session budget. The executor marks `blocked` when the suite is red because of an earlier
 increment. The reason is in the checkpoint's execution notes.

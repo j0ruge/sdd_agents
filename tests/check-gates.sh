@@ -39,7 +39,7 @@ SDD_STATE_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-state-XXXXXX")"
 export SDD_STATE_DIR="$SDD_STATE_FIX"
 CLOSE_REMOTE_DIR=""
 SHA256_FIX=""
-trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX" ${CLOSE_REMOTE_DIR:+"$CLOSE_REMOTE_DIR"} ${SHA256_FIX:+"$SHA256_FIX"}' EXIT
+trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX" ${CLOSE_REMOTE_DIR:+"$CLOSE_REMOTE_DIR"} ${SHA256_FIX:+"$SHA256_FIX"} ${NORUN_DIR:+"$NORUN_DIR"}' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -356,6 +356,40 @@ assert_phase "a red TEST_CMD fails the EXEC gate" "EXEC"
 assert_why   "EXEC reports the red suite" "EXEC" "TEST_CMD failed"
 sed -i 's|^TEST_CMD="false"|TEST_CMD="true"|' .sdd/config.sh
 assert_phase "TEST_CMD green again hands the mission back to QA" "QA"
+
+# A TEST_CMD that did NOT RUN is not a red suite (item 5 of L3, 20261121-l3-gates-do-fim-da-linha).
+# A worktree is born without ignored paths: `.venv/bin/python` does not exist there, the shell exits
+# 127, and the gate read it as a suite that failed. Two worlds, 127 (a relative path the tree
+# misses) and 126 (a file with no execute bit), and each reason is read for what it must say AND
+# for what it must not: `TEST_CMD failed` is the other branch, and a `.log` would make the reason
+# unstable from lap to lap, so no_work_check could never stop the second lap over the same tree.
+# The config edit is left uncommitted on purpose: the dirty-tree branch must not win either.
+NORUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sdd-norun-XXXXXX")"
+printf '#!/bin/sh\nexit 0\n' > "$NORUN_DIR/noexec"; chmod 644 "$NORUN_DIR/noexec"
+norun_why() { # norun_why <TEST_CMD> <PHASE> — the reason, with TEST_CMD swapped and put back
+  local w
+  sed -i "s|^TEST_CMD=\"true\"|TEST_CMD=\"$1\"|" .sdd/config.sh
+  # LC_ALL=C: the shell that eval's the TEST_CMD translates its strerror, and the line read below
+  # is the English one.
+  w="$( cd "$FIX" && LC_ALL=C "$SDD" why "$MISSION" "$2" 2>&1 )" || true
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"true\"|" .sdd/config.sh
+  printf '%s' "$w"
+}
+norun_ok() { # norun_ok <reason> <rc> <the line the log carries> — 0 when the reason is the right one
+  grep -qF "TEST_CMD did not run (rc $2: " <<< "$1" && grep -qF "$3" <<< "$1" \
+    && grep -qF 'this tree misses what the command names' <<< "$1" \
+    && ! grep -qF 'TEST_CMD failed' <<< "$1" && ! grep -qF '.log' <<< "$1"
+}
+nr127="$(norun_why '.venv/bin/python -m pytest' EXEC)"
+nr126="$(norun_why "$NORUN_DIR/noexec" EXEC)"
+if norun_ok "$nr127" 127 'No such file or directory' && norun_ok "$nr126" 126 'Permission denied'; then
+  pass "gate_EXEC says the TEST_CMD did not run when it exits 126 or 127, and names what the tree misses"
+else
+  fail "gate_EXEC says the TEST_CMD did not run when it exits 126 or 127, and names what the tree misses" \
+    "TEST_CMD did not run (rc 127: … No such file …) and (rc 126: … Permission denied …), no 'TEST_CMD failed', no .log" \
+    "127: $nr127 ‖ 126: $nr126"
+fi
+assert_phase "TEST_CMD put back after the did-not-run worlds hands the mission back to QA" "QA"
 
 # Jidoka: a `blocked` increment escalates ON THE SPOT, without burning a session.
 # `sdd run` decides that before invoking claude, so this test spends no tokens.
@@ -2101,6 +2135,11 @@ assert_eq "no interface: deferred still does not block, and the reason still nam
   "$noif_phase named:$( grep -cF '1 deferred (visible, not blocking): BUG-20260104-noif' <<< "$noif_why" ) branch:$( grep -cF 'without a browser interface' <<< "$noif_why" )"
 rm -f "$NOIF_BUG"
 assert_phase "no interface, the registry is clean again" "REVIEW"
+# The QA half of the did-not-run reason (item 5 of L3): here gate_QA reaches the suite, so the
+# reason it gives for a TEST_CMD that cannot start is read now; the REVIEW half is read where
+# gate_REVIEW reaches it, and the assertion is written there.
+norun_qa="$(norun_why '.venv/bin/python -m pytest' QA)"
+assert_phase "QA: TEST_CMD put back after the did-not-run world" "REVIEW"
 
 # skipped short-circuits everything
 cp "$MDIR/30-handoff-qa.md" "$MDIR/30.bak"
@@ -2967,6 +3006,17 @@ assert_phase "gate_REVIEW: reviewed_head absent still passes, as the rounds befo
 
 rb_head="$(git rev-parse HEAD)"; write_r12 "$rb_head"
 assert_phase "gate_REVIEW: reviewed_head the round read, with only its own files after it, passes" "DOCS"
+
+# The REVIEW half of the did-not-run reason (item 5 of L3): a round at A with a valid reviewed_head:,
+# so gate_REVIEW reaches the suite. The QA half was read where gate_QA reaches it (norun_qa).
+norun_review="$(norun_why "$NORUN_DIR/noexec" REVIEW)"
+if norun_ok "$norun_qa" 127 'No such file or directory' && norun_ok "$norun_review" 126 'Permission denied'; then
+  pass "gate_QA and gate_REVIEW say the same of a TEST_CMD that did not run"
+else
+  fail "gate_QA and gate_REVIEW say the same of a TEST_CMD that did not run" \
+    "TEST_CMD did not run (rc …) in both, no 'TEST_CMD failed', no .log" "QA: $norun_qa ‖ REVIEW: $norun_review"
+fi
+assert_phase "gate_REVIEW: TEST_CMD put back after the did-not-run world" "DOCS"
 
 # A path git quotes is still the path (r3 of 20261119-l1b-a-rodada-delta): under core.quotePath, the
 # default, git diff --name-only prints a non-ASCII name between quotes with octal escapes, the glob

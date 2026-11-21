@@ -886,6 +886,9 @@ app_probe() {
 declare -A _CHECK_RC=()
 declare -A _CHECK_LOG=()
 LAST_CHECK_LOG=""
+# The rc of the last run_check_cmd, on BOTH paths (the execution and the memo), beside
+# LAST_CHECK_LOG: test_cmd_red_why reads it to tell a suite that did not start from a red one.
+LAST_CHECK_RC=0
 # Set to 1 by the full face of `sdd status` and by nothing else (item I of TODO.md): see the line
 # that reads it in run_check_cmd.
 CHECK_ANNOUNCE=0
@@ -895,6 +898,7 @@ run_check_cmd() {
   [ -n "$cmd" ] || return 0
   if [ -n "${_CHECK_RC[$cmd]+x}" ]; then
     LAST_CHECK_LOG="${_CHECK_LOG[$cmd]}"
+    LAST_CHECK_RC="${_CHECK_RC[$cmd]}"
     return "${_CHECK_RC[$cmd]}"
   fi
   # The page that asks "where am I" says it is about to wait, and for what. Measured in ui24_agent:
@@ -932,7 +936,36 @@ run_check_cmd() {
   _CHECK_RC[$cmd]="$rc"
   _CHECK_LOG[$cmd]="$logfile"
   LAST_CHECK_LOG="$logfile"
+  LAST_CHECK_RC="$rc"
   return "$rc"
+}
+
+# The one definition of the reason a gate gives for a TEST_CMD that came back non-zero, read by the
+# four sites of gate_EXEC, gate_QA and gate_REVIEW right after run_check_cmd (item 5 of L3,
+# 20261121-l3-gates-do-fim-da-linha). CALLED, never substituted: it publishes GATE_WHY.
+#
+# rc 126 and 127 are the shell saying the command could not be started (no execute bit, no such
+# file): a worktree is born without ignored paths such as .venv or node_modules, and the gate read
+# `.venv/bin/python: No such file or directory` as a suite that failed. That reason cites the line
+# of the log that says so instead of the log: every log name is unique per execution, and
+# no_work_check ignores a reason that cites one (gate_why_cites_log), so a stable reason is what
+# lets the second lap over the same tree stop as no-work before it buys a session. The owner of what
+# the reason asks for is the human, whose tree it is; the gate asks no new artifact of anyone.
+# Returns 0 when it wrote the did-not-run reason, 1 when it wrote the reason of a red suite.
+test_cmd_red_why() {
+  local line=""
+  case "$LAST_CHECK_RC" in
+    126|127)
+      line="$(grep -E 'No such file or directory|not found|Permission denied' "$LAST_CHECK_LOG" 2>/dev/null | tail -n 1 | cut -b 1-200)" || true
+      # The shell translates strerror under the operator's locale (measured on a pt-BR machine,
+      # where the line is no longer English), so a log with no English line still gives its last
+      # non-empty line, which is the shell's own message.
+      [ -n "$line" ] || line="$(grep -v '^[[:space:]]*$' "$LAST_CHECK_LOG" 2>/dev/null | tail -n 1 | cut -b 1-200)" || true
+      GATE_WHY="TEST_CMD did not run (rc $LAST_CHECK_RC${line:+: $line}) — the suite never started, so this is not a red suite; this tree misses what the command names (a worktree is born without ignored paths such as .venv or node_modules)"
+      return 0 ;;
+  esac
+  GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"
+  return 1
 }
 
 # Invalidates the sensor cache — called after any phase that touched the repo.
@@ -1524,6 +1557,10 @@ gate_EXEC() {
   if [ "$pending" -gt 0 ]; then GATE_WHY="$pending of $total increment(s) still to execute"; return 1; fi
 
   if ! run_check_cmd "$TEST_CMD" "gate-exec-test"; then
+    # A suite that never started comes BEFORE the dirty tree, and does not arm GATE_EXEC_DIRTY: the
+    # dirty-tree sentence ("the uncommitted changes are what the suite is running against") would
+    # be false for a suite that did not run at all.
+    if test_cmd_red_why; then return 1; fi
     # A phase that DIED leaves its work uncommitted, and the suite then runs over a working tree
     # nobody approved. Every increment reads `done`, so the runner re-derives EXEC, opens another
     # session against the same red suite, and `state_fingerprint` — HEAD, the mission listing and
@@ -1535,7 +1572,7 @@ gate_EXEC() {
       GATE_WHY="TEST_CMD failed ($TEST_CMD) over a DIRTY working tree — the uncommitted changes are what the suite is running against; a session cannot fix what it cannot see. See $LAST_CHECK_LOG"
       return 1
     fi
-    GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
+    test_cmd_red_why || true; return 1
   fi
   [ -f "$MISSION_DIR/20-handoff-exec.md" ] \
     || { GATE_WHY="every increment done and the suite green, but 20-handoff-exec.md is missing"; return 1; }
@@ -1863,7 +1900,7 @@ gate_QA() {
     return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
-    GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
+    test_cmd_red_why || true; return 1
   fi
   # The composed `if` above is left INTACT and the probe goes in the body, which is the whole
   # design: the app is asked about only on the path where the e2e has ALREADY come back red.
@@ -2105,7 +2142,7 @@ gate_REVIEW() {
   fi
   review_head_ok "$last" || return 1
   if ! run_check_cmd "$TEST_CMD" "gate-review-test"; then
-    GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
+    test_cmd_red_why || true; return 1
   fi
   # The scope's second half is HAT_WRITES_BASE, read through the same hat_expand every hat's
   # frontier is, so the two cannot drift: the reviewer's hat declares it writes the backlog
