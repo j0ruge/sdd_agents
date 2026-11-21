@@ -395,7 +395,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `docs/pipeline.md:51` promete que um monitor que o consulte não derruba a run: só vale para a trava do checkout.
   Num repo de rascunho, com um `git status` em laço ao lado, 1505 de 5216 `git add` falharam com `File exists` no
   `index.lock`; com `GIT_OPTIONAL_LOCKS=0`, 0 de 4685. O `kit_guard_tree` (`bin/sdd:4285`) já usa a variável.
-  Direção: a mesma variável na leitura do `session_leftovers`.
+  Direção: a mesma variável na leitura do `session_leftovers` e no `git status` do `pr-ready` (`bin/sdd-worker:1349`).
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
   RECURRED 1: sdd_agents/20261119-l1b-a-rodada-delta (2026-11-20)
 
