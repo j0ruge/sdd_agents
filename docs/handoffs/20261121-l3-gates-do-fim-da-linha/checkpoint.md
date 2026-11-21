@@ -1,6 +1,6 @@
 ---
 missao: 20261121-l3-gates-do-fim-da-linha
-atualizado: 2026-11-21 10:55
+atualizado: 2026-11-21 11:40
 ---
 
 # Checkpoint — L3: gates do fim da linha
@@ -56,7 +56,7 @@ atualizado: 2026-11-21 10:55
 | I6 | O e2e vermelho diz se o caso já caiu antes (item 10) | `g=$(bash tests/check-gates.sh 2>&1); echo "$(grep -c '^  ok    gate_QA says how often each red e2e case already failed in the earlier e2e gate logs' <<< "$g") $(grep -c '^  ok    gate_QA adds nothing for a log with no failed block, and counts no case that passed' <<< "$g") $(grep -c -e '^mut_QA_e2e_history_uncounted()' -e '^mut_QA_e2e_history_counts_passed()' tests/check-mutation.sh)"` → `1 1 2` | done | 45c8434 |
 | I7 | O corpo do PR leva as linhas kit:, um Como verificar que roda e a pendência respondida (itens 8, 9 e 12) | `g=$(bash tests/check-gates.sh 2>&1); h=$(bash tests/check-hat.sh 2>&1); t=$(bash tests/check-templates.sh 2>&1); cmp -s agents/sdd-publisher.md .claude/agents/sdd-publisher.md; c0=$?; echo "$(grep -c '^  ok    gate_PR refuses a body with fewer kit lines than the handoffs of the mission, and counts none in a quote or a fence' <<< "$g") $(grep -c '^  ok    gate_PR reads the body once for the blocked rows and the kit lines, and not at all without either' <<< "$g") $(grep -c '^  ok    hat: the publisher carries every kit line of the handoffs into the body of the pull request, whole' <<< "$h") $(grep -c '^  ok    hat: the publisher writes in how to verify only what the shell of the reader runs, and sends a TEST_CMD with a runner variable to sdd preflight' <<< "$h") $(grep -c '^  ok    hat: the publisher keeps a question of the plan that a later handoff answered, ticked and with the answer' <<< "$h") $(grep -c '^  ok    pr-body.md: the body has a place for the kit lines, the answered question and the preflight line' <<< "$t") $(grep -c -e '^mut_PR_kit_lines_uncounted()' -e '^mut_PR_kit_lines_counted_in_quote()' tests/check-mutation.sh) $c0"` → `1 1 1 1 1 1 2 0` | done | 5e8b000 |
 | I8 | O gate: só cita medida com comando e sha, ou saída que está no caminho (item 3) | `t=$(bash tests/check-templates.sh 2>&1); echo "$(grep -c '^  ok    handoff.md: the gate field cites a measure with its command and the sha it ran on, or the path that holds the output' <<< "$t") $(grep -c '^  ok    review.md: the gate field cites a measure with its command and the sha it ran on, or the path that holds the output' <<< "$t")"` → `1 1` | done | b912a33 |
-| I9 | Fecho: RESOLVED by nos 13 itens e o 20-handoff-exec.md | `b=$(git show "$(git merge-base HEAD origin/main)":TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `13` | pending | — |
+| I9 | Fecho: RESOLVED by nos 13 itens e o 20-handoff-exec.md | `b=$(git show "$(git merge-base HEAD origin/main)":TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `13` | done | e8d7f4b |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
