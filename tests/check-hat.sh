@@ -1047,12 +1047,15 @@ command_acceptance_probes() {
   fi
   # Finding 5 of the r3 of L2: the hat admits an empty or placeholder `branch:` under
   # JIRA_ENABLED=true (the TICKET phase creates the branch), and a relay that followed the auto
-  # bullet as written would cut a branch named after the placeholder.
+  # bullet as written would cut a branch named after the placeholder. The first fix sent it to
+  # **Anywhere else**, which commits nothing, and left the plan untracked (r4 of the L2 chore, the
+  # Codex P2 and CodeRabbit on #457): the bullet commits where it stands, as `sdd approve` does.
   if grep -qF 'or still the `<...>` placeholder names no branch to cut' <<< "$art" \
-     && grep -qF 'switch to nothing and follow **Anywhere else**' <<< "$art"; then
-    pass "command: /sdd-plan under auto cuts no branch from an empty or placeholder branch:, and follows Anywhere else"
+     && grep -qF 'switch to nothing, and commit the mission directory and the file `adr:` names' <<< "$art" \
+     && ! grep -qF 'switch to nothing and follow **Anywhere else**' <<< "$art"; then
+    pass "command: /sdd-plan under auto cuts no branch from an empty or placeholder branch:, and commits the plan where it stands, as sdd approve does"
   else
-    fail "command: /sdd-plan under auto would cut a branch named after an empty or placeholder branch:"
+    fail "command: /sdd-plan under auto cuts a branch named after an empty or placeholder branch:, or leaves the plan untracked"
   fi
   if grep -qF 'Then run `git status --porcelain` with no path' <<< "$art" \
      && grep -qF 'a file the plan depends on' <<< "$art"; then

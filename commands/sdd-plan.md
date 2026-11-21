@@ -349,7 +349,11 @@ and it never paraphrases either side.
      the mission: `sdd approve` was never run. A `branch:` of `00-missao.md` that is empty
      or still the `<...>` placeholder names no branch to cut (the hat admits it only under
      `JIRA_ENABLED=true`, where the TICKET phase creates the branch and writes it back):
-     switch to nothing and follow **Anywhere else**. Otherwise move to that `branch:` with
+     switch to nothing, and commit the mission directory and the file `adr:` names on the branch
+     you stand on, as `sdd approve` does in this case, telling the human when that branch is
+     `DEFAULT_BRANCH`. The TICKET phase cuts the mission branch from there, and commits only
+     `10-ticket.md` and `00-missao.md`, so nothing else would bring the plan along; tell the human
+     that the next step is `sdd run <mission>`. Otherwise move to that `branch:` with
      `git switch -c <branch>`, or `git switch <branch>` when it already exists, commit there the
      mission directory and the file `adr:` names, then follow **On the mission branch** for the
      rest, and tell the human that the next step is `sdd run <mission>`. Measured in `magic_tutor`:
