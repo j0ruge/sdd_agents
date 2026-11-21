@@ -30,7 +30,8 @@ merge commit em `079bc39`, no `ready 9be3e94` do `pr-ready`, pelo worker sob a d
 ## O que foi para o pós-merge
 
 O chore `chore/l1b-pos-merge` cobre:
-- o #436 apagado (`RESOLVED by a3d0b72`, ancestral da `main`) e a catraca de 98 para 97;
+- o #436 apagado (`RESOLVED by a3d0b72`, ancestral da `main`) e a catraca de 98 para 97, e de volta
+  a 98 com o item do L5b;
 - os 4 LOW da r3: o `git status` do `review_base_line` sem `GIT_OPTIONAL_LOCKS=0` (também `RECURRED 1` no
   item aberto do `sdd status --no-gates`), o intervalo do `review_head_ok` sem `core.quotePath=false`, a
   quarta recusa ausente da prosa e o ramo "git status cannot say" sem cenário;
