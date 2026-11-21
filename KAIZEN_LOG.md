@@ -25,15 +25,28 @@ Fora da conta: a sessão `3672ea89` (2 710 s, US$ 3,85), que consertou os dois s
 `EFFORT_EXEC` exportado no lançamento.
 
 **Veredito pelo critério:** o L2 teve 1 `R<n>`, como o L1 e o L1b, e a mesma forma de REVIEW. O
-`xhigh` custou 1,8× por item e não comprou a qualidade que o critério mede. A EXEC volta a `medium`
+`xhigh` custou 1,8× por item e não comprou a qualidade que o critério mede. A medida aqui é **por
+item**, e não por sessão como na entrada do L2 logo abaixo (2,6× por sessão, com o I7 dentro), porque
+foi o "por item" que o critério fixou antes do resultado. O veredito vale pelas duas, porque ele lê a
+contagem de `R<n>`. A EXEC volta a `medium`
 do L3 em diante, lançada sem exportar `EFFORT_*` e sem o `CLAUDE_EFFORT` do ambiente da sessão
 interativa. A comparação é observacional, com a ressalva da entrada do L2: o trabalho e o número de
 incrementos diferem entre os lotes.
 
 **2. A rodada delta (ADR 0023) em dinheiro.** No L2 a r2 do runner custou US$ 1,36 e a r1 US$ 3,80:
-uma razão r2/r1 de **0,36**. Antes da ADR 0023, a razão r≥2/r1 ia de 1,0 a 1,5 (a medida que o § 3
-da `.claude/rules/anatomia-do-agente.md` deixou para o L2). É uma corrida só: o próximo lote com duas
-rodadas confirma ou refuta.
+uma razão r2/r1 de **0,36**. O "antes" que o § 3 da `.claude/rules/anatomia-do-agente.md` cita, 1,0 a
+1,5, vem da missão do worker, que era código novo com 22 `R<n>`. Os dois lotes da própria campanha
+anteriores ao delta são o controle mais próximo, pelo mesmo ledger (runners sem o `079bc39`, o
+primeiro com delta: `git merge-base --is-ancestor 079bc39 <runner_sha>` → rc 1 nos dois):
+
+| Missão | Runner | r1 | r2 | r2/r1 |
+|---|---|---|---|---|
+| L1 | `cc8509a`, sem delta | US$ 2,11 | US$ 1,30 | 0,61 |
+| L1b | `336640e`, sem delta | US$ 2,24 | US$ 2,16 | 0,97 |
+| L2 | `079bc39`, com delta | US$ 3,80 | US$ 1,36 | **0,36** |
+
+Parte da queda o L1 já mostrava sem o delta: a r2 sai mais barata quando a r1 deixou um conserto só. É
+uma corrida com o delta, e o próximo lote com duas rodadas confirma ou refuta.
 
 ## 2026-11-20 — O L2: quinze regras do `/sdd-plan` e do planner ganham texto e asserção, com o EXEC em `xhigh`
 
