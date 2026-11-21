@@ -282,7 +282,9 @@ mesma `mission_tip`, e o branch apagado ou já na base dá intervalo vazio. O `s
 `blocked` é a que não pôde ser feita ou espera decisão humana. Um `TEST_CMD` que sai 126 ou 127 sem
 ter começado tem motivo próprio (`test_cmd_red_why`), nunca "suíte vermelha". Cada leitura tem
 asserção em `tests/check-gates.sh` e um mutante no catálogo (`mut_PR_head_unread`,
-`mut_REVIEW_later_code_unread`, `mut_DOCS_k8_reads_head_off_branch`, entre os 17 da missão).
+`mut_REVIEW_later_code_unread`, `mut_DOCS_k8_reads_head_off_branch`, entre os 28 que a missão
+acrescentou: `git diff a0004df..86e16c0 -- tests/check-mutation.sh | grep -cE '^\+mut_[A-Za-z0-9_]+\(\)'`
+→ 28).
 Desde `20261117-o-worker-orquestrador` (ADR 0022 §5) o merge delegado também é gate por artefato,
 fora do runner: `sdd-worker pr-ready` responde `ready <sha>` só com os cinco itens verdadeiros no
 mesmo sha (a rodada mais nova da missão com A em todo critério e um `reviewed_head:` do qual até o
