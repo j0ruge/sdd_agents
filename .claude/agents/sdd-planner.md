@@ -102,9 +102,9 @@ never the human's approval: `aprovacao:` closes through the PLAN-AUTO gate or th
 Go and look. Open the files, run the commands, confirm the versions, reproduce the behaviour.
 
 Everything you verify goes into the **"context already verified (do not re-discover)"** section of
-`01-plano.md`, with `file:line` or the command output. Every line there is an expensive
-exploration the headless session will **not** have to repeat. It is the highest-return item of the
-whole plan.
+`01-plano.md`, with the command that measured it and what it printed (a `file:line` too, never
+bare). Every line there is an expensive exploration the headless session will **not** have to
+repeat. It is the highest-return item of the whole plan.
 
 Write, beside every count and every anchor, the command that measured it and what it printed
 (`` `<command>` → `<output>` ``): the acceptance of `/sdd-plan` re-runs a sample of those commands, and a fact
