@@ -26,6 +26,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Prioridade — resolver logo
 
+- [ ] **Missão: fazer o worker de campanhas funcionar também no Codex** — `commands/sdd-worker.md:48`
+  (`harness:`) — só aceita `claude`, embora o Codex já consiga chamar os verbos de `bin/sdd-worker`.
+  Direção: aceitar `harness: codex`, retomar planner e grill e definir a integração com `sdd run` (hoje `claude -p`).
+  Preservar o fluxo Claude e as regras de delegação, orçamento, aprovação e retomada.
+  Aceite: campanha de teste no Codex real, sem publicação, e regressão do fluxo Claude.
+  **Preferir o próprio Codex para planejar, implementar e validar a missão**, para medir o harness real.
+  — registrado a pedido do dono ao planejar a S10 do `ui24_agent` (2026-11-21)
+
 - [ ] **O carimbo é tudo ou nada: uma linha de prosa em `agents/` refaz o catálogo inteiro** — `bin/sdd:2453`
   (`MUTATION_STAMP_PATHS`) — a chave é um md5 dos arquivos rastreados em `bin/ tests/ templates/ config/ agents/`,
   menos o `tests/health-baseline.txt`, e o pulo do catálogo (PR #330) só vale com ela igual. O PR #337 mudou
