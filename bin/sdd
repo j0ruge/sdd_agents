@@ -2775,6 +2775,31 @@ GATE_PR_STAMP_WHY=""
 # cmd_run branches on it to name the remedy, never on the prose of GATE_PR_STAMP_WHY.
 GATE_PR_STAMP_IMPOSSIBLE=""
 
+# mission_kit_lines — how many `- kit:` lines the handoffs of the mission carry, outside any fence
+# (item 8 of 20261121-l3-gates-do-fim-da-linha). A finding about the kit born in a target repo
+# travels in the handoff, on a line marked `kit:` (agents/sdd-executor.md § 4), and a human or the
+# `sdd kaizen` triage carries it across — from the PR body, the one place the human reads before the
+# merge. The handoffs are `$MISSION_DIR/[0-9][0-9]-*.md` minus the plan (00, 01) and 50-pr.md, which
+# is the publisher's record and not a handoff. The template's example lives in a quote (`> - kit:`)
+# and does not match: the line opens with blanks and the dash, nothing else. Only prints, so it may
+# be read through `$( )`.
+mission_kit_lines() {
+  local f files=()
+  for f in "$MISSION_DIR"/[0-9][0-9]-*.md; do
+    [ -f "$f" ] || continue
+    case "${f##*/}" in 00-missao.md|01-plano.md|50-pr.md) continue ;; esac
+    files+=("$f")
+  done
+  [ "${#files[@]}" -gt 0 ] || { echo 0; return 0; }
+  awk "$FENCE_AWK"'
+    FNR == 1 { fence = 0 }
+    { fence_line($0) }
+    fence { next }
+    /^[ \t]*- kit:/ { n++ }
+    END { print n + 0 }
+  ' "${files[@]}"
+}
+
 gate_PR() {
   GATE_HANDOFF_BLOCKED=0
   GATE_PR_STAMP_WHY=""
@@ -2868,37 +2893,52 @@ gate_PR() {
   # (item 13: the porcelain edit fails on gh 2.45 and leaves the body as it was), never opens a second PR. The name has to sit on a line that carries `⛔` — the template's checklist
   # item — and not anywhere in the body: a name in "what changed" is not an item the human applies
   # (review r2). It proves the item is there, never that the quote under it is whole. The rows come
-  # from docs_checklist_rows, the same reader gate_DOCS decides on, and the body is asked for only
-  # when there is a ⛔ to look for. A MERGED PR is not read: the check is for the window before the
-  # merge, and a body edited afterwards would derive a finished mission back to PR and buy a
-  # publisher session on it — the reason mission_qa_report keeps its empty-range answer.
-  local docs_file="$MISSION_DIR/45-docs.md" rows row doc body="" body_read=0 body_rc=0 carried_missing="" pr_state
-  if [ -f "$docs_file" ]; then
-    rows="$(docs_checklist_rows "$docs_file")"
-    while IFS= read -r row; do
-      case "$row" in B\|*) doc="${row#B|}" ;; *) continue ;; esac
-      # An unnamed ⛔ is gate_DOCS's refusal, and an empty pattern would match any body.
-      [[ "$doc" =~ [[:alnum:]] ]] || continue
-      if [ "$body_read" -eq 0 ]; then
-        body="$( cd "$REPO_ROOT" && gh pr view "$url" --json state,body --jq '.state, .body' 2>/dev/null )" || body_rc=$?
-        body_read=1
-        # A body gh could not READ is its own refusal: "does not carry" would be a sentence about a
-        # body nobody saw, and it would send the publisher to edit a PR that may be fine.
-        if [ "$body_rc" -ne 0 ]; then
-          GATE_WHY="gh could not read the body of PR $live (rc $body_rc) — the ⛔ rows of 45-docs.md are not checked; run 'gh pr view $url --json body'"
+  # from docs_checklist_rows, the same reader gate_DOCS decides on.
+  # The `- kit:` lines of the handoffs travel the same road (item 8): the body has to carry at least
+  # as many `- kit:` lines (a `- [ ] kit:` counts) as mission_kit_lines counts — a count, never the
+  # text, so a line reworded in the body still passes. Same owner, same remedy.
+  # The body is asked for ONCE for both, and not at all when there is neither a ⛔ nor a kit line to
+  # look for. A MERGED PR is not read: the check is for the window before the merge, and a body
+  # edited afterwards would derive a finished mission back to PR and buy a publisher session on it —
+  # the reason mission_qa_report keeps its empty-range answer.
+  local docs_file="$MISSION_DIR/45-docs.md" rows="" row doc body="" body_rc=0 carried_missing=""
+  local docs=() kit_n=0 kit_k=0 blocked_body
+  if [ "$pr_live_state" != MERGED ]; then
+    if [ -f "$docs_file" ]; then
+      rows="$(docs_checklist_rows "$docs_file")"
+      while IFS= read -r row; do
+        case "$row" in B\|*) doc="${row#B|}" ;; *) continue ;; esac
+        # An unnamed ⛔ is gate_DOCS's refusal, and an empty pattern would match any body.
+        [[ "$doc" =~ [[:alnum:]] ]] || continue
+        docs+=("$doc")
+      done <<< "$rows"
+    fi
+    kit_n="$(mission_kit_lines)"
+    if [ "${#docs[@]}" -gt 0 ] || [ "$kit_n" -gt 0 ]; then
+      body="$( cd "$REPO_ROOT" && gh pr view "$url" --json state,body --jq '.state, .body' 2>/dev/null )" || body_rc=$?
+      # A body gh could not READ is its own refusal: "does not carry" would be a sentence about a
+      # body nobody saw, and it would send the publisher to edit a PR that may be fine.
+      if [ "$body_rc" -ne 0 ]; then
+        GATE_WHY="gh could not read the body of PR $live (rc $body_rc) — the ⛔ rows and the kit: lines are not checked; run 'gh pr view $url --json body'"
+        return 1
+      fi
+      # The first line is the state, which the first gh call already read; what is left is the body.
+      case "$body" in *$'\n'*) body="${body#*$'\n'}" ;; *) body="" ;; esac
+      blocked_body="$(grep -F '⛔' <<< "$body" || true)"
+      for doc in ${docs[@]+"${docs[@]}"}; do
+        grep -qF -- "$doc" <<< "$blocked_body" || carried_missing+="${carried_missing:+, }$doc"
+      done
+      if [ -n "$carried_missing" ]; then
+        GATE_WHY="PR $live does not carry the ⛔ proposal(s) of 45-docs.md: $carried_missing — the human applies them from the PR's decisions; edit its body ('gh api -X PATCH repos/{owner}/{repo}/pulls/${live##*/} -F body=@<file>'), never open a second PR"
+        return 1
+      fi
+      if [ "$kit_n" -gt 0 ]; then
+        kit_k="$(grep -cE '^[[:space:]]*- (\[[ xX]\] )?kit:' <<< "$body" || true)"
+        if [ "${kit_k:-0}" -lt "$kit_n" ]; then
+          GATE_WHY="PR $live carries ${kit_k:-0} of the $kit_n kit: line(s) of the handoffs — a finding about the kit travels in the PR body or is lost; copy each line whole and edit the body ('gh api -X PATCH repos/{owner}/{repo}/pulls/${live##*/} -F body=@<file>')"
           return 1
         fi
-        pr_state="${body%%$'\n'*}"
-        if [ "$pr_state" = MERGED ]; then break; fi
-        # The first line is the state; what is left is the body, kept only where it carries a ⛔.
-        case "$body" in *$'\n'*) body="${body#*$'\n'}" ;; *) body="" ;; esac
-        body="$(grep -F '⛔' <<< "$body" || true)"
       fi
-      grep -qF -- "$doc" <<< "$body" || carried_missing+="${carried_missing:+, }$doc"
-    done <<< "$rows"
-    if [ -n "$carried_missing" ]; then
-      GATE_WHY="PR $live does not carry the ⛔ proposal(s) of 45-docs.md: $carried_missing — the human applies them from the PR's decisions; edit its body ('gh api -X PATCH repos/{owner}/{repo}/pulls/${live##*/} -F body=@<file>'), never open a second PR"
-      return 1
     fi
   fi
 

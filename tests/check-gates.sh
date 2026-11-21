@@ -3921,6 +3921,8 @@ cat > "$FIX/.stub/gh" <<STUB
 # line, then the body). The head is the fixture's HEAD at the time of the call, unless pr-head pins
 # another; the state is OPEN unless pr-state says otherwise.
 [ "\${1:-}" = "pr" ] && [ "\${2:-}" = "view" ] || { echo "unexpected gh call: \$*" >&2; exit 9; }
+# Every call is logged, one line each, so the KIT block can count the reads of the body.
+printf '%s\\n' "\$*" >> "$FIX/.sdd/logs/gh-calls"
 case " \$* " in
   *" --json url,state,headRefOid "*)
     printf '%s\\n' "\${3:-}"
@@ -4014,6 +4016,46 @@ pru_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 rm -f "$FIX/.sdd/logs/pr-state" "$FIX/.sdd/logs/pr-head"
 assert_eq "gate_PR says it could not read the head, never that the head differs" "PR|1|0" \
   "$pru_phase|$(grep -c 'could not read the head of PR' <<< "$pru_why")|$(grep -c 'is at' <<< "$pru_why")"
+
+# 1e. KIT — every `- kit:` line of the handoffs travels in the PR body (item 8 of
+#     20261121-l3-gates-do-fim-da-linha): a finding about the kit born in a target repo reaches the
+#     human there, or is lost. Two real lines in 20-handoff-exec.md, one more inside a fence and one
+#     inside a quote, which do not count: if they did, the gate would ask for 4.
+cp "$MDIR/20-handoff-exec.md" "$SDD_STATE_FIX/exec-before-kit.md"
+printf '\n## Achados fora de escopo\n\n- kit: the first finding about the kit\n  - kit: the second one, nested\n\n```md\n- kit: an example inside a fence\n```\n\n> - kit: an example inside a quote\n' >> "$MDIR/20-handoff-exec.md"
+git add -A && git commit -qm "chore: the handoff carries two kit lines" >/dev/null
+printf '## Out of scope\n\n- kit: the first finding about the kit\n' > "$FIX/.sdd/logs/pr-body"
+pk1_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+pk1_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+printf '## Out of scope\n\n- kit: the first finding about the kit\n- [ ] kit: the second one, nested\n' > "$FIX/.sdd/logs/pr-body"
+pk2_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+if [ "$pk1_phase" = PR ] && grep -qF 'carries 1 of the 2 kit: line(s) of the handoffs' <<< "$pk1_why" \
+   && grep -qF 'gh api -X PATCH' <<< "$pk1_why" && [ "$pk2_phase" = DONE ]; then
+  pass "gate_PR refuses a body with fewer kit lines than the handoffs of the mission, and counts none in a quote or a fence"
+else fail "gate_PR refuses a body with fewer kit lines than the handoffs of the mission, and counts none in a quote or a fence" \
+  "PR, 'carries 1 of the 2 kit: line(s) of the handoffs', then DONE" "$pk1_phase — $pk1_why — then $pk2_phase"; fi
+# ONE read of the body for the ⛔ rows and the kit lines together, and none without either: the
+# differential pair, counted on the gh stub's log.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: a ⛔ beside the kit lines" >/dev/null
+printf -- '- [ ] ⛔ `.claude/rules/x.md` — apply\n- kit: the first finding about the kit\n- kit: the second one, nested\n' > "$FIX/.sdd/logs/pr-body"
+rm -f "$FIX/.sdd/logs/gh-calls"
+( cd "$FIX" && "$SDD" why "$MISSION" PR >/dev/null 2>&1 ) || true
+pkb_both="$(grep -c 'state,body' "$FIX/.sdd/logs/gh-calls" 2>/dev/null || true)"
+cp "$SDD_STATE_FIX/docs-before-pr.md" "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: the kit lines alone" >/dev/null
+rm -f "$FIX/.sdd/logs/gh-calls"
+( cd "$FIX" && "$SDD" why "$MISSION" PR >/dev/null 2>&1 ) || true
+pkb_kit="$(grep -c 'state,body' "$FIX/.sdd/logs/gh-calls" 2>/dev/null || true)"
+cp "$SDD_STATE_FIX/exec-before-kit.md" "$MDIR/20-handoff-exec.md"
+rm -f "$FIX/.sdd/logs/pr-body"
+git add -A && git commit -qm "chore: no ⛔ and no kit lines again" >/dev/null
+rm -f "$FIX/.sdd/logs/gh-calls"
+( cd "$FIX" && "$SDD" why "$MISSION" PR >/dev/null 2>&1 ) || true
+pkn_none="$(grep -c 'state,body' "$FIX/.sdd/logs/gh-calls" 2>/dev/null || true)"
+pkn_view="$(grep -c 'url,state,headRefOid' "$FIX/.sdd/logs/gh-calls" 2>/dev/null || true)"
+assert_eq "gate_PR reads the body once for the blocked rows and the kit lines, and not at all without either" \
+  "1|1|0|1" "${pkb_both:-0}|${pkb_kit:-0}|${pkn_none:-0}|${pkn_view:-0}"
 
 # 1c. BLOCKED — a 50-pr.md that declares `status: blocked` (the publisher stopped on a conflict with
 #     the base) arms the marker cmd_run stops on, BEFORE the pr_url is read: a blocked 50-pr.md has

@@ -596,6 +596,17 @@ merge would derive a finished mission back to PR. The rows come from `docs_check
 reader `gate_DOCS` decides on (one `⛔` cell naming several documents is one row per document), so
 the two gates cannot disagree about which documents are `⛔`.
 
+**When the handoffs carry `- kit:` lines, the PR body has to carry at least as many** (since
+`20261121-l3-gates-do-fim-da-linha`). A finding about the kit born in a target repo travels on a
+`- kit:` line of the handoff, and the PR body is where the human who carries it across reads it.
+`mission_kit_lines` counts the lines of `<HANDOFF_DIR>/<mission>/[0-9][0-9]-*.md` — minus
+`00-missao.md`, `01-plano.md` and `50-pr.md` — that open with blanks and `- kit:`, outside any fence;
+the template's example lives in a quote (`> - kit:`) and does not count. The body counts
+`- kit:` and `- [ ] kit:` lines; fewer is refused with both numbers and the REST PATCH as the way
+out. A count, never the text. The body is read **once** for the `⛔` rows and the `kit:` lines, and
+not at all when there is neither; a body gh cannot read says that neither was checked. Same owner,
+`sdd-publisher`; a **merged** PR is not read.
+
 **In a repo that owns a mutation catalogue there is one more requirement, and it is checked last:**
 the key of the current **tracked** content of `bin/ tests/ templates/ config/ agents/` minus the
 ratchet `tests/health-baseline.txt` (ADR 0014) has to be among the stamps, so registering a finding

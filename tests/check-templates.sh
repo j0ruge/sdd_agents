@@ -587,6 +587,19 @@ check pr-body.md '^## Riscos e não-feitos'    "section 'Riscos e não-feitos'"
 # ran, never that the repository has no CI (CodeRabbit on PR #391): no workflow in
 # .github/workflows/ does not prove there is none, since CI can live elsewhere.
 check pr-body.md '^\*\*Sensores novos\*\* \(<rodam no CI a partir deste PR \| rodam na suíte local, pelo `<TEST_CMD>`>\):$' "the new-sensors line promises CI only as one of two fill-ins, and never claims there is no CI"
+# Items 8, 9 and 12 of 20261121-l3-gates-do-fim-da-linha: the body has a place for every `- kit:` line
+# of the handoffs (gate_PR counts them), for a question of the plan a later handoff answered (ticked,
+# with the answer), and for the `sdd preflight` line of a TEST_CMD that cites a runner variable. Three
+# literals on three different lines, and check() reads one regex: so this one is written by hand.
+CHECKS_RUN=$((CHECKS_RUN + 1))
+if grep -qF -- '- kit: <a linha completa do handoff>' "$T/pr-body.md" \
+   && grep -qF -- '- [x] <pendência do plano já respondida> — <a resposta em uma linha>' "$T/pr-body.md" \
+   && grep -qF 'sdd preflight' "$T/pr-body.md"; then
+  pass "pr-body.md: the body has a place for the kit lines, the answered question and the preflight line"
+else
+  printf '  FAIL pr-body.md: missing the place for the kit lines, the answered question or the preflight line\n' >&2
+  fails=$((fails + 1))
+fi
 
 # == templates/review.md ==
 #

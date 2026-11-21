@@ -1246,6 +1246,36 @@ publisher_stamp_probes() {
   fi
 }
 
+# What the PR body carries from the handoffs (items 8, 9 and 12 of 20261121-l3-gates-do-fim-da-linha).
+# Each bullet of ### 4. is read from its own marker to the next bullet and joined into one line, so a
+# rule moved to another bullet, or wrapped between its words, reads red. The kit lines are counted by
+# gate_PR (check-gates.sh); the other two rules no gate can read, so the hat carries them.
+publisher_body_probes() {
+  local pub="$ROOT/agents/sdd-publisher.md" b
+  bullet() { awk -v m="$1" 'index($0, "- **" m "**") == 1 {s=1; print; next} s && /^- \*\*/{s=0} s && /^$/{s=0} s' "$pub" | tr -s ' \n' '  '; }
+  b="$(bullet 'out-of-scope findings')"
+  if grep -qF 'TODO_FILE' <<< "$b" && grep -qF -- '- kit:' <<< "$b" && grep -qF 'whole, one line each' <<< "$b" \
+     && grep -qF 'the runner counts them' <<< "$b"; then
+    pass "hat: the publisher carries every kit line of the handoffs into the body of the pull request, whole"
+  else
+    fail "hat: the publisher's out-of-scope bullet lost the kit lines of the handoffs, 'whole, one line each', or that the runner counts them"
+  fi
+  b="$(bullet 'how to verify')"
+  if grep -qF "only what the reader's shell runs" <<< "$b" && grep -qF 'sdd preflight' <<< "$b" \
+     && grep -qF "it runs TEST_CMD in the runner's environment" <<< "$b" && grep -qF '$SDD_HOME' <<< "$b"; then
+    pass "hat: the publisher writes in how to verify only what the shell of the reader runs, and sends a TEST_CMD with a runner variable to sdd preflight"
+  else
+    fail "hat: the publisher's how-to-verify bullet lost 'only what the reader's shell runs', or the sdd preflight line for a TEST_CMD that cites a runner variable"
+  fi
+  b="$(bullet 'decisions for a human')"
+  if grep -qF '00-missao.md' <<< "$b" && grep -qF -- '- [x]' <<< "$b" \
+     && grep -qF 'the answer in one line and the file that gave it' <<< "$b" && grep -qF 'never disappears' <<< "$b"; then
+    pass "hat: the publisher keeps a question of the plan that a later handoff answered, ticked and with the answer"
+  else
+    fail "hat: the publisher's decisions bullet lost the answered question of 00-missao.md, ticked with the answer and the file, kept in the list"
+  fi
+}
+
 # The head the PR carries (ADR 0024, decisions 2 and 3; items 2 and 13 of
 # 20261121-l3-gates-do-fim-da-linha). gate_PR reads verified_head: off 50-pr.md, and only the publisher
 # can write it, commit the record where nothing but the mission folder moves, and push it; and the
@@ -1631,6 +1661,7 @@ doc_plan_only_probes
 doc_operator_probes
 publisher_stamp_probes
 publisher_head_probes
+publisher_body_probes
 boot_probes
 help_probes
 release_probes

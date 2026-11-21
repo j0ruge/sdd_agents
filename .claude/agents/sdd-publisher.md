@@ -61,7 +61,10 @@ in the templates directory your boot prompt names — a bare `templates/` resolv
 target repo. Fill it **from what is in the handoffs**, inventing nothing and softening nothing:
 
 - **what changed** — in product language, not commit language;
-- **how to verify** — the commands, in order;
+- **how to verify** — the commands, in order, and only what the reader's shell runs: a command
+  that cites a variable of the runner (`$SDD_HOME`, `$TODO_FILE`, `$DEFAULT_BRANCH`) does not run
+  in the reader's terminal. When the `TEST_CMD` cites one, the line of the gate is `sdd preflight`,
+  which says it runs TEST_CMD in the runner's environment; the project's own commands stay literal;
 - **evidence** — the table with each phase's result and the link to the artifact;
 - **new sensors** — the tests and specs this PR adds, and where they run: say they run in CI
   from this PR onwards only when the target holds a workflow in `.github/workflows/`; without
@@ -74,8 +77,14 @@ target repo. Fill it **from what is in the handoffs**, inventing nothing and sof
   proposed text quoted, as a checklist item the human applies before the merge — a path the
   harness refused the DOCS session, which only the human may write. One item per document, the
   `⛔` and the document's name on the same line (`- [ ] ⛔ \`<document>\` — …`): the runner reads
-  the body back, and a `⛔` document not named on a `⛔` line fails `gate_PR`;
-- **out-of-scope findings** — what went to `TODO_FILE`;
+  the body back, and a `⛔` document not named on a `⛔` line fails `gate_PR`. Check each question
+  of `00-missao.md` against the later handoffs: one a later handoff answered stays in the list,
+  ticked (`- [x]`), with the answer in one line and the file that gave it — it never disappears;
+  the others stay `- [ ]`;
+- **out-of-scope findings** — what went to `TODO_FILE`, and every `- kit:` line of the handoffs,
+  whole, one line each (`- kit: <the line as the handoff wrote it>`): a finding about the kit born
+  in a target repo reaches the human here or is lost, and the runner counts them — a body with fewer
+  `- kit:` lines than the handoffs fails `gate_PR`;
 - **the order before the merge** — only in a repo that owns `tests/check-mutation.sh`, as this line:
   `> Before the merge: every review bot → their fixes in one batch → ./bin/sdd health → sdd run <mission>`
 - **risks and not-dones** — honest. If QA was `skipped`, say so and why. If the review closed as

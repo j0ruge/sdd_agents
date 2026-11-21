@@ -1572,16 +1572,16 @@ mut_PR_stamp_blind() {
 # The PR body stops being read for the ⛔ rows of 45-docs.md (codereview of 2026-09-28): the rule
 # change reaches the human only if the publisher remembered, and a body without it merges green.
 mut_PR_blocked_docs_not_carried() {
-  sed -i '/^gate_PR()/,/^}/ s@grep -qF -- "\$doc" <<< "\$body" || carried_missing@true || carried_missing@' "$1"
+  sed -i '/^gate_PR()/,/^}/ s@grep -qF -- "\$doc" <<< "\$blocked_body" || carried_missing@true || carried_missing@' "$1"
 }
 mut_PR_blocked_docs_anywhere() {        # the ⛔ document counts wherever the body names it (review r2)
   sed -i '/^gate_PR()/,/^}/ s@grep -F .⛔. <<< @grep -F "" <<< @' "$1"
 }
 mut_PR_merged_rechecked() {             # a merged PR's body is read again, and a finished mission reopens
-  sed -i '/^gate_PR()/,/^}/ s@if \[ "\$pr_state" = MERGED \]; then break; fi@:@' "$1"
+  sed -i '/^  local docs=() kit_n=0 kit_k=0 blocked_body$/,/^}/ s@^  if \[ "\$pr_live_state" != MERGED \]; then$@  if true; then@' "$1"
 }
 mut_PR_body_unread_is_missing() {       # a body gh could not read is reported as one lacking the ⛔
-  sed -i '/^gate_PR()/,/^}/ s@^        if \[ "\$body_rc" -ne 0 \]; then$@        if false; then@' "$1"
+  sed -i '/^gate_PR()/,/^}/ s@^      if \[ "\$body_rc" -ne 0 \]; then$@      if false; then@' "$1"
 }
 
 # The key stops being a function of the CONTENT alone and starts following HEAD as well. Deliberately
@@ -2472,6 +2472,16 @@ mut_REVIEW_later_merged_mission_refused() {
 
 mut_PR_head_unreadable_passes() {
   sed -i '/^gate_PR() {$/,/^}$/ s|^  if \[ -z "\$pr_live_state" \] \|\| ! \[\[ "\$pr_head" =~ ^\[0-9a-f\]{40,64}\$ \]\]; then$|  if false; then|' "$1"
+}
+
+# The kit lines of the handoffs (item 8 of 20261121-l3-gates-do-fim-da-linha). Without the
+# comparison a body that dropped a finding about the kit merges and the finding is lost; with a quote
+# counted, the template's own example (`> - kit:`) would owe the body a phantom line.
+mut_PR_kit_lines_uncounted() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^        if \[ "\${kit_k:-0}" -lt "\$kit_n" \]; then$|        if false; then|' "$1"
+}
+mut_PR_kit_lines_counted_in_quote() {
+  sed -i '/^mission_kit_lines() {$/,/^}$/ s|^    /\^\[ \\t\]\*- kit:/ { n++ }$|    /^[ \\t>]*- kit:/ { n++ }|' "$1"
 }
 
 # Door 1 of the app-down escalation, and the sibling of RUN_blocked_not_escalated above in every
@@ -7976,6 +7986,8 @@ CATALOG=(
   PR_verified_head_unchecked
   PR_merged_head_read
   PR_head_unreadable_passes
+  PR_kit_lines_uncounted
+  PR_kit_lines_counted_in_quote
   REVIEW_later_code_unread
   REVIEW_later_docs_writes_counted
   REVIEW_later_merged_mission_refused
