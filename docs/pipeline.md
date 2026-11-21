@@ -555,6 +555,18 @@ The owner is `sdd-docs` (`KAIZEN_LOG.md` is in its `writes:`), or an EXEC increm
 **Passes when:** `50-pr.md` exists with `pr_url:` **and** `gh pr view <url>` confirms the PR
 exists. A file claiming a PR that does not exist fails — and it is good that it does.
 
+**The PR has to carry what the mission closed** (ADR 0024, since `20261121-l3-gates-do-fim-da-linha`).
+The same `gh` call reads the state and the head (`--json url,state,headRefOid`); a url confirmed with
+no readable state and sha is its own refusal (`could not read the head of PR …`), never "the head
+differs". An open or closed PR whose `headRefOid` is not `mission_tip` — `HEAD` when no branch is
+declared or `HEAD` is on it, else the local or the `origin` ref of the declared branch, else nothing
+and no comparison — is refused with both shas and `git push` as the way out. A `verified_head:` in
+`50-pr.md`, the sha the publisher ran step 2 on, is refused when it is no commit, when the head does
+not carry it, or when a path outside `<HANDOFF_DIR>/<mission>/` changed between it and the head (a
+diff git cannot list refuses too); absent, it passes. The owner is `sdd-publisher`, who commits
+`50-pr.md` alone in the mission folder and pushes it, and on a lap runs step 2 again and rewrites the
+sha. A **merged** PR is not compared.
+
 **`status: blocked` in `50-pr.md` stops the line** (`handoff-blocked`, rc 3, since
 `20261121-l3-gates-do-fim-da-linha`), read **before** the `pr_url:` — a blocked `50-pr.md` has no PR,
 and refusing it for the missing url bought a second publisher session. The reason names the way out
@@ -567,7 +579,9 @@ positively (`done` or `blocked`, any other value refused by name); absent, it pa
 that carries `⛔`** — the template's checklist item, read with `gh pr view <url> --json state,body`;
 a name elsewhere in the body (under "what changed") is not an item the human applies. `gate_DOCS`
 proves the proposal exists on disk; this is what proves it reached the human. The owner is
-`sdd-publisher`: a lap refused here edits the body (`gh pr edit`), never opens a second PR. A body
+`sdd-publisher`: a lap refused here edits the body through the REST PATCH
+(`gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -F body=@<file>`; `gh pr edit` fails on gh 2.45 and
+leaves the body as it was), never opens a second PR. A body
 gh cannot read is its own refusal, and a **merged** PR is not read at all — a body edited after the
 merge would derive a finished mission back to PR. The rows come from `docs_checklist_rows`, the same
 reader `gate_DOCS` decides on (one `⛔` cell naming several documents is one row per document), so

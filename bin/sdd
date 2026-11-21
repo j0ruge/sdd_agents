@@ -1025,6 +1025,29 @@ mission_base_refs() {
   done
 }
 
+# mission_tip — the head of the mission, the full sha, or NOTHING when it cannot be named (ADR 0024,
+# decision 1). ONE definition, read by gate_PR (is the PR at the head of the mission?) and by the K8
+# check of gate_DOCS. The first rule that matches: no branch declared in 00-missao.md (read by
+# mission_branch_declared, never a second copy of its rule) or HEAD on the declared branch → HEAD;
+# refs/heads/<branch> → that commit; refs/remotes/origin/<branch> → that commit; otherwise nothing,
+# and the reader skips the comparison instead of comparing against a guess.
+#
+# Pure (prints, sets no global), so it is safe to read as `$(mission_tip)`. Every capture is guarded.
+mission_tip() {
+  local want cur r c
+  want="$(mission_branch_declared)"
+  cur="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || true)"
+  if [ -z "$want" ] || [ "$cur" = "$want" ]; then
+    git -C "$REPO_ROOT" rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null || true
+    return 0
+  fi
+  for r in "refs/heads/$want" "refs/remotes/origin/$want"; do
+    c="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "$r^{commit}" 2>/dev/null || true)"
+    if [ -n "$c" ]; then printf '%s\n' "$c"; return 0; fi
+  done
+  return 0
+}
+
 # path_in_commits <path> [<commit>...] — rc 0 when <path> exists in the tree of any <commit>.
 path_in_commits() {
   local path="$1" c
@@ -2716,15 +2739,68 @@ gate_PR() {
   fi
   local url; url="$(frontmatter "$p" pr_url)"
   [ -n "$url" ] || { GATE_WHY="50-pr.md has no 'pr_url:' in the frontmatter"; return 1; }
-  local live
-  live="$( cd "$REPO_ROOT" && gh pr view "$url" --json url --jq .url 2>/dev/null )" || true
+  # ONE gh call confirms the PR and reads where it stands (ADR 0024, decisions 1 and 2; items 1 and 2
+  # of 20261121-l3-gates-do-fim-da-linha): the url, the state and the head. Proving the PR exists said
+  # nothing about what it carries, and a PR one push behind the mission passed and merged without the
+  # last increments. The owner of both artifacts is sdd-publisher: it pushes the mission branch, and
+  # it writes verified_head: — the sha it ran step 2 on — committing 50-pr.md alone in the mission
+  # folder and pushing that commit; a lap refused here runs step 2 again on the head, rewrites the
+  # sha, commits and pushes. Three outcomes, each its own sentence: gh does not confirm the url; gh
+  # confirms it and the state and the sha do not read; read.
+  local live pr_view pr_live_state pr_head tip vh vc changed outside mdir_rel diff_rc=0
+  pr_view="$( cd "$REPO_ROOT" && gh pr view "$url" --json url,state,headRefOid --jq '.url, .state, .headRefOid' 2>/dev/null )" || true
+  live="$(sed -n 1p <<< "$pr_view")"
+  pr_live_state="$(sed -n 2p <<< "$pr_view")"
+  pr_head="$(sed -n 3p <<< "$pr_view")"
   [ -n "$live" ] || { GATE_WHY="gh does not confirm PR $url — 50-pr.md may be lying"; return 1; }
+  case "$pr_live_state" in OPEN|CLOSED|MERGED) ;; *) pr_live_state="" ;; esac
+  if [ -z "$pr_live_state" ] || ! [[ "$pr_head" =~ ^[0-9a-f]{40,64}$ ]]; then
+    GATE_WHY="could not read the head of PR $live (gh confirmed the url, and no state and sha came back) — run 'gh pr view $url --json state,headRefOid'"
+    return 1
+  fi
+  # A MERGED PR is not compared: what it carries is in the base now, and a head that moved after the
+  # merge would derive a finished mission back to PR — the reason the ⛔ check below skips it too.
+  if [ "$pr_live_state" != MERGED ]; then
+    tip="$(mission_tip)"
+    if [ -n "$tip" ] && [ "$pr_head" != "$tip" ]; then
+      GATE_WHY="PR $live is at ${pr_head:0:7}, and the mission is at ${tip:0:7} — push the mission branch ('git push'); the PR must carry what the mission closed"
+      return 1
+    fi
+    # verified_head: absent passes, as the records older than the key do. Present, it is a commit
+    # the head carries with nothing outside the mission folder after it; a diff git could not list
+    # refuses (fail closed), as rule 4 of review_head_ok does.
+    if [ -n "$tip" ] && frontmatter_has "$p" verified_head; then
+      vh="$(frontmatter "$p" verified_head)"
+      vc="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "$vh^{commit}" 2>/dev/null || true)"
+      if [ -z "$vc" ]; then
+        GATE_WHY="50-pr.md has verified_head '$vh', which is no commit of this repository — run the checks of step 2 again on the head and write the new sha"
+        return 1
+      fi
+      if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$vc" "$tip" 2>/dev/null; then
+        GATE_WHY="50-pr.md has verified_head ${vc:0:7}, which the head ${tip:0:7} does not carry — run the checks of step 2 again on the head and write the new sha"
+        return 1
+      fi
+      changed="$(git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$vc" "$tip" 2>/dev/null)" || diff_rc=$?
+      if [ "$diff_rc" -ne 0 ]; then
+        GATE_WHY="50-pr.md: git could not list what changed between verified_head ${vc:0:7} and the head ${tip:0:7} (rc $diff_rc) — the gate refuses what it cannot read"
+        return 1
+      fi
+      mdir_rel="$HANDOFF_DIR/$MISSION/"
+      # The prefix is anchored (index() == 1, a literal, never a regex): a path that only CONTAINS
+      # the mission folder further in is still outside it.
+      outside="$(awk -v pre="$mdir_rel" 'NF && index($0, pre) != 1 { print; exit }' <<< "$changed")"
+      if [ -n "$outside" ]; then
+        GATE_WHY="50-pr.md: $outside changed between verified_head ${vc:0:7} and the head — run the checks of step 2 again on the head and write the new sha"
+        return 1
+      fi
+    fi
+  fi
 
   # The ⛔ rows of 45-docs.md reach the human in the PR body, or not at all (ADR 0013; codereview of
   # 2026-09-28). gate_DOCS proves each has a proposal on disk; only the publisher's prompt carried it
   # into the PR, and a body without it merged with the rule change unapplied and nothing red. The
-  # owner is sdd-publisher, who writes the body: a lap refused here EDITS it (`gh pr edit`), never
-  # opens a second PR. The name has to sit on a line that carries `⛔` — the template's checklist
+  # owner is sdd-publisher, who writes the body: a lap refused here EDITS it through the REST PATCH
+  # (item 13: the porcelain edit fails on gh 2.45 and leaves the body as it was), never opens a second PR. The name has to sit on a line that carries `⛔` — the template's checklist
   # item — and not anywhere in the body: a name in "what changed" is not an item the human applies
   # (review r2). It proves the item is there, never that the quote under it is whole. The rows come
   # from docs_checklist_rows, the same reader gate_DOCS decides on, and the body is asked for only
@@ -2756,7 +2832,7 @@ gate_PR() {
       grep -qF -- "$doc" <<< "$body" || carried_missing+="${carried_missing:+, }$doc"
     done <<< "$rows"
     if [ -n "$carried_missing" ]; then
-      GATE_WHY="PR $live does not carry the ⛔ proposal(s) of 45-docs.md: $carried_missing — the human applies them from the PR's decisions; edit its body ('gh pr edit'), never open a second PR"
+      GATE_WHY="PR $live does not carry the ⛔ proposal(s) of 45-docs.md: $carried_missing — the human applies them from the PR's decisions; edit its body ('gh api -X PATCH repos/{owner}/{repo}/pulls/${live##*/} -F body=@<file>'), never open a second PR"
       return 1
     fi
   fi

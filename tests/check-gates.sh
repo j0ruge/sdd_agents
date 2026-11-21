@@ -3741,9 +3741,11 @@ EOF
 # gate_PR asks `gh` whether the PR is real, and no test may touch the network.
 cat > "$FIX/.stub/gh" <<'STUB'
 #!/usr/bin/env bash
-# Answers the one question gate_PR asks: `gh pr view <url> --json url --jq .url`.
+# Answers the first question gate_PR asks: `gh pr view <url> --json url,state,headRefOid` — the url,
+# the state (OPEN) and the head, which is the fixture's HEAD at the time of the call.
 [ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
-printf '%s\n' "${3:-}"
+printf '%s\nOPEN\n' "${3:-}"
+git rev-parse HEAD
 STUB
 chmod +x "$FIX/.stub/gh"
 printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\n---\n# PR\n' > "$MDIR/50-pr.md"
@@ -3763,10 +3765,16 @@ cp "$MDIR/45-docs.md" "$SDD_STATE_FIX/docs-before-pr.md"
 mkdir -p "$FIX/.sdd/logs"
 cat > "$FIX/.stub/gh" <<STUB
 #!/usr/bin/env bash
-# Answers what gate_PR asks: \`--json url --jq .url\` (is the PR real?) and, when 45-docs.md carries
-# ⛔ rows, \`--json state,body --jq '.state, .body'\` (the state line, then the body).
+# Answers what gate_PR asks: \`--json url,state,headRefOid\` (is the PR real, in which state, at which
+# head?) and, when 45-docs.md carries ⛔ rows, \`--json state,body --jq '.state, .body'\` (the state
+# line, then the body). The head is the fixture's HEAD at the time of the call, unless pr-head pins
+# another; the state is OPEN unless pr-state says otherwise.
 [ "\${1:-}" = "pr" ] && [ "\${2:-}" = "view" ] || { echo "unexpected gh call: \$*" >&2; exit 9; }
 case " \$* " in
+  *" --json url,state,headRefOid "*)
+    printf '%s\\n' "\${3:-}"
+    cat "$FIX/.sdd/logs/pr-state" 2>/dev/null || printf 'OPEN\\n'
+    cat "$FIX/.sdd/logs/pr-head" 2>/dev/null || git -C "$FIX" rev-parse HEAD ;;
   *" --json state,body "*)
     [ -e "$FIX/.sdd/logs/pr-body-fails" ] && exit 4
     cat "$FIX/.sdd/logs/pr-state" 2>/dev/null || printf 'OPEN\n'
@@ -3800,6 +3808,61 @@ rm -f "$FIX/.sdd/logs/pr-state"
 cp "$SDD_STATE_FIX/docs-before-pr.md" "$MDIR/45-docs.md"
 rm -f "$FIX/.sdd/logs/pr-body"
 git add -A && git commit -qm "chore: docs without a ⛔ again" >/dev/null
+
+# 1d. HEAD — the PR has to carry what the mission closed (ADR 0024, decisions 1 and 2; items 1 and 2
+#     of 20261121-l3-gates-do-fim-da-linha). gate_PR reads the head of the PR in the same gh call that
+#     confirms it, and compares it with mission_tip; and a verified_head: in 50-pr.md is the sha the
+#     publisher ran step 2 on, which the head has to carry with nothing but the mission folder after it.
+PRH_HEAD="$(git rev-parse HEAD)"
+PRH_OLD="$(git rev-parse HEAD~1)"
+printf '%s\n' "$PRH_OLD" > "$FIX/.sdd/logs/pr-head"
+prh_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+prh_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+rm -f "$FIX/.sdd/logs/pr-head"
+if [ "$prh_phase" = PR ] && grep -qF "is at ${PRH_OLD:0:7}, and the mission is at ${PRH_HEAD:0:7}" <<< "$prh_why" \
+   && grep -qF "git push" <<< "$prh_why"; then
+  pass "gate_PR refuses a pull request whose head is not the head of the mission, and names both"
+else fail "gate_PR refuses a pull request whose head is not the head of the mission, and names both" \
+  "PR, 'is at ${PRH_OLD:0:7}, and the mission is at ${PRH_HEAD:0:7}', 'git push'" "$prh_phase — $prh_why"; fi
+# verified_head: before a commit of code, refused naming the path; after it, with only the mission
+# folder committed since, passed — the differential pair, so neither half passes by the regime.
+cp "$MDIR/50-pr.md" "$SDD_STATE_FIX/50-pr-before-verified.md"
+PRV_BEFORE="$(git rev-parse HEAD)"
+printf 'code committed after the checks\n' > "$FIX/later-code.txt"
+git add -A && git commit -qm "feat: code after the checks of step 2" >/dev/null
+PRV_AFTER="$(git rev-parse HEAD)"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\nverified_head: %s\n---\n# PR\n' "$PRV_BEFORE" > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md verified before the code" >/dev/null
+prv_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+prv_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\nverified_head: %s\n---\n# PR\n' "$PRV_AFTER" > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: 50-pr.md verified after the code" >/dev/null
+prv_phase2="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+cp "$SDD_STATE_FIX/50-pr-before-verified.md" "$MDIR/50-pr.md"
+rm -f "$FIX/later-code.txt"
+git add -A && git commit -qm "chore: 50-pr.md without verified_head again" >/dev/null
+if [ "$prv_phase" = PR ] && grep -qF "later-code.txt changed between verified_head ${PRV_BEFORE:0:7} and the head" <<< "$prv_why" \
+   && grep -qF '50-pr.md' <<< "$prv_why" && [ "$prv_phase2" = DONE ]; then
+  pass "gate_PR refuses a verified_head that does not cover the head, and passes when only the mission folder changed after it"
+else fail "gate_PR refuses a verified_head that does not cover the head, and passes when only the mission folder changed after it" \
+  "PR naming later-code.txt and ${PRV_BEFORE:0:7}, then DONE" "$prv_phase — $prv_why — then $prv_phase2"; fi
+# No verified_head passes (the records older than the key); a MERGED PR is not compared at all.
+prn_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+printf 'MERGED\n' > "$FIX/.sdd/logs/pr-state"
+printf '%s\n' "$PRH_OLD" > "$FIX/.sdd/logs/pr-head"
+prm_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+rm -f "$FIX/.sdd/logs/pr-state" "$FIX/.sdd/logs/pr-head"
+assert_eq "gate_PR passes a 50-pr.md with no verified_head, and does not read the head of a merged pull request" \
+  "DONE|DONE" "$prn_phase|$prm_phase"
+# A head gh answered with no readable state and sha is its own refusal: "is at" would be a sentence
+# about a head nobody read.
+printf 'garbage\n' > "$FIX/.sdd/logs/pr-state"
+printf 'not-a-sha\n' > "$FIX/.sdd/logs/pr-head"
+pru_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+pru_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+rm -f "$FIX/.sdd/logs/pr-state" "$FIX/.sdd/logs/pr-head"
+assert_eq "gate_PR says it could not read the head, never that the head differs" "PR|1|0" \
+  "$pru_phase|$(grep -c 'could not read the head of PR' <<< "$pru_why")|$(grep -c 'is at' <<< "$pru_why")"
 
 # 1c. BLOCKED — a 50-pr.md that declares `status: blocked` (the publisher stopped on a conflict with
 #     the base) arms the marker cmd_run stops on, BEFORE the pr_url is read: a blocked 50-pr.md has

@@ -2430,6 +2430,21 @@ mut_RUN_pr_blocked_not_armed() {
 mut_RUN_review_blocked_not_armed() {
   sed -i '/^gate_REVIEW() {$/,/^}$/ s|^    GATE_HANDOFF_BLOCKED=1$|    GATE_HANDOFF_BLOCKED=0|' "$1"
 }
+# gate_PR reads the head of the PR (ADR 0024; I3 of 20261121-l3-gates-do-fim-da-linha): the
+# comparison with mission_tip always agrees; verified_head: is never read; a MERGED PR is compared
+# too; and a head gh answered unreadably passes on to the comparison.
+mut_PR_head_unread() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^    if \[ -n "\$tip" \] \&\& \[ "\$pr_head" != "\$tip" \]; then$|    if [ -n "$tip" ] \&\& false; then|' "$1"
+}
+mut_PR_verified_head_unchecked() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^    if \[ -n "\$tip" \] \&\& frontmatter_has "\$p" verified_head; then$|    if false; then|' "$1"
+}
+mut_PR_merged_head_read() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^  if \[ "\$pr_live_state" != MERGED \]; then$|  if true; then|' "$1"
+}
+mut_PR_head_unreadable_passes() {
+  sed -i '/^gate_PR() {$/,/^}$/ s|^  if \[ -z "\$pr_live_state" \] \|\| ! \[\[ "\$pr_head" =~ ^\[0-9a-f\]{40,64}\$ \]\]; then$|  if false; then|' "$1"
+}
 
 # Door 1 of the app-down escalation, and the sibling of RUN_blocked_not_escalated above in every
 # respect: same range, same neutralisation, and the line substituted is textually distinct so
@@ -7925,6 +7940,10 @@ CATALOG=(
   RUN_blocked_retry_not_escalated
   RUN_ticket_blocked_not_armed
   RUN_pr_blocked_not_armed
+  PR_head_unread
+  PR_verified_head_unchecked
+  PR_merged_head_read
+  PR_head_unreadable_passes
   RUN_review_blocked_not_armed
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated

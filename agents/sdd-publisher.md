@@ -84,8 +84,9 @@ target repo. Fill it **from what is in the handoffs**, inventing nothing and sof
 Title: the repo's convention (`<type>(<scope>): <what>`), with the issue key when there is one.
 
 **The PR already exists?** `50-pr.md` names it and the boot prompt says why the phase reopened —
-usually a body that misses a `⛔` item. Never open a second PR: fix the body in place with
-`gh pr edit <url> --body-file <file>`.
+usually a body that misses a `⛔` item, or a head behind the mission. Never open a second PR: fix the
+body in place with `gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -F body=@<file>` (`<n>` is the
+number at the end of the url; `gh` fills the owner and the repo from the directory), never `gh pr edit`, which fails on gh 2.45 and leaves the body as it was.
 
 ### 5. Record it
 
@@ -97,10 +98,20 @@ missao: <slug>
 fase: PR
 status: done
 pr_url: https://github.com/<org>/<repo>/pull/<n>
+verified_head: <the git rev-parse HEAD on which step 2 ran, the full sha>
 data: <YYYY-MM-DD HH:MM>
-gate: "gh pr view <url> --json url → ok"
+gate: "gh pr view <url> --json headRefOid → <sha>, the head pushed"
 ---
 ```
+
+Commit `50-pr.md` in a commit that touches the mission directory alone, and `git push` after it, so
+the head of the PR is the head of the mission. `gate_PR` reads the head of the PR and refuses one
+that is not the head of the mission; it refuses a `verified_head:` that is no commit, that the head
+does not carry, or with a path outside the mission directory changed between it and the head.
+
+The way back: the PR is open and the head carries new code since your `verified_head:` — run the
+checks of step 2 again on the head, rewrite `verified_head:` with the new sha, commit `50-pr.md`
+alone, and `git push`.
 
 The runner confirms the PR **through `gh`**, not through your file. A `pr_url` that does not exist
 fails the gate — and it is good that it does.

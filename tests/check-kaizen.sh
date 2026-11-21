@@ -1052,10 +1052,14 @@ loud_stub() {
     > "$OUTSIDE/stub/claude"
   chmod +x "$OUTSIDE/stub/claude"
 }
-# gh answers `gh pr view <url> --json url --jq .url` — the only call gate_PR makes.
+# gh answers `gh pr view <url> --json url,state,headRefOid` — the url, OPEN, and the HEAD of the
+# repository it runs in, which is the head of the mission there: the PR carries what the mission closed.
 gh_stub_confirms_pr() {
-  printf '#!/usr/bin/env bash\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then printf "%%s\\n" "$3"; exit 0; fi\nexit 1\n' \
-    > "$OUTSIDE/stub/gh"
+  cat > "$OUTSIDE/stub/gh" <<'STUB'
+#!/usr/bin/env bash
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then printf '%s\nOPEN\n' "$3"; git rev-parse HEAD; exit 0; fi
+exit 1
+STUB
   chmod +x "$OUTSIDE/stub/gh"
 }
 PATH="$OUTSIDE/stub:$PATH"

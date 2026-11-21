@@ -1246,6 +1246,33 @@ publisher_stamp_probes() {
   fi
 }
 
+# The head the PR carries (ADR 0024, decisions 2 and 3; items 2 and 13 of
+# 20261121-l3-gates-do-fim-da-linha). gate_PR reads verified_head: off 50-pr.md, and only the publisher
+# can write it, commit the record where nothing but the mission folder moves, and push it; and the
+# body of an open PR is edited through the REST PATCH, because `gh pr edit` fails on gh 2.45 and
+# leaves the body as it was. Every line that still names `gh pr edit` has to be the one forbidding it.
+publisher_head_probes() {
+  local pub="$ROOT/agents/sdd-publisher.md" rec edits
+  rec="$(awk '/^### 5\. /{on=1; next} /^### /{on=0} on' "$pub")"
+  if [ -n "$rec" ] && grep -qF 'verified_head:' <<< "$rec" \
+     && grep -qF 'in a commit that touches the mission directory alone' <<< "$rec" \
+     && grep -qF 'git push' <<< "$rec"; then
+    pass "hat: the publisher records verified_head, commits 50-pr.md alone in the mission folder and pushes it"
+  else
+    fail "hat: the publisher's ### 5. lost verified_head:, the commit of the mission directory alone, or the git push after it"
+  fi
+  # Code of the runner (a comment may say why the command is gone) and lines of the hat that name the
+  # command without forbidding it, in the hat's own words.
+  edits="$( { grep -F 'gh pr edit' "$ROOT/bin/sdd" | grep -vE '^[[:space:]]*#'
+              grep -F 'gh pr edit' "$pub" | grep -vF 'never `gh pr edit`'; } || true)"
+  if grep -qF 'gh api -X PATCH' "$pub" && grep -qF 'gh api -X PATCH' "$ROOT/bin/sdd" \
+     && [ -z "$edits" ]; then
+    pass "hat: the publisher and gate_PR edit the body of a pull request through the REST PATCH"
+  else
+    fail "hat: the publisher or gate_PR does not name 'gh api -X PATCH', or still sends the body to 'gh pr edit'"
+  fi
+}
+
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
 # PROVENANCE: the three lines below were captured on 2026-09-04 on Claude Code 2.1.260 with
 #     claude -p 'Read docs/handoffs/x/00-missao.md with the Read tool, then reply with exactly: OK' \
@@ -1590,6 +1617,7 @@ doc_finding_prs_probes
 doc_plan_only_probes
 doc_operator_probes
 publisher_stamp_probes
+publisher_head_probes
 boot_probes
 help_probes
 release_probes
