@@ -558,6 +558,11 @@ check handoff.md '^## Boot da próxima fase'   "section 'Boot da próxima fase'"
 check handoff.md '^## Pendências / Decisions for a Human' "open-questions section"
 check handoff.md '^## Riscos e não-feitos'    "section 'Riscos e não-feitos'"
 check handoff.md '^## Achados fora de escopo' "section 'Achados fora de escopo'"
+# Item 3 of 20261121-l3-gates-do-fim-da-linha: the gate: field cited outputs the evidence folder of
+# the phase did not keep, so nobody could open or rerun them. A measure is cited with its whole
+# command and the sha it ran on, or by the path that holds the output.
+check handoff.md '^gate: <.*o comando inteiro e o sha em que rodou' \
+  "the gate field cites a measure with its command and the sha it ran on, or the path that holds the output"
 # The handoff is the ONLY carrier a kit finding has when the mission's repo is not the kit — the
 # session is forbidden to write into the kit's own TODO.md, so a template that lost this line would
 # leave the instruction pointing at a slot that does not exist.
@@ -700,6 +705,9 @@ review_check '^## Pendências / Decisions for a Human' "section 'Pendências / D
 review_check '^## Achados da rodada'   "section 'Achados da rodada'"
 review_check '^## O que foi refutado'  "section 'O que foi refutado'"
 review_check '^## Achados fora de escopo' "section 'Achados fora de escopo'"
+# Item 3 of the same mission, the same rule on the other half of the seal (see handoff.md above).
+review_check '^gate: <.*o comando inteiro e o sha em que rodou' \
+  "the gate field cites a measure with its command and the sha it ran on, or the path that holds the output"
 # Item 6 of 20261121-l3-gates-do-fim-da-linha: gate_REVIEW stops the line on `status: blocked`, so
 # the template says what the word means — 53 of the 55 rounds on disk already wrote `done` for a
 # round with findings, and the two that wrote `blocked` had to carry on.
@@ -742,10 +750,11 @@ refute review.md "$FORBIDDEN_POINTER" \
 REVIEW_ASSERTIONS=$((CHECKS_RUN - REVIEW_MARK))
 # 23 → 24 in `20260901-o-revisor-so-acha`, with the `## Incrementos de conserto` section, then
 # 24 → 26 in the F1 of the same mission, with the two `refute` rules above, then 26 → 27 in the I2
-# of `20261121-l3-gates-do-fim-da-linha`, with the `status:` rule. A floor left behind
+# of `20261121-l3-gates-do-fim-da-linha`, with the `status:` rule, then 27 → 28 in the I8 of the
+# same mission, with the `gate:` rule. A floor left behind
 # still PASSES while describing a smaller surface than the one it reads, which is the same
 # fail-open as a floor of zero — recounted in the commit that adds the rule, never later.
-REVIEW_FLOOR=27
+REVIEW_FLOOR=28
 if [ "$REVIEW_ASSERTIONS" -lt "$REVIEW_FLOOR" ]; then
   printf '  FAIL review.md: only %d assertion(s) ran, expected at least %d — a clean report over\n' \
     "$REVIEW_ASSERTIONS" "$REVIEW_FLOOR" >&2

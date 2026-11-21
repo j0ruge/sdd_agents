@@ -4,7 +4,7 @@ fase: <EXEC | QA | REVIEW | DOCS | PR | TICKET>
 status: <done | blocked | skipped>
 sessao: <uuid da sessão que produziu este handoff — serve para --resume>
 data: <YYYY-MM-DD HH:MM>
-gate: <a evidência de que o gate desta fase passou — comando + saída resumida, não adjetivo>
+gate: <a evidência de que o gate desta fase passou — cada medida com o comando inteiro e o sha em que rodou, para ser refeita; "saídas em <caminho>" só quando o arquivo está lá; medida sem um dos dois fica fora>
 ---
 
 # Handoff — <fase> — <título da missão>
