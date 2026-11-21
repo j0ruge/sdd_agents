@@ -1869,6 +1869,57 @@ assert_eq "a plugin skill missing from the registry is looked for in the cache o
   "other:floor=1,named=0,tree=1|missing=1,warned=0,link=0,entry= both:where=1,named=0|missing=0,warned=1,link=0,entry=$RX_SK18_CACHE/mk2/codereview hollow:missing=1,warned=0,link=0,entry=" \
   "other:floor=$([ "$sk17_floor" = "$RX_SK17_CACHE/mk/other/1.0.0/skills/codereview" ] && echo 1 || echo 0),named=$(grep -cF "$RX_SK17_CACHE/mk/other" <<< "$out_sk17_other"),tree=$(grep -cxF "        $RX_SK17_CACHE/<marketplace>/<plugin>/<version>/skills/<skill>." <<< "$out_sk17_other")|$(rx_skill "$out_sk17_other") both:where=$(rx_where "$out_sk18_both" "$RX_SK18_CACHE/mk2/codereview"),named=$(grep -cF "$RX_SK18_CACHE/mk/other" <<< "$out_sk18_both")|$(rx_skill "$out_sk18_both") hollow:$(rx_skill "$out_sk19_hollow")"
 
+# The broken pipe (item 12 of the L4). read_rules_cover used to leave its `while … < <(kit_read_rules)`
+# at the first rule that covers the path, and kit_read_rules, on the other side, went on writing:
+# under a caller that ignores SIGPIPE — inherited ignored, and bash cannot un-ignore it — every printf
+# after the reader left said `printf: write error: Broken pipe` beside the verdict. With a few entries
+# the race is almost never lost; with 400 it always is. The world: the skill nobody declared of the
+# first world above, declared as the FIRST entry and followed by 399 that need not exist, so the
+# cover matches early and the producer has the most left to write. The floor proves the poison is
+# armed (under the same trap a SIGPIPE does not kill the shell); the skill line is the witness that
+# the cover ran and answered covered; the reached line says the run got as far as the git state. The
+# count reads `printf: ` under LC_ALL=C, never the translated text.
+echo "== a READ_EXTRA of 400 entries, under a caller that ignores SIGPIPE =="
+pipe_floor="$( ( trap '' PIPE; bash -c 'kill -PIPE $$; echo alive' ) 2>/dev/null || true )"
+pipe_rx="$RX_SK1_ROOT/plugins/cache/mk/codereview"
+for i in $(seq 1 399); do pipe_rx="$pipe_rx $RXF/pipe/entry$i"; done
+out_pipe="$( ( trap '' PIPE; HOME="$RX_SK1_HOME" SDD_SKILLS_ROOT="$RX_SK1_ROOT" READ_EXTRA="$pipe_rx" LC_ALL=C "$SDD" preflight ) 2>&1 || true )"
+assert_eq "preflight prints no write error with READ_EXTRA filled under a caller that ignores SIGPIPE" \
+  "floor:alive skill:missing=0,warned=0,link=0,entry= reached:1 errors:0" \
+  "floor:$pipe_floor skill:$(rx_skill "$out_pipe") reached:$(grep -c '^  ok   git present$' <<< "$out_pipe") errors:$(grep -c 'printf: ' <<< "$out_pipe")"
+
+# The dirty tree (item 11 of the L4). The failure said the tree was dirty and named nothing, so the
+# human ran `git status` to learn what the preflight had already read; and when every path was
+# untracked — data the app writes beside the code — nothing said where such data goes. Four worlds on
+# a repo of their own (the fixture's is dirty by construction): clean; a tracked file changed beside
+# an untracked one (both named, no exclude); only untracked files (named, and the exclude file); and
+# twelve untracked files (ten named, the rest counted). The count of the failure line rides beside the
+# paths: the tree stays a `_fail`.
+echo "== the dirty tree names its paths =="
+DT="$FIX/dirty-tree"
+mkdir -p "$DT" && ( cd "$DT" && git init -q -b main && git config user.email "fixture@example.com" \
+  && git config user.name "Fixture" && echo tracked > tracked.txt && "$SDD" install >/dev/null 2>&1 \
+  && git add -A && git commit -qm init ) >/dev/null 2>&1 || exit 1
+dt_run() { ( cd "$DT" && HOME="$RX_HOME" SDD_SKILLS_ROOT="$EMPTY_SKILLS" "$SDD" preflight 2>&1 ) || true; }
+# dt_says <output> → fail=N,paths=<the paths named, comma-joined>,more=N,exclude=N
+dt_says() {
+  printf 'fail=%s,paths=%s,more=%s,exclude=%s' \
+    "$(grep -c '^  fail  working tree dirty — the pipeline needs a clean base' <<< "$1")" \
+    "$(sed -n 's/^        \(??\| M\|M \) \(.*\)$/\2/p' <<< "$1" | paste -sd, -)" \
+    "$(grep -c '^        … and 2 more$' <<< "$1")" \
+    "$(grep -c 'every one of them is untracked.*\.git/info/exclude' <<< "$1")"
+}
+dt_clean="$(dt_run)"
+echo changed > "$DT/tracked.txt"; echo new > "$DT/new.txt"
+dt_mixed="$(dt_run)"
+( cd "$DT" && git checkout -q -- tracked.txt )
+dt_untracked="$(dt_run)"
+for i in 01 02 03 04 05 06 07 08 09 10 11; do echo x > "$DT/u$i.txt"; done
+dt_many="$(dt_run)"
+assert_eq "preflight names the dirty paths, and the exclude file only when every one of them is untracked" \
+  "clean:fail=0,paths=,more=0,exclude=0 mixed:fail=1,paths=tracked.txt,new.txt,more=0,exclude=0 untracked:fail=1,paths=new.txt,more=0,exclude=1 many:fail=1,paths=new.txt,u01.txt,u02.txt,u03.txt,u04.txt,u05.txt,u06.txt,u07.txt,u08.txt,u09.txt,more=1,exclude=1" \
+  "clean:$(dt_says "$dt_clean") mixed:$(dt_says "$dt_mixed") untracked:$(dt_says "$dt_untracked") many:$(dt_says "$dt_many")"
+
 # --- is anything listening where APP_URL points? ----------------------------
 # preflight ran fifteen checks and never once touched APP_URL, so the one thing that costs a whole
 # opus session to discover — the app is not up — was the one thing it could not say. Measured on

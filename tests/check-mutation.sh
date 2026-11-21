@@ -2959,6 +2959,19 @@ mut_PRE_template_probe_dead_counted_twice() {
 mut_PRE_template_outcome_error_warned() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s Read of|          warn "the template probe'"'"'s Read of|' "$1"
 }
+# L4 item 12: read_rules_cover matches off the stream again, leaving kit_read_rules writing into a
+# pipe with no reader at the first covering rule.
+mut_PRE_read_rules_cover_stream_read() {
+  sed -i '/^read_rules_cover() {/,/^}/ { s|^  for rule in \${rules\[@\]+"\${rules\[@\]}"}; do$|  while IFS= read -r rule; do|; s|^  done$|  done < <(kit_read_rules)| }' "$1"
+}
+# L4 item 11: the dirty-tree failure names no path again.
+mut_PRE_dirty_paths_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ { /head -n 10 <<< "\$_pf_dirty"/d }' "$1"
+}
+# L4 item 11: the exclude file is named even when a tracked path is dirty.
+mut_PRE_dirty_exclude_always_named() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    if ! grep -qv '"'"'^?? '"'"' <<< "\$_pf_dirty"; then$|    if true; then|' "$1"
+}
 mut_PRE_template_outcome_default_green() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
 }
@@ -8117,6 +8130,9 @@ CATALOG=(
   PRE_template_probe_dead_counted_twice
   PRE_template_outcome_error_warned
   PRE_template_outcome_default_green
+  PRE_read_rules_cover_stream_read
+  PRE_dirty_paths_unnamed
+  PRE_dirty_exclude_always_named
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent

@@ -6211,13 +6211,19 @@ skill_findable() {
 # exactly when the runner grants it, and no second copy of that decision exists. A directory covers
 # itself and what is under `<dir>/`, never a sibling that only begins with the same letters
 # (`…/codereview-x` is not under `…/codereview`). Pure: rc only. Sensor: tests/check-preflight.sh.
+# The list is read WHOLE before any match (mapfile), never matched off the stream: a `return` at the
+# first covering rule left kit_read_rules writing into a pipe with no reader, and under a caller that
+# ignores SIGPIPE every printf after it said `write error: Broken pipe` beside the verdict (item 12
+# of the L4; with 400 entries, always).
 read_rules_cover() {
   local p="${1:-}" rule dir
+  local -a rules=()
   case "$p" in "$REPO_ROOT"|"$REPO_ROOT"/*) return 0 ;; esac
-  while IFS= read -r rule; do
+  mapfile -t rules < <(kit_read_rules)
+  for rule in ${rules[@]+"${rules[@]}"}; do
     dir="${rule#"Read(/"}"; dir="${dir%"/**)"}"
     case "$p" in "$dir"|"$dir"/*) return 0 ;; esac
-  done < <(kit_read_rules)
+  done
   return 1
 }
 
@@ -7499,8 +7505,21 @@ cmd_preflight() {
   local branch; branch="$( cd "$REPO_ROOT" && git branch --show-current )"
   ok "current branch: $branch"
   warn_if_on_base_branch
-  if [ -n "$( cd "$REPO_ROOT" && git status --porcelain )" ]; then
-    _fail "working tree dirty — the pipeline needs a clean base to attribute commits to increments"
+  # The paths are named (up to ten, the rest counted): the human ran `git status` to learn what this
+  # had already read (item 11 of the L4). When every one is untracked it is often data the app writes
+  # beside the code, and the exclude file is named as the way out — git reads it, nobody commits it.
+  local _pf_dirty _pf_dirty_n _pf_dirty_msg _pf_exclude
+  _pf_dirty="$( cd "$REPO_ROOT" && git status --porcelain )" || _pf_dirty="?? (git status failed)"
+  if [ -n "$_pf_dirty" ]; then
+    _pf_dirty_n="$(grep -c '' <<< "$_pf_dirty")" || true
+    _pf_dirty_msg="working tree dirty — the pipeline needs a clean base to attribute commits to increments:"
+    _pf_dirty_msg+=$'\n'"$(head -n 10 <<< "$_pf_dirty" | sed 's/^/        /')"
+    [ "${_pf_dirty_n:-0}" -le 10 ] || _pf_dirty_msg+=$'\n'"        … and $((_pf_dirty_n - 10)) more"
+    if ! grep -qv '^?? ' <<< "$_pf_dirty"; then
+      _pf_exclude="$( cd "$REPO_ROOT" && git rev-parse --git-path info/exclude )" || _pf_exclude=".git/info/exclude"
+      _pf_dirty_msg+=$'\n'"        every one of them is untracked: data the app writes outside git can be listed in $_pf_exclude, which git reads and never commits"
+    fi
+    _fail "$_pf_dirty_msg"
   else
     ok "working tree clean"
   fi
