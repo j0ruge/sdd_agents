@@ -2103,6 +2103,29 @@ if [ "$floor_ok" = "1" ]; then
            "today's reason with no block, and 'never failed in the last 1' over a passed case" \
            "$hist_none"$'\n---\n'"$hist_passed"
     fi
+    # A project with no name (CodeRabbit 4654284439 on PR #458): Playwright writes the
+    # `[<project>] › ` prefix only for a named project. PROVENANCE: formatTestTitle in
+    # /home/joruge/repos/sales_quote/node_modules/playwright/lib/reporters/base.js (playwright
+    # 1.58.2), `const projectTitle = projectName ? \`[${projectLabel}${projectName}] › \` : ""`, and
+    # the summary of the same file indents each case of the `N failed` block by four spaces — the
+    # lines of hist_red with the prefix cut, since no log on this machine has an unnamed project.
+    hist_red_bare=$'\n  1 failed\n    e2e/sq113-copia-de-itens-persiste.spec.ts:121:7 › title\n  88 passed (5.0m)'
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    hist_seed 100000-aaaaaa "$hist_red_bare"
+    printf '%s\n' "$hist_red_bare" > "$page_dir/e2e.out"
+    hist_bare="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+    assert_eq "gate_QA reads the failed block of a Playwright project with no name" "1" \
+      "$(grep -cE 'sq113-copia-de-itens-persiste\.spec\.ts:121 already failed in 1 of the last 1 e2e gate logs' <<< "$hist_bare")$(grep -q 'e2e gate logs' <<< "$hist_bare" || printf ' — %s' "$hist_bare")"
+    # The log this evaluation wrote is left out by file identity (CodeRabbit 4654284443 on PR #458):
+    # `/<mission>`, which the CLI accepts, keeps `logs//<id>/` in the path the gate holds, find
+    # prints `logs/<id>/`, and the spelling test counted the current failure as an earlier one —
+    # `2 of the last 2` over one earlier log.
+    find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
+    hist_seed 100000-aaaaaa "$hist_red"
+    printf '%s\n' "$hist_red" > "$page_dir/e2e.out"
+    hist_slash="$( cd "$FIX" && "$SDD" why "/$MISSION" QA 2>&1 )"
+    assert_eq "gate_QA leaves the log it just wrote out of the history when the mission is named with a leading slash" "1|0" \
+      "$(grep -cE 'sq113-copia-de-itens-persiste\.spec\.ts:121 already failed in 1 of the last 1 e2e gate logs' <<< "$hist_slash")|$(grep -c 'of the last 2' <<< "$hist_slash")"
     find "$FIX/.sdd/logs" -name 'gate-qa-e2e-*.log' -delete
     rm -rf "$FIX/.sdd/logs/20200101-another-mission" "$page_dir/e2e.out"
     sed -i 's|^E2E_CMD=.*|E2E_CMD="false"|' .sdd/config.sh

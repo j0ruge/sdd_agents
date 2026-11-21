@@ -880,7 +880,10 @@ app_probe() {
 # e2e_failed_keys <log>: the `<file>:<line>` of each case in the Playwright `N failed` block of a
 # log, one per line, each once. The block runs from `^  <n> failed$` to the next `^  <n> <word>`
 # (flaky, skipped, passed, did not run, interrupted); a case line is
-# `    [<project>] › <file>:<line>:<column> › <title>`. A `✓` line of a case that PASSED carries the
+# `    [<project>] › <file>:<line>:<column> › <title>`, and `    <file>:<line>:<column> › <title>`
+# when the project has no name: Playwright writes the `[<project>] › ` prefix only for a named one
+# (`projectName ? … : ""` in formatTestTitle, lib/reporters/base.js of playwright 1.58.2;
+# CodeRabbit 4654284439 on PR #458). A `✓` line of a case that PASSED carries the
 # same file:line outside any block, and that is why the block, and not the log, is read.
 # The separators are found with index()/substr(): mawk is byte-based, and a negated class over
 # the multibyte `›` would negate its bytes (CLAUDE.md). DECLARED LIMIT: only the Playwright format
@@ -889,9 +892,10 @@ e2e_failed_keys() {
   awk '
     /^  [0-9]+ failed$/ { inb = 1; next }
     inb && /^  [0-9]+ [a-z]/ { inb = 0; next }
-    inb && /^    \[/ {
-      s = $0; i = index(s, "] › "); if (!i) next
-      s = substr(s, i + length("] › ")); j = index(s, " › "); if (j) s = substr(s, 1, j - 1)
+    inb && /^    [^ ]/ {
+      s = substr($0, 5)
+      if (substr(s, 1, 1) == "[") { i = index(s, "] › "); if (!i) next; s = substr(s, i + length("] › ")) }
+      j = index(s, " › "); if (j) s = substr(s, 1, j - 1)
       if (s !~ /:[0-9]+:[0-9]+$/) next
       sub(/:[0-9]+$/, "", s)
       if (!(s in seen)) { seen[s] = 1; print s }
@@ -912,7 +916,11 @@ e2e_red_history() {
   mapfile -t all < <(find "$REPO_ROOT/.sdd/logs" -mindepth 2 -maxdepth 2 -type f \
                        -name 'gate-qa-e2e-*.log' -printf '%f\t%p\n' 2>/dev/null \
                      | LC_ALL=C sort | cut -f2- || true)
-  for f in ${all[@]+"${all[@]}"}; do [ "$f" = "$log" ] || prior+=("$f"); done
+  # This log is left out by FILE IDENTITY, never by spelling: find prints `.sdd/logs/<id>/…`, and the
+  # log a gate holds is `$(log_dir)/…`, which keeps the `/<mission>` the CLI accepts as `logs//<id>/…`
+  # (MISSION stays literal, see resolve_mission) — the string test counted the current failure as an
+  # earlier one, even on the first run (CodeRabbit 4654284443 on PR #458).
+  for f in ${all[@]+"${all[@]}"}; do [ "$f" -ef "$log" ] || prior+=("$f"); done
   [ "${#prior[@]}" -le 50 ] || prior=("${prior[@]: -50}")
   n="${#prior[@]}"
   [ "$n" -gt 0 ] || return 0
@@ -2031,8 +2039,11 @@ gate_QA() {
         # database sits behind a port that answers — so the sentence names what it cleared and
         # sends the reader to the log for the rest.
         GATE_WHY="E2E_CMD failed ($E2E_CMD) with the app answering at $label — APP_URL is not the cause; whatever is (a broken assertion, or something behind the port, like a stopped database) is in the log. See $e2e_log"
-        # The history of each red case, before the `See`: a case that already fell before this
-        # mission is not the mission's, and the sdd-qa read that out of the logs by hand (item 10).
+        # The history of each red case, before the `See`: where the same `<file>:<line>` sat in the
+        # failed block of earlier e2e logs, this mission's own earlier runs included — a location
+        # match the sdd-qa read out of the logs by hand (item 10). It attributes nothing: the test at
+        # that line may have been rewritten since, and who broke it stays the QA's call
+        # (CodeRabbit 4654284471 on PR #458).
         local hist
         hist="$(e2e_red_history "$e2e_log")"
         [ -z "$hist" ] || GATE_WHY="${GATE_WHY% See "$e2e_log"} $hist. See $e2e_log"

@@ -1445,6 +1445,15 @@ mut_QA_e2e_history_uncounted() {      # the history is no longer added to the re
 mut_QA_e2e_history_counts_passed() {  # the count reads the whole log, not the failed block
   sed -i '/^e2e_red_history() {/,/^}/ s@e2e_failed_keys "\$f"; done)"$@grep -oE "› [^ ]+:[0-9]+:[0-9]+" "$f" | sed -E "s/^› //; s/:[0-9]+$//" | sort -u; done)"@' "$1"
 }
+# CodeRabbit on PR #458. 4654284439: a case line must open with `[<project>]` again, and a project
+# with no name — which Playwright writes with no prefix — yields no key. 4654284443: this log is left
+# out by spelling again, and `/<mission>` counts the current failure as an earlier one.
+mut_QA_e2e_unnamed_project_dropped() {
+  sed -i '/^e2e_failed_keys() {/,/^}/ s@^    inb && /\^    \[\^ \]/ {$@    inb \&\& /^    \\[/ {@' "$1"
+}
+mut_QA_e2e_current_log_by_spelling() {
+  sed -i '/^e2e_red_history() {/,/^}/ s@\[ "\$f" -ef "\$log" \]@[ "$f" = "$log" ]@' "$1"
+}
 
 mut_REVIEW_stops_at_h3() {
   sed -i 's|.*inside && /\^#{1,6}\[\[:space:\]\]/ { exit }.*|      inside \&\& /^###[[:space:]]/ { exit }|' "$1"
@@ -7908,6 +7917,8 @@ CATALOG=(
   QA_hostport_no_ipv6
   QA_e2e_history_uncounted
   QA_e2e_history_counts_passed
+  QA_e2e_unnamed_project_dropped
+  QA_e2e_current_log_by_spelling
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_every_row_as_prose
