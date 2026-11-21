@@ -4,6 +4,37 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-11-21 — O veredito do effort da EXEC (volta a `medium`) e a rodada delta medida em dinheiro
+
+**Origem:** o chore pós-merge do L2 (`20261120-l2-o-sdd-plan-e-o-planner`, PR #456), campanha
+`20261117-zerar-as-issues`. Duas medidas que a missão deixou para depois do merge, lidas do ledger
+(`~/.sdd/autonomy-log.jsonl`, `LC_ALL=C`, linhas `session`) e do log da corrida.
+
+**1. O effort da EXEC.** O critério foi escrito antes do resultado (2026-11-20 20:40, pedido do dono:
+*"quando fechar esse vamos voltar ao exec com esforço medium se passar na análise"*). O `xhigh` fica
+só se o L2 fechar a REVIEW com 0 `R<n>` e em até 2 rodadas, um ganho de qualidade que pague o custo
+por item maior.
+
+| Missão | Effort da EXEC | Sessões de EXEC (I + R) | Duração total | US$ da EXEC | US$ por item | `R<n>` | REVIEW do runner |
+|---|---|---|---|---|---|---|---|
+| L1 | `medium` | 10 (9 + 1) | 13 697 s | 13,21 | 0,94 | 1 | 2 sessões, US$ 3,41 |
+| L1b | `medium` | 6 (5 + 1) | 12 841 s | 11,29 | (1 item) | 1 | 2 sessões, US$ 4,40 |
+| L2 | `xhigh` | 7 (6 + 1) | 15 501 s | 24,04 | 1,72 | 1 | 2 sessões (r1 B → R1 → r2 A), US$ 5,16 |
+
+Fora da conta: a sessão `3672ea89` (2 710 s, US$ 3,85), que consertou os dois sensores que herdavam o
+`EFFORT_EXEC` exportado no lançamento.
+
+**Veredito pelo critério:** o L2 teve 1 `R<n>`, como o L1 e o L1b, e a mesma forma de REVIEW. O
+`xhigh` custou 1,8× por item e não comprou a qualidade que o critério mede. A EXEC volta a `medium`
+do L3 em diante, lançada sem exportar `EFFORT_*` e sem o `CLAUDE_EFFORT` do ambiente da sessão
+interativa. A comparação é observacional, com a ressalva da entrada do L2: o trabalho e o número de
+incrementos diferem entre os lotes.
+
+**2. A rodada delta (ADR 0023) em dinheiro.** No L2 a r2 do runner custou US$ 1,36 e a r1 US$ 3,80:
+uma razão r2/r1 de **0,36**. Antes da ADR 0023, a razão r≥2/r1 ia de 1,0 a 1,5 (a medida que o § 3
+da `.claude/rules/anatomia-do-agente.md` deixou para o L2). É uma corrida só: o próximo lote com duas
+rodadas confirma ou refuta.
+
 ## 2026-11-20 — O L2: quinze regras do `/sdd-plan` e do planner ganham texto e asserção, com o EXEC em `xhigh`
 
 **Missão:** `20261120-l2-o-sdd-plan-e-o-planner`, o L2 da campanha `20261117-zerar-as-issues`,
