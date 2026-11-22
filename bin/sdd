@@ -6248,6 +6248,138 @@ skill_read_entry() {
   printf '%s\n' "$entry"
 }
 
+# phase_skills_wanted → publishes SKILLS_WANTED, the third-party skills this config boots headless,
+# each in the FORM its phase invokes it by, which is where skill_findable looks (Codex r7 on PR
+# #315): REVIEW invokes `/codereview:codereview` (agents/sdd-reviewer.md), the skill of the codereview
+# plugin; TICKET invokes `/ticket` (agents/sdd-ticket.md) and the QA sub-steps `/qa-report` and
+# `/qa-execution` (phase_slash), all three plain. It is the subset of KIT_THIRD_PARTY_SKILLS this
+# config boots (the planner's three are interactive); the full list is what `sdd health --release`
+# line 2 asks an origin for. That is a second spelling of what the hats and phase_slash write, and no
+# comment makes it the same one: check-preflight.sh compares the list preflight prints with the
+# invocations it reads off those files. KIT_THIRD_PARTY_SKILLS lists names, so the check below holds
+# it to the part after the `:`. A global, so the function is CALLED: the die must not end in a
+# subshell. Readers: cmd_preflight (its Bash probe and its skills block) and phase_skills_check.
+phase_skills_wanted() {
+  local sk
+  SKILLS_WANTED=(codereview:codereview)   # REVIEW runs in every mission
+  [ "$JIRA_ENABLED" = "true" ] && SKILLS_WANTED+=(ticket)
+  { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && SKILLS_WANTED+=(qa-report qa-execution)
+  for sk in "${SKILLS_WANTED[@]}"; do
+    case " $KIT_THIRD_PARTY_SKILLS " in *" ${sk#*:} "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
+  done
+}
+
+# phase_skills_check <voice> → what the phases will meet of the skills they boot, said in <voice>:
+# `preflight` warns every class and prints the `ok` line when every skill is found and none broken;
+# `run` (sdd run, sdd retry) is the same sentences at launch, before any session and any gate (L4
+# item 7, decision 3). Four classes beside the covered skill, one sentence each, defined here only:
+#   - broken      the registry records the plugin, and no recorded install holds the skill;
+#   - uncovered   found, and no read rule of the sessions covers it — with the READ_EXTRA entry;
+#   - unreachable found and covered, and the grammar refuses its target's name: no entry reaches it;
+#   - missing     not found where the harness loads it from.
+# Under `run`, broken and uncovered STOP the line: the phase that boots the skill is denied it, and
+# the session is paid for before the DENIED line says so. Each is printed with `bad`, and one `die`
+# after the loop names the stop — the die is HERE, in the caller's shell, never inside `$( )`. Under
+# `--dry-run` (DRY_RUN=1) they are warnings, and the projection goes on. Missing and unreachable stay
+# warnings in both voices: no READ_EXTRA entry fixes either, and a skill the roots of the convention
+# do not hold may still be where the harness finds it. The skill is looked for in the form the phase
+# invokes (phase_skills_wanted); the rules are kit_read_rules' own (read_rules_cover).
+#
+# A skill found is not a skill the phases can READ: its references live outside the repo, and the
+# session gets only kit_read_rules' rules (ADR 0019 §2). The harness checks the path asked for AND
+# the resolved one, so the directory found and its `readlink -f` must both be covered; a skill
+# either misses is named with the entry to add (skill_read_entry). Nothing is granted here — the
+# permission still comes only from READ_EXTRA. The `||` after readlink has no probe: it never fails
+# on a directory just found, and it decides only that a race costs a sentence about that directory
+# instead of killing the command under `set -e`.
+# One miss hands NO entry: the directory found is covered and only its target is not, because the
+# grammar refuses the target's name (read_extra_dir_ok, the guard kit_read_rules holds a resolved
+# target to). No entry reaches that target, so handing back the one already declared was a loop
+# with no way out (r1 #1 of the final review); the remedy is the target's name. A covered directory
+# whose target passes the grammar keeps the entry to add, and the entry is the directory found,
+# never the target: kit_read_rules resolves an entry at every session, so it follows a retargeted
+# link, and the harness wants both rules (ADR 0019: link alone DENIED, target alone DENIED).
+# Declared limit: an UNcovered directory whose target the grammar refuses gets the undeclared
+# sentence and its entry, and the refused one at the next launch — two steps, never a loop.
+# A directory found under the plugin cache also names the registry (r1 #2 of the final review):
+# the cache may hold more than one copy, skill_findable holds to the rules the one the registry
+# records and falls back to the cache when the registry records no install of the plugin — for a
+# skill invoked through a plugin, the first copy in that plugin's own tree (Codex r8 on PR #315);
+# for one invoked plain, the first directory of its name `find` meets, also when no recorded
+# install holds it —, and the sentence says which file decides. The slash of `cache/` keeps a
+# sibling such as `plugins/cachex` out.
+# A skill invoked through a plugin whose recorded install does not hold it is neither missing nor
+# found (Codex r7 #2 on PR #315): the harness loads the plugin from that install, so the phase boots
+# without the skill whatever else the cache holds. Its own sentence, with skill_findable's reason —
+# the registry and the installPath — and the remedy, and it keeps the "present" line from printing.
+# Sensor: tests/check-preflight.sh (both voices, and the differential between them).
+phase_skills_check() {
+  local voice="${1:-preflight}" sk skills_root missing_skills="" broken_skills="" stops=0
+  local sk_real sk_entry sk_via sk_cache
+  skills_root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
+  phase_skills_wanted
+  # _skill_stop <sentence> — a class that stops the line under `run`, a warning anywhere else.
+  _skill_stop() {
+    if [ "$voice" = "run" ] && [ "${DRY_RUN:-0}" != "1" ]; then bad "$1"; stops=$((stops + 1))
+    else warn "$1"; fi
+  }
+  for sk in "${SKILLS_WANTED[@]}"; do
+    if ! skill_findable "$sk"; then
+      if [ -n "$SKILL_BROKEN_WHY" ]; then
+        broken_skills="$broken_skills $sk"
+        _skill_stop "skill $sk is not where the harness loads it: $SKILL_BROKEN_WHY.
+        The harness loads a plugin's skill from the install its registry records, so every phase that
+        invokes $sk boots without it; no other copy in the plugin cache stands in for it,
+        and none is held to the read rules. Reinstall the ${sk%%:*} plugin."
+      else
+        missing_skills="$missing_skills $sk"
+      fi
+      continue
+    fi
+    sk_real="$(readlink -f -- "$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="$SKILL_FOUND_DIR"
+    if read_rules_cover "$SKILL_FOUND_DIR" && read_rules_cover "$sk_real"; then continue; fi
+    sk_via=""; [ "$sk_real" = "$SKILL_FOUND_DIR" ] || sk_via=" (a symlink to $sk_real)"
+    if read_rules_cover "$SKILL_FOUND_DIR" && ! read_extra_dir_ok "$sk_real"; then
+      warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, whose target no read rule can cover:
+        the grammar of the rules refuses its name (every component letters, digits, \`.\`, \`_\` and
+        \`-\`), so kit_read_rules grants it nothing, whatever READ_EXTRA declares, and every phase that
+        loads the skill is denied its references (a DENIED line in the journal). No READ_EXTRA entry
+        reaches it: move or rename the target to a name the grammar accepts."
+      continue
+    fi
+    sk_entry="$(skill_read_entry "$SKILL_FOUND_DIR" "$skills_root")"
+    sk_cache=""
+    case "$SKILL_FOUND_DIR" in
+      "$skills_root/plugins/cache"/*) sk_cache="
+        The plugin cache may hold more than one copy of a plugin, and the one the harness loads is
+        the installPath recorded in $skills_root/plugins/installed_plugins.json: the copy named
+        above when that file records one, the first copy found when it does not." ;;
+    esac
+    _skill_stop "skill $sk is found in $SKILL_FOUND_DIR$sk_via, and no read rule
+        of the sessions covers it — READ_EXTRA does not declare it, so every phase that loads it is
+        denied its references outside the repo (a DENIED line in the journal).$sk_cache In .sdd/config.sh:
+        READ_EXTRA entry to add: $sk_entry"
+  done
+  if [ -n "$missing_skills" ]; then
+    warn "skills not found:$missing_skills
+        A skill a phase invokes plain was looked for in $skills_root/skills/, $REPO_ROOT/.claude/skills/
+        and $skills_root/plugins/cache/; one it invokes as plugin:skill, in the installs
+        $skills_root/plugins/installed_plugins.json records for the plugin and, only when that file
+        records none, in the cache under that plugin's own tree alone:
+        $skills_root/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>.
+        Those roots are a convention, so this is a warning and not a failure.
+        The phase boots the skill by name anyway: if it really is absent, the session improvises and
+        spends the phase budget producing something no gate can read."
+  elif [ -z "$broken_skills" ] && [ "$voice" = "preflight" ]; then
+    ok "third-party skills present (${SKILLS_WANTED[*]})"
+  fi
+  unset -f _skill_stop
+  if [ "$stops" -gt 0 ]; then
+    die "sdd stops before any session: $stops skill(s) a phase invokes would boot denied or absent, named above with the remedy.
+        Fix what the lines above name, then launch again; 'sdd run --dry-run' projects without stopping."
+  fi
+}
+
 # node_gate_scripts → the package.json scripts that belong INSIDE TEST_CMD, one per line, in the
 # order a gate should run them (cheapest first, so a lint error does not wait on a build).
 #
@@ -7049,21 +7181,9 @@ cmd_preflight() {
   fi
 
   # --- the third-party skills the phases boot: the list, read by the probe and by the block below ---
-  # The subset of KIT_THIRD_PARTY_SKILLS this config boots headless (the planner's three are
-  # interactive); the full list is what `sdd health --release` line 2 asks an origin for. Each one in
-  # the FORM its phase invokes it by, which is where skill_findable looks (Codex r7 on PR #315):
-  # REVIEW invokes `/codereview:codereview` (agents/sdd-reviewer.md), the skill of the codereview
-  # plugin; TICKET invokes `/ticket` (agents/sdd-ticket.md) and the QA sub-steps `/qa-report` and
-  # `/qa-execution` (phase_slash), all three plain. That is a second spelling of what the hats and
-  # phase_slash write, and no comment makes it the same one: check-preflight.sh compares the list
-  # preflight prints with the invocations it reads off those files. KIT_THIRD_PARTY_SKILLS lists
-  # names, so the check below holds it to the part after the `:`.
-  local -a wanted=(codereview:codereview)   # REVIEW runs in every mission
-  [ "$JIRA_ENABLED" = "true" ] && wanted+=(ticket)
-  { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && wanted+=(qa-report qa-execution)
-  for sk in "${wanted[@]}"; do
-    case " $KIT_THIRD_PARTY_SKILLS " in *" ${sk#*:} "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
-  done
+  # One definition (phase_skills_wanted), which sdd run and sdd retry read too (L4 item 7).
+  phase_skills_wanted
+  local -a wanted=("${SKILLS_WANTED[@]}")
 
   # --- authentication + the hat's shell ---
   # Sanity, permission and the hat in one shot. "claude -p answers" does NOT cover the failure
@@ -7507,89 +7627,10 @@ $todo_first
   # --- third-party skills the phases boot ---
   # Asked for BY CONFIG, not by a fixed list: a project with no interface never boots the QA
   # skills, and JIRA off means the TICKET phase is skipped entirely. Warning about a skill the
-  # pipeline will not use is how an operator learns to skip reading warnings.
-  local sk skills_root missing_skills=""
-  skills_root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
-  # `wanted` is defined above the Bash probe, one definition for the probe's init line and for this
-  # block (L4 item 15).
-  # A skill found is not a skill the phases can READ: its references live outside the repo, and the
-  # session gets only kit_read_rules' rules (ADR 0019 §2). The harness checks the path asked for AND
-  # the resolved one, so the directory found and its `readlink -f` must both be covered; a skill
-  # either misses is named with the entry to add (skill_read_entry). `warn`, never `_fail`, no
-  # session, and nothing granted — the permission still comes only from READ_EXTRA. The `||` after
-  # readlink has no probe: it never fails on a directory just found, and it decides only that a race
-  # costs a warning about that directory instead of killing preflight under `set -e`.
-  # One miss hands NO entry: the directory found is covered and only its target is not, because the
-  # grammar refuses the target's name (read_extra_dir_ok, the guard kit_read_rules holds a resolved
-  # target to). No entry reaches that target, so handing back the one already declared was a loop
-  # with no way out (r1 #1 of the final review); the remedy is the target's name. A covered directory
-  # whose target passes the grammar keeps the entry to add, and the entry is the directory found,
-  # never the target: kit_read_rules resolves an entry at every session, so it follows a retargeted
-  # link, and the harness wants both rules (ADR 0019: link alone DENIED, target alone DENIED).
-  # Declared limit: an UNcovered directory whose target the grammar refuses gets the undeclared
-  # warning and its entry, and the refused one at the next preflight — two steps, never a loop.
-  # A directory found under the plugin cache also names the registry (r1 #2 of the final review):
-  # the cache may hold more than one copy, skill_findable holds to the rules the one the registry
-  # records and falls back to the cache when the registry records no install of the plugin — for a
-  # skill invoked through a plugin, the first copy in that plugin's own tree (Codex r8 on PR #315);
-  # for one invoked plain, the first directory of its name `find` meets, also when no recorded
-  # install holds it —, and the warning says which file decides. The slash of `cache/` keeps a
-  # sibling such as `plugins/cachex` out.
-  # A skill invoked through a plugin whose recorded install does not hold it is neither missing nor
-  # found (Codex r7 #2 on PR #315): the harness loads the plugin from that install, so the phase boots
-  # without the skill whatever else the cache holds. Its own warning, with skill_findable's reason —
-  # the registry and the installPath — and the remedy, and it keeps the "present" line from printing.
-  local sk_real sk_entry sk_via sk_cache broken_skills=""
-  for sk in "${wanted[@]}"; do
-    if ! skill_findable "$sk"; then
-      if [ -n "$SKILL_BROKEN_WHY" ]; then
-        broken_skills="$broken_skills $sk"
-        warn "skill $sk is not where the harness loads it: $SKILL_BROKEN_WHY.
-        The harness loads a plugin's skill from the install its registry records, so every phase that
-        invokes $sk boots without it; no other copy in the plugin cache stands in for it,
-        and none is held to the read rules. Reinstall the ${sk%%:*} plugin."
-      else
-        missing_skills="$missing_skills $sk"
-      fi
-      continue
-    fi
-    sk_real="$(readlink -f -- "$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="$SKILL_FOUND_DIR"
-    if read_rules_cover "$SKILL_FOUND_DIR" && read_rules_cover "$sk_real"; then continue; fi
-    sk_via=""; [ "$sk_real" = "$SKILL_FOUND_DIR" ] || sk_via=" (a symlink to $sk_real)"
-    if read_rules_cover "$SKILL_FOUND_DIR" && ! read_extra_dir_ok "$sk_real"; then
-      warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, whose target no read rule can cover:
-        the grammar of the rules refuses its name (every component letters, digits, \`.\`, \`_\` and
-        \`-\`), so kit_read_rules grants it nothing, whatever READ_EXTRA declares, and every phase that
-        loads the skill is denied its references (a DENIED line in the journal). No READ_EXTRA entry
-        reaches it: move or rename the target to a name the grammar accepts."
-      continue
-    fi
-    sk_entry="$(skill_read_entry "$SKILL_FOUND_DIR" "$skills_root")"
-    sk_cache=""
-    case "$SKILL_FOUND_DIR" in
-      "$skills_root/plugins/cache"/*) sk_cache="
-        The plugin cache may hold more than one copy of a plugin, and the one the harness loads is
-        the installPath recorded in $skills_root/plugins/installed_plugins.json: the copy named
-        above when that file records one, the first copy found when it does not." ;;
-    esac
-    warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, and no read rule
-        of the sessions covers it — READ_EXTRA does not declare it, so every phase that loads it is
-        denied its references outside the repo (a DENIED line in the journal).$sk_cache In .sdd/config.sh:
-        READ_EXTRA entry to add: $sk_entry"
-  done
-  if [ -n "$missing_skills" ]; then
-    warn "skills not found:$missing_skills
-        A skill a phase invokes plain was looked for in $skills_root/skills/, $REPO_ROOT/.claude/skills/
-        and $skills_root/plugins/cache/; one it invokes as plugin:skill, in the installs
-        $skills_root/plugins/installed_plugins.json records for the plugin and, only when that file
-        records none, in the cache under that plugin's own tree alone:
-        $skills_root/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>.
-        Those roots are a convention, so this is a warning and not a failure.
-        The phase boots the skill by name anyway: if it really is absent, the session improvises and
-        spends the phase budget producing something no gate can read."
-  elif [ -z "$broken_skills" ]; then
-    ok "third-party skills present (${wanted[*]})"
-  fi
+  # pipeline will not use is how an operator learns to skip reading warnings. The classes and their
+  # sentences are phase_skills_check's, the one definition `sdd run` and `sdd retry` stop on; here
+  # every one is a warning, never `_fail`, and no session.
+  phase_skills_check preflight
 
   # --- target repo plugins ---
   local settings="$REPO_ROOT/.claude/settings.json"
@@ -10187,6 +10228,11 @@ cmd_run() {
   # gates to run, and three of them run TEST_CMD. What the dry-run guarantees is narrower — no
   # claude session, no touching of the mission artifacts. Same honesty fix as in --help.
   [ "$DRY_RUN" = "1" ] && dim "  (dry-run: no session will be opened — but the gates do run TEST_CMD)"
+  # L4 item 7 (decision 3): a skill a phase boots that the session will be denied stops the line
+  # HERE, before the branch is switched, before any gate runs TEST_CMD and before any session is
+  # paid for; under --dry-run it is a warning and the projection goes on. Called, never `$( )`: the
+  # die must end this process.
+  phase_skills_check run
   # BEFORE the base-branch warning, and the order is the point: the checkout is what decides where
   # this pipeline will commit, so warning first would cry wolf at a human the runner is about to
   # move off the base branch anyway — and a warning that cries wolf is how people learn to skip
@@ -10895,6 +10941,9 @@ cmd_retry() {
   PIPELINE_LOG="$(log_dir)/pipeline.log"
   AUTONOMY_RUN_ID="$(uuidgen)"
   AUTONOMY_INVOCATION="retry"
+  # The second door of phase_skills_check (L4 item 7): a retry opens a fresh session, which the
+  # harness would deny the skill all the same. Before the branch, the gates and the session.
+  phase_skills_check run
   # The second call site of the single definition: `sdd retry` opens a session that COMMITS, so a
   # retry fired from the wrong branch lands the redone phase exactly where `sdd run` would not
   # have put it. Same guard, same die, same silence in a dry run (retry has no dry mode, and the

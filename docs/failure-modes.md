@@ -123,6 +123,36 @@ line, so `tail -F` shows it without opening the session's `.json`.
 
 ---
 
+## `sdd run` stops at launch: "sdd stops before any session"
+
+**Symptom:** `sdd run <mission>` or `sdd retry <mission>` exits 1 right after the mission line,
+before switching branch, running a gate or opening a session, with a `fail` line that says
+`skill <skill> is found in <dir>, and no read rule of the sessions covers it` (ending in
+`READ_EXTRA entry to add: …`) or `skill <skill> is not where the harness loads it`, and then
+`error: sdd stops before any session: N skill(s) a phase invokes would boot denied or absent`.
+
+**Cause:** a phase of this config boots that skill (REVIEW's `codereview:codereview` in every
+mission; `ticket` with `JIRA_ENABLED=true`; `qa-report` and `qa-execution` with an interface), and
+the session would not get it. Uncovered: the skill is found, its references live outside the repo,
+and no `READ_EXTRA` entry grants the read, so the harness denies them and the session is paid for
+before the `DENIED` line says so. Broken: the plugin registry records an install that does not hold
+the skill, so the phase boots without it. Both are the sentences `sdd preflight` warns with, from the
+same definition (`phase_skills_check`).
+
+**What you do:**
+- **uncovered:** add the entry the line names to `READ_EXTRA` in the target's `.sdd/config.sh`
+  (written with `$HOME`, as the line prints it), commit it, and launch again.
+- **broken:** reinstall the plugin the line names.
+- **to see the projection anyway:** `sdd run <mission> --dry-run` prints the same lines as warnings
+  and goes on.
+
+A skill the runner does not find, and one whose symlink target has a name the grammar refuses, stay
+warnings: no entry fixes either, and the run goes on. The kit's own suite runs with
+`SDD_SKILLS_ROOT` at an empty directory (`tests/isolate-git.sh`), so its fixture runs never meet the
+machine's skills.
+
+---
+
 ## A `blocked` increment
 
 **Symptom:** `sdd run` exits with code 3 and "BLOCKED in EXEC" straight away, without opening a

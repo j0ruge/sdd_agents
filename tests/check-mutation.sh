@@ -3016,6 +3016,22 @@ mut_PRE_todo_preamble_author_warned() {
 mut_INSTALL_todo_preamble_unchecked() {
   sed -i '/^cmd_install() {/,/^}/ s|^    todo_preamble_say "\$inst_todo"|    : todo_preamble_say "$inst_todo"|' "$1"
 }
+# L4 item 7: sdd run and sdd retry stop before the session the harness will deny a skill.
+mut_RUN_skill_uncovered_not_stopped() {
+  sed -i '/^cmd_run() {/,/^}/ s|^  phase_skills_check run$|  phase_skills_check preflight|' "$1"
+}
+mut_RETRY_skill_uncovered_not_stopped() {
+  sed -i '/^cmd_retry() {/,/^}/ s|^  phase_skills_check run$|  phase_skills_check preflight|' "$1"
+}
+mut_RUN_skill_broken_not_stopped() {
+  sed -i '/^phase_skills_check() {/,/^}/ s|^        _skill_stop "skill \$sk is not where the harness loads it|        warn "skill $sk is not where the harness loads it|' "$1"
+}
+mut_RUN_skill_dry_run_stops() {
+  sed -i '/^phase_skills_check() {/,/^}/ s|^    if \[ "\$voice" = "run" \] && \[ "\${DRY_RUN:-0}" != "1" \]; then|    if [ "$voice" = "run" ]; then|' "$1"
+}
+mut_RUN_skill_missing_stops() {
+  sed -i '/^phase_skills_check() {/,/^}/ s|^    warn "skills not found:|    _skill_stop "skills not found:|' "$1"
+}
 mut_PRE_template_outcome_default_green() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
 }
@@ -3037,7 +3053,7 @@ mut_PRE_read_extra_missing_silent() {
   sed -i '/^cmd_preflight() {/,/^}/ s#^      || warn "READ_EXTRA names \$_rx_dir, which does not exist.*$#      || :#' "$1"
 }
 mut_PRE_undeclared_skill_silent() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && read_rules_cover "\$sk_real"; then continue; fi$#    continue#' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && read_rules_cover "\$sk_real"; then continue; fi$#    continue#' "$1"
 }
 # COVER_UNSLASHED: a rule covers what merely BEGINS with its directory, so `…/ticket` covers
 # `…/ticket-x` — caught by "a plugin skill is covered by the directory above its version, and never
@@ -3049,7 +3065,7 @@ mut_PRE_skill_cover_unslashed() {
   sed -i '/^read_rules_cover() {/,/^}/ s#^    case "\$p" in "\$dir"|"\$dir"/\*) return 0 ;; esac$#    case "$p" in "$dir"*) return 0 ;; esac#' "$1"
 }
 mut_PRE_skill_cover_unresolved() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^    sk_real="\$(readlink -f -- "\$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="\$SKILL_FOUND_DIR"$#    sk_real="$SKILL_FOUND_DIR"#' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^    sk_real="\$(readlink -f -- "\$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="\$SKILL_FOUND_DIR"$#    sk_real="$SKILL_FOUND_DIR"#' "$1"
 }
 # The entry the warning hands over. ENTRY_VERSIONED: the plugin's entry keeps its version directory,
 # which the next update orphans and which never covers the plugin directory the cache walk names —
@@ -3069,7 +3085,7 @@ mut_PRE_skill_entry_home_unwritten() {
 # out of r1 #1 of the final review. Caught by "a declared skill whose symlink target the grammar
 # refuses is named as such, never as undeclared" (check-preflight.sh), `decl:refused=0,…,add=1`.
 mut_PRE_skill_target_refused_undeclared() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && ! read_extra_dir_ok "\$sk_real"; then$#    if false; then#' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && ! read_extra_dir_ok "\$sk_real"; then$#    if false; then#' "$1"
 }
 # CACHE_REGISTRY_UNNAMED: the warning about a skill found under the plugin cache stops saying the
 # cache may hold more than one copy and that installed_plugins.json names the one the harness loads
@@ -3077,7 +3093,7 @@ mut_PRE_skill_target_refused_undeclared() {
 # installed_plugins.json named, since the cache may hold more than one copy" (check-preflight.sh),
 # `cache:copies=0,file=0,which=0`.
 mut_PRE_skill_cache_registry_unnamed() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^\(        denied its references outside the repo (a DENIED line in the journal)\.\)\$sk_cache In #\1 In #' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^\(        denied its references outside the repo (a DENIED line in the journal)\.\)\$sk_cache In #\1 In #' "$1"
 }
 # REGISTRY_IGNORED: skill_findable skips every copy installed_plugins.json records — the plain form
 # falls back to the first copy `find` meets in directory order, and since Codex r7 the plugin form
@@ -3126,13 +3142,13 @@ mut_PRE_plugin_form_plain_dirs_first() {
   sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" = "\$form" \]; then$#  if :; then#' "$1"
 }
 mut_PRE_plugin_form_asked_plain() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^  local -a wanted=(codereview:codereview)#  local -a wanted=(codereview)#' "$1"
+  sed -i '/^phase_skills_wanted() {/,/^}/ s#^  SKILLS_WANTED=(codereview:codereview)#  SKILLS_WANTED=(codereview)#' "$1"
 }
 mut_PRE_broken_install_to_cache() {
   sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" != "\$form" \] && \[ -n "\$recorded" \]; then$#  if false; then#' "$1"
 }
 mut_PRE_broken_install_unnamed() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^      if \[ -n "\$SKILL_BROKEN_WHY" \]; then$#      if false; then#' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^      if \[ -n "\$SKILL_BROKEN_WHY" \]; then$#      if false; then#' "$1"
 }
 mut_PRE_broken_reason_not_reset() {
   sed -i '/^skill_findable() {/,/^}/ s#^  SKILL_FOUND_DIR=""; SKILL_BROKEN_WHY=""$#  SKILL_FOUND_DIR=""; : "${SKILL_BROKEN_WHY:=}"#' "$1"
@@ -3141,7 +3157,7 @@ mut_PRE_plain_form_marked_broken() {
   sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" != "\$form" \] && \[ -n "\$recorded" \]; then$#  if [ -n "$recorded" ]; then#' "$1"
 }
 mut_PRE_broken_reported_present() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^  elif \[ -z "\$broken_skills" \]; then$#  else#' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^  elif \[ -z "\$broken_skills" \] && \[ "\$voice" = "preflight" \]; then$#  elif [ "$voice" = "preflight" ]; then#' "$1"
 }
 # Codex r8 on PR #315: with no install of the plugin recorded, the plugin form walks the cache only
 # under its own plugin's tree, `<root>/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>`.
@@ -8190,6 +8206,11 @@ CATALOG=(
   PRE_todo_preamble_stale_silent
   PRE_todo_preamble_author_warned
   INSTALL_todo_preamble_unchecked
+  RUN_skill_uncovered_not_stopped
+  RETRY_skill_uncovered_not_stopped
+  RUN_skill_broken_not_stopped
+  RUN_skill_dry_run_stops
+  RUN_skill_missing_stops
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent

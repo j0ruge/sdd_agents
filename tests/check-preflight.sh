@@ -2113,6 +2113,92 @@ assert_eq "preflight prints no write error with READ_EXTRA filled under a caller
   "floor:alive skill:missing=0,warned=0,link=0,entry= reached:1 errors:0" \
   "floor:$pipe_floor skill:$(rx_skill "$out_pipe") reached:$(grep -c '^  ok   git present$' <<< "$out_pipe") errors:$(grep -c 'printf: ' <<< "$out_pipe")"
 
+# The run stops before the session that will be denied (item 7 of the L4, decisions 3 and 9). The
+# preflight warned about a skill found where no read rule covers it, and `sdd run` opened the phase
+# anyway: the REVIEW booted the skill, the harness denied its references, and the session was paid
+# for. phase_skills_check is the one definition both read; under `sdd run` and `sdd retry` the skill
+# found and uncovered, and the plugin whose recorded install lacks it, stop the line before any
+# session and any gate (rc 1, the die), while the skill it does not find and the one whose target the
+# grammar refuses stay warnings — no READ_EXTRA entry fixes either, and the phase may not need them.
+# The worlds are the ones above (SK1 uncovered, SK14 broken, the empty root missing) plus one whose
+# recorded install holds the skill as a symlink to a name the grammar refuses, declared. A repo of
+# its own with one pending increment; the claude stub records every call, so "no session" is its
+# argv file absent, and "the run went on" is the same file present. The differential compares the
+# preflight's sentence with the run's about the same skill, each without its voice's prefix.
+echo "== sdd run stops before a session that will be denied =="
+RR="$RXF/run-repo"
+RR_STUB="$RXF/run-stub"
+mkdir -p "$RR/.sdd" "$RR/docs/handoffs/20260101-skills" "$RR_STUB"
+( cd "$RR" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" ) >/dev/null 2>&1
+printf 'PROJECT_NAME="fixture"\nDEFAULT_BRANCH="main"\nTEST_CMD="true"\nE2E_CMD=""\nHANDOFF_DIR="docs/handoffs"\nQA_DOCS_PATH="docs/qa"\nJIRA_ENABLED=false\n' \
+  > "$RR/.sdd/config.sh"
+printf -- '---\nmissao: 20260101-skills\nbranch: main\naprovacao: auto\n---\n# Mission\n' \
+  > "$RR/docs/handoffs/20260101-skills/00-missao.md"
+: > "$RR/docs/handoffs/20260101-skills/01-plano.md"
+printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n|---|---|---|---|---|\n| I1 | slice | `true` → 0 | pending | — |\n' \
+  > "$RR/docs/handoffs/20260101-skills/checkpoint.md"
+( cd "$RR" && "$SDD" install >/dev/null 2>&1; git add -A && git commit -qm "chore: fixture mission" ) >/dev/null 2>&1
+printf '#!/bin/sh\nfor a in "$@"; do printf "%%s\\n" "$a" >> "%s/argv"; done\nexit 1\n' "$RR_STUB" > "$RR_STUB/claude"
+chmod +x "$RR_STUB/claude"
+# The unreachable world: the recorded install holds skills/codereview as a symlink to `odd[1]`.
+RR_UN_ROOT="$RXF/run-un/.claude"
+RR_UN_REC="$RR_UN_ROOT/plugins/cache/mk/codereview/1.0.0"
+mkdir -p "$RR_UN_REC/skills/odd[1]"
+ln -s 'odd[1]' "$RR_UN_REC/skills/codereview"
+printf '{"version":2,"plugins":{"codereview@mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RR_UN_REC" > "$RR_UN_ROOT/plugins/installed_plugins.json"
+# rr_do <home> <skills root> <READ_EXTRA> <sdd args…> → the output, then `rc=N` and `session=0|1`
+rr_do() {
+  local h="$1" r="$2" x="$3" o rc=0 s=0; shift 3
+  rm -f "$RR_STUB/argv"; rm -rf "$RXF/run-state"
+  ( cd "$RR" && git checkout -q main 2>/dev/null; git reset -q --hard 2>/dev/null; git clean -qfd 2>/dev/null ) || true
+  o="$( cd "$RR" && PATH="$RR_STUB:$PATH" HOME="$h" SDD_SKILLS_ROOT="$r" READ_EXTRA="$x" \
+        SDD_STATE_DIR="$RXF/run-state" "$SDD" "$@" 2>&1 )" || rc=$?
+  [ ! -f "$RR_STUB/argv" ] || s=1
+  printf '%s\nrc=%s\nsession=%s\n' "$o" "$rc" "$s"
+}
+# rr_says <output> → rc=N,session=N,stop=N,entry=N,broken=N,missing=N,unreach=N
+rr_says() {
+  printf 'rc=%s,session=%s,stop=%s,entry=%s,broken=%s,missing=%s,unreach=%s' \
+    "$(sed -n 's/^rc=//p' <<< "$1")" "$(sed -n 's/^session=//p' <<< "$1")" \
+    "$(grep -c '^error: .* stops before any session' <<< "$1")" \
+    "$(grep -c '^ *READ_EXTRA entry to add: ' <<< "$1")" \
+    "$(grep -c 'is not where the harness loads it' <<< "$1")" \
+    "$(grep -c '^  warn  skills not found: codereview:codereview' <<< "$1")" \
+    "$(grep -c '^  warn  skill codereview:codereview is found in .*, whose target no read rule can cover:' <<< "$1")"
+}
+rr_unc="$(rr_do "$RX_SK1_HOME" "$RX_SK1_ROOT" "" run 20260101-skills --max-phases 1)"
+assert_eq "sdd run stops before any session when a skill a phase invokes is found where no read rule covers it, naming the READ_EXTRA entry to add" \
+  "rc=1,session=0,stop=1,entry=1,broken=0,missing=0,unreach=0" "$(rr_says "$rr_unc")"
+rr_retry="$(rr_do "$RX_SK1_HOME" "$RX_SK1_ROOT" "" retry 20260101-skills)"
+assert_eq "sdd retry stops before any session on the same uncovered skill" \
+  "rc=1,session=0,stop=1,entry=1,broken=0,missing=0,unreach=0" "$(rr_says "$rr_retry")"
+rr_broken="$(rr_do "$RX_HOME" "$RX_SK14_ROOT" "" run 20260101-skills --max-phases 1)"
+assert_eq "sdd run stops before any session on a plugin install that does not hold the skill" \
+  "rc=1,session=0,stop=1,entry=0,broken=1,missing=0,unreach=0" "$(rr_says "$rr_broken")"
+rr_dry="$(rr_do "$RX_SK1_HOME" "$RX_SK1_ROOT" "" run 20260101-skills --dry-run)"
+assert_eq "sdd run --dry-run only warns about an uncovered skill, and still projects" \
+  "rc=0,session=0,stop=0,entry=1,broken=0,missing=0,unreach=0 warned:1 blocks:yes" \
+  "$(rr_says "$rr_dry") warned:$(grep -c '^  warn  skill codereview:codereview is found in ' <<< "$rr_dry") blocks:$(grep -q '^--- DRY RUN: phase ' <<< "$rr_dry" && echo yes || echo no)"
+rr_miss="$(rr_do "$RX_HOME" "$EMPTY_SKILLS" "" run 20260101-skills --max-phases 1)"
+rr_unr="$(rr_do "$RX_HOME" "$RR_UN_ROOT" "$RR_UN_REC/skills/codereview" run 20260101-skills --max-phases 1)"
+assert_eq "sdd run only warns about a skill it does not find, and about one whose target the grammar refuses" \
+  "missing:session=1,stop=0,missing=1 unreachable:session=1,stop=0,unreach=1" \
+  "missing:$(rr_says "$rr_miss" | sed 's/.*\(session=[0-9]*\).*\(stop=[0-9]*\).*\(missing=[0-9]*\).*/\1,\2,\3/') unreachable:$(rr_says "$rr_unr" | sed 's/.*\(session=[0-9]*\).*\(stop=[0-9]*\).*\(unreach=[0-9]*\)$/\1,\2,\3/')"
+# The sentence: from `skill codereview:codereview is found in` through the entry line, the voice's
+# prefix (`  warn  ` or `  fail  `) taken off its first line. Non-empty on both sides, or equal empties
+# would pass.
+rr_sentence() {
+  sed -n '/^  \(warn\|fail\)  skill codereview:codereview is found in /,/READ_EXTRA entry to add: /p' <<< "$1" \
+    | sed '1s/^  \(warn\|fail\)  //'
+}
+rr_pf="$(rr_sentence "$out_sk1_bare")"
+rr_run_s="$(rr_sentence "$rr_unc")"
+assert_eq "preflight and sdd run say the same sentence about the same uncovered skill" \
+  "lines:yes same:yes" \
+  "lines:$([ "$(grep -c . <<< "$rr_pf")" -ge 3 ] && echo yes || echo no) same:$([ "$rr_pf" = "$rr_run_s" ] && echo yes || echo "no<$rr_pf>vs<$rr_run_s>")"
+
 # The dirty tree (item 11 of the L4). The failure said the tree was dirty and named nothing, so the
 # human ran `git status` to learn what the preflight had already read; and when every path was
 # untracked — data the app writes beside the code — nothing said where such data goes. Four worlds on

@@ -33,6 +33,17 @@
 #
 # Sourced into every sensor's own shell, so it leaves nothing behind: the work is a function with
 # locals, and the function is unset once it ran.
+#
+# The SECOND thing it clears is the machine's skills (L4 item 7, decision 9). `sdd run` and `sdd
+# retry` stop before any session on a skill a phase boots that no read rule covers
+# (phase_skills_check), and the skills are looked for under SDD_SKILLS_ROOT, `$HOME/.claude` by
+# default — so on a machine with the codereview plugin installed and no READ_EXTRA in a fixture's
+# config, every fixture `sdd run` of the suite would die at launch. SDD_SKILLS_ROOT is exported at an
+# EMPTY directory, one per user under TMPDIR and never written by the suite, so every skill is
+# missing (a warning) and no run depends on what this machine holds. A world that needs skills passes
+# its own SDD_SKILLS_ROOT to its command, as check-preflight.sh's do. The directory is shared by
+# every sensor, so it is created once and never removed: removing it under a sensor still running
+# would make the root absent, which answers the same, but racing on it buys nothing.
 _sdd_isolate_git() {
   local -a _sdd_git_local=()
   mapfile -t _sdd_git_local < <(git rev-parse --local-env-vars 2>/dev/null)
@@ -45,3 +56,6 @@ _sdd_isolate_git() {
 }
 _sdd_isolate_git
 unset -f _sdd_isolate_git
+SDD_SKILLS_ROOT="${TMPDIR:-/tmp}/sdd-suite-no-skills-$(id -u)"
+mkdir -p "$SDD_SKILLS_ROOT" 2>/dev/null || true
+export SDD_SKILLS_ROOT
