@@ -69,6 +69,11 @@ read rule for the kit's templates on its allowlist, that they can read the kit's
 ([ADR 0019](docs/adr/0019-the-session-reads-what-the-boot-names.md)) — that is what makes it
 valuable, and what makes it cost money. Do not run it in a loop.
 
+A skill a phase invokes (REVIEW's `codereview:codereview` in every mission) has to be readable by
+the sessions: when it lives outside the repo, declare its directory in `READ_EXTRA`. `sdd run` and
+`sdd retry` **stop before any session** on one that no rule covers, naming the entry to add — see
+[`docs/failure-modes.md`](docs/failure-modes.md#sdd-run-stops-at-launch-sdd-stops-before-any-session).
+
 The kit is English. The **artifacts** of a mission — handoffs, checkpoint, commit messages, PR
 body — are written in whatever the target repo declares in `OUTPUT_LANG`; leave it empty and the
 runner says nothing about language, and each session follows whatever the existing artifacts use.

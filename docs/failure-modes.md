@@ -933,6 +933,41 @@ refusing to spend a session on an agent that is not the one you think you are ru
 
 ---
 
+## `sdd run` refuses a phase: "agent sdd-<x> is not installed", in a linked worktree
+
+**Symptom:** `agent sdd-<x> is not installed in <repo>/.claude/agents/ — the harness loads the copy
+and refuses an unknown --agent; this is a linked worktree, and the agent mirrors are ignored links
+of each checkout, so a new worktree starts without them: run 'sdd link-agents' here.` (a warning
+under `--dry-run`).
+
+**Cause:** the target keeps its agent mirrors as ignored links (`sdd-link-agents`), and a link that
+Git ignores is not checked out: every new `git worktree add` starts without them.
+
+**What you do:** `sdd link-agents` in that worktree. In a **main** checkout the same refusal names
+`sdd install --force` instead — there the cause is a kit that gained a hat since the repo was
+installed, and that is still the right command.
+
+---
+
+## `sdd run`, `sdd retry` or `sdd preflight` warns that the kit is off its default branch, or behind it
+
+**Symptom:** `the kit at <dir> is a checkout of branch '<b>', not of its default branch '<d>'`, or
+`the kit at <dir> is <n> commit(s) behind origin/<d> (as last fetched; nothing was fetched now)`,
+once per command.
+
+**Cause:** every phase runs the runner, the hats and the templates of the checkout the `sdd` on the
+PATH resolves to. A kit left on a mission branch, or never pulled, runs older (or unreviewed) code
+than the one you think. The default branch is the kit's own `origin/HEAD` (falling back to
+`origin/main`, then `origin/master`), never the target's `DEFAULT_BRANCH`. Nothing is fetched: the
+count is against the last fetch.
+
+**What you do:** the line names the command — `git -C <dir> switch <d>` or `git -C <dir> pull
+--ff-only`. When the branch is on purpose, ignore it: it is a warning, never a stop. A linked
+worktree of the kit (a kit mission), a detached `HEAD` and a kit that is not a git checkout of its
+own say nothing, and neither does `--dry-run`.
+
+---
+
 ## `sdd install` shows a diff in the agents
 
 **Symptom:** warnings "agent X differs from the kit version" with a diff.
