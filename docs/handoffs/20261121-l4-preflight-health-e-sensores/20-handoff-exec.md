@@ -2,9 +2,9 @@
 missao: 20261121-l4-preflight-health-e-sensores
 fase: EXEC
 status: done
-sessao: 62ca97b2-1b1c-4b01-b112-aec0d4008461
-data: 2026-11-22 00:24
-gate: "`tests/run-all.sh` em 277c582 (54a8ffe só muda o TODO.md) → `suite green`, rc 0, 2331 linhas `^  ok    `, `grep -cE '^  FAIL'` → 0, `anchors: all 985 mutants still apply and leave valid code`; em 54a8ffe, `bash tests/check-todo.sh` → `selftest: 258 probe(s)` e `91 finding(s), all within 8 lines, carrying anchor + date, every anchor on target`; `bash tests/check-todo.sh --anchors TODO.md` → `anchors: 91 measured, 0 off target`; Check I13 → `15`; `grep -cE '^mut_' tests/check-mutation.sh` → 985 (954 no merge-base 86e16c0)"
+sessao: dc0b246a-0178-42d3-a2c7-fe3331537632
+data: 2026-11-22 02:57
+gate: "R1 da r1 em 5369a53: `tests/run-all.sh` → `suite green`, rc 0, 2336 linhas `^  ok    `, `grep -cE '^  FAIL'` → 0, `anchors: all 986 mutants still apply and leave valid code`; Check R1 → `1 1 1 1 1 1`; `tests/check-mutation.sh --only KAIZEN_hat_guard_check_dropped check-kaizen.sh` → `check-kaizen.sh dies (rc 1)`; `bash tests/check-todo.sh --anchors TODO.md` → `anchors: 91 measured, 0 off target`. Antes (I13): 2331 ok, 985 mutantes"
 ---
 
 # Handoff — EXEC — L4: preflight, health e sensores
@@ -18,13 +18,14 @@ Os 13 incrementos estão `done`: os 15 itens do lote fechados por 12 commits de 
 `RESOLVED by` no `TODO.md` (I13, `54a8ffe`). A suíte está verde (rc 0, 0 FAIL), com 31 mutantes
 novos (954 → 985), todos aplicando. Não há interface de produto: a QA é de CLI (`./bin/sdd
 preflight`, `sdd run`/`retry` param na skill não coberta, `sdd kaizen` com guarda do chapéu).
+Depois da r1 da REVIEW, o `R1` (`5369a53`) fechou os seis LOW do lote. A suíte segue verde, com 986 mutantes.
 
 ## Estado do repo
 
 - **Branch:** `fix/l4-preflight-health-e-sensores`, só local (o push é da fase PR)
-- **Último commit:** `54a8ffe` `chore(todo): RESOLVED by nos 15 itens do L4 (I13)`, mais o commit deste handoff e o do checkpoint
+- **Último commit:** `5369a53` `fix(preflight): R1 da r1 do L4, seis LOW num lote`, mais o commit deste handoff e o do checkpoint
 - **Working tree:** limpo
-- **Suíte:** `tests/run-all.sh` → verde, 2331 asserções `ok`, rc 0 (log em `/tmp/l4-i13-suite-pre.log`, efêmero)
+- **Suíte:** `tests/run-all.sh` → verde, 2336 asserções `ok`, rc 0 (log em `/tmp/l4-r1-post2.log`, efêmero)
 - **E2E:** não há `E2E_CMD` (o kit é bash + markdown)
 
 ## O que foi feito
@@ -43,6 +44,22 @@ preflight`, `sdd run`/`retry` param na skill não coberta, `sdd kaizen` com guar
 - `46da749` — I12, item 9: regra 8 do `check-todo.sh`: sob `--baseline`, o `PR #N` solto de um item novo só passa citado num assunto de commit do histórico local; os dois templates dizem "deste repositório"
 - `54a8ffe` — I13: `RESOLVED by <hash>` nos 15 itens; nos três que já estavam no teto de 8 linhas (7, 8 e 9) a direção foi encurtada, sem linha nova e sem mudar título
 
+## Rodada r1 da REVIEW — `R1`
+
+O lote dos achados #1–#6 da `40-review-r1.md`, num commit. Cada conserto tem um probe que a
+sabotagem deixou vermelho (as notas têm a lista):
+
+- `5369a53` — #1: o `git status` que falha no `cmd_preflight` tem `_fail` próprio ("git status failed in …"), e nenhum caminho nem o `info/exclude` é nomeado. O sentinela `?? (…)` saiu
+- `5369a53` — #2: o jq que falha sobre o stream da sonda do `Bash` dá `probe_ran=unread`, com o motivo "the stream of the Bash probe could not be read", e o modelo não é mais culpado por repetir o marcador
+- `5369a53` — #3: os mundos `wt` e `det` do `kit_stale_check` têm testemunha (`--absolute-git-dir` ≠ `--git-common-dir`; HEAD sem `symbolic-ref`) antes de o silêncio ser lido
+- `5369a53` — #4: as duas contagens do bloco de hooks são lidas antes da subtração (`the hooks block reads both failure counts it subtracts`), e a subtração não pula mais a asserção
+- `5369a53` — #5: probe CRLF na regra 7 do `check-checkpoint.sh` (`PROBE_FLOOR` 460 → 461, `RULE_FLOOR` 11 → 12)
+- `5369a53` — #6: `mut_KAIZEN_hat_guard_check_dropped` (catálogo 985 → 986), pego pelo `check-kaizen.sh`
+
+Limite declarado nas notas: tirar o default `${fo_…:-0}` da subtração não tem probe próprio, porque
+no único mundo em que ele pesa a asserção de leitura já fica vermelha. As 21 âncoras do `TODO.md`
+que as linhas novas deslocaram foram remapeadas pelo diff.
+
 ## Artefatos
 
 | Arquivo | O que contém |
@@ -52,6 +69,11 @@ preflight`, `sdd run`/`retry` param na skill não coberta, `sdd kaizen` com guar
 | `TODO.md` | os 15 itens com `RESOLVED by`; catraca intocada (91) |
 
 ## Boot da próxima fase
+
+**Depois do `R1`, a próxima fase é a REVIEW r2**, sobre o delta desde o `reviewed_head:` da r1. O
+diff de código é o `5369a53` (o `bin/sdd` no `cmd_preflight`, três sensores e o catálogo). Nada
+visível ao usuário mudou além de duas mensagens novas do `sdd preflight`, que só aparecem quando o
+`git status` ou o jq falham. O roteiro de QA abaixo vale como foi escrito para o I13.
 
 QA de CLI, sem navegador: o kit não tem interface de produto. Rode no worktree da missão, com o
 `./bin/sdd` do worktree (o `sdd` do PATH é o checkout principal, o runner velho):
