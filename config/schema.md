@@ -82,7 +82,11 @@ preflight only warns; the opt-in is what **stops** the line. Declared limits:
 - the DOCS and PR phases do not run `TEST_CMD`, so a finding written there is measured by the next
   gate that does, or by nobody if none follows;
 - `origin/<base>` is read as last fetched: a stale ref can read as new a violation the base gained
-  after the fetch — red, the closed direction — and a ref the repo does not have is refused (rc 88).
+  after the fetch — red, the closed direction — and a ref the repo does not have is refused (rc 88);
+- under `--baseline` only, a bare `PR #N` (or `PRs #N`) of a new item passes when a commit subject
+  of `HEAD` or the base cites `#N`, so a pull request of another repository is written
+  `owner/repo#N`. A shallow clone has no history to read: the rule refuses nothing and says so in a
+  `note` line. `issue #N` is not read, and a `#N` of another repository that matches a local PR passes.
 
 ## Running application (QA phase)
 

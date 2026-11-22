@@ -119,7 +119,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
 - [ ] **`PR #N` de outro repositório passa pelo `check-todo.sh` e vira link errado na issue** —
-  `tests/check-todo.sh:815` (`lint_todo`) — o `--check` não lê referência, e a direção do vizinho "O
+  `tests/check-todo.sh:826` (`lint_todo`) — o `--check` não lê referência, e a direção do vizinho "O
   `check-todo.sh` aceita o `#N` solto" isenta o `#N` depois de `PR`: é aí que este erro mora. Este arquivo
   tinha 8 desses em 7 itens, com rc 0, e só o `REF?` da `todo-to-github-issues` os mostrou, depois do merge dos
   itens (PR #339). O PR #378, ainda aberto, achou outros três. Uma sonda com `dotp-remake` e um `PR` inexistente
@@ -226,7 +226,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-20)
   RECURRED 1: magic_tutor/20261118-o-que-a-mesa-nao-diz (2026-11-18)
 
-- [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:33`
+- [ ] **O ciclo de vida do `RESOLVED by` não sobrevive a squash merge** — `templates/todo.pt-BR.md:36`
   (`merge-base --is-ancestor`) — o hash do branch nunca vira ancestral da base num repo que faz
   squash, e o item fica preso para sempre; os PRs JRC-Brasil/sales_quote#405 e JRC-Brasil/sales_quote#406
   entraram por squash e quatro itens com `RESOLVED by` não saíam. Direção: aceitar como prova também o

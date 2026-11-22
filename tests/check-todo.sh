@@ -68,6 +68,17 @@
 #      the exits: `item N`, or `PR #N` / `owner/repo#N`. A file that numbers nothing — this kit's
 #      own — is untouched. DECLARED: the numbers come from open items only, never from the decided
 #      records; a `#N` inside a code span is read like any other.
+#   8. under `--baseline <ref>` only, a bare `PR #N` or `PRs #N` of an open item — outside code
+#      spans and fenced lines, the word `PR`/`PRs` with no letter, digit or `_` glued before it,
+#      blanks or none before the `#` —
+#      passes only when a commit subject of `git log HEAD <ref>` cites `#N` (`#7` never answers for
+#      `#70`). A bare PR number is a merged pull request of THIS repository: the issue mirror links
+#      it here. The message names the line the item opens on and the exit, `owner/repo#N`, also for
+#      a pull request of this repository that has not merged. The ref's copy is scanned the same
+#      way, so a number the ref already had is inherited. A shallow clone, or a log that cannot be
+#      read, refuses nothing and says so in one `note` line. DECLARED: `issue #N` is not read; a
+#      `#N` of another repository that matches a local PR passes; with no `--baseline` nothing of
+#      this rule is read, so the kit's own suite, which checks TODO.md without it, never runs it.
 #
 # And per decided record: `- **<title>** — …`, one physical line, a code span after the title (the
 # pointer to the evidence) and a `(YYYY-MM-DD)` at the end. Records are not counted as findings.
@@ -869,7 +880,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=14
+RULES_FLOOR=15
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -2277,6 +2288,58 @@ EOF
     "an old item without the slot is inherited, a new one is not" --baseline legacy
   rule_end 8 'a --baseline run fails only on what the ref did not have'
 
+  # ── Rule 8: under --baseline, a bare PR number of a new item names a merged PR of this repository ──
+  # A bare `PR #N` reads as a pull request of THIS repository, and the issue mirror links it there.
+  # Under --baseline a new item's `PR #N` passes only when a commit subject of the local history
+  # (HEAD and the ref) cites `#N`; the exit is `owner/repo#N`. Same fixture repo, from `/`.
+  rule_begin
+  local prline='- [ ] **Cites a PR** — `src/code.sh:20` (`frobnicate_widget`) — fixed in PR #9 — by `x` (2026-10-03)'
+  bl_todo "$good"
+  git -C "$bl" add -A && git -C "$bl" -c user.email=probe@sdd -c user.name=probe \
+    -c commit.gpgsign=false commit -qm 'Merge pull request #7 from x/y' && git -C "$bl" tag prbase
+  bl_todo "$good" "${prline/PR #9/PR #7}"
+  baseline_says 0 'TODO.md: 0 new shape violation(s) against prbase (0 inherited)' \
+    "a bare PR number a commit subject cites passes" --baseline prbase
+  bl_todo "$good" "$prline"
+  baseline_says 1 'TODO.md: 1 new shape violation(s) against prbase (0 inherited)' \
+    "a bare PR number no commit subject cites is new" --baseline prbase
+  baseline_says 1 'owner/repo#9' "the message names the exit owner/repo#N" --baseline prbase
+  bl_todo "$good" "${prline/PR #9/PRs #9}"
+  baseline_says 1 'TODO.md: 1 new shape violation(s) against prbase (0 inherited)' \
+    "the plural PRs #N is read too" --baseline prbase
+  bl_todo "$good" "${prline/PR #9/PR #70}"
+  baseline_says 1 'TODO.md: 1 new shape violation(s) against prbase (0 inherited)' \
+    "#7 in a subject does not answer for #70" --baseline prbase
+  local spans="${prline/Cites a PR/Spans}"
+  bl_todo "$good" "${spans/PR #9/\`PR #9\`, x/y#9, issue #9}"
+  baseline_says 0 'TODO.md: 0 new shape violation(s) against prbase (0 inherited)' \
+    "a PR number in a code span, owner/repo#N and issue #N pass" --baseline prbase
+  bl_todo "$good" "${prline/PR #9/GPR #9, SPRs #9}"
+  baseline_says 0 'TODO.md: 0 new shape violation(s) against prbase (0 inherited)' \
+    "a word that only ends in PR is not the tracker word" --baseline prbase
+  bl_todo "$good" "${prline/PR #9/PR#9}"
+  baseline_says 1 'TODO.md: 1 new shape violation(s) against prbase (0 inherited)' \
+    "PR#N with no blank is read like PR #N" --baseline prbase
+  bl_todo "$good" "$prline"
+  baseline_says 0 'ok    ' "with no --baseline nothing is read"
+  git -C "$bl" add -A && git -C "$bl" -c user.email=probe@sdd -c user.name=probe \
+    -c commit.gpgsign=false commit -qm 'add an item citing a PR' && git -C "$bl" tag prinherit
+  bl_todo '- [ ] **Above it** — `src/code.sh:20` (`frobnicate_widget`) — calls it — by `x` (2026-10-04)' "$good" "$prline"
+  baseline_says 0 'TODO.md: 0 new shape violation(s) against prinherit (1 inherited)' \
+    "a bare PR number the ref already had is inherited" --baseline prinherit
+  # A shallow clone has a history it cannot read: the rule refuses nothing, and says so once.
+  local shallow="$box/shallowrepo" shout shrc
+  git clone -q --depth 1 "file://$bl" "$shallow" 2>/dev/null
+  bl_todo "$good" "${prline/PR #9/PR #11}"; cp "$bl/TODO.md" "$shallow/TODO.md"
+  shout="$(cd / && bash "$SELF" --check "$shallow/TODO.md" --baseline HEAD 2>&1)"; shrc=$?
+  PROBES=$((PROBES + 1))
+  case "$shrc:$shout" in
+    0:*'shallow'*'0 new shape violation(s) against HEAD'*) ;;
+    *) printf '  SELFTEST FAIL  a shallow clone refuses no PR number and says so — rc %s: %s\n' "$shrc" "$shout" >&2
+       FAILS=$((FAILS + 1)); fail_rc 91 ;;
+  esac
+  rule_end 11 'under --baseline a bare PR number in a new item passes only when a commit subject of the local history cites it'
+
   # ── Rule 6: the RECURRED line, measured, outside the cap and the width ─────────────────────────
   # A finding that comes back from another project, mission or session gains ONE line, the item's
   # last: `RECURRED <n>: <where> (YYYY-MM-DD)[; <where> (YYYY-MM-DD)]*`, the returns only — the first
@@ -2518,8 +2581,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 247 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 247\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 258 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 258\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -2806,6 +2869,57 @@ violation_keys() {
   done <<< "$2"
 }
 
+# pr_scan <file> <cited> — rule 8, read only under --baseline: one `  line <L>: …` per bare `PR #N`
+# (or `PRs #N`) of an open item that <cited>, the space-padded set of numbers the commit subjects
+# cite, does not hold. <L> is the line the item OPENS on, so the --baseline key does not move.
+# Code spans are cut first (backtick parity, as the lint does) and fenced lines are skipped; the
+# word before the `#` is `PR` or `PRs` with a non-letter before it, so `x/y#9` and `issue #9` pass.
+pr_scan() {
+  LC_ALL=C awk -v cited="$2" -v omark="$OPEN_MARKER" -v dmark="$DECIDED_MARKER" '
+    BEGIN { sect = 0; fence = 0; start = 0 }
+    index($0, omark) == 1 { sect = 1; next }
+    index($0, dmark) == 1 || /^## / { sect = 0; next }
+    sect != 1 { next }
+    /^[ \t>]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
+    /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/ { start = NR; delete said }
+    start == 0 { next }
+    {
+      text = ""; rest = $0
+      while ((p = index(rest, "`")) > 0) {
+        text = text substr(rest, 1, p - 1)
+        rest = substr(rest, p + 1)
+        q = index(rest, "`"); if (q == 0) { rest = ""; break }
+        rest = substr(rest, q + 1)
+      }
+      text = " " text rest
+      while (match(text, /[^A-Za-z0-9_]PRs?[ \t]*#[0-9]+/)) {
+        m = substr(text, RSTART, RLENGTH); text = substr(text, RSTART + RLENGTH)
+        n = m; sub(/^.*#/, "", n)
+        if (index(cited, " " n " ") == 0 && !(n in said)) {
+          said[n] = 1
+          print "  line " start ": bare PR #" n " is cited by no commit subject of the local history — a bare PR number is a merged pull request of this repository; write owner/repo#" n " for any other, also for a pull request of this repository that has not merged"
+        }
+      }
+    }
+  ' "$1"
+}
+
+# pr_cited <top> <ref> — publishes PR_CITED, the space-padded set of `#N` the commit subjects of HEAD
+# and <ref> cite, and PR_UNREAD, the reason the history cannot be read (a shallow clone, a log that
+# fails), empty when it can. CALLED, never read through `$( )`.
+pr_cited() {
+  local subjects
+  PR_CITED=' '; PR_UNREAD=''
+  if [ "$(git -C "$1" rev-parse --is-shallow-repository 2>/dev/null)" != false ]; then
+    PR_UNREAD="$1 is a shallow clone (or its depth cannot be read)"; return 0
+  fi
+  if ! subjects="$(git -C "$1" log --format=%s HEAD "$2" -- 2>/dev/null)"; then
+    PR_UNREAD="the history of $1 cannot be read"; return 0
+  fi
+  PR_CITED=" $(grep -oE '#[0-9]+' <<< "$subjects" | tr -d '#' | sort -u | tr '\n' ' ')"
+}
+
 # baseline_file <file> <cap> <ref> — the --baseline verdict. The ref's copy of the file is read from
 # git into a temp file and collected exactly as the file itself is; then the two lists are compared
 # as MULTISETS of keys, so each inherited violation pays for one current one and no more. A ref
@@ -2841,12 +2955,24 @@ baseline_file() {
     ANCHOR_BASE_OVERRIDE=''
     base_v="$VIOLATIONS"
   fi
+  # Rule 8 rides on the same keys: the ref's copy is scanned too, so a PR number it had is inherited.
+  pr_cited "$top" "$ref"
+  if [ -n "$PR_UNREAD" ]; then
+    printf '  note  --baseline: %s, so no bare PR number is measured\n' "$PR_UNREAD"
+  elif has_open_marker "$copy"; then
+    k="$(pr_scan "$copy" "$PR_CITED")"
+    [ -z "$k" ] || base_v="${base_v:+$base_v$'\n'}$k"
+  fi
   while IFS= read -r k; do
     [ -n "$k" ] || continue
     base_count["$k"]=$(( ${base_count["$k"]:-0} + 1 ))
   done < <(violation_keys "$copy" "$base_v")
   rm -f "$copy"
   collect_violations "$file" "$cap"
+  if [ -z "$PR_UNREAD" ]; then
+    k="$(pr_scan "$file" "$PR_CITED")"
+    [ -z "$k" ] || VIOLATIONS="${VIOLATIONS:+$VIOLATIONS$'\n'}$k"
+  fi
   # Two arrays in step: the violations and their keys, both skipping empty lines the same way.
   mapfile -t cur_v < <(grep . <<< "$VIOLATIONS")
   mapfile -t cur_k < <(violation_keys "$file" "$VIOLATIONS")
