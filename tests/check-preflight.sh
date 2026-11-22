@@ -3057,6 +3057,72 @@ assert_eq "install without origin/HEAD asks the remote, then an existing origin/
   "origin/HEAD absent; develop/0; main/0; wip/x/1" \
   "origin/HEAD $db_ohead; $(db_answer "$FIX/db-remote"); $(db_answer "$FIX/db-main"); $(db_answer "$FIX/db-none")"
 
+# --- the kit clone off its default branch or behind it (L4 item 2) ---
+# kit_stale_check speaks only for a kit that is a MAIN checkout of its own, on a branch: off the
+# kit's default branch (its own origin/HEAD, never the target's DEFAULT_BRANCH) it names the branch;
+# on it and behind the upstream already fetched it names the count. A linked worktree (a mission of
+# the kit), a detached HEAD (a CI) and a copy with no git of its own (the mutation sandbox, or a copy
+# inside another repo — $FIX is one) say nothing. Each world is a copy of the kit, a repository of
+# its own pushed to a local bare remote, so no assertion depends on the git of the real kit.
+ks_kit() { # ks_kit <dir> — a kit copy committed on main, pushed, origin/HEAD set to main
+  local d="$1" x
+  mkdir -p "$d/bin" || return 1
+  cp "$SDD" "$ROOT/bin/sdd-coordination.py" "$d/bin/" || return 1
+  for x in agents templates config commands; do ln -s "$ROOT/$x" "$d/$x"; done
+  git init -q --bare -b main "$d.remote.git" || return 1
+  ( cd "$d" && git init -q -b main && git config user.email "fixture@example.com" \
+      && git config user.name "Fixture" && git add -A && git commit -qm "kit" \
+      && git remote add origin "$d.remote.git" && git push -q origin main \
+      && git fetch -q origin && git remote set-head origin main ) >/dev/null 2>&1
+}
+KS="$FIX/.stub/ks"
+mkdir -p "$KS"
+ks_kit "$KS/level" || exit 1
+ks_kit "$KS/side" || exit 1; git -C "$KS/side" checkout -q -b side
+ks_kit "$KS/behind" || exit 1
+( cd "$KS/behind" && git commit -q --allow-empty -m a && git commit -q --allow-empty -m b \
+    && git push -q origin main && git reset -q --hard HEAD~2 ) >/dev/null 2>&1
+ks_kit "$KS/trunk" || exit 1
+( cd "$KS/trunk" && git checkout -q -b trunk && git push -q origin trunk \
+    && git remote set-head origin trunk ) >/dev/null 2>&1
+ks_kit "$KS/det" || exit 1; git -C "$KS/det" checkout -q --detach
+git -C "$KS/level" worktree add -q -b wt "$KS/wt" >/dev/null 2>&1
+mkdir -p "$KS/nogit/bin"; cp "$SDD" "$KS/nogit/bin/"
+# The function, called TWICE in one process: the second call is the once-per-process guard's probe.
+# SDD_HOME is readonly in the runner, so the probe drops that one line to point it at the copy.
+cat > "$KS/probe.sh" <<'KSP'
+set -uo pipefail
+# shellcheck disable=SC1090
+source <(sed -e '$d' -e '/^readonly SDD_HOME$/d' "$1") >/dev/null 2>&1
+set +e
+declare -F kit_stale_check >/dev/null || { echo NOFUNC; exit 3; }
+grep -qx 'readonly SDD_HOME' "$1" || { echo NOREADONLY; exit 3; }
+SDD_HOME="$2"; DEFAULT_BRANCH="$3"; DRY_RUN="${4:-0}"
+kit_stale_check; kit_stale_check
+KSP
+ks_say() { bash "$KS/probe.sh" "$SDD" "$1" "${2:-main}" "${3:-0}" 2>&1; } # ks_say <kit> [target DEFAULT_BRANCH] [DRY_RUN]
+KS_OFF="is a checkout of branch"
+KS_BEHIND="commit(s) behind origin/"
+ks_side="$(ks_say "$KS/side")"
+ks_side_pf="$( READ_EXTRA="" "$KS/side/bin/sdd" preflight 2>&1 )" || true
+ks_side_dry="$(ks_say "$KS/side" main 1)"
+# The run and retry doors: over KP_REPO, whose phases the stub claude never reaches (no agent mirror
+# is installed there, so the precondition of run_phase stops each before the session).
+ks_side_run="$( cd "$KP_REPO" && SDD_STATE_DIR="$FIX/.stub/ks-state" READ_EXTRA="" "$KS/side/bin/sdd" run 20260101-kitpath 2>&1 )" || true
+ks_side_retry="$( cd "$KP_REPO" && SDD_STATE_DIR="$FIX/.stub/ks-state" READ_EXTRA="" "$KS/side/bin/sdd" retry 20260101-kitpath 2>&1 )" || true
+assert_eq "a kit checkout off its default branch is named once per process, with the branch it is on" \
+  "fn:1 side:1 preflight:1 run:1 retry:1 dry:0" \
+  "fn:$(grep -cF -- "$KS_OFF 'side', not of its default branch 'main'" <<< "$ks_side") side:$(grep -c "'side'" <<< "$ks_side") preflight:$(grep -cF -- "$KS_OFF 'side'" <<< "$ks_side_pf") run:$(grep -cF -- "$KS_OFF 'side'" <<< "$ks_side_run") retry:$(grep -cF -- "$KS_OFF 'side'" <<< "$ks_side_retry") dry:$(grep -c . <<< "$ks_side_dry")"
+ks_behind="$(ks_say "$KS/behind")"
+assert_eq "a kit checkout behind its fetched upstream is named with the count of commits" \
+  "1 off:0" "$(grep -cF -- "is 2 $KS_BEHIND""main" <<< "$ks_behind") off:$(grep -cF -- "$KS_OFF" <<< "$ks_behind")"
+assert_eq "a kit on its default branch and level with it says nothing, and so does a linked worktree, a detached HEAD and a kit that is not a git checkout" \
+  "level: wt: det: nogit: side-armed:1" \
+  "level:$(ks_say "$KS/level") wt:$(ks_say "$KS/wt") det:$(ks_say "$KS/det") nogit:$(ks_say "$KS/nogit") side-armed:$(grep -c . <<< "$ks_side")"
+assert_eq "the default branch of the kit is its own remote HEAD, never the DEFAULT_BRANCH of the target" \
+  "level-develop: trunk-main: main-of-trunk:1" \
+  "level-develop:$(ks_say "$KS/level" develop) trunk-main:$(ks_say "$KS/trunk" main) main-of-trunk:$( git -C "$KS/trunk" checkout -q main >/dev/null 2>&1; ks_say "$KS/trunk" main | grep -cF -- "$KS_OFF 'main', not of its default branch 'trunk'")"
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    preflight measures the GNU userland instead of assuming it\n'; exit 0; fi

@@ -3041,6 +3041,18 @@ mut_PRE_test_cmd_stragglers_print_args() {
 mut_PRE_lint_absent_silent() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^  if has_mutation_catalogue "\$REPO_ROOT" \&\& ! command -v shellcheck|  if false \&\& ! command -v shellcheck|' "$1"
 }
+mut_RUN_kit_off_branch_silent() {
+  sed -i '/^kit_stale_check() {/,/^}/ s|^    warn "the kit at \$home is a checkout of branch|    : "the kit at $home is a checkout of branch|' "$1"
+}
+mut_RUN_kit_behind_silent() {
+  sed -i '/^kit_stale_check() {/,/^}/ s|^    warn "the kit at \$home is \$behind commit(s) behind|    : "the kit at $home is $behind commit(s) behind|' "$1"
+}
+mut_RUN_kit_reads_target_branch() {
+  sed -i '/^kit_stale_check() {/,/^}/ s|^  def="\${def#origin/}"$|  def="${DEFAULT_BRANCH:-${def#origin/}}"|' "$1"
+}
+mut_RUN_agent_missing_worktree_names_install() {
+  sed -i '/^run_phase() {/,/^}/ s|^    if repo_is_linked_worktree "\$REPO_ROOT"; then$|    if false; then|' "$1"
+}
 mut_PRE_template_outcome_default_green() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
 }
@@ -8223,6 +8235,10 @@ CATALOG=(
   PRE_test_cmd_stragglers_unnamed
   PRE_test_cmd_stragglers_print_args
   PRE_lint_absent_silent
+  RUN_kit_off_branch_silent
+  RUN_kit_behind_silent
+  RUN_kit_reads_target_branch
+  RUN_agent_missing_worktree_names_install
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent

@@ -5882,10 +5882,17 @@ run_phase() {
     die "hat $hat has no agents/$hat.md under $SDD_HOME — a missing hat would write anywhere"
   fi
   if [ -n "$agent" ] && [ ! -f "$REPO_ROOT/.claude/agents/$agent.md" ]; then
+    # The remedy depends on the checkout (L4 item 14): in a linked worktree the mirrors are the
+    # ignored links `sdd link-agents` makes in EACH checkout, so a new worktree starts without them
+    # and `sdd install --force` there is the wrong command; in the main checkout it is the right one.
+    local remedy="run 'sdd install --force' (the kit gained a hat since this repo was installed)"
+    if repo_is_linked_worktree "$REPO_ROOT"; then
+      remedy="this is a linked worktree, and the agent mirrors are ignored links of each checkout, so a new worktree starts without them: run 'sdd link-agents' here"
+    fi
     if [ "$DRY_RUN" = "1" ]; then
-      warn "agent $agent is not installed in $REPO_ROOT/.claude/agents/ — the real run would refuse this phase; run 'sdd install --force'"
+      warn "agent $agent is not installed in $REPO_ROOT/.claude/agents/ — the real run would refuse this phase; $remedy"
     else
-      die "agent $agent is not installed in $REPO_ROOT/.claude/agents/ — the harness loads the copy and refuses an unknown --agent. Run 'sdd install --force' (the kit gained a hat since this repo was installed)."
+      die "agent $agent is not installed in $REPO_ROOT/.claude/agents/ — the harness loads the copy and refuses an unknown --agent; $remedy."
     fi
   fi
   local disallowed mcp writes
@@ -6295,6 +6302,56 @@ phase_skills_wanted() {
   for sk in "${SKILLS_WANTED[@]}"; do
     case " $KIT_THIRD_PARTY_SKILLS " in *" ${sk#*:} "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
   done
+}
+
+# repo_is_linked_worktree <dir> → 0 when <dir> is a linked worktree (its git dir is not the common
+# dir), 1 for a main checkout or no repository at all. No side effect, so `if` reads it directly.
+repo_is_linked_worktree() {
+  local gd cdir
+  gd="$(git -C "$1" rev-parse --path-format=absolute --git-dir 2>/dev/null)" || return 1
+  cdir="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  [ -n "$gd" ] && [ -n "$cdir" ] && [ "$gd" != "$cdir" ]
+}
+
+# kit_stale_check (L4 item 2) → a warning when the kit this process runs is a clone off its default
+# branch, or on it and behind the upstream ALREADY fetched (nothing is fetched here: a run is not the
+# place for network). It speaks only for a kit that is a main checkout of its own, on a branch: a
+# linked worktree is a mission of the kit, on a branch by design; a detached HEAD is a CI or a pinned
+# copy; a copy with no git of its own (the mutation sandbox, or a copy inside another repo, which
+# `rev-parse` would answer for) cannot say. The default branch is the KIT's own origin/HEAD, falling
+# back to origin/main then origin/master, and never the target's DEFAULT_BRANCH — the target's base
+# says nothing about the kit's. Silent under --dry-run: the projection does not inherit a warning
+# about the kit's state. Once per process (KIT_STALE_SAID), so it is CALLED, never read by `$( )`.
+# Callers: cmd_run, cmd_retry, cmd_preflight.
+KIT_STALE_SAID=""
+kit_stale_check() {
+  [ -z "$KIT_STALE_SAID" ] || return 0
+  KIT_STALE_SAID=1
+  [ "${DRY_RUN:-0}" != "1" ] || return 0
+  local home top gd cdir br def c behind
+  home="$(CDPATH='' cd -P "$SDD_HOME" 2>/dev/null && pwd)" || return 0
+  top="$(git -C "$home" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ "$top" = "$home" ] || return 0
+  gd="$(git -C "$home" rev-parse --path-format=absolute --git-dir 2>/dev/null)" || return 0
+  cdir="$(git -C "$home" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 0
+  [ -n "$gd" ] && [ "$gd" = "$cdir" ] || return 0
+  br="$(git -C "$home" symbolic-ref --quiet --short HEAD 2>/dev/null)" || return 0
+  def="$(git -C "$home" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)" || def=""
+  if [ -z "$def" ]; then
+    for c in origin/main origin/master; do
+      if git -C "$home" rev-parse --verify --quiet "refs/remotes/$c" >/dev/null 2>&1; then def="$c"; break; fi
+    done
+  fi
+  [ -n "$def" ] || return 0
+  def="${def#origin/}"
+  if [ "$br" != "$def" ]; then
+    warn "the kit at $home is a checkout of branch '$br', not of its default branch '$def' (its origin/HEAD) — every phase runs this branch's runner, hats and templates. If that is not on purpose: git -C $home switch $def"
+    return 0
+  fi
+  behind="$(git -C "$home" rev-list --count "HEAD..refs/remotes/origin/$def" 2>/dev/null)" || return 0
+  if [ "${behind:-0}" -gt 0 ]; then
+    warn "the kit at $home is $behind commit(s) behind origin/$def (as last fetched; nothing was fetched now) — every phase runs the older runner, hats and templates: git -C $home pull --ff-only"
+  fi
 }
 
 # phase_skills_check <voice> → what the phases will meet of the skills they boot, said in <voice>:
@@ -7678,6 +7735,8 @@ $todo_first
   # sentences are phase_skills_check's, the one definition `sdd run` and `sdd retry` stop on; here
   # every one is a warning, never `_fail`, and no session.
   phase_skills_check preflight
+  # The kit clone itself (L4 item 2): off its default branch, or behind what was last fetched.
+  kit_stale_check
 
   # --- target repo plugins ---
   local settings="$REPO_ROOT/.claude/settings.json"
@@ -10280,6 +10339,8 @@ cmd_run() {
   # paid for; under --dry-run it is a warning and the projection goes on. Called, never `$( )`: the
   # die must end this process.
   phase_skills_check run
+  # L4 item 2: a stale kit clone is named before anything is paid for (silent in a dry run).
+  kit_stale_check
   # BEFORE the base-branch warning, and the order is the point: the checkout is what decides where
   # this pipeline will commit, so warning first would cry wolf at a human the runner is about to
   # move off the base branch anyway — and a warning that cries wolf is how people learn to skip
@@ -10991,6 +11052,7 @@ cmd_retry() {
   # The second door of phase_skills_check (L4 item 7): a retry opens a fresh session, which the
   # harness would deny the skill all the same. Before the branch, the gates and the session.
   phase_skills_check run
+  kit_stale_check
   # The second call site of the single definition: `sdd retry` opens a session that COMMITS, so a
   # retry fired from the wrong branch lands the redone phase exactly where `sdd run` would not
   # have put it. Same guard, same die, same silence in a dry run (retry has no dry mode, and the
