@@ -41,7 +41,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:7616` (`preflight-test`) — a forma só é medida quando o `TEST_CMD` do alvo inclui o
   `check-todo.sh` (o opt-in de `config/schema.md`); o do `sales_quote` não incluía, e o `TODO.md` dele
   divergiu calado até 206 violações, achadas só quando o espelho de issues recusou. Direção: o
-  `sdd preflight` roda `check-todo.sh --check "$TODO_FILE" --allow-empty` sozinho, ou avisa. Fonte:
+  `sdd preflight` roda `check-todo.sh --check "$TODO_FILE" --allow-empty` sozinho, ou avisa. RESOLVED by 9ef4cdc. Fonte:
   `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C8) — descoberto na faxina das
   issues do `sales_quote` (2026-10-09)
 
@@ -50,7 +50,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   linhas do `sdd health --release` também não. No `ui24_agent`, o `~/repos/sdd_agents` estava numa branch
   já mergeada, 382 commits atrás da `main`, e todo alvo rodou o kit velho sem saber. Direção: avisar uma
   vez por processo quando o `SDD_HOME` não está na branch padrão do remoto do próprio kit (o `origin/HEAD`
-  dele, nunca o `DEFAULT_BRANCH` do alvo: `develop` no `sales_quote`) ou está atrás do upstream já buscado.
+  dele, nunca o `DEFAULT_BRANCH` do alvo: `develop` no `sales_quote`) ou está atrás do upstream já
+  buscado. RESOLVED by a3e4c86.
   — descoberto por `retrofit-watch` na sessão do `ui24_agent` que planejou a S9 (2026-10-17)
 
 - [ ] **O `sdd preflight` diz "preflight ok" com um `TEST_CMD` que deixa servidor vivo** — `bin/sdd-coordination.py:359`
@@ -58,7 +59,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   de um `sdd run` repete a espera. No `dotp-remake` (.NET) o `dotnet build` deixou 7 nós do MSBuild e o
   `VBCSCompiler`: o preflight ficou preso em "8 processes it left running hold the checkout" até um
   `dotnet build-server shutdown`; com `--disable-build-servers` nenhum sobra. Direção: o probe do `TEST_CMD`
-  avisa nomeando o descendente que sobrou, e o failure-modes lista as flags de toolchain.
+  avisa nomeando o descendente que sobrou, e o failure-modes lista as flags de toolchain. RESOLVED by dfaeeb4.
   — descoberto por `sdd preflight` na instalação do kit no `dotp-remake` (2026-10-19)
 
 - [ ] **A prosa que a DOCS escreve depois da REVIEW não passa por revisão nenhuma** — `bin/sdd:3096` (`PHASES`) —
@@ -75,21 +76,23 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   chapéu ao `HAT_WRITES_BASE` (`$TODO_FILE` e a catraca), mas o `cmd_kaizen` não chama o `hat_guard_check`: uma
   escrita do juiz fora disso passa sem parada. O chapéu também não diz que a base inclui o `TODO.md`: o juiz de
   2026-10-20 leu o `writes:` ao pé da letra e levou os achados ao plano nascido; o de 2026-10-12 os commitou no
-  `TODO.md`, como a base permite. Direção: o `cmd_kaizen` passa pela guarda, com probe, e o chapéu nomeia a base.
+  `TODO.md`, como a base permite. Direção: o `cmd_kaizen` passa pela guarda, com probe, e o chapéu nomeia
+  a base. RESOLVED by 261acc8.
   — descoberto por `sdd-kaizen` na missão `20261020-a-sessao-le-o-que-o-boot-manda` (2026-10-20)
 
 - [ ] **O `atualizado:` do checkpoint aceita hora inventada, até no futuro** — `tests/check-checkpoint.sh:1608`
   (`check_one`) — a regra "todo carimbo sai do `date`" só está no `boot_prompt` (`bin/sdd:3524`), que a sessão
   interativa não lê, e o `--check` não olha o campo. Na peça C do `lighthouse_project`, as rodadas do `/codereview`
   gravaram 15:30, 17:10, 18:00 e 18:40 em commits das 12:43 às 12:52 (`-0300`, autor igual a commit), e o
-  `--check` passou. Direção: o `--check` reprova `atualizado:` posterior ao relógio, com probe.
+  `--check` passou. Direção: o `--check` reprova `atualizado:` posterior ao relógio, com probe. RESOLVED by 21a9af7.
   — descoberto por `retrofit-watch` na missão `20261020-amep-anexo-na-demanda` do `lighthouse_project` (2026-10-21)
 
 - [ ] **A sonda do `Bash` do `sdd preflight` dá `ok` pela resposta, nunca pelo comando rodado** — `bin/sdd:7287`
   (`sdd-preflight-ok`) — o braço `ok` só faz `grep` do marcador no `result`, e o marcador está literal no prompt:
   um modelo que repita o texto sem chamar o `Bash` fica verde, e sem linha `init` o `ok` ainda afirma "Bash in the
   tool list". O fixture prova: o stub A do `tests/check-preflight.sh` responde sem `tool_use` e a sonda diz `ok`.
-  Direção: ler o artefato, como a sonda dos templates desde o R6 (o `tool_result` do `Bash` com o marcador).
+  Direção: ler o artefato, como a sonda dos templates desde o R6 (o `tool_result` do `Bash`
+  com o marcador). RESOLVED by 641529b.
   — descoberto na varredura do R6 da missão `20261020-a-sessao-le-o-que-o-boot-manda` (2026-10-21)
 
 - [ ] **O `sdd run` paga a REVIEW sem avisar que o `READ_EXTRA` não cobre o `codereview`** — `bin/sdd:6446`
@@ -97,7 +100,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   repete e abre a REVIEW assim mesmo. No `magic_tutor`, as três últimas missões tiveram Reads negados nas
   `references/` do `codereview` (5, 2 e 3 no `pipeline.log`). Na `20261024-dica-na-hora`, 3 dos 5 agentes da
   Fase B pararam sem revisar, numa REVIEW de US$ 5,61. Com a entrada (`j0ruge/magic_tutor#104`), um subagente
-  headless lê a reference. Direção: o `sdd run` faz a mesma busca de skills, sem sessão, e avisa ou para.
+  headless lê a reference. Direção: o `sdd run` busca as skills, sem sessão, e avisa ou para. RESOLVED by 95598f4.
   — descoberto por `sessão coordenadora` na missão `20261024-dica-na-hora` do `magic_tutor` (2026-10-25)
   RECURRED 2: sdd_agents/20261117-o-worker-orquestrador (2026-11-18); sdd_agents/20261119-l1b-a-rodada-delta (2026-11-20)
 
@@ -107,8 +110,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Caiu assim na suíte do `6160ae1` (PR `j0ruge/sdd_agents#330`), com o `check-health.sh` igual ao do `d426c68`,
   verde, e na de um commit só de `TODO.md`; avulso, caiu 1 vez em 4 e passou com `bash -x`. A sonda vem do
   `a3d3996`. Causa provável, não reproduzida sob controle. Direção: medir o grupo depois da espera pelo passo
-  lento, quando a suíte já roda, e provar por sabotagem (sem o `setsid`) que a sonda acusa. — descoberto pelo
-  relay da missão `20261026-health-pula-catalogo` (2026-10-26)
+  lento, quando a suíte já roda, e provar por sabotagem (sem o `setsid`) que a sonda acusa. RESOLVED by 07fc265.
+  — descoberto pelo relay da missão `20261026-health-pula-catalogo` (2026-10-26)
 
 - [ ] **O `gate_PR` só prova que o PR existe, não que o head dele é o que a missão fechou** — `bin/sdd:2917`
   (`--json url`) — o gate pede ao `gh` só a `url`, e o `gate:` do `50-pr.md` (`agents/sdd-publisher.md:106`)
@@ -124,7 +127,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   tinha 8 desses em 7 itens, com rc 0, e só o `REF?` da `todo-to-github-issues` os mostrou, depois do merge dos
   itens (PR #339). O PR #378, ainda aberto, achou outros três. Uma sonda com `dotp-remake` e um `PR` inexistente
   deu rc 0 em 2026-11-07. O `templates/todo.pt-BR.md` diz o `dono/repo#N` desde `5cde830`, mas oferece `PR #N`
-  sem dizer "deste repositório". Direção: o template diz isso, e o `--check --baseline` acusa `PR #N` de outro repo.
+  sem dizer "deste repositório". Direção: o template diz, e o `--check --baseline` acusa o alheio. RESOLVED by 46da749.
   — descoberto pelo relay da 3.5d do `dotp-remake`, no espelho do `TODO.md` do kit (2026-11-02)
 
 - [ ] **O cabeçalho do `TODO.md` semeado pelo `install` não acompanha o template** — `bin/sdd:6921`
@@ -133,7 +136,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `b0c80aa` (2026-10-23) e não chegou ao `TODO.md` do `dotp-remake`, semeado em 2026-10-18. Na r2 do `/codereview` do PR
   `j0ruge/dotp-remake#25`, o agente deu MEDIUM a uma `RECURRED` de 136 colunas pelo cabeçalho velho, com o
   `check-todo.sh --check` verde; o `--audit` da `todo-to-github-issues` 2.9.5 também não acusa o cabeçalho. Direção: o
-  `install` ou o `health` avisam quando o preâmbulo difere do template do idioma, sem reescrever.
+  `install` ou o `health` avisam quando o preâmbulo difere do template do idioma, sem reescrever. RESOLVED by 6ca6f20.
   — descoberto por `codereview` na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-08)
 
 - [ ] **Nenhum sensor relê os Checks `done`, e o R que estende a família de um I o deixa vermelho calado** —
@@ -480,7 +483,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   porcelain tinha só `??`: 4 `partidas/*.md` que o app grava e o repo deixa fora do git de propósito (nomes de
   oponentes) e a `.claude/worktrees/` do harness. Foi preciso rodar o `git status` à mão e pôr os dois no
   `.git/info/exclude`. Direção: a falha lista os caminhos (até uns 10) e, quando todos são `??`, nomeia o
-  `.git/info/exclude` como saída para dado do app fora do git.
+  `.git/info/exclude` como saída para dado do app fora do git. RESOLVED by 81f6ec6.
   — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-20)
 
 - [ ] **O motivo do gate_QA não diz se o caso e2e vermelho já caiu antes** — `bin/sdd:2067` (`gate-qa-e2e`) —
@@ -543,7 +546,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   escrevendo num pipe sem leitor (`:5353`, `:5360`). No `lighthouse_project` foram 7 linhas antes do "third-party
   skills present", com veredito `ok`. As funções reais, extraídas, repetem o ruído sob SIGPIPE ignorado (como num
   pai Node) e calam com a ação padrão; quem o ignorava naquela corrida não foi achado. Erro de escrita num preflight
-  verde se lê como falha. Direção: ler a lista inteira (`mapfile -t`) antes de casar, com caso sob `SIG_IGN`.
+  verde se lê como falha. Direção: ler a lista inteira (`mapfile -t`) antes de casar, com caso sob
+  `SIG_IGN`. RESOLVED by 81f6ec6.
   — descoberto por `claude` no `lighthouse_project`, ao preencher a `READ_EXTRA` (2026-10-23)
 
 - [ ] **A ajuda do `sdd run` não diz como soltá-lo da sessão que o dispara** — `bin/sdd:12989`
@@ -619,7 +623,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   suíte sai verde: toda corrida da missão `20261112-as-reincidentes-primeiro` pulou, e o branch trouxe 3 avisos
   que só o codereview viu. Com o `shellcheck` 0.11.0 do cache do `uv`, `-S warning` dá 4 em `a48cf3c`: SC2209 no
   `check-gates.sh` e no `check-hat.sh`, SC2010 no `check-gates.sh`, SC2120 no `check-health.sh`. Quem instala o
-  binário vê o `TEST_CMD` do kit vermelho. Direção: consertar os 4, e o `sdd preflight` avisar sem o linter.
+  binário vê o `TEST_CMD` do kit vermelho. Direção: consertar os 4, e o `sdd preflight` avisar
+  sem o linter. RESOLVED by dfaeeb4.
   — descoberto pelo codereview do branch da missão `20261112-as-reincidentes-primeiro` (2026-11-12)
 
 - [ ] **O `sdd run` num worktree do alvo manda `install --force`, e o que falta é o `link-agents`** —
@@ -628,7 +633,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   No `dotp-remake` o primeiro `sdd run` da 3.6f, de `~/.wt/dotp-remake-plano-3-6-f`, morreu nisso; o
   `sdd link-agents` no worktree criou 8 links, a `.sdd/config.sh` ficou igual ao commit e a run foi até o PR.
   Direção: com o `--git-dir` diferente do `--git-common-dir`, esta mensagem e a do `--dry-run` (`:5520`)
-  nomeiam o `sdd link-agents`.
+  nomeiam o `sdd link-agents`. RESOLVED by a3e4c86.
   — descoberto pela sessão interativa que lançou a run da 3.6f do `dotp-remake` (2026-11-14)
 
 - [ ] **O `sdd adr new` dá a uma branch o número que outra branch sem merge já usa** —
@@ -708,7 +713,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   humano entram em toda sessão: no L1b, 3 `SessionStart` em cada uma das 8 sessões, um com 3 604 B de saída no
   contexto. Um hook que falhe, demore ou negue uma ferramenta pega todas as fases, e o preflight não os lista; a
   skill de que uma fase depende (`codereview`, `ticket`, `qa-*`) ausente é só `warn`. Direção, pedida pelo dono:
-  listar os hooks por evento (rc e bytes, pela sonda) e reprovar a skill de uma fase que vai rodar.
+  listar os hooks por evento (rc e bytes, pela sonda) e reprovar a skill de uma fase que vai rodar. RESOLVED by 3612cb9.
   — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
 - [ ] **O ato `run` do worker lança o `sdd run` sem rodar o `sdd preflight`** — `commands/sdd-worker.md:163`
