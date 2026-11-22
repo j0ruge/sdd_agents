@@ -9,7 +9,7 @@ suíte vermelha. São 13 itens do `TODO.md` em 9 incrementos.
 ## O que custou
 
 - **Corrida (`sdd run`, uma):** 15 sessões, 34 939 s, US$ 37,03 (ledger e log da corrida, `LC_ALL=C`), contra um
-  teto de US$ 60. Saiu com rc 2 às 15:2x: o PR aberto, só o carimbo faltando.
+  teto de US$ 60. Saiu com rc 2 às 15:23 (o `pipeline.log` da missão): o PR aberto, só o carimbo faltando.
   - EXEC: 10 sessões em `medium`, US$ 27,32. São I1 a I9, mais o R1.
   - QA: 1 sessão, US$ 1,19, sem interface.
   - REVIEW: 2 sessões, US$ 5,60. A r1 deu B em Error Handling (2 MEDIUM) e abriu o R1; a r2, delta, deu A.
@@ -19,7 +19,7 @@ suíte vermelha. São 13 itens do `TODO.md` em 9 incrementos.
   - `pr`: o `⛔` da anatomia § 4 foi aplicado pelo worker (`0125046`) e marcado no corpo para o aceite do dono.
   - `review`:
     - O CodeRabbit deixou 15 achados inline e 1 "unverified" sobre `4ef8e23`. Um subagente os conferiu: 13
-      consertados com asserção e mutante (`0143fec`, `e41809f`, `bfbc460`, `39ad63f`), 2 refutados no thread, e o
+      consertados, 10 deles com asserção e 9 com mutante novo (`0143fec`, `e41809f`, `bfbc460`, `39ad63f`), 2 refutados no thread, e o
       "unverified" foi ao `TODO.md`.
     - A r3 do worker (delta sobre `39ad63f`) deu A.
     - O Codex deu 1 P2 no `f2559cb`, o 126/127 de uma linha só sobre a árvore suja, que a r3 tinha como LOW. O

@@ -1133,7 +1133,9 @@ first step, over a DIRTY working tree` and the line stops (rc 3, `dirty-tree`): 
 cannot tell a command that never started from a silent first step followed by a missing one, so
 commit what belongs to the mission or `git restore` what does not, as well. An exit 127 **after**
 the log printed output (one of the suite's own commands is missing) is read as a suite that
-started, and says so; that suite ran against the tree, so over a dirty tree `gate_EXEC` answers
+started, and says so, once the log holds more than one non-empty line: a log of exactly one, even
+with output before the error (`printf x; no_such_cmd` puts the `x` and the shell's message on one
+line), reads as a command that did not run; that suite ran against the tree, so over a dirty tree `gate_EXEC` answers
 with its dirty-tree stop instead. An exit 126 or 127 with no output at all is read as
 a red suite, citing its log: the shell always writes its own message when it cannot start a
 command, so a silent one is the suite's own exit status.

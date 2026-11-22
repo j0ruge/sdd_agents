@@ -1029,7 +1029,7 @@ test_cmd_stragglers() {
 }
 
 # The one definition of the reason a gate gives for a TEST_CMD that came back non-zero, read by the
-# four sites of gate_EXEC, gate_QA and gate_REVIEW right after run_check_cmd (item 5 of L3,
+# three sites of gate_EXEC, gate_QA and gate_REVIEW right after run_check_cmd (item 5 of L3,
 # 20261121-l3-gates-do-fim-da-linha). CALLED, never substituted: it publishes GATE_WHY.
 #
 # rc 126 and 127 are the shell saying the command could not be started (no execute bit, no such
