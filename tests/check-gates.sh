@@ -367,7 +367,7 @@ assert_phase "TEST_CMD green again hands the mission back to QA" "QA"
 # stop with a sentence of its own (Codex P2 on PR #458), which the `sdd run` pair further down
 # counts. gate_QA and gate_REVIEW have no dirty-tree stop, and read norun_why's dirty tree alike.
 # DECLARED LIMIT: norun_ok reads the strerror word, which the reason keeps only while the shell's
-# line fits in 200 bytes (test_cmd_red_why), so under a long enough path of the kit copy its two
+# line fits in 200 bytes (test_cmd_red_why), so under a long enough path of the kit copy or of TMPDIR its two
 # readers, this one and the gate_QA/gate_REVIEW pair, go red, closed (measured in r3 of L3).
 NORUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sdd-norun-XXXXXX")"
 printf '#!/bin/sh\nexit 0\n' > "$NORUN_DIR/noexec"; chmod 644 "$NORUN_DIR/noexec"
@@ -405,7 +405,7 @@ else
     "127: $nr127 ‖ 126: $nr126"
 fi
 assert_phase "TEST_CMD put back after the did-not-run worlds hands the mission back to QA" "QA"
-# A TEST_CMD that STARTED and then hit a missing command also exits 127 (`bash -c 'true; x'`), and
+# A TEST_CMD that STARTED and then hit a missing command also exits 127 (`echo x; no_such_cmd`), and
 # "the suite never started" would be false about it (finding #1 of r1). The reason still cites no
 # .log, so no_work_check can stop the second lap over the same tree. Read over a CLEAN tree: that
 # suite ran against the tree, so over a dirty one the dirty-tree stop answers (the pair below).
