@@ -17,11 +17,12 @@ do `TODO_FILE`; o `sdd run` só descobria a skill sem regra de leitura com a REV
 3 de 5 agentes parados); o juiz do `sdd kaizen` não passava pela guarda do chapéu;
 `grep -c '^mut_' tests/check-mutation.sh` → **954**.
 
-**Depois** (head da branch): os 15 itens com `RESOLVED by <hash>`; 46 asserções novas (as 41 do
+**Depois** (`cef90b1`, o merge do PR #464): os 15 itens com `RESOLVED by <hash>`; 46 asserções novas (as 41 do
 plano e as 5 do R1) em `check-preflight.sh`, `check-dry-run.sh`, `check-kaizen.sh`, `check-hat.sh`,
 `check-checkpoint.sh`, `check-health.sh`, `check-todo.sh` e `check-templates.sh`;
-`grep -c '^mut_' tests/check-mutation.sh` → **986** (os 31 do plano e o
-`mut_KAIZEN_hat_guard_check_dropped` do R1), cada um provado por `--only`; `hat_crossed_escalation`
+`grep -c '^mut_' tests/check-mutation.sh` → **986**, 32 a mais
+(`git diff 86e16c0..cef90b1 -- tests/check-mutation.sh | grep -cE '^\+mut_[A-Za-z0-9_]+\(\)'`: os 31 do
+plano e o `mut_KAIZEN_hat_guard_check_dropped` do R1), cada um provado por `--only`; `hat_crossed_escalation`
 com 6 portas em vez de 4 (`grep -cE '^ +if [a-z_]+_escalation "\$phase"; then' bin/sdd` → 13 → 15).
 A catraca não desce aqui (`todo-findings 91` antes e depois): os 15 saem no chore de depois do merge.
 
@@ -34,7 +35,10 @@ desta missão, somadas com `jq`):
 | L4 | `medium` | 14 (13 + 1) | 28 733 s | 2 052 s | 34,51 | 2,47 | 2,30 (15) | 1 |
 
 O R1 sozinho foi a sessão mais longa (4 841 s, US$ 3,42): seis consertos, cada um com o seu mundo de
-sabotagem numa cópia. A missão inteira até a REVIEW r2: 17 sessões, US$ 41,97, nenhuma parada.
+sabotagem numa cópia. A missão inteira até a REVIEW r2: 17 sessões, US$ 41,97, nenhuma parada. Até o merge, com a DOCS e as
+duas sessões da PR: 20 sessões, US$ 46,51 e 34 518 s (linhas `session` da missão, `LC_ALL=C`), e uma
+parada, o `handoff-blocked` da PR às 04:25, num conflito com a `main` que o worker resolveu com a
+autorização do dono (`67d69db`).
 
 **A rodada delta, terceira medida:** r1 inteira US$ 4,59, r2 delta (`base=74d35db`) US$ 1,63, razão
 **0,35**, contra 0,39 no L3 e 0,36 no L2. Três corridas com o delta, as três abaixo de 0,4, e a mesma
