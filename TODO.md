@@ -197,6 +197,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   catraca, os arquivos de estado que o worker resolve pela união (hoje a gaveta), nomeada no merge e no diário.
   — registrado a pedido do dono na parada `conflict` do L4, campanha `20261117-zerar-as-issues` (2026-11-22)
 
+- [ ] **O `/sdd-worker` chamado com argumento entrega o trecho do `sdd run` com o `$1` trocado** —
+  `commands/sdd-worker.md:164` (`bash -c`) — o carregador de comando do Claude Code troca `$0`, `$1` e `$2` (base
+  zero) pelas palavras do argumento, também dentro de aspas, e deixa `${1}`, `$@`, `$?`, `$!` e o `$N` sem argumento.
+  Medido em 2.1.327: a sonda `/subst-probe alfa beta gama` deu `"$1"` → `"beta"` e `${1}` intacto, e o `/sdd-worker`
+  chamado com "Continuar a campanha …" mostrou `sdd run "a"`. Quem copia o trecho roda a missão errada. Direção: o
+  trecho sem parâmetro posicional (`${1}`, ou a missão numa variável) e um sensor que recuse `$<dígito>` em `commands/`.
+  — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-22)
+
 - [ ] **O `budget` esquece calado o gasto de uma missão que nunca chegou à base e cujo worktree saiu** —
   `bin/sdd-worker:716` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
   PR fechado sem merge ou a missão largada e o worktree removido, o `budget` dá US$ 0.00 no lugar dos US$ 85 do
