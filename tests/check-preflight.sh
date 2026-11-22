@@ -379,6 +379,17 @@ bash_stub "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/result-answer-only.jsonl
 out_bp_answer="$( "$SDD" preflight 2>&1 )"
 assert_eq "preflight fails a Bash probe whose answer repeats the marker with no Bash call behind it" \
   "ok=0,repeat=1,cannot=0" "$(bp_verdict "$out_bp_answer")"
+# The reader of the stream fails (r1 #2 of the L4): a Bash tool_result whose content is a list of
+# bare strings makes text_of index a string, and jq exits 5. The answer carries the marker, so a
+# fallback to "none" blamed the model for repeating it; the failure is the reader's, and said so.
+{ jq -c '(.message.content[]? | select(.type == "tool_result") | .content) |= ["sdd-preflight-ok"]' \
+    "$FIX/.stub/bash-call.jsonl"
+  cat "$FIX/.stub/result-ok.jsonl"; } > "$FIX/.stub/bp-unreadable.jsonl"
+bash_stub "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/bp-unreadable.jsonl"
+out_bp_unread="$( "$SDD" preflight 2>&1 )"
+assert_eq "preflight says the stream of the Bash probe could not be read when jq fails on it, and never that the model repeated the marker" \
+  "unread=1,ok=0,repeat=0,cannot=0,marker=yes" \
+  "unread=$(grep -cF 'fail  the stream of the Bash probe could not be read' <<< "$out_bp_unread"),$(bp_verdict "$out_bp_unread"),marker=$(jq -rs '[.[] | select(.type == "result") | .result // "" | contains("sdd-preflight-ok")] | if any then "yes" else "no" end' "$FIX/.stub/bp-unreadable.jsonl")"
 bash_stub - "$FIX/.stub/result-ok.jsonl"
 out_bp_noinit="$( "$SDD" preflight 2>&1 )"
 assert_eq "preflight claims Bash in the tool list only over an init line" \
@@ -427,9 +438,16 @@ assert_eq "preflight lists the hooks the probe session ran, one line per event, 
 assert_eq "preflight warns by name about a hook that exits non-zero or does not report success, and only about it" \
   "green:warn=0 red:warn=1,stderr=1,codes=1" \
   "green:warn=$(grep -cF -- "$HK_WARN" <<< "$out_hk_green") red:warn=$(grep -cF -- "$HK_WARN" <<< "$out_hk_red"),stderr=$(grep -cF 'hook-boom: no such file' <<< "$out_hk_red"),codes=$(grep -cF 'exit codes 0 2 0' <<< "$out_hk_red")"
+# Both counts are read before they are subtracted (r1 #4 of the L4): with the closing line missing,
+# fails_of answers empty, `$(( - ))` is a syntax error, and the assertion below was skipped with no
+# ok and no FAIL. The empty side is named here, and the subtraction reads 0 for it, so it still runs.
+fo_noreview="$(fails_of "$out_sk_noreview")"; fo_green="$(fails_of "$out_hk_green")"
+assert_eq "the hooks block reads both failure counts it subtracts" \
+  "noreview:read green:read" \
+  "noreview:$([ -n "$fo_noreview" ] && echo read || echo unread) green:$([ -n "$fo_green" ] && echo read || echo unread)"
 assert_eq "preflight fails a skill a phase will invoke when the init line of the probe does not list it" \
   "listed:fail=0 absent:fail=1,more=1" \
-  "listed:fail=$(grep -cF -- "$SK_FAIL" <<< "$out_hk_green") absent:fail=$(grep -cF -- "$SK_FAIL" <<< "$out_sk_noreview"),more=$(( $(fails_of "$out_sk_noreview") - $(fails_of "$out_hk_green") ))"
+  "listed:fail=$(grep -cF -- "$SK_FAIL" <<< "$out_hk_green") absent:fail=$(grep -cF -- "$SK_FAIL" <<< "$out_sk_noreview"),more=$(( ${fo_noreview:-0} - ${fo_green:-0} ))"
 assert_eq "preflight says nothing about hooks or the skills list without an init line" \
   "noinit:hooks=0,saw-none=0,skill=0 nokey:skill=0" \
   "noinit:hooks=$(grep -cF -- "$HK_ANY" <<< "$out_hk_noinit"),saw-none=$(grep -cF 'the probe session ran no hook' <<< "$out_hk_noinit"),skill=$(grep -cF 'is not in the skills list' <<< "$out_hk_noinit") nokey:skill=$(grep -cF 'is not in the skills list' <<< "$out_sk_nokey")"
@@ -2281,6 +2299,15 @@ assert_eq "preflight names the dirty paths, and the exclude file only when every
   "clean:fail=0,paths=,more=0,exclude=0 mixed:fail=1,paths=tracked.txt,new.txt,more=0,exclude=0 untracked:fail=1,paths=new.txt,more=0,exclude=1 many:fail=1,paths=new.txt,u01.txt,u02.txt,u03.txt,u04.txt,u05.txt,u06.txt,u07.txt,u08.txt,u09.txt,more=1,exclude=1" \
   "clean:$(dt_says "$dt_clean") mixed:$(dt_says "$dt_mixed") untracked:$(dt_says "$dt_untracked") many:$(dt_says "$dt_many")"
 
+# git status itself fails (r1 #1 of the L4): a corrupt index. The sentinel of the failure began with
+# `?? `, so the untracked test read it as "every path untracked" and named the exclude file.
+cp "$DT/.git/index" "$DT/.git/index.good"; echo junk > "$DT/.git/index"
+dt_gsfail="$(dt_run)"
+mv "$DT/.git/index.good" "$DT/.git/index"
+assert_eq "preflight says git status failed, and never that the dirty paths are untracked, when git status fails" \
+  "gsfail=1,witness=1,exclude=0" \
+  "gsfail=$(grep -c '^  fail  git status failed in ' <<< "$dt_gsfail"),witness=$(grep -c 'index file smaller than expected' <<< "$dt_gsfail"),exclude=$(grep -c 'every one of them is untracked' <<< "$dt_gsfail")"
+
 # --- is anything listening where APP_URL points? ----------------------------
 # preflight ran fifteen checks and never once touched APP_URL, so the one thing that costs a whole
 # opus session to discover — the app is not up — was the one thing it could not say. Measured on
@@ -3116,6 +3143,14 @@ assert_eq "a kit checkout off its default branch is named once per process, with
 ks_behind="$(ks_say "$KS/behind")"
 assert_eq "a kit checkout behind its fetched upstream is named with the count of commits" \
   "1 off:0" "$(grep -cF -- "is 2 $KS_BEHIND""main" <<< "$ks_behind") off:$(grep -cF -- "$KS_OFF" <<< "$ks_behind")"
+# The silent worlds are measured before their silence is read (r1 #3 of the L4): both are built with
+# their output thrown away, and a `worktree add` or a `checkout --detach` that failed would leave a
+# world silent for the wrong reason (no directory, or a copy of `level`).
+ks_wt_git="$(git -C "$KS/wt" rev-parse --absolute-git-dir 2>/dev/null)" || ks_wt_git=""
+ks_wt_common="$(git -C "$KS/wt" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || ks_wt_common=""
+assert_eq "the silent worlds of kit_stale_check are a linked worktree and a detached HEAD, measured before their silence is read" \
+  "wt:linked,sdd det:detached,sdd" \
+  "wt:$([ -n "$ks_wt_git" ] && [ -n "$ks_wt_common" ] && [ "$ks_wt_git" != "$ks_wt_common" ] && echo linked || echo "not-linked<$ks_wt_git>"),$([ -f "$KS/wt/bin/sdd" ] && echo sdd || echo no-sdd) det:$(git -C "$KS/det" symbolic-ref -q HEAD >/dev/null 2>&1 && echo on-branch || { git -C "$KS/det" rev-parse -q --verify HEAD >/dev/null 2>&1 && echo detached || echo no-head; }),$([ -f "$KS/det/bin/sdd" ] && echo sdd || echo no-sdd)"
 assert_eq "a kit on its default branch and level with it says nothing, and so does a linked worktree, a detached HEAD and a kit that is not a git checkout" \
   "level: wt: det: nogit: side-armed:1" \
   "level:$(ks_say "$KS/level") wt:$(ks_say "$KS/wt") det:$(ks_say "$KS/det") nogit:$(ks_say "$KS/nogit") side-armed:$(grep -c . <<< "$ks_side")"

@@ -1814,7 +1814,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=460
+PROBE_FLOOR=461
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1826,7 +1826,7 @@ fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
 # selftest green (the sabotage pass of lote 8, 2026-10-15). Tight, like PROBE_FLOOR, and the same
 # shape as rule_end in check-todo.sh.
 RULE_LINES=0
-RULE_FLOOR=11
+RULE_FLOOR=12
 rule_ok() { pass "rule: $1"; RULE_LINES=$((RULE_LINES + 1)); }
 
 probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode [arg…]]
@@ -3395,6 +3395,15 @@ ARGV
     'is later than the clock' "$scanclock" --scan
   [ "$FAILS" -eq "$ck_f0" ] && \
     rule_ok "an atualizado later than the clock is refused, in --check and in the scan, and one at or before it passes ($((PROBES - ck_p0)) probe(s))"
+  # The same future hour in a file written with CRLF line ends (r1 #5 of the L4): without the CR
+  # trimmed by frontmatter_updated the value stops matching CLOCK_RE, and the future passes in
+  # silence. The whole file is converted, table included, so the CR is the only thing that differs.
+  local cr_p0="$PROBES" cr_f0="$FAILS"
+  sed 's/$/\r/' "$box/ck-future.md" > "$box/ck-crlf.md"
+  probe 'an atualizado later than the clock is refused in a CRLF checkpoint' 1 \
+    "atualizado: $ck_tomorrow is later than the clock" "$box/ck-crlf.md"
+  [ "$FAILS" -eq "$cr_f0" ] && \
+    rule_ok "an atualizado later than the clock is refused in a checkpoint with CRLF line ends ($((PROBES - cr_p0)) probe(s))"
 
   # ── --red: the Check run at HEAD, refused when it is already green (issue 92) ──
   # One fixture repository, one row per probe. Every refusal shares rc 1, so each probe asserts the

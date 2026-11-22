@@ -7315,7 +7315,7 @@ cmd_preflight() {
         | if any($s[] | select(.type == "user") | .message.content[]?
                  | select(.type == "tool_result" and (.tool_use_id as $t | $ids | index($t)) != null);
                  .is_error != true and ((.content | text_of) // "" | contains("sdd-preflight-ok")))
-          then "ran" else "none" end' <<< "$probe_stream" 2>/dev/null )" || probe_ran=none
+          then "ran" else "none" end' <<< "$probe_stream" 2>/dev/null )" || probe_ran=unread
     # Herestrings for the same reason as the Jidoka in cmd_run: `printf | grep -q` returns 141
     # under `pipefail` when the grep MATCHES, so the success branch is the one that loses the race.
     if [ -z "$probe_init" ] && [ -z "$probe_answer" ]; then
@@ -7331,6 +7331,11 @@ cmd_preflight() {
       ok "headless session under the ${hat:-<no>} hat executes commands (OAuth + Bash in the tool list + permission)"
     elif [ "$probe_ran" = ran ]; then
       ok "headless session under the ${hat:-<no>} hat executes commands (a Bash tool_result carried the marker; no init line, so the tool list was not read)"
+    elif [ "$probe_ran" = unread ]; then
+      # The reader failed, not the model (r1 #2 of the L4): jq exited non-zero on the stream, so
+      # whether a Bash call carried the marker is unknown, and the answer says nothing about it.
+      _fail "the stream of the Bash probe could not be read — jq failed on it, so whether a Bash call
+        carried sdd-preflight-ok is unknown. Answer received: $(printf '%s' "$probe_answer" | head -c 120)"
     elif grep -q 'sdd-preflight-ok' <<< "$probe_answer"; then
       _fail "the headless session answered the marker with no Bash call behind it — no tool_result of a Bash
         tool_use in the stream carries sdd-preflight-ok, so the model repeated the text without running the
@@ -7819,8 +7824,11 @@ $todo_first
   # had already read (item 11 of the L4). When every one is untracked it is often data the app writes
   # beside the code, and the exclude file is named as the way out — git reads it, nobody commits it.
   local _pf_dirty _pf_dirty_n _pf_dirty_msg _pf_exclude
-  _pf_dirty="$( cd "$REPO_ROOT" && git status --porcelain )" || _pf_dirty="?? (git status failed)"
-  if [ -n "$_pf_dirty" ]; then
+  # A git status that fails is said by itself (r1 #1 of the L4): its sentinel used to start with `?? `,
+  # and the untracked test below read the failure as "every path untracked" and named the exclude.
+  if ! _pf_dirty="$( cd "$REPO_ROOT" && git status --porcelain )"; then
+    _fail "git status failed in $REPO_ROOT — the working tree could not be read, so no path is named (its error is above)"
+  elif [ -n "$_pf_dirty" ]; then
     _pf_dirty_n="$(grep -c '' <<< "$_pf_dirty")" || true
     _pf_dirty_msg="working tree dirty — the pipeline needs a clean base to attribute commits to increments:"
     _pf_dirty_msg+=$'\n'"$(head -n 10 <<< "$_pf_dirty" | sed 's/^/        /')"

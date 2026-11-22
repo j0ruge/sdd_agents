@@ -3059,6 +3059,11 @@ mut_KAIZEN_hat_guard_retry_door_dropped() {
 mut_KAIZEN_hat_guard_unarmed() {
   sed -i '/^cmd_kaizen() {/,/^}/ s|^  hat_guard_arm$|  :|' "$1"
 }
+# The setter of the marker, at the first door (r1 #6 of the L4): the two doors and the arm had a
+# mutant each, the read between them none.
+mut_KAIZEN_hat_guard_check_dropped() {
+  sed -i '/^cmd_kaizen() {/,/^}/ s#^  hat_guard_check "\$phase" "\${before%%|\*}"$#  :#' "$1"
+}
 mut_RUN_agent_missing_worktree_names_install() {
   sed -i '/^run_phase() {/,/^}/ s|^    if repo_is_linked_worktree "\$REPO_ROOT"; then$|    if false; then|' "$1"
 }
@@ -8251,6 +8256,7 @@ CATALOG=(
   KAIZEN_hat_guard_first_door_dropped
   KAIZEN_hat_guard_retry_door_dropped
   KAIZEN_hat_guard_unarmed
+  KAIZEN_hat_guard_check_dropped
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent
