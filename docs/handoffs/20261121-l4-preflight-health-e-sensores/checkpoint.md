@@ -1,6 +1,6 @@
 ---
 missao: 20261121-l4-preflight-health-e-sensores
-atualizado: 2026-11-22 00:25
+atualizado: 2026-11-22 01:36
 ---
 
 # Checkpoint — L4: preflight, health e sensores
@@ -61,6 +61,7 @@ atualizado: 2026-11-22 00:25
 | I11 | A sonda de interrupção lê o grupo depois que a suíte roda (item 8) | `o=$(bash tests/check-health.sh 2>&1); echo "$(grep -c '^  ok    surface: the interrupt probe tells a suite in its own process group from one left in the caller group' <<< "$o")"` → `1` | done | 07fc265 |
 | I12 | O PR #N sem rastro no histórico (item 9) | `o=$(bash tests/check-todo.sh --selftest 2>&1); t=$(bash tests/check-templates.sh 2>&1); echo "$(grep -c '^  ok    rule: under --baseline a bare PR number in a new item passes only when a commit subject of the local history cites it' <<< "$o") $(grep -c '^  ok    todo.md: a bare PR number is said to be a merged pull request of this repository' <<< "$t") $(grep -c '^  ok    todo.pt-BR.md: a bare PR number is said to be a merged pull request of this repository' <<< "$t")"` → `1 1 1` | done | 46da749 |
 | I13 | Fecho: RESOLVED by nos 15 itens | `b=$(git show "$(git merge-base HEAD origin/main)":TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `15` | done | 54a8ffe |
+| R1 | Lote dos achados #1–#6 da r1 (LOW): git status que falha lido como não versionado; jq que falha lido como marcador repetido; mundos wt/det do kit_stale_check sem testemunha; fails_of vazio pula a asserção; CRLF sem probe na regra 7; hat_guard_check do cmd_kaizen sem mutante | `o=$(bash tests/check-preflight.sh 2>&1); c=$(bash tests/check-checkpoint.sh 2>&1); echo "$(grep -c '^  ok    preflight says git status failed, and never that the dirty paths are untracked, when git status fails' <<< "$o") $(grep -c '^  ok    preflight says the stream of the Bash probe could not be read when jq fails on it, and never that the model repeated the marker' <<< "$o") $(grep -c '^  ok    the silent worlds of kit_stale_check are a linked worktree and a detached HEAD, measured before their silence is read' <<< "$o") $(grep -c '^  ok    the hooks block reads both failure counts it subtracts' <<< "$o") $(grep -c '^  ok    rule: an atualizado later than the clock is refused in a checkpoint with CRLF line ends' <<< "$c") $(grep -c '^mut_KAIZEN_hat_guard_check_dropped() {' tests/check-mutation.sh)"` → `1 1 1 1 1 1` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
