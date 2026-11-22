@@ -192,6 +192,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sem resposta da conta do PR.
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
 
+- [ ] **A parada `conflict` do worker leva ao dono a linha de estado que os dois lados reescreveram** —
+  `commands/sdd-worker.md:271` (`conflict`) — só o conflito no `TODO.md` e na catraca fica com o worker. No L4
+  (`20261121-l4-preflight-health-e-sensores`) o publisher parou (`b03993b`) num conflito com a `main` do PR #460 na
+  linha F6 da gaveta, que todo lote reescreve: cada lado com a sua frase, e a união resolveu (`67d69db`), mas a
+  campanha esperou o dono das 04:25 às 07:49. Direção (decisão do dono): a parada lista, com o `TODO.md` e a
+  catraca, os arquivos de estado que o worker resolve pela união (hoje a gaveta), nomeada no merge e no diário.
+  — registrado a pedido do dono na parada `conflict` do L4, campanha `20261117-zerar-as-issues` (2026-11-22)
+
 - [ ] **O `budget` esquece calado o gasto de uma missão que nunca chegou à base e cujo worktree saiu** —
   `bin/sdd-worker:716` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
   PR fechado sem merge ou a missão largada e o worktree removido, o `budget` dá US$ 0.00 no lugar dos US$ 85 do
