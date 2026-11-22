@@ -4582,7 +4582,7 @@ autonomy_kit_stamp() {
 # finding and never said how to get it there.
 #
 # It warned and recorded until 20260903-a-fronteira-do-chapeu; since then it STOPS the line — kind
-# `kit-touched`, through hat_crossed_escalation's four doors. The cost that kept it a warning is now
+# `kit-touched`, through hat_crossed_escalation at this guard's four doors. The cost that kept it a warning is now
 # paid the other way: a human editing the kit in another terminal while a mission runs is a real,
 # legitimate false positive, and it costs one more `sdd run`. Both kit-touched rows of the real
 # ledger were exactly that — 2026-09-18 a human commit, 2026-09-24 an uncommitted edit with no
