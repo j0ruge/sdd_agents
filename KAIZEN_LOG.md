@@ -52,11 +52,15 @@ e PR e o corpo do PR sem conserto; o `gate_PR` pedia ao `gh` só `--json url`; n
 código commitado depois da rodada de REVIEW; o K8 lia o `HEAD`; o `status: blocked` do `50-pr.md` e
 da rodada não parava a linha; `grep -c '^mut_' tests/check-mutation.sh` → **926**.
 
-**Depois** (head da branch): os 13 itens com `RESOLVED by <hash>`; 32 asserções novas (as 30 do
-plano e as 2 do R1) em `check-gates.sh`, `check-autonomy.sh`, `check-hat.sh` e
-`check-templates.sh`; `grep -c '^mut_' tests/check-mutation.sh` → **943** (os 16 do plano e o
-`mut_PR_kit_lines_counted_in_fence` do R1), cada um provado por `--only`. A catraca não desce aqui
-(`todo-findings 91` antes e depois): os 13 saem no chore de depois do merge.
+**Depois** (`86e16c0`, o merge do PR #458): os 13 itens com `RESOLVED by <hash>`; as linhas `ok` de
+`check-gates.sh`, `check-autonomy.sh`, `check-hat.sh` e `check-templates.sh` vão de **1 284 a 1 335**
+(515 → 551, 503 → 505, 143 → 152 e 123 → 127: cada sensor numa cópia `git archive` de `a0004df` e de
+`86e16c0`, e `grep -c '^  ok    '` na saída); `grep -c '^mut_' tests/check-mutation.sh` → **954**,
+28 a mais (`git diff a0004df..86e16c0 -- tests/check-mutation.sh | grep -cE '^\+mut_[A-Za-z0-9_]+\(\)'`):
+os 16 do plano, o `mut_PR_kit_lines_counted_in_fence` do R1, 9 dos consertos do CodeRabbit e 2 do
+P2 do Codex no PR, cada um provado por `--only` (os 2 do Codex, pela r4 do worker, no
+`check-gates.sh` sem `SDD_MUTANT`). A catraca não desce aqui (`todo-findings 91` antes e depois):
+os 13 saem no chore de depois do merge.
 
 **O custo da EXEC ao lado do L2 e do L1** (`~/.sdd/autonomy-log.jsonl`, linhas `session` com
 `phase: EXEC`, somadas com `jq`; o L2 sem a sessão `3672ea89`, como na entrada abaixo):
@@ -120,8 +124,9 @@ primeiro com delta: `git merge-base --is-ancestor 079bc39 <runner_sha>` → rc 1
 | L1b | `336640e`, sem delta | US$ 2,24 | US$ 2,16 | 0,97 |
 | L2 | `079bc39`, com delta | US$ 3,80 | US$ 1,36 | **0,36** |
 
-Parte da queda o L1 já mostrava sem o delta: a r2 sai mais barata quando a r1 deixou um conserto só. É
-uma corrida com o delta, e o próximo lote com duas rodadas confirma ou refuta.
+O L1 já caía sem o delta (0,61), e o número de consertos da r1 não explica por quê: o L1b, também
+com um `R1` só, ficou em 0,97 (`grep -oE '^\| *R[0-9]+ ' docs/handoffs/<missão>/checkpoint.md` → `R1`
+nos três). É uma corrida com o delta, e o próximo lote com duas rodadas confirma ou refuta.
 
 ## 2026-11-20 — O L2: quinze regras do `/sdd-plan` e do planner ganham texto e asserção, com o EXEC em `xhigh`
 

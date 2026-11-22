@@ -366,6 +366,9 @@ assert_phase "TEST_CMD green again hands the mission back to QA" "QA"
 # Read over a CLEAN tree (norun_why_clean): over a dirty one gate_EXEC keeps the dirty-tree
 # stop with a sentence of its own (Codex P2 on PR #458), which the `sdd run` pair further down
 # counts. gate_QA and gate_REVIEW have no dirty-tree stop, and read norun_why's dirty tree alike.
+# DECLARED LIMIT: norun_ok reads the strerror word, which the reason keeps only while the shell's
+# line fits in 200 bytes (test_cmd_red_why), so under a long enough path of the kit copy its two
+# readers, this one and the gate_QA/gate_REVIEW pair, go red, closed (measured in r3 of L3).
 NORUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sdd-norun-XXXXXX")"
 printf '#!/bin/sh\nexit 0\n' > "$NORUN_DIR/noexec"; chmod 644 "$NORUN_DIR/noexec"
 norun_why() { # norun_why <TEST_CMD> <PHASE> — the reason, with TEST_CMD swapped and put back
