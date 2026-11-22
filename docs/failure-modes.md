@@ -123,6 +123,36 @@ line, so `tail -F` shows it without opening the session's `.json`.
 
 ---
 
+## `sdd run` stops at launch: "sdd stops before any session"
+
+**Symptom:** `sdd run <mission>` or `sdd retry <mission>` exits 1 right after the mission line,
+before switching branch, running a gate or opening a session, with a `fail` line that says
+`skill <skill> is found in <dir>, and no read rule of the sessions covers it` (ending in
+`READ_EXTRA entry to add: …`) or `skill <skill> is not where the harness loads it`, and then
+`error: sdd stops before any session: N skill(s) a phase invokes would boot denied or absent`.
+
+**Cause:** a phase of this config boots that skill (REVIEW's `codereview:codereview` in every
+mission; `ticket` with `JIRA_ENABLED=true`; `qa-report` and `qa-execution` with an interface), and
+the session would not get it. Uncovered: the skill is found, its references live outside the repo,
+and no `READ_EXTRA` entry grants the read, so the harness denies them and the session is paid for
+before the `DENIED` line says so. Broken: the plugin registry records an install that does not hold
+the skill, so the phase boots without it. Both are the sentences `sdd preflight` warns with, from the
+same definition (`phase_skills_check`).
+
+**What you do:**
+- **uncovered:** add the entry the line names to `READ_EXTRA` in the target's `.sdd/config.sh`
+  (written with `$HOME`, as the line prints it), commit it, and launch again.
+- **broken:** reinstall the plugin the line names.
+- **to see the projection anyway:** `sdd run <mission> --dry-run` prints the same lines as warnings
+  and goes on.
+
+A skill the runner does not find, and one whose symlink target has a name the grammar refuses, stay
+warnings: no entry fixes either, and the run goes on. The kit's own suite runs with
+`SDD_SKILLS_ROOT` at an empty directory (`tests/isolate-git.sh`), so its fixture runs never meet the
+machine's skills.
+
+---
+
 ## A `blocked` increment
 
 **Symptom:** `sdd run` exits with code 3 and "BLOCKED in EXEC" straight away, without opening a
@@ -903,6 +933,41 @@ refusing to spend a session on an agent that is not the one you think you are ru
 
 ---
 
+## `sdd run` refuses a phase: "agent sdd-<x> is not installed", in a linked worktree
+
+**Symptom:** `agent sdd-<x> is not installed in <repo>/.claude/agents/ — the harness loads the copy
+and refuses an unknown --agent; this is a linked worktree, and the agent mirrors are ignored links
+of each checkout, so a new worktree starts without them: run 'sdd link-agents' here.` (a warning
+under `--dry-run`).
+
+**Cause:** the target keeps its agent mirrors as ignored links (`sdd-link-agents`), and a link that
+Git ignores is not checked out: every new `git worktree add` starts without them.
+
+**What you do:** `sdd link-agents` in that worktree. In a **main** checkout the same refusal names
+`sdd install --force` instead — there the cause is a kit that gained a hat since the repo was
+installed, and that is still the right command.
+
+---
+
+## `sdd run`, `sdd retry` or `sdd preflight` warns that the kit is off its default branch, or behind it
+
+**Symptom:** `the kit at <dir> is a checkout of branch '<b>', not of its default branch '<d>'`, or
+`the kit at <dir> is <n> commit(s) behind origin/<d> (as last fetched; nothing was fetched now)`,
+once per command.
+
+**Cause:** every phase runs the runner, the hats and the templates of the checkout the `sdd` on the
+PATH resolves to. A kit left on a mission branch, or never pulled, runs older (or unreviewed) code
+than the one you think. The default branch is the kit's own `origin/HEAD` (falling back to
+`origin/main`, then `origin/master`), never the target's `DEFAULT_BRANCH`. Nothing is fetched: the
+count is against the last fetch.
+
+**What you do:** the line names the command — `git -C <dir> switch <d>` or `git -C <dir> pull
+--ff-only`. When the branch is on purpose, ignore it: it is a warning, never a stop. A linked
+worktree of the kit (a kit mission), a detached `HEAD` and a kit that is not a git checkout of its
+own say nothing, and neither does `--dry-run`.
+
+---
+
 ## `sdd install` shows a diff in the agents
 
 **Symptom:** warnings "agent X differs from the kit version" with a diff.
@@ -1024,6 +1089,28 @@ looks up in the history of `HEAD`, and a rebase takes them out of it. Then remov
 from `50-pr.md` and `sdd run <mission>` for the PR phase to carry on. Since
 `20261121-l3-gates-do-fim-da-linha` the blocked `50-pr.md` stops the line itself (`handoff-blocked`,
 rc 3, see the section above), and the reason names this merge.
+
+---
+
+## TEST_CMD leaves a process running
+
+**Symptom:** `sdd preflight` warns `TEST_CMD left a process running after it exited: pid <n>,
+executable <name>`, and the command does not return until that process ends; a gate, `sdd status`
+or `sdd why` waits the same way, with the supervisor saying that the processes it left running hold
+the checkout.
+
+**Cause:** the command started a process that outlives it, usually a build server. The kit's lock
+on the checkout is released only when every descendant has been reaped, so a server that stays up
+for minutes holds every kit command that runs `TEST_CMD`. Measured in `dotp-remake` (.NET):
+`dotnet build` left seven MSBuild nodes and `VBCSCompiler`. The preflight finds them by a tag that
+`run_check_cmd` puts in the command's environment (`SDD_CHECK_TAG`), and names each by pid and the
+kernel's executable name, never by its arguments, which can carry a credential.
+
+**What you do:** make `TEST_CMD` leave nothing behind. For .NET, both remedies were measured: pass
+`--disable-build-servers` to `dotnet build`/`dotnet test` (nothing is left), or end the command
+with `dotnet build-server shutdown`. Other toolchains were not measured; the rule is the same:
+turn the build server off inside `TEST_CMD`, or shut it down as its last step. A process that
+rebuilt its environment (`env -i`) is not seen by the warning.
 
 ---
 

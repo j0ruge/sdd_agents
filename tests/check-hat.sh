@@ -1655,6 +1655,19 @@ reviewer_later_code_probes() {
   fi
 }
 
+# Item 4 of 20261121-l4-preflight-health-e-sensores (decision 7). `sdd kaizen` now runs the hat
+# guard around both judge sessions, so the judge is told, on one physical line of section 7, what
+# it may write besides its own writes: the base every hat sums, the findings file and the ratchet.
+judge_base_probes() {
+  local agent="$ROOT/agents/sdd-kaizen.md" sec
+  sec="$(awk '/^## 7\. /{s=1; next} s && /^## /{s=0} s' "$agent")"
+  if grep -qF 'the base every hat may write adds the findings file (`$TODO_FILE`) and the ratchet (`tests/health-baseline.txt`): any other path stops the line as `hat-crossed`' <<< "$sec"; then
+    pass "hat: the judge names the base every hat may write, the findings file and the ratchet"
+  else
+    fail "hat: the judge names the base every hat may write, the findings file and the ratchet"
+  fi
+}
+
 qa_agent_probes
 hat_promise_probes
 command_approval_probes
@@ -1680,6 +1693,7 @@ release_stamps_probes
 reviewer_delta_probes
 blocked_way_out_probes
 reviewer_later_code_probes
+judge_base_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2

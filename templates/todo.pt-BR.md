@@ -30,6 +30,9 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > `**<N>. `, o arquivo numera os itens, e um `#N` solto no corpo que coincide com o número de um
 > item é recusado: para um leitor é o item N, para outro o PR N. Escreva `item N`, ou `PR #N`,
 > `issue #N` ou `dono/repo#N` para o que não é o item. Num arquivo que não numera, o `#N` passa.
+> Um `PR #N` solto é um pull request já mergeado deste repositório: sob `--baseline`, o `PR #N`
+> de um item novo só passa quando o assunto de um commit cita `#N`. O resto, inclusive um PR
+> deste repositório ainda aberto, vai como `dono/repo#N`.
 >
 > **Registro decidido** — uma linha física, sem caixa, apontando a evidência:
 >

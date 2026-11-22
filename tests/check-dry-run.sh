@@ -1061,6 +1061,41 @@ assert_eq "an unreadable journal names no stream an orphan in the boot, and its 
   "armed:$LB_ARMED streams:$(lb_has "$LB_BLIND" 'stream no journal line closed') dirty:$(lb_has "$LB_BLIND" '^ +M tracked\.txt') raw:$(grep -c 'pipeline\.log' "$LB_BLIND_ERR")"
 rm -rf "$LB" "$LB_BLIND_ERR"
 
+# --- the agent mirror missing: link-agents in a worktree, install --force in the main checkout ----
+# L4 item 14. The mirrors `sdd link-agents` makes are ignored links of EACH checkout, so a linked
+# worktree of an installed target starts without them, and the remedy there is `sdd link-agents`;
+# in the main checkout with a mirror gone it is still `sdd install --force`. One repo, the mirrors
+# ignored (as link-agents leaves them), two missions: one on main for the main checkout, one on the
+# worktree's branch. The real run is stopped by the precondition before the stub claude is reached.
+echo "== the remedy for a missing agent mirror depends on the checkout =="
+AM="$SDD_STATE_FIX/am-main"; AW="$SDD_STATE_FIX/am-wt"
+mkdir -p "$AM"
+( cd "$AM" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" && "$SDD" install >/dev/null 2>&1 \
+    && cp "$FIX/.sdd/config.sh" .sdd/config.sh \
+    && printf '.claude/agents/sdd-*.md\n' >> .gitignore ) >/dev/null 2>&1
+for am in main wt; do
+  mkdir -p "$AM/docs/handoffs/20260101-am-$am"
+  printf -- '---\nmissao: 20260101-am-%s\nbranch: %s\naprovacao: auto\n---\n# Mission\n' "$am" "$am" \
+    > "$AM/docs/handoffs/20260101-am-$am/00-missao.md"
+  : > "$AM/docs/handoffs/20260101-am-$am/01-plano.md"
+  printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n|---|---|---|---|---|\n| I1 | slice | `true` → 0 | pending | — |\n' \
+    > "$AM/docs/handoffs/20260101-am-$am/checkpoint.md"
+done
+( cd "$AM" && git add -A && git commit -qm "fixture" && git worktree add -q -b wt "$AW" ) >/dev/null 2>&1
+rm -f "$AM/.claude/agents/sdd-executor.md"
+am_mirror="main:$([ -f "$AM/.claude/agents/sdd-qa.md" ] && echo 1 || echo 0) wt:$(find "$AW/.claude/agents" -name 'sdd-*.md' 2>/dev/null | wc -l)"
+AM_LINK="run 'sdd link-agents' here"; AM_INST="run 'sdd install --force'"
+am_wt_dry="$( cd "$AW" && "$SDD" run 20260101-am-wt --dry-run 2>&1 )" || true
+am_wt_run="$( cd "$AW" && "$SDD" run 20260101-am-wt 2>&1 )" || true
+am_main_run="$( cd "$AM" && "$SDD" run 20260101-am-main 2>&1 )" || true
+assert_eq "sdd run in a linked worktree with no agent mirror names sdd link-agents, in the stop and in the projection" \
+  "mirror:main:1 wt:0 dry:1/0 run:1/0 claude:0" \
+  "mirror:$am_mirror dry:$(grep -F -- 'agent sdd-executor is not installed' <<< "$am_wt_dry" | grep -cF -- "$AM_LINK")/$(grep -cF -- "$AM_INST" <<< "$am_wt_dry") run:$(grep -F -- 'agent sdd-executor is not installed' <<< "$am_wt_run" | grep -cF -- "$AM_LINK")/$(grep -cF -- "$AM_INST" <<< "$am_wt_run") claude:$(grep -c 'invoked the real claude' <<< "$am_wt_run$am_main_run")"
+assert_eq "sdd run in a main checkout with no agent mirror still names sdd install --force" \
+  "1/0" "$(grep -F -- 'agent sdd-executor is not installed' <<< "$am_main_run" | grep -cF -- "$AM_INST")/$(grep -cF -- "$AM_LINK" <<< "$am_main_run")"
+git -C "$AM" worktree remove --force "$AW" >/dev/null 2>&1; rm -rf "$AM" "$AW"
+
 # --- scope hygiene: no function reads the caller's local --------------------
 # `pstep` is `local` to `run_phase`. Bash dynamic scoping means EVERY function it calls can see
 # that local — so another function referencing `$pstep` "works", but only by coincidence of who

@@ -667,6 +667,8 @@ done
 check todo.pt-BR.md '^## ' "the pt-BR variant this repo's OUTPUT_LANG seeds from"
 check todo.md       'A number that changes goes in the body, never in the title' "a number that changes goes in the body, never in the title"
 check todo.pt-BR.md 'vai no corpo, nunca no t'                                    "a number that changes goes in the body, never in the title"
+check todo.md       'A bare `PR #N` is a merged pull request of this repository'  "a bare PR number is said to be a merged pull request of this repository"
+check todo.pt-BR.md 'Um `PR #N` solto é um pull request já mergeado deste reposit' "a bare PR number is said to be a merged pull request of this repository"
 
 echo "== the worker templates =="
 worker_tpl campaign.md "campaign.md carries the lots table and the harness and model keys" \

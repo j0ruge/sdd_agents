@@ -2959,6 +2959,114 @@ mut_PRE_template_probe_dead_counted_twice() {
 mut_PRE_template_outcome_error_warned() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s Read of|          warn "the template probe'"'"'s Read of|' "$1"
 }
+# L4 item 12: read_rules_cover matches off the stream again, leaving kit_read_rules writing into a
+# pipe with no reader at the first covering rule.
+mut_PRE_read_rules_cover_stream_read() {
+  sed -i '/^read_rules_cover() {/,/^}/ { s|^  for rule in \${rules\[@\]+"\${rules\[@\]}"}; do$|  while IFS= read -r rule; do|; s|^  done$|  done < <(kit_read_rules)| }' "$1"
+}
+# L4 item 11: the dirty-tree failure names no path again.
+mut_PRE_dirty_paths_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ { /head -n 10 <<< "\$_pf_dirty"/d }' "$1"
+}
+# L4 item 11: the exclude file is named even when a tracked path is dirty.
+mut_PRE_dirty_exclude_always_named() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    if ! grep -qv '"'"'^?? '"'"' <<< "\$_pf_dirty"; then$|    if true; then|' "$1"
+}
+# L4 item 6: the Bash probe's ok reads the answer again, not the Bash tool_result.
+mut_PRE_bash_probe_reads_answer() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    elif \[ "\$probe_ran" = ran \] && \[ -n "\$probe_init" \]; then$|    elif grep -q '"'"'sdd-preflight-ok'"'"' <<< "$probe_answer" \&\& [ -n "$probe_init" ]; then|' "$1"
+}
+# L4 item 6: any tool_use counts as the Bash call, whatever its name.
+mut_PRE_bash_probe_any_tool_result() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|select(.type == "tool_use" and .name == "Bash") \| .id \] as \$ids$|select(.type == "tool_use") \| .id ] as $ids|' "$1"
+}
+# L4 item 6: the ok claims the tool list with no init line behind it.
+mut_PRE_bash_probe_tool_list_blind() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|executes commands (a Bash tool_result carried the marker; no init line, so the tool list was not read)|executes commands (OAuth + Bash in the tool list + permission)|' "$1"
+}
+# L4 item 15: the hooks and the skills the probe session's init line carries.
+mut_PRE_hooks_unlisted() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          dim "  ---  hooks the probe session ran — |          : "  ---  hooks the probe session ran — |' "$1"
+}
+mut_PRE_hook_failure_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s/| select(.exit_code != 0 or .outcome != "success")$/| select(false)/' "$1"
+}
+mut_PRE_skill_absent_from_init_warned() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "skill \$sk_init, which the|          warn "skill $sk_init, which the|' "$1"
+}
+mut_PRE_skill_init_blind() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^      if jq -e '"'"'(.skills \| type) == "array"'"'"' <<< "\$probe_init" >/dev/null 2>&1; then$|      if true; then|' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s|^    if \[ -n "\$probe_init" \]; then$|    if true; then|' "$1"
+}
+mut_PRE_todo_shape_unmeasured() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|warn "the shape of TODO_FILE was not measured|: "the shape of TODO_FILE was not measured|' "$1"
+}
+mut_PRE_todo_shape_fails() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^        warn "TODO_FILE does not hold its shape|        _fail "TODO_FILE does not hold its shape|' "$1"
+}
+mut_PRE_todo_optin_always_named() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          \*check-todo.sh\*) ;;$|          *check-todo.sh-never*) ;;|' "$1"
+}
+mut_PRE_todo_preamble_stale_silent() {
+  sed -i '/^todo_preamble_say() {/,/^}/ s|^    stale) warn "the preamble of|    stale) : "the preamble of|' "$1"
+}
+mut_PRE_todo_preamble_author_warned() {
+  sed -i '/^todo_preamble_say() {/,/^}/ s|^    author) dim "  the preamble of|    author) warn "the preamble of|' "$1"
+}
+mut_INSTALL_todo_preamble_unchecked() {
+  sed -i '/^cmd_install() {/,/^}/ s|^    todo_preamble_say "\$inst_todo"|    : todo_preamble_say "$inst_todo"|' "$1"
+}
+# L4 item 7: sdd run and sdd retry stop before the session the harness will deny a skill.
+mut_RUN_skill_uncovered_not_stopped() {
+  sed -i '/^cmd_run() {/,/^}/ s|^  phase_skills_check run$|  phase_skills_check preflight|' "$1"
+}
+mut_RETRY_skill_uncovered_not_stopped() {
+  sed -i '/^cmd_retry() {/,/^}/ s|^  phase_skills_check run$|  phase_skills_check preflight|' "$1"
+}
+mut_RUN_skill_broken_not_stopped() {
+  sed -i '/^phase_skills_check() {/,/^}/ s|^        _skill_stop "skill \$sk is not where the harness loads it|        warn "skill $sk is not where the harness loads it|' "$1"
+}
+mut_RUN_skill_dry_run_stops() {
+  sed -i '/^phase_skills_check() {/,/^}/ s|^    if \[ "\$voice" = "run" \] && \[ "\${DRY_RUN:-0}" != "1" \]; then|    if [ "$voice" = "run" ]; then|' "$1"
+}
+mut_RUN_skill_missing_stops() {
+  sed -i '/^phase_skills_check() {/,/^}/ s|^    warn "skills not found:|    _skill_stop "skills not found:|' "$1"
+}
+mut_PRE_test_cmd_stragglers_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          warn "TEST_CMD left a process running after it exited:|          : "TEST_CMD left a process running after it exited:|' "$1"
+}
+mut_PRE_test_cmd_stragglers_print_args() {
+  sed -i '/^test_cmd_stragglers() {/,/^}/ s|comm="\$(cat "/proc/\$pid/comm" 2>/dev/null|comm="$(tr "\\0" " " < "/proc/$pid/cmdline" 2>/dev/null|' "$1"
+}
+mut_PRE_lint_absent_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^  if has_mutation_catalogue "\$REPO_ROOT" \&\& ! command -v shellcheck|  if false \&\& ! command -v shellcheck|' "$1"
+}
+mut_RUN_kit_off_branch_silent() {
+  sed -i '/^kit_stale_check() {/,/^}/ s|^    warn "the kit at \$home is a checkout of branch|    : "the kit at $home is a checkout of branch|' "$1"
+}
+mut_RUN_kit_behind_silent() {
+  sed -i '/^kit_stale_check() {/,/^}/ s|^    warn "the kit at \$home is \$behind commit(s) behind|    : "the kit at $home is $behind commit(s) behind|' "$1"
+}
+mut_RUN_kit_reads_target_branch() {
+  sed -i '/^kit_stale_check() {/,/^}/ s|^  def="\${def#origin/}"$|  def="${DEFAULT_BRANCH:-${def#origin/}}"|' "$1"
+}
+mut_KAIZEN_hat_guard_first_door_dropped() {
+  sed -i '/^cmd_kaizen() {/,/^}/ { /^  autonomy_session_row "KAIZEN" "1" "false"/,/^  if \[ "\$gate_rc" -eq 0 \]; then$/ s|^  if hat_crossed_escalation "\$phase"; then return 3; fi$|  :| }' "$1"
+}
+mut_KAIZEN_hat_guard_retry_door_dropped() {
+  sed -i '/^cmd_kaizen() {/,/^}/ { /^  autonomy_session_row "KAIZEN" "1" "true"/,/^  if \[ "\$gate_rc" -eq 0 \]; then$/ s|^  if hat_crossed_escalation "\$phase"; then return 3; fi$|  :| }' "$1"
+}
+mut_KAIZEN_hat_guard_unarmed() {
+  sed -i '/^cmd_kaizen() {/,/^}/ s|^  hat_guard_arm$|  :|' "$1"
+}
+# The setter of the marker, at the first door (r1 #6 of the L4): the two doors and the arm had a
+# mutant each, the read between them none.
+mut_KAIZEN_hat_guard_check_dropped() {
+  sed -i '/^cmd_kaizen() {/,/^}/ s#^  hat_guard_check "\$phase" "\${before%%|\*}"$#  :#' "$1"
+}
+mut_RUN_agent_missing_worktree_names_install() {
+  sed -i '/^run_phase() {/,/^}/ s|^    if repo_is_linked_worktree "\$REPO_ROOT"; then$|    if false; then|' "$1"
+}
 mut_PRE_template_outcome_default_green() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
 }
@@ -2980,7 +3088,7 @@ mut_PRE_read_extra_missing_silent() {
   sed -i '/^cmd_preflight() {/,/^}/ s#^      || warn "READ_EXTRA names \$_rx_dir, which does not exist.*$#      || :#' "$1"
 }
 mut_PRE_undeclared_skill_silent() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && read_rules_cover "\$sk_real"; then continue; fi$#    continue#' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && read_rules_cover "\$sk_real"; then continue; fi$#    continue#' "$1"
 }
 # COVER_UNSLASHED: a rule covers what merely BEGINS with its directory, so `…/ticket` covers
 # `…/ticket-x` — caught by "a plugin skill is covered by the directory above its version, and never
@@ -2992,7 +3100,7 @@ mut_PRE_skill_cover_unslashed() {
   sed -i '/^read_rules_cover() {/,/^}/ s#^    case "\$p" in "\$dir"|"\$dir"/\*) return 0 ;; esac$#    case "$p" in "$dir"*) return 0 ;; esac#' "$1"
 }
 mut_PRE_skill_cover_unresolved() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^    sk_real="\$(readlink -f -- "\$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="\$SKILL_FOUND_DIR"$#    sk_real="$SKILL_FOUND_DIR"#' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^    sk_real="\$(readlink -f -- "\$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="\$SKILL_FOUND_DIR"$#    sk_real="$SKILL_FOUND_DIR"#' "$1"
 }
 # The entry the warning hands over. ENTRY_VERSIONED: the plugin's entry keeps its version directory,
 # which the next update orphans and which never covers the plugin directory the cache walk names —
@@ -3012,7 +3120,7 @@ mut_PRE_skill_entry_home_unwritten() {
 # out of r1 #1 of the final review. Caught by "a declared skill whose symlink target the grammar
 # refuses is named as such, never as undeclared" (check-preflight.sh), `decl:refused=0,…,add=1`.
 mut_PRE_skill_target_refused_undeclared() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && ! read_extra_dir_ok "\$sk_real"; then$#    if false; then#' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^    if read_rules_cover "\$SKILL_FOUND_DIR" && ! read_extra_dir_ok "\$sk_real"; then$#    if false; then#' "$1"
 }
 # CACHE_REGISTRY_UNNAMED: the warning about a skill found under the plugin cache stops saying the
 # cache may hold more than one copy and that installed_plugins.json names the one the harness loads
@@ -3020,7 +3128,7 @@ mut_PRE_skill_target_refused_undeclared() {
 # installed_plugins.json named, since the cache may hold more than one copy" (check-preflight.sh),
 # `cache:copies=0,file=0,which=0`.
 mut_PRE_skill_cache_registry_unnamed() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^\(        denied its references outside the repo (a DENIED line in the journal)\.\)\$sk_cache In #\1 In #' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^\(        denied its references outside the repo (a DENIED line in the journal)\.\)\$sk_cache In #\1 In #' "$1"
 }
 # REGISTRY_IGNORED: skill_findable skips every copy installed_plugins.json records — the plain form
 # falls back to the first copy `find` meets in directory order, and since Codex r7 the plugin form
@@ -3069,13 +3177,13 @@ mut_PRE_plugin_form_plain_dirs_first() {
   sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" = "\$form" \]; then$#  if :; then#' "$1"
 }
 mut_PRE_plugin_form_asked_plain() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^  local -a wanted=(codereview:codereview)#  local -a wanted=(codereview)#' "$1"
+  sed -i '/^phase_skills_wanted() {/,/^}/ s#^  SKILLS_WANTED=(codereview:codereview)#  SKILLS_WANTED=(codereview)#' "$1"
 }
 mut_PRE_broken_install_to_cache() {
   sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" != "\$form" \] && \[ -n "\$recorded" \]; then$#  if false; then#' "$1"
 }
 mut_PRE_broken_install_unnamed() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^      if \[ -n "\$SKILL_BROKEN_WHY" \]; then$#      if false; then#' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^      if \[ -n "\$SKILL_BROKEN_WHY" \]; then$#      if false; then#' "$1"
 }
 mut_PRE_broken_reason_not_reset() {
   sed -i '/^skill_findable() {/,/^}/ s#^  SKILL_FOUND_DIR=""; SKILL_BROKEN_WHY=""$#  SKILL_FOUND_DIR=""; : "${SKILL_BROKEN_WHY:=}"#' "$1"
@@ -3084,7 +3192,7 @@ mut_PRE_plain_form_marked_broken() {
   sed -i '/^skill_findable() {/,/^}/ s#^  if \[ "\$plugin" != "\$form" \] && \[ -n "\$recorded" \]; then$#  if [ -n "$recorded" ]; then#' "$1"
 }
 mut_PRE_broken_reported_present() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^  elif \[ -z "\$broken_skills" \]; then$#  else#' "$1"
+  sed -i '/^phase_skills_check() {/,/^}/ s#^  elif \[ -z "\$broken_skills" \] && \[ "\$voice" = "preflight" \]; then$#  elif [ "$voice" = "preflight" ]; then#' "$1"
 }
 # Codex r8 on PR #315: with no install of the plugin recorded, the plugin form walks the cache only
 # under its own plugin's tree, `<root>/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>`.
@@ -8117,6 +8225,38 @@ CATALOG=(
   PRE_template_probe_dead_counted_twice
   PRE_template_outcome_error_warned
   PRE_template_outcome_default_green
+  PRE_read_rules_cover_stream_read
+  PRE_dirty_paths_unnamed
+  PRE_dirty_exclude_always_named
+  PRE_bash_probe_reads_answer
+  PRE_bash_probe_any_tool_result
+  PRE_bash_probe_tool_list_blind
+  PRE_hooks_unlisted
+  PRE_hook_failure_silent
+  PRE_skill_absent_from_init_warned
+  PRE_skill_init_blind
+  PRE_todo_shape_unmeasured
+  PRE_todo_shape_fails
+  PRE_todo_optin_always_named
+  PRE_todo_preamble_stale_silent
+  PRE_todo_preamble_author_warned
+  INSTALL_todo_preamble_unchecked
+  RUN_skill_uncovered_not_stopped
+  RETRY_skill_uncovered_not_stopped
+  RUN_skill_broken_not_stopped
+  RUN_skill_dry_run_stops
+  RUN_skill_missing_stops
+  PRE_test_cmd_stragglers_unnamed
+  PRE_test_cmd_stragglers_print_args
+  PRE_lint_absent_silent
+  RUN_kit_off_branch_silent
+  RUN_kit_behind_silent
+  RUN_kit_reads_target_branch
+  RUN_agent_missing_worktree_names_install
+  KAIZEN_hat_guard_first_door_dropped
+  KAIZEN_hat_guard_retry_door_dropped
+  KAIZEN_hat_guard_unarmed
+  KAIZEN_hat_guard_check_dropped
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent

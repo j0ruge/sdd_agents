@@ -62,6 +62,11 @@
 #   6. no row is `done` below a `blocked` one. The runner stops the line at the first blocked row,
 #      so a done below it was closed outside the runner, past the stop (issue 216; no case in any
 #      checkpoint when the rule was born, so it entered green).
+#   7. the `atualizado:` of the frontmatter is no later than the clock (`date '+%Y-%m-%d %H:%M'`),
+#      in --check and in the scan. The hour of an artifact comes from `date` run in the same batch;
+#      one in the future is an hour written from memory. DECLARED LIMITS: only the form the
+#      template gives (`YYYY-MM-DD HH:MM`) is read — the placeholder, a missing field and any
+#      other form pass unread — and an invented hour IN THE PAST is not measurable from the file.
 #
 # What it deliberately does NOT measure: whether the expected value beside the arrow is the right
 # one, whether the Check actually exercises the increment, or whether a Check with no grep at all
@@ -1285,10 +1290,10 @@ rows_of() {
 
 # Counters published as globals and never through a command substitution: a function read as
 # `x="$(f)"` runs in a subshell and every assignment it makes dies with it (CLAUDE.md).
-N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0; V_ORDER=0
+N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0; V_ORDER=0; V_CLOCK=0
 
 reset_counters() {
-  N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0; V_ORDER=0
+  N_FILES=0; N_ROWS=0; N_RULED=0; V_ANCHOR=0; V_COLS=0; N_PATHS=0; V_IGNORED=0; V_ORDER=0; V_CLOCK=0
 }
 
 # scan_file <path> <label> — accumulates into the globals, prints one FAIL per violation.
@@ -1300,6 +1305,19 @@ scan_file() {
   # target repo ignores what the kit does not. `git -C`, never `cd` (CDPATH). Empty outside a repo,
   # and then rule 5 has nothing to ask.
   top="$(git -C "$(dirname -- "$path")" rev-parse --show-toplevel 2>/dev/null)" || top=''
+
+  # Rule 7 — the frontmatter's atualizado is no later than the clock. Only the form the template
+  # gives (YYYY-MM-DD HH:MM) is read; two strings of that form compare as text in time order.
+  local upd now
+  upd="$(frontmatter_updated "$path")"
+  if [[ "$upd" =~ $CLOCK_RE ]]; then
+    now="$(date '+%Y-%m-%d %H:%M')"
+    if [[ "$upd" > "$now" ]]; then
+      fail "$label: atualizado: $upd is later than the clock ($now) — the hour of an artifact comes from \`date\` run in the same batch, never from memory or a log"
+      V_CLOCK=$((V_CLOCK + 1))
+    fi
+  fi
+
   while IFS=$'\t' read -r nf id st chk; do
     [ -n "$nf" ] || continue
     N_ROWS=$((N_ROWS + 1))
@@ -1367,6 +1385,18 @@ scan_file() {
       V_ANCHOR=$((V_ANCHOR + 1))
     fi
   done <<< "$rows"
+}
+
+# frontmatter_updated <path> — the value of `atualizado:` inside the leading `---` block, blanks and
+# a CR trimmed; empty when the file opens no frontmatter or the block carries no such line.
+CLOCK_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}$'
+frontmatter_updated() {
+  awk '
+    { sub(/\r$/, "") }
+    NR == 1 { if ($0 !~ /^---[ \t]*$/) exit; next }
+    /^---[ \t]*$/ { exit }
+    /^atualizado:/ { sub(/^atualizado:[ \t]*/, ""); sub(/[ \t]+$/, ""); print; exit }
+  ' "$1"
 }
 
 # tested_paths <check cell> — the repo paths a `test -e|-f|-s <p>`, `[ … ]` or `[[ … ]]` names,
@@ -1487,6 +1517,11 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
   else
     rc=1
   fi
+  if [ "$V_CLOCK" -eq 0 ]; then
+    pass "no checkpoint is dated after the clock ($N_FILES file(s))"
+  else
+    rc=1
+  fi
 
   doc_rule "$root/templates/checkpoint.md" "templates/checkpoint.md" \
     "the checkpoint template teaches the ok-anchor rule" || rc=1
@@ -1511,7 +1546,7 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
     rc=1
   fi
 
-  [ "$rc" -eq 0 ] || fail "$((V_ANCHOR + V_COLS + V_IGNORED + V_ORDER)) checkpoint violation(s)"
+  [ "$rc" -eq 0 ] || fail "$((V_ANCHOR + V_COLS + V_IGNORED + V_ORDER + V_CLOCK)) checkpoint violation(s)"
   return "$rc"
 }
 
@@ -1578,7 +1613,7 @@ check_one() { # check_one <path> — one checkpoint, no floors, no doc assertion
   fi
   reset_counters
   scan_file "$path" "$(basename -- "$path")"
-  if [ $((V_ANCHOR + V_COLS + V_IGNORED + V_ORDER)) -eq 0 ]; then
+  if [ $((V_ANCHOR + V_COLS + V_IGNORED + V_ORDER + V_CLOCK)) -eq 0 ]; then
     pass "$(basename -- "$path"): $N_ROWS row(s), $N_RULED under the anchor rule, none blind"
     return 0
   fi
@@ -1779,7 +1814,7 @@ SELFTEST_RC=0
 # Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
 # on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
 # below the truth measures nothing it claims to.
-PROBE_FLOOR=452
+PROBE_FLOOR=461
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -1791,7 +1826,7 @@ fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
 # selftest green (the sabotage pass of lote 8, 2026-10-15). Tight, like PROBE_FLOOR, and the same
 # shape as rule_end in check-todo.sh.
 RULE_LINES=0
-RULE_FLOOR=10
+RULE_FLOOR=12
 rule_ok() { pass "rule: $1"; RULE_LINES=$((RULE_LINES + 1)); }
 
 probe() { # probe <desc> <want_rc> <want_text|-> <target> [mode [arg…]]
@@ -3321,6 +3356,54 @@ ARGV
   cp_row "$scanorder/docs/handoffs/m4/checkpoint.md" I7 '`bash tests/run-all.sh` → verde'
   probe 'a done below a blocked row makes the whole scan red' 1 \
     'which is blocked' "$scanorder" --scan
+
+  # ── an atualizado later than the clock (rule 7) ──
+  # The frontmatter's hour is written by a model, and the house rule is that it comes from `date`
+  # in the same batch; one in the future is the only invented hour a file can show by itself.
+  # Each fixture carries a plain row, so the date is the only thing that can be wrong.
+  local ck_p0="$PROBES" ck_f0="$FAILS" ck_f ck_tomorrow ck_now ck_yesterday scanclock="$box/scanclock"
+  ck_tomorrow="$(date -d tomorrow '+%Y-%m-%d %H:%M')"
+  ck_now="$(date '+%Y-%m-%d %H:%M')"
+  ck_yesterday="$(date -d yesterday '+%Y-%m-%d %H:%M')"
+  for ck_f in future now yesterday placeholder nofield otherform body; do
+    : > "$box/ck-$ck_f.md"
+  done
+  printf -- '---\nmissao: m\natualizado: %s\n---\n\n' "$ck_tomorrow" > "$box/ck-future.md"
+  printf -- '---\nmissao: m\natualizado: %s\n---\n\n' "$ck_now" > "$box/ck-now.md"
+  printf -- '---\nmissao: m\natualizado: %s\n---\n\n' "$ck_yesterday" > "$box/ck-yesterday.md"
+  printf -- '---\nmissao: m\natualizado: <YYYY-MM-DD HH:MM>\n---\n\n' > "$box/ck-placeholder.md"
+  printf -- '---\nmissao: m\n---\n\n' > "$box/ck-nofield.md"
+  printf -- '---\nmissao: m\natualizado: 2999-01-01\n---\n\n' > "$box/ck-otherform.md"
+  printf -- '---\nmissao: m\n---\n\natualizado: %s\n\n' "$ck_tomorrow" > "$box/ck-body.md"
+  for ck_f in future now yesterday placeholder nofield otherform body; do
+    cp_head "$box/ck-$ck_f.tbl"; cp_row "$box/ck-$ck_f.tbl" I1 '`bash tests/run-all.sh` → verde'
+    cat "$box/ck-$ck_f.tbl" >> "$box/ck-$ck_f.md"
+  done
+  probe 'an atualizado later than the clock is refused, naming the field and the value' 1 \
+    "atualizado: $ck_tomorrow is later than the clock" "$box/ck-future.md"
+  probe 'an atualizado equal to the clock passes' 0 'none blind' "$box/ck-now.md"
+  probe 'an atualizado before the clock passes' 0 'none blind' "$box/ck-yesterday.md"
+  probe 'the placeholder of the template passes' 0 'none blind' "$box/ck-placeholder.md"
+  probe 'a checkpoint with no atualizado passes' 0 'none blind' "$box/ck-nofield.md"
+  probe 'an atualizado in another form is not read (declared limit)' 0 'none blind' "$box/ck-otherform.md"
+  probe 'an atualizado line below the frontmatter is not the field' 0 'none blind' "$box/ck-body.md"
+  build_tree "$scanclock"
+  { printf -- '---\natualizado: %s\n---\n\n' "$ck_tomorrow"
+    cat "$scanclock/docs/handoffs/m4/checkpoint.md"; } > "$box/ck-scan.md"
+  cp "$box/ck-scan.md" "$scanclock/docs/handoffs/m4/checkpoint.md"
+  probe 'a checkpoint dated after the clock makes the whole scan red' 1 \
+    'is later than the clock' "$scanclock" --scan
+  [ "$FAILS" -eq "$ck_f0" ] && \
+    rule_ok "an atualizado later than the clock is refused, in --check and in the scan, and one at or before it passes ($((PROBES - ck_p0)) probe(s))"
+  # The same future hour in a file written with CRLF line ends (r1 #5 of the L4): without the CR
+  # trimmed by frontmatter_updated the value stops matching CLOCK_RE, and the future passes in
+  # silence. The whole file is converted, table included, so the CR is the only thing that differs.
+  local cr_p0="$PROBES" cr_f0="$FAILS"
+  sed 's/$/\r/' "$box/ck-future.md" > "$box/ck-crlf.md"
+  probe 'an atualizado later than the clock is refused in a CRLF checkpoint' 1 \
+    "atualizado: $ck_tomorrow is later than the clock" "$box/ck-crlf.md"
+  [ "$FAILS" -eq "$cr_f0" ] && \
+    rule_ok "an atualizado later than the clock is refused in a checkpoint with CRLF line ends ($((PROBES - cr_p0)) probe(s))"
 
   # ── --red: the Check run at HEAD, refused when it is already green (issue 92) ──
   # One fixture repository, one row per probe. Every refusal shares rc 1, so each probe asserts the
