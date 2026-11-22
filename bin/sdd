@@ -949,6 +949,11 @@ LAST_CHECK_LOG=""
 # The rc of the last run_check_cmd, on BOTH paths (the execution and the memo), beside
 # LAST_CHECK_LOG: test_cmd_red_why reads it to tell a suite that did not start from a red one.
 LAST_CHECK_RC=0
+# The environment tag of the last run_check_cmd (L4 item 3): SDD_CHECK_TAG=<this value> is exported
+# to the command it evaluates, and only to it, so a process the command leaves running still carries
+# it in /proc/<pid>/environ. test_cmd_stragglers reads it. Unique per EXECUTION: the log's own name.
+LAST_CHECK_TAG=""
+declare -A _CHECK_TAG=()
 # Set to 1 by the full face of `sdd status` and by nothing else (item I of TODO.md): see the line
 # that reads it in run_check_cmd.
 CHECK_ANNOUNCE=0
@@ -959,6 +964,7 @@ run_check_cmd() {
   if [ -n "${_CHECK_RC[$cmd]+x}" ]; then
     LAST_CHECK_LOG="${_CHECK_LOG[$cmd]}"
     LAST_CHECK_RC="${_CHECK_RC[$cmd]}"
+    LAST_CHECK_TAG="${_CHECK_TAG[$cmd]}"
     return "${_CHECK_RC[$cmd]}"
   fi
   # The page that asks "where am I" says it is about to wait, and for what. Measured in ui24_agent:
@@ -992,12 +998,34 @@ run_check_cmd() {
   # a terminal as "interactive" — vitest 3 turns watch mode on when stdin is a TTY — would hang the
   # gate for good, with no rc, from any `sdd run` typed at a terminal. The gates, the E2E_CMD and
   # the preflight all run through here, so this one redirection covers the three.
-  ( cd "$REPO_ROOT" && eval "$cmd" ) </dev/null >"$logfile" 2>&1 || rc=$?
+  local tag; tag="sdd-$(basename "$logfile" .log)"
+  ( cd "$REPO_ROOT" && export SDD_CHECK_TAG="$tag" && eval "$cmd" ) </dev/null >"$logfile" 2>&1 || rc=$?
+  _CHECK_TAG[$cmd]="$tag"
+  LAST_CHECK_TAG="$tag"
   _CHECK_RC[$cmd]="$rc"
   _CHECK_LOG[$cmd]="$logfile"
   LAST_CHECK_LOG="$logfile"
   LAST_CHECK_RC="$rc"
   return "$rc"
+}
+
+# The processes a run_check_cmd left running (L4 item 3): every process whose /proc/<pid>/environ
+# carries SDD_CHECK_TAG=<tag>, one line each, `<pid> <comm>`. The comm is the kernel's name of the
+# executable, never the arguments nor argv[0], which the caller chooses and which can carry a
+# credential (the rule of name_stragglers in bin/sdd-coordination.py). Prints nothing with no /proc,
+# no tag or no process. Limits: a process that rebuilt its environment (env -i, a daemon that clears
+# it) is not seen, and /proc of another user is not readable.
+test_cmd_stragglers() {
+  local tag="$1" f pid comm found
+  [ -n "$tag" ] && [ -d /proc ] || return 0
+  found="$(grep -lsaF -- "SDD_CHECK_TAG=$tag" /proc/[0-9]*/environ 2>/dev/null || true)"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    pid="${f#/proc/}"; pid="${pid%/environ}"
+    comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
+    [ -n "$comm" ] || continue
+    printf '%s %s\n' "$pid" "$comm"
+  done <<< "$found"
 }
 
 # The one definition of the reason a gate gives for a TEST_CMD that came back non-zero, read by the
@@ -7537,8 +7565,19 @@ cmd_preflight() {
         # the preflight would be running whatever someone typed into a key it had just rejected.
         # Through run_check_cmd, which already memoises and already puts the output in the mission
         # log rather than on the runner's stdout.
-        local test_rc=0 missing_manifest=""
+        local test_rc=0 missing_manifest="" st_pid st_comm st_n=0
         run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?
+        # What the command left running (L4 item 3), said BEFORE the verdict: the supervisor's own
+        # notice comes after "preflight ok", and every kit command that runs TEST_CMD outside a
+        # `sdd run` waits again. Ten at most; the pid and the comm, never the arguments.
+        while read -r st_pid st_comm; do
+          [ -n "$st_pid" ] || continue
+          st_n=$(( st_n + 1 )); [ "$st_n" -le 10 ] || break
+          warn "TEST_CMD left a process running after it exited: pid $st_pid, executable $st_comm.
+        Every kit command that runs TEST_CMD (the gates, sdd status, sdd preflight) waits until it
+        ends, and the checkout stays held. See \"TEST_CMD leaves a process running\" in
+        docs/failure-modes.md of the kit."
+        done <<< "$(test_cmd_stragglers "$LAST_CHECK_TAG")"
         if [ "$test_rc" -eq 0 ]; then
           ok "TEST_CMD ran green ($TEST_CMD)"
         elif missing_manifest="$(test_cmd_missing_manifest "$TEST_CMD" "$LAST_CHECK_LOG")"; then
@@ -7564,6 +7603,14 @@ cmd_preflight() {
         no other sensor, so a mission passes every gate with them red. Chain them in (npm run <script>
         && … && npm test), unless leaving them out is deliberate." ;;
   esac
+
+  # The kit's own suite skips its lint step when shellcheck is absent ("linter absent — skipped") and
+  # still exits green, so a green TEST_CMD has not measured the warnings (L4 item 13: a whole mission
+  # ran that way and brought three of them). Said only in a tree that carries the suite.
+  if has_mutation_catalogue "$REPO_ROOT" && ! command -v shellcheck >/dev/null 2>&1; then
+    warn "shellcheck is not on PATH: the lint step of tests/run-all.sh will be skipped, so a green
+        suite will not have measured the shellcheck warnings of bin/ and tests/. Install shellcheck."
+  fi
 
   # --- the shape of TODO_FILE (L4 item 1) ---
   # The opt-in of config/schema.md runs check-todo.sh inside TEST_CMD, and a target that never typed

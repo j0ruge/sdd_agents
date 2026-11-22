@@ -1564,6 +1564,56 @@ assert_eq "preflight says the shape of TODO_FILE was not measured when the file 
 cp "$PROBE/TODO.md.bak" TODO.md
 mv .sdd/config.sh.bak .sdd/config.sh
 
+# --- the process TEST_CMD leaves running, and the suite with no linter (L4 items 3 and 13) ---
+# A TEST_CMD that leaves a build server behind (dotp-remake: 7 MSBuild nodes and VBCSCompiler) made
+# every kit command that runs it wait, and the preflight said "preflight ok" first. run_check_cmd
+# tags the command's environment, and the preflight names every process carrying the tag BEFORE its
+# verdict, by pid and executable (the kernel's comm), never by arguments: the straggler is started
+# under `exec -a` with a recognizable argv[0], which the warning must not carry. Kept short (5 s):
+# the supervisor waits for it before the preflight returns. The lint half: in a tree that carries
+# the suite (tests/check-mutation.sh) and a PATH with no shellcheck, run-all.sh skips its lint step,
+# so the preflight says so; the same PATH in a target repo says nothing.
+echo "== the process TEST_CMD leaves running, and the suite with no linter =="
+cp .sdd/config.sh .sdd/config.sh.bak
+printf '#!/usr/bin/env bash\nbash -c "exec -a l4argvsecret sleep 5" >/dev/null 2>&1 &\nprintf "%%s\\n" "$!" > "%s/straggler-pid"\nexit 0\n' "$PROBE" > "$PROBE/suite-straggler.sh"
+chmod +x "$PROBE/suite-straggler.sh"
+ST_WARN='warn  TEST_CMD left a process running after it exited:'
+sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$PROBE/suite-straggler.sh\"|" .sdd/config.sh
+st_left="$( "$SDD" preflight 2>&1 )"
+st_pid="$(cat "$PROBE/straggler-pid" 2>/dev/null || true)"
+sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$PROBE/suite-green.sh\"|" .sdd/config.sh
+st_none="$( "$SDD" preflight 2>&1 )"
+st_warn_at="$(grep -nF -- "$ST_WARN pid $st_pid, executable sleep" <<< "$st_left" | head -n 1 | cut -d: -f1)"
+st_verdict_at="$(grep -nE 'preflight ok|check\(s\) failed' <<< "$st_left" | tail -n 1 | cut -d: -f1)"
+st_order=after; [ -n "$st_warn_at" ] && [ -n "$st_verdict_at" ] && [ "$st_warn_at" -lt "$st_verdict_at" ] && st_order=before
+assert_eq "preflight warns before its verdict, by pid and executable and never by arguments, about a process TEST_CMD left running" \
+  "warn=1 pid=yes before argv=0" \
+  "warn=$(grep -cF -- "$ST_WARN" <<< "$st_left") pid=$([ -n "$st_pid" ] && grep -qF -- "pid $st_pid, executable sleep" <<< "$st_left" && echo yes || echo no) $st_order argv=$(grep -cF l4argvsecret <<< "$st_left")"
+assert_eq "preflight says nothing of the kind when TEST_CMD leaves nothing behind" \
+  "warn=0 green=1" \
+  "warn=$(grep -cF -- "$ST_WARN" <<< "$st_none") green=$(grep -cF 'TEST_CMD ran green' <<< "$st_none")"
+# A PATH with every command of this one but shellcheck: links, the earlier PATH dirs winning.
+NOSC="$PROBE/path-without-shellcheck"
+mkdir -p "$NOSC"
+IFS=: read -r -a st_dirs <<< "$PATH"
+for (( st_i=${#st_dirs[@]}-1; st_i>=0; st_i-- )); do
+  [ -d "${st_dirs[$st_i]}" ] || continue
+  ln -sf -t "$NOSC" "${st_dirs[$st_i]}"/* 2>/dev/null || true
+done
+rm -f "$NOSC/shellcheck"
+LINT_WARN='warn  shellcheck is not on PATH: the lint step of tests/run-all.sh will be skipped'
+st_have=0; command -v shellcheck >/dev/null 2>&1 && st_have=1
+mkdir -p tests
+: > tests/check-mutation.sh
+st_kit_nosc="$( PATH="$NOSC" "$SDD" preflight 2>&1 )"
+st_kit_path="$( "$SDD" preflight 2>&1 )"
+rm -f tests/check-mutation.sh; rmdir tests 2>/dev/null || true
+st_target_nosc="$( PATH="$NOSC" "$SDD" preflight 2>&1 )"
+assert_eq "preflight warns that the lint step of the suite will be skipped when shellcheck is absent, only in a tree that carries the suite" \
+  "suite without=1 suite with=$(( 1 - st_have )) target without=0" \
+  "suite without=$(grep -cF -- "$LINT_WARN" <<< "$st_kit_nosc") suite with=$(grep -cF -- "$LINT_WARN" <<< "$st_kit_path") target without=$(grep -cF -- "$LINT_WARN" <<< "$st_target_nosc")"
+mv .sdd/config.sh.bak .sdd/config.sh
+
 # --- the preamble of TODO_FILE against the revisions of the template (L4 item 10) ---
 # install seeds TODO.md once and never rewrites it, so a target keeps the preamble of the kit it was
 # installed from while the template moves on, and nothing said so. The preamble (line 1 up to the

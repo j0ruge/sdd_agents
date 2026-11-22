@@ -3032,6 +3032,15 @@ mut_RUN_skill_dry_run_stops() {
 mut_RUN_skill_missing_stops() {
   sed -i '/^phase_skills_check() {/,/^}/ s|^    warn "skills not found:|    _skill_stop "skills not found:|' "$1"
 }
+mut_PRE_test_cmd_stragglers_unnamed() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^          warn "TEST_CMD left a process running after it exited:|          : "TEST_CMD left a process running after it exited:|' "$1"
+}
+mut_PRE_test_cmd_stragglers_print_args() {
+  sed -i '/^test_cmd_stragglers() {/,/^}/ s|comm="\$(cat "/proc/\$pid/comm" 2>/dev/null|comm="$(tr "\\0" " " < "/proc/$pid/cmdline" 2>/dev/null|' "$1"
+}
+mut_PRE_lint_absent_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s|^  if has_mutation_catalogue "\$REPO_ROOT" \&\& ! command -v shellcheck|  if false \&\& ! command -v shellcheck|' "$1"
+}
 mut_PRE_template_outcome_default_green() {
   sed -i '/^cmd_preflight() {/,/^}/ s|^          _fail "the template probe'"'"'s verdict got an outcome it does not know|          ok "the template probe'"'"'s verdict got an outcome it does not know|' "$1"
 }
@@ -8211,6 +8220,9 @@ CATALOG=(
   RUN_skill_broken_not_stopped
   RUN_skill_dry_run_stops
   RUN_skill_missing_stops
+  PRE_test_cmd_stragglers_unnamed
+  PRE_test_cmd_stragglers_print_args
+  PRE_lint_absent_silent
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent

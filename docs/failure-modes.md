@@ -1057,6 +1057,28 @@ rc 3, see the section above), and the reason names this merge.
 
 ---
 
+## TEST_CMD leaves a process running
+
+**Symptom:** `sdd preflight` warns `TEST_CMD left a process running after it exited: pid <n>,
+executable <name>`, and the command does not return until that process ends; a gate, `sdd status`
+or `sdd why` waits the same way, with the supervisor saying that the processes it left running hold
+the checkout.
+
+**Cause:** the command started a process that outlives it, usually a build server. The kit's lock
+on the checkout is released only when every descendant has been reaped, so a server that stays up
+for minutes holds every kit command that runs `TEST_CMD`. Measured in `dotp-remake` (.NET):
+`dotnet build` left seven MSBuild nodes and `VBCSCompiler`. The preflight finds them by a tag that
+`run_check_cmd` puts in the command's environment (`SDD_CHECK_TAG`), and names each by pid and the
+kernel's executable name, never by its arguments, which can carry a credential.
+
+**What you do:** make `TEST_CMD` leave nothing behind. For .NET, both remedies were measured: pass
+`--disable-build-servers` to `dotnet build`/`dotnet test` (nothing is left), or end the command
+with `dotnet build-server shutdown`. Other toolchains were not measured; the rule is the same:
+turn the build server off inside `TEST_CMD`, or shut it down as its last step. A process that
+rebuilt its environment (`env -i`) is not seen by the warning.
+
+---
+
 ## A gate says `TEST_CMD did not run (rc 126/127 …)`
 
 **Symptom:** `gate_EXEC`, `gate_QA` or `gate_REVIEW` refuses with `TEST_CMD did not run (rc 127: …)
