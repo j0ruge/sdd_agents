@@ -1,6 +1,6 @@
 ---
 missao: 20261121-l4-preflight-health-e-sensores
-atualizado: 2026-11-21 23:48
+atualizado: 2026-11-22 00:08
 ---
 
 # Checkpoint — L4: preflight, health e sensores
@@ -59,7 +59,7 @@ atualizado: 2026-11-21 23:48
 | I9 | O juiz passa pela guarda do chapéu (item 4) | `k=$(bash tests/check-kaizen.sh 2>&1); h=$(bash tests/check-hat.sh 2>&1); cmp -s agents/sdd-kaizen.md .claude/agents/sdd-kaizen.md; c=$?; echo "$(grep -c '^  ok    kaizen: a judge session that writes outside its hat stops the line as hat-crossed, after its session row' <<< "$k") $(grep -c '^  ok    kaizen: the retry session that crosses stops too, by its own read' <<< "$k") $(grep -c '^  ok    kaizen: a judge session that writes only the mission folder, KAIZEN_LOG.md and the findings file is not accused' <<< "$k") $(grep -c '^  ok    kaizen: the projection arms no hat guard' <<< "$k") $(grep -c '^  ok    hat: the judge names the base every hat may write, the findings file and the ratchet' <<< "$h") $c"` → `1 1 1 1 1 0` | done | 261acc8 |
 | I10 | O atualizado: no futuro é recusado (item 5) | `o=$(bash tests/check-checkpoint.sh 2>&1); echo "$(grep -c '^  ok    rule: an atualizado later than the clock is refused, in --check and in the scan, and one at or before it passes' <<< "$o")"` → `1` | done | 21a9af7 |
 | I11 | A sonda de interrupção lê o grupo depois que a suíte roda (item 8) | `o=$(bash tests/check-health.sh 2>&1); echo "$(grep -c '^  ok    surface: the interrupt probe tells a suite in its own process group from one left in the caller group' <<< "$o")"` → `1` | done | 07fc265 |
-| I12 | O PR #N sem rastro no histórico (item 9) | `o=$(bash tests/check-todo.sh --selftest 2>&1); t=$(bash tests/check-templates.sh 2>&1); echo "$(grep -c '^  ok    rule: under --baseline a bare PR number in a new item passes only when a commit subject of the local history cites it' <<< "$o") $(grep -c '^  ok    todo.md: a bare PR number is said to be a merged pull request of this repository' <<< "$t") $(grep -c '^  ok    todo.pt-BR.md: a bare PR number is said to be a merged pull request of this repository' <<< "$t")"` → `1 1 1` | pending | — |
+| I12 | O PR #N sem rastro no histórico (item 9) | `o=$(bash tests/check-todo.sh --selftest 2>&1); t=$(bash tests/check-templates.sh 2>&1); echo "$(grep -c '^  ok    rule: under --baseline a bare PR number in a new item passes only when a commit subject of the local history cites it' <<< "$o") $(grep -c '^  ok    todo.md: a bare PR number is said to be a merged pull request of this repository' <<< "$t") $(grep -c '^  ok    todo.pt-BR.md: a bare PR number is said to be a merged pull request of this repository' <<< "$t")"` → `1 1 1` | done | 46da749 |
 | I13 | Fecho: RESOLVED by nos 15 itens | `b=$(git show "$(git merge-base HEAD origin/main)":TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `15` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
