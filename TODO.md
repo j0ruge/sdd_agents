@@ -78,7 +78,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `TODO.md`, como a base permite. Direção: o `cmd_kaizen` passa pela guarda, com probe, e o chapéu nomeia a base.
   — descoberto por `sdd-kaizen` na missão `20261020-a-sessao-le-o-que-o-boot-manda` (2026-10-20)
 
-- [ ] **O `atualizado:` do checkpoint aceita hora inventada, até no futuro** — `tests/check-checkpoint.sh:1573`
+- [ ] **O `atualizado:` do checkpoint aceita hora inventada, até no futuro** — `tests/check-checkpoint.sh:1608`
   (`check_one`) — a regra "todo carimbo sai do `date`" só está no `boot_prompt` (`bin/sdd:3524`), que a sessão
   interativa não lê, e o `--check` não olha o campo. Na peça C do `lighthouse_project`, as rodadas do `/codereview`
   gravaram 15:30, 17:10, 18:00 e 18:40 em commits das 12:43 às 12:52 (`-0300`, autor igual a commit), e o
@@ -137,7 +137,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `codereview` na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-08)
 
 - [ ] **Nenhum sensor relê os Checks `done`, e o R que estende a família de um I o deixa vermelho calado** —
-  `tests/check-checkpoint.sh:1634` (`red_one`) — o `--red` roda só as linhas `pending`. Na r5 do worker, o R9 e
+  `tests/check-checkpoint.sh:1669` (`red_one`) — o `--red` roda só as linhas `pending`. Na r5 do worker, o R9 e
   o R10 puseram linhas nas famílias `worker templates:` e `command:`, que o I1 e o I9 contavam com número exato:
   os dois ficaram vermelhos no head sem aviso, achados por um script da sessão (`5565a41`, `995c4ad`). Direção:
   um `--green <checkpoint>` que roda o Check de cada linha `done` e nomeia a que não dá o esperado, e o
