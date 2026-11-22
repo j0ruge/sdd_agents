@@ -107,11 +107,11 @@ outra família") vale para as outras, não para estas.** O censo sai do comando,
 
 ```bash
 grep -cE '^[a-z_]+_escalation\(\) \{'                 bin/sdd   # definições de escalada → 5
-grep -cE '^ +if [a-z_]+_escalation "\$phase"; then'   bin/sdd   # portas delas           → 13
+grep -cE '^ +if [a-z_]+_escalation "\$phase"; then'   bin/sdd   # portas delas           → 15
 grep -cE '^ *kit_guard_check "'                       bin/sdd   # portas da guarda de kit → 4
 ```
 
-⚠️ O `-E` com âncora não é capricho: `grep -F 'escalation "$phase"'` responde **15**, porque conta as
+⚠️ O `-E` com âncora não é capricho: `grep -F 'escalation "$phase"'` responde **17**, porque conta as
 linhas de comentário que exibem a grafia. A conta é sempre a mesma, **um probe por porta**, e porta
 acrescentada sem probe é porta cuja remoção nenhuma asserção percebe.
 
@@ -131,10 +131,13 @@ acrescentada sem probe é porta cuja remoção nenhuma asserção percebe.
   do chapéu ou viu MCP/ferramenta que não declarou; `FOREIGN_COMMIT_WHY`, armado pelo mesmo setter
   quando um commit **sem o rótulo da sessão** no reflog saiu do `writes:` — desde
   `20260926-a-carona-antes-do-congelamento`, ADR 0012; `KIT_TOUCHED_WHY`, armado por
-  `kit_guard_check`) e QUATRO portas — as duas do laço do `cmd_run`, `cmd_retry` e `cmd_close` —,
+  `kit_guard_check`) e SEIS portas — as duas do laço do `cmd_run`, `cmd_retry`, `cmd_close` e,
+  desde `20261121-l4-preflight-health-e-sensores`, as duas sessões do `cmd_kaizen` (o juiz e o retry
+  dele, só com a guarda do chapéu: o juiz roda no kit, e escrever nele é o trabalho dele) —,
   todas lidas **depois** da linha de sessão do ledger. Cada marcador tem um setter só, que o zera
-  na entrada; um probe por porta em `check-autonomy.sh` e um mutante por porta no catálogo. É o
-  quarto marcador, e ele **re-derivou** o contrato em vez de herdá-lo.
+  na entrada; um probe por porta em `check-autonomy.sh` (as do `cmd_kaizen` no `check-kaizen.sh`) e
+  um mutante por porta no catálogo. É o quarto marcador, e ele **re-derivou** o contrato em vez de
+  herdá-lo.
 - `session_died_escalation`, desde `20260918-a-sessao-morreu-e-o-gate-levou-a-culpa`: marcador
   (`SESSION_DIED_WHY`) armado pelo **próprio `run_phase`**, não por um gate; as duas portas do laço
   do `cmd_run`, primeiras de cada uma.

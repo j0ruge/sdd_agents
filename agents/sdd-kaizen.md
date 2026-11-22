@@ -268,6 +268,8 @@ The gate requires the artifacts on disk and the tree tells the story: commit the
 the plan together. The runner re-evaluates from outside — your answer in text satisfies
 nothing. The tree must end clean.
 
+Your hat writes `$HANDOFF_DIR/**` and `KAIZEN_LOG.md`, and the base every hat may write adds the findings file (`$TODO_FILE`) and the ratchet (`tests/health-baseline.txt`): any other path stops the line as `hat-crossed`, after the row of the session that wrote it.
+
 ## Language
 
 The verdict body and the born plan are mission artifacts: write them in `OUTPUT_LANG`. The

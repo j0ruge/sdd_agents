@@ -4,6 +4,46 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-11-22 — O L4: o preflight mede o que afirma, e o `sdd run` para antes da sessão que será negada
+
+**Missão:** `20261121-l4-preflight-health-e-sensores`, o L4 da campanha `20261117-zerar-as-issues`
+(`adr: none`; uma linha datada na ADR 0019). EXEC em `medium`, como o L3. Treze incrementos do
+plano e um `R<n>` (o R1 da r1, seis LOW num lote).
+
+**Antes** (merge-base `86e16c0`, PR #458): os 15 itens do `TODO.md` sobre o `sdd preflight`, o que o
+`sdd run` confere antes de gastar e quatro sensores, sem conserto. A sonda do `Bash` dava `ok` pela
+resposta do modelo; o preflight não lia hooks, nem o `.skills` da `init`, nem a forma ou o preâmbulo
+do `TODO_FILE`; o `sdd run` só descobria a skill sem regra de leitura com a REVIEW paga (US$ 5,61,
+3 de 5 agentes parados); o juiz do `sdd kaizen` não passava pela guarda do chapéu;
+`grep -c '^mut_' tests/check-mutation.sh` → **954**.
+
+**Depois** (`cef90b1`, o merge do PR #464): os 15 itens com `RESOLVED by <hash>`; 46 asserções novas (as 41 do
+plano e as 5 do R1) em `check-preflight.sh`, `check-dry-run.sh`, `check-kaizen.sh`, `check-hat.sh`,
+`check-checkpoint.sh`, `check-health.sh`, `check-todo.sh` e `check-templates.sh`;
+`grep -c '^mut_' tests/check-mutation.sh` → **986**, 32 a mais
+(`git diff 86e16c0..cef90b1 -- tests/check-mutation.sh | grep -cE '^\+mut_[A-Za-z0-9_]+\(\)'`: os 31 do
+plano e o `mut_KAIZEN_hat_guard_check_dropped` do R1), cada um provado por `--only`; `hat_crossed_escalation`
+com 6 portas em vez de 4 (`grep -cE '^ +if [a-z_]+_escalation "\$phase"; then' bin/sdd` → 13 → 15).
+A catraca não desce aqui (`todo-findings 91` antes e depois): os 15 saem no chore de depois do merge.
+
+**O custo da EXEC ao lado do L3** (`~/.sdd/autonomy-log.jsonl`, linhas `session` com `phase: EXEC`
+desta missão, somadas com `jq`):
+
+| Missão | Effort da EXEC | Sessões (I + R) | Duração total | Por sessão | US$ da EXEC | US$ por sessão | US$ por item | `R<n>` |
+|---|---|---|---|---|---|---|---|---|
+| L3 | `medium` | 10 (9 + 1) | 30 819 s | 3 082 s | 27,32 | 2,73 | 2,10 (13) | 1 |
+| L4 | `medium` | 14 (13 + 1) | 28 733 s | 2 052 s | 34,51 | 2,47 | 2,30 (15) | 1 |
+
+O R1 sozinho foi a sessão mais longa (4 841 s, US$ 3,42): seis consertos, cada um com o seu mundo de
+sabotagem numa cópia. A missão inteira até a REVIEW r2: 17 sessões, US$ 41,97, nenhuma parada. Até o merge, com a DOCS e as
+duas sessões da PR: 20 sessões, US$ 46,51 e 34 518 s (linhas `session` da missão, `LC_ALL=C`), e uma
+parada, o `handoff-blocked` da PR às 04:25, num conflito com a `main` que o worker resolveu com a
+autorização do dono (`67d69db`).
+
+**A rodada delta, terceira medida:** r1 inteira US$ 4,59, r2 delta (`base=74d35db`) US$ 1,63, razão
+**0,35**, contra 0,39 no L3 e 0,36 no L2. Três corridas com o delta, as três abaixo de 0,4, e a mesma
+forma nas três (r1 B com um R1 de lote, r2 A).
+
 ## 2026-11-21 — O L3: os gates do fim da linha leem o head que conferem, com a EXEC de volta a `medium`
 
 **Missão:** `20261121-l3-gates-do-fim-da-linha`, o L3 da campanha `20261117-zerar-as-issues`

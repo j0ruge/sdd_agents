@@ -949,6 +949,11 @@ LAST_CHECK_LOG=""
 # The rc of the last run_check_cmd, on BOTH paths (the execution and the memo), beside
 # LAST_CHECK_LOG: test_cmd_red_why reads it to tell a suite that did not start from a red one.
 LAST_CHECK_RC=0
+# The environment tag of the last run_check_cmd (L4 item 3): SDD_CHECK_TAG=<this value> is exported
+# to the command it evaluates, and only to it, so a process the command leaves running still carries
+# it in /proc/<pid>/environ. test_cmd_stragglers reads it. Unique per EXECUTION: the log's own name.
+LAST_CHECK_TAG=""
+declare -A _CHECK_TAG=()
 # Set to 1 by the full face of `sdd status` and by nothing else (item I of TODO.md): see the line
 # that reads it in run_check_cmd.
 CHECK_ANNOUNCE=0
@@ -959,6 +964,7 @@ run_check_cmd() {
   if [ -n "${_CHECK_RC[$cmd]+x}" ]; then
     LAST_CHECK_LOG="${_CHECK_LOG[$cmd]}"
     LAST_CHECK_RC="${_CHECK_RC[$cmd]}"
+    LAST_CHECK_TAG="${_CHECK_TAG[$cmd]}"
     return "${_CHECK_RC[$cmd]}"
   fi
   # The page that asks "where am I" says it is about to wait, and for what. Measured in ui24_agent:
@@ -992,7 +998,10 @@ run_check_cmd() {
   # a terminal as "interactive" — vitest 3 turns watch mode on when stdin is a TTY — would hang the
   # gate for good, with no rc, from any `sdd run` typed at a terminal. The gates, the E2E_CMD and
   # the preflight all run through here, so this one redirection covers the three.
-  ( cd "$REPO_ROOT" && eval "$cmd" ) </dev/null >"$logfile" 2>&1 || rc=$?
+  local tag; tag="sdd-$(basename "$logfile" .log)"
+  ( cd "$REPO_ROOT" && export SDD_CHECK_TAG="$tag" && eval "$cmd" ) </dev/null >"$logfile" 2>&1 || rc=$?
+  _CHECK_TAG[$cmd]="$tag"
+  LAST_CHECK_TAG="$tag"
   _CHECK_RC[$cmd]="$rc"
   _CHECK_LOG[$cmd]="$logfile"
   LAST_CHECK_LOG="$logfile"
@@ -1000,8 +1009,27 @@ run_check_cmd() {
   return "$rc"
 }
 
+# The processes a run_check_cmd left running (L4 item 3): every process whose /proc/<pid>/environ
+# carries SDD_CHECK_TAG=<tag>, one line each, `<pid> <comm>`. The comm is the kernel's name of the
+# executable, never the arguments nor argv[0], which the caller chooses and which can carry a
+# credential (the rule of name_stragglers in bin/sdd-coordination.py). Prints nothing with no /proc,
+# no tag or no process. Limits: a process that rebuilt its environment (env -i, a daemon that clears
+# it) is not seen, and /proc of another user is not readable.
+test_cmd_stragglers() {
+  local tag="$1" f pid comm found
+  [ -n "$tag" ] && [ -d /proc ] || return 0
+  found="$(grep -lsaF -- "SDD_CHECK_TAG=$tag" /proc/[0-9]*/environ 2>/dev/null || true)"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    pid="${f#/proc/}"; pid="${pid%/environ}"
+    comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
+    [ -n "$comm" ] || continue
+    printf '%s %s\n' "$pid" "$comm"
+  done <<< "$found"
+}
+
 # The one definition of the reason a gate gives for a TEST_CMD that came back non-zero, read by the
-# four sites of gate_EXEC, gate_QA and gate_REVIEW right after run_check_cmd (item 5 of L3,
+# three sites of gate_EXEC, gate_QA and gate_REVIEW right after run_check_cmd (item 5 of L3,
 # 20261121-l3-gates-do-fim-da-linha). CALLED, never substituted: it publishes GATE_WHY.
 #
 # rc 126 and 127 are the shell saying the command could not be started (no execute bit, no such
@@ -4554,7 +4582,7 @@ autonomy_kit_stamp() {
 # finding and never said how to get it there.
 #
 # It warned and recorded until 20260903-a-fronteira-do-chapeu; since then it STOPS the line — kind
-# `kit-touched`, through hat_crossed_escalation's four doors. The cost that kept it a warning is now
+# `kit-touched`, through hat_crossed_escalation at this guard's four doors. The cost that kept it a warning is now
 # paid the other way: a human editing the kit in another terminal while a mission runs is a real,
 # legitimate false positive, and it costs one more `sdd run`. Both kit-touched rows of the real
 # ledger were exactly that — 2026-09-18 a human commit, 2026-09-24 an uncommitted edit with no
@@ -5854,10 +5882,17 @@ run_phase() {
     die "hat $hat has no agents/$hat.md under $SDD_HOME — a missing hat would write anywhere"
   fi
   if [ -n "$agent" ] && [ ! -f "$REPO_ROOT/.claude/agents/$agent.md" ]; then
+    # The remedy depends on the checkout (L4 item 14): in a linked worktree the mirrors are the
+    # ignored links `sdd link-agents` makes in EACH checkout, so a new worktree starts without them
+    # and `sdd install --force` there is the wrong command; in the main checkout it is the right one.
+    local remedy="run 'sdd install --force' (the kit gained a hat since this repo was installed)"
+    if repo_is_linked_worktree "$REPO_ROOT"; then
+      remedy="this is a linked worktree, and the agent mirrors are ignored links of each checkout, so a new worktree starts without them: run 'sdd link-agents' here"
+    fi
     if [ "$DRY_RUN" = "1" ]; then
-      warn "agent $agent is not installed in $REPO_ROOT/.claude/agents/ — the real run would refuse this phase; run 'sdd install --force'"
+      warn "agent $agent is not installed in $REPO_ROOT/.claude/agents/ — the real run would refuse this phase; $remedy"
     else
-      die "agent $agent is not installed in $REPO_ROOT/.claude/agents/ — the harness loads the copy and refuses an unknown --agent. Run 'sdd install --force' (the kit gained a hat since this repo was installed)."
+      die "agent $agent is not installed in $REPO_ROOT/.claude/agents/ — the harness loads the copy and refuses an unknown --agent; $remedy."
     fi
   fi
   local disallowed mcp writes
@@ -6211,13 +6246,19 @@ skill_findable() {
 # exactly when the runner grants it, and no second copy of that decision exists. A directory covers
 # itself and what is under `<dir>/`, never a sibling that only begins with the same letters
 # (`…/codereview-x` is not under `…/codereview`). Pure: rc only. Sensor: tests/check-preflight.sh.
+# The list is read WHOLE before any match (mapfile), never matched off the stream: a `return` at the
+# first covering rule left kit_read_rules writing into a pipe with no reader, and under a caller that
+# ignores SIGPIPE every printf after it said `write error: Broken pipe` beside the verdict (item 12
+# of the L4; with 400 entries, always).
 read_rules_cover() {
   local p="${1:-}" rule dir
+  local -a rules=()
   case "$p" in "$REPO_ROOT"|"$REPO_ROOT"/*) return 0 ;; esac
-  while IFS= read -r rule; do
+  mapfile -t rules < <(kit_read_rules)
+  for rule in ${rules[@]+"${rules[@]}"}; do
     dir="${rule#"Read(/"}"; dir="${dir%"/**)"}"
     case "$p" in "$dir"|"$dir"/*) return 0 ;; esac
-  done < <(kit_read_rules)
+  done
   return 1
 }
 
@@ -6240,6 +6281,188 @@ skill_read_entry() {
     case "$entry" in "$home"/*) entry="\$HOME/${entry#"$home"/}" ;; esac
   fi
   printf '%s\n' "$entry"
+}
+
+# phase_skills_wanted → publishes SKILLS_WANTED, the third-party skills this config boots headless,
+# each in the FORM its phase invokes it by, which is where skill_findable looks (Codex r7 on PR
+# #315): REVIEW invokes `/codereview:codereview` (agents/sdd-reviewer.md), the skill of the codereview
+# plugin; TICKET invokes `/ticket` (agents/sdd-ticket.md) and the QA sub-steps `/qa-report` and
+# `/qa-execution` (phase_slash), all three plain. It is the subset of KIT_THIRD_PARTY_SKILLS this
+# config boots (the planner's three are interactive); the full list is what `sdd health --release`
+# line 2 asks an origin for. That is a second spelling of what the hats and phase_slash write, and no
+# comment makes it the same one: check-preflight.sh compares the list preflight prints with the
+# invocations it reads off those files. KIT_THIRD_PARTY_SKILLS lists names, so the check below holds
+# it to the part after the `:`. A global, so the function is CALLED: the die must not end in a
+# subshell. Readers: cmd_preflight (its Bash probe and its skills block) and phase_skills_check.
+phase_skills_wanted() {
+  local sk
+  SKILLS_WANTED=(codereview:codereview)   # REVIEW runs in every mission
+  [ "$JIRA_ENABLED" = "true" ] && SKILLS_WANTED+=(ticket)
+  { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && SKILLS_WANTED+=(qa-report qa-execution)
+  for sk in "${SKILLS_WANTED[@]}"; do
+    case " $KIT_THIRD_PARTY_SKILLS " in *" ${sk#*:} "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
+  done
+}
+
+# repo_is_linked_worktree <dir> → 0 when <dir> is a linked worktree (its git dir is not the common
+# dir), 1 for a main checkout or no repository at all. No side effect, so `if` reads it directly.
+repo_is_linked_worktree() {
+  local gd cdir
+  gd="$(git -C "$1" rev-parse --path-format=absolute --git-dir 2>/dev/null)" || return 1
+  cdir="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  [ -n "$gd" ] && [ -n "$cdir" ] && [ "$gd" != "$cdir" ]
+}
+
+# kit_stale_check (L4 item 2) → a warning when the kit this process runs is a clone off its default
+# branch, or on it and behind the upstream ALREADY fetched (nothing is fetched here: a run is not the
+# place for network). It speaks only for a kit that is a main checkout of its own, on a branch: a
+# linked worktree is a mission of the kit, on a branch by design; a detached HEAD is a CI or a pinned
+# copy; a copy with no git of its own (the mutation sandbox, or a copy inside another repo, which
+# `rev-parse` would answer for) cannot say. The default branch is the KIT's own origin/HEAD, falling
+# back to origin/main then origin/master, and never the target's DEFAULT_BRANCH — the target's base
+# says nothing about the kit's. Silent under --dry-run: the projection does not inherit a warning
+# about the kit's state. Once per process (KIT_STALE_SAID), so it is CALLED, never read by `$( )`.
+# Callers: cmd_run, cmd_retry, cmd_preflight.
+KIT_STALE_SAID=""
+kit_stale_check() {
+  [ -z "$KIT_STALE_SAID" ] || return 0
+  KIT_STALE_SAID=1
+  [ "${DRY_RUN:-0}" != "1" ] || return 0
+  local home top gd cdir br def c behind
+  home="$(CDPATH='' cd -P "$SDD_HOME" 2>/dev/null && pwd)" || return 0
+  top="$(git -C "$home" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ "$top" = "$home" ] || return 0
+  gd="$(git -C "$home" rev-parse --path-format=absolute --git-dir 2>/dev/null)" || return 0
+  cdir="$(git -C "$home" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 0
+  [ -n "$gd" ] && [ "$gd" = "$cdir" ] || return 0
+  br="$(git -C "$home" symbolic-ref --quiet --short HEAD 2>/dev/null)" || return 0
+  def="$(git -C "$home" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)" || def=""
+  if [ -z "$def" ]; then
+    for c in origin/main origin/master; do
+      if git -C "$home" rev-parse --verify --quiet "refs/remotes/$c" >/dev/null 2>&1; then def="$c"; break; fi
+    done
+  fi
+  [ -n "$def" ] || return 0
+  def="${def#origin/}"
+  if [ "$br" != "$def" ]; then
+    warn "the kit at $home is a checkout of branch '$br', not of its default branch '$def' (its origin/HEAD) — every phase runs this branch's runner, hats and templates. If that is not on purpose: git -C $home switch $def"
+    return 0
+  fi
+  behind="$(git -C "$home" rev-list --count "HEAD..refs/remotes/origin/$def" 2>/dev/null)" || return 0
+  if [ "${behind:-0}" -gt 0 ]; then
+    warn "the kit at $home is $behind commit(s) behind origin/$def (as last fetched; nothing was fetched now) — every phase runs the older runner, hats and templates: git -C $home pull --ff-only"
+  fi
+}
+
+# phase_skills_check <voice> → what the phases will meet of the skills they boot, said in <voice>:
+# `preflight` warns every class and prints the `ok` line when every skill is found and none broken;
+# `run` (sdd run, sdd retry) is the same sentences at launch, before any session and any gate (L4
+# item 7, decision 3). Four classes beside the covered skill, one sentence each, defined here only:
+#   - broken      the registry records the plugin, and no recorded install holds the skill;
+#   - uncovered   found, and no read rule of the sessions covers it — with the READ_EXTRA entry;
+#   - unreachable found and covered, and the grammar refuses its target's name: no entry reaches it;
+#   - missing     not found where the harness loads it from.
+# Under `run`, broken and uncovered STOP the line: the phase that boots the skill is denied it, and
+# the session is paid for before the DENIED line says so. Each is printed with `bad`, and one `die`
+# after the loop names the stop — the die is HERE, in the caller's shell, never inside `$( )`. Under
+# `--dry-run` (DRY_RUN=1) they are warnings, and the projection goes on. Missing and unreachable stay
+# warnings in both voices: no READ_EXTRA entry fixes either, and a skill the roots of the convention
+# do not hold may still be where the harness finds it. The skill is looked for in the form the phase
+# invokes (phase_skills_wanted); the rules are kit_read_rules' own (read_rules_cover).
+#
+# A skill found is not a skill the phases can READ: its references live outside the repo, and the
+# session gets only kit_read_rules' rules (ADR 0019 §2). The harness checks the path asked for AND
+# the resolved one, so the directory found and its `readlink -f` must both be covered; a skill
+# either misses is named with the entry to add (skill_read_entry). Nothing is granted here — the
+# permission still comes only from READ_EXTRA. The `||` after readlink has no probe: it never fails
+# on a directory just found, and it decides only that a race costs a sentence about that directory
+# instead of killing the command under `set -e`.
+# One miss hands NO entry: the directory found is covered and only its target is not, because the
+# grammar refuses the target's name (read_extra_dir_ok, the guard kit_read_rules holds a resolved
+# target to). No entry reaches that target, so handing back the one already declared was a loop
+# with no way out (r1 #1 of the final review); the remedy is the target's name. A covered directory
+# whose target passes the grammar keeps the entry to add, and the entry is the directory found,
+# never the target: kit_read_rules resolves an entry at every session, so it follows a retargeted
+# link, and the harness wants both rules (ADR 0019: link alone DENIED, target alone DENIED).
+# Declared limit: an UNcovered directory whose target the grammar refuses gets the undeclared
+# sentence and its entry, and the refused one at the next launch — two steps, never a loop.
+# A directory found under the plugin cache also names the registry (r1 #2 of the final review):
+# the cache may hold more than one copy, skill_findable holds to the rules the one the registry
+# records and falls back to the cache when the registry records no install of the plugin — for a
+# skill invoked through a plugin, the first copy in that plugin's own tree (Codex r8 on PR #315);
+# for one invoked plain, the first directory of its name `find` meets, also when no recorded
+# install holds it —, and the sentence says which file decides. The slash of `cache/` keeps a
+# sibling such as `plugins/cachex` out.
+# A skill invoked through a plugin whose recorded install does not hold it is neither missing nor
+# found (Codex r7 #2 on PR #315): the harness loads the plugin from that install, so the phase boots
+# without the skill whatever else the cache holds. Its own sentence, with skill_findable's reason —
+# the registry and the installPath — and the remedy, and it keeps the "present" line from printing.
+# Sensor: tests/check-preflight.sh (both voices, and the differential between them).
+phase_skills_check() {
+  local voice="${1:-preflight}" sk skills_root missing_skills="" broken_skills="" stops=0
+  local sk_real sk_entry sk_via sk_cache
+  skills_root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
+  phase_skills_wanted
+  # _skill_stop <sentence> — a class that stops the line under `run`, a warning anywhere else.
+  _skill_stop() {
+    if [ "$voice" = "run" ] && [ "${DRY_RUN:-0}" != "1" ]; then bad "$1"; stops=$((stops + 1))
+    else warn "$1"; fi
+  }
+  for sk in "${SKILLS_WANTED[@]}"; do
+    if ! skill_findable "$sk"; then
+      if [ -n "$SKILL_BROKEN_WHY" ]; then
+        broken_skills="$broken_skills $sk"
+        _skill_stop "skill $sk is not where the harness loads it: $SKILL_BROKEN_WHY.
+        The harness loads a plugin's skill from the install its registry records, so every phase that
+        invokes $sk boots without it; no other copy in the plugin cache stands in for it,
+        and none is held to the read rules. Reinstall the ${sk%%:*} plugin."
+      else
+        missing_skills="$missing_skills $sk"
+      fi
+      continue
+    fi
+    sk_real="$(readlink -f -- "$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="$SKILL_FOUND_DIR"
+    if read_rules_cover "$SKILL_FOUND_DIR" && read_rules_cover "$sk_real"; then continue; fi
+    sk_via=""; [ "$sk_real" = "$SKILL_FOUND_DIR" ] || sk_via=" (a symlink to $sk_real)"
+    if read_rules_cover "$SKILL_FOUND_DIR" && ! read_extra_dir_ok "$sk_real"; then
+      warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, whose target no read rule can cover:
+        the grammar of the rules refuses its name (every component letters, digits, \`.\`, \`_\` and
+        \`-\`), so kit_read_rules grants it nothing, whatever READ_EXTRA declares, and every phase that
+        loads the skill is denied its references (a DENIED line in the journal). No READ_EXTRA entry
+        reaches it: move or rename the target to a name the grammar accepts."
+      continue
+    fi
+    sk_entry="$(skill_read_entry "$SKILL_FOUND_DIR" "$skills_root")"
+    sk_cache=""
+    case "$SKILL_FOUND_DIR" in
+      "$skills_root/plugins/cache"/*) sk_cache="
+        The plugin cache may hold more than one copy of a plugin, and the one the harness loads is
+        the installPath recorded in $skills_root/plugins/installed_plugins.json: the copy named
+        above when that file records one, the first copy found when it does not." ;;
+    esac
+    _skill_stop "skill $sk is found in $SKILL_FOUND_DIR$sk_via, and no read rule
+        of the sessions covers it — READ_EXTRA does not declare it, so every phase that loads it is
+        denied its references outside the repo (a DENIED line in the journal).$sk_cache In .sdd/config.sh:
+        READ_EXTRA entry to add: $sk_entry"
+  done
+  if [ -n "$missing_skills" ]; then
+    warn "skills not found:$missing_skills
+        A skill a phase invokes plain was looked for in $skills_root/skills/, $REPO_ROOT/.claude/skills/
+        and $skills_root/plugins/cache/; one it invokes as plugin:skill, in the installs
+        $skills_root/plugins/installed_plugins.json records for the plugin and, only when that file
+        records none, in the cache under that plugin's own tree alone:
+        $skills_root/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>.
+        Those roots are a convention, so this is a warning and not a failure.
+        The phase boots the skill by name anyway: if it really is absent, the session improvises and
+        spends the phase budget producing something no gate can read."
+  elif [ -z "$broken_skills" ] && [ "$voice" = "preflight" ]; then
+    ok "third-party skills present (${SKILLS_WANTED[*]})"
+  fi
+  unset -f _skill_stop
+  if [ "$stops" -gt 0 ]; then
+    die "sdd stops before any session: $stops skill(s) a phase invokes would boot denied or absent, named above with the remedy.
+        Fix what the lines above name, then launch again; 'sdd run --dry-run' projects without stopping."
+  fi
 }
 
 # node_gate_scripts → the package.json scripts that belong INSIDE TEST_CMD, one per line, in the
@@ -6480,6 +6703,69 @@ phase_budget() {
   esac
 }
 
+# todo_template_for <OUTPUT_LANG> → the kit template install seeds TODO_FILE from: the variant
+# templates/todo.<lang>.md when the kit has one, the English templates/todo.md otherwise. One
+# definition, read by the seed of cmd_install and by the preamble verdict below.
+todo_template_for() {
+  if [ -n "$1" ] && [ -f "$SDD_HOME/templates/todo.$1.md" ]; then
+    printf '%s\n' "$SDD_HOME/templates/todo.$1.md"
+  else
+    printf '%s\n' "$SDD_HOME/templates/todo.md"
+  fi
+}
+
+# todo_preamble_verdict <file> <OUTPUT_LANG> — CALLED, never read through $( ): it publishes
+# TODO_PREAMBLE_VERDICT (current | stale | author | unknown), TODO_PREAMBLE_REV and _DATE (for a
+# stale one) and TODO_PREAMBLE_TEMPLATE. install seeds TODO_FILE once and never rewrites it, so a
+# target keeps the preamble of the kit it was installed from while the template moves on (L4 item
+# 10). The preamble is the file from line 1 up to its first <!-- sdd:open -->, inclusive. Equal to
+# the template on disk is `current`; else equal to the template at some revision of the kit's git is
+# `stale` (the newest such revision); equal to none is `author` — a preamble somebody wrote, like the
+# kit's own, which must not warn forever, so comparing with today's template alone was refused. A
+# file with no marker, or a kit that is not a git checkout of its own (a copy inside another repo
+# would answer with that repo's history), is `unknown`. Declared limit: an old preamble edited by
+# hand reads as `author`, so it stays quiet.
+todo_preamble_verdict() {
+  TODO_PREAMBLE_VERDICT=unknown TODO_PREAMBLE_REV="" TODO_PREAMBLE_DATE=""
+  TODO_PREAMBLE_TEMPLATE="$(todo_template_for "$2")"
+  local re='^<!-- sdd:open -->[[:space:]]*$' home top mine rel log rev date text
+  [ -f "$1" ] && [ -f "$TODO_PREAMBLE_TEMPLATE" ] || return 0
+  grep -qE "$re" "$1" || return 0
+  home="$(CDPATH='' cd -P "$SDD_HOME" 2>/dev/null && pwd)" || return 0
+  top="$(git -C "$home" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ "$top" = "$home" ] || return 0
+  mine="$(sed "/$re/q" "$1")"
+  if [ "$mine" = "$(sed "/$re/q" "$TODO_PREAMBLE_TEMPLATE")" ]; then
+    TODO_PREAMBLE_VERDICT=current
+    return 0
+  fi
+  rel="templates/${TODO_PREAMBLE_TEMPLATE##*/}"
+  log="$(git -C "$home" log --format='%H %ad' --date=short -- "$rel" 2>/dev/null)" || log=""
+  while read -r rev date; do
+    [ -n "$rev" ] || continue
+    text="$(git -C "$home" show "${rev}:$rel" 2>/dev/null)" || continue
+    if [ "$mine" = "$(sed "/$re/q" <<< "$text")" ]; then
+      TODO_PREAMBLE_VERDICT=stale TODO_PREAMBLE_REV="${rev:0:7}" TODO_PREAMBLE_DATE="$date"
+      return 0
+    fi
+  done <<< "$log"
+  TODO_PREAMBLE_VERDICT=author
+}
+
+# todo_preamble_say <label> <file> <OUTPUT_LANG> — the verdict in words, the same in sdd preflight
+# and in the `preserved` arm of sdd install. A stale preamble is a WARN with the diff to run, and
+# the file is never rewritten: below the marker it holds somebody's findings. `unknown` says nothing.
+todo_preamble_say() {
+  todo_preamble_verdict "$2" "$3"
+  local t="templates/${TODO_PREAMBLE_TEMPLATE##*/}"
+  case "$TODO_PREAMBLE_VERDICT" in
+    current) ok "the preamble of $1 is the one of $t of today" ;;
+    stale) warn "the preamble of $1 is the one of $t at $TODO_PREAMBLE_REV ($TODO_PREAMBLE_DATE), older than the template of today — preserved, never rewritten. See what changed:
+        diff <(sed '/^<!-- sdd:open -->/q' \"$2\") <(sed '/^<!-- sdd:open -->/q' \"$TODO_PREAMBLE_TEMPLATE\")" ;;
+    author) dim "  the preamble of $1 matches no revision of $t — an author's preamble, left as it is" ;;
+  esac
+}
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -6620,10 +6906,8 @@ cmd_install() {
   # English templates/todo.md when no variant exists for that language. Every variant carries the
   # same two markers (tests/check-templates.sh holds them to one structure), so the sensor and the
   # agents read any of them the same way; only the prose a human reads changes.
-  local seed="$SDD_HOME/templates/todo.md"
-  if [ -n "$inst_lang" ] && [ -f "$SDD_HOME/templates/todo.$inst_lang.md" ]; then
-    seed="$SDD_HOME/templates/todo.$inst_lang.md"
-  fi
+  local seed
+  seed="$(todo_template_for "$inst_lang")"
   [ -f "$seed" ] || die "the TODO.md seed is missing from the kit: $seed"
   # The blob of the seed this command wrote before the two-section skeleton, byte for byte. A file
   # still equal to it holds no finding, so replacing it loses nothing; one byte different and it is
@@ -6645,6 +6929,7 @@ cmd_install() {
     warn "$inst_todo predates the two-section skeleton (no <!-- sdd:open --> marker) — preserved; migrate it by hand from templates/$(basename "$seed")"
   else
     ok "$inst_todo already exists (preserved)"
+    todo_preamble_say "$inst_todo" "$REPO_ROOT/$inst_todo" "$inst_lang"
   fi
 
   local a name target changed=0
@@ -6980,6 +7265,11 @@ cmd_preflight() {
         grant every directory it matches. Move the kit to a literal path. See kit_read_rules and ADR 0019 §1."
   fi
 
+  # --- the third-party skills the phases boot: the list, read by the probe and by the block below ---
+  # One definition (phase_skills_wanted), which sdd run and sdd retry read too (L4 item 7).
+  phase_skills_wanted
+  local -a wanted=("${SKILLS_WANTED[@]}")
+
   # --- authentication + the hat's shell ---
   # Sanity, permission and the hat in one shot. "claude -p answers" does NOT cover the failure
   # mode that matters: the phase session has to EXECUTE (run the suite, commit); `acceptEdits`
@@ -6993,14 +7283,14 @@ cmd_preflight() {
   # those with no settings, and this one boots with the settings a phase boots with. The hat is the
   # mirror in .claude/agents/ when installed, because that is the copy the harness loads, and the
   # probe reads two artifacts here: `Bash` on the stream's init line (the tool
-  # list the session actually got) and the marker in the result (the permission to run it), plus a
+  # list the session actually got) and the marker in a Bash tool_result (the command really ran), plus a
   # third below it, the money keys of the result line (issue 87). No
   # init line and no answer is the old "did not answer"; an init line without Bash names the hat.
   # ONE hat, the executor's, by cost: eight sessions per preflight is not a preflight. The other
   # seven declare the same key shape, and tests/check-hat.sh R3 refuses the mix-up in every file;
   # what this probe adds is the harness's reading of it, which no sensor on the declaration can see.
   if command -v claude >/dev/null 2>&1; then
-    local hat probe_stream probe_init probe_answer probe_tools probe_result probe_silent=""
+    local hat probe_stream probe_init probe_answer probe_tools probe_result probe_ran probe_silent=""
     local -a probe_agent=()
     hat="$(phase_hat EXEC)"
     if [ -n "$hat" ] && [ -f "$REPO_ROOT/.claude/agents/$hat.md" ]; then probe_agent=(--agent "$hat"); fi
@@ -7013,6 +7303,19 @@ cmd_preflight() {
     probe_init="$( jq -c 'select(.type == "system" and .subtype == "init")' <<< "$probe_stream" 2>/dev/null | head -1 )" || probe_init=""
     probe_answer="$( jq -r 'select(.type == "result") | .result // ""' <<< "$probe_stream" 2>/dev/null | tail -1 )" || probe_answer=""
     probe_tools="$( jq -r '.tools // [] | join(" ")' <<< "$probe_init" 2>/dev/null )" || probe_tools=""
+    # The `ok` reads the artifact, never the answer (L4 item 6): a tool_result with no is_error whose
+    # tool_use_id is that of a Bash tool_use, and whose content (a string, or a list of text blocks)
+    # carries the marker. The answer alone is the model's text, and a model can repeat a marker it
+    # never ran. Same matching by tool_use_id as the template probe below.
+    probe_ran="$( jq -rs '
+        def text_of: if type == "string" then . else ([ .[]? | select(.type == "text") | .text ] | join("\n")) end;
+        . as $s
+        | [ $s[] | select(.type == "assistant") | .message.content[]?
+            | select(.type == "tool_use" and .name == "Bash") | .id ] as $ids
+        | if any($s[] | select(.type == "user") | .message.content[]?
+                 | select(.type == "tool_result" and (.tool_use_id as $t | $ids | index($t)) != null);
+                 .is_error != true and ((.content | text_of) // "" | contains("sdd-preflight-ok")))
+          then "ran" else "none" end' <<< "$probe_stream" 2>/dev/null )" || probe_ran=unread
     # Herestrings for the same reason as the Jidoka in cmd_run: `printf | grep -q` returns 141
     # under `pipefail` when the grep MATCHES, so the success branch is the one that loses the race.
     if [ -z "$probe_init" ] && [ -z "$probe_answer" ]; then
@@ -7024,8 +7327,20 @@ cmd_preflight() {
         A permission rule such as Bash(git push:*) in the hat's disallowedTools: strips the tool whole on
         Claude Code 2.1.263+; rules belong in permissionsDeny: (tests/check-hat.sh R3), and the mirror in
         .claude/agents/ has to carry the fix ('sdd install --force')."
-    elif grep -q 'sdd-preflight-ok' <<< "$probe_answer"; then
+    elif [ "$probe_ran" = ran ] && [ -n "$probe_init" ]; then
       ok "headless session under the ${hat:-<no>} hat executes commands (OAuth + Bash in the tool list + permission)"
+    elif [ "$probe_ran" = ran ]; then
+      ok "headless session under the ${hat:-<no>} hat executes commands (a Bash tool_result carried the marker; no init line, so the tool list was not read)"
+    elif [ "$probe_ran" = unread ]; then
+      # The reader failed, not the model (r1 #2 of the L4): jq exited non-zero on the stream, so
+      # whether a Bash call carried the marker is unknown, and the answer says nothing about it.
+      _fail "the stream of the Bash probe could not be read — jq failed on it, so whether a Bash call
+        carried sdd-preflight-ok is unknown. Answer received: $(printf '%s' "$probe_answer" | head -c 120)"
+    elif grep -q 'sdd-preflight-ok' <<< "$probe_answer"; then
+      _fail "the headless session answered the marker with no Bash call behind it — no tool_result of a Bash
+        tool_use in the stream carries sdd-preflight-ok, so the model repeated the text without running the
+        command (or the call failed). The phases may not run the suite nor commit; check ALLOWED_TOOLS
+        and the hat's permissionsDeny:."
     else
       _fail "the headless session CANNOT execute commands — the phases will not run the suite
         nor commit. Answer received: $(printf '%s' "$probe_answer" | head -c 120)
@@ -7043,6 +7358,49 @@ cmd_preflight() {
       else
         _fail "the session's result line has no numeric total_cost_usd or num_turns — run_phase, sdd census,
         sdd close and the mission budget read them, and would go blind. Keys it got: $(jq -r 'keys | join(" ")' <<< "$probe_result" 2>/dev/null | head -c 300)"
+      fi
+    fi
+
+    # The hooks every phase loads, and the skills the harness loaded (L4 item 15). The same stream,
+    # paid already: the hook_response lines of the hooks every session runs (settings user, project
+    # and local, as a phase boots), and the init line's `.skills`, the harness's own answer about what
+    # it loaded — the directory search of the skills block below is a convention, this is the fact.
+    # Both read only over an init line, and the skills only when `.skills` is a list (the predicate
+    # is written positively): a stream with no init, or an init without the key, asserts nothing.
+    # A hook that exits non-zero warns and never fails: exit 2 is how a hook blocks, on purpose. The
+    # duration of each hook, and the hooks that do not fire in this session, are not measured.
+    # Sensor: tests/check-preflight.sh.
+    if [ -n "$probe_init" ]; then
+      local hk_rows hk_ev hk_n hk_codes hk_bytes hk_name hk_rc hk_out hk_err
+      hk_rows="$( jq -rs '[ .[] | select(.type == "system" and .subtype == "hook_response") ]
+          | group_by(.hook_event)[]
+          | [ (.[0].hook_event // "?"), (length | tostring), ([ .[].exit_code | tostring ] | join(" ")),
+              ([ .[].output // "" | utf8bytelength ] | add | tostring) ] | join("\t")' <<< "$probe_stream" 2>/dev/null )" || hk_rows=""
+      if [ -n "$hk_rows" ]; then
+        while IFS=$'\t' read -r hk_ev hk_n hk_codes hk_bytes; do
+          dim "  ---  hooks the probe session ran — $hk_ev: $hk_n hook(s), exit codes $hk_codes, $hk_bytes bytes into the context of every session"
+        done <<< "$hk_rows"
+      else
+        dim "  ---  the probe session ran no hook"
+      fi
+      hk_rows="$( jq -r 'select(.type == "system" and .subtype == "hook_response")
+          | select(.exit_code != 0 or .outcome != "success")
+          | [ (.hook_name // .hook_event // "?"), (.exit_code | tostring), (.outcome // "?" | tostring),
+              ((.stderr // "") | tostring | split("\n")[0]) ] | join("\t")' <<< "$probe_stream" 2>/dev/null )" || hk_rows=""
+      if [ -n "$hk_rows" ]; then
+        while IFS=$'\t' read -r hk_name hk_rc hk_out hk_err; do
+          warn "hook $hk_name exited $hk_rc ($hk_out) in the probe session, and every phase loads it: ${hk_err:-(no stderr)}"
+        done <<< "$hk_rows"
+      fi
+      if jq -e '(.skills | type) == "array"' <<< "$probe_init" >/dev/null 2>&1; then
+        local sk_init sk_phase
+        for sk_init in "${wanted[@]}"; do
+          jq -e --arg s "$sk_init" '.skills | index($s) != null' <<< "$probe_init" >/dev/null 2>&1 && continue
+          case "$sk_init" in codereview:*) sk_phase=REVIEW ;; ticket) sk_phase=TICKET ;; *) sk_phase=QA ;; esac
+          _fail "skill $sk_init, which the $sk_phase phase invokes, is not in the skills list of the probe session's
+        init line: the harness did not load it, and the phase will boot without it. Install it (or the plugin
+        that carries it) where the harness loads skills from."
+        done
       fi
     fi
 
@@ -7269,8 +7627,19 @@ cmd_preflight() {
         # the preflight would be running whatever someone typed into a key it had just rejected.
         # Through run_check_cmd, which already memoises and already puts the output in the mission
         # log rather than on the runner's stdout.
-        local test_rc=0 missing_manifest=""
+        local test_rc=0 missing_manifest="" st_pid st_comm st_n=0
         run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?
+        # What the command left running (L4 item 3), said BEFORE the verdict: the supervisor's own
+        # notice comes after "preflight ok", and every kit command that runs TEST_CMD outside a
+        # `sdd run` waits again. Ten at most; the pid and the comm, never the arguments.
+        while read -r st_pid st_comm; do
+          [ -n "$st_pid" ] || continue
+          st_n=$(( st_n + 1 )); [ "$st_n" -le 10 ] || break
+          warn "TEST_CMD left a process running after it exited: pid $st_pid, executable $st_comm.
+        Every kit command that runs TEST_CMD (the gates, sdd status, sdd preflight) waits until it
+        ends, and the checkout stays held. See \"TEST_CMD leaves a process running\" in
+        docs/failure-modes.md of the kit."
+        done <<< "$(test_cmd_stragglers "$LAST_CHECK_TAG")"
         if [ "$test_rc" -eq 0 ]; then
           ok "TEST_CMD ran green ($TEST_CMD)"
         elif missing_manifest="$(test_cmd_missing_manifest "$TEST_CMD" "$LAST_CHECK_LOG")"; then
@@ -7296,6 +7665,48 @@ cmd_preflight() {
         no other sensor, so a mission passes every gate with them red. Chain them in (npm run <script>
         && … && npm test), unless leaving them out is deliberate." ;;
   esac
+
+  # The kit's own suite skips its lint step when shellcheck is absent ("linter absent — skipped") and
+  # still exits green, so a green TEST_CMD has not measured the warnings (L4 item 13: a whole mission
+  # ran that way and brought three of them). Said only in a tree that carries the suite.
+  if has_mutation_catalogue "$REPO_ROOT" && ! command -v shellcheck >/dev/null 2>&1; then
+    warn "shellcheck is not on PATH: the lint step of tests/run-all.sh will be skipped, so a green
+        suite will not have measured the shellcheck warnings of bin/ and tests/. Install shellcheck."
+  fi
+
+  # --- the shape of TODO_FILE (L4 item 1) ---
+  # The opt-in of config/schema.md runs check-todo.sh inside TEST_CMD, and a target that never typed
+  # it was measured by nobody: sales_quote and lighthouse_project carried 209 and 127 violations for
+  # missions. So the preflight runs the kit's own sensor by itself, from REPO_ROOT (the anchors
+  # resolve against the repo). A WARN and never a _fail: those repos would sit red until a clean-up.
+  # The opt-in is what STOPS the line, so it is named only where TEST_CMD does not carry it; a file
+  # or a sensor that is missing, or an rc the sensor does not document, is said as "not measured",
+  # so a silence here is never read as an ok.
+  local todo_sensor="$SDD_HOME/tests/check-todo.sh" todo_out todo_rc=0 todo_n todo_first
+  if [ ! -f "$todo_sensor" ]; then
+    warn "the shape of TODO_FILE was not measured ($TODO_FILE): the kit at $SDD_HOME has no tests/check-todo.sh"
+  elif [ ! -f "$REPO_ROOT/$TODO_FILE" ]; then
+    warn "the shape of TODO_FILE was not measured ($TODO_FILE): $TODO_FILE does not exist in $REPO_ROOT — 'sdd install' seeds it from templates/todo.md"
+  else
+    todo_out="$( cd "$REPO_ROOT" && bash "$todo_sensor" --check "$TODO_FILE" --allow-empty 2>&1 )" || todo_rc=$?
+    case "$todo_rc" in
+      0) ok "TODO_FILE holds its shape ($TODO_FILE): $(sed -n 's/^  ok    //p' <<< "$todo_out" | head -n 1)" ;;
+      1)
+        todo_n="$(sed -n 's/^\([0-9][0-9]*\) shape violation(s)$/\1/p' <<< "$todo_out" | head -n 1)"
+        todo_first="$(grep '^  line ' <<< "$todo_out" | head -n 3 || true)"
+        warn "TODO_FILE does not hold its shape ($TODO_FILE): ${todo_n:-?} shape violation(s), the first:
+$todo_first
+        Read them all: bash \"$todo_sensor\" --check \"$TODO_FILE\" --allow-empty"
+        case "$TEST_CMD" in
+          *check-todo.sh*) ;;
+          *) warn "nothing stops the line on the shape of $TODO_FILE: TEST_CMD does not run check-todo.sh.
+        The opt-in of config/schema.md appends, inside single quotes, to TEST_CMD:
+        bash \"\$SDD_HOME/tests/check-todo.sh\" --check \"\$TODO_FILE\" --allow-empty --baseline \"origin/\$DEFAULT_BRANCH\"" ;;
+        esac ;;
+      *) warn "the shape of TODO_FILE was not measured ($TODO_FILE): check-todo.sh answered rc $todo_rc — $(head -n 1 <<< "$todo_out")" ;;
+    esac
+  fi
+  [ ! -f "$REPO_ROOT/$TODO_FILE" ] || todo_preamble_say "$TODO_FILE" "$REPO_ROOT/$TODO_FILE" "${OUTPUT_LANG:-}"
 
   # DEFAULT_BRANCH is the base of `gh pr create` in the PR phase — the LAST phase, after EXEC, QA,
   # REVIEW and DOCS have all been paid for. Nothing ever asked the repository whether the branch was
@@ -7325,102 +7736,12 @@ cmd_preflight() {
   # --- third-party skills the phases boot ---
   # Asked for BY CONFIG, not by a fixed list: a project with no interface never boots the QA
   # skills, and JIRA off means the TICKET phase is skipped entirely. Warning about a skill the
-  # pipeline will not use is how an operator learns to skip reading warnings.
-  local sk skills_root missing_skills=""
-  skills_root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
-  # The subset of KIT_THIRD_PARTY_SKILLS this config boots headless (the planner's three are
-  # interactive); the full list is what `sdd health --release` line 2 asks an origin for. Each one in
-  # the FORM its phase invokes it by, which is where skill_findable looks (Codex r7 on PR #315):
-  # REVIEW invokes `/codereview:codereview` (agents/sdd-reviewer.md), the skill of the codereview
-  # plugin; TICKET invokes `/ticket` (agents/sdd-ticket.md) and the QA sub-steps `/qa-report` and
-  # `/qa-execution` (phase_slash), all three plain. That is a second spelling of what the hats and
-  # phase_slash write, and no comment makes it the same one: check-preflight.sh compares the list
-  # preflight prints with the invocations it reads off those files. KIT_THIRD_PARTY_SKILLS lists
-  # names, so the check below holds it to the part after the `:`.
-  local -a wanted=(codereview:codereview)   # REVIEW runs in every mission
-  [ "$JIRA_ENABLED" = "true" ] && wanted+=(ticket)
-  { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && wanted+=(qa-report qa-execution)
-  for sk in "${wanted[@]}"; do
-    case " $KIT_THIRD_PARTY_SKILLS " in *" ${sk#*:} "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
-  done
-  # A skill found is not a skill the phases can READ: its references live outside the repo, and the
-  # session gets only kit_read_rules' rules (ADR 0019 §2). The harness checks the path asked for AND
-  # the resolved one, so the directory found and its `readlink -f` must both be covered; a skill
-  # either misses is named with the entry to add (skill_read_entry). `warn`, never `_fail`, no
-  # session, and nothing granted — the permission still comes only from READ_EXTRA. The `||` after
-  # readlink has no probe: it never fails on a directory just found, and it decides only that a race
-  # costs a warning about that directory instead of killing preflight under `set -e`.
-  # One miss hands NO entry: the directory found is covered and only its target is not, because the
-  # grammar refuses the target's name (read_extra_dir_ok, the guard kit_read_rules holds a resolved
-  # target to). No entry reaches that target, so handing back the one already declared was a loop
-  # with no way out (r1 #1 of the final review); the remedy is the target's name. A covered directory
-  # whose target passes the grammar keeps the entry to add, and the entry is the directory found,
-  # never the target: kit_read_rules resolves an entry at every session, so it follows a retargeted
-  # link, and the harness wants both rules (ADR 0019: link alone DENIED, target alone DENIED).
-  # Declared limit: an UNcovered directory whose target the grammar refuses gets the undeclared
-  # warning and its entry, and the refused one at the next preflight — two steps, never a loop.
-  # A directory found under the plugin cache also names the registry (r1 #2 of the final review):
-  # the cache may hold more than one copy, skill_findable holds to the rules the one the registry
-  # records and falls back to the cache when the registry records no install of the plugin — for a
-  # skill invoked through a plugin, the first copy in that plugin's own tree (Codex r8 on PR #315);
-  # for one invoked plain, the first directory of its name `find` meets, also when no recorded
-  # install holds it —, and the warning says which file decides. The slash of `cache/` keeps a
-  # sibling such as `plugins/cachex` out.
-  # A skill invoked through a plugin whose recorded install does not hold it is neither missing nor
-  # found (Codex r7 #2 on PR #315): the harness loads the plugin from that install, so the phase boots
-  # without the skill whatever else the cache holds. Its own warning, with skill_findable's reason —
-  # the registry and the installPath — and the remedy, and it keeps the "present" line from printing.
-  local sk_real sk_entry sk_via sk_cache broken_skills=""
-  for sk in "${wanted[@]}"; do
-    if ! skill_findable "$sk"; then
-      if [ -n "$SKILL_BROKEN_WHY" ]; then
-        broken_skills="$broken_skills $sk"
-        warn "skill $sk is not where the harness loads it: $SKILL_BROKEN_WHY.
-        The harness loads a plugin's skill from the install its registry records, so every phase that
-        invokes $sk boots without it; no other copy in the plugin cache stands in for it,
-        and none is held to the read rules. Reinstall the ${sk%%:*} plugin."
-      else
-        missing_skills="$missing_skills $sk"
-      fi
-      continue
-    fi
-    sk_real="$(readlink -f -- "$SKILL_FOUND_DIR" 2>/dev/null)" || sk_real="$SKILL_FOUND_DIR"
-    if read_rules_cover "$SKILL_FOUND_DIR" && read_rules_cover "$sk_real"; then continue; fi
-    sk_via=""; [ "$sk_real" = "$SKILL_FOUND_DIR" ] || sk_via=" (a symlink to $sk_real)"
-    if read_rules_cover "$SKILL_FOUND_DIR" && ! read_extra_dir_ok "$sk_real"; then
-      warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, whose target no read rule can cover:
-        the grammar of the rules refuses its name (every component letters, digits, \`.\`, \`_\` and
-        \`-\`), so kit_read_rules grants it nothing, whatever READ_EXTRA declares, and every phase that
-        loads the skill is denied its references (a DENIED line in the journal). No READ_EXTRA entry
-        reaches it: move or rename the target to a name the grammar accepts."
-      continue
-    fi
-    sk_entry="$(skill_read_entry "$SKILL_FOUND_DIR" "$skills_root")"
-    sk_cache=""
-    case "$SKILL_FOUND_DIR" in
-      "$skills_root/plugins/cache"/*) sk_cache="
-        The plugin cache may hold more than one copy of a plugin, and the one the harness loads is
-        the installPath recorded in $skills_root/plugins/installed_plugins.json: the copy named
-        above when that file records one, the first copy found when it does not." ;;
-    esac
-    warn "skill $sk is found in $SKILL_FOUND_DIR$sk_via, and no read rule
-        of the sessions covers it — READ_EXTRA does not declare it, so every phase that loads it is
-        denied its references outside the repo (a DENIED line in the journal).$sk_cache In .sdd/config.sh:
-        READ_EXTRA entry to add: $sk_entry"
-  done
-  if [ -n "$missing_skills" ]; then
-    warn "skills not found:$missing_skills
-        A skill a phase invokes plain was looked for in $skills_root/skills/, $REPO_ROOT/.claude/skills/
-        and $skills_root/plugins/cache/; one it invokes as plugin:skill, in the installs
-        $skills_root/plugins/installed_plugins.json records for the plugin and, only when that file
-        records none, in the cache under that plugin's own tree alone:
-        $skills_root/plugins/cache/<marketplace>/<plugin>/<version>/skills/<skill>.
-        Those roots are a convention, so this is a warning and not a failure.
-        The phase boots the skill by name anyway: if it really is absent, the session improvises and
-        spends the phase budget producing something no gate can read."
-  elif [ -z "$broken_skills" ]; then
-    ok "third-party skills present (${wanted[*]})"
-  fi
+  # pipeline will not use is how an operator learns to skip reading warnings. The classes and their
+  # sentences are phase_skills_check's, the one definition `sdd run` and `sdd retry` stop on; here
+  # every one is a warning, never `_fail`, and no session.
+  phase_skills_check preflight
+  # The kit clone itself (L4 item 2): off its default branch, or behind what was last fetched.
+  kit_stale_check
 
   # --- target repo plugins ---
   local settings="$REPO_ROOT/.claude/settings.json"
@@ -7499,8 +7820,24 @@ cmd_preflight() {
   local branch; branch="$( cd "$REPO_ROOT" && git branch --show-current )"
   ok "current branch: $branch"
   warn_if_on_base_branch
-  if [ -n "$( cd "$REPO_ROOT" && git status --porcelain )" ]; then
-    _fail "working tree dirty — the pipeline needs a clean base to attribute commits to increments"
+  # The paths are named (up to ten, the rest counted): the human ran `git status` to learn what this
+  # had already read (item 11 of the L4). When every one is untracked it is often data the app writes
+  # beside the code, and the exclude file is named as the way out — git reads it, nobody commits it.
+  local _pf_dirty _pf_dirty_n _pf_dirty_msg _pf_exclude
+  # A git status that fails is said by itself (r1 #1 of the L4): its sentinel used to start with `?? `,
+  # and the untracked test below read the failure as "every path untracked" and named the exclude.
+  if ! _pf_dirty="$( cd "$REPO_ROOT" && git status --porcelain )"; then
+    _fail "git status failed in $REPO_ROOT — the working tree could not be read, so no path is named (its error is above)"
+  elif [ -n "$_pf_dirty" ]; then
+    _pf_dirty_n="$(grep -c '' <<< "$_pf_dirty")" || true
+    _pf_dirty_msg="working tree dirty — the pipeline needs a clean base to attribute commits to increments:"
+    _pf_dirty_msg+=$'\n'"$(head -n 10 <<< "$_pf_dirty" | sed 's/^/        /')"
+    [ "${_pf_dirty_n:-0}" -le 10 ] || _pf_dirty_msg+=$'\n'"        … and $((_pf_dirty_n - 10)) more"
+    if ! grep -qv '^?? ' <<< "$_pf_dirty"; then
+      _pf_exclude="$( cd "$REPO_ROOT" && git rev-parse --git-path info/exclude )" || _pf_exclude=".git/info/exclude"
+      _pf_dirty_msg+=$'\n'"        every one of them is untracked: data the app writes outside git can be listed in $_pf_exclude, which git reads and never commits"
+    fi
+    _fail "$_pf_dirty_msg"
   else
     ok "working tree clean"
   fi
@@ -10005,6 +10342,13 @@ cmd_run() {
   # gates to run, and three of them run TEST_CMD. What the dry-run guarantees is narrower — no
   # claude session, no touching of the mission artifacts. Same honesty fix as in --help.
   [ "$DRY_RUN" = "1" ] && dim "  (dry-run: no session will be opened — but the gates do run TEST_CMD)"
+  # L4 item 7 (decision 3): a skill a phase boots that the session will be denied stops the line
+  # HERE, before the branch is switched, before any gate runs TEST_CMD and before any session is
+  # paid for; under --dry-run it is a warning and the projection goes on. Called, never `$( )`: the
+  # die must end this process.
+  phase_skills_check run
+  # L4 item 2: a stale kit clone is named before anything is paid for (silent in a dry run).
+  kit_stale_check
   # BEFORE the base-branch warning, and the order is the point: the checkout is what decides where
   # this pipeline will commit, so warning first would cry wolf at a human the runner is about to
   # move off the base branch anyway — and a warning that cries wolf is how people learn to skip
@@ -10713,6 +11057,10 @@ cmd_retry() {
   PIPELINE_LOG="$(log_dir)/pipeline.log"
   AUTONOMY_RUN_ID="$(uuidgen)"
   AUTONOMY_INVOCATION="retry"
+  # The second door of phase_skills_check (L4 item 7): a retry opens a fresh session, which the
+  # harness would deny the skill all the same. Before the branch, the gates and the session.
+  phase_skills_check run
+  kit_stale_check
   # The second call site of the single definition: `sdd retry` opens a session that COMMITS, so a
   # retry fired from the wrong branch lands the redone phase exactly where `sdd run` would not
   # have put it. Same guard, same die, same silence in a dry run (retry has no dry mode, and the
@@ -12569,8 +12917,13 @@ cmd_kaizen() {
     return "$out_rc"
   fi
 
-  local before after moved="false"
+  # The hat guard, and only its half (20261121-l4-preflight-health-e-sensores, decision 7): the judge
+  # was the one door of five that ran a hat and never read what it wrote. The KIT guard stays out —
+  # the judge runs in the kit, and committing the verdict there is its job. `phase` is spelled
+  # beside the door because that spelling is what the census of CLAUDE.md counts.
+  local before after moved="false" phase="KAIZEN"
   before="$(state_fingerprint)"
+  hat_guard_arm
   run_phase KAIZEN
   # The projection stops HERE, before the fingerprint and the ledger writer — same decision, same
   # reason, as the dry-run branch in cmd_run: the writer stays out of the projection path
@@ -12580,10 +12933,14 @@ cmd_kaizen() {
     return 0
   fi
   after="$(state_fingerprint)"
+  hat_guard_check "$phase" "${before%%|*}"
   [ "$before" != "$after" ] && moved="true"
   gate_rc=0; gate_KAIZEN || gate_rc=$?
   autonomy_session_row "KAIZEN" "1" "false" "$moved" \
     "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+  # After the session row, like the four doors of the other phases: the session happened and is
+  # counted, and then the line stops on what it wrote outside its hat.
+  if hat_crossed_escalation "$phase"; then return 3; fi
   if [ "$gate_rc" -eq 0 ]; then
     kaizen_outcome || out_rc=$?
     return "$out_rc"
@@ -12598,13 +12955,18 @@ cmd_kaizen() {
 
   warn "gate KAIZEN failed: $GATE_WHY"
   warn "  retrying once with the gate reason in the prompt"
+  # The retry is a session of its own and is read by its own guard: armed over what the first one
+  # left, so only what the retry wrote is its doing.
+  hat_guard_arm
   run_phase KAIZEN "$LAST_PHASE_SID"
   local after2 moved2="false"
   after2="$(state_fingerprint)"
+  hat_guard_check "$phase" "${after%%|*}"
   [ "$after" != "$after2" ] && moved2="true"
   gate_rc=0; gate_KAIZEN || gate_rc=$?
   autonomy_session_row "KAIZEN" "1" "true" "$moved2" \
     "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+  if hat_crossed_escalation "$phase"; then return 3; fi
   if [ "$gate_rc" -eq 0 ]; then
     kaizen_outcome || out_rc=$?
     return "$out_rc"
