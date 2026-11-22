@@ -3050,6 +3050,15 @@ mut_RUN_kit_behind_silent() {
 mut_RUN_kit_reads_target_branch() {
   sed -i '/^kit_stale_check() {/,/^}/ s|^  def="\${def#origin/}"$|  def="${DEFAULT_BRANCH:-${def#origin/}}"|' "$1"
 }
+mut_KAIZEN_hat_guard_first_door_dropped() {
+  sed -i '/^cmd_kaizen() {/,/^}/ { /^  autonomy_session_row "KAIZEN" "1" "false"/,/^  if \[ "\$gate_rc" -eq 0 \]; then$/ s|^  if hat_crossed_escalation "\$phase"; then return 3; fi$|  :| }' "$1"
+}
+mut_KAIZEN_hat_guard_retry_door_dropped() {
+  sed -i '/^cmd_kaizen() {/,/^}/ { /^  autonomy_session_row "KAIZEN" "1" "true"/,/^  if \[ "\$gate_rc" -eq 0 \]; then$/ s|^  if hat_crossed_escalation "\$phase"; then return 3; fi$|  :| }' "$1"
+}
+mut_KAIZEN_hat_guard_unarmed() {
+  sed -i '/^cmd_kaizen() {/,/^}/ s|^  hat_guard_arm$|  :|' "$1"
+}
 mut_RUN_agent_missing_worktree_names_install() {
   sed -i '/^run_phase() {/,/^}/ s|^    if repo_is_linked_worktree "\$REPO_ROOT"; then$|    if false; then|' "$1"
 }
@@ -8239,6 +8248,9 @@ CATALOG=(
   RUN_kit_behind_silent
   RUN_kit_reads_target_branch
   RUN_agent_missing_worktree_names_install
+  KAIZEN_hat_guard_first_door_dropped
+  KAIZEN_hat_guard_retry_door_dropped
+  KAIZEN_hat_guard_unarmed
   PRE_template_outcome_error_over_read
   PRE_template_outcome_error_over_denied
   PRE_read_extra_missing_silent
