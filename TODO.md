@@ -640,6 +640,32 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   handoff. Direção: o relay grava o id em disco (o handoff dele, ou a linha do diário da campanha) e diz ao
   humano onde está, nunca o id na resposta.
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
+  RECURRED 1: curso-ddd/relay-do-sdd-plan (2026-11-23)
+
+- [ ] **Num projeto novo, o `/sdd-plan` para na árvore suja que o próprio `sdd install` deixou** —
+  `commands/sdd-plan.md:43` (`A dirty tree with no command`) — a receita do `docs/plan-only.md` e o
+  "Next: $ /sdd-plan" do `sdd-link-agents` levam direto ao passo 1, e o `git status --porcelain` logo depois
+  da instalação já mostra `?? .gitignore`, `?? .sdd/` e `?? TODO.md`. A saída da árvore suja manda parar e
+  perguntar a base, por caminhos que o kit acabou de criar. Direção: a receita commita a instalação antes do
+  `/sdd-plan`, ou o passo 1 reconhece esses três caminhos e diz isso ao humano numa linha.
+  — descoberto pelo relay do `/sdd-plan` no primeiro plano do repositório `curso-ddd` (2026-11-23)
+
+- [ ] **O reteste do QA que só roda o sensor dá pass ao que a correção quebrou ao lado** — `config/schema.md:124`
+  (`QA_DOCS_PATH`) — o `docs/qa` não diz como retestar. Num guia de estudo em HTML (2026-11-22), três retestes
+  acharam bugs novos ao lado das correções: o anel de foco que o escuro forçado do Chrome levou a 2,03:1, a dica
+  "arraste" que o mouse não faz, o magenta trocado no gráfico e esquecido no rótulo. Um reteste de conteúdo deu
+  pass a um bug cuja frase ("a norma não fixa") saiu de duas lições e ficou numa terceira página, com todos os
+  sensores verdes. Direção: o reteste refaz a reprodução pela persona, procura o efeito colateral perto da
+  correção e varre o artefato inteiro pelo padrão corrigido, antes de dar `verified`.
+  — descoberto no QA do guia de estudo do `PROJETO_FINAL`, com o método do kit aplicado à mão (2026-11-22)
+
+- [ ] **O agente que corrige grava a seção Fix só no fim, e morto no meio deixa código mudado e bug vazio** —
+  `config/schema.md:124` (`QA_DOCS_PATH`) — no mesmo QA, a máquina reiniciou com o agente de correção no meio:
+  `quiz.js`, `estudo.css`, `diagramas.js` e sete sensores já estavam mudados, e os sete bugs dele seguiam com a
+  seção Fix vazia e `Status: open`. O orquestrador teve de refazer, por cópia sabotada, a prova de que cada sensor
+  falha com o bug presente. Direção: quem corrige preenche Fix (causa, correção, sensor antes e depois) e muda o
+  status bug a bug, logo que cada um fecha, e não num lote no fim.
+  — descoberto no QA do guia de estudo do `PROJETO_FINAL` (2026-11-22)
 
 - [ ] **O planner marca o critério c com ✅ pela própria releitura e o deixa para um aceite que não o refaz** —
   `agents/sdd-planner.md:216` (`Self-containment test`) — o planner que leu a conversa inteira não é sessão nova.
