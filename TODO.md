@@ -667,6 +667,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   status bug a bug, logo que cada um fecha, e não num lote no fim.
   — descoberto no QA do guia de estudo do `PROJETO_FINAL` (2026-11-22)
 
+- [ ] **O planner marca o critério c com ✅ pela própria releitura e o deixa para um aceite que não o refaz** —
+  `agents/sdd-planner.md:216` (`Self-containment test`) — o planner que leu a conversa inteira não é sessão nova.
+  A evidência de c dizia "o aceite do `/sdd-plan` o refaz", e o aceite (`commands/sdd-plan.md:259`) só mede,
+  renderiza e pergunta. Um teste independente (sessão nova, só leitura) achou 5 pontos de adivinhar e 2
+  contradições, um deles uma variável sem padrão que gravava o commit do repo errado com rc 0. Direção: o hat
+  recusa ✅ em c sem sessão independente, ou o aceite a despacha antes da pergunta YES/NO.
+  — descoberto pelo relay da missão `20261123-curso-ddd-l1-base-e-aulas-1-4` do `curso-ddd` (2026-11-23)
+
+- [ ] **Um fato de outro repositório no "Contexto verificado" é medido pelo topo do ramo, que anda sozinho** —
+  `agents/sdd-planner.md:110` (`beside every count`) — `git -C <loja> log --oneline -1 main` → `fd39d62` provava
+  um merge no `main` de outro repo. Um commit do relay lá, durante o aceite, mudou a saída com o fato intacto, e
+  a regra do commit do relay (`commands/sdd-plan.md:163`) só cobre o repo alvo. Corrigido no plano por
+  `merge-base --is-ancestor fd39d62 main; echo $?` → `0`. Direção: fato de outro repo se mede pelo próprio fato
+  (ancestral, `grep` no arquivo), nunca pelo topo de um ramo.
+  — descoberto pelo relay da missão `20261123-curso-ddd-l1-base-e-aulas-1-4` do `curso-ddd` (2026-11-23)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
