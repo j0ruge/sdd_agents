@@ -640,6 +640,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   handoff. Direção: o relay grava o id em disco (o handoff dele, ou a linha do diário da campanha) e diz ao
   humano onde está, nunca o id na resposta.
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
+  RECURRED 1: curso-ddd/relay-do-sdd-plan (2026-11-23)
+
+- [ ] **Num projeto novo, o `/sdd-plan` para na árvore suja que o próprio `sdd install` deixou** —
+  `commands/sdd-plan.md:43` (`A dirty tree with no command`) — a receita do `docs/plan-only.md` e o
+  "Next: $ /sdd-plan" do `sdd-link-agents` levam direto ao passo 1, e o `git status --porcelain` logo depois
+  da instalação já mostra `?? .gitignore`, `?? .sdd/` e `?? TODO.md`. A saída da árvore suja manda parar e
+  perguntar a base, por caminhos que o kit acabou de criar. Direção: a receita commita a instalação antes do
+  `/sdd-plan`, ou o passo 1 reconhece esses três caminhos e diz isso ao humano numa linha.
+  — descoberto pelo relay do `/sdd-plan` no primeiro plano do repositório `curso-ddd` (2026-11-23)
 
 - [ ] **O reteste do QA que só roda o sensor dá pass ao que a correção quebrou ao lado** — `config/schema.md:124`
   (`QA_DOCS_PATH`) — o `docs/qa` não diz como retestar. Num guia de estudo em HTML (2026-11-22), três retestes
