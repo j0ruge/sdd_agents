@@ -715,6 +715,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que o `next` lê e que cala o `ahead` daquele lote.
   — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
 
+- [ ] **No `ListAgents` do worker, a fase do próprio `sdd run` parece outra sessão interativa do checkout** —
+  `commands/sdd-worker.md:55` (`names who holds a checkout`) — o worker leu `curso-ddd-bf` e `curso-ddd-dc` como
+  outro worker e quase deixou os atos para eles. Medido: o run tem um só filho `claude -p` por vez. O
+  `~/.claude/sessions/<pid>.json` dele diz `kind interactive`, `agent sdd-executor`, nome `curso-ddd-<2 hex>` novo
+  a cada fase e `sessionId` igual ao uuid da fase no log (PID 3041580, `20cac683…`, `curso-ddd-04`). Os dois nomes
+  batem pela hora com `0f86bc98…` (19:59:46) e `2f4c9384…` (20:22:37). Direção: o worker reconhece a fase pelo
+  PID do run e pelo log, nunca pelo nome no `ListAgents`, e o passo 4 diz isso.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
