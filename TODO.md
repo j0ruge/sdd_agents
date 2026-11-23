@@ -683,6 +683,38 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (ancestral, `grep` no arquivo), nunca pelo topo de um ramo.
   — descoberto pelo relay da missão `20261123-curso-ddd-l1-base-e-aulas-1-4` do `curso-ddd` (2026-11-23)
 
+- [ ] **No alvo, o checkout da campanha é o da missão, e uma linha do journal durante o run para a fase** —
+  `commands/sdd-worker.md:79` (`journal.md`) — o passo 5 só proíbe o journal no checkout do kit, e a seção do
+  worktree (linha 122) supõe a missão fora do checkout da campanha. No `curso-ddd` os dois são o mesmo, no ramo da
+  missão. Medido numa fixture com o `hat_guard_check` (`bin/sdd:5099`): uma linha nova num journal limpo durante a
+  REVIEW dá `touched 1 path(s) outside its writes`, o `hat-crossed`; com o journal já sujo antes da fase, nada; na
+  EXEC, nada. O `dirty-tree` só para a EXEC com a suíte vermelha. Direção: o passo 5 vale também para esse checkout.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
+- [ ] **O `!` do Claude Code fecha o stdin, e o `sdd-worker delegate` do dono sai 66 sem assinar** —
+  `commands/sdd-worker.md:45` (`sdd-worker delegate`) — o texto manda o dono assinar "in a terminal of his own" e
+  não fala do `!`. Pelo `! sdd-worker delegate <campanha>`, o `read` do `cmd_delegate` (`bin/sdd-worker:304`) achou
+  o stdin fechado: `not signed — no answer reached the prompt`, rc 66. O `! printf 'y\n' | sdd-worker delegate`
+  assinou. Os limites declarados da ADR 0022 (linha 168) dizem só que a assinatura prova uma resposta no stdin.
+  Direção: o passo 2 diz que o `!` fecha o stdin e qual forma serve, e a frase do rc 66 nomeia o `!`.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
+- [ ] **O aviso "kit behind origin/main" conta commits e não separa um atraso só de `TODO.md`** —
+  `bin/sdd:6351` (`rev-list --count`) — o `kit_stale_check` conta `HEAD..origin/<def>` e diz "every phase runs
+  the older runner, hats and templates". Medido no checkout do kit em 2026-11-23: 6 commits atrás, e o diff deles
+  só toca `TODO.md` e `tests/health-baseline.txt` (0 caminhos de `bin agents templates config`). O
+  `KIT_BEHAVIOR_PATHS` (`bin/sdd:4527`) já separa o que uma fase executa. Direção: o aviso conta só os commits
+  que tocam `KIT_BEHAVIOR_PATHS`, e um atraso só de achados vira linha `dim`, não `warn`.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
+- [ ] **O `ahead plan` não lê a intenção do dono de planejar o lote só depois do merge do anterior** —
+  `bin/sdd-worker:1022` (`ahead plan`) — o `next` dá `ahead plan <lote seguinte>` sempre que o lote atual está em
+  `run` ou `review` e o seguinte não tem missão. No `curso-ddd` respondeu `ahead plan L2`, e o `campaign.md` diz só
+  na prosa "A missão do L2 se planeja depois do merge do L1". Nenhuma chave do frontmatter nem coluna da tabela
+  (`templates/campaign.md:30`) diz isso, e o `lots_table` lê só `Lot` e `Ceiling`. Direção: uma coluna ou valor
+  que o `next` lê e que cala o `ahead` daquele lote.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
