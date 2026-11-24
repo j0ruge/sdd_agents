@@ -727,8 +727,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O ato `pr` do worker não diz que o `gh pr edit` falha, e o aviso mora só no chapéu do publisher** —
   `commands/sdd-worker.md:186` (`grill answers`) — o ato manda pôr no corpo do PR as respostas do grill e os bots
   que não revisaram, sem dizer como. O `agents/sdd-publisher.md:100` manda o `gh api -X PATCH`, com o corpo num
-  arquivo, e proíbe o `gh pr edit`, que falha no gh 2.45; o worker não lê esse chapéu. Medido no PR #1 do
-  `curso-ddd`, gh 2.45.0: o `gh pr edit 1 --body-file …` saiu rc 1 com `GraphQL: Projects (classic) is being
+  arquivo, e proíbe o `gh pr edit`, que falha no gh 2.45; o worker não lê esse chapéu. Medido no PR
+  j0ruge/curso-ddd#1, gh 2.45.0: o `gh pr edit 1 --body-file …` saiu rc 1 com `GraphQL: Projects (classic) is being
   deprecated …`, e o corpo ficou como estava; o `gh api -X PATCH` saiu rc 0, com as duas seções no corpo.
   Direção: o ato `pr` cita a mesma chamada REST.
   — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-24)
