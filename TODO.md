@@ -717,12 +717,30 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **No `ListAgents` do worker, a fase do próprio `sdd run` parece outra sessão interativa do checkout** —
   `commands/sdd-worker.md:55` (`names who holds a checkout`) — o worker leu `curso-ddd-bf` e `curso-ddd-dc` como
-  outro worker e quase deixou os atos para eles. Medido: o run tem um só filho `claude -p` por vez. O
-  `~/.claude/sessions/<pid>.json` dele diz `kind interactive`, `agent sdd-executor`, nome `curso-ddd-<2 hex>` novo
-  a cada fase e `sessionId` igual ao uuid da fase no log (PID 3041580, `20cac683…`, `curso-ddd-04`). Os dois nomes
-  batem pela hora com `0f86bc98…` (19:59:46) e `2f4c9384…` (20:22:37). Direção: o worker reconhece a fase pelo
-  PID do run e pelo log, nunca pelo nome no `ListAgents`, e o passo 4 diz isso.
+  outro worker. Medido: o run tem um só filho `claude -p` por vez, e o `~/.claude/sessions/<pid>.json` dele diz
+  `kind interactive`, nome `curso-ddd-<2 hex>` novo a cada fase e o `sessionId` da fase no log (PID 3041580,
+  `20cac683…`). Em 2026-11-24, `curso-ddd-1c` era a fase `DOCS` (`7cb194af…`), e o dono perguntou se ela parara.
+  Direção: o worker reconhece a fase pelo PID do run e pelo log, e o passo 4 diz isso; ou o runner passa
+  `--name sdd-<missão>-<fase>` (`claude --help`: `-n, --name`) no `claude -p` (`bin/sdd:5917`), ainda não medido.
   — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
+- [ ] **O ato `pr` do worker não diz que o `gh pr edit` falha, e o aviso mora só no chapéu do publisher** —
+  `commands/sdd-worker.md:186` (`grill answers`) — o ato manda pôr no corpo do PR as respostas do grill e os bots
+  que não revisaram, sem dizer como. O `agents/sdd-publisher.md:100` manda o `gh api -X PATCH`, com o corpo num
+  arquivo, e proíbe o `gh pr edit`, que falha no gh 2.45; o worker não lê esse chapéu. Medido no PR #1 do
+  `curso-ddd`, gh 2.45.0: o `gh pr edit 1 --body-file …` saiu rc 1 com `GraphQL: Projects (classic) is being
+  deprecated …`, e o corpo ficou como estava; o `gh api -X PATCH` saiu rc 0, com as duas seções no corpo.
+  Direção: o ato `pr` cita a mesma chamada REST.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-24)
+
+- [ ] **Sob merge delegado, o run diz que só falta o merge com a REVIEW em B, e o `pr-ready` recusa** —
+  `bin/sdd:10437` (`pipeline complete`) — a spec do merge delegado (§1 e M5) diz que o piso B do
+  `REVIEW_PROSE_CRITERIA` não basta ao dono e que a régua é do alvo, mas nada a configura: o `curso-ddd` ficou
+  com o `REVIEW_PROSE_MIN_GRADE="B"` do starter. A r3 deu Documentation B, o `gate_REVIEW` passou, e o run disse
+  `only the merge is left`; o dono pediu o merge, o `pr-ready` deu `not-ready review: … every row must read A`
+  (rc 1), e o ato `review` fez a r4 com o PR aberto, como na 5a do M5. Direção: o `allows run` avisa no nível
+  `merge` com o piso abaixo de A no worktree da missão, e o fim do run nomeia o próximo ato do worker.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-24)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
