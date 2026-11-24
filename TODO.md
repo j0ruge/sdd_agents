@@ -683,6 +683,65 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (ancestral, `grep` no arquivo), nunca pelo topo de um ramo.
   — descoberto pelo relay da missão `20261123-curso-ddd-l1-base-e-aulas-1-4` do `curso-ddd` (2026-11-23)
 
+- [ ] **No alvo, o checkout da campanha é o da missão, e uma linha do journal durante o run para a fase** —
+  `commands/sdd-worker.md:79` (`journal.md`) — o passo 5 só proíbe o journal no checkout do kit, e a seção do
+  worktree (linha 122) supõe a missão fora do checkout da campanha. No `curso-ddd` os dois são o mesmo, no ramo da
+  missão. Medido numa fixture com o `hat_guard_check` (`bin/sdd:5099`): uma linha nova num journal limpo durante a
+  REVIEW dá `touched 1 path(s) outside its writes`, o `hat-crossed`; com o journal já sujo antes da fase, nada; na
+  EXEC, nada. O `dirty-tree` só para a EXEC com a suíte vermelha. Direção: o passo 5 vale também para esse checkout.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
+- [ ] **O `!` do Claude Code fecha o stdin, e o `sdd-worker delegate` do dono sai 66 sem assinar** —
+  `commands/sdd-worker.md:45` (`sdd-worker delegate`) — o texto manda o dono assinar "in a terminal of his own" e
+  não fala do `!`. Pelo `! sdd-worker delegate <campanha>`, o `read` do `cmd_delegate` (`bin/sdd-worker:304`) achou
+  o stdin fechado: `not signed — no answer reached the prompt`, rc 66. O `! printf 'y\n' | sdd-worker delegate`
+  assinou. Os limites declarados da ADR 0022 (linha 168) dizem só que a assinatura prova uma resposta no stdin.
+  Direção: o passo 2 diz que o `!` fecha o stdin e qual forma serve, e a frase do rc 66 nomeia o `!`.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
+- [ ] **O aviso "kit behind origin/main" conta commits e não separa um atraso só de `TODO.md`** —
+  `bin/sdd:6351` (`rev-list --count`) — o `kit_stale_check` conta `HEAD..origin/<def>` e diz "every phase runs
+  the older runner, hats and templates". Medido no checkout do kit em 2026-11-23: 6 commits atrás, e o diff deles
+  só toca `TODO.md` e `tests/health-baseline.txt` (0 caminhos de `bin agents templates config`). O
+  `KIT_BEHAVIOR_PATHS` (`bin/sdd:4527`) já separa o que uma fase executa. Direção: o aviso conta só os commits
+  que tocam `KIT_BEHAVIOR_PATHS`, e um atraso só de achados vira linha `dim`, não `warn`.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
+- [ ] **O `ahead plan` não lê a intenção do dono de planejar o lote só depois do merge do anterior** —
+  `bin/sdd-worker:1022` (`ahead plan`) — o `next` dá `ahead plan <lote seguinte>` sempre que o lote atual está em
+  `run` ou `review` e o seguinte não tem missão. No `curso-ddd` respondeu `ahead plan L2`, e o `campaign.md` diz só
+  na prosa "A missão do L2 se planeja depois do merge do L1". Nenhuma chave do frontmatter nem coluna da tabela
+  (`templates/campaign.md:30`) diz isso, e o `lots_table` lê só `Lot` e `Ceiling`. Direção: uma coluna ou valor
+  que o `next` lê e que cala o `ahead` daquele lote.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
+- [ ] **No `ListAgents` do worker, a fase do próprio `sdd run` parece outra sessão interativa do checkout** —
+  `commands/sdd-worker.md:55` (`names who holds a checkout`) — o worker leu `curso-ddd-bf` e `curso-ddd-dc` como
+  outro worker. Medido: o run tem um só filho `claude -p` por vez, e o `~/.claude/sessions/<pid>.json` dele diz
+  `kind interactive`, nome `curso-ddd-<2 hex>` novo a cada fase e o `sessionId` da fase no log (PID 3041580,
+  `20cac683…`). Em 2026-11-24, `curso-ddd-1c` era a fase `DOCS` (`7cb194af…`), e o dono perguntou se ela parara.
+  Direção: o worker reconhece a fase pelo PID do run e pelo log, e o passo 4 diz isso; ou o runner passa
+  `--name sdd-<missão>-<fase>` (`claude --help`: `-n, --name`) no `claude -p` (`bin/sdd:5917`), ainda não medido.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
+
+- [ ] **O ato `pr` do worker não diz que o `gh pr edit` falha, e o aviso mora só no chapéu do publisher** —
+  `commands/sdd-worker.md:186` (`grill answers`) — o ato manda pôr no corpo do PR as respostas do grill e os bots
+  que não revisaram, sem dizer como. O `agents/sdd-publisher.md:100` manda o `gh api -X PATCH`, com o corpo num
+  arquivo, e proíbe o `gh pr edit`, que falha no gh 2.45; o worker não lê esse chapéu. Medido no PR #1 do
+  `curso-ddd`, gh 2.45.0: o `gh pr edit 1 --body-file …` saiu rc 1 com `GraphQL: Projects (classic) is being
+  deprecated …`, e o corpo ficou como estava; o `gh api -X PATCH` saiu rc 0, com as duas seções no corpo.
+  Direção: o ato `pr` cita a mesma chamada REST.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-24)
+
+- [ ] **Sob merge delegado, o run diz que só falta o merge com a REVIEW em B, e o `pr-ready` recusa** —
+  `bin/sdd:10437` (`pipeline complete`) — a spec do merge delegado (§1 e M5) diz que o piso B do
+  `REVIEW_PROSE_CRITERIA` não basta ao dono e que a régua é do alvo, mas nada a configura: o `curso-ddd` ficou
+  com o `REVIEW_PROSE_MIN_GRADE="B"` do starter. A r3 deu Documentation B, o `gate_REVIEW` passou, e o run disse
+  `only the merge is left`; o dono pediu o merge, o `pr-ready` deu `not-ready review: … every row must read A`
+  (rc 1), e o ato `review` fez a r4 com o PR aberto, como na 5a do M5. Direção: o `allows run` avisa no nível
+  `merge` com o piso abaixo de A no worktree da missão, e o fim do run nomeia o próximo ato do worker.
+  — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-24)
+
 - [ ] **Os logs de sessão só existem no checkout da corrida, e o `sdd census` de outro checkout responde vazio** —
   `bin/sdd:1089` (`log_dir`) — a missão rodada num worktree ligado (ADR 0016 §2, ADR 0022 §7) deixa os streams
   só no `.sdd/logs/` dele, ignorado, e o `git worktree remove` os apaga sem aviso (5 worktrees, 278 arquivos).
