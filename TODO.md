@@ -640,7 +640,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   handoff. Direção: o relay grava o id em disco (o handoff dele, ou a linha do diário da campanha) e diz ao
   humano onde está, nunca o id na resposta.
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
-  RECURRED 1: curso-ddd/relay-do-sdd-plan (2026-11-23)
+  RECURRED 2: curso-ddd/relay-do-sdd-plan (2026-11-23); expiry_guardian/20261124 (2026-11-24)
 
 - [ ] **Num projeto novo, o `/sdd-plan` para na árvore suja que o próprio `sdd install` deixou** —
   `commands/sdd-plan.md:43` (`A dirty tree with no command`) — a receita do `docs/plan-only.md` e o
