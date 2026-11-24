@@ -750,6 +750,24 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   census avisa a pasta ausente; o desenho maior leva o log ao diretório comum do git, como o carimbo (ADR 0021).
   — descoberto na limpeza dos worktrees da campanha `20261117-zerar-as-issues` (2026-11-24)
 
+- [ ] **O `sdd install` grava um `TEST_CMD` vermelho num repo Node sem script `test`** — `bin/sdd:6513`
+  (`npm test`) — o `node_test_cmd` encadeia os scripts de gate e termina sempre em `npm test`, declarado ou
+  não, e sempre com `npm`, mesmo com `bun.lock`. No `expiry_guardian` (só `build`, `lint`, `dev`, sem `test`;
+  `bun.lock` e `bunfig.toml`) saiu `npm run lint && npm run build && npm test`, e o `sdd preflight` reprovou
+  (`TEST_CMD FAILED (rc 1)`); reproduzido num repo de rascunho, onde o `npm test` sozinho sai com rc 1.
+  Direção: só pôr o `npm test` quando `scripts.test` existe, e escolher o runner pelo lockfile
+  (`bun.lock`/`bun.lockb` → `bun run`, `pnpm-lock.yaml` → `pnpm`, `yarn.lock` → `yarn`).
+  — descoberto pela retro do retrofit-watch ao instalar o kit no `expiry_guardian` (2026-11-23)
+
+- [ ] **O `sdd install` deixa vazio o `READ_EXTRA` que o `sdd preflight` pede logo em seguida** —
+  `config/starter.conf:60` (`READ_EXTRA=""`) — o preflight já acha a skill `codereview:codereview` e diz a
+  entrada exata (`$HOME/.claude/plugins/cache/chewiesoft-marketplace/codereview`), mas o install semeia o
+  starter com a chave vazia. Todo alvo novo nasce com a REVIEW sem ler as references da skill, a mesma
+  leitura negada que a fase do `1fcb66cc` sofreu em 2026-11-18, até alguém copiar o aviso à mão.
+  Direção: o install semear o `READ_EXTRA` com as entradas que a busca do preflight resolve (o mesmo
+  `plugin_install_paths`), e avisar só do que não achou.
+  — descoberto pela retro do retrofit-watch ao instalar o kit no `expiry_guardian` (2026-11-23)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
