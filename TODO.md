@@ -683,6 +683,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (ancestral, `grep` no arquivo), nunca pelo topo de um ramo.
   — descoberto pelo relay da missão `20261123-curso-ddd-l1-base-e-aulas-1-4` do `curso-ddd` (2026-11-23)
 
+- [ ] **Os logs de sessão só existem no checkout da corrida, e o `sdd census` de outro checkout responde vazio** —
+  `bin/sdd:1089` (`log_dir`) — a missão rodada num worktree ligado (ADR 0016 §2, ADR 0022 §7) deixa os streams
+  só no `.sdd/logs/` dele, ignorado, e o `git worktree remove` os apaga sem aviso (5 worktrees, 278 arquivos).
+  Do principal, `sdd census 20261112-as-reincidentes-primeiro` dá o cabeçalho e o boot bill, nenhuma fase, rc 0,
+  sem dizer que a pasta não existe; o `e2e_red_history` do `gate_QA` também só lê o checkout atual. Direção: o
+  census avisa a pasta ausente; o desenho maior leva o log ao diretório comum do git, como o carimbo (ADR 0021).
+  — descoberto na limpeza dos worktrees da campanha `20261117-zerar-as-issues` (2026-11-24)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
