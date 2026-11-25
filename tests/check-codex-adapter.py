@@ -62,6 +62,8 @@ else:
         if os.environ['FAKE_MODEL_COMMIT'] == 'concurrent':
             # The fixture's separate checkout owner advances the real branch.
             subprocess.run(['git', 'commit', '--allow-empty', '-qm', 'external'], check=True)
+        if os.environ['FAKE_MODEL_COMMIT'] == 'flags':
+            subprocess.run(['git', 'update-index', '--assume-unchanged', 'baseline.txt'], check=True)
     print(os.environ['FAKE_STREAM'], flush=True)
     sys.exit(int(os.environ['FAKE_RC']))
 """
@@ -70,7 +72,7 @@ else:
 class AdapterTests(unittest.TestCase):
     def invoke(self, *args, events=None, rc=0, sandbox_rc=0, linked=False, remote=None,
                execute_sandbox=False, model_commit=False, git_override=False, mission_branch="mission",
-               local_ignore=False):
+               local_ignore=False, staged_gitlink=False):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
@@ -92,6 +94,15 @@ class AdapterTests(unittest.TestCase):
                                env=git_env, check=True)
                 repo = branch
             (repo / ".sdd").mkdir()
+            if model_commit == "flags":
+                (repo / "baseline.txt").write_text("baseline")
+                subprocess.run(["git", "add", "baseline.txt"], cwd=repo, env=git_env, check=True)
+                subprocess.run(["git", "commit", "-qm", "baseline"], cwd=repo, env=git_env, check=True)
+            if staged_gitlink:
+                subprocess.run(["git", "config", "diff.ignoreSubmodules", "all"], cwd=repo, env=git_env, check=True)
+                head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, env=git_env, text=True).strip()
+                subprocess.run(["git", "update-index", "--add", "--cacheinfo", f"160000,{head},module"],
+                               cwd=repo, env=git_env, check=True)
             if local_ignore:
                 (repo / "local-note.txt").write_text("local")
                 (repo / "other-local-note.txt").write_text("other local")
@@ -132,6 +143,7 @@ class AdapterTests(unittest.TestCase):
                                   git("log", "-1", "--format=%s", "trunk"),
                                   git("reflog", "-1", "--format=%gs")]
                 self.final_tracked = git("ls-files").splitlines()
+                self.final_flags = git("ls-files", "-v").splitlines()
             return result, arguments
 
     def run_hat(self, *args, model="gpt-6.2-sol", hat="sdd-executor", **kwargs):
@@ -416,6 +428,20 @@ class AdapterTests(unittest.TestCase):
         rc, events, _, _ = self.run_hat(linked=True, model_commit=True, local_ignore=True)
         self.assertEqual(rc, 0, events)
         self.assertEqual(self.final_tracked, ["proof.txt"])
+
+    def test_git_turn_preserves_index_flags_changed_while_the_model_runs(self):
+        rc, events, _, _ = self.run_hat(linked=True, model_commit="flags")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("assume-unchanged", events[-1]["result"])
+        self.assertEqual(self.final_git[0], "baseline")
+        self.assertIn("h baseline.txt", self.final_flags)
+
+    def test_git_turn_refuses_staged_gitlinks_even_when_the_diff_ignores_submodules(self):
+        rc, events, captured, _ = self.run_hat(linked=True, model_commit=True, staged_gitlink=True)
+        self.assertNotEqual(rc, 0)
+        self.assertIsNone(captured)
+        self.assertIn("staged", events[-1]["result"])
+        self.assertIn("module", self.final_tracked)
 
     @unittest.skipUnless(os.environ.get("SDD_TEST_NATIVE_CODEX"), "requires the opt-in native Codex CLI")
     def test_gate_native_sandbox_denies_git_metadata_writes(self):

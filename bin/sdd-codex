@@ -329,23 +329,36 @@ class GitIndexHandoff:
         branch, old, new, identity = (record.get(key) for key in ("branch", "old", "new", "index"))
         if not (all(isinstance(value, str) for value in (branch, old, new)) and branch.startswith("refs/heads/")
                 and OID.fullmatch(old) and OID.fullmatch(new) and isinstance(identity, list)
-                and len(identity) == 2 and all(type(value) is int for value in identity)):
+                and len(identity) == 2 and all(type(value) is int for value in identity)
+                and type(record.get("eligible")) is bool):
             raise ValueError("Invalid Codex Git handoff receipt")
+        owned_lock = self.file_id(self.lock) == identity
+        if declined or not record["eligible"]:
+            if owned_lock:
+                self.lock.unlink()
+            self.intent.unlink()
+            return
         head = self.git("symbolic-ref", "HEAD")
         tip = self.git("rev-parse", "--verify", branch)
-        lock = self.file_id(self.lock)
-        owned_lock = lock == identity
         if head == branch and tip == new:
             if owned_lock:
                 self.lock.replace(self.index)
             elif self.file_id(self.index) != identity:
                 raise ValueError("Codex branch advanced, but the prepared index is missing")
-        elif declined or (head == branch and tip == old):
+        elif head == branch and tip == old:
             if owned_lock:
                 self.lock.unlink()
         else:
             raise ValueError("The checkout moved with an unfinished Codex Git handoff")
         self.intent.unlink()
+
+    def record(self, path, publication):
+        """Write a complete receipt before replacing the previous version."""
+        with path.open("w", encoding="utf-8") as output:
+            json.dump(publication, output)
+            output.flush()
+            os.fsync(output.fileno())
+        path.replace(self.intent)
 
     def advance(self, branch, old, new, check_index):
         """Record the replacement before updating the ref, then publish it under Git's lock."""
@@ -353,12 +366,9 @@ class GitIndexHandoff:
             replacement = Path(stage) / "index"
             self.git("read-tree", new, env={**git_environment(), "GIT_INDEX_FILE": str(replacement)})
             receipt = Path(stage) / "receipt"
-            with receipt.open("w", encoding="utf-8") as output:
-                json.dump(dict(branch=branch, old=old, new=new, index=self.file_id(replacement)), output)
-                output.flush()
-                os.fsync(output.fileno())
+            publication = dict(branch=branch, old=old, new=new, index=self.file_id(replacement), eligible=False)
             # Receipt precedes the lock, so an interruption never leaves an unidentifiable lock.
-            receipt.replace(self.intent)
+            self.record(receipt, publication)
             try:
                 os.link(replacement, self.lock)
             except OSError:
@@ -368,9 +378,15 @@ class GitIndexHandoff:
                 if self.git("symbolic-ref", "HEAD") != branch:
                     raise ValueError("The mission checkout's branch changed during the Codex turn")
                 check_index()
+                publication["eligible"] = True
+                self.record(receipt, publication)
                 self.git("update-ref", "--no-deref", "-m", os.environ.get("GIT_REFLOG_ACTION", "sdd:codex"),
                          branch, new, old)
-            except (ValueError, OSError, subprocess.SubprocessError):
+            except subprocess.TimeoutExpired:
+                # A timed-out update-ref can have committed. Consult the receipt and ref.
+                self.recover()
+                raise
+            except (ValueError, OSError):
                 self.recover(declined=True)
                 raise
             self.recover()
@@ -387,9 +403,6 @@ class PrivateGitTurn(GitIndexHandoff):
             raise ValueError("Codex requires HEAD on the mission branch")
         self.old = self.git("rev-parse", "--verify", "HEAD")
         self.check_index()
-        if any(entry[0] == "S" or entry[0].islower() for entry in self.git("ls-files", "-v", "-z").split("\0")
-               if entry):
-            raise ValueError("Codex cannot safely shadow sparse or assume-unchanged index entries")
         self.private = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="sdd-codex-git-"))) / "git"
         self.git("clone", "--quiet", "--mirror", "--shared", "--", str(cwd), str(self.private))
         self.environment = {"GIT_DIR": str(self.private), "GIT_WORK_TREE": str(cwd),
@@ -418,9 +431,12 @@ class PrivateGitTurn(GitIndexHandoff):
 
     def check_index(self):
         try:
-            self.git("diff", "--cached", "--quiet", "--no-ext-diff", self.old, "--")
+            self.git("diff", "--cached", "--quiet", "--no-ext-diff", "--ignore-submodules=none", self.old, "--")
         except ValueError:
             raise ValueError("Codex requires an unchanged, unstaged real Git index") from None
+        if any(entry[0] == "S" or entry[0].islower() for entry in self.git("ls-files", "-v", "-z").split("\0")
+               if entry):
+            raise ValueError("Codex cannot safely shadow sparse or assume-unchanged index entries")
 
     def settings(self):
         values = ", ".join(f"{key}={json.dumps(value, ensure_ascii=False)}"

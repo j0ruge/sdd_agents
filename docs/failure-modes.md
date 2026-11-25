@@ -883,9 +883,9 @@ older stream is history from then on. To retire it sooner, move it out of `.sdd/
 
 ---
 
-## The runner published a draft PR by itself
+## The pipeline moved to draft publication before Grade A
 
-**Symptom:** the mission ends with a **draft** PR and a review that never reached Grade A.
+**Symptom:** Claude proceeds to draft publication, or Codex returns a draft-only handoff to the worker.
 
 **Cause:** `PUBLISH_ON_REVIEW_BLOCKED="draft"` plus a review out of `REVIEW_MAX_ITER` rounds. The
 runner lowered its own bar and carried on — by design, and the one autonomy event where it decides
@@ -901,13 +901,9 @@ hand the mission back to REVIEW with more rounds.
 **Reading the count:** all three trails are written **once per run**, so `review-to-draft: 3` in
 either reader means three runs — never one run that degraded three times.
 
-**If the Claude draft PR gate fails too:** the run ends there, with `BLOCKED in REVIEW` and a
-`blocked` / `budget-exhausted` row naming **REVIEW**. The draft was the one chance, and the phase
-named is the one whose ceiling was actually blown. The runner used to hand REVIEW back instead and
-go round again — REVIEW→PR→REVIEW with the budget still blown — until PR ran out of its own budget
-and the escalation came out blaming **PR**, a phase that was never over budget. If you are reading
-an old ledger and a `budget-exhausted` in PR follows a `review-to-draft`, that is what you are
-looking at.
+**On Claude,** the draft PR phase keeps its ordinary guards and retry. If control returns to
+an exhausted REVIEW, the runner records `blocked` / `budget-exhausted` in REVIEW instead of
+redirecting to draft publication again.
 For Codex, rc 2 hands the draft to the worker under its separate PR authorization.
 Use `sdd why <mission> PR` after publication to inspect the PR gate.
 
