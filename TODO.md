@@ -157,7 +157,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O mutante `range_ancestry_unchecked` só troca a mensagem, e o ancestral segue conferido** —
-  `tests/check-mutation.sh:7448` (`mut_WORKER_range_ancestry_unchecked`) — ele desliga o `"$anc" -eq 1` do
+  `tests/check-mutation.sh:7460` (`mut_WORKER_range_ancestry_unchecked`) — ele desliga o `"$anc" -eq 1` do
   `cmd_pr_ready`, e o `"$anc" -ne 0` logo abaixo recusa o mesmo rc 1 com outra frase: o catálogo o pega pela
   mensagem, e o mundo que o comentário dele promete (uma rodada sobre um commit que o PR largou) nunca é montado.
   Direção: trocar também o `-ne 0` por `-gt 1`, provado por `--only WORKER_range_ancestry_unchecked check-worker.sh`.
@@ -165,7 +165,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **Os probes de nota do `pr-ready` passariam pelo item `dirty` com o leitor de nota frouxo** —
-  `tests/check-worker.sh:1904` (`ready_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
+  `tests/check-worker.sh:1953` (`ready_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
   tabela sem linha editam o `40-review-r2.md` sem `land` e casam só `not-ready review: `, e o `dirty` também
   reprova a árvore suja com esse prefixo: um `pr-ready` que aceitasse B ou A- seguiria vermelho pelo motivo
   errado. Direção: `land` depois de cada edição e exigir o texto do ramo (`grades B`, `has no row for`), como a

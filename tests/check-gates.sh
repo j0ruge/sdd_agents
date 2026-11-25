@@ -141,6 +141,36 @@ EOF
 MDIR="$FIX/docs/handoffs/$MISSION"
 mkdir -p "$MDIR" "$FIX/docs/qa/reports" "$FIX/docs/qa/bugs"
 
+echo "== the read-only status index =="
+# Two distinct mtimes arm the same change in stat data without changing any bytes. The
+# plain status must rewrite the index first, or the query below has nothing to prove.
+NG_INDEX_REPO="$SDD_STATE_FIX/index-repo"
+if ! mkdir -p "$NG_INDEX_REPO/.sdd" "$NG_INDEX_REPO/docs/handoffs/$MISSION" \
+  || ! cp .sdd/config.sh "$NG_INDEX_REPO/.sdd/config.sh" \
+  || ! git init -qb main "$NG_INDEX_REPO" \
+  || ! git -C "$NG_INDEX_REPO" add -f .sdd/config.sh \
+  || ! git -C "$NG_INDEX_REPO" -c user.name=Fixture -c user.email=fixture@example.com commit -qm "index fixture"; then
+  fail "SENSOR-BROKEN: cannot prepare the status index fixture" "a clean committed checkout" "setup failed"
+  exit 1
+fi
+NG_INDEX="$NG_INDEX_REPO/.git/index"
+touch -d '2 minutes ago' "$NG_INDEX_REPO/.sdd/config.sh"
+NG_IX0="$(stat -c '%i' "$NG_INDEX")"
+if ! NG_WITNESS="$(env -u GIT_OPTIONAL_LOCKS git -C "$NG_INDEX_REPO" status --porcelain)" \
+  || ! NG_IX1="$(stat -c '%i' "$NG_INDEX")" \
+  || [ -z "$NG_IX0" ] || [ "$NG_IX0" = "$NG_IX1" ] || [ -n "$NG_WITNESS" ]; then
+  fail "SENSOR-BROKEN: plain status does not rewrite the index of the clean fixture" \
+    "a different inode and no changes" "$NG_IX0 → ${NG_IX1:-missing}; status '${NG_WITNESS:-}'"
+  exit 1
+fi
+touch -d '1 minute ago' "$NG_INDEX_REPO/.sdd/config.sh"
+NG_INDEX_RC=0
+NG_INDEX_OUT="$(CDPATH='' cd "$NG_INDEX_REPO" && env -u GIT_OPTIONAL_LOCKS "$SDD" status "$MISSION" --no-gates 2>&1)" \
+  || NG_INDEX_RC=$?
+assert_eq "sdd status --no-gates reads the tree without rewriting the index of the checkout" \
+  "rc:0 read:1 inode:$NG_IX1" \
+  "rc:$NG_INDEX_RC read:$(grep -cF 'no gate was evaluated' <<< "$NG_INDEX_OUT") inode:$(stat -c '%i' "$NG_INDEX")"
+
 # --- PLAN ------------------------------------------------------------------
 # The artifact file names, the frontmatter keys and the checkpoint header below are CONTRACT and
 # stay exactly as templates/ ships them — they are what the runner parses, and this repo's

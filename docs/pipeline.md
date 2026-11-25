@@ -49,6 +49,8 @@ queries evaluate no gates; commands that load config still execute that trusted 
 `boot` is NOT among them: it derives the phase, so it runs the gates (and `TEST_CMD`) and takes the
 lock like any other command that can run the suite. `status --no-gates` reads the owner from `/proc`
 and never takes the lock itself, so a monitor polling it cannot make a real `run` fail `CHECKOUT-BUSY`.
+It also reads uncommitted paths with `GIT_OPTIONAL_LOCKS=0`, so polling does not take Git's
+`index.lock` or rewrite the index while another process is committing.
 
 A Python standard-library helper holds the kernel lock in a separate session and enables the
 Linux child-subreaper facility before starting the Bash worker. The original CLI PID remains

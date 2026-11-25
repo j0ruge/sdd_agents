@@ -2641,6 +2641,10 @@ mut_STATUS_no_gates_runs_gates() {
   sed -i 's@--no-gates) no_gates=1 ;;@--no-gates) no_gates=0 ;;@' "$1"
 }
 
+mut_STATUS_leftovers_rewrites_index() {
+  sed -i '/^session_leftovers() {/,/^}/ s/GIT_OPTIONAL_LOCKS=0 hat_status_lines/hat_status_lines/' "$1"
+}
+
 # The hat's boundary (2026-09-03 spec). Two flags, one mutant each: dropping either one leaves the
 # session with the human's whole harness — 9 MCP servers including Gmail and Jira, 104 tools —
 # which is the measured "before". The projection prints what run_phase passes FROM THE SAME
@@ -7445,6 +7449,10 @@ mut_WORKER_committed_unchecked() {
 mut_WORKER_committed_ignored_unseen() {
   sed -i '/^cmd_pr_ready() {/,/^}/ s@ status --porcelain --untracked-files=all --ignored -- \. @ status --porcelain --untracked-files=all -- . @' "${1%/*}/sdd-worker"
 }
+
+mut_WORKER_pr_ready_rewrites_index() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s/GIT_OPTIONAL_LOCKS=0 \(git -C "\$dir" -c core\.quotePath=false status\)/\1/' "${1%/*}/sdd-worker"
+}
 # The reviewed head no longer has to be an ancestor of the head: a round over a commit the pull
 # request dropped reads as a review of this history (achado #9 of the mission's review r5). Caught
 # by "range: a commit after the reviewed head that touches code, a merge resolution and a reviewed
@@ -8226,6 +8234,7 @@ CATALOG=(
   RUN_session_died_fires_without_cause
   RUN_close_prompt_bare
   STATUS_no_gates_runs_gates
+  STATUS_leftovers_rewrites_index
   RUN_strict_mcp_dropped
   RUN_disallowed_dropped
   RUN_hat_guard_blind
@@ -8814,6 +8823,7 @@ CATALOG=(
   WORKER_sep_unjustified_by_criterion
   WORKER_committed_unchecked
   WORKER_committed_ignored_unseen
+  WORKER_pr_ready_rewrites_index
   WORKER_range_ancestry_unchecked
   WORKER_range_endpoints_only
   WORKER_range_merge_unseen

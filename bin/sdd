@@ -4691,7 +4691,9 @@ autonomy_kit_stamp() {
     AUTONOMY_SHA_WARNED=1
     AUTONOMY_KIT_STAMP="|"; AUTONOMY_KIT_REV="|"; return 0
   fi
-  if [ -n "$( git -C "$SDD_HOME" status --porcelain 2>/dev/null )" ]
+  # Both reads leave the kit index alone while a target runs and someone may be committing
+  # in the kit. Like kit_guard_tree, neither read has a kit-index probe — DECLARED.
+  if [ -n "$( GIT_OPTIONAL_LOCKS=0 git -C "$SDD_HOME" status --porcelain 2>/dev/null )" ]
   then AUTONOMY_KIT_STAMP="$sha|true"
   else AUTONOMY_KIT_STAMP="$sha|false"; fi
   # %H and then rev-parse --short, so the rev is spelled with the same length rule as kit_sha (a
@@ -4699,7 +4701,7 @@ autonomy_kit_stamp() {
   # readers keep such a row on the raw axis.
   rev_full="$( git -C "$SDD_HOME" log -1 --first-parent --format=%H HEAD -- "${KIT_BEHAVIOR_PATHS[@]}" 2>/dev/null || true )"
   [ -n "$rev_full" ] && rev="$( git -C "$SDD_HOME" rev-parse --short "$rev_full" 2>/dev/null || true )"
-  if [ -n "$( git -C "$SDD_HOME" status --porcelain -- "${KIT_BEHAVIOR_PATHS[@]}" 2>/dev/null )" ]
+  if [ -n "$( GIT_OPTIONAL_LOCKS=0 git -C "$SDD_HOME" status --porcelain -- "${KIT_BEHAVIOR_PATHS[@]}" 2>/dev/null )" ]
   then AUTONOMY_KIT_REV="$rev|true"
   else AUTONOMY_KIT_REV="$rev|false"; fi
 }
@@ -9171,7 +9173,7 @@ session_leftovers() {
     [ -n "$line" ] || continue
     LEFTOVER_DIRTY_N=$((LEFTOVER_DIRTY_N + 1))
     if [ "$LEFTOVER_DIRTY_N" -le 10 ]; then LEFTOVER_DIRTY="${LEFTOVER_DIRTY:+$LEFTOVER_DIRTY$'\n'}$line"; fi
-  done < <(hat_status_lines)
+  done < <( GIT_OPTIONAL_LOCKS=0 hat_status_lines )
   return 0
 }
 
