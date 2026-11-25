@@ -314,7 +314,21 @@ cat > "$FIX/.stub/result-real.jsonl" <<'EOF'
 {"duration_api_ms":12808,"stop_reason":"end_turn","session_id":"a74f8a14-6262-426e-89af-0dc22f5f6f15","total_cost_usd":0.0083415,"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":33165,"output_tokens":1003,"output_tokens_details":{"thinking_tokens":785},"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":"not_available","iterations":[{"input_tokens":10,"output_tokens":1003,"cache_read_input_tokens":33165,"cache_creation_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":10,"outputTokens":1003,"cacheReadInputTokens":33165,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.0083415,"contextWindow":200000,"maxOutputTokens":32000,"thinkingTokens":785,"canonicalModel":"claude-haiku-4-5","provider":"firstParty","costBasis":"list"}},"permission_denials":[],"terminal_reason":"completed","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subagent_stats":{"spawned":0,"requested":{"background":0,"foreground":0,"unset":0},"started_in_background":0,"max_depth":0,"spawned_by_subagents":0,"completed":0,"failed":0,"killed":{"parent":0,"user":0,"system":0},"refused":{"depth_limit":0,"concurrency_limit":0,"budget":0},"by_type":{}},"is_error":false,"num_turns":1,"subtype":"success","api_error_status":null,"result":"I can't run that command. The sdd-executor role has a non-negotiable rule: **Never `git push`, never open a PR, never merge — that belongs to another phase.**\n\nThis is a core constraint, not a suggestion. The executor's job is to:\n\n1. **Write code** and commit locally (via `git commit`)\n2. **Update the checkpoint** with the commit hash\n3. **Stop**\n\nPushing to the remote is the **Publisher phase's responsibility** — it reads the checkpoint, verifies the commits exist locally, and pushes. That separation is deliberate: it prevents accidental pushes of incomplete work and keeps phases independent.\n\nIf you need to push the current `main` branch, you should:\n- Close this executor session (if one is running)\n- Use the Publisher phase, or\n- Push manually from your own terminal with `git push origin main`\n\nIs there something else I should be doing as the executor for the current mission?","ttft_ms":9642,"type":"result","duration_ms":12837,"uuid":"e786808c-558c-460c-b316-63b513121fc7","ttft_stream_ms":1688,"time_to_request_ms":28,"first_content_frame_ms":2020,"queued_turn_count":0}
 EOF
 jq -c '.tools -= ["Bash"]' "$FIX/.stub/init-with-bash.jsonl" > "$FIX/.stub/init-no-bash.jsonl"
-jq -c '.result = "sdd-preflight-ok"' "$FIX/.stub/result-real.jsonl" > "$FIX/.stub/result-ok.jsonl"
+# The Bash call itself (L4 item 6): the probe's `ok` reads the tool_result of a Bash tool_use, never
+# the answer. PROVENANCE: the two content blocks are the ones of a real stream of this probe,
+# captured while planning 20261121-l4-preflight-health-e-sensores (Claude Code 2.1.327, the
+# runner's own command with --agent sdd-executor, rc 0) and quoted in its 01-plano.md ("Um stream
+# real dessa sonda"), with the id swapped; the envelopes are the assistant/user lines of the same
+# shape as tpl-deny-use.jsonl/tpl-deny-result.jsonl below. Every stub that cats result-ok.jsonl
+# now carries the call before the result line, as the real stream does.
+cat > "$FIX/.stub/bash-call.jsonl" <<'EOF'
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_X","name":"Bash","input":{"command":"bash -c 'echo sdd-preflight-ok'","description":"Run the preflight marker"}}]},"parent_tool_use_id":null}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_X","content":"sdd-preflight-ok","is_error":false}]},"parent_tool_use_id":null}
+EOF
+{ cat "$FIX/.stub/bash-call.jsonl"; jq -c '.result = "sdd-preflight-ok"' "$FIX/.stub/result-real.jsonl"; } \
+  > "$FIX/.stub/result-ok.jsonl"
+# The answer alone, with no call behind it: the stub this sensor used before item 6.
+jq -c '.result = "sdd-preflight-ok"' "$FIX/.stub/result-real.jsonl" > "$FIX/.stub/result-answer-only.jsonl"
 
 # Stub A: Bash whatever the flags. The POSITIVE control — without it a probe that failed every
 # session would satisfy every "lacks" below.
@@ -326,6 +340,117 @@ out_hat_ok="$( "$SDD" preflight 2>&1 )"
 assert_has "a session with Bash in its tool list passes the probe, under the executor hat" \
   "headless session under the sdd-executor hat executes commands" "$out_hat_ok"
 assert_lacks "and is not reported as a hat without a shell" "has NO Bash" "$out_hat_ok"
+
+# --- the Bash probe reads the command it ran (L4 item 6) ---
+# bash_stub <init file or -> <stream> — every claude call answers <init> (none for -) then <stream>.
+bash_stub() {
+  local init="$1"; [ "$init" = - ] && init=/dev/null
+  printf '#!/bin/sh\ncat "%s" "%s"\n' "$init" "$2" > "$FIX/.stub/claude"
+}
+BP_OK="ok   headless session under the sdd-executor hat executes commands"
+BP_REPEAT="fail  the headless session answered the marker with no Bash call behind it"
+BP_CANNOT="fail  the headless session CANNOT execute commands"
+bp_verdict() { # <output> → ok=N,repeat=N,cannot=N
+  printf 'ok=%s,repeat=%s,cannot=%s' "$(grep -cF -- "$BP_OK" <<< "$1")" \
+    "$(grep -cF -- "$BP_REPEAT" <<< "$1")" "$(grep -cF -- "$BP_CANNOT" <<< "$1")"
+}
+# The worlds are DERIVED from the capture with jq, never typed: the marker in the tool_result of a
+# Read call, the same Bash call with is_error, and a Bash call whose result lacks the marker.
+{ jq -c '(.message.content[]? | select(.type == "tool_use") | .name) |= "Read"' "$FIX/.stub/bash-call.jsonl"
+  cat "$FIX/.stub/result-answer-only.jsonl"; } > "$FIX/.stub/bp-other-tool.jsonl"
+{ jq -c '(.message.content[]? | select(.type == "tool_result") | .is_error) |= true' "$FIX/.stub/bash-call.jsonl"
+  cat "$FIX/.stub/result-answer-only.jsonl"; } > "$FIX/.stub/bp-errored.jsonl"
+{ jq -c '(.message.content[]? | select(.type == "tool_result") | .content) |= [{"type":"text","text":"command not found"}]' \
+    "$FIX/.stub/bash-call.jsonl"
+  cat "$FIX/.stub/result-answer-only.jsonl"; } > "$FIX/.stub/bp-no-marker.jsonl"
+# The same Bash call with the content as a LIST of text blocks: still the marker.
+{ jq -c '(.message.content[]? | select(.type == "tool_result") | .content) |= [{"type":"text","text":"sdd-preflight-ok"}]' \
+    "$FIX/.stub/bash-call.jsonl"
+  cat "$FIX/.stub/result-answer-only.jsonl"; } > "$FIX/.stub/bp-list.jsonl"
+bp_all=""
+for w in result-ok bp-list bp-other-tool bp-errored bp-no-marker; do
+  bash_stub "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/$w.jsonl"
+  bp_all="$bp_all $w:$(bp_verdict "$( "$SDD" preflight 2>&1 )")"
+done
+assert_eq "preflight says the Bash probe executes only when a Bash tool_result of the stream carries the marker" \
+  " result-ok:ok=1,repeat=0,cannot=0 bp-list:ok=1,repeat=0,cannot=0 bp-other-tool:ok=0,repeat=1,cannot=0 bp-errored:ok=0,repeat=1,cannot=0 bp-no-marker:ok=0,repeat=1,cannot=0" \
+  "$bp_all"
+bash_stub "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/result-answer-only.jsonl"
+out_bp_answer="$( "$SDD" preflight 2>&1 )"
+assert_eq "preflight fails a Bash probe whose answer repeats the marker with no Bash call behind it" \
+  "ok=0,repeat=1,cannot=0" "$(bp_verdict "$out_bp_answer")"
+# The reader of the stream fails (r1 #2 of the L4): a Bash tool_result whose content is a list of
+# bare strings makes text_of index a string, and jq exits 5. The answer carries the marker, so a
+# fallback to "none" blamed the model for repeating it; the failure is the reader's, and said so.
+{ jq -c '(.message.content[]? | select(.type == "tool_result") | .content) |= ["sdd-preflight-ok"]' \
+    "$FIX/.stub/bash-call.jsonl"
+  cat "$FIX/.stub/result-ok.jsonl"; } > "$FIX/.stub/bp-unreadable.jsonl"
+bash_stub "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/bp-unreadable.jsonl"
+out_bp_unread="$( "$SDD" preflight 2>&1 )"
+assert_eq "preflight says the stream of the Bash probe could not be read when jq fails on it, and never that the model repeated the marker" \
+  "unread=1,ok=0,repeat=0,cannot=0,marker=yes" \
+  "unread=$(grep -cF 'fail  the stream of the Bash probe could not be read' <<< "$out_bp_unread"),$(bp_verdict "$out_bp_unread"),marker=$(jq -rs '[.[] | select(.type == "result") | .result // "" | contains("sdd-preflight-ok")] | if any then "yes" else "no" end' "$FIX/.stub/bp-unreadable.jsonl")"
+bash_stub - "$FIX/.stub/result-ok.jsonl"
+out_bp_noinit="$( "$SDD" preflight 2>&1 )"
+assert_eq "preflight claims Bash in the tool list only over an init line" \
+  "noinit:ok=1,list=0 init:ok=1,list=1" \
+  "noinit:ok=$(grep -cF -- "$BP_OK" <<< "$out_bp_noinit"),list=$(grep -cF 'Bash in the tool list' <<< "$out_bp_noinit") init:ok=$(grep -cF -- "$BP_OK" <<< "$out_hat_ok"),list=$(grep -cF 'Bash in the tool list' <<< "$out_hat_ok")"
+
+# --- the hooks every phase loads, and the skills the harness loaded (L4 item 15) ---
+# The same probe stream carries the hook_response lines of the hooks every session runs, and the
+# `.skills` list of the init line, which is the harness's answer about what it loaded — not the
+# directory convention skill_findable reads. PROVENANCE: the keys and values are those of the real
+# stream captured at PLAN, 2026-11-21, Claude Code 2.1.327, mission
+# 20261121-l4-preflight-health-e-sensores (its 01-plano.md, the section on the hooks of that stream: three
+# SessionStart hooks named SessionStart:startup, exit_code 0, outcome success, 3604, 0 and 0 bytes
+# of output). The stream itself is not in the repository (it carries the owner's paths). The output
+# strings are built with jq to the measured lengths; the failing hook is DERIVED from the green one.
+hook_line() { # <id> <bytes> → one hook_response line of the captured shape
+  jq -cn --arg id "$1" --argjson n "$2" '{type:"system",subtype:"hook_response",hook_id:$id,
+    hook_name:"SessionStart:startup",hook_event:"SessionStart",output:("x" * $n // ""),stdout:("x" * $n // ""),
+    stderr:"",exit_code:0,outcome:"success",uuid:("u-" + $id),session_id:"s"}'
+}
+{ hook_line h1 3604; hook_line h2 0; hook_line h3 0; } > "$FIX/.stub/hooks-green.jsonl"
+{ hook_line h1 3604
+  hook_line h2 0 | jq -c '.exit_code = 2 | .outcome = "error" | .stderr = "hook-boom: no such file\nsecond line"'
+  hook_line h3 0; } > "$FIX/.stub/hooks-one-red.jsonl"
+jq -c '.skills -= ["codereview:codereview"]' "$FIX/.stub/init-with-bash.jsonl" > "$FIX/.stub/init-no-review.jsonl"
+jq -c 'del(.skills)' "$FIX/.stub/init-with-bash.jsonl" > "$FIX/.stub/init-no-skills-key.jsonl"
+hk_world() { # <init file or -> <hooks file> → the preflight output over that stream
+  local init="$1"; [ "$init" = - ] && init=/dev/null
+  cat "$2" "$FIX/.stub/result-ok.jsonl" > "$FIX/.stub/hk-stream.jsonl"
+  printf '#!/bin/sh\ncat "%s" "%s"\n' "$init" "$FIX/.stub/hk-stream.jsonl" > "$FIX/.stub/claude"
+  "$SDD" preflight 2>&1
+}
+fails_of() { local l; l="$(grep -oE '[0-9]+ check\(s\) failed' <<< "$1" | tail -1)"; printf '%s' "${l%% *}"; }
+HK_LINE="SessionStart: 3 hook(s), exit codes 0 0 0, 3604 bytes into the context of every session"
+HK_ANY="hook(s), exit codes"
+HK_WARN="warn  hook SessionStart:startup"
+SK_FAIL="fail  skill codereview:codereview, which the REVIEW phase invokes, is not in the skills list"
+out_hk_green="$(hk_world "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/hooks-green.jsonl")"
+out_hk_red="$(hk_world "$FIX/.stub/init-with-bash.jsonl" "$FIX/.stub/hooks-one-red.jsonl")"
+out_sk_noreview="$(hk_world "$FIX/.stub/init-no-review.jsonl" "$FIX/.stub/hooks-green.jsonl")"
+out_sk_nokey="$(hk_world "$FIX/.stub/init-no-skills-key.jsonl" "$FIX/.stub/hooks-green.jsonl")"
+out_hk_noinit="$(hk_world - "$FIX/.stub/hooks-green.jsonl")"
+assert_eq "preflight lists the hooks the probe session ran, one line per event, with the count, the exit codes and the bytes" \
+  "green:line=1,any=1 none:any=0,saw-none=1" \
+  "green:line=$(grep -cF -- "$HK_LINE" <<< "$out_hk_green"),any=$(grep -cF -- "$HK_ANY" <<< "$out_hk_green") none:any=$(grep -cF -- "$HK_ANY" <<< "$out_hat_ok"),saw-none=$(grep -cF 'the probe session ran no hook' <<< "$out_hat_ok")"
+assert_eq "preflight warns by name about a hook that exits non-zero or does not report success, and only about it" \
+  "green:warn=0 red:warn=1,stderr=1,codes=1" \
+  "green:warn=$(grep -cF -- "$HK_WARN" <<< "$out_hk_green") red:warn=$(grep -cF -- "$HK_WARN" <<< "$out_hk_red"),stderr=$(grep -cF 'hook-boom: no such file' <<< "$out_hk_red"),codes=$(grep -cF 'exit codes 0 2 0' <<< "$out_hk_red")"
+# Both counts are read before they are subtracted (r1 #4 of the L4): with the closing line missing,
+# fails_of answers empty, `$(( - ))` is a syntax error, and the assertion below was skipped with no
+# ok and no FAIL. The empty side is named here, and the subtraction reads 0 for it, so it still runs.
+fo_noreview="$(fails_of "$out_sk_noreview")"; fo_green="$(fails_of "$out_hk_green")"
+assert_eq "the hooks block reads both failure counts it subtracts" \
+  "noreview:read green:read" \
+  "noreview:$([ -n "$fo_noreview" ] && echo read || echo unread) green:$([ -n "$fo_green" ] && echo read || echo unread)"
+assert_eq "preflight fails a skill a phase will invoke when the init line of the probe does not list it" \
+  "listed:fail=0 absent:fail=1,more=1" \
+  "listed:fail=$(grep -cF -- "$SK_FAIL" <<< "$out_hk_green") absent:fail=$(grep -cF -- "$SK_FAIL" <<< "$out_sk_noreview"),more=$(( ${fo_noreview:-0} - ${fo_green:-0} ))"
+assert_eq "preflight says nothing about hooks or the skills list without an init line" \
+  "noinit:hooks=0,saw-none=0,skill=0 nokey:skill=0" \
+  "noinit:hooks=$(grep -cF -- "$HK_ANY" <<< "$out_hk_noinit"),saw-none=$(grep -cF 'the probe session ran no hook' <<< "$out_hk_noinit"),skill=$(grep -cF 'is not in the skills list' <<< "$out_hk_noinit") nokey:skill=$(grep -cF 'is not in the skills list' <<< "$out_sk_nokey")"
 
 # Stub B: no Bash when asked AS THE HAT, Bash otherwise — the harness of 2026-09-06.
 cat > "$FIX/.stub/claude" <<STUB
@@ -1406,6 +1531,174 @@ fi
 cp "$PROBE/TODO.md.bak" TODO.md
 mv .sdd/config.sh.bak .sdd/config.sh
 
+# --- the shape of TODO_FILE, measured by preflight itself (L4 item 1) ---------
+# The block above proves the opt-in works once a target has typed it; nothing measured a target
+# that never did, and sales_quote and lighthouse_project carried 209 and 127 violations for
+# missions. So the preflight runs the kit's check-todo.sh on TODO_FILE by itself: ok when clean, a
+# WARN with the count when not (never a fail — those two repos would sit red until a clean-up),
+# the opt-in line only when TEST_CMD does not already carry the sensor, and a "not measured" warn
+# when the file or the sensor is missing, so a silence is never read as an ok. Four worlds: the
+# seeded TODO.md, the same with one malformed finding (2 violations: no anchor, no date), that one
+# under a TEST_CMD naming check-todo.sh (never run: the first command is green), TODO.md deleted,
+# and a kit copy with no tests/ at all.
+echo "== the shape of TODO_FILE, measured by preflight itself =="
+cp .sdd/config.sh .sdd/config.sh.bak
+cp TODO.md "$PROBE/TODO.md.bak"
+TS_OK='ok   TODO_FILE holds its shape (TODO.md)'
+TS_WARN='warn  TODO_FILE does not hold its shape (TODO.md): 2 shape violation(s)'
+TS_OPTIN='--check "$TODO_FILE" --allow-empty --baseline "origin/$DEFAULT_BRANCH"'
+TS_UNMEASURED='warn  the shape of TODO_FILE was not measured (TODO.md)'
+ts_cmd() { { grep -v '^TEST_CMD=' .sdd/config.sh.bak; printf "TEST_CMD='%s'\n" "$1"; } > .sdd/config.sh; }
+ts_count() { grep -cF -- "$1" <<< "$2" || true; }
+ts_cmd "\"$PROBE/suite-green.sh\""
+# A blank line keeps the shape and dirties the tree as the malformed finding does, so the fail count
+# the two worlds compare differs only by what the shape block says.
+printf '\n' >> TODO.md
+ts_clean="$( "$SDD" preflight 2>&1 )"
+sed -i '/^<!-- sdd:open -->$/a - [ ] **a finding with no anchor and no date**' TODO.md
+ts_bad="$( "$SDD" preflight 2>&1 )"
+ts_cmd "\"$PROBE/suite-green.sh\" || bash \"\$SDD_HOME/tests/check-todo.sh\" --check \"\$TODO_FILE\""
+ts_carried="$( "$SDD" preflight 2>&1 )"
+ts_cmd "\"$PROBE/suite-green.sh\""
+rm -f TODO.md
+ts_gone="$( "$SDD" preflight 2>&1 )"
+cp "$PROBE/TODO.md.bak" TODO.md
+TS_KIT="$FIX/.stub/todo-shape-kit"
+mkdir -p "$TS_KIT/bin"
+cp "$SDD" "$ROOT/bin/sdd-coordination.py" "$TS_KIT/bin/"
+ln -sfn "$ROOT/agents" "$TS_KIT/agents"
+ln -sfn "$ROOT/templates" "$TS_KIT/templates"
+ts_nosensor="$( "$TS_KIT/bin/sdd" preflight 2>&1 )"
+fc_clean="$(failed_count "$ts_clean")"; fc_bad="$(failed_count "$ts_bad")"
+assert_eq "preflight measures the shape of TODO_FILE by itself: ok when clean, a warning with the count when not, never a failure" \
+  "clean ok=1 warn=0 / bad ok=0 warn=1 / fails ${fc_clean:-0}" \
+  "clean ok=$(ts_count "$TS_OK" "$ts_clean") warn=$(ts_count "$TS_WARN" "$ts_clean") / bad ok=$(ts_count "$TS_OK" "$ts_bad") warn=$(ts_count "$TS_WARN" "$ts_bad") / fails ${fc_bad:-0}"
+assert_eq "preflight names the opt-in line with --baseline only when TEST_CMD does not carry check-todo.sh" \
+  "clean 0 / bad 1 / carried warn=1 optin=0" \
+  "clean $(ts_count "$TS_OPTIN" "$ts_clean") / bad $(ts_count "$TS_OPTIN" "$ts_bad") / carried warn=$(ts_count "$TS_WARN" "$ts_carried") optin=$(ts_count "$TS_OPTIN" "$ts_carried")"
+assert_eq "preflight says the shape of TODO_FILE was not measured when the file or the sensor is missing" \
+  "gone 1 file=1 ok=0 / no sensor 1 sensor=1 ok=0" \
+  "gone $(ts_count "$TS_UNMEASURED" "$ts_gone") file=$(ts_count "TODO.md does not exist" "$ts_gone") ok=$(ts_count "$TS_OK" "$ts_gone") / no sensor $(ts_count "$TS_UNMEASURED" "$ts_nosensor") sensor=$(ts_count "has no tests/check-todo.sh" "$ts_nosensor") ok=$(ts_count "$TS_OK" "$ts_nosensor")"
+cp "$PROBE/TODO.md.bak" TODO.md
+mv .sdd/config.sh.bak .sdd/config.sh
+
+# --- the process TEST_CMD leaves running, and the suite with no linter (L4 items 3 and 13) ---
+# A TEST_CMD that leaves a build server behind (dotp-remake: 7 MSBuild nodes and VBCSCompiler) made
+# every kit command that runs it wait, and the preflight said "preflight ok" first. run_check_cmd
+# tags the command's environment, and the preflight names every process carrying the tag BEFORE its
+# verdict, by pid and executable (the kernel's comm), never by arguments: the straggler is started
+# under `exec -a` with a recognizable argv[0], which the warning must not carry. Kept short (5 s):
+# the supervisor waits for it before the preflight returns. The lint half: in a tree that carries
+# the suite (tests/check-mutation.sh) and a PATH with no shellcheck, run-all.sh skips its lint step,
+# so the preflight says so; the same PATH in a target repo says nothing.
+echo "== the process TEST_CMD leaves running, and the suite with no linter =="
+cp .sdd/config.sh .sdd/config.sh.bak
+printf '#!/usr/bin/env bash\nbash -c "exec -a l4argvsecret sleep 5" >/dev/null 2>&1 &\nprintf "%%s\\n" "$!" > "%s/straggler-pid"\nexit 0\n' "$PROBE" > "$PROBE/suite-straggler.sh"
+chmod +x "$PROBE/suite-straggler.sh"
+ST_WARN='warn  TEST_CMD left a process running after it exited:'
+sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$PROBE/suite-straggler.sh\"|" .sdd/config.sh
+st_left="$( "$SDD" preflight 2>&1 )"
+st_pid="$(cat "$PROBE/straggler-pid" 2>/dev/null || true)"
+sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$PROBE/suite-green.sh\"|" .sdd/config.sh
+st_none="$( "$SDD" preflight 2>&1 )"
+st_warn_at="$(grep -nF -- "$ST_WARN pid $st_pid, executable sleep" <<< "$st_left" | head -n 1 | cut -d: -f1)"
+st_verdict_at="$(grep -nE 'preflight ok|check\(s\) failed' <<< "$st_left" | tail -n 1 | cut -d: -f1)"
+st_order=after; [ -n "$st_warn_at" ] && [ -n "$st_verdict_at" ] && [ "$st_warn_at" -lt "$st_verdict_at" ] && st_order=before
+assert_eq "preflight warns before its verdict, by pid and executable and never by arguments, about a process TEST_CMD left running" \
+  "warn=1 pid=yes before argv=0" \
+  "warn=$(grep -cF -- "$ST_WARN" <<< "$st_left") pid=$([ -n "$st_pid" ] && grep -qF -- "pid $st_pid, executable sleep" <<< "$st_left" && echo yes || echo no) $st_order argv=$(grep -cF l4argvsecret <<< "$st_left")"
+assert_eq "preflight says nothing of the kind when TEST_CMD leaves nothing behind" \
+  "warn=0 green=1" \
+  "warn=$(grep -cF -- "$ST_WARN" <<< "$st_none") green=$(grep -cF 'TEST_CMD ran green' <<< "$st_none")"
+# A PATH with every command of this one but shellcheck: links, the earlier PATH dirs winning.
+NOSC="$PROBE/path-without-shellcheck"
+mkdir -p "$NOSC"
+IFS=: read -r -a st_dirs <<< "$PATH"
+for (( st_i=${#st_dirs[@]}-1; st_i>=0; st_i-- )); do
+  [ -d "${st_dirs[$st_i]}" ] || continue
+  ln -sf -t "$NOSC" "${st_dirs[$st_i]}"/* 2>/dev/null || true
+done
+rm -f "$NOSC/shellcheck"
+LINT_WARN='warn  shellcheck is not on PATH: the lint step of tests/run-all.sh will be skipped'
+st_have=0; command -v shellcheck >/dev/null 2>&1 && st_have=1
+mkdir -p tests
+: > tests/check-mutation.sh
+st_kit_nosc="$( PATH="$NOSC" "$SDD" preflight 2>&1 )"
+st_kit_path="$( "$SDD" preflight 2>&1 )"
+rm -f tests/check-mutation.sh; rmdir tests 2>/dev/null || true
+st_target_nosc="$( PATH="$NOSC" "$SDD" preflight 2>&1 )"
+assert_eq "preflight warns that the lint step of the suite will be skipped when shellcheck is absent, only in a tree that carries the suite" \
+  "suite without=1 suite with=$(( 1 - st_have )) target without=0" \
+  "suite without=$(grep -cF -- "$LINT_WARN" <<< "$st_kit_nosc") suite with=$(grep -cF -- "$LINT_WARN" <<< "$st_kit_path") target without=$(grep -cF -- "$LINT_WARN" <<< "$st_target_nosc")"
+mv .sdd/config.sh.bak .sdd/config.sh
+
+# --- the preamble of TODO_FILE against the revisions of the template (L4 item 10) ---
+# install seeds TODO.md once and never rewrites it, so a target keeps the preamble of the kit it was
+# installed from while the template moves on, and nothing said so. The preamble (line 1 up to the
+# first <!-- sdd:open -->) is compared with the template of today and with the one of every revision
+# in the kit's git: today's is an ok, an older one a WARN naming the revision, its date and the diff
+# to run (the file left byte for byte), and none at all an author's preamble said in one dim line —
+# the kit's own TODO.md is one, and it must not warn forever. The mutation sandbox copies the kit
+# WITHOUT git, so the probe never leans on the real kit's history: a copy of the kit with a git of its
+# own, two commits (an old preamble, then today's), run by the bin/sdd of the copy; and a second copy
+# with no .git — inside the fixture repo, so a git that answers for the wrong tree is caught too.
+echo "== the preamble of TODO_FILE against the revisions of the template =="
+cp TODO.md "$PROBE/TODO.md.bak"
+PK="$FIX/.stub/preamble-kit"
+mkdir -p "$PK/bin"
+cp "$SDD" "$ROOT/bin/sdd-coordination.py" "$PK/bin/"
+ln -sfn "$ROOT/agents" "$PK/agents"
+cp -r "$ROOT/templates" "$ROOT/config" "$PK/"
+sed -i '3s/.*/An OLD preamble line, as an older kit wrote it./' "$PK/templates/todo.md"
+( cd "$PK" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" && git add -A \
+    && GIT_AUTHOR_DATE='2026-01-02T10:00:00' GIT_COMMITTER_DATE='2026-01-02T10:00:00' git commit -qm "old preamble" \
+    && cp "$ROOT/templates/todo.md" templates/todo.md && git add -A \
+    && GIT_AUTHOR_DATE='2026-02-03T10:00:00' GIT_COMMITTER_DATE='2026-02-03T10:00:00' git commit -qm "today's preamble" ) >/dev/null 2>&1
+PK_OLD="$(git -C "$PK" rev-parse --short=7 HEAD~1 2>/dev/null)"
+PKN="$FIX/.stub/preamble-kit-nogit"
+cp -a "$PK" "$PKN"; rm -rf "$PKN/.git"
+PA_OK='ok   the preamble of TODO.md is the one of templates/todo.md of today'
+PA_STALE="warn  the preamble of TODO.md is the one of templates/todo.md at $PK_OLD (2026-01-02), older than the template of today"
+PA_DIFF="diff <(sed '/^<!-- sdd:open -->/q' "
+PA_AUTHOR='the preamble of TODO.md matches no revision of templates/todo.md'
+PA_ANY='the preamble of TODO.md'
+pa_count() { grep -cF -- "$1" <<< "$2" || true; }
+cp "$ROOT/templates/todo.md" TODO.md
+pa_cur="$( "$PK/bin/sdd" preflight 2>&1 )"
+pa_cur_nogit="$( "$PKN/bin/sdd" preflight 2>&1 )"
+git -C "$PK" show "HEAD~1:templates/todo.md" > TODO.md
+pa_before="$(md5sum < TODO.md)"
+pa_stale="$( "$PK/bin/sdd" preflight 2>&1 )"
+pa_after="$(md5sum < TODO.md)"
+pa_stale_nogit="$( "$PKN/bin/sdd" preflight 2>&1 )"
+sed '3s/.*/A line the author wrote by hand./' "$ROOT/templates/todo.md" > TODO.md
+pa_author="$( "$PK/bin/sdd" preflight 2>&1 )"
+# The same two first worlds through install, over a repo of its own.
+PI="$FIX/.stub/preamble-install"
+mkdir -p "$PI"
+( cd "$PI" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" && echo x > f && git add -A && git commit -qm init ) >/dev/null 2>&1
+cp "$ROOT/templates/todo.md" "$PI/TODO.md"
+pi_cur="$( cd "$PI" && "$PK/bin/sdd" install 2>&1 )"
+git -C "$PK" show "HEAD~1:templates/todo.md" > "$PI/TODO.md"
+pi_before="$(md5sum < "$PI/TODO.md")"
+pi_stale="$( cd "$PI" && "$PK/bin/sdd" install 2>&1 )"
+pi_after="$(md5sum < "$PI/TODO.md")"
+assert_eq "the TODO preamble equal to the template of today is ok, in preflight and in install" \
+  "preflight 1 install 1" \
+  "preflight $(pa_count "$PA_OK" "$pa_cur") install $(pa_count "$PA_OK" "$pi_cur")"
+assert_eq "the TODO preamble equal to an older revision of the template is a warning with the revision, its date and the diff to run, and the file is not rewritten" \
+  "rev 7 / preflight warn=1 diff=1 ok=0 same=1 / install warn=1 diff=1 same=1" \
+  "rev ${#PK_OLD} / preflight warn=$(pa_count "$PA_STALE" "$pa_stale") diff=$(pa_count "$PA_DIFF" "$pa_stale") ok=$(pa_count "$PA_OK" "$pa_stale") same=$([ "$pa_before" = "$pa_after" ] && echo 1 || echo 0) / install warn=$(pa_count "$PA_STALE" "$pi_stale") diff=$(pa_count "$PA_DIFF" "$pi_stale") same=$([ "$pi_before" = "$pi_after" ] && echo 1 || echo 0)"
+assert_eq "the TODO preamble equal to no revision of the template is an author preamble, said in one neutral line" \
+  "author=1 warn=0 any=1" \
+  "author=$(pa_count "$PA_AUTHOR" "$pa_author") warn=$(grep -c "^  warn  $PA_ANY" <<< "$pa_author") any=$(pa_count "$PA_ANY" "$pa_author")"
+assert_eq "a kit that is not a git checkout answers nothing about the TODO preamble" \
+  "current 0 ran=1 / stale 0 ran=1" \
+  "current $(pa_count "$PA_ANY" "$pa_cur_nogit") ran=$(pa_count "the shape of TODO_FILE was not measured" "$pa_cur_nogit") / stale $(pa_count "$PA_ANY" "$pa_stale_nogit") ran=$(pa_count "the shape of TODO_FILE was not measured" "$pa_stale_nogit")"
+cp "$PROBE/TODO.md.bak" TODO.md
+
 # --- third-party skills the phases depend on --------------------------------
 # Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
 # sub-steps boot `qa-report` and `qa-execution`, and REVIEW loads `codereview`. A missing one is
@@ -1868,6 +2161,152 @@ out_sk19_hollow="$(rx_run "$RX_HOME" "$RX_SK19_ROOT" "")"
 assert_eq "a plugin skill missing from the registry is looked for in the cache only under its own plugin tree" \
   "other:floor=1,named=0,tree=1|missing=1,warned=0,link=0,entry= both:where=1,named=0|missing=0,warned=1,link=0,entry=$RX_SK18_CACHE/mk2/codereview hollow:missing=1,warned=0,link=0,entry=" \
   "other:floor=$([ "$sk17_floor" = "$RX_SK17_CACHE/mk/other/1.0.0/skills/codereview" ] && echo 1 || echo 0),named=$(grep -cF "$RX_SK17_CACHE/mk/other" <<< "$out_sk17_other"),tree=$(grep -cxF "        $RX_SK17_CACHE/<marketplace>/<plugin>/<version>/skills/<skill>." <<< "$out_sk17_other")|$(rx_skill "$out_sk17_other") both:where=$(rx_where "$out_sk18_both" "$RX_SK18_CACHE/mk2/codereview"),named=$(grep -cF "$RX_SK18_CACHE/mk/other" <<< "$out_sk18_both")|$(rx_skill "$out_sk18_both") hollow:$(rx_skill "$out_sk19_hollow")"
+
+# The broken pipe (item 12 of the L4). read_rules_cover used to leave its `while … < <(kit_read_rules)`
+# at the first rule that covers the path, and kit_read_rules, on the other side, went on writing:
+# under a caller that ignores SIGPIPE — inherited ignored, and bash cannot un-ignore it — every printf
+# after the reader left said `printf: write error: Broken pipe` beside the verdict. With a few entries
+# the race is almost never lost; with 400 it always is. The world: the skill nobody declared of the
+# first world above, declared as the FIRST entry and followed by 399 that need not exist, so the
+# cover matches early and the producer has the most left to write. The floor proves the poison is
+# armed (under the same trap a SIGPIPE does not kill the shell); the skill line is the witness that
+# the cover ran and answered covered; the reached line says the run got as far as the git state. The
+# count reads `printf: ` under LC_ALL=C, never the translated text.
+echo "== a READ_EXTRA of 400 entries, under a caller that ignores SIGPIPE =="
+pipe_floor="$( ( trap '' PIPE; bash -c 'kill -PIPE $$; echo alive' ) 2>/dev/null || true )"
+pipe_rx="$RX_SK1_ROOT/plugins/cache/mk/codereview"
+for i in $(seq 1 399); do pipe_rx="$pipe_rx $RXF/pipe/entry$i"; done
+out_pipe="$( ( trap '' PIPE; HOME="$RX_SK1_HOME" SDD_SKILLS_ROOT="$RX_SK1_ROOT" READ_EXTRA="$pipe_rx" LC_ALL=C "$SDD" preflight ) 2>&1 || true )"
+assert_eq "preflight prints no write error with READ_EXTRA filled under a caller that ignores SIGPIPE" \
+  "floor:alive skill:missing=0,warned=0,link=0,entry= reached:1 errors:0" \
+  "floor:$pipe_floor skill:$(rx_skill "$out_pipe") reached:$(grep -c '^  ok   git present$' <<< "$out_pipe") errors:$(grep -c 'printf: ' <<< "$out_pipe")"
+
+# The run stops before the session that will be denied (item 7 of the L4, decisions 3 and 9). The
+# preflight warned about a skill found where no read rule covers it, and `sdd run` opened the phase
+# anyway: the REVIEW booted the skill, the harness denied its references, and the session was paid
+# for. phase_skills_check is the one definition both read; under `sdd run` and `sdd retry` the skill
+# found and uncovered, and the plugin whose recorded install lacks it, stop the line before any
+# session and any gate (rc 1, the die), while the skill it does not find and the one whose target the
+# grammar refuses stay warnings — no READ_EXTRA entry fixes either, and the phase may not need them.
+# The worlds are the ones above (SK1 uncovered, SK14 broken, the empty root missing) plus one whose
+# recorded install holds the skill as a symlink to a name the grammar refuses, declared. A repo of
+# its own with one pending increment; the claude stub records every call, so "no session" is its
+# argv file absent, and "the run went on" is the same file present. The differential compares the
+# preflight's sentence with the run's about the same skill, each without its voice's prefix.
+echo "== sdd run stops before a session that will be denied =="
+RR="$RXF/run-repo"
+RR_STUB="$RXF/run-stub"
+mkdir -p "$RR/.sdd" "$RR/docs/handoffs/20260101-skills" "$RR_STUB"
+( cd "$RR" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" ) >/dev/null 2>&1
+printf 'PROJECT_NAME="fixture"\nDEFAULT_BRANCH="main"\nTEST_CMD="true"\nE2E_CMD=""\nHANDOFF_DIR="docs/handoffs"\nQA_DOCS_PATH="docs/qa"\nJIRA_ENABLED=false\n' \
+  > "$RR/.sdd/config.sh"
+printf -- '---\nmissao: 20260101-skills\nbranch: main\naprovacao: auto\n---\n# Mission\n' \
+  > "$RR/docs/handoffs/20260101-skills/00-missao.md"
+: > "$RR/docs/handoffs/20260101-skills/01-plano.md"
+printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n|---|---|---|---|---|\n| I1 | slice | `true` → 0 | pending | — |\n' \
+  > "$RR/docs/handoffs/20260101-skills/checkpoint.md"
+( cd "$RR" && "$SDD" install >/dev/null 2>&1; git add -A && git commit -qm "chore: fixture mission" ) >/dev/null 2>&1
+printf '#!/bin/sh\nfor a in "$@"; do printf "%%s\\n" "$a" >> "%s/argv"; done\nexit 1\n' "$RR_STUB" > "$RR_STUB/claude"
+chmod +x "$RR_STUB/claude"
+# The unreachable world: the recorded install holds skills/codereview as a symlink to `odd[1]`.
+RR_UN_ROOT="$RXF/run-un/.claude"
+RR_UN_REC="$RR_UN_ROOT/plugins/cache/mk/codereview/1.0.0"
+mkdir -p "$RR_UN_REC/skills/odd[1]"
+ln -s 'odd[1]' "$RR_UN_REC/skills/codereview"
+printf '{"version":2,"plugins":{"codereview@mk":[{"scope":"user","installPath":"%s"}]}}\n' \
+  "$RR_UN_REC" > "$RR_UN_ROOT/plugins/installed_plugins.json"
+# rr_do <home> <skills root> <READ_EXTRA> <sdd args…> → the output, then `rc=N` and `session=0|1`
+rr_do() {
+  local h="$1" r="$2" x="$3" o rc=0 s=0; shift 3
+  rm -f "$RR_STUB/argv"; rm -rf "$RXF/run-state"
+  ( cd "$RR" && git checkout -q main 2>/dev/null; git reset -q --hard 2>/dev/null; git clean -qfd 2>/dev/null ) || true
+  o="$( cd "$RR" && PATH="$RR_STUB:$PATH" HOME="$h" SDD_SKILLS_ROOT="$r" READ_EXTRA="$x" \
+        SDD_STATE_DIR="$RXF/run-state" "$SDD" "$@" 2>&1 )" || rc=$?
+  [ ! -f "$RR_STUB/argv" ] || s=1
+  printf '%s\nrc=%s\nsession=%s\n' "$o" "$rc" "$s"
+}
+# rr_says <output> → rc=N,session=N,stop=N,entry=N,broken=N,missing=N,unreach=N
+rr_says() {
+  printf 'rc=%s,session=%s,stop=%s,entry=%s,broken=%s,missing=%s,unreach=%s' \
+    "$(sed -n 's/^rc=//p' <<< "$1")" "$(sed -n 's/^session=//p' <<< "$1")" \
+    "$(grep -c '^error: .* stops before any session' <<< "$1")" \
+    "$(grep -c '^ *READ_EXTRA entry to add: ' <<< "$1")" \
+    "$(grep -c 'is not where the harness loads it' <<< "$1")" \
+    "$(grep -c '^  warn  skills not found: codereview:codereview' <<< "$1")" \
+    "$(grep -c '^  warn  skill codereview:codereview is found in .*, whose target no read rule can cover:' <<< "$1")"
+}
+rr_unc="$(rr_do "$RX_SK1_HOME" "$RX_SK1_ROOT" "" run 20260101-skills --max-phases 1)"
+assert_eq "sdd run stops before any session when a skill a phase invokes is found where no read rule covers it, naming the READ_EXTRA entry to add" \
+  "rc=1,session=0,stop=1,entry=1,broken=0,missing=0,unreach=0" "$(rr_says "$rr_unc")"
+rr_retry="$(rr_do "$RX_SK1_HOME" "$RX_SK1_ROOT" "" retry 20260101-skills)"
+assert_eq "sdd retry stops before any session on the same uncovered skill" \
+  "rc=1,session=0,stop=1,entry=1,broken=0,missing=0,unreach=0" "$(rr_says "$rr_retry")"
+rr_broken="$(rr_do "$RX_HOME" "$RX_SK14_ROOT" "" run 20260101-skills --max-phases 1)"
+assert_eq "sdd run stops before any session on a plugin install that does not hold the skill" \
+  "rc=1,session=0,stop=1,entry=0,broken=1,missing=0,unreach=0" "$(rr_says "$rr_broken")"
+rr_dry="$(rr_do "$RX_SK1_HOME" "$RX_SK1_ROOT" "" run 20260101-skills --dry-run)"
+assert_eq "sdd run --dry-run only warns about an uncovered skill, and still projects" \
+  "rc=0,session=0,stop=0,entry=1,broken=0,missing=0,unreach=0 warned:1 blocks:yes" \
+  "$(rr_says "$rr_dry") warned:$(grep -c '^  warn  skill codereview:codereview is found in ' <<< "$rr_dry") blocks:$(grep -q '^--- DRY RUN: phase ' <<< "$rr_dry" && echo yes || echo no)"
+rr_miss="$(rr_do "$RX_HOME" "$EMPTY_SKILLS" "" run 20260101-skills --max-phases 1)"
+rr_unr="$(rr_do "$RX_HOME" "$RR_UN_ROOT" "$RR_UN_REC/skills/codereview" run 20260101-skills --max-phases 1)"
+assert_eq "sdd run only warns about a skill it does not find, and about one whose target the grammar refuses" \
+  "missing:session=1,stop=0,missing=1 unreachable:session=1,stop=0,unreach=1" \
+  "missing:$(rr_says "$rr_miss" | sed 's/.*\(session=[0-9]*\).*\(stop=[0-9]*\).*\(missing=[0-9]*\).*/\1,\2,\3/') unreachable:$(rr_says "$rr_unr" | sed 's/.*\(session=[0-9]*\).*\(stop=[0-9]*\).*\(unreach=[0-9]*\)$/\1,\2,\3/')"
+# The sentence: from `skill codereview:codereview is found in` through the entry line, the voice's
+# prefix (`  warn  ` or `  fail  `) taken off its first line. Non-empty on both sides, or equal empties
+# would pass.
+rr_sentence() {
+  sed -n '/^  \(warn\|fail\)  skill codereview:codereview is found in /,/READ_EXTRA entry to add: /p' <<< "$1" \
+    | sed '1s/^  \(warn\|fail\)  //'
+}
+rr_pf="$(rr_sentence "$out_sk1_bare")"
+rr_run_s="$(rr_sentence "$rr_unc")"
+assert_eq "preflight and sdd run say the same sentence about the same uncovered skill" \
+  "lines:yes same:yes" \
+  "lines:$([ "$(grep -c . <<< "$rr_pf")" -ge 3 ] && echo yes || echo no) same:$([ "$rr_pf" = "$rr_run_s" ] && echo yes || echo "no<$rr_pf>vs<$rr_run_s>")"
+
+# The dirty tree (item 11 of the L4). The failure said the tree was dirty and named nothing, so the
+# human ran `git status` to learn what the preflight had already read; and when every path was
+# untracked — data the app writes beside the code — nothing said where such data goes. Four worlds on
+# a repo of their own (the fixture's is dirty by construction): clean; a tracked file changed beside
+# an untracked one (both named, no exclude); only untracked files (named, and the exclude file); and
+# twelve untracked files (ten named, the rest counted). The count of the failure line rides beside the
+# paths: the tree stays a `_fail`.
+echo "== the dirty tree names its paths =="
+DT="$FIX/dirty-tree"
+mkdir -p "$DT" && ( cd "$DT" && git init -q -b main && git config user.email "fixture@example.com" \
+  && git config user.name "Fixture" && echo tracked > tracked.txt && "$SDD" install >/dev/null 2>&1 \
+  && git add -A && git commit -qm init ) >/dev/null 2>&1 || exit 1
+dt_run() { ( cd "$DT" && HOME="$RX_HOME" SDD_SKILLS_ROOT="$EMPTY_SKILLS" "$SDD" preflight 2>&1 ) || true; }
+# dt_says <output> → fail=N,paths=<the paths named, comma-joined>,more=N,exclude=N
+dt_says() {
+  printf 'fail=%s,paths=%s,more=%s,exclude=%s' \
+    "$(grep -c '^  fail  working tree dirty — the pipeline needs a clean base' <<< "$1")" \
+    "$(sed -n 's/^        \(??\| M\|M \) \(.*\)$/\2/p' <<< "$1" | paste -sd, -)" \
+    "$(grep -c '^        … and 2 more$' <<< "$1")" \
+    "$(grep -c 'every one of them is untracked.*\.git/info/exclude' <<< "$1")"
+}
+dt_clean="$(dt_run)"
+echo changed > "$DT/tracked.txt"; echo new > "$DT/new.txt"
+dt_mixed="$(dt_run)"
+( cd "$DT" && git checkout -q -- tracked.txt )
+dt_untracked="$(dt_run)"
+for i in 01 02 03 04 05 06 07 08 09 10 11; do echo x > "$DT/u$i.txt"; done
+dt_many="$(dt_run)"
+assert_eq "preflight names the dirty paths, and the exclude file only when every one of them is untracked" \
+  "clean:fail=0,paths=,more=0,exclude=0 mixed:fail=1,paths=tracked.txt,new.txt,more=0,exclude=0 untracked:fail=1,paths=new.txt,more=0,exclude=1 many:fail=1,paths=new.txt,u01.txt,u02.txt,u03.txt,u04.txt,u05.txt,u06.txt,u07.txt,u08.txt,u09.txt,more=1,exclude=1" \
+  "clean:$(dt_says "$dt_clean") mixed:$(dt_says "$dt_mixed") untracked:$(dt_says "$dt_untracked") many:$(dt_says "$dt_many")"
+
+# git status itself fails (r1 #1 of the L4): a corrupt index. The sentinel of the failure began with
+# `?? `, so the untracked test read it as "every path untracked" and named the exclude file.
+cp "$DT/.git/index" "$DT/.git/index.good"; echo junk > "$DT/.git/index"
+dt_gsfail="$(dt_run)"
+mv "$DT/.git/index.good" "$DT/.git/index"
+assert_eq "preflight says git status failed, and never that the dirty paths are untracked, when git status fails" \
+  "gsfail=1,witness=1,exclude=0" \
+  "gsfail=$(grep -c '^  fail  git status failed in ' <<< "$dt_gsfail"),witness=$(grep -c 'index file smaller than expected' <<< "$dt_gsfail"),exclude=$(grep -c 'every one of them is untracked' <<< "$dt_gsfail")"
 
 # --- is anything listening where APP_URL points? ----------------------------
 # preflight ran fifteen checks and never once touched APP_URL, so the one thing that costs a whole
@@ -2644,6 +3083,80 @@ db_ohead="$(git -C "$FIX/db-remote" symbolic-ref --quiet refs/remotes/origin/HEA
 assert_eq "install without origin/HEAD asks the remote, then an existing origin/main or origin/master, and calls the current branch a guess" \
   "origin/HEAD absent; develop/0; main/0; wip/x/1" \
   "origin/HEAD $db_ohead; $(db_answer "$FIX/db-remote"); $(db_answer "$FIX/db-main"); $(db_answer "$FIX/db-none")"
+
+# --- the kit clone off its default branch or behind it (L4 item 2) ---
+# kit_stale_check speaks only for a kit that is a MAIN checkout of its own, on a branch: off the
+# kit's default branch (its own origin/HEAD, never the target's DEFAULT_BRANCH) it names the branch;
+# on it and behind the upstream already fetched it names the count. A linked worktree (a mission of
+# the kit), a detached HEAD (a CI) and a copy with no git of its own (the mutation sandbox, or a copy
+# inside another repo — $FIX is one) say nothing. Each world is a copy of the kit, a repository of
+# its own pushed to a local bare remote, so no assertion depends on the git of the real kit.
+ks_kit() { # ks_kit <dir> — a kit copy committed on main, pushed, origin/HEAD set to main
+  local d="$1" x
+  mkdir -p "$d/bin" || return 1
+  cp "$SDD" "$ROOT/bin/sdd-coordination.py" "$d/bin/" || return 1
+  for x in agents templates config commands; do ln -s "$ROOT/$x" "$d/$x"; done
+  git init -q --bare -b main "$d.remote.git" || return 1
+  ( cd "$d" && git init -q -b main && git config user.email "fixture@example.com" \
+      && git config user.name "Fixture" && git add -A && git commit -qm "kit" \
+      && git remote add origin "$d.remote.git" && git push -q origin main \
+      && git fetch -q origin && git remote set-head origin main ) >/dev/null 2>&1
+}
+KS="$FIX/.stub/ks"
+mkdir -p "$KS"
+ks_kit "$KS/level" || exit 1
+ks_kit "$KS/side" || exit 1; git -C "$KS/side" checkout -q -b side
+ks_kit "$KS/behind" || exit 1
+( cd "$KS/behind" && git commit -q --allow-empty -m a && git commit -q --allow-empty -m b \
+    && git push -q origin main && git reset -q --hard HEAD~2 ) >/dev/null 2>&1
+ks_kit "$KS/trunk" || exit 1
+( cd "$KS/trunk" && git checkout -q -b trunk && git push -q origin trunk \
+    && git remote set-head origin trunk ) >/dev/null 2>&1
+ks_kit "$KS/det" || exit 1; git -C "$KS/det" checkout -q --detach
+git -C "$KS/level" worktree add -q -b wt "$KS/wt" >/dev/null 2>&1
+mkdir -p "$KS/nogit/bin"; cp "$SDD" "$KS/nogit/bin/"
+# The function, called TWICE in one process: the second call is the once-per-process guard's probe.
+# SDD_HOME is readonly in the runner, so the probe drops that one line to point it at the copy.
+cat > "$KS/probe.sh" <<'KSP'
+set -uo pipefail
+# shellcheck disable=SC1090
+source <(sed -e '$d' -e '/^readonly SDD_HOME$/d' "$1") >/dev/null 2>&1
+set +e
+declare -F kit_stale_check >/dev/null || { echo NOFUNC; exit 3; }
+grep -qx 'readonly SDD_HOME' "$1" || { echo NOREADONLY; exit 3; }
+SDD_HOME="$2"; DEFAULT_BRANCH="$3"; DRY_RUN="${4:-0}"
+kit_stale_check; kit_stale_check
+KSP
+ks_say() { bash "$KS/probe.sh" "$SDD" "$1" "${2:-main}" "${3:-0}" 2>&1; } # ks_say <kit> [target DEFAULT_BRANCH] [DRY_RUN]
+KS_OFF="is a checkout of branch"
+KS_BEHIND="commit(s) behind origin/"
+ks_side="$(ks_say "$KS/side")"
+ks_side_pf="$( READ_EXTRA="" "$KS/side/bin/sdd" preflight 2>&1 )" || true
+ks_side_dry="$(ks_say "$KS/side" main 1)"
+# The run and retry doors: over KP_REPO, whose phases the stub claude never reaches (no agent mirror
+# is installed there, so the precondition of run_phase stops each before the session).
+ks_side_run="$( cd "$KP_REPO" && SDD_STATE_DIR="$FIX/.stub/ks-state" READ_EXTRA="" "$KS/side/bin/sdd" run 20260101-kitpath 2>&1 )" || true
+ks_side_retry="$( cd "$KP_REPO" && SDD_STATE_DIR="$FIX/.stub/ks-state" READ_EXTRA="" "$KS/side/bin/sdd" retry 20260101-kitpath 2>&1 )" || true
+assert_eq "a kit checkout off its default branch is named once per process, with the branch it is on" \
+  "fn:1 side:1 preflight:1 run:1 retry:1 dry:0" \
+  "fn:$(grep -cF -- "$KS_OFF 'side', not of its default branch 'main'" <<< "$ks_side") side:$(grep -c "'side'" <<< "$ks_side") preflight:$(grep -cF -- "$KS_OFF 'side'" <<< "$ks_side_pf") run:$(grep -cF -- "$KS_OFF 'side'" <<< "$ks_side_run") retry:$(grep -cF -- "$KS_OFF 'side'" <<< "$ks_side_retry") dry:$(grep -c . <<< "$ks_side_dry")"
+ks_behind="$(ks_say "$KS/behind")"
+assert_eq "a kit checkout behind its fetched upstream is named with the count of commits" \
+  "1 off:0" "$(grep -cF -- "is 2 $KS_BEHIND""main" <<< "$ks_behind") off:$(grep -cF -- "$KS_OFF" <<< "$ks_behind")"
+# The silent worlds are measured before their silence is read (r1 #3 of the L4): both are built with
+# their output thrown away, and a `worktree add` or a `checkout --detach` that failed would leave a
+# world silent for the wrong reason (no directory, or a copy of `level`).
+ks_wt_git="$(git -C "$KS/wt" rev-parse --absolute-git-dir 2>/dev/null)" || ks_wt_git=""
+ks_wt_common="$(git -C "$KS/wt" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || ks_wt_common=""
+assert_eq "the silent worlds of kit_stale_check are a linked worktree and a detached HEAD, measured before their silence is read" \
+  "wt:linked,sdd det:detached,sdd" \
+  "wt:$([ -n "$ks_wt_git" ] && [ -n "$ks_wt_common" ] && [ "$ks_wt_git" != "$ks_wt_common" ] && echo linked || echo "not-linked<$ks_wt_git>"),$([ -f "$KS/wt/bin/sdd" ] && echo sdd || echo no-sdd) det:$(git -C "$KS/det" symbolic-ref -q HEAD >/dev/null 2>&1 && echo on-branch || { git -C "$KS/det" rev-parse -q --verify HEAD >/dev/null 2>&1 && echo detached || echo no-head; }),$([ -f "$KS/det/bin/sdd" ] && echo sdd || echo no-sdd)"
+assert_eq "a kit on its default branch and level with it says nothing, and so does a linked worktree, a detached HEAD and a kit that is not a git checkout" \
+  "level: wt: det: nogit: side-armed:1" \
+  "level:$(ks_say "$KS/level") wt:$(ks_say "$KS/wt") det:$(ks_say "$KS/det") nogit:$(ks_say "$KS/nogit") side-armed:$(grep -c . <<< "$ks_side")"
+assert_eq "the default branch of the kit is its own remote HEAD, never the DEFAULT_BRANCH of the target" \
+  "level-develop: trunk-main: main-of-trunk:1" \
+  "level-develop:$(ks_say "$KS/level" develop) trunk-main:$(ks_say "$KS/trunk" main) main-of-trunk:$( git -C "$KS/trunk" checkout -q main >/dev/null 2>&1; ks_say "$KS/trunk" main | grep -cF -- "$KS_OFF 'main', not of its default branch 'trunk'")"
 
 # ---------------------------------------------------------------------------
 echo

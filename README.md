@@ -69,6 +69,11 @@ read rule for the kit's templates on its allowlist, that they can read the kit's
 ([ADR 0019](docs/adr/0019-the-session-reads-what-the-boot-names.md)) — that is what makes it
 valuable, and what makes it cost money. Do not run it in a loop.
 
+A skill a phase invokes (REVIEW's `codereview:codereview` in every mission) has to be readable by
+the sessions: when it lives outside the repo, declare its directory in `READ_EXTRA`. `sdd run` and
+`sdd retry` **stop before any session** on one that no rule covers, naming the entry to add — see
+[`docs/failure-modes.md`](docs/failure-modes.md#sdd-run-stops-at-launch-sdd-stops-before-any-session).
+
 The kit is English. The **artifacts** of a mission — handoffs, checkpoint, commit messages, PR
 body — are written in whatever the target repo declares in `OUTPUT_LANG`; leave it empty and the
 runner says nothing about language, and each session follows whatever the existing artifacts use.
@@ -173,6 +178,18 @@ has `/sdd-worker` only where Claude Code finds the file, in `~/.claude/commands/
 `.claude/commands/`, linked by hand:
 `ln -s ~/repos/sdd_agents/commands/sdd-worker.md ~/.claude/commands/`. The contracts, the rules and
 the declared limits are in [`docs/pipeline.md`](docs/pipeline.md#the-worker).
+
+For a Codex campaign, set `harness: codex`. Link the worker skill and use `$sdd-worker <campaign-dir>`
+in a new Codex session, or open the worker command instructions directly.
+
+```bash
+mkdir -p ~/.agents/skills
+ln -s ~/repos/sdd_agents/skills/sdd-worker ~/.agents/skills/sdd-worker
+```
+
+Use the kit's `bin/sdd-plan-codex` to start and resume the grill and `PHASE_ENGINE=codex` for the
+mission runner.
+See [Codex campaigns](docs/pipeline.md#codex-campaigns) for prerequisites and delegation.
 
 `sdd run` and `sdd retry` put you on the branch the plan declares (`branch:` in `00-missao.md`)
 before the first gate — checking it out, or cutting it from where you stand. A `<…>` placeholder or

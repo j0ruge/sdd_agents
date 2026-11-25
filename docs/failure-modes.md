@@ -123,6 +123,36 @@ line, so `tail -F` shows it without opening the session's `.json`.
 
 ---
 
+## `sdd run` stops at launch: "sdd stops before any session"
+
+**Symptom:** `sdd run <mission>` or `sdd retry <mission>` exits 1 right after the mission line,
+before switching branch, running a gate or opening a session, with a `fail` line that says
+`skill <skill> is found in <dir>, and no read rule of the sessions covers it` (ending in
+`READ_EXTRA entry to add: …`) or `skill <skill> is not where the harness loads it`, and then
+`error: sdd stops before any session: N skill(s) a phase invokes would boot denied or absent`.
+
+**Cause:** a phase of this config boots that skill (REVIEW's `codereview:codereview` in every
+mission; `ticket` with `JIRA_ENABLED=true`; `qa-report` and `qa-execution` with an interface), and
+the session would not get it. Uncovered: the skill is found, its references live outside the repo,
+and no `READ_EXTRA` entry grants the read, so the harness denies them and the session is paid for
+before the `DENIED` line says so. Broken: the plugin registry records an install that does not hold
+the skill, so the phase boots without it. Both are the sentences `sdd preflight` warns with, from the
+same definition (`phase_skills_check`).
+
+**What you do:**
+- **uncovered:** add the entry the line names to `READ_EXTRA` in the target's `.sdd/config.sh`
+  (written with `$HOME`, as the line prints it), commit it, and launch again.
+- **broken:** reinstall the plugin the line names.
+- **to see the projection anyway:** `sdd run <mission> --dry-run` prints the same lines as warnings
+  and goes on.
+
+A skill the runner does not find, and one whose symlink target has a name the grammar refuses, stay
+warnings: no entry fixes either, and the run goes on. The kit's own suite runs with
+`SDD_SKILLS_ROOT` at an empty directory (`tests/isolate-git.sh`), so its fixture runs never meet the
+machine's skills.
+
+---
+
 ## A `blocked` increment
 
 **Symptom:** `sdd run` exits with code 3 and "BLOCKED in EXEC" straight away, without opening a
@@ -776,19 +806,21 @@ damaged and nothing needs undoing — the phase is derived from the artifacts, s
 where it stopped. For an expired login that is `claude` in your own terminal, not in the
 pipeline.
 
-**What it never does is fire on doubt.** Only a session whose summary carries `is_error: true`
+**When Claude is the harness,** only a session whose summary carries `is_error: true`
 **and** a non-empty `result` string escalates. A session that died with no cause (6 of the 11
 errored sessions measured across the four target repos on 2026-09-18) behaves exactly as it
 always did — `session_error` is `null` and the ordinary retry is still bought. So is the budget
 ceiling (`error_max_budget_usd`, `result: null`), which is the kit's **designed** loop and must
-never stop the line.
+never stop the line. Codex also stops on a failed adapter status, even if the artifact gate passes.
+After addressing the failure, check the current phase with `sdd status <mission>`.
+`sdd retry` re-derives the current phase and opens a fresh session only if a runnable phase is pending.
 
 **Two doors, and the limit is declared.** The first pass and the inline retry, both in `cmd_run`'s
 loop, and both **above their own gate-pass branch**: a session the environment killed stops the
 line even on the rare lap whose gate is satisfied by artifacts an earlier run left behind. That
 placement is the whole of it — with the retry door below the branch, a dying retry whose gate
 passed walked on into the next phase and bought two more sessions against the same dead
-environment before blocking there under the wrong kind. `sdd retry` is the human's hand already on the phase and ends on `retry-gate-red` instead;
+environment before blocking there under the wrong kind. `sdd retry` can end on `retry-gate-red` when its gate fails or `session-died` when the Codex adapter fails.
 `sdd close` does not go through `run_phase`, so nothing arms the marker there.
 
 ---
@@ -851,9 +883,9 @@ older stream is history from then on. To retire it sooner, move it out of `.sdd/
 
 ---
 
-## The runner published a draft PR by itself
+## The pipeline moved to draft publication before Grade A
 
-**Symptom:** the mission ends with a **draft** PR and a review that never reached Grade A.
+**Symptom:** Claude proceeds to draft publication, or Codex returns a draft-only handoff to the worker.
 
 **Cause:** `PUBLISH_ON_REVIEW_BLOCKED="draft"` plus a review out of `REVIEW_MAX_ITER` rounds. The
 runner lowered its own bar and carried on — by design, and the one autonomy event where it decides
@@ -869,13 +901,11 @@ hand the mission back to REVIEW with more rounds.
 **Reading the count:** all three trails are written **once per run**, so `review-to-draft: 3` in
 either reader means three runs — never one run that degraded three times.
 
-**If the draft PR does not close either:** the run ends there, with `BLOCKED in REVIEW` and a
-`blocked` / `budget-exhausted` row naming **REVIEW**. The draft was the one chance, and the phase
-named is the one whose ceiling was actually blown. The runner used to hand REVIEW back instead and
-go round again — REVIEW→PR→REVIEW with the budget still blown — until PR ran out of its own budget
-and the escalation came out blaming **PR**, a phase that was never over budget. If you are reading
-an old ledger and a `budget-exhausted` in PR follows a `review-to-draft`, that is what you are
-looking at.
+**On Claude,** the draft PR phase keeps its ordinary guards and retry. If control returns to
+an exhausted REVIEW, the runner records `blocked` / `budget-exhausted` in REVIEW instead of
+redirecting to draft publication again.
+For Codex, rc 2 hands the draft to the worker under its separate PR authorization.
+Use `sdd why <mission> PR` after publication to inspect the PR gate.
 
 **Do not:** silence it by setting `PUBLISH_ON_REVIEW_BLOCKED="off"` and re-running until the review
 passes. Off is the default precisely because a stop is louder than a draft; switching it on and then
@@ -900,6 +930,41 @@ own should have to say so out loud.
 
 **Not the same as** the next entry: that one is information at install time, this one is a gate
 refusing to spend a session on an agent that is not the one you think you are running.
+
+---
+
+## `sdd run` refuses a phase: "agent sdd-<x> is not installed", in a linked worktree
+
+**Symptom:** `agent sdd-<x> is not installed in <repo>/.claude/agents/ — the harness loads the copy
+and refuses an unknown --agent; this is a linked worktree, and the agent mirrors are ignored links
+of each checkout, so a new worktree starts without them: run 'sdd link-agents' here.` (a warning
+under `--dry-run`).
+
+**Cause:** the target keeps its agent mirrors as ignored links (`sdd-link-agents`), and a link that
+Git ignores is not checked out: every new `git worktree add` starts without them.
+
+**What you do:** `sdd link-agents` in that worktree. In a **main** checkout the same refusal names
+`sdd install --force` instead — there the cause is a kit that gained a hat since the repo was
+installed, and that is still the right command.
+
+---
+
+## `sdd run`, `sdd retry` or `sdd preflight` warns that the kit is off its default branch, or behind it
+
+**Symptom:** `the kit at <dir> is a checkout of branch '<b>', not of its default branch '<d>'`, or
+`the kit at <dir> is <n> commit(s) behind origin/<d> (as last fetched; nothing was fetched now)`,
+once per command.
+
+**Cause:** every phase runs the runner, the hats and the templates of the checkout the `sdd` on the
+PATH resolves to. A kit left on a mission branch, or never pulled, runs older (or unreviewed) code
+than the one you think. The default branch is the kit's own `origin/HEAD` (falling back to
+`origin/main`, then `origin/master`), never the target's `DEFAULT_BRANCH`. Nothing is fetched: the
+count is against the last fetch.
+
+**What you do:** the line names the command — `git -C <dir> switch <d>` or `git -C <dir> pull
+--ff-only`. When the branch is on purpose, ignore it: it is a warning, never a stop. A linked
+worktree of the kit (a kit mission), a detached `HEAD` and a kit that is not a git checkout of its
+own say nothing, and neither does `--dry-run`.
 
 ---
 
@@ -1027,11 +1092,34 @@ rc 3, see the section above), and the reason names this merge.
 
 ---
 
+## TEST_CMD leaves a process running
+
+**Symptom:** `sdd preflight` warns `TEST_CMD left a process running after it exited: pid <n>,
+executable <name>`, and the command does not return until that process ends; a gate, `sdd status`
+or `sdd why` waits the same way, with the supervisor saying that the processes it left running hold
+the checkout.
+
+**Cause:** the command started a process that outlives it, usually a build server. The kit's lock
+on the checkout is released only when every descendant has been reaped, so a server that stays up
+for minutes holds every kit command that runs `TEST_CMD`. Measured in `dotp-remake` (.NET):
+`dotnet build` left seven MSBuild nodes and `VBCSCompiler`. The preflight finds them by a tag that
+`run_check_cmd` puts in the command's environment (`SDD_CHECK_TAG`), and names each by pid and the
+kernel's executable name, never by its arguments, which can carry a credential.
+
+**What you do:** make `TEST_CMD` leave nothing behind. For .NET, both remedies were measured: pass
+`--disable-build-servers` to `dotnet build`/`dotnet test` (nothing is left), or end the command
+with `dotnet build-server shutdown`. Other toolchains were not measured; the rule is the same:
+turn the build server off inside `TEST_CMD`, or shut it down as its last step. A process that
+rebuilt its environment (`env -i`) is not seen by the warning.
+
+---
+
 ## A gate says `TEST_CMD did not run (rc 126/127 …)`
 
 **Symptom:** `gate_EXEC`, `gate_QA` or `gate_REVIEW` refuses with `TEST_CMD did not run (rc 127: …)
 — the suite never started`, usually in a linked worktree; a second lap over the same tree stops as
-`no-work` before opening a session.
+`no-work` before opening a session. Over a dirty tree `gate_EXEC` stops the line at once instead
+(rc 3, `dirty-tree`, below); `gate_QA` and `gate_REVIEW` have no dirty-tree stop.
 
 **Cause:** the shell could not start the command (no such file, no execute bit). A linked worktree
 is born without ignored paths such as `.venv` or `node_modules`, and a `TEST_CMD` that names one
@@ -1040,12 +1128,15 @@ exits 127 there. Since `20261121-l3-gates-do-fim-da-linha` this is its own reaso
 
 **What you do:** give the tree what the line of the reason names (create the `.venv`, run the
 install), then `sdd run` again. Do not hand it to a session: no agent fixes a missing environment
-by editing code. Over a dirty tree the reason reads `…, or stopped at its first step, over a DIRTY
-working tree` and the line stops (rc 3, `dirty-tree`): a log of one line cannot tell a command that
-never started from a silent first step followed by a missing one, so commit what belongs to the
-mission or `git restore` what does not, as well. An exit 127 **after** the log printed output (one
-of the suite's own commands is missing) is read as a suite that started, and says so; that suite ran against the tree, so over a
-dirty tree the dirty-tree stop answers instead. An exit 126 or 127 with no output at all is read as
+by editing code. Over a dirty tree, in `gate_EXEC` only, the reason reads `…, or stopped at its
+first step, over a DIRTY working tree` and the line stops (rc 3, `dirty-tree`): a log of one line
+cannot tell a command that never started from a silent first step followed by a missing one, so
+commit what belongs to the mission or `git restore` what does not, as well. An exit 127 **after**
+the log printed output (one of the suite's own commands is missing) is read as a suite that
+started, and says so, once the log holds more than one non-empty line: a log of exactly one, even
+with output before the error (`printf x; no_such_cmd` puts the `x` and the shell's message on one
+line), reads as a command that did not run; that suite ran against the tree, so over a dirty tree `gate_EXEC` answers
+with its dirty-tree stop instead. An exit 126 or 127 with no output at all is read as
 a red suite, citing its log: the shell always writes its own message when it cannot start a
 command, so a silent one is the suite's own exit status.
 

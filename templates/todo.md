@@ -30,6 +30,9 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > file numbers its items, and a bare `#N` in a body that matches the number of an item is
 > refused: to one reader it is item N, to another PR N. Write `item N`, or `PR #N`, `issue #N`
 > or `owner/repo#N` for what is not the item. In a file that numbers nothing, a `#N` passes.
+> A bare `PR #N` is a merged pull request of this repository: under `--baseline`, a new item's
+> `PR #N` passes only when a commit subject cites `#N`. Anything else, an open PR of this
+> repository included, goes as `owner/repo#N`.
 >
 > **Decided record** — one physical line, no box, pointing at the evidence:
 >

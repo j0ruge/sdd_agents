@@ -1,0 +1,719 @@
+#!/usr/bin/env python3
+"""Run one Codex turn under an SDD hat and normalize its native JSONL stream."""
+import argparse
+from contextlib import ExitStack
+from decimal import Decimal
+import fcntl
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+from urllib.parse import urlsplit
+import uuid
+
+HATS = (
+    "sdd-ticket", "sdd-planner", "sdd-executor", "sdd-qa", "sdd-reviewer",
+    "sdd-docs", "sdd-publisher", "sdd-kaizen", "preflight",
+)
+PRICE_VERSION = "openai-api-standard-short-context-2026-11-24"
+PRICE_USD_PER_MILLION = {
+    "gpt-6.2-sol": (Decimal("2"), Decimal("0.10"), Decimal("10")),
+    "gpt-6.2-astra": (Decimal("8"), Decimal("0.40"), Decimal("40")),
+}
+TOKEN_KEYS = ("input_tokens", "cached_input_tokens", "output_tokens")
+SHORT_CONTEXT_INPUT_LIMIT = 272_000
+JIRA_DOMAINS = ("*.atlassian.net", "api.atlassian.com", "auth.atlassian.com", "id.atlassian.com")
+CODE_HOSTS = ("github.com", "githubusercontent.com", "gitlab.com", "bitbucket.org",
+              "azure.com", "visualstudio.com", "codeberg.org", "sr.ht", "gitea.com")
+DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", re.ASCII)
+REQUIRED_FLAGS = ("--json", "--strict-config", "--ignore-user-config", "--ignore-rules")
+MAX_TURN_SECONDS = 3600
+OID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
+GIT_ENV_KEEP = {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM",
+                "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME",
+                "GIT_COMMITTER_EMAIL", "GIT_REFLOG_ACTION"}
+
+
+def git_environment():
+    """Ignore Git routing overrides while retaining host identity and global config."""
+    return {key: value for key, value in os.environ.items()
+            if not key.startswith("GIT_") or key in GIT_ENV_KEEP}
+
+
+def turn_timeout():
+    """Use GNU timeout to bound the provider process group without changing USD accounting."""
+    binary = shutil.which("timeout")
+    if not binary:
+        raise ValueError("Codex requires GNU timeout on PATH")
+    value = os.environ.get("SDD_CODEX_MAX_TURN_SECONDS", str(MAX_TURN_SECONDS))
+    if not re.fullmatch(r"[1-9][0-9]{0,3}", value) or int(value) > MAX_TURN_SECONDS:
+        raise ValueError(f"SDD_CODEX_MAX_TURN_SECONDS must be between 1 and {MAX_TURN_SECONDS}")
+    return binary, int(value)
+
+
+def shell_policy(private):
+    """Pass only basic shell settings, plus the adapter's private Git routing."""
+    allow = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "GIT_REFLOG_ACTION")
+    environment = {key: os.environ[key] for key in allow if key in os.environ}
+    environment.setdefault("PATH", os.defpath)
+    environment.setdefault("HOME", str(Path.home()))
+    if private is not None:
+        environment.update(private.environment)
+    values = ", ".join(f"{key}={json.dumps(value, ensure_ascii=False)}" for key, value in environment.items())
+    return ["-c", 'shell_environment_policy.inherit="none"', "-c", f"shell_environment_policy.set={{{values}}}"]
+
+
+def emit(native_event=None, **event):
+    event["provider"] = "codex"
+    if native_event is not None:
+        event["native_event"] = native_event
+    print(json.dumps(event, separators=(",", ":")), flush=True)
+
+
+def native_uuid(value):
+    try:
+        return str(uuid.UUID(value)) if isinstance(value, str) else None
+    except ValueError:
+        return None
+
+
+def usage_totals(turns):
+    totals = {}
+    for key in TOKEN_KEYS:
+        values = [turn.get(key) if isinstance(turn, dict) else None for turn in turns]
+        totals[key] = sum(values) if values and all(type(v) is int and v >= 0 for v in values) else None
+    totals["cache_read_input_tokens"] = totals["cached_input_tokens"]
+    return totals
+
+
+def estimate_cost(model, turns, failed, unexpected_metadata):
+    source = f"https://developers.openai.com/api/docs/models/{model}" if model in PRICE_USD_PER_MILLION else None
+    basis = {
+        "price_table": PRICE_VERSION,
+        "source": source,
+        "assumptions": ["Standard API reference, not an account charge",
+                        "no unreported cache writes, all request contexts at or below 272K",
+                        "token counts from native turn summaries, model from adapter request"],
+        "unknown_reason": None,
+    }
+    reason = None
+    total = Decimal(0)
+    if failed:
+        reason = "invocation incomplete or unsuccessful"
+    elif model not in PRICE_USD_PER_MILLION:
+        reason = "model absent from fixed price table"
+    elif not turns:
+        reason = "no completed turn usage"
+    elif unexpected_metadata:
+        reason = "non-Standard or unmodeled pricing metadata reported"
+    else:
+        input_rate, cached_rate, output_rate = PRICE_USD_PER_MILLION[model]
+        for turn in turns:
+            values = usage_totals([turn])
+            inp, cached, output = (values[k] for k in TOKEN_KEYS)
+            if None in (inp, cached, output) or cached > inp:
+                reason = "missing or invalid native token counts"
+                break
+            if inp == 0 and output == 0:
+                reason = "native summary has no measured tokens"
+                break
+            if inp > SHORT_CONTEXT_INPUT_LIMIT:
+                reason = "turn usage cannot distinguish short and long context requests"
+                break
+            total += (inp - cached) * input_rate + cached * cached_rate + output * output_rate
+    if reason:
+        basis["unknown_reason"] = reason
+    return (float(total / 1_000_000) if not reason else None), basis
+
+
+def qa_app_host(value):
+    host = value.lower()
+    if "%" in host:
+        raise ValueError("QA host may not include an IPv6 zone or escapes")
+    try:
+        host = str(ipaddress.ip_address(host))
+    except ValueError:
+        if len(host) > 253 or not all(DNS_LABEL.fullmatch(label) for label in host.split(".")):
+            raise ValueError("QA host must be one exact DNS name or IP literal") from None
+    if any(host == domain or host.endswith(f".{domain}") for domain in CODE_HOSTS):
+        raise ValueError("QA host must not be a Git publication service")
+
+    # Inspect remote hosts only; never log the URL (it might embed authentication).
+    remotes = subprocess.run(["git", "remote", "-v"], check=True, capture_output=True, text=True, timeout=10,
+                             env=git_environment())
+    for line in remotes.stdout.splitlines():
+        _, sep, remote = line.partition("\t")
+        if not sep:
+            continue
+        remote = remote.rsplit(None, 1)[0]
+        if "://" in remote:
+            try:
+                remote_host = urlsplit(remote).hostname
+            except ValueError:
+                raise ValueError("cannot validate QA host against a malformed Git remote") from None
+        else:
+            match = re.match(r"^(?:[^@/:]+@)?(\[[^]]+\]|[^/:]+):", remote)
+            remote_host = match.group(1).strip("[]") if match else None
+        if not remote_host:
+            continue
+        remote_host = remote_host.lower().rstrip(".")
+        try:
+            remote_host = str(ipaddress.ip_address(remote_host))
+        except ValueError:
+            pass  # DNS names do not have an IP literal spelling.
+        if remote_host == host:
+            raise ValueError("QA host must not be a Git remote of the checkout")
+    return host
+
+
+def git_metadata(cwd):
+    query = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"],
+                           cwd=cwd, capture_output=True, text=True, timeout=10, env=git_environment())
+    if query.returncode or len(query.stdout.splitlines()) != 2:
+        raise ValueError("could not resolve Git metadata for the Codex worktree sandbox")
+    git_dir, common = (Path(path).resolve() for path in query.stdout.splitlines())
+    if git_dir == common:
+        if git_dir != cwd / ".git":
+            raise ValueError("Codex worktree sandbox requires the root of a standard Git checkout")
+    elif not (cwd.joinpath(".git").is_file() and git_dir.parent == common / "worktrees"):
+        raise ValueError("Codex worktree sandbox did not recognize this linked Git checkout")
+
+    return git_dir, common
+
+
+def git_access_profile(cwd, network, private_git):
+    """Mount the real Git stores read-only and grant writes only to private Git."""
+    git_dir, common = git_metadata(cwd)
+    paths = {common: "read", git_dir: "read", cwd / ".git": "read", cwd / ".sdd": "read"}
+    if private_git is not None:
+        paths[private_git] = "write"
+    worktrees = subprocess.check_output(["git", "worktree", "list", "--porcelain", "-z"],
+                                        cwd=cwd, text=True, timeout=10, env=git_environment())
+    for entry in worktrees.split("\0"):
+        if entry.startswith("worktree "):
+            sibling = Path(entry.removeprefix("worktree ")).resolve()
+            if sibling != cwd and not cwd.is_relative_to(sibling):
+                paths[sibling] = "read"
+
+    filesystem = ", ".join(f'{json.dumps(str(p), ensure_ascii=False)} = "{access}"'
+                           for p, access in paths.items())
+    return ["-c", 'default_permissions="sdd-workspace"', "-c",
+            ('permissions={sdd-workspace={extends=":workspace", '
+             f'filesystem={{{filesystem}}}, network={{enabled = {str(network).lower()}}}}}}}')]
+
+
+def never_escalate(read_only, network, allowed_domains=(), private_git=None):
+    # Ignore exec policy files too. A prefix rule granting allow can dispatch a command
+    # outside the sandbox without an approval, even with approval_policy=never.
+    cwd = json.dumps(str(Path.cwd()), ensure_ascii=False)
+    settings = [
+        "-c", 'approval_policy="never"',
+        "-c", f'projects={{{cwd} = {{trust_level = "untrusted"}}}}',
+        "-c", 'mcp_servers={}',
+        "-c", 'features.apps=false',
+        "-c", 'features.plugins=false',
+        "-c", 'features.hooks=false',
+        "-c", 'features.multi_agent=false',
+        "-c", 'features.multi_agent_v2=false',
+        "-c", 'features.in_app_browser=false',
+        "-c", 'features.skill_mcp_dependency_install=false',
+        "-c", 'web_search="disabled"',
+    ]
+    if read_only:
+        settings.extend(["-c", 'default_permissions=":read-only"'])
+    elif network is not None:
+        settings.extend(git_access_profile(Path.cwd(), network, private_git))
+    else:
+        # Preflight can run from a non-Git directory and still probes the native sandbox.
+        settings.extend(["-c", 'default_permissions=":workspace"'])
+    if allowed_domains:
+        domains_toml = ", ".join(f'{json.dumps(domain)} = "allow"' for domain in allowed_domains)
+        settings.extend(["-c", "features.network_proxy.enabled=true",
+                         "-c", "features.network_proxy.allow_upstream_proxy=false",
+                         "-c", 'features.network_proxy.mode="full"',
+                         "-c", f"features.network_proxy.domains={{{domains_toml}}}"])
+    else:
+        settings.extend(["-c", "features.network_proxy=false"])
+    return settings
+
+
+def preflight(binary):
+    # These checks inspect the CLI, auth and sandbox locally. They do not start a model turn.
+    try:
+        states = [
+            [binary, "--version"],
+            [binary, "exec", "--help"],
+            [binary, "exec", "resume", "--help"],
+            [binary, "login", "status"],
+            [binary, *never_escalate(False, None), "sandbox", "--", "/usr/bin/true"],
+        ]
+        for index, command in enumerate(states):
+            result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+            if result.returncode:
+                label = ("version", "exec flags", "resume flags", "login", "sandbox")[index]
+                print(f"sdd-codex: {label} check failed: {(result.stderr or result.stdout).strip()}",
+                      file=sys.stderr)
+                return 1
+            if index in (1, 2) and any(flag not in result.stdout for flag in REQUIRED_FLAGS):
+                print("sdd-codex: installed CLI lacks required exec isolation/JSON flags", file=sys.stderr)
+                return 1
+            if index in (0, 3):
+                print((result.stdout or result.stderr).strip())
+        with tempfile.TemporaryDirectory(prefix="sdd-codex-preflight-") as directory:
+            sentinel = Path(directory) / "read-only"
+            sentinel.write_text("sandbox preflight\n", encoding="utf-8")
+            probe = """import errno, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+if path.read_text() != "sandbox preflight\\n":
+    raise SystemExit(1)
+try:
+    with path.open("ab"):
+        pass
+except OSError as exc:
+    if exc.errno not in (errno.EACCES, errno.EPERM, errno.EROFS):
+        raise
+else:
+    raise SystemExit("write was not denied")
+"""
+            result = subprocess.run(
+                [binary, *never_escalate(True, None), "sandbox", "--",
+                 sys.executable, "-c", probe, str(sentinel)],
+                capture_output=True, text=True, timeout=15,
+            )
+            if result.returncode:
+                print("sdd-codex: read-only sandbox permission probe failed", file=sys.stderr)
+                return 1
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"sdd-codex: preflight failed: {error}", file=sys.stderr)
+        return 1
+    print("sdd-codex: CLI, login and command sandbox available")
+    return 0
+
+
+def sandbox_check(binary, command, qa_host):
+    domains = (qa_app_host(qa_host),) if qa_host is not None else ()
+    with tempfile.TemporaryDirectory(prefix="sdd-codex-check-") as home:
+        variables = ("PATH", "LANG", "LC_ALL", "TZ", "SDD_CHECK_TAG")
+        environment = [f"{name}={os.environ[name]}" for name in variables if name in os.environ]
+        result = subprocess.run(
+            [binary, *never_escalate(False, bool(domains), domains), "sandbox", "--",
+             "/usr/bin/env", "-i", f"HOME={home}", *environment,
+             "bash", "--noprofile", "--norc", "-u", "-o", "pipefail", "-c", command],
+            stdin=subprocess.DEVNULL,
+        )
+    return result.returncode
+
+
+class GitIndexHandoff:
+    """Serialize index publication and recover it after a process interruption."""
+
+    intent_name = "sdd-codex-index.json"
+
+    def git(self, *arguments, env=None):
+        command = ["git", "--no-replace-objects", "-c", "core.hooksPath=/dev/null", *arguments]
+        result = subprocess.run(command, cwd=self.cwd, env=env if env is not None else git_environment(),
+                                capture_output=True, text=True, encoding="utf-8", errors="surrogateescape", timeout=120)
+        if result.returncode:
+            raise ValueError(f"Git {arguments[0]} failed during the Codex commit handoff")
+        return result.stdout.strip()
+
+    def __init__(self, stack, cwd):
+        self.cwd = cwd
+        self.git_dir, self.common = git_metadata(cwd)
+        self.index = self.git_dir / "index"
+        self.lock = self.git_dir / "index.lock"
+        self.intent = self.git_dir / self.intent_name
+        lease = stack.enter_context((self.git_dir / "sdd-codex-index.lease").open("ab"))
+        try:
+            fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("Another Codex Git handoff owns this checkout") from None
+        self.recover()
+
+    @staticmethod
+    def file_id(path):
+        try:
+            info = path.stat(follow_symlinks=False)
+            return [info.st_dev, info.st_ino]
+        except FileNotFoundError:
+            return None
+
+    @staticmethod
+    def index_digest(path, *, sync=False):
+        try:
+            with path.open("rb") as stream:
+                if sync:
+                    os.fsync(stream.fileno())
+                return hashlib.file_digest(stream, "sha256").hexdigest()
+        except FileNotFoundError:
+            return None
+
+    def sync_git_dir(self):
+        descriptor = os.open(self.git_dir, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def recover(self, declined=False, attempted=False):
+        """Finish only the recorded index installation or release its own lock."""
+        try:
+            record = json.loads(self.intent.read_text())
+        except FileNotFoundError:
+            return
+        if not isinstance(record, dict):
+            raise ValueError("Invalid Codex Git handoff receipt")
+        branch, old, new, identity = (record.get(key) for key in ("branch", "old", "new", "index"))
+        if not (all(isinstance(value, str) for value in (branch, old, new)) and branch.startswith("refs/heads/")
+                and OID.fullmatch(old) and OID.fullmatch(new) and isinstance(identity, list)
+                and len(identity) == 2 and all(type(value) is int for value in identity)
+                and type(record.get("eligible")) is bool and type(record.get("installed", False)) is bool):
+            raise ValueError("Invalid Codex Git handoff receipt")
+        prepared = record.get("prepared_index")
+        owned_lock = self.file_id(self.lock) == identity
+        if prepared and owned_lock:
+            owned_lock = self.index_digest(self.lock) == prepared
+        if declined or not record["eligible"]:
+            if owned_lock:
+                self.lock.unlink()
+            self.intent.unlink()
+            return
+        head = self.git("symbolic-ref", "HEAD")
+        tip = self.git("rev-parse", "--verify", branch)
+        landed = head == branch and tip == new
+        if landed:
+            installed = record.get("installed") and self.file_id(self.index) is not None
+            if not installed:
+                if owned_lock and prepared:
+                    self.lock.replace(self.index)
+                elif not prepared or self.index_digest(self.index) != prepared:
+                    raise ValueError(f"Codex branch advanced but cannot verify the prepared index; inspect {self.intent.name}")
+                # Persist the installation evidence before cleanup. Git may rewrite the index.
+                self.sync_git_dir()
+                self.record({**record, "installed": True})
+        elif attempted or (head == branch and tip == old):
+            if owned_lock:
+                self.lock.unlink()
+        else:
+            raise ValueError("The checkout moved with an unfinished Codex Git handoff")
+        self.intent.unlink()
+        return landed
+
+    def record(self, publication):
+        """Write a complete receipt before replacing the previous version."""
+        with tempfile.TemporaryDirectory(dir=self.git_dir, prefix="sdd-codex-receipt-") as temporary:
+            path = Path(temporary) / "receipt"
+            with path.open("w", encoding="utf-8") as output:
+                json.dump(publication, output)
+                output.flush()
+                os.fsync(output.fileno())
+            path.replace(self.intent)
+            self.sync_git_dir()
+
+    def advance(self, branch, old, new, check_index):
+        """Record the replacement before updating the ref, then publish it under Git's lock."""
+        with tempfile.TemporaryDirectory(dir=self.git_dir, prefix="sdd-codex-index-") as stage:
+            replacement = Path(stage) / "index"
+            self.git("read-tree", new, env={**git_environment(), "GIT_INDEX_FILE": str(replacement)})
+            publication = dict(branch=branch, old=old, new=new, index=self.file_id(replacement),
+                               prepared_index=self.index_digest(replacement, sync=True), eligible=False)
+            # Receipt precedes the lock, so an interruption never leaves an unidentifiable lock.
+            self.record(publication)
+            try:
+                os.link(replacement, self.lock)
+            except OSError:
+                self.intent.unlink()
+                raise
+            try:
+                if self.git("symbolic-ref", "HEAD") != branch:
+                    raise ValueError("The mission checkout's branch changed during the Codex turn")
+                check_index()
+                publication["eligible"] = True
+                self.record(publication)
+            except (ValueError, OSError, subprocess.SubprocessError):
+                self.recover(declined=True)
+                raise
+            try:
+                self.git("update-ref", "--no-deref", "-m", os.environ.get("GIT_REFLOG_ACTION", "sdd:codex"),
+                         branch, new, old)
+            except (ValueError, OSError, subprocess.SubprocessError):
+                # Even a nonzero Git status can follow a successful ref rename.
+                if not self.recover(attempted=True):
+                    raise
+                return
+            self.recover()
+
+
+class PrivateGitTurn(GitIndexHandoff):
+    """Stage native commits privately and admit only a fast-forward of the captured branch."""
+
+    def __init__(self, stack, cwd, binary):
+        super().__init__(stack, cwd)
+        self.binary = binary
+        self.branch = self.git("symbolic-ref", "HEAD")
+        if not self.branch.startswith("refs/heads/"):
+            raise ValueError("Codex requires HEAD on the mission branch")
+        self.old = self.git("rev-parse", "--verify", "HEAD")
+        self.check_index()
+        self.private = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="sdd-codex-git-"))) / "git"
+        self.git("clone", "--quiet", "--mirror", "--shared", "--", str(cwd), str(self.private))
+        self.environment = {"GIT_DIR": str(self.private), "GIT_WORK_TREE": str(cwd),
+                            "GIT_NO_REPLACE_OBJECTS": "1"}
+        private_env = {**git_environment(), **self.environment}
+        if self.git("rev-parse", "--verify", self.branch, env=private_env) != self.old:
+            raise ValueError("The mission branch moved while preparing private Git")
+        self.git("symbolic-ref", "HEAD", self.branch, env=private_env)
+        self.git("read-tree", self.old, env=private_env)
+        self.git("config", "--remove-section", "remote.origin", env=private_env)
+        # Carry declarative Git behavior only. Never import hooks, filters or credential config.
+        keys = ("user.name", "user.email", "core.filemode", "core.ignorecase", "core.autocrlf",
+                "core.eol", "core.symlinks", "core.excludesfile")
+        for key in keys:
+            kind = ("--path",) if key == "core.excludesfile" else ()
+            result = subprocess.run(["git", "config", *kind, "--get", key], cwd=cwd, env=git_environment(),
+                                    capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                self.git("config", key, result.stdout.removesuffix("\n"), env=private_env)
+            elif result.returncode != 1:
+                raise ValueError("Could not resolve Git settings for the Codex turn")
+        excludes = self.common / "info" / "exclude"
+        if excludes.is_file():
+            (self.private / "info").mkdir(exist_ok=True)
+            shutil.copyfile(excludes, self.private / "info" / "exclude")
+
+    def check_index(self):
+        try:
+            self.git("diff", "--cached", "--quiet", "--no-ext-diff", "--ignore-submodules=none", self.old, "--")
+        except ValueError:
+            raise ValueError("Codex requires an unchanged, unstaged real Git index") from None
+        if any(entry[0] == "S" or entry[0].islower() for entry in self.git("ls-files", "-v", "-z").split("\0")
+               if entry):
+            raise ValueError("Codex cannot safely shadow sparse or assume-unchanged index entries")
+
+    def sandbox_git(self, *arguments, stdout=subprocess.PIPE):
+        # Inspect the private store inside the native sandbox, never with host-side Git config.
+        command = [self.binary, *never_escalate(False, False, private_git=self.private),
+                   "sandbox", "--", "/usr/bin/env", "-i", f"PATH={os.defpath}",
+                   *(f"{key}={value}" for key, value in self.environment.items()),
+                   "git", *arguments]
+        result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=stdout, stderr=subprocess.PIPE,
+                                timeout=120)
+        if result.returncode:
+            raise ValueError(f"Private Git {arguments[0]} failed during the Codex commit handoff")
+        return result.stdout.decode("utf-8", "surrogateescape").strip() if result.stdout else ""
+
+    def promote(self):
+        if self.sandbox_git("symbolic-ref", "HEAD") != self.branch:
+            raise ValueError("Codex changed the private checkout's branch")
+        new = self.sandbox_git("rev-parse", "--verify", self.branch)
+        if not OID.fullmatch(new):
+            raise ValueError("Codex proposed an invalid Git object ID")
+        if new == self.old:
+            return
+        self.sandbox_git("merge-base", "--is-ancestor", self.old, new)
+        # Bundle bytes go to a host-owned file under real metadata (read-only in the sandbox).
+        with tempfile.NamedTemporaryFile(dir=self.git_dir, prefix="sdd-codex-", suffix=".bundle") as bundle:
+            self.sandbox_git("bundle", "create", "-", self.branch, "--not", self.old, stdout=bundle)
+            if self.git("bundle", "list-heads", bundle.name) != f"{new} {self.branch}":
+                raise ValueError("Codex proposed a different Git branch or object than inspected")
+            self.git("bundle", "unbundle", bundle.name)
+        self.git("merge-base", "--is-ancestor", self.old, new)
+        self.advance(self.branch, self.old, new, self.check_index)
+
+
+def error_message(event):
+    error = event.get("error")
+    if isinstance(error, dict) and isinstance(error.get("message"), str) and error["message"].strip():
+        return error["message"]
+    return next((event[key] for key in ("message", "description")
+                 if isinstance(event.get(key), str) and event[key].strip()), None)
+
+
+def stream_turn(child, args, version, private_git=None, deadline=None):
+    session_id, last_message, recent_error = None, None, None
+    problems, turn_usage = [], []
+    terminal_completed = False
+    unexpected_metadata = False
+    for line in child.stdout:
+        try:
+            event = json.loads(line)
+            if not isinstance(event, dict) or not isinstance(event.get("type"), str):
+                raise ValueError("not a typed native event")
+        except ValueError:
+            if line.strip():
+                problems.append("malformed native Codex JSONL")
+                emit(type="codex_malformed_event", text=line.rstrip("\n"))
+            continue
+        native_type = event["type"]
+        attributes = {"type": "codex_event", "subtype": native_type}
+        if native_type == "thread.started":
+            native_id = native_uuid(event.get("thread_id"))
+            if not native_id or (args.resume and native_id != args.resume) or (session_id and native_id != session_id):
+                problems.append("unexpected native Codex thread ID")
+            else:
+                session_id = native_id
+                # The native start event proves identity, not a tools inventory.
+                attributes = {"type": "system", "subtype": "init", "session_id": session_id,
+                              "model": args.model, "codex_cli_version": version,
+                              "tools": ["Bash"], "mcp_servers": [], "tool_inventory": "configured"}
+        elif native_type == "turn.started":
+            terminal_completed = False
+            last_message = None
+        elif native_type == "turn.completed":
+            terminal_completed = True
+            turn_usage.append(event.get("usage"))
+            fields = (event, event.get("usage"))
+            unexpected_metadata |= any(isinstance(record, dict) and (
+                record.get("service_tier") not in (None, "standard", "default") or
+                record.get("model") not in (None, args.model) or
+                any("cache" in key and "writ" in key and value != 0 for key, value in record.items())
+            ) for record in fields)
+        elif native_type == "turn.failed":
+            terminal_completed = False
+            problems.append(error_message(event) or "native Codex turn failed")
+        elif native_type == "error":
+            recent_error = error_message(event) or "native Codex error"
+        item = event.get("item")
+        if isinstance(item, dict):
+            item_type = item.get("type")
+            item_id = item.get("id")
+            if item_type == "mcp_tool_call":
+                problems.append("unexpected native Codex MCP tool call")
+            if item_type == "command_execution" and native_type == "item.started":
+                attributes.update(type="assistant", message={"content": [{
+                    "type": "tool_use", "id": item_id, "name": "Bash", "input": {"command": item.get("command")},
+                }]})
+            elif item_type == "command_execution" and native_type == "item.completed":
+                attributes.update(type="user", message={"content": [{
+                    "type": "tool_result", "tool_use_id": item_id, "content": item.get("aggregated_output"),
+                    "is_error": item.get("exit_code") != 0,
+                }]})
+            elif item_type == "agent_message" and native_type == "item.completed" and isinstance(item.get("text"), str):
+                last_message = item["text"]
+                attributes.update(type="assistant", message={"content": [{"type": "text", "text": last_message}]})
+        emit(event, **attributes)
+    rc = child.wait()
+    if rc:
+        if deadline is not None and rc in (124, 137) and time.monotonic() >= deadline:
+            problems.append("Codex turn exceeded its wall-clock limit")
+        else:
+            problems.append(f"Codex CLI exited {rc}" + (f": {recent_error}" if recent_error else ""))
+    if not session_id:
+        problems.append("missing native Codex thread ID")
+    if not terminal_completed:
+        problems.append("no completed native Codex turn")
+    if not problems and private_git is not None:
+        try:
+            private_git.promote()
+        except (ValueError, OSError, subprocess.SubprocessError) as error:
+            problems.append(f"Codex commit handoff refused: {error}")
+    failed = bool(problems)
+    estimate, basis = estimate_cost(args.model, turn_usage, failed, unexpected_metadata)
+    emit(type="result", subtype="error_during_execution" if failed else "success", is_error=failed,
+         result="; ".join(dict.fromkeys(problems)) if failed else last_message, session_id=session_id,
+         model=args.model, total_cost_usd=None, estimated_cost_usd=estimate, estimate_basis=basis,
+         num_turns=len(turn_usage), usage=usage_totals(turn_usage), turn_usage=turn_usage)
+    return (128 - rc if rc < 0 else rc) or int(failed)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--preflight", action="store_true")
+    parser.add_argument("--sandbox-check")
+    parser.add_argument("--hat", choices=HATS)
+    parser.add_argument("--model")
+    parser.add_argument("--effort", default="")
+    parser.add_argument("--resume")
+    parser.add_argument("--read-only", action="store_true")
+    parser.add_argument("--qa-host")
+    args = parser.parse_args()
+    binary = shutil.which("codex")
+    if not binary:
+        print("sdd-codex: codex CLI is not on PATH", file=sys.stderr)
+        return 127
+    if args.preflight:
+        try:
+            turn_timeout()
+        except ValueError as error:
+            print(f"sdd-codex: {error}", file=sys.stderr)
+            return 1
+        if Path.cwd().joinpath(".git").exists():
+            try:
+                with ExitStack() as stack:
+                    root = Path.cwd()
+                    git_dir, _ = git_metadata(root)
+                    if (git_dir / GitIndexHandoff.intent_name).is_file():
+                        GitIndexHandoff(stack, root)
+            except (OSError, ValueError, subprocess.SubprocessError) as error:
+                print(f"sdd-codex: Git handoff check failed: {error}", file=sys.stderr)
+                return 1
+        if args.qa_host is not None:
+            try:
+                qa_app_host(args.qa_host)
+            except (ValueError, OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+                print(f"sdd-codex: QA host check failed: {error}", file=sys.stderr)
+                return 1
+        return preflight(binary)
+    if args.sandbox_check is not None:
+        try:
+            return sandbox_check(binary, args.sandbox_check, args.qa_host)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            print(f"sdd-codex: sandbox check failed: {error}", file=sys.stderr)
+            return 1
+    if not args.model or not args.hat:
+        parser.error("a turn requires --model and --hat")
+    if args.resume:
+        args.resume = native_uuid(args.resume)
+        if not args.resume:
+            parser.error("--resume requires a native Codex thread UUID")
+    if args.qa_host is not None and (args.hat != "sdd-qa" or args.read_only):
+        parser.error("--qa-host is only supported by the writable sdd-qa hat")
+    # The publisher can draft locally. Any remote publication belongs to the trusted runner.
+    network = not args.read_only and (args.hat == "sdd-ticket" or args.qa_host is not None)
+    allowed_domains = JIRA_DOMAINS if args.hat == "sdd-ticket" and network else ()
+    cmd = [binary, "exec"]
+    if args.resume:
+        cmd.append("resume")
+    try:
+        with ExitStack() as stack:
+            timeout_bin, timeout_seconds = turn_timeout()
+            if args.qa_host is not None:
+                allowed_domains = (qa_app_host(args.qa_host),)
+            private = None if args.read_only else PrivateGitTurn(stack, Path.cwd(), binary)
+            cmd.extend([*REQUIRED_FLAGS, "--model", args.model,
+                        *never_escalate(args.read_only, network, allowed_domains, private.private if private else None)])
+            cmd.extend(shell_policy(private))
+            if args.effort:
+                cmd.extend(["-c", f"model_reasoning_effort={json.dumps(args.effort)}"])
+            if args.resume:
+                cmd.append(args.resume)
+            cmd.append("-")
+            version = subprocess.check_output([binary, "--version"], text=True, timeout=10).strip()
+            deadline = time.monotonic() + timeout_seconds
+            with subprocess.Popen([timeout_bin, "--kill-after=5s", f"{timeout_seconds}s", *cmd],
+                                  stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                                  env=git_environment()) as child:
+                def forward_signal(number, _frame):
+                    if child.poll() is None:
+                        child.send_signal(number)
+                signal.signal(signal.SIGTERM, forward_signal)
+                signal.signal(signal.SIGINT, forward_signal)
+                return stream_turn(child, args, version, private, deadline)
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        emit(type="result", subtype="error_during_execution", is_error=True,
+             result=f"Could not start Codex CLI: {error}", session_id=None, total_cost_usd=None,
+             estimated_cost_usd=None, num_turns=0, usage=usage_totals([]), turn_usage=[])
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

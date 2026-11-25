@@ -68,6 +68,35 @@ sdd approve <mission>          # writes 'aprovacao: humano-YYYY-MM-DD' and commi
 `sdd why` is the cheap validator this mode needs. Without a runner ever booting, nothing else looks
 at the artifacts, and format drift enters in silence.
 
+### Codex planner
+
+On a mission branch in its own worktree, set `SDD_KIT` to the absolute kit path and use its
+planner relay. Set `QUESTION_ID` from the `status` output before answering.
+
+```bash
+"$SDD_KIT/bin/sdd-plan-codex" start 20261124-example 'Update the example command'
+"$SDD_KIT/bin/sdd-plan-codex" status 20261124-example
+"$SDD_KIT/bin/sdd-plan-codex" answer 20261124-example "$QUESTION_ID" "Use option A"
+# Repeat status and answer for any further question. Finish only at status draft.
+"$SDD_KIT/bin/sdd-plan-codex" finish 20261124-example
+```
+
+The example starts a standalone plan. For delegated planning, append
+`--campaign <absolute-campaign-dir> --lot <L>` to `start`. Mentioning a campaign or lot in the topic
+does not engage the delegation checks.
+
+The relay launches the SDD planner role with Astra at high effort under the read-only Codex sandbox.
+It records each human answer with the question ID and the text presented, then resumes the exact
+Codex thread. If the relay loses the result of an active turn, `recover <mission>` resumes the saved
+thread to recover the pending question or draft. If the first thread ID was not recorded, it opens
+a new thread with the saved opening prompt. If `finish` rejects a draft, `recover` requests a
+correction in the same thread. The record lives in this worktree's Git metadata and is removed with
+the worktree.
+`finish` writes the three plan artifacts and fills the grill decision section with the recorded
+questions and human answers. Older answers recorded without question text still show the question
+ID and answer. Run the usual checkpoint checks and approval gate next. If the draft requires an
+ADR, allocate it with `sdd adr new` and record its path before approval.
+
 ### The `aprovacao:` trap, measured
 
 `gate_PLAN` accepts **only** `auto` or `humano-*`:

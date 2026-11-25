@@ -198,6 +198,7 @@ step_timeout() { # step_timeout <step name> — prints the deadline in seconds; 
   "adr allocator and link check") echo 90 ;;
   "one checkout has one execution owner") echo 240 ;;
   "the worker answers from artifacts") echo 550 ;;
+  "Codex campaign and planner") echo 180 ;;
   "catalogue anchors: every mutant still applies") echo 60 ;;
   "mutation: the suite dies when the runner is sabotaged") echo 0 ;;
   *) return 1 ;;
@@ -258,7 +259,7 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 # tests/isolate-git.sh, sourced by every sensor and run by none (issue #226): 19 -> 20.
 # The campaign worker (ADR 0022) adds its program and its sensor: 20 -> 22.
 LINT_SEVERITY=warning
-LINT_FLOOR=22
+LINT_FLOOR=23
 
 lint_surface() {
   local files=("$ROOT/bin/sdd" "$ROOT/bin/sdd-link-agents" "$ROOT/bin/sdd-worker") f
@@ -393,6 +394,7 @@ run "one checkout has one execution owner" "$ROOT/tests/check-coordination.sh"
 # HERE or nowhere. It reads bin/, templates/, commands/, config/schema.md, docs/pipeline.md,
 # README.md and CONTEXT.md, every one copied by sandbox().
 run "the worker answers from artifacts" "$ROOT/tests/check-worker.sh"
+run "Codex campaign and planner" "$ROOT/tests/check-codex-runner.sh"
 
 # The catalogue's cheap half, in seconds and on every run: every mutant still APPLIES and leaves
 # valid bash and Python. A fix that moves a line a mutant anchors used to surface only at the end of

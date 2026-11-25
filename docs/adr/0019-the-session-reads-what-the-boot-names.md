@@ -318,3 +318,11 @@ precedence in two worlds of two outcomes, and the default on a sabotaged copy of
   session fails closed, its new target denied and named by a `DENIED` line in the journal. The two
   paid probes of `sdd preflight` carry a cost cap (`--max-budget-usd 1` each) and no time cap:
   nothing in the runner ends a probe session that does not answer.
+- 2026-11-22, `20261121-l4-preflight-health-e-sensores` (a dated line, no new ADR, decision 8 of
+  that mission): the coverage warning of §2 is no longer only a warning. `sdd run` and `sdd retry`
+  stop with `die` at launch, before any gate or session, on a skill a phase invokes that is found
+  where no read rule covers it, and on a plugin install that does not hold it, naming the
+  `READ_EXTRA` entry to add (`phase_skills_check`, the same sentences as the preflight's); under
+  `--dry-run` they warn. And the Bash probe of `sdd preflight` fails a skill a phase invokes that the
+  `.skills` list of its `init` line lacks: the harness's own answer, where the directory search is
+  a convention. Reverting either is one line.

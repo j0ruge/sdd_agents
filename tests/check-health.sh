@@ -1859,17 +1859,28 @@ fi
 # ceremony: a `&` of a non-interactive shell starts with SIGINT ignored (issue #157), and a probe
 # born that way would measure nothing. The deadline is left at its real value, so only the
 # interrupt can end the slow step inside the 10 s this waits.
+# intr_leader <pid>: 0 when <pid> leads its own process group, 1 otherwise (gone included).
+intr_leader() { [ "$(ps -o pgid= -p "$1" 2>/dev/null | tr -d ' ')" = "$1" ]; }
+# intr_tree_kill <pid>: SIGKILL to <pid> and every descendant, by pid, deepest first — never to a
+# group, since the control world shares this sensor's.
+intr_tree_kill() {
+  local c
+  for c in $(pgrep -P "$1" 2>/dev/null || true); do intr_tree_kill "$c"; done
+  kill -KILL "$1" 2>/dev/null || true
+}
 : > "$WORK/intr.log"
 INTR_RC=0
 FAILFAST_LOG="$WORK/intr.log" FAILFAST_RED='' FAILFAST_SLOW="$TIMEOUT_STEP_FILE" \
   setsid env -u SDD_MUTANT -u SDD_MUTANT_FIRST -u SDD_TPL_SELFTEST_CHILD --default-signal=INT \
   "$FAILFAST/tests/run-all.sh" > "$WORK/intr.out" 2>&1 &
 INTR_PID=$!
-[ "$(ps -o pgid= -p "$INTR_PID" | tr -d ' ')" = "$INTR_PID" ] \
-  || broken "interrupt probe: the suite is not the leader of its own process group — the Ctrl-C would go elsewhere"
 for _ in $(seq 1 200); do grep -qxF "$TIMEOUT_STEP_FILE" "$WORK/intr.log" && break; sleep 0.1; done
 grep -qxF "$TIMEOUT_STEP_FILE" "$WORK/intr.log" \
   || broken "interrupt probe: the slow step never started in 20 s — there is nothing to interrupt"
+# Read only now, once the suite is running a step: right after the `&` the child may not have
+# called setsid() yet, and the read raced it (1 run in 4 died here as SENSOR-BROKEN).
+INTR_SETSID_LEADER=0
+intr_leader "$INTR_PID" || INTR_SETSID_LEADER=1
 sleep 0.5
 kill -INT -- "-$INTR_PID" 2>/dev/null || true
 INTR_ENDED=0
@@ -1883,6 +1894,31 @@ else
   fail 'surface: an interrupt still stops the suite while a step runs' \
        "the suite gone within 10 s of the group's SIGINT, rc non-zero, no step run after $TIMEOUT_STEP_FILE" \
        "ended: $INTR_ENDED, rc $INTR_RC, steps: $(tr '\n' ' ' < "$WORK/intr.log")"
+fi
+
+# The negative control of the leader read: the same world launched WITHOUT setsid stays in the
+# caller's group, and intr_leader has to say so — a read that answered "leader" for everything would
+# pass the probe above and certify a Ctrl-C that goes elsewhere. It is read at the same point (the
+# slow step running) and taken down by pid, its descendants first, never by a signal to the group,
+# which is this sensor's own.
+: > "$WORK/intr-ctl.log"
+FAILFAST_LOG="$WORK/intr-ctl.log" FAILFAST_RED='' FAILFAST_SLOW="$TIMEOUT_STEP_FILE" \
+  env -u SDD_MUTANT -u SDD_MUTANT_FIRST -u SDD_TPL_SELFTEST_CHILD \
+  "$FAILFAST/tests/run-all.sh" > "$WORK/intr-ctl.out" 2>&1 &
+INTR_CTL_PID=$!
+for _ in $(seq 1 200); do grep -qxF "$TIMEOUT_STEP_FILE" "$WORK/intr-ctl.log" && break; sleep 0.1; done
+grep -qxF "$TIMEOUT_STEP_FILE" "$WORK/intr-ctl.log" \
+  || broken "interrupt control: the slow step never started in 20 s — the leader read would measure nothing"
+INTR_CTL_LEADER=0
+intr_leader "$INTR_CTL_PID" || INTR_CTL_LEADER=1
+intr_tree_kill "$INTR_CTL_PID"
+wait "$INTR_CTL_PID" 2>/dev/null || true
+if [ "$INTR_SETSID_LEADER" = 0 ] && [ "$INTR_CTL_LEADER" = 1 ]; then
+  pass 'surface: the interrupt probe tells a suite in its own process group from one left in the caller group'
+else
+  fail 'surface: the interrupt probe tells a suite in its own process group from one left in the caller group' \
+       "the setsid suite leads its own group (0), the one launched without setsid does not (1)" \
+       "setsid: $INTR_SETSID_LEADER, without setsid: $INTR_CTL_LEADER"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1947,7 +1983,7 @@ GITENV_SOURCE='. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"'
 # `GITENV_FLOOR=0` alone survives the sabotage pass — it bites only paired with a narrowed glob, two
 # edits — and a floor a new sensor left behind keeps passing while it describes a smaller suite than
 # the one the census reads. 17 -> 18 with tests/check-worker.sh (ADR 0022).
-GITENV_FLOOR=18
+GITENV_FLOOR=19
 gitenv_census() { # gitenv_census <tests dir> — PUBLISHES GITENV_SEEN (entry points read) and GITENV_MISSING (names not sourcing it before their first git)
   local f at
   GITENV_SEEN=0; GITENV_MISSING=""
@@ -2166,7 +2202,7 @@ CENSUS_FLOOR=9
 # step or a sensor in neither list and with no primitive the census knows is SENSOR-BROKEN, never
 # skipped — the promise above is kept by refusing what the walk cannot classify.
 CENSUS_NOT_SENSORS=$'runner syntax (bash -n)\ncoordination helper syntax'
-CENSUS_EXEMPT=$'check-entrypoint.sh\ncheck-templates.sh'
+CENSUS_EXEMPT=$'check-entrypoint.sh\ncheck-templates.sh\ncheck-codex-runner.sh'
 # census_join and census_file_of live in check-mutation.sh since issue 192 — its --touched mode joins
 # a killer step to its sensor file by the same title the census reads — and are SOURCED from there,
 # never copied: the killer_of guard, one short closed block or SENSOR-BROKEN, since an unterminated

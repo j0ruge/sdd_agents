@@ -5012,7 +5012,7 @@ ser_shapes="$( SDD_STATE_DIR="$OUTSIDE/norepshapes" "$SDD" kaizen --series 2>/de
 # ⚠️ NOT prefixed `no-repo` — the checkpoint Check for I5 counts `^  ok    no-repo` and demands
 # exactly two, and these two clauses are new. Same rule as the scope-header assertion above.
 assert_eq "unattributable shapes: absent, null and empty are one 'names no project', never three verdicts" \
-  '{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":3}' \
+  '{"non_comparable":0,"unrecognized":0,"codex_telemetry":0,"meta":0,"other_repo":0,"no_repo":3}' \
   "$(jq -c '.excluded' <<< "$ser_shapes")"
 # The one that mattered outside a git repo: there $repo is itself empty, so a `repo: ""` row
 # compared EQUAL to it and was counted local in a repo that does not exist.

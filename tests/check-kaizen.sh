@@ -150,6 +150,7 @@ localize > "$LEDGER" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:07:00-03:00","event":"session","run_id":"r5","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"gate":"pass","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:08:00-03:00","event":"session","run_id":"r6","invocation":"run","kit_sha":"fff9999","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:09:00-03:00","event":"session","run_id":"r7","invocation":"run","kit_sha":null,"kit_dirty":null,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s7","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:09:30-03:00","event":"codex_plan_usage","engine":"codex","repo":"/p1","campaign":"receipt-only","lot":"L1","launch_id":"fixture-receipt","phase":"PLAN","cost_usd":null,"estimated_cost_usd":null,"usage":null}
 {"v":1,"ts":"2026-08-15T10:10:00-03:00","repo":"/p1"}
 {"v":1,"ts":"2026-08-15T10:10:30-03:00"}
 {"v":1,"ts":"2026-08-15T10:11:00-03:00","event":"session","run_id":"r8","invocation":"run","kit_sha":"aaa1111","kit_dirty":false,"project":"sdd_agents","repo":"/kit","mission":"20260815-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"s8","rc":0,"dur_s":10,"cost_usd":0.5,"moved":true,"gate":"pass","gate_why":"x"}
@@ -253,7 +254,7 @@ assert_eq "nor its missions" "1" "$(field '.latest.missions')"
 # event nobody recognizes. Lumped together (the old `else true end`) this reads `unrecognized:2,
 # no_repo:0` — an object compared whole, so neither bucket can drift alone.
 assert_eq "every excluded row is counted, by reason" \
-  '{"non_comparable":2,"unrecognized":1,"meta":1,"other_repo":0,"no_repo":1}' \
+  '{"non_comparable":2,"unrecognized":1,"codex_telemetry":1,"meta":1,"other_repo":0,"no_repo":1}' \
   "$(jq -c '.excluded' <<< "$SERIES_OUT")"
 
 # --- each arm of the `leve` clause, ALONE ------------------------------------
@@ -848,6 +849,8 @@ empty_guard_keys="$(jq -c '.guard | keys' <<< "$SERIES_OUT")"
 # with the whole key set, never on a half-filled object the consumer reads as "zero of a reason
 # that no longer exists".
 empty_excluded_keys="$(jq -c '.excluded | keys' <<< "$SERIES_OUT")"
+assert_eq "the empty-ledger series reports zero Codex telemetry receipts" "0" \
+  "$(field '.excluded.codex_telemetry')"
 
 # --- the guard floor counts missions the judge could OBSERVE -----------------
 # `missions` is `map(.mission) | unique` over every admitted row, escalations included — so three
@@ -1205,6 +1208,70 @@ assert_eq "covered: a retry that moves the disk records moved:true, after a firs
   "$(jq -rs '[.[] | select(.phase == "KAIZEN" and .event == "session")] | .[-2:] | map(.moved | tostring) | join(" ")' "$KSTATE2/autonomy-log.jsonl") $(cat "$KCOUNT" 2>/dev/null || echo 0)"
 rm -rf "$FIX/docs/handoffs/"*-kaizen
 dead_stub
+
+echo "== the judge passes through the hat guard (20261121-l4-preflight-health-e-sensores, I9) =="
+# cmd_kaizen opened its two sessions with no hat guard at all, the one door of the five that ran a
+# hat and never read what it wrote: a judge that edited README.md went on to the gate as if it had
+# written only its verdict. Each world below runs the real `sdd kaizen` of the fixture kit over a
+# ledger of its own, with a stub that counts its SESSION calls and writes on the call it is told
+# to. `kz_hat_run <write on call> <paths...>` → "<rc> <events of the run, kind on blocked>"; the
+# events are read from the rows this run appended, so an earlier block's rows never count.
+kz_hat_run() {
+  local on="$1"; shift
+  local st="$OUTSIDE/kaizenhat-$on-$#-$RANDOM" cnt="$OUTSIDE/kaizenhat-count" p w="" rc n0
+  mkdir -p "$st"; cp "$LEDGER" "$st/autonomy-log.jsonl"; rm -f "$cnt"
+  n0="$(jq -s 'length' "$st/autonomy-log.jsonl")"
+  for p in "$@"; do w+="  mkdir -p \"\$(dirname \"$FIX/$p\")\"; printf 'x\\n' >> \"$FIX/$p\""$'\n'; done
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+case " \$* " in *" -p "*) ;; *) exit 1 ;; esac
+n=\$(( \$(cat "$cnt" 2>/dev/null || echo 0) + 1 )); echo "\$n" > "$cnt"
+if [ "\$n" = "$on" ]; then
+$w
+fi
+exit 1
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+  rc=0; ( cd "$FIX" && SDD_STATE_DIR="$st" "$KSDD" kaizen >/dev/null 2>&1 ) || rc=$?
+  printf '%s %s' "$rc" "$(jq -rs --argjson n "$n0" '.[$n:] | map(select(.phase == "KAIZEN")
+    | if .event == "blocked" then "blocked:" + .kind else .event end) | join(",")' "$st/autonomy-log.jsonl")"
+}
+# Back to the tree every later block expects, whatever the world wrote.
+kz_hat_clean() {
+  rm -rf "$FIX/docs/handoffs/"*-kaizen "$FIX/README-judge.md" "$FIX/KAIZEN_LOG.md"
+  git -C "$FIX" checkout -q -- TODO.md
+  dead_stub
+}
+KZD="docs/handoffs/$(date +%Y%m%d)-kaizen"
+assert_eq "kaizen: a judge session that writes outside its hat stops the line as hat-crossed, after its session row" \
+  "3 session,blocked:hat-crossed" "$(kz_hat_run 1 "$KZD/05-verdict.md" README-judge.md)"
+kz_hat_clean
+assert_eq "kaizen: the retry session that crosses stops too, by its own read" \
+  "3 session,session,blocked:hat-crossed" "$(kz_hat_run 2 README-judge.md)"
+kz_hat_clean
+# The healthy judge: the mission folder, KAIZEN_LOG.md and the findings file (the base of every
+# hat). Its gate still fails — the stub writes no verdict the gate takes — so the line stops as
+# no-progress after two sessions, and that is the witness that both reads ran and accused nothing.
+# The human's own file, untracked outside every hat BEFORE the judge opens, is the dirt the guard is
+# armed against: it is the human's, never the session's, and a guard that was not armed reads it.
+printf 'x\n' > "$FIX/README-human.md"
+assert_eq "kaizen: a judge session that writes only the mission folder, KAIZEN_LOG.md and the findings file is not accused" \
+  "3 session,session,blocked:no-progress" "$(kz_hat_run 1 "$KZD/notes.md" KAIZEN_LOG.md TODO.md)"
+rm -f "$FIX/README-human.md"
+kz_hat_clean
+# The projection opens no session: with a stub that would cross on any call, nothing reaches the
+# journal and the run projects (rc 0). An untracked file outside the hat is left in the tree on
+# purpose — a guard armed under the projection would have something to read.
+# The journal is the same file the worlds above wrote to (one pseudo-mission a day), so only the
+# lines this projection appended are read.
+printf 'x\n' > "$FIX/README-judge.md"
+kz_log="$FIX/.sdd/logs/$(date +%Y%m%d)-kaizen/pipeline.log"
+kz_n0="$(cat "$kz_log" 2>/dev/null | wc -l)"
+kz_proj_rc=0; kz_proj="$( cd "$FIX" && "$KSDD" kaizen --dry-run 2>&1 )" || kz_proj_rc=$?
+kz_new="$(tail -n "+$((kz_n0 + 1))" "$kz_log" 2>/dev/null || true)"
+assert_eq "kaizen: the projection arms no hat guard" "0 0" \
+  "$kz_proj_rc $(grep -c 'HAT-CROSSED' <<< "$kz_proj"$'\n'"$kz_new" || true)"
+kz_hat_clean
 
 echo "== reminder: pipeline complete points at the judge =="
 # A COMPLETE mission in the fixture kit: every gate satisfied, so cmd_run reaches the

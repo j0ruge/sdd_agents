@@ -350,10 +350,18 @@ and it never paraphrases either side.
      or still the `<...>` placeholder names no branch to cut (the hat admits it only under
      `JIRA_ENABLED=true`, where the TICKET phase creates the branch and writes it back):
      switch to nothing, and commit the mission directory and the file `adr:` names on the branch
-     you stand on, as `sdd approve` does in this case, telling the human when that branch is
-     `DEFAULT_BRANCH`. The TICKET phase cuts the mission branch from there, and commits only
-     `10-ticket.md` and `00-missao.md`, so nothing else would bring the plan along; tell the human
-     that the next step is `sdd run <mission>`. Otherwise move to that `branch:` with
+     you stand on, as `sdd approve` does in this case; the rest of this step goes there too, by
+     the rule of **On the mission branch** (a file the plan depends on with the plan, a finding in
+     `TODO_FILE` in a commit of its own with the ratchet). The TICKET phase does not cut from where
+     you stand: the `ticket` skill checks out its base branch, pulls it and cuts the mission branch
+     there (`git checkout`, `git pull`, `git checkout -b` in its `references/start.md`), and
+     commits only `10-ticket.md` and `00-missao.md`. So the plan reaches the mission branch only
+     when you stand on that base (the skill's `BASE_BRANCH`, which is `DEFAULT_BRANCH` when the
+     two configs agree); tell the human that the next step is `sdd run <mission>`. On any other
+     branch (another mission's, a worktree's provisional one) the commits stay there, and the
+     checkout of the base takes the mission directory out of the tree the TICKET session reads:
+     name that to the human before any `sdd run` (reproduced in r5 of
+     `20261120-l2-o-sdd-plan-e-o-planner`). Otherwise move to that `branch:` with
      `git switch -c <branch>`, or `git switch <branch>` when it already exists, commit there the
      mission directory and the file `adr:` names, then follow **On the mission branch** for the
      rest, and tell the human that the next step is `sdd run <mission>`. Measured in `magic_tutor`:

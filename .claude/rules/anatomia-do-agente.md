@@ -108,6 +108,15 @@ instalação do plugin, e então só na árvore do próprio plugin
 conta, r8 do Codex no #315); e o aviso sobre diretório sob o cache nomeia esse arquivo, porque o
 cache pode ter mais de uma cópia; o probe é o `tests/check-preflight.sh`, com vinte e quatro
 mutantes `mut_PRE_*`, e o `tests/check-health.sh` do lado da tabela.
+Desde `20261121-l4-preflight-health-e-sensores` o mesmo juízo (`phase_skills_check`, uma
+definição, duas vozes) é dito no lançamento do `sdd run` e do `sdd retry`, antes de qualquer gate
+ou sessão. Lá, a instalação de plugin quebrada e a skill achada que nenhuma regra cobre **param**
+com `die`, nomeando a entrada do `READ_EXTRA` (na `--dry-run`, só aviso). O aviso do preflight não
+foi lido três vezes, e uma REVIEW custou US$ 5,61 com 3 de 5 agentes parados. A skill não achada e
+o alvo que a gramática recusa seguem aviso, porque nenhuma entrada os conserta. A sonda do `Bash`
+do preflight reprova (`_fail`) a skill que uma fase vai invocar e que o `.skills` da linha `init`
+não lista: é a resposta do harness, e a busca em diretórios é convenção. A suíte do kit roda com o
+`SDD_SKILLS_ROOT` vazio (`tests/isolate-git.sh`).
 
 **Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`
@@ -282,13 +291,25 @@ mesma `mission_tip`, e o branch apagado ou já na base dá intervalo vazio. O `s
 `blocked` é a que não pôde ser feita ou espera decisão humana. Um `TEST_CMD` que sai 126 ou 127 sem
 ter começado tem motivo próprio (`test_cmd_red_why`), nunca "suíte vermelha". Cada leitura tem
 asserção em `tests/check-gates.sh` e um mutante no catálogo (`mut_PR_head_unread`,
-`mut_REVIEW_later_code_unread`, `mut_DOCS_k8_reads_head_off_branch`, entre os 17 da missão).
+`mut_REVIEW_later_code_unread`, `mut_DOCS_k8_reads_head_off_branch`, entre os 28 que a missão
+acrescentou: `git diff a0004df..86e16c0 -- tests/check-mutation.sh | grep -cE '^\+mut_[A-Za-z0-9_]+\(\)'`
+→ 28).
 Desde `20261117-o-worker-orquestrador` (ADR 0022 §5) o merge delegado também é gate por artefato,
 fora do runner: `sdd-worker pr-ready` responde `ready <sha>` só com os cinco itens verdadeiros no
 mesmo sha (a rodada mais nova da missão com A em todo critério e um `reviewed_head:` do qual até o
 head só a pasta da missão mudou, o recibo `codex-review-state:v1` do Codex `completed` nesse sha e sem achado aberto, nenhum thread
 aberto, `MERGEABLE`, o `HEAD` local), e nomeia o primeiro que falha. A tabela de notas dele é mais
 estrita que a do `gate_REVIEW` de propósito: nenhuma tolerância de prosa.
+Desde `20261121-l4-preflight-health-e-sensores` o `sdd preflight` deixa de afirmar o que não
+mediu. A sonda do `Bash` dá `ok` pelo `tool_result` de uma chamada `Bash` que carrega o marcador,
+nunca pela resposta, e o stream que o `jq` não lê tem motivo próprio. O mesmo stream lista os hooks
+que toda fase carrega (contagem, rc e bytes por evento) e avisa pelo nome o hook de rc diferente de
+0 ou `outcome` diferente de `success`. A forma do `TODO_FILE` é medida pelo `check-todo.sh` do kit,
+com ou sem o opt-in (nunca `_fail`), e o preâmbulo é comparado com cada revisão do template no git
+do kit. A árvore suja sai com os caminhos, e o processo que o `TEST_CMD` deixou vivo sai pelo pid e
+pelo executável (`SDD_CHECK_TAG`). Dois sensores ganharam regra: o `check-checkpoint.sh` recusa
+`atualizado:` no futuro (regra 7) e o `check-todo.sh`, sob `--baseline`, o `PR #N` solto sem
+commit que o cite (regra 8).
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
@@ -422,7 +443,9 @@ nomeado pelo `DENIED` (ADR 0019, Consequences).
 As fases rodam **no checkout do humano**, com `.env.idp`, Jira e push reais;
 a guarda de kit **para a linha** desde `20260903-a-fronteira-do-chapeu` (`kind: kit-touched`), e o
 chapéu que escreve fora de `writes:` também (`hat-crossed`) — as duas pela mesma porta,
-`hat_crossed_escalation`, em quatro sítios. Desde `20260926-a-carona-antes-do-congelamento`
+`hat_crossed_escalation`, em seis sítios (desde
+`20261121-l4-preflight-health-e-sensores` também a sessão do juiz do `sdd kaizen` e o retry dela,
+só com a guarda do chapéu: o juiz roda no kit, e escrever nele é o trabalho dele). Desde `20260926-a-carona-antes-do-congelamento`
 (issue #51, ADR 0012) a guarda do chapéu **atribui** o commit antes de culpar: toda sessão roda com
 `GIT_REFLOG_ACTION=sdd:<passo>:<sid8>` (`session_git_label`, no `run_phase` e no `cmd_close`), e o
 `hat_guard_check` lê a janela pelo reflog de `HEAD` — entrada com o rótulo exato é da sessão, sem ele
@@ -493,6 +516,19 @@ Matar o supervisor, adulterar arquivos/namespace do lock ou intervenção privil
 essa coordenação. Descendente de longa duração conserva o lock até terminar — desde #234 nomeado no
 stderr do supervisor, não mais em silêncio —; timeout não libera outro escritor. Não é isolamento de filesystem nem mudança do estado derivado da missão.
 
+### O caminho Codex da campanha (#466)
+
+O runner escolhe o harness uma vez por execução. O Codex recebe o prompt de boot, o contrato do
+chapéu e os caminhos das skills resolvidas para a fase. O adaptador isola a configuração de usuário
+e desativa MCP, conectores e hooks. A sessão usa o sandbox nativo e a guarda do runner mede as
+escritas e os commits do mesmo checkout ao fim da fase. O preflight testa um comando dentro desse
+sandbox. Uma falha ali impede o aceite da campanha naquele ambiente.
+
+O retry usa o ID nativo que veio no stream. O grill usa outro registro, por missão e worktree,
+na área de metadados do Git. Cada resposta referencia a pergunta pendente. O ledger guarda o uso,
+a estimativa de API quando calculável e o custo faturado como desconhecido quando o harness não o
+informa. A delegação assinada determina se o worker pode abrir a fase mesmo sem provar o teto USD.
+
 ## 7. Hooks — pontos de intervenção humana
 
 **Regra.** Toda decisão de **abrir mais uma volta ou gastar mais** tem uma porta humana com
@@ -550,6 +586,12 @@ Desde `20261012-a-rota-da-qa` (ADR 0018 §3) a porta do PLAN mostra o que o huma
 novo (`--check`/`--red`), renderiza o plano e conta as respostas do grill, `N (recommended) of M`,
 pelo leitor da D22 sobre as linhas `- answer:` das decisões — a escolha do humano passa a ser
 medida, nunca escrita à mão.
+Desde `20261121-l4-preflight-health-e-sensores` o `sdd run` e o `sdd retry` param **antes** da
+sessão que será negada: a skill de uma fase que nenhuma regra de leitura cobre é `die` no
+lançamento (rc 1, sem sessão, sem linha de ledger e sem hook, como o chapéu não instalado), com a
+entrada do `READ_EXTRA` a declarar. Não é escalada, é a porta humana antes do gasto. Os avisos do
+clone do kit fora da `main` ou atrás dela (`kit_stale_check`) e do worktree sem o espelho dos
+chapéus (`sdd link-agents`) nomeiam o comando.
 Desde `20261117-o-worker-orquestrador` (ADR 0022) a campanha tem a sua porta humana com artefato:
 a assinatura da delegação (`sdd-worker delegate` mostra as seis chaves e o teto de cada lote,
 pergunta, só `y` assina, e sai 66 sem escrever nada quando não lê resposta, o contrato do
