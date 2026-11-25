@@ -12948,7 +12948,17 @@ kaizen_reminder() {
     [ -f "$f" ] || continue
     [ "$(frontmatter "$f" kit_sha_judged)" = "$sha" ] && return 0
   done
-  # WHERE this is being said from decides WHAT is true. The count above is this repo's missions,
+  local kit_config="$SDD_HOME/.sdd/config.sh" kit_todo count budget backlog=''
+  local cost="'sdd kaizen' is one paid session, two when its gate fails"
+  # Do not inherit the settings of the repo whose run just finished.
+  kit_todo="$(unset -v TODO_FILE; config_read_key "$kit_config" TODO_FILE 2>/dev/null)" || kit_todo=''
+  if count="$(bash "$SDD_HOME/tests/check-todo.sh" --count "$SDD_HOME/${kit_todo:-TODO.md}" 2>/dev/null)"; then
+    backlog="the kit backlog holds $count open finding(s); "
+  fi
+  budget="$(unset -v BUDGET_PER_PHASE_USD; config_read_key "$kit_config" BUDGET_PER_PHASE_USD 2>/dev/null)" || budget=''
+  if [ -n "$budget" ]; then cost+=", each capped at US\$ $budget"; fi
+  local suffix=" — ${backlog}${cost}"
+  # WHERE this is being said from decides WHAT is true. The series count is this repo's missions,
   # and it used to be followed, in every repo, by "run 'sdd kaizen' in the kit repo" — a pointer to
   # a judge that reads a DIFFERENT set of numbers. In a target repo the human would open the kit,
   # run the command, and be told something about the kit's own missions that has nothing to do with
@@ -12956,7 +12966,7 @@ kaizen_reminder() {
   local kit_id here_id
   kit_id="$( REPO_ROOT="$SDD_HOME" ledger_repo_root )"; here_id="$( ledger_repo_root )"
   if [ -n "$kit_id" ] && [ "$kit_id" = "$here_id" ]; then
-    dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME), for the next kit mission plan"
+    dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME), for the next kit mission plan$suffix"
     return 0
   fi
   # Outside the kit the pointer is to the kit, and the sentence is the one thing here that had to
@@ -12969,7 +12979,7 @@ kaizen_reminder() {
   # that just finished contributed, `sdd run` carries no ledger option to widen it with, and a
   # reminder that answered with other projects' missions would be reporting somebody else's work
   # as this repo's.
-  dim "  autonomy series: $n mission(s) of this repo on kit $sha are in the ledger. The kaizen judge counts them (ADR 0005) — run 'sdd kaizen' in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME)."
+  dim "  autonomy series: $n mission(s) of this repo on kit $sha are in the ledger. The kaizen judge counts them (ADR 0005) — run 'sdd kaizen' in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME).$suffix"
 }
 
 # KAIZEN gate — same convention as every gate (0/1, reason in GATE_WHY), but NOT in PHASES:

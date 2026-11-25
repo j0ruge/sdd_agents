@@ -4864,6 +4864,14 @@ mut_KAIZEN_reminder_per_worktree() {
   sed -i '/^kaizen_reminder()/,/^}/ s@kit_id="\$( REPO_ROOT="\$SDD_HOME" ledger_repo_root )"; here_id="\$( ledger_repo_root )"@kit_id="$( git -C "$SDD_HOME" rev-parse --show-toplevel )"; here_id="$REPO_ROOT"@' "$1"
 }
 
+# The pointer still appears, but without the kit backlog or the cost of acting on it.
+mut_KAIZEN_reminder_backlog_unsaid() {
+  sed -i '/^kaizen_reminder()/,/^}/ s@\${backlog}\${cost}@${cost}@' "$1"
+}
+mut_KAIZEN_reminder_cost_unsaid() {
+  sed -i '/^kaizen_reminder()/,/^}/ s@\${backlog}\${cost}@${backlog}@' "$1"
+}
+
 # The checkout every target's `sdd run` executes is refused to the judge (#236, ADR 0017): one mutant
 # per rule of the door, each caught by its `kaizen door: ` world in check-kaizen.sh. ADMITTED: the
 # real run opens its session there again. SILENT: the projection stops saying what the real run
@@ -8593,6 +8601,8 @@ CATALOG=(
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
   KAIZEN_reminder_per_worktree
+  KAIZEN_reminder_backlog_unsaid
+  KAIZEN_reminder_cost_unsaid
   KAIZEN_shared_checkout_admitted
   KAIZEN_shared_checkout_projection_silent
   KAIZEN_remedy_tracks_the_base

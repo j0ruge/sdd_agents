@@ -1728,6 +1728,11 @@ a KAIZEN session commits there. The real run dies before any session and names t
 origin/<DEFAULT_BRANCH>`, then `sdd kaizen` from there; `--dry-run` there warns with the same
 sentence and projects, and `--series` reads as before. With no `sdd` on the PATH nothing is refused.
 
+When `sdd run` finishes and reminds you about the judge, it shows how many open findings the kit
+has, when it can count them. The judge uses one paid session and a second if its gate fails. The
+reminder shows the kit's configured per-session cap when available, even when the run finished in
+a different repository.
+
 The judge is split in two (ADR 0001):
 
 **The runner derives the numbers.** `sdd kaizen --series` prints a versioned JSON (`v: 1`) about
