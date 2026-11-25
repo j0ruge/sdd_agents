@@ -1983,7 +1983,7 @@ GITENV_SOURCE='. "$(dirname "${BASH_SOURCE[0]}")/isolate-git.sh"'
 # `GITENV_FLOOR=0` alone survives the sabotage pass — it bites only paired with a narrowed glob, two
 # edits — and a floor a new sensor left behind keeps passing while it describes a smaller suite than
 # the one the census reads. 17 -> 18 with tests/check-worker.sh (ADR 0022).
-GITENV_FLOOR=18
+GITENV_FLOOR=19
 gitenv_census() { # gitenv_census <tests dir> — PUBLISHES GITENV_SEEN (entry points read) and GITENV_MISSING (names not sourcing it before their first git)
   local f at
   GITENV_SEEN=0; GITENV_MISSING=""
@@ -2202,7 +2202,7 @@ CENSUS_FLOOR=9
 # step or a sensor in neither list and with no primitive the census knows is SENSOR-BROKEN, never
 # skipped — the promise above is kept by refusing what the walk cannot classify.
 CENSUS_NOT_SENSORS=$'runner syntax (bash -n)\ncoordination helper syntax'
-CENSUS_EXEMPT=$'check-entrypoint.sh\ncheck-templates.sh'
+CENSUS_EXEMPT=$'check-entrypoint.sh\ncheck-templates.sh\ncheck-codex-runner.sh'
 # census_join and census_file_of live in check-mutation.sh since issue 192 — its --touched mode joins
 # a killer step to its sensor file by the same title the census reads — and are SOURCED from there,
 # never copied: the killer_of guard, one short closed block or SENSOR-BROKEN, since an unterminated

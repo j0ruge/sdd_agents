@@ -557,7 +557,7 @@ mut_PLAN_remedy_unnamed() {
 # that wrote `branch:` is skipped, ensure_mission_branch reads empty or `<…>` as a no-op, and every
 # phase of a new repo commits into its `main` by omission — which is what this rule exists to end.
 mut_PLAN_branch_unasked() {
-  sed -i '/^gate_PLAN() {/,/^}/ s@^  if \[ "$JIRA_ENABLED" != "true" \]; then$@  if false; then@' "$1"
+  sed -i '/^gate_PLAN() {/,/^}/ s@^  if \[ "$JIRA_ENABLED" != "true" \].*; then$@  if false; then@' "$1"
 }
 
 # The gate stops checking that the branch born in this phase reached the artifact the runner reads.
@@ -1645,7 +1645,7 @@ mut_HEALTH_unstampable_silent() {
 # the one the next lap's gate runs, which is SQ-141's four EXEC sessions. Caught by `config: the next
 # lap runs the edited TEST_CMD, …` (block 3c of the kit-guard regimes in check-autonomy.sh).
 mut_RUN_config_not_reloaded() {
-  sed -i '/^cmd_run() {/,/^}/ s@^    config_reload$@    :@' "$1"
+  sed -i '/^cmd_run() {/,/^}/ s@^      config_reload$@      :@' "$1"
 }
 # The reload forgets to unset: a key deleted from the file survives from the previous read. Same
 # assertion, its `deleted-hook` term — the file's ON_ESCALATION_CMD pages after it was deleted.
@@ -1937,7 +1937,7 @@ mut_RUN_templates_kaizen_only() {
 # five-phase projection goes on answering yes. Caught by exactly one assertion in the suite, the
 # TICKET line of check-dry-run.sh — which is the whole reason that line exists.
 mut_RUN_templates_ticket_short_circuit() {
-  sed -i 's|^  \[ -n "\$slash" \] && printf|  if [ "$step" = TICKET ]; then printf "ticket\\n"; return 0; fi\n&|' "$1"
+  sed -i 's|^  \[ "\$PHASE_ENGINE" = claude \] \&\& \[ -n "\$slash" \] \&\& printf|  if [ "$step" = TICKET ]; then printf "ticket\\n"; return 0; fi\n&|' "$1"
 }
 
 # Not a gate, and the fail-open shape in pure form: every DEFAULT_BRANCH "exists on origin",
@@ -2226,7 +2226,7 @@ mut_KAIZEN_composition_unprinted() {
 # docs/pipeline.md went on naming `cost_usd`. What dies is the sensor that reads the
 # sdd:series-fields block of docs/pipeline.md against the keys the series prints.
 mut_KAIZEN_series_key_renamed() {
-  sed -i '/^kaizen_series() {/,/^}/ s/^                      cost_usd: (map(.cost_usd \/\/ 0) | add)})) as \$detail$/                      cost: (map(.cost_usd \/\/ 0) | add)})) as $detail/' "$1"
+  sed -i '/^kaizen_series() {/,/^}/ s/^                      cost_usd: (map/                      cost: (map/' "$1"
 }
 
 mut_KAIZEN_series_rc_dropped() {
@@ -2688,7 +2688,7 @@ mut_RUN_hat_expand_unquoted() {
 }
 #  · the missing mirror ignored — the harness refuses the --agent and the run pays a no-progress
 mut_RUN_hat_missing_mirror_ignored() {
-  sed -i '/^run_phase() {/,/^}/ s|^  if \[ -n "\$agent" \] && \[ ! -f "\$REPO_ROOT/.claude/agents/\$agent.md" \]; then$|  if false; then|' "$1"
+  sed -i '/^run_phase() {/,/^}/ s|^  if \[ "\$PHASE_ENGINE" = claude \] && \[ -n "\$agent" \] && \[ ! -f "\$REPO_ROOT/.claude/agents/\$agent.md" \]; then$|  if false; then|' "$1"
 }
 #  · the close session armed but never checked
 mut_RUN_hat_close_unchecked() {
@@ -2833,7 +2833,7 @@ mut_RUN_init_blind() {
 # took Bash from every hat and no row said so. check-autonomy's "the harness version is read off
 # the init line into the row" dies on the fixture's own value.
 mut_RUN_harness_blind() {
-  sed -i 's|^  LAST_PHASE_HARNESS="$( jq -r '"'"'.claude_code_version // ""'"'"' <<< "$init" 2>/dev/null )" \|\| LAST_PHASE_HARNESS=""$|  LAST_PHASE_HARNESS=""|' "$1"
+  sed -i 's|^  LAST_PHASE_HARNESS="$( jq -r '"'"'.claude_code_version // .codex_cli_version // ""'"'"' <<< "$init" 2>/dev/null )" \|\| LAST_PHASE_HARNESS=""$|  LAST_PHASE_HARNESS=""|' "$1"
 }
 
 # The row carries the version and the slice the judge reads does not: `sdd kaizen --series`
@@ -2849,7 +2849,7 @@ mut_RUN_series_harness_blind() {
 # would leave a repo whose rulebook doubled to find out from an invoice. Caught by "the context
 # bill is reported" in check-preflight.sh.
 mut_PREFLIGHT_context_bill_silent() {
-  sed -i '/^cmd_preflight() {/,/^}/ s@^  ok "context bill: @  : "@' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s@^    ok "context bill: @    : "@' "$1"
 }
 
 # The `[ -f "$cb" ] || continue` guard comes off the loop. On a repo with no .claude/rules/ the
@@ -2858,7 +2858,7 @@ mut_PREFLIGHT_context_bill_silent() {
 # It is the `guard:` class CLAUDE.md names, here in the preflight rather than in health. Caught by
 # "the context bill is reported" in check-preflight.sh, whose fixture has neither file.
 mut_PREFLIGHT_context_bill_unguarded() {
-  sed -i '/^cmd_preflight() {/,/^}/ s@^    \[ -f "$cb" \] || continue$@    :@' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s@^      \[ -f "$cb" \] || continue$@      :@' "$1"
 }
 
 # The auth probe of preflight, back to its 2026-09-05 shape: no --agent, so the session it fires
@@ -3018,10 +3018,10 @@ mut_INSTALL_todo_preamble_unchecked() {
 }
 # L4 item 7: sdd run and sdd retry stop before the session the harness will deny a skill.
 mut_RUN_skill_uncovered_not_stopped() {
-  sed -i '/^cmd_run() {/,/^}/ s|^  phase_skills_check run$|  phase_skills_check preflight|' "$1"
+  sed -i '/^cmd_run() {/,/^}/ s|then phase_skills_check run; fi$|then phase_skills_check preflight; fi|' "$1"
 }
 mut_RETRY_skill_uncovered_not_stopped() {
-  sed -i '/^cmd_retry() {/,/^}/ s|^  phase_skills_check run$|  phase_skills_check preflight|' "$1"
+  sed -i '/^cmd_retry() {/,/^}/ s|then phase_skills_check run; fi$|then phase_skills_check preflight; fi|' "$1"
 }
 mut_RUN_skill_broken_not_stopped() {
   sed -i '/^phase_skills_check() {/,/^}/ s|^        _skill_stop "skill \$sk is not where the harness loads it|        warn "skill $sk is not where the harness loads it|' "$1"
@@ -3235,7 +3235,7 @@ mut_PRE_plugin_cache_falls_through() {
 # it, and lands on the scratch arm, whose warning says the rule was not measured for a reason that is
 # not this one — the same assertion, `skip=0`.
 mut_PRE_kit_path_unnamed() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^  if ! read_extra_dir_ok "\$SDD_HOME/templates"; then$#  if false; then#' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s#^  if \[ "\$PHASE_ENGINE" = claude \] && ! read_extra_dir_ok "\$SDD_HOME/templates"; then$#  if false; then#' "$1"
 }
 mut_PRE_kit_path_probe_opened() {
   sed -i '/^cmd_preflight() {/,/^}/ s#^    if \[ -n "\$kit_tpl_refused" \]; then$#    if false; then#' "$1"
@@ -3407,7 +3407,7 @@ mut_AUTONOMY_cache_read_dropped() {
 # The review-loop cell's zero guard (issue #110): `$whole > 0` loosened to `>= 0` divides by zero on
 # a mission whose sessions all cost null, and jq takes the whole --by-mission down with it.
 mut_AUTONOMY_review_loop_zero_guard() {
-  sed -i '/^cmd_autonomy()/,/^}/ s@(if \$whole > 0 then@(if $whole >= 0 then@' "$1"
+  sed -i '/^cmd_autonomy()/,/^}/ s@(if \$whole > 0 and@(if $whole >= 0 and@' "$1"
 }
 
 # The census stops reading tool_use names — the line that turns the "before" of the 2026-09-03
@@ -4079,7 +4079,7 @@ mut_PRE_agents_checked_silent() {
   sed -i 's@then ok "$n kit agent(s) checked"; fi$@then :; fi@' "$1"
 }
 mut_PRE_agents_checked_miscounted() {
-  sed -i '/^  local a name copy n=0 fails_before_agents=/,/kit agent(s) checked/ s@^    n=$((n + 1))$@    n=$((n + 2))@' "$1"
+  sed -i '/^    local a name copy n=0 fails_before_agents=/,/kit agent(s) checked/ s@^      n=$((n + 1))$@      n=$((n + 2))@' "$1"
 }
 mut_PRE_agents_checked_despite_fail() {
   sed -i 's@if \[ "$n" -gt 0 \] && \[ "$fails" -eq "$fails_before_agents" \]; then ok@if [ "$n" -gt 0 ]; then ok@' "$1"
@@ -4751,6 +4751,12 @@ mut_RETRY_branch_switch_dead() {
   sed -i '/^cmd_retry() {/,/^}/ { /^  ensure_mission_branch$/d }' "$1"
 }
 
+# An existing mission branch can have a different harness. Reading only the original checkout
+# skips the destination's Codex admission even though the branch and approved plan are correct.
+mut_RETRY_branch_config_stale() {
+  sed -i '/^cmd_retry() {/,/^}/ s/^    config_reload$/    :/' "$1"
+}
+
 # The ghost UUID comes back (the bug fixed in `032c09c`): an in-loop retry runs with `--resume …
 # --fork-session` and WITHOUT `--session-id`, so the `$sid` generated at the top of the call was
 # never handed to claude — recording it leaves the retry row pointing at a session that identifies
@@ -4760,7 +4766,7 @@ mut_RETRY_branch_switch_dead() {
 # one two — so a mutant cannot break the projection and the ledger at once, and this entry is
 # credited for the recorded id and nothing else.
 mut_RUN_ghost_session_id() {
-  sed -i 's|^  LAST_PHASE_SID="${resume_sid:-$sid}"$|  LAST_PHASE_SID="$sid"|' "$1"
+  sed -i 's|^  LAST_PHASE_SID="$session"$|  LAST_PHASE_SID="$sid"|' "$1"
 }
 
 # `sdd retry` stops measuring whether its session changed the disk. `mut_RUN_moved_never_true` above
@@ -6076,7 +6082,7 @@ mut_RUN_gate_pass_off_the_derived_branch() {
 # leaves the header total through a bucket whose name is a lie about it. Caught by `the human reader
 # does not call the recorded closure unrecognized` in check-autonomy.sh, and by nothing else.
 mut_LEDGER_gate_pass_unrecognized() {
-  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
+  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual or is_codex_telemetry) | not;@def is_unrecognized: (is_session or is_escalation or is_codex_telemetry) | not;@' "$1"
 }
 
 # The close row goes back to being ADMITTED but never NAMED: it enters the header total (the shell
@@ -6186,7 +6192,7 @@ mut_KAIZEN_close_mints_a_version() {
 # #153, the sixth event, in its two readers. Reader one forgets it: the row the runner wrote on
 # purpose reads as a stray.
 mut_AUTONOMY_manual_unrecognized() {
-  sed -i 's@ or is_close or is_manual) | not;@ or is_close) | not;@' "$1"
+  sed -i 's@ or is_close or is_manual or is_codex_telemetry) | not;@ or is_close or is_codex_telemetry) | not;@' "$1"
 }
 # Reader two forgets it: `excluded.unrecognized` goes to 1, the field the judge reads as a kit bug.
 mut_KAIZEN_manual_not_admitted() {
@@ -6385,7 +6391,7 @@ mut_AUTONOMY_review_loop_frontier_comparable() {
 # `the review loop cell is the same whether the round was comparable or not`, which reads
 # `dirty:review loop US$ 16.00 (160%)` under this mutant.
 mut_AUTONOMY_review_loop_denominator_split() {
-  sed -i 's@if \$whole > 0 then " (\\((\$loop \* 100 / \$whole) | round)%)"@if $cost > 0 then " (\\(($loop * 100 / $cost) | round)%)"@' "$1"
+  sed -i '/^cmd_autonomy()/,/^}/ s@if \$whole > 0 and (\$every | codex_unknown_cost_count) == 0 then " (\\((\$loop \* 100 / \$whole) | round)%)"@if $cost > 0 and ($every | codex_unknown_cost_count) == 0 then " (\\(($loop * 100 / $cost) | round)%)"@' "$1"
 }
 
 # Not a gate: the REVIEW session is told to fix in place again. The whole contract of this mission
@@ -7151,7 +7157,7 @@ mut_WORKER_allows_ignores_lot() {
 # campaigns' and other repos' included. Caught by "budget: the sum counts the campaign's missions and
 # no other" (check-worker.sh).
 mut_WORKER_budget_counts_every_mission() {
-  sed -i '/^cmd_budget() {/,/^}/ s@ and (\.mission | IN(\$ARGS\.positional\[\]))@@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_budget() {/,/^}/ s@(\.mission | IN(\$ARGS\.positional\[\]))@true@' "${1%/*}/sdd-worker"
 }
 # The ceiling never stops: a campaign at its ceiling or above it answers rc 0, and the worker goes on
 # spending. Caught by "budget: at the ceiling or above it the verb leaves rc 1" (check-worker.sh).
@@ -7464,7 +7470,7 @@ mut_WORKER_listed_failure_swallowed() {
 # after printing, stops budget, level and next with rc 1 naming the call, and allows asks"
 # (check-worker.sh).
 mut_WORKER_listed_budget_goes_on() {
-  sed -i '/^cmd_budget() {/,/^}/ s@^  if ! campaign_set "\$root" "\$(fm_value "\$f" campaign)"; then printf .no spend — %s\\n. "\$SET_WHY"; return 1; fi$@  campaign_set "$root" "$(fm_value "$f" campaign)" || :@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if ! campaign_set "\$root" "\$campaign"; then printf .no spend — %s\\n. "\$SET_WHY"; return 1; fi$@  campaign_set "$root" "$campaign" || :@' "${1%/*}/sdd-worker"
 }
 # The sum is compared with the ceiling as binary floats again, not in cents: 0.10 + 0.70 sums to
 # 0.7999999999999999 and never reaches a ceiling of 0.80 (achado #4 of the mission's review r5).
@@ -7641,6 +7647,16 @@ mut_WORKER_ceiling_cap_rounded() {
 mut_WORKER_ceiling_float_compare() {
   sed -i '/^cmd_budget() {/,/^}/ s@ \\(\$ceiling - \$spent < \$mission)"@ \\(($cap | tonumber) - . < ($m | tonumber))"@' "${1%/*}/sdd-worker"
 }
+# The current Codex accounting can leave actual USD unknown. A normal signed delegation
+# without the extra term must not give the runner permission to spend under that exception.
+mut_WORKER_codex_unknown_cost_unchecked() {
+  sed -i '/^codex_cost_consent() {/,/^}/ s@^  if \[ "\$(fm_value "\$LEVEL_SIGNED_TERMS" allow_unknown_cost)" != true \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# Estimated API usage belongs to the separate subtotal. Treating it as actual spend makes
+# the signed ceiling claim that it covers billing the harness did not report.
+mut_WORKER_codex_estimate_billed() {
+  sed -i 's@\.cost_usd | select(measured)\] as \$mission_amounts@(.cost_usd // .estimated_cost_usd) | select(measured)] as $mission_amounts@' "${1%/*}/sdd-worker"
+}
 # A left equal to the mission cap stops: the run that would end the campaign at its ceiling exactly
 # is refused. Caught by "budget: at the ceiling or above it the verb leaves rc 1" (the boundary
 # leaves one cent, the cap of 0.01) and by "ceiling: …", the world equal (check-worker.sh).
@@ -7651,7 +7667,7 @@ mut_WORKER_ceiling_equal_stops() {
 # in the config fits the 20.00 left under a signed 40, and budget opens a run the rule says it
 # stops. Caught by "ceiling: …" (check-worker.sh), the world strict.
 mut_WORKER_ceiling_effective_compared() {
-  sed -i '/^cmd_budget() {/,/^}/ s@ --arg m "\$mcap" --args .$@ --arg m "$run" --args '"'"'@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_budget() {/,/^}/ s@--arg m "\$mcap" --arg scope@--arg m "$run" --arg scope@' "${1%/*}/sdd-worker"
 }
 # The comment of cmd_budget stops writing the no room line (decision 2 of the owner on the
 # mission's review r6): the rule is kept, and its line goes unsaid. Caught by "ceiling: …"
@@ -8467,6 +8483,7 @@ CATALOG=(
   HEALTH_baseline_read_aborts
   HEALTH_ratchet_eats_verdict
   RETRY_branch_switch_dead
+  RETRY_branch_config_stale
   RUN_ghost_session_id
   RETRY_moved_never_true
   KAIZEN_moved_never_true
@@ -8719,6 +8736,8 @@ CATALOG=(
   WORKER_allows_ignores_lot
   WORKER_budget_counts_every_mission
   WORKER_budget_never_stops
+  WORKER_codex_unknown_cost_unchecked
+  WORKER_codex_estimate_billed
   WORKER_next_gh_failure_reads_no_pr
   WORKER_next_skips_approval
   WORKER_next_ignores_merged

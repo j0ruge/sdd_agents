@@ -806,19 +806,21 @@ damaged and nothing needs undoing — the phase is derived from the artifacts, s
 where it stopped. For an expired login that is `claude` in your own terminal, not in the
 pipeline.
 
-**What it never does is fire on doubt.** Only a session whose summary carries `is_error: true`
+**When Claude is the harness,** only a session whose summary carries `is_error: true`
 **and** a non-empty `result` string escalates. A session that died with no cause (6 of the 11
 errored sessions measured across the four target repos on 2026-09-18) behaves exactly as it
 always did — `session_error` is `null` and the ordinary retry is still bought. So is the budget
 ceiling (`error_max_budget_usd`, `result: null`), which is the kit's **designed** loop and must
-never stop the line.
+never stop the line. Codex also stops on a failed adapter status, even if the artifact gate passes.
+After addressing the failure, check the current phase with `sdd status <mission>`.
+`sdd retry` re-derives the current phase and opens a fresh session only if a runnable phase is pending.
 
 **Two doors, and the limit is declared.** The first pass and the inline retry, both in `cmd_run`'s
 loop, and both **above their own gate-pass branch**: a session the environment killed stops the
 line even on the rare lap whose gate is satisfied by artifacts an earlier run left behind. That
 placement is the whole of it — with the retry door below the branch, a dying retry whose gate
 passed walked on into the next phase and bought two more sessions against the same dead
-environment before blocking there under the wrong kind. `sdd retry` is the human's hand already on the phase and ends on `retry-gate-red` instead;
+environment before blocking there under the wrong kind. `sdd retry` can end on `retry-gate-red` when its gate fails or `session-died` when the Codex adapter fails.
 `sdd close` does not go through `run_phase`, so nothing arms the marker there.
 
 ---
@@ -881,9 +883,9 @@ older stream is history from then on. To retire it sooner, move it out of `.sdd/
 
 ---
 
-## The runner published a draft PR by itself
+## The pipeline moved to draft publication before Grade A
 
-**Symptom:** the mission ends with a **draft** PR and a review that never reached Grade A.
+**Symptom:** Claude proceeds to draft publication, or Codex returns a draft-only handoff to the worker.
 
 **Cause:** `PUBLISH_ON_REVIEW_BLOCKED="draft"` plus a review out of `REVIEW_MAX_ITER` rounds. The
 runner lowered its own bar and carried on — by design, and the one autonomy event where it decides
@@ -899,13 +901,11 @@ hand the mission back to REVIEW with more rounds.
 **Reading the count:** all three trails are written **once per run**, so `review-to-draft: 3` in
 either reader means three runs — never one run that degraded three times.
 
-**If the draft PR does not close either:** the run ends there, with `BLOCKED in REVIEW` and a
-`blocked` / `budget-exhausted` row naming **REVIEW**. The draft was the one chance, and the phase
-named is the one whose ceiling was actually blown. The runner used to hand REVIEW back instead and
-go round again — REVIEW→PR→REVIEW with the budget still blown — until PR ran out of its own budget
-and the escalation came out blaming **PR**, a phase that was never over budget. If you are reading
-an old ledger and a `budget-exhausted` in PR follows a `review-to-draft`, that is what you are
-looking at.
+**On Claude,** the draft PR phase keeps its ordinary guards and retry. If control returns to
+an exhausted REVIEW, the runner records `blocked` / `budget-exhausted` in REVIEW instead of
+redirecting to draft publication again.
+For Codex, rc 2 hands the draft to the worker under its separate PR authorization.
+Use `sdd why <mission> PR` after publication to inspect the PR gate.
 
 **Do not:** silence it by setting `PUBLISH_ON_REVIEW_BLOCKED="off"` and re-running until the review
 passes. Off is the default precisely because a stop is louder than a draft; switching it on and then

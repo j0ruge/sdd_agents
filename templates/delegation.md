@@ -5,6 +5,7 @@ lots: <all, ou L1 L2 … separados por espaço>
 expires: <YYYY-MM-DD HH:MM, hora local>
 budget_mission_usd: <número de pelo menos 0.01 — o teto de cada missão, passado como assinado ao sdd run como BUDGET_MISSION_USD, se nenhum .sdd/config.sh lido (o da campanha e o de cada worktree que guarda missão dela) fixar essa chave acima dele; 0 é sem teto, e o budget para>
 budget_campaign_usd: <número — o teto da campanha inteira, somado do ledger; o budget para quando o que resta dele é menor que o budget_mission_usd>
+allow_unknown_cost:
 signed:
 ---
 
@@ -85,16 +86,32 @@ remova o worktree de uma missão que não vai chegar à base só depois de
 assinar um teto de campanha menor pelo que ela gastou: a soma do `cost_usd` das linhas do ledger
 com o id dela.
 
+## Sessões Codex sem valor faturado
+
+`allow_unknown_cost:` é opcional. Ausente, vazio ou `false` não concede a exceção. Marque
+`true` e assine só se aceitar sessões do Codex cujo valor faturado em dólares não é informado.
+A opção exige `harness: codex` e `exec_model:` no `campaign.md`. Os três ficam cobertos pela
+assinatura e não mudam o nível delegado. Antes de abrir cada sessão paga, inclusive nas novas tentativas, o runner confere a
+delegação no checkout principal do repositório da missão, o lote, o ato, a validade e os dois
+tetos de gasto conhecido. Uma cópia antiga no worktree da missão não vale.
+
+No ledger, o valor faturado dessas sessões fica nulo, não zero. O `budget` informa o subtotal
+conhecido e a quantidade de sessões sem valor faturado. Se houver estimativas, mostra o
+subtotal estimado à parte, sem somá-lo ao gasto conhecido. Os tetos continuam limitando o
+gasto conhecido, mas não garantem um teto em dólares para sessões sem valor faturado. A exceção
+não cobre sessões de outros engines com valor desconhecido.
+
 ## Como assinar
 
-1. Preencha as seis primeiras chaves e deixe `signed:` vazio.
+1. Preencha as seis primeiras chaves, decida sobre `allow_unknown_cost:` e deixe `signed:` vazio.
 2. Num terminal, rode `bin/sdd-worker delegate <diretório desta campanha>`: ele mostra o que está
-   sendo concedido (as seis chaves e uma linha `ceiling <lote>: <teto>` por lote da tabela do
-   `campaign.md` ao lado) e pergunta. Só `y` assina. Uma edição salva enquanto a assinatura é gravada
-   fica no arquivo, e nada é assinado: rode o `delegate` de novo.
-3. A assinatura grava `signed: <YYYY-MM-DD HH:MM> <digest>`, e o digest cobre as seis chaves e o
-   `Lot` e o `Ceiling` de cada linha da tabela de lotes do `campaign.md`. Mudar uma das seis chaves,
-   subir ou baixar um teto, ou pôr ou tirar um lote da tabela depois disso invalida o digest, e a
-   delegação volta a valer `assisted` até ser assinada de novo. Riscar itens e reescrever o título
-   ou a contagem de um lote não invalida: a campanha faz isso enquanto anda.
+   sendo concedido (as seis chaves, a opção quando preenchida e uma linha
+   `ceiling <lote>: <teto>` por lote do `campaign.md` ao lado) e pergunta. Só `y` assina. Uma
+   edição detectada durante a assinatura faz o comando recusar. Termine as edições antes de
+   executar `delegate`.
+3. A assinatura grava `signed: <YYYY-MM-DD HH:MM> <digest>`. O digest cobre os termos mostrados,
+   inclusive o `harness:` e o `exec_model:` quando a exceção é `true`, e o `Lot` e o `Ceiling` de cada linha da
+   tabela. Uma assinatura antiga continua válida se a opção estiver ausente ou vazia. Se mudar
+   os termos, um teto ou um lote da tabela, a delegação volta a valer `assisted` até ser assinada
+   novamente. Riscar itens e reescrever o título ou a contagem de um lote não invalida a assinatura.
 4. Commite o arquivo: a delegação é versionada no repo-alvo, e o commit é a trilha.

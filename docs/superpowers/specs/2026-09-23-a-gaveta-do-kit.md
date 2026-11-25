@@ -307,6 +307,11 @@ São quatro, todas abertas em 2026-09-22 a partir da missão do `lighthouse_proj
 
 ## F6 — O worker (W1–W7)
 
+A [issue #466, worker no Codex](../plans/2026-11-24-worker-codex.md), tem implementação no
+worktree da missão. Em 2026-11-24, o [piloto real](../../handoffs/20261124-worker-codex/record-I2.md)
+passou de PLAN a DOCS e parou no handoff de PR, sem publicação. A integração com a base segue pendente.
+
+
 Spec completo neste repo: `docs/superpowers/specs/2026-09-22-o-worker-roadmap-design.md` (trazido
 do branch local `docs/worker-roadmap`, commit `8722dc1`, que nunca tinha sido empurrado). O desenho
 de setembro era um `bin/sdd-worker tick --once`, disparado por systemd timer, que leva uma missão
