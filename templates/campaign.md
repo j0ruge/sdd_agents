@@ -2,9 +2,9 @@
 campaign: <YYYYMMDD>-<slug — igual ao nome do diretório desta campanha>
 title: <uma linha — o que fica pronto quando a fila inteira estiver mergeada>
 date: <YYYY-MM-DD>
-harness: <claude — o harness que abre as sessões das missões da campanha>
-plan_model: <fable — o melhor modelo para planejar no harness acima>
-exec_model: <opus — o modelo que a campanha declara para o EXEC; quem decide é o MODEL_EXEC do .sdd/config.sh do worktree da missão>
+harness: <claude | codex — o harness que abre as sessões das missões da campanha>
+plan_model: <fable | gpt-6.2-astra — o melhor modelo para planejar no harness acima>
+exec_model: <opus | gpt-6.2-sol — confira MODEL_EXEC (Claude) ou CODEX_PHASE_MODEL (Codex) no worktree da missão>
 ---
 
 # Campanha — <título>

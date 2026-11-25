@@ -68,6 +68,24 @@ sdd approve <mission>          # writes 'aprovacao: humano-YYYY-MM-DD' and commi
 `sdd why` is the cheap validator this mode needs. Without a runner ever booting, nothing else looks
 at the artifacts, and format drift enters in silence.
 
+### Codex planner
+
+On a mission branch in its own worktree, use the Codex planner relay from the kit's `bin/`:
+
+```bash
+sdd-plan-codex start <mission> '<topic, with campaign ID and lot if applicable>'
+sdd-plan-codex status <mission>
+sdd-plan-codex answer <mission> <question-id> '<answer>'
+sdd-plan-codex finish <mission>
+```
+
+The relay launches the SDD planner role with Astra at high effort under the read-only Codex sandbox.
+It binds each answer to a question ID and resumes the exact Codex thread. If the relay loses the
+result of an active turn, `recover <mission>` resumes that thread to recover the pending question
+or draft. The record lives in this worktree's Git metadata and is removed with the worktree.
+`finish` writes the three plan artifacts; run the usual checkpoint checks and approval gate next. If the draft requires an ADR, allocate
+it with `sdd adr new` and record its path before approval.
+
 ### The `aprovacao:` trap, measured
 
 `gate_PLAN` accepts **only** `auto` or `humano-*`:

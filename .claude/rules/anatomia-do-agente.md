@@ -516,6 +516,19 @@ Matar o supervisor, adulterar arquivos/namespace do lock ou intervenção privil
 essa coordenação. Descendente de longa duração conserva o lock até terminar — desde #234 nomeado no
 stderr do supervisor, não mais em silêncio —; timeout não libera outro escritor. Não é isolamento de filesystem nem mudança do estado derivado da missão.
 
+### O caminho Codex da campanha (#466)
+
+O runner escolhe o harness uma vez por execução. O Codex recebe o prompt de boot, o contrato do
+chapéu e os caminhos das skills resolvidas para a fase. O adaptador isola a configuração de usuário
+e desativa MCP, conectores e hooks. A sessão usa o sandbox nativo e a guarda do runner mede as
+escritas e os commits do mesmo checkout ao fim da fase. O preflight testa um comando dentro desse
+sandbox. Uma falha ali impede o aceite da campanha naquele ambiente.
+
+O retry usa o ID nativo que veio no stream. O grill usa outro registro, por missão e worktree,
+na área de metadados do Git. Cada resposta referencia a pergunta pendente. O ledger guarda o uso,
+a estimativa de API quando calculável e o custo faturado como desconhecido quando o harness não o
+informa. A delegação assinada determina se o worker pode abrir a fase mesmo sem provar o teto USD.
+
 ## 7. Hooks — pontos de intervenção humana
 
 **Regra.** Toda decisão de **abrir mais uma volta ou gastar mais** tem uma porta humana com

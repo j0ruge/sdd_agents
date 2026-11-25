@@ -149,6 +149,15 @@ load_config() {
   : "${PROJECT_NAME:=}"; : "${DEFAULT_BRANCH:=}"; : "${TEST_CMD:=}"
   : "${E2E_CMD:=}"; : "${E2E_DIR:=e2e}"; : "${APP_URL:=}"; : "${APP_EXPECT:=}"
   : "${HANDOFF_DIR:=docs/handoffs}"; : "${QA_DOCS_PATH:=docs/qa}"; : "${TODO_FILE:=TODO.md}"
+  : "${PHASE_ENGINE:=claude}"; : "${CODEX_PHASE_MODEL:=gpt-6.2-sol}"
+  export -n PHASE_ENGINE CODEX_PHASE_MODEL
+  case "$PHASE_ENGINE" in
+    claude|codex) ;;
+    *) die "PHASE_ENGINE must be claude or codex, got: '$PHASE_ENGINE'" ;;
+  esac
+  if [ "$PHASE_ENGINE" = codex ] && [[ ! "$CODEX_PHASE_MODEL" =~ ^[abcdefghijklmnopqrstuvwxyz0123456789][abcdefghijklmnopqrstuvwxyz0123456789._-]*$ ]]; then
+    die "CODEX_PHASE_MODEL must be a literal Codex model id"
+  fi
   : "${MODEL_EXEC:=opus}"; : "${MODEL_QA:=opus}"; : "${MODEL_REVIEW:=opus}"
   : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"
   : "${MODEL_KAIZEN:=opus}"
@@ -3139,6 +3148,10 @@ next_pending_phase() {
 
 # Model configured for the phase.
 phase_model() {
+  if [ "$PHASE_ENGINE" = codex ]; then
+    case "$1" in EXEC) printf '%s\n' "$CODEX_PHASE_MODEL" ;; *) printf 'gpt-6.2-sol\n' ;; esac
+    return 0
+  fi
   case "$1" in
     EXEC)   printf '%s\n' "$MODEL_EXEC" ;;
     QA)     printf '%s\n' "$MODEL_QA" ;;
@@ -3154,6 +3167,10 @@ phase_model() {
 # Effort configured for the phase — empty when the human's settings decide. Same shape and same
 # fallthrough as phase_model, on purpose: the PR phase answers to the PUBLISH key in both.
 phase_effort() {
+  if [ "$PHASE_ENGINE" = codex ]; then
+    case "$1" in QA|REVIEW) printf 'xhigh\n' ;; *) printf 'medium\n' ;; esac
+    return 0
+  fi
   case "$1" in
     EXEC)   printf '%s\n' "$EFFORT_EXEC" ;;
     QA)     printf '%s\n' "$EFFORT_QA" ;;
@@ -3304,6 +3321,91 @@ phase_agent() {
     QA:plan|QA:exec) printf '%s\n' "" ;;
     *)               phase_hat "$1" ;;
   esac
+}
+
+# Codex resolves the actual skill file, rather than hoping a Claude slash command expands.
+# The same paths are checked in preflight and used in phase prompts. Scope goes from the target
+# checkout to user installs. A user may link a local or plugin skill there without copying it.
+codex_skill_file() {
+  local name="${1#*:}" root path
+  for root in "$REPO_ROOT/.agents/skills" "$HOME/.agents/skills" "${CODEX_HOME:-$HOME/.codex}/skills"; do
+    path="$root/$name/SKILL.md"
+    if [ -r "$path" ] && [ -f "$path" ]; then printf '%s\n' "$path"; return 0; fi
+  done
+  return 1
+}
+
+codex_phase_skill() {
+  case "$1" in
+    QA:plan) printf 'qa-report\n' ;;
+    QA:exec) printf 'qa-execution\n' ;;
+    REVIEW) printf 'codereview\n' ;;
+    TICKET) printf 'ticket\n' ;;
+  esac
+}
+
+codex_role_context() {
+  local step="$1" hat="$2" skill path role
+  skill="$(codex_phase_skill "$step")"
+  if [ -n "$skill" ]; then
+    if path="$(codex_skill_file "$skill")"; then
+      printf 'Read %s and follow it as the %s skill.\n' "$path" "$skill"
+      printf 'References are relative to that skill. Where it names a Claude tool or slash invocation, use the corresponding Codex capability.\n'
+    elif [ "$DRY_RUN" = 1 ]; then
+      warn "Codex skill $skill is not installed — install it in an .agents/skills directory"
+    else
+      return 1
+    fi
+  fi
+  # The first two QA substeps are driven by their own skill, not the QA closer's body.
+  role="$(phase_agent "$step")"
+  if [ -n "$role" ]; then
+    printf '\nRole instructions from the kit (%s):\n' "$role"
+    awk 'NR==1 && $0=="---" { meta=1; next } meta && $0=="---" { meta=0; next } !meta' "$SDD_HOME/agents/$role.md"
+  fi
+  printf '\nPhase boundary (%s), in addition to the Codex sandbox:\n' "$hat"
+  printf 'Denied capabilities and commands: %s\n' "$(hat_disallowed "$step")"
+  printf 'Allowed write paths: %s\n' "$(hat_writes "$step" | sed '/^$/d')"
+  printf 'Do not use MCP servers. Never read or write another mission worktree.\n'
+}
+
+# A provider with GitHub credentials cannot be limited to the worker's pr act by a prompt.
+# Leave publication to that separately authorized worker act and keep gate_PR as the authority.
+codex_pr_handoff() {
+  info "PR needs worker publish — use the campaign's separately authorized pr act, then resume sdd run for gate verification."
+}
+
+# Each call that can spend enforces the signed receipt in the actual target checkout. Neither
+# a CLI budget override nor a fake model response changes the worker's decision.
+codex_admit_session() {
+  local phase="$1" state_dir="${SDD_STATE_DIR:-$HOME/.sdd}" ledger repo model
+  [ "$PHASE_ENGINE" = codex ] || return 0
+  if [ "$phase" = PR ]; then codex_pr_handoff; return 2; fi
+  [ "$DRY_RUN" != 1 ] || return 0
+  [ "$BUDGET_OVERRIDE" != 1 ] || die "--budget-override does not apply to Codex campaign sessions"
+  [ -x "$SDD_HOME/bin/sdd-codex" ] || die "Codex adapter not installed at $SDD_HOME/bin/sdd-codex"
+  [ -x "$SDD_HOME/bin/sdd-worker" ] || die "Codex requires the worker's delegation check"
+  command -v jq >/dev/null 2>&1 || die "Codex requires jq to record its unknown-cost session"
+  # Match the ledger that the runner writes even when invoked from a subdirectory.
+  [[ "$state_dir" == /* ]] || state_dir="$PWD/$state_dir"
+  model="$(phase_model "$phase")"
+  if ! ( cd "$REPO_ROOT" && SDD_STATE_DIR="$state_dir" "$SDD_HOME/bin/sdd-worker" codex-run --mission "$MISSION_DIR" --phase "$phase" --model "$model" ); then
+    bad "BLOCKED in $phase — the worker did not authorize this Codex session"
+    pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  Codex delegation refused"
+    autonomy_blocked_row "codex-delegation" "$phase" "the worker did not authorize this Codex session"
+    return 3
+  fi
+  # Unlike a standalone Claude mission, delegated budget relies on a writable shared ledger.
+  if [ -z "${SDD_STATE_DIR:-}" ]; then
+    repo="$(ledger_repo_root)"
+    if ledger_repo_is_temp "$repo"; then
+      die "Codex requires a dedicated SDD_STATE_DIR for a temporary checkout"
+    fi
+  fi
+  ledger="$(autonomy_log_path)"
+  if ! mkdir -p "$(dirname "$ledger")" || ! ( : >> "$ledger" ); then
+    die "Codex requires a writable autonomy ledger at $ledger"
+  fi
 }
 
 # --- the hat's boundary --------------------------------------------------------------------------
@@ -3864,7 +3966,7 @@ The tree was not clean when this session opened:"
 Run git status and git diff BEFORE you edit anything. What belongs to the work of this phase is yours to finish and commit;
 never commit a .bak or an applied mutant you did not write, and say in the handoff what else you found."
   fi
-  [ -n "$slash" ] && printf '%s\n\n' "$slash"
+  [ "$PHASE_ENGINE" = claude ] && [ -n "$slash" ] && printf '%s\n\n' "$slash"
   cat <<EOF
 You are in phase $step of mission \`$MISSION\` in project \`$PROJECT_NAME\`${agent:+, as the agent $agent}.
 
@@ -5213,7 +5315,10 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   # there yields an empty string, and swallowing it here in silence would leave a gap in the
   # ledger that JSONL gives no way to detect afterwards — the mission goes on, same as the
   # unwritable-file guard right below, so it gets the same warn.
-  [ -n "${1:-}" ] || { warn "autonomy ledger row came out empty (jq failed to build it?) — the mission goes on, the row is lost"; return 0; }
+  [ -n "${1:-}" ] || {
+    [ "${PHASE_ENGINE:-claude}" != codex ] || die "Codex budget requires a valid autonomy ledger row"
+    warn "autonomy ledger row came out empty (jq failed to build it?) — the mission goes on, the row is lost"; return 0
+  }
   # `runner_sha` (#129) is added HERE, at the door every row goes through, and not in the four
   # builders: a writer added tomorrow is born carrying it. It is the HEAD the process was LAUNCHED
   # from, while `kit_sha` is read off the disk when the row is built — the two differ exactly when
@@ -5263,6 +5368,7 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   # curated warning below. Both writers were aligned on purpose (R8), and are corrected together
   # (r3 finding #1) so they do not drift apart a third time.
   printf '%s\n' "$row" 2>/dev/null >> "$file" || {
+    [ "${PHASE_ENGINE:-claude}" != codex ] || die "Codex budget requires recording the session in $file"
     warn "could not write the autonomy ledger at $file — the mission goes on, the row is lost"
     return 0
   }
@@ -5509,6 +5615,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
   # the one definition the readers also go through.
   local repo; repo="$(ledger_repo_root)"
   autonomy_append "$( jq -cn \
+    --argjson codex "$LAST_CODEX_FACTS" \
     --arg ts "$(date -Iseconds)" --arg phase "$1" --arg attempt "$2" \
     --arg auto_retry "$3" --arg moved "$4" --arg gate "$5" \
     --arg why "${6:0:200}" \
@@ -5555,7 +5662,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       rounds_before: ($rbefore | tonumber? // null),
       rounds_after: ($rafter | tonumber? // null),
       rounds_max: ($rmax | tonumber? // null),
-      gate: $gate, gate_why: $why}' )"
+      gate: $gate, gate_why: $why} + $codex' )"
 }
 
 # The one `result` object of a stream-json session, or nothing. `tail -1` and not `head -1`: the
@@ -5577,6 +5684,26 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
 # for whoever reads the mangled session.
 stream_summary() { # stream_summary <stream.jsonl>
   jq -c 'select(.type == "result")' "$1" 2>/dev/null | tail -1 || true
+}
+
+# Record a real thread id even if the terminal event was lost. The invocation UUID is only
+# the log/reflog key, not a thread Codex can resume. A missing id is unknown, never fabricated.
+codex_session_facts() {   # <stream> <result> <effort>
+  LAST_CODEX_SID="$(jq -r '
+    select(.type == "system" and .subtype == "init" and .provider == "codex")
+    | .session_id // empty | select(test("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"))
+  ' "$1" 2>/dev/null | head -1)" || true
+  LAST_CODEX_FACTS="$(jq -c --arg effort "$3" --arg session "$LAST_CODEX_SID" '
+    {engine:"codex", effort:$effort, session:(if $session == "" then null else $session end),
+     usage:(.usage | if type == "object" then . else null end),
+     estimated_cost_usd:(.estimated_cost_usd | if type == "number" and . >= 0 then . else null end),
+     estimate_basis:(.estimate_basis | if type == "object" then . else null end)}
+  ' "$2" 2>/dev/null)" || LAST_CODEX_FACTS=""
+  if [ -z "$LAST_CODEX_FACTS" ]; then
+    LAST_CODEX_FACTS="$(jq -cn --arg effort "$3" --arg session "$LAST_CODEX_SID" '
+      {engine:"codex", effort:$effort, session:(if $session == "" then null else $session end),
+       usage:null, estimated_cost_usd:null, estimate_basis:null}')"
+  fi
 }
 
 # What the session could SEE, read off the stream's `init` line, and what it was refused, read
@@ -5602,7 +5729,20 @@ hat_init_facts() {   # hat_init_facts <stream> <result json> <deny list> <declar
   # hat's `disallowedTools:` and stripped Bash from every phase — three TICKET sessions, US$ 3,39 —
   # and no row said so. Recorded here, shown per slice by `sdd kaizen --series`; whether the judge
   # refuses a mixed slice is a separate decision (TODO.md), this only stops the bump being invisible.
-  LAST_PHASE_HARNESS="$( jq -r '.claude_code_version // ""' <<< "$init" 2>/dev/null )" || LAST_PHASE_HARNESS=""
+  LAST_PHASE_HARNESS="$( jq -r '.claude_code_version // .codex_cli_version // ""' <<< "$init" 2>/dev/null )" || LAST_PHASE_HARNESS=""
+  # Codex native streams do not publish an inventory. Only record a leak from observed calls,
+  # and leave the configured inventory out of the legacy "tools seen" telemetry.
+  if jq -e '.provider == "codex" and .tool_inventory == "configured"' <<< "$init" >/dev/null; then
+    local codex_mcp
+    codex_mcp="$(jq -sc '
+      [ .[] | .native_event.item? | select(.type == "mcp_tool_call") | .id ] | unique | length
+    ' "$stream" 2>/dev/null)" || codex_mcp=""
+    if [ "${codex_mcp:-0}" -gt 0 ]; then
+      LAST_PHASE_MCP_SEEN="$codex_mcp"
+      LAST_PHASE_LEAK_NAMES="native MCP call"
+    fi
+    return 0
+  fi
   facts="$( jq -r --arg deny "$deny" --arg declared "$declared" '
       def names($s): [ $s | split(",")[] | gsub("^\\s+|\\s+$"; "") | select(. != "" and (contains("(") | not)) ];
       (names($deny) | map(if . == "Agent" then "Task" else . end)) as $deny_names
@@ -5862,6 +6002,7 @@ run_phase() {
   # Same contract again: the label of the session THIS call opens, or empty when none was opened —
   # hat_guard_check reads an empty label as "nothing to attribute by" and falls back to the diff.
   LAST_PHASE_GIT_LABEL=""
+  LAST_CODEX_FACTS="{}"
   local pstep model effort agent sid prompt logfile streamfile started ended cost turns cache_read
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
@@ -5881,7 +6022,7 @@ run_phase() {
   if [ -n "$hat" ] && [ ! -f "$SDD_HOME/agents/$hat.md" ]; then
     die "hat $hat has no agents/$hat.md under $SDD_HOME — a missing hat would write anywhere"
   fi
-  if [ -n "$agent" ] && [ ! -f "$REPO_ROOT/.claude/agents/$agent.md" ]; then
+  if [ "$PHASE_ENGINE" = claude ] && [ -n "$agent" ] && [ ! -f "$REPO_ROOT/.claude/agents/$agent.md" ]; then
     # The remedy depends on the checkout (L4 item 14): in a linked worktree the mirrors are the
     # ignored links `sdd link-agents` makes in EACH checkout, so a new worktree starts without them
     # and `sdd install --force` there is the wrong command; in the main checkout it is the right one.
@@ -5931,6 +6072,26 @@ missing and write the artifacts. The gate will be re-evaluated."
   if [ -z "$mcp" ]; then cmd+=(--strict-mcp-config); mcp_mode="<none: --strict-mcp-config>"; fi
   if [ -n "$resume_sid" ]; then cmd+=(--resume "$resume_sid" --fork-session)
   else cmd+=(--session-id "$sid"); fi
+  local role_context app_hostport
+  if [ "$PHASE_ENGINE" = codex ]; then
+    case "$phase" in PR|KAIZEN) die "$phase does not open a Codex campaign session" ;; esac
+    [ -n "$hat" ] || die "$phase is not a Codex campaign phase"
+    [ -x "$SDD_HOME/bin/sdd-codex" ] || die "Codex adapter not installed at $SDD_HOME/bin/sdd-codex"
+    role_context="$(codex_role_context "$pstep" "$hat")" \
+      || die "required Codex skill $(codex_phase_skill "$pstep") is not installed — run 'sdd preflight'"
+    prompt="$prompt
+
+$role_context"
+    agent="$hat"
+    mcp_mode="<none: Codex adapter>"
+    cmd=(env "${HARNESS_ENV_UNSET[@]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL"
+      "$SDD_HOME/bin/sdd-codex" --model "$model" --effort "$effort" --hat "$hat")
+    if [ "$hat" = sdd-qa ] && [ -n "$APP_URL" ]; then
+      app_hostport="$(app_url_hostport "$APP_URL")" || die "Codex QA needs APP_URL with an HTTP(S) host and port"
+      cmd+=(--qa-host "${app_hostport%% *}")
+    fi
+    if [ -n "$resume_sid" ]; then cmd+=(--resume "$resume_sid"); fi
+  fi
   # The journal says it too, for the human on `tail -F` (item H of TODO.md): one line before a NEW
   # session that boots over the leftovers its prompt names — a retry gets the gate's reason as its
   # prompt instead, so it carries no block and writes no line. pipeline_log_line is silent under
@@ -5945,6 +6106,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   if [ "$DRY_RUN" = "1" ]; then
     info ""
     printf '%s--- DRY RUN: phase %s ---%s\n' "$C_BOLD" "$pstep" "$C_RESET"
+    if [ "$PHASE_ENGINE" = codex ]; then printf 'engine: codex\n'; fi
     printf '%scwd:%s   %s\n' "$C_DIM" "$C_RESET" "$REPO_ROOT"
     printf '%smodel:%s %s   %seffort:%s %s   %sagent:%s %s   %ssession:%s %s\n' \
       "$C_DIM" "$C_RESET" "$model" "$C_DIM" "$C_RESET" "${effort:-<settings>}" \
@@ -5988,7 +6150,11 @@ missing and write the artifacts. The gate will be re-evaluated."
   # PIPESTATUS, for no second consumer to feed.
   local watcher=""
   if progress_wanted; then stream_watch "$streamfile" & watcher=$!; fi
-  ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$streamfile" 2>"${logfile%.json}.err" || rc=$?
+  if [ "$PHASE_ENGINE" = codex ]; then
+    ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$streamfile" 2>"${logfile%.json}.err" <<< "$prompt" || rc=$?
+  else
+    ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$streamfile" 2>"${logfile%.json}.err" || rc=$?
+  fi
   # Before `ended`, so the watcher cannot print over the phase's own closing lines. `wait` is what
   # makes that a guarantee instead of a hope, and both are silenced: the watcher is killed by
   # design, so its death is not news.
@@ -6067,8 +6233,17 @@ missing and write the artifacts. The gate will be re-evaluated."
   # "nothing to do" (final review of 20260922-o-motivo-da-fase; decided by the human). POSITIVE
   # rule, one subtype named, for the reason the paragraph above gives.
   SESSION_BUDGET_CUT="$(jq -r 'if .subtype == "error_max_budget_usd" then "1" else "" end' "$logfile" 2>/dev/null || echo "")"
-  local dur=$((ended - started))
-  pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  effort=${effort:-settings}  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
+  local dur=$((ended - started)) session="${resume_sid:-$sid}" engine_note=""
+  if [ "$PHASE_ENGINE" = codex ]; then
+    codex_session_facts "$streamfile" "$logfile" "$effort"
+    session="$LAST_CODEX_SID"; cost="?"; engine_note=" engine=codex"
+    if [ -z "$session" ] || [ "$rc" -ne 0 ]; then
+      SESSION_DIED_WHY="${died:-Codex did not complete with a native thread id; see $streamfile and ${logfile%.json}.err}"
+      died="$SESSION_DIED_WHY"
+      [ "$rc" -ne 0 ] || rc=1
+    fi
+  fi
+  pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  effort=${effort:-settings}$engine_note  session=${session:-unknown}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
   # Published for the autonomy ledger, which is written by cmd_run — only there is the gate
   # result known, and the row carries it.
@@ -6091,7 +6266,7 @@ missing and write the artifacts. The gate will be re-evaluated."
     if [ -n "$died" ]; then
       bad "the $phase session died: ${died:0:200}"
     fi
-    warn "claude exited $rc in phase $phase (see $logfile and ${logfile%.json}.err)"
+    warn "$PHASE_ENGINE exited $rc in phase $phase (see $logfile and ${logfile%.json}.err)"
   else
     dim "  session ended in ${dur}s, cost $cost USD"
   fi
@@ -6099,7 +6274,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   # `--session-id`: the `$sid` generated at the top of this call was never handed to claude, so
   # recording it here would leave the retry row pointing at a session that identifies nothing —
   # matches what `pipeline_log_line` above already records for the same session.
-  LAST_PHASE_SID="${resume_sid:-$sid}"
+  LAST_PHASE_SID="$session"
   invalidate_checks
   return 0
 }
@@ -6113,6 +6288,8 @@ LAST_PHASE_STEP=""
 LAST_PHASE_AGENT=""
 LAST_PHASE_MODEL=""
 LAST_PHASE_DIED=""
+LAST_CODEX_FACTS="{}"
+LAST_CODEX_SID=""
 LAST_PHASE_GIT_LABEL=""
 SESSION_DIED_WHY=""
 SESSION_BUDGET_CUT=""
@@ -7173,7 +7350,16 @@ cmd_preflight() {
   _fail() { bad "$1"; fails=$((fails + 1)); }
 
   # --- tools ---
-  if command -v claude >/dev/null 2>&1; then ok "claude $(claude --version 2>&1 | head -1)"
+  if [ "$PHASE_ENGINE" = codex ]; then
+    if [ ! -x "$SDD_HOME/bin/sdd-codex" ]; then
+      _fail "Codex adapter not installed at $SDD_HOME/bin/sdd-codex"
+    elif ( cd "$REPO_ROOT" && "$SDD_HOME/bin/sdd-codex" --preflight ); then
+      ok "Codex adapter, CLI capabilities and login checked (no model session opened)"
+    else
+      _fail "Codex capability or login check failed"
+    fi
+    [ -r "$SDD_HOME/templates/handoff.md" ] || _fail "Codex cannot read kit templates at $SDD_HOME/templates/"
+  elif command -v claude >/dev/null 2>&1; then ok "claude $(claude --version 2>&1 | head -1)"
   else _fail "claude CLI not found in PATH"; fi
 
   local t
@@ -7256,7 +7442,7 @@ cmd_preflight() {
   # is red there.
   # Sensor: tests/check-preflight.sh.
   local kit_tpl_refused=""
-  if ! read_extra_dir_ok "$SDD_HOME/templates"; then
+  if [ "$PHASE_ENGINE" = claude ] && ! read_extra_dir_ok "$SDD_HOME/templates"; then
     kit_tpl_refused=1
     _fail "the kit's templates are at $SDD_HOME/templates, a path the grammar of the read rules refuses
         (every component letters, digits, \`.\`, \`_\` and \`-\`): kit_read_rules gives no session a rule for
@@ -7289,7 +7475,7 @@ cmd_preflight() {
   # ONE hat, the executor's, by cost: eight sessions per preflight is not a preflight. The other
   # seven declare the same key shape, and tests/check-hat.sh R3 refuses the mix-up in every file;
   # what this probe adds is the harness's reading of it, which no sensor on the declaration can see.
-  if command -v claude >/dev/null 2>&1; then
+  if [ "$PHASE_ENGINE" = claude ] && command -v claude >/dev/null 2>&1; then
     local hat probe_stream probe_init probe_answer probe_tools probe_result probe_ran probe_silent=""
     local -a probe_agent=()
     hat="$(phase_hat EXEC)"
@@ -7575,6 +7761,13 @@ cmd_preflight() {
   # start a mission because a URL could not be parsed would break every repo whose APP_URL this
   # does not understand, which is the widest possible reading of the narrowest possible fact.
   if [ -n "$APP_URL" ]; then
+    if [ "$PHASE_ENGINE" = codex ]; then
+      if app_url_hostport "$APP_URL" >/dev/null; then
+        dim "  ---  Codex QA limits proxy access to the configured app host; browser access inside the sandbox is not probed"
+      else
+        _fail "Codex QA needs APP_URL with an HTTP(S) host and port"
+      fi
+    fi
     local app_verdict app_state app_label
     app_verdict="$(app_probe "$APP_URL" "$APP_EXPECT")"
     app_state="${app_verdict%%|*}"; app_label="${app_verdict#*|}"
@@ -7739,50 +7932,61 @@ $todo_first
   # pipeline will not use is how an operator learns to skip reading warnings. The classes and their
   # sentences are phase_skills_check's, the one definition `sdd run` and `sdd retry` stop on; here
   # every one is a warning, never `_fail`, and no session.
-  phase_skills_check preflight
+  if [ "$PHASE_ENGINE" = codex ]; then
+    local skill skill_path
+    for skill in "${wanted[@]}"; do
+      if skill_path="$(codex_skill_file "$skill")"; then ok "Codex skill ${skill#*:}: $skill_path"
+      else _fail "Codex skill ${skill#*:} is missing — install it in an .agents/skills directory"; fi
+    done
+  else
+    phase_skills_check preflight
+  fi
   # The kit clone itself (L4 item 2): off its default branch, or behind what was last fetched.
   kit_stale_check
 
-  # --- target repo plugins ---
-  local settings="$REPO_ROOT/.claude/settings.json"
-  if [ -f "$settings" ]; then
-    local p missing=""
-    for p in ddd kaizen-software; do
-      grep -q "\"$p@" "$settings" || missing="$missing $p"
-    done
-    if [ -z "$missing" ]; then ok "plugins ddd + kaizen-software enabled"
-    else warn "plugins not enabled in .claude/settings.json:$missing (the planner invokes them)"; fi
-  else
-    warn ".claude/settings.json missing — ddd/kaizen plugins not enabled in the repo"
-  fi
-
-  # --- installed agents ---
-  # `cmp -s` and not `[ -f ]`: what the harness loads is the COPY in .claude/agents/, so a source
-  # that was fixed proves nothing about the text the agent will actually run. Presence-only made
-  # the "N kit agent(s) checked" line below a label over a comparison that never happened, and it
-  # bit for real — 2132cf5 edited agents/sdd-kaizen.md, the copy stayed behind, green in
-  # everything. Two failures and not one: absent and stale are different repairs, and telling an
-  # operator to install a file that is right there on disk sends them the wrong way.
-  local a name copy n=0 fails_before_agents="$fails"
-  for a in "$SDD_HOME"/agents/sdd-*.md; do
-    [ -e "$a" ] || continue
-    n=$((n + 1))
-    name="$(basename "$a")"
-    copy="$REPO_ROOT/.claude/agents/$name"
-    if [ ! -f "$copy" ]; then
-      _fail "agent $name not installed — run 'sdd install'"
-    elif ! cmp -s "$a" "$copy"; then
-      _fail "agent $name stale — .claude/agents/$name no longer matches $a.
-        The harness loads the copy, so this agent keeps running the old text while the kit source
-        looks corrected. Run 'sdd install --force' (or 'sdd install' to see the diff first)."
+  if [ "$PHASE_ENGINE" = claude ]; then
+    # --- target repo plugins ---
+    local settings="$REPO_ROOT/.claude/settings.json"
+    if [ -f "$settings" ]; then
+      local p missing=""
+      for p in ddd kaizen-software; do
+        grep -q "\"$p@" "$settings" || missing="$missing $p"
+      done
+      if [ -z "$missing" ]; then ok "plugins ddd + kaizen-software enabled"
+      else warn "plugins not enabled in .claude/settings.json:$missing (the planner invokes them)"; fi
+    else
+      warn ".claude/settings.json missing — ddd/kaizen plugins not enabled in the repo"
     fi
-  done
-  # Only claims "checked" when no AGENT failed — saying it right after six failure lines is the
-  # output contradicting itself, which is the kind of lie the kit forbids in the gates. Counted
-  # across this block and not across the whole preflight: `fails -eq 0` let a red `gh auth` above
-  # silence the line over eight copies that all matched, and made it unobservable in every offline
-  # fixture (issue #83).
-  if [ "$n" -gt 0 ] && [ "$fails" -eq "$fails_before_agents" ]; then ok "$n kit agent(s) checked"; fi
+
+    # --- installed agents ---
+    # `cmp -s` and not `[ -f ]`: what the harness loads is the COPY in .claude/agents/, so a source
+    # that was fixed proves nothing about the text the agent will actually run. Presence-only made
+    # the "N kit agent(s) checked" line below a label over a comparison that never happened, and it
+    # bit for real — 2132cf5 edited agents/sdd-kaizen.md, the copy stayed behind, green in
+    # everything. Two failures and not one: absent and stale are different repairs, and telling an
+    # operator to install a file that is right there on disk sends them the wrong way.
+    local a name copy n=0 fails_before_agents="$fails"
+    for a in "$SDD_HOME"/agents/sdd-*.md; do
+      [ -e "$a" ] || continue
+      n=$((n + 1))
+      name="$(basename "$a")"
+      copy="$REPO_ROOT/.claude/agents/$name"
+      if [ ! -f "$copy" ]; then
+        _fail "agent $name not installed — run 'sdd install'"
+      elif ! cmp -s "$a" "$copy"; then
+        _fail "agent $name stale — .claude/agents/$name no longer matches $a.
+          The harness loads the copy, so this agent keeps running the old text while the kit source
+          looks corrected. Run 'sdd install --force' (or 'sdd install' to see the diff first)."
+      fi
+    done
+    # Only claims "checked" when no AGENT failed — saying it right after six failure lines is the
+    # output contradicting itself, which is the kind of lie the kit forbids in the gates. Counted
+    # across this block and not across the whole preflight: `fails -eq 0` let a red `gh auth` above
+    # silence the line over eight copies that all matched, and made it unobservable in every offline
+    # fixture (issue #83).
+    if [ "$n" -gt 0 ] && [ "$fails" -eq "$fails_before_agents" ]; then ok "$n kit agent(s) checked"; fi
+
+  fi
 
   # --- the qa bug template carries the genre field ----------------------------
   # Anchor 3 of gate_QA blocks on an ABSENT `Closable by:`, and nothing but `sdd install` ever
@@ -7855,12 +8059,14 @@ $todo_first
   # ~52K in the target. Every capture is guarded — `find` and the loop exit non-zero on an empty
   # match, and under `set -o pipefail` an unguarded one would take the whole preflight down on a
   # repo with no rules directory, which is most of them.
-  local cb_files=0 cb_bytes=0 cb
-  for cb in "$REPO_ROOT/CLAUDE.md" "$REPO_ROOT/.claude/rules"/*.md; do
-    [ -f "$cb" ] || continue
-    cb_files=$((cb_files + 1)); cb_bytes=$((cb_bytes + $(wc -c < "$cb")))
-  done
-  ok "context bill: $cb_files file(s), $cb_bytes bytes of CLAUDE.md + .claude/rules/ — carried into EVERY turn of every phase (bytes, not tokens: the ratio is not constant)"
+  if [ "$PHASE_ENGINE" = claude ]; then
+    local cb_files=0 cb_bytes=0 cb
+    for cb in "$REPO_ROOT/CLAUDE.md" "$REPO_ROOT/.claude/rules"/*.md; do
+      [ -f "$cb" ] || continue
+      cb_files=$((cb_files + 1)); cb_bytes=$((cb_bytes + $(wc -c < "$cb")))
+    done
+    ok "context bill: $cb_files file(s), $cb_bytes bytes of CLAUDE.md + .claude/rules/ — carried into EVERY turn of every phase (bytes, not tokens: the ratio is not constant)"
+  fi
 
   # --- ADR traceability ---
   # A SENSOR and never a `_fail`, on the same argument as the context bill above: a repo that has
@@ -10346,7 +10552,7 @@ cmd_run() {
   # HERE, before the branch is switched, before any gate runs TEST_CMD and before any session is
   # paid for; under --dry-run it is a warning and the projection goes on. Called, never `$( )`: the
   # die must end this process.
-  phase_skills_check run
+  if [ "$PHASE_ENGINE" = claude ]; then phase_skills_check run; fi
   # L4 item 2: a stale kit clone is named before anything is paid for (silent in a dry run).
   kit_stale_check
   # BEFORE the base-branch warning, and the order is the point: the checkout is what decides where
@@ -10366,7 +10572,7 @@ cmd_run() {
   # session, right above `before=` (#227): written here, it was committed ahead of laps that stop
   # without one — the stamp stop and PLAN return 2 — and `sdd autonomy --by-mission` counted an
   # intervention in a run that did nothing.
-  local cli_phase="$force_phase" cli_lap=""
+  local cli_phase="$force_phase" cli_lap="" launch_engine="$PHASE_ENGINE"
 
   local -A attempts=()
   # SESSIONS, which is not the same grandeza as `attempts` and was being printed as if it were.
@@ -10401,6 +10607,7 @@ cmd_run() {
   while :; do
     # The config is re-read on every lap, before anything of the lap reads it (#129, config_reload).
     config_reload
+    [ "$PHASE_ENGINE" = "$launch_engine" ] || die "PHASE_ENGINE changed during a run — start a new invocation"
     # Single use: the first lap takes the CLI's --phase, every later lap — the draft jump included,
     # whose force_phase is the runner's — finds it empty.
     cli_lap="$cli_phase"; cli_phase=""
@@ -10687,6 +10894,12 @@ cmd_run() {
     # window it would read as the session's progress (state_fingerprint reads HEAD) and as a commit
     # with no session label (hat_guard_arm records the reflog's top). The inline retry is the same
     # lap and writes nothing more; `sdd retry` is its own door and keeps its own note.
+    local admission_rc=0
+    codex_admit_session "$phase" || admission_rc=$?
+    if [ "$admission_rc" -ne 0 ]; then
+      if [ "$DRY_RUN" = 1 ] && [ "$admission_rc" = 2 ]; then return 0; fi
+      return "$admission_rc"
+    fi
     if [ -n "$cli_lap" ]; then
       checkpoint_note_intervention "sdd run --phase $cli_lap (the starting phase was forced from the CLI)" "$cli_lap"
     fi
@@ -10845,6 +11058,7 @@ cmd_run() {
     # this line. Which mechanism orders it that way was not identified. The direction of the
     # failure without this line is a FALSE hat-crossed stop, loud and not silent.
     hat_guard_arm
+    codex_admit_session "$phase" || return $?
     run_phase "$phase" "$LAST_PHASE_SID"
     # The retry gets its own pair of fingerprints. Until now it ran with no measurement at all,
     # and `moved/total` is precisely the metric that needs it.
@@ -11059,7 +11273,7 @@ cmd_retry() {
   AUTONOMY_INVOCATION="retry"
   # The second door of phase_skills_check (L4 item 7): a retry opens a fresh session, which the
   # harness would deny the skill all the same. Before the branch, the gates and the session.
-  phase_skills_check run
+  if [ "$PHASE_ENGINE" = claude ]; then phase_skills_check run; fi
   kit_stale_check
   # The second call site of the single definition: `sdd retry` opens a session that COMMITS, so a
   # retry fired from the wrong branch lands the redone phase exactly where `sdd run` would not
@@ -11091,6 +11305,7 @@ cmd_retry() {
   # BELOW the ceiling since decision 11a (#227's neighbour): written above it, a retry the ceiling
   # refused committed a note into a mission whose run bought nothing. Then the override's note, if
   # mission_budget_blown published one — both above `before=` and the two arms, never below.
+  codex_admit_session "$phase" || return $?
   checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"
   budget_override_note_write "$phase"
   step "retrying $phase with a FRESH session"
@@ -11316,7 +11531,18 @@ cmd_boot() {
   case " $PHASES " in *" $phase "*) ;; *) die "unknown phase '$phase' (one of: $PHASES)" ;; esac
   # The same derivation the session would be opened on, so the instrument shows what it would see.
   derive_phase
-  boot_prompt "$phase" "$(phase_hat "$phase")"
+  if [ "$PHASE_ENGINE" = codex ] && [ "$phase" = PR ]; then
+    codex_pr_handoff
+  elif [ "$PHASE_ENGINE" = codex ] && [ "$phase" != PLAN ]; then
+    local step_id hat context DRY_RUN=1
+    step_id="$(phase_step "$phase")"
+    hat="$(phase_hat "$step_id")"
+    context="$(codex_role_context "$step_id" "$hat")"
+    boot_prompt "$step_id"
+    printf '\n%s\n' "$context"
+  else
+    boot_prompt "$phase" "$(phase_hat "$phase")"
+  fi
 }
 
 # sdd census <mission> — what each phase's sessions used and re-read, from .sdd/logs. The
@@ -13549,6 +13775,7 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
     return 0
   fi
 
+  [ "$PHASE_ENGINE" = claude ] || die "CLOSE is not a delegated Codex campaign phase — no session opened"
   step "closing $issue"
   local sid logfile rc=0
   sid="$(uuidgen)"

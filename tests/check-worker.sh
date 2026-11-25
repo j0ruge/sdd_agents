@@ -330,6 +330,9 @@
 #       side alone, give budget and level the whole answers of the same spelling on both sides, a
 #       differential; two folders that differ still stop both with rc 1, naming the two as the runner
 #       reads them (P2 of the Codex on PR #414, over f8e3e02)
+#   R71 Codex cost consent is a signed opt-in, bound to the campaign and mission lot. Unknown
+#       sessions have a count, optional estimates stay separate, and known ceilings still stop.
+#   R72 A stale copy of the campaign in a linked worktree cannot restore a revoked delegation.
 #
 # The command and the four documents are prose, and no mutant of bin/ reaches them, so R30 to R33,
 # R60 and R63 to R68 carry their own negative control: each checker runs on the files, where it has
@@ -2106,7 +2109,7 @@ COMMAND="$ROOT/commands/sdd-worker.md"
 
 # command_verbs — the verbs bin/sdd-worker dispatches, one per line, read from the case of its
 # main(): the program is the source, so a verb it gains is a verb the command has to name.
-command_verbs() { sed -n '/^main() {$/,/^}$/ s/^    \([a-z][a-z-]*\)) shift; cmd_.*/\1/p' "$WORKER"; }
+command_verbs() { sed -n '/^main() {$/,/^}$/ s/^    \([a-z][a-z-]*\)) shift; .*cmd_.*/\1/p' "$WORKER"; }
 
 # section <file> <heading> — the lines under `## <heading>`, up to the next `## `.
 section() { awk -v h="## $2" '$0 == h { on = 1; next } on && /^## / { exit } on' "$1"; }
@@ -2140,7 +2143,7 @@ acts_unpreceded() {
 # the context rules: each phrase on a bullet of its own section, the last rule naming both verbs a
 # new session resumes from. A phrase found only in another section is missing.
 prose_missing() {
-  local s items p
+  local s items p ceiling
   s="$(section "$1" 'The five stops' 2>/dev/null)"
   items="$(grep -E '^[0-9]+\. ' <<< "$s")"
   [ "$(grep -c . <<< "$items")" = 5 ] || printf 'stops: not five numbered lines\n'
@@ -2151,7 +2154,8 @@ prose_missing() {
   # The fifth stop is a measured spend alone, and the lines of a verb that measured nothing are paged
   # under the names of what it printed (achado #30 of the r5); the line goes to the pager through a
   # variable, never pasted between single quotes (#31).
-  grep -qF 'campaign US$' <<< "$(grep -F 'campaign-ceiling' <<< "$items")" \
+  ceiling="$(grep -F 'campaign-ceiling' <<< "$items")"
+  { grep -qF 'campaign US$' <<< "$ceiling" && grep -qF 'campaign known US$' <<< "$ceiling"; } \
     || printf 'stops: campaign-ceiling on a measured spend\n'
   for p in 'SDD_REASON=next-stop' '`no-ceiling`' '`no-spend`'; do
     grep -qF "$p" <<< "$s" || printf 'stops: %s\n' "$p"
@@ -2190,16 +2194,17 @@ control() {
 }
 
 # --- R30: every verb is named -------------------------------------------------------------------
-# The floor of six is the probe of the parse: a main() whose case changes shape (an arm split over
+# The floor of seven is the probe of the parse: a main() whose case changes shape (an arm split over
 # two lines) hides that verb from command_verbs, and a verb the parse misses is one nobody checks —
 # measured, level split that way left the controls green and only this floor red.
 got=""
 verbs="$(command_verbs)"
-[ "$(grep -c . <<< "$verbs")" -ge 6 ] || got="the program dispatches '${verbs//$'\n'/ }', not the six verbs"
+[ "$(grep -c . <<< "$verbs")" -ge 7 ] || got="the program dispatches '${verbs//$'\n'/ }', not the seven verbs"
 m="$(verbs_missing "$COMMAND")"
 [ -z "$m" ] || got="${got:+$got; }not named: ${m//$'\n'/ }"
 control 'no budget call' verbs_missing budget 's/sdd-worker budget/sdd-worker budgets/g'
 control 'no pr-ready call' verbs_missing pr-ready 's/sdd-worker pr-ready/sdd-worker pr_ready/g'
+control 'no codex-run call' verbs_missing codex-run 's/sdd-worker codex-run/sdd-worker codex_run/g'
 # The primitive under every control, against an answer known wrong: told to want level from a copy
 # whose checker prints budget, control() has to append, or each control above passes on anything.
 saved="$got"
@@ -2251,9 +2256,9 @@ control 'context: handoff' prose_missing 'context: a handoff to a file' '/^- .*a
 control 'context: not a bullet' prose_missing 'context: One line per event' 's/^- \(One line per event\)/\1/'
 control 'context: no next' prose_missing 'context: resumes from level and next' 's/^\(- A new session resumes from `sdd-worker level`\) and `sdd-worker next`/\1/'
 control 'context: no level' prose_missing 'context: resumes from level and next' 's/^\(- A new session resumes from\) `sdd-worker level` and/\1/'
-control 'ceiling on any line' prose_missing 'stops: campaign-ceiling on a measured spend' '/^5\. / s/on its `campaign US\$ <spent> of <ceiling>` line/on any other line/'
-control 'measured line in stop 4' prose_missing 'stops: campaign-ceiling on a measured spend' '/^5\. / s/on its `campaign US\$ <spent> of <ceiling>` line/on any other line/
-/^4\. / s/$/ Not the `campaign US$` line./'
+control 'ceiling on any line' prose_missing 'stops: campaign-ceiling on a measured spend' '/^5\. / s/campaign \(known \)\?US\$/unmeasured amount/g'
+control 'measured line in stop 4' prose_missing 'stops: campaign-ceiling on a measured spend' '/^5\. / s/campaign \(known \)\?US\$/unmeasured amount/g
+/^4\. / s/$/ Not the `campaign US$` or `campaign known US$` line./'
 control 'no-spend paged as the ceiling' prose_missing 'stops: `no-spend`' 's/with `no-spend`/with `campaign-ceiling`/'
 control 'next-stop only outside the section' prose_missing 'stops: SDD_REASON=next-stop' 's/SDD_REASON=next-stop/SDD_REASON=stop/
 $a\
@@ -5031,6 +5036,172 @@ if [ -z "$got" ]; then
 else
   fail 'spelling: a HANDOFF_DIR with a leading ./ or a trailing / on either side of the set is the folder the runner reads, budget and level answering as with one spelling, and two folders that differ still stop both naming them as the runner reads them' \
     'the three spellings each the whole answers of the same one, and docs/missions rc 1 for both verbs naming the two normalised' "$got"
+fi
+
+# --- Codex cost exception ----------------------------------------------------------------------
+cdx="$(campaign codex-cost pr "$FAR" 10 30)"
+sed -i -e 's/^harness:.*/harness: codex/' -e 's/^exec_model:.*/exec_model: gpt-6.2-sol/' "$cdx/campaign.md"
+cdxm="$REPO/docs/handoffs/codex-cost-mission"
+mkdir -p "$cdxm"
+printf '%s\n' '---' 'campaign: codex-cost' 'lot: L1' '---' > "$cdxm/00-missao.md"
+cdxl="$BOX/codex-state"
+mkdir "$cdxl"
+cat > "$cdxl/autonomy-log.jsonl" <<'EOF'
+{"event":"session","mission":"codex-cost-mission","cost_usd":4}
+{"event":"session","mission":"codex-cost-mission","engine":"codex","cost_usd":null,"estimated_cost_usd":42.25}
+{"event":"close","mission":"codex-cost-mission","engine":"codex","cost_usd":null}
+{"event":"gate_pass","mission":"codex-cost-mission"}
+{"event":"session","mission":"other","engine":"codex","cost_usd":null,"estimated_cost_usd":89}
+EOF
+cdx_worker() { SDD_STATE_DIR="$cdxl" W_CWD="$REPO" worker "$@"; }
+answer $'y\n'
+worker_from "$BOX/in" delegate "$cdx"
+got=""
+[ "$W_RC" = 0 ] && [[ "$W_OUT" == *'signed '* ]] || got="legacy sign: rc $W_RC: $W_OUT $W_ERR"
+mv "$cdxl/autonomy-log.jsonl" "$cdxl/mixed"
+cdx_worker codex-run --mission "$cdxm" --phase EXEC --model gpt-6.2-sol
+[ "$W_RC" = 1 ] && [[ "$W_ERR" == *'must sign allow_unknown_cost: true'* ]] || got="${got:+$got; }first phase: rc $W_RC: $W_OUT $W_ERR"
+mv "$cdxl/mixed" "$cdxl/autonomy-log.jsonl"
+if [ -z "$got" ]; then
+  pass 'codex cost: a legacy signature without unknown-cost consent cannot open even the first Codex session'
+else
+  fail 'codex cost: a legacy signature without unknown-cost consent cannot open even the first Codex session' \
+    'valid legacy signature, clean ledger, rc 1 naming the missing signed exception' "$got"
+fi
+
+cdx_worker budget "$cdx"
+if [ "$W_RC" = 1 ] && [[ "$W_OUT" == *'known US$ 4.00'*'2 unknown session(s)'*'estimated subtotal US$ 42.25'* ]]; then
+  pass 'codex cost: unapproved unknown sessions stop and stay separate from known and estimated subtotals'
+else
+  fail 'codex cost: unapproved unknown sessions stop and stay separate from known and estimated subtotals' \
+    'rc 1, known US$ 4.00, 2 unknown sessions, estimated subtotal US$ 42.25' "rc $W_RC: $W_OUT $W_ERR"
+fi
+sed -i '/^allow_unknown_cost:/d; /^signed:/i allow_unknown_cost: true' "$cdx/delegation.md"
+answer $'y\n'
+worker_from "$BOX/in" delegate "$cdx"
+got=""
+[ "$W_RC" = 0 ] && [[ "$W_OUT" == *'allow_unknown_cost: true'* ]] || got="delegate: rc $W_RC: $W_OUT $W_ERR"
+cdx_worker budget "$cdx"
+[ "$W_RC" = 0 ] && [[ "$W_OUT" == 'campaign known US$ 4.00 of 30.00'*'2 unknown session(s)'*'estimated subtotal US$ 42.25'* ]] \
+  || got="${got:+$got; }signed budget: rc $W_RC: $W_OUT $W_ERR"
+cdx_worker codex-run --mission "$cdxm" --phase EXEC --model gpt-6.2-sol
+[ "$W_RC" = 0 ] && [ -z "$W_OUT" ] || got="${got:+$got; }signed guard: rc $W_RC: $W_OUT $W_ERR"
+if [ -z "$got" ]; then
+  pass 'codex cost: a signed scoped exception permits unknown USD, without adding estimates to known spend'
+else
+  fail 'codex cost: a signed scoped exception permits unknown USD, without adding estimates to known spend' \
+    'shown exception, successful budget and guard, estimates still separate' "$got"
+fi
+
+got=""
+cdx_worker codex-run --mission "$cdxm" --phase EXEC
+[ "$W_RC" = 2 ] || got="missing model: rc $W_RC: $W_OUT $W_ERR"
+cdx_worker codex-run --mission "$cdxm" --phase EXEC --model gpt-6.2-astra
+[ "$W_RC" = 1 ] && [[ "$W_ERR" == *'exec_model'*'gpt-6.2-sol'* ]] || got="${got:+$got; }wrong model: rc $W_RC: $W_OUT $W_ERR"
+if [ -z "$got" ]; then
+  pass 'codex cost: EXEC needs its actual selected model and refuses a model not declared by the campaign'
+else
+  fail 'codex cost: EXEC needs its actual selected model and refuses a model not declared by the campaign' \
+    'missing model rc 2 and mismatched model rc 1 naming the declaration' "$got"
+fi
+
+got=""
+cp "$cdxl/autonomy-log.jsonl" "$cdxl/base"
+for cost_case in Claude mission campaign no-room; do
+  cp "$cdxl/base" "$cdxl/autonomy-log.jsonl"
+  case "$cost_case" in
+    Claude) row='{"event":"session","mission":"codex-cost-mission","engine":"claude","cost_usd":null}'; want='not covered by the Codex exception' ;;
+    mission) row='{"event":"session","mission":"codex-cost-mission","cost_usd":6}'; want='mission ceiling — known USD' ;;
+    campaign) row='{"event":"session","mission":"codex-cost-mission","cost_usd":26}'; want='campaign known US$ 30.00 of 30.00' ;;
+    no-room) row='{"event":"session","mission":"codex-cost-mission","cost_usd":17}'; want='no room — campaign known US$ 21.00 of 30.00' ;;
+  esac
+  printf '%s\n' "$row" >> "$cdxl/autonomy-log.jsonl"
+  cdx_worker codex-run --mission "$cdxm" --phase EXEC --model gpt-6.2-sol
+  [ "$W_RC" = 1 ] && [[ "$W_ERR" == *"$want"* ]] || got="${got:+$got; }$cost_case: rc $W_RC: $W_OUT $W_ERR"
+done
+cp "$cdxl/base" "$cdxl/autonomy-log.jsonl"
+cdx_worker codex-run --mission "$cdxm" --phase CLOSE
+[ "$W_RC" = 1 ] && [[ "$W_ERR" == *'not a delegated Codex campaign phase'* ]] || got="${got:+$got; }close: rc $W_RC: $W_OUT $W_ERR"
+cp "$cdx/delegation.md" "$BOX/signed-exception"
+sed -i 's/^level:.*/level: assisted/' "$cdx/delegation.md"
+answer $'y\n'
+worker_from "$BOX/in" delegate "$cdx"
+cdx_worker codex-run --mission "$cdxm" --phase PR
+[ "$W_RC" = 1 ] && [[ "$W_ERR" == *'pr needs pr, effective assisted'* ]] || got="${got:+$got; }assisted: rc $W_RC: $W_OUT $W_ERR"
+cp "$BOX/signed-exception" "$cdx/delegation.md"
+if [ -z "$got" ]; then
+  pass 'codex cost: known ceilings, unsupported unknown rows, phase and autonomy each still gate an opted-in campaign'
+else
+  fail 'codex cost: known ceilings, unsupported unknown rows, phase and autonomy each still gate an opted-in campaign' \
+    'rc 1 with the specific stop in every world' "$got"
+fi
+
+got=""
+SDD_WORKER_NOW="$FAR" cdx_worker codex-run --mission "$cdxm" --phase EXEC --model gpt-6.2-sol
+[ "$W_RC" = 1 ] && [[ "$W_ERR" == *expired* ]] || got="expired: rc $W_RC: $W_OUT $W_ERR"
+sed -i 's/^lot:.*/lot: L999/' "$cdxm/00-missao.md"
+cdx_worker codex-run --mission "$cdxm" --phase EXEC --model gpt-6.2-sol
+[ "$W_RC" = 1 ] && [[ "$W_ERR" == *'lot not covered'* ]] || got="${got:+$got; }wrong lot: rc $W_RC: $W_OUT $W_ERR"
+sed -i 's/^lot:.*/lot: L1/' "$cdxm/00-missao.md"
+sed -i 's/^exec_model:.*/exec_model: gpt-6.2-astra/' "$cdx/campaign.md"
+cdx_worker codex-run --mission "$cdxm" --phase EXEC --model gpt-6.2-astra
+[ "$W_RC" = 1 ] && [[ "$W_ERR" == *'edited after signing'* ]] || got="${got:+$got; }changed model: rc $W_RC: $W_OUT $W_ERR"
+sed -i 's/^exec_model:.*/exec_model: gpt-6.2-sol/' "$cdx/campaign.md"
+sed -i 's/^budget_campaign_usd:.*/budget_campaign_usd: 999/' "$cdx/delegation.md"
+cdx_worker codex-run --mission "$cdxm" --phase EXEC --model gpt-6.2-sol
+[ "$W_RC" = 1 ] && [[ "$W_ERR" == *'edited after signing'* ]] || got="${got:+$got; }edited: rc $W_RC: $W_OUT $W_ERR"
+if [ -z "$got" ]; then
+  pass 'codex cost: expiry, another lot and a changed signed value each refuse the paid guard'
+else
+  fail 'codex cost: expiry, another lot and a changed signed value each refuse the paid guard' \
+    'rc 1 in each world with reason' "$got"
+fi
+
+got=""
+cp "$BOX/signed-exception" "$cdx/delegation.md"
+cdxw="$BOX/codex-linked"
+git -C "$REPO" -c user.name=fixture -c user.email=fixture@example.com commit -q --allow-empty -m fixture
+git -C "$REPO" worktree add -q -b codex-fixture "$cdxw" || got='fixture worktree missing'
+cdxwc="$cdxw/docs/campaigns/codex-cost"
+cdxwm="$cdxw/docs/handoffs/codex-cost-mission"
+mkdir -p "$cdxwc" "$cdxwm" "$cdxw/.sdd"
+cp "$cdx"/{campaign,delegation}.md "$cdxwc/"
+cp "$cdxm/00-missao.md" "$cdxwm/"
+cp "$REPO/.sdd/config.sh" "$cdxw/.sdd/config.sh"
+cdx_worker codex-run --mission "$cdxwm" --phase REVIEW
+[ "$W_RC" = 0 ] || got="${got:+$got; }linked before revocation: rc $W_RC: $W_OUT $W_ERR"
+sed -i '/^allow_unknown_cost:/d' "$cdx/delegation.md"
+cdx_worker codex-run --mission "$cdxwm" --phase REVIEW
+[ "$W_RC" = 1 ] && [[ "$W_ERR" == *'edited after signing'* ]] || got="${got:+$got; }stale copy: rc $W_RC: $W_OUT $W_ERR"
+if [ -z "$got" ]; then
+  pass 'codex cost: a linked mission checks the primary delegation again instead of using its stale copy'
+else
+  fail 'codex cost: a linked mission checks the primary delegation again instead of using its stale copy' \
+    'linked mission allowed before revocation and refused immediately after' "$got"
+fi
+
+# A valid plan-level signature must explicitly cover unknown cost from the first planner turn.
+cdxp="$(campaign codex-planning plan "$FAR" 10 30)"
+sed -i -e 's/^harness:.*/harness: codex/' -e 's/^exec_model:.*/exec_model: gpt-6.2-sol/' "$cdxp/campaign.md"
+answer $'y\n'
+worker_from "$BOX/in" delegate "$cdxp"
+got=""
+[ "$W_RC" -eq 0 ] || got="legacy signature: $W_OUT $W_ERR"
+cdx_worker allows "$cdxp" plan --lot L1
+[ "$W_RC" -eq 1 ] && [[ "$W_OUT" == *'sign allow_unknown_cost: true for Codex planning'* ]] \
+  || got="${got:+$got; }without opt-in: $W_RC $W_OUT $W_ERR"
+sed -i '/^allow_unknown_cost:/d; /^signed:/i allow_unknown_cost: true' "$cdxp/delegation.md"
+answer $'y\n'
+worker_from "$BOX/in" delegate "$cdxp"
+[ "$W_RC" -eq 0 ] || got="${got:+$got; }new signature: $W_OUT $W_ERR"
+cdx_worker allows "$cdxp" plan --lot L1
+[ "$W_RC" -eq 0 ] && [[ "$W_OUT" == 'allowed plan at plan' ]] \
+  || got="${got:+$got; }with opt-in: $W_RC $W_OUT $W_ERR"
+if [ -z "$got" ]; then
+  pass 'codex cost: delegated planning requires the signed exception even with no session history'
+else
+  fail 'codex cost: delegated planning requires the signed exception even with no session history' \
+    'a valid plan signature is insufficient before the opt-in and permits plan afterward' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

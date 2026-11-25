@@ -1933,11 +1933,43 @@ Two files make it:
   ledger, `gh` and the review bot's machine comment. Its sensor is `tests/check-worker.sh`, with the
   `mut_WORKER_*` entries of the mutation catalogue.
 
+### Codex campaigns
+
+Set `harness: codex`, `plan_model: gpt-6.2-astra`, and `exec_model: gpt-6.2-sol`.
+Use the [Codex planner relay](plan-only.md#codex-planner), then run preflight and launch the
+runner from the mission worktree with `PHASE_ENGINE=codex`. The preflight checks that Codex
+can open a command inside its sandbox. EXEC and DOCS use Sol at `medium`. QA and REVIEW
+use Sol at `xhigh`, including the worker's review rounds. The normal gates, checkout owner,
+handoffs, and publisher's merge prerequisites apply.
+
+Before each phase, `sdd-worker codex-run --mission <mission-dir> --phase <phase> [--model <model>]` verifies
+the campaign's signed authority, including `allow_unknown_cost: true`. EXEC also passes
+`--model` and checks the selection against the campaign. Unknown charges remain null
+in the ledger. Budget output separates the known spend, the number of unknown charges, and any
+reference estimate in USD. The estimate values the tokens at public Standard API rates. It
+cannot verify a signed hard ceiling on ChatGPT subscription usage. The hard ceiling still
+applies to the known charges. With incomplete billing, the budget line starts with
+`campaign known US$`. An inline Codex retry resumes the native thread ID recorded in its journal. A restarted
+runner or explicit `sdd retry` starts a fresh phase session from the on-disk artifacts.
+
+This route uses the existing role instructions in a Codex sandbox and checks the recorded edits
+against the role's write scope. Most roles run offline. A QA role can reach the exact host in
+`APP_URL`. The TICKET role can reach Atlassian Cloud. At PR, the runner hands off to the
+worker's separately authorized `pr` act. This keeps remote publication and merge out of a
+Codex phase's shell permissions. The worker verifies the resulting PR through the existing gate.
+The Codex preflight requires the Codex versions of the skills used by
+the pipeline in an active skill directory. The standalone Jira close session is Claude-only.
+
 ### A campaign directory
+
+The Codex runtime guard discovers its campaign from the mission ID and then reads its delegation
+from `docs/campaigns/<id>/` or `docs/superpowers/campaigns/<id>/` in the primary Git checkout. It
+refuses ambiguous copies and ignores stale delegations in mission worktrees. The worker's user
+commands that take a campaign directory still read the path the caller supplies.
 
 Any directory of the target repo — the convention is `docs/campaigns/<YYYYMMDD>-<slug>/`, and the
 kit's own live under `docs/superpowers/campaigns/` — holding three files. No config key names it:
-every verb but `pr-ready` takes it as its first argument and finds the repo root by
+every verb except `pr-ready` and the internal `codex-run` guard takes it as its first argument and finds the repo root by
 `git -C <dir> rev-parse --show-toplevel`; `HANDOFF_DIR` comes from that root's `.sdd/config.sh`,
 read in a subshell that stands in the root, so a relative include resolves against its own
 checkout. `ON_ESCALATION_CMD` and `BUDGET_MISSION_USD` are read the same way, but in the
@@ -2063,7 +2095,7 @@ signed, and grants nothing.
 replaces it only when it is **later** than the real clock: it lets the sensor move time forward and
 watch a delegation expire, and it never brings an expired one back.
 
-### The six verbs
+### The worker verbs
 
 A call of the wrong shape, an unknown verb or a directory that is not there prints the usage on
 stderr and leaves rc 2. The reason of an answer comes after ` — `.
@@ -2245,4 +2277,3 @@ tolerance for prose), and the worker's round is what applies it. Its review act 
   PATH — the main checkout, which the mission does not edit; from the main checkout it stays
   forbidden. The kit's `gate_PR` leaves rc 2 when only the mutation stamp is missing, which the
   worker reads as it reads an rc 0: the pull request is open, and its `pr` act comes next.
-- The Codex harness is the next mission: nothing here opens a phase outside `claude -p`.

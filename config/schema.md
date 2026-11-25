@@ -244,6 +244,32 @@ A repo that also keeps a **local** ADR namespace beside a spec — `specs/023/ad
 target — is not seen by either scope, and `sdd adr check` says nothing about it. Unifying the two
 namespaces or declaring the local one out of scope is that repo's decision; the kit does not guess.
 
+## Phase harness
+
+| Key | Default | What it is |
+|---|---|---|
+| `PHASE_ENGINE` | `claude` | `claude` or `codex`. The starter accepts an environment override such as `PHASE_ENGINE=codex sdd run <mission>`. To prevent silent harness switches, a change on disk during an active `sdd run` stops it before opening another session. |
+| `CODEX_PHASE_MODEL` | `gpt-6.2-sol` | Codex EXEC model id. It must match the campaign's `exec_model`. EXEC uses `medium`. DOCS and TICKET use Sol `medium`, and QA and REVIEW use Sol `xhigh`, regardless of this override. No Claude model or effort key is reused. |
+
+A paid Codex run or retry must be in the actual mission worktree of a `harness: codex` campaign
+under effective worker delegation for the phase, with signed `allow_unknown_cost: true`. The
+existing caps still constrain known USD; Codex does not enforce a per-phase USD ceiling or report USD
+billing. Its ledger records the native session id and observed usage, with billed USD null.
+`--budget-override` cannot bypass the worker check. Paid `sdd close` and the kit's `sdd kaizen`
+are not Codex campaign phases. They do not fall back to Claude when Codex is selected.
+Codex does not open a publishing session. At PR the runner stops with `PR needs worker publish`
+and returns 2. The worker's separately authorized `pr` act publishes, then the unchanged PR gate
+verifies the result. Dry-run shows the same handoff without opening a session.
+
+`PHASE_ENGINE=codex sdd preflight` checks the Codex CLI flags, login, local command sandbox, and
+applicable skill files without opening a model session. Skills are looked up as `<name>/SKILL.md`
+in the target's `.agents/skills/`, then the user's `~/.agents/skills/`, then the `skills/` directory
+of `CODEX_HOME` (default `~/.codex`). Claude-specific permission flags apply only to Claude. Codex
+uses the adapter's sandbox without MCP, plus the existing artifact gates and hat write checks.
+QA with `APP_URL` configured gives the adapter only the HTTP(S) hostname for scoped proxy access.
+Preflight does not verify that a browser in the Codex sandbox reaches that host. The runner can still
+execute E2E gates outside the sandbox. The adapter limits TICKET network access to Atlassian Cloud.
+
 ## Models per phase
 
 Opus by default in the judgement phases; Sonnet where Opus would be waste — an **explicit

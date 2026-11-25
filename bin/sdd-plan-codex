@@ -1,0 +1,271 @@
+#!/usr/bin/env python3
+"""Relay a Codex planner's grill over separate invocations in one worktree."""
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import uuid
+
+KIT = Path(__file__).resolve().parents[1]
+TEMPLATES = {
+    "00-missao.md": "missao.md",
+    "01-plano.md": "plano.md",
+    "checkpoint.md": "checkpoint.md",
+}
+MODEL = "gpt-6.2-astra"
+MISSION = re.compile(r"[0-9]{8}-[a-z0-9-]+")
+SESSION = re.compile(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}")
+
+
+def git(*args):
+    return subprocess.check_output(["git", *args], text=True).strip()
+
+
+def save(path, state):
+    tmp = path.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as out:
+        json.dump(state, out, ensure_ascii=False)
+        out.flush()
+        os.fsync(out.fileno())
+    os.replace(tmp, path)
+
+
+def status(state):
+    if state["stage"] == "question":
+        print("question", state["question_id"])
+        print(state["result"])
+    else:
+        print(state["stage"], state.get("session") or "session not recorded")
+
+
+def check_delegated_plan(state):
+    campaign = state.get("campaign")
+    if campaign:
+        worker = str(KIT / "bin/sdd-worker")
+        subprocess.run([worker, "allows", campaign, "plan", "--lot", state["lot"]],
+                       check=True, stdout=sys.stderr)
+        subprocess.run([worker, "budget", campaign], check=True, stdout=sys.stderr)
+
+
+def opening_prompt(root, args):
+    files = "\n".join(f"{target}: {KIT / 'templates' / source}" for target, source in TEMPLATES.items())
+    instructions = KIT / "agents/sdd-planner.md"
+    campaign = ""
+    if args.campaign:
+        campaign = f"Set campaign to {Path(args.campaign).name} and lot to {args.lot} in the mission frontmatter."
+    return f"""Act as the registered SDD planner for mission {args.mission} in {root}.
+Read {instructions}, the repository instructions and .sdd/config.sh. Follow the planner contract and OUTPUT_LANG.
+Use these source templates (read all of them):
+{files}
+This relay supplies the human's answers verbatim, one turn at a time. Each turn, ask one material question with
+concrete choices and a recommendation, until the decisions are sufficient. Never invent a human answer.
+Use plain text for questions. When ready to hand back the plan, reply with a single JSON object with exactly
+the three target filenames above as keys and the COMPLETE Markdown drafts as string values. No code fence or extra text.
+In the mission frontmatter set missao to {args.mission}, branch to the current branch, and aprovacao to a blank value.
+{campaign} The relay materializes the draft and the regular SDD gate handles approval.
+If an ADR is required, include the proposed decision in the plan and use adr: TBD until it is allocated.
+The sandbox is read-only. Do not implement, edit, publish, or run checks that write to this checkout.
+Topic:
+{args.topic}"""
+
+
+def turn(path, state, prompt, lock, recovering=False):
+    check_delegated_plan(state)
+    cmd = [str(KIT / "bin/sdd-codex"), "--model", MODEL, "--effort", "high", "--hat", "sdd-planner", "--read-only"]
+    previous = state.get("session")
+    if previous:
+        cmd.extend(["--resume", previous])
+    state["stage"] = "interrupted"
+    if not recovering:
+        state["pending_prompt"] = prompt
+    save(path, state)
+    result = None
+    # The inherited lock prevents another relay from starting while the orphaned adapter is alive.
+    with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as given:
+        given.write(prompt)
+        given.seek(0)
+        with subprocess.Popen(cmd, stdin=given, stdout=subprocess.PIPE, text=True,
+                              pass_fds=(lock.fileno(),)) as process:
+            assert process.stdout is not None
+            for line in process.stdout:
+                event = json.loads(line)
+                if event.get("type") == "system":
+                    sid = event.get("session_id")
+                    if not isinstance(sid, str) or not SESSION.fullmatch(sid) or (previous and sid != previous):
+                        raise ValueError("Codex did not return the expected planner session ID")
+                    state["session"] = sid
+                    save(path, state)
+                if event.get("type") == "result":
+                    result = event
+            rc = process.wait()
+    if rc or not state.get("session") or not result or result.get("is_error") or not isinstance(result.get("result"), str):
+        raise ValueError("planner turn did not finish. Use status, then recover if a session ID was recorded")
+    answer = result["result"].strip()
+    if not answer:
+        raise ValueError("planner returned an empty response")
+    pending_answer = state.pop("pending_answer", None)
+    if recovering and pending_answer:
+        receipt, separator, answer = answer.partition("\n")
+        if not separator or receipt not in {"ANSWER_RECEIVED", "ANSWER_NOT_RECEIVED"}:
+            raise ValueError("the recovered turn did not say whether the answer arrived")
+        if receipt == "ANSWER_RECEIVED":
+            state["answers"].append(pending_answer)
+        answer = answer.strip()
+    elif pending_answer:
+        state["answers"].append(pending_answer)
+    state.pop("pending_prompt", None)
+    state.setdefault("usage", []).append({
+        key: result.get(key) for key in ("model", "usage", "estimated_cost_usd", "estimate_basis", "total_cost_usd")
+    })
+    if answer.startswith("{"):
+        draft = json.loads(answer)
+        if not isinstance(draft, dict) or draft.keys() != TEMPLATES.keys() or not all(
+            isinstance(content, str) and content.strip() for content in draft.values()
+        ):
+            raise ValueError("planner draft does not contain all three Markdown artifacts")
+        state["stage"] = "draft"
+        state["draft"] = draft
+    else:
+        state["stage"] = "question"
+        state["question_id"] = uuid.uuid4().hex
+        state["result"] = answer
+    save(path, state)
+
+
+def materialize(root, mission, state):
+    if state["stage"] != "draft":
+        raise ValueError("the planner has not returned a complete draft")
+    config = root / ".sdd/config.sh"
+    handoffs = subprocess.check_output(
+        ["bash", "-ec", '. "$1"\nprintf "%s" "${HANDOFF_DIR:-docs/handoffs}"', "sdd-plan-codex", str(config)],
+        text=True,
+    )
+    base = (root / handoffs).resolve()
+    if not base.is_relative_to(root) or base == root or base.is_relative_to(root / ".git"):
+        raise ValueError("HANDOFF_DIR must name a directory inside the worktree")
+    dest = base / mission
+    if dest.exists() or dest.is_symlink():
+        raise ValueError(f"mission already exists at {dest}")
+    draft = state["draft"]
+    mission_text = draft["00-missao.md"]
+    frontmatter = mission_text.split("---\n", 2)
+    branch = git("branch", "--show-current")
+    fields = {}
+    if len(frontmatter) == 3 and not frontmatter[0]:
+        for line in frontmatter[1].splitlines():
+            key, separator, value = line.partition(":")
+            if separator:
+                fields.setdefault(key.strip(" \t"), []).append(value.strip(" \t"))
+    expected = {"missao": mission, "branch": branch, "aprovacao": ""}
+    if state.get("campaign"):
+        expected.update(campaign=Path(state["campaign"]).name, lot=state["lot"])
+    if not branch or any(fields.get(key) != [value] for key, value in expected.items()):
+        raise ValueError("mission draft must name this mission and branch once, with one blank approval")
+    decisions = re.search(r"^## Decis[^\n]* do grill[^\n]*\n(.*?)(?=^## |\Z)", frontmatter[2], re.M | re.S)
+    answers = re.findall(r"^ +- answer: \((?:recommended|other: .+)\)$",
+                         decisions[1] if decisions else "", re.M)
+    if len(answers) != len(state["answers"]):
+        raise ValueError("draft answer marks do not match the human replies the relay recorded")
+    base.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=base, prefix=".sdd-plan-") as temp:
+        staging = Path(temp) / mission
+        staging.mkdir()
+        for filename, content in draft.items():
+            (staging / filename).write_text(content.rstrip() + "\n", encoding="utf-8")
+        subprocess.run([str(KIT / "tests/check-checkpoint.sh"), "--check", str(staging / "checkpoint.md")], check=True)
+        staging.rename(dest)
+    print(dest)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    cmds = parser.add_subparsers(dest="act", required=True)
+    for act in ("start", "status", "answer", "recover", "finish"):
+        option = cmds.add_parser(act)
+        option.add_argument("mission")
+        if act == "start":
+            option.add_argument("topic")
+            option.add_argument("--campaign", type=Path)
+            option.add_argument("--lot")
+        if act == "answer":
+            option.add_argument("question_id")
+            option.add_argument("answer")
+    args = parser.parse_args()
+    if not MISSION.fullmatch(args.mission):
+        parser.error("mission must match YYYYMMDD-slug")
+    root = Path(git("rev-parse", "--show-toplevel"))
+    meta = Path(git("rev-parse", "--absolute-git-dir"))
+    os.chdir(root)
+    if root == KIT and meta.name == ".git":
+        raise ValueError("use a separate linked worktree for a kit mission")
+    if not (root / ".sdd/config.sh").is_file():
+        raise ValueError("install the SDD kit in this repository first")
+    if args.act == "finish":
+        helper = [sys.executable, "-I", str(KIT / "bin/sdd-coordination.py")]
+        scope = [str(root), str(meta), "auxiliary"]
+        if subprocess.run([*helper, "check", *scope]).returncode:
+            return subprocess.call([*helper, "enter", *scope, str(Path(__file__).resolve()), *sys.argv[1:]])
+    directory = meta / "sdd-codex-planner"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    path = directory / f"{args.mission}.json"
+    with (directory / f"{args.mission}.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if args.act == "start":
+            if path.exists():
+                raise ValueError("planner already exists. Use status")
+            state = {"stage": "starting", "session": None, "answers": []}
+            if args.campaign or args.lot:
+                if not args.campaign or not re.fullmatch(r"L[0-9]+[a-z]?", args.lot or ""):
+                    raise ValueError("--campaign and --lot are required together for delegated planning")
+                campaign = args.campaign.resolve(strict=True)
+                if git("-C", str(campaign), "rev-parse", "--path-format=absolute", "--git-common-dir") != git(
+                    "rev-parse", "--path-format=absolute", "--git-common-dir"
+                ):
+                    raise ValueError("the campaign and mission must be worktrees of the same repository")
+                primary = git("worktree", "list", "--porcelain", "-z").split("\0", 1)[0].removeprefix("worktree ")
+                if campaign.parent not in {Path(primary) / "docs/campaigns",
+                                           Path(primary) / "docs/superpowers/campaigns"}:
+                    raise ValueError("use the campaign directory from the primary Git checkout")
+                args.campaign = campaign
+                state.update(campaign=str(campaign), lot=args.lot)
+
+            turn(path, state, opening_prompt(root, args), lock)
+        else:
+            if not path.is_file():
+                raise ValueError("planner record not found in this worktree")
+            state = json.loads(path.read_text(encoding="utf-8"))
+            if args.act == "answer":
+                if state["stage"] != "question" or args.question_id != state["question_id"]:
+                    raise ValueError("the requested question is not pending")
+                if not args.answer.strip():
+                    raise ValueError("the answer is empty")
+                state["pending_answer"] = {"question_id": args.question_id, "answer": args.answer}
+                turn(path, state, args.answer, lock)
+            elif args.act == "recover":
+                if state["stage"] != "interrupted":
+                    raise ValueError("no interrupted planner turn to recover")
+                if not state.get("session"):
+                    turn(path, state, state["pending_prompt"], lock)
+                else:
+                    prompt = "Recover the interrupted grill turn from this thread. Re-emit the last pending question or the final draft."
+                    if state.get("pending_answer"):
+                        prompt += (" Begin with ANSWER_RECEIVED if the human's answer to the previous question is "
+                                   "already in this thread, or ANSWER_NOT_RECEIVED if it is absent. Then on the next "
+                                   "line give your result. Count the human's answer only if it reached you.")
+                    turn(path, state, prompt, lock, recovering=True)
+            elif args.act == "finish":
+                materialize(root, args.mission, state)
+                return
+        status(state)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        sys.exit(f"sdd-plan-codex: {error}")

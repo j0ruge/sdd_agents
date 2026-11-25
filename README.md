@@ -179,6 +179,17 @@ has `/sdd-worker` only where Claude Code finds the file, in `~/.claude/commands/
 `ln -s ~/repos/sdd_agents/commands/sdd-worker.md ~/.claude/commands/`. The contracts, the rules and
 the declared limits are in [`docs/pipeline.md`](docs/pipeline.md#the-worker).
 
+For a Codex campaign, set `harness: codex`. Link the worker skill and use `$sdd-worker <campaign-dir>`
+in a new Codex session, or open the worker command instructions directly.
+
+```bash
+mkdir -p ~/.agents/skills
+ln -s ~/repos/sdd_agents/skills/sdd-worker ~/.agents/skills/sdd-worker
+```
+
+Use `sdd-plan-codex` to start and resume the grill and `PHASE_ENGINE=codex` for the mission runner.
+See [Codex campaigns](docs/pipeline.md#codex-campaigns) for prerequisites and delegation.
+
 `sdd run` and `sdd retry` put you on the branch the plan declares (`branch:` in `00-missao.md`)
 before the first gate — checking it out, or cutting it from where you stand. A `<…>` placeholder or
 an empty value means "stay here". What happens when git refuses, and why the field is not

@@ -1571,7 +1571,7 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
 # because 17 sensors print the ok prefix today (the seventeenth is tests/check-worker.sh, ADR 0022),
 # and an eighteenth that lands without moving it leaves one of slack; nothing measures that, so it
 # is one of the places CLAUDE.md says every new sensor moves. No lag in 105 commits.
-CALIBRATE_FLOOR=17
+CALIBRATE_FLOOR=18
 calibrate() {
   local root="$1" f line rest sp p seen='' seenf='' n=0 hit
   local sq="'" dq='"' ok='  ok'

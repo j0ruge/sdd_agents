@@ -44,12 +44,11 @@ through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, 
    reason after ` — ` says why (no delegation, illegible, unsigned, edited after signing, expired,
    no pager): tell the owner, who fixes it and signs again with `sdd-worker delegate`, in a terminal
    of his own.
-3. **Read `harness:`, `plan_model:` and `exec_model:`** in the frontmatter of `campaign.md`. A
-   harness other than `claude` stops here: this command drives Claude Code only. `exec_model:` is
-   what the campaign declares, and nothing passes it on: the runner runs EXEC on `MODEL_EXEC` (each
-   other phase on its own `MODEL_<PHASE>`, `config/schema.md`), from the `.sdd/config.sh` of the
-   mission's worktree over the environment, `opus` when neither sets it. Before a `run`, read that
-   key there; when it is not `exec_model:`, tell the owner, and never edit his file to match.
+3. **Read `harness:`, `plan_model:` and `exec_model:`** in the campaign frontmatter. Accept
+   `claude` and `codex`. Inspect the mission worktree's effective configuration before opening a
+   session. For Claude, EXEC reads `MODEL_EXEC` there. For Codex, pass `PHASE_ENGINE=codex` to the
+   runner and compare `exec_model:` with `CODEX_PHASE_MODEL` (default `gpt-6.2-sol`). Report a
+   mismatch to the owner before running the phase.
 4. **Never act while an `sdd run` of another mission is alive in the same checkout.** One checkout,
    one owner of execution: each mission runs in its own worktree, and
    `sdd status <mission> --no-gates` names who holds a checkout.
@@ -96,13 +95,15 @@ act still passes its own `allows` call (step 3):
 |---|---|---|
 | `run`, rc 0 | `pr` | the run opened the pull request, and its body still owes the owner the grill answers and the bots that did not review |
 | `run` of a mission of the kit, rc 2, the pull request open and only the stamp missing | `pr` | the kit's `gate_PR` waits for the mutation stamp, which a mission's pull request of the kit merges without: the run left what an rc 0 leaves |
+| Codex `run`, rc 2 and `PR needs worker publish` | `pr` | publish under the signed `pr` act before continuing |
 | `pr` | `review` | the body is written, and the round comes next |
 | `review`, every criterion A and the Codex receipt on the head | `merge`: `allows … merge`, then `pr-ready` | `next` answers `review` again for an open pull request; an rc 1 of `pr-ready` names the act that fixes its item |
 | every wait: the owner's yes, a bot, a deadline, a run | step 1, `budget` | the ceiling read before the wait, and the delegation, may have moved since |
 
 A new session finds the last act of each lot in the journal's tail: a `run` with rc 0, or with
 rc 2 for a mission of the kit with only the stamp missing, and no `pr` line after it is a `pr`
-still to do, though the pull request is open and `next` says `review`.
+still to do, though the pull request is open and `next` says `review`. A Codex run journaled
+with `PR needs worker publish` also resumes at `pr`, even if `next` still finds no pull request.
 
 ## The acts
 
@@ -117,7 +118,17 @@ Run `/sdd-plan` for the lot, with the planner on the campaign's `plan_model:`: t
 plans. The mission's `00-missao.md` declares `campaign: <id>` and `lot: <L>` in its frontmatter,
 which is how `next` finds it. Under delegation the relay answers the grill with the recommended
 option, and every answer that touches a rule of the owner is listed in the pull request body, for
-his acceptance. The plan, the grill and the report go to files; the planner returns only its verdict.
+his acceptance. The plan, the grill and the report go to files.
+
+For delegated Codex planning, run
+`sdd-plan-codex start <mission> <topic> --campaign <absolute-campaign-dir> --lot <L>` in the
+mission worktree. The relay rechecks the plan authority and the campaign's budget before each turn.
+The worker's orchestrating and planning sessions remain outside the existing mission-spend ledger. Plan with `gpt-6.2-astra`. Read the pending question with
+`sdd-plan-codex status <mission>` after a relay restart. Give the selected answer verbatim once
+with `sdd-plan-codex answer <mission> <question-id> <answer>`. If the native turn itself was
+interrupted, use `sdd-plan-codex recover <mission>` to recover the question from the same thread.
+Use `sdd-plan-codex finish <mission>` to materialize the draft. If the plan requires an ADR,
+allocate it with `sdd adr new`, write the agreed decision, and link it from the mission before approval.
 
 The mission runs in a worktree of its own, cut before anything of it is written. In the kit,
 `/sdd-plan` cuts it (its step 2), and the planner renames its branch. In a target, the session cuts
@@ -173,16 +184,32 @@ Wait on that PID (`tail --pid=<pid> -f /dev/null`, or a monitor whose condition 
 `! kill -0 <pid>`), never on `pgrep -f`, which matches its own command line (M23). Then read the
 `sdd run rc=` line of the log. An rc 0 is the pull request open; an rc 2 is a human step the runner
 names, except the rc 2 of a mission of the kit with the pull request open and only the stamp
-missing, which goes on as an rc 0 does (**A mission of the kit**); an rc 3 is an escalation the
+missing, which goes on as an rc 0 does (**A mission of the kit**). On `PR needs worker publish`,
+continue at the signed `pr` act. An rc 3 is an escalation the
 runner already paged, with the worktree's pager, which `level` requires as it requires the campaign
 checkout's: write it in the journal and wait for the owner, and `budget-exhausted` among them is a
 stop (the mission ceiling).
+
+For a Codex campaign, run `PHASE_ENGINE=codex sdd preflight` in that worktree before launching
+`sdd run`. Set `PHASE_ENGINE=codex` alongside `BUDGET_MISSION_USD` in the launch command. Before
+each Codex phase, the runner verifies the signed delegation with
+`sdd-worker codex-run --mission <mission-dir> --phase <phase> [--model <model>]`. The owner must explicitly grant
+`allow_unknown_cost: true` when signing the Codex delegation. If the signature, cost exception,
+or ordinary run authority fails verification, stop and return the diagnostic to the owner.
+Budget output reports the known subtotal and any reference API estimate separately.
 
 ### `pr`
 
 `sdd-worker allows <campaign-dir> pr --mission <mission-dir>`
 
-The run's PR phase opens the pull request; this act is what its body owes the owner. It lists the
+For Codex, `sdd run` returns rc 2 with `PR needs worker publish` when work at the PR gate remains.
+Resume at this act under the signed `pr` authority. In the mission worktree, follow the publisher
+procedure in `agents/sdd-publisher.md` as the worker. Check the suite and branch, push only that
+branch, create or update its pull request and record verified `50-pr.md`. Then use
+`PHASE_ENGINE=codex sdd why <mission> PR` to verify the artifact. Merge remains a separate act
+requiring `allows … merge` and `pr-ready`.
+
+After the PR opens, this act completes the information its body owes the owner. It lists the
 grill answers that touch his rules, and declares every bot but Codex that did not review (no quota,
 no plan, a rate limit) as "did not review": such a bot neither blocks nor counts as a review. Codex
 is never one of them: its receipt on the head is an item of `pr-ready`, so a Codex that does not
@@ -197,7 +224,8 @@ In the mission's worktree, bring the base in (`git fetch`, then `git merge origi
 suite (`TEST_CMD`), then run `sdd review-base <mission>` and hand its one line to the subagent that
 makes the review round: on `base=<sha> — <round> …` it invokes `/codereview:codereview base=<sha>`
 and reads that round for the findings it left open; on `full — <reason>` the round is whole (a merge
-of the base after the last round makes it whole, by the same rule). The subagent writes the report
+of the base after the last round makes it whole, by the same rule). Use `gpt-6.2-sol` at `xhigh` for the Codex review subagent, and load the installed Codex
+`codereview` skill for that round. The subagent writes the report
 to a file and returns only the grade table, each grade with its one-sentence rationale. Write the round as
 `<HANDOFF_DIR>/<mission>/40-review-r<N>.md`, one above the newest, with `reviewed_head: <sha>` in
 its frontmatter, the `git rev-parse HEAD` the round read, and the suite's result in `gate:`.
@@ -270,7 +298,7 @@ twice.
 2. **`below-a`**: a criterion still graded below A after three rounds of review on one pull request.
 3. **`conflict`**: a merge conflict with the base outside the findings file and its ratchet.
 4. **`mission-ceiling`**: `sdd run` stopped on `budget-exhausted`, the mission spent its `BUDGET_MISSION_USD`; or `sdd-worker budget` answered `no mission cap — …`, the config of the campaign's checkout or of a mission's worktree sets that key over the signed cap, or the delegation signs a mission cap of zero, which the runner reads as no ceiling, or one below one cent.
-5. **`campaign-ceiling`**: `sdd-worker budget` leaves rc 1 on its `campaign US$ <spent> of <ceiling>` line, the spend it measured reached the ceiling; only on that line.
+5. **`campaign-ceiling`**: `sdd-worker budget` leaves rc 1 on its `campaign US$ <spent> of <ceiling>` or `campaign known US$ <spent> of <ceiling>` line when the measured spend reached the ceiling.
 
 ## Never
 

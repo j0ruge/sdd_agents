@@ -1937,7 +1937,7 @@ mut_RUN_templates_kaizen_only() {
 # five-phase projection goes on answering yes. Caught by exactly one assertion in the suite, the
 # TICKET line of check-dry-run.sh — which is the whole reason that line exists.
 mut_RUN_templates_ticket_short_circuit() {
-  sed -i 's|^  \[ -n "\$slash" \] && printf|  if [ "$step" = TICKET ]; then printf "ticket\\n"; return 0; fi\n&|' "$1"
+  sed -i 's|^  \[ "\$PHASE_ENGINE" = claude \] \&\& \[ -n "\$slash" \] \&\& printf|  if [ "$step" = TICKET ]; then printf "ticket\\n"; return 0; fi\n&|' "$1"
 }
 
 # Not a gate, and the fail-open shape in pure form: every DEFAULT_BRANCH "exists on origin",
@@ -2688,7 +2688,7 @@ mut_RUN_hat_expand_unquoted() {
 }
 #  · the missing mirror ignored — the harness refuses the --agent and the run pays a no-progress
 mut_RUN_hat_missing_mirror_ignored() {
-  sed -i '/^run_phase() {/,/^}/ s|^  if \[ -n "\$agent" \] && \[ ! -f "\$REPO_ROOT/.claude/agents/\$agent.md" \]; then$|  if false; then|' "$1"
+  sed -i '/^run_phase() {/,/^}/ s|^  if \[ "\$PHASE_ENGINE" = claude \] && \[ -n "\$agent" \] && \[ ! -f "\$REPO_ROOT/.claude/agents/\$agent.md" \]; then$|  if false; then|' "$1"
 }
 #  · the close session armed but never checked
 mut_RUN_hat_close_unchecked() {
@@ -2833,7 +2833,7 @@ mut_RUN_init_blind() {
 # took Bash from every hat and no row said so. check-autonomy's "the harness version is read off
 # the init line into the row" dies on the fixture's own value.
 mut_RUN_harness_blind() {
-  sed -i 's|^  LAST_PHASE_HARNESS="$( jq -r '"'"'.claude_code_version // ""'"'"' <<< "$init" 2>/dev/null )" \|\| LAST_PHASE_HARNESS=""$|  LAST_PHASE_HARNESS=""|' "$1"
+  sed -i 's|^  LAST_PHASE_HARNESS="$( jq -r '"'"'.claude_code_version // .codex_cli_version // ""'"'"' <<< "$init" 2>/dev/null )" \|\| LAST_PHASE_HARNESS=""$|  LAST_PHASE_HARNESS=""|' "$1"
 }
 
 # The row carries the version and the slice the judge reads does not: `sdd kaizen --series`
@@ -2849,7 +2849,7 @@ mut_RUN_series_harness_blind() {
 # would leave a repo whose rulebook doubled to find out from an invoice. Caught by "the context
 # bill is reported" in check-preflight.sh.
 mut_PREFLIGHT_context_bill_silent() {
-  sed -i '/^cmd_preflight() {/,/^}/ s@^  ok "context bill: @  : "@' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s@^    ok "context bill: @    : "@' "$1"
 }
 
 # The `[ -f "$cb" ] || continue` guard comes off the loop. On a repo with no .claude/rules/ the
@@ -2858,7 +2858,7 @@ mut_PREFLIGHT_context_bill_silent() {
 # It is the `guard:` class CLAUDE.md names, here in the preflight rather than in health. Caught by
 # "the context bill is reported" in check-preflight.sh, whose fixture has neither file.
 mut_PREFLIGHT_context_bill_unguarded() {
-  sed -i '/^cmd_preflight() {/,/^}/ s@^    \[ -f "$cb" \] || continue$@    :@' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s@^      \[ -f "$cb" \] || continue$@      :@' "$1"
 }
 
 # The auth probe of preflight, back to its 2026-09-05 shape: no --agent, so the session it fires
@@ -3018,10 +3018,10 @@ mut_INSTALL_todo_preamble_unchecked() {
 }
 # L4 item 7: sdd run and sdd retry stop before the session the harness will deny a skill.
 mut_RUN_skill_uncovered_not_stopped() {
-  sed -i '/^cmd_run() {/,/^}/ s|^  phase_skills_check run$|  phase_skills_check preflight|' "$1"
+  sed -i '/^cmd_run() {/,/^}/ s|then phase_skills_check run; fi$|then phase_skills_check preflight; fi|' "$1"
 }
 mut_RETRY_skill_uncovered_not_stopped() {
-  sed -i '/^cmd_retry() {/,/^}/ s|^  phase_skills_check run$|  phase_skills_check preflight|' "$1"
+  sed -i '/^cmd_retry() {/,/^}/ s|then phase_skills_check run; fi$|then phase_skills_check preflight; fi|' "$1"
 }
 mut_RUN_skill_broken_not_stopped() {
   sed -i '/^phase_skills_check() {/,/^}/ s|^        _skill_stop "skill \$sk is not where the harness loads it|        warn "skill $sk is not where the harness loads it|' "$1"
@@ -3235,7 +3235,7 @@ mut_PRE_plugin_cache_falls_through() {
 # it, and lands on the scratch arm, whose warning says the rule was not measured for a reason that is
 # not this one — the same assertion, `skip=0`.
 mut_PRE_kit_path_unnamed() {
-  sed -i '/^cmd_preflight() {/,/^}/ s#^  if ! read_extra_dir_ok "\$SDD_HOME/templates"; then$#  if false; then#' "$1"
+  sed -i '/^cmd_preflight() {/,/^}/ s#^  if \[ "\$PHASE_ENGINE" = claude \] && ! read_extra_dir_ok "\$SDD_HOME/templates"; then$#  if false; then#' "$1"
 }
 mut_PRE_kit_path_probe_opened() {
   sed -i '/^cmd_preflight() {/,/^}/ s#^    if \[ -n "\$kit_tpl_refused" \]; then$#    if false; then#' "$1"
@@ -4079,7 +4079,7 @@ mut_PRE_agents_checked_silent() {
   sed -i 's@then ok "$n kit agent(s) checked"; fi$@then :; fi@' "$1"
 }
 mut_PRE_agents_checked_miscounted() {
-  sed -i '/^  local a name copy n=0 fails_before_agents=/,/kit agent(s) checked/ s@^    n=$((n + 1))$@    n=$((n + 2))@' "$1"
+  sed -i '/^    local a name copy n=0 fails_before_agents=/,/kit agent(s) checked/ s@^      n=$((n + 1))$@      n=$((n + 2))@' "$1"
 }
 mut_PRE_agents_checked_despite_fail() {
   sed -i 's@if \[ "$n" -gt 0 \] && \[ "$fails" -eq "$fails_before_agents" \]; then ok@if [ "$n" -gt 0 ]; then ok@' "$1"
@@ -4760,7 +4760,7 @@ mut_RETRY_branch_switch_dead() {
 # one two — so a mutant cannot break the projection and the ledger at once, and this entry is
 # credited for the recorded id and nothing else.
 mut_RUN_ghost_session_id() {
-  sed -i 's|^  LAST_PHASE_SID="${resume_sid:-$sid}"$|  LAST_PHASE_SID="$sid"|' "$1"
+  sed -i 's|^  LAST_PHASE_SID="$session"$|  LAST_PHASE_SID="$sid"|' "$1"
 }
 
 # `sdd retry` stops measuring whether its session changed the disk. `mut_RUN_moved_never_true` above
@@ -7641,6 +7641,16 @@ mut_WORKER_ceiling_cap_rounded() {
 mut_WORKER_ceiling_float_compare() {
   sed -i '/^cmd_budget() {/,/^}/ s@ \\(\$ceiling - \$spent < \$mission)"@ \\(($cap | tonumber) - . < ($m | tonumber))"@' "${1%/*}/sdd-worker"
 }
+# The current Codex accounting can leave actual USD unknown. A normal signed delegation
+# without the extra term must not give the runner permission to spend under that exception.
+mut_WORKER_codex_unknown_cost_unchecked() {
+  sed -i '/^cmd_codex_run() {/,/^}/ s@^  if \[ "\$(fm_value "\$LEVEL_SIGNED_TERMS" allow_unknown_cost)" != true \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# Estimated API usage belongs to the separate subtotal. Treating it as actual spend makes
+# the signed ceiling claim that it covers billing the harness did not report.
+mut_WORKER_codex_estimate_billed() {
+  sed -i 's@\.cost_usd | select(measured)\] | add // 0) as \$mission_spend@(.cost_usd // .estimated_cost_usd) | select(measured)] | add // 0) as $mission_spend@' "${1%/*}/sdd-worker"
+}
 # A left equal to the mission cap stops: the run that would end the campaign at its ceiling exactly
 # is refused. Caught by "budget: at the ceiling or above it the verb leaves rc 1" (the boundary
 # leaves one cent, the cap of 0.01) and by "ceiling: …", the world equal (check-worker.sh).
@@ -7651,7 +7661,7 @@ mut_WORKER_ceiling_equal_stops() {
 # in the config fits the 20.00 left under a signed 40, and budget opens a run the rule says it
 # stops. Caught by "ceiling: …" (check-worker.sh), the world strict.
 mut_WORKER_ceiling_effective_compared() {
-  sed -i '/^cmd_budget() {/,/^}/ s@ --arg m "\$mcap" --args .$@ --arg m "$run" --args '"'"'@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_budget() {/,/^}/ s@--arg m "\$mcap" --arg scope@--arg m "$run" --arg scope@' "${1%/*}/sdd-worker"
 }
 # The comment of cmd_budget stops writing the no room line (decision 2 of the owner on the
 # mission's review r6): the rule is kept, and its line goes unsaid. Caught by "ceiling: …"
@@ -8719,6 +8729,8 @@ CATALOG=(
   WORKER_allows_ignores_lot
   WORKER_budget_counts_every_mission
   WORKER_budget_never_stops
+  WORKER_codex_unknown_cost_unchecked
+  WORKER_codex_estimate_billed
   WORKER_next_gh_failure_reads_no_pr
   WORKER_next_skips_approval
   WORKER_next_ignores_merged
