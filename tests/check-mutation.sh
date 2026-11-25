@@ -4234,6 +4234,11 @@ mut_RUN_base_branch_warn_dead() {
   sed -i 's@^  \[ -n "\$branch" \] && \[ -n "\$DEFAULT_BRANCH" \] && \[ "\$branch" = "\$DEFAULT_BRANCH" \] || return 0$@  return 0@' "$1"
 }
 
+# Treat the pending branch assignment as if TICKET were not going to create it.
+mut_RUN_base_warning_before_ticket() {
+  sed -i '/^ticket_will_cut_branch() {/,/^}/ s@^  \[ "\$JIRA_ENABLED" = true \]@  false@' "$1"
+}
+
 # Not a gate: `sdd approve` keeps working, keeps asking, keeps committing — and writes `auto`
 # instead of `humano-<date>`. The gate opens either way, so nothing that reads an rc can see it,
 # and every downstream reader (the handoffs, the kaizen judge, a human doing archaeology on the
@@ -4368,12 +4373,9 @@ mut_RUN_branch_option_name() {
 # `retry ` pair in check-gates.sh, and only the pair: the three other doors stay warning, so every
 # assertion about them stays green and the score credits this entry for nothing but the fourth.
 #
-# The sed is ADDRESSED to cmd_retry's body rather than anchored on the bare call, because after
-# this increment the line `  warn_if_on_base_branch` appears four times and an unaddressed
-# substitution would gut all four at once. The range ends at the first column-zero `}`, which is
-# cmd_retry's own closing brace — every line of the body is indented.
+# The sed is ADDRESSED to cmd_retry's body so it does not also silence cmd_run.
 mut_RETRY_base_branch_warn_dead() {
-  sed -i '/^cmd_retry() {/,/^}/ s@^  warn_if_on_base_branch$@@' "$1"
+  sed -i '/^cmd_retry() {/,/^}/ s@^  if ! ticket_will_cut_branch; then warn_if_on_base_branch; fi$@  :@' "$1"
 }
 
 # `sdd approve` goes back to being the silent fifth door: it still prints the plan, still asks, and
@@ -4436,7 +4438,7 @@ mut_APPROVE_adr_file_left_out() {
 mut_RUN_branch_order_swap() {
   sed -i '/^cmd_run() {/,/^}/ {
     /^  ensure_mission_branch$/d
-    s/^  warn_if_on_base_branch$/  warn_if_on_base_branch\n  ensure_mission_branch/
+    s/^  if ! ticket_will_cut_branch; then warn_if_on_base_branch; fi$/&\n  ensure_mission_branch/
   }' "$1"
 }
 
@@ -8516,6 +8518,7 @@ CATALOG=(
   PRE_node_manifest_jq_missing_blind
   RUN_install_branch_unescaped
   RUN_base_branch_warn_dead
+  RUN_base_warning_before_ticket
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
   RUN_approve_no_plan_blind

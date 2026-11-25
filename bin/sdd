@@ -7317,6 +7317,11 @@ mission_branch_declared() {
   printf '%s' "$want"
 }
 
+ticket_will_cut_branch() {
+  [ "$JIRA_ENABLED" = true ] && [ ! -f "$MISSION_DIR/10-ticket.md" ] &&
+    [ -z "$(mission_branch_declared)" ]
+}
+
 ensure_mission_branch() {
   [ "$DRY_RUN" = "1" ] && return 0
   local want current out rc=0 mission_rel mission_hash plan_hash target_hash mismatches artifact
@@ -10681,13 +10686,10 @@ cmd_run() {
   # BEFORE the base-branch warning, and the order is the point: the checkout is what decides where
   # this pipeline will commit, so warning first would cry wolf at a human the runner is about to
   # move off the base branch anyway — and a warning that cries wolf is how people learn to skip
-  # reading them. In a dry run nothing is switched, so the projection still says out loud that you
-  # are standing on `main`.
+  # reading them. A dry run switches nothing but applies the same TICKET exception to the warning.
   ensure_mission_branch
-  # Before the first gate, so it is on screen ahead of anything that could scroll it away. It warns
-  # in a dry run too: the projection is where you look BEFORE spending sessions, which makes it the
-  # cheapest moment to learn you are about to commit into the base branch.
-  warn_if_on_base_branch
+  # Before the first gate, unless TICKET is about to create the mission's branch.
+  if ! ticket_will_cut_branch; then warn_if_on_base_branch; fi
   # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The CLI value is kept
   # HERE, before the loop — inside it, force_phase is also set by the runner itself
   # (PUBLISH_ON_REVIEW_BLOCKED=draft), and that is the runner's hand, not the human's. It is consumed
@@ -11425,8 +11427,8 @@ cmd_retry() {
   #
   # AFTER ensure_mission_branch, exactly like cmd_run and for the same reason: the checkout is what
   # decides where this retry will commit, so warning first would cry wolf at a human the runner is
-  # about to move off the base branch anyway.
-  warn_if_on_base_branch
+  # about to move off the base branch anyway. TICKET can still be the one to create the branch.
+  if ! ticket_will_cut_branch; then warn_if_on_base_branch; fi
   local phase
   derive_phase
   phase="$CURRENT_PHASE"

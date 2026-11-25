@@ -4907,6 +4907,65 @@ else
        "the same rc on both branches, and 0" "main=$BASE_RC feature=$FEAT_RC"
 fi
 
+# On the same base branch, only the pending branch assignment makes the warning premature.
+TW="20260109-ticket-branch-warning"
+TW_DIR="$FIX/docs/handoffs/$TW"
+mkdir -p "$TW_DIR"
+cat > "$TW_DIR/00-missao.md" <<'EOF'
+---
+missao: 20260109-ticket-branch-warning
+versao: 0.1.0
+branch: <working branch>
+aprovacao: auto
+adr: none
+kaizen_log: skipped
+---
+# Mission fixture
+EOF
+: > "$TW_DIR/01-plano.md"
+cat > "$TW_DIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | one slice | `true` → `0` | pending | — |
+EOF
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' .sdd/config.sh
+TW_WARNING='commits straight into it'
+TW_PHASE="$( cd "$FIX" && "$SDD" phase "$TW" )"
+TW_PENDING="$( cd "$FIX" && "$SDD" run --dry-run "$TW" 2>&1 )"; TW_PENDING_RC=$?
+# Retry has no dry run. An unapproved plan reaches the warning site but stops before a session.
+sed -i 's/^aprovacao: auto$/aprovacao:/' "$TW_DIR/00-missao.md"
+TW_RETRY="$( cd "$FIX" && "$SDD" retry "$TW" 2>&1 )"; TW_RETRY_RC=$?
+sed -i 's/^aprovacao:$/aprovacao: auto/' "$TW_DIR/00-missao.md"
+if [ "$TW_PHASE" = TICKET ] && [ "$TW_PENDING_RC" -eq 0 ] \
+   && ! grep -qF "$TW_WARNING" <<< "$TW_PENDING" \
+   && [ "$TW_RETRY_RC" -eq 1 ] && grep -qF 'PLAN is interactive' <<< "$TW_RETRY" \
+   && ! grep -qF "$TW_WARNING" <<< "$TW_RETRY"; then
+  pass "sdd run on the base branch is silent about committing into it while the branch field is the placeholder and the TICKET is still to run"
+else
+  fail "sdd run on the base branch is silent about committing into it while the branch field is the placeholder and the TICKET is still to run" \
+       "TICKET is next, projection succeeds, retry stops at PLAN, neither issues the warning" \
+       "phase $TW_PHASE; run rc $TW_PENDING_RC, warnings $(grep -cF "$TW_WARNING" <<< "$TW_PENDING"); retry rc $TW_RETRY_RC, warnings $(grep -cF "$TW_WARNING" <<< "$TW_RETRY")"
+fi
+
+printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\nsprint: Sprint 1\n---\n' > "$TW_DIR/10-ticket.md"
+TW_FILE="$( cd "$FIX" && "$SDD" run --dry-run "$TW" 2>&1 )"; TW_FILE_RC=$?
+rm -f "$TW_DIR/10-ticket.md"
+sed -i 's/^branch: <working branch>$/branch: main/' "$TW_DIR/00-missao.md"
+TW_BASE="$( cd "$FIX" && "$SDD" run --dry-run "$TW" 2>&1 )"; TW_BASE_RC=$?
+# Both controls must restore the warning, relative to the otherwise identical pending case.
+if [ "$TW_FILE_RC" -eq 0 ] && [ "$TW_BASE_RC" -eq 0 ] \
+   && ! grep -qF "$TW_WARNING" <<< "$TW_PENDING" \
+   && grep -qF "$TW_WARNING" <<< "$TW_FILE" && grep -qF "$TW_WARNING" <<< "$TW_BASE"; then
+  pass "sdd run on the base branch still warns once 10-ticket.md exists, and when the mission declares the base itself"
+else
+  fail "sdd run on the base branch still warns once 10-ticket.md exists, and when the mission declares the base itself" \
+       "both projections succeed, and the warning is restored by either a handoff or the explicit base" \
+       "warnings pending/file/base: $(grep -cF "$TW_WARNING" <<< "$TW_PENDING")/$(grep -cF "$TW_WARNING" <<< "$TW_FILE")/$(grep -cF "$TW_WARNING" <<< "$TW_BASE"); rc file/base: $TW_FILE_RC/$TW_BASE_RC"
+fi
+rm -f "$TW_DIR/00-missao.md" "$TW_DIR/01-plano.md" "$TW_DIR/checkpoint.md"
+rmdir "$TW_DIR"
+sed -i 's/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' .sdd/config.sh
+
 # --- sdd approve -----------------------------------------------------------
 echo "== sdd approve =="
 # Closing the PLAN gate used to mean typing `aprovacao: humano-YYYY-MM-DD` into the frontmatter by

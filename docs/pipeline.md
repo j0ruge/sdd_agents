@@ -697,12 +697,14 @@ The failure this closes was measured: in the SQ-97 pilot five phases committed i
 branch — 16 commits over somebody else's work, ~US$ 45 of `rebase --onto` to undo. Committing on
 the wrong branch is loud now in **all five doors that can end up committing** — `sdd run`,
 `sdd retry`, `sdd approve`, `sdd kaizen` and `sdd preflight` — each warning when you are standing
-on the base branch. The warning has one definition, so sabotaging it silences all five at once and
-the suite dies; the two call sites added last (`sdd retry` and `sdd approve`) carry a mutation of
-their own, because for those two the defect was the missing call, not the missing warning.
+on the base branch. For `sdd run` and `sdd retry` only, the warning is skipped when Jira is enabled,
+`branch:` is empty or still the placeholder, and `10-ticket.md` does not exist yet. The branch
+assignment is left to TICKET. The warning has one definition, so sabotaging it silences all five
+at once and the suite dies. The two call sites added last (`sdd retry` and `sdd approve`) carry a
+mutation of their own, because for those two the defect was the missing call, not the missing warning.
 
-One thing it deliberately does not do: **it never runs in `--dry-run`** — a checkout is a mutation
-of state, and that is the half the projection promises not to touch (below).
+The branch checkout **never runs in `--dry-run`**. A checkout changes the working tree, which the
+projection promises not to touch (below).
 
 **How the branch created by TICKET gets here.** With `JIRA_ENABLED=true` the `ticket` skill creates
 the branch, and the name used to land in `10-ticket.md` alone — nothing copied it into the field

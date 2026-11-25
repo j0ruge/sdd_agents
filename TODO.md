@@ -46,14 +46,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Sensores que faltam
 
 - [ ] **A cópia do catálogo deixa o controle do check-hat sem os guias que ele lê** —
-  `tests/check-mutation.sh:8938` (`sandbox`) — `--only … check-hat.sh` retorna `HARNESS-BROKEN` sem sabotagem.
+  `tests/check-mutation.sh:8951` (`sandbox`) — `--only … check-hat.sh` retorna `HARNESS-BROKEN` sem sabotagem.
   Faltam `docs/finding-prs.md`, `docs/plan-only.md` e `docs/failure-modes.md`. Com os três, controle verde.
   Direção: copiar os guias e testar o controle do catálogo com o conjunto que o sensor lê.
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/checkpoint-notas.md`
   — descoberto por `sdd-executor` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-25)
 
 - [ ] **O fixture de fast-forward do close esconde falhas na criação do remoto** —
-  `tests/check-gates.sh:7112` (`git clone`) — uma rodada de `--only` parou em `HARNESS-BROKEN` sem o diretório
+  `tests/check-gates.sh:7175` (`git clone`) — uma rodada de `--only` parou em `HARNESS-BROKEN` sem o diretório
   `peer`. O bloco descarta stderr do push e do clone e só acusa a comparação do fast-forward.
   Direção: validar a preparação do remoto e mostrar qual comando falhou antes de medir o close.
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/checkpoint-notas.md`
