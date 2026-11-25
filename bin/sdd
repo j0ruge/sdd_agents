@@ -13367,6 +13367,9 @@ USAGE
   sdd approve <mission>      show the plan and, on an explicit y, write the human approval into
                              00-missao.md and commit it (the PLAN gate — never a session)
   sdd run <mission>          run from the first unsatisfied phase through to the PR
+                             If the launching session or terminal will close, start it detached.
+                             setsid nohup sdd run <mission> > <log> 2>&1 < /dev/null &
+                             Follow .sdd/logs/<mission>/pipeline.log or use sdd status <mission> --no-gates.
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
   sdd note-manual <mission> <PHASE>

@@ -7010,6 +7010,10 @@ mut_COORD_stragglers_pipe_fatal() {
 mut_RUN_help_after_subcommand_ignored() {
   sed -i '/^main() {/,/^}/ s@^    case "$arg" in -h|--help) cmd_help; return 0 ;; esac$@    :@' "$1"
 }
+# Without the command, the help still names the log but leaves the operator without a launch recipe.
+mut_HELP_run_detached_form_dropped() {
+  sed -i '/^cmd_help() {/,/^}/ { /^ *setsid nohup sdd run <mission> > /d; }' "$1"
+}
 # cmd_install accepts any option again, and installs. Caught by "install refuses an option it does
 # not know, before writing anything" (check-preflight.sh).
 mut_RUN_install_unknown_option_accepted() {
@@ -8736,6 +8740,7 @@ CATALOG=(
   EXEC_adr_drift_blind
   RUN_adr_warn_silent
   RUN_help_after_subcommand_ignored
+  HELP_run_detached_form_dropped
   RUN_install_unknown_option_accepted
   RUN_link_agents_argument_accepted
   LINK_commands_unlinked

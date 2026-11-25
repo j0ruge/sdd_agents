@@ -125,6 +125,8 @@ sdd-worker <verb> <dir> [args]        # the campaign worker's verbs (delegate, l
                                       #   they answer from artifacts and never act — see below
 ```
 
+For `setsid nohup sdd run`, see `sdd help` and the [detached-run guide](docs/failure-modes.md#the-sdd-run-process-itself-disappeared).
+
 `sdd approve <mission>` is the human gate with a command instead of a hand edit. It prints what you
 are about to approve — the title, the PLAN-AUTO evidence, the increments, the open questions —
 asks `[y/N]`, and only on an explicit yes switches to the declared branch, writes

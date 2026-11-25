@@ -1203,6 +1203,15 @@ help_probes() {
   else
     fail "help: the sdd why entry of sdd help does not say that its gate runs TEST_CMD for EXEC, QA or REVIEW"
   fi
+
+  blk="$(awk '/^  sdd run <mission> /{on=1; print; next} on && /^                    /{print; next} {on=0}' <<< "$out")"
+  if grep -qF 'setsid nohup sdd run <mission> > <log> 2>&1 < /dev/null &' <<< "$blk" \
+     && grep -qF '.sdd/logs/<mission>/pipeline.log' <<< "$blk" \
+     && grep -qF 'sdd status <mission> --no-gates' <<< "$blk"; then
+    pass "help: sdd run shows its detached form and where to read the progress afterwards"
+  else
+    fail "help: sdd run shows its detached form and where to read the progress afterwards"
+  fi
 }
 
 
