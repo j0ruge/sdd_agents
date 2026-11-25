@@ -774,7 +774,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   O teste do runner exige handoff ao worker e o do adaptador exige o publicador offline. RESOLVED by 0abeee2
   — achado por Codex na revisão da missão `20261124-worker-codex` (2026-11-24)
 
-- [ ] **Chave de aprovação com espaços podia passar pela validação do planner** — `bin/sdd-plan-codex:223`
+- [ ] **Chave de aprovação com espaços podia passar pela validação do planner** — `bin/sdd-plan-codex:247`
   (`one blank approval`) — `aprovacao : auto` antes de uma chave em branco passava na minuta e vencia no gate.
   O teste de materialização cobre chaves repetidas com espaços para aprovação, missão e branch. RESOLVED by 0abeee2
   — achado por Codex na revisão da missão `20261124-worker-codex` (2026-11-24)

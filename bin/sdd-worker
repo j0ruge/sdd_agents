@@ -807,6 +807,7 @@ except OSError:
 # Match git_common_dir_abs and ledger_repo_root in bin/sdd. Older Git echoes the absolute-path
 # flag and exits successfully, so resolve a non-absolute answer from the unflagged query.
 # Keep the final newline until validation so a path with a trailing newline cannot lose bytes.
+# Unlike the modern writer, the delegated guard refuses newline paths before spending.
 budget_repo_key() {
   local root="$1" common bare
   common="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null && printf .)" || return 1

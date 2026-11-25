@@ -1843,7 +1843,8 @@ dated slug on the same `kit_sha` from collapsing into one group — mission slug
 The series preserves `cost_usd` as the measured subtotal. Each version and phase cell also
 reports `unknown_cost_sessions` for Codex sessions without billed USD. The human mission and
 version tables mark those sessions beside the measured subtotal. A token-based estimate is
-not added to that subtotal.
+not added to that subtotal. The separate `close` event remains Claude-only: the Codex
+runner refuses CLOSE before launching a session, and therefore emits no Codex closure cost.
 
 The empty-ledger branch prints the same key set with
 zeros: a consumer must never read `null` on one branch where the other gives a number.
@@ -1989,6 +1990,10 @@ copy remote credentials or executable Git settings. Uncommitted files remain in 
 The private index and refs do not carry across turns. If publication is interrupted between the
 ref and index updates, run `PHASE_ENGINE=codex sdd preflight` in the mission checkout before
 restarting. It finishes the recorded index update only if the branch still matches the receipt.
+If preflight cannot verify the prepared index, preserve the branch, the index, and the receipt
+it names. Do not clear the lock or the receipt to retry. Inspect the recorded old and new refs
+and the staged differences before deciding how to restore the expected index and retain any
+work staged by the operator.
 Other registered checkouts which do not contain the mission checkout are mounted read-only.
 The TICKET role can reach Atlassian Cloud and requires a real mission branch before launch. At PR, the runner hands off to the
 worker's separately authorized `pr` act. This keeps remote publication and merge out of a
