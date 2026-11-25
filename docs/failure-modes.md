@@ -806,12 +806,13 @@ damaged and nothing needs undoing — the phase is derived from the artifacts, s
 where it stopped. For an expired login that is `claude` in your own terminal, not in the
 pipeline.
 
-**What it never does is fire on doubt.** Only a session whose summary carries `is_error: true`
+**When Claude is the harness,** only a session whose summary carries `is_error: true`
 **and** a non-empty `result` string escalates. A session that died with no cause (6 of the 11
 errored sessions measured across the four target repos on 2026-09-18) behaves exactly as it
 always did — `session_error` is `null` and the ordinary retry is still bought. So is the budget
 ceiling (`error_max_budget_usd`, `result: null`), which is the kit's **designed** loop and must
-never stop the line.
+never stop the line. Codex also stops on a failed adapter status, even if the artifact gate passes.
+Run `sdd retry` to start a fresh session for that phase after addressing the failure.
 
 **Two doors, and the limit is declared.** The first pass and the inline retry, both in `cmd_run`'s
 loop, and both **above their own gate-pass branch**: a session the environment killed stops the
@@ -899,13 +900,15 @@ hand the mission back to REVIEW with more rounds.
 **Reading the count:** all three trails are written **once per run**, so `review-to-draft: 3` in
 either reader means three runs — never one run that degraded three times.
 
-**If the draft PR does not close either:** the run ends there, with `BLOCKED in REVIEW` and a
+**If the Claude draft PR gate fails too:** the run ends there, with `BLOCKED in REVIEW` and a
 `blocked` / `budget-exhausted` row naming **REVIEW**. The draft was the one chance, and the phase
 named is the one whose ceiling was actually blown. The runner used to hand REVIEW back instead and
 go round again — REVIEW→PR→REVIEW with the budget still blown — until PR ran out of its own budget
 and the escalation came out blaming **PR**, a phase that was never over budget. If you are reading
 an old ledger and a `budget-exhausted` in PR follows a `review-to-draft`, that is what you are
 looking at.
+For Codex, rc 2 hands the draft to the worker under its separate PR authorization.
+Use `sdd why <mission> PR` after publication to inspect the PR gate.
 
 **Do not:** silence it by setting `PUBLISH_ON_REVIEW_BLOCKED="off"` and re-running until the review
 passes. Off is the default precisely because a stop is louder than a draft; switching it on and then

@@ -22,6 +22,10 @@ O aceite independente reavaliou os cinco gates com `sdd why`, reproduziu
 os bytes da saudação em UTF-8 com um único LF final. O runner saiu com rc 2 e
 `PR needs worker publish`. O piloto permaneceu sem remoto, referências remotas,
 `50-pr.md` ou sessão de publicação. O ato `pr` não foi executado nesse repo.
+A rechecagem local do piloto original após as correções do adaptador executou
+`git remote` e `git for-each-ref refs/remotes` e exigiu saída vazia nos dois.
+Também exigiu que não existissem `50-pr.md` nem logs `PR-*` da missão.
+Essa rechecagem não abriu uma nova sessão de modelo.
 
 ## Telemetria
 

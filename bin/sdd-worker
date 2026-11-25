@@ -786,21 +786,18 @@ campaign_set() {
 }
 
 budget_ledger_input() {
-  if [ "$2" = true ]; then
-    # An absent history is zero, but a denied read is not an absent history.
-    python3 -I -c '
+  # An absent history is zero, but a denied read is not an absent history.
+  python3 -I -c '
 import shutil
 import sys
 try:
-    ledger = open(sys.argv[1], "rb")
+    with open(sys.argv[1], "rb") as ledger:
+        shutil.copyfileobj(ledger, sys.stdout.buffer)
 except FileNotFoundError:
     sys.exit(0)
-with ledger:
-    shutil.copyfileobj(ledger, sys.stdout.buffer)
+except OSError:
+    sys.exit(1)
 ' "$1"
-  elif [ -e "$1" ]; then
-    cat -- "$1"
-  fi
 }
 
 # budget <campaign-dir> — what the campaign spent against its ceiling: the cost_usd of every ledger
@@ -932,7 +929,7 @@ cmd_budget() {
   # The mission cap's cents come from its text (digits, and a fraction the legible grammar allows):
   # the whole part times 100, the first two digits of the fraction, and one more cent when a digit
   # after those two is above zero.
-  if ! out="$(budget_ledger_input "$ledger" "$strict_json" | jq -nrR --arg cap "$cap" --arg m "$mcap" --arg scope "$scope" --argjson strict "$strict_json" --args '
+  if ! out="$(budget_ledger_input "$ledger" | jq -nrR --arg cap "$cap" --arg m "$mcap" --arg scope "$scope" --argjson strict "$strict_json" --args '
          def measured: type == "number" and . >= 0;
          [inputs | if $strict then fromjson else fromjson? end
            | select(type == "object" and (.mission | IN($ARGS.positional[])))] as $rows

@@ -77,6 +77,7 @@ planner relay. Set `QUESTION_ID` from the `status` output before answering.
 "$SDD_KIT/bin/sdd-plan-codex" start 20261124-example 'Update the example command'
 "$SDD_KIT/bin/sdd-plan-codex" status 20261124-example
 "$SDD_KIT/bin/sdd-plan-codex" answer 20261124-example "$QUESTION_ID" "Use option A"
+# Repeat status and answer for any further question. Finish only at status draft.
 "$SDD_KIT/bin/sdd-plan-codex" finish 20261124-example
 ```
 

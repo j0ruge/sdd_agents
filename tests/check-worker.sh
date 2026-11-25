@@ -5258,9 +5258,18 @@ if [ "$(id -u)" -ne 0 ]; then
   cp "$cdxl/base" "$cdxl/unreadable/autonomy-log.jsonl"
   chmod 000 "$cdxl/unreadable"
   SDD_STATE_DIR="$cdxl/unreadable" W_CWD="$REPO" worker codex-plan "$cdxp" --lot L1
+  denied_plan="$W_RC:$W_ERR"
+  SDD_STATE_DIR="$cdxl/unreadable" W_CWD="$REPO" worker budget "$cdxp"
   chmod 700 "$cdxl/unreadable"
-  [ "$W_RC" -eq 1 ] && [[ "$W_ERR" == *'ledger'*'does not read'* ]] \
-    || got="${got:+$got; }inaccessible ledger: rc $W_RC: $W_OUT $W_ERR"
+  if [[ "$denied_plan" == 1:*'ledger'*'does not read'* ]] && [ "$W_RC" -eq 1 ] \
+      && [[ "$W_OUT" == *'ledger'*'does not read'* ]]; then
+    pass 'codex cost: paid planning and public budget both refuse an inaccessible ledger'
+  else
+    fail 'codex cost: paid planning and public budget both refuse an inaccessible ledger' \
+      'both rc 1 and ledger does not read' "plan $denied_plan; budget rc $W_RC: $W_OUT $W_ERR"
+  fi
+else
+  printf '  skip  inaccessible ledger probe requires an unprivileged UID\n'
 fi
 for harness in claude legacy; do
   sed -i '/^allow_unknown_cost:/d' "$cdxp/delegation.md"

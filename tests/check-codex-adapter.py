@@ -17,7 +17,7 @@ COMPLETE = {"type": "turn.completed", "usage": USAGE}
 MESSAGE = {"type": "item.completed", "item": {"type": "agent_message", "id": "item_1", "text": "SDD_OK"}}
 
 FAKE = """#!/usr/bin/env python3
-import json, os, pathlib, sys
+import json, os, pathlib, subprocess, sys, tomllib
 args = sys.argv[1:]
 if args == ['--version']:
     print('codex-cli 0.test')
@@ -26,6 +26,12 @@ elif args in (['exec', '--help'], ['exec', 'resume', '--help']):
 elif args == ['login', 'status']:
     print('Logged in using ChatGPT')
 elif 'sandbox' in args:
+    if any(value.startswith('GIT_DIR=') for value in args):
+        if os.environ.get('SDD_TEST_NATIVE_CODEX'):
+            real = os.environ['SDD_TEST_NATIVE_CODEX']
+            os.execv(real, [real, *args])
+        command = args[args.index('--') + 1:]
+        os.execv(command[0], command)
     if os.environ.get('FAKE_EXEC_SANDBOX') == '1':
         pathlib.Path(os.environ['FAKE_ARGS']).write_text(json.dumps(args))
         command = args[args.index('--') + 1:]
@@ -33,6 +39,23 @@ elif 'sandbox' in args:
     sys.exit(int(os.environ.get('FAKE_SANDBOX_RC', '0')))
 else:
     pathlib.Path(os.environ['FAKE_ARGS']).write_text(json.dumps([args, sys.stdin.read(), os.environ['GIT_REFLOG_ACTION']]))
+    if 'FAKE_MODEL_COMMIT' in os.environ:
+        setting = next((v for v in args if v.startswith('shell_environment_policy.set=')), None)
+        env = os.environ.copy()
+        if setting:
+            env.update(tomllib.loads(setting)['shell_environment_policy']['set'])
+        pathlib.Path('proof.txt').write_text('proof')
+        amend = ['--amend'] if os.environ['FAKE_MODEL_COMMIT'] == 'amend' else []
+        command = ['bash', '-ec', 'git add proof.txt && git commit -qm proof "$@"', 'bash', *amend]
+        if os.environ.get('SDD_TEST_NATIVE_CODEX'):
+            real = os.environ['SDD_TEST_NATIVE_CODEX']
+            config = [value for i, value in enumerate(args) if args[i - 1] == '-c']
+            command = [real, *(value for setting in config for value in ('-c', setting)), 'sandbox', '--', *command]
+            env = os.environ.copy()
+        subprocess.run(command, env=env, check=True)
+        if os.environ['FAKE_MODEL_COMMIT'] == 'concurrent':
+            # The fixture's separate checkout owner advances the real branch.
+            subprocess.run(['git', 'commit', '--allow-empty', '-qm', 'external'], check=True)
     print(os.environ['FAKE_STREAM'], flush=True)
     sys.exit(int(os.environ['FAKE_RC']))
 """
@@ -40,16 +63,17 @@ else:
 
 class AdapterTests(unittest.TestCase):
     def invoke(self, *args, events=None, rc=0, sandbox_rc=0, linked=False, remote=None,
-               execute_sandbox=False):
+               execute_sandbox=False, model_commit=False):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
             repo = base / "repo"
             subprocess.run(["git", "init", "-q", "--initial-branch=trunk", str(repo)], env=git_env, check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Fixture"], env=git_env, check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "fixture@example.invalid"],
+                           env=git_env, check=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "seed", "--allow-empty"], env=git_env, check=True)
             if linked:
-                subprocess.run(["git", "-C", str(repo), "-c", "user.name=Fixture",
-                                "-c", "user.email=fixture@example.invalid",
-                                "commit", "-qm", "seed", "--allow-empty"], env=git_env, check=True)
                 branch = base / "linked"
                 subprocess.run(["git", "-C", str(repo), "worktree", "add", "-qb", "mission", str(branch)],
                                env=git_env, check=True)
@@ -71,11 +95,20 @@ class AdapterTests(unittest.TestCase):
                 "FAKE_EXEC_SANDBOX": str(int(execute_sandbox)),
                 "GIT_REFLOG_ACTION": "sdd:fixture",
             }
+            if model_commit:
+                env["FAKE_MODEL_COMMIT"] = str(model_commit)
             result = subprocess.run(
                 [str(ADAPTER), *args], text=True, input="fixture prompt\n", env=env,
                 cwd=repo, capture_output=True, timeout=15,
             )
             arguments = json.loads(captured.read_text()) if captured.exists() else None
+            if model_commit:
+                def git(*args):
+                    return subprocess.check_output(["git", *args], cwd=repo, env=git_env, text=True).strip()
+
+                self.final_git = [git("log", "-1", "--format=%s"), git("status", "--short"),
+                                  git("log", "-1", "--format=%s", "trunk"),
+                                  git("reflog", "-1", "--format=%gs")]
             return result, arguments
 
     def run_hat(self, *args, model="gpt-6.2-sol", hat="sdd-executor", **kwargs):
@@ -156,7 +189,9 @@ class AdapterTests(unittest.TestCase):
         def settings(arguments):
             projects = next(value for value in arguments if value.startswith("projects="))
             root = next(iter(tomllib.loads(projects)["projects"]))
-            return [value.replace(root, "/fixture") for value in arguments]
+            private = next(value for value in arguments if value.startswith("shell_environment_policy.set="))
+            shadow = tomllib.loads(private)["shell_environment_policy"]["set"]["GIT_DIR"]
+            return [value.replace(root, "/fixture").replace(shadow, "/shadow") for value in arguments]
 
         self.assertEqual(settings(args[2:-2]), settings(fresh_args[1:-1]))
         other = {**START, "thread_id": "019aebba-bc11-73b0-8080-7c8fbffcd881"}
@@ -188,22 +223,14 @@ class AdapterTests(unittest.TestCase):
                 if not read_only:
                     profile = next(arg for arg in args if arg.startswith("permissions="))
                     self.assertIn(f"enabled = {network}", profile)
-                    self.assertIn('/repo/.git/config" = "read"', profile)
-                    self.assertIn('/repo/.git/hooks" = "read"', profile)
+                    self.assertIn('/repo/.git" = "read"', profile)
 
     def test_linked_worktree_profile_does_not_unlock_the_shared_git_directory(self):
         rc, _, (args, _, _), err = self.run_hat(linked=True)
         self.assertEqual(rc, 0, err)
         profile = next(arg for arg in args if arg.startswith("permissions="))
-        self.assertIn('/repo/.git/worktrees/linked" = "write"', profile)
-        self.assertIn('/repo/.git/objects" = "write"', profile)
-        self.assertIn('/repo/.git/refs/heads" = "write"', profile)
-        self.assertIn('/repo/.git/objects/info" = "read"', profile)
-        self.assertIn('/repo/.git/worktrees/linked/commondir" = "read"', profile)
-        self.assertIn('/repo/.git/worktrees/linked/sdd-coordination.lock" = "read"', profile)
-        self.assertIn('/repo/.git/worktrees/linked/sdd-coordination.json" = "read"', profile)
+        self.assertIn('/repo/.git/worktrees/linked" = "read"', profile)
         self.assertIn('/linked/.sdd" = "read"', profile)
-        self.assertIn('/repo/.git/refs/heads/trunk" = "read"', profile)
         self.assertIn('/repo" = "read"', profile)
         self.assertNotIn('/repo/.git/refs/heads/mission" = "read"', profile)
         self.assertIn('/repo/.git" = "read"', profile)
@@ -224,7 +251,7 @@ class AdapterTests(unittest.TestCase):
             project = next(arg for arg in args if arg.startswith("projects="))
             checkout = Path(next(iter(tomllib.loads(project)["projects"])))
             filesystem = {str(Path(path).relative_to(checkout.parent)): access
-                          for path, access in workspace["filesystem"].items()}
+                          for path, access in workspace["filesystem"].items() if Path(path).is_relative_to(checkout.parent)}
             self.assertNotIn("repo/.git/refs/remotes", filesystem)
             profiles.append(filesystem)
         self.assertEqual(*profiles)
@@ -324,6 +351,31 @@ class AdapterTests(unittest.TestCase):
         profile = tomllib.loads(next(arg for arg in args if arg.startswith("permissions=")))
         filesystem = profile["permissions"]["sdd-workspace"]["filesystem"]
         self.assertTrue(all(access == "read" for access in filesystem.values()))
+
+    def test_git_turn_promotes_only_the_mission_tip_and_labels_it(self):
+        rc, events, (args, _, _), err = self.run_hat(linked=True, model_commit=True)
+        self.assertEqual(rc, 0, (events, err))
+        profile = tomllib.loads(next(arg for arg in args if arg.startswith("permissions=")))
+        paths = profile["permissions"]["sdd-workspace"]["filesystem"]
+        self.assertTrue(all(access == "read" for path, access in paths.items() if "/repo" in path))
+        self.assertEqual(self.final_git, ["proof", "", "seed", "sdd:fixture"])
+
+    def test_git_turn_never_promotes_a_failed_provider_turn(self):
+        rc, _, _, _ = self.run_hat(linked=True, model_commit=True, rc=91)
+        self.assertEqual(rc, 91)
+        self.assertEqual(self.final_git[:3], ["seed", "?? proof.txt", "seed"])
+
+    def test_git_turn_refuses_to_rewrite_the_original_tip(self):
+        rc, events, _, _ = self.run_hat(linked=True, model_commit="amend")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("merge-base", events[-1]["result"])
+        self.assertEqual(self.final_git[:3], ["seed", "?? proof.txt", "seed"])
+
+    def test_git_turn_preserves_an_external_advance(self):
+        rc, events, _, _ = self.run_hat(linked=True, model_commit="concurrent")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("update-ref", events[-1]["result"])
+        self.assertEqual(self.final_git[:3], ["external", "?? proof.txt", "seed"])
 
 
 if __name__ == "__main__":

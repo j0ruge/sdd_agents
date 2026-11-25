@@ -196,7 +196,7 @@ stop (the mission ceiling).
 
 For a Codex campaign, run `PHASE_ENGINE=codex sdd preflight` in that worktree before launching
 `sdd run`. Set `PHASE_ENGINE=codex` alongside `BUDGET_MISSION_USD` in the launch command. Before
-each Codex phase, the runner verifies the signed delegation with
+each Codex model session, the runner verifies the signed delegation with
 `sdd-worker codex-run --mission <mission-dir> --phase <phase> [--model <model>]`. The owner must explicitly grant
 `allow_unknown_cost: true` when signing the Codex delegation. If the signature, cost exception,
 or ordinary run authority fails verification, stop and return the diagnostic to the owner.
@@ -208,11 +208,11 @@ Budget output reports the known subtotal and any reference API estimate separate
 
 For Codex, `sdd run` returns rc 2 with `PR needs worker publish` when work at the PR gate remains.
 Resume at this act under the signed `pr` authority. In the mission worktree, follow the publisher
-procedure in `agents/sdd-publisher.md` as the worker. Check the suite and branch, push only that
-branch, create or update its pull request and record verified `50-pr.md`. If the handoff says
-`draft only`, or that run's journal records `PUBLISH_ON_REVIEW_BLOCKED=draft`, use
-`gh pr create --draft` for a new PR. If the existing PR is already ready, report that conflict
-and stop before changing it. Verify that `gh pr view --json isDraft --jq .isDraft` prints `true`
+procedure in `agents/sdd-publisher.md` as the worker. Check the suite and branch before pushing.
+If the handoff says `draft only`, or that run's journal records `PUBLISH_ON_REVIEW_BLOCKED=draft`,
+check the existing PR state before pushing. If the PR is already ready, report that conflict and
+stop without pushing or editing the PR. For a new draft-only PR use `gh pr create --draft`. Push only
+the mission branch, create or update its pull request and record verified `50-pr.md`. Verify that `gh pr view --json isDraft --jq .isDraft` prints `true`
 in addition to checking the artifact gate. Then use
 `PHASE_ENGINE=codex sdd why <mission> PR` to read the verdict. Check for `PR: PR open:` rather
 than relying on the command's exit code. If only the kit mutation stamp is missing and the PR is

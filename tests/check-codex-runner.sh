@@ -44,7 +44,7 @@ if [ "${1:-}" = --preflight ]; then
 fi
 if [ "${1:-}" = --sandbox-check ]; then
   printf '%s\n' "$2" >> "$FIX/sandbox-checks"
-  if [ "${3:-}" = --qa-host ]; then printf '%s\n' "$4" >> "$FIX/sandbox-hosts"; fi
+  printf '%s|%s\n' "$2" "${4:-offline}" >> "$FIX/sandbox-hosts"
   exec bash -c "$2"
 fi
 printf '%s\n' "$PWD|$*|${GIT_REFLOG_ACTION:-}" >> "$FIX/provider"
@@ -244,9 +244,11 @@ git switch -qc qa-network-fixture
 mkdir -p docs/qa/reports
 printf '%s\n' '# Fixture report' '- **Started:** 2026-01-01 · **Status:** closed' > docs/qa/reports/20260101-fixture.md
 git add docs/qa/reports && git commit -qm 'Record the closed interface QA report'
+: > "$FIX/sandbox-hosts"
 APP_URL=https://qa.example.test E2E_CMD='test -f .sdd/config.sh' PHASE_ENGINE=codex \
   "$SDD" why "$MISSION" QA > "$FIX/out" 2>&1
-assert 'Codex separates identical unit and E2E commands by sandbox host' grep -Fxq qa.example.test "$FIX/sandbox-hosts"
+assert 'Codex separates identical unit and E2E commands by sandbox host' \
+  cmp -s "$FIX/sandbox-hosts" <(printf '%s\n' 'test -f .sdd/config.sh|offline' 'test -f .sdd/config.sh|qa.example.test')
 assert 'Codex paths never invoke Claude' test ! -e "$FIX/claude.called"
 
 python3 "$ROOT/tests/check-codex-adapter.py"
