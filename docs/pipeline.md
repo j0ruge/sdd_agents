@@ -805,6 +805,12 @@ unbounded) or a diverged branch each leave the sha where it was and **warn** —
 succeeded, and nothing is forced. Before this the base stayed behind the PR just merged, and the
 next mission was cut from it (SQ-145, SQ-146).
 
+Back on a clean base, `sdd close` lists findings in `TODO_FILE` whose `RESOLVED by` hashes are
+all proven. Each row shows the file, line, title and proof for each hash. A hash must be an
+ancestor of the base or, after a squash, of the locally available head of this mission's PR
+that the command confirmed as `MERGED`. Without a verified PR or a local head, only base ancestry
+counts. The command lists findings for review and never edits the file.
+
 `sdd close` is the only invocation of `claude` outside `run_phase()` besides the two `sdd preflight`
 probes — none of them runs a phase. It carries the kit guard anyway, for the reason below, and
 the kit's read-only rule (see "Permissions").

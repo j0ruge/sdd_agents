@@ -6781,11 +6781,15 @@ exit "\$(cat "$CLOSE_RCFILE" 2>/dev/null || echo 0)"
 STUB
 chmod +x "$FIX/.stub/claude"
 
-# cmd_close asks `gh` exactly one thing before it spends anything: is the PR merged?
+# cmd_close asks `gh` once before it spends anything. Only the combined query carries a PR head.
+printf 'MERGED\n' > "$FIX/.sdd/logs/close-pr-state"
 cat > "$FIX/.stub/gh" <<'STUB'
 #!/usr/bin/env bash
 [ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
-printf 'MERGED\n'
+cat .sdd/logs/close-pr-state
+if [ "${4:-}" = --json ] && [ "${5:-}" = state,headRefOid ] && [ -f .sdd/logs/close-pr-head ]; then
+  cat .sdd/logs/close-pr-head
+fi
 STUB
 chmod +x "$FIX/.stub/gh"
 
@@ -7218,12 +7222,7 @@ assert_eq "close: with JIRA off the tree goes back to the default branch" \
 
 # 9c. ...and the trip home is post-merge there too: a PR that is not MERGED is refused with the
 #     JIRA arm's own sentence, and the branch does not move. `gh` answers OPEN for this one regime.
-cat > "$FIX/.stub/gh" <<'STUB'
-#!/usr/bin/env bash
-[ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
-printf 'OPEN\n'
-STUB
-chmod +x "$FIX/.stub/gh"
+printf 'OPEN\n' > "$FIX/.sdd/logs/close-pr-state"
 git -C "$FIX" checkout -q -b LH-15_nojira-open-pr
 rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
 C9C_RC=0
@@ -7251,6 +7250,77 @@ assert_eq "close: without a pr_url the trip home claims no merge it did not chec
   "rc:0 branch:$CLOSE_HOME verified-claims:1 unverified-claims:0 unverified-says:1" \
   "rc:$C9D_RC branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) verified-claims:$(has "$C9B_OUT" 'merged and spent') unverified-claims:$(has "$C9D_OUT" 'merged and spent') unverified-says:$(has "$C9D_OUT" 'merge was not verified')"
 git -C "$FIX" checkout -q "$CLOSE_HOME"
+
+# 9e. The local upstream brings in the findings file and the first fix in a fast-forward. The PR
+#     head and the unrelated fix are on separate lines of history, neither merged into the base.
+printf 'MERGED\n' > "$FIX/.sdd/logs/close-pr-state"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\n---\n# PR\n' > "$MDIR/50-pr.md"
+printf 'TODO_FILE="close-findings.md"\n' >> "$FIX/.sdd/config.sh"
+git -C "$FIX" add -A && git -C "$FIX" commit -qm "fixture: configure the close listing" || exit 1
+CLOSE_START="$(git -C "$FIX" rev-parse HEAD)" || exit 1
+CLOSE_TREE="$(git -C "$FIX" rev-parse 'HEAD^{tree}')" || exit 1
+CLOSE_SQUASH_FIX="$(git -C "$FIX" commit-tree "$CLOSE_TREE" -p "$CLOSE_START" -m 'fixture: fix on the PR branch')" || exit 1
+CLOSE_PR_HEAD="$(git -C "$FIX" commit-tree "$CLOSE_TREE" -p "$CLOSE_SQUASH_FIX" -m 'fixture: merged PR head')" || exit 1
+CLOSE_OTHER_FIX="$(git -C "$FIX" commit-tree "$CLOSE_TREE" -p "$CLOSE_START" -m 'fixture: unrelated fix')" || exit 1
+printf '%s\n' "$CLOSE_PR_HEAD" > "$FIX/.sdd/logs/close-pr-head"
+git -C "$FIX" checkout -qb close-resolved-base &&
+  git -C "$FIX" commit -q --allow-empty -m 'fixture: fix on the upstream base' || exit 1
+CLOSE_BASE_FIX="$(git -C "$FIX" rev-parse HEAD)" || exit 1
+cat > "$FIX/close-findings.md" <<EOF
+# Findings
+## Open
+<!-- sdd:open -->
+- [ ] **Base finding** — RESOLVED by $CLOSE_BASE_FIX
+- [ ] **Squash finding** — RESOLVED by $CLOSE_SQUASH_FIX
+- [ ] **Partial finding** — RESOLVED by $CLOSE_BASE_FIX and RESOLVED by $CLOSE_OTHER_FIX
+- [ ] **Unresolved finding**
+## Decided
+<!-- sdd:decided -->
+EOF
+CLOSE_SUM="$(md5sum "$FIX/close-findings.md")" || exit 1
+git -C "$FIX" add close-findings.md && git -C "$FIX" commit -qm "fixture: backlog on the upstream base" &&
+  git -C "$FIX" checkout -q "$CLOSE_HOME" &&
+  git -C "$FIX" branch -q --set-upstream-to=close-resolved-base "$CLOSE_HOME" || exit 1
+close_run "done" 0
+CLOSE_NO_JIRA_OUT="$CLOSE_OUT"
+CLOSE_BASE_ROW="close-findings.md:4  Base finding  ($CLOSE_BASE_FIX: in $CLOSE_HOME)"
+CLOSE_SQUASH_ROW="close-findings.md:5  Squash finding  ($CLOSE_SQUASH_FIX: in the head of the merged PR)"
+assert_eq "sdd close lists the open item whose RESOLVED by hash is an ancestor of the base, with file, line, title and proof" \
+  "rc:0 ff:1 header:1 proof:1" \
+  "rc:$CLOSE_RC_OUT ff:$(has "$CLOSE_OUT" 'fast-forwarded') header:$(grep -Fxc '2 finding(s) in close-findings.md can go — their RESOLVED by is merged:' <<< "$CLOSE_OUT") proof:$(grep -Fxc -- "$CLOSE_BASE_ROW" <<< "$CLOSE_OUT")"
+assert_eq "sdd close lists the item whose hash is an ancestor of the head of the mission PR it saw MERGED, the squash case" \
+  "1" "$(grep -Fxc -- "$CLOSE_SQUASH_ROW" <<< "$CLOSE_OUT")"
+CLOSE_NO_JIRA_SUM="$(md5sum "$FIX/close-findings.md")" || exit 1
+
+git -C "$FIX" branch -q --unset-upstream "$CLOSE_HOME" || exit 1
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$FIX/.sdd/config.sh"
+git -C "$FIX" add -A && git -C "$FIX" commit -qm "fixture: enable JIRA for the same listing" || exit 1
+close_run "done" 0
+assert_eq "sdd close lists the resolved items with and without JIRA, and deletes nothing" \
+  "rc:0 done:1 session:0 listing:match bytes:kept" \
+  "rc:$CLOSE_RC_OUT done:$(has "$CLOSE_OUT" 'already Done') session:$(spent) listing:$(
+    if [ "$(grep '^close-findings[.]md:' <<< "$CLOSE_OUT")" = "$CLOSE_BASE_ROW"$'\n'"$CLOSE_SQUASH_ROW" ]; then echo match; else echo differs; fi
+  ) bytes:$(
+    if [ "$CLOSE_NO_JIRA_SUM" = "$CLOSE_SUM" ] && [ "$(md5sum "$FIX/close-findings.md")" = "$CLOSE_SUM" ]; then echo kept; else echo changed; fi
+  )"
+
+printf 'draft\n' > "$FIX/close-draft.txt"
+close_run "done" 0
+CLOSE_DIRTY_OUT="$CLOSE_OUT"
+rm "$FIX/close-draft.txt"
+printf '%040d\n' 0 > "$FIX/.sdd/logs/close-pr-head"
+close_run "done" 0
+CLOSE_MISSING_HEAD_OUT="$CLOSE_OUT"
+printf -- '---\nfase: PR\n---\n# PR\n' > "$MDIR/50-pr.md"
+git -C "$FIX" add -A && git -C "$FIX" commit -qm "fixture: close without a verified PR" || exit 1
+close_run "done" 0
+assert_eq "sdd close lists no item whose hash passes neither proof, and none without RESOLVED by" \
+  "rc:0 listed:2 invalid:0 dirty:0 missing-head:1 unverified:1" \
+  "rc:$CLOSE_RC_OUT listed:$(grep -c '^close-findings[.]md:' <<< "$CLOSE_NO_JIRA_OUT") invalid:$(has "$CLOSE_NO_JIRA_OUT" 'Partial finding|Unresolved finding') dirty:$(has "$CLOSE_DIRTY_OUT" '^close-findings[.]md:') missing-head:$([ "$(grep '^close-findings[.]md:' <<< "$CLOSE_MISSING_HEAD_OUT")" = "$CLOSE_BASE_ROW" ] && echo 1 || echo 0) unverified:$([ "$(grep '^close-findings[.]md:' <<< "$CLOSE_OUT")" = "$CLOSE_BASE_ROW" ] && echo 1 || echo 0)"
+
+sed -i '/^TODO_FILE="close-findings.md"$/d; s/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
+git -C "$FIX" rm -q close-findings.md && git -C "$FIX" add -A &&
+  git -C "$FIX" commit -qm "fixture: put the close listing inputs back" || exit 1
 
 # The fixture goes back the way it was found. "This block runs last" was the previous version's
 # only defence, and it is not one a sensor can hold: a future author appending below would inherit

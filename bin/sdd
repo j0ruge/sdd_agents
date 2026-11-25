@@ -13824,8 +13824,8 @@ post_merge_hint() {
 # bounded (`timeout 30`, `GIT_TERMINAL_PROMPT=0`): with no timeout(1) it is SKIPPED, because an
 # unbounded fetch could hang the close, and the fast-forward is still tried against the upstream
 # already on the machine — a local merge does not hang. The `ok` says whether anything moved.
-close_return_home() { # close_return_home <verified|unverified> — what cmd_close's merge check saw
-  local seen="${1:-unverified}" current out rc=0 where upstream remote merge before after
+close_return_home() { # close_return_home <verified|unverified> <PR head or empty>
+  local seen="${1:-unverified}" pr_head="${2:-}" current out rc=0 where
   [ -n "${DEFAULT_BRANCH:-}" ] || return 0
   current="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "" )"
   [ -n "$current" ] || return 0
@@ -13853,6 +13853,14 @@ close_return_home() { # close_return_home <verified|unverified> — what cmd_clo
       where="back on '$DEFAULT_BRANCH' — 50-pr.md names no pr_url, so the merge was not verified"
     fi
   fi
+  close_fast_forward_base "$where"
+  out="$( GIT_OPTIONAL_LOCKS=0 git -C "$REPO_ROOT" status --porcelain 2>/dev/null )" || return 0
+  [ -z "$out" ] || return 0
+  close_list_resolved "$seen" "$pr_head"
+}
+
+close_fast_forward_base() {
+  local where="$1" upstream remote merge before after out rc=0
   upstream="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref "$DEFAULT_BRANCH@{upstream}" 2>/dev/null || true )"
   if [ -z "$upstream" ]; then ok "$where; no upstream, nothing to fast-forward"; return 0; fi
   # Remote and branch from the config, never split off the abbreviated name: a remote may carry a
@@ -13886,6 +13894,39 @@ close_return_home() { # close_return_home <verified|unverified> — what cmd_clo
   fi
 }
 
+# A squash proof only covers this mission's PR. If its head is not in the local repository it
+# proves nothing. For another PR, the TODO template describes how to look up its head by hash.
+close_list_resolved() { # close_list_resolved <verified|unverified> <PR head or empty>
+  local seen="$1" pr_head="$2" sensor="$SDD_HOME/tests/check-todo.sh" todo="$REPO_ROOT/$TODO_FILE"
+  local rows line hashes title hash proof evidence
+  local -a item_hashes=() findings=()
+  [ -f "$todo" ] && [ -f "$sensor" ] || return 0
+  rows="$(bash "$sensor" --resolved "$todo" 2>/dev/null)" || return 0
+  [ -n "$rows" ] || return 0
+  if ! [[ "$pr_head" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then pr_head=""; fi
+
+  while IFS=$'\t' read -r line hashes title; do
+    [ -n "$hashes" ] || continue
+    IFS=, read -r -a item_hashes <<< "$hashes"
+    evidence=""
+    for hash in "${item_hashes[@]}"; do
+      if git -C "$REPO_ROOT" merge-base --is-ancestor "$hash" "refs/heads/$DEFAULT_BRANCH" 2>/dev/null; then
+        proof="in $DEFAULT_BRANCH"
+      elif [ "$seen" = verified ] && [ -n "$pr_head" ] &&
+        git -C "$REPO_ROOT" merge-base --is-ancestor "$hash" "$pr_head" 2>/dev/null; then
+        proof="in the head of the merged PR"
+      else
+        continue 2
+      fi
+      evidence+="${evidence:+; }$hash: $proof"
+    done
+    findings+=("$TODO_FILE:$line  $title  ($evidence)")
+  done <<< "$rows"
+  [ -n "${findings[0]:-}" ] || return 0
+  printf '%s finding(s) in %s can go — their RESOLVED by is merged:\n' "${#findings[@]}" "$TODO_FILE"
+  printf '%s\n' "${findings[@]}"
+}
+
 cmd_close() {
   load_config
   resolve_mission "${1:-}"
@@ -13895,19 +13936,21 @@ cmd_close() {
   # "post-merge" is what makes leaving the mission branch safe (#182: the JIRA-less arm returned
   # early, before both the check and the trip home, and left the human on a spent branch).
   local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
-  local merge_seen=unverified
+  local merge_seen=unverified pr_head=""
   if [ -n "$prurl" ]; then
-    local merged
-    merged="$( cd "$REPO_ROOT" && gh pr view "$prurl" --json state --jq .state 2>/dev/null || true )"
+    local merged pr_view
+    pr_view="$( cd "$REPO_ROOT" && gh pr view "$prurl" --json state,headRefOid --jq '.state, .headRefOid' 2>/dev/null )" || pr_view=""
+    merged="$(sed -n 1p <<< "$pr_view")"
     if [ "$merged" != "MERGED" ]; then
       die "PR $prurl is '$merged', not MERGED — 'sdd close' is post-merge"
     fi
     merge_seen=verified
+    pr_head="$(sed -n 2p <<< "$pr_view")"
   fi
 
   if [ "$JIRA_ENABLED" != "true" ]; then
     info "JIRA_ENABLED=false — nothing to close in JIRA"
-    close_return_home "$merge_seen"
+    close_return_home "$merge_seen" "$pr_head"
     return 0
   fi
   local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"
@@ -13937,7 +13980,7 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
     # nobody spent would be the same class of lie as the rc this whole function stopped believing.
     pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=none  rc=0  verified=true  log=none"
     ok "$issue is already Done — JIRA confirms it, and no session was spent"
-    close_return_home "$merge_seen"
+    close_return_home "$merge_seen" "$pr_head"
     return 0
   fi
 
@@ -14066,7 +14109,8 @@ blocks the transition, say what it is and stop — but do not stop to request pe
     # second label ANDed onto the first. A session that fell over after closing the issue closed it.
     if [ "$rc" -ne 0 ]; then dim "  (the close session exited $rc — see $close_logs — but the issue is Done, so the artifact decides)"; fi
     ok "$issue closed — JIRA confirms it is Done"
-    close_return_home "$merge_seen"
+    # The paid arm passes the same merge evidence as the tested already-Done arm.
+    close_return_home "$merge_seen" "$pr_head"
     return 0
   fi
   # THREE outcomes, not two, and the third is why this branch exists: "I asked and JIRA said no" and

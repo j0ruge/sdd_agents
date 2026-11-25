@@ -6911,7 +6911,7 @@ mut_COORD_helper_not_isolated() {
 # The close brings the merge home (finding 7): without the fast-forward the default branch stays
 # behind the PR that was just merged, and the next mission is cut from a stale base.
 mut_CLOSE_no_fast_forward() {
-  sed -i '/^close_return_home() {/,/^}/ s#out="\$( git -C "\$REPO_ROOT" merge --ff-only --quiet "\$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=\$?#out=""#' "$1"
+  sed -i '/^close_fast_forward_base() {/,/^}/ s#out="\$( git -C "\$REPO_ROOT" merge --ff-only --quiet "\$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=\$?#out=""#' "$1"
 }
 # The four ways home stays where it is (codereview of 2026-09-28), one mutant each: every one of
 # them turns the refusal into a move, or the named reason into a wrong one.
@@ -6919,13 +6919,13 @@ mut_CLOSE_dirty_base_moves() {          # uncommitted work on the base no longer
   sed -i '/^close_return_home() {/,/^}/ s@^  if \[ -n "\$( git -C "\$REPO_ROOT" status --porcelain 2>/dev/null )" \]; then$@  if false; then@' "$1"
 }
 mut_CLOSE_fetch_failure_ignored() {     # a failed fetch falls through to a fast-forward to a stale ref
-  sed -i '/^close_return_home() {/,/^}/ s@^      if \[ "\$rc" -ne 0 \]; then$@      if false; then@' "$1"
+  sed -i '/^close_fast_forward_base() {/,/^}/ s@^      if \[ "\$rc" -ne 0 \]; then$@      if false; then@' "$1"
 }
 mut_CLOSE_fetch_unbounded() {           # with no timeout(1) the fetch is tried anyway
-  sed -i '/^close_return_home() {/,/^}/ s@^    if ! command -v timeout >/dev/null 2>&1; then$@    if false; then@' "$1"
+  sed -i '/^close_fast_forward_base() {/,/^}/ s@^    if ! command -v timeout >/dev/null 2>&1; then$@    if false; then@' "$1"
 }
 mut_CLOSE_no_upstream_unsaid() {        # no upstream reads as a divergence
-  sed -i '/^close_return_home() {/,/^}/ s@^  if \[ -z "\$upstream" \]; then ok@  if false; then ok@' "$1"
+  sed -i '/^close_fast_forward_base() {/,/^}/ s@^  if \[ -z "\$upstream" \]; then ok@  if false; then ok@' "$1"
 }
 # #182: the JIRA-less arm of the close is a close too. Caught by "close: with JIRA off the tree goes
 # back to the default branch" and "close: with JIRA off an unmerged PR is still refused", one each.
@@ -6942,6 +6942,17 @@ mut_CLOSE_claims_unverified_merge() {   # the sentence claims the merge whatever
 }
 mut_CLOSE_never_records_the_merge() {  # a MERGED PR is checked and the verdict is never passed on
   sed -i '/^cmd_close() {/,/^}/ s@^    merge_seen=verified$@    :@' "$1"
+}
+
+# Post-merge findings need a listing, both proofs, and proof for every hash on a row.
+mut_CLOSE_resolved_unlisted() {
+  sed -i '/^close_return_home() {/,/^}/ s@^  close_list_resolved "\$seen" "\$pr_head"$@  :@' "$1"
+}
+mut_CLOSE_resolved_squash_proof_unread() {
+  sed -i '/^close_list_resolved() {/,/^}/ s@^      elif \[ "\$seen" = verified \]@      elif false@' "$1"
+}
+mut_CLOSE_resolved_lists_unproven() {
+  sed -i '/^close_list_resolved() {/,/^}/ s@^        continue 2$@        proof="unverified"@' "$1"
 }
 
 # CHECKOUT-UNAVAILABLE names what fell and in which interpreter (finding 8): back to the generic list,
@@ -7943,6 +7954,9 @@ CATALOG=(
   CLOSE_no_jira_skips_merge_check
   CLOSE_claims_unverified_merge
   CLOSE_never_records_the_merge
+  CLOSE_resolved_unlisted
+  CLOSE_resolved_squash_proof_unread
+  CLOSE_resolved_lists_unproven
   COORD_select_pidfd
   COORD_stragglers_unnamed
   COORD_stragglers_named_every_tick
