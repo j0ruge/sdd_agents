@@ -45,6 +45,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **A cópia do catálogo deixa o controle do check-hat sem os guias que ele lê** —
+  `tests/check-mutation.sh:8880` (`sandbox`) — `--only … check-hat.sh` retorna `HARNESS-BROKEN` sem sabotagem.
+  Faltam `docs/finding-prs.md`, `docs/plan-only.md` e `docs/failure-modes.md`. Com os três, controle verde.
+  Direção: copiar os guias e testar o controle do catálogo com o conjunto que o sensor lê.
+  Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/checkpoint-notas.md`
+  — descoberto por `sdd-executor` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-25)
+
 - [ ] **A prosa que a DOCS escreve depois da REVIEW não passa por revisão nenhuma** — `bin/sdd:3118` (`PHASES`) —
   a ordem é `REVIEW DOCS PR`: o `gate_REVIEW` aceita B na prosa (`REVIEW_PROSE_MIN_GRADE`), o achado de prosa vai
   ao `TODO_FILE` e quem reescreve a prosa é a DOCS, cujo gate lê a checklist, não a prosa. Na 3.2a do `dotp-remake`
