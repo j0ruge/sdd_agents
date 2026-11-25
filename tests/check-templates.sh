@@ -577,6 +577,7 @@ check handoff.md '^gate: <.*o comando inteiro e o sha em que rodou' \
 check handoff.md '^> - kit: ' "kit-finding slot in 'Achados fora de escopo'"
 
 echo "== templates/pr-body.md =="
+check pr-body.md '^> Depois do merge: `sdd close <missão>`\.$' "names sdd close as the step after the merge"
 check pr-body.md '^## O que mudou'            "section 'O que mudou'"
 check pr-body.md '^## Como verificar'         "section 'Como verificar'"
 check pr-body.md '^## Evidências'             "section 'Evidências'"

@@ -770,9 +770,11 @@ The **merge is human**, and it is the pipeline's only unconditional human gate. 
 a Human" accumulated by the phases arrive as a section of the PR: they inform the merge decision,
 without ever having blocked the automation.
 
-Post-merge, `sdd close <mission>` closes the JIRA issue with an automatic summary (the
-`/ticket close` skill, model `MODEL_TICKET`). It refuses to run outside the right place, and each
-refusal is deliberate:
+After the merge, run `sdd close <mission>` as shown by `sdd run`, `sdd status` and the PR body
+when the pipeline is complete. Run it even without JIRA to return to the base branch and
+fast-forward it. With JIRA enabled, it also closes the issue with an automatic summary (the
+`/ticket close` skill, model `MODEL_TICKET`). It refuses to run outside the right place, and
+each refusal is deliberate:
 
 | Condition | What happens |
 |---|---|

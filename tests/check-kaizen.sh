@@ -1308,6 +1308,11 @@ git add -A && git commit -qm "chore: a complete mission for the reminder scenari
 # reminder must appear, with the numbers.
 out="$( cd "$FIX" && "$KSDD" run 20260102-donemission 2>&1 )"; rc=$?
 assert_eq "the complete mission reaches the human gate (rc 0)" "0" "$rc"
+assert_eq "the end of sdd run names sdd close as the step after the merge" "1" \
+  "$(grep -cF 'after the merge: sdd close 20260102-donemission —' <<< "$out")"
+status_out="$( cd "$FIX" && "$KSDD" status 20260102-donemission 2>&1 )"; rc=$?
+assert_eq "sdd status of a complete mission names sdd close as the step after the merge" "0 1" \
+  "$rc $(grep -cF 'after the merge: sdd close 20260102-donemission —' <<< "$status_out")"
 assert_eq "and reminds: missions accumulated on the current kit without a verdict" "yes" \
   "$(grep -q "autonomy series: 3 mission(s) on kit aaa1111 without a verdict" <<< "$out" && echo yes || echo no)"
 assert_eq "pointing at sdd kaizen, from a linked worktree of the kit" "yes" \

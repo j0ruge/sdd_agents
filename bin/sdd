@@ -9065,6 +9065,7 @@ cmd_status() {
   local next; next="$(current_phase)"
   if [ -z "$next" ]; then
     printf '  %spipeline complete — only the merge is left (the human gate)%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
+    post_merge_hint
   else
     "gate_$next" || true
     printf '  next phase: %s%s%s — %s\n' "$C_BOLD" "$next" "$C_RESET" "$GATE_WHY"
@@ -10769,6 +10770,7 @@ cmd_run() {
       info ""
       printf '%s✓ pipeline complete — only the merge is left (the one human gate)%s\n' \
         "$C_GREEN$C_BOLD" "$C_RESET"
+      post_merge_hint
       local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
       [ -n "$prurl" ] && info "  $prurl"
       kaizen_reminder
@@ -13790,6 +13792,10 @@ cmd_note_manual() {
     *)           note="a manual row in the ledger, and no note" ;;
   esac
   ok "phase $phase of $MISSION recorded as done by hand: $note"
+}
+
+post_merge_hint() {
+  dim "  after the merge: sdd close $MISSION — comes home, fast-forwards $DEFAULT_BRANCH, lists what the merge resolved, and closes the JIRA issue when JIRA_ENABLED=true"
 }
 
 # Post-merge: closes the JIRA issue. Fired by the human after the merge — it is the only thing
