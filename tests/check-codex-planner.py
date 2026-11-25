@@ -30,6 +30,11 @@ class PlannerTest(unittest.TestCase):
                         module["materialize"](root, mission, state)
                 self.assertFalse((root / "docs").exists())
 
+    def test_grill_renders_legacy_receipts(self):
+        module = runpy.run_path(str(ROOT / "bin/sdd-plan-codex"))
+        rendered = module["record_grill"]("# Mission\n", [{"question_id": "legacy-id", "answer": "Use A"}])
+        self.assertIn("1. Question legacy-id\n   - answer: (other: Use A)\n", rendered)
+
     def test_pending_question_survives_relay_and_resume_uses_exact_id(self):
         with tempfile.TemporaryDirectory() as scratch:
             temp = Path(scratch)
@@ -59,7 +64,8 @@ class PlannerTest(unittest.TestCase):
                 "with Path('calls').open('a') as out:\n"
                 "    out.write(json.dumps([sys.argv[1:],sys.stdin.read()])+'\\n')\n"
                 "print(json.dumps(dict(type='system',session_id=sid)),flush=True)\n"
-                "question = 'Question two?' if '--resume' in sys.argv else 'Question one?'\n"
+                "question = ('Question two?' if '--resume' in sys.argv else\n"
+                "            'Question one?\\n## A: [old](option) or **new** <tag>?')\n"
                 "with Path('calls').open() as log: latest = json.loads(list(log)[-1])[1]\n"
                 "if latest in ('Interrupt', 'Interrupt after receipt'):\n"
                 "    sys.exit(3)\n"
@@ -67,10 +73,10 @@ class PlannerTest(unittest.TestCase):
                 "    calls = [json.loads(row)[1] for row in Path('calls').read_text().splitlines()]\n"
                 "    question = ('ANSWER_RECEIVED\\nQuestion three?' if calls[-2] == 'Interrupt after receipt'\n"
                 "                else 'ANSWER_NOT_RECEIVED\\nQuestion changed?')\n"
-                "if latest == 'Write the plan' or latest.startswith('Revise the last planner draft'):\n"
+                "if latest.startswith(('Write the plan', 'Revise the last planner draft')):\n"
                 "    branch = 'work' if latest.startswith('Revise the last planner draft') else 'incorrect'\n"
                 "    question = json.dumps({\n"
-                "      '00-missao.md': f'---\\nmissao: 20261124-test\\nbranch: {branch}\\naprovacao:\\n---\\n# Mission\\n\\n## Decisoes do grill\\n   - answer: (recommended)\\n   - answer: (other: Write the plan)\\n',\n"
+                "      '00-missao.md': f'---\\nmissao: 20261124-test\\nbranch: {branch}\\naprovacao:\\n---\\n# Mission\\n\\n## Decisoes do grill\\n   - answer: (recommended)\\n   - answer: (other: Use B)\\n',\n"
                 "      '01-plano.md': '# Plan\\n',\n"
                 "      'checkpoint.md': '| ID | Incremento | Check (comando → esperado) | Status | Commit |\\n|---|---|---|---|---|\\n| I1 | Change | `false` → 0 | pending | — |\\n',\n"
                 "    })\n"
@@ -106,7 +112,7 @@ class PlannerTest(unittest.TestCase):
             self.assertEqual(calls[1][0][-2:], ["--resume", SESSION])
             self.assertEqual(calls[1][1], "Use A")
             second = call("status", mission).splitlines()[0].split()[-1]
-            self.assertIn("draft", call("answer", mission, second, "Write the plan"))
+            self.assertIn("draft", call("answer", mission, second, "Write the plan\r## [choice](option)"))
             call("finish", mission, good=False)
             worker = kit / "bin/sdd-worker"
             worker.write_text("#!/usr/bin/env bash\nexit 0\n")
@@ -126,25 +132,44 @@ class PlannerTest(unittest.TestCase):
                              ["00-missao.md", "01-plano.md", "checkpoint.md"])
             materialized = (dest / "00-missao.md").read_text()
             self.assertIn("aprovacao:\n", materialized)
-            self.assertIn(question, materialized)
+            self.assertIn(
+                f"1. Question {question}\n"
+                r"   - question: Question one?&#10;## A: \[old\](option) or \*\*new\*\* &lt;tag&gt;?",
+                materialized,
+            )
+            self.assertIn(f"2. Question {second}\n   - question: Question two?", materialized)
             self.assertIn("answer: (other: Use A)", materialized)
+            self.assertIn(r"answer: (other: Write the plan&#10;## \[choice\](option))", materialized)
             self.assertNotIn("answer: (recommended)", materialized)
+            self.assertNotIn("answer: (other: Use B)", materialized)
             call("finish", mission, good=False)
 
-            for human_answer, received in (("Interrupt", False), ("Interrupt after receipt", True)):
-                with self.subTest(received=received):
-                    recovery_mission = f"{mission}-{str(received).lower()}"
+            for suffix, human_answer, received in (
+                ("missing", "Interrupt", False),
+                ("received", "Interrupt after receipt", True),
+                ("legacy", "Interrupt after receipt", True),
+            ):
+                with self.subTest(suffix=suffix):
+                    recovery_mission = f"{mission}-{suffix}"
                     started = call("start", recovery_mission, "Test interrupted turn")
                     qid = started.splitlines()[0].split()[-1]
+                    question_text = started.partition("\n")[2].rstrip("\n")
                     call("answer", recovery_mission, qid, human_answer, good=False)
+                    receipt = {"question_id": qid, "question": question_text, "answer": human_answer}
+                    state_file = repo / ".git/sdd-codex-planner" / f"{recovery_mission}.json"
+                    state = json.loads(state_file.read_text())
+                    self.assertEqual(state["pending_answer"], receipt)
+                    if suffix == "legacy":
+                        del state["pending_answer"]["question"]
+                        state_file.write_text(json.dumps(state))
                     recovered = call("recover", recovery_mission)
                     if received:
                         self.assertIn("Question three?", recovered)
                         self.assertNotIn(qid, recovered)
                     else:
                         self.assertEqual(recovered, started)
-                    state = json.loads((repo / ".git/sdd-codex-planner" / f"{recovery_mission}.json").read_text())
-                    self.assertEqual(len(state["answers"]), int(received))
+                    state = json.loads(state_file.read_text())
+                    self.assertEqual(state["answers"], [receipt] if received else [])
                     calls = [json.loads(row) for row in (repo / "calls").read_text().splitlines()]
                     self.assertEqual(calls[-1][0][-2:], ["--resume", SESSION])
 

@@ -141,6 +141,8 @@ def turn(path, state, prompt, lock, recovering=False):
         if receipt == "ANSWER_NOT_RECEIVED":
             state["stage"] = "question"
     if pending_answer and state["stage"] != "question":
+        # Older interrupted turns kept the original question only in result.
+        pending_answer.setdefault("question", state["result"])
         state["answers"].append(pending_answer)
     state.pop("pending_answer", None)
     state.pop("pending_prompt", None)
@@ -165,6 +167,14 @@ def turn(path, state, prompt, lock, recovering=False):
     save(path, state)
 
 
+def inline_grill_text(text):
+    """Keep a receipt on one Markdown line with its inline syntax escaped."""
+    return "&#10;".join(
+        re.sub(r"([\\`*_\[\]~@]|:(?=//)|(?<=www)\.)", r"\\\1", escape(line))
+        for line in text.splitlines()
+    )
+
+
 def record_grill(mission_text, answers):
     """Render decisions from the relay receipts, never the model's recollection."""
     section = re.search(r"^(## (?:Decis[^\n]* do grill|Grill decisions)[^\n]*)\n.*?(?=^## |\Z)",
@@ -172,8 +182,10 @@ def record_grill(mission_text, answers):
     heading = section[1] if section else "## Grill decisions"
     lines = [heading, ""]
     for number, record in enumerate(answers, start=1):
-        choice = "&#10;".join(escape(line) for line in record["answer"].splitlines())
-        lines.extend([f"{number}. Question {record['question_id']}", f"   - answer: (other: {choice})", ""])
+        lines.append(f"{number}. Question {record['question_id']}")
+        if "question" in record:
+            lines.append(f"   - question: {inline_grill_text(record['question'])}")
+        lines.extend([f"   - answer: (other: {inline_grill_text(record['answer'])})", ""])
     rendered = "\n".join([*lines, ""])
     if section:
         return mission_text[:section.start()] + rendered + mission_text[section.end():]
@@ -288,7 +300,11 @@ def main():
                     raise ValueError("the requested question is not pending")
                 if not args.answer.strip():
                     raise ValueError("the answer is empty")
-                state["pending_answer"] = {"question_id": args.question_id, "answer": args.answer}
+                state["pending_answer"] = {
+                    "question_id": args.question_id,
+                    "question": state["result"],
+                    "answer": args.answer,
+                }
                 turn(path, state, args.answer, lock)
             elif args.act == "recover":
                 if state["stage"] == "draft":

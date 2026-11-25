@@ -86,12 +86,16 @@ The example starts a standalone plan. For delegated planning, append
 does not engage the delegation checks.
 
 The relay launches the SDD planner role with Astra at high effort under the read-only Codex sandbox.
-It binds each answer to a question ID and resumes the exact Codex thread. If the relay loses the
-result of an active turn, `recover <mission>` resumes the saved thread to recover the pending
-question or draft. If the first thread ID was not recorded, it opens a new thread with the saved
-opening prompt. If `finish` rejects a draft, `recover` requests a correction in the same thread. The record lives in this worktree's Git metadata and is removed with the worktree.
-`finish` writes the three plan artifacts and renders the grill answers from the relay record; run the usual checkpoint checks and approval gate next. If the draft requires an ADR, allocate
-it with `sdd adr new` and record its path before approval.
+It records each human answer with the question ID and the text presented, then resumes the exact
+Codex thread. If the relay loses the result of an active turn, `recover <mission>` resumes the saved
+thread to recover the pending question or draft. If the first thread ID was not recorded, it opens
+a new thread with the saved opening prompt. If `finish` rejects a draft, `recover` requests a
+correction in the same thread. The record lives in this worktree's Git metadata and is removed with
+the worktree.
+`finish` writes the three plan artifacts and fills the grill decision section with the recorded
+questions and human answers. Older answers recorded without question text still show the question
+ID and answer. Run the usual checkpoint checks and approval gate next. If the draft requires an
+ADR, allocate it with `sdd adr new` and record its path before approval.
 
 ### The `aprovacao:` trap, measured
 
