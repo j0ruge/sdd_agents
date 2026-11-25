@@ -2,6 +2,8 @@
 """Relay a Codex planner's grill over separate invocations in one worktree."""
 import argparse
 import fcntl
+from html import escape
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -51,6 +53,25 @@ def check_delegated_plan(state):
                        check=True, stdout=sys.stderr)
 
 
+def record_campaign_turn(state, launch, result=None):
+    """Write a paired planning receipt to the same ledger that authorizes the campaign."""
+    if not state.get("campaign"):
+        return
+    root = Path(os.environ.get("SDD_STATE_DIR") or Path.home() / ".sdd")
+    root.mkdir(parents=True, exist_ok=True)
+    repo = git("rev-parse", "--path-format=absolute", "--git-common-dir").removesuffix("/.git")
+    row = {
+        "v": 1, "ts": datetime.now().astimezone().isoformat(timespec="seconds"), "phase": "PLAN",
+        "repo": repo, "campaign": Path(state["campaign"]).name, "lot": state["lot"],
+        "engine": "codex", "launch_id": launch, "event": "codex_launch", "cost_usd": None,
+    }
+    if result is not None:
+        row.update(event="codex_plan_usage", cost_usd=result.get("total_cost_usd"),
+                   estimated_cost_usd=result.get("estimated_cost_usd"), usage=result.get("usage"))
+    with (root / "autonomy-log.jsonl").open("a", encoding="utf-8") as ledger:
+        ledger.write(json.dumps(row, separators=(",", ":")) + "\n")
+
+
 def opening_prompt(root, args):
     files = "\n".join(f"{target}: {KIT / 'templates' / source}" for target, source in TEMPLATES.items())
     instructions = KIT / "agents/sdd-planner.md"
@@ -84,6 +105,8 @@ def turn(path, state, prompt, lock, recovering=False):
         state["pending_prompt"] = prompt
     save(path, state)
     result = None
+    launch = str(uuid.uuid4())
+    record_campaign_turn(state, launch)
     # The inherited lock prevents another relay from starting while the orphaned adapter is alive.
     with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as given:
         given.write(prompt)
@@ -102,6 +125,8 @@ def turn(path, state, prompt, lock, recovering=False):
                 if event.get("type") == "result":
                     result = event
             rc = process.wait()
+    if result is not None:
+        record_campaign_turn(state, launch, result)
     if rc or not state.get("session") or not result or result.get("is_error") or not isinstance(result.get("result"), str):
         raise ValueError("planner turn did not finish. Use status, then recover if a session ID was recorded")
     answer = result["result"].strip()
@@ -140,6 +165,21 @@ def turn(path, state, prompt, lock, recovering=False):
     save(path, state)
 
 
+def record_grill(mission_text, answers):
+    """Render decisions from the relay receipts, never the model's recollection."""
+    section = re.search(r"^(## (?:Decis[^\n]* do grill|Grill decisions)[^\n]*)\n.*?(?=^## |\Z)",
+                        mission_text, re.M | re.S)
+    heading = section[1] if section else "## Grill decisions"
+    lines = [heading, ""]
+    for number, record in enumerate(answers, start=1):
+        choice = "&#10;".join(escape(line) for line in record["answer"].splitlines())
+        lines.extend([f"{number}. Question {record['question_id']}", f"   - answer: (other: {choice})", ""])
+    rendered = "\n".join([*lines, ""])
+    if section:
+        return mission_text[:section.start()] + rendered + mission_text[section.end():]
+    return mission_text.rstrip() + "\n\n" + rendered if answers else mission_text
+
+
 def materialize(root, mission, state):
     if state["stage"] != "draft":
         raise ValueError("the planner has not returned a complete draft")
@@ -169,11 +209,7 @@ def materialize(root, mission, state):
         expected.update(campaign=Path(state["campaign"]).name, lot=state["lot"])
     if not branch or any(fields.get(key) != [value] for key, value in expected.items()):
         raise ValueError("mission draft must name this mission and branch once, with one blank approval")
-    decisions = re.search(r"^## Decis[^\n]* do grill[^\n]*\n(.*?)(?=^## |\Z)", frontmatter[2], re.M | re.S)
-    answers = re.findall(r"^ +- answer: \((?:recommended|other: .+)\)$",
-                         decisions[1] if decisions else "", re.M)
-    if len(answers) != len(state["answers"]):
-        raise ValueError("draft answer marks do not match the human replies the relay recorded")
+    draft = {**draft, "00-missao.md": record_grill(mission_text, state["answers"])}
     base.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=base, prefix=".sdd-plan-") as temp:
         staging = Path(temp) / mission
@@ -186,6 +222,11 @@ def materialize(root, mission, state):
 
 
 def main():
+    # Repository discovery must follow cwd, not another worktree's inherited Git routing.
+    keep = {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM"}
+    for key in tuple(os.environ):
+        if key.startswith("GIT_") and key not in keep:
+            del os.environ[key]
     parser = argparse.ArgumentParser(description=__doc__)
     cmds = parser.add_subparsers(dest="act", required=True)
     for act in ("start", "status", "answer", "recover", "finish"):
@@ -250,9 +291,12 @@ def main():
                 state["pending_answer"] = {"question_id": args.question_id, "answer": args.answer}
                 turn(path, state, args.answer, lock)
             elif args.act == "recover":
-                if state["stage"] != "interrupted":
-                    raise ValueError("no interrupted planner turn to recover")
-                if not state.get("session"):
+                if state["stage"] == "draft":
+                    reason = state.get("draft_error", "Check the three artifacts against the planner contract.")
+                    turn(path, state, f"Revise the last planner draft. {reason}", lock)
+                elif state["stage"] != "interrupted":
+                    raise ValueError("no interrupted planner turn or draft to recover")
+                elif not state.get("session"):
                     turn(path, state, state["pending_prompt"], lock)
                 else:
                     prompt = "Recover the interrupted grill turn from this thread. Re-emit the last pending question or the final draft."
@@ -262,7 +306,13 @@ def main():
                                    "line give your result. Count the human's answer only if it reached you.")
                     turn(path, state, prompt, lock, recovering=True)
             elif args.act == "finish":
-                materialize(root, args.mission, state)
+                try:
+                    materialize(root, args.mission, state)
+                except (ValueError, subprocess.CalledProcessError) as error:
+                    if state["stage"] == "draft":
+                        state["draft_error"] = str(error)
+                        save(path, state)
+                    raise
                 return
         status(state)
 

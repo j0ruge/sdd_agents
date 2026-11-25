@@ -34,10 +34,14 @@ class PlannerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             temp = Path(scratch)
             env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+            state_dir = temp / "state"
+            env["SDD_STATE_DIR"] = str(state_dir)
             kit = temp / "kit"
             repo = temp / "target"
             repo.mkdir()
             subprocess.run(["git", "init", "-q", "--initial-branch=work", str(repo)], env=env, check=True)
+            decoy = temp / "other"
+            subprocess.run(["git", "init", "-q", "--initial-branch=other", str(decoy)], env=env, check=True)
             (repo / ".sdd").mkdir()
             (repo / ".sdd/config.sh").write_text("HANDOFF_DIR=docs/handoffs\n")
             (kit / "bin").mkdir(parents=True)
@@ -63,9 +67,10 @@ class PlannerTest(unittest.TestCase):
                 "    calls = [json.loads(row)[1] for row in Path('calls').read_text().splitlines()]\n"
                 "    question = ('ANSWER_RECEIVED\\nQuestion three?' if calls[-2] == 'Interrupt after receipt'\n"
                 "                else 'ANSWER_NOT_RECEIVED\\nQuestion changed?')\n"
-                "if latest == 'Write the plan':\n"
+                "if latest == 'Write the plan' or latest.startswith('Revise the last planner draft'):\n"
+                "    branch = 'work' if latest.startswith('Revise the last planner draft') else 'incorrect'\n"
                 "    question = json.dumps({\n"
-                "      '00-missao.md': '---\\nmissao: 20261124-test\\nbranch: work\\naprovacao:\\n---\\n# Mission\\n\\n## Decisoes do grill\\n   - answer: (recommended)\\n   - answer: (other: Write the plan)\\n',\n"
+                "      '00-missao.md': f'---\\nmissao: 20261124-test\\nbranch: {branch}\\naprovacao:\\n---\\n# Mission\\n\\n## Decisoes do grill\\n   - answer: (recommended)\\n   - answer: (other: Write the plan)\\n',\n"
                 "      '01-plano.md': '# Plan\\n',\n"
                 "      'checkpoint.md': '| ID | Incremento | Check (comando → esperado) | Status | Commit |\\n|---|---|---|---|---|\\n| I1 | Change | `false` → 0 | pending | — |\\n',\n"
                 "    })\n"
@@ -75,8 +80,9 @@ class PlannerTest(unittest.TestCase):
             mission = "20261124-test"
             relay = kit / "bin/sdd-plan-codex"
 
-            def call(*args, good=True):
-                result = subprocess.run([str(relay), *args], cwd=repo, env=env,
+            def call(*args, good=True, routing_override=False):
+                override = {"GIT_DIR": str(decoy / ".git"), "GIT_WORK_TREE": str(decoy)} if routing_override else {}
+                result = subprocess.run([str(relay), *args], cwd=repo, env={**env, **override},
                                         capture_output=True, text=True)
                 if good:
                     self.assertEqual(result.returncode, 0, result.stderr)
@@ -84,8 +90,9 @@ class PlannerTest(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0, result.stdout)
                 return result.stdout
 
-            started = call("start", mission, "A change")
+            started = call("start", mission, "A change", routing_override=True)
             self.assertIn("Question one?", started)
+            self.assertFalse((decoy / ".git/sdd-codex-planner").exists())
             question = started.splitlines()[0].split()[-1]
             self.assertIn("Question one?", call("status", mission))
             call("start", mission, "Duplicate", good=False)
@@ -100,11 +107,28 @@ class PlannerTest(unittest.TestCase):
             self.assertEqual(calls[1][1], "Use A")
             second = call("status", mission).splitlines()[0].split()[-1]
             self.assertIn("draft", call("answer", mission, second, "Write the plan"))
+            call("finish", mission, good=False)
+            worker = kit / "bin/sdd-worker"
+            worker.write_text("#!/usr/bin/env bash\nexit 0\n")
+            worker.chmod(0o755)
+            campaign = repo / "docs/campaigns/delegated"
+            campaign.mkdir(parents=True)
+            call("start", f"{mission}-delegated", "Test the campaign ledger", "--campaign", str(campaign), "--lot", "L1")
+            rows = [json.loads(line) for line in (state_dir / "autonomy-log.jsonl").read_text().splitlines()]
+            self.assertEqual([row["event"] for row in rows], ["codex_launch", "codex_plan_usage"])
+            self.assertEqual({row["campaign"] for row in rows}, {"delegated"})
+            self.assertEqual({row["repo"] for row in rows}, {str(repo)})
+            self.assertEqual(rows[0]["launch_id"], rows[1]["launch_id"])
+            self.assertIn("draft", call("recover", mission))
             call("finish", mission)
             dest = repo / "docs/handoffs" / mission
             self.assertEqual(sorted(file.name for file in dest.iterdir()),
                              ["00-missao.md", "01-plano.md", "checkpoint.md"])
-            self.assertIn("aprovacao:\n", (dest / "00-missao.md").read_text())
+            materialized = (dest / "00-missao.md").read_text()
+            self.assertIn("aprovacao:\n", materialized)
+            self.assertIn(question, materialized)
+            self.assertIn("answer: (other: Use A)", materialized)
+            self.assertNotIn("answer: (recommended)", materialized)
             call("finish", mission, good=False)
 
             for human_answer, received in (("Interrupt", False), ("Interrupt after receipt", True)):

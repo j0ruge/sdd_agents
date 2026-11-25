@@ -2154,7 +2154,7 @@ prose_missing() {
   # The fifth stop is a measured spend alone, and the lines of a verb that measured nothing are paged
   # under the names of what it printed (achado #30 of the r5); the line goes to the pager through a
   # variable, never pasted between single quotes (#31).
-  ceiling="$(grep -F 'campaign-ceiling' <<< "$items")"
+  ceiling="$(grep -E '^5\. .*campaign-ceiling' <<< "$items" || true)"
   { grep -qF 'campaign US$' <<< "$ceiling" && grep -qF 'campaign known US$' <<< "$ceiling"; } \
     || printf 'stops: campaign-ceiling on a measured spend\n'
   for p in 'SDD_REASON=next-stop' '`no-ceiling`' '`no-spend`'; do
@@ -2199,11 +2199,12 @@ control() {
 # measured, level split that way left the controls green and only this floor red.
 got=""
 verbs="$(command_verbs)"
-[ "$(grep -c . <<< "$verbs")" -ge 7 ] || got="the program dispatches '${verbs//$'\n'/ }', not the seven verbs"
+[ "$(grep -c . <<< "$verbs")" -ge 8 ] || got="the program dispatches '${verbs//$'\n'/ }', not the eight verbs"
 m="$(verbs_missing "$COMMAND")"
 [ -z "$m" ] || got="${got:+$got; }not named: ${m//$'\n'/ }"
 control 'no budget call' verbs_missing budget 's/sdd-worker budget/sdd-worker budgets/g'
 control 'no pr-ready call' verbs_missing pr-ready 's/sdd-worker pr-ready/sdd-worker pr_ready/g'
+control 'no codex-plan call' verbs_missing codex-plan 's/sdd-worker codex-plan/sdd-worker codex_plan/g'
 control 'no codex-run call' verbs_missing codex-run 's/sdd-worker codex-run/sdd-worker codex_run/g'
 # The primitive under every control, against an answer known wrong: told to want level from a copy
 # whose checker prints budget, control() has to append, or each control above passes on anything.
@@ -2259,6 +2260,8 @@ control 'context: no level' prose_missing 'context: resumes from level and next'
 control 'ceiling on any line' prose_missing 'stops: campaign-ceiling on a measured spend' '/^5\. / s/campaign \(known \)\?US\$/unmeasured amount/g'
 control 'measured line in stop 4' prose_missing 'stops: campaign-ceiling on a measured spend' '/^5\. / s/campaign \(known \)\?US\$/unmeasured amount/g
 /^4\. / s/$/ Not the `campaign US$` or `campaign known US$` line./'
+control 'only the Codex prefix moved to stop 4' prose_missing 'stops: campaign-ceiling on a measured spend' '/^5\. / s/campaign known US\$/unmeasured amount/
+ /^4\. / s/$/ A `campaign-ceiling` mentions `campaign known US$` here./'
 control 'no-spend paged as the ceiling' prose_missing 'stops: `no-spend`' 's/with `no-spend`/with `campaign-ceiling`/'
 control 'next-stop only outside the section' prose_missing 'stops: SDD_REASON=next-stop' 's/SDD_REASON=next-stop/SDD_REASON=stop/
 $a\
@@ -5113,6 +5116,21 @@ else
   fail 'codex cost: a signed scoped exception permits unknown USD, without adding estimates to known spend' \
     'shown exception, successful budget and guard, estimates still separate' "$got"
 fi
+
+cp "$cdxl/autonomy-log.jsonl" "$cdxl/before-planning-probe"
+{
+  jq -cn --arg mission "codex-cost-mission" '{event:"session",repo:"/other-repository",mission:$mission,cost_usd:90}'
+  jq -cn --arg repo "$REPO" '{event:"codex_launch",engine:"codex",phase:"PLAN",repo:$repo,campaign:"codex-cost",launch_id:"plan-test",cost_usd:null}'
+  jq -cn --arg repo "$REPO" '{event:"codex_plan_usage",engine:"codex",phase:"PLAN",repo:$repo,campaign:"codex-cost",launch_id:"plan-test",cost_usd:null,estimated_cost_usd:1.50}'
+} >>"$cdxl/autonomy-log.jsonl"
+cdx_worker budget "$cdx"
+if [ "$W_RC" = 0 ] && [[ "$W_OUT" == 'campaign known US$ 4.00 of 30.00'*'3 unknown session(s)'*'estimated subtotal US$ 43.75'* ]]; then
+  pass 'codex cost: planner receipts count once before a mission exists and explicitly foreign rows do not count'
+else
+  fail 'codex cost: planner receipts count once before a mission exists and explicitly foreign rows do not count' \
+    'rc 0, known US$ 4.00, 3 unknown sessions and estimated US$ 43.75' "rc $W_RC: $W_OUT $W_ERR"
+fi
+mv "$cdxl/before-planning-probe" "$cdxl/autonomy-log.jsonl"
 
 got=""
 cdx_worker codex-run --mission "$cdxm" --phase EXEC

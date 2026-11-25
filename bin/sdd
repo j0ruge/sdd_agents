@@ -1445,10 +1445,11 @@ gate_PLAN() {
   # omission (gap 2 of portability). The field's owner is `sdd-planner`, with the human in the
   # room, which is why the refusal lives HERE: no headless phase could satisfy it. Any real name
   # passes, DEFAULT_BRANCH included — that is a decision written down, not an omission.
-  if [ "$JIRA_ENABLED" != "true" ]; then
+  if [ "$JIRA_ENABLED" != "true" ] || [ "${PHASE_ENGINE:-claude}" = codex ]; then
     local b; b="$(frontmatter "$m" branch)"
     if [ -z "$b" ] || [[ $b == \<* ]]; then
       GATE_WHY="JIRA_ENABLED is not true and 00-missao.md has no mission branch ('branch: ${b:-<empty>}') — nothing will create one, so every phase would commit wherever you stand: write the branch name into 00-missao.md (the planner decides it with the human)"
+      if [ "${PHASE_ENGINE:-claude}" = codex ]; then GATE_WHY="Codex requires a real mission branch in 00-missao.md before TICKET or EXEC — the planner decides it with the human"; fi
       return 1
     fi
   fi
@@ -3377,6 +3378,9 @@ codex_role_context() {
     printf '\nRole instructions from the kit (%s):\n' "$role"
     awk 'NR==1 && $0=="---" { meta=1; next } meta && $0=="---" { meta=0; next } !meta' "$SDD_HOME/agents/$role.md"
   fi
+  if [ "$step" = TICKET ]; then
+    printf '\nCodex TICKET override: use the predeclared checked-out mission branch. Do not create, rename or switch branches. Record the current branch in both ticket and mission artifacts.\n'
+  fi
   printf '\nPhase boundary (%s), in addition to the Codex sandbox:\n' "$hat"
   printf 'Denied capabilities and commands: %s\n' "$(hat_disallowed "$step")"
   printf 'Allowed write paths: %s\n' "$(hat_writes "$step" | sed '/^$/d')"
@@ -3400,6 +3404,13 @@ codex_admit_session() {
   [ "$PHASE_ENGINE" = codex ] || return 0
   if [ "$phase" = PR ]; then codex_pr_handoff "${2:-0}"; return 2; fi
   [ "$DRY_RUN" != 1 ] || return 0
+  if [ "$phase" = TICKET ]; then
+    local branch; branch="$(frontmatter "$MISSION_DIR/00-missao.md" branch)"
+    if [ -z "$branch" ] || [[ $branch == \<* ]]; then
+      bad "BLOCKED in TICKET — Codex requires a real mission branch in 00-missao.md"
+      return 3
+    fi
+  fi
   [ "$BUDGET_OVERRIDE" != 1 ] || die "--budget-override does not apply to Codex campaign sessions"
   [ -x "$SDD_HOME/bin/sdd-codex" ] || die "Codex adapter not installed at $SDD_HOME/bin/sdd-codex"
   [ -x "$SDD_HOME/bin/sdd-worker" ] || die "Codex requires the worker's delegation check"
@@ -4616,6 +4627,7 @@ ledger_row_is_local() {
 # QA⇄EXEC loop) still reads that next session's step; a close after a close is no advance, so the
 # error can only land on the conservative side.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
+  printf '%s' 'def is_codex_telemetry: type == "object" and .v == 1 and .engine == "codex" and (.event == "codex_launch" or .event == "codex_plan_usage");'
   printf '%s' 'def step_rank: if . == "QA:plan" then 0 elif . == "QA:exec" then 1 elif . == "QA:close" then 2 else null end;'
   printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced" elif ((.step_after | step_rank) != null and (.step | step_rank) != null and (.step_after | step_rank) > (.step | step_rank) and .moved != false) then "advanced" elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
   printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else ($p.m - (.seen[$k] // 0)) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $row.pending_after != null and $row.increments_total != null then .seen[$k] = ($row.increments_total - $row.pending_after) elif (($r.gate_why // "") | test("^[0-9]+ increment\\(s\\) done")) then .seen[$k] = (($r.gate_why // "") | capture("^(?<t>[0-9]+) increment") | .t | tonumber) else . end)) | .out;'
@@ -11614,7 +11626,7 @@ cmd_census() {
   load_config
   resolve_mission "${1:-}"
   autonomy_have_jq || die "sdd census needs jq"
-  local dir ph agg tools mcp denials kb hd n_sess n_turns cost cache
+  local dir ph agg tools mcp denials kb hd n_sess n_turns cost cache unknown
   local -a streams jsons
   dir="$(log_dir)"
   hd="$HANDOFF_DIR"; while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
@@ -11624,9 +11636,9 @@ cmd_census() {
     mapfile -t streams < <( ls -1 "$dir"/"$ph"-*.stream.jsonl 2>/dev/null || true )
     [ "${#streams[@]}" -gt 0 ] || continue
     mapfile -t jsons < <( ls -1 "$dir"/"$ph"-*.json 2>/dev/null || true )
-    agg="0 0 0 0"; denials="?"
+    agg="0 0 0 0 0"; denials="?"
     if [ "${#jsons[@]}" -gt 0 ]; then
-      agg="$( jq -rs '"\(length) \(map(.num_turns // 0) | add) \(map(.total_cost_usd // 0) | add | . * 100 | round / 100) \(map(.usage.cache_read_input_tokens // 0) | add / 1e6 | . * 10 | round / 10)"' "${jsons[@]}" 2>/dev/null )" || agg="0 0 0 0"
+      agg="$( jq -rs '"\(length) \(map(.num_turns // 0) | add) \(map(.total_cost_usd // 0) | add | . * 100 | round / 100) \(map(.usage.cache_read_input_tokens // 0) | add / 1e6 | . * 10 | round / 10) \(map(select(.provider == "codex" and (.total_cost_usd | type) != "number")) | length)"' "${jsons[@]}" 2>/dev/null )" || agg="0 0 0 0 0"
       denials="$( jq -rs 'map(.permission_denials // [] | length) | add' "${jsons[@]}" 2>/dev/null )" || denials="?"
     fi
     tools="$( jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name' "${streams[@]}" 2>/dev/null \
@@ -11639,7 +11651,8 @@ cmd_census() {
             | select((.tool_use_id as $i | $ids | index($i)) != null)
             | (.content | if type == "array" then map(.text // "") | join("") else (. // "") end) | length ]
         | add // 0' "${streams[@]}" 2>/dev/null )" || kb="0"
-    read -r n_sess n_turns cost cache <<< "$agg"
+    read -r n_sess n_turns cost cache unknown <<< "$agg"
+    if [ "${unknown:-0}" -gt 0 ]; then cost="${cost}+unknown"; fi
     printf '  %-7s sessions %-3s turns %-5s cost %-8s cache_read %sM  mcp_seen %s  denials %s  handoff_read %sB\n' \
       "$ph" "$n_sess" "$n_turns" "$cost" "$cache" "${mcp:-?}" "$denials" "${kb:-0}"
     printf '          tools: %s\n' "${tools:-(none)}"
@@ -11874,7 +11887,7 @@ cmd_autonomy() {
     # by `sdd note-manual`. Admitted so it never reads as a stray, given a bucket of its own
     # ($manuals) so the arithmetic closes over it, and kept out of every grade: no session ran.
     def is_manual: .event == "manual";
-    def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual) | not;
+    def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual or is_codex_telemetry) | not;
     # ONE definition of "this row is the judge observing, not a row to grade" — read in TWO places
     # below (the count and the removal), which is exactly the shape CLAUDE.md demands of a predicate
     # with more than one reader: spelled twice, the two drift and the row leaves the list without
@@ -12061,6 +12074,7 @@ cmd_autonomy() {
     # The EIGHTH bucket, for the sixth event, on the terms of the two above: local, counted in the
     # header, and no graded phase — a phase done by hand left no session to grade.
     | (map(select(is_manual)) | length) as $manuals
+    | (map(select(is_codex_telemetry)) | length) as $codex_telemetry
     # The MONEY a recorded closure cost, which until r? of this review the ledger recorded and no
     # view ever spent. `sdd close` buys a real paid session, and `cost_usd` was put on the close row
     # in this very mission so D12 (US$ per merged PR) could include it — but both groupings drew
@@ -12250,6 +12264,7 @@ cmd_autonomy() {
        # close total beside it: the money already on the printed lines would be counted twice.
        , (if $closes > 0 then "  (\($closes) ticket closure(s) recorded: `sdd close` wrote the row — a closure grades no phase\(if $close_unattributed > 0 then ", US$ \($close_unattributed | usd) of it on no line above" else "" end))" else empty end)
        , (if $manuals > 0 then "  (\($manuals) phase(s) recorded as done by hand: `sdd note-manual` wrote the row — a manual phase grades nothing)" else empty end)
+       , (if $codex_telemetry > 0 then "  (\($codex_telemetry) Codex telemetry receipt(s), not graded sessions)" else empty end)
        , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass/close/manual)" else empty end)
        , (if $history_extra > 0 then "  (launches, reopened and the review loop are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
        # NOT an exclusion — nothing left a bucket — which is why it rides at the end of the first
@@ -12730,11 +12745,12 @@ kaizen_series() {
     # and a bucket that said it did would be a wrong reason printed with the confidence of a right
     # one. The two counts partition what the filter removed, so the arithmetic still closes.
     | (($file_rows | length) - ($raw | length) - $no_repo) as $other_repo
+    | ($raw | map(select(is_codex_telemetry)) | length) as $codex_telemetry
     | ($raw | map(select(type == "object" and .v == 1
                          and (.event == "session" or is_escalation or is_gate_pass or is_close or is_manual)))) as $all
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
-    | (($raw | length) - ($all | length)) as $unrec
+    | (($raw | length) - ($all | length) - $codex_telemetry) as $unrec
     | ($rows | map(select(comparable_row | not))) as $noncomp
     | ($rows | map(select(comparable_row))) as $ok
     | ($ok | shas_in_file_order) as $shas
@@ -12814,7 +12830,7 @@ kaizen_series() {
                window_missions_stranded: $stranded,
                window_broken: ($stranded > 0),
                degenerate_axis: $degenerate},
-       excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
+       excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec, codex_telemetry: $codex_telemetry,
                   meta: ($meta | length), other_repo: $other_repo, no_repo: $no_repo}}
   ' < "$file" 2>"$jq_err" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then

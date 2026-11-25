@@ -110,6 +110,15 @@ assert() {
 run() { PHASE_ENGINE=codex "$SDD" run "$MISSION" "$@" > "$FIX/out" 2>&1; }
 no_launch() { [ ! -e "$FIX/provider" ] && [ ! -e "$FIX/claude.called" ]; }
 
+cp .sdd/config.sh "$FIX/config-before-ticket"
+cp "$MDIR/00-missao.md" "$FIX/mission-before-ticket"
+sed -i 's/JIRA_ENABLED=false/JIRA_ENABLED=true/' .sdd/config.sh
+sed -i 's/^branch:.*/branch:\nversao: 1.0.0/' "$MDIR/00-missao.md"
+PHASE_ENGINE=codex "$SDD" why "$MISSION" PLAN >"$FIX/out" 2>&1
+assert 'Codex requires an explicit branch before delegated Jira ticket work' grep -Fq 'requires a real mission branch' "$FIX/out"
+cp "$FIX/config-before-ticket" .sdd/config.sh
+cp "$FIX/mission-before-ticket" "$MDIR/00-missao.md"
+
 assert 'dry-run selects Codex without invoking either harness' run --phase EXEC --dry-run
 assert 'Codex EXEC projects Sol medium and its role' grep -Eq 'model: gpt-6\.2-sol .*effort: medium .*agent: sdd-executor' "$FIX/out"
 assert 'dry-run never opens a session' no_launch
@@ -255,6 +264,12 @@ APP_URL=https://qa.example.test E2E_CMD='test -f .sdd/config.sh' PHASE_ENGINE=co
 assert 'Codex separates identical unit and E2E commands by sandbox host' \
   cmp -s "$FIX/sandbox-hosts" <(printf '%s\n' 'test -f .sdd/config.sh|offline' 'test -f .sdd/config.sh|qa.example.test')
 assert 'Codex paths never invoke Claude' test ! -e "$FIX/claude.called"
+assert 'Codex census labels unmeasured billing' bash -c '"$1" census "$2" | grep -F "0+unknown" >/dev/null' bash "$SDD" "$MISSION"
+"$SDD" autonomy >"$FIX/autonomy"
+assert 'Codex launch receipts are recognized apart from graded sessions' grep -Fq 'Codex telemetry receipt(s)' "$FIX/autonomy"
+"$SDD" kaizen --series >"$FIX/series"
+assert 'The judge extracts Codex receipts from the unknown event bucket' jq -e \
+  '.excluded.codex_telemetry > 0 and .excluded.unrecognized == 0' "$FIX/series"
 
 python3 "$ROOT/tests/check-codex-adapter.py"
 python3 "$ROOT/tests/check-codex-planner.py"

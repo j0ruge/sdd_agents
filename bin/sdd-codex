@@ -4,6 +4,7 @@ import argparse
 from contextlib import ExitStack
 from decimal import Decimal
 import fcntl
+import hashlib
 import ipaddress
 import json
 import os
@@ -58,6 +59,18 @@ def turn_timeout():
     return binary, int(value)
 
 
+def shell_policy(private):
+    """Pass only basic shell settings, plus the adapter's private Git routing."""
+    allow = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "GIT_REFLOG_ACTION")
+    environment = {key: os.environ[key] for key in allow if key in os.environ}
+    environment.setdefault("PATH", os.defpath)
+    environment.setdefault("HOME", str(Path.home()))
+    if private is not None:
+        environment.update(private.environment)
+    values = ", ".join(f"{key}={json.dumps(value, ensure_ascii=False)}" for key, value in environment.items())
+    return ["-c", 'shell_environment_policy.inherit="none"', "-c", f"shell_environment_policy.set={{{values}}}"]
+
+
 def emit(native_event=None, **event):
     event["provider"] = "codex"
     if native_event is not None:
@@ -108,6 +121,9 @@ def estimate_cost(model, turns, failed, unexpected_metadata):
             inp, cached, output = (values[k] for k in TOKEN_KEYS)
             if None in (inp, cached, output) or cached > inp:
                 reason = "missing or invalid native token counts"
+                break
+            if inp == 0 and output == 0:
+                reason = "native summary has no measured tokens"
                 break
             if inp > SHORT_CONTEXT_INPUT_LIMIT:
                 reason = "turn usage cannot distinguish short and long context requests"
@@ -331,6 +347,14 @@ class GitIndexHandoff:
         except FileNotFoundError:
             return None
 
+    @staticmethod
+    def index_digest(path):
+        try:
+            with path.open("rb") as stream:
+                return hashlib.file_digest(stream, "sha256").hexdigest()
+        except FileNotFoundError:
+            return None
+
     def recover(self, declined=False, attempted=False):
         """Finish only the recorded index installation or release its own lock."""
         try:
@@ -357,8 +381,14 @@ class GitIndexHandoff:
         if landed:
             if owned_lock:
                 self.lock.replace(self.index)
-            elif self.file_id(self.index) != identity:
-                raise ValueError("Codex branch advanced, but the prepared index is missing")
+            else:
+                installed = self.file_id(self.index)
+                if installed != identity:
+                    contents = self.index_digest(self.index)
+                    if contents is None or "previous_index" not in record or (
+                        contents == record["previous_index"] and contents != record.get("prepared_index")
+                    ):
+                        raise ValueError(f"Codex branch advanced but the prepared index is missing; inspect {self.intent.name}")
         elif attempted or (head == branch and tip == old):
             if owned_lock:
                 self.lock.unlink()
@@ -393,6 +423,8 @@ class GitIndexHandoff:
                 if self.git("symbolic-ref", "HEAD") != branch:
                     raise ValueError("The mission checkout's branch changed during the Codex turn")
                 check_index()
+                publication["previous_index"] = self.index_digest(self.index)
+                publication["prepared_index"] = self.index_digest(replacement)
                 publication["eligible"] = True
                 self.record(receipt, publication)
             except (ValueError, OSError, subprocess.SubprocessError):
@@ -454,11 +486,6 @@ class PrivateGitTurn(GitIndexHandoff):
         if any(entry[0] == "S" or entry[0].islower() for entry in self.git("ls-files", "-v", "-z").split("\0")
                if entry):
             raise ValueError("Codex cannot safely shadow sparse or assume-unchanged index entries")
-
-    def settings(self):
-        values = ", ".join(f"{key}={json.dumps(value, ensure_ascii=False)}"
-                           for key, value in self.environment.items())
-        return ["-c", f"shell_environment_policy.set={{{values}}}"]
 
     def sandbox_git(self, *arguments, stdout=subprocess.PIPE):
         # Inspect the private store inside the native sandbox, never with host-side Git config.
@@ -652,8 +679,7 @@ def main():
             private = None if args.read_only else PrivateGitTurn(stack, Path.cwd(), binary)
             cmd.extend([*REQUIRED_FLAGS, "--model", args.model,
                         *never_escalate(args.read_only, network, allowed_domains, private.private if private else None)])
-            if private is not None:
-                cmd.extend(private.settings())
+            cmd.extend(shell_policy(private))
             if args.effort:
                 cmd.extend(["-c", f"model_reasoning_effort={json.dumps(args.effort)}"])
             if args.resume:

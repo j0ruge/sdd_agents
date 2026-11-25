@@ -557,7 +557,7 @@ mut_PLAN_remedy_unnamed() {
 # that wrote `branch:` is skipped, ensure_mission_branch reads empty or `<…>` as a no-op, and every
 # phase of a new repo commits into its `main` by omission — which is what this rule exists to end.
 mut_PLAN_branch_unasked() {
-  sed -i '/^gate_PLAN() {/,/^}/ s@^  if \[ "$JIRA_ENABLED" != "true" \]; then$@  if false; then@' "$1"
+  sed -i '/^gate_PLAN() {/,/^}/ s@^  if \[ "$JIRA_ENABLED" != "true" \].*; then$@  if false; then@' "$1"
 }
 
 # The gate stops checking that the branch born in this phase reached the artifact the runner reads.
@@ -6076,7 +6076,7 @@ mut_RUN_gate_pass_off_the_derived_branch() {
 # leaves the header total through a bucket whose name is a lie about it. Caught by `the human reader
 # does not call the recorded closure unrecognized` in check-autonomy.sh, and by nothing else.
 mut_LEDGER_gate_pass_unrecognized() {
-  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
+  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual or is_codex_telemetry) | not;@def is_unrecognized: (is_session or is_escalation or is_codex_telemetry) | not;@' "$1"
 }
 
 # The close row goes back to being ADMITTED but never NAMED: it enters the header total (the shell
@@ -6186,7 +6186,7 @@ mut_KAIZEN_close_mints_a_version() {
 # #153, the sixth event, in its two readers. Reader one forgets it: the row the runner wrote on
 # purpose reads as a stray.
 mut_AUTONOMY_manual_unrecognized() {
-  sed -i 's@ or is_close or is_manual) | not;@ or is_close) | not;@' "$1"
+  sed -i 's@ or is_close or is_manual or is_codex_telemetry) | not;@ or is_close or is_codex_telemetry) | not;@' "$1"
 }
 # Reader two forgets it: `excluded.unrecognized` goes to 1, the field the judge reads as a kit bug.
 mut_KAIZEN_manual_not_admitted() {
@@ -7151,7 +7151,7 @@ mut_WORKER_allows_ignores_lot() {
 # campaigns' and other repos' included. Caught by "budget: the sum counts the campaign's missions and
 # no other" (check-worker.sh).
 mut_WORKER_budget_counts_every_mission() {
-  sed -i '/^cmd_budget() {/,/^}/ s@ and (\.mission | IN(\$ARGS\.positional\[\]))@@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_budget() {/,/^}/ s@(\.mission | IN(\$ARGS\.positional\[\]))@true@' "${1%/*}/sdd-worker"
 }
 # The ceiling never stops: a campaign at its ceiling or above it answers rc 0, and the worker goes on
 # spending. Caught by "budget: at the ceiling or above it the verb leaves rc 1" (check-worker.sh).
@@ -7464,7 +7464,7 @@ mut_WORKER_listed_failure_swallowed() {
 # after printing, stops budget, level and next with rc 1 naming the call, and allows asks"
 # (check-worker.sh).
 mut_WORKER_listed_budget_goes_on() {
-  sed -i '/^cmd_budget() {/,/^}/ s@^  if ! campaign_set "\$root" "\$(fm_value "\$f" campaign)"; then printf .no spend — %s\\n. "\$SET_WHY"; return 1; fi$@  campaign_set "$root" "$(fm_value "$f" campaign)" || :@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_budget() {/,/^}/ s@^  if ! campaign_set "\$root" "\$campaign"; then printf .no spend — %s\\n. "\$SET_WHY"; return 1; fi$@  campaign_set "$root" "$campaign" || :@' "${1%/*}/sdd-worker"
 }
 # The sum is compared with the ceiling as binary floats again, not in cents: 0.10 + 0.70 sums to
 # 0.7999999999999999 and never reaches a ceiling of 0.80 (achado #4 of the mission's review r5).

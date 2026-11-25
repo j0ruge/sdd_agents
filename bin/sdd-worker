@@ -632,7 +632,7 @@ cmd_allows() {
   else
     effective_level "$1" "$lot" "${mf:+the lot: of $mf}"
   fi
-  if [ "$2" = plan ] && { [ "$(fm_value "$1/campaign.md" harness)" = codex ] ||
+  if [ "$2" = plan ] && [ "$(ladder_rank "$LEVEL")" -ge "$(ladder_rank "$need")" ] && { [ "$(fm_value "$1/campaign.md" harness)" = codex ] ||
        { [ -n "$LEVEL_SIGNED_TERMS" ] && [ "$(fm_value "${LEVEL_SIGNED_TERMS%/*}/campaign.md" harness)" = codex ]; }; }; then
     if [ -z "$LEVEL_SIGNED_TERMS" ] || [ "$(fm_value "$LEVEL_SIGNED_TERMS" allow_unknown_cost)" != true ]; then
       printf 'ask plan needs %s, effective %s — sign allow_unknown_cost: true for Codex planning\n' "$need" "$LEVEL"
@@ -876,6 +876,7 @@ cmd_budget() {
   local strict_json=false
   [ -z "$signed_terms" ] || strict_json=true
   local unknown estimated estimated_count unsupported billing="" blocked="" campaign_title=campaign
+  local harness campaign repo_key
   local -a ms=()
   f="$delegation"
   if [ ! -f "$f" ]; then printf 'no ceiling — no delegation: %s does not exist\n' "$f"; return 1; fi
@@ -903,7 +904,15 @@ cmd_budget() {
   fi
   root="$(repo_root "$dir")"
   if [ -z "$root" ]; then printf 'no spend — %s is not inside a git checkout\n' "$dir"; return 1; fi
-  if ! campaign_set "$root" "$(fm_value "$f" campaign)"; then printf 'no spend — %s\n' "$SET_WHY"; return 1; fi
+  campaign="$(fm_value "$f" campaign)"
+  harness="$(fm_value "${f%/*}/campaign.md" harness)"
+  repo_key=""
+  if [ "$harness" = codex ]; then
+    repo_key="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)" \
+      || { printf 'no spend — cannot resolve the campaign Git common directory\n'; return 1; }
+    repo_key="${repo_key%/.git}"
+  fi
+  if ! campaign_set "$root" "$campaign"; then printf 'no spend — %s\n' "$SET_WHY"; return 1; fi
   for wt in "${SET_CHECKOUTS[@]}"; do
     run="$(config_key "$wt" BUDGET_MISSION_USD "$mcap")"
     if [ "$wt" = "$scope_wt" ]; then scope_cap="$run"; fi
@@ -933,12 +942,17 @@ cmd_budget() {
   # The mission cap's cents come from its text (digits, and a fraction the legible grammar allows):
   # the whole part times 100, the first two digits of the fraction, and one more cent when a digit
   # after those two is above zero.
-  if ! out="$(budget_ledger_input "$ledger" | jq -nrR --arg cap "$cap" --arg m "$mcap" --arg scope "$scope" --argjson strict "$strict_json" --args '
+  if ! out="$(budget_ledger_input "$ledger" | jq -nrR --arg cap "$cap" --arg m "$mcap" --arg scope "$scope" --arg repo "$repo_key" --arg campaign "$campaign" --argjson strict "$strict_json" --args '
          def measured: type == "number" and . >= 0;
          [inputs | if $strict then fromjson else fromjson? end
-           | select(type == "object" and (.mission | IN($ARGS.positional[])))] as $rows
-         | (INDEX($rows[] | select(.event == "session" and (.launch_id | type == "string")); .launch_id)) as $finished
+           | select(type == "object")
+           | select(($repo == "" or .repo == $repo or .repo == null) and
+             ((.mission | IN($ARGS.positional[])) or ($repo != "" and .repo == $repo and
+               .campaign == $campaign and (.event == "codex_plan_usage" or
+                 (.event == "codex_launch" and .phase == "PLAN")))))] as $rows
+         | (INDEX($rows[] | select((.event == "session" or .event == "codex_plan_usage") and (.launch_id | type == "string")); .launch_id)) as $finished
          | [$rows[] | select(.event == "session" or .event == "close" or
+             .event == "codex_plan_usage" or
              (.event == "codex_launch" and ($finished[.launch_id] == null)))
              | select(.cost_usd | measured | not)] as $unknown
          | [$unknown[] | .estimated_cost_usd | select(measured)] as $estimates
@@ -953,7 +967,7 @@ cmd_budget() {
     printf 'no spend — the ledger %s does not read\n' "$ledger"; return 1
   fi
   read -r spent ceiling reached short unknown estimated estimated_count unsupported scope_amounts <<< "$out"
-  if [ "$unknown" -gt 0 ] && [ "$(fm_value "${f%/*}/campaign.md" harness)" = codex ]; then
+  if [ "$unknown" -gt 0 ] && [ "$harness" = codex ]; then
     campaign_title='campaign known'
     printf -v billing 'billing — known US$ %d.%02d; %d unknown session(s); ' "$((spent / 100))" "$((spent % 100))" "$unknown"
     if [ "$estimated_count" -gt 0 ]; then
@@ -1016,6 +1030,9 @@ codex_budget_guard() {
   fi
   if expired "$(fm_value "$LEVEL_SIGNED_TERMS" expires)"; then
     printf 'no cost exception — the delegation expired during the Codex phase check\n' >&2; return 1
+  fi
+  if [ "$(fm_value "$dir/delegation.md" signed)" != "$(fm_value "$LEVEL_SIGNED_TERMS" signed)" ]; then
+    printf 'no cost exception — the delegation changed during the Codex phase check\n' >&2; return 1
   fi
   if [ "$#" -eq 0 ]; then printf '%s\n' "$out" >&2; fi
 }

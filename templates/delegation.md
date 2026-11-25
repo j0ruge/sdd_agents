@@ -107,8 +107,8 @@ não cobre sessões de outros engines com valor desconhecido.
 2. Num terminal, rode `bin/sdd-worker delegate <diretório desta campanha>`: ele mostra o que está
    sendo concedido (as seis chaves, a opção quando preenchida e uma linha
    `ceiling <lote>: <teto>` por lote do `campaign.md` ao lado) e pergunta. Só `y` assina. Uma
-   edição salva enquanto a assinatura é gravada fica no arquivo, e nada é assinado.
-   Rode o `delegate` de novo.
+   edição detectada durante a assinatura faz o comando recusar. Termine as edições antes de
+   executar `delegate`.
 3. A assinatura grava `signed: <YYYY-MM-DD HH:MM> <digest>`. O digest cobre os termos mostrados,
    inclusive o `harness:` e o `exec_model:` quando a exceção é `true`, e o `Lot` e o `Ceiling` de cada linha da
    tabela. Uma assinatura antiga continua válida se a opção estiver ausente ou vazia. Se mudar

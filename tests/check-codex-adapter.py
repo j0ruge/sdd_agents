@@ -37,6 +37,8 @@ elif 'sandbox' in args:
         os.execv(command[0], command)
     if os.environ.get('FAKE_EXEC_SANDBOX') == '1':
         pathlib.Path(os.environ['FAKE_ARGS']).write_text(json.dumps(args))
+        if os.environ.get('FAKE_PREFLIGHT_WRITABLE'):
+            args = [a.replace('default_permissions=":read-only"', 'default_permissions=":workspace"') for a in args]
         if os.environ.get('SDD_TEST_NATIVE_CODEX'):
             real = os.environ['SDD_TEST_NATIVE_CODEX']
             os.execv(real, [real, *args])
@@ -74,7 +76,7 @@ else:
 class AdapterTests(unittest.TestCase):
     def invoke(self, *args, events=None, rc=0, sandbox_rc=0, linked=False, remote=None,
                execute_sandbox=False, model_commit=False, git_override=False, mission_branch="mission",
-               local_ignore=False, staged_gitlink=False, deadline=None):
+               local_ignore=False, staged_gitlink=False, deadline=None, preflight_writable=False, checkout_skills=True):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
@@ -96,7 +98,8 @@ class AdapterTests(unittest.TestCase):
                                env=git_env, check=True)
                 repo = branch
             (repo / ".sdd").mkdir()
-            (repo / ".agents/skills").mkdir(parents=True)
+            if checkout_skills:
+                (repo / ".agents/skills").mkdir(parents=True)
             if model_commit == "flags":
                 (repo / "baseline.txt").write_text("baseline")
                 subprocess.run(["git", "add", "baseline.txt"], cwd=repo, env=git_env, check=True)
@@ -131,6 +134,8 @@ class AdapterTests(unittest.TestCase):
             if deadline is not None:
                 env["SDD_CODEX_MAX_TURN_SECONDS"] = str(deadline)
                 env["FAKE_PAUSE"] = "3"
+            if preflight_writable:
+                env["FAKE_PREFLIGHT_WRITABLE"] = "1"
             if git_override:
                 (repo / "already-staged.txt").write_text("already staged")
                 subprocess.run(["git", "add", "already-staged.txt"], cwd=repo, check=True, env=git_env)
@@ -172,6 +177,15 @@ class AdapterTests(unittest.TestCase):
         self.assertIn("standard", terminal["estimate_basis"]["price_table"])
         self.assertEqual(terminal["estimate_basis"]["source"], "https://developers.openai.com/api/docs/models/gpt-6.2-sol")
 
+    def test_native_pilot_exec_usage_shape(self):
+        # Native turn.completed, first EXEC of the Codex CLI pilot in
+        # docs/handoffs/20261124-worker-codex/record-I2.md. No thread IP or content is copied.
+        usage = {"input_tokens": 231294, "cached_input_tokens": 173696, "cache_write_input_tokens": 0,
+                 "output_tokens": 3432, "reasoning_output_tokens": 301}
+        rc, events, _, error = self.run_hat(events=[START, TURN, MESSAGE, {**COMPLETE, "usage": usage}])
+        self.assertEqual(rc, 0, error)
+        self.assertEqual(events[-1]["estimated_cost_usd"], 0.1668856)
+
     def test_astra_and_multiple_turns_sum_independently(self):
         rc, events, _, err = self.run_hat(model="gpt-6.2-astra", events=[START, TURN, COMPLETE, TURN, MESSAGE, COMPLETE])
         self.assertEqual(rc, 0, err)
@@ -189,6 +203,7 @@ class AdapterTests(unittest.TestCase):
             ("gpt-6.2-sol", {**USAGE, "cache_write_input_tokens": 10}),
             ("gpt-6.2-sol", {**USAGE, "service_tier": "priority"}),
             ("gpt-6.2-sol", {"input_tokens": 10, "output_tokens": 1}),
+            ("gpt-6.2-sol", dict.fromkeys(USAGE, 0)),
         ]
         for model, usage in cases:
             with self.subTest(model=model, usage=usage):
@@ -232,7 +247,8 @@ class AdapterTests(unittest.TestCase):
             root = next(iter(tomllib.loads(projects)["projects"]))
             private = next(value for value in arguments if value.startswith("shell_environment_policy.set="))
             shadow = tomllib.loads(private)["shell_environment_policy"]["set"]["GIT_DIR"]
-            return [value.replace(root, "/fixture").replace(shadow, "/shadow") for value in arguments]
+            return [value.replace(root, "/fixture").replace(str(Path(root).parent), "/fixture-base")
+                    .replace(shadow, "/shadow") for value in arguments]
 
         self.assertEqual(settings(args[2:-2]), settings(fresh_args[1:-1]))
         other = {**START, "thread_id": "019aebba-bc11-73b0-8080-7c8fbffcd881"}
@@ -384,6 +400,14 @@ class AdapterTests(unittest.TestCase):
         self.assertIn("sandbox", result.stderr)
         self.assertIsNone(native)
 
+    @unittest.skipUnless(os.environ.get("SDD_TEST_NATIVE_CODEX"), "requires the opt-in native Codex CLI")
+    def test_native_preflight_rejects_a_writable_read_only_probe(self):
+        result, _ = self.invoke("--preflight", execute_sandbox=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result, _ = self.invoke("--preflight", execute_sandbox=True, preflight_writable=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("read-only sandbox permission probe failed", result.stderr)
+
     def test_gate_checks_keep_pipefail_and_do_not_get_git_write_access(self):
         positive, _ = self.invoke("--sandbox-check", "true | true", linked=True, execute_sandbox=True)
         self.assertEqual(positive.returncode, 0, positive.stderr)
@@ -465,12 +489,27 @@ class AdapterTests(unittest.TestCase):
                    '! touch .agents/skills/permission-check && test ! -e .agents/skills/permission-check')
         result, _ = self.invoke("--sandbox-check", command, linked=True, execute_sandbox=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+        result, _ = self.invoke("--sandbox-check", "! mkdir -p .agents/skills && test ! -d .agents/skills",
+                                linked=True, execute_sandbox=True, checkout_skills=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_model_turn_has_a_wall_clock_deadline(self):
         rc, events, _, _ = self.run_hat(deadline=1)
         self.assertNotEqual(rc, 0)
         self.assertIn("wall-clock limit", events[-1]["result"])
         self.assertIsNone(events[-1]["estimated_cost_usd"])
+
+    def test_model_shell_uses_an_allowlist_without_inheriting_operator_variables(self):
+        for read_only in (False, True):
+            with self.subTest(read_only=read_only):
+                choice = ("--read-only",) if read_only else ()
+                rc, _, (args, _, _), error = self.run_hat(*choice)
+                self.assertEqual(rc, 0, error)
+                self.assertIn('shell_environment_policy.inherit="none"', args)
+                values = tomllib.loads(next(arg for arg in args if arg.startswith("shell_environment_policy.set=")))
+                allowed = values["shell_environment_policy"]["set"]
+                self.assertEqual(allowed.keys() & {"HOME", "PATH"}, {"HOME", "PATH"})
+                self.assertEqual("GIT_DIR" in allowed, not read_only)
 
     def test_git_handoff_recovers_a_failed_installation_after_the_branch_advances(self):
         handoff_type = runpy.run_path(str(ADAPTER))["GitIndexHandoff"]
@@ -511,6 +550,27 @@ class AdapterTests(unittest.TestCase):
             self.assertEqual(git("status", "--short"), "")
             self.assertFalse(handoff.intent.exists())
             self.assertFalse(handoff.lock.exists())
+
+            git("reset", "--mixed", old)
+            unlink = Path.unlink
+
+            def fail_receipt_cleanup(source, *args, **kwargs):
+                if source.name == "sdd-codex-index.json":
+                    raise OSError("simulated interrupted receipt cleanup")
+                return unlink(source, *args, **kwargs)
+
+            with ExitStack() as stack:
+                handoff = handoff_type(stack, checkout)
+                with patch.object(Path, "unlink", fail_receipt_cleanup):
+                    with self.assertRaisesRegex(OSError, "interrupted receipt cleanup"):
+                        handoff.advance("refs/heads/mission", old, new, lambda: None)
+            self.assertFalse(handoff.lock.exists())
+            (checkout / "operator.txt").write_text("operator work")
+            git("add", "operator.txt")
+            with ExitStack() as stack:
+                handoff_type(stack, checkout)
+            self.assertEqual(git("status", "--short"), "A  operator.txt")
+            self.assertFalse(handoff.intent.exists())
 
     def test_git_handoff_reconciles_a_failed_result_after_update_ref_applied(self):
         handoff_type = runpy.run_path(str(ADAPTER))["GitIndexHandoff"]

@@ -1494,16 +1494,17 @@ It carries neither `kind` nor `gate_why`.
 
 For Codex, `event: "codex_launch"` records an authorized attempt just before calling the
 provider. This compact row carries the repository, mission, phase, engine and launch UUID,
-not the run, invocation, project, or kit stamps of the final session row. The final `session` row has the same `launch_id`; the worker counts an unmatched
-launch as one unknown cost and never counts a matched pair twice. The existing autonomy
-and judge session counts use completed session rows, not these receipts. The `codex-delegation`
+not the run, invocation, project, or kit stamps of the final session row. The final `session` or
+`codex_plan_usage` row has the same `launch_id`. The worker counts an unmatched launch as one
+unknown cost and never counts a matched pair twice. Autonomy and the judge report these
+receipts separately from graded pipeline sessions. The `codex-delegation`
 escalation records a refusal before launch.
 
 | Field | Type | Absent when | Meaning |
 |---|---|---|---|
 | `v` | integer | never | Schema version of the row, `1` today. Lets the reader tell "old shape" from "malformed" when a future field is added. |
 | `ts` | string | never | `date -Iseconds` timestamp of when the row was written. |
-| `event` | string enum: `session` \| `blocked` \| `degraded` \| `gate_pass` \| `close` \| `manual` \| `codex_launch` | never | A spent session, a no-session escalation, a no-session **gate closure**, a **ticket closure** (`close`), or a **phase done by hand** (`manual`, written by `sdd note-manual`), or a Codex pre-launch receipt (`codex_launch`). `blocked` means the line **stopped** (the runner returns 3 and a human has to act); `degraded` means the runner lowered its own bar and **carried on**. They are kept apart on purpose: reusing `blocked` for a degradation would have been cheaper — it inherits the `kit_sha` axis and the aggregation with no `jq` to touch — but it records "stopped" for a run that continued, and the ledger exists to record fact. `gate_pass` is the third value and the same argument one step further: a gate that closes without buying a session writes nothing, so every reader had to infer the closure from an **absence** — and `phase_label` inferred it wrong, stamping `refez` (the loudest friction signal in the rubric) on a phase that closed clean. Measured on window 2: the QA of `20260830-o-rascunho-fantasma-do-mount`, one session, `escalations: {}`, one launch for the whole mission, REVIEW/DOCS/PR all `ok` after it. It is written **only** from the derived branch of `cmd_run`'s loop, and only for a phase that bought a session in *this* run whose gate then failed — at most one per phase per run. `current_phase()` re-evaluates every gate on every derivation, so without that condition every resumed run would append a row per already-closed phase per lap. ⚠️ Declared limit: a phase whose session was paid for in run *N* and whose gate closes for free in run *N+1* gets no row; its `refez` corrects itself the first time the whole pattern happens inside one run. |
+| `event` | string enum: `session` \| `blocked` \| `degraded` \| `gate_pass` \| `close` \| `manual` \| `codex_launch` \| `codex_plan_usage` | never | A spent session, a no-session escalation, a no-session **gate closure**, a **ticket closure** (`close`), or a **phase done by hand** (`manual`, written by `sdd note-manual`), or a Codex pre-launch receipt (`codex_launch`). `blocked` means the line **stopped** (the runner returns 3 and a human has to act); `degraded` means the runner lowered its own bar and **carried on**. They are kept apart on purpose: reusing `blocked` for a degradation would have been cheaper — it inherits the `kit_sha` axis and the aggregation with no `jq` to touch — but it records "stopped" for a run that continued, and the ledger exists to record fact. `gate_pass` is the third value and the same argument one step further: a gate that closes without buying a session writes nothing, so every reader had to infer the closure from an **absence** — and `phase_label` inferred it wrong, stamping `refez` (the loudest friction signal in the rubric) on a phase that closed clean. Measured on window 2: the QA of `20260830-o-rascunho-fantasma-do-mount`, one session, `escalations: {}`, one launch for the whole mission, REVIEW/DOCS/PR all `ok` after it. It is written **only** from the derived branch of `cmd_run`'s loop, and only for a phase that bought a session in *this* run whose gate then failed — at most one per phase per run. `current_phase()` re-evaluates every gate on every derivation, so without that condition every resumed run would append a row per already-closed phase per lap. ⚠️ Declared limit: a phase whose session was paid for in run *N* and whose gate closes for free in run *N+1* gets no row; its `refez` corrects itself the first time the whole pattern happens inside one run. |
 | `launch_id` | string | on rows other than a Codex launch or its final session row | Local UUID for a single provider invocation, distinct from the native thread ID even on a retry. |
 | `engine`, `effort`, `session` | strings, with a nullable session ID | `engine` and `effort` are absent on legacy Claude session rows | A Codex session records the selected engine and effort and the native thread ID if observed. |
 | `usage`, `estimated_cost_usd`, `estimate_basis` | object, number, object (nullable) | outside Codex session rows | Observed token totals and the reference estimate, with its pricing assumptions or reason for absence. They do not change `cost_usd`. |
@@ -1958,7 +1959,7 @@ cannot verify a signed hard ceiling on ChatGPT subscription usage. The hard ceil
 applies to the known charges. With incomplete billing, the normal budget total uses
 `campaign known US$`. An inline Codex retry resumes the native thread ID recorded in its journal. A restarted
 runner or explicit `sdd retry` starts a fresh phase session from the on-disk artifacts.
-The adapter enforces a one-hour wall-clock limit on each provider invocation, including PLAN.
+The adapter uses GNU `timeout` to enforce a one-hour wall-clock limit on each provider invocation, including PLAN.
 An operator can lower it with `SDD_CODEX_MAX_TURN_SECONDS` (1–3600). A timed-out turn fails and
 does not promote private commits. The time limit is not a token quota or a billing ceiling.
 
@@ -1979,12 +1980,12 @@ The private index and refs do not carry across turns. If publication is interrup
 ref and index updates, run `PHASE_ENGINE=codex sdd preflight` in the mission checkout before
 restarting. It finishes the recorded index update only if the branch still matches the receipt.
 Other registered checkouts which do not contain the mission checkout are mounted read-only.
-The TICKET role can reach Atlassian Cloud. At PR, the runner hands off to the
+The TICKET role can reach Atlassian Cloud and requires a real mission branch before launch. At PR, the runner hands off to the
 worker's separately authorized `pr` act. This keeps remote publication and merge out of a
 Codex phase's shell permissions. The worker verifies the resulting PR through the existing gate.
 The Codex preflight requires the Codex versions of the skills used by
-the pipeline in an active skill directory. The native workspace policy keeps the checkout's
-`.agents` directory read-only during the pipeline. The standalone Jira close session is Claude-only.
+the pipeline in an active skill directory. Codex CLI 0.172.0 keeps the existing checkout
+`.agents/skills` tree read-only under its native workspace policy. The standalone Jira close session is Claude-only.
 
 ### A campaign directory
 
@@ -2115,8 +2116,8 @@ signature. A lot's title and count and its items are not signed, since the campa
 it goes. It does not commit; its last line names the `git add` and `git commit` to
 run. No character on stdin is rc 66 and writes nothing, the contract of `sdd approve`; an illegible
 or already expired delegation is refused before the question, with rc 1. An edit saved while the
-signature is being written is kept, and nothing is signed (rc 1): the file is compared, right
-before the move that writes it, with a copy taken before the write. `level: assisted` may be
+signature is being prepared and detected before the final move makes the command refuse (rc 1).
+Finish editing before running the signing command. `level: assisted` may be
 signed, and grants nothing.
 
 **The clock.** One function gives the instant, `date '+%Y-%m-%d %H:%M'`. The seam `SDD_WORKER_NOW`
@@ -2143,6 +2144,9 @@ For Codex campaigns with incomplete billing the normal total starts with `campai
 the budget reports `no cost exception — …`. An unapproved or unsupported unknown-cost row gives
 `unknown cost — …` with a separate `billing — known US$` line. Both refusals leave rc 1 and are
 distinct from reaching a known ceiling.
+Delegated Codex planner turns also add launch and usage receipts to the campaign budget,
+even before a mission file exists. Codex budget matches a recorded repository identity when
+provided and retains older mission rows without a repository field.
 Claude and legacy campaigns continue to sum the measured costs without applying the Codex
 unknown-cost gate.
 
