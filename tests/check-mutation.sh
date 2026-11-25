@@ -7079,6 +7079,9 @@ mut_RUN_status_suite_unannounced() {
 mut_RUN_missing_mission_no_gates_unsaid() {
   sed -i "/^resolve_mission() {/,/^}/ s@<mission> --no-gates' reads a mission off@<mission>' reads a mission off@" "$1"
 }
+mut_RUN_mission_dash_unrefused() {
+  sed -i '/^resolve_mission() {/,/^}/ { /is an option, not a mission/d; }' "$1"
+}
 # Item H of TODO.md, first half. One mutant per face of `sdd status` (a door added with no probe is
 # a door nobody sees fall), one for the journal filter, one for the session in course. Caught by
 # "sdd status names a stream no journal line closed and the paths left dirty, on both faces" and,
@@ -8762,6 +8765,7 @@ CATALOG=(
   RUN_approve_adr_outside_rewritten
   RUN_status_suite_unannounced
   RUN_missing_mission_no_gates_unsaid
+  RUN_mission_dash_unrefused
   RUN_leftovers_full_face_unsaid
   RUN_leftovers_no_gates_unsaid
   RUN_leftovers_journal_ignored

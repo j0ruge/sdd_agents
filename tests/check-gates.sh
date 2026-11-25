@@ -171,6 +171,51 @@ assert_eq "sdd status --no-gates reads the tree without rewriting the index of t
   "rc:0 read:1 inode:$NG_IX1" \
   "rc:$NG_INDEX_RC read:$(grep -cF 'no gate was evaluated' <<< "$NG_INDEX_OUT") inode:$(stat -c '%i' "$NG_INDEX")"
 
+echo "== dash-prefixed mission arguments =="
+DASH_REPO="$SDD_STATE_FIX/dash-repo"
+DASH_L_MISSION=20261020-lote-de-consertos
+DASH_N_MISSION=20261020-narracao
+DASH_HANDOFFS="$DASH_REPO/docs/handoffs"
+if ! mkdir -p "$DASH_REPO/.sdd" "$DASH_HANDOFFS/$DASH_L_MISSION" "$DASH_HANDOFFS/$DASH_N_MISSION" \
+  || ! cp .sdd/config.sh "$DASH_REPO/.sdd/config.sh" \
+  || ! touch "$DASH_HANDOFFS/$DASH_L_MISSION/checkpoint.md" "$DASH_HANDOFFS/$DASH_L_MISSION/checkpoint-notas.md" \
+          "$DASH_HANDOFFS/$DASH_N_MISSION/00-missao.md" \
+  || ! git init -qb main "$DASH_REPO" \
+  || ! git -C "$DASH_REPO" config user.name Fixture \
+  || ! git -C "$DASH_REPO" config user.email fixture@example.com \
+  || ! git -C "$DASH_REPO" add -f .sdd/config.sh docs/handoffs \
+  || ! git -C "$DASH_REPO" commit -qm "dash argument fixture"; then
+  fail "SENSOR-BROKEN: cannot prepare the dash argument fixture" "a clean committed checkout with two matching missions" "setup failed"
+  exit 1
+fi
+dash_head_before="$(git -C "$DASH_REPO" rev-parse HEAD)" || exit 1
+dash_tree_before="$(git -C "$DASH_REPO" status --porcelain)" || exit 1
+dash_not_refused=""
+dash_resolved=""
+for dash_cmd in why phase boot census approve close note-manual; do
+  dash_args=(-l)
+  case "$dash_cmd" in
+    phase) dash_args=(-n) ;;
+    boot|note-manual) dash_args+=("EXEC") ;;
+  esac
+  dash_rc=0
+  dash_out="$(CDPATH='' cd "$DASH_REPO" &&
+    SDD_STATE_DIR="$SDD_STATE_FIX/dash-state" "$SDD" "$dash_cmd" "${dash_args[@]}" </dev/null 2>&1)" || dash_rc=$?
+  if [ "$dash_rc" -eq 0 ] || ! grep -qF -- "'${dash_args[0]}' is an option, not a mission — see 'sdd help'" <<< "$dash_out"; then
+    dash_not_refused+=" $dash_cmd (rc $dash_rc)"
+  fi
+  if [[ "$dash_out" == *"$DASH_L_MISSION"* || "$dash_out" == *"$DASH_N_MISSION"* ]]; then
+    dash_resolved+=" $dash_cmd"
+  fi
+done
+dash_head_after="$(git -C "$DASH_REPO" rev-parse HEAD)" || exit 1
+dash_tree_after="$(git -C "$DASH_REPO" status --porcelain)" || exit 1
+assert_eq "a mission argument that starts with a dash is refused by name in why, phase, boot, census, approve, close and note-manual" \
+  "" "$dash_not_refused"
+assert_eq "the refusal of a dash argument resolves no mission, with a folder whose name contains it on disk" \
+  "head:$dash_head_before tree:$dash_tree_before mentions:" \
+  "head:$dash_head_after tree:$dash_tree_after mentions:$dash_resolved"
+
 # --- PLAN ------------------------------------------------------------------
 # The artifact file names, the frontmatter keys and the checkpoint header below are CONTRACT and
 # stay exactly as templates/ ships them — they are what the runner parses, and this repo's

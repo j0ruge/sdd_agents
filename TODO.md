@@ -46,7 +46,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Sensores que faltam
 
 - [ ] **A cópia do catálogo deixa o controle do check-hat sem os guias que ele lê** —
-  `tests/check-mutation.sh:8880` (`sandbox`) — `--only … check-hat.sh` retorna `HARNESS-BROKEN` sem sabotagem.
+  `tests/check-mutation.sh:8894` (`sandbox`) — `--only … check-hat.sh` retorna `HARNESS-BROKEN` sem sabotagem.
   Faltam `docs/finding-prs.md`, `docs/plan-only.md` e `docs/failure-modes.md`. Com os três, controle verde.
   Direção: copiar os guias e testar o controle do catálogo com o conjunto que o sensor lê.
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/checkpoint-notas.md`

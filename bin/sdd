@@ -350,6 +350,7 @@ mission_id() {
 resolve_mission() {
   local want="${1:-}" base="$REPO_ROOT/$HANDOFF_DIR" matches=()
   [ -n "$want" ] || die "missing mission name (e.g. sdd status 20260814-spinner)"
+  [[ "$want" != -* ]] || die "'$want' is an option, not a mission — see 'sdd help'"
   [ -d "$base" ] || die "$HANDOFF_DIR/ does not exist in the target repo — no mission planned yet"
 
   if [ -d "$base/$want" ]; then
