@@ -9295,6 +9295,10 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
   exit 1
 fi
 
+# Mutation copies live under /tmp, but the ledger's control repository must live
+# outside it. In the offline sandbox the original checkout can supply this directory.
+export SDD_MUTATION_FIXTURE_ROOT="$ROOT"
+
 # The control of the catalogue: the whole suite on an unsabotaged copy (see CONTROL run below).
 # Defined here because --only, the next block, runs the same control before reading its one mutant.
 # CONTROL_FIRST is the step it runs first: empty — the usual order, said explicitly and never
