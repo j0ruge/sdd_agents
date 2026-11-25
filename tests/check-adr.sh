@@ -222,7 +222,7 @@ fails=0
 # fail() are the only writers. Two blocks below used to bump it by hand AND then call pass/fail,
 # so two probes counted twice and the floor was pinned to a number two higher than the assertions
 # it was standing for — an instrument off by exactly the amount nobody could see.
-PROBE_FLOOR=79
+PROBE_FLOOR=83
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -682,6 +682,54 @@ else pass '--dry-run prints the path and creates nothing'; fi
 
 mkdir -p "$N/docs/adr"; : > "$N/docs/adr/0001-a.md"; : > "$N/docs/adr/0003-c.md"
 assert_adr 'a gap is never reused (0001, 0003 allocate 0004)' "$N" 0 '^docs/adr/0004-d\.md$' new --slug d --dry-run
+
+assert_adr_allocation() {
+  local desc="$1" d="$2" id="$3" message="${4:-}" out err rc=0
+  out="$(cd "$d" && PATH="$d/.stub:$PATH" "$SDD" adr new --slug y --dry-run 2>"$d/.adr-stderr")" || rc=$?
+  err="$(< "$d/.adr-stderr")"
+  if [ "$rc" = 0 ] && [ "$out" = "docs/adr/$id-y.md" ] &&
+    { if [ -n "$message" ]; then grep -qxF -- "  info  $message" <<< "$err"
+      else ! grep -qF 'is in use on' <<< "$err"
+      fi; }; then
+    pass "$desc"
+  else
+    fail "$desc" "rc 0, stdout docs/adr/$id-y.md, stderr: ${message:-no allocation source}" \
+      "rc $rc, stdout: $out, stderr: $err"
+  fi
+}
+
+adr_other_branch() {
+  local d="$1"
+  git -C "$d" switch -qc other &&
+    adr_file "$d" 0007-x.md '@none@' &&
+    git -C "$d" add docs/adr/0007-x.md &&
+    git -C "$d" commit -qm 'ADR on other branch' &&
+    git -C "$d" switch -q main
+}
+
+L="$(fixture alloc-local)" && adr_other_branch "$L" || exit 1
+assert_adr_allocation 'an id used only on another local branch is never handed out again, and the answer names the ref' \
+  "$L" 0008 'id 0007 is in use on refs/heads/other — allocating 0008'
+
+FAR="$(fixture alloc-remote)" && adr_other_branch "$FAR" &&
+  git -C "$FAR" update-ref refs/remotes/origin/far refs/heads/other &&
+  git -C "$FAR" branch -D other >/dev/null || exit 1
+assert_adr_allocation 'an id used only on a remote-tracking ref is never handed out again' \
+  "$FAR" 0008 'id 0007 is in use on refs/remotes/origin/far — allocating 0008'
+
+WT="$(fixture alloc-worktree)" || exit 1
+OTHER_WT="$BOX/other worktree"
+git -C "$WT" worktree add -qb other "$OTHER_WT" &&
+  adr_file "$OTHER_WT" 0009-w.md '@none@' || exit 1
+assert_adr_allocation 'an id used only on the disk of another worktree is never handed out again, and the answer names the worktree' \
+  "$WT" 0010 "id 0009 is in use on $OTHER_WT — allocating 0010"
+
+DISK="$(fixture alloc-disk)" || exit 1
+adr_file "$DISK" 0003-c.md '@none@' &&
+  git -C "$DISK" add docs/adr/0003-c.md &&
+  git -C "$DISK" commit -qm 'ADR on disk and main' || exit 1
+assert_adr_allocation 'a repository with a single ref and a single worktree allocates from the disk and names no other source' \
+  "$DISK" 0004
 
 assert_adr 'a slug that is not lower-case-and-hyphens is refused' "$N" 1 \
   "is not lower-case letters, digits and hyphens" new --slug 'Not A Slug'

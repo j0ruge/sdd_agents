@@ -6595,6 +6595,18 @@ mut_ADR_alloc_no_excl() {
   sed -i '/^adr_reserve() {/,/^}/ s@( set -C; : > "$1" )@( : ; : > "$1" )@' "$1"
 }
 
+# Without these reads, an unmerged ref or an uncommitted file in another worktree can hold the
+# same number the allocator hands out. The source message explains why the next id jumped.
+mut_ADR_alloc_refs_unread() {
+  sed -i '/^adr_next_id() {/,/^}/ s@< <(git -C "\$root" for-each-ref .*$@< <(:)@' "$1"
+}
+mut_ADR_alloc_worktrees_unread() {
+  sed -i '/^adr_next_id() {/,/^}/ s@< <(git -C "\$root" worktree list .*$@< <(:)@' "$1"
+}
+mut_ADR_alloc_source_unnamed() {
+  sed -i '/^adr_new() {/,/^}/ s@^    adr_info "id .* >&2$@    :@' "$1"
+}
+
 # PLAN is the ONE phase that can refuse an undecided `adr:`, because it is the one phase with a
 # human in the room. Blind, `block` is a config key that reads as set and asks nothing — the label
 # without the artifact behind it, which is what principle 1 of CLAUDE.md forbids.
@@ -8691,6 +8703,9 @@ CATALOG=(
   ADR_number_mismatch_blind
   ADR_bare_number_blind
   ADR_alloc_no_excl
+  ADR_alloc_refs_unread
+  ADR_alloc_worktrees_unread
+  ADR_alloc_source_unnamed
   ADR_link_bold_colon_blind
   ADR_link_backtick_kept
   ADR_link_not_path_generic

@@ -9645,27 +9645,50 @@ adr_check_repo() {
   [ "$ADR_FAILS" -eq 0 ]
 }
 
-# adr_next_id <dir> — the next free id, zero-padded to four. Empty directory ⇒ 0001.
-#
-# MAX+1, and a gap is never reused. Reusing one would hand out a number that a merged branch, a
-# handoff, a commit message or somebody's notes may already cite — the ADR would be gone and the
-# citation would silently point at a different decision, which is the whole defect this section
-# exists to close, inverted.
+adr_max_id() {
+  local file base id max=0
+  while IFS= read -r -d '' file; do
+    base="${file##*/}"
+    [[ "$base" =~ $ADR_FILE_RE ]] || continue
+    # 0008 and 0009 are decimal, not octal. Pad only when publishing the result.
+    id=$((10#${base%%-*}))
+    [ "$id" -le "$max" ] || max="$id"
+  done
+  printf '%d\n' "$max"
+}
+
+adr_disk_max_id() {
+  adr_max_id < <(find "$1" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null || true)
+}
+
+# adr_next_id <root> — publish MAX+1 as ADR_NEXT_ID and the source of the maximum as
+# ADR_NEXT_SOURCE. The checkout on disk wins ties. Reusing a gap could make an existing citation
+# point at a different decision. A branch never pushed from another machine stays invisible.
+ADR_NEXT_ID=""
+ADR_NEXT_SOURCE=""
 adr_next_id() {
-  local dir="$1" f base max=0 id
-  if [ -d "$dir" ]; then
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      base="$(basename -- "$f")"
-      grep -qE "$ADR_FILE_RE" <<< "$base" || continue
-      # `10#` because 0008 is not octal — without it 0008 and 0009 are arithmetic errors, which is
-      # the ordinary way this family of bug arrives and the reason the padding is applied on the
-      # way OUT and never carried through the arithmetic.
-      id=$((10#${base%%-*}))
-      [ "$id" -le "$max" ] || max="$id"
-    done < <(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null)
-  fi
-  printf '%04d\n' "$((max + 1))"
+  local root="$1" dir="${ADR_DIR%/}" max id ref entry worktree
+  ADR_NEXT_SOURCE=""
+  max="$(adr_disk_max_id "$root/$dir")" || max=0
+  while IFS= read -r ref; do
+    if id="$(adr_max_id < <(git -C "$root" ls-tree -z --name-only "$ref" -- "$dir/" 2>/dev/null || true))" &&
+       [ "$id" -gt "$max" ]; then
+      max="$id"
+      ADR_NEXT_SOURCE="$ref"
+    fi
+  done < <(git -C "$root" for-each-ref --format='%(refname)' refs/heads refs/remotes 2>/dev/null || true)
+  while IFS= read -r -d '' entry; do
+    case "$entry" in
+      'worktree '*) worktree="${entry#worktree }" ;;
+      *) continue ;;
+    esac
+    [ "$worktree" != "$root" ] || continue
+    if id="$(adr_disk_max_id "$worktree/$dir")" && [ "$id" -gt "$max" ]; then
+      max="$id"
+      ADR_NEXT_SOURCE="$worktree"
+    fi
+  done < <(git -C "$root" worktree list --porcelain -z 2>/dev/null || true)
+  printf -v ADR_NEXT_ID '%04d' "$((max + 1))"
 }
 
 # adr_reserve <path> — create the file, or fail. THE poka-yoke of this whole mission.
@@ -9823,7 +9846,8 @@ adr_new() {
   grep -qE '^[a-z0-9-]+$' <<< "$slug" \
     || die "sdd adr new: --slug '$slug' is not lower-case letters, digits and hyphens"
   local dir="$root/${ADR_DIR%/}" rel id path
-  id="$(adr_next_id "$dir")"
+  adr_next_id "$root"
+  id="$ADR_NEXT_ID"
   rel="${ADR_DIR%/}/$id-$slug.md"
   path="$root/$rel"
 
@@ -9839,6 +9863,12 @@ adr_new() {
       ''|TBD|none|\<*) : ;;
       *) die "sdd adr new: $spec_rel already declares '$cur' — change it by hand, or point --spec somewhere else" ;;
     esac
+  fi
+
+  if [ -n "$ADR_NEXT_SOURCE" ]; then
+    local previous_id
+    printf -v previous_id '%04d' "$((10#$id - 1))"
+    adr_info "id $previous_id is in use on $ADR_NEXT_SOURCE — allocating $id" >&2
   fi
 
   if [ "$dry" = 1 ]; then
@@ -13356,9 +13386,9 @@ USAGE
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the
                              ledger, with the composition of the slice beside the numbers
   sdd adr new --slug <s> [--ticket <id>] [--spec <path>] [--dry-run]
-                             reserve the next free id in ADR_DIR and write the header stub. The
-                             reservation is O_EXCL: a number is never handed out twice, and an
-                             existing file is never overwritten. --spec writes BOTH sides of the
+                             reserve the next free id in ADR_DIR and write the header stub. Reads
+                             ids in use across the branches and worktrees of this clone. O_EXCL
+                             never overwrites an existing file. --spec writes BOTH sides of the
                              link — the ADR's `Spec:` line and the spec's `adr:` key
   sdd adr check [--repo <root>] [--mission <m>] [--phase plan|exec]
                              read the traceability links back. No scope ⇒ the whole repo; --mission
