@@ -768,6 +768,17 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `plugin_install_paths`), e avisar só do que não achou.
   — descoberto pela retro do retrofit-watch ao instalar o kit no `expiry_guardian` (2026-11-23)
 
+
+- [ ] **O publicador Codex podia fazer merge com delegação só de PR** — `bin/sdd:3375`
+  (`PR needs worker publish`) — a revisão viu rede e acesso ao `gh` na fase, fora da autoridade do ato `pr`.
+  O teste do runner exige handoff ao worker e o do adaptador exige o publicador offline. RESOLVED by 0abeee2
+  — achado por Codex na revisão da missão `20261124-worker-codex` (2026-11-24)
+
+- [ ] **Chave de aprovação com espaços podia passar pela validação do planner** — `bin/sdd-plan-codex:168`
+  (`one blank approval`) — `aprovacao : auto` antes de uma chave em branco passava na minuta e vencia no gate.
+  O teste de materialização cobre chaves repetidas com espaços para aprovação, missão e branch. RESOLVED by 0abeee2
+  — achado por Codex na revisão da missão `20261124-worker-codex` (2026-11-24)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
