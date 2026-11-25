@@ -2507,41 +2507,9 @@ echo "== a dead app escalates on the first session, where a red e2e alone still 
 # environment, plus US$ 7,61 for the lap that reopened a mission whose PR was already open.
 #
 # FLOOR FIRST, and deliberately NOT written with the runner's own app_probe: a floor that reuses
-# the function under test measures the runner with the runner. This is a raw connect, and when it
-# cannot find a refused port it dies BY NAME rather than certifying a pair that proved nothing.
-port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
-  local rc=0
-  LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
-  [ "$rc" -ne 0 ]
-}
-
-# start_page_server <dir> — serves <dir> over HTTP on a free loopback port and publishes PAGE_PORT
-# and PAGE_PID. CALLED, never `$( )`: the two globals would die with the subshell. PAGE_PORT stays
-# empty when no server came up, and the caller fails BY NAME rather than certifying nothing. The
-# server has to be OUR process (`kill -0` once the port answers): a neighbour sensor binding the
-# same port between the free check and our bind would otherwise be read as ours. 30000-31999 sits
-# under the ephemeral range, like the dead port above; `timeout 900` bounds an orphan if this shell
-# is killed before its EXIT trap runs, and the trap kills it on every ordinary exit.
-PAGE_PID=""; PAGE_PORT=""
-start_page_server() {
-  local port=$(( 30000 + $$ % 2000 )) tries=0 waited
-  PAGE_PID=""; PAGE_PORT=""
-  while [ "$tries" -lt 10 ]; do
-    tries=$(( tries + 1 )); port=$(( port + 1 ))
-    port_is_free "$port" || continue
-    timeout 900 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$1" >/dev/null 2>&1 &
-    PAGE_PID=$!
-    waited=0
-    while port_is_free "$port" && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$(( waited + 1 )); done
-    if ! port_is_free "$port" && kill -0 "$PAGE_PID" 2>/dev/null; then PAGE_PORT="$port"; return 0; fi
-    kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; PAGE_PID=""
-  done
-  return 0
-}
-stop_page_server() {
-  if [ -n "$PAGE_PID" ]; then kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; fi
-  PAGE_PID=""; PAGE_PORT=""
-}
+# the function under test measures the runner with the runner. The fixture checks the transport and
+# fails by name if it cannot find a refused port, instead of certifying a pair that proved nothing.
+. "$ROOT/tests/app-probe-fixture.sh"
 # BELOW the ephemeral range, and that is what makes the floor hold for the whole block. The floor
 # proves the port refuses ONCE; the assertions under it then run several `sdd` invocations over
 # minutes against that one measurement. Drawn from 49152-59171 the port sat INSIDE the kernel's
@@ -2553,7 +2521,10 @@ stop_page_server() {
 # assertion would buy a smaller window at the price of a floor nobody can read.
 dead_port=$(( 20000 + $$ % 10000 ))
 app_floor_ok=1
-if ! command -v timeout >/dev/null 2>&1; then
+if ! app_fixture_begin "$OUTSIDE/app-probe-bin"; then
+  fail "app transport" "a loopback socket or an offline fixture" "could not prepare either transport"
+  app_floor_ok=0
+elif ! command -v timeout >/dev/null 2>&1; then
   fail "dead-app floor" "timeout(1) on PATH" "timeout is missing — the app-down pair was NOT measured"
   app_floor_ok=0
 else
@@ -2658,8 +2629,8 @@ RPT
   printf '<!doctype html><title>Other Product</title><p>not the fixture</p>\n' > "$page_dir/index.html"
   start_page_server "$page_dir"
   if [ -z "$PAGE_PORT" ]; then
-    fail "wrong-app floor" "an HTTP server on a loopback port" \
-         "python3 -m http.server did not come up — the wrong-app pair was NOT measured"
+    fail "wrong-app floor" "an HTTP endpoint for the fixture" \
+         "the fixture did not provide an HTTP endpoint — the wrong-app pair was NOT measured"
   else
     page_port="$PAGE_PORT"
     sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$page_port/\"|" .sdd/config.sh
@@ -2770,6 +2741,7 @@ exit 1
 STUB
   chmod +x "$OUTSIDE/stub/claude"
 fi
+app_fixture_end
 
 # The fixture goes back to what the blocks below expect: no interface, and a QA handoff that is
 # `done` without the `gate:` evidence — the ordinary refusal the reader blocks are built on. An
@@ -5100,14 +5072,14 @@ assert_eq "a malformed row fails loudly" "1" "$rc"
 # FOUR regimes, and they are two differential PAIRS rather than one refusal plus decoration:
 #   A/B  the same repo under /tmp, one environment variable apart. Unset refuses, set writes.
 #        Without B, "the runner refuses every ledger everywhere" satisfies A.
-#   C/D  the same repo under /var/tmp, one environment variable apart. TMPDIR unset writes,
+#   C/D  the same repo outside /tmp, one environment variable apart. TMPDIR unset writes,
 #        TMPDIR naming that root refuses. Without D the $TMPDIR arm of the heuristic has NO probe
 #        at all — every path mktemp hands this suite lands under /tmp, so the two arms are
 #        otherwise indistinguishable; without C nothing shows that a repo outside the temp roots
 #        is still written, and "refuses temp checkouts" would be unseparable from "refuses".
 #
-# /var/tmp is the control root on purpose: it is a temp directory the heuristic deliberately does
-# NOT know. The declared limit of ADR 0005 part 3, standing here as the control it makes possible.
+# The control root must be outside /tmp. Inside the Codex sandbox /var/tmp is read-only,
+# so a checkout outside /tmp supplies a writable root for the same differential.
 #
 # HOME is redirected in every regime: with SDD_STATE_DIR unset the writer targets $HOME/.sdd, and
 # a probe that wrote into the developer's real ledger would BE the contamination it exists to
@@ -5119,8 +5091,9 @@ TMPGUARD="$OUTSIDE/tmpguard"
 mkdir -p "$TMPGUARD/home"
 # NOT under $OUTSIDE, which is where mktemp puts things and therefore under /tmp. This one has to
 # live outside both temp roots the guard knows, or regimes C and D have nothing to stand on.
-VARTMP="$(mktemp -d /var/tmp/sdd-tmpguard-XXXXXX)"
-trap 'rm -rf "$FIX" "$OUTSIDE" "$VARTMP"' EXIT
+TMPGUARD_CONTROL="$(mktemp -d /var/tmp/sdd-tmpguard-XXXXXX 2>/dev/null)" ||
+  TMPGUARD_CONTROL="$(mktemp -d "$ROOT/.sdd-tmpguard-XXXXXX")" || exit 1
+trap 'rm -rf "$FIX" "$OUTSIDE" "$TMPGUARD_CONTROL"' EXIT
 
 # tmpguard_fixture <dir> — a repo whose only increment is `blocked`, so `sdd run` escalates with
 # rc 3 BEFORE opening any session: the real writer is reachable without spending a token. Same
@@ -5187,8 +5160,8 @@ tmpguard_run() {
 
 tmpguard_fixture "$TMPGUARD/under-tmp" \
   || fail "PROBE-BROKEN: the /tmp fixture did not build" "built" "failed"
-tmpguard_fixture "$VARTMP/repo" \
-  || fail "PROBE-BROKEN: the /var/tmp fixture did not build" "built" "failed"
+tmpguard_fixture "$TMPGUARD_CONTROL/repo" \
+  || fail "PROBE-BROKEN: the control fixture outside /tmp did not build" "built" "failed"
 
 # A — under /tmp with no SDD_STATE_DIR: refused, loudly, and nothing reached the real ledger path.
 assert_eq "writer: a repo under the temp dir may not write the real ledger" \
@@ -5198,12 +5171,12 @@ assert_eq "writer: a repo under the temp dir may not write the real ledger" \
 assert_eq "writer: ...and with SDD_STATE_DIR set the same repo writes its row" \
   "3 silent 0" "$(tmpguard_run "$TMPGUARD/under-tmp" "$TMPGUARD/state" "")"
 # C — outside both temp roots the real ledger is written: the guard refuses throwaway checkouts,
-# not repositories. /var/tmp is a temp directory the heuristic deliberately does not know.
+# not repositories. The control directory is outside the guard's built-in /tmp root.
 assert_eq "writer: a repo outside the temp roots still writes the real ledger" \
-  "3 silent 1" "$(tmpguard_run "$VARTMP/repo" "" "")"
+  "3 silent 1" "$(tmpguard_run "$TMPGUARD_CONTROL/repo" "" "")"
 # D — the same repo, refused the moment $TMPDIR names its root. The only probe of that arm.
 assert_eq "writer: ...and refused as soon as TMPDIR names that root" \
-  "1 refused 0" "$(tmpguard_run "$VARTMP/repo" "" "/var/tmp")"
+  "1 refused 0" "$(tmpguard_run "$TMPGUARD_CONTROL/repo" "" "$TMPGUARD_CONTROL")"
 
 # =============================================================================
 # the phase ceiling counts SESSIONS, not laps of the loop
@@ -7501,7 +7474,8 @@ foreign_elsewhere() {   # foreign_elsewhere <dir> — a branch that differs from
 # throwaway repo writes it to the reflog.
 export GIT_REFLOG_ACTION=sdd:REVIEW:0badc0de
 RSV="$OUTSIDE/reviewscope-venom"
-( git init -q -b main "$RSV" && git -C "$RSV" commit -q --allow-empty -m seed \
+( git init -q -b main "$RSV" \
+    && git -C "$RSV" -c user.name=Fixture -c user.email=fixture@example.com commit -q --allow-empty -m seed \
     && git -C "$RSV" checkout -qb venom ) >/dev/null 2>&1
 assert_eq "the round-trip world runs under an armed session label" \
   "env:sdd:REVIEW:0badc0de reflog:1" \

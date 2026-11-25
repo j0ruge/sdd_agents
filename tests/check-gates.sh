@@ -1928,41 +1928,9 @@ echo "== QA phase — the e2e is red, and WHOSE fault it is =="
 # lap that reopened a mission whose PR was already open.
 #
 # FLOOR FIRST, and deliberately NOT written with the runner's own app_probe: a floor that reuses
-# the function under test measures the runner with the runner. This is a raw connect, and when it
-# cannot find a refused port it dies BY NAME rather than certifying a block that proved nothing.
-port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
-  local rc=0
-  LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
-  [ "$rc" -ne 0 ]
-}
-
-# start_page_server <dir> — serves <dir> over HTTP on a free loopback port and publishes PAGE_PORT
-# and PAGE_PID. CALLED, never `$( )`: the two globals would die with the subshell. PAGE_PORT stays
-# empty when no server came up, and the caller fails BY NAME rather than certifying nothing. The
-# server has to be OUR process (`kill -0` once the port answers): a neighbour sensor binding the
-# same port between the free check and our bind would otherwise be read as ours. 30000-31999 sits
-# under the ephemeral range, like the dead port above; `timeout 900` bounds an orphan if this shell
-# is killed before its EXIT trap runs, and the trap kills it on every ordinary exit.
-PAGE_PID=""; PAGE_PORT=""
-start_page_server() {
-  local port=$(( 30000 + $$ % 2000 )) tries=0 waited
-  PAGE_PID=""; PAGE_PORT=""
-  while [ "$tries" -lt 10 ]; do
-    tries=$(( tries + 1 )); port=$(( port + 1 ))
-    port_is_free "$port" || continue
-    timeout 900 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$1" >/dev/null 2>&1 &
-    PAGE_PID=$!
-    waited=0
-    while port_is_free "$port" && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$(( waited + 1 )); done
-    if ! port_is_free "$port" && kill -0 "$PAGE_PID" 2>/dev/null; then PAGE_PORT="$port"; return 0; fi
-    kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; PAGE_PID=""
-  done
-  return 0
-}
-stop_page_server() {
-  if [ -n "$PAGE_PID" ]; then kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; fi
-  PAGE_PID=""; PAGE_PORT=""
-}
+# the function under test measures the runner with the runner. The fixture checks the transport and
+# fails by name if it cannot find a refused port, instead of certifying a block that proved nothing.
+. "$ROOT/tests/app-probe-fixture.sh"
 # BELOW the ephemeral range, and that is what makes the floor hold for the whole block. The floor
 # proves the port refuses ONCE; the assertions under it then run several `sdd` invocations over
 # minutes against that one measurement. Drawn from 49152-59171 the port sat INSIDE the kernel's
@@ -1974,7 +1942,10 @@ stop_page_server() {
 # of a floor nobody can read.
 dead_port=$(( 20000 + $$ % 10000 ))
 floor_ok=1
-if ! command -v timeout >/dev/null 2>&1; then
+if ! app_fixture_begin "$SDD_STATE_FIX/app-probe-bin"; then
+  fail "app transport" "a loopback socket or an offline fixture" "could not prepare either transport"
+  floor_ok=0
+elif ! command -v timeout >/dev/null 2>&1; then
   fail "dead-app floor" "timeout(1) on PATH" "timeout is missing — the app-down block was NOT measured"
   floor_ok=0
 else
@@ -2063,8 +2034,8 @@ if [ "$floor_ok" = "1" ]; then
   printf '<!doctype html><title>Other Product</title><p>not the fixture</p>\n' > "$page_dir/index.html"
   start_page_server "$page_dir"
   if [ -z "$PAGE_PORT" ]; then
-    fail "wrong-app floor" "an HTTP server on a loopback port" \
-         "python3 -m http.server did not come up — the wrong-app world was NOT measured"
+    fail "wrong-app floor" "an HTTP endpoint for the fixture" \
+         "the fixture did not provide an HTTP endpoint — the wrong-app world was NOT measured"
   else
     sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$PAGE_PORT/\"|" .sdd/config.sh
     printf 'APP_EXPECT="Fixture Product"\n' >> .sdd/config.sh
@@ -2158,6 +2129,7 @@ if [ "$floor_ok" = "1" ]; then
     stop_page_server
   fi
 fi
+app_fixture_end
 
 # Restore what the next block's sed expects to find.
 sed -i 's|^E2E_CMD=.*|E2E_CMD="true"|; s|^APP_URL=.*|APP_URL="http://example.invalid"|' .sdd/config.sh

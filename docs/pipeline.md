@@ -1995,6 +1995,12 @@ it names. Do not clear the lock or the receipt to retry. Inspect the recorded ol
 and the staged differences before deciding how to restore the expected index and retain any
 work staged by the operator.
 Other registered checkouts which do not contain the mission checkout are mounted read-only.
+
+When the kit is its own target, the gate, autonomy and preflight tests use real loopback
+connections when available. If the sandbox denies socket creation or binding, those tests
+inject the TCP and HTTP replies and still check the runner's verdicts and escalations.
+The ledger tests use a writable control outside `/tmp` and supply their own Git identity.
+
 The TICKET role can reach Atlassian Cloud and requires a real mission branch before launch. At PR, the runner hands off to the
 worker's separately authorized `pr` act. This keeps remote publication and merge out of a
 Codex phase's shell permissions. The worker verifies the resulting PR through the existing gate.

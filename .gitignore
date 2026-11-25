@@ -37,3 +37,6 @@ docs/qa/evidence/
 # commit — a dirty tree fails gate_REVIEW and sdd preflight). Rebuild: `graphify update .`
 # (~1 s, AST only, zero API). `.graphifyignore` stays VERSIONED: it defines the scope.
 graphify-out/
+
+# Writable ledger fixture for the offline test sandbox.
+/.sdd-tmpguard-*/
