@@ -86,8 +86,10 @@ class PlannerTest(unittest.TestCase):
             mission = "20261124-test"
             relay = kit / "bin/sdd-plan-codex"
 
-            def call(*args, good=True, routing_override=False):
+            def call(*args, good=True, routing_override=False, older_git=False):
                 override = {"GIT_DIR": str(decoy / ".git"), "GIT_WORK_TREE": str(decoy)} if routing_override else {}
+                if older_git:
+                    override["PATH"] = str(legacy_bin) + os.pathsep + env["PATH"]
                 result = subprocess.run([str(relay), *args], cwd=repo, env={**env, **override},
                                         capture_output=True, text=True)
                 if good:
@@ -125,6 +127,27 @@ class PlannerTest(unittest.TestCase):
             self.assertEqual({row["campaign"] for row in rows}, {"delegated"})
             self.assertEqual({row["repo"] for row in rows}, {str(repo)})
             self.assertEqual(rows[0]["launch_id"], rows[1]["launch_id"])
+            legacy_bin = temp / "old-git"
+            legacy_bin.mkdir()
+            original_git = subprocess.check_output(["which", "git"], env=env, text=True).strip()
+            shim = legacy_bin / "git"
+            shim.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os,sys\n"
+                f"actual = {original_git!r}\n"
+                "args = sys.argv[1:]\n"
+                "if args[-3:] == ['rev-parse', '--path-format=absolute', '--git-common-dir']:\n"
+                "    print('--path-format=absolute', flush=True)\n"
+                "    args.remove('--path-format=absolute')\n"
+                "os.execv(actual, [actual, *args])\n"
+            )
+            shim.chmod(0o755)
+            call("start", f"{mission}-legacy-git", "Budget sees the same repo",
+                 "--campaign", str(campaign), "--lot", "L1", older_git=True)
+            legacy_rows = [json.loads(line) for line in (state_dir / "autonomy-log.jsonl").read_text().splitlines()][2:]
+            self.assertEqual({row["repo"] for row in legacy_rows}, {str(repo)})
+            self.assertEqual([row["event"] for row in legacy_rows], ["codex_launch", "codex_plan_usage"])
+
             self.assertIn("draft", call("recover", mission))
             call("finish", mission)
             dest = repo / "docs/handoffs" / mission

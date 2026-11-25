@@ -28,6 +28,30 @@ def git(*args):
     return subprocess.check_output(["git", *args], text=True).strip()
 
 
+def ledger_repo_key(root):
+    """Resolve the same directory and normalization as the runner and worker."""
+    def common_dir(*args):
+        return os.fsdecode(subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", *args, "--git-common-dir"]
+        )).removesuffix("\n")
+
+    common = common_dir("--path-format=absolute")
+    if not common.startswith("/"):
+        common = common_dir()
+        if not common or "\n" in common:
+            raise ValueError("cannot resolve the campaign Git common directory")
+        common = str((root / common).resolve(strict=True))
+    if "\n" in common or not Path(common).is_dir():
+        raise ValueError("cannot resolve the campaign Git common directory")
+    bare = subprocess.run(["git", "-C", str(root), "config", "--bool", "--get", "core.bare"],
+                          capture_output=True, text=True)
+    if bare.returncode not in (0, 1):
+        raise ValueError("cannot resolve the campaign Git core.bare setting")
+    if bare.stdout.strip() != "true" and common != "/.git":
+        common = common.removesuffix("/.git")
+    return common
+
+
 def save(path, state):
     tmp = path.with_suffix(".tmp")
     with tmp.open("w", encoding="utf-8") as out:
@@ -59,7 +83,7 @@ def record_campaign_turn(state, launch, result=None):
         return
     root = Path(os.environ.get("SDD_STATE_DIR") or Path.home() / ".sdd")
     root.mkdir(parents=True, exist_ok=True)
-    repo = git("rev-parse", "--path-format=absolute", "--git-common-dir").removesuffix("/.git")
+    repo = ledger_repo_key(Path.cwd())
     row = {
         "v": 1, "ts": datetime.now().astimezone().isoformat(timespec="seconds"), "phase": "PLAN",
         "repo": repo, "campaign": Path(state["campaign"]).name, "lot": state["lot"],
@@ -279,9 +303,7 @@ def main():
                 if not args.campaign or not re.fullmatch(r"L[0-9]+[a-z]?", args.lot or ""):
                     raise ValueError("--campaign and --lot are required together for delegated planning")
                 campaign = args.campaign.resolve(strict=True)
-                if git("-C", str(campaign), "rev-parse", "--path-format=absolute", "--git-common-dir") != git(
-                    "rev-parse", "--path-format=absolute", "--git-common-dir"
-                ):
+                if ledger_repo_key(campaign) != ledger_repo_key(root):
                     raise ValueError("the campaign and mission must be worktrees of the same repository")
                 primary = git("worktree", "list", "--porcelain", "-z").split("\0", 1)[0].removeprefix("worktree ")
                 if campaign.parent not in {Path(primary) / "docs/campaigns",
