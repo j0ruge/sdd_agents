@@ -13629,7 +13629,12 @@ main() {
     case "$arg" in -h|--help) cmd_help; return 0 ;; esac
   done
   coordination_enter "$@" || admission=$?
-  [ "$COORDINATION_ADMITTED" = 1 ] || return "$admission"
+  if [ "$COORDINATION_ADMITTED" != 1 ]; then
+    if [ "$admission" -eq 75 ]; then
+      printf '%s\n' 'sdd status <mission> --no-gates reads the mission off the disk with no lock, while the owner runs' >&2
+    fi
+    return "$admission"
+  fi
   local subcmd="${1:-help}"
   shift || true
   case "$subcmd" in

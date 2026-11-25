@@ -662,12 +662,18 @@ try:
     busy(repo, "install", name="metadata-free kernel lock refuses admission")
     lock_file.close()
     owner = start(repo)
+    no_gates_hint = ("sdd status <mission> --no-gates reads the mission off the disk "
+                     "with no lock, while the owner runs")
+    refused = busy(repo, "status", "20260101-one")
+    check("a CHECKOUT-BUSY refusal names sdd status --no-gates as the read that takes no lock",
+          refused.returncode == 75 and refused.stdout.splitlines()[-1:] == [no_gates_hint],
+          refused.stdout)
     for args in [("run", "20260101-one"), ("run", "20260101-two"),
                  ("run", "20260101-one", "--dry-run"), ("retry", "20260101-one"),
                  ("close", "20260101-one"), ("kaizen",), ("approve", "20260101-one"),
                  ("note-manual", "20260101-one", "PR"),
                  ("install", "--force"), ("adr", "new", "--slug", "new"),
-                 ("preflight",), ("status", "20260101-one"),
+                 ("preflight",),
                  ("phase", "20260101-one"), ("why", "20260101-one", "EXEC"),
                  ("boot", "20260101-one", "EXEC")]:
         busy(repo, *args)
@@ -690,6 +696,8 @@ try:
         if args[0] == "status":
             check("query reports active owner", "CHECKOUT-OWNER" in result.stdout
                   and str(owner[0].pid) in result.stdout, result.stdout[:500])
+            check("status --no-gates succeeds without the refusal hint", result.returncode == 0
+                  and no_gates_hint not in result.stdout.splitlines(), result.stdout[:500])
     independent = work / "worktree"
     git(repo, "worktree", "add", "-qb", "independent", str(independent))
     result = run(independent, "install")

@@ -6779,6 +6779,10 @@ mut_COORD_admission_missing() {
   sed -i 's%^  coordination_enter "$@" || admission=$?$%  COORDINATION_ADMITTED=1%'  "$1"
 }
 
+mut_COORD_busy_no_gates_unnamed() {
+  sed -i '/^main() {/,/^}/ s/^      printf .*sdd status <mission> --no-gates reads the mission off the disk.*$/      :/' "$1"
+}
+
 mut_COORD_linker_unlocked() {
   sed -i 's@install|preflight|health|approve|phase|why|link-agents)@install|preflight|health|approve|phase|why)@' "$1"
 }
@@ -7932,6 +7936,7 @@ CATALOG=(
   COORD_stragglers_pipe_fatal
   RUN_branch_double_slash
   COORD_admission_missing
+  COORD_busy_no_gates_unnamed
   COORD_linker_unlocked
   COORD_health_wrong_tree
   COORD_worktrees_share_lock
