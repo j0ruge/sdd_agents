@@ -493,6 +493,54 @@ class AdapterTests(unittest.TestCase):
             self.assertFalse(handoff.intent.exists())
             self.assertFalse(handoff.lock.exists())
 
+    def test_git_handoff_reconciles_a_failed_result_after_update_ref_applied(self):
+        handoff_type = runpy.run_path(str(ADAPTER))["GitIndexHandoff"]
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            checkout = Path(directory)
+
+            def git(*args):
+                return subprocess.check_output(["git", *args], cwd=checkout, text=True).strip()
+
+            git("init", "-q", "-b", "mission")
+            git("config", "user.name", "Fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            git("commit", "-qm", "seed", "--allow-empty")
+            old = git("rev-parse", "HEAD")
+            (checkout / "proof.txt").write_text("proof")
+            git("add", "proof.txt")
+            git("commit", "-qm", "proof")
+            new = git("rev-parse", "HEAD")
+            git("reset", "--mixed", old)
+            handoff = handoff_type(stack, checkout)
+            real_git = handoff.git
+
+            def lost_status(*args, **kwargs):
+                value = real_git(*args, **kwargs)
+                if args[0] == "update-ref":
+                    raise ValueError("simulated lost update-ref status")
+                return value
+
+            with patch.object(handoff, "git", lost_status):
+                handoff.advance("refs/heads/mission", old, new, lambda: None)
+            self.assertEqual(git("rev-parse", "HEAD"), new)
+            self.assertEqual(git("status", "--short"), "")
+            self.assertFalse(handoff.intent.exists())
+            self.assertFalse(handoff.lock.exists())
+
+
+            # Another owner may already have installed the candidate ref and then staged work.
+            (checkout / "staged.txt").write_text("operator work")
+            git("add", "staged.txt")
+
+            def reject_index():
+                raise ValueError("operator has staged work")
+
+            with self.assertRaisesRegex(ValueError, "operator has staged work"):
+                handoff.advance("refs/heads/mission", old, new, reject_index)
+            self.assertEqual(git("status", "--short"), "A  staged.txt")
+            self.assertFalse(handoff.intent.exists())
+            self.assertFalse(handoff.lock.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -318,7 +318,7 @@ class GitIndexHandoff:
         except FileNotFoundError:
             return None
 
-    def recover(self, declined=False):
+    def recover(self, declined=False, attempted=False):
         """Finish only the recorded index installation or release its own lock."""
         try:
             record = json.loads(self.intent.read_text())
@@ -340,17 +340,19 @@ class GitIndexHandoff:
             return
         head = self.git("symbolic-ref", "HEAD")
         tip = self.git("rev-parse", "--verify", branch)
-        if head == branch and tip == new:
+        landed = head == branch and tip == new
+        if landed:
             if owned_lock:
                 self.lock.replace(self.index)
             elif self.file_id(self.index) != identity:
                 raise ValueError("Codex branch advanced, but the prepared index is missing")
-        elif head == branch and tip == old:
+        elif attempted or (head == branch and tip == old):
             if owned_lock:
                 self.lock.unlink()
         else:
             raise ValueError("The checkout moved with an unfinished Codex Git handoff")
         self.intent.unlink()
+        return landed
 
     def record(self, path, publication):
         """Write a complete receipt before replacing the previous version."""
@@ -380,15 +382,17 @@ class GitIndexHandoff:
                 check_index()
                 publication["eligible"] = True
                 self.record(receipt, publication)
-                self.git("update-ref", "--no-deref", "-m", os.environ.get("GIT_REFLOG_ACTION", "sdd:codex"),
-                         branch, new, old)
-            except subprocess.TimeoutExpired:
-                # A timed-out update-ref can have committed. Consult the receipt and ref.
-                self.recover()
-                raise
-            except (ValueError, OSError):
+            except (ValueError, OSError, subprocess.SubprocessError):
                 self.recover(declined=True)
                 raise
+            try:
+                self.git("update-ref", "--no-deref", "-m", os.environ.get("GIT_REFLOG_ACTION", "sdd:codex"),
+                         branch, new, old)
+            except (ValueError, OSError, subprocess.SubprocessError):
+                # Even a nonzero Git status can follow a successful ref rename.
+                if not self.recover(attempted=True):
+                    raise
+                return
             self.recover()
 
 
