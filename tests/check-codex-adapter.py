@@ -497,9 +497,10 @@ class AdapterTests(unittest.TestCase):
         handoff_type = runpy.run_path(str(ADAPTER))["GitIndexHandoff"]
         with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             checkout = Path(directory)
+            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
 
             def git(*args):
-                return subprocess.check_output(["git", *args], cwd=checkout, text=True).strip()
+                return subprocess.check_output(["git", *args], cwd=checkout, env=env, text=True).strip()
 
             git("init", "-q", "-b", "mission")
             git("config", "user.name", "Fixture")
