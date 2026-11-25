@@ -51,3 +51,4 @@
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
 - 2026-11-25 10:02 · `I1` · TDD: três casos externos devolviam 0001 e o controle local passava. Após 436b1f2, Check `1 1 1 1`, suíte `tests/run-all.sh` verde (rc 0), e `ADR_alloc_refs_unread caught by check-adr.sh`, `ADR_alloc_worktrees_unread caught by check-adr.sh` e `ADR_alloc_source_unnamed caught by check-adr.sh`.
+- 2026-11-25 10:48 · `I2` · TDD: cinco asserções vermelhas antes da correção. Após 8718ccf, Check `1 1 1 1 1` e suíte `tests/run-all.sh` verde (rc 0). Mutantes: `LINK_commands_unlinked caught by check-preflight.sh`, `LINK_commands_gitignore_dropped caught by check-preflight.sh`, `PRE_sdd_plan_missing_silent caught by check-preflight.sh` e `PRE_sdd_plan_kit_names_link_agents caught by check-preflight.sh`.
