@@ -5092,7 +5092,7 @@ mkdir -p "$TMPGUARD/home"
 # NOT under $OUTSIDE, which is where mktemp puts things and therefore under /tmp. This one has to
 # live outside both temp roots the guard knows, or regimes C and D have nothing to stand on.
 TMPGUARD_CONTROL="$(mktemp -d /var/tmp/sdd-tmpguard-XXXXXX 2>/dev/null)" ||
-  TMPGUARD_CONTROL="$(mktemp -d "$ROOT/.sdd-tmpguard-XXXXXX")" || exit 1
+  TMPGUARD_CONTROL="$(mktemp -d "${SDD_MUTATION_FIXTURE_ROOT:-$ROOT}/.sdd-tmpguard-XXXXXX")" || exit 1
 trap 'rm -rf "$FIX" "$OUTSIDE" "$TMPGUARD_CONTROL"' EXIT
 
 # tmpguard_fixture <dir> — a repo whose only increment is `blocked`, so `sdd run` escalates with
