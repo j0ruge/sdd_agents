@@ -12376,7 +12376,7 @@ kaizen_series() {
     # Second producer of the same shape, and it cannot share the jq above (there is no input to
     # run it on), so the key set is kept in step by hand and check-kaizen.sh compares the two as
     # key sets. A consumer reading `null` where the real series gives a number is the drift.
-    printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"why":["floor"],"harness":[],"window_missions_stranded":0,"window_broken":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
+    printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"why":["floor"],"harness":[],"window_missions_stranded":0,"window_broken":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"codex_telemetry":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
     return 0
   fi
   # jq's stderr goes to a temp file, never to the terminal raw: a row that IS an object with a field

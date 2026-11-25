@@ -1828,8 +1828,10 @@ from the same owner, never a second copy of it — each bought exactly one
 *mission* — the same unit the floor counts, never sessions — there is more than one of them, **and
 no version anywhere in the history ever reached the floor** — that third clause is what separates
 "this axis cannot work here" from a merely quiet stretch in a healthy repo) and an `excluded`
-accounting with five reasons
-(`non_comparable` dirty-kit rows, `unrecognized` rows, the `meta` rows the kaizen sessions
+accounting with six reasons
+(`non_comparable` dirty-kit rows, `unrecognized` rows,
+`codex_telemetry` receipts for Codex launches and planning usage that are not graded sessions,
+the `meta` rows the kaizen sessions
 themselves write — the loop never lets its own sessions shift the axis it is judged on —
 `other_repo`, the rows born somewhere else, and `no_repo`, the rows that name no project at all —
 the field absent, `null`, or empty are one and the same answer).
@@ -1860,7 +1862,7 @@ changes its unit or its meaning is not caught, and the sensor's comment says so.
 - `escalations`: one key per escalation kind, holding its count — data, never a fixed name
 - `guard`: `missions_after_change`, `missions_with_session`, `sessions`, `floor`, `sufficient`,
   `why`, `harness`, `window_missions_stranded`, `window_broken`, `degenerate_axis`
-- `excluded`: `non_comparable`, `unrecognized`, `meta`, `other_repo`, `no_repo`
+- `excluded`: `non_comparable`, `unrecognized`, `codex_telemetry`, `meta`, `other_repo`, `no_repo`
 <!-- /sdd:series-fields -->
 
 `degenerate_axis` exists because `sufficient: false` alone says two different things. In a target
