@@ -348,12 +348,21 @@ class GitIndexHandoff:
             return None
 
     @staticmethod
-    def index_digest(path):
+    def index_digest(path, *, sync=False):
         try:
             with path.open("rb") as stream:
+                if sync:
+                    os.fsync(stream.fileno())
                 return hashlib.file_digest(stream, "sha256").hexdigest()
         except FileNotFoundError:
             return None
+
+    def sync_git_dir(self):
+        descriptor = os.open(self.git_dir, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
     def recover(self, declined=False, attempted=False):
         """Finish only the recorded index installation or release its own lock."""
@@ -367,9 +376,12 @@ class GitIndexHandoff:
         if not (all(isinstance(value, str) for value in (branch, old, new)) and branch.startswith("refs/heads/")
                 and OID.fullmatch(old) and OID.fullmatch(new) and isinstance(identity, list)
                 and len(identity) == 2 and all(type(value) is int for value in identity)
-                and type(record.get("eligible")) is bool):
+                and type(record.get("eligible")) is bool and type(record.get("installed", False)) is bool):
             raise ValueError("Invalid Codex Git handoff receipt")
+        prepared = record.get("prepared_index")
         owned_lock = self.file_id(self.lock) == identity
+        if prepared and owned_lock:
+            owned_lock = self.index_digest(self.lock) == prepared
         if declined or not record["eligible"]:
             if owned_lock:
                 self.lock.unlink()
@@ -379,16 +391,15 @@ class GitIndexHandoff:
         tip = self.git("rev-parse", "--verify", branch)
         landed = head == branch and tip == new
         if landed:
-            if owned_lock:
-                self.lock.replace(self.index)
-            else:
-                installed = self.file_id(self.index)
-                if installed != identity:
-                    contents = self.index_digest(self.index)
-                    if contents is None or "previous_index" not in record or (
-                        contents == record["previous_index"] and contents != record.get("prepared_index")
-                    ):
-                        raise ValueError(f"Codex branch advanced but the prepared index is missing; inspect {self.intent.name}")
+            installed = record.get("installed") and self.file_id(self.index) is not None
+            if not installed:
+                if owned_lock and prepared:
+                    self.lock.replace(self.index)
+                elif not prepared or self.index_digest(self.index) != prepared:
+                    raise ValueError(f"Codex branch advanced but cannot verify the prepared index; inspect {self.intent.name}")
+                # Persist the installation evidence before cleanup. Git may rewrite the index.
+                self.sync_git_dir()
+                self.record({**record, "installed": True})
         elif attempted or (head == branch and tip == old):
             if owned_lock:
                 self.lock.unlink()
@@ -397,23 +408,26 @@ class GitIndexHandoff:
         self.intent.unlink()
         return landed
 
-    def record(self, path, publication):
+    def record(self, publication):
         """Write a complete receipt before replacing the previous version."""
-        with path.open("w", encoding="utf-8") as output:
-            json.dump(publication, output)
-            output.flush()
-            os.fsync(output.fileno())
-        path.replace(self.intent)
+        with tempfile.TemporaryDirectory(dir=self.git_dir, prefix="sdd-codex-receipt-") as temporary:
+            path = Path(temporary) / "receipt"
+            with path.open("w", encoding="utf-8") as output:
+                json.dump(publication, output)
+                output.flush()
+                os.fsync(output.fileno())
+            path.replace(self.intent)
+            self.sync_git_dir()
 
     def advance(self, branch, old, new, check_index):
         """Record the replacement before updating the ref, then publish it under Git's lock."""
         with tempfile.TemporaryDirectory(dir=self.git_dir, prefix="sdd-codex-index-") as stage:
             replacement = Path(stage) / "index"
             self.git("read-tree", new, env={**git_environment(), "GIT_INDEX_FILE": str(replacement)})
-            receipt = Path(stage) / "receipt"
-            publication = dict(branch=branch, old=old, new=new, index=self.file_id(replacement), eligible=False)
+            publication = dict(branch=branch, old=old, new=new, index=self.file_id(replacement),
+                               prepared_index=self.index_digest(replacement, sync=True), eligible=False)
             # Receipt precedes the lock, so an interruption never leaves an unidentifiable lock.
-            self.record(receipt, publication)
+            self.record(publication)
             try:
                 os.link(replacement, self.lock)
             except OSError:
@@ -423,10 +437,8 @@ class GitIndexHandoff:
                 if self.git("symbolic-ref", "HEAD") != branch:
                     raise ValueError("The mission checkout's branch changed during the Codex turn")
                 check_index()
-                publication["previous_index"] = self.index_digest(self.index)
-                publication["prepared_index"] = self.index_digest(replacement)
                 publication["eligible"] = True
-                self.record(receipt, publication)
+                self.record(publication)
             except (ValueError, OSError, subprocess.SubprocessError):
                 self.recover(declined=True)
                 raise

@@ -552,6 +552,26 @@ class AdapterTests(unittest.TestCase):
             self.assertFalse(handoff.lock.exists())
 
             git("reset", "--mixed", old)
+
+            def interrupt_after_index_rename(source, destination):
+                result = replace(source, destination)
+                if source.name == "index.lock":
+                    raise OSError("simulated interruption after index rename")
+                return result
+
+            with ExitStack() as stack:
+                handoff = handoff_type(stack, checkout)
+                with patch.object(Path, "replace", interrupt_after_index_rename):
+                    with self.assertRaisesRegex(OSError, "interruption after index rename"):
+                        handoff.advance("refs/heads/mission", old, new, lambda: None)
+            self.assertTrue(handoff.intent.is_file())
+            self.assertFalse(handoff.lock.exists())
+            with ExitStack() as stack:
+                handoff_type(stack, checkout)
+            self.assertEqual(git("status", "--short"), "")
+            self.assertFalse(handoff.intent.exists())
+
+            git("reset", "--mixed", old)
             unlink = Path.unlink
 
             def fail_receipt_cleanup(source, *args, **kwargs):
@@ -571,6 +591,24 @@ class AdapterTests(unittest.TestCase):
                 handoff_type(stack, checkout)
             self.assertEqual(git("status", "--short"), "A  operator.txt")
             self.assertFalse(handoff.intent.exists())
+
+            git("reset", "--mixed", old)
+            with ExitStack() as stack:
+                handoff = handoff_type(stack, checkout)
+                with patch.object(Path, "replace", fail_index_lock_rename):
+                    with self.assertRaisesRegex(OSError, "simulated interrupted"):
+                        handoff.advance("refs/heads/mission", old, new, lambda: None)
+            self.assertEqual(git("rev-parse", "HEAD"), new)
+            handoff.lock.unlink()
+            git("add", "operator.txt")
+            self.assertEqual(git("diff", "--cached", "--name-status"), "A\toperator.txt\nD\tproof.txt")
+            receipt = handoff.intent.read_bytes()
+            index = handoff.index.read_bytes()
+            with ExitStack() as stack:
+                with self.assertRaisesRegex(ValueError, "branch advanced.*prepared index"):
+                    handoff_type(stack, checkout)
+            self.assertEqual(handoff.intent.read_bytes(), receipt)
+            self.assertEqual(handoff.index.read_bytes(), index)
 
     def test_git_handoff_reconciles_a_failed_result_after_update_ref_applied(self):
         handoff_type = runpy.run_path(str(ADAPTER))["GitIndexHandoff"]
