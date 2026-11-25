@@ -50,3 +50,4 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+- 2026-11-25 10:02 · `I1` · TDD: três casos externos devolviam 0001 e o controle local passava. Após 436b1f2, Check `1 1 1 1`, suíte `tests/run-all.sh` verde (rc 0), e `ADR_alloc_refs_unread caught by check-adr.sh`, `ADR_alloc_worktrees_unread caught by check-adr.sh` e `ADR_alloc_source_unnamed caught by check-adr.sh`.
