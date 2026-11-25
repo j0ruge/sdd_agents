@@ -210,8 +210,10 @@ For Codex, `sdd run` returns rc 2 with `PR needs worker publish` when work at th
 Resume at this act under the signed `pr` authority. In the mission worktree, follow the publisher
 procedure in `agents/sdd-publisher.md` as the worker. Check the suite and branch, push only that
 branch, create or update its pull request and record verified `50-pr.md`. If the handoff says
-`draft only`, or that run's journal records `PUBLISH_ON_REVIEW_BLOCKED=draft`, publish only a
-draft and do not mark it ready for review while that restriction holds. Then use
+`draft only`, or that run's journal records `PUBLISH_ON_REVIEW_BLOCKED=draft`, use
+`gh pr create --draft` for a new PR. If the existing PR is already ready, report that conflict
+and stop before changing it. Verify that `gh pr view --json isDraft --jq .isDraft` prints `true`
+in addition to checking the artifact gate. Then use
 `PHASE_ENGINE=codex sdd why <mission> PR` to read the verdict. Check for `PR: PR open:` rather
 than relying on the command's exit code. If only the kit mutation stamp is missing and the PR is
 already open, apply the kit-specific exception above. On any other refusal, stop before advancing

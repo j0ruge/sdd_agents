@@ -26,6 +26,10 @@ elif args in (['exec', '--help'], ['exec', 'resume', '--help']):
 elif args == ['login', 'status']:
     print('Logged in using ChatGPT')
 elif 'sandbox' in args:
+    if os.environ.get('FAKE_EXEC_SANDBOX') == '1':
+        pathlib.Path(os.environ['FAKE_ARGS']).write_text(json.dumps(args))
+        command = args[args.index('--') + 1:]
+        os.execv(command[0], command)
     sys.exit(int(os.environ.get('FAKE_SANDBOX_RC', '0')))
 else:
     pathlib.Path(os.environ['FAKE_ARGS']).write_text(json.dumps([args, sys.stdin.read(), os.environ['GIT_REFLOG_ACTION']]))
@@ -35,7 +39,8 @@ else:
 
 
 class AdapterTests(unittest.TestCase):
-    def invoke(self, *args, events=None, rc=0, sandbox_rc=0, linked=False, remote=None):
+    def invoke(self, *args, events=None, rc=0, sandbox_rc=0, linked=False, remote=None,
+               execute_sandbox=False):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
@@ -63,6 +68,7 @@ class AdapterTests(unittest.TestCase):
                                          for event in (events if events is not None else (START, TURN, MESSAGE, COMPLETE))),
                 "FAKE_RC": str(rc),
                 "FAKE_SANDBOX_RC": str(sandbox_rc),
+                "FAKE_EXEC_SANDBOX": str(int(execute_sandbox)),
                 "GIT_REFLOG_ACTION": "sdd:fixture",
             }
             result = subprocess.run(
@@ -309,6 +315,15 @@ class AdapterTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("sandbox", result.stderr)
         self.assertIsNone(native)
+
+    def test_gate_checks_keep_pipefail_and_do_not_get_git_write_access(self):
+        positive, _ = self.invoke("--sandbox-check", "true | true", linked=True, execute_sandbox=True)
+        self.assertEqual(positive.returncode, 0, positive.stderr)
+        negative, args = self.invoke("--sandbox-check", "false | true", linked=True, execute_sandbox=True)
+        self.assertEqual(negative.returncode, 1, negative.stderr)
+        profile = tomllib.loads(next(arg for arg in args if arg.startswith("permissions=")))
+        filesystem = profile["permissions"]["sdd-workspace"]["filesystem"]
+        self.assertTrue(all(access == "read" for access in filesystem.values()))
 
 
 if __name__ == "__main__":

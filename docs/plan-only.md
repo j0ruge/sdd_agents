@@ -70,13 +70,14 @@ at the artifacts, and format drift enters in silence.
 
 ### Codex planner
 
-On a mission branch in its own worktree, use the Codex planner relay from the kit's `bin/`:
+On a mission branch in its own worktree, set `SDD_KIT` to the absolute kit path and use its
+planner relay. Set `QUESTION_ID` from the `status` output before answering.
 
 ```bash
-sdd-plan-codex start <mission> '<topic>'
-sdd-plan-codex status <mission>
-sdd-plan-codex answer <mission> <question-id> '<answer>'
-sdd-plan-codex finish <mission>
+"$SDD_KIT/bin/sdd-plan-codex" start 20261124-example 'Update the example command'
+"$SDD_KIT/bin/sdd-plan-codex" status 20261124-example
+"$SDD_KIT/bin/sdd-plan-codex" answer 20261124-example "$QUESTION_ID" "Use option A"
+"$SDD_KIT/bin/sdd-plan-codex" finish 20261124-example
 ```
 
 The example starts a standalone plan. For delegated planning, append

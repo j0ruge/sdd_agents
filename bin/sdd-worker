@@ -785,6 +785,24 @@ campaign_set() {
   SET_DIRS+=(${BASE_DIRS[@]+"${BASE_DIRS[@]}"})
 }
 
+budget_ledger_input() {
+  if [ "$2" = true ]; then
+    # An absent history is zero, but a denied read is not an absent history.
+    python3 -I -c '
+import shutil
+import sys
+try:
+    ledger = open(sys.argv[1], "rb")
+except FileNotFoundError:
+    sys.exit(0)
+with ledger:
+    shutil.copyfileobj(ledger, sys.stdout.buffer)
+' "$1"
+  elif [ -e "$1" ]; then
+    cat -- "$1"
+  fi
+}
+
 # budget <campaign-dir> — what the campaign spent against its ceiling: the cost_usd of every ledger
 # line whose mission is one of the campaign's (the delegation's campaign:, campaign_set), summed by jq
 # — never by awk, whose mawk reads 1.99 as 1 under pt-BR — against budget_campaign_usd, and the
@@ -911,11 +929,10 @@ cmd_budget() {
   mapfile -t ms < <(for p in ${SET_DIRS[@]+"${SET_DIRS[@]}"}; do printf '%s\n' "${p##*/}"; done | awk '!seen[$0]++')
   cap="$(fm_value "$f" budget_campaign_usd)"
   ledger="$(ledger_path)"
-  [ -e "$ledger" ] || ledger=/dev/null
   # The mission cap's cents come from its text (digits, and a fraction the legible grammar allows):
   # the whole part times 100, the first two digits of the fraction, and one more cent when a digit
   # after those two is above zero.
-  if ! out="$(jq -nrR --arg cap "$cap" --arg m "$mcap" --arg scope "$scope" --argjson strict "$strict_json" --args '
+  if ! out="$(budget_ledger_input "$ledger" "$strict_json" | jq -nrR --arg cap "$cap" --arg m "$mcap" --arg scope "$scope" --argjson strict "$strict_json" --args '
          def measured: type == "number" and . >= 0;
          [inputs | if $strict then fromjson else fromjson? end
            | select(type == "object" and (.mission | IN($ARGS.positional[])))] as $rows
@@ -931,7 +948,7 @@ cmd_budget() {
          | ($m | split(".") | (.[0] | tonumber) * 100 + ((.[1] // "") + "00" | .[0:2] | tonumber) + (if (.[1] // "") | .[2:] | test("[1-9]") then 1 else 0 end)) as $mission
          | "\($spent) \($ceiling) \($spent >= $ceiling) \($ceiling - $spent < $mission)" +
            " \($unknown | length) \(($estimates | add // 0) * 100 | round) \($estimates | length) \($unsupported)" +
-           " \($mission_amounts | tojson)"' ${ms[@]+"${ms[@]}"} < "$ledger")"; then
+           " \($mission_amounts | tojson)"' ${ms[@]+"${ms[@]}"} )"; then
     printf 'no spend — the ledger %s does not read\n' "$ledger"; return 1
   fi
   read -r spent ceiling reached short unknown estimated estimated_count unsupported scope_amounts <<< "$out"
@@ -968,7 +985,7 @@ cmd_budget() {
   if [ -n "$scope_cap" ]; then
     # Unlike the display in cents, the mission stop compares the decimal entries to the actual cap.
     local scope_reached
-    if ! scope_reached="$(python3 -c '
+    if ! scope_reached="$(python3 -I -c '
 import json
 from decimal import Decimal
 import sys
@@ -977,9 +994,11 @@ print(sum(amounts) >= Decimal(sys.argv[1]))
 ' "$scope_cap" <<< "$scope_amounts")"; then
       printf 'no spend — cannot compare known USD for %s to its mission ceiling\n' "$scope"; return 1
     fi
-    if [ "$scope_reached" = True ]; then
-      printf 'mission ceiling — known USD for %s reached its US$ %s cap\n' "$scope" "$scope_cap"; return 1
-    fi
+    case "$scope_reached" in
+      False) ;;
+      True) printf 'mission ceiling — known USD for %s reached its US$ %s cap\n' "$scope" "$scope_cap"; return 1 ;;
+      *) printf 'no spend — invalid mission ceiling verdict for %s\n' "$scope"; return 1 ;;
+    esac
   fi
 }
 
@@ -997,6 +1016,7 @@ codex_budget_guard() {
   if expired "$(fm_value "$LEVEL_SIGNED_TERMS" expires)"; then
     printf 'no cost exception — the delegation expired during the Codex phase check\n' >&2; return 1
   fi
+  if [ "$#" -eq 0 ]; then printf '%s\n' "$out" >&2; fi
 }
 
 codex_cost_consent() {
@@ -1012,7 +1032,9 @@ codex_cost_consent() {
 cmd_codex_plan() {
   [ "$#" -eq 3 ] && [ "$2" = --lot ] && [ -n "$3" ] || { usage; return 2; }
   local dir primary need
-  dir="$(readlink -f -- "$1")" || return 1
+  if ! dir="$(readlink -f -- "$1")" || [ ! -d "$dir" ]; then
+    printf 'no cost exception — cannot resolve campaign directory: %s\n' "$1" >&2; return 1
+  fi
   if ! primary="$(git -C "$dir" worktree list --porcelain | sed -n '1s/^worktree //p')"; then
     printf 'no cost exception — cannot read the campaign primary worktree\n' >&2; return 1
   fi

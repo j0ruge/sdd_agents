@@ -52,5 +52,4 @@ planner session same: 01a21015-2d0f-78b2-b5db-e1574aef588c
   ok   gate DOCS: drift checklist complete
 PR needs worker publish — use the campaign's separately authorized pr act, then resume sdd run for gate verification.
 rc=2
-remotes=0
 ```

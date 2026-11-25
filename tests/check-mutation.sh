@@ -1645,7 +1645,7 @@ mut_HEALTH_unstampable_silent() {
 # the one the next lap's gate runs, which is SQ-141's four EXEC sessions. Caught by `config: the next
 # lap runs the edited TEST_CMD, …` (block 3c of the kit-guard regimes in check-autonomy.sh).
 mut_RUN_config_not_reloaded() {
-  sed -i '/^cmd_run() {/,/^}/ s@^    config_reload$@    :@' "$1"
+  sed -i '/^cmd_run() {/,/^}/ s@^      config_reload$@      :@' "$1"
 }
 # The reload forgets to unset: a key deleted from the file survives from the previous read. Same
 # assertion, its `deleted-hook` term — the file's ON_ESCALATION_CMD pages after it was deleted.
@@ -7644,12 +7644,12 @@ mut_WORKER_ceiling_float_compare() {
 # The current Codex accounting can leave actual USD unknown. A normal signed delegation
 # without the extra term must not give the runner permission to spend under that exception.
 mut_WORKER_codex_unknown_cost_unchecked() {
-  sed -i '/^cmd_codex_run() {/,/^}/ s@^  if \[ "\$(fm_value "\$LEVEL_SIGNED_TERMS" allow_unknown_cost)" != true \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+  sed -i '/^codex_cost_consent() {/,/^}/ s@^  if \[ "\$(fm_value "\$LEVEL_SIGNED_TERMS" allow_unknown_cost)" != true \]; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
 # Estimated API usage belongs to the separate subtotal. Treating it as actual spend makes
 # the signed ceiling claim that it covers billing the harness did not report.
 mut_WORKER_codex_estimate_billed() {
-  sed -i 's@\.cost_usd | select(measured)\] | add // 0) as \$mission_spend@(.cost_usd // .estimated_cost_usd) | select(measured)] | add // 0) as $mission_spend@' "${1%/*}/sdd-worker"
+  sed -i 's@\.cost_usd | select(measured)\] as \$mission_amounts@(.cost_usd // .estimated_cost_usd) | select(measured)] as $mission_amounts@' "${1%/*}/sdd-worker"
 }
 # A left equal to the mission cap stops: the run that would end the campaign at its ceiling exactly
 # is refused. Caught by "budget: at the ceiling or above it the verb leaves rc 1" (the boundary

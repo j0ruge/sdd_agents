@@ -44,6 +44,7 @@ if [ "${1:-}" = --preflight ]; then
 fi
 if [ "${1:-}" = --sandbox-check ]; then
   printf '%s\n' "$2" >> "$FIX/sandbox-checks"
+  if [ "${3:-}" = --qa-host ]; then printf '%s\n' "$4" >> "$FIX/sandbox-hosts"; fi
   exec bash -c "$2"
 fi
 printf '%s\n' "$PWD|$*|${GIT_REFLOG_ACTION:-}" >> "$FIX/provider"
@@ -215,6 +216,10 @@ touch "$FIX/signed" "$FIX/closed-exec-then-error"
 rc=0; PHASE_ENGINE=codex "$SDD" retry "$MISSION" > "$FIX/out" 2>&1 || rc=$?
 assert 'Codex retry stops on provider failure after valid artifacts' test "$rc" -eq 3
 assert 'Codex retry reports that the provider session died' grep -q 'session died.*fixture provider failed' "$FIX/out"
+assert 'Codex session death takes precedence over the passing retry gate' jq -se '
+  (map(select(.event == "session" and .invocation == "retry" and .gate == "pass")) | last | .run_id) as $run
+  | $run != null and any(.[]; .run_id == $run and .event == "blocked" and .kind == "session-died")
+' "$SDD_STATE_DIR/autonomy-log.jsonl"
 rm "$FIX/closed-exec-then-error"
 cat > "$MDIR/30-handoff-qa.md" <<'QA'
 ---
@@ -235,6 +240,13 @@ assert 'Codex keeps the draft publication handoff separate' test "$rc" -eq 2
 assert 'Codex reports draft-only publication after review reached its ceiling' grep -Fq 'PR needs worker publish (draft only)' "$FIX/out"
 assert 'Codex draft handoff opens no provider session' cmp -s "$FIX/provider" "$FIX/provider-before-draft"
 assert 'Codex sends repository check commands through the no-model sandbox' grep -Fxq 'test -f .sdd/config.sh' "$FIX/sandbox-checks"
+git switch -qc qa-network-fixture
+mkdir -p docs/qa/reports
+printf '%s\n' '# Fixture report' '- **Started:** 2026-01-01 · **Status:** closed' > docs/qa/reports/20260101-fixture.md
+git add docs/qa/reports && git commit -qm 'Record the closed interface QA report'
+APP_URL=https://qa.example.test E2E_CMD='test -f .sdd/config.sh' PHASE_ENGINE=codex \
+  "$SDD" why "$MISSION" QA > "$FIX/out" 2>&1
+assert 'Codex separates identical unit and E2E commands by sandbox host' grep -Fxq qa.example.test "$FIX/sandbox-hosts"
 assert 'Codex paths never invoke Claude' test ! -e "$FIX/claude.called"
 
 python3 "$ROOT/tests/check-codex-adapter.py"

@@ -132,7 +132,7 @@ def qa_app_host(value):
     return host
 
 
-def git_write_profile(cwd, network):
+def git_access_profile(cwd, network, git_writes):
     # The built-in workspace sandbox protects .git, including a linked worktree's index.
     # Grant the current index and the shared objects/ref/log stores, not the shared Git
     # root. Hooks, config and pointer files remain protected from agent process writes.
@@ -147,35 +147,13 @@ def git_write_profile(cwd, network):
     elif not (cwd.joinpath(".git").is_file() and git_dir.parent == common / "worktrees"):
         raise ValueError("Codex worktree sandbox did not recognize this linked Git checkout")
 
-    paths = {git_dir: "write"}
-    for path in ("config", "config.worktree", "hooks", "info", "modules", "worktrees",
-                 "sdd-coordination.lock", "sdd-coordination.json", "sdd-codex-planner"):
-        paths[git_dir / path] = "read"
-    paths[cwd / ".sdd"] = "read"
+    paths = {git_dir: "write" if git_writes else "read", cwd / ".sdd": "read"}
     if git_dir != common:
         # A checkout under a writable ancestor (including /tmp) must not make the
         # common config/hooks writable merely because the worktree is sandboxed.
         paths[common] = "read"
-        for path in ("commondir", "gitdir"):
-            paths[git_dir / path] = "read"
-        for path in ("objects", "refs/heads", "logs/refs/heads"):
-            paths[common / path] = "write"
-    paths[common / "objects" / "info"] = "read"
-    # The native profile requires writable directories for Git's temporary lock siblings.
-    # Bind existing refs belonging to other local branches back as read-only.
-    head = subprocess.run(["git", "symbolic-ref", "--quiet", "HEAD"], cwd=cwd,
-                          capture_output=True, text=True, timeout=10)
-    if head.returncode not in (0, 1):
-        raise ValueError("could not determine the Codex checkout's branch")
-    branch = head.stdout.strip()
-    refs = subprocess.check_output(["git", "for-each-ref", "--format=%(refname)", "refs/heads/"],
-                                   cwd=cwd, text=True, timeout=10)
-    for ref in refs.splitlines():
-        if ref == branch:
-            continue
-        for path in (common / ref, common / "logs" / ref):
-            if path.is_file():
-                paths[path] = "read"
+    if git_writes:
+        git_write_exceptions(paths, cwd, git_dir, common)
     worktrees = subprocess.check_output(["git", "worktree", "list", "--porcelain", "-z"],
                                         cwd=cwd, text=True, timeout=10)
     for entry in worktrees.split("\0"):
@@ -191,7 +169,32 @@ def git_write_profile(cwd, network):
              f'filesystem={{{filesystem}}}, network={{enabled = {str(network).lower()}}}}}}}')]
 
 
-def never_escalate(read_only, network, allowed_domains=()):
+def git_write_exceptions(paths, cwd, git_dir, common):
+    protected = ("config", "config.worktree", "hooks", "info", "modules", "worktrees",
+                 "sdd-coordination.lock", "sdd-coordination.json", "sdd-codex-planner")
+    if git_dir != common:
+        protected += ("commondir", "gitdir")
+        for path in ("objects", "refs/heads", "logs/refs/heads"):
+            paths[common / path] = "write"
+    for path in protected:
+        paths[git_dir / path] = "read"
+    paths[common / "objects" / "info"] = "read"
+    # Keep other existing loose refs read-only within the directories Git needs for locks.
+    head = subprocess.run(["git", "symbolic-ref", "--quiet", "HEAD"], cwd=cwd,
+                          capture_output=True, text=True, timeout=10)
+    if head.returncode not in (0, 1):
+        raise ValueError("could not determine the Codex checkout's branch")
+    branch = head.stdout.strip()
+    refs = subprocess.check_output(["git", "for-each-ref", "--format=%(refname)", "refs/heads/"],
+                                   cwd=cwd, text=True, timeout=10)
+    for ref in refs.splitlines():
+        if ref != branch:
+            for path in (common / ref, common / "logs" / ref):
+                if path.is_file():
+                    paths[path] = "read"
+
+
+def never_escalate(read_only, network, allowed_domains=(), git_writes=True):
     # Ignore exec policy files too. A prefix rule granting allow can dispatch a command
     # outside the sandbox without an approval, even with approval_policy=never.
     cwd = json.dumps(str(Path.cwd()), ensure_ascii=False)
@@ -211,7 +214,7 @@ def never_escalate(read_only, network, allowed_domains=()):
     if read_only:
         settings.extend(["-c", 'default_permissions=":read-only"'])
     elif network is not None:
-        settings.extend(git_write_profile(Path.cwd(), network))
+        settings.extend(git_access_profile(Path.cwd(), network, git_writes))
     else:
         # Preflight can run from a non-Git directory and still probes the native sandbox.
         settings.extend(["-c", 'default_permissions=":workspace"'])
@@ -286,8 +289,9 @@ def sandbox_check(binary, command, qa_host):
         variables = ("PATH", "LANG", "LC_ALL", "TZ", "SDD_CHECK_TAG")
         environment = [f"{name}={os.environ[name]}" for name in variables if name in os.environ]
         result = subprocess.run(
-            [binary, *never_escalate(False, bool(domains), domains), "sandbox", "--",
-             "/usr/bin/env", "-i", f"HOME={home}", *environment, "bash", "-c", command],
+            [binary, *never_escalate(False, bool(domains), domains, git_writes=False), "sandbox", "--",
+             "/usr/bin/env", "-i", f"HOME={home}", *environment,
+             "bash", "--noprofile", "--norc", "-u", "-o", "pipefail", "-c", command],
             stdin=subprocess.DEVNULL,
         )
     return result.returncode

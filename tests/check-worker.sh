@@ -5205,9 +5205,10 @@ else
 fi
 
 # Reading the upstream must preserve the caller’s verified terms snapshot.
-git -C "$REPO" branch codex-upstream
+git -C "$REPO" branch codex-upstream || exit 1
 cdx_branch="$(git -C "$REPO" branch --show-current)"
-git -C "$REPO" branch --set-upstream-to=codex-upstream "$cdx_branch" >/dev/null
+git -C "$REPO" branch --set-upstream-to=codex-upstream "$cdx_branch" >/dev/null || exit 1
+[ "$(git -C "$REPO" rev-parse --symbolic-full-name '@{upstream}')" = refs/heads/codex-upstream ] || exit 1
 cp "$BOX/signed-exception" "$cdx/delegation.md"
 cdx_worker codex-run --mission "$cdxwm" --phase REVIEW
 if [ "$W_RC" -eq 0 ]; then
@@ -5252,6 +5253,15 @@ cdx_worker codex-plan "$cdxp" --lot L1
 [ "$W_RC" -eq 1 ] && [[ "$W_ERR" == *'ledger'*'does not read'* ]] \
   || got="${got:+$got; }malformed ledger: rc $W_RC: $W_OUT $W_ERR"
 cp "$cdxl/base" "$cdxl/autonomy-log.jsonl"
+if [ "$(id -u)" -ne 0 ]; then
+  mkdir "$cdxl/unreadable"
+  cp "$cdxl/base" "$cdxl/unreadable/autonomy-log.jsonl"
+  chmod 000 "$cdxl/unreadable"
+  SDD_STATE_DIR="$cdxl/unreadable" W_CWD="$REPO" worker codex-plan "$cdxp" --lot L1
+  chmod 700 "$cdxl/unreadable"
+  [ "$W_RC" -eq 1 ] && [[ "$W_ERR" == *'ledger'*'does not read'* ]] \
+    || got="${got:+$got; }inaccessible ledger: rc $W_RC: $W_OUT $W_ERR"
+fi
 for harness in claude legacy; do
   sed -i '/^allow_unknown_cost:/d' "$cdxp/delegation.md"
   if [ "$harness" = claude ]; then sed -i 's/^harness:.*/harness: claude/' "$cdxp/campaign.md"

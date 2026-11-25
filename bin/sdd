@@ -970,11 +970,18 @@ CHECK_ANNOUNCE=0
 run_check_cmd() {
   local cmd="$1" label="${2:-check}" logfile rc=0
   [ -n "$cmd" ] || return 0
-  if [ -n "${_CHECK_RC[$cmd]+x}" ]; then
-    LAST_CHECK_LOG="${_CHECK_LOG[$cmd]}"
-    LAST_CHECK_RC="${_CHECK_RC[$cmd]}"
-    LAST_CHECK_TAG="${_CHECK_TAG[$cmd]}"
-    return "${_CHECK_RC[$cmd]}"
+  local key="$cmd" check_hostport="" check_host=""
+  if [ "${PHASE_ENGINE:-claude}" = codex ]; then
+    if [[ "$label" == *-e2e ]] && [ -n "$APP_URL" ] && check_hostport="$(app_url_hostport "$APP_URL")"; then
+      check_host="${check_hostport%% *}"
+    fi
+    key="codex:$check_host"$'\n'"$cmd"
+  fi
+  if [ -n "${_CHECK_RC[$key]+x}" ]; then
+    LAST_CHECK_LOG="${_CHECK_LOG[$key]}"
+    LAST_CHECK_RC="${_CHECK_RC[$key]}"
+    LAST_CHECK_TAG="${_CHECK_TAG[$key]}"
+    return "${_CHECK_RC[$key]}"
   fi
   # The page that asks "where am I" says it is about to wait, and for what. Measured in ui24_agent:
   # 1 min 57 s of silence after the TICKET line while gate_EXEC ran the suite, and a `timeout 60`
@@ -1010,19 +1017,16 @@ run_check_cmd() {
   local tag; tag="sdd-$(basename "$logfile" .log)"
   if [ "${PHASE_ENGINE:-claude}" = codex ]; then
     local -a check=(--sandbox-check "$cmd")
-    local check_host
-    if [[ "$label" == *-e2e ]] && [ -n "$APP_URL" ] && check_host="$(app_url_hostport "$APP_URL")"; then
-      check+=(--qa-host "${check_host%% *}")
-    fi
+    if [ -n "$check_host" ]; then check+=(--qa-host "$check_host"); fi
     ( cd "$REPO_ROOT" && SDD_CHECK_TAG="$tag" "$SDD_HOME/bin/sdd-codex" "${check[@]}" ) \
       </dev/null >"$logfile" 2>&1 || rc=$?
   else
     ( cd "$REPO_ROOT" && export SDD_CHECK_TAG="$tag" && eval "$cmd" ) </dev/null >"$logfile" 2>&1 || rc=$?
   fi
-  _CHECK_TAG[$cmd]="$tag"
+  _CHECK_TAG[$key]="$tag"
   LAST_CHECK_TAG="$tag"
-  _CHECK_RC[$cmd]="$rc"
-  _CHECK_LOG[$cmd]="$logfile"
+  _CHECK_RC[$key]="$rc"
+  _CHECK_LOG[$key]="$logfile"
   LAST_CHECK_LOG="$logfile"
   LAST_CHECK_RC="$rc"
   return "$rc"
@@ -10657,8 +10661,11 @@ cmd_run() {
 
   while :; do
     # Do not source a checkout's control file again after a Codex phase has written to disk.
-    if [ "$launch_engine" = codex ]; then codex_config_unchanged "$codex_config"
-    else config_reload; fi
+    if [ "$launch_engine" = codex ]; then
+      codex_config_unchanged "$codex_config"
+    else
+      config_reload
+    fi
     [ "$PHASE_ENGINE" = "$launch_engine" ] || die "PHASE_ENGINE changed during a run — start a new invocation"
     # Single use: the first lap takes the CLI's --phase, every later lap — the draft jump included,
     # whose force_phase is the runner's — finds it empty.
