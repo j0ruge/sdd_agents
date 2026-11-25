@@ -30,5 +30,7 @@ O teste de publicação usa repositório e comandos isolados. A regressão Claud
 No teste de telemetria com o Sol, a sessão informou 22.474 tokens de entrada, dos quais 12.672
 vieram do cache, e 5 de saída. O equivalente Standard da API é US$ 0,0209212. O harness da
 assinatura não informou um valor cobrado. O teste real de retomada confirmou o mesmo ID de
-thread. O aceite da campanha continua bloqueado neste ambiente, cujo preflight falhou com
-`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`.
+thread. O preflight inicialmente falhou com
+`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`. Após aplicar o perfil
+AppArmor oficial para o Bubblewrap, o piloto passou por todos os gates planejados e chegou
+ao handoff de PR sem publicação. As evidências estão no [registro do piloto](../../handoffs/20261124-worker-codex/record-I2.md).
