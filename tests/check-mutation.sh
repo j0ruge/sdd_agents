@@ -3407,7 +3407,7 @@ mut_AUTONOMY_cache_read_dropped() {
 # The review-loop cell's zero guard (issue #110): `$whole > 0` loosened to `>= 0` divides by zero on
 # a mission whose sessions all cost null, and jq takes the whole --by-mission down with it.
 mut_AUTONOMY_review_loop_zero_guard() {
-  sed -i '/^cmd_autonomy()/,/^}/ s@(if \$whole > 0 then@(if $whole >= 0 then@' "$1"
+  sed -i '/^cmd_autonomy()/,/^}/ s@(if \$whole > 0 and@(if $whole >= 0 and@' "$1"
 }
 
 # The census stops reading tool_use names — the line that turns the "before" of the 2026-09-03
@@ -6391,7 +6391,7 @@ mut_AUTONOMY_review_loop_frontier_comparable() {
 # `the review loop cell is the same whether the round was comparable or not`, which reads
 # `dirty:review loop US$ 16.00 (160%)` under this mutant.
 mut_AUTONOMY_review_loop_denominator_split() {
-  sed -i 's@if \$whole > 0 then " (\\((\$loop \* 100 / \$whole) | round)%)"@if $cost > 0 then " (\\(($loop * 100 / $cost) | round)%)"@' "$1"
+  sed -i '/^cmd_autonomy()/,/^}/ s@if \$whole > 0 and (\$every | codex_unknown_cost_count) == 0 then " (\\((\$loop \* 100 / \$whole) | round)%)"@if $cost > 0 and ($every | codex_unknown_cost_count) == 0 then " (\\(($loop * 100 / $cost) | round)%)"@' "$1"
 }
 
 # Not a gate: the REVIEW session is told to fix in place again. The whole contract of this mission

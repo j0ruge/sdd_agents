@@ -150,7 +150,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O mutante `range_ancestry_unchecked` só troca a mensagem, e o ancestral segue conferido** —
-  `tests/check-mutation.sh:7410` (`mut_WORKER_range_ancestry_unchecked`) — ele desliga o `"$anc" -eq 1` do
+  `tests/check-mutation.sh:7421` (`mut_WORKER_range_ancestry_unchecked`) — ele desliga o `"$anc" -eq 1` do
   `cmd_pr_ready`, e o `"$anc" -ne 0` logo abaixo recusa o mesmo rc 1 com outra frase: o catálogo o pega pela
   mensagem, e o mundo que o comentário dele promete (uma rodada sobre um commit que o PR largou) nunca é montado.
   Direção: trocar também o `-ne 0` por `-gt 1`, provado por `--only WORKER_range_ancestry_unchecked check-worker.sh`.
@@ -167,7 +167,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **Dois leitores de "o que mudou" listam com detecção de rename, e um `git mv` esconde o caminho que saiu** —
-  `bin/sdd:14084` (`review_head_ok`) — e `hat_diff_names`, a guarda do chapéu: `git diff --name-only` sem
+  `bin/sdd:14095` (`review_head_ok`) — e `hat_diff_names`, a guarda do chapéu: `git diff --name-only` sem
   `--no-renames` mostra só o destino de um arquivo movido sem mudança (git 2.43.0: `git mv run.sh d/m/run.sh` dá
   só o destino; `--no-renames` e `diff-tree -r` dão os dois), e a saída de código de fora do `writes:` passa calada.
   O `gate_PR` ganhou `--no-renames` em j0ruge/sdd_agents#458 (CodeRabbit 4654284461). Direção: `--no-renames` nos
@@ -215,7 +215,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   parado na r4; a r7, com só o `R7` entre as rodadas, deu A em tudo. Direção: só `R<n>` entra entre rodadas,
   o boot da rodada lista o commit que não fecha `R<n>`, e o platô compara a classe do achado, não só a letra.
   — descoberto por `sdd-reviewer` na missão `20261013-amep-alignment-review` (2026-10-14)
-- [ ] **O remédio do `sdd kaizen` recusado ensina a mesma receita sem `--no-track`** — `bin/sdd:13162`
+- [ ] **O remédio do `sdd kaizen` recusado ensina a mesma receita sem `--no-track`** — `bin/sdd:13182`
   (`shared_why`) — o motivo manda `worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>`, e a
   branch do juiz nasce rastreando a `main` (git 2.43, medido em repo de rascunho); o `docs/failure-modes.md:685`
   e o `docs/pipeline.md:1605` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
@@ -229,7 +229,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   install, ou a saída nomear o reinstall quando o `TODO_FILE` ainda é a semente de outro idioma.
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
 
-- [ ] **Nada instala nem confere o `/sdd-plan` que o `link-agents` manda rodar** — `bin/sdd:13450`
+- [ ] **Nada instala nem confere o `/sdd-plan` que o `link-agents` manda rodar** — `bin/sdd:13470`
   (`/sdd-plan`) — a saída termina em "Next: $ /sdd-plan", mas o comando só existe onde alguém criou o link
   `~/.claude/commands/sdd-plan.md`, descrito só na ADR 0016 (máquina do operador); o README (`:45`) não o cita
   e o `sdd preflight` não o mede. Numa máquina nova o `~/.claude/commands` nem existia. Direção: o `link-agents`
@@ -286,7 +286,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-07)
 
 - [ ] **O `PR #N aberto` que a fase PR escreve no roadmap e no `KAIZEN_LOG.md` envelhece no merge** —
-  `bin/sdd:13735` (`close_return_home`) — o head do PR grava o estado dele em doc durável, e nada o lista depois do
+  `bin/sdd:13755` (`close_return_home`) — o head do PR grava o estado dele em doc durável, e nada o lista depois do
   merge. Na `main` do `dotp-remake` depois de j0ruge/dotp-remake#28, o `docs/roadmap.md:32` e `:159` e o
   `KAIZEN_LOG.md:1346` e `:1349` seguiam com `PR #28 aberto` (o `f5d6710` de lá); a 3.6c deixou o mesmo no roadmap,
   e o pós-merge consertou à mão. Vizinho de "O pós-merge não lista o `RESOLVED by` que já pode sair". Direção: o
@@ -384,7 +384,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   em 2026-10-18. Direção: com `JIRA_ENABLED=true`, a mensagem final e o corpo do PR nomeiam o `sdd close`.
   — descoberto por `sessão coordenadora` na missão `20261018-silencios-do-formulario-e-dos-dialogos` (2026-10-18)
 
-- [ ] **O pós-merge não lista o `RESOLVED by` que já pode sair** — `bin/sdd:13735` (`close_return_home`) —
+- [ ] **O pós-merge não lista o `RESOLVED by` que já pode sair** — `bin/sdd:13755` (`close_return_home`) —
   o `sdd close` volta à base com o merge e para aí, e o `sdd status` diz "only the merge is left". O ciclo de
   vida (`templates/todo.pt-BR.md`) apaga o item quando `git merge-base --is-ancestor <hash>` vale, e nada o
   lista. Medido depois do PR j0ruge/warehouse_explorer_web#8: 5 itens RESOLVED, apagados por script avulso só porque um
@@ -400,7 +400,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   vazio e a TICKET pendente, com caso nos dois lados. Vizinho do item do `sdd approve` no placeholder (mesma função).
   — descoberto pelo relay do `/sdd-plan` na missão `20261016-lighthouse-instala-object-storage` (2026-10-20)
 
-- [ ] **A ajuda do `sdd run` não diz como soltá-lo da sessão que o dispara** — `bin/sdd:13307`
+- [ ] **A ajuda do `sdd run` não diz como soltá-lo da sessão que o dispara** — `bin/sdd:13327`
   (`sdd run <mission>`) — o run leva horas, e quem o dispara de uma sessão do Claude Code e vai dar `/clear` ou
   fechar o terminal precisa destacá-lo, sem saber onde ler o progresso depois. Na peça C do `lighthouse_project`
   funcionou `nohup setsid sdd run <m> > ~/.cache/<log> 2>&1 < /dev/null &`: o pai virou o PID 2140, fora da
@@ -409,7 +409,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `retrofit-watch` na missão `20261020-amep-anexo-na-demanda` do `lighthouse_project` (2026-10-21)
   RECURRED 1: dotp-remake/20261118-plano-7-c-o-hud-e-a-pilha (2026-11-20)
 
-- [ ] **O lembrete do `sdd kaizen` não vê o backlog nem diz o custo** — `bin/sdd:12855` (`kaizen_reminder`) — no
+- [ ] **O lembrete do `sdd kaizen` não vê o backlog nem diz o custo** — `bin/sdd:12875` (`kaizen_reminder`) — no
   fim do `sdd run`, a função só olha a série de autonomia e se já há veredito do `kit_sha`. Ela não lê o
   `todo-findings` e manda rodar o `sdd kaizen` sem dizer o que ele é: uma sessão, e outra se o gate falhar
   (`bin/sdd:12496`), cada uma com teto de `BUDGET_PER_PHASE_USD` (US$ 40 no `.sdd/config.sh` do kit). A sessão
@@ -419,7 +419,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
 - [ ] **O `CHECKOUT-BUSY` do `sdd status` não aponta o `--no-gates`, que lê o disco com a run em voo** —
-  `bin/sdd:13463` (`coordination_enter`) — a recusa imprime só o dono (o `describe` do `sdd-coordination.py`).
+  `bin/sdd:13476` (`coordination_enter`) — a recusa imprime só o dono (o `describe` do `sdd-coordination.py`).
   Na 5a do `dotp-remake`, o relay rodou `sdd status <missão>` com a run em voo, recebeu só o `CHECKOUT-BUSY` e
   escreveu no handoff que o status "não serve durante a run"; a sessão seguinte ia ler o checkpoint por `sed`. O
   `--no-gates` está no `README.md` e no `docs/failure-modes.md`, e a missão inexistente já aponta para ele
@@ -566,7 +566,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   RECURRED 1: dotp-remake/20261118-plano-7-c-o-hud-e-a-pilha (2026-11-20)
 
 - [ ] **O `--budget-override` não aparece no `sdd run --help`, e quem o ensina é o `BLOCKED` do teto** —
-  `bin/sdd:13381` (`--max-phases <N>`) — as opções do `run` na ajuda são `--dry-run`, `--phase` e `--max-phases`;
+  `bin/sdd:13401` (`--max-phases <N>`) — as opções do `run` na ajuda são `--dry-run`, `--phase` e `--max-phases`;
   a opção é lida no `cmd_run` (`:9647`) e no `cmd_retry` (`:10367`), e só o motivo do teto a nomeia (`:6118`),
   depois de a linha parar. Na 7b1 e na 7b2 do `dotp-remake` o teto de US$ 150 parou a run antes do PR, e o relance
   saiu dessa mensagem e do `docs/pipeline.md:1211`. Medido na `origin/main` `336640e`. Direção: a ajuda do `run`
@@ -774,7 +774,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   O teste do runner exige handoff ao worker e o do adaptador exige o publicador offline. RESOLVED by 0abeee2
   — achado por Codex na revisão da missão `20261124-worker-codex` (2026-11-24)
 
-- [ ] **Chave de aprovação com espaços podia passar pela validação do planner** — `bin/sdd-plan-codex:211`
+- [ ] **Chave de aprovação com espaços podia passar pela validação do planner** — `bin/sdd-plan-codex:223`
   (`one blank approval`) — `aprovacao : auto` antes de uma chave em branco passava na minuta e vencia no gate.
   O teste de materialização cobre chaves repetidas com espaços para aprovação, missão e branch. RESOLVED by 0abeee2
   — achado por Codex na revisão da missão `20261124-worker-codex` (2026-11-24)
