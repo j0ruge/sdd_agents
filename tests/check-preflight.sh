@@ -2317,39 +2317,7 @@ assert_eq "preflight says git status failed, and never that the dirty paths are 
 # under test measures the runner with the runner.
 echo "== is anything listening where APP_URL points =="
 cd "$FIX" || exit 1
-port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
-  local rc=0
-  LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
-  [ "$rc" -ne 0 ]
-}
-
-# start_page_server <dir> — serves <dir> over HTTP on a free loopback port and publishes PAGE_PORT
-# and PAGE_PID. CALLED, never `$( )`: the two globals would die with the subshell. PAGE_PORT stays
-# empty when no server came up, and the caller fails BY NAME rather than certifying nothing. The
-# server has to be OUR process (`kill -0` once the port answers): a neighbour sensor binding the
-# same port between the free check and our bind would otherwise be read as ours. 30000-31999 sits
-# under the ephemeral range, like the dead port above; `timeout 900` bounds an orphan if this shell
-# is killed before its EXIT trap runs, and the trap kills it on every ordinary exit.
-PAGE_PID=""; PAGE_PORT=""
-start_page_server() {
-  local port=$(( 30000 + $$ % 2000 )) tries=0 waited
-  PAGE_PID=""; PAGE_PORT=""
-  while [ "$tries" -lt 10 ]; do
-    tries=$(( tries + 1 )); port=$(( port + 1 ))
-    port_is_free "$port" || continue
-    timeout 900 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$1" >/dev/null 2>&1 &
-    PAGE_PID=$!
-    waited=0
-    while port_is_free "$port" && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$(( waited + 1 )); done
-    if ! port_is_free "$port" && kill -0 "$PAGE_PID" 2>/dev/null; then PAGE_PORT="$port"; return 0; fi
-    kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; PAGE_PID=""
-  done
-  return 0
-}
-stop_page_server() {
-  if [ -n "$PAGE_PID" ]; then kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; fi
-  PAGE_PID=""; PAGE_PORT=""
-}
+. "$ROOT/tests/app-probe-fixture.sh"
 # BELOW the ephemeral range, and that is what makes the floor hold for the whole block. The floor
 # proves the port refuses ONCE; the assertions under it then run several `sdd` invocations over
 # minutes against that one measurement. Drawn from 49152-59171 the port sat INSIDE the kernel's
@@ -2361,7 +2329,10 @@ stop_page_server() {
 # of a floor nobody can read.
 dead_port=$(( 20000 + $$ % 10000 ))
 app_floor_ok=1
-if ! command -v timeout >/dev/null 2>&1; then
+if ! app_fixture_begin "$FIX/.git/app-probe-bin"; then
+  fail "app transport" "a loopback socket or an offline fixture" "could not prepare either transport"
+  app_floor_ok=0
+elif ! command -v timeout >/dev/null 2>&1; then
   fail "dead-app floor" "timeout(1) on PATH" "timeout is missing — the APP_URL block was NOT measured"
   app_floor_ok=0
 else
@@ -2461,8 +2432,8 @@ if [ "$app_floor_ok" = "1" ]; then
   done
   start_page_server "$page_dir"
   if [ -z "$PAGE_PORT" ]; then
-    fail "wrong-app floor" "an HTTP server on a loopback port" \
-         "python3 -m http.server did not come up — the APP_EXPECT block was NOT measured"
+    fail "wrong-app floor" "an HTTP endpoint for the fixture" \
+         "the fixture did not provide an HTTP endpoint — the APP_EXPECT block was NOT measured"
   else
     page_port="$PAGE_PORT"
     sed -i "s|^E2E_CMD=.*|E2E_CMD=\"npm run e2e\"|" .sdd/config.sh
@@ -2519,6 +2490,7 @@ if [ "$app_floor_ok" = "1" ]; then
 
   mv .sdd/config.sh.bak .sdd/config.sh
 fi
+app_fixture_end
 
 # --- install seeds the tree the runner cannot work without ------------------
 # `sdd install` made `.sdd/` and `.claude/agents/` and stopped. `resolve_mission` dies on the FIRST
