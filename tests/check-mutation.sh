@@ -4857,6 +4857,10 @@ mut_KAIZEN_shared_checkout_admitted() {
 mut_KAIZEN_shared_checkout_projection_silent() {
   sed -i '/^cmd_kaizen() {/,/^}/ s@then warn "a real run here would refuse: \$shared_why"; else@then :; else@' "$1"
 }
+# The remedy creates a branch that tracks the base again. Caught by check-kaizen.sh.
+mut_KAIZEN_remedy_tracks_the_base() {
+  sed -i '/^cmd_kaizen() {/,/^}/ s@worktree add \$q_wt --no-track -b kaizen/@worktree add $q_wt -b kaizen/@' "$1"
+}
 mut_KAIZEN_shared_checkout_prefix() {
   sed -i '/^kit_checkout_targets_run() {/,/^}/ s@case "\$p" in "\$REPO_ROOT"/\*)@case "$p" in "$REPO_ROOT"*)@' "$1"
 }
@@ -8539,6 +8543,7 @@ CATALOG=(
   KAIZEN_reminder_per_worktree
   KAIZEN_shared_checkout_admitted
   KAIZEN_shared_checkout_projection_silent
+  KAIZEN_remedy_tracks_the_base
   KAIZEN_shared_checkout_prefix
   KAIZEN_shared_checkout_no_sdd
   KAIZEN_shared_checkout_unquoted

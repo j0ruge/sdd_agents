@@ -1994,9 +1994,14 @@ kz_shared "$FIX" "$KPATH:$PATH" real
 assert_eq "kaizen door: the checkout the PATH's sdd runs from is refused before any session, naming git worktree add" \
   "rc:1 named:1 sessions:0" \
   "rc:$KZ_RC named:$(grep -c 'git -C .* worktree add' <<< "$KZ_OUT" || true) sessions:${KZ_SESSIONS:-0}"
+kz_no_track='worktree add .* --no-track -b kaizen/'
+kz_refusal_no_track="$(grep -c "$kz_no_track" <<< "$KZ_OUT" || true)"
 kz_shared "$FIX" "$KPATH:$PATH" dry --dry-run
 assert_eq "kaizen door: the projection there warns with the same sentence and still projects" \
   "rc:0 warned:1" "rc:$KZ_RC warned:$KZ_WARNED"
+assert_eq "the refusal in the checkout the targets run names a worktree add with --no-track" \
+  "refusal:1 projection:1" \
+  "refusal:$kz_refusal_no_track projection:$(grep -c "a real run here would refuse: .*$kz_no_track" <<< "$KZ_OUT" || true)"
 kz_shared "$KWT2" "$KPATH:$PATH" worktree --dry-run
 assert_eq "kaizen door: a linked worktree of that checkout is admitted under the same PATH" \
   "rc:0 warned:0" "rc:$KZ_RC warned:$KZ_WARNED"

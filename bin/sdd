@@ -13227,7 +13227,7 @@ cmd_kaizen() {
     local shared_why q_root q_wt q_base
     q_root="$(printf '%q' "$REPO_ROOT")"; q_wt="$(printf '%q' "../${REPO_ROOT##*/}-kaizen")"
     q_base="$(printf '%q' "origin/$DEFAULT_BRANCH")"
-    shared_why="this is the checkout every target's 'sdd run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git -C $q_root fetch && git -C $q_root worktree add $q_wt -b kaizen/$(date +%Y%m%d) $q_base', then 'sdd kaizen' from there"
+    shared_why="this is the checkout every target's 'sdd run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git -C $q_root fetch && git -C $q_root worktree add $q_wt --no-track -b kaizen/$(date +%Y%m%d) $q_base', then 'sdd kaizen' from there"
     if [ "$DRY_RUN" = 1 ]; then warn "a real run here would refuse: $shared_why"; else die "$shared_why"; fi
   fi
   # A dirty tree does not block (the judge may be invoked mid-work on purpose), but the rows born

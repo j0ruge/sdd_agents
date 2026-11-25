@@ -718,7 +718,7 @@ there would, and the fix is one more ignore line, never a looser guard.
 
 **Symptom:** `sdd kaizen` dies with rc 1 before any session — `this is the checkout every target's 'sdd
 run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git
--C <root> fetch && git -C <root> worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>',
+-C <root> fetch && git -C <root> worktree add ../<repo>-kaizen --no-track -b kaizen/<YYYYMMDD> origin/<branch>',
 then 'sdd kaizen' from there`. With `--dry-run` the same sentence comes as a warning, after `a real run
 here would refuse:`, and the projection follows.
 
