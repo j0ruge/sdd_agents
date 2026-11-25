@@ -54,8 +54,8 @@ sdd preflight          # environment sensor: claude, gh, GNU userland, git 2.31+
 
 Adopting **only** the planning half — the three artifacts, executed by an interactive session
 instead of `sdd run` — is a supported tier with a lighter setup (no budgets, no `TEST_CMD` the
-gates depend on, no preflight). See [`docs/plan-only.md`](docs/plan-only.md); the agents there are
-symlinked to this kit with `sdd-link-agents`, so an improvement here reaches every target at once.
+gates depend on, no preflight). See [`docs/plan-only.md`](docs/plan-only.md). With `sdd-link-agents`,
+both the agents and slash commands are linked to this kit, so updates reach every target at once.
 `sdd install --force` never writes through those links (a broken one included): it reports them and
 leaves them alone.
 
@@ -172,10 +172,10 @@ act, and whether a pull request meets the merge bar on its head sha. An absent, 
 or illegible delegation answers `assisted`, and then the worker does nothing alone. With the
 `bin/` directory on the `PATH`, `sdd-worker` is there too; with only `sdd` symlinked, link
 `sdd-worker` as well, or call it by the path `commands/sdd-worker.md` resolves:
-`"$(dirname "$(readlink -f "$(command -v sdd)")")/sdd-worker"`. The session command itself is not
-installed by anything: neither `sdd install` nor `sdd-link-agents` touches `commands/`, so a session
-has `/sdd-worker` only where Claude Code finds the file, in `~/.claude/commands/` or the repo's
-`.claude/commands/`, linked by hand:
+`"$(dirname "$(readlink -f "$(command -v sdd)")")/sdd-worker"`. After `sdd install`,
+`sdd-link-agents` links `/sdd-plan` and `/sdd-worker` into the target's `.claude/commands/`.
+If you keep the agent copies from `sdd install`, link the slash commands by hand. For example,
+after creating `~/.claude/commands/`, run
 `ln -s ~/repos/sdd_agents/commands/sdd-worker.md ~/.claude/commands/`. The contracts, the rules and
 the declared limits are in [`docs/pipeline.md`](docs/pipeline.md#the-worker).
 

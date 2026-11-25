@@ -7994,6 +7994,18 @@ $todo_first
   # The kit clone itself (L4 item 2): off its default branch, or behind what was last fetched.
   kit_stale_check
 
+  if [ ! -f "$REPO_ROOT/.claude/commands/sdd-plan.md" ] &&
+     { [ -z "${HOME:-}" ] || [ ! -f "$HOME/.claude/commands/sdd-plan.md" ]; }; then
+    local plan_source plan_target
+    printf -v plan_source '%q' "$SDD_HOME/commands/sdd-plan.md"
+    if [ "$REPO_ROOT" = "$SDD_HOME" ]; then
+      warn "/sdd-plan not found — create ~/.claude/commands/ and run 'ln -s $plan_source ~/.claude/commands/'"
+    else
+      printf -v plan_target '%q' "$REPO_ROOT/.claude/commands/"
+      warn "/sdd-plan not found — run 'sdd-link-agents', or create $plan_target and run 'ln -s $plan_source $plan_target'"
+    fi
+  fi
+
   if [ "$PHASE_ENGINE" = claude ]; then
     # --- target repo plugins ---
     local settings="$REPO_ROOT/.claude/settings.json"
@@ -13343,7 +13355,7 @@ sdd — runner for the autonomous development agent pipeline
 
 USAGE
   sdd install [--force]      install the kit into the target repo (.sdd/config.sh + .claude/agents/)
-  sdd link-agents            link an installed target's agents to this kit (sdd-link-agents)
+  sdd link-agents            link an installed target's agents and slash commands to this kit (sdd-link-agents)
   sdd preflight              environment sensor: tools, auth, config, plugins, git
   sdd health                 KIT sensor: suite, mutation, doc and config drift; skips the mutation
                            catalogue over content whose key is already measured green
@@ -13439,7 +13451,7 @@ EOF
 
 # ---------------------------------------------------------------------------
 cmd_link_agents() {
-  local linked already untracked src name target IGNORE MARKER
+  local dir kind linked already untracked src name relative target IGNORE MARKER
   # It takes no argument, and one is refused before anything is linked (item E): `sdd link-agents
   # --help` used to link the agents. bin/sdd-link-agents enters through main() with the same argv.
   [ $# -eq 0 ] || die "unknown link-agents option: $1 (see 'sdd help')"
@@ -13454,47 +13466,51 @@ cmd_link_agents() {
   [ "$REPO_ROOT" != "$SDD_HOME" ] \
     || die "refusing to link the kit to itself — $REPO_ROOT is the kit."
 
-  mkdir -p "$REPO_ROOT/.claude/agents"
-
-  linked=0; already=0; untracked=0
-  for src in "$SDD_HOME"/agents/sdd-*.md; do
-    name="$(basename "$src")"
-    target="$REPO_ROOT/.claude/agents/$name"
-
-    # Drop it from the index BEFORE replacing it: a tracked path that becomes a symlink shows up as a
-    # content change, and the whole point is that these stop being versioned.
-    if git -C "$REPO_ROOT" ls-files --error-unmatch ".claude/agents/$name" >/dev/null 2>&1; then
-      git -C "$REPO_ROOT" rm --cached --quiet ".claude/agents/$name"
-      untracked=$((untracked + 1))
-    fi
-
-    if [ -L "$target" ] && [ "$(readlink -f "$target")" = "$(readlink -f "$src")" ]; then
-      already=$((already + 1))
-      continue
-    fi
-    ln -sfn "$src" "$target"
-    linked=$((linked + 1))
-  done
-
-  [ "$linked"  -gt 0 ] && ok "$linked agent(s) linked to $SDD_HOME/agents/"
-  [ "$already" -gt 0 ] && dim "  $already already linked"
-  [ "$untracked" -gt 0 ] && ok "$untracked agent(s) removed from the git index (now local-only)"
-
-  # `.gitignore`, appended once. The marker line is what makes the second run a no-op.
   IGNORE="$REPO_ROOT/.gitignore"
-  MARKER='.claude/agents/sdd-*.md'
-  if ! grep -qxF "$MARKER" "$IGNORE" 2>/dev/null; then
-    {
-      [ -s "$IGNORE" ] && printf '\n'
-      printf '# sdd kit agents: local symlinks created by\n'
-      printf '# `sdd install && sdd-link-agents`. These links stay outside Git because they carry\n'
-      printf '# a machine-specific absolute path and would dangle in another checkout.\n'
-      printf '%s\n' "$MARKER"
-    } >> "$IGNORE"
-    ok ".gitignore updated"
-  else
-    dim "  .gitignore already carries the rule"
-  fi
+  for dir in agents commands; do
+    kind="${dir%s}"
+    mkdir -p "$REPO_ROOT/.claude/$dir"
+    linked=0; already=0; untracked=0
+    for src in "$SDD_HOME/$dir"/sdd-*.md; do
+      [ -f "$src" ] || continue
+      name="${src##*/}"
+      relative=".claude/$dir/$name"
+      target="$REPO_ROOT/$relative"
+
+      # Drop it from the index BEFORE replacing it: a tracked path that becomes a symlink shows up as a
+      # content change, and the whole point is that these stop being versioned.
+      if git -C "$REPO_ROOT" ls-files --error-unmatch "$relative" >/dev/null 2>&1; then
+        git -C "$REPO_ROOT" rm --cached --quiet "$relative"
+        untracked=$((untracked + 1))
+      fi
+
+      if [ -L "$target" ] && [ "$(readlink -f "$target")" = "$(readlink -f "$src")" ]; then
+        already=$((already + 1))
+        continue
+      fi
+      ln -sfn "$src" "$target"
+      linked=$((linked + 1))
+    done
+
+    [ "$linked"  -gt 0 ] && ok "$linked $kind(s) linked to $SDD_HOME/$dir/"
+    [ "$already" -gt 0 ] && dim "  $already $kind(s) already linked"
+    [ "$untracked" -gt 0 ] && ok "$untracked $kind(s) removed from the git index (now local-only)"
+
+    # `.gitignore`, appended once per directory. The marker makes the second run a no-op.
+    MARKER=".claude/$dir/sdd-*.md"
+    if ! grep -qxF "$MARKER" "$IGNORE" 2>/dev/null; then
+      {
+        [ -s "$IGNORE" ] && printf '\n'
+        printf '# sdd kit %s: local symlinks created by\n' "$dir"
+        printf '# `sdd install && sdd-link-agents`. These links stay outside Git because they carry\n'
+        printf '# a machine-specific absolute path and would dangle in another checkout.\n'
+        printf '%s\n' "$MARKER"
+      } >> "$IGNORE"
+      ok ".gitignore updated"
+    else
+      dim "  .gitignore already carries the rule for $dir"
+    fi
+  done
 
   info ""
   dim "Next: $ /sdd-plan   (see $SDD_HOME/docs/plan-only.md)"

@@ -33,7 +33,7 @@ That makes PLAN-only a real adoption tier, not a degraded one:
 ```bash
 cd ~/repos/<project>
 sdd install                    # writes .sdd/config.sh and copies the agents
-sdd-link-agents                # replaces those copies with symlinks into this kit, and gitignores them
+sdd-link-agents                # links the agents and slash commands into .claude/, and gitignores them
 $EDITOR .sdd/config.sh
 mkdir -p docs/handoffs
 ```
@@ -172,7 +172,8 @@ known-good version, wrong for a kit under active development, where every improv
 
 Symlinking costs nothing to the runner: `sdd install` and `sdd preflight` compare with `cmp -s`,
 which reads **through** the link and compares content, so a symlink reports as identical to the
-source. No change to `bin/sdd` was needed.
+source. `sdd-link-agents` also links the kit's slash commands under `.claude/commands/`, so
+`/sdd-plan` is available when you open a Claude Code session at the target root.
 
 They are **gitignored** rather than committed: the link carries this machine's absolute path, and a
 committed symlink is dangling in every other checkout — broken in silence, which is the worst
@@ -197,6 +198,6 @@ self-contained) and `checkpoint.md` (the increment table, **read by a machine**)
 
 The kit lives in `~/repos/sdd_agents`, and the full recipe is its `docs/plan-only.md`
 (`~/repos/sdd_agents/docs/plan-only.md`). The agents in
-`.claude/agents/sdd-*.md` are symlinks into the kit and are **not** versioned: in a fresh clone,
-run `sdd install && sdd-link-agents`.
+`.claude/agents/sdd-*.md` and the commands in `.claude/commands/sdd-*.md` are symlinks into the
+kit and are **not** versioned. In a fresh clone, run `sdd install && sdd-link-agents`.
 ```

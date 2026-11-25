@@ -4088,6 +4088,14 @@ mut_PRE_agents_checked_preflight_wide() {
   sed -i 's@\[ "$fails" -eq "$fails_before_agents" \]; then ok "$n kit agent@[ "$fails" -eq 0 ]; then ok "$n kit agent@' "$1"
 }
 
+# The missing-command hint is advisory, but must name a remedy that works in the current repo.
+mut_PRE_sdd_plan_missing_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s@^  if \[ ! -f "\$REPO_ROOT/.claude/commands/sdd-plan.md" \] \&\&$@  if false \&\&@' "$1"
+}
+mut_PRE_sdd_plan_kit_names_link_agents() {
+  sed -i '/^cmd_preflight() {/,/^}/ s@^    if \[ "\$REPO_ROOT" = "\$SDD_HOME" \]; then$@    if false; then@' "$1"
+}
+
 # The preflight stops asking whether TEST_CMD would run anything at all. A `true` left behind while
 # the config was being wired up then passes preflight, and after it gate_EXEC, gate_QA and
 # gate_REVIEW pass instantly, in every mission, for ever — each phase certifying itself against a
@@ -7012,6 +7020,13 @@ mut_RUN_install_unknown_option_accepted() {
 mut_RUN_link_agents_argument_accepted() {
   sed -i '/^cmd_link_agents() {/,/^}/ s@^  \[ \$# -eq 0 \] || die "unknown link-agents option: @  true || die "unknown link-agents option: @' "$1"
 }
+# Linking commands without ignoring them can leave machine-specific paths in Git.
+mut_LINK_commands_unlinked() {
+  sed -i '/^cmd_link_agents() {/,/^}/ s@^  for dir in agents commands; do$@  for dir in agents; do@' "$1"
+}
+mut_LINK_commands_gitignore_dropped() {
+  sed -i '/^cmd_link_agents() {/,/^}/ s@^    if ! grep -qxF "\$MARKER"@    if [ "$dir" != commands ] \&\& ! grep -qxF "$MARKER"@' "$1"
+}
 # The help scan after the checkout admission again (CodeRabbit and Codex on PR #391): `sdd install
 # --help` outside a repository dies "not inside a git repository", and `sdd run --help` on a held
 # checkout answers CHECKOUT-BUSY. Caught by "--help prints the help outside a repository, for every
@@ -8414,6 +8429,8 @@ CATALOG=(
   PRE_agents_checked_miscounted
   PRE_agents_checked_despite_fail
   PRE_agents_checked_preflight_wide
+  PRE_sdd_plan_missing_silent
+  PRE_sdd_plan_kit_names_link_agents
   PRE_testcmd_noop_blind
   PRE_testcmd_noop_runs_anyway
   PRE_testcmd_list_unnormalised
@@ -8721,6 +8738,8 @@ CATALOG=(
   RUN_help_after_subcommand_ignored
   RUN_install_unknown_option_accepted
   RUN_link_agents_argument_accepted
+  LINK_commands_unlinked
+  LINK_commands_gitignore_dropped
   RUN_help_after_admission
   RUN_install_remote_head_skipped
   RUN_install_origin_main_skipped

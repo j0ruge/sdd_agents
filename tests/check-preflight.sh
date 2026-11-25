@@ -2993,6 +2993,70 @@ else
   fail "link-agents refuses an argument, before linking anything" \
        "rc != 0, 'unknown link-agents option: --bogus', no symlink" "rc $rc; out: $(head -c 120 <<< "$out")"
 fi
+# An empty home makes the slash-command lookup independent of the operator's installation.
+echo "== link-agents installs the slash commands the planner needs =="
+LC_REPO="$FIX/link-commands"
+LC_HOME="$FIX/link-commands-home"
+mkdir -p "$LC_HOME" || exit 1
+help_repo "$LC_REPO" || exit 1
+( cd "$LC_REPO" && "$SDD" install >/dev/null 2>&1 ) || exit 1
+lc_preflight() ( cd "$1" && HOME="$LC_HOME" PHASE_ENGINE=claude "$2" preflight 2>&1 )
+lc_missing="$(lc_preflight "$LC_REPO" "$SDD")"
+lc_warning="$(grep -F '  warn  /sdd-plan not found' <<< "$lc_missing")"
+if [[ "$lc_warning" == *sdd-link-agents* &&
+      "$lc_warning" == *"ln -s $ROOT/commands/sdd-plan.md $LC_REPO/.claude/commands/"* ]]; then
+  pass "preflight warns that /sdd-plan is in neither commands directory, naming sdd-link-agents and the ln -s by hand"
+else
+  fail "preflight warns that /sdd-plan is in neither commands directory, naming sdd-link-agents and the ln -s by hand" \
+       "one command warning with both target remedies" "${lc_warning:-no warning}"
+fi
+
+mkdir -p "$LC_REPO/.claude/commands" || exit 1
+cp "$ROOT/commands/sdd-plan.md" "$LC_REPO/.claude/commands/" || exit 1
+git -C "$LC_REPO" add -f .claude/commands/sdd-plan.md && git -C "$LC_REPO" commit -qm 'track a command' || exit 1
+lc_rc=0; lc_first="$(cd "$LC_REPO" && HOME="$LC_HOME" "$SDD" link-agents 2>&1)" || lc_rc=$?
+lc_ignore_before="$(md5sum "$LC_REPO/.gitignore")"
+lc_rc2=0; lc_second="$(cd "$LC_REPO" && HOME="$LC_HOME" "$SDD" link-agents 2>&1)" || lc_rc2=$?
+lc_count=0; lc_links=0
+for lc_source in "$ROOT"/commands/sdd-*.md; do
+  lc_path=".claude/commands/${lc_source##*/}"
+  lc_count=$((lc_count + 1))
+  if [ -L "$LC_REPO/$lc_path" ] && [ "$(readlink "$LC_REPO/$lc_path")" = "$lc_source" ] \
+     && ! git -C "$LC_REPO" ls-files --error-unmatch "$lc_path" >/dev/null 2>&1; then
+    lc_links=$((lc_links + 1))
+  fi
+done
+assert_eq "link-agents links every kit command into .claude/commands of the target, and a second run links nothing" \
+  "rc=0/0 links=$lc_count first=1 second=0" \
+  "rc=$lc_rc/$lc_rc2 links=$lc_links first=$(grep -cF "$lc_count command(s) linked to $ROOT/commands/" <<< "$lc_first") second=$(grep -cF 'command(s) linked to ' <<< "$lc_second")"
+assert_eq "link-agents ignores the linked commands by one .gitignore rule, appended once" \
+  "rules=1 ignored=1 unchanged=1" \
+  "rules=$(grep -cxF '.claude/commands/sdd-*.md' "$LC_REPO/.gitignore") ignored=$(git -C "$LC_REPO" check-ignore .claude/commands/sdd-plan.md | grep -cxF '.claude/commands/sdd-plan.md') unchanged=$([ "$lc_ignore_before" = "$(md5sum "$LC_REPO/.gitignore")" ] && echo 1 || echo 0)"
+
+lc_repo_present="$(lc_preflight "$LC_REPO" "$SDD")"
+mkdir -p "$LC_HOME/.claude/commands" || exit 1
+cp "$ROOT/commands/sdd-plan.md" "$LC_HOME/.claude/commands/" || exit 1
+rm -f "$LC_REPO/.claude/commands/sdd-plan.md"
+lc_home_present="$(lc_preflight "$LC_REPO" "$SDD")"
+assert_eq "preflight says nothing about /sdd-plan when the repo or the user directory has it" \
+  "missing=1 repo=0 user=0" \
+  "missing=$(grep -cF '  warn  /sdd-plan not found' <<< "$lc_missing") repo=$(grep -cF '  warn  /sdd-plan not found' <<< "$lc_repo_present") user=$(grep -cF '  warn  /sdd-plan not found' <<< "$lc_home_present")"
+
+# Run the copied binary from its own kit root to exercise the self-link refusal's counterpart.
+rm -f "$LC_HOME/.claude/commands/sdd-plan.md"
+help_repo "$KP_KIT" || exit 1
+mkdir -p "$KP_KIT/.sdd" || exit 1
+cp "$LC_REPO/.sdd/config.sh" "$KP_KIT/.sdd/config.sh" || exit 1
+lc_kit="$(lc_preflight "$KP_KIT" "$KP_KIT/bin/sdd")"
+lc_warning="$(grep -F '  warn  /sdd-plan not found' <<< "$lc_kit")"
+if [[ "$lc_warning" == *'ln -s '*'/commands/sdd-plan.md ~/.claude/commands/'* &&
+      "$lc_warning" != *sdd-link-agents* ]]; then
+  pass "in the kit itself the warning names only the ln -s into the user directory"
+else
+  fail "in the kit itself the warning names only the ln -s into the user directory" \
+       "one command warning with only the user-directory remedy" "${lc_warning:-no warning}"
+fi
+
 # The scan runs BEFORE the checkout admission (CodeRabbit and Codex on PR #391): after it, `sdd
 # install --help` outside a repository died with "not inside a git repository", because
 # coordination_enter resolves the root of every subcommand it admits. Help writes nothing and needs
