@@ -2645,6 +2645,14 @@ mut_STATUS_leftovers_rewrites_index() {
   sed -i '/^session_leftovers() {/,/^}/ s/GIT_OPTIONAL_LOCKS=0 hat_status_lines/hat_status_lines/' "$1"
 }
 
+mut_STATUS_app_down_names_run() {
+  sed -i '/^cmd_status() {/,/^}/ s/^    if \[ "\$next" = "QA" \] .*"\$GATE_APP_DOWN".*; then$/    if false; then/' "$1"
+}
+
+mut_STATUS_app_down_closed_unsaid() {
+  sed -i '/^cmd_status() {/,/^}/ s/^        dim "  QA is closed on disk .*$/        :/' "$1"
+}
+
 # The hat's boundary (2026-09-03 spec). Two flags, one mutant each: dropping either one leaves the
 # session with the human's whole harness — 9 MCP servers including Gmail and Jira, 104 tools —
 # which is the measured "before". The projection prints what run_phase passes FROM THE SAME
@@ -8247,6 +8255,8 @@ CATALOG=(
   RUN_close_prompt_bare
   STATUS_no_gates_runs_gates
   STATUS_leftovers_rewrites_index
+  STATUS_app_down_names_run
+  STATUS_app_down_closed_unsaid
   RUN_strict_mcp_dropped
   RUN_disallowed_dropped
   RUN_hat_guard_blind

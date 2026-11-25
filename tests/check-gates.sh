@@ -2048,6 +2048,32 @@ if [ "$floor_ok" = "1" ]; then
                "nothing is listening at 127\.0\.0\.1:$dead_port"
   assert_why_absent "an app that WAS probed is not reported as unprobed" "QA" "no verdict on"
 
+  status_run="  run: sdd run $MISSION"
+  status_app_help="  start the app (or stop the one on its port), then 'sdd status' again — 'sdd run' now would only escalate app-down"
+  status_qa_closed="  QA is closed on disk (30-handoff-qa.md: done); its e2e cannot be re-verified now"
+  status_down="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
+  if grep -qxF "$status_app_help" <<< "$status_down" && ! grep -q '^  run: sdd run ' <<< "$status_down"; then
+    pass "sdd status with the e2e red and the app down names starting the app, never sdd run"
+  else
+    fail "sdd status with the e2e red and the app down names starting the app, never sdd run" "$status_app_help" "$status_down"
+  fi
+  assert_eq "sdd status with the app down says the QA is closed on disk when 30-handoff-qa.md is done" "1" \
+    "$(grep -xcF "$status_qa_closed" <<< "$status_down")"
+
+  # Without the handoff QA refuses before running the e2e, so there is no app verdict to report.
+  mv "$MDIR/30-handoff-qa.md" "$SDD_STATE_FIX/status-qa.md"
+  status_no_qa="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
+  mv "$SDD_STATE_FIX/status-qa.md" "$MDIR/30-handoff-qa.md"
+  assert_eq "sdd status with no QA handoff reports the missing artifact and no app verdict" "1|1|0|0" \
+    "$(grep -c '^  next phase: QA — missing 30-handoff-qa.md$' <<< "$status_no_qa")|$(grep -xcF "$status_run" <<< "$status_no_qa")|$(grep -xcF "$status_qa_closed" <<< "$status_no_qa")|$(grep -xcF "$status_app_help" <<< "$status_no_qa")"
+
+  # The table can mark the app down even when an earlier phase is the one due.
+  mv "$MDIR/20-handoff-exec.md" "$SDD_STATE_FIX/status-exec.md"
+  status_exec="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
+  mv "$SDD_STATE_FIX/status-exec.md" "$MDIR/20-handoff-exec.md"
+  assert_eq "sdd status does not let a later QA refusal replace the advice for EXEC" "1|1|0" \
+    "$(grep -c '^  next phase: EXEC — ' <<< "$status_exec")|$(grep -xcF "$status_run" <<< "$status_exec")|$(grep -xcF "$status_app_help" <<< "$status_exec")"
+
   # The green half, and it is what protects the `example.invalid` fixture above — that one sits
   # beside a GREEN E2E_CMD, and a runner that probed before the gate would block it for a machine
   # state that never mattered. A false BLOCKED costs a person; the loop only costs money.
@@ -2096,6 +2122,9 @@ if [ "$floor_ok" = "1" ]; then
   sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
   assert_why        "an empty APP_URL is not probed" "QA" "no verdict on"
   assert_why_absent "an empty APP_URL never claims a dead app" "QA" "nothing is listening"
+  status_unknown="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
+  assert_eq "sdd status with the e2e red and no app verdict still names sdd run" "1|0" \
+    "$(grep -xcF "$status_run" <<< "$status_unknown")|$(grep -xcF "$status_app_help" <<< "$status_unknown")"
   sed -i 's|^APP_URL=.*|APP_URL="not a url"|' .sdd/config.sh
   assert_why        "an unparseable APP_URL is not probed" "QA" "no verdict on"
   assert_why_absent "an unparseable APP_URL never claims a dead app" "QA" "nothing is listening"
@@ -2119,6 +2148,9 @@ if [ "$floor_ok" = "1" ]; then
     sed -i 's|^APP_EXPECT=.*|APP_EXPECT="Other Product"|' .sdd/config.sh
     assert_why "the same page carrying APP_EXPECT reads as the app answering" "QA" \
                "with the app answering at 127\.0\.0\.1:$PAGE_PORT"
+    status_up="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
+    assert_eq "sdd status with the e2e red and the app answering still names sdd run" "1|0|0" \
+      "$(grep -xcF "$status_run" <<< "$status_up")|$(grep -xcF "$status_app_help" <<< "$status_up")|$(grep -xcF "$status_qa_closed" <<< "$status_up")"
     sed -i '/^APP_EXPECT=/d' .sdd/config.sh
 
     # --- the history of each red e2e case (item 10 of L3) -----------------------------------

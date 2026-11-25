@@ -1577,7 +1577,9 @@ GATE_EXEC_DIRTY=0
 GATE_HANDOFF_BLOCKED=0
 
 # Set by gate_QA when the e2e came back RED and the app at APP_URL is down (the TCP connect was
-# refused) or is not this product (a 2xx page without APP_EXPECT), read by cmd_run to escalate instead of buying a session against a machine no session can fix. A GLOBAL
+# refused) or is not this product (a 2xx page without APP_EXPECT). cmd_run reads it to escalate
+# against an environment no session can fix. cmd_status reads it only when QA is the next phase,
+# because its table also evaluates QA when an earlier phase is still due. A GLOBAL
 # for the third time and for the reason the two above give — the rc is already spent on pass/fail
 # — and a MARKER rather than a grep of GATE_WHY, because GATE_WHY is prose: the sentence the arm
 # writes is one an operator may reword, and an early exit anchored on a substring of it would
@@ -9066,7 +9068,14 @@ cmd_status() {
   else
     "gate_$next" || true
     printf '  next phase: %s%s%s — %s\n' "$C_BOLD" "$next" "$C_RESET" "$GATE_WHY"
-    printf '  %srun: sdd run %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
+    if [ "$next" = "QA" ] && [ "$GATE_APP_DOWN" = "1" ]; then
+      if [ "$(frontmatter "$MISSION_DIR/30-handoff-qa.md" status)" = "done" ]; then
+        dim "  QA is closed on disk (30-handoff-qa.md: done); its e2e cannot be re-verified now"
+      fi
+      dim "  start the app (or stop the one on its port), then 'sdd status' again — 'sdd run' now would only escalate app-down"
+    else
+      printf '  %srun: sdd run %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
+    fi
   fi
 }
 

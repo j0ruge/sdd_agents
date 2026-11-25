@@ -557,6 +557,10 @@ filed as `kind: app-down`.
 is supposed to bring its own server up, then `APP_URL` should not point at a port nobody serves
 between runs — clear it, or point it at the address that is up.
 
+If you see this in `sdd status` with QA as the next phase, restore the right app and run
+`sdd status` again first. The status still reports the failing gate and distinguishes a QA handoff
+marked `done` on disk from an e2e result it cannot re-verify.
+
 ```bash
 sdd preflight            # asks the same question before a session is opened
 ```
