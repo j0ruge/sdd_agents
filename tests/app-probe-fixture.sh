@@ -42,8 +42,15 @@ exec "$APP_FIXTURE_TIMEOUT" "$@"
 SH
   cat > "$stub/curl" <<'SH' || return 1
 #!/usr/bin/env bash
+# Serve only the app probe's no-follow request. Options that change curl's
+# response must fail the fixture rather than silently returning the old result.
+if [[ "$#" -ne 8 || "$1" != -sS || "$2" != --noproxy || "$3" != '*' ||
+      "$4" != --max-time || "$6" != -w || "$7" != '\n%{http_code}' ]]; then
+  printf 'app fixture: unsupported curl arguments\n' >&2
+  exit 2
+fi
 base="http://127.0.0.1:${APP_FIXTURE_PAGE_PORT:?}"
-url="${!#}"
+url="$8"
 case "$url" in
   "$base"/*) path="${url#"$base"/}" ;;
   *) exit 7 ;;
