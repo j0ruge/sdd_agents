@@ -229,13 +229,15 @@ closed against 29 born in two missions is a file growing on true statements, not
 ⚠️ It is not licence to declare everything away. A fail-open stays an open item after it is written
 into a header — writing it down stops the lie, it does not fix the defect.
 
-**The triage is also the sweep.** A resolved item stays in the file only until the PR that cites
-it merges; after that it is deleted, never archived. So for every `RESOLVED by <hash>` you
-meet, check whether the hash already reached the base branch —
-`git merge-base --is-ancestor <hash> main` — and list the ones that did under a
-**"resolvidos a apagar"** heading in the born plan, with the hash beside each. Never delete them
-yourself: your session plans, the mission executes. Proving by the hash and not by the PR label
-is the same artifact-over-label rule the gates run on.
+**The triage is also the sweep.** A resolved item is deleted, never archived, once every
+`RESOLVED by <hash>` on the item passes one of two proofs. Either
+`git merge-base --is-ancestor <hash> main` exits 0, or
+`git merge-base --is-ancestor <hash> <PR head>` exits 0 and
+`gh pr view <PR> --json state,headRefOid` reports `MERGED` for that head at the time of the check.
+Find the PR with `gh pr list --search <hash> --state merged --json number,headRefOid`.
+List the proven items under **"resolvidos a apagar"** in the born plan, with their hashes beside
+each. Never delete them yourself. Your session plans and the mission executes. The proof always
+comes from a command: `git merge-base` alone or together with the state read from `gh`, never a PR label.
 
 ## 6. Give birth to the plan
 

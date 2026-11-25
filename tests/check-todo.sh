@@ -132,6 +132,8 @@
 #        tests/check-todo.sh --count <file> (print the parser's item count, even when the lint
 #                                            fails — for tools that mirror the findings elsewhere
 #                                            and must prove their own parser agrees)
+#        tests/check-todo.sh --resolved <file>
+#                                           (open items with RESOLVED by: line<TAB>hash[,hash…]<TAB>title)
 #        tests/check-todo.sh --anchors <file> [<prefix>]
 #                                           (measure the anchors only — ADR 0011 — of every open item,
 #                                            or of those whose anchor starts with <prefix>; one
@@ -292,8 +294,8 @@ WIDTH_CAP=120
 # quotes, alone on its line. The sensor hands it to awk as `rtok`, and the awk program never spells
 # the word itself.
 RECURRED_TOKEN="RECURRED"
-# Beside that token, the two section markers are the ONLY words this sensor reads, and they are
-# English on purpose: the heading above each one is content in OUTPUT_LANG (`## Aberto`, `## Open`,
+# The section markers, like the kit tokens inside an item, are English on purpose. The heading
+# above each one is content in OUTPUT_LANG (`## Aberto`, `## Open`,
 # anything), so a sensor keyed on the heading text would work in one language and go quietly blind
 # in every other one. That is what happened: the previous version located the section by
 # `^## Aberto`, and in a target whose findings live under another heading it fell back to "the
@@ -319,13 +321,13 @@ valid_cap() {
   esac
 }
 
-# todo_awk <file> <cap> <lint|count> — ONE parser, two views.
+# todo_awk <file> <cap> <lint|count|anchors|resolved> — one parser, four views.
 #
 # The count shares this parser instead of getting its own `grep -c`: TODO.md documents its own
 # format inside a ```md block whose example line is itself an unchecked item, so a grep counts one
 # more than the parser sees. Two mechanisms answering the same question is how they drift.
 #
-# ── Why there is no fence tracking here ────────────────────────────────────────────────────────
+# ── Why lint does not track fences ─────────────────────────────────────────────────────────────
 # Six adversarial rounds, and every single fail-open lived in the fence logic: a one-way latch, a
 # four-backtick block closing on an inner marker, an inline code span opening a phantom block, a
 # closer carrying an info string, a 4-space indent that CommonMark calls a code block. The cause
@@ -335,7 +337,8 @@ valid_cap() {
 # So it stopped. The findings section of TODO.md contains NO fenced block — the only one is the
 # format example in the header — so the parser skips the header (everything above the open
 # marker) wholesale and forbids fences after it. Nothing to desync, and every shape that used to hide behind a fence is now judged by
-# a rule that never looks at fences at all.
+# a rule that never looks inside fences. The resolved view is read-only and skips their contents
+# so an example in an invalid file cannot supply a resolution hash.
 # unassignable <path> — the path as grep and awk must be handed it.
 # A bare path shaped like `name=value` is eaten by awk as a variable ASSIGNMENT, and awk then
 # reads stdin instead of the file — the sensor would happily lint whatever it was handed and
@@ -510,9 +513,26 @@ todo_awk() {
         print "  line " at ": an H2 with no section marker on the next line — the skeleton has two, each followed by " omark " or " dmark
       if (oseen || dseen) sect = 3
     }
+    function emit_resolved(   end_title, title, text, hash, hashes) {
+      if (substr(first, 1, 8) != "- [ ] **") return
+      end_title = index(substr(first, 9), "**")
+      if (end_title <= 1) return
+      title = substr(first, 9, end_title - 1)
+      text = substr(body, 9 + end_title + 1)
+      while (match(text, /(^|[^[:alnum:]_])RESOLVED by [[:alnum:]_]+/)) {
+        hash = substr(text, RSTART, RLENGTH)
+        text = substr(text, RSTART + RLENGTH)
+        sub(/^.*RESOLVED by /, "", hash)
+        if (hash ~ /^[0-9a-f]+$/ && length(hash) >= 7 && length(hash) <= 40)
+          hashes = (hashes == "" ? hash : hashes "," hash)
+      }
+      gsub(/\t/, " ", title)
+      if (hashes != "") print start "\t" hashes "\t" title
+    }
     function flush() {
       if (!initem) return
       items++
+      if (mode == "resolved") emit_resolved()
       # The anchors view: one line per open item, its start line and the spans of its HEAD. The
       # tail is the attribution and names an agent, never code, so it is never a symbol. The spans
       # of the bold TITLE come first, each tagged with an \036 byte: they are symbols, never the
@@ -605,6 +625,23 @@ todo_awk() {
         dseen = 1; sect = 2; next
       }
       nomarker(NR - 1)
+    }
+    # Only the resolved view needs to skip fenced examples. The lint below still refuses the
+    # fence itself. A closer must use the same character, at least as many, and no info string.
+    mode == "resolved" && sect == 1 {
+      edge = $0; sub(/^[ \t>]*/, "", edge)
+      if (match(edge, /^(```+|~~~+)/)) {
+        delim = substr(edge, 1, RLENGTH); info = substr(edge, RLENGTH + 1)
+        if (fence != "") {
+          if (index(delim, fence) == 1 && info ~ /^[ \t]*$/) fence = ""
+        } else if (substr(delim, 1, 1) == "~" || info !~ /`/) {
+          # An indented example can sit between two continuation lines of the same item.
+          if ($0 !~ /^[ \t]/) flush()
+          fence = delim
+        }
+        next
+      }
+      if (fence != "") next
     }
     # A BARE CR — one not followed by LF — is a line ending to CommonMark and to GitHub, and not
     # to awk or grep. Everything after it on the same physical line renders as its own line, so a
@@ -880,7 +917,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=15
+RULES_FLOOR=16
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -2578,6 +2615,44 @@ EOF
   # And an unclosed fence above every item must still say WHY, instead of the floor's generic
   # "did the format change?" — the linter runs first for exactly this case.
 
+  rule_begin
+  # The two misplaced boxes look open if the fence or the section guard stops working.
+  cat > "$box/resolved.md" <<'EOF'
+# TODO
+## Open
+<!-- sdd:open -->
+- [ ] **First finding** — `a.sh:1` (`alpha`) — fixed. RESOLVED by 012abcd
+  Source: `handoff` — found by `sdd-qa` (2026-09-24)
+- [ ] **Second finding** — `a.sh:2` (`alpha`) — fixed twice. RESOLVED by abcdef1
+  ```text
+  RESOLVED by 901abcd
+  ```
+  Source: `handoff` RESOLVED by 234abcd — found by `sdd-qa` (2026-09-24)
+- [ ] **Still open (RESOLVED by 7bcdef1 is an example)** — `a.sh:3` (`alpha`) — UNRESOLVED by 8bcdef1 or RESOLVED by abcdef1x.
+~~~~md
+~~~
+- [ ] **Fenced example** — RESOLVED by 345abcd
+~~~~
+## Decided
+<!-- sdd:decided -->
+- **Decided record** — `a.sh:4` cites RESOLVED by 456abcd (2026-09-24)
+- [ ] **Misplaced finding** — RESOLVED by 567abcd
+EOF
+  local resolved_out resolved_want
+  resolved_want="$(printf '4\t012abcd\tFirst finding\n6\tabcdef1,234abcd\tSecond finding')"
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
+    printf '  SELFTEST FAIL  --resolved expects exactly these open items:\n%s\n  got:\n%s\n' "$resolved_want" "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/noitems.md" 2>&1)" || [ -n "$resolved_out" ]; then
+    printf '  SELFTEST FAIL  --resolved must exit 0 with no output for an empty backlog, got: %s\n' "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  assert_rc 99 "--resolved refuses a file without the open marker" bash "$SELF" --resolved "$box/rawunmarked.md"
+  rule_end 3 '--resolved prints one line per open item that carries RESOLVED by'
+
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
@@ -3036,6 +3111,10 @@ case "${1:-}" in
     if [ -n "$BASELINE" ]; then baseline_file "$CHECK_FILE" "$CAP" "$BASELINE"; exit $?; fi
     check_file "$CHECK_FILE" "$CAP"; exit $? ;;
   --count)    count_file "${2-}"; exit $? ;;
+  --resolved)
+    [ "$#" -le 2 ] || { printf '  FAIL  too many arguments to --resolved\n' >&2; exit 96; }
+    require_marked_file "${2-}" || exit $?
+    todo_awk "$2" 1 resolved; exit $? ;;
   --anchors)
     [ "$#" -le 3 ] || { printf '  FAIL  too many arguments to --anchors\n' >&2; exit 96; }
     anchors_file "${2-}" "${3-}"; exit $? ;;

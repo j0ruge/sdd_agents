@@ -1677,6 +1677,16 @@ judge_base_probes() {
   fi
 }
 
+judge_sweep_probes() {
+  local sweep
+  sweep="$(awk '/^\*\*The triage is also the sweep\.\*\*/ { p=1 } p && !NF { exit } p { printf "%s ", $0 }' "$ROOT/agents/sdd-kaizen.md")"
+  if grep -qE 'git merge-base --is-ancestor <hash> main.*git merge-base --is-ancestor <hash> <PR head>.*gh pr view <PR> --json state,headRefOid.*MERGED' <<< "$sweep"; then
+    pass "kaizen: the sweep of the judge names both proofs of a resolution"
+  else
+    fail "kaizen: the sweep of the judge names both proofs of a resolution"
+  fi
+}
+
 qa_agent_probes
 hat_promise_probes
 command_approval_probes
@@ -1703,6 +1713,7 @@ reviewer_delta_probes
 blocked_way_out_probes
 reviewer_later_code_probes
 judge_base_probes
+judge_sweep_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2

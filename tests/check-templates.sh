@@ -649,6 +649,14 @@ for v in "$T"/todo.md "$T"/todo.*.md; do
   check "$vn" '^<!-- sdd:decided -->$' "the decided-section marker, alone on its line"
   check "$vn" 'RESOLVED by'           "the kit token for a finding fixed by a commit"
   check "$vn" 'RECURRED <n>: '        "the kit token for a finding seen again, in the grammar of its paragraph"
+  lifecycle="$(awk '/^> \*\*(Lifecycle|Ciclo de vida)\.\*\*/ { p=1 } p && /^>$/ { exit } p { printf "%s ", $0 }' "$v")"
+  CHECKS_RUN=$((CHECKS_RUN + 1))
+  if grep -qE 'git merge-base --is-ancestor <hash> <DEFAULT_BRANCH>.*git merge-base --is-ancestor <hash> <(PR head|head do PR)>.*gh pr view <PR> --json state,headRefOid.*MERGED.*gh pr list --search <hash> --state merged' <<< "$lifecycle"; then
+    pass "$vn: the lifecycle names both proofs of a resolution"
+  else
+    printf '  FAIL %s: the lifecycle names both proofs of a resolution\n' "$vn" >&2
+    fails=$((fails + 1))
+  fi
   CHECKS_RUN=$((CHECKS_RUN + 1))
   if [ "$(todo_shape "$v")" = "$(todo_shape "$T/todo.md")" ] && [ -n "$(todo_shape "$v")" ]; then
     pass "$vn: the same skeleton as todo.md, line for line"
