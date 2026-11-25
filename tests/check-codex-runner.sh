@@ -36,15 +36,30 @@ STUB
 cat > "$KIT/bin/sdd-codex" <<'STUB'
 #!/usr/bin/env bash
 set -eu
-if [ "$*" = --preflight ]; then
+if [ "${1:-}" = --preflight ]; then
   touch "$FIX/adapter.preflight"
+  case "$*" in *github.com*) exit 96 ;; esac
   [ ! -f "$FIX/login.missing" ]
   exit $?
 fi
+if [ "${1:-}" = --sandbox-check ]; then
+  printf '%s\n' "$2" >> "$FIX/sandbox-checks"
+  exec bash -c "$2"
+fi
 printf '%s\n' "$PWD|$*|${GIT_REFLOG_ACTION:-}" >> "$FIX/provider"
 cat >> "$FIX/prompt"
+jq -se 'last | .event == "codex_launch" and (.launch_id | type == "string")' \
+  "$SDD_STATE_DIR/autonomy-log.jsonl" > /dev/null || touch "$FIX/missing-launch"
 native=3a80f12a-8f18-4077-8358-558cd54c75ff
 if [ -f "$FIX/hat-cross" ]; then printf 'forbidden\n' > foreign.txt; fi
+if [ -f "$FIX/closed-exec-then-error" ]; then
+  mission=docs/handoffs/20260101-codex-fixture
+  commit="$(git rev-parse --short HEAD)"
+  sed -i "s/| pending | — |/| done | $commit |/" "$mission/checkpoint.md"
+  printf '# EXEC\n\n## TL;DR\n\nThe fixture completed the increment and the suite is green.\n' > "$mission/20-handoff-exec.md"
+  printf '{"type":"result","provider":"codex","subtype":"error_during_execution","is_error":true,"result":"fixture provider failed after writing artifacts","total_cost_usd":null}\n'
+  exit 91
+fi
 printf '{"type":"system","subtype":"init","provider":"codex","session_id":"%s","tool_inventory":"configured","tools":["Bash"],"mcp_servers":[]}\n' "$native"
 printf '{"type":"result","provider":"codex","session_id":"%s","subtype":"success","is_error":false,"total_cost_usd":null,"estimated_cost_usd":0.01,"estimate_basis":{"source":"fixture"},"num_turns":1,"usage":{"input_tokens":70,"cache_read_input_tokens":20,"output_tokens":5}}\n' "$native"
 STUB
@@ -147,6 +162,11 @@ assert 'ledger retains native thread ID, engine, usage and unknown USD' jq -es '
       .estimated_cost_usd == 0.01 and .estimate_basis.source == "fixture" and
       .mcp_seen == null and .tools_leaked == null)
 ' "$SDD_STATE_DIR/autonomy-log.jsonl"
+assert 'the Codex launch is recorded before the provider starts' test ! -e "$FIX/missing-launch"
+assert 'each finished session refers to one earlier launch' jq -es '
+  (map(select(.event == "session")) | map(.launch_id) | sort) ==
+  (map(select(.event == "codex_launch")) | map(.launch_id) | sort)
+' "$SDD_STATE_DIR/autonomy-log.jsonl"
 
 touch "$FIX/hat-cross"
 rc=0; run --phase REVIEW || rc=$?
@@ -182,6 +202,39 @@ assert 'Codex preflight uses the selected adapter capability probe' test -f "$FI
 touch "$FIX/login.missing"
 rc=0; PHASE_ENGINE=codex "$SDD" preflight > "$FIX/out" 2>&1 || rc=$?
 assert 'Codex preflight cannot report readiness when the adapter refuses' test "$rc" -ne 0
+rm "$FIX/login.missing"
+rc=0; APP_URL=https://github.com PHASE_ENGINE=codex "$SDD" preflight > "$FIX/out" 2>&1 || rc=$?
+assert 'Codex preflight asks the adapter to validate its QA host' grep -q 'Codex capability or login check failed' "$FIX/out"
+assert 'Codex preflight fails when the sandbox cannot open QA for this host' test "$rc" -ne 0
+mv "$KIT/bin/sdd-worker" "$KIT/bin/worker.off"
+rc=0; PHASE_ENGINE=codex "$SDD" preflight > "$FIX/out" 2>&1 || rc=$?
+mv "$KIT/bin/worker.off" "$KIT/bin/sdd-worker"
+assert 'Codex preflight finds a missing mandatory worker' grep -q 'Codex requires the worker' "$FIX/out"
+assert 'Codex preflight fails with no worker' test "$rc" -ne 0
+touch "$FIX/signed" "$FIX/closed-exec-then-error"
+rc=0; PHASE_ENGINE=codex "$SDD" retry "$MISSION" > "$FIX/out" 2>&1 || rc=$?
+assert 'Codex retry stops on provider failure after valid artifacts' test "$rc" -eq 3
+assert 'Codex retry reports that the provider session died' grep -q 'session died.*fixture provider failed' "$FIX/out"
+rm "$FIX/closed-exec-then-error"
+cat > "$MDIR/30-handoff-qa.md" <<'QA'
+---
+status: done
+gate: The CLI journey passed with the expected output. There is no browser interface.
+---
+# QA
+
+## TL;DR
+
+The command-line journey and the configured suite passed.
+QA
+printf '%s\n' '# An incomplete review round' > "$MDIR/40-review-r1.md"
+git add "$MDIR" && git commit -qm 'Record QA and the incomplete review round'
+cp "$FIX/provider" "$FIX/provider-before-draft"
+rc=0; REVIEW_MAX_ITER=1 PUBLISH_ON_REVIEW_BLOCKED=draft run || rc=$?
+assert 'Codex keeps the draft publication handoff separate' test "$rc" -eq 2
+assert 'Codex reports draft-only publication after review reached its ceiling' grep -Fq 'PR needs worker publish (draft only)' "$FIX/out"
+assert 'Codex draft handoff opens no provider session' cmp -s "$FIX/provider" "$FIX/provider-before-draft"
+assert 'Codex sends repository check commands through the no-model sandbox' grep -Fxq 'test -f .sdd/config.sh' "$FIX/sandbox-checks"
 assert 'Codex paths never invoke Claude' test ! -e "$FIX/claude.called"
 
 python3 "$ROOT/tests/check-codex-adapter.py"

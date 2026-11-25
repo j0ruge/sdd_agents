@@ -1008,7 +1008,17 @@ run_check_cmd() {
   # gate for good, with no rc, from any `sdd run` typed at a terminal. The gates, the E2E_CMD and
   # the preflight all run through here, so this one redirection covers the three.
   local tag; tag="sdd-$(basename "$logfile" .log)"
-  ( cd "$REPO_ROOT" && export SDD_CHECK_TAG="$tag" && eval "$cmd" ) </dev/null >"$logfile" 2>&1 || rc=$?
+  if [ "${PHASE_ENGINE:-claude}" = codex ]; then
+    local -a check=(--sandbox-check "$cmd")
+    local check_host
+    if [[ "$label" == *-e2e ]] && [ -n "$APP_URL" ] && check_host="$(app_url_hostport "$APP_URL")"; then
+      check+=(--qa-host "${check_host%% *}")
+    fi
+    ( cd "$REPO_ROOT" && SDD_CHECK_TAG="$tag" "$SDD_HOME/bin/sdd-codex" "${check[@]}" ) \
+      </dev/null >"$logfile" 2>&1 || rc=$?
+  else
+    ( cd "$REPO_ROOT" && export SDD_CHECK_TAG="$tag" && eval "$cmd" ) </dev/null >"$logfile" 2>&1 || rc=$?
+  fi
   _CHECK_TAG[$cmd]="$tag"
   LAST_CHECK_TAG="$tag"
   _CHECK_RC[$cmd]="$rc"
@@ -3372,7 +3382,11 @@ codex_role_context() {
 # A provider with GitHub credentials cannot be limited to the worker's pr act by a prompt.
 # Leave publication to that separately authorized worker act and keep gate_PR as the authority.
 codex_pr_handoff() {
-  info "PR needs worker publish — use the campaign's separately authorized pr act, then resume sdd run for gate verification."
+  if [ "${1:-0}" = 1 ]; then
+    info "PR needs worker publish (draft only) — use the separately authorized pr act without marking the PR ready."
+  else
+    info "PR needs worker publish — use the campaign's separately authorized pr act, then resume sdd run for gate verification."
+  fi
 }
 
 # Each call that can spend enforces the signed receipt in the actual target checkout. Neither
@@ -3380,7 +3394,7 @@ codex_pr_handoff() {
 codex_admit_session() {
   local phase="$1" state_dir="${SDD_STATE_DIR:-$HOME/.sdd}" ledger repo model
   [ "$PHASE_ENGINE" = codex ] || return 0
-  if [ "$phase" = PR ]; then codex_pr_handoff; return 2; fi
+  if [ "$phase" = PR ]; then codex_pr_handoff "${2:-0}"; return 2; fi
   [ "$DRY_RUN" != 1 ] || return 0
   [ "$BUDGET_OVERRIDE" != 1 ] || die "--budget-override does not apply to Codex campaign sessions"
   [ -x "$SDD_HOME/bin/sdd-codex" ] || die "Codex adapter not installed at $SDD_HOME/bin/sdd-codex"
@@ -5688,20 +5702,20 @@ stream_summary() { # stream_summary <stream.jsonl>
 
 # Record a real thread id even if the terminal event was lost. The invocation UUID is only
 # the log/reflog key, not a thread Codex can resume. A missing id is unknown, never fabricated.
-codex_session_facts() {   # <stream> <result> <effort>
+codex_session_facts() {   # <stream> <result> <effort> <launch_id>
   LAST_CODEX_SID="$(jq -r '
     select(.type == "system" and .subtype == "init" and .provider == "codex")
     | .session_id // empty | select(test("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"))
   ' "$1" 2>/dev/null | head -1)" || true
-  LAST_CODEX_FACTS="$(jq -c --arg effort "$3" --arg session "$LAST_CODEX_SID" '
-    {engine:"codex", effort:$effort, session:(if $session == "" then null else $session end),
+  LAST_CODEX_FACTS="$(jq -c --arg effort "$3" --arg session "$LAST_CODEX_SID" --arg launch_id "$4" '
+    {engine:"codex", effort:$effort, launch_id:$launch_id, session:(if $session == "" then null else $session end),
      usage:(.usage | if type == "object" then . else null end),
      estimated_cost_usd:(.estimated_cost_usd | if type == "number" and . >= 0 then . else null end),
      estimate_basis:(.estimate_basis | if type == "object" then . else null end)}
   ' "$2" 2>/dev/null)" || LAST_CODEX_FACTS=""
   if [ -z "$LAST_CODEX_FACTS" ]; then
-    LAST_CODEX_FACTS="$(jq -cn --arg effort "$3" --arg session "$LAST_CODEX_SID" '
-      {engine:"codex", effort:$effort, session:(if $session == "" then null else $session end),
+    LAST_CODEX_FACTS="$(jq -cn --arg effort "$3" --arg session "$LAST_CODEX_SID" --arg launch_id "$4" '
+      {engine:"codex", effort:$effort, launch_id:$launch_id, session:(if $session == "" then null else $session end),
        usage:null, estimated_cost_usd:null, estimate_basis:null}')"
   fi
 }
@@ -6140,6 +6154,13 @@ $role_context"
   step "phase $pstep — ${agent:-skill} ($model, effort ${effort:-<settings>}) — session ${resume_sid:-$sid}"
 
   local rc=0
+  if [ "$PHASE_ENGINE" = codex ]; then
+    # The final session row may never arrive if the runner is interrupted before the gate.
+    autonomy_append "$(jq -cn --arg ts "$(date -Iseconds)" --arg mission "$MISSION" \
+      --arg repo "$(ledger_repo_root)" --arg phase "$phase" --arg id "$sid" \
+      '{v:1, ts:$ts, event:"codex_launch", engine:"codex", mission:$mission, repo:$repo,
+        phase:$phase, launch_id:$id, cost_usd:null}')"
+  fi
   # The session writes STRAIGHT to the stream file, one JSON event per line, as it happens. Under
   # the old `--output-format json` this file was a single blob printed at exit: it sat at 0 bytes
   # for the ten minutes a phase takes, so a run in flight was unobservable and a session killed
@@ -6235,7 +6256,7 @@ $role_context"
   SESSION_BUDGET_CUT="$(jq -r 'if .subtype == "error_max_budget_usd" then "1" else "" end' "$logfile" 2>/dev/null || echo "")"
   local dur=$((ended - started)) session="${resume_sid:-$sid}" engine_note=""
   if [ "$PHASE_ENGINE" = codex ]; then
-    codex_session_facts "$streamfile" "$logfile" "$effort"
+    codex_session_facts "$streamfile" "$logfile" "$effort" "$sid"
     session="$LAST_CODEX_SID"; cost="?"; engine_note=" engine=codex"
     if [ -z "$session" ] || [ "$rc" -ne 0 ]; then
       SESSION_DIED_WHY="${died:-Codex did not complete with a native thread id; see $streamfile and ${logfile%.json}.err}"
@@ -7351,14 +7372,26 @@ cmd_preflight() {
 
   # --- tools ---
   if [ "$PHASE_ENGINE" = codex ]; then
+    local -a codex_preflight=(--preflight)
+    local qa_hostport
+    if [ -n "$APP_URL" ] && qa_hostport="$(app_url_hostport "$APP_URL")"; then
+      codex_preflight+=(--qa-host "${qa_hostport%% *}")
+    fi
     if [ ! -x "$SDD_HOME/bin/sdd-codex" ]; then
       _fail "Codex adapter not installed at $SDD_HOME/bin/sdd-codex"
-    elif ( cd "$REPO_ROOT" && "$SDD_HOME/bin/sdd-codex" --preflight ); then
+    elif ( cd "$REPO_ROOT" && "$SDD_HOME/bin/sdd-codex" "${codex_preflight[@]}" ); then
       ok "Codex adapter, CLI capabilities and login checked (no model session opened)"
     else
       _fail "Codex capability or login check failed"
     fi
+    [ -x "$SDD_HOME/bin/sdd-worker" ] || _fail "Codex requires the worker at $SDD_HOME/bin/sdd-worker"
     [ -r "$SDD_HOME/templates/handoff.md" ] || _fail "Codex cannot read kit templates at $SDD_HOME/templates/"
+    local codex_phase codex_hat
+    for codex_phase in EXEC QA REVIEW DOCS TICKET; do
+      if [ "$codex_phase" = TICKET ] && [ "$JIRA_ENABLED" = false ]; then continue; fi
+      codex_hat="$(phase_hat "$codex_phase")"
+      [ -r "$SDD_HOME/agents/$codex_hat.md" ] || _fail "Codex cannot read the $codex_phase hat: $codex_hat"
+    done
   elif command -v claude >/dev/null 2>&1; then ok "claude $(claude --version 2>&1 | head -1)"
   else _fail "claude CLI not found in PATH"; fi
 
@@ -10518,6 +10551,20 @@ config_reload() {
   load_config
 }
 
+codex_config_fingerprint() {
+  if [ -f "$CONFIG_FILE" ]; then
+    git hash-object --no-filters -- "$CONFIG_FILE"
+  else
+    printf '%s\n' absent
+  fi
+}
+
+codex_config_unchanged() {
+  local actual
+  actual="$(codex_config_fingerprint)" || die "cannot check the Codex launch configuration"
+  [ "$actual" = "$1" ] || die "Codex launch configuration changed — start a new invocation"
+}
+
 cmd_run() {
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
@@ -10534,6 +10581,10 @@ cmd_run() {
 
   config_env_snapshot
   load_config
+  local codex_config=""
+  if [ "$PHASE_ENGINE" = codex ]; then
+    codex_config="$(codex_config_fingerprint)" || die "cannot check the Codex launch configuration"
+  fi
   resolve_mission "$mission_arg"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
 
@@ -10605,8 +10656,9 @@ cmd_run() {
   local prev_step="" prev_why=""
 
   while :; do
-    # The config is re-read on every lap, before anything of the lap reads it (#129, config_reload).
-    config_reload
+    # Do not source a checkout's control file again after a Codex phase has written to disk.
+    if [ "$launch_engine" = codex ]; then codex_config_unchanged "$codex_config"
+    else config_reload; fi
     [ "$PHASE_ENGINE" = "$launch_engine" ] || die "PHASE_ENGINE changed during a run — start a new invocation"
     # Single use: the first lap takes the CLI's --phase, every later lap — the draft jump included,
     # whose force_phase is the runner's — finds it empty.
@@ -10895,7 +10947,7 @@ cmd_run() {
     # with no session label (hat_guard_arm records the reflog's top). The inline retry is the same
     # lap and writes nothing more; `sdd retry` is its own door and keeps its own note.
     local admission_rc=0
-    codex_admit_session "$phase" || admission_rc=$?
+    codex_admit_session "$phase" "$degraded_logged" || admission_rc=$?
     if [ "$admission_rc" -ne 0 ]; then
       if [ "$DRY_RUN" = 1 ] && [ "$admission_rc" = 2 ]; then return 0; fi
       return "$admission_rc"
@@ -11058,6 +11110,7 @@ cmd_run() {
     # this line. Which mechanism orders it that way was not identified. The direction of the
     # failure without this line is a FALSE hat-crossed stop, loud and not silent.
     hat_guard_arm
+    if [ "$launch_engine" = codex ]; then codex_config_unchanged "$codex_config"; fi
     codex_admit_session "$phase" || return $?
     run_phase "$phase" "$LAST_PHASE_SID"
     # The retry gets its own pair of fingerprints. Until now it ran with no measurement at all,
@@ -11348,6 +11401,7 @@ cmd_retry() {
     "$exec_before" "$exec_after" "$exec_total" \
     "$review_before" "$review_after" "$review_max" "$step_after"
   if hat_crossed_escalation "$phase"; then return 3; fi
+  if [ "$PHASE_ENGINE" = codex ] && session_died_escalation "$phase"; then return 3; fi
   if [ "$gate_rc" -eq 0 ]; then ok "gate $phase: $GATE_WHY"; return 0; fi
   # AN rc 3 IS AN ESCALATION, and this door used to be the only one that returned 3 in silence: no
   # BLOCKED line in the journal, no row in the ledger. `docs/pipeline.md` promises one JSON line per

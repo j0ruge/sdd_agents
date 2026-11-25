@@ -50,6 +50,7 @@ usage: sdd-worker <verb> <args>
                                                the mission's 00-missao.md declares
   allows   <campaign-dir> plan --lot L<n>      whether planning the lot fits its effective level
   budget   <campaign-dir>                      the campaign's spend against its ceilings
+  codex-plan <campaign-dir> --lot L<n>          delegated Codex planning and known ceilings
   codex-run --mission <mission-dir> --phase <phase> [--model <model>]
                                                the mission's delegated Codex phase and known ceilings
                                                (EXEC requires its selected model)
@@ -420,6 +421,7 @@ terms_copy() {
   local dir="${1%/}"
   TERMS_COPY=""
   TERMS_TMP="$(mktemp -d "${TMPDIR:-/tmp}/sdd-worker-terms.XXXXXX")" || return 1
+  TERMS_TMP_OWNER="$BASHPID"
   trap tmp_sweep EXIT
   TERMS_COPY="$TERMS_TMP/$(campaign_name "$dir")"
   mkdir -p -- "$TERMS_COPY" || return 1
@@ -434,8 +436,8 @@ terms_copy() {
 # the program, which each maker sets. Two traps would be one, the second replacing the first, and
 # level makes both copies.
 tmp_sweep() {
-  [ -z "${TERMS_TMP:-}" ] || rm -rf -- "$TERMS_TMP"
-  [ -z "${BASE_TMP:-}" ] || rm -rf -- "$BASE_TMP"
+  if [ "${TERMS_TMP_OWNER:-}" = "$BASHPID" ]; then rm -rf -- "$TERMS_TMP"; fi
+  if [ "${BASE_TMP_OWNER:-}" = "$BASHPID" ]; then rm -rf -- "$BASE_TMP"; fi
 }
 
 # effective_level <campaign-dir> [<lot> [<from>]] — the level the worker may act at, PUBLISHED in
@@ -694,6 +696,7 @@ base_copies() {
   if ! BASE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/sdd-worker-base.XXXXXX")"; then
     BASE_WHY="no copy of the upstream $up of $root could be made under ${TMPDIR:-/tmp}"; return 1
   fi
+  BASE_TMP_OWNER="$BASHPID"
   trap tmp_sweep EXIT
   BASE_COPY="$BASE_TMP/tree"
   dir_normalise hd
@@ -850,7 +853,9 @@ cmd_budget() {
   [ -d "$1" ] || { usage; return 2; }
   local dir="${1%/}" f root cap mcap run wt p ledger out spent ceiling reached short left
   local delegation="$dir/delegation.md"
-  local signed_terms="${2:-}" scope="${3:-}" scope_wt="${4:-}" scope_cap="" scope_reached
+  local signed_terms="${2:-}" scope="${3:-}" scope_wt="${4:-}" scope_cap="" scope_amounts
+  local strict_json=false
+  [ -z "$signed_terms" ] || strict_json=true
   local unknown estimated estimated_count unsupported billing="" blocked="" campaign_title=campaign
   local -a ms=()
   f="$delegation"
@@ -910,24 +915,26 @@ cmd_budget() {
   # The mission cap's cents come from its text (digits, and a fraction the legible grammar allows):
   # the whole part times 100, the first two digits of the fraction, and one more cent when a digit
   # after those two is above zero.
-  if ! out="$(jq -nrR --arg cap "$cap" --arg m "$mcap" --arg scope "$scope" --arg scope_cap "$scope_cap" --args '
+  if ! out="$(jq -nrR --arg cap "$cap" --arg m "$mcap" --arg scope "$scope" --argjson strict "$strict_json" --args '
          def measured: type == "number" and . >= 0;
-         [inputs | if $scope == "" then fromjson? else fromjson end
+         [inputs | if $strict then fromjson else fromjson? end
            | select(type == "object" and (.mission | IN($ARGS.positional[])))] as $rows
-         | [$rows[] | select(.event == "session" or .event == "close")
-            | select(.cost_usd | measured | not)] as $unknown
+         | (INDEX($rows[] | select(.event == "session" and (.launch_id | type == "string")); .launch_id)) as $finished
+         | [$rows[] | select(.event == "session" or .event == "close" or
+             (.event == "codex_launch" and ($finished[.launch_id] == null)))
+             | select(.cost_usd | measured | not)] as $unknown
          | [$unknown[] | .estimated_cost_usd | select(measured)] as $estimates
          | [$unknown[] | select(.engine != "codex" or (has("cost_usd") | not) or .cost_usd != null)] | length as $unsupported
-         | ([ $rows[] | select(.mission == $scope) | .cost_usd | select(measured)] | add // 0) as $mission_spend
+         | [ $rows[] | select(.mission == $scope) | .cost_usd | select(measured)] as $mission_amounts
          | ([ $rows[] | .cost_usd | select(measured)] | add // 0)
          | (. * 100 | round) as $spent | ($cap | tonumber * 100 | round) as $ceiling
          | ($m | split(".") | (.[0] | tonumber) * 100 + ((.[1] // "") + "00" | .[0:2] | tonumber) + (if (.[1] // "") | .[2:] | test("[1-9]") then 1 else 0 end)) as $mission
          | "\($spent) \($ceiling) \($spent >= $ceiling) \($ceiling - $spent < $mission)" +
            " \($unknown | length) \(($estimates | add // 0) * 100 | round) \($estimates | length) \($unsupported)" +
-           " \(if $scope_cap == "" then false else ($mission_spend * 100 | round / 100) >= ($scope_cap | tonumber) end)"' ${ms[@]+"${ms[@]}"} < "$ledger")"; then
+           " \($mission_amounts | tojson)"' ${ms[@]+"${ms[@]}"} < "$ledger")"; then
     printf 'no spend — the ledger %s does not read\n' "$ledger"; return 1
   fi
-  read -r spent ceiling reached short unknown estimated estimated_count unsupported scope_reached <<< "$out"
+  read -r spent ceiling reached short unknown estimated estimated_count unsupported scope_amounts <<< "$out"
   if [ "$unknown" -gt 0 ]; then
     campaign_title='campaign known'
     printf -v billing 'billing — known US$ %d.%02d; %d unknown session(s); ' "$((spent / 100))" "$((spent % 100))" "$unknown"
@@ -958,9 +965,69 @@ cmd_budget() {
     "$campaign_title" "$((spent / 100))" "$((spent % 100))" "$((ceiling / 100))" "$((ceiling % 100))" "${#ms[@]}" "$mcap"
   [ -z "$billing" ] || printf '%s\n' "$billing"
   if [ "$reached" = true ]; then return 1; fi
-  if [ "$scope_reached" = true ]; then
-    printf 'mission ceiling — known USD for %s reached its US$ %s cap\n' "$scope" "$scope_cap"; return 1
+  if [ -n "$scope_cap" ]; then
+    # Unlike the display in cents, the mission stop compares the decimal entries to the actual cap.
+    local scope_reached
+    if ! scope_reached="$(python3 -c '
+import json
+from decimal import Decimal
+import sys
+amounts = json.load(sys.stdin, parse_float=Decimal, parse_int=Decimal)
+print(sum(amounts) >= Decimal(sys.argv[1]))
+' "$scope_cap" <<< "$scope_amounts")"; then
+      printf 'no spend — cannot compare known USD for %s to its mission ceiling\n' "$scope"; return 1
+    fi
+    if [ "$scope_reached" = True ]; then
+      printf 'mission ceiling — known USD for %s reached its US$ %s cap\n' "$scope" "$scope_cap"; return 1
+    fi
   fi
+}
+
+# Both Codex guards check the budget against the immutable terms that authorized the lot,
+# then recheck the live signature and expiry before returning to the caller.
+codex_budget_guard() {
+  local dir="$1" out rc=0
+  shift
+  out="$(cmd_budget "$dir" "$LEVEL_SIGNED_TERMS" "$@")" || rc=$?
+  if [ "$rc" -ne 0 ]; then printf '%s\n' "$out" >&2; return "$rc"; fi
+  if [ "$(fm_value "$dir/delegation.md" signed)" != "$(fm_value "$LEVEL_SIGNED_TERMS" signed)" ] ||
+     [ "$(delegation_digest "$dir")" != "$(delegation_digest "${LEVEL_SIGNED_TERMS%/*}")" ]; then
+    printf 'no cost exception — the delegation changed during the Codex phase check\n' >&2; return 1
+  fi
+  if expired "$(fm_value "$LEVEL_SIGNED_TERMS" expires)"; then
+    printf 'no cost exception — the delegation expired during the Codex phase check\n' >&2; return 1
+  fi
+}
+
+codex_cost_consent() {
+  local dir="$1"
+  if [ -z "$LEVEL_SIGNED_TERMS" ]; then
+    printf 'no cost exception — %s\n' "$LEVEL_WHY" >&2; return 1
+  fi
+  if [ "$(fm_value "$LEVEL_SIGNED_TERMS" allow_unknown_cost)" != true ]; then
+    printf 'no cost exception — %s/delegation.md must sign allow_unknown_cost: true\n' "$dir" >&2; return 1
+  fi
+}
+
+cmd_codex_plan() {
+  [ "$#" -eq 3 ] && [ "$2" = --lot ] && [ -n "$3" ] || { usage; return 2; }
+  local dir primary need
+  dir="$(readlink -f -- "$1")" || return 1
+  if ! primary="$(git -C "$dir" worktree list --porcelain | sed -n '1s/^worktree //p')"; then
+    printf 'no cost exception — cannot read the campaign primary worktree\n' >&2; return 1
+  fi
+  if [ -z "$primary" ] || { [ "${dir%/*}" != "$primary/docs/campaigns" ] &&
+       [ "${dir%/*}" != "$primary/docs/superpowers/campaigns" ]; } ||
+       [ -L "$dir/campaign.md" ] || [ -L "$dir/delegation.md" ]; then
+    printf 'no cost exception — use the campaign directory in the primary worktree\n' >&2; return 1
+  fi
+  effective_level "$dir" "$3"
+  codex_cost_consent "$dir" || return 1
+  need="$(act_floor plan)"
+  if [ "$(ladder_rank "$LEVEL")" -lt "$(ladder_rank "$need")" ]; then
+    printf 'no cost exception — plan needs %s, effective %s — %s\n' "$need" "$LEVEL" "$LEVEL_WHY" >&2; return 1
+  fi
+  codex_budget_guard "$dir"
 }
 
 # codex-run is the paid-session guard for delegated campaign phases. Its campaign comes
@@ -969,7 +1036,7 @@ cmd_budget() {
 cmd_codex_run() {
   { [ "$#" -eq 4 ] || { [ "$#" -eq 6 ] && [ "$5" = --model ] && [ -n "$6" ]; }; } &&
     [ "$1" = --mission ] && [ -n "$2" ] && [ "$3" = --phase ] || { usage; return 2; }
-  local mission mf wt hd id lot primary dir candidate out rc act need declared=""
+  local mission mf wt hd id lot primary dir candidate act need declared=""
   case "$4" in
     EXEC) [ "$#" -eq 6 ] || { usage; return 2; }; act=run ;;
     QA | DOCS | TICKET) act=run ;;
@@ -1011,12 +1078,7 @@ cmd_codex_run() {
     printf 'no cost exception — campaign %s not found in the primary checkout of %s\n' "$id" "$wt" >&2; return 1
   fi
   effective_level "$dir" "$lot" "the lot: of $mf"
-  if [ -z "$LEVEL_SIGNED_TERMS" ]; then
-    printf 'no cost exception — %s\n' "$LEVEL_WHY" >&2; return 1
-  fi
-  if [ "$(fm_value "$LEVEL_SIGNED_TERMS" allow_unknown_cost)" != true ]; then
-    printf 'no cost exception — %s/delegation.md must sign allow_unknown_cost: true\n' "$dir" >&2; return 1
-  fi
+  codex_cost_consent "$dir" || return 1
   need="$(act_floor "$act")"
   if [ "$(ladder_rank "$LEVEL")" -lt "$(ladder_rank "$need")" ]; then
     printf 'no cost exception — %s needs %s, effective %s — %s\n' "$act" "$need" "$LEVEL" "$LEVEL_WHY" >&2; return 1
@@ -1028,16 +1090,7 @@ cmd_codex_run() {
         "$6" "${declared:-<missing>}" "$dir" >&2; return 1
     fi
   fi
-  rc=0
-  out="$(cmd_budget "$dir" "$LEVEL_SIGNED_TERMS" "${mission##*/}" "$wt")" || rc=$?
-  if [ "$rc" -ne 0 ]; then printf '%s\n' "$out" >&2; return "$rc"; fi
-  if [ "$(fm_value "$dir/delegation.md" signed)" != "$(fm_value "$LEVEL_SIGNED_TERMS" signed)" ] ||
-     [ "$(delegation_digest "$dir")" != "$(delegation_digest "${LEVEL_SIGNED_TERMS%/*}")" ]; then
-    printf 'no cost exception — the delegation changed during the Codex phase check\n' >&2; return 1
-  fi
-  if expired "$(fm_value "$LEVEL_SIGNED_TERMS" expires)"; then
-    printf 'no cost exception — the delegation expired during the Codex phase check\n' >&2; return 1
-  fi
+  codex_budget_guard "$dir" "${mission##*/}" "$wt"
 }
 
 # approved <00-missao.md> — 0 when its aprovacao: is one the runner's gate_PLAN admits: auto, or
@@ -1590,6 +1643,7 @@ main() {
     level) shift; cmd_level "$@" ;;
     allows) shift; cmd_allows "$@" ;;
     budget) shift; [ "$#" -eq 1 ] || { usage; return 2; }; cmd_budget "$@" ;;
+    codex-plan) shift; cmd_codex_plan "$@" ;;
     codex-run) shift; cmd_codex_run "$@" ;;
     next) shift; cmd_next "$@" ;;
     pr-ready) shift; cmd_pr_ready "$@" ;;

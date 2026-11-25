@@ -61,7 +61,8 @@ or be edited, between two acts, and the answer of the last turn is not the answe
 1. `sdd-worker budget <campaign-dir>`: rc 1 is a stop, named by the line it printed (below): the
    campaign ceiling reached, less of it left than the mission cap a run may spend (`no room — …`),
    a mission cap the runner would not apply (`no mission cap — …`), or a ceiling or a spend it
-   could not read (`no ceiling — …`, `no spend — …`). Its line prints the mission cap, the
+   could not read (`no ceiling — …`, `no spend — …`). A Codex cost check may also stop with
+   `no cost exception — …` or `unknown cost — …`. The budget line prints the mission cap, the
    `BUDGET_MISSION_USD` the next `run` passes.
 2. The act. When the last act of the lot has a move in **The transitions** (below), the act is that
    one; otherwise `sdd-worker next <campaign-dir>`, whose first line is
@@ -121,9 +122,12 @@ option, and every answer that touches a rule of the owner is listed in the pull 
 his acceptance. The plan, the grill and the report go to files.
 
 For delegated Codex planning, run
-`sdd-plan-codex start <mission> <topic> --campaign <absolute-campaign-dir> --lot <L>` in the
-mission worktree. The relay rechecks the plan authority and the campaign's budget before each turn.
-The worker's orchestrating and planning sessions remain outside the existing mission-spend ledger. Plan with `gpt-6.2-astra`. Read the pending question with
+`<kit>/bin/sdd-plan-codex start <mission> <topic> --campaign <absolute-campaign-dir> --lot <L>`
+in the mission worktree. Use the same executable for the relay commands below if it is not on PATH.
+Before every turn, the relay runs `sdd-worker codex-plan <campaign-dir> --lot <L>` to verify the
+signed Codex terms, the lot's plan authority, and the campaign's known budget. The worker's
+orchestration and the relay's planning turns are not part of the mission-spend ledger.
+Plan with `gpt-6.2-astra`. Read the pending question with
 `sdd-plan-codex status <mission>` after a relay restart. Give the selected answer verbatim once
 with `sdd-plan-codex answer <mission> <question-id> <answer>`. If the native turn itself was
 interrupted, use `sdd-plan-codex recover <mission>` to recover the question from the same thread.
@@ -205,8 +209,13 @@ Budget output reports the known subtotal and any reference API estimate separate
 For Codex, `sdd run` returns rc 2 with `PR needs worker publish` when work at the PR gate remains.
 Resume at this act under the signed `pr` authority. In the mission worktree, follow the publisher
 procedure in `agents/sdd-publisher.md` as the worker. Check the suite and branch, push only that
-branch, create or update its pull request and record verified `50-pr.md`. Then use
-`PHASE_ENGINE=codex sdd why <mission> PR` to verify the artifact. Merge remains a separate act
+branch, create or update its pull request and record verified `50-pr.md`. If the handoff says
+`draft only`, or that run's journal records `PUBLISH_ON_REVIEW_BLOCKED=draft`, publish only a
+draft and do not mark it ready for review while that restriction holds. Then use
+`PHASE_ENGINE=codex sdd why <mission> PR` to read the verdict. Check for `PR: PR open:` rather
+than relying on the command's exit code. If only the kit mutation stamp is missing and the PR is
+already open, apply the kit-specific exception above. On any other refusal, stop before advancing
+to review and resolve or report the reason. Merge remains a separate act
 requiring `allows … merge` and `pr-ready`.
 
 After the PR opens, this act completes the information its body owes the owner. It lists the
@@ -283,6 +292,10 @@ delegation, or an illegible one) with `no-ceiling`; a `no spend — …` line (n
 `git worktree list` that failed, an upstream of the campaign's checkout that does not read, a ledger
 that does not read) with `no-spend`. None of them is
 `campaign-ceiling`: nobody measured a spend.
+
+Report `no cost exception — …` with `SDD_REASON=no-cost-exception`, and `unknown cost — …`
+with `SDD_REASON=unknown-cost`. Include the original diagnostic for the owner and stop.
+Neither result means the measured campaign ceiling was reached.
 
 A `no room — …` line of `budget` measured a spend below the ceiling, with less of it left than the
 signed mission cap: the next `run` may spend up to its cap and pass the ceiling, so the loop stops

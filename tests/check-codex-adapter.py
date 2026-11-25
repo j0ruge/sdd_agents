@@ -38,23 +38,25 @@ class AdapterTests(unittest.TestCase):
     def invoke(self, *args, events=None, rc=0, sandbox_rc=0, linked=False, remote=None):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
+            git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
             repo = base / "repo"
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "init", "-q", "--initial-branch=trunk", str(repo)], env=git_env, check=True)
             if linked:
                 subprocess.run(["git", "-C", str(repo), "-c", "user.name=Fixture",
                                 "-c", "user.email=fixture@example.invalid",
-                                "commit", "-qm", "seed", "--allow-empty"], check=True)
+                                "commit", "-qm", "seed", "--allow-empty"], env=git_env, check=True)
                 branch = base / "linked"
-                subprocess.run(["git", "-C", str(repo), "worktree", "add", "-qb", "mission", str(branch)], check=True)
+                subprocess.run(["git", "-C", str(repo), "worktree", "add", "-qb", "mission", str(branch)],
+                               env=git_env, check=True)
                 repo = branch
             if remote:
-                subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", remote], check=True)
+                subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", remote], env=git_env, check=True)
             fake = base / "codex"
             captured = base / "args.json"
             fake.write_text(FAKE)
             fake.chmod(0o755)
             env = {
-                **os.environ,
+                **git_env,
                 "PATH": f"{temporary}:{os.environ['PATH']}",
                 "FAKE_ARGS": str(captured),
                 "FAKE_STREAM": "\n".join(event if isinstance(event, str) else json.dumps(event)
@@ -142,6 +144,15 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(prompt, "fixture prompt\n")
         self.assertEqual(label, "sdd:fixture")
         self.assertEqual(events[-1]["session_id"], THREAD)
+        fresh_rc, _, (fresh_args, _, _), fresh_error = self.run_hat()
+        self.assertEqual(fresh_rc, 0, fresh_error)
+
+        def settings(arguments):
+            projects = next(value for value in arguments if value.startswith("projects="))
+            root = next(iter(tomllib.loads(projects)["projects"]))
+            return [value.replace(root, "/fixture") for value in arguments]
+
+        self.assertEqual(settings(args[2:-2]), settings(fresh_args[1:-1]))
         other = {**START, "thread_id": "019aebba-bc11-73b0-8080-7c8fbffcd881"}
         rc, events, _, _ = self.run_hat("--resume", THREAD, events=[other, TURN, COMPLETE])
         self.assertNotEqual(rc, 0)
@@ -183,6 +194,12 @@ class AdapterTests(unittest.TestCase):
         self.assertIn('/repo/.git/refs/heads" = "write"', profile)
         self.assertIn('/repo/.git/objects/info" = "read"', profile)
         self.assertIn('/repo/.git/worktrees/linked/commondir" = "read"', profile)
+        self.assertIn('/repo/.git/worktrees/linked/sdd-coordination.lock" = "read"', profile)
+        self.assertIn('/repo/.git/worktrees/linked/sdd-coordination.json" = "read"', profile)
+        self.assertIn('/linked/.sdd" = "read"', profile)
+        self.assertIn('/repo/.git/refs/heads/trunk" = "read"', profile)
+        self.assertIn('/repo" = "read"', profile)
+        self.assertNotIn('/repo/.git/refs/heads/mission" = "read"', profile)
         self.assertIn('/repo/.git" = "read"', profile)
         self.assertNotIn('/repo/.git" = "write"', profile)
         self.assertNotIn('/repo/.git/config" = "write"', profile)
@@ -198,9 +215,11 @@ class AdapterTests(unittest.TestCase):
             profile = tomllib.loads(next(arg for arg in args if arg.startswith("permissions=")))
             workspace = profile["permissions"]["sdd-workspace"]
             self.assertEqual(workspace["network"], {"enabled": False})
-            filesystem = {path.split("/repo/.git", 1)[1]: access
+            project = next(arg for arg in args if arg.startswith("projects="))
+            checkout = Path(next(iter(tomllib.loads(project)["projects"])))
+            filesystem = {str(Path(path).relative_to(checkout.parent)): access
                           for path, access in workspace["filesystem"].items()}
-            self.assertNotIn("/refs/remotes", filesystem)
+            self.assertNotIn("repo/.git/refs/remotes", filesystem)
             profiles.append(filesystem)
         self.assertEqual(*profiles)
 
@@ -211,9 +230,11 @@ class AdapterTests(unittest.TestCase):
         self.assertIn("enabled = true", profile)
         self.assertIn('features.network_proxy.enabled=true', args)
         domains = next(arg for arg in args if arg.startswith('features.network_proxy.domains='))
-        self.assertIn('"*.atlassian.net" = "allow"', domains)
-        self.assertNotIn('"*" = "allow"', domains)
-        self.assertNotIn('github', domains)
+        self.assertEqual(tomllib.loads(domains)["features"]["network_proxy"]["domains"],
+                         dict.fromkeys(("*.atlassian.net", "api.atlassian.com",
+                                        "auth.atlassian.com", "id.atlassian.com"), "allow"))
+        self.assertIn("features.network_proxy.allow_upstream_proxy=false", args)
+        self.assertIn('features.network_proxy.mode="full"', args)
 
     def test_qa_allowlists_one_exact_app_host(self):
         for host in ["localhost", "127.0.0.1", "::1", "staging.example.invalid"]:
@@ -244,6 +265,21 @@ class AdapterTests(unittest.TestCase):
                 self.assertIsNone(native)
                 self.assertIn("Git remote", proc.stdout)
                 self.assertNotIn(url, proc.stdout + proc.stderr)
+
+    def test_qa_rejects_the_same_ipv6_remote_in_both_spellings(self):
+        result, native = self.invoke("--model", "gpt-6.2-sol", "--hat", "sdd-qa",
+                                     "--qa-host", "::1", remote="https://[0:0:0:0:0:0:0:1]/repo.git")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIsNone(native)
+        self.assertIn("Git remote", result.stdout)
+
+    def test_qa_reports_malformed_remote_without_reprinting_it(self):
+        result, native = self.invoke("--model", "gpt-6.2-sol", "--hat", "sdd-qa",
+                                     "--qa-host", "localhost", remote="https://git-example／invalid/repo.git")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIsNone(native)
+        self.assertIn("malformed Git remote", result.stdout)
+        self.assertNotIn("git-example", result.stdout + result.stderr)
 
     def test_tools_are_emitted_as_runner_evidence(self):
         item = {"type": "command_execution", "id": "item_0", "command": "printf SDD_OK",

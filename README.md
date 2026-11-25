@@ -187,7 +187,8 @@ mkdir -p ~/.agents/skills
 ln -s ~/repos/sdd_agents/skills/sdd-worker ~/.agents/skills/sdd-worker
 ```
 
-Use `sdd-plan-codex` to start and resume the grill and `PHASE_ENGINE=codex` for the mission runner.
+Use the kit's `bin/sdd-plan-codex` to start and resume the grill and `PHASE_ENGINE=codex` for the
+mission runner.
 See [Codex campaigns](docs/pipeline.md#codex-campaigns) for prerequisites and delegation.
 
 `sdd run` and `sdd retry` put you on the branch the plan declares (`branch:` in `00-missao.md`)

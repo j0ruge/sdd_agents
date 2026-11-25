@@ -4,12 +4,14 @@ import argparse
 from decimal import Decimal
 import ipaddress
 import json
+import os
 from pathlib import Path
 import re
 import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 from urllib.parse import urlsplit
 import uuid
 
@@ -85,9 +87,6 @@ def estimate_cost(model, turns, failed, unexpected_metadata):
             if inp > SHORT_CONTEXT_INPUT_LIMIT:
                 reason = "turn usage cannot distinguish short and long context requests"
                 break
-            if any("cache" in key and "writ" in key and value != 0 for key, value in turn.items()):
-                reason = "unmodeled cache writes"
-                break
             total += (inp - cached) * input_rate + cached * cached_rate + output * output_rate
     if reason:
         basis["unknown_reason"] = reason
@@ -114,11 +113,21 @@ def qa_app_host(value):
             continue
         remote = remote.rsplit(None, 1)[0]
         if "://" in remote:
-            remote_host = urlsplit(remote).hostname
+            try:
+                remote_host = urlsplit(remote).hostname
+            except ValueError:
+                raise ValueError("cannot validate QA host against a malformed Git remote") from None
         else:
             match = re.match(r"^(?:[^@/:]+@)?(\[[^]]+\]|[^/:]+):", remote)
             remote_host = match.group(1).strip("[]") if match else None
-        if remote_host and remote_host.lower().rstrip(".") == host:
+        if not remote_host:
+            continue
+        remote_host = remote_host.lower().rstrip(".")
+        try:
+            remote_host = str(ipaddress.ip_address(remote_host))
+        except ValueError:
+            pass  # DNS names do not have an IP literal spelling.
+        if remote_host == host:
             raise ValueError("QA host must not be a Git remote of the checkout")
     return host
 
@@ -139,17 +148,41 @@ def git_write_profile(cwd, network):
         raise ValueError("Codex worktree sandbox did not recognize this linked Git checkout")
 
     paths = {git_dir: "write"}
-    for path in ("config", "config.worktree", "hooks", "info", "modules", "worktrees"):
+    for path in ("config", "config.worktree", "hooks", "info", "modules", "worktrees",
+                 "sdd-coordination.lock", "sdd-coordination.json", "sdd-codex-planner"):
         paths[git_dir / path] = "read"
+    paths[cwd / ".sdd"] = "read"
     if git_dir != common:
         # A checkout under a writable ancestor (including /tmp) must not make the
         # common config/hooks writable merely because the worktree is sandboxed.
         paths[common] = "read"
         for path in ("commondir", "gitdir"):
             paths[git_dir / path] = "read"
-        for path in ("objects", "refs/heads", "logs"):
+        for path in ("objects", "refs/heads", "logs/refs/heads"):
             paths[common / path] = "write"
     paths[common / "objects" / "info"] = "read"
+    # The native profile requires writable directories for Git's temporary lock siblings.
+    # Bind existing refs belonging to other local branches back as read-only.
+    head = subprocess.run(["git", "symbolic-ref", "--quiet", "HEAD"], cwd=cwd,
+                          capture_output=True, text=True, timeout=10)
+    if head.returncode not in (0, 1):
+        raise ValueError("could not determine the Codex checkout's branch")
+    branch = head.stdout.strip()
+    refs = subprocess.check_output(["git", "for-each-ref", "--format=%(refname)", "refs/heads/"],
+                                   cwd=cwd, text=True, timeout=10)
+    for ref in refs.splitlines():
+        if ref == branch:
+            continue
+        for path in (common / ref, common / "logs" / ref):
+            if path.is_file():
+                paths[path] = "read"
+    worktrees = subprocess.check_output(["git", "worktree", "list", "--porcelain", "-z"],
+                                        cwd=cwd, text=True, timeout=10)
+    for entry in worktrees.split("\0"):
+        if entry.startswith("worktree "):
+            sibling = Path(entry.removeprefix("worktree ")).resolve()
+            if sibling != cwd and not cwd.is_relative_to(sibling):
+                paths[sibling] = "read"
 
     filesystem = ", ".join(f'{json.dumps(str(p), ensure_ascii=False)} = "{access}"'
                            for p, access in paths.items())
@@ -215,11 +248,49 @@ def preflight(binary):
                 return 1
             if index in (0, 3):
                 print((result.stdout or result.stderr).strip())
+        with tempfile.TemporaryDirectory(prefix="sdd-codex-preflight-") as directory:
+            sentinel = Path(directory) / "read-only"
+            sentinel.write_text("sandbox preflight\n", encoding="utf-8")
+            probe = """import errno, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+if path.read_text() != "sandbox preflight\\n":
+    raise SystemExit(1)
+try:
+    with path.open("ab"):
+        pass
+except OSError as exc:
+    if exc.errno not in (errno.EACCES, errno.EPERM, errno.EROFS):
+        raise
+else:
+    raise SystemExit("write was not denied")
+"""
+            result = subprocess.run(
+                [binary, *never_escalate(True, None), "sandbox", "--",
+                 sys.executable, "-c", probe, str(sentinel)],
+                capture_output=True, text=True, timeout=15,
+            )
+            if result.returncode:
+                print("sdd-codex: read-only sandbox permission probe failed", file=sys.stderr)
+                return 1
     except (OSError, subprocess.TimeoutExpired) as error:
         print(f"sdd-codex: preflight failed: {error}", file=sys.stderr)
         return 1
     print("sdd-codex: CLI, login and command sandbox available")
     return 0
+
+
+def sandbox_check(binary, command, qa_host):
+    domains = (qa_app_host(qa_host),) if qa_host is not None else ()
+    with tempfile.TemporaryDirectory(prefix="sdd-codex-check-") as home:
+        variables = ("PATH", "LANG", "LC_ALL", "TZ", "SDD_CHECK_TAG")
+        environment = [f"{name}={os.environ[name]}" for name in variables if name in os.environ]
+        result = subprocess.run(
+            [binary, *never_escalate(False, bool(domains), domains), "sandbox", "--",
+             "/usr/bin/env", "-i", f"HOME={home}", *environment, "bash", "-c", command],
+            stdin=subprocess.DEVNULL,
+        )
+    return result.returncode
 
 
 def error_message(event):
@@ -312,6 +383,7 @@ def stream_turn(child, args, version):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preflight", action="store_true")
+    parser.add_argument("--sandbox-check")
     parser.add_argument("--hat", choices=HATS)
     parser.add_argument("--model")
     parser.add_argument("--effort", default="")
@@ -324,7 +396,19 @@ def main():
         print("sdd-codex: codex CLI is not on PATH", file=sys.stderr)
         return 127
     if args.preflight:
+        if args.qa_host is not None:
+            try:
+                qa_app_host(args.qa_host)
+            except (ValueError, OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+                print(f"sdd-codex: QA host check failed: {error}", file=sys.stderr)
+                return 1
         return preflight(binary)
+    if args.sandbox_check is not None:
+        try:
+            return sandbox_check(binary, args.sandbox_check, args.qa_host)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            print(f"sdd-codex: sandbox check failed: {error}", file=sys.stderr)
+            return 1
     if not args.model or not args.hat:
         parser.error("a turn requires --model and --hat")
     if args.resume:

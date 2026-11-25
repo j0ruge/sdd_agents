@@ -33,10 +33,11 @@ class PlannerTest(unittest.TestCase):
     def test_pending_question_survives_relay_and_resume_uses_exact_id(self):
         with tempfile.TemporaryDirectory() as scratch:
             temp = Path(scratch)
+            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
             kit = temp / "kit"
             repo = temp / "target"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "init", "-q", "--initial-branch=work", str(repo)], env=env, check=True)
             (repo / ".sdd").mkdir()
             (repo / ".sdd/config.sh").write_text("HANDOFF_DIR=docs/handoffs\n")
             (kit / "bin").mkdir(parents=True)
@@ -45,7 +46,6 @@ class PlannerTest(unittest.TestCase):
             (kit / "bin/sdd-plan-codex").write_bytes((ROOT / "bin/sdd-plan-codex").read_bytes())
             (kit / "bin/sdd-plan-codex").chmod(0o755)
             (kit / "bin/sdd-coordination.py").symlink_to(ROOT / "bin/sdd-coordination.py")
-            subprocess.run(["git", "symbolic-ref", "HEAD", "refs/heads/work"], cwd=repo, check=True)
             adapter = kit / "bin/sdd-codex"
             adapter.write_text(
                 "#!/usr/bin/env python3\n"
@@ -57,6 +57,12 @@ class PlannerTest(unittest.TestCase):
                 "print(json.dumps(dict(type='system',session_id=sid)),flush=True)\n"
                 "question = 'Question two?' if '--resume' in sys.argv else 'Question one?'\n"
                 "with Path('calls').open() as log: latest = json.loads(list(log)[-1])[1]\n"
+                "if latest in ('Interrupt', 'Interrupt after receipt'):\n"
+                "    sys.exit(3)\n"
+                "if latest.startswith('Recover the interrupted'):\n"
+                "    calls = [json.loads(row)[1] for row in Path('calls').read_text().splitlines()]\n"
+                "    question = ('ANSWER_RECEIVED\\nQuestion three?' if calls[-2] == 'Interrupt after receipt'\n"
+                "                else 'ANSWER_NOT_RECEIVED\\nQuestion changed?')\n"
                 "if latest == 'Write the plan':\n"
                 "    question = json.dumps({\n"
                 "      '00-missao.md': '---\\nmissao: 20261124-test\\nbranch: work\\naprovacao:\\n---\\n# Mission\\n\\n## Decisoes do grill\\n   - answer: (recommended)\\n   - answer: (other: Write the plan)\\n',\n"
@@ -68,7 +74,6 @@ class PlannerTest(unittest.TestCase):
             adapter.chmod(0o755)
             mission = "20261124-test"
             relay = kit / "bin/sdd-plan-codex"
-            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
 
             def call(*args, good=True):
                 result = subprocess.run([str(relay), *args], cwd=repo, env=env,
@@ -102,13 +107,30 @@ class PlannerTest(unittest.TestCase):
             self.assertIn("aprovacao:\n", (dest / "00-missao.md").read_text())
             call("finish", mission, good=False)
 
+            for human_answer, received in (("Interrupt", False), ("Interrupt after receipt", True)):
+                with self.subTest(received=received):
+                    recovery_mission = f"{mission}-{str(received).lower()}"
+                    started = call("start", recovery_mission, "Test interrupted turn")
+                    qid = started.splitlines()[0].split()[-1]
+                    call("answer", recovery_mission, qid, human_answer, good=False)
+                    recovered = call("recover", recovery_mission)
+                    if received:
+                        self.assertIn("Question three?", recovered)
+                        self.assertNotIn(qid, recovered)
+                    else:
+                        self.assertEqual(recovered, started)
+                    state = json.loads((repo / ".git/sdd-codex-planner" / f"{recovery_mission}.json").read_text())
+                    self.assertEqual(len(state["answers"]), int(received))
+                    calls = [json.loads(row) for row in (repo / "calls").read_text().splitlines()]
+                    self.assertEqual(calls[-1][0][-2:], ["--resume", SESSION])
+
             worker = kit / "bin/sdd-worker"
             worker.write_text(
                 "#!/usr/bin/env python3\n"
                 "import sys\n"
                 "from pathlib import Path\n"
-                "assert sys.argv[1] in ('allows', 'budget')\n"
-                "assert len(sys.argv) == 3 or sys.argv[3:] == ['plan', '--lot', 'L1']\n"
+                "assert len(sys.argv) == 5 and sys.argv[1] == 'codex-plan'\n"
+                "assert sys.argv[3:] == ['--lot', 'L1']\n"
                 "sys.exit(1 if Path('revoked').exists() else 0)\n"
             )
             worker.chmod(0o755)

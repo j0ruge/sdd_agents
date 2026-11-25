@@ -248,7 +248,7 @@ namespaces or declaring the local one out of scope is that repo's decision; the 
 
 | Key | Default | What it is |
 |---|---|---|
-| `PHASE_ENGINE` | `claude` | `claude` or `codex`. The starter accepts an environment override such as `PHASE_ENGINE=codex sdd run <mission>`. To prevent silent harness switches, a change on disk during an active `sdd run` stops it before opening another session. |
+| `PHASE_ENGINE` | `claude` | `claude` or `codex`. The starter accepts an environment override such as `PHASE_ENGINE=codex sdd run <mission>`. A Codex run keeps the configuration it loaded at launch. If `.sdd/config.sh` changes, the next lap or inline retry stops and asks for a fresh invocation. |
 | `CODEX_PHASE_MODEL` | `gpt-6.2-sol` | Codex EXEC model id. It must match the campaign's `exec_model`. EXEC uses `medium`. DOCS and TICKET use Sol `medium`, and QA and REVIEW use Sol `xhigh`, regardless of this override. No Claude model or effort key is reused. |
 
 A paid Codex run or retry must be in the actual mission worktree of a `harness: codex` campaign
@@ -267,8 +267,9 @@ in the target's `.agents/skills/`, then the user's `~/.agents/skills/`, then the
 of `CODEX_HOME` (default `~/.codex`). Claude-specific permission flags apply only to Claude. Codex
 uses the adapter's sandbox without MCP, plus the existing artifact gates and hat write checks.
 QA with `APP_URL` configured gives the adapter only the HTTP(S) hostname for scoped proxy access.
-Preflight does not verify that a browser in the Codex sandbox reaches that host. The runner can still
-execute E2E gates outside the sandbox. The adapter limits TICKET network access to Atlassian Cloud.
+Preflight does not verify that a browser in the Codex sandbox reaches that host. Codex gate checks
+also run in the sandbox, with a temporary home and a minimal environment. An E2E check can use the
+same eligible app host. The adapter limits TICKET network access to Atlassian Cloud.
 
 ## Models per phase
 

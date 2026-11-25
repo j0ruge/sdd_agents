@@ -73,11 +73,15 @@ at the artifacts, and format drift enters in silence.
 On a mission branch in its own worktree, use the Codex planner relay from the kit's `bin/`:
 
 ```bash
-sdd-plan-codex start <mission> '<topic, with campaign ID and lot if applicable>'
+sdd-plan-codex start <mission> '<topic>'
 sdd-plan-codex status <mission>
 sdd-plan-codex answer <mission> <question-id> '<answer>'
 sdd-plan-codex finish <mission>
 ```
+
+The example starts a standalone plan. For delegated planning, append
+`--campaign <absolute-campaign-dir> --lot <L>` to `start`. Mentioning a campaign or lot in the topic
+does not engage the delegation checks.
 
 The relay launches the SDD planner role with Astra at high effort under the read-only Codex sandbox.
 It binds each answer to a question ID and resumes the exact Codex thread. If the relay loses the

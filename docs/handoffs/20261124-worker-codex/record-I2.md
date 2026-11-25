@@ -39,3 +39,18 @@ total da campanha. As quatro linhas foram conferidas no ledger isolado do piloto
 Evidência local do piloto descartável em `/tmp/sdd466-pilot.fGNHKo`, nos arquivos
 `resume-proof`, `approve.log`, `preflight.log`, `run.log`, `run.rc` e
 `state/autonomy-log.jsonl`.
+
+## Extrato sanitizado do piloto
+
+O extrato preserva os resultados da corrida de `5e2a3a9`, sem dados de autenticação.
+
+```text
+planner session same: 01a21015-2d0f-78b2-b5db-e1574aef588c
+  ok   gate EXEC: 1 increment(s) done, suite green, handoff written
+  ok   gate QA: journey walked without a browser interface (evidence in the handoff), suite green
+  ok   gate REVIEW: 40-review-r1.md Grade A on every criterion, at least B on the prose ones, suite green, tree clean
+  ok   gate DOCS: drift checklist complete
+PR needs worker publish — use the campaign's separately authorized pr act, then resume sdd run for gate verification.
+rc=2
+remotes=0
+```

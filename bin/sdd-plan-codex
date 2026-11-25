@@ -47,9 +47,8 @@ def check_delegated_plan(state):
     campaign = state.get("campaign")
     if campaign:
         worker = str(KIT / "bin/sdd-worker")
-        subprocess.run([worker, "allows", campaign, "plan", "--lot", state["lot"]],
+        subprocess.run([worker, "codex-plan", campaign, "--lot", state["lot"]],
                        check=True, stdout=sys.stderr)
-        subprocess.run([worker, "budget", campaign], check=True, stdout=sys.stderr)
 
 
 def opening_prompt(root, args):
@@ -108,20 +107,24 @@ def turn(path, state, prompt, lock, recovering=False):
     answer = result["result"].strip()
     if not answer:
         raise ValueError("planner returned an empty response")
-    pending_answer = state.pop("pending_answer", None)
+    pending_answer = state.get("pending_answer")
     if recovering and pending_answer:
         receipt, separator, answer = answer.partition("\n")
         if not separator or receipt not in {"ANSWER_RECEIVED", "ANSWER_NOT_RECEIVED"}:
             raise ValueError("the recovered turn did not say whether the answer arrived")
-        if receipt == "ANSWER_RECEIVED":
-            state["answers"].append(pending_answer)
         answer = answer.strip()
-    elif pending_answer:
+        if receipt == "ANSWER_NOT_RECEIVED":
+            state["stage"] = "question"
+    if pending_answer and state["stage"] != "question":
         state["answers"].append(pending_answer)
+    state.pop("pending_answer", None)
     state.pop("pending_prompt", None)
     state.setdefault("usage", []).append({
         key: result.get(key) for key in ("model", "usage", "estimated_cost_usd", "estimate_basis", "total_cost_usd")
     })
+    if state["stage"] == "question":
+        save(path, state)
+        return
     if answer.startswith("{"):
         draft = json.loads(answer)
         if not isinstance(draft, dict) or draft.keys() != TEMPLATES.keys() or not all(

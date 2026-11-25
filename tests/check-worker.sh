@@ -5204,6 +5204,87 @@ else
     'a valid plan signature is insufficient before the opt-in and permits plan afterward' "$got"
 fi
 
+# Reading the upstream must preserve the caller’s verified terms snapshot.
+git -C "$REPO" branch codex-upstream
+cdx_branch="$(git -C "$REPO" branch --show-current)"
+git -C "$REPO" branch --set-upstream-to=codex-upstream "$cdx_branch" >/dev/null
+cp "$BOX/signed-exception" "$cdx/delegation.md"
+cdx_worker codex-run --mission "$cdxwm" --phase REVIEW
+if [ "$W_RC" -eq 0 ]; then
+  pass 'codex cost: a checkout tracking an upstream preserves the verified delegation through budget'
+else
+  fail 'codex cost: a checkout tracking an upstream preserves the verified delegation through budget' \
+    'rc 0 with unchanged signed terms' "rc $W_RC: $W_OUT $W_ERR"
+fi
+git -C "$REPO" branch --unset-upstream "$cdx_branch"
+
+cp "$cdxw/.sdd/config.sh" "$BOX/codex-config"
+printf '\nBUDGET_MISSION_USD=0.014\n' >> "$cdxw/.sdd/config.sh"
+got=""
+for amount in 0.013 0.014 0.015; do
+  printf '{"event":"session","mission":"codex-cost-mission","cost_usd":%s}\n' "$amount" > "$cdxl/autonomy-log.jsonl"
+  cdx_worker codex-run --mission "$cdxwm" --phase REVIEW
+  if [ "$amount" = 0.013 ]; then
+    [ "$W_RC" -eq 0 ] || got="${got:+$got; }$amount: rc $W_RC: $W_ERR"
+  else
+    [ "$W_RC" -eq 1 ] && [[ "$W_ERR" == *'mission ceiling — known USD'* ]] \
+      || got="${got:+$got; }$amount: rc $W_RC: $W_ERR"
+  fi
+done
+printf '{"event":"session","mission":"codex-cost-mission","cost_usd":%s}\n' 0.009 0.005 > "$cdxl/autonomy-log.jsonl"
+cdx_worker codex-run --mission "$cdxwm" --phase REVIEW
+[ "$W_RC" -eq 1 ] && [[ "$W_ERR" == *'mission ceiling — known USD'* ]] \
+  || got="${got:+$got; }0.009 + 0.005: rc $W_RC: $W_ERR"
+cp "$BOX/codex-config" "$cdxw/.sdd/config.sh"
+cp "$cdxl/base" "$cdxl/autonomy-log.jsonl"
+if [ -z "$got" ]; then
+  pass 'codex cost: known spend reaches the mission ceiling without cent rounding'
+else
+  fail 'codex cost: known spend reaches the mission ceiling without cent rounding' \
+    '0.013 allowed; 0.014 and 0.015 refused at a 0.014 cap' "$got"
+fi
+
+got=""
+cdx_worker codex-plan "$cdxp" --lot L1
+[ "$W_RC" -eq 0 ] || got="valid Codex terms: rc $W_RC: $W_OUT $W_ERR"
+printf '%s\n' '{"event":' >> "$cdxl/autonomy-log.jsonl"
+cdx_worker codex-plan "$cdxp" --lot L1
+[ "$W_RC" -eq 1 ] && [[ "$W_ERR" == *'ledger'*'does not read'* ]] \
+  || got="${got:+$got; }malformed ledger: rc $W_RC: $W_OUT $W_ERR"
+cp "$cdxl/base" "$cdxl/autonomy-log.jsonl"
+for harness in claude legacy; do
+  sed -i '/^allow_unknown_cost:/d' "$cdxp/delegation.md"
+  if [ "$harness" = claude ]; then sed -i 's/^harness:.*/harness: claude/' "$cdxp/campaign.md"
+  else sed -i '/^harness:/d' "$cdxp/campaign.md"; fi
+  answer $'y\n'
+  worker_from "$BOX/in" delegate "$cdxp"
+  [ "$W_RC" -eq 0 ] || got="${got:+$got; }$harness signature: rc $W_RC: $W_OUT $W_ERR"
+  cdx_worker allows "$cdxp" plan --lot L1
+  [ "$W_RC" -eq 0 ] || got="${got:+$got; }$harness normal plan: rc $W_RC: $W_OUT $W_ERR"
+  cdx_worker codex-plan "$cdxp" --lot L1
+  [ "$W_RC" -eq 1 ] && [[ "$W_ERR" == *'must sign allow_unknown_cost: true'* ]] \
+    || got="${got:+$got; }$harness Codex plan: rc $W_RC: $W_OUT $W_ERR"
+done
+if [ -z "$got" ]; then
+  pass 'codex cost: paid planning requires Codex terms and a readable ledger before each turn'
+else
+  fail 'codex cost: paid planning requires Codex terms and a readable ledger before each turn' \
+    'allow signed Codex, refuse corrupt ledger, and refuse Claude or legacy terms only for Codex' "$got"
+fi
+
+cat >> "$cdxl/autonomy-log.jsonl" <<'EOF'
+{"event":"codex_launch","mission":"codex-cost-mission","engine":"codex","cost_usd":null,"launch_id":"open"}
+{"event":"codex_launch","mission":"codex-cost-mission","engine":"codex","cost_usd":null,"launch_id":"finished"}
+{"event":"session","mission":"codex-cost-mission","engine":"codex","cost_usd":null,"launch_id":"finished"}
+EOF
+cdx_worker budget "$cdx"
+if [ "$W_RC" -eq 0 ] && [[ "$W_OUT" == *'4 unknown session(s)'* ]]; then
+  pass 'codex cost: interrupted launches are visible and finished launches are not counted twice'
+else
+  fail 'codex cost: interrupted launches are visible and finished launches are not counted twice' \
+    'rc 0 with two original unknown sessions plus one interrupted and one finished' "rc $W_RC: $W_OUT $W_ERR"
+fi
+
 # --- verdict ------------------------------------------------------------------------------------
 if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then
   printf '  FAIL  probe floor shrank to %d, expected at least %d — did a block stop being dispatched?\n' \
