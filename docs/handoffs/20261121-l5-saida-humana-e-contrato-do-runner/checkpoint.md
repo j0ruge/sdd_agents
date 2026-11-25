@@ -1,6 +1,6 @@
 ---
 missao: 20261121-l5-saida-humana-e-contrato-do-runner
-atualizado: 2026-11-25 13:02
+atualizado: 2026-11-25 13:45
 ---
 
 # Checkpoint — L5: saída humana e contrato do runner
@@ -53,7 +53,7 @@ atualizado: 2026-11-25 13:02
 | I3 | A ajuda do sdd run mostra a forma destacada e onde ler o progresso (item 14) | `h=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    help: sdd run shows its detached form and where to read the progress afterwards' <<< "$h") $(grep -c 'setsid nohup sdd run' README.md)"` → `1 1` | done | 03091ed |
 | I4 | O git status de leitura não reescreve o índice (item 9) | `g=$(bash tests/check-gates.sh 2>&1); w=$(bash tests/check-worker.sh 2>&1); echo "$(grep -c '^  ok    sdd status --no-gates reads the tree without rewriting the index of the checkout' <<< "$g") $(grep -c '^  ok    index: pr-ready reads the tree without rewriting the index of the checkout' <<< "$w")"` → `1 1` | done | 012044b |
 | I5 | O argumento de missão que começa com hífen é recusado (item 6) | `g=$(bash tests/check-gates.sh 2>&1); echo "$(grep -c '^  ok    a mission argument that starts with a dash is refused by name in why, phase, boot, census, approve, close and note-manual' <<< "$g") $(grep -c '^  ok    the refusal of a dash argument resolves no mission, with a folder whose name contains it on disk' <<< "$g")"` → `1 1` | done | f7709e3 |
-| I6 | O remédio do sdd kaizen recusado leva --no-track (item 3) | `d=$(cat docs/failure-modes.md docs/pipeline.md); k=$(bash tests/check-kaizen.sh 2>&1); echo "$(grep -c '^  ok    the refusal in the checkout the targets run names a worktree add with --no-track' <<< "$k") $(grep -c -e '--no-track -b kaizen/' <<< "$d")"` → `1 2` | pending | — |
+| I6 | O remédio do sdd kaizen recusado leva --no-track (item 3) | `d=$(cat docs/failure-modes.md docs/pipeline.md); k=$(bash tests/check-kaizen.sh 2>&1); echo "$(grep -c '^  ok    the refusal in the checkout the targets run names a worktree add with --no-track' <<< "$k") $(grep -c -e '--no-track -b kaizen/' <<< "$d")"` → `1 2` | done | 0fe8217 |
 | I7 | O CHECKOUT-BUSY aponta o sdd status --no-gates (item 16) | `c=$(bash tests/check-coordination.sh 2>&1); echo "$(grep -c '^  ok    a CHECKOUT-BUSY refusal names sdd status --no-gates as the read that takes no lock' <<< "$c")"` → `1` | pending | — |
 | I8 | O sdd status com o app fora do ar manda subir o app (item 10) | `g=$(bash tests/check-gates.sh 2>&1); echo "$(grep -c '^  ok    sdd status with the e2e red and the app down names starting the app, never sdd run' <<< "$g") $(grep -c '^  ok    sdd status with the app down says the QA is closed on disk when 30-handoff-qa.md is done' <<< "$g") $(grep -c '^  ok    sdd status with the e2e red and the app answering still names sdd run' <<< "$g")"` → `1 1 1` | pending | — |
 | I9 | O fim da corrida, o sdd status e o corpo do PR nomeiam o sdd close (item 11) | `k=$(bash tests/check-kaizen.sh 2>&1); t=$(bash tests/check-templates.sh 2>&1); echo "$(grep -c '^  ok    the end of sdd run names sdd close as the step after the merge' <<< "$k") $(grep -c '^  ok    sdd status of a complete mission names sdd close as the step after the merge' <<< "$k") $(grep -c '^  ok    pr-body.md: names sdd close as the step after the merge' <<< "$t")"` → `1 1 1` | pending | — |
