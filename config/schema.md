@@ -9,8 +9,10 @@ deleted from the file goes back to its default, and a key exported in the enviro
 `sdd run` keeps that value. A file that no longer loads stops the run before the lap opens a
 session, with the message it would give at launch. An edit made during a session reaches the gate
 of the **next** lap, not the gate right after that session; what the run derived before its first
-lap (the mission branch, the mission directory) keeps the launch value; `sdd retry`, `sdd close` and
-`sdd kaizen` read the file once. Because every key is put back before the re-read, a key the file declares
+lap (the mission branch, the mission directory) keeps the launch value. `sdd retry` reloads
+and validates the configuration when switching to a mission branch changes that file. It
+keeps the approved mission directory and refuses a change to `HANDOFF_DIR`. `sdd close`
+and `sdd kaizen` read the file once. Because every key is put back before the re-read, a key the file declares
 `readonly` stops the run with a sentence that names it — the file holds assignments only.
 
 Rule: if a required key is empty, `sdd preflight` fails **before** spending a session. For two keys

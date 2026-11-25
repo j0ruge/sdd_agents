@@ -4628,6 +4628,7 @@ ledger_row_is_local() {
 # error can only land on the conservative side.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
   printf '%s' 'def is_codex_telemetry: type == "object" and .v == 1 and .engine == "codex" and (.event == "codex_launch" or .event == "codex_plan_usage");'
+  printf '%s' 'def codex_unknown_cost_count: map(select(.event == "session" and .engine == "codex" and (.cost_usd | type) != "number")) | length;'
   printf '%s' 'def step_rank: if . == "QA:plan" then 0 elif . == "QA:exec" then 1 elif . == "QA:close" then 2 else null end;'
   printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced" elif ((.step_after | step_rank) != null and (.step | step_rank) != null and (.step_after | step_rank) > (.step | step_rank) and .moved != false) then "advanced" elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
   printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else ($p.m - (.seen[$k] // 0)) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $row.pending_after != null and $row.increments_total != null then .seen[$k] = ($row.increments_total - $row.pending_after) elif (($r.gate_why // "") | test("^[0-9]+ increment\\(s\\) done")) then .seen[$k] = (($r.gate_why // "") | capture("^(?<t>[0-9]+) increment") | .t | tonumber) else . end)) | .out;'
@@ -10551,7 +10552,7 @@ config_env_snapshot() {
 # own REVIEW. ⚠️ DECLARED LIMITS: what cmd_run derived from the config BEFORE its loop keeps the
 # launch value (the mission branch off DEFAULT_BRANCH, MISSION_DIR off HANDOFF_DIR); an edit made
 # DURING a session reaches the gate of the NEXT lap, not the gate right after that session nor its
-# inline retry; `sdd retry`, `sdd close` and `sdd kaizen` read the config once, as before.
+# inline retry; `sdd retry` reloads only if its branch switch changed the config on disk.
 # A key the file declared `readonly` cannot be put back, so it stops the run here with a sentence
 # that names it (found by the final review of 20261004-lote-4-a-catraca-zera: lap 1 died on bash's
 # own `unset: …: readonly variable`). The probe is a subshell, so the real unset below never fails.
@@ -11338,20 +11339,29 @@ cmd_retry() {
     esac
     shift
   done
+  config_env_snapshot
   load_config
   resolve_mission "$mission_arg"
+  local source_config target_config source_handoffs="$HANDOFF_DIR"
+  source_config="$(codex_config_fingerprint)" || die "cannot check the retry configuration"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
   AUTONOMY_RUN_ID="$(uuidgen)"
   AUTONOMY_INVOCATION="retry"
-  # The second door of phase_skills_check (L4 item 7): a retry opens a fresh session, which the
-  # harness would deny the skill all the same. Before the branch, the gates and the session.
-  if [ "$PHASE_ENGINE" = claude ]; then phase_skills_check run; fi
   kit_stale_check
   # The second call site of the single definition: `sdd retry` opens a session that COMMITS, so a
   # retry fired from the wrong branch lands the redone phase exactly where `sdd run` would not
   # have put it. Same guard, same die, same silence in a dry run (retry has no dry mode, and the
   # global defaults to 0 — the guard costs nothing and outlives the assumption).
   ensure_mission_branch
+  # A different config belongs to the selected branch. Restore the caller's environment
+  # before loading it so removed keys cannot inherit values from the previous branch.
+  target_config="$(codex_config_fingerprint)" || die "cannot check the retry configuration"
+  if [ "$target_config" != "$source_config" ]; then
+    config_reload
+    [ "$HANDOFF_DIR" = "$source_handoffs" ] || die "HANDOFF_DIR changed — retry from the mission branch"
+  fi
+  # Check the skills of the actual harness, before gates or any fresh session.
+  if [ "$PHASE_ENGINE" = claude ]; then phase_skills_check run; fi
   # The fourth door, and the last of the four that existed then: `sdd retry` redoes a phase with a
   # FRESH session, and that session COMMITS. Fired from `main` it used to put the redone phase
   # straight into the base branch without a word — the one door of the four that opened in silence.
@@ -11888,6 +11898,7 @@ cmd_autonomy() {
     # ($manuals) so the arithmetic closes over it, and kept out of every grade: no session ran.
     def is_manual: .event == "manual";
     def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close or is_manual or is_codex_telemetry) | not;
+    def unknown_cost_suffix: if . == 0 then "" else " + \(.) session(s) at unknown cost" end;
     # ONE definition of "this row is the judge observing, not a row to grade" — read in TWO places
     # below (the count and the removal), which is exactly the shape CLAUDE.md demands of a predicate
     # with more than one reader: spelled twice, the two drift and the row leaves the list without
@@ -12164,6 +12175,7 @@ cmd_autonomy() {
               | ((map(.cost_usd // 0) | add)
                  + ((.[0] | mission_key) as $k
                     | $closerows | map(select(mission_key == $k)) | map(.cost_usd // 0) | add // 0)) as $cost
+              | (codex_unknown_cost_count) as $unknown
               | (.[0] | mission_key | history_of) as $every
               | ($every | launches) as $launches
               | ((.[0] | mission_key | history_rows_of) | reopened) as $reopened
@@ -12197,14 +12209,16 @@ cmd_autonomy() {
               | (if $fr == null then "" else
                    ($every | [to_entries[]
                      | select(.value.phase == "REVIEW" or (.value.phase == "EXEC" and .key > $fr))
-                     | .value.cost_usd // 0] | add // 0) as $loop
+                     | .value]) as $loop_rows
+                   | ($loop_rows | map(.cost_usd // 0) | add // 0) as $loop
+                   | ($loop_rows | codex_unknown_cost_count) as $loop_unknown
                    | ($every | map(.cost_usd // 0) | add // 0) as $whole
                    # The zero guard is not decoration: jq DIES on a division by zero and takes the
                    # whole command with it, and a mission whose every session cost null sums to 0
                    # here — the `cost_usd: null` a session that died before its `result` writes.
-                   | " · review loop US$ \($loop | usd)\(if $whole > 0 then " (\(($loop * 100 / $whole) | round)%)" else "" end)"
+                   | " · review loop US$ \($loop | usd)\($loop_unknown | unknown_cost_suffix)\(if $whole > 0 and ($every | codex_unknown_cost_count) == 0 then " (\(($loop * 100 / $whole) | round)%)" else "" end)"
                  end) as $rl
-              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened\($iv)\($rl) · US$ \($cost | usd)"
+              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened\($iv)\($rl) · US$ \($cost | usd)\($unknown | unknown_cost_suffix)"
             ) | join("\n"))
         end)
       elif ($groups | length) == 0 then
@@ -12223,7 +12237,8 @@ cmd_autonomy() {
             | ((map(.cost_usd // 0) | add)
                + (.[0].kit_sha as $k
                   | $closerows | map(select(.kit_sha == $k)) | map(.cost_usd // 0) | add // 0)) as $cost
-            | "  \($sha)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \((($t.churned + $t.idle) * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | usd)"
+            | (codex_unknown_cost_count) as $unknown
+            | "  \($sha)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \((($t.churned + $t.idle) * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | usd)\($unknown | unknown_cost_suffix)"
           ) | join("\n"))
       end)
     , (map(select(is_escalation and on_axis)) | group_by(.kit_sha, .kind)
@@ -12661,7 +12676,8 @@ kaizen_series() {
                | map({repo: .[0].repo, mission: .[0].mission, phase: .[0].phase, label: phase_label,
                       sessions: (map(select(.event == "session")) | length),
                       outcomes: (map(select(.event == "session")) | outcome_tally),
-                      cost_usd: (map(.cost_usd // 0) | add)})) as $detail
+                      cost_usd: (map(.cost_usd // 0) | add),
+                      unknown_cost_sessions: codex_unknown_cost_count})) as $detail
       | {kit_sha: $rows[0].kit_sha,
          # The raw HEAD shas this behaviour version covers, unique, in file order (ADR 0014). It is
          # what the judge reads to see that two commits were one behaviour; a row without kit_rev
@@ -12728,6 +12744,7 @@ kaizen_series() {
                              | group_by(.kind)
                              | map({(.[0].kind): length}) | add // {}),
          cost_usd: ($sess | map(.cost_usd // 0) | add // 0 | . * 100 | round / 100),
+         unknown_cost_sessions: ($sess | codex_unknown_cost_count),
          detail: $detail};
 
     [ inputs ] as $file_rows

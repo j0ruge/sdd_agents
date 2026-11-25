@@ -2226,7 +2226,7 @@ mut_KAIZEN_composition_unprinted() {
 # docs/pipeline.md went on naming `cost_usd`. What dies is the sensor that reads the
 # sdd:series-fields block of docs/pipeline.md against the keys the series prints.
 mut_KAIZEN_series_key_renamed() {
-  sed -i '/^kaizen_series() {/,/^}/ s/^                      cost_usd: (map(.cost_usd \/\/ 0) | add)})) as \$detail$/                      cost: (map(.cost_usd \/\/ 0) | add)})) as $detail/' "$1"
+  sed -i '/^kaizen_series() {/,/^}/ s/^                      cost_usd: (map/                      cost: (map/' "$1"
 }
 
 mut_KAIZEN_series_rc_dropped() {
@@ -4749,6 +4749,12 @@ mut_HEALTH_ratchet_eats_verdict() {
 # delete both, sabotaging the door this entry is not about.
 mut_RETRY_branch_switch_dead() {
   sed -i '/^cmd_retry() {/,/^}/ { /^  ensure_mission_branch$/d }' "$1"
+}
+
+# An existing mission branch can have a different harness. Reading only the original checkout
+# skips the destination's Codex admission even though the branch and approved plan are correct.
+mut_RETRY_branch_config_stale() {
+  sed -i '/^cmd_retry() {/,/^}/ s/^    config_reload$/    :/' "$1"
 }
 
 # The ghost UUID comes back (the bug fixed in `032c09c`): an in-loop retry runs with `--resume …
@@ -8477,6 +8483,7 @@ CATALOG=(
   HEALTH_baseline_read_aborts
   HEALTH_ratchet_eats_verdict
   RETRY_branch_switch_dead
+  RETRY_branch_config_stale
   RUN_ghost_session_id
   RETRY_moved_never_true
   KAIZEN_moved_never_true

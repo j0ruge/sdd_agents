@@ -271,5 +271,47 @@ assert 'Codex launch receipts are recognized apart from graded sessions' grep -F
 assert 'The judge extracts Codex receipts from the unknown event bucket' jq -e \
   '.excluded.codex_telemetry > 0 and .excluded.unrecognized == 0' "$FIX/series"
 
+# A retry entered from another branch must use the selected mission configuration.
+(
+  seed="$(git rev-list --max-parents=0 HEAD)"
+  git switch -qc retry-engine-source "$seed"
+  sed -i 's/^branch:.*/branch: retry-engine-destination/' "$MDIR/00-missao.md"
+  git add "$MDIR/00-missao.md" && git commit -qm 'Declare the retry destination'
+  git switch -qc retry-engine-destination
+  printf '%s\n' PHASE_ENGINE=codex CODEX_PHASE_MODEL=gpt-6.2-astra >> .sdd/config.sh
+  git add .sdd/config.sh && git commit -qm 'Select Codex on the destination'
+  git switch -q retry-engine-source
+  rm -f "$FIX/signed" "$FIX/guard" "$FIX/provider"
+  rc=0; "$SDD" retry "$MISSION" > "$FIX/out" 2>&1 || rc=$?
+  assert 'retry reaches the branch declared by the mission' test "$(git branch --show-current)" = retry-engine-destination
+  assert 'retry on a Codex destination requires signed consent before either provider' grep -Fq 'missing signed unknown-cost allowance' "$FIX/out"
+  assert 'retry checks the destination model' grep -Fq -- '--phase EXEC --model gpt-6.2-astra' "$FIX/guard"
+  assert 'retry with no consent never invokes either harness' no_launch
+)
+
+# Reports carry the measured subtotal and say which sessions had unknown billed USD.
+(
+  export SDD_STATE_DIR="$FIX/cost-state"
+  mkdir "$SDD_STATE_DIR"
+  jq -cn --arg repo "$REPO" '
+    {v:1,ts:"2026-01-01T12:00:00Z",event:"session",repo:$repo,mission:"cost-mixed",
+     kit_sha:"cost-fixture",kit_dirty:false,phase:"EXEC",step:"EXEC",gate:"pass",moved:true,
+     invocation:"run",run_id:"r1",engine:"claude",cost_usd:2.5} as $known
+    | $known, ($known + {engine:"codex",cost_usd:null,estimated_cost_usd:7}),
+      ($known + {mission:"cost-all-unknown",engine:"codex",cost_usd:null})
+  ' > "$SDD_STATE_DIR/autonomy-log.jsonl"
+  "$SDD" autonomy --by-mission > "$FIX/out"
+  assert 'mission report discloses unknown USD without adding the estimate' grep -Eq 'cost-mixed .*US[$] 2[.]50 [+] 1 session.s. at unknown cost' "$FIX/out"
+  assert 'mission report does not present an entirely unpriced mission as measured zero' grep -Eq 'cost-all-unknown .*US[$] 0[.]00 [+] 1 session.s. at unknown cost' "$FIX/out"
+  "$SDD" autonomy > "$FIX/out"
+  assert 'version report records the same known subtotal and both unknown sessions' grep -Eq 'cost-fixture .*US[$] 2[.]50 [+] 2 session.s. at unknown cost' "$FIX/out"
+  "$SDD" kaizen --series > "$FIX/out"
+  assert 'series reports known USD and unknown counts at version and cell levels' jq -e '
+    .latest.cost_usd == 2.5 and .latest.unknown_cost_sessions == 2
+    and any(.latest.detail[]; .mission == "cost-mixed" and .cost_usd == 2.5 and .unknown_cost_sessions == 1)
+    and any(.latest.detail[]; .mission == "cost-all-unknown" and .cost_usd == 0 and .unknown_cost_sessions == 1)
+  ' "$FIX/out"
+)
+
 python3 "$ROOT/tests/check-codex-adapter.py"
 python3 "$ROOT/tests/check-codex-planner.py"

@@ -1840,6 +1840,11 @@ the field absent, `null`, or empty are one and the same answer).
 Under one repo that is a no-op; under `--all-repos` it is what keeps two projects that ran the same
 dated slug on the same `kit_sha` from collapsing into one group — mission slugs are dated and
 `sdd kaizen` itself mints `<today>-kaizen`, identical in every repo on the same day.
+The series preserves `cost_usd` as the measured subtotal. Each version and phase cell also
+reports `unknown_cost_sessions` for Codex sessions without billed USD. The human mission and
+version tables mark those sessions beside the measured subtotal. A token-based estimate is
+not added to that subtotal.
+
 The empty-ledger branch prints the same key set with
 zeros: a consumer must never read `null` on one branch where the other gives a number.
 
@@ -1854,9 +1859,10 @@ changes its unit or its meaning is not caught, and the sensor's comment says so.
 - top level: `v`, `latest`, `previous`, `guard`, `excluded`
 - `latest` and `previous`, each a slice or null: `kit_sha`, `kit_shas_raw`, `missions`,
   `missions_with_session`, `composition`, `sessions`, `harness`, `outcomes`, `advance_rate`,
-  `moved_rate`, `labels`, `escalations`, `cost_usd`, `detail`
+  `moved_rate`, `labels`, `escalations`, `cost_usd`, `unknown_cost_sessions`, `detail`
 - a `composition` entry: `repo`, `missions`, `missions_with_session`
-- a `detail` entry: `repo`, `mission`, `phase`, `label`, `sessions`, `outcomes`, `cost_usd`
+- a `detail` entry: `repo`, `mission`, `phase`, `label`, `sessions`, `outcomes`, `cost_usd`,
+  `unknown_cost_sessions`
 - `outcomes`, in a slice and in a `detail` entry: `advanced`, `churned`, `idle`
 - `labels`: `ok`, `leve`, `refez`
 - `escalations`: one key per escalation kind, holding its count — data, never a fixed name
