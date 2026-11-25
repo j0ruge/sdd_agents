@@ -804,6 +804,30 @@ except OSError:
 ' "$1"
 }
 
+# Match git_common_dir_abs and ledger_repo_root in bin/sdd. Older Git echoes the absolute-path
+# flag and exits successfully, so resolve a non-absolute answer from the unflagged query.
+# Keep the final newline until validation so a path with a trailing newline cannot lose bytes.
+budget_repo_key() {
+  local root="$1" common bare
+  common="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null && printf .)" || return 1
+  [[ "$common" == *$'\n.' ]] || return 1
+  common="${common%$'\n.'}"
+  if [[ "$common" != /* ]]; then
+    common="$(git -C "$root" rev-parse --git-common-dir 2>/dev/null && printf .)" || return 1
+    [[ "$common" == *$'\n.' ]] || return 1
+    common="${common%$'\n.'}"
+    [[ -n "$common" && "$common" != *$'\n'* ]] || return 1
+    common="$(CDPATH='' cd -- "$root" && CDPATH='' cd -- "$common" && pwd -P && printf .)" || return 1
+    common="${common%$'\n.'}"
+  fi
+  [[ "$common" == /* && "$common" != *$'\n'* && -d "$common" ]] || return 1
+  # core.bare describes the shared repository even when the entry point is a linked worktree.
+  # Missing core.bare has the same meaning as false.
+  bare="$(git -C "$root" config --bool --get core.bare 2>/dev/null)" || [ "$?" -eq 1 ] || return 1
+  if [[ "$bare" != true && "$common" == ?*/.git ]]; then common="${common%/.git}"; fi
+  printf '%s' "$common"
+}
+
 # budget <campaign-dir> — what the campaign spent against its ceiling: the cost_usd of every ledger
 # line whose mission is one of the campaign's (the delegation's campaign:, campaign_set), summed by jq
 # — never by awk, whose mawk reads 1.99 as 1 under pt-BR — against budget_campaign_usd, and the
@@ -908,9 +932,8 @@ cmd_budget() {
   harness="$(fm_value "${f%/*}/campaign.md" harness)"
   repo_key=""
   if [ "$harness" = codex ]; then
-    repo_key="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)" \
+    repo_key="$(budget_repo_key "$root")" \
       || { printf 'no spend — cannot resolve the campaign Git common directory\n'; return 1; }
-    repo_key="${repo_key%/.git}"
   fi
   if ! campaign_set "$root" "$campaign"; then printf 'no spend — %s\n' "$SET_WHY"; return 1; fi
   for wt in "${SET_CHECKOUTS[@]}"; do

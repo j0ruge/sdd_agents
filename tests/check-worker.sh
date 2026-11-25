@@ -5258,6 +5258,91 @@ else
 fi
 git -C "$REPO" branch --unset-upstream "$cdx_branch"
 
+# The Git shim reproduces the pre-2.31 response described in check-autonomy.sh. Its unflagged
+# query stays real, so a primary checkout exercises a relative common dir and a linked checkout
+# exercises an absolute one. The runner must admit the same row that stops the worker's budget.
+identity_state="$BOX/codex-identity-state"
+identity_shim="$BOX/codex-identity-shim"
+identity_cdpath="$BOX/codex-identity-cdpath"
+mkdir -p "$identity_state" "$identity_shim" "$identity_cdpath/.git"
+{ printf '#!/usr/bin/env bash\nreal=%q\n' "$REAL_GIT"
+  cat <<'SHIM'
+if [ "$1" = -C ] && [ "$3" = rev-parse ]; then
+  case "$4 $5" in
+    '--path-format=absolute --git-common-dir')
+      if [ "${BUDGET_GIT_SHIM:-}" = ambiguous ]; then printf '/ambiguous\n/path\n'; exit 0; fi
+      printf '%s\n' "$4"
+      exec "$real" -C "$2" rev-parse --git-common-dir ;;
+    '--git-common-dir ')
+      if [ "${BUDGET_GIT_SHIM:-}" = unresolved ]; then printf 'missing-common-directory\n'; exit 0; fi ;;
+  esac
+fi
+exec "$real" "$@"
+SHIM
+} > "$identity_shim/git"
+chmod +x "$identity_shim/git"
+if [ "$(PATH="$identity_shim:$PATH" git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)" != \
+     $'--path-format=absolute\n.git' ]; then
+  printf '  SENSOR-BROKEN  the older Git budget fixture does not echo the flag and relative path\n' >&2
+  exit 94
+fi
+
+# A bare repository can itself be named .git. Its linked worktree must keep that suffix in the
+# ledger key even though rev-parse --is-bare-repository from the worktree answers false.
+identity_bare="$BOX/codex-identity-bare/.git"
+identity_link="$BOX/codex-identity-bare-link"
+identity_campaign="$identity_link/docs/campaigns/codex-cost"
+identity_mission="$identity_link/docs/handoffs/codex-cost-mission"
+git clone -q --bare "$REPO" "$identity_bare" &&
+  git --git-dir="$identity_bare" worktree add -q --detach "$identity_link" HEAD &&
+  mkdir -p "$identity_campaign" "$identity_mission" &&
+  cp "$cdx"/{campaign,delegation}.md "$identity_campaign/" &&
+  cp "$cdxm/00-missao.md" "$identity_mission/" || exit 94
+
+got=""
+for identity_case in primary linked bare-linked; do
+  identity_key="$REPO"
+  case "$identity_case" in
+    primary) identity_root="$REPO"; identity_dir="$cdx" ;;
+    linked) identity_root="$cdxw"; identity_dir="$cdxwc" ;;
+    bare-linked) identity_root="$identity_link"; identity_dir="$identity_campaign"; identity_key="$identity_bare" ;;
+  esac
+  {
+    jq -cn --arg repo "$identity_key" '{event:"session",repo:$repo,mission:"codex-cost-mission",cost_usd:30}'
+    jq -cn '{event:"session",repo:"/another-repo",mission:"codex-cost-mission",cost_usd:90}'
+  } > "$identity_state/autonomy-log.jsonl"
+  for identity_git in real old; do
+    identity_path="$PATH"
+    if [ "$identity_git" = old ]; then identity_path="$identity_shim:$PATH"; fi
+    identity_report="$(CDPATH='' cd "$identity_root" &&
+      PATH="$identity_path" CDPATH="$identity_cdpath" SDD_STATE_DIR="$identity_state" "$ROOT/bin/sdd" autonomy 2>&1)"
+    [[ "$identity_report" == *"1 row(s) · $identity_key"* ]] \
+      || got="${got:+$got; }$identity_case/$identity_git runner: $identity_report"
+    PATH="$identity_path" CDPATH="$identity_cdpath" SDD_STATE_DIR="$identity_state" W_CWD="$REPO" worker budget "$identity_dir"
+    [ "$W_RC" -eq 1 ] && [ "$W_OUT" = "$(camp_line 30.00 30.00 1 10)" ] \
+      || got="${got:+$got; }$identity_case/$identity_git budget: rc $W_RC: $W_OUT $W_ERR"
+  done
+done
+if [ -z "$got" ]; then
+  pass 'codex cost: budget enforces the ceiling with the same repository key as the runner on both Git versions'
+else
+  fail 'codex cost: budget enforces the ceiling with the same repository key as the runner on both Git versions' \
+    'rc 1 at US$ 30.00 in the primary checkout, linked worktree and linked worktree of a bare .git' "$got"
+fi
+
+got=""
+for identity_failure in ambiguous unresolved; do
+  PATH="$identity_shim:$PATH" BUDGET_GIT_SHIM="$identity_failure" SDD_STATE_DIR="$identity_state" W_CWD="$REPO" worker budget "$cdx"
+  [ "$W_RC" -eq 1 ] && [ "$W_OUT" = 'no spend — cannot resolve the campaign Git common directory' ] \
+    || got="${got:+$got; }$identity_failure: rc $W_RC: $W_OUT $W_ERR"
+done
+if [ -z "$got" ]; then
+  pass 'codex cost: budget refuses ambiguous or unresolvable ledger identities'
+else
+  fail 'codex cost: budget refuses ambiguous or unresolvable ledger identities' \
+    'rc 1 and a repository identity error in both cases' "$got"
+fi
+
 cp "$cdxw/.sdd/config.sh" "$BOX/codex-config"
 printf '\nBUDGET_MISSION_USD=0.014\n' >> "$cdxw/.sdd/config.sh"
 got=""
