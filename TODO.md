@@ -167,7 +167,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **Dois leitores de "o que mudou" listam com detecção de rename, e um `git mv` esconde o caminho que saiu** —
-  `bin/sdd:14119` (`review_head_ok`) — e `hat_diff_names`, a guarda do chapéu: `git diff --name-only` sem
+  `bin/sdd:14084` (`review_head_ok`) — e `hat_diff_names`, a guarda do chapéu: `git diff --name-only` sem
   `--no-renames` mostra só o destino de um arquivo movido sem mudança (git 2.43.0: `git mv run.sh d/m/run.sh` dá
   só o destino; `--no-renames` e `diff-tree -r` dão os dois), e a saída de código de fora do `writes:` passa calada.
   O `gate_PR` ganhou `--no-renames` em j0ruge/sdd_agents#458 (CodeRabbit 4654284461). Direção: `--no-renames` nos
@@ -419,7 +419,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
 - [ ] **O `CHECKOUT-BUSY` do `sdd status` não aponta o `--no-gates`, que lê o disco com a run em voo** —
-  `bin/sdd:13539` (`coordination_enter`) — a recusa imprime só o dono (o `describe` do `sdd-coordination.py`).
+  `bin/sdd:13463` (`coordination_enter`) — a recusa imprime só o dono (o `describe` do `sdd-coordination.py`).
   Na 5a do `dotp-remake`, o relay rodou `sdd status <missão>` com a run em voo, recebeu só o `CHECKOUT-BUSY` e
   escreveu no handoff que o status "não serve durante a run"; a sessão seguinte ia ler o checkpoint por `sed`. O
   `--no-gates` está no `README.md` e no `docs/failure-modes.md`, e a missão inexistente já aponta para ele

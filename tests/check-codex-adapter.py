@@ -3,10 +3,13 @@
 import json
 import os
 from pathlib import Path
+import runpy
 import subprocess
 import tempfile
 import tomllib
 import unittest
+from contextlib import ExitStack
+from unittest.mock import patch
 
 ADAPTER = Path(__file__).resolve().parents[1] / "bin" / "sdd-codex"
 THREAD = "019aebba-bc11-73b0-8080-7c8fbffcd884"
@@ -34,6 +37,9 @@ elif 'sandbox' in args:
         os.execv(command[0], command)
     if os.environ.get('FAKE_EXEC_SANDBOX') == '1':
         pathlib.Path(os.environ['FAKE_ARGS']).write_text(json.dumps(args))
+        if os.environ.get('SDD_TEST_NATIVE_CODEX'):
+            real = os.environ['SDD_TEST_NATIVE_CODEX']
+            os.execv(real, [real, *args])
         command = args[args.index('--') + 1:]
         os.execv(command[0], command)
     sys.exit(int(os.environ.get('FAKE_SANDBOX_RC', '0')))
@@ -46,7 +52,7 @@ else:
             env.update(tomllib.loads(setting)['shell_environment_policy']['set'])
         pathlib.Path('proof.txt').write_text('proof')
         amend = ['--amend'] if os.environ['FAKE_MODEL_COMMIT'] == 'amend' else []
-        command = ['bash', '-ec', 'git add proof.txt && git commit -qm proof "$@"', 'bash', *amend]
+        command = ['bash', '-ec', 'git add --all && git commit -qm proof "$@"', 'bash', *amend]
         if os.environ.get('SDD_TEST_NATIVE_CODEX'):
             real = os.environ['SDD_TEST_NATIVE_CODEX']
             config = [value for i, value in enumerate(args) if args[i - 1] == '-c']
@@ -63,7 +69,8 @@ else:
 
 class AdapterTests(unittest.TestCase):
     def invoke(self, *args, events=None, rc=0, sandbox_rc=0, linked=False, remote=None,
-               execute_sandbox=False, model_commit=False):
+               execute_sandbox=False, model_commit=False, git_override=False, mission_branch="mission",
+               local_ignore=False):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
@@ -73,11 +80,21 @@ class AdapterTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(repo), "config", "user.email", "fixture@example.invalid"],
                            env=git_env, check=True)
             subprocess.run(["git", "-C", str(repo), "commit", "-qm", "seed", "--allow-empty"], env=git_env, check=True)
+            if local_ignore:
+                (repo / ".git/info/exclude").write_text("local-note.txt\n")
+                excludes = base / "extra-ignore"
+                excludes.write_text("other-local-note.txt\n")
+                subprocess.run(["git", "-C", str(repo), "config", "core.excludesfile", str(excludes)],
+                               env=git_env, check=True)
             if linked:
                 branch = base / "linked"
-                subprocess.run(["git", "-C", str(repo), "worktree", "add", "-qb", "mission", str(branch)],
+                subprocess.run(["git", "-C", str(repo), "worktree", "add", "-qb", mission_branch, str(branch)],
                                env=git_env, check=True)
                 repo = branch
+            (repo / ".sdd").mkdir()
+            if local_ignore:
+                (repo / "local-note.txt").write_text("local")
+                (repo / "other-local-note.txt").write_text("other local")
             if remote:
                 subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", remote], env=git_env, check=True)
             fake = base / "codex"
@@ -97,6 +114,11 @@ class AdapterTests(unittest.TestCase):
             }
             if model_commit:
                 env["FAKE_MODEL_COMMIT"] = str(model_commit)
+            if git_override:
+                (repo / "already-staged.txt").write_text("already staged")
+                subprocess.run(["git", "add", "already-staged.txt"], cwd=repo, check=True, env=git_env)
+                env["GIT_INDEX_FILE"] = str(base / "other-index")
+                subprocess.run(["git", "read-tree", "HEAD"], cwd=repo, check=True, env=env)
             result = subprocess.run(
                 [str(ADAPTER), *args], text=True, input="fixture prompt\n", env=env,
                 cwd=repo, capture_output=True, timeout=15,
@@ -109,6 +131,7 @@ class AdapterTests(unittest.TestCase):
                 self.final_git = [git("log", "-1", "--format=%s"), git("status", "--short"),
                                   git("log", "-1", "--format=%s", "trunk"),
                                   git("reflog", "-1", "--format=%gs")]
+                self.final_tracked = git("ls-files").splitlines()
             return result, arguments
 
     def run_hat(self, *args, model="gpt-6.2-sol", hat="sdd-executor", **kwargs):
@@ -376,6 +399,73 @@ class AdapterTests(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("update-ref", events[-1]["result"])
         self.assertEqual(self.final_git[:3], ["external", "?? proof.txt", "seed"])
+
+    def test_git_turn_ignores_an_inherited_index_override(self):
+        rc, events, captured, _ = self.run_hat(linked=True, model_commit=True, git_override=True)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("staged", events[-1]["result"])
+        self.assertIsNone(captured)
+        self.assertEqual(self.final_git[:3], ["seed", "A  already-staged.txt", "seed"])
+
+    def test_git_turn_accepts_a_unicode_branch_name(self):
+        rc, events, _, _ = self.run_hat(linked=True, model_commit=True, mission_branch="missão")
+        self.assertEqual(rc, 0, events)
+        self.assertEqual(self.final_git[:3], ["proof", "", "seed"])
+
+    def test_git_turn_respects_local_ignore_rules_when_staging(self):
+        rc, events, _, _ = self.run_hat(linked=True, model_commit=True, local_ignore=True)
+        self.assertEqual(rc, 0, events)
+        self.assertEqual(self.final_tracked, ["proof.txt"])
+
+    @unittest.skipUnless(os.environ.get("SDD_TEST_NATIVE_CODEX"), "requires the opt-in native Codex CLI")
+    def test_gate_native_sandbox_denies_git_metadata_writes(self):
+        command = ('touch permitted-worktree-file && '
+                   'git_dir=$(git rev-parse --absolute-git-dir) && '
+                   'test -f "$git_dir/HEAD" && '
+                   '! touch "$git_dir/sandbox-permission-check" && '
+                   'test ! -e "$git_dir/sandbox-permission-check"')
+        result, _ = self.invoke("--sandbox-check", command, linked=True, execute_sandbox=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_git_handoff_recovers_a_failed_installation_after_the_branch_advances(self):
+        handoff_type = runpy.run_path(str(ADAPTER))["GitIndexHandoff"]
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+
+            def git(*args):
+                return subprocess.check_output(["git", *args], cwd=checkout, env=env, text=True).strip()
+
+            git("init", "-q", "-b", "mission")
+            git("config", "user.name", "Fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            git("commit", "-qm", "seed", "--allow-empty")
+            old = git("rev-parse", "HEAD")
+            (checkout / "proof.txt").write_text("proof")
+            git("add", "proof.txt")
+            git("commit", "-qm", "proof")
+            new = git("rev-parse", "HEAD")
+            git("reset", "--mixed", old)
+            replace = Path.replace
+
+            def fail_index_lock_rename(source, destination):
+                if source.name == "index.lock":
+                    raise OSError("simulated interrupted index installation")
+                return replace(source, destination)
+
+            with ExitStack() as stack:
+                handoff = handoff_type(stack, checkout)
+                with patch.object(Path, "replace", fail_index_lock_rename):
+                    with self.assertRaisesRegex(OSError, "simulated interrupted"):
+                        handoff.advance("refs/heads/mission", old, new, lambda: None)
+            self.assertEqual(git("rev-parse", "HEAD"), new)
+            self.assertTrue(handoff.intent.is_file())
+            self.assertTrue(handoff.lock.is_file())
+            with ExitStack() as stack:
+                handoff_type(stack, checkout)
+            self.assertEqual(git("status", "--short"), "")
+            self.assertFalse(handoff.intent.exists())
+            self.assertFalse(handoff.lock.exists())
 
 
 if __name__ == "__main__":

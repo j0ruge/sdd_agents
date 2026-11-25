@@ -43,6 +43,11 @@ if [ "${1:-}" = --preflight ]; then
   exit $?
 fi
 if [ "${1:-}" = --sandbox-check ]; then
+  case "$#" in
+    2) ;;
+    4) [ "$3" = --qa-host ] && [ -n "$4" ] || exit 2 ;;
+    *) exit 2 ;;
+  esac
   printf '%s\n' "$2" >> "$FIX/sandbox-checks"
   printf '%s|%s\n' "$2" "${4:-offline}" >> "$FIX/sandbox-hosts"
   exec bash -c "$2"

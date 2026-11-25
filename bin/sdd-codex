@@ -3,6 +3,7 @@
 import argparse
 from contextlib import ExitStack
 from decimal import Decimal
+import fcntl
 import ipaddress
 import json
 import os
@@ -32,6 +33,16 @@ CODE_HOSTS = ("github.com", "githubusercontent.com", "gitlab.com", "bitbucket.or
               "azure.com", "visualstudio.com", "codeberg.org", "sr.ht", "gitea.com")
 DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", re.ASCII)
 REQUIRED_FLAGS = ("--json", "--strict-config", "--ignore-user-config", "--ignore-rules")
+OID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
+GIT_ENV_KEEP = {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM",
+                "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME",
+                "GIT_COMMITTER_EMAIL", "GIT_REFLOG_ACTION"}
+
+
+def git_environment():
+    """Ignore Git routing overrides while retaining host identity and global config."""
+    return {key: value for key, value in os.environ.items()
+            if not key.startswith("GIT_") or key in GIT_ENV_KEEP}
 
 
 def emit(native_event=None, **event):
@@ -107,7 +118,8 @@ def qa_app_host(value):
         raise ValueError("QA host must not be a Git publication service")
 
     # Inspect remote hosts only; never log the URL (it might embed authentication).
-    remotes = subprocess.run(["git", "remote", "-v"], check=True, capture_output=True, text=True, timeout=10)
+    remotes = subprocess.run(["git", "remote", "-v"], check=True, capture_output=True, text=True, timeout=10,
+                             env=git_environment())
     for line in remotes.stdout.splitlines():
         _, sep, remote = line.partition("\t")
         if not sep:
@@ -135,7 +147,7 @@ def qa_app_host(value):
 
 def git_metadata(cwd):
     query = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"],
-                           cwd=cwd, capture_output=True, text=True, timeout=10)
+                           cwd=cwd, capture_output=True, text=True, timeout=10, env=git_environment())
     if query.returncode or len(query.stdout.splitlines()) != 2:
         raise ValueError("could not resolve Git metadata for the Codex worktree sandbox")
     git_dir, common = (Path(path).resolve() for path in query.stdout.splitlines())
@@ -155,7 +167,7 @@ def git_access_profile(cwd, network, private_git):
     if private_git is not None:
         paths[private_git] = "write"
     worktrees = subprocess.check_output(["git", "worktree", "list", "--porcelain", "-z"],
-                                        cwd=cwd, text=True, timeout=10)
+                                        cwd=cwd, text=True, timeout=10, env=git_environment())
     for entry in worktrees.split("\0"):
         if entry.startswith("worktree "):
             sibling = Path(entry.removeprefix("worktree ")).resolve()
@@ -272,40 +284,137 @@ def sandbox_check(binary, command, qa_host):
     return result.returncode
 
 
-class PrivateGitTurn:
-    """Stage native commits privately and admit only a fast-forward of the captured branch."""
+class GitIndexHandoff:
+    """Serialize index publication and recover it after a process interruption."""
+
+    intent_name = "sdd-codex-index.json"
 
     def git(self, *arguments, env=None):
         command = ["git", "--no-replace-objects", "-c", "core.hooksPath=/dev/null", *arguments]
-        result = subprocess.run(command, cwd=self.cwd, env=env, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(command, cwd=self.cwd, env=env if env is not None else git_environment(),
+                                capture_output=True, text=True, encoding="utf-8", errors="surrogateescape", timeout=120)
         if result.returncode:
             raise ValueError(f"Git {arguments[0]} failed during the Codex commit handoff")
         return result.stdout.strip()
 
+    def __init__(self, stack, cwd):
+        self.cwd = cwd
+        self.git_dir, self.common = git_metadata(cwd)
+        self.index = self.git_dir / "index"
+        self.lock = self.git_dir / "index.lock"
+        self.intent = self.git_dir / self.intent_name
+        lease = stack.enter_context((self.git_dir / "sdd-codex-index.lease").open("ab"))
+        try:
+            fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("Another Codex Git handoff owns this checkout") from None
+        self.recover()
+
+    @staticmethod
+    def file_id(path):
+        try:
+            info = path.stat(follow_symlinks=False)
+            return [info.st_dev, info.st_ino]
+        except FileNotFoundError:
+            return None
+
+    def recover(self, declined=False):
+        """Finish only the recorded index installation or release its own lock."""
+        try:
+            record = json.loads(self.intent.read_text())
+        except FileNotFoundError:
+            return
+        if not isinstance(record, dict):
+            raise ValueError("Invalid Codex Git handoff receipt")
+        branch, old, new, identity = (record.get(key) for key in ("branch", "old", "new", "index"))
+        if not (all(isinstance(value, str) for value in (branch, old, new)) and branch.startswith("refs/heads/")
+                and OID.fullmatch(old) and OID.fullmatch(new) and isinstance(identity, list)
+                and len(identity) == 2 and all(type(value) is int for value in identity)):
+            raise ValueError("Invalid Codex Git handoff receipt")
+        head = self.git("symbolic-ref", "HEAD")
+        tip = self.git("rev-parse", "--verify", branch)
+        lock = self.file_id(self.lock)
+        owned_lock = lock == identity
+        if head == branch and tip == new:
+            if owned_lock:
+                self.lock.replace(self.index)
+            elif self.file_id(self.index) != identity:
+                raise ValueError("Codex branch advanced, but the prepared index is missing")
+        elif declined or (head == branch and tip == old):
+            if owned_lock:
+                self.lock.unlink()
+        else:
+            raise ValueError("The checkout moved with an unfinished Codex Git handoff")
+        self.intent.unlink()
+
+    def advance(self, branch, old, new, check_index):
+        """Record the replacement before updating the ref, then publish it under Git's lock."""
+        with tempfile.TemporaryDirectory(dir=self.git_dir, prefix="sdd-codex-index-") as stage:
+            replacement = Path(stage) / "index"
+            self.git("read-tree", new, env={**git_environment(), "GIT_INDEX_FILE": str(replacement)})
+            receipt = Path(stage) / "receipt"
+            with receipt.open("w", encoding="utf-8") as output:
+                json.dump(dict(branch=branch, old=old, new=new, index=self.file_id(replacement)), output)
+                output.flush()
+                os.fsync(output.fileno())
+            # Receipt precedes the lock, so an interruption never leaves an unidentifiable lock.
+            receipt.replace(self.intent)
+            try:
+                os.link(replacement, self.lock)
+            except OSError:
+                self.intent.unlink()
+                raise
+            try:
+                if self.git("symbolic-ref", "HEAD") != branch:
+                    raise ValueError("The mission checkout's branch changed during the Codex turn")
+                check_index()
+                self.git("update-ref", "--no-deref", "-m", os.environ.get("GIT_REFLOG_ACTION", "sdd:codex"),
+                         branch, new, old)
+            except (ValueError, OSError, subprocess.SubprocessError):
+                self.recover(declined=True)
+                raise
+            self.recover()
+
+
+class PrivateGitTurn(GitIndexHandoff):
+    """Stage native commits privately and admit only a fast-forward of the captured branch."""
+
     def __init__(self, stack, cwd, binary):
-        self.cwd, self.binary = cwd, binary
-        self.git_dir, _ = git_metadata(cwd)
+        super().__init__(stack, cwd)
+        self.binary = binary
         self.branch = self.git("symbolic-ref", "HEAD")
         if not self.branch.startswith("refs/heads/"):
             raise ValueError("Codex requires HEAD on the mission branch")
         self.old = self.git("rev-parse", "--verify", "HEAD")
         self.check_index()
+        if any(entry[0] == "S" or entry[0].islower() for entry in self.git("ls-files", "-v", "-z").split("\0")
+               if entry):
+            raise ValueError("Codex cannot safely shadow sparse or assume-unchanged index entries")
         self.private = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="sdd-codex-git-"))) / "git"
-        self.git("clone", "--quiet", "--bare", "--shared", "--", str(cwd), str(self.private))
+        self.git("clone", "--quiet", "--mirror", "--shared", "--", str(cwd), str(self.private))
         self.environment = {"GIT_DIR": str(self.private), "GIT_WORK_TREE": str(cwd),
                             "GIT_NO_REPLACE_OBJECTS": "1"}
-        private_env = {**os.environ, **self.environment}
+        private_env = {**git_environment(), **self.environment}
         if self.git("rev-parse", "--verify", self.branch, env=private_env) != self.old:
             raise ValueError("The mission branch moved while preparing private Git")
         self.git("symbolic-ref", "HEAD", self.branch, env=private_env)
         self.git("read-tree", self.old, env=private_env)
-        for key in ("user.name", "user.email"):
-            result = subprocess.run(["git", "config", "--get", key], cwd=cwd,
+        self.git("config", "--remove-section", "remote.origin", env=private_env)
+        # Carry declarative Git behavior only. Never import hooks, filters or credential config.
+        keys = ("user.name", "user.email", "core.filemode", "core.ignorecase", "core.autocrlf",
+                "core.eol", "core.symlinks", "core.excludesfile")
+        for key in keys:
+            kind = ("--path",) if key == "core.excludesfile" else ()
+            result = subprocess.run(["git", "config", *kind, "--get", key], cwd=cwd, env=git_environment(),
                                     capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 self.git("config", key, result.stdout.removesuffix("\n"), env=private_env)
             elif result.returncode != 1:
-                raise ValueError("Could not resolve the Git identity for the Codex turn")
+                raise ValueError("Could not resolve Git settings for the Codex turn")
+        excludes = self.common / "info" / "exclude"
+        if excludes.is_file():
+            (self.private / "info").mkdir(exist_ok=True)
+            shutil.copyfile(excludes, self.private / "info" / "exclude")
 
     def check_index(self):
         try:
@@ -328,13 +437,13 @@ class PrivateGitTurn:
                                 timeout=120)
         if result.returncode:
             raise ValueError(f"Private Git {arguments[0]} failed during the Codex commit handoff")
-        return result.stdout.decode("ascii").strip() if result.stdout else ""
+        return result.stdout.decode("utf-8", "surrogateescape").strip() if result.stdout else ""
 
     def promote(self):
         if self.sandbox_git("symbolic-ref", "HEAD") != self.branch:
             raise ValueError("Codex changed the private checkout's branch")
         new = self.sandbox_git("rev-parse", "--verify", self.branch)
-        if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", new):
+        if not OID.fullmatch(new):
             raise ValueError("Codex proposed an invalid Git object ID")
         if new == self.old:
             return
@@ -346,22 +455,7 @@ class PrivateGitTurn:
                 raise ValueError("Codex proposed a different Git branch or object than inspected")
             self.git("bundle", "unbundle", bundle.name)
         self.git("merge-base", "--is-ancestor", self.old, new)
-        index = self.git_dir / "index"
-        lock = index.with_suffix(".lock")
-        with lock.open("xb"):
-            pass
-        try:
-            if self.git("symbolic-ref", "HEAD") != self.branch:
-                raise ValueError("The mission checkout's branch changed during the Codex turn")
-            self.check_index()
-            with tempfile.TemporaryDirectory(dir=self.git_dir, prefix="sdd-codex-index-") as stage:
-                replacement = Path(stage) / "index"
-                self.git("read-tree", new, env={**os.environ, "GIT_INDEX_FILE": str(replacement)})
-                self.git("update-ref", "--no-deref", "-m", os.environ.get("GIT_REFLOG_ACTION", "sdd:codex"),
-                         self.branch, new, self.old)
-                replacement.replace(index)
-        finally:
-            lock.unlink(missing_ok=True)
+        self.advance(self.branch, self.old, new, self.check_index)
 
 
 def error_message(event):
@@ -472,6 +566,16 @@ def main():
         print("sdd-codex: codex CLI is not on PATH", file=sys.stderr)
         return 127
     if args.preflight:
+        if Path.cwd().joinpath(".git").exists():
+            try:
+                with ExitStack() as stack:
+                    root = Path.cwd()
+                    git_dir, _ = git_metadata(root)
+                    if (git_dir / GitIndexHandoff.intent_name).is_file():
+                        GitIndexHandoff(stack, root)
+            except (OSError, ValueError, subprocess.SubprocessError) as error:
+                print(f"sdd-codex: Git handoff check failed: {error}", file=sys.stderr)
+                return 1
         if args.qa_host is not None:
             try:
                 qa_app_host(args.qa_host)
@@ -514,7 +618,8 @@ def main():
                 cmd.append(args.resume)
             cmd.append("-")
             version = subprocess.check_output([binary, "--version"], text=True, timeout=10).strip()
-            with subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="replace") as child:
+            with subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                                  env=git_environment()) as child:
                 def forward_signal(number, _frame):
                     if child.poll() is None:
                         child.send_signal(number)

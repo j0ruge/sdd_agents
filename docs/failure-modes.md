@@ -812,14 +812,15 @@ errored sessions measured across the four target repos on 2026-09-18) behaves ex
 always did — `session_error` is `null` and the ordinary retry is still bought. So is the budget
 ceiling (`error_max_budget_usd`, `result: null`), which is the kit's **designed** loop and must
 never stop the line. Codex also stops on a failed adapter status, even if the artifact gate passes.
-Run `sdd retry` to start a fresh session for that phase after addressing the failure.
+After addressing the failure, check the current phase with `sdd status <mission>`.
+`sdd retry` re-derives the current phase and opens a fresh session only if a runnable phase is pending.
 
 **Two doors, and the limit is declared.** The first pass and the inline retry, both in `cmd_run`'s
 loop, and both **above their own gate-pass branch**: a session the environment killed stops the
 line even on the rare lap whose gate is satisfied by artifacts an earlier run left behind. That
 placement is the whole of it — with the retry door below the branch, a dying retry whose gate
 passed walked on into the next phase and bought two more sessions against the same dead
-environment before blocking there under the wrong kind. `sdd retry` is the human's hand already on the phase and ends on `retry-gate-red` instead;
+environment before blocking there under the wrong kind. `sdd retry` can end on `retry-gate-red` when its gate fails or `session-died` when the Codex adapter fails.
 `sdd close` does not go through `run_phase`, so nothing arms the marker there.
 
 ---

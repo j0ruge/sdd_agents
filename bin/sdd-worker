@@ -791,10 +791,14 @@ budget_ledger_input() {
 import shutil
 import sys
 try:
-    with open(sys.argv[1], "rb") as ledger:
-        shutil.copyfileobj(ledger, sys.stdout.buffer)
+    ledger = open(sys.argv[1], "rb")
 except FileNotFoundError:
     sys.exit(0)
+except OSError:
+    sys.exit(1)
+try:
+    with ledger:
+        shutil.copyfileobj(ledger, sys.stdout.buffer)
 except OSError:
     sys.exit(1)
 ' "$1"
