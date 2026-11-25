@@ -811,6 +811,11 @@ ancestor of the base or, after a squash, of the locally available head of this m
 that the command confirmed as `MERGED`. Without a verified PR or a local head, only base ancestry
 counts. The command lists findings for review and never edits the file.
 
+On that same clean base, if it confirmed the PR as `MERGED` and its URL ends in a number, the
+command also lists tracked text lines that still say `PR #N open` or `PR #N aberto` for that PR.
+It reports each file, line number and text, skips the handoff directory, and makes no edits.
+Without a verified merge or a matching line, it prints no such list.
+
 `sdd close` is the only invocation of `claude` outside `run_phase()` besides the two `sdd preflight`
 probes — none of them runs a phase. It carries the kit guard anyway, for the reason below, and
 the kit's read-only rule (see "Permissions").

@@ -6955,6 +6955,14 @@ mut_CLOSE_resolved_lists_unproven() {
   sed -i '/^close_list_resolved() {/,/^}/ s@^        continue 2$@        proof="unverified"@' "$1"
 }
 
+# Stale references should be visible only for a PR whose merge was confirmed.
+mut_CLOSE_open_pr_lines_unlisted() {
+  sed -i '/^close_return_home() {/,/^}/ s@^    close_list_open_pr_lines "\$pr_number"$@    :@' "$1"
+}
+mut_CLOSE_open_pr_lines_unverified_listed() {
+  sed -i '/^cmd_close() {/,/^}/ s@^    if \[ "\$merged" != "MERGED" \]; then$@&\n      close_list_open_pr_lines "$pr_number"@' "$1"
+}
+
 # CHECKOUT-UNAVAILABLE names what fell and in which interpreter (finding 8): back to the generic list,
 # and the operator diagnoses the PATH's python3 by hand again.
 mut_COORD_remedy_for_every_requirement() {   # a kernel refusal is told to switch interpreters
@@ -7957,6 +7965,8 @@ CATALOG=(
   CLOSE_resolved_unlisted
   CLOSE_resolved_squash_proof_unread
   CLOSE_resolved_lists_unproven
+  CLOSE_open_pr_lines_unlisted
+  CLOSE_open_pr_lines_unverified_listed
   COORD_select_pidfd
   COORD_stragglers_unnamed
   COORD_stragglers_named_every_tick

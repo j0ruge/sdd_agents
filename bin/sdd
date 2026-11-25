@@ -13824,8 +13824,8 @@ post_merge_hint() {
 # bounded (`timeout 30`, `GIT_TERMINAL_PROMPT=0`): with no timeout(1) it is SKIPPED, because an
 # unbounded fetch could hang the close, and the fast-forward is still tried against the upstream
 # already on the machine — a local merge does not hang. The `ok` says whether anything moved.
-close_return_home() { # close_return_home <verified|unverified> <PR head or empty>
-  local seen="${1:-unverified}" pr_head="${2:-}" current out rc=0 where
+close_return_home() { # close_return_home <verified|unverified> <PR head or empty> <PR number or empty>
+  local seen="${1:-unverified}" pr_head="${2:-}" pr_number="${3:-}" current out rc=0 where
   [ -n "${DEFAULT_BRANCH:-}" ] || return 0
   current="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "" )"
   [ -n "$current" ] || return 0
@@ -13857,6 +13857,9 @@ close_return_home() { # close_return_home <verified|unverified> <PR head or empt
   out="$( GIT_OPTIONAL_LOCKS=0 git -C "$REPO_ROOT" status --porcelain 2>/dev/null )" || return 0
   [ -z "$out" ] || return 0
   close_list_resolved "$seen" "$pr_head"
+  if [ "$seen" = verified ]; then
+    close_list_open_pr_lines "$pr_number"
+  fi
 }
 
 close_fast_forward_base() {
@@ -13927,6 +13930,21 @@ close_list_resolved() { # close_list_resolved <verified|unverified> <PR head or 
   printf '%s\n' "${findings[@]}"
 }
 
+# Handoffs are historical. Only the literal open spellings in tracked text outside them are
+# reported, and the person closing the mission decides whether to update those references.
+close_list_open_pr_lines() { # close_list_open_pr_lines <PR number or empty>
+  local pr_number="$1" rows file line content
+  [ -n "$pr_number" ] || return 0
+  # NUL separates the path and line number so a colon in the path is not a delimiter.
+  rows="$(git -C "$REPO_ROOT" grep -IznE --no-color -e "PR #$pr_number (aberto|open)\b" \
+    -- . ":(exclude,literal)$HANDOFF_DIR" 2>/dev/null |
+    while IFS= read -r -d '' file && IFS= read -r -d '' line && IFS= read -r content; do
+      printf '%s:%s: %s\n' "${file//$'\n'/\\n}" "$line" "$content"
+    done)" || return 0
+  [ -n "$rows" ] || return 0
+  printf '%s line(s) still give PR #%s as open:\n%s\n' "$(grep -c '^' <<< "$rows")" "$pr_number" "$rows"
+}
+
 cmd_close() {
   load_config
   resolve_mission "${1:-}"
@@ -13936,9 +13954,10 @@ cmd_close() {
   # "post-merge" is what makes leaving the mission branch safe (#182: the JIRA-less arm returned
   # early, before both the check and the trip home, and left the human on a spent branch).
   local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
-  local merge_seen=unverified pr_head=""
+  local merge_seen=unverified pr_head="" pr_number=""
   if [ -n "$prurl" ]; then
     local merged pr_view
+    if [[ "$prurl" =~ /([0-9]+)$ ]]; then pr_number="${BASH_REMATCH[1]}"; fi
     pr_view="$( cd "$REPO_ROOT" && gh pr view "$prurl" --json state,headRefOid --jq '.state, .headRefOid' 2>/dev/null )" || pr_view=""
     merged="$(sed -n 1p <<< "$pr_view")"
     if [ "$merged" != "MERGED" ]; then
@@ -13950,7 +13969,7 @@ cmd_close() {
 
   if [ "$JIRA_ENABLED" != "true" ]; then
     info "JIRA_ENABLED=false — nothing to close in JIRA"
-    close_return_home "$merge_seen" "$pr_head"
+    close_return_home "$merge_seen" "$pr_head" "$pr_number"
     return 0
   fi
   local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"
@@ -13980,7 +13999,7 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
     # nobody spent would be the same class of lie as the rc this whole function stopped believing.
     pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=none  rc=0  verified=true  log=none"
     ok "$issue is already Done — JIRA confirms it, and no session was spent"
-    close_return_home "$merge_seen" "$pr_head"
+    close_return_home "$merge_seen" "$pr_head" "$pr_number"
     return 0
   fi
 
@@ -14110,7 +14129,7 @@ blocks the transition, say what it is and stop — but do not stop to request pe
     if [ "$rc" -ne 0 ]; then dim "  (the close session exited $rc — see $close_logs — but the issue is Done, so the artifact decides)"; fi
     ok "$issue closed — JIRA confirms it is Done"
     # The paid arm passes the same merge evidence as the tested already-Done arm.
-    close_return_home "$merge_seen" "$pr_head"
+    close_return_home "$merge_seen" "$pr_head" "$pr_number"
     return 0
   fi
   # THREE outcomes, not two, and the third is why this branch exists: "I asked and JIRA said no" and

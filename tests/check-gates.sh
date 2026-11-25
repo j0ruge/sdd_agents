@@ -7254,7 +7254,7 @@ git -C "$FIX" checkout -q "$CLOSE_HOME"
 # 9e. The local upstream brings in the findings file and the first fix in a fast-forward. The PR
 #     head and the unrelated fix are on separate lines of history, neither merged into the base.
 printf 'MERGED\n' > "$FIX/.sdd/logs/close-pr-state"
-printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\n---\n# PR\n' > "$MDIR/50-pr.md"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/7\n---\n# PR\n' > "$MDIR/50-pr.md"
 printf 'TODO_FILE="close-findings.md"\n' >> "$FIX/.sdd/config.sh"
 git -C "$FIX" add -A && git -C "$FIX" commit -qm "fixture: configure the close listing" || exit 1
 CLOSE_START="$(git -C "$FIX" rev-parse HEAD)" || exit 1
@@ -7278,7 +7278,12 @@ cat > "$FIX/close-findings.md" <<EOF
 <!-- sdd:decided -->
 EOF
 CLOSE_SUM="$(md5sum "$FIX/close-findings.md")" || exit 1
-git -C "$FIX" add close-findings.md && git -C "$FIX" commit -qm "fixture: backlog on the upstream base" &&
+# The open-PR lines only arrive with the fast-forward. The handoff is tracked too but historical.
+printf '%s\n' 'Roadmap: PR #7 aberto' 'Other PR: PR #70 aberto' 'Similar word: PR #7 opened' > "$FIX/docs/roadmap.md"
+printf '%s\n' 'Log: PR #7 open' > "$FIX/KAIZEN_LOG.md"
+printf '%s\n' 'Handoff history: PR #7 aberto' > "$MDIR/close-pr-history.md"
+git -C "$FIX" add close-findings.md docs/roadmap.md KAIZEN_LOG.md "$MDIR/close-pr-history.md" &&
+  git -C "$FIX" commit -qm "fixture: backlog and PR references on the upstream base" &&
   git -C "$FIX" checkout -q "$CLOSE_HOME" &&
   git -C "$FIX" branch -q --set-upstream-to=close-resolved-base "$CLOSE_HOME" || exit 1
 close_run "done" 0
@@ -7304,6 +7309,12 @@ assert_eq "sdd close lists the resolved items with and without JIRA, and deletes
     if [ "$CLOSE_NO_JIRA_SUM" = "$CLOSE_SUM" ] && [ "$(md5sum "$FIX/close-findings.md")" = "$CLOSE_SUM" ]; then echo kept; else echo changed; fi
   )"
 
+CLOSE_STALE_HEADER='2 line(s) still give PR #7 as open:'
+CLOSE_STALE_RE='still give PR|^docs/roadmap[.]md:[0-9]+:|^KAIZEN_LOG[.]md:[0-9]+:|Handoff history'
+assert_eq "sdd close lists the tracked lines that still give the merged PR as open, outside the handoff directory" \
+  "rc:0 header:1 roadmap:1 log:1 excluded:0 jira:1 unchanged:1" \
+  "rc:$CLOSE_RC_OUT header:$(grep -Fxc "$CLOSE_STALE_HEADER" <<< "$CLOSE_NO_JIRA_OUT") roadmap:$(grep -Fxc 'docs/roadmap.md:1: Roadmap: PR #7 aberto' <<< "$CLOSE_NO_JIRA_OUT") log:$(grep -Fxc 'KAIZEN_LOG.md:1: Log: PR #7 open' <<< "$CLOSE_NO_JIRA_OUT") excluded:$(has "$CLOSE_NO_JIRA_OUT" 'Other PR|Similar word|Handoff history') jira:$(grep -Fxc "$CLOSE_STALE_HEADER" <<< "$CLOSE_OUT") unchanged:$(git -C "$FIX" diff --quiet HEAD && echo 1 || echo 0)"
+
 printf 'draft\n' > "$FIX/close-draft.txt"
 close_run "done" 0
 CLOSE_DIRTY_OUT="$CLOSE_OUT"
@@ -7311,15 +7322,30 @@ rm "$FIX/close-draft.txt"
 printf '%040d\n' 0 > "$FIX/.sdd/logs/close-pr-head"
 close_run "done" 0
 CLOSE_MISSING_HEAD_OUT="$CLOSE_OUT"
+printf 'OPEN\n' > "$FIX/.sdd/logs/close-pr-state"
+close_run "done" 0
+CLOSE_OPEN_PR="rc:$CLOSE_RC_OUT list:$(has "$CLOSE_OUT" "$CLOSE_STALE_RE")"
+printf 'MERGED\n' > "$FIX/.sdd/logs/close-pr-state"
+sed -i 's@/pull/7$@/pull/8@' "$MDIR/50-pr.md"
+git -C "$FIX" add "$MDIR/50-pr.md" && git -C "$FIX" commit -qm "fixture: select a merged PR with no stale reference" || exit 1
+close_run "done" 0
+CLOSE_NO_MATCH="rc:$CLOSE_RC_OUT list:$(has "$CLOSE_OUT" "$CLOSE_STALE_RE")"
+sed -i 's@/pull/8$@/pull/7x@' "$MDIR/50-pr.md"
+git -C "$FIX" add "$MDIR/50-pr.md" && git -C "$FIX" commit -qm "fixture: use a PR URL without a numeric suffix" || exit 1
+close_run "done" 0
+CLOSE_BAD_URL="rc:$CLOSE_RC_OUT list:$(has "$CLOSE_OUT" "$CLOSE_STALE_RE")"
 printf -- '---\nfase: PR\n---\n# PR\n' > "$MDIR/50-pr.md"
 git -C "$FIX" add -A && git -C "$FIX" commit -qm "fixture: close without a verified PR" || exit 1
 close_run "done" 0
 assert_eq "sdd close lists no item whose hash passes neither proof, and none without RESOLVED by" \
   "rc:0 listed:2 invalid:0 dirty:0 missing-head:1 unverified:1" \
   "rc:$CLOSE_RC_OUT listed:$(grep -c '^close-findings[.]md:' <<< "$CLOSE_NO_JIRA_OUT") invalid:$(has "$CLOSE_NO_JIRA_OUT" 'Partial finding|Unresolved finding') dirty:$(has "$CLOSE_DIRTY_OUT" '^close-findings[.]md:') missing-head:$([ "$(grep '^close-findings[.]md:' <<< "$CLOSE_MISSING_HEAD_OUT")" = "$CLOSE_BASE_ROW" ] && echo 1 || echo 0) unverified:$([ "$(grep '^close-findings[.]md:' <<< "$CLOSE_OUT")" = "$CLOSE_BASE_ROW" ] && echo 1 || echo 0)"
+assert_eq "sdd close says nothing about open-PR lines when none is left, or when the merge was not verified" \
+  "control:1 dirty:0 open:[rc:1 list:0] no-match:[rc:0 list:0] bad-url:[rc:0 list:0] no-url:[rc:0 list:0]" \
+  "control:$(grep -Fxc "$CLOSE_STALE_HEADER" <<< "$CLOSE_MISSING_HEAD_OUT") dirty:$(has "$CLOSE_DIRTY_OUT" "$CLOSE_STALE_RE") open:[$CLOSE_OPEN_PR] no-match:[$CLOSE_NO_MATCH] bad-url:[$CLOSE_BAD_URL] no-url:[rc:$CLOSE_RC_OUT list:$(has "$CLOSE_OUT" "$CLOSE_STALE_RE")]"
 
 sed -i '/^TODO_FILE="close-findings.md"$/d; s/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
-git -C "$FIX" rm -q close-findings.md && git -C "$FIX" add -A &&
+git -C "$FIX" rm -q close-findings.md docs/roadmap.md KAIZEN_LOG.md "$MDIR/close-pr-history.md" && git -C "$FIX" add -A &&
   git -C "$FIX" commit -qm "fixture: put the close listing inputs back" || exit 1
 
 # The fixture goes back the way it was found. "This block runs last" was the previous version's
