@@ -5039,6 +5039,27 @@ else
 fi
 
 # --- Codex cost exception ----------------------------------------------------------------------
+legacy="$(campaign legacy-missing-cost pr "$FAR" 10 30)"
+legacy_mission="$REPO/docs/handoffs/legacy-missing-cost-mission"
+legacy_state="$BOX/legacy-missing-cost-state"
+mkdir -p "$legacy_mission" "$legacy_state"
+printf '%s\n' '---' 'campaign: legacy-missing-cost' 'lot: L1' '---' > "$legacy_mission/00-missao.md"
+cat > "$legacy_state/autonomy-log.jsonl" <<'EOF'
+{"event":"session","mission":"legacy-missing-cost-mission","cost_usd":4}
+{"event":"session","mission":"legacy-missing-cost-mission","cost_usd":null}
+{"event":"close","mission":"legacy-missing-cost-mission","cost_usd":null}
+EOF
+for legacy_harness in explicit implicit; do
+  if [ "$legacy_harness" = implicit ]; then sed -i '/^harness:/d' "$legacy/campaign.md"; fi
+  SDD_STATE_DIR="$legacy_state" W_CWD="$REPO" worker budget "$legacy"
+  if [ "$W_RC" = 0 ] && [ "$W_OUT" = "$(camp_line 4.00 30.00 1 10)" ]; then
+    pass "legacy budget: $legacy_harness Claude still sums measured USD when session cost is missing"
+  else
+    fail "legacy budget: $legacy_harness Claude still sums measured USD when session cost is missing" \
+      'rc 0 and the same measured-spend line as the original Claude worker' "rc $W_RC: $W_OUT $W_ERR"
+  fi
+done
+
 cdx="$(campaign codex-cost pr "$FAR" 10 30)"
 sed -i -e 's/^harness:.*/harness: codex/' -e 's/^exec_model:.*/exec_model: gpt-6.2-sol/' "$cdx/campaign.md"
 cdxm="$REPO/docs/handoffs/codex-cost-mission"

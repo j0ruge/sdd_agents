@@ -953,7 +953,7 @@ cmd_budget() {
     printf 'no spend — the ledger %s does not read\n' "$ledger"; return 1
   fi
   read -r spent ceiling reached short unknown estimated estimated_count unsupported scope_amounts <<< "$out"
-  if [ "$unknown" -gt 0 ]; then
+  if [ "$unknown" -gt 0 ] && [ "$(fm_value "${f%/*}/campaign.md" harness)" = codex ]; then
     campaign_title='campaign known'
     printf -v billing 'billing — known US$ %d.%02d; %d unknown session(s); ' "$((spent / 100))" "$((spent % 100))" "$unknown"
     if [ "$estimated_count" -gt 0 ]; then

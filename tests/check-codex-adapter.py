@@ -20,7 +20,7 @@ COMPLETE = {"type": "turn.completed", "usage": USAGE}
 MESSAGE = {"type": "item.completed", "item": {"type": "agent_message", "id": "item_1", "text": "SDD_OK"}}
 
 FAKE = """#!/usr/bin/env python3
-import json, os, pathlib, subprocess, sys, tomllib
+import json, os, pathlib, subprocess, sys, time, tomllib
 args = sys.argv[1:]
 if args == ['--version']:
     print('codex-cli 0.test')
@@ -45,6 +45,8 @@ elif 'sandbox' in args:
     sys.exit(int(os.environ.get('FAKE_SANDBOX_RC', '0')))
 else:
     pathlib.Path(os.environ['FAKE_ARGS']).write_text(json.dumps([args, sys.stdin.read(), os.environ['GIT_REFLOG_ACTION']]))
+    if os.environ.get('FAKE_PAUSE'):
+        time.sleep(int(os.environ['FAKE_PAUSE']))
     if 'FAKE_MODEL_COMMIT' in os.environ:
         setting = next((v for v in args if v.startswith('shell_environment_policy.set=')), None)
         env = os.environ.copy()
@@ -72,7 +74,7 @@ else:
 class AdapterTests(unittest.TestCase):
     def invoke(self, *args, events=None, rc=0, sandbox_rc=0, linked=False, remote=None,
                execute_sandbox=False, model_commit=False, git_override=False, mission_branch="mission",
-               local_ignore=False, staged_gitlink=False):
+               local_ignore=False, staged_gitlink=False, deadline=None):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
@@ -94,6 +96,7 @@ class AdapterTests(unittest.TestCase):
                                env=git_env, check=True)
                 repo = branch
             (repo / ".sdd").mkdir()
+            (repo / ".agents/skills").mkdir(parents=True)
             if model_commit == "flags":
                 (repo / "baseline.txt").write_text("baseline")
                 subprocess.run(["git", "add", "baseline.txt"], cwd=repo, env=git_env, check=True)
@@ -125,6 +128,9 @@ class AdapterTests(unittest.TestCase):
             }
             if model_commit:
                 env["FAKE_MODEL_COMMIT"] = str(model_commit)
+            if deadline is not None:
+                env["SDD_CODEX_MAX_TURN_SECONDS"] = str(deadline)
+                env["FAKE_PAUSE"] = "3"
             if git_override:
                 (repo / "already-staged.txt").write_text("already staged")
                 subprocess.run(["git", "add", "already-staged.txt"], cwd=repo, check=True, env=git_env)
@@ -452,6 +458,19 @@ class AdapterTests(unittest.TestCase):
                    'test ! -e "$git_dir/sandbox-permission-check"')
         result, _ = self.invoke("--sandbox-check", command, linked=True, execute_sandbox=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(os.environ.get("SDD_TEST_NATIVE_CODEX"), "requires the opt-in native Codex CLI")
+    def test_gate_native_sandbox_cannot_change_checkout_skills(self):
+        command = ('test -d .agents/skills && touch ordinary-worktree-file && '
+                   '! touch .agents/skills/permission-check && test ! -e .agents/skills/permission-check')
+        result, _ = self.invoke("--sandbox-check", command, linked=True, execute_sandbox=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_model_turn_has_a_wall_clock_deadline(self):
+        rc, events, _, _ = self.run_hat(deadline=1)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("wall-clock limit", events[-1]["result"])
+        self.assertIsNone(events[-1]["estimated_cost_usd"])
 
     def test_git_handoff_recovers_a_failed_installation_after_the_branch_advances(self):
         handoff_type = runpy.run_path(str(ADAPTER))["GitIndexHandoff"]

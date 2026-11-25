@@ -1958,6 +1958,9 @@ cannot verify a signed hard ceiling on ChatGPT subscription usage. The hard ceil
 applies to the known charges. With incomplete billing, the normal budget total uses
 `campaign known US$`. An inline Codex retry resumes the native thread ID recorded in its journal. A restarted
 runner or explicit `sdd retry` starts a fresh phase session from the on-disk artifacts.
+The adapter enforces a one-hour wall-clock limit on each provider invocation, including PLAN.
+An operator can lower it with `SDD_CODEX_MAX_TURN_SECONDS` (1–3600). A timed-out turn fails and
+does not promote private commits. The time limit is not a token quota or a billing ceiling.
 
 This route uses the existing role instructions in a Codex sandbox and checks the recorded edits
 against the role's write scope. Most roles run offline. The QA proxy allows only the eligible
@@ -1980,7 +1983,8 @@ The TICKET role can reach Atlassian Cloud. At PR, the runner hands off to the
 worker's separately authorized `pr` act. This keeps remote publication and merge out of a
 Codex phase's shell permissions. The worker verifies the resulting PR through the existing gate.
 The Codex preflight requires the Codex versions of the skills used by
-the pipeline in an active skill directory. The standalone Jira close session is Claude-only.
+the pipeline in an active skill directory. The native workspace policy keeps the checkout's
+`.agents` directory read-only during the pipeline. The standalone Jira close session is Claude-only.
 
 ### A campaign directory
 
@@ -2134,11 +2138,13 @@ stderr and leaves rc 2 for ordinary calls. A Codex guard can refuse an unavailab
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts or the base do not read); 3 when `gh` did not answer |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
 
-With incomplete billing the normal total starts with `campaign known US$`, also used after
+For Codex campaigns with incomplete billing the normal total starts with `campaign known US$`, also used after
 `no room —`. When legible terms opt into `allow_unknown_cost: true` but lack a valid signature,
 the budget reports `no cost exception — …`. An unapproved or unsupported unknown-cost row gives
 `unknown cost — …` with a separate `billing — known US$` line. Both refusals leave rc 1 and are
 distinct from reaching a known ceiling.
+Claude and legacy campaigns continue to sum the measured costs without applying the Codex
+unknown-cost gate.
 
 **`budget`** sums, with `jq` (never `awk`: under pt-BR the `mawk` reads `1.99` as 1), the `cost_usd`
 of the ledger rows (`${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`) whose `mission` is one of the

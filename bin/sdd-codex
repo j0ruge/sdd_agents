@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 from urllib.parse import urlsplit
 import uuid
 
@@ -33,6 +34,7 @@ CODE_HOSTS = ("github.com", "githubusercontent.com", "gitlab.com", "bitbucket.or
               "azure.com", "visualstudio.com", "codeberg.org", "sr.ht", "gitea.com")
 DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", re.ASCII)
 REQUIRED_FLAGS = ("--json", "--strict-config", "--ignore-user-config", "--ignore-rules")
+MAX_TURN_SECONDS = 3600
 OID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 GIT_ENV_KEEP = {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM",
                 "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME",
@@ -43,6 +45,17 @@ def git_environment():
     """Ignore Git routing overrides while retaining host identity and global config."""
     return {key: value for key, value in os.environ.items()
             if not key.startswith("GIT_") or key in GIT_ENV_KEEP}
+
+
+def turn_timeout():
+    """Use GNU timeout to bound the provider process group without changing USD accounting."""
+    binary = shutil.which("timeout")
+    if not binary:
+        raise ValueError("Codex requires GNU timeout on PATH")
+    value = os.environ.get("SDD_CODEX_MAX_TURN_SECONDS", str(MAX_TURN_SECONDS))
+    if not re.fullmatch(r"[1-9][0-9]{0,3}", value) or int(value) > MAX_TURN_SECONDS:
+        raise ValueError(f"SDD_CODEX_MAX_TURN_SECONDS must be between 1 and {MAX_TURN_SECONDS}")
+    return binary, int(value)
 
 
 def emit(native_event=None, **event):
@@ -486,7 +499,7 @@ def error_message(event):
                  if isinstance(event.get(key), str) and event[key].strip()), None)
 
 
-def stream_turn(child, args, version, private_git=None):
+def stream_turn(child, args, version, private_git=None, deadline=None):
     session_id, last_message, recent_error = None, None, None
     problems, turn_usage = [], []
     terminal_completed = False
@@ -551,7 +564,10 @@ def stream_turn(child, args, version, private_git=None):
         emit(event, **attributes)
     rc = child.wait()
     if rc:
-        problems.append(f"Codex CLI exited {rc}" + (f": {recent_error}" if recent_error else ""))
+        if deadline is not None and rc in (124, 137) and time.monotonic() >= deadline:
+            problems.append("Codex turn exceeded its wall-clock limit")
+        else:
+            problems.append(f"Codex CLI exited {rc}" + (f": {recent_error}" if recent_error else ""))
     if not session_id:
         problems.append("missing native Codex thread ID")
     if not terminal_completed:
@@ -586,6 +602,11 @@ def main():
         print("sdd-codex: codex CLI is not on PATH", file=sys.stderr)
         return 127
     if args.preflight:
+        try:
+            turn_timeout()
+        except ValueError as error:
+            print(f"sdd-codex: {error}", file=sys.stderr)
+            return 1
         if Path.cwd().joinpath(".git").exists():
             try:
                 with ExitStack() as stack:
@@ -625,6 +646,7 @@ def main():
         cmd.append("resume")
     try:
         with ExitStack() as stack:
+            timeout_bin, timeout_seconds = turn_timeout()
             if args.qa_host is not None:
                 allowed_domains = (qa_app_host(args.qa_host),)
             private = None if args.read_only else PrivateGitTurn(stack, Path.cwd(), binary)
@@ -638,14 +660,16 @@ def main():
                 cmd.append(args.resume)
             cmd.append("-")
             version = subprocess.check_output([binary, "--version"], text=True, timeout=10).strip()
-            with subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+            deadline = time.monotonic() + timeout_seconds
+            with subprocess.Popen([timeout_bin, "--kill-after=5s", f"{timeout_seconds}s", *cmd],
+                                  stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
                                   env=git_environment()) as child:
                 def forward_signal(number, _frame):
                     if child.poll() is None:
                         child.send_signal(number)
                 signal.signal(signal.SIGTERM, forward_signal)
                 signal.signal(signal.SIGINT, forward_signal)
-                return stream_turn(child, args, version, private)
+                return stream_turn(child, args, version, private, deadline)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         emit(type="result", subtype="error_during_execution", is_error=True,
              result=f"Could not start Codex CLI: {error}", session_id=None, total_cost_usd=None,
