@@ -103,3 +103,4 @@
 - 2026-11-26 03:53 · `R4` · R4 sabotage: exigir que o destino antigo exista → probe do link quebrado ficou vermelho (rc 1).
 - 2026-11-26 03:53 · `R4` · A declaração local, os comentários e a formatação da guarda não têm comportamento observável próprio. O fixture foi medido em vermelho e verde e a prosa foi conferida contra o restante do guia e o README.
 - 2026-11-26 03:53 · `R4` · TDD de `0 0 1` para `1 1 1` em `b23f936`. Suíte inicial verde com 2481 linhas ok. Suíte final verde com 21 etapas, 2486 linhas ok e zero FAIL. Quatro referências do TODO deslocadas pelo código foram reancoradas sem mudar os achados. As 259 inserções preexistentes nas notas não entraram nos commits.
+- 2026-11-26 04:34 · `R5` · REVIEW r3, achados 1 e 2 reproduzidos: retomada após falha na migração e preservação de comando local com a mesma raiz do planner. R4 conferido em b23f936.
