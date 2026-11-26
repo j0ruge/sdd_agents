@@ -212,7 +212,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   squash, e o item fica preso para sempre; os PRs JRC-Brasil/sales_quote#405 e JRC-Brasil/sales_quote#406
   entraram por squash e quatro itens com `RESOLVED by` não saíam. Direção: aceitar como prova também o
   merge do PR que carregou o hash, ou declarar que o ciclo exige merge commit. Fonte:
-  `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C7) — descoberto na triagem
+  `docs/superpowers/specs/2026-10-09-o-worker-caderno-de-campo.md` (C7) RESOLVED by 5348c7d — descoberto na triagem
   das issues do `sales_quote` (2026-10-09)
 - [ ] **A prosa congelada diz a regra 2 e o teto de largura mais estritos que os sensores** —
   `templates/checkpoint.md:27` (`check-x.sh`) — desde o lote 8 a regra 2 lê a variável e aceita `'^ *✓ '`,
@@ -220,7 +220,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `^  ok    `, e o `templates/todo.pt-BR.md:24`, o `templates/todo.md:24` e o `agents/sdd-executor.md:174`,
   "nenhuma linha passa de 120". Não falha aberta, mas a saída só aparece na mensagem de FAIL. Direção: as
   cinco frases dizem a regra nova quando o congelamento cair.
-  Lote 9 (`20261016-lote-9-o-papel-de-cada-palavra`): toda mescla, só o padrão deve âncora (getopt_long), par de zeros.
+  L9 (`20261016-lote-9-o-papel-de-cada-palavra`): âncora só no padrão (getopt_long), par de zeros. RESOLVED by 3faad6c
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 - [ ] **O veredito da QA não é revalidado depois de um R<n>** — `docs/pipeline.md:99` (`R<n>`) — o REVIEW
   vem depois da QA e um `R<n>` muda o código sem reabri-la: o reteste do lote 7 só lê `F<n>`, e o `skipped`
@@ -240,21 +240,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`shared_why`) — o motivo manda `worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>`, e a
   branch do juiz nasce rastreando a `main` (git 2.43, medido em repo de rascunho); o `docs/failure-modes.md:685`
   e o `docs/pipeline.md:1605` citam o motivo literal. Gêmeo do item acima, que a leva conserta só no
-  `/sdd-plan` porque o `bin/` está congelado até o veredito. Direção: `--no-track` no motivo e nas duas citações.
+  `/sdd-plan` até o veredito liberar o `bin/`. Direção: `--no-track` no motivo e nas duas citações. RESOLVED by 0fe8217
   — descoberto pelo `sdd-planner` na missão `20261015-lote-8-a-leva-que-nao-parte-a-janela` (2026-10-15)
 
 - [ ] **A primeira instalação semeia o `TODO.md` em inglês, qualquer que seja o idioma** — `bin/sdd:7120`
   (`inst_lang`) — o install lê o `OUTPUT_LANG` da config que acabou de gerar do `starter.conf`, onde ele vem
   vazio, e cai no `templates/todo.md` (`:6103`). Ajustar o idioma depois não troca a semente: no `dotp-remake`
   (`pt-BR`) foi preciso apagar o `TODO.md` intocado e rodar o `sdd install` de novo. Direção: um `--lang` no
-  install, ou a saída nomear o reinstall quando o `TODO_FILE` ainda é a semente de outro idioma.
+  install, ou a saída nomear o reinstall quando o `TODO_FILE` ainda é a semente de outro idioma. RESOLVED by 0c457ab
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
 
 - [ ] **Nada instala nem confere o `/sdd-plan` que o `link-agents` manda rodar** — `bin/sdd:13574`
   (`/sdd-plan`) — a saída termina em "Next: $ /sdd-plan", mas o comando só existe onde alguém criou o link
   `~/.claude/commands/sdd-plan.md`, descrito só na ADR 0016 (máquina do operador); o README (`:45`) não o cita
   e o `sdd preflight` não o mede. Numa máquina nova o `~/.claude/commands` nem existia. Direção: o `link-agents`
-  cria esse link, idempotente como os dos agentes, ou o README o põe nos passos de instalação.
+  cria esse link, idempotente como os dos agentes, ou o README o põe nos passos de instalação. RESOLVED by 8718ccf
   — descoberto por `retrofit-watch` na instalação do kit no `dotp-remake` (2026-10-19)
   RECURRED 1: sdd_agents/20261117-o-worker-orquestrador (2026-11-18)
 
@@ -272,7 +272,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `sdd close --help` deu `mission '--help' not found`, e com as missões reais `-n` casa só a
   `20261020-narracao-com-dicas` e `-l` só a `20261020-lote-de-consertos`: com JIRA ligado, `sdd close -l`
   fecharia o ticket dela, que tem o PR mesclado. Direção: `-h`/`--help` num subcomando imprime o uso dele, e o
-  `resolve_mission` recusa argumento que começa com `-`.
+  `resolve_mission` recusa argumento que começa com `-`. RESOLVED by f7709e3
   — descoberto por `retrofit-watch` no `magic_tutor` (2026-10-20)
 - [ ] **A guarda do kit para a corrida do alvo por um merge só de docs no checkout do kit** — `bin/sdd:4903`
   (`kit_guard_check`) — compara o par cru (HEAD e sujeira) e não lê o rótulo `sdd:` do reflog (anatomia §6). No
@@ -303,7 +303,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `agents/sdd-planner.md`, `sdd-docs.md`, `sdd-publisher.md` e `sdd-kaizen.md`. A frase do PLAN-AUTO vai para o
   `00-missao.md` do alvo, e na 3.6a do `dotp-remake` o plano alocou o ADR 0018 do próprio repo: ela passou a apontar
   para o ADR errado, e o planner a reescreveu à mão ("ADR 0018 §3 do kit `sdd`"). Os dois `templates/todo*.md:26` já
-  nomeiam o kit, com link. Direção: as outras 12 seguem o molde do `todo.md:26`.
+  nomeiam o kit, com link. Direção: as outras 12 seguem o molde do `todo.md:26`. RESOLVED by dfd5f25
   — descoberto por `sdd-plan` (relay) na missão `20261107-plano-3-6-a-substituicao-na-entrada` (2026-11-07)
 
 - [ ] **O `PR #N aberto` que a fase PR escreve no roadmap e no `KAIZEN_LOG.md` envelhece no merge** —
@@ -311,7 +311,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   merge. Na `main` do `dotp-remake` depois de j0ruge/dotp-remake#28, o `docs/roadmap.md:32` e `:159` e o
   `KAIZEN_LOG.md:1346` e `:1349` seguiam com `PR #28 aberto` (o `f5d6710` de lá); a 3.6c deixou o mesmo no roadmap,
   e o pós-merge consertou à mão. Vizinho de "O pós-merge não lista o `RESOLVED by` que já pode sair". Direção: o
-  `close_return_home` lista as linhas que dão o PR mergeado como aberto (só lista). Sem correção verificada.
+  `close_return_home` lista as linhas que dão o PR mergeado como aberto (só lista). RESOLVED by e30971f
   — descoberto por `sessão interativa` no pós-merge da missão `20261111-plano-3-6-d-custos-e-ciclagem` (2026-11-11)
 
 - [ ] **O `sdd status --no-gates` roda o `git status` sem `GIT_OPTIONAL_LOCKS=0` sobre a run em voo** —
@@ -320,7 +320,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `docs/pipeline.md:51` promete que um monitor que o consulte não derruba a run: só vale para a trava do checkout.
   Num repo de rascunho, com um `git status` em laço ao lado, 1505 de 5216 `git add` falharam com `File exists` no
   `index.lock`; com `GIT_OPTIONAL_LOCKS=0`, 0 de 4685. O `kit_guard_tree` (`bin/sdd:4520`) já usa a variável.
-  Direção: a mesma variável na leitura do `session_leftovers` e no `git status` do `pr-ready` (`bin/sdd-worker:1349`).
+  Direção: a variável em `session_leftovers` e `git status` de `pr-ready` (`bin/sdd-worker:1349`). RESOLVED by 012044b
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
   RECURRED 1: sdd_agents/20261119-l1b-a-rodada-delta (2026-11-20)
 
@@ -395,14 +395,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `next phase: QA` e `run: sdd run`, embora o motivo diga "no session can start it" (`:1867`). Esse `sdd run`
   compra uma sessão `QA:close` (opus no alvo) antes de escalar `app-down` (`tests/check-autonomy.sh:2618`), e cada
   leitura roda a e2e, que no `lighthouse_project` grava uma demanda e gasta um número da sequência. Direção: o
-  status lê o `GATE_APP_DOWN` e diz "fechada, e2e não re-verificável agora: app fora", com o remédio da escalada.
+  status lê o `GATE_APP_DOWN` e diz "fechada, e2e não re-verificável: app fora" e como agir. RESOLVED by 51203f0
   — descoberto por `sessão coordenadora` na missão `20261013-amep-alignment-review` (2026-10-14)
 
 - [ ] **O fim da corrida diz que só falta o merge, e o `sdd close` some** — `bin/sdd:10802` (`pipeline complete`) —
   o `sdd run` e o `sdd status` (`:7700`) fecham com "only the merge is left", e nenhum template, chapéu ou comando
   cita o `sdd close <missão>` pós-merge (`docs/pipeline.md` § "After the PR"). Medido no `sales_quote`: os 7
   cartões da campanha (SQ-156 a SQ-162) seguiram "Em andamento" depois do merge, até o operador fechá-los à mão
-  em 2026-10-18. Direção: com `JIRA_ENABLED=true`, a mensagem final e o corpo do PR nomeiam o `sdd close`.
+  em 2026-10-18. Direção: com `JIRA_ENABLED=true`, o fim e o corpo do PR citam o `sdd close`. RESOLVED by 70c956f
   — descoberto por `sessão coordenadora` na missão `20261018-silencios-do-formulario-e-dos-dialogos` (2026-10-18)
 
 - [ ] **O pós-merge não lista o `RESOLVED by` que já pode sair** — `bin/sdd:13868` (`close_return_home`) —
@@ -410,7 +410,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   vida (`templates/todo.pt-BR.md`) apaga o item quando `git merge-base --is-ancestor <hash>` vale, e nada o
   lista. Medido depois do PR j0ruge/warehouse_explorer_web#8: 5 itens RESOLVED, apagados por script avulso só porque um
   handoff lembrava; a seção que fica vazia também não tem regra. Direção: depois do fast-forward, `close_return_home`
-  lista os `RESOLVED by` cujo hash entrou na base (só lista), nos dois braços do JIRA.
+  lista os `RESOLVED by` cujo hash entrou na base (só lista), nos dois braços do JIRA. RESOLVED by 891712d
   — descoberto por `sessão interativa` no pós-merge da missão `20261028-whf-162-jdb-na-descricao` (2026-10-30)
 
 - [ ] **O `sdd run` diz que commita na base quando a TICKET vai cortar o branch antes** — `bin/sdd:7288`
@@ -418,7 +418,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `JIRA_ENABLED=true`, `branch:` no placeholder) o `sdd run` de `develop` avisou "commits straight into it", e o
   `8f6b46f` da TICKET já nasceu no branch da missão: o `develop` local ficou no `e03583a` do approve, cujo aviso
   era verdadeiro. Aviso que grita lobo ensina a não ler. Direção: o `cmd_run` cala com `mission_branch_declared`
-  vazio e a TICKET pendente, com caso nos dois lados. Vizinho do item do `sdd approve` no placeholder (mesma função).
+  vazio e a TICKET pendente, com caso nos dois lados. Ver `sdd approve` no placeholder. RESOLVED by f27e0f8
   — descoberto pelo relay do `/sdd-plan` na missão `20261016-lighthouse-instala-object-storage` (2026-10-20)
 
 - [ ] **A ajuda do `sdd run` não diz como soltá-lo da sessão que o dispara** — `bin/sdd:13424`
@@ -426,7 +426,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   fechar o terminal precisa destacá-lo, sem saber onde ler o progresso depois. Na peça C do `lighthouse_project`
   funcionou `nohup setsid sdd run <m> > ~/.cache/<log> 2>&1 < /dev/null &`: o pai virou o PID 2140, fora da
   sessão, e a TICKET (LH-9) e a EXEC seguiram. Direção: a ajuda mostra essa forma e onde ler o log, ou um
-  `--detach` que a faz e imprime o caminho do log.
+  `--detach` que a faz e imprime o caminho do log. RESOLVED by 03091ed
   — descoberto por `retrofit-watch` na missão `20261020-amep-anexo-na-demanda` do `lighthouse_project` (2026-10-21)
   RECURRED 1: dotp-remake/20261118-plano-7-c-o-hud-e-a-pilha (2026-11-20)
 
@@ -436,7 +436,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`bin/sdd:12496`), cada uma com teto de `BUDGET_PER_PHASE_USD` (US$ 40 no `.sdd/config.sh` do kit). A sessão
   tria o `TODO.md` e escreve a próxima missão (`agents/sdd-kaizen.md:209`). No fim da 3.5d do `dotp-remake`, com
   65 achados abertos, o dono mandou rodar e recuou ao ver isso: sem resolver o monte de achado, não faz sentido.
-  Hoje só uma memória local segura o próximo relay. Direção: a linha cita os achados e o teto, e o humano decide.
+  Só a memória local avisa o relay. Direção: a linha cita os achados e o teto, e o humano decide. RESOLVED by ca5260b
   — descoberto pelo relay da missão `20261101-plano-3-5-d-camadas-e-habilidade-concedida` (2026-11-02)
 
 - [ ] **O `CHECKOUT-BUSY` do `sdd status` não aponta o `--no-gates`, que lê o disco com a run em voo** —
@@ -445,7 +445,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   escreveu no handoff que o status "não serve durante a run"; a sessão seguinte ia ler o checkpoint por `sed`. O
   `--no-gates` está no `README.md` e no `docs/failure-modes.md`, e a missão inexistente já aponta para ele
   (`bin/sdd:355`); a recusa da trava, não. Direção: com rc 75 num subcomando que pede a trava, uma linha a mais
-  com `sdd status <missão> --no-gates`. Vizinho do decidido "O sdd status travaria mais de 2 min".
+  com `sdd status <missão> --no-gates`. Vizinho do decidido "O sdd status travaria mais de 2 min". RESOLVED by 1f8b722
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
 
 ### Comentário e registro
@@ -494,7 +494,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:9723` (`adr_next_id`) — o MAX+1 só lê o `docs/adr/` do checkout. No `dotp-remake`, a 6a (ADR 0026) e a
   7a (ADR 0027) estavam em branches sem merge, e o `sdd adr new` da 7b, cortada da `main`, daria 0026 de novo; o
   planner criou 0026 e 0027 vazios para pular, apagou-os, e saiu 0028. Sem isso, a colisão só aparece no merge.
-  Direção: `--after <n>`, ou ler também os `docs/adr/` das outras branches e worktrees do repositório.
+  Direção: `--after <n>`, ou ler também os `docs/adr/` das outras branches e worktrees. RESOLVED by 436b1f2
   — descoberto pelo planner na missão `20261116-plano-7-b-o-palco-3d` (2026-11-16)
   RECURRED 2: dotp-remake/20261117-plano-7-b1-a-mesa-cheia (2026-11-17); dotp-remake/20261119-plano-7-d-o-movimento-e-os-efeitos (2026-11-19)
 
