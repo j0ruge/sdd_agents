@@ -1,6 +1,6 @@
 ---
 missao: 20261121-l5-saida-humana-e-contrato-do-runner
-atualizado: 2026-11-26 13:01
+atualizado: 2026-11-26 13:42
 ---
 
 # Checkpoint — L5: saída humana e contrato do runner
@@ -73,6 +73,7 @@ atualizado: 2026-11-26 13:01
 | R5 | Achados 1 e 2 da r3 — retomar a migração de links sem substituir comandos locais | `p=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    link-agents retries a kit relocation after a failed command symlink update$' <<< "$p") $(grep -c '^  ok    link-agents preserves a local command symlink that shares a root with a local planner$' <<< "$p")"` → `1 1` | done | 6ac31be |
 | R6 | Achados 1 e 2 da r4 — ignorar exemplos de resolução e entradas que não são arquivos de ADR | `t=$(bash tests/check-todo.sh --selftest 2>&1); g=$(bash tests/check-gates.sh 2>&1); a=$(bash tests/check-adr.sh 2>&1); echo "$(grep -c '^  ok    rule: --resolved distinguishes inline examples from resolution records' <<< "$t") $(grep -c '^  ok    sdd close lists the real resolution and omits its quoted example$' <<< "$g") $(grep -c '^  ok    adr new does not count a directory named like an ADR on another ref$' <<< "$a")"` → `1 1 1` | done | 0426916 |
 | R7 | Achado 1 da r5 — distinguir exemplo e prova de resolução em parágrafos distintos | `t=$(bash tests/check-todo.sh --selftest 2>&1); g=$(bash tests/check-gates.sh 2>&1); echo "$(grep -c '^  ok    rule: --resolved keeps inline code within its paragraph' <<< "$t") $(grep -c '^  ok    sdd close distinguishes example and proof in separate TODO paragraphs$' <<< "$g")"` → `1 1` | done | a3518ea |
+| R8 | Achado 1 da r6 — processar sequências de linhas vazias sem atrasar a listagem de provas | `t=$(bash tests/check-todo.sh --selftest 2>&1); g=$(bash tests/check-gates.sh 2>&1); echo "$(grep -c '^  ok    rule: --resolved bounds work on consecutive blank lines' <<< "$t") $(grep -c '^  ok    sdd close lists the same proof after consecutive blank TODO lines$' <<< "$g")"` → `1 1` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
