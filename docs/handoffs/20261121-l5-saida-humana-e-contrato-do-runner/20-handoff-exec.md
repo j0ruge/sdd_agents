@@ -2,9 +2,9 @@
 missao: 20261121-l5-saida-humana-e-contrato-do-runner
 fase: EXEC
 status: done
-sessao: 01a216c7-58f2-73a1-a973-4c54061af30c
-data: 2026-11-26 05:09
-gate: "tests/run-all.sh no commit 6ac31be → rc 0, suite green, 21 etapas, 2490 linhas ok e zero FAIL. Check R5 → 1 1. Check R4 → 1 1 1."
+sessao: 01a2182c-57b0-7810-8273-2f3700ff7703
+data: 2026-11-26 11:45
+gate: "tests/run-all.sh na árvore de 0426916 → rc 0, suite green, 21 etapas, 2493 linhas ok, zero FAIL, 726 s. Check R6 → 1 1 1."
 ---
 
 # Handoff — EXEC — L5: saída humana e contrato do runner
@@ -14,19 +14,29 @@ gate: "tests/run-all.sh no commit 6ac31be → rc 0, suite green, 21 etapas, 2490
 
 ## TL;DR
 
-O R5 fechou os dois achados da REVIEW r3. A reinstalação pode ser retomada após falha de escrita
-e preserva comandos locais mesmo quando compartilham a raiz com um planner local. A suíte ficou
-verde e a QA em disco segue fechada. Se houver nova REVIEW, ela retesta o delta da r3.
+O R6 fechou os dois achados da REVIEW r4. O `sdd close` não usa exemplos de código em linha
+como registros de resolução. O `sdd adr new` não conta diretórios nem links como ADRs em outras
+refs. A suíte ficou verde e a QA em disco segue fechada. Se houver nova REVIEW, reteste o delta da r4.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5-saida-humana-e-contrato-do-runner`, sem upstream configurado. A referência local `origin/main` é ancestral do branch.
-- **Último commit de entrega:** `6ac31be` — retomada da migração e preservação de comandos locais.
-- **Working tree:** as 259 inserções preexistentes em `checkpoint-notas.md` foram preservadas fora dos commits.
-- **Suíte:** `tests/run-all.sh` na árvore gravada em `6ac31be` → rc 0, `suite green`, 21 etapas, 2490 linhas `ok` e zero `FAIL`. O Check R5 passou de `0 0` para `1 1`. O Check R4 permaneceu em `1 1 1`.
-- **E2E:** `E2E_CMD=""`. A QA original percorreu a CLI. As regressões das revisões foram retestadas em Git de rascunho, sem app, PR ou JIRA reais.
+- **Último commit de entrega:** `0426916` — exemplos não valem como resolução e só arquivos regulares reservam IDs em refs.
+- **Working tree:** as 260 inserções preexistentes em `checkpoint-notas.md` foram preservadas fora dos commits. Nenhum outro caminho estava alterado na entrada.
+- **Suíte:** `tests/run-all.sh` na árvore gravada em `0426916` → rc 0, `suite green`, 21 etapas, 2493 linhas `ok` e zero `FAIL`. O Check R6 passou de `0 0 0` para `1 1 1`.
+- **E2E:** `E2E_CMD=""`. A QA original percorreu a CLI e os retestes do R6 usaram Git descartável, sem app, PR ou JIRA reais.
 
 ## O que foi feito
+
+### Consertos da REVIEW r4
+
+- `0426916` (R6) — O leitor de resoluções mascara trechos de código em linha sem juntar
+  o texto dos dois lados do trecho. Mantém os registros reais e rejeita os malformados
+  fora do código. O alocador lê os modos das entradas imediatas das refs e mantém
+  apenas arquivos regulares, incluindo executáveis. O fixture comprova a proposta 0009
+  e a origem `refs/heads/other`, apesar de árvore e link com números superiores.
+  Os três sensores deram vermelho antes das mudanças. 20 sabotagens caíram em
+  cópia descartável, em grupos próprios, com teto de tempo e 1 GiB por processo.
 
 ### Consertos da REVIEW r3
 
@@ -77,13 +87,24 @@ verde e a QA em disco segue fechada. Se houver nova REVIEW, ela retesta o delta 
 
 | Arquivo | O que contém |
 |---|---|
-| [`checkpoint.md`](checkpoint.md) | 23 linhas `done`, cada uma com o Check e o hash alcançável. |
+| [`checkpoint.md`](checkpoint.md) | 24 linhas `done`, cada uma com o Check e o hash alcançável. |
 | [Guia PLAN-only](../../plan-only.md#why-the-agents-are-symlinks) | Como reinstalar após mover o kit e quais links ficam intactos. |
 | [`01-plano.md`](01-plano.md) | Em “Verificação end-to-end”, os comandos para rechecagem e a jornada de QA. |
 | [`TODO.md`](../../../TODO.md) | Em `a033008`, `bash tests/check-todo.sh --check TODO.md` e `--anchors` passaram com 92 âncoras e zero fora do alvo. O Check I18 foi de `0` em `b5a6d57` para `17` em `a033008`, contra o merge-base `60ec571`. `bash tests/check-todo.sh --resolved TODO.md` mostrou os 17 títulos com seus hashes exatos mais os dois registros da base. |
+| [REVIEW r4](40-review-r4.md) | Reprodução dos achados e base do delta. |
 | [ADR 0025](../../adr/0025-ids-across-refs-and-the-second-proof-of-a-resolution.md) | Origem dos IDs e segunda prova de resolução. `./bin/sdd adr check --mission 20261121-l5-saida-humana-e-contrato-do-runner --phase plan` passou em `a033008`. |
 
 ## Boot da próxima fase
+
+Leia os achados 1 e 2 de [`40-review-r4.md`](40-review-r4.md) e a linha R6 de
+[`checkpoint.md`](checkpoint.md). Rode `bash tests/check-todo.sh --selftest`,
+`bash tests/check-gates.sh` e `bash tests/check-adr.sh`. Confira que o consumidor lista a
+prova real sem listar o exemplo com o mesmo hash e mantém o backlog byte a byte. No reteste
+do ADR, o maior arquivo regular está só em outra ref, ao lado de entradas que não contam.
+A QA em disco segue fechada. Uma nova REVIEW delta parte de
+`956004b1576630dba29b2ba6e687bd0852294211`, o `reviewed_head` da r4.
+
+### Reteste da REVIEW r3
 
 Leia os achados 1 e 2 de [`40-review-r3.md`](40-review-r3.md) e o R5 de
 [`checkpoint.md`](checkpoint.md). Rode `bash tests/check-preflight.sh`. O fixture move
@@ -155,7 +176,7 @@ Use fixtures para merge e JIRA, sem abrir, fechar ou mesclar PRs reais.
 
 ## Achados fora de escopo
 
-Nenhum achado novo fora de escopo no R5. O fallback do Git antigo com quebra de linha no caminho
+Nenhum achado novo fora de escopo no R6 ou no R5. O fallback do Git antigo com quebra de linha no caminho
 de worktree segue no [backlog](../../../TODO.md), conforme a REVIEW r2. As pendências sobre alocação concorrente de ADR e ajuda do `close` continuam no backlog, conforme a REVIEW r1. Os achados já registrados durante o EXEC seguem em
 [`TODO.md`](../../../TODO.md), na subseção “Sensores que faltam”. Incluem a intermitência do probe
 do processo residual, os guias ausentes na cópia do catálogo e a preparação do fixture de fast-forward.

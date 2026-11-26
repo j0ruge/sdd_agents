@@ -121,3 +121,25 @@
 - 2026-11-26 05:09 · `R5` · A suíte em cópia sob /tmp não serve para medir o cenário do ledger que exige um checkout fora de /tmp. O gate foi medido no checkout da missão.
 - 2026-11-26 05:09 · `R5` · TDD de `0 0` para `1 1` em `6ac31be`. A suíte inicial teve 2486 linhas ok. A suíte no checkout da missão passou com 21 etapas, 2490 linhas ok e zero FAIL. R4 manteve `1 1 1`. Uma âncora do TODO e a do mutante `LINK_commands_unlinked` foram atualizadas. As 259 inserções preexistentes nas notas ficaram fora dos commits.
 - 2026-11-26 11:03 · `R6` · REVIEW r4 FULL: os achados 1 e 2 viraram R6 após reproduzir a listagem de um exemplo em crases e a reserva de um ID inválido causada por um diretório em outra ref. Nenhum código foi alterado.
+- 2026-11-26 11:45 · `R6` · R6 sabotage: repor o leitor antigo de resoluções → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: pular a busca de delimitadores → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: perder a prosa anterior ao delimitador → --resolved expects exactly these open items (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: reduzir todo delimitador de abertura a uma crase → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: avançar só uma crase ao abrir o trecho → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: ignorar escapes na abertura → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: considerar também escapes de comprimento par → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: aceitar encerramento com largura diferente → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: trocar o separador da máscara por espaço → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: perder o texto depois do fechamento → --resolved expects exactly these open items (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: apagar delimitador sem par → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: descartar a prosa processada → --resolved expects exactly these open items (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: eliminar a publicação da regra → 17 rule line(s) reported, expected 18 — either a rule_end call site (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: repor ls-tree sem modos → adr new does not count a directory named like an ADR on another ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: aceitar entradas de qualquer modo → adr new does not count a directory named like an ADR on another ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: aceitar links junto a regulares → adr new does not count a directory named like an ADR on another ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: rejeitar arquivo regular executável → adr new does not count a directory named like an ADR on another ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: recorrer aos ADRs aninhados → adr new does not count a directory named like an ADR on another ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: retirar NUL da leitura da ref → an id used only on another local branch is never handed out again, and the answer names the ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: ignorar o máximo da ref → a gap is never reused (0001, 0003 allocate 0004) (rc 1).
+- 2026-11-26 11:45 · `R6` · Grupo próprio e 1 GiB por processo, com teto de 60 s para o selftest e 180 s para ADR. Os controles intactos e restaurados passaram. As linhas de estrutura, os dados do fixture e a guarda de erro da substituição de processo não têm comportamento isolado adicional. A leitura do ADR 0025 e do guia confirmou a distinção entre prova e exemplo.
+- 2026-11-26 11:45 · `R6` · TDD de `0 0 0` para `1 1 1` em `0426916`. Entrada verde com 2490 linhas ok. Suíte final no checkout da missão com 21 etapas, 2493 linhas ok e zero FAIL. Três âncoras do TODO foram ajustadas, com 96 medidas e zero fora do alvo. As 260 inserções preexistentes nas notas ficaram fora dos commits.
