@@ -39,7 +39,9 @@ by it, and `gate_PR` reads the head of the pull request from it.
    name passes the same `ADR_FILE_RE`. When the maximum comes from outside the checkout,
    `sdd adr new` says which ref or worktree carries it, on stderr, in the real run and in
    `--dry-run`. Outside a git repository, and for a ref git cannot read, that source contributes
-   nothing and the allocation goes on.
+   nothing and the allocation goes on. If Git rejects NUL output for the worktree list, the
+   allocator falls back to line-delimited porcelain. On Git 2.31–2.35 that format cannot reliably
+   represent a worktree path containing a newline.
 2. **Two proofs let a resolved finding go, and both are commands.** The first is the one of today:
    `git merge-base --is-ancestor <hash> <DEFAULT_BRANCH>`. The second is
    `git merge-base --is-ancestor <hash> <head of the pull request>` together with the state

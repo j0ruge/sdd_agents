@@ -9736,6 +9736,7 @@ adr_next_id() {
       ADR_NEXT_SOURCE="$ref"
     fi
   done < <(git -C "$root" for-each-ref --format='%(refname)' refs/heads refs/remotes 2>/dev/null || true)
+  # Git before 2.36 only has line-delimited porcelain. Convert its separators for the same reader.
   while IFS= read -r -d '' entry; do
     case "$entry" in
       'worktree '*) worktree="${entry#worktree }" ;;
@@ -9746,7 +9747,7 @@ adr_next_id() {
       max="$id"
       ADR_NEXT_SOURCE="$worktree"
     fi
-  done < <(git -C "$root" worktree list --porcelain -z 2>/dev/null || true)
+  done < <(git -C "$root" worktree list --porcelain -z 2>/dev/null || git -C "$root" worktree list --porcelain 2>/dev/null | tr '\n' '\000' || true)
   printf -v ADR_NEXT_ID '%04d' "$((max + 1))"
 }
 

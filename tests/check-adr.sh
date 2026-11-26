@@ -222,7 +222,7 @@ fails=0
 # fail() are the only writers. Two blocks below used to bump it by hand AND then call pass/fail,
 # so two probes counted twice and the floor was pinned to a number two higher than the assertions
 # it was standing for — an instrument off by exactly the amount nobody could see.
-PROBE_FLOOR=83
+PROBE_FLOOR=85
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -723,6 +723,37 @@ git -C "$WT" worktree add -qb other "$OTHER_WT" &&
   adr_file "$OTHER_WT" 0009-w.md '@none@' || exit 1
 assert_adr_allocation 'an id used only on the disk of another worktree is never handed out again, and the answer names the worktree' \
   "$WT" 0010 "id 0009 is in use on $OTHER_WT — allocating 0010"
+
+# Git before 2.36 refuses -z. Record both calls and delegate plain porcelain to real Git.
+adr_file "$OTHER_WT" 0017-older.md '@none@' || exit 1
+ADR_REAL_GIT="$(command -v git)" || exit 1
+cat > "$WT/.stub/git" <<'STUB'
+#!/usr/bin/env bash
+case "${*:3}" in
+  'worktree list --porcelain -z')
+    printf 'nul\n' >> "${0%/*}/worktree-list.calls"
+    exit 129
+    ;;
+  'worktree list --porcelain')
+    printf 'lines\n' >> "${0%/*}/worktree-list.calls"
+    ;;
+esac
+exec "$ADR_REAL_GIT" "$@"
+STUB
+chmod +x "$WT/.stub/git" || exit 1
+ADR_REAL_GIT="$ADR_REAL_GIT" assert_adr_allocation \
+  'adr new names the other worktree and advances beyond its uncommitted id on older Git' \
+  "$WT" 0018 "id 0017 is in use on $OTHER_WT — allocating 0018"
+worktree_list_calls=
+if [ -f "$WT/.stub/worktree-list.calls" ]; then
+  worktree_list_calls="$(< "$WT/.stub/worktree-list.calls")"
+fi
+if [ "$worktree_list_calls" = $'nul\nlines' ]; then
+  pass 'adr allocation falls back when git worktree list refuses NUL output'
+else
+  fail 'adr allocation falls back when git worktree list refuses NUL output' \
+    'NUL request followed by the line-delimited fallback' "$worktree_list_calls"
+fi
 
 DISK="$(fixture alloc-disk)" || exit 1
 adr_file "$DISK" 0003-c.md '@none@' &&
