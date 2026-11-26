@@ -800,6 +800,19 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   O teste de materialização cobre chaves repetidas com espaços para aprovação, missão e branch. RESOLVED by 0abeee2
   — achado por Codex na revisão da missão `20261124-worker-codex` (2026-11-24)
 
+- [ ] **Duas alocações concorrentes de ADR reservam o mesmo número em worktrees distintos** —
+  `bin/sdd:9910` (`adr_next_id`) — duas chamadas reais sincronizadas após a leitura do máximo
+  reservaram 0001 com rc 0 em ambos os worktrees. A exclusividade por caminho não serializa a
+  escolha do número entre checkouts. Direção: desenhar uma reserva compartilhada por ID.
+  Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r1.md`
+  — descoberto por `sdd-reviewer` (2026-11-26)
+
+- [ ] **A ajuda do sdd close descreve apenas o fechamento no JIRA** — `bin/sdd:13429`
+  (`post-merge: close the JIRA issue`) — `sdd help` não diz por que rodar o comando sem JIRA,
+  embora o fechamento volte à base, tente o fast-forward e liste pendências pós-merge.
+  Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r1.md`
+  — descoberto por `sdd-reviewer` (2026-11-26)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
