@@ -1,6 +1,6 @@
 ---
 missao: 20261121-l5-saida-humana-e-contrato-do-runner
-atualizado: 2026-11-25 22:31
+atualizado: 2026-11-25 23:08
 ---
 
 # Checkpoint — L5: saída humana e contrato do runner
@@ -65,7 +65,7 @@ atualizado: 2026-11-25 22:31
 | I15 | O sdd install troca a semente intocada de outro idioma (item 4) | `p=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    the first install with no OUTPUT_LANG says the TODO was seeded in English and how to reseed it' <<< "$p") $(grep -c '^  ok    install replaces a TODO that is still the untouched seed of another language with the seed of OUTPUT_LANG' <<< "$p") $(grep -c '^  ok    install preserves a TODO one byte away from a seed' <<< "$p") $(grep -c '^  ok    preflight warns that the TODO is still the untouched seed of another language, naming sdd install' <<< "$p")"` → `1 1 1 1` | done | 0c457ab |
 | I16 | A prosa diz a regra 2 e o teto de largura como os sensores medem (item 2) | `t=$(bash tests/check-templates.sh 2>&1); h=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    checkpoint.md: the anchor rule names the pass mark of a test runner and the count that expects only zeros' <<< "$t") $(grep -c '^  ok    todo.md: the width cap exempts the line that carries only the anchor' <<< "$t") $(grep -c '^  ok    todo.pt-BR.md: the width cap exempts the line that carries only the anchor' <<< "$t") $(grep -c '^  ok    prose: the planner and the executor state the anchor rule and the width cap as the sensors measure them' <<< "$h")"` → `1 1 1 1` | done | 3faad6c |
 | I17 | A citação de ADR do kit nomeia o kit (item 7) | `h=$(bash tests/check-hat.sh 2>&1); echo "$(grep -c '^  ok    adr citation: no hat, template or command cites a kit ADR by its bare number' <<< "$h") $(grep -c '^  ok    adr citation: a bare ADR number in a fixture hat is refused by name' <<< "$h")"` → `1 1` | done | dfd5f25 |
-| I18 | Fecho: RESOLVED by nos 17 itens | `b=$(git show "$(git merge-base HEAD origin/main)":TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `17` | pending | — |
+| I18 | Fecho: RESOLVED by nos 17 itens | `b=$(git show "$(git merge-base HEAD origin/main)":TODO.md); echo $(( $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' TODO.md) - $(grep -cE 'RESOLVED by [0-9a-f]{7,40}' <<< "$b") ))` → `17` | done | a033008 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
