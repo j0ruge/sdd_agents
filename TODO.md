@@ -832,6 +832,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r1.md`
   — descoberto por `sdd-reviewer` (2026-11-26)
 
+- [ ] **O exemplo de sdd close no README ainda promete uma sessão paga de JIRA** — `README.md:94`
+  (`post-merge: close the JIRA issue`) — a CLI já descreve a volta à base, a lista do backlog e o JIRA opcional.
+  O guia rápido omite a lista e não indica em que condições a sessão paga é dispensada.
+  Direção: alinhar o verbete à ajuda nova e à seção pós-merge do guia do pipeline.
+  Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r5.md`
+  — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)
+
+- [ ] **O Check I18 do L5 conta resoluções de fora da missão** —
+  `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/checkpoint.md:68` (`Fecho`) —
+  a contagem global mudou de 17 para 18 com o conserto da ajuda, sem alterar os 17 hashes planejados.
+  Direção: em checagens de fecho, comparar os títulos previstos e os hashes, sem somar resoluções alheias.
+  Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r5.md`
+  — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
