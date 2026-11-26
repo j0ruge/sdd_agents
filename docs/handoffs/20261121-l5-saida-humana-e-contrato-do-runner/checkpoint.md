@@ -1,6 +1,6 @@
 ---
 missao: 20261121-l5-saida-humana-e-contrato-do-runner
-atualizado: 2026-11-26 14:58
+atualizado: 2026-11-26 15:24
 ---
 
 # Checkpoint — L5: saída humana e contrato do runner
