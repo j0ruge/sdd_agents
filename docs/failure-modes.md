@@ -553,13 +553,13 @@ US$ 7,61 for the lap that reopened a mission whose PR was already open. Since th
 gate asks — after the e2e, never before — and the line stops with the address in the message,
 filed as `kind: app-down`.
 
-**What you do:** start the app at the address the message names, then `sdd run` again. If the e2e
-is supposed to bring its own server up, then `APP_URL` should not point at a port nobody serves
-between runs — clear it, or point it at the address that is up.
+**What you do:** start the app at the address the message names, then run `sdd run <mission>` again.
+If the e2e is supposed to bring its own server up, then `APP_URL` should not point at a port nobody
+serves between runs — clear it, or point it at the address that is up.
 
 If you see this in `sdd status` with QA as the next phase, restore the right app and run
-`sdd status` again first. The status still reports the failing gate and distinguishes a QA handoff
-marked `done` on disk from an e2e result it cannot re-verify.
+`sdd status <mission>` again first. The status still reports the failing gate and distinguishes a
+QA handoff marked `done` on disk from an e2e result it cannot re-verify.
 
 ```bash
 sdd preflight            # asks the same question before a session is opened
