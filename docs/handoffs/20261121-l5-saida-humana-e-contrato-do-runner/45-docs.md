@@ -51,8 +51,8 @@ a [revisão final](40-review-r8.md) e as propostas abaixo. Use `git diff origin/
 para o inventário e a base `main` configurada para este kit. Separe os comandos verificáveis da
 evidência histórica, especialmente o R8 e os 17 títulos. Não use a contagem global de I18.
 A dependência anterior à corrida foi atendida: os PRs do L3 e do L4 entraram em `1f7f527`
-e `cef90b1`, ancestrais da janela de EXEC. Leve ao PR um item para cada documento com texto proposto, incluindo `CLAUDE.md`, que o plano
-reservou ao dono. Registre as pendências já resolvidas do plano com a evidência que as responde.
+e `cef90b1`, ancestrais da janela de EXEC. No PR, confira o aceite e a aplicação dos textos
+reservados ao dono em `4110b42`. Registre as pendências já resolvidas do plano com a evidência que as responde.
 O exemplo de encerramento do PR deve indicar `sdd close` depois do merge, mesmo sem JIRA.
 
 ## Pendências / Decisions for a Human

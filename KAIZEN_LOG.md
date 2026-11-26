@@ -43,8 +43,8 @@ o checkpoint continha 26 incrementos `done`, de I1–I18 e R1–R8.
 **Padronização.** As reincidências de alocação, instalação do comando, corrida destacada e
 consulta do índice viraram comportamento ou ajuda da CLI, cobertos pelos Checks I1–I4.
 A segunda prova e o alcance da alocação têm o [ADR 0025](docs/adr/0025-ids-across-refs-and-the-second-proof-of-a-resolution.md).
-Não há regra de memória adicional para repetir esses mecanismos. A frase divergente do
-`CLAUDE.md` e a regra da anatomia ficam para o dono no PR, como previsto na missão.
+O mantenedor aceitou a segunda prova e os textos reservados. `CLAUDE.md` e a regra da
+anatomia registram a convenção em `4110b42`.
 
 **Custo da EXEC na série da campanha.** L1–L4 vêm das entradas respectivas deste log. Para L5,
 foram somados os campos `dur=` das linhas `EXEC agent=sdd-executor` de
