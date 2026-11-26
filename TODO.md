@@ -797,6 +797,33 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   O teste de materialização cobre chaves repetidas com espaços para aprovação, missão e branch. RESOLVED by 0abeee2
   — achado por Codex na revisão da missão `20261124-worker-codex` (2026-11-24)
 
+- [ ] **O teste de autocontenção lê "só os três arquivos", e a sessão nova acusa o que o kit já garante** —
+  `agents/sdd-planner.md:220` (`reading **only**`) — a fase EXEC abre com `--agent sdd-executor` (`bin/sdd:6097`),
+  e o fluxo `approve` → TICKET commita a missão e cria a branch. A primeira rodada, só com os três arquivos, deu
+  três bloqueantes que não eram: a branch e a pasta da missão fora do git, a permissão de escrever no
+  `.sdd/config.sh` (`writes: ""` é escrever em qualquer lugar) e o formato da nota (`agents/sdd-executor.md:217`).
+  A segunda, com o `sdd-executor.md`, deu zero. Direção: o § 5 e o `templates/plano.md:9` dão à sessão do teste
+  a definição do executor e dizem o que o runner já faz. Vizinho do item do critério c, que é outro defeito.
+  — descoberto por `claude` na missão `20261124-m0-caracterizacao-do-mvp` (2026-11-26)
+
+- [ ] **O Check pela marca `✓` conta linhas, e não casos, e fica vermelho quando o runner pinta a marca** —
+  `tests/check-checkpoint.sh:244` (`DECLARED LIMITS of the pass mark`) — a regra 2 aceita
+  `grep -c '^ *✓ .*REGUA-0[1-6]'`, mas o vitest 3.2.7 monta a linha com o nome completo (arquivo > describe >
+  teste): numa saída sintética, essa forma deu 6 com dois ids repetidos e 6 com o id num `describe`. Com
+  `FORCE_COLOR` ou `CI` no ambiente, a cor vem antes do `✓` e o Check dá 0 com o incremento certo; o `NO_COLOR`
+  vence (tinyrainbow 2.0.0, `chunk-BVHSVHOK.js:59`). Nenhum dos dois está nos limites declarados. Direção:
+  declará-los, e o planner escrever `NO_COLOR=1` e contar ids distintos (` > <id> — `, `sort -u` por herestring).
+  — descoberto por `claude` na missão `20261124-m0-caracterizacao-do-mvp` (2026-11-26)
+
+- [ ] **Um `>/dev/null 2>&1` fora das capturas põe a regra 2 no modo estrito, e o FAIL não diz por quê** —
+  `tests/check-checkpoint.sh:1101` (`left outside the clean captures`) — num Check que lê o `$o` só por greps
+  ancorados, acrescentar `lint >/dev/null 2>&1; e=$?` faz o `grep -c . <<< "$l"`, que não lê o `$o`, dever
+  âncora: "1 of 2 pattern(s) anchored". Com `2>/dev/null` no lugar, passa ("1 under the anchor rule, none
+  blind"); reproduzido em quatro células mínimas. Um descarte para `/dev/null` não mistura nada que um grep
+  leia, e a mensagem aponta os greps, e não a mescla. Direção: tratar o descarte como sem mescla, ou o FAIL
+  dizer que o leitor caiu no modo estrito e por qual mescla.
+  — descoberto por `claude` na missão `20261124-m0-caracterizacao-do-mvp` (2026-11-26)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
