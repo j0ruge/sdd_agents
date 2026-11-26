@@ -3108,6 +3108,83 @@ else
        "only the missing worker command linked once, with the local plan and index unchanged" "$lc_first / $lc_second"
 fi
 
+# Two targets carry links made by the old CLI. Refresh one while that kit is readable and
+# leave the other untouched until the old installation has moved away.
+LC_OLD="$FIX/previous kit"
+LC_LIVE="$FIX/link-old-live"
+LC_MOVED="$FIX/link-old-moved"
+mkdir -p "$LC_OLD/bin" "$LC_OLD/commands" || exit 1
+cp "$SDD" "$ROOT/bin/sdd-coordination.py" "$LC_OLD/bin/" || exit 1
+cp -R "$ROOT/agents" "$LC_OLD/agents" || exit 1
+cp "$ROOT"/commands/sdd-*.md "$LC_OLD/commands/" || exit 1
+printf '\n# Previous kit version\n' >> "$LC_OLD/commands/sdd-plan.md"
+for lc_fixture in "$LC_LIVE" "$LC_MOVED"; do
+  help_repo "$lc_fixture" || exit 1
+  ( cd "$lc_fixture" && HOME="$LC_HOME" "$SDD" install \
+    && HOME="$LC_HOME" "$LC_OLD/bin/sdd" link-agents ) >/dev/null 2>&1 || exit 1
+  [ "$(readlink "$lc_fixture/$lc_plan")" = "$LC_OLD/commands/sdd-plan.md" ] \
+    && cmp -s "$lc_fixture/$lc_plan" "$LC_OLD/commands/sdd-plan.md" || exit 1
+done
+lc_local_target="$LC_OLD/commands/sdd-worker.md"$'\n'
+cp "$ROOT/commands/sdd-worker.md" "$lc_local_target" || exit 1
+ln -sfn "$lc_local_target" "$LC_LIVE/$lc_worker" || exit 1
+lc_current_link() ( cd "$1" && HOME="$LC_HOME" "$SDD" link-agents 2>&1 )
+lc_reinstalled() {
+  [ "$(readlink "$1/$lc_plan")" = "$ROOT/commands/sdd-plan.md" ] \
+    && cmp -s "$1/$lc_plan" "$ROOT/commands/sdd-plan.md" \
+    && [ "$(readlink "$1/.claude/agents/sdd-planner.md")" = "$ROOT/agents/sdd-planner.md" ]
+}
+lc_rc=0; lc_first="$(lc_current_link "$LC_LIVE")" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && lc_reinstalled "$LC_LIVE"; then
+  pass "link-agents refreshes a command link from a previous kit installation"
+else
+  fail "link-agents refreshes a command link from a previous kit installation" \
+       "rc 0 and a readable link to the active kit" "rc $lc_rc; $lc_first"
+fi
+if [ "$lc_rc" -eq 0 ] && [ "$(readlink -n "$LC_LIVE/$lc_worker" && printf .)" = "$lc_local_target." ] \
+   && cmp -s "$LC_LIVE/$lc_worker" "$ROOT/commands/sdd-worker.md" \
+   && [[ "$lc_first" == *"preserving local command $lc_worker"* \
+      && "$lc_first" != *"preserving local command $lc_worker (differs from the kit)"* ]]; then
+  pass "link-agents preserves an unrelated command symlink even when its contents match the kit"
+else
+  fail "link-agents preserves an unrelated command symlink even when its contents match the kit" \
+       "rc 0 and the local symlink kept and named without claiming its contents differ" "rc $lc_rc; $lc_first"
+fi
+
+git -C "$LC_MOVED" add -f -- "$lc_worker" || exit 1
+lc_index="$(git -C "$LC_MOVED" ls-files --stage -- "$lc_worker")" || exit 1
+mv -- "$LC_OLD" "$LC_OLD-moved" || exit 1
+[ -L "$LC_MOVED/$lc_plan" ] && [ ! -e "$LC_MOVED/$lc_plan" ] || exit 1
+lc_rc=0; lc_first="$(lc_current_link "$LC_MOVED")" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && lc_reinstalled "$LC_MOVED"; then
+  pass "link-agents restores a dangling kit command link after relocation"
+else
+  fail "link-agents restores a dangling kit command link after relocation" \
+       "rc 0 and a readable link to the active kit" "rc $lc_rc; $lc_first"
+fi
+if [ "$lc_rc" -eq 0 ] && [ "$(readlink "$LC_MOVED/$lc_worker")" = "$LC_OLD/commands/sdd-worker.md" ] \
+   && [ "$(git -C "$LC_MOVED" ls-files --stage -- "$lc_worker")" = "$lc_index" ]; then
+  pass "link-agents preserves a tracked command symlink even when it points to the previous kit"
+else
+  fail "link-agents preserves a tracked command symlink even when it points to the previous kit" \
+       "rc 0 and the tracked symlink and index entry unchanged" "rc $lc_rc; $lc_first"
+fi
+
+LC_RELATIVE="$FIX/link-relative"
+help_repo "$LC_RELATIVE" || exit 1
+mkdir -p "$LC_RELATIVE"/{.sdd,.claude/agents,.claude/commands} || exit 1
+cp "$LC_REPO/.sdd/config.sh" "$LC_RELATIVE/.sdd/config.sh" || exit 1
+lc_relative_target=../../custom/commands/sdd-plan.md
+ln -s ../../custom/agents/sdd-planner.md "$LC_RELATIVE/.claude/agents/sdd-planner.md" \
+  && ln -s "$lc_relative_target" "$LC_RELATIVE/$lc_plan" || exit 1
+lc_rc=0; lc_first="$(lc_current_link "$LC_RELATIVE")" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && [ "$(readlink "$LC_RELATIVE/$lc_plan")" = "$lc_relative_target" ]; then
+  pass "link-agents preserves a relative command symlink without evidence of kit origin"
+else
+  fail "link-agents preserves a relative command symlink without evidence of kit origin" \
+       "rc 0 and the relative command target unchanged" "rc $lc_rc; $lc_first"
+fi
+
 # Run the copied binary from its own kit root to exercise the self-link refusal's counterpart.
 rm -f "$LC_HOME/.claude/commands/sdd-plan.md"
 help_repo "$KP_KIT" || exit 1

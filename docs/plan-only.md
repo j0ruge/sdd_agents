@@ -175,9 +175,12 @@ which reads **through** the link and compares content, so a symlink reports as i
 source. `sdd-link-agents` also links the kit's slash commands under `.claude/commands/`, so
 `/sdd-plan` is available when you open a Claude Code session at the target root.
 
-A command that differs from the kit is left untouched, including its Git index entry if tracked.
-The installer warns with its path and still links the missing commands. An identical copy can
-still be replaced by the kit link.
+After moving the kit, rerun `sdd-link-agents` from the new installation. It refreshes an untracked
+command symlink whose absolute destination matches the old installation still named by the
+target's `sdd-planner.md` agent link, even if that destination no longer exists.
+The installer warns about other command symlinks or conflicting files and leaves them and their
+Git index entries untouched. Missing commands are still linked, and an identical regular file
+can still be replaced by the kit link.
 
 The generated links are **gitignored** rather than committed: they carry this machine's absolute
 path. A committed symlink dangles in every other checkout and breaks in silence. Recreate the links

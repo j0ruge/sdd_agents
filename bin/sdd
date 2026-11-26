@@ -13510,7 +13510,7 @@ EOF
 
 # ---------------------------------------------------------------------------
 cmd_link_agents() {
-  local dir kind linked already untracked src name relative target IGNORE MARKER
+  local dir kind linked already untracked src name relative target IGNORE MARKER previous_planner indexed
   # It takes no argument, and one is refused before anything is linked (item E): `sdd link-agents
   # --help` used to link the agents. bin/sdd-link-agents enters through main() with the same argv.
   [ $# -eq 0 ] || die "unknown link-agents option: $1 (see 'sdd help')"
@@ -13526,6 +13526,8 @@ cmd_link_agents() {
     || die "refusing to link the kit to itself — $REPO_ROOT is the kit."
 
   IGNORE="$REPO_ROOT/.gitignore"
+  # Read the raw planner link before relinking agents. The sentinel keeps trailing newlines.
+  previous_planner="$(readlink -n "$REPO_ROOT/.claude/agents/sdd-planner.md" && printf .)" || previous_planner=""
   for dir in agents commands; do
     kind="${dir%s}"
     mkdir -p "$REPO_ROOT/.claude/$dir"
@@ -13536,9 +13538,14 @@ cmd_link_agents() {
       relative=".claude/$dir/$name"
       target="$REPO_ROOT/$relative"
 
-      # Leave a conflicting command and its index entry untouched.
-      if [ "$dir" = commands ] && { [ -e "$target" ] || [ -L "$target" ]; } && ! { [ -f "$target" ] && cmp -s "$src" "$target"; }; then
-        warn "preserving local command $relative (differs from the kit)"
+      # The old planner link corroborates the origin of an untracked command link,
+      # even if the old installation has moved. Keep other local commands and their index entries.
+      if [ "$dir" = commands ] && { [ -e "$target" ] || [ -L "$target" ]; } \
+        && ! { [ ! -L "$target" ] && [ -f "$target" ] && cmp -s "$src" "$target"; } \
+        && ! { [[ "$previous_planner" == /*/agents/sdd-planner.md. ]] \
+          && [ "$(readlink -n "$target" && printf .)" = "${previous_planner%/agents/sdd-planner.md.}/commands/$name." ] \
+          && indexed="$(git -C "$REPO_ROOT" ls-files -- "$relative")" && [ -z "$indexed" ]; }; then
+        warn "preserving local command $relative"
         continue
       fi
 
