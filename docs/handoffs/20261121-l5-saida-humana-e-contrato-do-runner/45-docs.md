@@ -16,7 +16,8 @@ gate: "`tests/run-all.sh` em 1a8b1cfe3d8200ab8891b0923c2b4071250b68f4 → rc 0, 
 
 O guia, o esquema de configuração e o README descrevem os limites do runner do L5.
 O Kaizen registra os 17 itens entregues e 27 sessões de EXEC, com custo em dólares desconhecido.
-O dono ainda decide sobre a segunda prova de resolução e aplica os textos de convenção no PR.
+O mantenedor aceitou a segunda prova de resolução e autorizou os textos de convenção.
+Os dois arquivos foram atualizados em `4110b42`.
 
 ## Estado do repo
 
@@ -57,8 +58,8 @@ O exemplo de encerramento do PR deve indicar `sdd close` depois do merge, mesmo 
 ## Pendências / Decisions for a Human
 
 - Confirme no PR as escolhas 1–9 e os mecanismos 10–18 do [grill](00-missao.md#decisões-do-grill-não-re-litigar), feitos por delegação escrita.
-- Decida separadamente se aceita a segunda prova no squash, que diverge do `CLAUDE.md` atual. Se não aceitar, o plano prevê reverter I10 e o braço de prova pelo head do PR no I11.
-- Aplique no PR os textos propostos para `CLAUDE.md` e `.claude/rules/anatomia-do-agente.md`. O plano reservou essas edições ao dono.
+- A segunda prova no squash e a aplicação dos textos reservados foram aceitas pelo mantenedor no pedido de merge do L5.
+- Os textos de `CLAUDE.md` e `.claude/rules/anatomia-do-agente.md` foram aplicados em `4110b42`.
 - Decida se a sessão `QA:close` comprada por `sdd run` antes de escalar `app-down` merece item próprio. O L5 alterou só a orientação de `sdd status`.
 - Após o merge, faça o yokoten nos alvos com `sdd preflight` e, onde se usa links, `sdd-link-agents`. O retrofit de `todo-to-github-issues` está em outro repo e fica com o dono.
 - O PR do kit segue a regra do dono de merge commit sem carimbo. A retirada dos 17 itens e o ajuste da catraca são do chore pós-merge.
@@ -90,8 +91,8 @@ Nenhum item novo. A seção final lista os registros conferidos e o que ficou no
 | Receita e lembrete do Kaizen (I6, I14) | `docs/failure-modes.md`, `docs/pipeline.md` | ✅ | Receita com `--no-track` em `0fe8217`, backlog e teto por sessão em `ca5260b`. |
 | Encerramento e lista de referências a PR aberto (I9, I12) | `README.md`, `docs/pipeline.md`, `templates/pr-body.md` | ✅ | Próximo passo e template em `70c956f`, linhas obsoletas em `e30971f`, resumo de JIRA opcional em `d21723f`. |
 | Provas e leitor de resoluções (I10, I11, R3, R6–R8) | `docs/pipeline.md`, `templates/todo.md`, `templates/todo.pt-BR.md`, `agents/sdd-kaizen.md` e espelho | ✅ | Duas provas em `5348c7d`, listagem em `891712d`, hashes malformados em `234b734` e limite de parágrafo em `a3518ea`. R8 só limita trabalho sem mudar a saída. |
-| Ciclo de vida resumido no princípio 5 | `CLAUDE.md` | n/a | Alteração de política reservada ao dono pela pendência 4 da missão. Proposta explícita abaixo. O gate recusa ⛔ neste caminho por ele constar no chapéu padrão. |
-| Memória do ADR e portas de intervenção humana | `.claude/rules/anatomia-do-agente.md` | ⛔ | §§ 5 e 7. Caminho de regra fora das escritas da fase. |
+| Ciclo de vida resumido no princípio 5 | `CLAUDE.md` | ✅ | Texto de política aceito pelo mantenedor e aplicado em `4110b42`. |
+| Memória do ADR e portas de intervenção humana | `.claude/rules/anatomia-do-agente.md` | ✅ | Textos dos §§ 5 e 7 aceitos pelo mantenedor e aplicados em `4110b42`. |
 | Regra de âncora e teto de largura (I16) | `templates/checkpoint.md`, templates TODO, `agents/sdd-planner.md`, `agents/sdd-executor.md` e espelhos | ✅ | Prosa alinhada às exceções efetivamente medidas em `3faad6c`. |
 | Citações nos chapéus, em `commands/sdd-plan.md` e `commands/sdd-worker.md`, nos templates e no aviso do worker | Chapéus, espelhos, comandos e templates tocados | ✅ | Citações qualificadas pelo kit em `dfd5f25`, com sensor anti-regressão. Não muda o ADR do alvo nem sua sintaxe. |
 | Fechamento I18, achados e catraca | `TODO.md` | ✅ | Vínculos dos 17 títulos em `a033008`. Registros da r7 em `8310b12` e `178bf75`. Complementos de gramática em `1a8b1cf`. Os ajustes de baseline anteriores à DOCS incluem achados novos, não retirada dos 17. |
