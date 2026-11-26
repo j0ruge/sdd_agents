@@ -1,6 +1,6 @@
 ---
 missao: 20261121-l5-saida-humana-e-contrato-do-runner
-atualizado: 2026-11-26 05:09
+atualizado: 2026-11-26 11:03
 ---
 
 # Checkpoint — L5: saída humana e contrato do runner
@@ -71,6 +71,7 @@ atualizado: 2026-11-26 05:09
 | R3 | Achados #3–#5 da r1 — distinguir resolução não provada e avisar sobre EXEC forçado na base | `t=$(bash tests/check-todo.sh --selftest 2>&1); g=$(bash tests/check-gates.sh 2>&1); echo "$(grep -c '^  ok    rule: --resolved refuses a mixed valid and malformed resolution item' <<< "$t") $(grep -c '^  ok    sdd close omits a finding with any malformed resolution token$' <<< "$g") $(grep -c '^  ok    sdd close does not use a ref as proof for an abbreviated resolution hash$' <<< "$g") $(grep -c '^  ok    sdd run warns on the base before a forced EXEC even when TICKET is pending$' <<< "$g")"` → `1 1 1 1` | done | 234b734 |
 | R4 | Achado 1 da r2 — restaurar links do kit depois de mudar o caminho da instalação | `p=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    link-agents refreshes a command link from a previous kit installation$' <<< "$p") $(grep -c '^  ok    link-agents restores a dangling kit command link after relocation$' <<< "$p") $(grep -c '^  ok    link-agents preserves conflicting tracked edits and untracked local commands$' <<< "$p")"` → `1 1 1` | done | b23f936 |
 | R5 | Achados 1 e 2 da r3 — retomar a migração de links sem substituir comandos locais | `p=$(bash tests/check-preflight.sh 2>&1); echo "$(grep -c '^  ok    link-agents retries a kit relocation after a failed command symlink update$' <<< "$p") $(grep -c '^  ok    link-agents preserves a local command symlink that shares a root with a local planner$' <<< "$p")"` → `1 1` | done | 6ac31be |
+| R6 | Achados 1 e 2 da r4 — ignorar exemplos de resolução e entradas que não são arquivos de ADR | `t=$(bash tests/check-todo.sh --selftest 2>&1); g=$(bash tests/check-gates.sh 2>&1); a=$(bash tests/check-adr.sh 2>&1); echo "$(grep -c '^  ok    rule: --resolved distinguishes inline examples from resolution records' <<< "$t") $(grep -c '^  ok    sdd close lists the real resolution and omits its quoted example$' <<< "$g") $(grep -c '^  ok    adr new does not count a directory named like an ADR on another ref$' <<< "$a")"` → `1 1 1` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
