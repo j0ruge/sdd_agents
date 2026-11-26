@@ -91,9 +91,9 @@ sdd phase <mission>          # print only the current phase (or DONE) — for sc
 sdd review-base <mission>    # base=<sha> when the next REVIEW round can review only the delta since the
                              #   reviewed_head: of the latest round, or full and why — no gate, no suite (ADR 0023)
 sdd retry <mission>          # retry the current phase with a fresh session
-sdd close <mission>          # post-merge: close the JIRA issue (a real paid session — since 2026-09-11
-                             #   it writes its own ledger row, `event:"close"`, cost included), then
-                             #   returns to the base branch — with or without JIRA
+sdd close <mission>          # post-merge: return to the base, fast-forward if possible, and list TODO cleanup
+                             #   with JIRA enabled, closing a still-open issue uses a paid session
+                             #   that records its cost in the ledger (`event:"close"`)
 sdd note-manual <mission> <PHASE>  # record a phase done BY HAND: an intervention note in the checkpoint
                              #   and a `manual` row in the ledger, which grades nothing (PLAN is refused)
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
