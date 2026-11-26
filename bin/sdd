@@ -10718,8 +10718,8 @@ cmd_run() {
   # move off the base branch anyway — and a warning that cries wolf is how people learn to skip
   # reading them. A dry run switches nothing but applies the same TICKET exception to the warning.
   ensure_mission_branch
-  # Before the first gate, unless TICKET is about to create the mission's branch.
-  if ! ticket_will_cut_branch; then warn_if_on_base_branch; fi
+  # Before the first gate. A forced lap other than TICKET bypasses branch assignment.
+  if [[ -n "$force_phase" && "$force_phase" != TICKET ]] || ! ticket_will_cut_branch; then warn_if_on_base_branch; fi
   # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The CLI value is kept
   # HERE, before the loop — inside it, force_phase is also set by the runner itself
   # (PUBLISH_ON_REVIEW_BLOCKED=draft), and that is the runner's hand, not the human's. It is consumed
@@ -13949,7 +13949,7 @@ close_fast_forward_base() {
 # proves nothing. For another PR, the TODO template describes how to look up its head by hash.
 close_list_resolved() { # close_list_resolved <verified|unverified> <PR head or empty>
   local seen="$1" pr_head="$2" sensor="$SDD_HOME/tests/check-todo.sh" todo="$REPO_ROOT/$TODO_FILE"
-  local rows line hashes title hash proof evidence
+  local rows line hashes title hash oid proof evidence
   local -a item_hashes=() findings=()
   [ -f "$todo" ] && [ -f "$sensor" ] || return 0
   rows="$(bash "$sensor" --resolved "$todo" 2>/dev/null)" || return 0
@@ -13961,10 +13961,13 @@ close_list_resolved() { # close_list_resolved <verified|unverified> <PR head or 
     IFS=, read -r -a item_hashes <<< "$hashes"
     evidence=""
     for hash in "${item_hashes[@]}"; do
-      if git -C "$REPO_ROOT" merge-base --is-ancestor "$hash" "refs/heads/$DEFAULT_BRANCH" 2>/dev/null; then
+      # Disambiguate in the object database, not the ref namespace. Only a unique commit counts.
+      oid="$(git -C "$REPO_ROOT" rev-parse --disambiguate="$hash" 2>/dev/null)" || continue 2
+      [ "$(git -C "$REPO_ROOT" cat-file -t "$oid" 2>/dev/null)" = commit ] || continue 2
+      if git -C "$REPO_ROOT" merge-base --is-ancestor "$oid" "refs/heads/$DEFAULT_BRANCH" 2>/dev/null; then
         proof="in $DEFAULT_BRANCH"
       elif [ "$seen" = verified ] && [ -n "$pr_head" ] &&
-        git -C "$REPO_ROOT" merge-base --is-ancestor "$hash" "$pr_head" 2>/dev/null; then
+        git -C "$REPO_ROOT" merge-base --is-ancestor "$oid" "$pr_head" 2>/dev/null; then
         proof="in the head of the merged PR"
       else
         continue 2

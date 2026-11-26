@@ -4936,6 +4936,11 @@ TW_PENDING="$( cd "$FIX" && "$SDD" run --dry-run "$TW" 2>&1 )"; TW_PENDING_RC=$?
 sed -i 's/^aprovacao: auto$/aprovacao:/' "$TW_DIR/00-missao.md"
 TW_RETRY="$( cd "$FIX" && "$SDD" retry "$TW" 2>&1 )"; TW_RETRY_RC=$?
 sed -i 's/^aprovacao:$/aprovacao: auto/' "$TW_DIR/00-missao.md"
+TW_FORCED="$( cd "$FIX" && "$SDD" run --phase EXEC --dry-run "$TW" 2>&1 )"; TW_FORCED_RC=$?
+TW_FORCED_TICKET="$( cd "$FIX" && "$SDD" run --phase TICKET --dry-run "$TW" 2>&1 )"; TW_FORCED_TICKET_RC=$?
+assert_eq "sdd run warns on the base before a forced EXEC even when TICKET is pending" \
+  "exec:0 projected:1 warned:1 ticket:0 projected:1 warned:0" \
+  "exec:$TW_FORCED_RC projected:$(grep -cF 'DRY RUN: phase EXEC ---' <<< "$TW_FORCED") warned:$(grep -cF "$TW_WARNING" <<< "$TW_FORCED") ticket:$TW_FORCED_TICKET_RC projected:$(grep -cF 'DRY RUN: phase TICKET ---' <<< "$TW_FORCED_TICKET") warned:$(grep -cF "$TW_WARNING" <<< "$TW_FORCED_TICKET")"
 if [ "$TW_PHASE" = TICKET ] && [ "$TW_PENDING_RC" -eq 0 ] \
    && ! grep -qF "$TW_WARNING" <<< "$TW_PENDING" \
    && [ "$TW_RETRY_RC" -eq 1 ] && grep -qF 'PLAN is interactive' <<< "$TW_RETRY" \
@@ -7402,6 +7407,46 @@ assert_eq "sdd close lists no item whose hash passes neither proof, and none wit
 assert_eq "sdd close says nothing about open-PR lines when none is left, or when the merge was not verified" \
   "control:1 dirty:0 open:[rc:1 list:0] no-match:[rc:0 list:0] bad-url:[rc:0 list:0] no-url:[rc:0 list:0]" \
   "control:$(grep -Fxc "$CLOSE_STALE_HEADER" <<< "$CLOSE_MISSING_HEAD_OUT") dirty:$(has "$CLOSE_DIRTY_OUT" "$CLOSE_STALE_RE") open:[$CLOSE_OPEN_PR] no-match:[$CLOSE_NO_MATCH] bad-url:[$CLOSE_BAD_URL] no-url:[rc:$CLOSE_RC_OUT list:$(has "$CLOSE_OUT" "$CLOSE_STALE_RE")]"
+
+# The colliding branches point to a valid proof, but the underlying objects do not.
+CLOSE_OTHER_PR_FIX="$(git -C "$FIX" commit-tree "$CLOSE_TREE" -p "$CLOSE_OTHER_FIX" -m 'fixture: second unrelated fix')" || exit 1
+CLOSE_REF_BASE="$(git -C "$FIX" rev-parse --short=12 "$CLOSE_OTHER_FIX")" || exit 1
+CLOSE_REF_PR="$(git -C "$FIX" rev-parse --short=12 "$CLOSE_OTHER_PR_FIX")" || exit 1
+CLOSE_SHORT_BASE="$(git -C "$FIX" rev-parse --short=12 "$CLOSE_BASE_FIX")" || exit 1
+CLOSE_SHORT_PR="$(git -C "$FIX" rev-parse --short=12 "$CLOSE_SQUASH_FIX")" || exit 1
+git -C "$FIX" branch "$CLOSE_REF_BASE" "$CLOSE_BASE_FIX" &&
+  git -C "$FIX" branch "$CLOSE_REF_PR" "$CLOSE_PR_HEAD" &&
+  git -C "$FIX" branch 000000000000 "$CLOSE_BASE_FIX" &&
+  git -C "$FIX" tag -a close-proof-tag "$CLOSE_BASE_FIX" -m 'fixture: tag is not a commit id' || exit 1
+CLOSE_TAG="$(git -C "$FIX" rev-parse --short=12 refs/tags/close-proof-tag)" || exit 1
+printf '%s\n' "$CLOSE_PR_HEAD" > "$FIX/.sdd/logs/close-pr-head"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/7\n---\n# PR\n' > "$MDIR/50-pr.md"
+cat > "$FIX/close-findings.md" <<EOF
+# Findings
+## Open
+<!-- sdd:open -->
+- [ ] **Short base proof** — RESOLVED by $CLOSE_SHORT_BASE
+- [ ] **Short squash proof** — RESOLVED by $CLOSE_SHORT_PR
+- [ ] **Malformed finding** — RESOLVED by $CLOSE_SHORT_BASE and RESOLVED by ${CLOSE_SHORT_PR}x
+- [ ] **Base ref collision** — RESOLVED by $CLOSE_REF_BASE
+- [ ] **PR ref collision** — RESOLVED by $CLOSE_REF_PR
+- [ ] **Ref only** — RESOLVED by 000000000000
+- [ ] **Tag object** — RESOLVED by $CLOSE_TAG
+## Decided
+<!-- sdd:decided -->
+EOF
+git -C "$FIX" add close-findings.md "$MDIR/50-pr.md" &&
+  git -C "$FIX" commit -qm "fixture: separate abbreviated object ids from refs" || exit 1
+close_run "done" 0
+assert_eq "sdd close omits a finding with any malformed resolution token" \
+  "rc:0 control:1 malformed:0" \
+  "rc:$CLOSE_RC_OUT control:$(has "$CLOSE_OUT" 'Short base proof') malformed:$(has "$CLOSE_OUT" 'Malformed finding')"
+assert_eq "sdd close does not use a ref as proof for an abbreviated resolution hash" \
+  "rc:0 base:1 squash:1 collisions:0 ref-only:0 tag:0" \
+  "rc:$CLOSE_RC_OUT base:$(grep -Fxc "close-findings.md:4  Short base proof  ($CLOSE_SHORT_BASE: in $CLOSE_HOME)" <<< "$CLOSE_OUT") squash:$(grep -Fxc "close-findings.md:5  Short squash proof  ($CLOSE_SHORT_PR: in the head of the merged PR)" <<< "$CLOSE_OUT") collisions:$(has "$CLOSE_OUT" 'Base ref collision|PR ref collision') ref-only:$(has "$CLOSE_OUT" 'Ref only') tag:$(has "$CLOSE_OUT" 'Tag object')"
+git -C "$FIX" branch -q -D "$CLOSE_REF_BASE" "$CLOSE_REF_PR" 000000000000 &&
+  git -C "$FIX" tag -d close-proof-tag >/dev/null || exit 1
+printf -- '---\nfase: PR\n---\n# PR\n' > "$MDIR/50-pr.md"
 
 sed -i '/^TODO_FILE="close-findings.md"$/d; s/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
 git -C "$FIX" rm -q close-findings.md docs/roadmap.md KAIZEN_LOG.md "$MDIR/close-pr-history.md" && git -C "$FIX" add -A &&

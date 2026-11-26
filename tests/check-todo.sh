@@ -133,7 +133,8 @@
 #                                            fails — for tools that mirror the findings elsewhere
 #                                            and must prove their own parser agrees)
 #        tests/check-todo.sh --resolved <file>
-#                                           (open items with RESOLVED by: line<TAB>hash[,hash…]<TAB>title)
+#                                           (open items with only valid RESOLVED by values:
+#                                            line<TAB>hash[,hash…]<TAB>title)
 #        tests/check-todo.sh --anchors <file> [<prefix>]
 #                                           (measure the anchors only — ADR 0011 — of every open item,
 #                                            or of those whose anchor starts with <prefix>; one
@@ -519,12 +520,11 @@ todo_awk() {
       if (end_title <= 1) return
       title = substr(first, 9, end_title - 1)
       text = substr(body, 9 + end_title + 1)
-      while (match(text, /(^|[^[:alnum:]_])RESOLVED by [[:alnum:]_]+/)) {
-        hash = substr(text, RSTART, RLENGTH)
+      while (match(text, /(^|[^[:alnum:]_])RESOLVED by([ \t]+|$)/)) {
         text = substr(text, RSTART + RLENGTH)
-        sub(/^.*RESOLVED by /, "", hash)
-        if (hash ~ /^[0-9a-f]+$/ && length(hash) >= 7 && length(hash) <= 40)
-          hashes = (hashes == "" ? hash : hashes "," hash)
+        hash = text; sub(/[ \t].*$/, "", hash)
+        if (hash !~ /^[0-9a-f]+$/ || length(hash) < 7 || length(hash) > 40) return
+        hashes = (hashes == "" ? hash : hashes "," hash)
       }
       gsub(/\t/, " ", title)
       if (hashes != "") print start "\t" hashes "\t" title
@@ -917,7 +917,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=16
+RULES_FLOOR=17
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -2652,6 +2652,28 @@ EOF
   fi
   assert_rc 99 "--resolved refuses a file without the open marker" bash "$SELF" --resolved "$box/rawunmarked.md"
   rule_end 3 '--resolved prints one line per open item that carries RESOLVED by'
+
+  rule_begin
+  cat > "$box/mixed-resolved.md" <<'EOF'
+# TODO
+## Open
+<!-- sdd:open -->
+- [ ] **Control** — RESOLVED by 012abcd and RESOLVED by abcdef1
+- [ ] **Non-hexadecimal suffix** — RESOLVED by abcdef1 and RESOLVED by abcdef1x
+- [ ] **Joined suffix** — RESOLVED by abcdef1-bad and RESOLVED by abcdef1
+- [ ] **Missing value** — RESOLVED by abcdef1 and RESOLVED by
+- [ ] **Too short** — RESOLVED by abcdef1 and RESOLVED by abcdef
+- [ ] **Too long** — RESOLVED by abcdef1 and RESOLVED by 01234567890123456789012345678901234567890
+## Decided
+<!-- sdd:decided -->
+EOF
+  resolved_want="$(printf '4\t012abcd,abcdef1\tControl')"
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/mixed-resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
+    printf '  SELFTEST FAIL  --resolved must preserve only the fully valid item, got:\n%s\n' "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  rule_end 1 '--resolved refuses a mixed valid and malformed resolution item'
 
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran

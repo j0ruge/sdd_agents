@@ -53,7 +53,9 @@ by it, and `gate_PR` reads the head of the pull request from it.
    base, it lists the open items whose every `RESOLVED by` hash passes one of the two proofs. The
    second proof is read against the head of the mission's own pull request, the one this close just
    saw `MERGED`. The items are read by `tests/check-todo.sh --resolved`, the parser that already
-   knows where the open section ends, so the runner gains no second parser of the file.
+   knows where the open section ends, so the runner gains no second parser of the file. It omits
+   any item with a malformed resolution value. The runner resolves each remaining hash to a unique
+   local commit object before checking either proof, without interpreting the hash as a ref name.
 
 ## Alternatives discarded
 

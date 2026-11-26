@@ -699,7 +699,8 @@ the wrong branch is loud now in **all five doors that can end up committing** â€
 `sdd retry`, `sdd approve`, `sdd kaizen` and `sdd preflight` â€” each warning when you are standing
 on the base branch. For `sdd run` and `sdd retry` only, the warning is skipped when Jira is enabled,
 `branch:` is empty or still the placeholder, and `10-ticket.md` does not exist yet. The branch
-assignment is left to TICKET. The warning has one definition, so sabotaging it silences all five
+assignment is left to TICKET. If `sdd run --phase` forces a different phase, it warns because the
+run bypasses that assignment. The warning has one definition, so sabotaging it silences all five
 at once and the suite dies. The two call sites added last (`sdd retry` and `sdd approve`) carry a
 mutation of their own, because for those two the defect was the missing call, not the missing warning.
 
@@ -808,10 +809,11 @@ succeeded, and nothing is forced. Before this the base stayed behind the PR just
 next mission was cut from it (SQ-145, SQ-146).
 
 Back on a clean base, `sdd close` lists findings in `TODO_FILE` whose `RESOLVED by` hashes are
-all proven. Each row shows the file, line, title and proof for each hash. A hash must be an
-ancestor of the base or, after a squash, of the locally available head of this mission's PR
-that the command confirmed as `MERGED`. Without a verified PR or a local head, only base ancestry
-counts. The command lists findings for review and never edits the file.
+all proven. A malformed value excludes the entire finding. Each row shows the file, line, title and
+proof for each hash. A hash must identify a unique commit object, not a ref with the same spelling.
+The commit must be an ancestor of the base or, after a squash, of the locally available head of
+this mission's PR that the command confirmed as `MERGED`. Without a verified PR or a local head,
+only base ancestry counts. The command lists findings for review and never edits the file.
 
 On that same clean base, if it confirmed the PR as `MERGED` and its URL ends in a number, the
 command also lists tracked text lines that still say `PR #N open` or `PR #N aberto` for that PR.
