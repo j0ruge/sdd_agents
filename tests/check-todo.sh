@@ -539,7 +539,7 @@ todo_awk() {
         while (match(text, /(^|[^[:alnum:]_])RESOLVED by([ \t]+|$)/)) {
           text = substr(text, RSTART + RLENGTH)
           hash = text; sub(/[ \t].*$/, "", hash)
-          if (hash !~ /^[0-9a-f]+$/ || length(hash) < 7 || length(hash) > 40) return
+          if (hash !~ /^[0-9a-f]+$/ || length(hash) < 7 || length(hash) > 64) return
           hashes = (hashes == "" ? hash : hashes "," hash)
         }
       }
@@ -2647,6 +2647,9 @@ EOF
   RESOLVED by 901abcd
   ```
   Source: `handoff` RESOLVED by 234abcd — found by `sdd-qa` (2026-09-24)
+- [ ] **Full SHA-1** — RESOLVED by 0123456789abcdef0123456789abcdef01234567
+- [ ] **Full SHA-256** — RESOLVED by 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- [ ] **Oversize hash** — RESOLVED by 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0
 - [ ] **Still open (RESOLVED by 7bcdef1 is an example)** — `a.sh:3` (`alpha`) — UNRESOLVED by 8bcdef1 or RESOLVED by abcdef1x.
 ~~~~md
 ~~~
@@ -2658,7 +2661,8 @@ EOF
 - [ ] **Misplaced finding** — RESOLVED by 567abcd
 EOF
   local resolved_out resolved_want
-  resolved_want="$(printf '4\t012abcd\tFirst finding\n6\tabcdef1,234abcd\tSecond finding')"
+  resolved_want="$(printf '4\t012abcd\tFirst finding\n6\tabcdef1,234abcd\tSecond finding\n11\t%s\tFull SHA-1\n12\t%s\tFull SHA-256' \
+    '0123456789abcdef0123456789abcdef01234567' '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef')"
   PROBES=$((PROBES + 1))
   if ! resolved_out="$(bash "$SELF" --resolved "$box/resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
     printf '  SELFTEST FAIL  --resolved expects exactly these open items:\n%s\n  got:\n%s\n' "$resolved_want" "$resolved_out" >&2
@@ -2682,7 +2686,7 @@ EOF
 - [ ] **Joined suffix** — RESOLVED by abcdef1-bad and RESOLVED by abcdef1
 - [ ] **Missing value** — RESOLVED by abcdef1 and RESOLVED by
 - [ ] **Too short** — RESOLVED by abcdef1 and RESOLVED by abcdef
-- [ ] **Too long** — RESOLVED by abcdef1 and RESOLVED by 01234567890123456789012345678901234567890
+- [ ] **Too long** — RESOLVED by abcdef1 and RESOLVED by 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0
 ## Decided
 <!-- sdd:decided -->
 EOF
