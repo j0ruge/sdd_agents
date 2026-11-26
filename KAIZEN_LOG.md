@@ -20,7 +20,7 @@ fixa a métrica. As referências abaixo são os Checks do
 | I5 | Um argumento como `-l` podia casar uma pasta por substring. | Opções não viram nomes de missão. A ajuda já funcionava antes. |
 | I6 | A receita de Kaizen criava branch que rastreava a base. | O remédio inclui `--no-track`. |
 | I7 | A recusa por checkout ocupado não apontava a leitura sem trava. | `CHECKOUT-BUSY` indica `sdd status --no-gates`. |
-| I8 | Com app fora, o status mandava rodar de novo e escondia a QA já fechada em disco. | Manda restaurar o app, distingue o relatório fechado da e2e não revalidada e só indica retomar se o app responder. |
+| I8 | Com app fora, o status mandava rodar de novo e escondia a QA já fechada em disco. | Ao detectar app fora ou errado, manda restaurar o app e distingue o relatório fechado da e2e não revalidada. Sem esse diagnóstico, segue indicando retomada. |
 | I9 | A orientação acabava no merge. | Corrida concluída, status e corpo do PR indicam `sdd close` pós-merge, mesmo sem JIRA. |
 | I10 | Só a ancestralidade da base liberava a limpeza. | Templates e juiz também aceitam ancestralidade do head de um PR confirmado `MERGED`. |
 | I11 | O fechamento não dizia quais achados podiam sair. | Lista arquivo, linha, título e prova sem alterar o TODO. Sob squash só usa o PR da própria missão. |
@@ -36,7 +36,7 @@ ancestrais de `04376a7`. A DOCS conferiu os pares um a um, sem usar a contagem g
 A [QA em `9127882`](docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/30-handoff-qa.md#o-que-foi-feito)
 registrou as 46 asserções do plano e os 28 mutantes catalogados. O reteste do R8
 [comparado pela REVIEW r7](docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r7.md#o-que-virou-incremento)
-mostrou o leitor e a CLI antes vencendo o prazo de 10 s com um milhão de linhas vazias.
+mostrou o leitor e a CLI excedendo o prazo de 10 s antes do conserto, com um milhão de linhas vazias.
 Depois foram 0,53 s e 0,74 s, com a mesma prova e sem editar o backlog. Ao fim da revisão,
 o checkpoint continha 26 incrementos `done`, de I1–I18 e R1–R8.
 

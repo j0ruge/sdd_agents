@@ -65,11 +65,14 @@ Then the next PR of the queue starts again from step 1, against the `main` this 
 
 A mission that fixes findings writes `RESOLVED by <hash>` in each item and leaves the ratchet
 where it was (the decided record "`RESOLVED by` does not let the ratchet go down in the mission
-that fixes"). After its PR merges, on a new branch from `origin/main`:
+that fixes"). Once the PR merges, run `sdd close <mission>` from a clean checkout to update
+the base and list proven resolutions for review. The command does not remove any item.
+On a new chore branch from `origin/main`:
 
-1. For every hash, `git merge-base --is-ancestor <hash> origin/main` → rc 0. A hash that fails it
-   did not reach `main` (a squash merge, say): prove the fix through the PR instead, or leave the
-   item.
+1. Prove every hash with `git merge-base --is-ancestor <hash> origin/main` → rc 0. Where squash
+   is used, the other proof requires both `git merge-base --is-ancestor <hash> <PR-head>` → rc 0
+   and `gh pr view <PR> --json state,headRefOid` showing `MERGED` for that same head. Leave an
+   item if any of its hashes is unproven. This kit still uses merge commits.
 2. Delete each proven item from `TODO.md`.
 3. `tests/check-todo.sh --count TODO.md` gives the new count; write it as `todo-findings <N>` in
    `tests/health-baseline.txt`, and run the three measures of step 4 above.

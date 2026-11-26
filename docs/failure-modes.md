@@ -1377,9 +1377,9 @@ the finding that moved it. That is the whole point — growing stays allowed, gr
 not, and the count moves in a diff with an author. Take `<N>` from the failure message or from
 `tests/check-todo.sh` (`  ok    N finding(s) …`), never from a `grep -c` of your own: a grep does
 not know where the open section ends. Findings closed with
-`RESOLVED by <hash>` keep counting until they are deleted, which happens after the PR merges
-(`git merge-base --is-ancestor <hash> main`) — so the count usually drops on the post-merge sweep,
-not inside the mission that fixed them.
+`RESOLVED by <hash>` keep counting until the hashes are proven and the items are deleted.
+Follow the [post-merge chore](finding-prs.md#the-post-merge-chore-of-a-mission) for the proof
+and the recount. The count usually drops in that chore, not in the mission that fixed the items.
 
 ---
 
