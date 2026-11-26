@@ -13510,7 +13510,8 @@ EOF
 
 # ---------------------------------------------------------------------------
 cmd_link_agents() {
-  local dir kind linked already untracked src name relative target IGNORE MARKER previous_planner indexed
+  local dir kind linked already untracked src name relative target IGNORE MARKER indexed
+  local previous_planner previous_root command_link
   # It takes no argument, and one is refused before anything is linked (item E): `sdd link-agents
   # --help` used to link the agents. bin/sdd-link-agents enters through main() with the same argv.
   [ $# -eq 0 ] || die "unknown link-agents option: $1 (see 'sdd help')"
@@ -13526,9 +13527,18 @@ cmd_link_agents() {
     || die "refusing to link the kit to itself — $REPO_ROOT is the kit."
 
   IGNORE="$REPO_ROOT/.gitignore"
-  # Read the raw planner link before relinking agents. The sentinel keeps trailing newlines.
+  # The sentinel keeps trailing newlines. A shared root alone does not identify a kit:
+  # require the command ignore rule and, if that root still exists, its kit runner.
   previous_planner="$(readlink -n "$REPO_ROOT/.claude/agents/sdd-planner.md" && printf .)" || previous_planner=""
-  for dir in agents commands; do
+  previous_root="${previous_planner%/agents/sdd-planner.md.}"
+  if [[ "$previous_planner" != /*/agents/sdd-planner.md. ]] \
+     || ! grep -qxF '.claude/commands/sdd-*.md' "$IGNORE" 2>/dev/null \
+     || { [ -e "$previous_root" ] && [ ! -f "$previous_root/bin/sdd" ]; }; then
+    previous_root="$SDD_HOME"
+  fi
+
+  # Keep the old planner link until the commands are in place, so a failed write is retryable.
+  for dir in commands agents; do
     kind="${dir%s}"
     mkdir -p "$REPO_ROOT/.claude/$dir"
     linked=0; already=0; untracked=0
@@ -13538,12 +13548,12 @@ cmd_link_agents() {
       relative=".claude/$dir/$name"
       target="$REPO_ROOT/$relative"
 
-      # The old planner link corroborates the origin of an untracked command link,
-      # even if the old installation has moved. Keep other local commands and their index entries.
+      # A retry may see both old and active command links. Preserve other symlinks and
+      # index entries, even when they resolve to identical contents.
       if [ "$dir" = commands ] && { [ -e "$target" ] || [ -L "$target" ]; } \
         && ! { [ ! -L "$target" ] && [ -f "$target" ] && cmp -s "$src" "$target"; } \
-        && ! { [[ "$previous_planner" == /*/agents/sdd-planner.md. ]] \
-          && [ "$(readlink -n "$target" && printf .)" = "${previous_planner%/agents/sdd-planner.md.}/commands/$name." ] \
+        && ! { command_link="$(readlink -n "$target" && printf .)" \
+          && [[ "$command_link" == "$src." || "$command_link" == "$previous_root/commands/$name." ]] \
           && indexed="$(git -C "$REPO_ROOT" ls-files -- "$relative")" && [ -z "$indexed" ]; }; then
         warn "preserving local command $relative"
         continue

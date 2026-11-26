@@ -3108,17 +3108,17 @@ else
        "only the missing worker command linked once, with the local plan and index unchanged" "$lc_first / $lc_second"
 fi
 
-# Two targets carry links made by the old CLI. Refresh one while that kit is readable and
-# leave the other untouched until the old installation has moved away.
+# Three targets carry links made by the old CLI: one live, one dangling, one interrupted.
 LC_OLD="$FIX/previous kit"
 LC_LIVE="$FIX/link-old-live"
 LC_MOVED="$FIX/link-old-moved"
+LC_RETRY="$FIX/link-old-retry"
 mkdir -p "$LC_OLD/bin" "$LC_OLD/commands" || exit 1
 cp "$SDD" "$ROOT/bin/sdd-coordination.py" "$LC_OLD/bin/" || exit 1
 cp -R "$ROOT/agents" "$LC_OLD/agents" || exit 1
 cp "$ROOT"/commands/sdd-*.md "$LC_OLD/commands/" || exit 1
 printf '\n# Previous kit version\n' >> "$LC_OLD/commands/sdd-plan.md"
-for lc_fixture in "$LC_LIVE" "$LC_MOVED"; do
+for lc_fixture in "$LC_LIVE" "$LC_MOVED" "$LC_RETRY"; do
   help_repo "$lc_fixture" || exit 1
   ( cd "$lc_fixture" && HOME="$LC_HOME" "$SDD" install \
     && HOME="$LC_HOME" "$LC_OLD/bin/sdd" link-agents ) >/dev/null 2>&1 || exit 1
@@ -3170,10 +3170,97 @@ else
        "rc 0 and the tracked symlink and index entry unchanged" "rc $lc_rc; $lc_first"
 fi
 
+# Fail the second command update even when the suite runs as root.
+mkdir "$FIX/.fail-link" || exit 1
+lc_ln="$(command -v ln)" || exit 1
+cat > "$FIX/.fail-link/ln" <<'SH'
+#!/usr/bin/env bash
+if [[ "${!#}" == "$LC_FAIL_LINK" ]]; then
+  echo 'fixture: command link update refused' >&2
+  exit 73
+fi
+exec "$LC_REAL_LN" "$@"
+SH
+chmod +x "$FIX/.fail-link/ln" || exit 1
+lc_rc=0
+lc_first="$(PATH="$FIX/.fail-link:$PATH" LC_FAIL_LINK="$LC_RETRY/$lc_worker" \
+  LC_REAL_LN="$lc_ln" lc_current_link "$LC_RETRY")" || lc_rc=$?
+lc_partial=0
+if [ "$lc_rc" -eq 73 ] && [[ "$lc_first" == *'fixture: command link update refused'* ]] \
+   && [ "$(readlink "$LC_RETRY/$lc_plan")" = "$ROOT/commands/sdd-plan.md" ] \
+   && [ "$(readlink "$LC_RETRY/$lc_worker")" = "$LC_OLD/commands/sdd-worker.md" ] \
+   && [ ! -e "$LC_RETRY/$lc_worker" ]; then
+  lc_partial=1
+fi
+lc_rc2=0; lc_second="$(lc_current_link "$LC_RETRY")" || lc_rc2=$?
+if [ "$lc_partial/$lc_rc2" = 1/0 ] && lc_reinstalled "$LC_RETRY" \
+   && [ "$(readlink "$LC_RETRY/$lc_worker")" = "$ROOT/commands/sdd-worker.md" ] \
+   && cmp -s "$LC_RETRY/$lc_worker" "$ROOT/commands/sdd-worker.md" \
+   && [[ "$lc_second" != *'preserving local command'* ]]; then
+  pass "link-agents retries a kit relocation after a failed command symlink update"
+else
+  fail "link-agents retries a kit relocation after a failed command symlink update" \
+       "an observed partial update, then rc 0 and both commands readable without preservation warnings" \
+       "partial=$lc_partial rc=$lc_rc/$lc_rc2; $lc_first / $lc_second"
+fi
+
+git -C "$LC_RETRY" add -f -- "$lc_plan" || exit 1
+lc_index="$(git -C "$LC_RETRY" ls-files --stage -- "$lc_plan")" || exit 1
+lc_rc=0; lc_first="$(lc_current_link "$LC_RETRY")" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && [ "$(readlink "$LC_RETRY/$lc_plan")" = "$ROOT/commands/sdd-plan.md" ] \
+   && [ "$(git -C "$LC_RETRY" ls-files --stage -- "$lc_plan")" = "$lc_index" ] \
+   && [[ "$lc_first" == *"preserving local command $lc_plan"* ]]; then
+  pass "link-agents preserves a tracked command symlink to the active kit"
+else
+  fail "link-agents preserves a tracked command symlink to the active kit" \
+       "rc 0 and the active symlink and index entry unchanged" "rc $lc_rc; $lc_first"
+fi
+
+LC_TWIN="$FIX/link-local-twin"
+help_repo "$LC_TWIN" || exit 1
+mkdir -p "$LC_TWIN"/{.sdd,.claude/agents,.claude/commands,local/agents,local/commands} || exit 1
+cp "$LC_REPO/.sdd/config.sh" "$LC_TWIN/.sdd/config.sh" || exit 1
+printf '# Local planner\n' > "$LC_TWIN/local/agents/sdd-planner.md"
+printf '# Local command\n' > "$FIX/local-twin.want"
+lc_twin="$LC_TWIN/local/commands/sdd-plan.md"
+cp "$FIX/local-twin.want" "$lc_twin" || exit 1
+lc_twin_case() {
+  ln -sfn "$LC_TWIN/local/agents/sdd-planner.md" "$LC_TWIN/.claude/agents/sdd-planner.md" || return
+  ln -sfn "$lc_twin" "$LC_TWIN/$lc_plan" || return
+  lc_rc=0; lc_first="$(lc_current_link "$LC_TWIN")" || lc_rc=$?
+  [ "$lc_rc" -eq 0 ] && [ "$(readlink "$LC_TWIN/$lc_plan")" = "$lc_twin" ] \
+    && cmp -s "$FIX/local-twin.want" "$LC_TWIN/$lc_plan" \
+    && [ "$(git -C "$LC_TWIN" ls-files --stage -- "$lc_plan")" = "$lc_index" ] \
+    && [[ "$lc_first" == *"preserving local command $lc_plan"* ]]
+}
+lc_index="$(git -C "$LC_TWIN" ls-files --stage -- "$lc_plan")" || exit 1
+if lc_twin_case && lc_twin_case; then
+  pass "link-agents preserves a local command symlink that shares a root with a local planner"
+else
+  fail "link-agents preserves a local command symlink that shares a root with a local planner" \
+       "rc 0, destination and content preserved and named, with or without the installer rule" "rc $lc_rc; $lc_first"
+fi
+
+LC_UNMARKED="$FIX/link-unmarked-dangling"
+help_repo "$LC_UNMARKED" || exit 1
+mkdir -p "$LC_UNMARKED"/{.sdd,.claude/agents,.claude/commands} || exit 1
+cp "$LC_REPO/.sdd/config.sh" "$LC_UNMARKED/.sdd/config.sh" || exit 1
+ln -s "$LC_OLD/agents/sdd-planner.md" "$LC_UNMARKED/.claude/agents/sdd-planner.md" \
+  && ln -s "$LC_OLD/commands/sdd-plan.md" "$LC_UNMARKED/$lc_plan" || exit 1
+lc_rc=0; lc_first="$(lc_current_link "$LC_UNMARKED")" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && [ "$(readlink "$LC_UNMARKED/$lc_plan")" = "$LC_OLD/commands/sdd-plan.md" ] \
+   && [[ "$lc_first" == *"preserving local command $lc_plan"* ]]; then
+  pass "link-agents preserves a dangling command symlink without the installer rule"
+else
+  fail "link-agents preserves a dangling command symlink without the installer rule" \
+       "rc 0 and the unmarked dangling symlink kept and named" "rc $lc_rc; $lc_first"
+fi
+
 LC_RELATIVE="$FIX/link-relative"
 help_repo "$LC_RELATIVE" || exit 1
 mkdir -p "$LC_RELATIVE"/{.sdd,.claude/agents,.claude/commands} || exit 1
 cp "$LC_REPO/.sdd/config.sh" "$LC_RELATIVE/.sdd/config.sh" || exit 1
+printf '%s\n' '.claude/commands/sdd-*.md' > "$LC_RELATIVE/.gitignore" || exit 1
 lc_relative_target=../../custom/commands/sdd-plan.md
 ln -s ../../custom/agents/sdd-planner.md "$LC_RELATIVE/.claude/agents/sdd-planner.md" \
   && ln -s "$lc_relative_target" "$LC_RELATIVE/$lc_plan" || exit 1

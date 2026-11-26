@@ -7093,7 +7093,7 @@ mut_RUN_link_agents_argument_accepted() {
 }
 # Linking commands without ignoring them can leave machine-specific paths in Git.
 mut_LINK_commands_unlinked() {
-  sed -i '/^cmd_link_agents() {/,/^}/ s@^  for dir in agents commands; do$@  for dir in agents; do@' "$1"
+  sed -i '/^cmd_link_agents() {/,/^}/ s@^  for dir in commands agents; do$@  for dir in agents; do@' "$1"
 }
 mut_LINK_commands_gitignore_dropped() {
   sed -i '/^cmd_link_agents() {/,/^}/ s@^    if ! grep -qxF "\$MARKER"@    if [ "$dir" != commands ] \&\& ! grep -qxF "$MARKER"@' "$1"

@@ -177,7 +177,11 @@ source. `sdd-link-agents` also links the kit's slash commands under `.claude/com
 
 After moving the kit, rerun `sdd-link-agents` from the new installation. It refreshes an untracked
 command symlink whose absolute destination matches the old installation still named by the
-target's `sdd-planner.md` agent link, even if that destination no longer exists.
+target's `sdd-planner.md` agent link, even if the old installation no longer exists. The target's
+`.gitignore` must contain the kit's command rule, and an old root still on disk must contain
+`bin/sdd`. Sharing a root with the planner is not enough. If a command update fails, fix the
+cause and rerun the installer. The planner link still names the old root until the commands
+are in place.
 The installer warns about other command symlinks or conflicting files and leaves them and their
 Git index entries untouched. Missing commands are still linked, and an identical regular file
 can still be replaced by the kit link.
