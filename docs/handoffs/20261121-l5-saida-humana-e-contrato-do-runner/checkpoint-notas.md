@@ -90,3 +90,16 @@
 - 2026-11-26 02:38 · `R3` · R3 sabotage: valor bruto na prova pelo PR → probe ficou vermelho na colisão com a ref que aponta para o head do PR (rc 1).
 - 2026-11-26 02:38 · `R3` · TDD de `0 0 0 0` para `1 1 1 1` em `234b734`. `tests/run-all.sh` verde antes e depois (rc 0, 21 etapas, 2481 linhas ok no final, zero FAIL). Controles e mutantes rodaram em cópias descartáveis, com grupo próprio, teto de 90 s e 1 GiB. A declaração local, os comentários e a reinserção isolada dos recortes antigos do marcador não mudam o resultado. As 259 inserções preexistentes nas notas ficaram fora dos commits.
 - 2026-11-26 03:11 · `R4` · REVIEW r2, achado 1: após mover o kit, link-agents retorna 0 e deixa /sdd-plan quebrado. Check de reinstalação e preservação vai ao EXEC.
+- 2026-11-26 03:53 · `R4` · R4 sabotage: capturar o agente da instalação ativa em vez do anterior → probe da instalação antiga legível ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: aplicar a guarda de comandos aos agentes → probe da instalação antiga legível ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: proteger só symlinks existentes e deixar passar arquivos regulares → controle dos rascunhos do R1 ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: aceitar arquivos regulares sem comparar conteúdo → controle dos rascunhos do R1 ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: tratar symlink de conteúdo idêntico como cópia regular → probe do link local ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: aceitar raiz relativa como prova de origem → probe do link relativo local ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: cortar a quebra de linha final do destino do link → probe do link local ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: presumir ausência no índice sem consultar o Git → probe do link rastreado ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: recolocar a guarda anterior sem recuperação → probe da instalação antiga legível ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: recolocar o aviso de conteúdo divergente em link com conteúdo idêntico → probe do link local ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: exigir que o destino antigo exista → probe do link quebrado ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · A declaração local, os comentários e a formatação da guarda não têm comportamento observável próprio. O fixture foi medido em vermelho e verde e a prosa foi conferida contra o restante do guia e o README.
+- 2026-11-26 03:53 · `R4` · TDD de `0 0 1` para `1 1 1` em `b23f936`. Suíte inicial verde com 2481 linhas ok. Suíte final verde com 21 etapas, 2486 linhas ok e zero FAIL. Quatro referências do TODO deslocadas pelo código foram reancoradas sem mudar os achados. As 259 inserções preexistentes nas notas não entraram nos commits.

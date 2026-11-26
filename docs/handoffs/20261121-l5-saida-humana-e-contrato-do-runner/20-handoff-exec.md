@@ -2,9 +2,9 @@
 missao: 20261121-l5-saida-humana-e-contrato-do-runner
 fase: EXEC
 status: done
-sessao: 01a21639-d95a-7543-8f1c-7add3438cfaa
-data: 2026-11-26 02:38
-gate: "tests/run-all.sh na árvore gravada em 234b734 → rc 0, suite green, 21 etapas, 2481 linhas ok e zero FAIL. Check R3 → 1 1 1 1."
+sessao: 01a2167b-75b7-7110-a482-a1a50796b614
+data: 2026-11-26 03:53
+gate: "tests/run-all.sh na árvore gravada em b23f936 → rc 0, suite green, 21 etapas, 2486 linhas ok e zero FAIL. Check R4 → 1 1 1."
 ---
 
 # Handoff — EXEC — L5: saída humana e contrato do runner
@@ -14,19 +14,25 @@ gate: "tests/run-all.sh na árvore gravada em 234b734 → rc 0, suite green, 21 
 
 ## TL;DR
 
-O EXEC fechou os 18 incrementos do plano e os três consertos da REVIEW r1. A suíte ficou verde.
-O `close` omite resoluções malformadas e exige commits, e o `run` avisa quando o EXEC forçado pula a TICKET na base.
-A próxima REVIEW deve reandar os cinco achados corrigidos com os sensores listados abaixo.
+O R4 fechou o último incremento. A reinstalação recupera os links de comando do kit antigo, mesmo quebrados,
+e preserva rascunhos e links locais. A suíte ficou verde. A próxima REVIEW retesta o delta da r2.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5-saida-humana-e-contrato-do-runner`, sem upstream configurado. A referência local `origin/main` é ancestral do branch.
-- **Último commit de entrega:** `234b734` — consertos do R3.
+- **Último commit de entrega:** `b23f936` — recuperação dos links de comandos do R4.
 - **Working tree:** as 259 inserções preexistentes em `checkpoint-notas.md` foram preservadas fora dos commits.
-- **Suíte:** `tests/run-all.sh` na árvore gravada em `234b734` → rc 0, `suite green`, 21 etapas, 2481 linhas `ok` e zero `FAIL`. O Check R3 passou de `0 0 0 0` para `1 1 1 1`.
-- **E2E:** `E2E_CMD=""`. A QA original percorreu a CLI. As regressões da r1 foram retestadas em Git de rascunho, sem app, PR ou JIRA reais.
+- **Suíte:** `tests/run-all.sh` na árvore gravada em `b23f936` → rc 0, `suite green`, 21 etapas, 2486 linhas `ok` e zero `FAIL`. O Check R4 passou de `0 0 1` para `1 1 1`.
+- **E2E:** `E2E_CMD=""`. A QA original percorreu a CLI. As regressões das revisões foram retestadas em Git de rascunho, sem app, PR ou JIRA reais.
 
 ## O que foi feito
+
+### Conserto da REVIEW r2
+
+- `b23f936` (R4) — Ao reinstalar, o `link-agents` usa o destino absoluto do agente `sdd-planner.md`
+  anterior para reconhecer e restaurar links de comandos do kit fora do índice. O fixture usa duas
+  instalações e mede destino, leitura e preservação dos rascunhos, dos links locais e do índice.
+  Onze mutantes caíram em cópia descartável com grupo próprio, teto de 90 s e 1 GiB.
 
 ### Consertos da REVIEW r1
 
@@ -59,12 +65,23 @@ A próxima REVIEW deve reandar os cinco achados corrigidos com os sensores lista
 
 | Arquivo | O que contém |
 |---|---|
-| [`checkpoint.md`](checkpoint.md) | 21 linhas `done`, cada uma com o Check e o hash alcançável. |
+| [`checkpoint.md`](checkpoint.md) | 22 linhas `done`, cada uma com o Check e o hash alcançável. |
+| [Guia PLAN-only](../../plan-only.md#why-the-agents-are-symlinks) | Como reinstalar após mover o kit e quais links ficam intactos. |
 | [`01-plano.md`](01-plano.md) | Em “Verificação end-to-end”, os comandos para rechecagem e a jornada de QA. |
 | [`TODO.md`](../../../TODO.md) | Em `a033008`, `bash tests/check-todo.sh --check TODO.md` e `--anchors` passaram com 92 âncoras e zero fora do alvo. O Check I18 foi de `0` em `b5a6d57` para `17` em `a033008`, contra o merge-base `60ec571`. `bash tests/check-todo.sh --resolved TODO.md` mostrou os 17 títulos com seus hashes exatos mais os dois registros da base. |
 | [ADR 0025](../../adr/0025-ids-across-refs-and-the-second-proof-of-a-resolution.md) | Origem dos IDs e segunda prova de resolução. `./bin/sdd adr check --mission 20261121-l5-saida-humana-e-contrato-do-runner --phase plan` passou em `a033008`. |
 
 ## Boot da próxima fase
+
+Leia o achado 1 de [`40-review-r2.md`](40-review-r2.md) e o R4 de [`checkpoint.md`](checkpoint.md).
+Rode `bash tests/check-preflight.sh`. O fixture cria os links com a CLI da instalação anterior
+em dois alvos temporários, roda a CLI nova com a instalação antiga legível em um alvo e move
+a instalação antiga antes de rodá-la no outro. Confira o caminho novo em `readlink` e a leitura
+de `/sdd-plan`. Os rascunhos e os links locais ou rastreados ficam intactos, inclusive no índice.
+O fixture não precisa de app nem de instalação real. A QA em disco segue fechada. A próxima
+REVIEW parte do `reviewed_head` da r2, `86b48881f08fde1063a7c66fcc66a79e1264866d`.
+
+### Retestes da REVIEW r1
 
 Para o reteste de QA da rodada r1, leia os achados 1 a 5 de [`40-review-r1.md`](40-review-r1.md) e
 as linhas R1 a R3 de [`checkpoint.md`](checkpoint.md). Rode `bash tests/check-preflight.sh` para
@@ -74,8 +91,6 @@ No `close`, confirme que um valor inválido impede a listagem do item inteiro e 
 homônimas não provam ancestralidade. Os controles abreviados válidos devem aparecer tanto pela
 base quanto pelo head do PR `MERGED`. Compare o aviso do `run --phase EXEC --dry-run` na base
 com a projeção normal de TICKET. Os sensores montam seus próprios repositórios e stubs.
-A QA em disco segue fechada, pois o gate só reabre por `F<n>`, não por `R<n>`. A REVIEW
-reavalia o delta a partir do `reviewed_head` da r1.
 
 ### Jornada original de QA
 
@@ -106,6 +121,9 @@ Use fixtures para merge e JIRA, sem abrir, fechar ou mesclar PRs reais.
 
 ## Riscos e não-feitos
 
+- Sem o link anterior do agente `sdd-planner.md`, a origem não pode ser confirmada e o comando
+  permanece intacto com aviso. Isso inclui uma tentativa anterior que já migrou o agente, mas
+  deixou o comando apontado para a instalação anterior.
 - Não foram rodados o catálogo inteiro de mutação nem o carimbo. Não houve mudança na catraca, limpeza pós-merge ou instalação em alvos reais.
 - Sob squash, a listagem do `sdd close` só usa o head do PR confirmado da própria missão como segunda prova. O alocador de ADR não vê branches que só existem em outra máquina.
 - O registro das medidas e do custo em `KAIZEN_LOG.md` é da fase DOCS.
@@ -113,6 +131,7 @@ Use fixtures para merge e JIRA, sem abrir, fechar ou mesclar PRs reais.
 
 ## Achados fora de escopo
 
-Nenhum achado novo no R3. As pendências sobre alocação concorrente de ADR e ajuda do `close` continuam no backlog, conforme a REVIEW r1. Os achados já registrados durante o EXEC seguem em
+Nenhum achado novo fora de escopo no R4. O fallback do Git antigo com quebra de linha no caminho
+de worktree segue no [backlog](../../../TODO.md), conforme a REVIEW r2. As pendências sobre alocação concorrente de ADR e ajuda do `close` continuam no backlog, conforme a REVIEW r1. Os achados já registrados durante o EXEC seguem em
 [`TODO.md`](../../../TODO.md), na subseção “Sensores que faltam”. Incluem a intermitência do probe
 do processo residual, os guias ausentes na cópia do catálogo e a preparação do fixture de fast-forward.
