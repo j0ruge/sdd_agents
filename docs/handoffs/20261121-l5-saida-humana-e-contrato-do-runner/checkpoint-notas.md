@@ -78,3 +78,14 @@
 - 2026-11-26 02:00 · `R2` · R2 sabotage: tentativa com NUL ignorada → a asserção da sequência de chamadas falhou (rc 1).
 - 2026-11-26 02:00 · `R2` · R2 sabotage: conversão de separadores removida → a asserção do número 0018 e da origem falhou (rc 1).
 - 2026-11-26 02:00 · `R2` · TDD de `0 0` para `1 1` em `4376e32`. Com a recusa de -z simulada, a CLI deixou de oferecer 0001 e passou a oferecer 0018, nomeando o worktree que contém o ADR 0017 não commitado. A leitura NUL do Git atual continuou verde. Controle e mutantes rodaram em grupo próprio, com teto de 90 s e 1 GiB. A suíte tests/run-all.sh passou antes e depois (rc 0, zero FAIL), com 85 asserções de ADR após o conserto e 1017 âncoras válidas. O ADR documenta o limite de caminhos com quebra de linha no Git antigo. As 259 inserções preexistentes nas notas ficaram fora dos commits.
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor ausente ignorado → selftest de resolução mista ficou vermelho (rc 92).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: cursor pula o primeiro caractere do valor → controle de itens válidos ficou vermelho (rc 92).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor truncado antes do hífen → selftest de resolução mista ficou vermelho (rc 92).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor inválido descartado sem recusar o item → selftest de resolução mista ficou vermelho (rc 92).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: hashes não incluídos na lista → controle de itens válidos ficou vermelho (rc 92).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: exceção da TICKET aplicada ao EXEC forçado → probe do aviso ficou vermelho (rc 1).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor bruto no lugar do objeto desambiguado → probe de refs homônimas ficou vermelho (rc 1).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: guarda de tipo removida → probe de refs homônimas ficou vermelho no controle com objeto tag (rc 1).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor bruto na prova pela base → probe ficou vermelho na colisão com a ref da base (rc 1).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor bruto na prova pelo PR → probe ficou vermelho na colisão com a ref que aponta para o head do PR (rc 1).
+- 2026-11-26 02:38 · `R3` · TDD de `0 0 0 0` para `1 1 1 1` em `234b734`. `tests/run-all.sh` verde antes e depois (rc 0, 21 etapas, 2481 linhas ok no final, zero FAIL). Controles e mutantes rodaram em cópias descartáveis, com grupo próprio, teto de 90 s e 1 GiB. A declaração local, os comentários e a reinserção isolada dos recortes antigos do marcador não mudam o resultado. As 259 inserções preexistentes nas notas ficaram fora dos commits.

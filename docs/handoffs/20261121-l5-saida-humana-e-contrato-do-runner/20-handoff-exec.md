@@ -2,9 +2,9 @@
 missao: 20261121-l5-saida-humana-e-contrato-do-runner
 fase: EXEC
 status: done
-sessao: 01a2157b-1a86-7101-8d67-6ca58bee53b6
-data: 2026-11-25 23:08
-gate: "tests/run-all.sh na árvore gravada em a033008 → rc 0, suite green, zero FAIL, 21 etapas e 2473 linhas ok."
+sessao: 01a21639-d95a-7543-8f1c-7add3438cfaa
+data: 2026-11-26 02:38
+gate: "tests/run-all.sh na árvore gravada em 234b734 → rc 0, suite green, 21 etapas, 2481 linhas ok e zero FAIL. Check R3 → 1 1 1 1."
 ---
 
 # Handoff — EXEC — L5: saída humana e contrato do runner
@@ -14,19 +14,27 @@ gate: "tests/run-all.sh na árvore gravada em a033008 → rc 0, suite green, zer
 
 ## TL;DR
 
-O EXEC concluiu os 18 incrementos. O kit aponta o próximo passo na CLI e automatiza os contratos de ADR, links e idioma.
-O I18 registrou os 17 hashes de resolução no backlog. A suíte ficou verde e todas as 46 asserções ancoradas passaram.
-A QA começa com a jornada em um repositório de rascunho, sem tocar nos alvos reais.
+O EXEC fechou os 18 incrementos do plano e os três consertos da REVIEW r1. A suíte ficou verde.
+O `close` omite resoluções malformadas e exige commits, e o `run` avisa quando o EXEC forçado pula a TICKET na base.
+A próxima REVIEW deve reandar os cinco achados corrigidos com os sensores listados abaixo.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5-saida-humana-e-contrato-do-runner`, sem upstream configurado. A referência local `origin/main` é ancestral do branch.
-- **Último commit de entrega:** `a033008` `docs(todo): vincula os 17 achados do L5 aos consertos`.
-- **Working tree:** houve 259 inserções preexistentes em `checkpoint-notas.md`. Elas foram preservadas fora dos commits do I18.
-- **Suíte:** `tests/run-all.sh` na árvore gravada em `a033008` → rc 0, `suite green`, zero `FAIL`, 21 etapas e 2473 linhas `ok`. Os Checks I1 a I17 retornaram os 48 valores esperados, incluindo as 46 asserções ancoradas.
-- **E2E:** `E2E_CMD=""`, sem execução de E2E configurada. A jornada manual da CLI fica para a QA.
+- **Último commit de entrega:** `234b734` — consertos do R3.
+- **Working tree:** as 259 inserções preexistentes em `checkpoint-notas.md` foram preservadas fora dos commits.
+- **Suíte:** `tests/run-all.sh` na árvore gravada em `234b734` → rc 0, `suite green`, 21 etapas, 2481 linhas `ok` e zero `FAIL`. O Check R3 passou de `0 0 0 0` para `1 1 1 1`.
+- **E2E:** `E2E_CMD=""`. A QA original percorreu a CLI. As regressões da r1 foram retestadas em Git de rascunho, sem app, PR ou JIRA reais.
 
 ## O que foi feito
+
+### Consertos da REVIEW r1
+
+- `21482a2` (R1) — O instalador preserva comandos locais conflitantes e ainda liga os comandos ausentes.
+- `4376e32` (R2) — Se Git recusar a saída NUL, o alocador lê a saída alternativa e respeita ADRs ainda não commitados em outros worktrees.
+- `234b734` (R3) — O analisador omite itens com qualquer valor de resolução malformado. As duas provas do `close` usam objetos commit e não refs homônimas. O `run` avisa na base antes de pular a atribuição de branch ao forçar EXEC.
+
+### Entrega original
 
 - `436b1f2` (I1) — O alocador de ADR lê refs locais e remotos e o disco dos worktrees, e nomeia a origem do máximo.
 - `8718ccf` (I2) — O instalador de links liga comandos, e o preflight avisa onde instalar o `/sdd-plan`.
@@ -51,12 +59,25 @@ A QA começa com a jornada em um repositório de rascunho, sem tocar nos alvos r
 
 | Arquivo | O que contém |
 |---|---|
-| [`checkpoint.md`](checkpoint.md) | 18 linhas `done`, cada uma com o Check e o hash alcançável. |
+| [`checkpoint.md`](checkpoint.md) | 21 linhas `done`, cada uma com o Check e o hash alcançável. |
 | [`01-plano.md`](01-plano.md) | Em “Verificação end-to-end”, os comandos para rechecagem e a jornada de QA. |
 | [`TODO.md`](../../../TODO.md) | Em `a033008`, `bash tests/check-todo.sh --check TODO.md` e `--anchors` passaram com 92 âncoras e zero fora do alvo. O Check I18 foi de `0` em `b5a6d57` para `17` em `a033008`, contra o merge-base `60ec571`. `bash tests/check-todo.sh --resolved TODO.md` mostrou os 17 títulos com seus hashes exatos mais os dois registros da base. |
 | [ADR 0025](../../adr/0025-ids-across-refs-and-the-second-proof-of-a-resolution.md) | Origem dos IDs e segunda prova de resolução. `./bin/sdd adr check --mission 20261121-l5-saida-humana-e-contrato-do-runner --phase plan` passou em `a033008`. |
 
 ## Boot da próxima fase
+
+Para o reteste de QA da rodada r1, leia os achados 1 a 5 de [`40-review-r1.md`](40-review-r1.md) e
+as linhas R1 a R3 de [`checkpoint.md`](checkpoint.md). Rode `bash tests/check-preflight.sh` para
+a preservação dos comandos locais, `bash tests/check-adr.sh` para o Git sem `-z` e
+`bash tests/check-todo.sh --selftest` e `bash tests/check-gates.sh` para o Check R3.
+No `close`, confirme que um valor inválido impede a listagem do item inteiro e que refs
+homônimas não provam ancestralidade. Os controles abreviados válidos devem aparecer tanto pela
+base quanto pelo head do PR `MERGED`. Compare o aviso do `run --phase EXEC --dry-run` na base
+com a projeção normal de TICKET. Os sensores montam seus próprios repositórios e stubs.
+A QA em disco segue fechada, pois o gate só reabre por `F<n>`, não por `R<n>`. A REVIEW
+reavalia o delta a partir do `reviewed_head` da r1.
+
+### Jornada original de QA
 
 Leia `00-missao.md`, `01-plano.md` (seção “Verificação end-to-end”) e `checkpoint.md`.
 Rode `tests/run-all.sh` e refaça o Check I18. No fechamento, os 28 mutantes nomeados no plano
@@ -88,10 +109,10 @@ Use fixtures para merge e JIRA, sem abrir, fechar ou mesclar PRs reais.
 - Não foram rodados o catálogo inteiro de mutação nem o carimbo. Não houve mudança na catraca, limpeza pós-merge ou instalação em alvos reais.
 - Sob squash, a listagem do `sdd close` só usa o head do PR confirmado da própria missão como segunda prova. O alocador de ADR não vê branches que só existem em outra máquina.
 - O registro das medidas e do custo em `KAIZEN_LOG.md` é da fase DOCS.
-- As edições preexistentes de `checkpoint-notas.md` continuam locais. Apenas a linha nova do I18 foi incluída no commit de fechamento.
+- As edições preexistentes de `checkpoint-notas.md` continuam locais. Cada fechamento incluiu somente as notas novas do próprio incremento.
 
 ## Achados fora de escopo
 
-Nenhum achado novo no I18. Os achados já registrados durante o EXEC seguem em
+Nenhum achado novo no R3. As pendências sobre alocação concorrente de ADR e ajuda do `close` continuam no backlog, conforme a REVIEW r1. Os achados já registrados durante o EXEC seguem em
 [`TODO.md`](../../../TODO.md), na subseção “Sensores que faltam”. Incluem a intermitência do probe
 do processo residual, os guias ausentes na cópia do catálogo e a preparação do fixture de fast-forward.
