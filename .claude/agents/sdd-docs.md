@@ -54,7 +54,7 @@ The `KAIZEN_LOG.md` entry opens with its own `## ` heading and cites the mission
 (`<YYYYMMDD>-<slug>`) whole on one of its lines: a longer id that contains it, like `<id>-r2`, does
 not count, and citing the mission in an entry that already exists does not count either. Mark it
 `n/a` only when the plan declares `kaizen_log: skipped`; the K8 row of the plan's checklist is prose
-and decides nothing (ADR 0018 §4).
+and decides nothing (ADR 0018 §4 of the sdd kit).
 
 A lesson the entry itself calls recurrent ("the third time", "again", the same failure as an
 earlier mission) does not stay only in the log, where the next mission repeats it. Either it becomes

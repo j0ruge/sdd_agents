@@ -59,7 +59,7 @@ decision in `00-missao.md`, indented under it:
 One line per answer: a question asked twice (a confirmation, a reopened decision) gets two lines.
 A note never goes inside the parentheses; it goes in the decision's prose. The acceptance step of
 `/sdd-plan` counts only these whole lines inside the decisions section, so no count of answers is
-written by hand anywhere in the plan (ADR 0018 §3).
+written by hand anywhere in the plan (ADR 0018 §3 of the sdd kit).
 Write an `- answer:` line only after the relay handed that answer back, and never write `aprovacao: auto`
 while a question is still unanswered: the relay counts the marks at every hand-back and stops on
 one it did not deliver (measured in `magic_tutor`: decision 7 came out `- answer: (recommended)`
@@ -71,7 +71,7 @@ When the grill decides that QA does not apply in a project with an interface (th
 reach the user), write `qa: skipped` in the frontmatter of `00-missao.md` and the justification in
 the grill decisions. Only that literal changes the route: the runner then sends the QA phase
 straight to `sdd-qa`, which confirms the declaration against the real diff and stops the line when
-the diff reaches the user (ADR 0018 §1).
+the diff reaches the user (ADR 0018 §1 of the sdd kit).
 
 When you run as a subagent you cannot reach the human: you have no tool to ask, and you may be
 running in the background — the session that delegated you is the relay. End every turn with ONE
@@ -242,7 +242,7 @@ Fill the `00-missao.md` table **with evidence**, not with optimism:
 - **All ✅** → leave `aprovacao:` empty: the human reads the plan in the acceptance step of
   `/sdd-plan` and approves with `sdd approve`. Write `auto` only when the human asked for it in the grill —
   then the grill **is** the approval, because the human was present and chose to skip the reading,
-  and `sdd run <mission>` goes on alone to the PR (ADR 0018 §3).
+  and `sdd run <mission>` goes on alone to the PR (ADR 0018 §3 of the sdd kit).
 - **Any ✗** → leave `aprovacao` empty and ask the human for explicit approval, saying which
   criterion failed. The runner does not proceed without one of the two values.
 
