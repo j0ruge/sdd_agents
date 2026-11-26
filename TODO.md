@@ -835,7 +835,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O exemplo de sdd close no README ainda promete uma sessão paga de JIRA** — `README.md:94`
   (`list TODO cleanup`) — a CLI já descreve a volta à base, a lista do backlog e o JIRA opcional.
   O guia rápido omite a lista e não indica em que condições a sessão paga é dispensada.
-  Direção: alinhar o verbete à ajuda nova e à seção pós-merge do guia do pipeline.
+  Direção: alinhar o verbete à ajuda nova e à seção pós-merge do guia do pipeline. RESOLVED by d21723f
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r5.md`
   — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)
 
