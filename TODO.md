@@ -828,7 +828,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **A ajuda do sdd close descreve apenas o fechamento no JIRA** — `bin/sdd:13433`
   (`post-merge: update the base`) — `sdd help` não diz por que rodar o comando sem JIRA,
-  embora o fechamento volte à base, tente o fast-forward e liste pendências pós-merge.
+  embora o fechamento volte à base, tente o fast-forward e liste pendências pós-merge. RESOLVED by 269ecc7
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r1.md`
   — descoberto por `sdd-reviewer` (2026-11-26)
 
