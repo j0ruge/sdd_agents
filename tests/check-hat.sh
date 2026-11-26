@@ -1212,6 +1212,14 @@ help_probes() {
   else
     fail "help: sdd run shows its detached form and where to read the progress afterwards"
   fi
+
+  blk="$(awk '/^  sdd close <mission> /{print; exit}' <<< "$out")"
+  if grep -qF 'update the base' <<< "$blk" && grep -qF 'list TODO cleanup' <<< "$blk" \
+     && grep -qF 'JIRA when enabled' <<< "$blk"; then
+    pass "help: sdd close tells operators what it does with or without JIRA"
+  else
+    fail "help: sdd close tells operators what it does with or without JIRA"
+  fi
 }
 
 

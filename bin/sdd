@@ -13430,7 +13430,7 @@ USAGE
                              setsid nohup sdd run <mission> > <log> 2>&1 < /dev/null &
                              Follow .sdd/logs/<mission>/pipeline.log or use sdd status <mission> --no-gates.
   sdd retry <mission>        retry the current phase with a fresh session
-  sdd close <mission>        post-merge: close the JIRA issue
+  sdd close <mission>        post-merge: update the base, list TODO cleanup, and close JIRA when enabled
   sdd note-manual <mission> <PHASE>
                              record a phase done BY HAND: an intervention note in the checkpoint
                              (committed alone) and a `manual` row in the ledger, which grades nothing
