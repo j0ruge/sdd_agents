@@ -3036,6 +3036,16 @@ mut_PRE_todo_preamble_author_warned() {
 mut_INSTALL_todo_preamble_unchecked() {
   sed -i '/^cmd_install() {/,/^}/ s|^    todo_preamble_say "\$inst_todo"|    : todo_preamble_say "$inst_todo"|' "$1"
 }
+# L5 item 4: install keeps an untouched seed, accepts a partial match, or preflight stays silent.
+mut_INSTALL_seed_other_lang_kept() {
+  sed -i '/^cmd_install() {/,/^}/ s/^  elif other_seed=.*todo_other_language_seed.*; then$/  elif false; then/' "$1"
+}
+mut_INSTALL_seed_edited_replaced() {
+  sed -i '/^todo_other_language_seed() {/,/^}/ s@ = "\$blob" ]; then@ = "$(head -c "$(wc -c < "$candidate")" "$1" | git hash-object --stdin)" ]; then@' "$1"
+}
+mut_PRE_seed_other_lang_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s/^      warn "\$TODO_FILE is still the untouched seed/      : "$TODO_FILE is still the untouched seed/' "$1"
+}
 # L4 item 7: sdd run and sdd retry stop before the session the harness will deny a skill.
 mut_RUN_skill_uncovered_not_stopped() {
   sed -i '/^cmd_run() {/,/^}/ s|then phase_skills_check run; fi$|then phase_skills_check preflight; fi|' "$1"
@@ -8363,6 +8373,9 @@ CATALOG=(
   PRE_todo_preamble_stale_silent
   PRE_todo_preamble_author_warned
   INSTALL_todo_preamble_unchecked
+  INSTALL_seed_other_lang_kept
+  INSTALL_seed_edited_replaced
+  PRE_seed_other_lang_silent
   RUN_skill_uncovered_not_stopped
   RETRY_skill_uncovered_not_stopped
   RUN_skill_broken_not_stopped

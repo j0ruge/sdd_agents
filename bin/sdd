@@ -6934,12 +6934,28 @@ todo_template_for() {
   fi
 }
 
+# todo_other_language_seed <file> <chosen template> prints the name of an untouched seed
+# of another language. Hash the bytes on disk, with no clean filters or line-ending conversion.
+todo_other_language_seed() {
+  local blob candidate digest
+  [ -f "$1" ] && [ ! -L "$1" ] || return 1
+  blob="$(git hash-object --no-filters -- "$1" 2>/dev/null)" || return 1
+  for candidate in "$SDD_HOME"/templates/todo.md "$SDD_HOME"/templates/todo.*.md; do
+    [ "$candidate" != "$2" ] && [ -f "$candidate" ] || continue
+    if digest="$(git hash-object --no-filters -- "$candidate" 2>/dev/null)" && [ "$digest" = "$blob" ]; then
+      printf '%s\n' "${candidate##*/}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # todo_preamble_verdict <file> <OUTPUT_LANG> — CALLED, never read through $( ): it publishes
 # TODO_PREAMBLE_VERDICT (current | stale | author | unknown), TODO_PREAMBLE_REV and _DATE (for a
-# stale one) and TODO_PREAMBLE_TEMPLATE. install seeds TODO_FILE once and never rewrites it, so a
-# target keeps the preamble of the kit it was installed from while the template moves on (L4 item
-# 10). The preamble is the file from line 1 up to its first <!-- sdd:open -->, inclusive. Equal to
-# the template on disk is `current`; else equal to the template at some revision of the kit's git is
+# stale one) and TODO_PREAMBLE_TEMPLATE. An existing TODO_FILE can keep the preamble of the kit it
+# was installed from while the template moves on (L4 item 10). The preamble is the file from line 1
+# up to its first <!-- sdd:open -->, inclusive. Equal to the template on disk is `current`; else
+# equal to the template at some revision of the kit's git is
 # `stale` (the newest such revision); equal to none is `author` — a preamble somebody wrote, like the
 # kit's own, which must not warn forever, so comparing with today's template alone was refused. A
 # file with no marker, or a kit that is not a git checkout of its own (a copy inside another repo
@@ -7126,7 +7142,7 @@ cmd_install() {
   # English templates/todo.md when no variant exists for that language. Every variant carries the
   # same two markers (tests/check-templates.sh holds them to one structure), so the sensor and the
   # agents read any of them the same way; only the prose a human reads changes.
-  local seed
+  local seed seed_hint="" other_seed
   seed="$(todo_template_for "$inst_lang")"
   [ -f "$seed" ] || die "the TODO.md seed is missing from the kit: $seed"
   # The blob of the seed this command wrote before the two-section skeleton, byte for byte. A file
@@ -7138,13 +7154,18 @@ cmd_install() {
 
   if [ ! -f "$REPO_ROOT/$inst_todo" ]; then
     # Seeded with the FORMAT, because an empty file teaches nothing and the format is what makes
-    # the entries countable. Never overwritten: a second install over a file holding real findings
-    # would take them with it.
+    # the entries countable. Only an untouched seed can later be replaced.
     cp "$seed" "$REPO_ROOT/$inst_todo"
-    ok "$inst_todo created from templates/$(basename "$seed") (out-of-scope findings go here — principle 5)"
+    if [ -z "$inst_lang" ]; then
+      seed_hint=". It was seeded in English because OUTPUT_LANG is empty. Set OUTPUT_LANG and run 'sdd install' again while the seed is untouched."
+    fi
+    ok "$inst_todo created from templates/$(basename "$seed") (out-of-scope findings go here — principle 5)${seed_hint}"
   elif [ "$(git hash-object --no-filters "$REPO_ROOT/$inst_todo" 2>/dev/null)" = "$legacy_seed_blob" ]; then
     cp "$seed" "$REPO_ROOT/$inst_todo"
     ok "$inst_todo was the untouched legacy seed — replaced by templates/$(basename "$seed") (it held no finding)"
+  elif other_seed="$(todo_other_language_seed "$REPO_ROOT/$inst_todo" "$seed")"; then
+    cp "$seed" "$REPO_ROOT/$inst_todo"
+    ok "$inst_todo was the untouched seed from templates/$other_seed — replaced by templates/${seed##*/} (it held no finding)"
   elif ! grep -qE '^<!-- sdd:open -->[[:space:]]*$' "$REPO_ROOT/$inst_todo"; then
     warn "$inst_todo predates the two-section skeleton (no <!-- sdd:open --> marker) — preserved; migrate it by hand from templates/$(basename "$seed")"
   else
@@ -7959,7 +7980,15 @@ $todo_first
       *) warn "the shape of TODO_FILE was not measured ($TODO_FILE): check-todo.sh answered rc $todo_rc — $(head -n 1 <<< "$todo_out")" ;;
     esac
   fi
-  [ ! -f "$REPO_ROOT/$TODO_FILE" ] || todo_preamble_say "$TODO_FILE" "$REPO_ROOT/$TODO_FILE" "${OUTPUT_LANG:-}"
+  if [ -f "$REPO_ROOT/$TODO_FILE" ]; then
+    local seed other_seed
+    seed="$(todo_template_for "${OUTPUT_LANG:-}")"
+    if other_seed="$(todo_other_language_seed "$REPO_ROOT/$TODO_FILE" "$seed")"; then
+      warn "$TODO_FILE is still the untouched seed from templates/$other_seed, but OUTPUT_LANG selects templates/${seed##*/} — run 'sdd install' to replace it"
+    else
+      todo_preamble_say "$TODO_FILE" "$REPO_ROOT/$TODO_FILE" "${OUTPUT_LANG:-}"
+    fi
+  fi
 
   # DEFAULT_BRANCH is the base of `gh pr create` in the PR phase — the LAST phase, after EXEC, QA,
   # REVIEW and DOCS have all been paid for. Nothing ever asked the repository whether the branch was

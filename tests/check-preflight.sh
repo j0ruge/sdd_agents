@@ -1633,9 +1633,9 @@ assert_eq "preflight warns that the lint step of the suite will be skipped when 
 mv .sdd/config.sh.bak .sdd/config.sh
 
 # --- the preamble of TODO_FILE against the revisions of the template (L4 item 10) ---
-# install seeds TODO.md once and never rewrites it, so a target keeps the preamble of the kit it was
-# installed from while the template moves on, and nothing said so. The preamble (line 1 up to the
-# first <!-- sdd:open -->) is compared with the template of today and with the one of every revision
+# A target can keep the preamble of the kit it was installed from while the template moves on, and
+# nothing used to say so. The preamble (line 1 up to the first <!-- sdd:open -->) is compared
+# with the template of today and with the one of every revision
 # in the kit's git: today's is an ok, an older one a WARN naming the revision, its date and the diff
 # to run (the file left byte for byte), and none at all an author's preamble said in one dim line —
 # the kit's own TODO.md is one, and it must not warn forever. The mutation sandbox copies the kit
@@ -2507,7 +2507,7 @@ mkdir -p "$SEED"
 ( cd "$SEED" && git init -q -b main \
   && git config user.email "fixture@example.com" && git config user.name "Fixture" \
   && echo content > file.txt && git add -A && git commit -qm "init" ) >/dev/null 2>&1
-seed_out="$( cd "$SEED" && "$SDD" install 2>&1 )"
+seed_out="$( cd "$SEED" && HOME="$FIX/.stub" "$SDD" install 2>&1 )"
 
 assert_has "install seeds HANDOFF_DIR and the findings file" "docs/handoffs/" "$seed_out"
 if [ -d "$SEED/docs/handoffs" ]; then pass "the handoff root exists on disk after install"
@@ -2528,8 +2528,35 @@ if [ "$rc" -eq 0 ] && grep -q '^  ok    0 finding(s)' <<< "$seed_check"; then
 else fail "the seed passes the shape sensor with zero findings" "rc 0 and 'ok    0 finding(s)'" \
        "rc $rc: $seed_check"; fi
 
+# The first install explains the English default and the way to switch while the file is untouched.
+assert_eq "the first install with no OUTPUT_LANG says the TODO was seeded in English and how to reseed it" \
+  "english=1 advice=1" \
+  "english=$(cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.md" && echo 1 || echo 0) advice=$(grep -cE "^  ok +TODO\.md .*seeded in English because OUTPUT_LANG is empty.*Set OUTPUT_LANG and run 'sdd install' again while the seed is untouched" <<< "$seed_out")"
+
+# Use the fixture kit with a history to ensure the preamble verdict yields to the language warning.
+sed -i 's/^OUTPUT_LANG=.*/OUTPUT_LANG="pt-BR"/' "$SEED/.sdd/config.sh"
+seed_warning="TODO.md is still the untouched seed from templates/todo.md, but OUTPUT_LANG selects templates/todo.pt-BR.md — run 'sdd install' to replace it"
+seed_pf="$( cd "$SEED" && HOME="$FIX/.stub" "$PK/bin/sdd" preflight 2>&1 )"
+assert_eq "preflight warns that the TODO is still the untouched seed of another language, naming sdd install" \
+  "warn=1 preamble=0 untouched=1" \
+  "warn=$(pa_count "  warn  $seed_warning" "$seed_pf") preamble=$(pa_count "$PA_ANY" "$seed_pf") untouched=$(cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.md" && echo 1 || echo 0)"
+
+seed_swap="$( cd "$SEED" && HOME="$FIX/.stub" "$SDD" install 2>&1 )"
+assert_eq "install replaces a TODO that is still the untouched seed of another language with the seed of OUTPUT_LANG" \
+  "pt-BR=1 said=1" \
+  "pt-BR=$(cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.pt-BR.md" && echo 1 || echo 0) said=$(grep -cE '^  ok +TODO\.md was the untouched seed from templates/todo\.md — replaced by templates/todo\.pt-BR\.md' <<< "$seed_swap")"
+
+# One byte beyond the preamble takes the file out of the reseed path in both commands.
+{ cat "$ROOT/templates/todo.md"; printf 'x'; } > "$SEED/TODO.md"
+cp "$SEED/TODO.md" "$FIX/edited-seed"
+seed_edited_pf="$( cd "$SEED" && HOME="$FIX/.stub" "$PK/bin/sdd" preflight 2>&1 )"
+seed_edited_install="$( cd "$SEED" && HOME="$FIX/.stub" "$SDD" install 2>&1 )"
+assert_eq "install preserves a TODO one byte away from a seed" \
+  "untouched warned=1 edited warned=0 edited preamble=1 preserved=1 same=1" \
+  "untouched warned=$(pa_count "$seed_warning" "$seed_pf") edited warned=$(pa_count "$seed_warning" "$seed_edited_pf") edited preamble=$(pa_count "$PA_ANY" "$seed_edited_pf") preserved=$(grep -cE '^  ok +TODO\.md already exists \(preserved\)$' <<< "$seed_edited_install") same=$(cmp -s "$SEED/TODO.md" "$FIX/edited-seed" && echo 1 || echo 0)"
+
 # Which variant: templates/todo.<OUTPUT_LANG>.md when the kit has one, the English one otherwise.
-# Each case removes the file first, because an existing TODO.md is never overwritten.
+# Each case removes the file first to exercise creation separately from reseeding.
 seed_lang() { # seed_lang <lang> — reinstall with OUTPUT_LANG=<lang> over no TODO.md
   sed -i "s/^OUTPUT_LANG=.*/OUTPUT_LANG=\"$1\"/" "$SEED/.sdd/config.sh"
   rm -f "$SEED/TODO.md"
