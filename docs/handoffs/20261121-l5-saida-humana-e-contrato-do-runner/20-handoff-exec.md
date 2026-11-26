@@ -2,9 +2,9 @@
 missao: 20261121-l5-saida-humana-e-contrato-do-runner
 fase: EXEC
 status: done
-sessao: 01a2167b-75b7-7110-a482-a1a50796b614
-data: 2026-11-26 03:53
-gate: "tests/run-all.sh na árvore gravada em b23f936 → rc 0, suite green, 21 etapas, 2486 linhas ok e zero FAIL. Check R4 → 1 1 1."
+sessao: 01a216c7-58f2-73a1-a973-4c54061af30c
+data: 2026-11-26 05:09
+gate: "tests/run-all.sh no commit 6ac31be → rc 0, suite green, 21 etapas, 2490 linhas ok e zero FAIL. Check R5 → 1 1. Check R4 → 1 1 1."
 ---
 
 # Handoff — EXEC — L5: saída humana e contrato do runner
@@ -14,18 +14,30 @@ gate: "tests/run-all.sh na árvore gravada em b23f936 → rc 0, suite green, 21 
 
 ## TL;DR
 
-O R4 fechou o último incremento. A reinstalação recupera os links de comando do kit antigo, mesmo quebrados,
-e preserva rascunhos e links locais. A suíte ficou verde. A próxima REVIEW retesta o delta da r2.
+O R5 fechou os dois achados da REVIEW r3. A reinstalação pode ser retomada após falha de escrita
+e preserva comandos locais mesmo quando compartilham a raiz com um planner local. A suíte ficou
+verde e a QA em disco segue fechada. Se houver nova REVIEW, ela retesta o delta da r3.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5-saida-humana-e-contrato-do-runner`, sem upstream configurado. A referência local `origin/main` é ancestral do branch.
-- **Último commit de entrega:** `b23f936` — recuperação dos links de comandos do R4.
+- **Último commit de entrega:** `6ac31be` — retomada da migração e preservação de comandos locais.
 - **Working tree:** as 259 inserções preexistentes em `checkpoint-notas.md` foram preservadas fora dos commits.
-- **Suíte:** `tests/run-all.sh` na árvore gravada em `b23f936` → rc 0, `suite green`, 21 etapas, 2486 linhas `ok` e zero `FAIL`. O Check R4 passou de `0 0 1` para `1 1 1`.
+- **Suíte:** `tests/run-all.sh` na árvore gravada em `6ac31be` → rc 0, `suite green`, 21 etapas, 2490 linhas `ok` e zero `FAIL`. O Check R5 passou de `0 0` para `1 1`. O Check R4 permaneceu em `1 1 1`.
 - **E2E:** `E2E_CMD=""`. A QA original percorreu a CLI. As regressões das revisões foram retestadas em Git de rascunho, sem app, PR ou JIRA reais.
 
 ## O que foi feito
+
+### Consertos da REVIEW r3
+
+- `6ac31be` (R5) — O instalador atualiza os comandos antes de trocar o link do planner. Se uma
+  escrita falhar, a próxima tentativa reconhece tanto os links que ficaram na raiz anterior
+  quanto os que já apontam para o kit ativo. A regra de comandos em `.gitignore` e o runner
+  na raiz antiga, se ainda existir, corroboram a origem. O índice continua protegido.
+  O sensor mede a falha no segundo comando, a leitura de ambos após a retomada e a preservação
+  do comando local com e sem regra no alvo. Treze mutantes caíram em cópia descartável,
+  com grupo próprio, teto de 25 s e 1 GiB por processo. O mutante de catálogo
+  `LINK_commands_unlinked` teve a âncora atualizada e caiu em `check-preflight.sh`.
 
 ### Conserto da REVIEW r2
 
@@ -65,13 +77,24 @@ e preserva rascunhos e links locais. A suíte ficou verde. A próxima REVIEW ret
 
 | Arquivo | O que contém |
 |---|---|
-| [`checkpoint.md`](checkpoint.md) | 22 linhas `done`, cada uma com o Check e o hash alcançável. |
+| [`checkpoint.md`](checkpoint.md) | 23 linhas `done`, cada uma com o Check e o hash alcançável. |
 | [Guia PLAN-only](../../plan-only.md#why-the-agents-are-symlinks) | Como reinstalar após mover o kit e quais links ficam intactos. |
 | [`01-plano.md`](01-plano.md) | Em “Verificação end-to-end”, os comandos para rechecagem e a jornada de QA. |
 | [`TODO.md`](../../../TODO.md) | Em `a033008`, `bash tests/check-todo.sh --check TODO.md` e `--anchors` passaram com 92 âncoras e zero fora do alvo. O Check I18 foi de `0` em `b5a6d57` para `17` em `a033008`, contra o merge-base `60ec571`. `bash tests/check-todo.sh --resolved TODO.md` mostrou os 17 títulos com seus hashes exatos mais os dois registros da base. |
 | [ADR 0025](../../adr/0025-ids-across-refs-and-the-second-proof-of-a-resolution.md) | Origem dos IDs e segunda prova de resolução. `./bin/sdd adr check --mission 20261121-l5-saida-humana-e-contrato-do-runner --phase plan` passou em `a033008`. |
 
 ## Boot da próxima fase
+
+Leia os achados 1 e 2 de [`40-review-r3.md`](40-review-r3.md) e o R5 de
+[`checkpoint.md`](checkpoint.md). Rode `bash tests/check-preflight.sh`. O fixture move
+uma cópia do kit, injeta uma falha na escrita do segundo comando e repete a instalação.
+Confira os destinos e o conteúdo dos dois comandos e do planner. Em outro alvo, confirme
+que um par local de links com a mesma raiz não basta para substituir o comando, mesmo após
+o instalador acrescentar a regra ao `.gitignore`. Não é necessário subir app ou tocar
+numa instalação real. A próxima REVIEW usa o `reviewed_head` da r3,
+`e919a145222897a75c7074cd7ff0465dc14160c3`, como base do delta.
+
+### Reteste da REVIEW r2
 
 Leia o achado 1 de [`40-review-r2.md`](40-review-r2.md) e o R4 de [`checkpoint.md`](checkpoint.md).
 Rode `bash tests/check-preflight.sh`. O fixture cria os links com a CLI da instalação anterior
@@ -121,9 +144,10 @@ Use fixtures para merge e JIRA, sem abrir, fechar ou mesclar PRs reais.
 
 ## Riscos e não-feitos
 
-- Sem o link anterior do agente `sdd-planner.md`, a origem não pode ser confirmada e o comando
-  permanece intacto com aviso. Isso inclui uma tentativa anterior que já migrou o agente, mas
-  deixou o comando apontado para a instalação anterior.
+- Se uma versão anterior já trocou o link do planner antes de falhar, a referência à raiz
+  anterior já foi perdida. O instalador não adivinha a origem e preserva o comando com aviso.
+  Com a raiz antiga ausente, a recuperação depende da regra no alvo, dos destinos absolutos
+  correspondentes e da ausência do comando no índice.
 - Não foram rodados o catálogo inteiro de mutação nem o carimbo. Não houve mudança na catraca, limpeza pós-merge ou instalação em alvos reais.
 - Sob squash, a listagem do `sdd close` só usa o head do PR confirmado da própria missão como segunda prova. O alocador de ADR não vê branches que só existem em outra máquina.
 - O registro das medidas e do custo em `KAIZEN_LOG.md` é da fase DOCS.
@@ -131,7 +155,7 @@ Use fixtures para merge e JIRA, sem abrir, fechar ou mesclar PRs reais.
 
 ## Achados fora de escopo
 
-Nenhum achado novo fora de escopo no R4. O fallback do Git antigo com quebra de linha no caminho
+Nenhum achado novo fora de escopo no R5. O fallback do Git antigo com quebra de linha no caminho
 de worktree segue no [backlog](../../../TODO.md), conforme a REVIEW r2. As pendências sobre alocação concorrente de ADR e ajuda do `close` continuam no backlog, conforme a REVIEW r1. Os achados já registrados durante o EXEC seguem em
 [`TODO.md`](../../../TODO.md), na subseção “Sensores que faltam”. Incluem a intermitência do probe
 do processo residual, os guias ausentes na cópia do catálogo e a preparação do fixture de fast-forward.

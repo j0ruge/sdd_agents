@@ -104,3 +104,19 @@
 - 2026-11-26 03:53 · `R4` · A declaração local, os comentários e a formatação da guarda não têm comportamento observável próprio. O fixture foi medido em vermelho e verde e a prosa foi conferida contra o restante do guia e o README.
 - 2026-11-26 03:53 · `R4` · TDD de `0 0 1` para `1 1 1` em `b23f936`. Suíte inicial verde com 2481 linhas ok. Suíte final verde com 21 etapas, 2486 linhas ok e zero FAIL. Quatro referências do TODO deslocadas pelo código foram reancoradas sem mudar os achados. As 259 inserções preexistentes nas notas não entraram nos commits.
 - 2026-11-26 04:34 · `R5` · REVIEW r3, achados 1 e 2 reproduzidos: retomada após falha na migração e preservação de comando local com a mesma raiz do planner. R4 conferido em b23f936.
+- 2026-11-26 05:09 · `R5` · R5 sabotage: desligar leitura do planner anterior → link-agents refreshes a command link from a previous kit installation (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: extrair raiz sem cortar o sufixo do planner → link-agents refreshes a command link from a previous kit installation (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: aceitar raiz relativa → link-agents preserves a relative command symlink without evidence of kit origin (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: dispensar a regra de instalação → link-agents preserves a dangling command symlink without the installer rule (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: exigir que a raiz antiga exista → link-agents restores a dangling kit command link after relocation (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: aceitar raiz existente sem o runner → link-agents preserves a local command symlink that shares a root with a local planner (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: manter a raiz rejeitada → link-agents preserves a local command symlink that shares a root with a local planner (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: recolocar agentes antes dos comandos → link-agents retries a kit relocation after a failed command symlink update (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: descartar quebra de linha final do destino → link-agents preserves an unrelated command symlink even when its contents match the kit (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: aceitar só comandos da raiz anterior → link-agents retries a kit relocation after a failed command symlink update (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: aceitar só comandos da instalação ativa → link-agents refreshes a command link from a previous kit installation (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: recolocar a comparação com o planner sem validação da raiz → link-agents preserves a local command symlink that shares a root with a local planner (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: deixar o destino ativo passar sem consultar o índice → link-agents preserves a tracked command symlink to the active kit (rc 1).
+- 2026-11-26 05:09 · `R5` · A declaração de variáveis, as quebras da guarda e os comentários não têm comportamento isolado. Os fixtures deram o vermelho esperado e depois passaram. A leitura do trecho do guia e do README confirmou as instruções de instalação.
+- 2026-11-26 05:09 · `R5` · A suíte em cópia sob /tmp não serve para medir o cenário do ledger que exige um checkout fora de /tmp. O gate foi medido no checkout da missão.
+- 2026-11-26 05:09 · `R5` · TDD de `0 0` para `1 1` em `6ac31be`. A suíte inicial teve 2486 linhas ok. A suíte no checkout da missão passou com 21 etapas, 2490 linhas ok e zero FAIL. R4 manteve `1 1 1`. Uma âncora do TODO e a do mutante `LINK_commands_unlinked` foram atualizadas. As 259 inserções preexistentes nas notas ficaram fora dos commits.
