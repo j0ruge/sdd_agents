@@ -24,11 +24,12 @@ atualizado: <YYYY-MM-DD HH:MM>
 > `no-work` antes de abrir sessão. Custou duas sessões EXEC sem trabalho em
 > `20260921-amep-backend-0-1-0`.
 >
-> ⚠️ **Check que lê a saída de um sensor ancora em `^  ok    ` — quatro espaços, com o `^`.**
-> Todo sensor da suíte imprime `  ok    <asserção>` na **stdout** e `  FAIL  <asserção>` na
-> **stderr**, com o *mesmo* `<asserção>`. Um Check que faz `2>&1` e grepa o texto solto devolve o
-> mesmo número com a asserção verde e com ela vermelha: ele responde "a asserção existe", nunca
-> "a asserção passou". Custou uma missão inteira, achado só na fase QA. A forma certa:
+> ⚠️ **Ao mesclar stderr e stdout, o `grep` dessa saída ancora em `^  ok    ` — quatro espaços, com o `^`.**
+> Vale para `2>&1` ou qualquer outra grafia de mescla. Se o sensor não consegue rastrear a saída,
+> cobra a âncora de todos os `grep` da célula. A marca de aprovação do test runner no início do padrão
+> (`'^ *✓ '`) também ancora, e o `grep -c` que espera só zeros dispensa a âncora se a saída do Check
+> traz apenas as contagens, um zero por `grep -c`. Sem âncora, grepar só o texto da asserção na saída
+> mesclada não distingue `  ok    <asserção>` (stdout) de `  FAIL  <asserção>` (stderr). A forma certa:
 > `` o=$(bash tests/check-x.sh 2>&1); grep -c '^  ok    <asserção>' <<< "$o" `` → `1`.
 > O sensor é o `tests/check-checkpoint.sh --check <este checkpoint>` do kit (pelo caminho do kit).
 >

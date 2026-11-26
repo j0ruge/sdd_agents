@@ -1687,6 +1687,24 @@ judge_sweep_probes() {
   fi
 }
 
+checkpoint_and_todo_prose_probes() {
+  local planner executor desc
+  planner="$(awk '/^## 4\. /{s=1; next} s && /^## /{exit} s' "$ROOT/agents/sdd-planner.md")"
+  executor="$(awk '/^## 4\. /{s=1; next} s && /^## /{exit} s' "$ROOT/agents/sdd-executor.md")"
+  desc='prose: the planner and the executor state the anchor rule and the width cap as the sensors measure them'
+  if grep -qF '(`2>&1` or any other spelling), each `grep` that' <<< "$planner" \
+     && grep -qF 'reads the merged output anchors on `^  ok    `' <<< "$planner" \
+     && grep -qF "'^ *✓ '" <<< "$planner" \
+     && grep -qF 'A `grep -c` that expects only zeros owes' <<< "$planner" \
+     && grep -qF 'no anchor when the Check prints only the counts' <<< "$planner" \
+     && grep -qF '120-character width cap exempts a well-formed `RECURRED`' <<< "$executor" \
+     && grep -qF 'or an indented line carrying only the anchor' <<< "$executor"; then
+    pass "$desc"
+  else
+    fail "$desc"
+  fi
+}
+
 qa_agent_probes
 hat_promise_probes
 command_approval_probes
@@ -1714,6 +1732,7 @@ blocked_way_out_probes
 reviewer_later_code_probes
 judge_base_probes
 judge_sweep_probes
+checkpoint_and_todo_prose_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2

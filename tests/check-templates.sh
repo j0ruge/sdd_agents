@@ -513,6 +513,8 @@ check checkpoint.md 'checkpoint-notas\.md'    "pointer to the sibling notes file
 # carried that text, and that repo has no such file.
 check checkpoint.md 'tests/check-checkpoint\.sh --check' \
   "the checkpoint sensor cited in its --check form, the one a target repo can run"
+check checkpoint.md '^> .*✓.*grep -c.*só zeros.*dispensa a âncora' \
+  "the anchor rule names the pass mark of a test runner and the count that expects only zeros"
 refute checkpoint.md 'checkpoints deste repo' \
   "the claim that the sensor reads only this repo's checkpoints"
 # The Commit cell is 7–64 hex digits and nothing else (gate_EXEC), so the act that happens OUTSIDE
@@ -674,6 +676,10 @@ for v in "$T"/todo.md "$T"/todo.*.md; do
   fi
 done
 check todo.pt-BR.md '^## ' "the pt-BR variant this repo's OUTPUT_LANG seeds from"
+check todo.md '120 characters.*RECURRED.*indented line carrying only the anchor' \
+  "the width cap exempts the line that carries only the anchor"
+check todo.pt-BR.md '120 caracteres.*RECURRED.*linha recuada só com a âncora' \
+  "the width cap exempts the line that carries only the anchor"
 check todo.md       'A number that changes goes in the body, never in the title' "a number that changes goes in the body, never in the title"
 check todo.pt-BR.md 'vai no corpo, nunca no t'                                    "a number that changes goes in the body, never in the title"
 check todo.md       'A bare `PR #N` is a merged pull request of this repository'  "a bare PR number is said to be a merged pull request of this repository"

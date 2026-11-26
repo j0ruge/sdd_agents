@@ -23,7 +23,7 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > the `<symbol>` in parentheses right after it is **mandatory**: a code span of 4+ characters that
 > occurs in that file within 10 lines of the line — anywhere in it for `:1` or no line. It is the
 > only span measured, and the one an off-target report names. No physical line of the open section
-> passes 120 characters, except a well-formed `RECURRED` (below).
+> passes 120 characters, except a well-formed `RECURRED` or an indented line carrying only the anchor.
 > ([ADR 0011 of the sdd kit](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
 > **A bare `#N` in a file that numbers.** When an open item's title opens with `**<N>. `, the

@@ -23,7 +23,7 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > o `<símbolo>` entre parênteses logo depois dele é **obrigatório**: uma crase de 4+ caracteres que
 > ocorre nesse arquivo a até 10 linhas da linha — em qualquer ponto dele para `:1` ou sem linha. É a
 > única crase medida, e a que o relatório de âncora fora do alvo nomeia. Nenhuma linha física da
-> seção aberta passa de 120 caracteres, fora a `RECURRED` bem formada (abaixo).
+> seção aberta passa de 120 caracteres, salvo `RECURRED` bem formada ou linha recuada só com a âncora.
 > ([ADR 0011 do kit sdd](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
 > **`#N` solto num arquivo que numera.** Quando um item aberto tem o título começando por

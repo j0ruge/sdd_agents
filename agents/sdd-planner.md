@@ -148,11 +148,13 @@ named in Portuguese against the target's `<CRITICAL>` rule, caught only by a bot
 Every increment needs:
 
 - **an executable Check**: command → expected result. "Verify that it works" is not a Check.
-  ⚠️ A Check that reads a **sensor's** output anchors on `^  ok    ` — four spaces, caret
-  included. Every sensor prints `  ok    <assertion>` on stdout and `  FAIL  <assertion>` on
-  stderr, with the same `<assertion>`; a Check that merges the two with `2>&1` and greps the bare
-  text returns the same number green or red, so it answers "the assertion exists", never "the
-  assertion passed". Write `` o=$(bash tests/check-x.sh 2>&1); grep -c '^  ok    <assertion>' <<< "$o" ``.
+  ⚠️ When a Check merges stderr into stdout (`2>&1` or any other spelling), each `grep` that
+  reads the merged output anchors on `^  ok    ` — four spaces, caret included. If the sensor
+  cannot trace the stream, every `grep` in the cell must anchor. A test runner's pass mark at
+  the start of the pattern (`'^ *✓ '`) also anchors. A `grep -c` that expects only zeros owes
+  no anchor when the Check prints only the counts, one zero per counting `grep`. Searching for
+  bare assertion text in the merged stream cannot tell `  ok    <assertion>` (stdout) from
+  `  FAIL  <assertion>` (stderr). Write `` o=$(bash tests/check-x.sh 2>&1); grep -c '^  ok    <assertion>' <<< "$o" ``.
   ⚠️ And **never a raw `|` in the Check cell**. The checkpoint table is read with `awk -F'|'`: a
   raw pipe splits the cell in two, the Status the runner reads becomes a fragment of the command
   and the Commit becomes `pending`, so `gate_EXEC` fails with "invalid status" while `sdd status`

@@ -175,8 +175,9 @@ it** and **do not lose it**. Record it in the repo's `TODO.md` (the `TODO_FILE` 
      Source: `<your handoff>` — found by `sdd-executor` in mission `<slug>` (YYYY-MM-DD)
    ```
 
-   About six lines, hard cap eight, none wider than 120 characters: the long analysis goes to your
-   handoff and `Source:` points at it. The prose, the found-by wording included, follows the repo's
+   About six lines, hard cap eight. The 120-character width cap exempts a well-formed `RECURRED`
+   line or an indented line carrying only the anchor. The long analysis goes to your handoff and
+   `Source:` points at it. The prose, the found-by wording included, follows the repo's
    `OUTPUT_LANG` — copy the preamble's example; the box, the bold title, the backticks, the date
    and the anchor are the contract `tests/check-todo.sh` measures. The anchor is measured, not
    read: `<symbol>` is a code span of 4+ characters that occurs in that file within 10 lines of
