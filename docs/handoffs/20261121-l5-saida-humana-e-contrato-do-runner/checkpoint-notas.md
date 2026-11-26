@@ -70,3 +70,7 @@
 - 2026-11-26 00:34 · `R1` · REVIEW r1, achado #1: o link-agents apagou rascunhos locais em dois comandos; EXEC deve provar preservação e instalação dos comandos ausentes.
 - 2026-11-26 00:34 · `R2` · REVIEW r1, achado #2: recusar -z fez o alocador ignorar o ADR 0017 de outro worktree e oferecer 0001; EXEC deve provar a leitura alternativa.
 - 2026-11-26 00:34 · `R3` · REVIEW r1, achados #3–#5: resolução malformada ou confundida com ref e aviso ausente no EXEC forçado na base; EXEC deve refazer as jornadas em TDD.
+- 2026-11-26 01:16 · `R1` · R1 sabotage: guarda de conflito desativada → as duas asserções de `link-agents` do R1 ficaram vermelhos (rc 1).
+- 2026-11-26 01:16 · `R1` · R1 sabotage: aviso de preservação silenciado → `link-agents preserves conflicting tracked edits and untracked local commands` ficou vermelho (rc 1).
+- 2026-11-26 01:16 · `R1` · R1 sabotage: avanço para o próximo comando neutralizado → os dois probes de `link-agents` do R1 ficaram vermelhos (rc 1).
+- 2026-11-26 01:16 · `R1` · TDD de `0 0` para `1 1` em `21482a2`. `tests/run-all.sh` verde antes e depois (rc 0, zero FAIL). Controle verde sob os mesmos tetos dos três mutantes (grupo próprio, 600 s e 1 GiB). Comentário, delimitador e linha em branco não têm comportamento próprio para sabotar. O sensor preservou os bytes dos rascunhos e o índice, e instalou o comando ausente sem recriar o link na segunda execução. As 259 inserções preexistentes nas notas ficaram fora dos commits.
