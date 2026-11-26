@@ -83,10 +83,10 @@ as duas variantes. `git merge-base --is-ancestor <hash> main` deu rc 0 e
 | 1.000.000 de linhas vazias, 1.000.211 bytes | rc 0 em 0,51 s, mesma linha TSV | rc 124 no limite de 10 s | rc 124 no limite de 10 s, sem chegar à lista |
 
 O rc 124 vem do `timeout` da reprodução. Em uma repetição com teto de 60 s, a CLI terminou com rc 0 em 25,30 s, listou a mesma prova e manteve os bytes.
-O custo sobe no leitor, não no Git. No mesmo ensaio por tamanho, 250 mil e
-500 mil linhas vazias levaram 1,14 s e 5,26 s no HEAD, contra 0,15 s e
-0,28 s na base. A severidade é LOW porque o caso comprovado exige uma
-sequência atípica de linhas vazias. A sequência representa uma só fronteira.
+O custo sobe no leitor, não no Git. Os TSVs de 250 mil e 500 mil linhas
+preservam a saída do leitor, mas não os tempos. A r7 confirmou essa lacuna.
+A severidade é LOW porque o caso comprovado com medição exige uma sequência
+atípica de linhas vazias, que representa uma só fronteira.
 
 ## Incrementos de conserto (R<n>)
 

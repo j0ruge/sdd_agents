@@ -107,7 +107,7 @@ A QA em disco segue fechada e a próxima REVIEW retesta o delta da r6.
 | Arquivo | O que contém |
 |---|---|
 | [REVIEW r6](40-review-r6.md) | Reprodução do custo do R8 e ponto de partida da próxima REVIEW delta. |
-| [`checkpoint.md`](checkpoint.md) | 25 linhas `done`, cada uma com o Check e o hash alcançável. |
+| [`checkpoint.md`](checkpoint.md) | 26 linhas `done` até o R8, cada uma com o Check e o hash alcançável. |
 | [Guia PLAN-only](../../plan-only.md#why-the-agents-are-symlinks) | Como reinstalar após mover o kit e quais links ficam intactos. |
 | [`01-plano.md`](01-plano.md) | Em “Verificação end-to-end”, os comandos para rechecagem e a jornada de QA. |
 | [`TODO.md`](../../../TODO.md) | Em `a033008`, `bash tests/check-todo.sh --check TODO.md` e `--anchors` passaram com 92 âncoras e zero fora do alvo. O Check I18 foi de `0` em `b5a6d57` para `17` em `a033008`, contra o merge-base `60ec571`. `bash tests/check-todo.sh --resolved TODO.md` mostrou os 17 títulos com seus hashes exatos mais os dois registros da base. |

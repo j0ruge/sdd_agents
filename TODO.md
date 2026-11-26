@@ -855,7 +855,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **Os tempos intermediários da REVIEW r6 do L5 ficaram sem saída de medição** —
   `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r6.md:86`
-  (`250 mil`) — os TSVs dos ensaios de 250 mil e 500 mil linhas guardam as provas, mas não os quatro tempos citados.
+  (`250 mil`) — os TSVs dos ensaios de 250 mil e 500 mil linhas guardam as provas, mas não os tempos iniciais.
   Direção: guardar a saída de cada medição ou citar só os tempos comprovados.
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r7.md`
   — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)

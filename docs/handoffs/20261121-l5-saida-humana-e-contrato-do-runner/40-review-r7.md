@@ -5,7 +5,7 @@ rodada: 7
 status: done
 sessao: 01a218ef-8ac2-7ba3-95e9-22e4cb1ca027
 data: 2026-11-26 14:58
-gate: "tests/run-all.sh em 7824ed81f6c0fdb4e0cca7d352e2c89a128cce86 deu rc 0, suite green, 21 etapas, 2498 linhas ok, 0 linhas FAIL, 1156 s. R8 1 1, R7 1 1, R6 1 1 1. Todos os critérios estritos em A. Documentation caiu de A para B por dois achados de prosa e Overall segue em B, ambos aceitos pelo gate. Nenhum R9. Na entrada só checkpoint-notas.md, 263 inserções locais mantidas fora do índice."
+gate: "tests/run-all.sh em 7824ed81f6c0fdb4e0cca7d352e2c89a128cce86 deu rc 0, suite green, 21 etapas, 2498 linhas ok, 0 linhas FAIL, 1156 s. R8 1 1, R7 1 1, R6 1 1 1. Todos os critérios estritos em A. Documentation caiu de A para B por dois achados de prosa e Overall segue em B, ambos tolerados na configuração padrão e recusados pelo piso A desta corrida. Nenhum R9. Na entrada só checkpoint-notas.md, 263 inserções locais mantidas fora do índice."
 reviewed_head: 7824ed81f6c0fdb4e0cca7d352e2c89a128cce86
 ---
 
@@ -133,12 +133,12 @@ Nenhum. Os dois achados são de prosa e não alteram o código nem os Checks.
 
 Nenhuma decisão nova. Performance e Test Coverage subiram de B para A
 com o commit do R8. Documentation caiu de A para B e Overall ficou em B.
-A queda ficou só na prosa tolerada pelo gate, sem abrir rodada nova.
+A queda ficou na prosa. O piso A desta corrida exige uma nova rodada de revisão após o ajuste.
 Permanecem as pendências de aceite descritas na [missão](00-missao.md#pendências-para-o-humano).
 
 ## Boot da próxima fase
 
-A próxima fase é DOCS se o runner confirmar os gates. Comece pela evidência
+Após uma rodada em que todos os critérios fiquem em A, DOCS pode começar. Use a evidência
 do R8 neste relatório e pelas métricas e pendências do [documento da missão](00-missao.md).
 Não reabra os dois registros de prosa como incrementos de código.
 Se uma mudança de código reabrir REVIEW, a base do delta é o `reviewed_head`
