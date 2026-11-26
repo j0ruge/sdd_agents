@@ -717,6 +717,19 @@ FAR="$(fixture alloc-remote)" && adr_other_branch "$FAR" &&
 assert_adr_allocation 'an id used only on a remote-tracking ref is never handed out again' \
   "$FAR" 0008 'id 0007 is in use on refs/remotes/origin/far — allocating 0008'
 
+DIR_REF="$(fixture alloc-directory-ref)" && adr_other_branch "$DIR_REF" &&
+  git -C "$DIR_REF" switch -q other &&
+  mkdir "$DIR_REF/docs/adr/9999-directory.md" &&
+  adr_file "$DIR_REF" 0008-executable.md '@none@' &&
+  chmod +x "$DIR_REF/docs/adr/0008-executable.md" &&
+  ln -s 0007-x.md "$DIR_REF/docs/adr/9998-link.md" &&
+  printf 'nested\n' > "$DIR_REF/docs/adr/9999-directory.md/9997-nested.md" &&
+  git -C "$DIR_REF" -c core.filemode=true add docs/adr &&
+  git -C "$DIR_REF" commit -qm 'fixture: regular ADRs and non-file entries on the same ref' &&
+  git -C "$DIR_REF" switch -q main || exit 1
+assert_adr_allocation 'adr new does not count a directory named like an ADR on another ref' \
+  "$DIR_REF" 0009 'id 0008 is in use on refs/heads/other — allocating 0009'
+
 WT="$(fixture alloc-worktree)" || exit 1
 OTHER_WT="$BOX/other worktree"
 git -C "$WT" worktree add -qb other "$OTHER_WT" &&

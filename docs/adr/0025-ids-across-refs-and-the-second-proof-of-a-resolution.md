@@ -35,8 +35,9 @@ by it, and `gate_PR` reads the head of the pull request from it.
 
 1. **The allocator reads three places.** `adr_next_id` takes the maximum over the `ADR_DIR` on the
    disk of the checkout, the `ADR_DIR` of every ref under `refs/heads` and `refs/remotes`
-   (`git ls-tree`), and the `ADR_DIR` on the disk of every other worktree of the repository. Every
-   name passes the same `ADR_FILE_RE`. When the maximum comes from outside the checkout,
+   (`git ls-tree`), and the `ADR_DIR` on the disk of every other worktree of the repository. Only
+   regular files directly in that directory count. Every name passes the same `ADR_FILE_RE`.
+   When the maximum comes from outside the checkout,
    `sdd adr new` says which ref or worktree carries it, on stderr, in the real run and in
    `--dry-run`. Outside a git repository, and for a ref git cannot read, that source contributes
    nothing and the allocation goes on. If Git rejects NUL output for the worktree list, the
@@ -54,7 +55,8 @@ by it, and `gate_PR` reads the head of the pull request from it.
    second proof is read against the head of the mission's own pull request, the one this close just
    saw `MERGED`. The items are read by `tests/check-todo.sh --resolved`, the parser that already
    knows where the open section ends, so the runner gains no second parser of the file. It omits
-   any item with a malformed resolution value. The runner resolves each remaining hash to a unique
+   examples in inline or fenced code and any item with a malformed resolution value outside code.
+   The runner resolves each remaining hash to a unique
    local commit object before checking either proof, without interpreting the hash as a ref name.
 
 ## Alternatives discarded

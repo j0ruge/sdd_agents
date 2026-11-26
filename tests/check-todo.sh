@@ -133,7 +133,7 @@
 #                                            fails — for tools that mirror the findings elsewhere
 #                                            and must prove their own parser agrees)
 #        tests/check-todo.sh --resolved <file>
-#                                           (open items with only valid RESOLVED by values:
+#                                           (valid RESOLVED by values outside code in open items:
 #                                            line<TAB>hash[,hash…]<TAB>title)
 #        tests/check-todo.sh --anchors <file> [<prefix>]
 #                                           (measure the anchors only — ADR 0011 — of every open item,
@@ -514,12 +514,26 @@ todo_awk() {
         print "  line " at ": an H2 with no section marker on the next line — the skeleton has two, each followed by " omark " or " dmark
       if (oseen || dseen) sect = 3
     }
+    # Mask paired backtick runs with a non-blank byte so their neighbours cannot form a record.
+    function mask_inline_code(text,   prose, delim) {
+      while (match(text, /`+/)) {
+        prose = prose substr(text, 1, RSTART - 1)
+        delim = substr(text, RSTART, RLENGTH)
+        text = substr(text, RSTART + RLENGTH)
+        if (match(prose, /\\+$/) && RLENGTH % 2) { prose = prose "`"; delim = substr(delim, 2) }
+        if (delim != "" && match(" " text, "[^`]" delim "([^`]|$)")) {
+          prose = prose "\034"
+          text = substr(text, RSTART + length(delim))
+        } else prose = prose delim
+      }
+      return prose text
+    }
     function emit_resolved(   end_title, title, text, hash, hashes) {
       if (substr(first, 1, 8) != "- [ ] **") return
       end_title = index(substr(first, 9), "**")
       if (end_title <= 1) return
       title = substr(first, 9, end_title - 1)
-      text = substr(body, 9 + end_title + 1)
+      text = mask_inline_code(substr(body, 9 + end_title + 1))
       while (match(text, /(^|[^[:alnum:]_])RESOLVED by([ \t]+|$)/)) {
         text = substr(text, RSTART + RLENGTH)
         hash = text; sub(/[ \t].*$/, "", hash)
@@ -917,7 +931,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=17
+RULES_FLOOR=18
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -2674,6 +2688,33 @@ EOF
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   rule_end 1 '--resolved refuses a mixed valid and malformed resolution item'
+
+  rule_begin
+  cat > "$box/inline-resolved.md" <<'EOF'
+# TODO
+## Open
+<!-- sdd:open -->
+- [ ] **Example only** — `RESOLVED by 012abcd as an example`
+- [ ] **Real record** — `RESOLVED by abcdef1x` is an example. RESOLVED by 012abcd
+- [ ] **Long delimiters** — ``a ` RESOLVED by abcdef1 example ``` b``
+- [ ] **No joined proof** — RESOLVED by `an explanation` 012abcd and RESOLVED by abcdef1
+- [ ] **Unpaired delimiter** — A literal ``` remains prose. RESOLVED by 012abcd
+- [ ] **Escaped opener** — A literal \` marker. `RESOLVED by abcdef1 as an example`
+- [ ] **Escaped run** — A literal \``RESOLVED by abcdef1 as an example`
+- [ ] **Genuine malformed token** — `RESOLVED by abcdef1 as an example` RESOLVED by invalid and RESOLVED by 012abcd
+- [ ] **Proof before span** — RESOLVED by abcdef1 `an example`
+- [ ] **Even escapes** — \\`RESOLVED by abcdef1 as an example`
+- [ ] **No unmatched join** — RESOLVED by ```012abcd and RESOLVED by abcdef1
+## Decided
+<!-- sdd:decided -->
+EOF
+  resolved_want="$(printf '5\t012abcd\tReal record\n8\t012abcd\tUnpaired delimiter\n12\tabcdef1\tProof before span')"
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/inline-resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
+    printf '  SELFTEST FAIL  --resolved must ignore inline examples and preserve real records, got:\n%s\n' "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  rule_end 1 '--resolved distinguishes inline examples from resolution records'
 
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran

@@ -7338,6 +7338,7 @@ cat > "$FIX/close-findings.md" <<EOF
 - [ ] **Squash finding** — RESOLVED by $CLOSE_SQUASH_FIX
 - [ ] **Partial finding** — RESOLVED by $CLOSE_BASE_FIX and RESOLVED by $CLOSE_OTHER_FIX
 - [ ] **Unresolved finding**
+- [ ] **Quoted resolution example** — \`RESOLVED by $CLOSE_BASE_FIX as an example\`
 ## Decided
 <!-- sdd:decided -->
 EOF
@@ -7360,6 +7361,9 @@ assert_eq "sdd close lists the open item whose RESOLVED by hash is an ancestor o
 assert_eq "sdd close lists the item whose hash is an ancestor of the head of the mission PR it saw MERGED, the squash case" \
   "1" "$(grep -Fxc -- "$CLOSE_SQUASH_ROW" <<< "$CLOSE_OUT")"
 CLOSE_NO_JIRA_SUM="$(md5sum "$FIX/close-findings.md")" || exit 1
+assert_eq "sdd close lists the real resolution and omits its quoted example" \
+  "rc:0 base:1 example:0 unchanged:1" \
+  "rc:$CLOSE_RC_OUT base:$(grep -Fxc -- "$CLOSE_BASE_ROW" <<< "$CLOSE_OUT") example:$(has "$CLOSE_OUT" 'Quoted resolution example') unchanged:$([ "$CLOSE_SUM" = "$CLOSE_NO_JIRA_SUM" ] && echo 1 || echo 0)"
 
 git -C "$FIX" branch -q --unset-upstream "$CLOSE_HOME" || exit 1
 sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$FIX/.sdd/config.sh"

@@ -9730,8 +9730,11 @@ adr_next_id() {
   ADR_NEXT_SOURCE=""
   max="$(adr_disk_max_id "$root/$dir")" || max=0
   while IFS= read -r ref; do
-    if id="$(adr_max_id < <(git -C "$root" ls-tree -z --name-only "$ref" -- "$dir/" 2>/dev/null || true))" &&
-       [ "$id" -gt "$max" ]; then
+    # Keep the NUL-terminated paths of regular files, not trees, symlinks or gitlinks.
+    if id="$(adr_max_id < <(
+      git -C "$root" ls-tree -z "$ref" -- "$dir/" 2>/dev/null |
+        sed -zEn 's/^100(644|755) blob [0-9a-f]+\t//p' || true
+    ))" && [ "$id" -gt "$max" ]; then
       max="$id"
       ADR_NEXT_SOURCE="$ref"
     fi
