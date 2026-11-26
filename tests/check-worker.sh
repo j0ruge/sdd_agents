@@ -1898,6 +1898,29 @@ else
   fail 'pr-ready: all five true at one sha answers ready with the full sha' "ready $B, rc 0" "$got"
 fi
 
+# The mission scope stays clean. Touch only a tracked file outside it, and prove that the
+# same scoped Git read still rewrites the index before running the read through pr-ready.
+touch -d '2 minutes ago' "$RR/src/app.txt"
+PR_IX0="$(stat -c '%i' "$RR/.git/index")"
+if ! PR_WITNESS="$(env -u GIT_OPTIONAL_LOCKS git -C "$MD" status --porcelain --untracked-files=all --ignored -- .)" \
+  || ! PR_IX1="$(stat -c '%i' "$RR/.git/index")" \
+  || [ -z "$PR_IX0" ] || [ "$PR_IX0" = "$PR_IX1" ] || [ -n "$PR_WITNESS" ]; then
+  fail 'SENSOR-BROKEN: plain status does not rewrite the index of the clean mission fixture' \
+    'a different inode and no changes' "$PR_IX0 → ${PR_IX1:-missing}; status '${PR_WITNESS:-}'"
+  exit 1
+fi
+touch -d '1 minute ago' "$RR/src/app.txt"
+PR_INDEX_RC=0
+PR_INDEX_OUT="$(env -u GIT_OPTIONAL_LOCKS GHFX="$BOX/ghfx/good" PATH="$BOX/stub-ready:$PATH" \
+  "$WORKER" pr-ready "$MD" "$PRN" 2>&1)" || PR_INDEX_RC=$?
+PR_IX2="$(stat -c '%i' "$RR/.git/index")"
+if [ "$PR_INDEX_RC" = 0 ] && [ "$PR_INDEX_OUT" = "ready $B" ] && [ "$PR_IX1" = "$PR_IX2" ]; then
+  pass 'index: pr-ready reads the tree without rewriting the index of the checkout'
+else
+  fail 'index: pr-ready reads the tree without rewriting the index of the checkout' \
+    "rc 0, ready $B, inode $PR_IX1" "rc $PR_INDEX_RC, $PR_INDEX_OUT, inode $PR_IX2"
+fi
+
 # --- the reviewed head as the runner reads it --------------------------------------------------
 # gate_REVIEW reads reviewed_head: through the runner's frontmatter reader, which trims the blanks
 # around the value and then strips one quote from each end; pr-ready read the text after `: ` raw,

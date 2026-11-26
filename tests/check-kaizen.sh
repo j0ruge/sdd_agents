@@ -1038,8 +1038,19 @@ E2E_CMD=""
 HANDOFF_DIR="docs/handoffs"
 QA_DOCS_PATH="docs/qa"
 JIRA_ENABLED=false
+BUDGET_PER_PHASE_USD=40
 EOF
-printf -- '- [ ] a kit finding worth a mission\n' > TODO.md
+cat > TODO.md <<'EOF'
+## Open
+<!-- sdd:open -->
+- [ ] **First kit finding**
+- [ ] **Second kit finding**
+- [ ] **Third kit finding**
+
+## Decided
+<!-- sdd:decided -->
+- [ ] **Not an open finding**
+EOF
 git add -A && git commit -qm "chore: fixture kit config"
 
 # No test spends tokens. The dead stub lets the pending-gate path burn its two attempts offline;
@@ -1308,10 +1319,19 @@ git add -A && git commit -qm "chore: a complete mission for the reminder scenari
 # reminder must appear, with the numbers.
 out="$( cd "$FIX" && "$KSDD" run 20260102-donemission 2>&1 )"; rc=$?
 assert_eq "the complete mission reaches the human gate (rc 0)" "0" "$rc"
+assert_eq "the end of sdd run names sdd close as the step after the merge" "1" \
+  "$(grep -cF 'after the merge: sdd close 20260102-donemission —' <<< "$out")"
+status_out="$( cd "$FIX" && "$KSDD" status 20260102-donemission 2>&1 )"; rc=$?
+assert_eq "sdd status of a complete mission names sdd close as the step after the merge" "0 1" \
+  "$rc $(grep -cF 'after the merge: sdd close 20260102-donemission —' <<< "$status_out")"
 assert_eq "and reminds: missions accumulated on the current kit without a verdict" "yes" \
   "$(grep -q "autonomy series: 3 mission(s) on kit aaa1111 without a verdict" <<< "$out" && echo yes || echo no)"
 assert_eq "pointing at sdd kaizen, from a linked worktree of the kit" "yes" \
   "$(grep -q "run 'sdd kaizen' in the kit repo, from a linked worktree" <<< "$out" && echo yes || echo no)"
+assert_eq "the reminder still prints, without the count, when the kit backlog cannot be counted" "1 0" \
+  "$(grep -cF "— 'sdd kaizen' is one paid session, two when its gate fails, each capped at US\$ 40" <<< "$out") $(grep -cF 'open finding' <<< "$out")"
+mkdir -p "$FIX/tests"
+cp "$ROOT/tests/check-todo.sh" "$ROOT/tests/isolate-git.sh" "$FIX/tests/"
 
 # A linked WORKTREE of the kit is still the kit, and has to get the kit's sentence (TODO.md, the
 # kaizen_reminder item). kaizen_reminder compared `git rev-parse --show-toplevel` of $SDD_HOME with
@@ -1330,6 +1350,8 @@ assert_eq "reminder: a linked worktree of the kit answers with the kit sentence"
   "$(grep -q 'for the next kit mission plan' <<< "$out_wt" && echo yes || echo no)"
 assert_eq "reminder: and not with the target-repo sentence" "no" \
   "$(grep -q 'The kaizen judge counts them' <<< "$out_wt" && echo yes || echo no)"
+assert_eq "the reminder says how many open findings the kit backlog holds and what one judge session may cost" "1" \
+  "$(grep -cF "— the kit backlog holds 3 open finding(s); 'sdd kaizen' is one paid session, two when its gate fails, each capped at US\$ 40" <<< "$out_wt")"
 git -C "$FIX" worktree remove --force "$RWT"
 git -C "$FIX" checkout -q main
 git -C "$FIX" branch -q -D reminder/park
@@ -1352,9 +1374,13 @@ echo "== reminder: outside the kit it tells the truth about the judge =="
 # byte for byte the one the assertions above just measured. One `cp` apart: a differential, not a
 # second world, so whichever side regresses the other is standing next to it.
 KIT2="$OUTSIDE/kit2"
-mkdir -p "$KIT2/bin"
+mkdir -p "$KIT2/bin" "$KIT2/.sdd"
 cp "$ROOT/bin/sdd" "$KIT2/bin/sdd"
 cp "$ROOT/bin/sdd-coordination.py" "$KIT2/bin/sdd-coordination.py"
+cp -r "$FIX/tests" "$KIT2/"
+rm -r "$FIX/tests"
+cp "$FIX/TODO.md" "$KIT2/backlog.md"
+printf 'TODO_FILE="backlog.md"\n' > "$KIT2/.sdd/config.sh"
 ( cd "$KIT2" && git init -q -b main \
   && git config user.email "fixture@example.com" && git config user.name "Fixture" \
   && git add -A && git commit -qm "init the second kit checkout" ) >/dev/null 2>&1
@@ -1368,6 +1394,8 @@ assert_eq "outside the kit the pipeline still completes (rc 0)" "0" "$rc"
 # with the fact rather than the fact being left to rot behind a green assertion.
 assert_eq "outside the kit the reminder tells the truth about the judge, and where to run it" "yes" \
   "$(grep -q "The kaizen judge counts them (ADR 0005) — run 'sdd kaizen' in the kit repo, from a linked worktree" <<< "$out" && echo yes || echo no)"
+assert_eq "outside the kit the reminder reads the kit's custom backlog and does not borrow the target's cap" "1 0" \
+  "$(grep -cF "— the kit backlog holds 3 open finding(s); 'sdd kaizen' is one paid session, two when its gate fails" <<< "$out") $(grep -cF 'US$' <<< "$out")"
 # The other half, the house rule: the text of the right branch AND the absence of the wrong one.
 # Without it the assertion above passes on a runner that prints both lines — which is exactly what
 # mut_KAIZEN_reminder_wrong_repo makes it do. The tell can no longer be "does it name sdd kaizen"
@@ -1994,9 +2022,14 @@ kz_shared "$FIX" "$KPATH:$PATH" real
 assert_eq "kaizen door: the checkout the PATH's sdd runs from is refused before any session, naming git worktree add" \
   "rc:1 named:1 sessions:0" \
   "rc:$KZ_RC named:$(grep -c 'git -C .* worktree add' <<< "$KZ_OUT" || true) sessions:${KZ_SESSIONS:-0}"
+kz_no_track='worktree add .* --no-track -b kaizen/'
+kz_refusal_no_track="$(grep -c "$kz_no_track" <<< "$KZ_OUT" || true)"
 kz_shared "$FIX" "$KPATH:$PATH" dry --dry-run
 assert_eq "kaizen door: the projection there warns with the same sentence and still projects" \
   "rc:0 warned:1" "rc:$KZ_RC warned:$KZ_WARNED"
+assert_eq "the refusal in the checkout the targets run names a worktree add with --no-track" \
+  "refusal:1 projection:1" \
+  "refusal:$kz_refusal_no_track projection:$(grep -c "a real run here would refuse: .*$kz_no_track" <<< "$KZ_OUT" || true)"
 kz_shared "$KWT2" "$KPATH:$PATH" worktree --dry-run
 assert_eq "kaizen door: a linked worktree of that checkout is admitted under the same PATH" \
   "rc:0 warned:0" "rc:$KZ_RC warned:$KZ_WARNED"

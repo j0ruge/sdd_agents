@@ -2641,6 +2641,26 @@ mut_STATUS_no_gates_runs_gates() {
   sed -i 's@--no-gates) no_gates=1 ;;@--no-gates) no_gates=0 ;;@' "$1"
 }
 
+mut_STATUS_leftovers_rewrites_index() {
+  sed -i '/^session_leftovers() {/,/^}/ s/GIT_OPTIONAL_LOCKS=0 hat_status_lines/hat_status_lines/' "$1"
+}
+
+mut_STATUS_app_down_names_run() {
+  sed -i '/^cmd_status() {/,/^}/ s/^    if \[ "\$next" = "QA" \] .*"\$GATE_APP_DOWN".*; then$/    if false; then/' "$1"
+}
+
+mut_STATUS_app_down_closed_unsaid() {
+  sed -i '/^cmd_status() {/,/^}/ s/^        dim "  QA is closed on disk .*$/        :/' "$1"
+}
+
+mut_RUN_complete_close_unnamed() {
+  sed -i '/^cmd_run() {/,/^}/ s/^      post_merge_hint$/      :/' "$1"
+}
+
+mut_STATUS_complete_close_unnamed() {
+  sed -i '/^cmd_status() {/,/^}/ s/^    post_merge_hint$/    :/' "$1"
+}
+
 # The hat's boundary (2026-09-03 spec). Two flags, one mutant each: dropping either one leaves the
 # session with the human's whole harness — 9 MCP servers including Gmail and Jira, 104 tools —
 # which is the measured "before". The projection prints what run_phase passes FROM THE SAME
@@ -3015,6 +3035,16 @@ mut_PRE_todo_preamble_author_warned() {
 }
 mut_INSTALL_todo_preamble_unchecked() {
   sed -i '/^cmd_install() {/,/^}/ s|^    todo_preamble_say "\$inst_todo"|    : todo_preamble_say "$inst_todo"|' "$1"
+}
+# L5 item 4: install keeps an untouched seed, accepts a partial match, or preflight stays silent.
+mut_INSTALL_seed_other_lang_kept() {
+  sed -i '/^cmd_install() {/,/^}/ s/^  elif other_seed=.*todo_other_language_seed.*; then$/  elif false; then/' "$1"
+}
+mut_INSTALL_seed_edited_replaced() {
+  sed -i '/^todo_other_language_seed() {/,/^}/ s@ = "\$blob" ]; then@ = "$(head -c "$(wc -c < "$candidate")" "$1" | git hash-object --stdin)" ]; then@' "$1"
+}
+mut_PRE_seed_other_lang_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s/^      warn "\$TODO_FILE is still the untouched seed/      : "$TODO_FILE is still the untouched seed/' "$1"
 }
 # L4 item 7: sdd run and sdd retry stop before the session the harness will deny a skill.
 mut_RUN_skill_uncovered_not_stopped() {
@@ -4088,6 +4118,14 @@ mut_PRE_agents_checked_preflight_wide() {
   sed -i 's@\[ "$fails" -eq "$fails_before_agents" \]; then ok "$n kit agent@[ "$fails" -eq 0 ]; then ok "$n kit agent@' "$1"
 }
 
+# The missing-command hint is advisory, but must name a remedy that works in the current repo.
+mut_PRE_sdd_plan_missing_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s@^  if \[ ! -f "\$REPO_ROOT/.claude/commands/sdd-plan.md" \] \&\&$@  if false \&\&@' "$1"
+}
+mut_PRE_sdd_plan_kit_names_link_agents() {
+  sed -i '/^cmd_preflight() {/,/^}/ s@^    if \[ "\$REPO_ROOT" = "\$SDD_HOME" \]; then$@    if false; then@' "$1"
+}
+
 # The preflight stops asking whether TEST_CMD would run anything at all. A `true` left behind while
 # the config was being wired up then passes preflight, and after it gate_EXEC, gate_QA and
 # gate_REVIEW pass instantly, in every mission, for ever — each phase certifying itself against a
@@ -4204,6 +4242,11 @@ mut_RUN_install_branch_unescaped() {
 # go through the one function.
 mut_RUN_base_branch_warn_dead() {
   sed -i 's@^  \[ -n "\$branch" \] && \[ -n "\$DEFAULT_BRANCH" \] && \[ "\$branch" = "\$DEFAULT_BRANCH" \] || return 0$@  return 0@' "$1"
+}
+
+# Treat the pending branch assignment as if TICKET were not going to create it.
+mut_RUN_base_warning_before_ticket() {
+  sed -i '/^ticket_will_cut_branch() {/,/^}/ s@^  \[ "\$JIRA_ENABLED" = true \]@  false@' "$1"
 }
 
 # Not a gate: `sdd approve` keeps working, keeps asking, keeps committing — and writes `auto`
@@ -4340,12 +4383,9 @@ mut_RUN_branch_option_name() {
 # `retry ` pair in check-gates.sh, and only the pair: the three other doors stay warning, so every
 # assertion about them stays green and the score credits this entry for nothing but the fourth.
 #
-# The sed is ADDRESSED to cmd_retry's body rather than anchored on the bare call, because after
-# this increment the line `  warn_if_on_base_branch` appears four times and an unaddressed
-# substitution would gut all four at once. The range ends at the first column-zero `}`, which is
-# cmd_retry's own closing brace — every line of the body is indented.
+# The sed is ADDRESSED to cmd_retry's body so it does not also silence cmd_run.
 mut_RETRY_base_branch_warn_dead() {
-  sed -i '/^cmd_retry() {/,/^}/ s@^  warn_if_on_base_branch$@@' "$1"
+  sed -i '/^cmd_retry() {/,/^}/ s@^  warn_if_on_base_branch$@  :@' "$1"
 }
 
 # `sdd approve` goes back to being the silent fifth door: it still prints the plan, still asks, and
@@ -4408,7 +4448,7 @@ mut_APPROVE_adr_file_left_out() {
 mut_RUN_branch_order_swap() {
   sed -i '/^cmd_run() {/,/^}/ {
     /^  ensure_mission_branch$/d
-    s/^  warn_if_on_base_branch$/  warn_if_on_base_branch\n  ensure_mission_branch/
+    s/^  if .*ticket_will_cut_branch; then warn_if_on_base_branch; fi$/&\n  ensure_mission_branch/
   }' "$1"
 }
 
@@ -4834,6 +4874,14 @@ mut_KAIZEN_reminder_per_worktree() {
   sed -i '/^kaizen_reminder()/,/^}/ s@kit_id="\$( REPO_ROOT="\$SDD_HOME" ledger_repo_root )"; here_id="\$( ledger_repo_root )"@kit_id="$( git -C "$SDD_HOME" rev-parse --show-toplevel )"; here_id="$REPO_ROOT"@' "$1"
 }
 
+# The pointer still appears, but without the kit backlog or the cost of acting on it.
+mut_KAIZEN_reminder_backlog_unsaid() {
+  sed -i '/^kaizen_reminder()/,/^}/ s@\${backlog}\${cost}@${cost}@' "$1"
+}
+mut_KAIZEN_reminder_cost_unsaid() {
+  sed -i '/^kaizen_reminder()/,/^}/ s@\${backlog}\${cost}@${backlog}@' "$1"
+}
+
 # The checkout every target's `sdd run` executes is refused to the judge (#236, ADR 0017): one mutant
 # per rule of the door, each caught by its `kaizen door: ` world in check-kaizen.sh. ADMITTED: the
 # real run opens its session there again. SILENT: the projection stops saying what the real run
@@ -4844,6 +4892,10 @@ mut_KAIZEN_shared_checkout_admitted() {
 }
 mut_KAIZEN_shared_checkout_projection_silent() {
   sed -i '/^cmd_kaizen() {/,/^}/ s@then warn "a real run here would refuse: \$shared_why"; else@then :; else@' "$1"
+}
+# The remedy creates a branch that tracks the base again. Caught by check-kaizen.sh.
+mut_KAIZEN_remedy_tracks_the_base() {
+  sed -i '/^cmd_kaizen() {/,/^}/ s@worktree add \$q_wt --no-track -b kaizen/@worktree add $q_wt -b kaizen/@' "$1"
 }
 mut_KAIZEN_shared_checkout_prefix() {
   sed -i '/^kit_checkout_targets_run() {/,/^}/ s@case "\$p" in "\$REPO_ROOT"/\*)@case "$p" in "$REPO_ROOT"*)@' "$1"
@@ -6595,6 +6647,18 @@ mut_ADR_alloc_no_excl() {
   sed -i '/^adr_reserve() {/,/^}/ s@( set -C; : > "$1" )@( : ; : > "$1" )@' "$1"
 }
 
+# Without these reads, an unmerged ref or an uncommitted file in another worktree can hold the
+# same number the allocator hands out. The source message explains why the next id jumped.
+mut_ADR_alloc_refs_unread() {
+  sed -i '/^adr_next_id() {/,/^}/ s@< <(git -C "\$root" for-each-ref .*$@< <(:)@' "$1"
+}
+mut_ADR_alloc_worktrees_unread() {
+  sed -i '/^adr_next_id() {/,/^}/ s@< <(git -C "\$root" worktree list .*$@< <(:)@' "$1"
+}
+mut_ADR_alloc_source_unnamed() {
+  sed -i '/^adr_new() {/,/^}/ s@^    adr_info "id .* >&2$@    :@' "$1"
+}
+
 # PLAN is the ONE phase that can refuse an undecided `adr:`, because it is the one phase with a
 # human in the room. Blind, `block` is a config key that reads as set and asks nothing — the label
 # without the artifact behind it, which is what principle 1 of CLAUDE.md forbids.
@@ -6751,6 +6815,10 @@ mut_COORD_admission_missing() {
   sed -i 's%^  coordination_enter "$@" || admission=$?$%  COORDINATION_ADMITTED=1%'  "$1"
 }
 
+mut_COORD_busy_no_gates_unnamed() {
+  sed -i '/^main() {/,/^}/ s/^      printf .*sdd status <mission> --no-gates reads the mission off the disk.*$/      :/' "$1"
+}
+
 mut_COORD_linker_unlocked() {
   sed -i 's@install|preflight|health|approve|phase|why|link-agents)@install|preflight|health|approve|phase|why)@' "$1"
 }
@@ -6863,7 +6931,7 @@ mut_COORD_helper_not_isolated() {
 # The close brings the merge home (finding 7): without the fast-forward the default branch stays
 # behind the PR that was just merged, and the next mission is cut from a stale base.
 mut_CLOSE_no_fast_forward() {
-  sed -i '/^close_return_home() {/,/^}/ s#out="\$( git -C "\$REPO_ROOT" merge --ff-only --quiet "\$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=\$?#out=""#' "$1"
+  sed -i '/^close_fast_forward_base() {/,/^}/ s#out="\$( git -C "\$REPO_ROOT" merge --ff-only --quiet "\$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=\$?#out=""#' "$1"
 }
 # The four ways home stays where it is (codereview of 2026-09-28), one mutant each: every one of
 # them turns the refusal into a move, or the named reason into a wrong one.
@@ -6871,13 +6939,13 @@ mut_CLOSE_dirty_base_moves() {          # uncommitted work on the base no longer
   sed -i '/^close_return_home() {/,/^}/ s@^  if \[ -n "\$( git -C "\$REPO_ROOT" status --porcelain 2>/dev/null )" \]; then$@  if false; then@' "$1"
 }
 mut_CLOSE_fetch_failure_ignored() {     # a failed fetch falls through to a fast-forward to a stale ref
-  sed -i '/^close_return_home() {/,/^}/ s@^      if \[ "\$rc" -ne 0 \]; then$@      if false; then@' "$1"
+  sed -i '/^close_fast_forward_base() {/,/^}/ s@^      if \[ "\$rc" -ne 0 \]; then$@      if false; then@' "$1"
 }
 mut_CLOSE_fetch_unbounded() {           # with no timeout(1) the fetch is tried anyway
-  sed -i '/^close_return_home() {/,/^}/ s@^    if ! command -v timeout >/dev/null 2>&1; then$@    if false; then@' "$1"
+  sed -i '/^close_fast_forward_base() {/,/^}/ s@^    if ! command -v timeout >/dev/null 2>&1; then$@    if false; then@' "$1"
 }
 mut_CLOSE_no_upstream_unsaid() {        # no upstream reads as a divergence
-  sed -i '/^close_return_home() {/,/^}/ s@^  if \[ -z "\$upstream" \]; then ok@  if false; then ok@' "$1"
+  sed -i '/^close_fast_forward_base() {/,/^}/ s@^  if \[ -z "\$upstream" \]; then ok@  if false; then ok@' "$1"
 }
 # #182: the JIRA-less arm of the close is a close too. Caught by "close: with JIRA off the tree goes
 # back to the default branch" and "close: with JIRA off an unmerged PR is still refused", one each.
@@ -6894,6 +6962,25 @@ mut_CLOSE_claims_unverified_merge() {   # the sentence claims the merge whatever
 }
 mut_CLOSE_never_records_the_merge() {  # a MERGED PR is checked and the verdict is never passed on
   sed -i '/^cmd_close() {/,/^}/ s@^    merge_seen=verified$@    :@' "$1"
+}
+
+# Post-merge findings need a listing, both proofs, and proof for every hash on a row.
+mut_CLOSE_resolved_unlisted() {
+  sed -i '/^close_return_home() {/,/^}/ s@^  close_list_resolved "\$seen" "\$pr_head"$@  :@' "$1"
+}
+mut_CLOSE_resolved_squash_proof_unread() {
+  sed -i '/^close_list_resolved() {/,/^}/ s@^      elif \[ "\$seen" = verified \]@      elif false@' "$1"
+}
+mut_CLOSE_resolved_lists_unproven() {
+  sed -i '/^close_list_resolved() {/,/^}/ s@^        continue 2$@        proof="unverified"@' "$1"
+}
+
+# Stale references should be visible only for a PR whose merge was confirmed.
+mut_CLOSE_open_pr_lines_unlisted() {
+  sed -i '/^close_return_home() {/,/^}/ s@^    close_list_open_pr_lines "\$pr_number"$@    :@' "$1"
+}
+mut_CLOSE_open_pr_lines_unverified_listed() {
+  sed -i '/^cmd_close() {/,/^}/ s@^    if \[ "\$merged" != "MERGED" \]; then$@&\n      close_list_open_pr_lines "$pr_number"@' "$1"
 }
 
 # CHECKOUT-UNAVAILABLE names what fell and in which interpreter (finding 8): back to the generic list,
@@ -6990,6 +7077,10 @@ mut_COORD_stragglers_pipe_fatal() {
 mut_RUN_help_after_subcommand_ignored() {
   sed -i '/^main() {/,/^}/ s@^    case "$arg" in -h|--help) cmd_help; return 0 ;; esac$@    :@' "$1"
 }
+# Without the command, the help still names the log but leaves the operator without a launch recipe.
+mut_HELP_run_detached_form_dropped() {
+  sed -i '/^cmd_help() {/,/^}/ { /^ *setsid nohup sdd run <mission> > /d; }' "$1"
+}
 # cmd_install accepts any option again, and installs. Caught by "install refuses an option it does
 # not know, before writing anything" (check-preflight.sh).
 mut_RUN_install_unknown_option_accepted() {
@@ -6999,6 +7090,13 @@ mut_RUN_install_unknown_option_accepted() {
 # before linking anything" (check-preflight.sh).
 mut_RUN_link_agents_argument_accepted() {
   sed -i '/^cmd_link_agents() {/,/^}/ s@^  \[ \$# -eq 0 \] || die "unknown link-agents option: @  true || die "unknown link-agents option: @' "$1"
+}
+# Linking commands without ignoring them can leave machine-specific paths in Git.
+mut_LINK_commands_unlinked() {
+  sed -i '/^cmd_link_agents() {/,/^}/ s@^  for dir in commands agents; do$@  for dir in agents; do@' "$1"
+}
+mut_LINK_commands_gitignore_dropped() {
+  sed -i '/^cmd_link_agents() {/,/^}/ s@^    if ! grep -qxF "\$MARKER"@    if [ "$dir" != commands ] \&\& ! grep -qxF "$MARKER"@' "$1"
 }
 # The help scan after the checkout admission again (CodeRabbit and Codex on PR #391): `sdd install
 # --help` outside a repository dies "not inside a git repository", and `sdd run --help` on a held
@@ -7043,6 +7141,9 @@ mut_RUN_status_suite_unannounced() {
 }
 mut_RUN_missing_mission_no_gates_unsaid() {
   sed -i "/^resolve_mission() {/,/^}/ s@<mission> --no-gates' reads a mission off@<mission>' reads a mission off@" "$1"
+}
+mut_RUN_mission_dash_unrefused() {
+  sed -i '/^resolve_mission() {/,/^}/ { /is an option, not a mission/d; }' "$1"
 }
 # Item H of TODO.md, first half. One mutant per face of `sdd status` (a door added with no probe is
 # a door nobody sees fall), one for the journal filter, one for the session in course. Caught by
@@ -7413,6 +7514,10 @@ mut_WORKER_committed_unchecked() {
 # change not committed, staged, untracked or ignored fails review" (check-worker.sh).
 mut_WORKER_committed_ignored_unseen() {
   sed -i '/^cmd_pr_ready() {/,/^}/ s@ status --porcelain --untracked-files=all --ignored -- \. @ status --porcelain --untracked-files=all -- . @' "${1%/*}/sdd-worker"
+}
+
+mut_WORKER_pr_ready_rewrites_index() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s/GIT_OPTIONAL_LOCKS=0 \(git -C "\$dir" -c core\.quotePath=false status\)/\1/' "${1%/*}/sdd-worker"
 }
 # The reviewed head no longer has to be an ancestor of the head: a round over a commit the pull
 # request dropped reads as a review of this history (achado #9 of the mission's review r5). Caught
@@ -7877,6 +7982,11 @@ CATALOG=(
   CLOSE_no_jira_skips_merge_check
   CLOSE_claims_unverified_merge
   CLOSE_never_records_the_merge
+  CLOSE_resolved_unlisted
+  CLOSE_resolved_squash_proof_unread
+  CLOSE_resolved_lists_unproven
+  CLOSE_open_pr_lines_unlisted
+  CLOSE_open_pr_lines_unverified_listed
   COORD_select_pidfd
   COORD_stragglers_unnamed
   COORD_stragglers_named_every_tick
@@ -7886,6 +7996,7 @@ CATALOG=(
   COORD_stragglers_pipe_fatal
   RUN_branch_double_slash
   COORD_admission_missing
+  COORD_busy_no_gates_unnamed
   COORD_linker_unlocked
   COORD_health_wrong_tree
   COORD_worktrees_share_lock
@@ -8195,6 +8306,11 @@ CATALOG=(
   RUN_session_died_fires_without_cause
   RUN_close_prompt_bare
   STATUS_no_gates_runs_gates
+  STATUS_leftovers_rewrites_index
+  STATUS_app_down_names_run
+  STATUS_app_down_closed_unsaid
+  RUN_complete_close_unnamed
+  STATUS_complete_close_unnamed
   RUN_strict_mcp_dropped
   RUN_disallowed_dropped
   RUN_hat_guard_blind
@@ -8257,6 +8373,9 @@ CATALOG=(
   PRE_todo_preamble_stale_silent
   PRE_todo_preamble_author_warned
   INSTALL_todo_preamble_unchecked
+  INSTALL_seed_other_lang_kept
+  INSTALL_seed_edited_replaced
+  PRE_seed_other_lang_silent
   RUN_skill_uncovered_not_stopped
   RETRY_skill_uncovered_not_stopped
   RUN_skill_broken_not_stopped
@@ -8402,6 +8521,8 @@ CATALOG=(
   PRE_agents_checked_miscounted
   PRE_agents_checked_despite_fail
   PRE_agents_checked_preflight_wide
+  PRE_sdd_plan_missing_silent
+  PRE_sdd_plan_kit_names_link_agents
   PRE_testcmd_noop_blind
   PRE_testcmd_noop_runs_anyway
   PRE_testcmd_list_unnormalised
@@ -8418,6 +8539,7 @@ CATALOG=(
   PRE_node_manifest_jq_missing_blind
   RUN_install_branch_unescaped
   RUN_base_branch_warn_dead
+  RUN_base_warning_before_ticket
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
   RUN_approve_no_plan_blind
@@ -8492,8 +8614,11 @@ CATALOG=(
   KAIZEN_reminder_dead
   KAIZEN_reminder_wrong_repo
   KAIZEN_reminder_per_worktree
+  KAIZEN_reminder_backlog_unsaid
+  KAIZEN_reminder_cost_unsaid
   KAIZEN_shared_checkout_admitted
   KAIZEN_shared_checkout_projection_silent
+  KAIZEN_remedy_tracks_the_base
   KAIZEN_shared_checkout_prefix
   KAIZEN_shared_checkout_no_sdd
   KAIZEN_shared_checkout_unquoted
@@ -8691,6 +8816,9 @@ CATALOG=(
   ADR_number_mismatch_blind
   ADR_bare_number_blind
   ADR_alloc_no_excl
+  ADR_alloc_refs_unread
+  ADR_alloc_worktrees_unread
+  ADR_alloc_source_unnamed
   ADR_link_bold_colon_blind
   ADR_link_backtick_kept
   ADR_link_not_path_generic
@@ -8704,8 +8832,11 @@ CATALOG=(
   EXEC_adr_drift_blind
   RUN_adr_warn_silent
   RUN_help_after_subcommand_ignored
+  HELP_run_detached_form_dropped
   RUN_install_unknown_option_accepted
   RUN_link_agents_argument_accepted
+  LINK_commands_unlinked
+  LINK_commands_gitignore_dropped
   RUN_help_after_admission
   RUN_install_remote_head_skipped
   RUN_install_origin_main_skipped
@@ -8714,6 +8845,7 @@ CATALOG=(
   RUN_approve_adr_outside_rewritten
   RUN_status_suite_unannounced
   RUN_missing_mission_no_gates_unsaid
+  RUN_mission_dash_unrefused
   RUN_leftovers_full_face_unsaid
   RUN_leftovers_no_gates_unsaid
   RUN_leftovers_journal_ignored
@@ -8775,6 +8907,7 @@ CATALOG=(
   WORKER_sep_unjustified_by_criterion
   WORKER_committed_unchecked
   WORKER_committed_ignored_unseen
+  WORKER_pr_ready_rewrites_index
   WORKER_range_ancestry_unchecked
   WORKER_range_endpoints_only
   WORKER_range_merge_unseen

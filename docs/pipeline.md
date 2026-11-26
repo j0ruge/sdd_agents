@@ -49,6 +49,8 @@ queries evaluate no gates; commands that load config still execute that trusted 
 `boot` is NOT among them: it derives the phase, so it runs the gates (and `TEST_CMD`) and takes the
 lock like any other command that can run the suite. `status --no-gates` reads the owner from `/proc`
 and never takes the lock itself, so a monitor polling it cannot make a real `run` fail `CHECKOUT-BUSY`.
+It also reads uncommitted paths with `GIT_OPTIONAL_LOCKS=0`, so polling does not take Git's
+`index.lock` or rewrite the index while another process is committing.
 
 A Python standard-library helper holds the kernel lock in a separate session and enables the
 Linux child-subreaper facility before starting the Bash worker. The original CLI PID remains
@@ -695,12 +697,16 @@ The failure this closes was measured: in the SQ-97 pilot five phases committed i
 branch — 16 commits over somebody else's work, ~US$ 45 of `rebase --onto` to undo. Committing on
 the wrong branch is loud now in **all five doors that can end up committing** — `sdd run`,
 `sdd retry`, `sdd approve`, `sdd kaizen` and `sdd preflight` — each warning when you are standing
-on the base branch. The warning has one definition, so sabotaging it silences all five at once and
-the suite dies; the two call sites added last (`sdd retry` and `sdd approve`) carry a mutation of
-their own, because for those two the defect was the missing call, not the missing warning.
+on the base branch. An ordinary `sdd run` skips the warning when Jira is enabled, `branch:` is
+empty or still the placeholder, and `10-ticket.md` does not exist yet. TICKET will assign the branch.
+`sdd retry`, `sdd run --phase`, and `sdd run --budget-override` can write an intervention note on
+the base before TICKET assigns the branch, so they still warn. The warning has one definition, so
+sabotaging it silences all five at once and the suite dies. The two call sites added last
+(`sdd retry` and `sdd approve`) carry a mutation of their own, because for those two the defect
+was the missing call, not the missing warning.
 
-One thing it deliberately does not do: **it never runs in `--dry-run`** — a checkout is a mutation
-of state, and that is the half the projection promises not to touch (below).
+The branch checkout **never runs in `--dry-run`**. A checkout changes the working tree, which the
+projection promises not to touch (below).
 
 **How the branch created by TICKET gets here.** With `JIRA_ENABLED=true` the `ticket` skill creates
 the branch, and the name used to land in `10-ticket.md` alone — nothing copied it into the field
@@ -768,9 +774,11 @@ The **merge is human**, and it is the pipeline's only unconditional human gate. 
 a Human" accumulated by the phases arrive as a section of the PR: they inform the merge decision,
 without ever having blocked the automation.
 
-Post-merge, `sdd close <mission>` closes the JIRA issue with an automatic summary (the
-`/ticket close` skill, model `MODEL_TICKET`). It refuses to run outside the right place, and each
-refusal is deliberate:
+After the merge, run `sdd close <mission>` as shown by `sdd run`, `sdd status` and the PR body
+when the pipeline is complete. Run it even without JIRA to return to the base branch and
+fast-forward it. With JIRA enabled, it also closes the issue with an automatic summary (the
+`/ticket close` skill, model `MODEL_TICKET`). It refuses to run outside the right place, and
+each refusal is deliberate:
 
 | Condition | What happens |
 |---|---|
@@ -801,6 +809,20 @@ unbounded) or a diverged branch each leave the sha where it was and **warn** —
 succeeded, and nothing is forced. Before this the base stayed behind the PR just merged, and the
 next mission was cut from it (SQ-145, SQ-146).
 
+Back on a clean base, `sdd close` lists findings in `TODO_FILE` whose `RESOLVED by` hashes are
+all proven. It ignores examples in fenced code and in inline code, which can span a wrapped line
+but not a blank line between paragraphs. A malformed value outside code excludes the entire
+finding. Each row shows the file, line, title and proof for each hash.
+A hash must identify a unique commit object, not a ref with the same spelling.
+The commit must be an ancestor of the base or, after a squash, of the locally available head of
+this mission's PR that the command confirmed as `MERGED`. Without a verified PR or a local head,
+only base ancestry counts. The command lists findings for review and never edits the file.
+
+On that same clean base, if it confirmed the PR as `MERGED` and its URL ends in a number, the
+command also lists tracked text lines that still say `PR #N open` or `PR #N aberto` for that PR.
+It reports each file, line number and text, skips the handoff directory, and makes no edits.
+Without a verified merge or a matching line, it prints no such list.
+
 `sdd close` is the only invocation of `claude` outside `run_phase()` besides the two `sdd preflight`
 probes — none of them runs a phase. It carries the kit guard anyway, for the reason below, and
 the kit's read-only rule (see "Permissions").
@@ -811,6 +833,13 @@ Nothing here allocated an ADR id until 2026-09-17, and a convention is only as g
 person who followed it: a note declared "ADR 0030" for one decision the day before the real
 `docs/adr/0030-…` was accepted for another. [ADR 0008](adr/0008-adr-ids-are-allocated-and-links-are-checked.md)
 is the decision; this is how to use it.
+
+**Allocation.** `sdd adr new` takes the highest regular ADR file number visible in
+`ADR_DIR` on disk, in local and remote-tracking branches, or on disk in another worktree of the
+same repository. It allocates the next number without filling gaps and reports the source when
+the maximum comes from outside the checkout. The exclusive create protects the destination file
+in that checkout. It does not serialize concurrent allocations across worktrees or see branches
+only present on another machine. See [ADR 0025](adr/0025-ids-across-refs-and-the-second-proof-of-a-resolution.md).
 
 **One grammar, two dialects.** The rule is a KEY on a line, never a section:
 `^(- )?(\*\*)?(ADR|Spec)(\*\*)?:`. That reads `Spec: <path>` and `- **Spec**: <path>` the same
@@ -1707,9 +1736,14 @@ closure is inventory, not improvement.
 It does not run in the checkout the `sdd` on the PATH resolves into (ADR 0017): every target's
 `sdd run` on the machine executes that checkout, and its kit guard stops them with `KIT-TOUCHED` when
 a KAIZEN session commits there. The real run dies before any session and names the command — `git -C
-<root> fetch && git -C <root> worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD>
+<root> fetch && git -C <root> worktree add ../<repo>-kaizen --no-track -b kaizen/<YYYYMMDD>
 origin/<DEFAULT_BRANCH>`, then `sdd kaizen` from there; `--dry-run` there warns with the same
 sentence and projects, and `--series` reads as before. With no `sdd` on the PATH nothing is refused.
+
+When `sdd run` finishes and reminds you about the judge, it shows how many open findings the kit
+has, when it can count them. The judge uses one paid session and a second if its gate fails. The
+reminder shows the kit's configured per-session cap when available, even when the run finished in
+a different repository.
 
 The judge is split in two (ADR 0001):
 

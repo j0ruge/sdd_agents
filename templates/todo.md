@@ -23,7 +23,7 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > the `<symbol>` in parentheses right after it is **mandatory**: a code span of 4+ characters that
 > occurs in that file within 10 lines of the line — anywhere in it for `:1` or no line. It is the
 > only span measured, and the one an off-target report names. No physical line of the open section
-> passes 120 characters, except a well-formed `RECURRED` (below).
+> passes 120 characters, except a well-formed `RECURRED` or an indented line carrying only the anchor.
 > ([ADR 0011 of the sdd kit](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
 > **A bare `#N` in a file that numbers.** When an open item's title opens with `**<N>. `, the
@@ -41,8 +41,12 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > ```
 >
 > **Lifecycle.** Fixed by a commit: the body gets `RESOLVED by <hash>` (a kit token, the same in
-> every language) and the item stays until `git merge-base --is-ancestor <hash> <DEFAULT_BRANCH>`
-> holds; then it is **deleted**, never ticked. Refuted, decided, won't-fix or accepted risk: there
+> every language). The item is **deleted**, never ticked, once every hash passes one of two proofs.
+> Either `git merge-base --is-ancestor <hash> <DEFAULT_BRANCH>` exits 0, or
+> `git merge-base --is-ancestor <hash> <PR head>` exits 0 and
+> `gh pr view <PR> --json state,headRefOid` reports `MERGED` for that head at the time of the check.
+> Find the PR with `gh pr list --search <hash> --state merged --json number,headRefOid`.
+> An emptied subsection keeps its heading. Refuted, decided, won't-fix or accepted risk: there
 > is nothing to commit, so it leaves the open section and becomes a decided record in the same
 > commit. A duplicate is deleted, naming the survivor; one that came from another project or
 > mission is first folded into the survivor's `RECURRED` line, as a new entry (below). Before

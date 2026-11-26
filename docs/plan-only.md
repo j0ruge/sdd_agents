@@ -33,7 +33,7 @@ That makes PLAN-only a real adoption tier, not a degraded one:
 ```bash
 cd ~/repos/<project>
 sdd install                    # writes .sdd/config.sh and copies the agents
-sdd-link-agents                # replaces those copies with symlinks into this kit, and gitignores them
+sdd-link-agents                # links the agents and slash commands into .claude/, and gitignores them
 $EDITOR .sdd/config.sh
 mkdir -p docs/handoffs
 ```
@@ -172,11 +172,25 @@ known-good version, wrong for a kit under active development, where every improv
 
 Symlinking costs nothing to the runner: `sdd install` and `sdd preflight` compare with `cmp -s`,
 which reads **through** the link and compares content, so a symlink reports as identical to the
-source. No change to `bin/sdd` was needed.
+source. `sdd-link-agents` also links the kit's slash commands under `.claude/commands/`, so
+`/sdd-plan` is available when you open a Claude Code session at the target root.
+If neither the target nor your user command directory provides `/sdd-plan`, `sdd preflight`
+warns and tells you how to link it. PLAN-only adoption does not require running preflight.
 
-They are **gitignored** rather than committed: the link carries this machine's absolute path, and a
-committed symlink is dangling in every other checkout — broken in silence, which is the worst
-shape. Recreating them is one command, named in the target's `CLAUDE.md`.
+After moving the kit, rerun `sdd-link-agents` from the new installation. It refreshes an untracked
+command symlink whose absolute destination matches the old installation still named by the
+target's `sdd-planner.md` agent link, even if the old installation no longer exists. The target's
+`.gitignore` must contain the kit's command rule, and an old root still on disk must contain
+`bin/sdd`. Sharing a root with the planner is not enough. If a command update fails, fix the
+cause and rerun the installer. The planner link still names the old root until the commands
+are in place.
+The installer warns about other command symlinks or conflicting files and leaves them and their
+Git index entries untouched. Missing commands are still linked, and an identical regular file
+can still be replaced by the kit link.
+
+The generated links are **gitignored** rather than committed: they carry this machine's absolute
+path. A committed symlink dangles in every other checkout and breaks in silence. Recreate the links
+with the command named in the target's `CLAUDE.md`.
 
 ## The `CLAUDE.md` block for a target repository
 
@@ -197,6 +211,6 @@ self-contained) and `checkpoint.md` (the increment table, **read by a machine**)
 
 The kit lives in `~/repos/sdd_agents`, and the full recipe is its `docs/plan-only.md`
 (`~/repos/sdd_agents/docs/plan-only.md`). The agents in
-`.claude/agents/sdd-*.md` are symlinks into the kit and are **not** versioned: in a fresh clone,
-run `sdd install && sdd-link-agents`.
+`.claude/agents/sdd-*.md` and the commands in `.claude/commands/sdd-*.md` are symlinks into the
+kit and are **not** versioned. In a fresh clone, run `sdd install && sdd-link-agents`.
 ```

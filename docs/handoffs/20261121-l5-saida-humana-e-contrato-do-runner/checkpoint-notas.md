@@ -1,0 +1,174 @@
+# Notas de execução — L5: saída humana e contrato do runner
+
+> **Append-only.** Uma linha por evento; nunca reescreva o arquivo, nunca o releia inteiro.
+>
+> Este arquivo nasceu em `20260904-a-dieta-de-contexto`, separado do `checkpoint.md` por medição:
+> as notas eram **69% daquele arquivo** (67 166 B de 97 865 B em `20260901-o-revisor-so-acha`), e
+> aquele arquivo era **44,7% de tudo que a missão releu** — 160 leituras, 1 114 571 B. Enquanto
+> tabela e notas dividiam o arquivo havia um piso mecânico: em sessão headless o `Edit` exige um
+> `Read` prévio, então toda sessão que atualizasse a tabela pagava o arquivo inteiro. Separadas,
+> escrever nota é `>>` e custa **zero leitura**.
+>
+> O prompt de boot **inlina as últimas 10 notas** (`BOOT_NOTES_TAIL` no `bin/sdd`) e manda
+> explicitamente **não abrir este arquivo**. Se você precisa de uma nota mais antiga, ela é
+> história — e história se lê no `git log`, não no boot de toda sessão.
+
+## Notas de execução
+
+> Uma linha por evento relevante: bloqueio, decisão tomada, desvio do plano com justificativa.
+> É o que a próxima sessão lê para não repetir um erro que já custou caro.
+
+- 2026-11-21 18:48 · `PLAN` · plano escrito sobre `86e16c0`, com o L4 em execução e o PR #460 em revisão: antes do `sdd run`, a `main` entra neste branch e o `--anchors`, o `--check` e o `--red` rodam de novo (pendência 1 do `00-missao.md`)
+
+> **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
+> `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É a **narrativa** do que o
+> humano fez. O **número** de intervenções o `sdd autonomy --by-mission` lê do ledger, em
+> `launch(es)` (`run_id` distintos — cada `sdd run`/`sdd retry`), e imprime estas notas ao lado
+> como `intervention note(s)`. Medido em 2026-08-28: a missão de três lançamentos tinha zero
+> notas — o contador não pode depender de alguém lembrar de escrever; a narrativa, sim, e é a
+> única fonte que diz o que o humano *fez*.
+>
+> ⚠️ O marcador é **inglês e minúsculo**, como `pending`/`done`/`blocked`: é contrato, não prosa.
+> O texto depois dos dois-pontos vai no idioma do `OUTPUT_LANG`, como o resto deste arquivo.
+> Só conta quando abre a linha — `intervention` no meio de uma frase é prosa e não é contado.
+>
+> Desde 2026-09-03 o **runner escreve a linha sozinho** quando é ele quem recebe a mão do humano —
+> `sdd run --phase X`, `sdd retry`, `--budget-override` — **e só na volta que abre sessão** (uma
+> volta parada antes dela, por PLAN, carimbo, teto ou no-work, não grava nota), e a commita sozinha,
+> na hora, para a árvore chegar limpa ao gate da fase seguinte. A linha escrita à mão continua valendo para o que
+> o runner não vê: conserto manual, `BLOCKED` assumido. Fase feita à mão tem comando:
+> `sdd note-manual <missão> <FASE>` escreve a nota e a linha `manual` do ledger, que não gradua
+> nada — escrita só aqui, a fase não existe para o ledger. `sdd approve` não
+> escreve nenhuma: aprovar o plano é o gate humano desenhado, não uma entrada na linha. A nota
+> diz o que o runner **sabe** ("forçada pela CLI"), nunca quem estava na CLI: outro agente com
+> shell entra pela mesma porta, e o runner não distingue — medido em 2026-09-03.
+>
+> O exemplo abaixo mora **dentro** desta citação de propósito: o `>` quebra o casamento com
+> `^[[:space:]]*-`, e sem ele o exemplo era contado verbatim — todo checkpoint recém-instanciado
+> nascia devendo uma intervenção fantasma ao instrumento que mede autonomia. Copie a forma para
+> fora da citação ao registrar uma intervenção de verdade.
+>
+> - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
+
+- 2026-11-25 10:02 · `I1` · TDD: três casos externos devolviam 0001 e o controle local passava. Após 436b1f2, Check `1 1 1 1`, suíte `tests/run-all.sh` verde (rc 0), e `ADR_alloc_refs_unread caught by check-adr.sh`, `ADR_alloc_worktrees_unread caught by check-adr.sh` e `ADR_alloc_source_unnamed caught by check-adr.sh`.
+- 2026-11-25 10:48 · `I2` · TDD: cinco asserções vermelhas antes da correção. Após 8718ccf, Check `1 1 1 1 1` e suíte `tests/run-all.sh` verde (rc 0). Mutantes: `LINK_commands_unlinked caught by check-preflight.sh`, `LINK_commands_gitignore_dropped caught by check-preflight.sh`, `PRE_sdd_plan_missing_silent caught by check-preflight.sh` e `PRE_sdd_plan_kit_names_link_agents caught by check-preflight.sh`.
+- 2026-11-25 11:30 · `I3` · TDD: a falta da receita deu Check `0 0`; em 03091ed, Check `1 1` e `tests/run-all.sh` verde (rc 0, zero FAIL). `HELP_run_detached_form_dropped caught by check-hat.sh` com `--only` em cópia temporária com os guias `finding-prs.md`, `plan-only.md` e `failure-modes.md`. A cópia padrão deu `HARNESS-BROKEN` no controle por faltar esses guias (registrado no `TODO.md`). A saída de suíte preexistente nas notas foi preservada fora dos commits.
+- 2026-11-25 12:10 · `I4` · TDD: antes da correção, as duas consultas retornavam rc 0, mas trocavam o inode (Check `0 0`). Após 012044b, Check `1 1` e `tests/run-all.sh` verde (rc 0). `STATUS_leftovers_rewrites_index caught by check-gates.sh` e `WORKER_pr_ready_rewrites_index caught by check-worker.sh`. A saída preexistente de suíte neste arquivo foi preservada fora dos commits.
+- 2026-11-25 13:02 · `I5` · TDD: os sete subcomandos não davam a recusa esperada, e `note-manual` alterava o HEAD do fixture (Check `0 0`). Após f7709e3, Check `1 1` e `tests/run-all.sh` verde (rc 0). `RUN_mission_dash_unrefused caught by check-gates.sh`. A âncora de `sandbox` no TODO foi realinhada. As alterações preexistentes neste arquivo foram preservadas fora dos commits.
+- 2026-11-25 13:45 · `I6` · TDD: a receita não tinha `--no-track` nem na recusa nem na projeção (Check `0 0`). Após 0fe8217, Check `1 2` e `tests/run-all.sh` verde (rc 0, zero FAIL). `KAIZEN_remedy_tracks_the_base caught by check-kaizen.sh`. As alterações preexistentes nas notas ficaram fora dos commits.
+- 2026-11-25 14:29 · `I7` · TDD: a recusa teve rc 75, mas faltava a dica (Check `0`). Após 1f8b722, Check `1`, consulta sem trava sem a dica e `tests/run-all.sh` verde (rc 0, zero FAIL). `COORD_busy_no_gates_unnamed caught by check-coordination.sh`. Quatro âncoras do TODO foram realinhadas. As alterações preexistentes neste arquivo ficaram fora dos commits.
+- 2026-11-25 15:01 · `I8` · TDD: Check `0 0 1` antes (controle com o app respondendo já verde) e `1 1 1` após 51203f0. `tests/run-all.sh` verde (rc 0, zero FAIL). Os mutantes `STATUS_app_down_names_run` e `STATUS_app_down_closed_unsaid` foram detectados pelo `check-gates.sh`. Sem handoff, o gate recusa antes da e2e e o status não afirma que o app caiu. Foi registrado no TODO o controle de mutação que falhou sem o clone do fixture de fast-forward e passou na repetição. As alterações preexistentes nas notas ficaram fora dos commits.
+- 2026-11-25 15:34 · `I9` · TDD: Check `0 0 0` antes e `1 1 1` após 70c956f. `tests/run-all.sh` verde (rc 0, zero FAIL). `RUN_complete_close_unnamed caught by check-kaizen.sh` e `STATUS_complete_close_unnamed caught by check-kaizen.sh`. Tirar a dica do template em cópia deixou `check-templates.sh` vermelho. Três âncoras do TODO foram realinhadas. A oração sobre listar o que o merge resolveu depende do I11. As alterações preexistentes nas notas ficaram fora dos commits.
+- 2026-11-25 16:07 · `I10` · TDD de `0 0 0 0` para `1 1 1 1` em 5348c7d. `tests/run-all.sh` verde antes e depois (rc 0). Na cópia sob os mesmos tetos de 90 s e 1 GiB, o controle passou e o selftest reprovou (rc 92) tanto ao listar exemplo de bloco cercado quanto ao listar item da seção decidida. Espelho do chapéu idêntico após `./bin/sdd install --force`. As alterações preexistentes nestas notas ficaram fora dos commits.
+- 2026-11-25 16:41 · `I11` · TDD de `0 0 0 0` para `1 1 1 1` em 891712d. `tests/run-all.sh` verde antes e depois (rc 0, zero FAIL). `CLOSE_resolved_unlisted`, `CLOSE_resolved_squash_proof_unread` e `CLOSE_resolved_lists_unproven` detectados pelo `check-gates.sh` (600 s e 1 GiB, controle verde). A listagem não alterou o arquivo com ou sem JIRA. Três âncoras do TODO foram realinhadas. As alterações preexistentes nestas notas ficaram fora dos commits.
+- 2026-11-25 18:03 · `I13` · TDD de `0 0` para `1 1` em f27e0f8. `tests/run-all.sh` verde antes e depois (rc 0, zero FAIL). `RUN_base_warning_before_ticket` e os dois mutantes reancorados foram detectados pelo `check-gates.sh` (600 s e 1 GiB, controles verdes). Duas âncoras do TODO foram realinhadas. As alterações preexistentes nas notas ficaram fora dos commits.
+- 2026-11-25 18:36 · `I14` · TDD de `0 0` para `1 1` em `ca5260b`. O lembrete usa o backlog e o teto do kit, sem herdar o teto do alvo. `tests/run-all.sh` verde antes e depois (rc 0, zero FAIL). `KAIZEN_reminder_backlog_unsaid` e `KAIZEN_reminder_cost_unsaid` detectados por `check-kaizen.sh` (600 s e 1 GiB, controles verdes). Oito âncoras do TODO foram realinhadas, incluindo a que a primeira passagem da suíte apontou após cadastrar os mutantes. As alterações preexistentes nestas notas ficaram fora dos commits.
+- 2026-11-25 21:16 · `I15` · TDD: as quatro asserções falharam com o runner de `cf55512` (Check `0 0 0 0`) e passaram em `0c457ab` (Check `1 1 1 1`). `tests/run-all.sh` verde (rc 0, zero FAIL, 1017 âncoras de mutação válidas). `INSTALL_seed_other_lang_kept caught by check-preflight.sh`, `INSTALL_seed_edited_replaced caught by check-preflight.sh` e `PRE_seed_other_lang_silent caught by check-preflight.sh` (600 s e 1 GiB, controles verdes). Os rascunhos preexistentes em `bin/sdd`, nos testes e no `TODO.md` foram validados. O probe intermitente do processo residual ficou registrado no `TODO.md` sem alterar o sensor. As alterações preexistentes nestas notas ficaram fora dos commits.
+- 2026-11-25 21:53 · `I16` · TDD de `0 0 0 0` para `1 1 1 1` em `3faad6c`. `tests/run-all.sh` verde antes e depois (rc 0, zero FAIL). Os espelhos ficaram idênticos após `./bin/sdd install --force`. As regras medidas não mudaram. As alterações preexistentes nestas notas ficaram fora dos commits.
+- 2026-11-25 22:31 · `I17` · TDD: Check `0 0` na base, `0 1` com o sensor (11 citações recusadas com arquivo e linha) e `1 1` após `dfd5f25`. O controle negativo recusou a citação sem o nome do kit, inclusive na linha com outra citação válida e quando o nome ficou na linha seguinte. `tests/run-all.sh` verde antes e depois (rc 0, zero FAIL). Os quatro espelhos ficaram idênticos após `./bin/sdd install --force`. As alterações preexistentes nestas notas ficaram fora dos commits.
+- 2026-11-25 23:08 · `I18` · TDD: Check `0` na base e `17` em `a033008`. `tests/run-all.sh` verde antes e depois (rc 0, zero FAIL). Os 17 títulos foram conferidos com os hashes do checkpoint, os 2 registros da base foram preservados e as 92 âncoras do TODO estão no alvo. Os Checks I1–I17 passaram, com 46 asserções ancoradas, e as 1017 âncoras de mutação estão válidas. As 259 inserções preexistentes nestas notas ficaram fora dos commits.
+- 2026-11-26 00:34 · `R1` · REVIEW r1, achado #1: o link-agents apagou rascunhos locais em dois comandos; EXEC deve provar preservação e instalação dos comandos ausentes.
+- 2026-11-26 00:34 · `R2` · REVIEW r1, achado #2: recusar -z fez o alocador ignorar o ADR 0017 de outro worktree e oferecer 0001; EXEC deve provar a leitura alternativa.
+- 2026-11-26 00:34 · `R3` · REVIEW r1, achados #3–#5: resolução malformada ou confundida com ref e aviso ausente no EXEC forçado na base; EXEC deve refazer as jornadas em TDD.
+- 2026-11-26 01:16 · `R1` · R1 sabotage: guarda de conflito desativada → as duas asserções de `link-agents` do R1 ficaram vermelhos (rc 1).
+- 2026-11-26 01:16 · `R1` · R1 sabotage: aviso de preservação silenciado → `link-agents preserves conflicting tracked edits and untracked local commands` ficou vermelho (rc 1).
+- 2026-11-26 01:16 · `R1` · R1 sabotage: avanço para o próximo comando neutralizado → os dois probes de `link-agents` do R1 ficaram vermelhos (rc 1).
+- 2026-11-26 01:16 · `R1` · TDD de `0 0` para `1 1` em `21482a2`. `tests/run-all.sh` verde antes e depois (rc 0, zero FAIL). Controle verde sob os mesmos tetos dos três mutantes (grupo próprio, 600 s e 1 GiB). Comentário, delimitador e linha em branco não têm comportamento próprio para sabotar. O sensor preservou os bytes dos rascunhos e o índice, e instalou o comando ausente sem recriar o link na segunda execução. As 259 inserções preexistentes nas notas ficaram fora dos commits.
+- 2026-11-26 02:00 · `R2` · R2 sabotage: leitura alternativa removida → as duas asserções do R2 falharam (rc 1).
+- 2026-11-26 02:00 · `R2` · R2 sabotage: tentativa com NUL ignorada → a asserção da sequência de chamadas falhou (rc 1).
+- 2026-11-26 02:00 · `R2` · R2 sabotage: conversão de separadores removida → a asserção do número 0018 e da origem falhou (rc 1).
+- 2026-11-26 02:00 · `R2` · TDD de `0 0` para `1 1` em `4376e32`. Com a recusa de -z simulada, a CLI deixou de oferecer 0001 e passou a oferecer 0018, nomeando o worktree que contém o ADR 0017 não commitado. A leitura NUL do Git atual continuou verde. Controle e mutantes rodaram em grupo próprio, com teto de 90 s e 1 GiB. A suíte tests/run-all.sh passou antes e depois (rc 0, zero FAIL), com 85 asserções de ADR após o conserto e 1017 âncoras válidas. O ADR documenta o limite de caminhos com quebra de linha no Git antigo. As 259 inserções preexistentes nas notas ficaram fora dos commits.
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor ausente ignorado → selftest de resolução mista ficou vermelho (rc 92).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: cursor pula o primeiro caractere do valor → controle de itens válidos ficou vermelho (rc 92).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor truncado antes do hífen → selftest de resolução mista ficou vermelho (rc 92).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor inválido descartado sem recusar o item → selftest de resolução mista ficou vermelho (rc 92).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: hashes não incluídos na lista → controle de itens válidos ficou vermelho (rc 92).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: exceção da TICKET aplicada ao EXEC forçado → probe do aviso ficou vermelho (rc 1).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor bruto no lugar do objeto desambiguado → probe de refs homônimas ficou vermelho (rc 1).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: guarda de tipo removida → probe de refs homônimas ficou vermelho no controle com objeto tag (rc 1).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor bruto na prova pela base → probe ficou vermelho na colisão com a ref da base (rc 1).
+- 2026-11-26 02:38 · `R3` · R3 sabotage: valor bruto na prova pelo PR → probe ficou vermelho na colisão com a ref que aponta para o head do PR (rc 1).
+- 2026-11-26 02:38 · `R3` · TDD de `0 0 0 0` para `1 1 1 1` em `234b734`. `tests/run-all.sh` verde antes e depois (rc 0, 21 etapas, 2481 linhas ok no final, zero FAIL). Controles e mutantes rodaram em cópias descartáveis, com grupo próprio, teto de 90 s e 1 GiB. A declaração local, os comentários e a reinserção isolada dos recortes antigos do marcador não mudam o resultado. As 259 inserções preexistentes nas notas ficaram fora dos commits.
+- 2026-11-26 03:11 · `R4` · REVIEW r2, achado 1: após mover o kit, link-agents retorna 0 e deixa /sdd-plan quebrado. Check de reinstalação e preservação vai ao EXEC.
+- 2026-11-26 03:53 · `R4` · R4 sabotage: capturar o agente da instalação ativa em vez do anterior → probe da instalação antiga legível ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: aplicar a guarda de comandos aos agentes → probe da instalação antiga legível ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: proteger só symlinks existentes e deixar passar arquivos regulares → controle dos rascunhos do R1 ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: aceitar arquivos regulares sem comparar conteúdo → controle dos rascunhos do R1 ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: tratar symlink de conteúdo idêntico como cópia regular → probe do link local ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: aceitar raiz relativa como prova de origem → probe do link relativo local ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: cortar a quebra de linha final do destino do link → probe do link local ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: presumir ausência no índice sem consultar o Git → probe do link rastreado ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: recolocar a guarda anterior sem recuperação → probe da instalação antiga legível ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: recolocar o aviso de conteúdo divergente em link com conteúdo idêntico → probe do link local ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · R4 sabotage: exigir que o destino antigo exista → probe do link quebrado ficou vermelho (rc 1).
+- 2026-11-26 03:53 · `R4` · A declaração local, os comentários e a formatação da guarda não têm comportamento observável próprio. O fixture foi medido em vermelho e verde e a prosa foi conferida contra o restante do guia e o README.
+- 2026-11-26 03:53 · `R4` · TDD de `0 0 1` para `1 1 1` em `b23f936`. Suíte inicial verde com 2481 linhas ok. Suíte final verde com 21 etapas, 2486 linhas ok e zero FAIL. Quatro referências do TODO deslocadas pelo código foram reancoradas sem mudar os achados. As 259 inserções preexistentes nas notas não entraram nos commits.
+- 2026-11-26 04:34 · `R5` · REVIEW r3, achados 1 e 2 reproduzidos: retomada após falha na migração e preservação de comando local com a mesma raiz do planner. R4 conferido em b23f936.
+- 2026-11-26 05:09 · `R5` · R5 sabotage: desligar leitura do planner anterior → link-agents refreshes a command link from a previous kit installation (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: extrair raiz sem cortar o sufixo do planner → link-agents refreshes a command link from a previous kit installation (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: aceitar raiz relativa → link-agents preserves a relative command symlink without evidence of kit origin (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: dispensar a regra de instalação → link-agents preserves a dangling command symlink without the installer rule (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: exigir que a raiz antiga exista → link-agents restores a dangling kit command link after relocation (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: aceitar raiz existente sem o runner → link-agents preserves a local command symlink that shares a root with a local planner (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: manter a raiz rejeitada → link-agents preserves a local command symlink that shares a root with a local planner (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: recolocar agentes antes dos comandos → link-agents retries a kit relocation after a failed command symlink update (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: descartar quebra de linha final do destino → link-agents preserves an unrelated command symlink even when its contents match the kit (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: aceitar só comandos da raiz anterior → link-agents retries a kit relocation after a failed command symlink update (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: aceitar só comandos da instalação ativa → link-agents refreshes a command link from a previous kit installation (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: recolocar a comparação com o planner sem validação da raiz → link-agents preserves a local command symlink that shares a root with a local planner (rc 1).
+- 2026-11-26 05:09 · `R5` · R5 sabotage: deixar o destino ativo passar sem consultar o índice → link-agents preserves a tracked command symlink to the active kit (rc 1).
+- 2026-11-26 05:09 · `R5` · A declaração de variáveis, as quebras da guarda e os comentários não têm comportamento isolado. Os fixtures deram o vermelho esperado e depois passaram. A leitura do trecho do guia e do README confirmou as instruções de instalação.
+- 2026-11-26 05:09 · `R5` · A suíte em cópia sob /tmp não serve para medir o cenário do ledger que exige um checkout fora de /tmp. O gate foi medido no checkout da missão.
+- 2026-11-26 05:09 · `R5` · TDD de `0 0` para `1 1` em `6ac31be`. A suíte inicial teve 2486 linhas ok. A suíte no checkout da missão passou com 21 etapas, 2490 linhas ok e zero FAIL. R4 manteve `1 1 1`. Uma âncora do TODO e a do mutante `LINK_commands_unlinked` foram atualizadas. As 259 inserções preexistentes nas notas ficaram fora dos commits.
+- 2026-11-26 11:03 · `R6` · REVIEW r4 FULL: os achados 1 e 2 viraram R6 após reproduzir a listagem de um exemplo em crases e a reserva de um ID inválido causada por um diretório em outra ref. Nenhum código foi alterado.
+- 2026-11-26 11:45 · `R6` · R6 sabotage: repor o leitor antigo de resoluções → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: pular a busca de delimitadores → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: perder a prosa anterior ao delimitador → --resolved expects exactly these open items (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: reduzir todo delimitador de abertura a uma crase → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: avançar só uma crase ao abrir o trecho → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: ignorar escapes na abertura → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: considerar também escapes de comprimento par → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: aceitar encerramento com largura diferente → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: trocar o separador da máscara por espaço → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: perder o texto depois do fechamento → --resolved expects exactly these open items (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: apagar delimitador sem par → --resolved must ignore inline examples and preserve real records, got (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: descartar a prosa processada → --resolved expects exactly these open items (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: eliminar a publicação da regra → 17 rule line(s) reported, expected 18 — either a rule_end call site (rc 92).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: repor ls-tree sem modos → adr new does not count a directory named like an ADR on another ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: aceitar entradas de qualquer modo → adr new does not count a directory named like an ADR on another ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: aceitar links junto a regulares → adr new does not count a directory named like an ADR on another ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: rejeitar arquivo regular executável → adr new does not count a directory named like an ADR on another ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: recorrer aos ADRs aninhados → adr new does not count a directory named like an ADR on another ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: retirar NUL da leitura da ref → an id used only on another local branch is never handed out again, and the answer names the ref (rc 1).
+- 2026-11-26 11:45 · `R6` · R6 sabotage: ignorar o máximo da ref → a gap is never reused (0001, 0003 allocate 0004) (rc 1).
+- 2026-11-26 11:45 · `R6` · Grupo próprio e 1 GiB por processo, com teto de 60 s para o selftest e 180 s para ADR. Os controles intactos e restaurados passaram. As linhas de estrutura, os dados do fixture e a guarda de erro da substituição de processo não têm comportamento isolado adicional. A leitura do ADR 0025 e do guia confirmou a distinção entre prova e exemplo.
+- 2026-11-26 11:45 · `R6` · TDD de `0 0 0` para `1 1 1` em `0426916`. Entrada verde com 2490 linhas ok. Suíte final no checkout da missão com 21 etapas, 2493 linhas ok e zero FAIL. Três âncoras do TODO foram ajustadas, com 96 medidas e zero fora do alvo. As 260 inserções preexistentes nas notas ficaram fora dos commits.
+- 2026-11-26 12:20 · `R7` · REVIEW r5 confirmou o R6 (1 1 1) e reproduziu a troca entre prova e exemplo em parágrafos distintos. Achado 1 vai a R7. Achados 2 e 3 ficaram no backlog.
+- 2026-11-26 13:01 · `R7` · R7 sabotage: apagar a fronteira vazia → --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 13:01 · `R7` · R7 sabotage: ignorar fronteira com espaços ou tab → --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 13:01 · `R7` · R7 sabotage: separar toda quebra de linha → --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 13:01 · `R7` · R7 sabotage: exigir duas fronteiras em vez de uma → --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 13:01 · `R7` · R7 sabotage: pular o primeiro parágrafo → --resolved expects exactly these open items, --resolved must preserve only the fully valid item, --resolved must ignore inline examples and preserve real records, --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 13:01 · `R7` · R7 sabotage: pular o último parágrafo → --resolved expects exactly these open items, --resolved must preserve only the fully valid item, --resolved must ignore inline examples and preserve real records, --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 13:01 · `R7` · R7 sabotage: ler código de linha como prosa → --resolved must ignore inline examples and preserve real records, --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 13:01 · `R7` · R7 sabotage: permitir resolução parcial após valor malformado → --resolved must preserve only the fully valid item, --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 13:01 · `R7` · R7 sabotage: perder a acumulação dos hashes do item → --resolved expects exactly these open items, --resolved must preserve only the fully valid item, --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 13:01 · `R7` · Controle inicial e restaurado verdes sob grupo próprio, 60 s e 1 GiB por processo. As declarações, chaves, linhas reindentadas sem mudança de lógica e dados dos fixtures não têm comportamento isolado adicional. A documentação preserva o contrato de ancestralidade e de não edição.
+- 2026-11-26 13:01 · `R7` · Baseline verde com 2494 linhas ok. Vermelhos no selftest (rc 92) e na asserção da CLI (rc 1), com exemplo listado no lugar da prova. Em a3518ea, Check R7 de 0 0 para 1 1, controles R6 1 1 1. Suíte final com 21 etapas, 2496 linhas ok, zero FAIL e rc 0. Os 20 registros do backlog real ficaram idênticos e as 261 inserções locais preexistentes nas notas ficaram fora dos commits.
+- 2026-11-26 13:42 · `R8` · Achado 1 da REVIEW r6. Linhas vazias consecutivas tornam o leitor e o fechamento lentos. Check de equivalência e custo pendente nos dois sensores.
+- 2026-11-26 14:17 · `R8` · R8 sabotage: voltar a acumular todas as linhas vazias → limite de 10 s nos dois ensaios (rc 124; selftest rc 92, sensor da CLI rc 1).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: apagar a fronteira de parágrafo → exemplos e provas do R7 trocados no leitor e na CLI, e prova esperada do R8 ausente no leitor (rc 92 e 1).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: guardar só uma fronteira por item → --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: ignorar linhas vazias com indentação → --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: encolher a entrada longa do leitor → --resolved did not get the long blank run (rc 92).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: encolher a entrada longa da CLI → sdd close lists the same proof after consecutive blank TODO lines (rc 1, added:1).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: trocar o TSV retornado pelo leitor → equivalência da prova do R8 (rc 92).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: alterar o backlog após a leitura → preservação dos bytes no selftest do R8 (rc 92).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: apagar o relato da nova regra → piso do selftest (rc 92, 19 de 20 regras).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: esvaziar a listagem da CLI na entrada longa → equivalência da prova no sensor da CLI (rc 1).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: alterar o backlog após o fechamento → preservação dos bytes no sensor da CLI (rc 1, unchanged:0).
+- 2026-11-26 14:17 · `R8` · Controles intactos e restaurados verdes em grupo próprio, com 60 s e 1 GiB por processo. Comentários, delimitadores e dados dos fixtures não têm comportamento isolado do ensaio que os consome.
+- 2026-11-26 14:17 · `R8` · Base verde (rc 0, 21 etapas e 2496 linhas ok). Vermelhos no selftest (rc 92) e na CLI (rc 1), ambos por limite de 10 s na entrada longa. Em 2defd63, Check R8 1 1, R7 1 1 e R6 1 1 1. Suíte final rc 0, suite green, 21 etapas, 2498 linhas ok, zero FAIL, 884 s. Os 21 registros do backlog ficaram idênticos e as 262 inserções locais preexistentes nas notas ficaram fora dos commits.
+- 2026-11-26 14:58 · `REVIEW r7` · R8 verificado no leitor e no sdd close, suíte verde e nenhum R9. Dois achados de prosa registrados no backlog.
+- 2026-11-26 15:24 · `REVIEW r8` · Os dois achados de prosa da r7 fecharam em dfd2197. Suíte verde e todos os critérios em A, sem R9.
+- 2026-11-26 16:27 · `DOCS` · Documentação viva e Kaizen atualizados. Suíte rc 0 em 1a8b1cf, 21 etapas e zero FAIL. Checklist e propostas para o dono em 45-docs.md.

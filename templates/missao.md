@@ -40,8 +40,8 @@ comportamento observado, print de erro. Se você não foi olhar, não escreva aq
 
 Preenchido pelo `sdd-planner` **com evidência**. Todos ✅ → `aprovacao` fica vazio do mesmo jeito: o
 humano lê o plano no passo de aceite do `/sdd-plan` e aprova com `sdd approve`. O `auto` só entra
-quando o humano o pediu no grill, e aí o pipeline segue sozinho até o PR (ADR 0018 §3). Qualquer ✗ →
-`aprovacao` fica vazio e o runner para pedindo aprovação humana explícita, nomeando o critério.
+quando o humano o pediu no grill, e aí o pipeline segue sozinho até o PR (ADR 0018 §3 do kit sdd).
+Qualquer ✗ → `aprovacao` fica vazio e o runner para pedindo aprovação humana explícita, nomeando o critério.
 
 | # | Critério | Status | Evidência |
 |---|---|---|---|

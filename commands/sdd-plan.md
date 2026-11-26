@@ -73,11 +73,11 @@ writes the artifacts from memory, and their headings are the contract the gates 
      checkout's `agents/` over the worktree's;
    - tell the human, in one line, the worktree's path and branch, and that the mission is
      executed there too — interactively, or, under the campaign worker, by a `sdd run` launched
-     in that worktree through the `sdd` on the PATH (ADR 0022 §7); never by a `sdd run` from this
-     checkout. Copy no killer
-     map into the worktree, and ask for nothing to come back after the merge: the map and the
-     stamp live in `<git-common-dir>/sdd-mutation/`, which the worktree shares with this checkout,
-     so both outlive `git worktree remove` (ADR 0021).
+     in that worktree through the `sdd` on the PATH (ADR 0022 §7 of the sdd kit); never by a
+     `sdd run` from this checkout. Copy no killer map into the worktree, and ask for nothing to
+     come back after the merge: the map and the stamp live in `<git-common-dir>/sdd-mutation/`,
+     which the worktree shares with this checkout, so both outlive `git worktree remove`
+     (ADR 0021 of the sdd kit).
 
    When `sdd` is not on the PATH, or resolves outside this root, skip this step: no run of another
    repository executes this checkout. The one exception is the second exit of step 1: when another

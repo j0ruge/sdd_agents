@@ -3,6 +3,7 @@
 <Uma frase: o que o usuário ganha com este PR.>
 
 > Gerado pelo pipeline `sdd` — missão `<YYYYMMDD>-<slug>`. Único gate humano: **o merge**.
+> Depois do merge: `sdd close <missão>`.
 
 ## O que mudou
 

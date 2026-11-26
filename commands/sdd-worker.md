@@ -10,7 +10,8 @@ judgments that decided a merge were the model's reading and went wrong on record
 matched by the hour instead of the sha (M13), a watcher whose `pgrep -f` matched itself (M23), a
 bot with no quota read as "reviewed" (M1), a checker that read 20 of 21 units (M24). Those
 questions are now answered by `bin/sdd-worker`, from artifacts. This command gives the session the
-loop, the stops, and the way to cross a night without spending its own context window (ADR 0022).
+loop, the stops, and the way to cross a night without spending its own context window
+(ADR 0022 of the sdd kit).
 
 **You are the worker.** `sdd-worker` only answers, and signs; it never acts. Every act is yours,
 through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, `gh`. Its verbs:

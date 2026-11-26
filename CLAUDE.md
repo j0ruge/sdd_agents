@@ -151,10 +151,14 @@ a que atribuir mudança, e armar mesmo assim fazia a projeção herdar o aviso d
 
 O item **cabe em ~6 linhas** (teto duro de 8, medido por `tests/check-todo.sh`); a análise longa
 mora no handoff da missão citada — duplicá-la aqui foi o que levou este arquivo a 861 linhas.
-Consertado por commit, o corpo ganha `RESOLVED by <hash>` (token do kit, igual em todo idioma) e o
-item **é apagado** depois do merge, provado por `git merge-base --is-ancestor`, nunca pelo rótulo do
-PR; refutado ou decidido, vira uma linha na seção decidida, porque não há commit que o feche e a
-próxima QA o registraria de novo. Achado que volta, de outro projeto, missão ou sessão, ganha uma
+Consertado por commit, o corpo ganha `RESOLVED by <hash>` (token do kit, igual em todo idioma).
+O item **é apagado** no pós-merge quando cada hash passa uma de duas provas.
+`git merge-base --is-ancestor <hash> <DEFAULT_BRANCH>` deve retornar 0, ou
+`git merge-base --is-ancestor <hash> <head do PR>` deve retornar 0 e
+`gh pr view <PR> --json state,headRefOid` deve mostrar `MERGED` para esse mesmo head na hora da consulta.
+O rótulo do PR por si só nunca prova uma resolução. Refutado ou decidido, o item vira
+uma linha na seção decidida, porque não há commit que o feche e a próxima QA o registraria de novo.
+Achado que volta, de outro projeto, missão ou sessão, ganha uma
 entrada na linha `RECURRED`, medida e fora do teto: a volta é o sinal mais forte de que a dor é real,
 e se perdia, porque o item no teto não tinha onde somá-la e o "e por" em prosa ninguém contava. A
 regra inteira mora no template; aqui fica o porquê.

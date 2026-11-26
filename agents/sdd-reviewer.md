@@ -49,8 +49,8 @@ round's frontmatter, the head it read, and the next round reviews only the delta
 Invoke `/codereview:codereview` over the mission diff. The skill routes the model by severity
 internally — do not try to guess what it will do.
 
-The boot prompt says which round this is (ADR 0023). A **DELTA** round carries `base=<sha>`, the
-`reviewed_head:` of the round before: invoke `/codereview:codereview base=<sha>` with that argument
+The boot prompt says which round this is (ADR 0023 of the sdd kit). A **DELTA** round carries
+`base=<sha>`, the `reviewed_head:` of the round before: invoke `/codereview:codereview base=<sha>` with that argument
 — the argument, not a sentence, is what limits the skill to the delta — and read the round the
 prompt names for the findings it left open. In a delta round a finding in code the delta did not
 touch goes to the `TODO_FILE`, never to an R<n>; the one read outside the delta is a `grep` for the
@@ -251,10 +251,10 @@ and its `R<n>` rows. `gate_REVIEW` stops the line on a `blocked` round, with no 
 only a human sets it back.
 
 `reviewed_head:` is the `git rev-parse HEAD` you ran in section 1, the full sha as it printed it (40
-hex; 64 in a SHA-256 repository; ADR 0023). The gate refuses a value that is no commit, one the
-HEAD does not carry, a round committed after code outside this hat's `writes:` changed since that
-sha, and, failing closed, a round whose range `git diff` cannot list; an absent key passes, and the
-next round is a full one.
+hex; 64 in a SHA-256 repository; ADR 0023 of the sdd kit). The gate refuses a value that is no
+commit, one the HEAD does not carry, a round committed after code outside this hat's `writes:`
+changed since that sha, and, failing closed, a round whose range `git diff` cannot list; an absent
+key passes, and the next round is a full one.
 Code committed after the round reopens REVIEW: the gate reads the commits after the one that added the round, and a path outside what this hat and the DOCS hat write refuses it
 (the merge of the base and the mission already in the base pass), and the next round is a delta from this round's `reviewed_head:`.
 

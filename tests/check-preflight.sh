@@ -1633,9 +1633,9 @@ assert_eq "preflight warns that the lint step of the suite will be skipped when 
 mv .sdd/config.sh.bak .sdd/config.sh
 
 # --- the preamble of TODO_FILE against the revisions of the template (L4 item 10) ---
-# install seeds TODO.md once and never rewrites it, so a target keeps the preamble of the kit it was
-# installed from while the template moves on, and nothing said so. The preamble (line 1 up to the
-# first <!-- sdd:open -->) is compared with the template of today and with the one of every revision
+# A target can keep the preamble of the kit it was installed from while the template moves on, and
+# nothing used to say so. The preamble (line 1 up to the first <!-- sdd:open -->) is compared
+# with the template of today and with the one of every revision
 # in the kit's git: today's is an ok, an older one a WARN naming the revision, its date and the diff
 # to run (the file left byte for byte), and none at all an author's preamble said in one dim line —
 # the kit's own TODO.md is one, and it must not warn forever. The mutation sandbox copies the kit
@@ -2507,7 +2507,7 @@ mkdir -p "$SEED"
 ( cd "$SEED" && git init -q -b main \
   && git config user.email "fixture@example.com" && git config user.name "Fixture" \
   && echo content > file.txt && git add -A && git commit -qm "init" ) >/dev/null 2>&1
-seed_out="$( cd "$SEED" && "$SDD" install 2>&1 )"
+seed_out="$( cd "$SEED" && HOME="$FIX/.stub" "$SDD" install 2>&1 )"
 
 assert_has "install seeds HANDOFF_DIR and the findings file" "docs/handoffs/" "$seed_out"
 if [ -d "$SEED/docs/handoffs" ]; then pass "the handoff root exists on disk after install"
@@ -2528,8 +2528,35 @@ if [ "$rc" -eq 0 ] && grep -q '^  ok    0 finding(s)' <<< "$seed_check"; then
 else fail "the seed passes the shape sensor with zero findings" "rc 0 and 'ok    0 finding(s)'" \
        "rc $rc: $seed_check"; fi
 
+# The first install explains the English default and the way to switch while the file is untouched.
+assert_eq "the first install with no OUTPUT_LANG says the TODO was seeded in English and how to reseed it" \
+  "english=1 advice=1" \
+  "english=$(cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.md" && echo 1 || echo 0) advice=$(grep -cE "^  ok +TODO\.md .*seeded in English because OUTPUT_LANG is empty.*Set OUTPUT_LANG and run 'sdd install' again while the seed is untouched" <<< "$seed_out")"
+
+# Use the fixture kit with a history to ensure the preamble verdict yields to the language warning.
+sed -i 's/^OUTPUT_LANG=.*/OUTPUT_LANG="pt-BR"/' "$SEED/.sdd/config.sh"
+seed_warning="TODO.md is still the untouched seed from templates/todo.md, but OUTPUT_LANG selects templates/todo.pt-BR.md — run 'sdd install' to replace it"
+seed_pf="$( cd "$SEED" && HOME="$FIX/.stub" "$PK/bin/sdd" preflight 2>&1 )"
+assert_eq "preflight warns that the TODO is still the untouched seed of another language, naming sdd install" \
+  "warn=1 preamble=0 untouched=1" \
+  "warn=$(pa_count "  warn  $seed_warning" "$seed_pf") preamble=$(pa_count "$PA_ANY" "$seed_pf") untouched=$(cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.md" && echo 1 || echo 0)"
+
+seed_swap="$( cd "$SEED" && HOME="$FIX/.stub" "$SDD" install 2>&1 )"
+assert_eq "install replaces a TODO that is still the untouched seed of another language with the seed of OUTPUT_LANG" \
+  "pt-BR=1 said=1" \
+  "pt-BR=$(cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.pt-BR.md" && echo 1 || echo 0) said=$(grep -cE '^  ok +TODO\.md was the untouched seed from templates/todo\.md — replaced by templates/todo\.pt-BR\.md' <<< "$seed_swap")"
+
+# One byte beyond the preamble takes the file out of the reseed path in both commands.
+{ cat "$ROOT/templates/todo.md"; printf 'x'; } > "$SEED/TODO.md"
+cp "$SEED/TODO.md" "$FIX/edited-seed"
+seed_edited_pf="$( cd "$SEED" && HOME="$FIX/.stub" "$PK/bin/sdd" preflight 2>&1 )"
+seed_edited_install="$( cd "$SEED" && HOME="$FIX/.stub" "$SDD" install 2>&1 )"
+assert_eq "install preserves a TODO one byte away from a seed" \
+  "untouched warned=1 edited warned=0 edited preamble=1 preserved=1 same=1" \
+  "untouched warned=$(pa_count "$seed_warning" "$seed_pf") edited warned=$(pa_count "$seed_warning" "$seed_edited_pf") edited preamble=$(pa_count "$PA_ANY" "$seed_edited_pf") preserved=$(grep -cE '^  ok +TODO\.md already exists \(preserved\)$' <<< "$seed_edited_install") same=$(cmp -s "$SEED/TODO.md" "$FIX/edited-seed" && echo 1 || echo 0)"
+
 # Which variant: templates/todo.<OUTPUT_LANG>.md when the kit has one, the English one otherwise.
-# Each case removes the file first, because an existing TODO.md is never overwritten.
+# Each case removes the file first to exercise creation separately from reseeding.
 seed_lang() { # seed_lang <lang> — reinstall with OUTPUT_LANG=<lang> over no TODO.md
   sed -i "s/^OUTPUT_LANG=.*/OUTPUT_LANG=\"$1\"/" "$SEED/.sdd/config.sh"
   rm -f "$SEED/TODO.md"
@@ -2993,6 +3020,273 @@ else
   fail "link-agents refuses an argument, before linking anything" \
        "rc != 0, 'unknown link-agents option: --bogus', no symlink" "rc $rc; out: $(head -c 120 <<< "$out")"
 fi
+# An empty home makes the slash-command lookup independent of the operator's installation.
+echo "== link-agents installs the slash commands the planner needs =="
+LC_REPO="$FIX/link-commands"
+LC_HOME="$FIX/link-commands-home"
+mkdir -p "$LC_HOME" || exit 1
+help_repo "$LC_REPO" || exit 1
+( cd "$LC_REPO" && "$SDD" install >/dev/null 2>&1 ) || exit 1
+lc_preflight() ( cd "$1" && HOME="$LC_HOME" PHASE_ENGINE=claude "$2" preflight 2>&1 )
+lc_missing="$(lc_preflight "$LC_REPO" "$SDD")"
+lc_warning="$(grep -F '  warn  /sdd-plan not found' <<< "$lc_missing")"
+if [[ "$lc_warning" == *sdd-link-agents* &&
+      "$lc_warning" == *"ln -s $ROOT/commands/sdd-plan.md $LC_REPO/.claude/commands/"* ]]; then
+  pass "preflight warns that /sdd-plan is in neither commands directory, naming sdd-link-agents and the ln -s by hand"
+else
+  fail "preflight warns that /sdd-plan is in neither commands directory, naming sdd-link-agents and the ln -s by hand" \
+       "one command warning with both target remedies" "${lc_warning:-no warning}"
+fi
+
+mkdir -p "$LC_REPO/.claude/commands" || exit 1
+cp "$ROOT/commands/sdd-plan.md" "$LC_REPO/.claude/commands/" || exit 1
+git -C "$LC_REPO" add -f .claude/commands/sdd-plan.md && git -C "$LC_REPO" commit -qm 'track a command' || exit 1
+lc_rc=0; lc_first="$(cd "$LC_REPO" && HOME="$LC_HOME" "$SDD" link-agents 2>&1)" || lc_rc=$?
+lc_ignore_before="$(md5sum "$LC_REPO/.gitignore")"
+lc_rc2=0; lc_second="$(cd "$LC_REPO" && HOME="$LC_HOME" "$SDD" link-agents 2>&1)" || lc_rc2=$?
+lc_count=0; lc_links=0
+for lc_source in "$ROOT"/commands/sdd-*.md; do
+  lc_path=".claude/commands/${lc_source##*/}"
+  lc_count=$((lc_count + 1))
+  if [ -L "$LC_REPO/$lc_path" ] && [ "$(readlink "$LC_REPO/$lc_path")" = "$lc_source" ] \
+     && ! git -C "$LC_REPO" ls-files --error-unmatch "$lc_path" >/dev/null 2>&1; then
+    lc_links=$((lc_links + 1))
+  fi
+done
+assert_eq "link-agents links every kit command into .claude/commands of the target, and a second run links nothing" \
+  "rc=0/0 links=$lc_count first=1 second=0" \
+  "rc=$lc_rc/$lc_rc2 links=$lc_links first=$(grep -cF "$lc_count command(s) linked to $ROOT/commands/" <<< "$lc_first") second=$(grep -cF 'command(s) linked to ' <<< "$lc_second")"
+assert_eq "link-agents ignores the linked commands by one .gitignore rule, appended once" \
+  "rules=1 ignored=1 unchanged=1" \
+  "rules=$(grep -cxF '.claude/commands/sdd-*.md' "$LC_REPO/.gitignore") ignored=$(git -C "$LC_REPO" check-ignore .claude/commands/sdd-plan.md | grep -cxF '.claude/commands/sdd-plan.md') unchanged=$([ "$lc_ignore_before" = "$(md5sum "$LC_REPO/.gitignore")" ] && echo 1 || echo 0)"
+
+lc_repo_present="$(lc_preflight "$LC_REPO" "$SDD")"
+mkdir -p "$LC_HOME/.claude/commands" || exit 1
+cp "$ROOT/commands/sdd-plan.md" "$LC_HOME/.claude/commands/" || exit 1
+rm -f "$LC_REPO/.claude/commands/sdd-plan.md"
+lc_home_present="$(lc_preflight "$LC_REPO" "$SDD")"
+assert_eq "preflight says nothing about /sdd-plan when the repo or the user directory has it" \
+  "missing=1 repo=0 user=0" \
+  "missing=$(grep -cF '  warn  /sdd-plan not found' <<< "$lc_missing") repo=$(grep -cF '  warn  /sdd-plan not found' <<< "$lc_repo_present") user=$(grep -cF '  warn  /sdd-plan not found' <<< "$lc_home_present")"
+
+LC_LOCAL="$FIX/link-local-commands"
+help_repo "$LC_LOCAL" || exit 1
+( cd "$LC_LOCAL" && "$SDD" install >/dev/null 2>&1 ) || exit 1
+lc_plan=.claude/commands/sdd-plan.md
+lc_worker=.claude/commands/sdd-worker.md
+mkdir -p "$LC_LOCAL/.claude/commands" || exit 1
+cp "$ROOT/commands/sdd-plan.md" "$LC_LOCAL/$lc_plan" || exit 1
+git -C "$LC_LOCAL" add -f "$lc_plan" && git -C "$LC_LOCAL" commit -qm 'track a command' || exit 1
+printf '\n# Local edits\n' >> "$LC_LOCAL/$lc_plan"
+printf '# Untracked draft\n' > "$LC_LOCAL/$lc_worker"
+cp "$LC_LOCAL/$lc_plan" "$FIX/local-plan.want" && cp "$LC_LOCAL/$lc_worker" "$FIX/local-worker.want" || exit 1
+lc_index="$(git -C "$LC_LOCAL" ls-files --stage -- .claude/commands)" || exit 1
+lc_local_link() ( cd "$LC_LOCAL" && HOME="$LC_HOME" "$SDD" link-agents 2>&1 )
+lc_plan_preserved() {
+  [ ! -L "$LC_LOCAL/$lc_plan" ] && cmp -s "$FIX/local-plan.want" "$LC_LOCAL/$lc_plan" \
+    && [ "$(git -C "$LC_LOCAL" ls-files --stage -- .claude/commands)" = "$lc_index" ]
+}
+lc_rc=0; lc_first="$(lc_local_link)" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && lc_plan_preserved && [ ! -L "$LC_LOCAL/$lc_worker" ] \
+   && cmp -s "$FIX/local-worker.want" "$LC_LOCAL/$lc_worker" \
+   && [[ "$lc_first" == *"preserving local command $lc_plan"* && "$lc_first" == *"preserving local command $lc_worker"* ]]; then
+  pass "link-agents preserves conflicting tracked edits and untracked local commands"
+else
+  fail "link-agents preserves conflicting tracked edits and untracked local commands" \
+       "rc 0, both drafts byte-identical and named, and no change to their index entries" "$lc_first"
+fi
+
+rm -- "$LC_LOCAL/$lc_worker" || exit 1
+lc_rc=0; lc_first="$(lc_local_link)" || lc_rc=$?
+lc_rc2=0; lc_second="$(lc_local_link)" || lc_rc2=$?
+if [ "$lc_rc/$lc_rc2" = 0/0 ] && lc_plan_preserved \
+   && [ "$(readlink "$LC_LOCAL/$lc_worker")" = "$ROOT/commands/sdd-worker.md" ] \
+   && [[ "$lc_first" == *"1 command(s) linked to "* && "$lc_second" != *"command(s) linked to "* ]]; then
+  pass "link-agents still installs missing kit commands and is idempotent"
+else
+  fail "link-agents still installs missing kit commands and is idempotent" \
+       "only the missing worker command linked once, with the local plan and index unchanged" "$lc_first / $lc_second"
+fi
+
+# Three targets carry links made by the old CLI: one live, one dangling, one interrupted.
+LC_OLD="$FIX/previous kit"
+LC_LIVE="$FIX/link-old-live"
+LC_MOVED="$FIX/link-old-moved"
+LC_RETRY="$FIX/link-old-retry"
+mkdir -p "$LC_OLD/bin" "$LC_OLD/commands" || exit 1
+cp "$SDD" "$ROOT/bin/sdd-coordination.py" "$LC_OLD/bin/" || exit 1
+cp -R "$ROOT/agents" "$LC_OLD/agents" || exit 1
+cp "$ROOT"/commands/sdd-*.md "$LC_OLD/commands/" || exit 1
+printf '\n# Previous kit version\n' >> "$LC_OLD/commands/sdd-plan.md"
+for lc_fixture in "$LC_LIVE" "$LC_MOVED" "$LC_RETRY"; do
+  help_repo "$lc_fixture" || exit 1
+  ( cd "$lc_fixture" && HOME="$LC_HOME" "$SDD" install \
+    && HOME="$LC_HOME" "$LC_OLD/bin/sdd" link-agents ) >/dev/null 2>&1 || exit 1
+  [ "$(readlink "$lc_fixture/$lc_plan")" = "$LC_OLD/commands/sdd-plan.md" ] \
+    && cmp -s "$lc_fixture/$lc_plan" "$LC_OLD/commands/sdd-plan.md" || exit 1
+done
+lc_local_target="$LC_OLD/commands/sdd-worker.md"$'\n'
+cp "$ROOT/commands/sdd-worker.md" "$lc_local_target" || exit 1
+ln -sfn "$lc_local_target" "$LC_LIVE/$lc_worker" || exit 1
+lc_current_link() ( cd "$1" && HOME="$LC_HOME" "$SDD" link-agents 2>&1 )
+lc_reinstalled() {
+  [ "$(readlink "$1/$lc_plan")" = "$ROOT/commands/sdd-plan.md" ] \
+    && cmp -s "$1/$lc_plan" "$ROOT/commands/sdd-plan.md" \
+    && [ "$(readlink "$1/.claude/agents/sdd-planner.md")" = "$ROOT/agents/sdd-planner.md" ]
+}
+lc_rc=0; lc_first="$(lc_current_link "$LC_LIVE")" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && lc_reinstalled "$LC_LIVE"; then
+  pass "link-agents refreshes a command link from a previous kit installation"
+else
+  fail "link-agents refreshes a command link from a previous kit installation" \
+       "rc 0 and a readable link to the active kit" "rc $lc_rc; $lc_first"
+fi
+if [ "$lc_rc" -eq 0 ] && [ "$(readlink -n "$LC_LIVE/$lc_worker" && printf .)" = "$lc_local_target." ] \
+   && cmp -s "$LC_LIVE/$lc_worker" "$ROOT/commands/sdd-worker.md" \
+   && [[ "$lc_first" == *"preserving local command $lc_worker"* \
+      && "$lc_first" != *"preserving local command $lc_worker (differs from the kit)"* ]]; then
+  pass "link-agents preserves an unrelated command symlink even when its contents match the kit"
+else
+  fail "link-agents preserves an unrelated command symlink even when its contents match the kit" \
+       "rc 0 and the local symlink kept and named without claiming its contents differ" "rc $lc_rc; $lc_first"
+fi
+
+git -C "$LC_MOVED" add -f -- "$lc_worker" || exit 1
+lc_index="$(git -C "$LC_MOVED" ls-files --stage -- "$lc_worker")" || exit 1
+mv -- "$LC_OLD" "$LC_OLD-moved" || exit 1
+[ -L "$LC_MOVED/$lc_plan" ] && [ ! -e "$LC_MOVED/$lc_plan" ] || exit 1
+lc_rc=0; lc_first="$(lc_current_link "$LC_MOVED")" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && lc_reinstalled "$LC_MOVED"; then
+  pass "link-agents restores a dangling kit command link after relocation"
+else
+  fail "link-agents restores a dangling kit command link after relocation" \
+       "rc 0 and a readable link to the active kit" "rc $lc_rc; $lc_first"
+fi
+if [ "$lc_rc" -eq 0 ] && [ "$(readlink "$LC_MOVED/$lc_worker")" = "$LC_OLD/commands/sdd-worker.md" ] \
+   && [ "$(git -C "$LC_MOVED" ls-files --stage -- "$lc_worker")" = "$lc_index" ]; then
+  pass "link-agents preserves a tracked command symlink even when it points to the previous kit"
+else
+  fail "link-agents preserves a tracked command symlink even when it points to the previous kit" \
+       "rc 0 and the tracked symlink and index entry unchanged" "rc $lc_rc; $lc_first"
+fi
+
+# Fail the second command update even when the suite runs as root.
+mkdir "$FIX/.fail-link" || exit 1
+lc_ln="$(command -v ln)" || exit 1
+cat > "$FIX/.fail-link/ln" <<'SH'
+#!/usr/bin/env bash
+if [[ "${!#}" == "$LC_FAIL_LINK" ]]; then
+  echo 'fixture: command link update refused' >&2
+  exit 73
+fi
+exec "$LC_REAL_LN" "$@"
+SH
+chmod +x "$FIX/.fail-link/ln" || exit 1
+lc_rc=0
+lc_first="$(PATH="$FIX/.fail-link:$PATH" LC_FAIL_LINK="$LC_RETRY/$lc_worker" \
+  LC_REAL_LN="$lc_ln" lc_current_link "$LC_RETRY")" || lc_rc=$?
+lc_partial=0
+if [ "$lc_rc" -eq 73 ] && [[ "$lc_first" == *'fixture: command link update refused'* ]] \
+   && [ "$(readlink "$LC_RETRY/$lc_plan")" = "$ROOT/commands/sdd-plan.md" ] \
+   && [ "$(readlink "$LC_RETRY/$lc_worker")" = "$LC_OLD/commands/sdd-worker.md" ] \
+   && [ ! -e "$LC_RETRY/$lc_worker" ]; then
+  lc_partial=1
+fi
+lc_rc2=0; lc_second="$(lc_current_link "$LC_RETRY")" || lc_rc2=$?
+if [ "$lc_partial/$lc_rc2" = 1/0 ] && lc_reinstalled "$LC_RETRY" \
+   && [ "$(readlink "$LC_RETRY/$lc_worker")" = "$ROOT/commands/sdd-worker.md" ] \
+   && cmp -s "$LC_RETRY/$lc_worker" "$ROOT/commands/sdd-worker.md" \
+   && [[ "$lc_second" != *'preserving local command'* ]]; then
+  pass "link-agents retries a kit relocation after a failed command symlink update"
+else
+  fail "link-agents retries a kit relocation after a failed command symlink update" \
+       "an observed partial update, then rc 0 and both commands readable without preservation warnings" \
+       "partial=$lc_partial rc=$lc_rc/$lc_rc2; $lc_first / $lc_second"
+fi
+
+git -C "$LC_RETRY" add -f -- "$lc_plan" || exit 1
+lc_index="$(git -C "$LC_RETRY" ls-files --stage -- "$lc_plan")" || exit 1
+lc_rc=0; lc_first="$(lc_current_link "$LC_RETRY")" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && [ "$(readlink "$LC_RETRY/$lc_plan")" = "$ROOT/commands/sdd-plan.md" ] \
+   && [ "$(git -C "$LC_RETRY" ls-files --stage -- "$lc_plan")" = "$lc_index" ] \
+   && [[ "$lc_first" == *"preserving local command $lc_plan"* ]]; then
+  pass "link-agents preserves a tracked command symlink to the active kit"
+else
+  fail "link-agents preserves a tracked command symlink to the active kit" \
+       "rc 0 and the active symlink and index entry unchanged" "rc $lc_rc; $lc_first"
+fi
+
+LC_TWIN="$FIX/link-local-twin"
+help_repo "$LC_TWIN" || exit 1
+mkdir -p "$LC_TWIN"/{.sdd,.claude/agents,.claude/commands,local/agents,local/commands} || exit 1
+cp "$LC_REPO/.sdd/config.sh" "$LC_TWIN/.sdd/config.sh" || exit 1
+printf '# Local planner\n' > "$LC_TWIN/local/agents/sdd-planner.md"
+printf '# Local command\n' > "$FIX/local-twin.want"
+lc_twin="$LC_TWIN/local/commands/sdd-plan.md"
+cp "$FIX/local-twin.want" "$lc_twin" || exit 1
+lc_twin_case() {
+  ln -sfn "$LC_TWIN/local/agents/sdd-planner.md" "$LC_TWIN/.claude/agents/sdd-planner.md" || return
+  ln -sfn "$lc_twin" "$LC_TWIN/$lc_plan" || return
+  lc_rc=0; lc_first="$(lc_current_link "$LC_TWIN")" || lc_rc=$?
+  [ "$lc_rc" -eq 0 ] && [ "$(readlink "$LC_TWIN/$lc_plan")" = "$lc_twin" ] \
+    && cmp -s "$FIX/local-twin.want" "$LC_TWIN/$lc_plan" \
+    && [ "$(git -C "$LC_TWIN" ls-files --stage -- "$lc_plan")" = "$lc_index" ] \
+    && [[ "$lc_first" == *"preserving local command $lc_plan"* ]]
+}
+lc_index="$(git -C "$LC_TWIN" ls-files --stage -- "$lc_plan")" || exit 1
+if lc_twin_case && lc_twin_case; then
+  pass "link-agents preserves a local command symlink that shares a root with a local planner"
+else
+  fail "link-agents preserves a local command symlink that shares a root with a local planner" \
+       "rc 0, destination and content preserved and named, with or without the installer rule" "rc $lc_rc; $lc_first"
+fi
+
+LC_UNMARKED="$FIX/link-unmarked-dangling"
+help_repo "$LC_UNMARKED" || exit 1
+mkdir -p "$LC_UNMARKED"/{.sdd,.claude/agents,.claude/commands} || exit 1
+cp "$LC_REPO/.sdd/config.sh" "$LC_UNMARKED/.sdd/config.sh" || exit 1
+ln -s "$LC_OLD/agents/sdd-planner.md" "$LC_UNMARKED/.claude/agents/sdd-planner.md" \
+  && ln -s "$LC_OLD/commands/sdd-plan.md" "$LC_UNMARKED/$lc_plan" || exit 1
+lc_rc=0; lc_first="$(lc_current_link "$LC_UNMARKED")" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && [ "$(readlink "$LC_UNMARKED/$lc_plan")" = "$LC_OLD/commands/sdd-plan.md" ] \
+   && [[ "$lc_first" == *"preserving local command $lc_plan"* ]]; then
+  pass "link-agents preserves a dangling command symlink without the installer rule"
+else
+  fail "link-agents preserves a dangling command symlink without the installer rule" \
+       "rc 0 and the unmarked dangling symlink kept and named" "rc $lc_rc; $lc_first"
+fi
+
+LC_RELATIVE="$FIX/link-relative"
+help_repo "$LC_RELATIVE" || exit 1
+mkdir -p "$LC_RELATIVE"/{.sdd,.claude/agents,.claude/commands} || exit 1
+cp "$LC_REPO/.sdd/config.sh" "$LC_RELATIVE/.sdd/config.sh" || exit 1
+printf '%s\n' '.claude/commands/sdd-*.md' > "$LC_RELATIVE/.gitignore" || exit 1
+lc_relative_target=../../custom/commands/sdd-plan.md
+ln -s ../../custom/agents/sdd-planner.md "$LC_RELATIVE/.claude/agents/sdd-planner.md" \
+  && ln -s "$lc_relative_target" "$LC_RELATIVE/$lc_plan" || exit 1
+lc_rc=0; lc_first="$(lc_current_link "$LC_RELATIVE")" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && [ "$(readlink "$LC_RELATIVE/$lc_plan")" = "$lc_relative_target" ]; then
+  pass "link-agents preserves a relative command symlink without evidence of kit origin"
+else
+  fail "link-agents preserves a relative command symlink without evidence of kit origin" \
+       "rc 0 and the relative command target unchanged" "rc $lc_rc; $lc_first"
+fi
+
+# Run the copied binary from its own kit root to exercise the self-link refusal's counterpart.
+rm -f "$LC_HOME/.claude/commands/sdd-plan.md"
+help_repo "$KP_KIT" || exit 1
+mkdir -p "$KP_KIT/.sdd" || exit 1
+cp "$LC_REPO/.sdd/config.sh" "$KP_KIT/.sdd/config.sh" || exit 1
+lc_kit="$(lc_preflight "$KP_KIT" "$KP_KIT/bin/sdd")"
+lc_warning="$(grep -F '  warn  /sdd-plan not found' <<< "$lc_kit")"
+if [[ "$lc_warning" == *'ln -s '*'/commands/sdd-plan.md ~/.claude/commands/'* &&
+      "$lc_warning" != *sdd-link-agents* ]]; then
+  pass "in the kit itself the warning names only the ln -s into the user directory"
+else
+  fail "in the kit itself the warning names only the ln -s into the user directory" \
+       "one command warning with only the user-directory remedy" "${lc_warning:-no warning}"
+fi
+
 # The scan runs BEFORE the checkout admission (CodeRabbit and Codex on PR #391): after it, `sdd
 # install --help` outside a repository died with "not inside a git repository", because
 # coordination_enter resolves the root of every subcommand it admits. Help writes nothing and needs

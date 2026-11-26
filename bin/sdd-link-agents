@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# sdd-link-agents — point a target repo's agents at this kit instead of copying them.
+# sdd-link-agents — point a target repo's agents and slash commands at this kit.
 #
 # `sdd install` copies the agents and refuses to overwrite a copy that differs. That is right for a
 # target pinned to a known-good version and wrong for a kit under active development, where every
 # improvement needs a `--force` per repository. This replaces the copies with symlinks, so the kit
-# is the single source and a change reaches every target at once.
+# is the single source and a change reaches every target at once. It links the slash commands
+# under .claude/commands/ too, so /sdd-plan is available in the target.
 #
 # It costs the runner nothing: `sdd install` and `sdd preflight` compare with `cmp -s`, which reads
 # THROUGH the link and compares content, so a symlink reports as identical to the source.
@@ -13,7 +14,7 @@
 # The links are gitignored, never committed: they carry this machine's absolute path, and a
 # committed symlink is dangling in every other checkout — broken in silence, the worst shape.
 #
-# Idempotent: run it twice and the second run changes nothing and adds no duplicate .gitignore line.
+# Idempotent: the second run changes nothing and adds no duplicate .gitignore rules.
 set -euo pipefail
 
 if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then

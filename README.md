@@ -54,8 +54,8 @@ sdd preflight          # environment sensor: claude, gh, GNU userland, git 2.31+
 
 Adopting **only** the planning half — the three artifacts, executed by an interactive session
 instead of `sdd run` — is a supported tier with a lighter setup (no budgets, no `TEST_CMD` the
-gates depend on, no preflight). See [`docs/plan-only.md`](docs/plan-only.md); the agents there are
-symlinked to this kit with `sdd-link-agents`, so an improvement here reaches every target at once.
+gates depend on, no preflight). See [`docs/plan-only.md`](docs/plan-only.md). With `sdd-link-agents`,
+both the agents and slash commands are linked to this kit, so updates reach every target at once.
 `sdd install --force` never writes through those links (a broken one included): it reports them and
 leaves them alone.
 
@@ -91,9 +91,9 @@ sdd phase <mission>          # print only the current phase (or DONE) — for sc
 sdd review-base <mission>    # base=<sha> when the next REVIEW round can review only the delta since the
                              #   reviewed_head: of the latest round, or full and why — no gate, no suite (ADR 0023)
 sdd retry <mission>          # retry the current phase with a fresh session
-sdd close <mission>          # post-merge: close the JIRA issue (a real paid session — since 2026-09-11
-                             #   it writes its own ledger row, `event:"close"`, cost included), then
-                             #   returns to the base branch — with or without JIRA
+sdd close <mission>          # post-merge: return to the base, fast-forward if possible, and list TODO cleanup
+                             #   with JIRA enabled, closing a still-open issue uses a paid session
+                             #   that records its cost in the ledger (`event:"close"`)
 sdd note-manual <mission> <PHASE>  # record a phase done BY HAND: an intervention note in the checkpoint
                              #   and a `manual` row in the ledger, which grades nothing (PLAN is refused)
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
@@ -118,12 +118,14 @@ sdd run <mission> --dry-run         # project the whole pipeline without spendin
 sdd run <mission> --phase EXEC      # force one specific phase
 sdd run <mission> --max-phases 2    # stop after N phases
 
-sdd adr new --slug <s> --spec <path>  # reserve the next free ADR id (O_EXCL) and write both sides of the link
+sdd adr new --slug <s> --spec <path>  # reserve the id after the highest visible ADR and write both sides of the link
 sdd adr check [--mission <m>]         # read the links back; rc 0 clean, 1 violation, 2 bad configuration
 
 sdd-worker <verb> <dir> [args]        # the campaign worker's verbs (delegate, level, allows, budget, next, pr-ready);
                                       #   they answer from artifacts and never act — see below
 ```
+
+For `setsid nohup sdd run`, see `sdd help` and the [detached-run guide](docs/failure-modes.md#the-sdd-run-process-itself-disappeared).
 
 `sdd approve <mission>` is the human gate with a command instead of a hand edit. It prints what you
 are about to approve — the title, the PLAN-AUTO evidence, the increments, the open questions —
@@ -136,12 +138,9 @@ said no" from "nobody was asked". On a plan born of `sdd kaizen` it is the **onl
 refused there, because nobody was in the room
 ([why](docs/pipeline.md#plan--the-only-one-the-runner-does-not-execute)).
 
-`sdd adr new` is the only way a number should be handed out. It reserves the file under `set -C`
-— O_EXCL, one syscall — so two writers racing for the same id get one file and one error instead
-of two files and a silent overwrite, and a freed number is never reused: it may already be cited
-by a merged branch, a handoff or somebody's notes. `--spec` writes **both** sides in one call, the
-mission's `adr:` and the ADR's `Spec:`, because one direction proves nothing — an `adr:` pointing
-at a real file is satisfied by *every* real file.
+Use `sdd adr new` to allocate IDs and `--spec` to write both sides of the mission link. See
+[ADR traceability](docs/pipeline.md#adr-traceability) for where the allocator looks and what its
+reservation protects.
 
 **Adoption is gradual, and it is your repo's decision.** `ADR_CHECK` ships as `off`: a repo that
 just installed the kit has no `adr:` in any mission on disk, and a default that spoke would make
@@ -172,10 +171,10 @@ act, and whether a pull request meets the merge bar on its head sha. An absent, 
 or illegible delegation answers `assisted`, and then the worker does nothing alone. With the
 `bin/` directory on the `PATH`, `sdd-worker` is there too; with only `sdd` symlinked, link
 `sdd-worker` as well, or call it by the path `commands/sdd-worker.md` resolves:
-`"$(dirname "$(readlink -f "$(command -v sdd)")")/sdd-worker"`. The session command itself is not
-installed by anything: neither `sdd install` nor `sdd-link-agents` touches `commands/`, so a session
-has `/sdd-worker` only where Claude Code finds the file, in `~/.claude/commands/` or the repo's
-`.claude/commands/`, linked by hand:
+`"$(dirname "$(readlink -f "$(command -v sdd)")")/sdd-worker"`. After `sdd install`,
+`sdd-link-agents` links `/sdd-plan` and `/sdd-worker` into the target's `.claude/commands/`.
+If you keep the agent copies from `sdd install`, link the slash commands by hand. For example,
+after creating `~/.claude/commands/`, run
 `ln -s ~/repos/sdd_agents/commands/sdd-worker.md ~/.claude/commands/`. The contracts, the rules and
 the declared limits are in [`docs/pipeline.md`](docs/pipeline.md#the-worker).
 

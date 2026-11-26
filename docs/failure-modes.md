@@ -553,9 +553,13 @@ US$ 7,61 for the lap that reopened a mission whose PR was already open. Since th
 gate asks — after the e2e, never before — and the line stops with the address in the message,
 filed as `kind: app-down`.
 
-**What you do:** start the app at the address the message names, then `sdd run` again. If the e2e
-is supposed to bring its own server up, then `APP_URL` should not point at a port nobody serves
-between runs — clear it, or point it at the address that is up.
+**What you do:** start the app at the address the message names, then run `sdd run <mission>` again.
+If the e2e is supposed to bring its own server up, then `APP_URL` should not point at a port nobody
+serves between runs — clear it, or point it at the address that is up.
+
+If you see this in `sdd status` with QA as the next phase, restore the right app and run
+`sdd status <mission>` again first. The status still reports the failing gate and distinguishes a
+QA handoff marked `done` on disk from an e2e result it cannot re-verify.
 
 ```bash
 sdd preflight            # asks the same question before a session is opened
@@ -718,7 +722,7 @@ there would, and the fix is one more ignore line, never a looser guard.
 
 **Symptom:** `sdd kaizen` dies with rc 1 before any session — `this is the checkout every target's 'sdd
 run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git
--C <root> fetch && git -C <root> worktree add ../<repo>-kaizen -b kaizen/<YYYYMMDD> origin/<branch>',
+-C <root> fetch && git -C <root> worktree add ../<repo>-kaizen --no-track -b kaizen/<YYYYMMDD> origin/<branch>',
 then 'sdd kaizen' from there`. With `--dry-run` the same sentence comes as a warning, after `a real run
 here would refuse:`, and the projection follows.
 
@@ -1373,9 +1377,9 @@ the finding that moved it. That is the whole point — growing stays allowed, gr
 not, and the count moves in a diff with an author. Take `<N>` from the failure message or from
 `tests/check-todo.sh` (`  ok    N finding(s) …`), never from a `grep -c` of your own: a grep does
 not know where the open section ends. Findings closed with
-`RESOLVED by <hash>` keep counting until they are deleted, which happens after the PR merges
-(`git merge-base --is-ancestor <hash> main`) — so the count usually drops on the post-merge sweep,
-not inside the mission that fixed them.
+`RESOLVED by <hash>` keep counting until the hashes are proven and the items are deleted.
+Follow the [post-merge chore](finding-prs.md#the-post-merge-chore-of-a-mission) for the proof
+and the recount. The count usually drops in that chore, not in the mission that fixed the items.
 
 ---
 

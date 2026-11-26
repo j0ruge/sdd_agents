@@ -34,9 +34,9 @@ Every handoff in `docs/handoffs/<mission>/`: `00-missao.md`, `01-plano.md`, `che
 
 Any of them failing: **stop** and write down the reason. Do not fix it — it is not your phase.
 
-**The mutation stamp is not on that list, and it is not yours** (ADR 0015 §1). In a repo that owns
-`tests/check-mutation.sh` the PR gate also demands a stamp that only `sdd health` writes, and you
-never start it: it takes twenty to fifty minutes, a headless session that ends its turn waiting on
+**The mutation stamp is not on that list, and it is not yours** (ADR 0015 §1 of the sdd kit). In a
+repo that owns `tests/check-mutation.sh` the PR gate also demands a stamp that only `sdd health`
+writes, and you never start it: it takes twenty to fifty minutes, a headless session that ends its turn waiting on
 it is a session that ended, and a stamp taken before the review bots have spoken is thrown away by
 their first fix to the code. Push and open the PR whatever the stamp says: once the PR is open and
 the stamp is all its gate misses, the runner stops on its own with rc 2 and hands it to the human.

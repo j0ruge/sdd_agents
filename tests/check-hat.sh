@@ -1203,6 +1203,23 @@ help_probes() {
   else
     fail "help: the sdd why entry of sdd help does not say that its gate runs TEST_CMD for EXEC, QA or REVIEW"
   fi
+
+  blk="$(awk '/^  sdd run <mission> /{on=1; print; next} on && /^                    /{print; next} {on=0}' <<< "$out")"
+  if grep -qF 'setsid nohup sdd run <mission> > <log> 2>&1 < /dev/null &' <<< "$blk" \
+     && grep -qF '.sdd/logs/<mission>/pipeline.log' <<< "$blk" \
+     && grep -qF 'sdd status <mission> --no-gates' <<< "$blk"; then
+    pass "help: sdd run shows its detached form and where to read the progress afterwards"
+  else
+    fail "help: sdd run shows its detached form and where to read the progress afterwards"
+  fi
+
+  blk="$(awk '/^  sdd close <mission> /{print; exit}' <<< "$out")"
+  if grep -qF 'update the base' <<< "$blk" && grep -qF 'list TODO cleanup' <<< "$blk" \
+     && grep -qF 'JIRA when enabled' <<< "$blk"; then
+    pass "help: sdd close tells operators what it does with or without JIRA"
+  else
+    fail "help: sdd close tells operators what it does with or without JIRA"
+  fi
 }
 
 
@@ -1668,6 +1685,90 @@ judge_base_probes() {
   fi
 }
 
+judge_sweep_probes() {
+  local sweep
+  sweep="$(awk '/^\*\*The triage is also the sweep\.\*\*/ { p=1 } p && !NF { exit } p { printf "%s ", $0 }' "$ROOT/agents/sdd-kaizen.md")"
+  if grep -qE 'git merge-base --is-ancestor <hash> main.*git merge-base --is-ancestor <hash> <PR head>.*gh pr view <PR> --json state,headRefOid.*MERGED' <<< "$sweep"; then
+    pass "kaizen: the sweep of the judge names both proofs of a resolution"
+  else
+    fail "kaizen: the sweep of the judge names both proofs of a resolution"
+  fi
+}
+
+checkpoint_and_todo_prose_probes() {
+  local planner executor desc
+  planner="$(awk '/^## 4\. /{s=1; next} s && /^## /{exit} s' "$ROOT/agents/sdd-planner.md")"
+  executor="$(awk '/^## 4\. /{s=1; next} s && /^## /{exit} s' "$ROOT/agents/sdd-executor.md")"
+  desc='prose: the planner and the executor state the anchor rule and the width cap as the sensors measure them'
+  if grep -qF '(`2>&1` or any other spelling), each `grep` that' <<< "$planner" \
+     && grep -qF 'reads the merged output anchors on `^  ok    `' <<< "$planner" \
+     && grep -qF "'^ *✓ '" <<< "$planner" \
+     && grep -qF 'A `grep -c` that expects only zeros owes' <<< "$planner" \
+     && grep -qF 'no anchor when the Check prints only the counts' <<< "$planner" \
+     && grep -qF '120-character width cap exempts a well-formed `RECURRED`' <<< "$executor" \
+     && grep -qF 'or an indented line carrying only the anchor' <<< "$executor"; then
+    pass "$desc"
+  else
+    fail "$desc"
+  fi
+}
+
+# A target can have an ADR with the same number. The qualifier belongs on the citation's
+# own line, including when the citation is the label of a Markdown link.
+check_adr_citations() {
+  awk '
+    {
+      rest = $0
+      while (match(rest, /(^|[^[:alnum:]_])ADR [0-9][0-9][0-9][0-9]/)) {
+        citation = substr(rest, RSTART, RLENGTH)
+        sub(/^[^[:alnum:]_]/, "", citation)
+        tail = substr(rest, RSTART + RLENGTH)
+        # Keep the last digit to preserve the word boundary for the next match.
+        rest = substr(rest, RSTART + RLENGTH - 1)
+        if (tail ~ /^[[:alnum:]_]/) continue
+        if (match(tail, /^ ?§[0-9]+/)) {
+          citation = citation substr(tail, 1, RLENGTH)
+          tail = substr(tail, RLENGTH + 1)
+        }
+        if (tail !~ /^ (of the sdd kit|do kit sdd)([^[:alnum:]_]|$)/) {
+          printf "%s:%d: bare %s\n", FILENAME, FNR, citation
+          failed = 1
+        }
+      }
+    }
+    END { if (failed) exit 1 }
+  ' "$@"
+}
+
+adr_citation_probes() {
+  local f box fixture out expected rc=0 scan_desc fixture_desc
+  local -a files=()
+  scan_desc='adr citation: no hat, template or command cites a kit ADR by its bare number'
+  fixture_desc='adr citation: a bare ADR number in a fixture hat is refused by name'
+  for f in "$ROOT"/agents/*.md "$ROOT"/templates/*.md "$ROOT"/commands/*.md; do
+    [ "$f" != "$ROOT/agents/sdd-kaizen.md" ] || continue
+    files+=("$f")
+  done
+  if out="$(check_adr_citations "${files[@]}" 2>&1)"; then pass "$scan_desc"
+  else fail "$scan_desc"$'\n'"$out"; fi
+
+  box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-hat-adr-XXXXXX")" || { fail "$fixture_desc (mktemp failed)"; return; }
+  PROBE_BOXES+=("$box")
+  fixture="$box/sdd-fixture.md"
+  cat > "$fixture" <<'EOF'
+(ADR 0018 §3).
+(ADR 0018 §3 of the sdd kit) and (ADR 0021).
+(ADR 0018 §3 do kit sdd).
+[ADR 0011 of the sdd kit](docs/adr/0011.md) and [ADR 0011 do kit sdd](docs/adr/0011.md).
+(ADR 0023
+of the sdd kit).
+EOF
+  expected="$(printf '%s:1: bare ADR 0018 §3\n%s:2: bare ADR 0021\n%s:5: bare ADR 0023\n' "$fixture" "$fixture" "$fixture")"
+  out="$(check_adr_citations "$fixture" 2>&1)" || rc=$?
+  if [ "$rc" -eq 1 ] && [ "$out" = "$expected" ]; then pass "$fixture_desc"
+  else fail "$fixture_desc (rc $rc)"$'\n'"$out"; fi
+}
+
 qa_agent_probes
 hat_promise_probes
 command_approval_probes
@@ -1694,6 +1795,9 @@ reviewer_delta_probes
 blocked_way_out_probes
 reviewer_later_code_probes
 judge_base_probes
+judge_sweep_probes
+checkpoint_and_todo_prose_probes
+adr_citation_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2

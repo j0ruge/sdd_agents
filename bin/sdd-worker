@@ -1629,7 +1629,7 @@ cmd_pr_ready() {
   # head item below it is the round the head carries only when the mission folder holds nothing git
   # has not committed — modified, staged, untracked (whatever status.showUntrackedFiles says) or
   # ignored. The first entry is named with its status.
-  if ! dirty="$(git -C "$dir" -c core.quotePath=false status --porcelain --untracked-files=all --ignored -- . 2> /dev/null)"; then
+  if ! dirty="$(GIT_OPTIONAL_LOCKS=0 git -C "$dir" -c core.quotePath=false status --porcelain --untracked-files=all --ignored -- . 2> /dev/null)"; then
     printf 'not-ready review: git status does not run in %s\n' "$dir"; return 1
   fi
   if [ -n "$dirty" ]; then

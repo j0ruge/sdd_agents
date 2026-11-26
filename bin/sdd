@@ -350,6 +350,7 @@ mission_id() {
 resolve_mission() {
   local want="${1:-}" base="$REPO_ROOT/$HANDOFF_DIR" matches=()
   [ -n "$want" ] || die "missing mission name (e.g. sdd status 20260814-spinner)"
+  [[ "$want" != -* ]] || die "'$want' is an option, not a mission — see 'sdd help'"
   [ -d "$base" ] || die "$HANDOFF_DIR/ does not exist in the target repo — no mission planned yet"
 
   if [ -d "$base/$want" ]; then
@@ -1576,7 +1577,9 @@ GATE_EXEC_DIRTY=0
 GATE_HANDOFF_BLOCKED=0
 
 # Set by gate_QA when the e2e came back RED and the app at APP_URL is down (the TCP connect was
-# refused) or is not this product (a 2xx page without APP_EXPECT), read by cmd_run to escalate instead of buying a session against a machine no session can fix. A GLOBAL
+# refused) or is not this product (a 2xx page without APP_EXPECT). cmd_run reads it to escalate
+# against an environment no session can fix. cmd_status reads it only when QA is the next phase,
+# because its table also evaluates QA when an earlier phase is still due. A GLOBAL
 # for the third time and for the reason the two above give — the rc is already spent on pass/fail
 # — and a MARKER rather than a grep of GATE_WHY, because GATE_WHY is prose: the sentence the arm
 # writes is one an operator may reword, and an early exit anchored on a substring of it would
@@ -4691,7 +4694,9 @@ autonomy_kit_stamp() {
     AUTONOMY_SHA_WARNED=1
     AUTONOMY_KIT_STAMP="|"; AUTONOMY_KIT_REV="|"; return 0
   fi
-  if [ -n "$( git -C "$SDD_HOME" status --porcelain 2>/dev/null )" ]
+  # Both reads leave the kit index alone while a target runs and someone may be committing
+  # in the kit. Like kit_guard_tree, neither read has a kit-index probe — DECLARED.
+  if [ -n "$( GIT_OPTIONAL_LOCKS=0 git -C "$SDD_HOME" status --porcelain 2>/dev/null )" ]
   then AUTONOMY_KIT_STAMP="$sha|true"
   else AUTONOMY_KIT_STAMP="$sha|false"; fi
   # %H and then rev-parse --short, so the rev is spelled with the same length rule as kit_sha (a
@@ -4699,7 +4704,7 @@ autonomy_kit_stamp() {
   # readers keep such a row on the raw axis.
   rev_full="$( git -C "$SDD_HOME" log -1 --first-parent --format=%H HEAD -- "${KIT_BEHAVIOR_PATHS[@]}" 2>/dev/null || true )"
   [ -n "$rev_full" ] && rev="$( git -C "$SDD_HOME" rev-parse --short "$rev_full" 2>/dev/null || true )"
-  if [ -n "$( git -C "$SDD_HOME" status --porcelain -- "${KIT_BEHAVIOR_PATHS[@]}" 2>/dev/null )" ]
+  if [ -n "$( GIT_OPTIONAL_LOCKS=0 git -C "$SDD_HOME" status --porcelain -- "${KIT_BEHAVIOR_PATHS[@]}" 2>/dev/null )" ]
   then AUTONOMY_KIT_REV="$rev|true"
   else AUTONOMY_KIT_REV="$rev|false"; fi
 }
@@ -6929,12 +6934,28 @@ todo_template_for() {
   fi
 }
 
+# todo_other_language_seed <file> <chosen template> prints the name of an untouched seed
+# of another language. Hash the bytes on disk, with no clean filters or line-ending conversion.
+todo_other_language_seed() {
+  local blob candidate digest
+  [ -f "$1" ] && [ ! -L "$1" ] || return 1
+  blob="$(git hash-object --no-filters -- "$1" 2>/dev/null)" || return 1
+  for candidate in "$SDD_HOME"/templates/todo.md "$SDD_HOME"/templates/todo.*.md; do
+    [ "$candidate" != "$2" ] && [ -f "$candidate" ] || continue
+    if digest="$(git hash-object --no-filters -- "$candidate" 2>/dev/null)" && [ "$digest" = "$blob" ]; then
+      printf '%s\n' "${candidate##*/}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # todo_preamble_verdict <file> <OUTPUT_LANG> — CALLED, never read through $( ): it publishes
 # TODO_PREAMBLE_VERDICT (current | stale | author | unknown), TODO_PREAMBLE_REV and _DATE (for a
-# stale one) and TODO_PREAMBLE_TEMPLATE. install seeds TODO_FILE once and never rewrites it, so a
-# target keeps the preamble of the kit it was installed from while the template moves on (L4 item
-# 10). The preamble is the file from line 1 up to its first <!-- sdd:open -->, inclusive. Equal to
-# the template on disk is `current`; else equal to the template at some revision of the kit's git is
+# stale one) and TODO_PREAMBLE_TEMPLATE. An existing TODO_FILE can keep the preamble of the kit it
+# was installed from while the template moves on (L4 item 10). The preamble is the file from line 1
+# up to its first <!-- sdd:open -->, inclusive. Equal to the template on disk is `current`; else
+# equal to the template at some revision of the kit's git is
 # `stale` (the newest such revision); equal to none is `author` — a preamble somebody wrote, like the
 # kit's own, which must not warn forever, so comparing with today's template alone was refused. A
 # file with no marker, or a kit that is not a git checkout of its own (a copy inside another repo
@@ -7121,7 +7142,7 @@ cmd_install() {
   # English templates/todo.md when no variant exists for that language. Every variant carries the
   # same two markers (tests/check-templates.sh holds them to one structure), so the sensor and the
   # agents read any of them the same way; only the prose a human reads changes.
-  local seed
+  local seed seed_hint="" other_seed
   seed="$(todo_template_for "$inst_lang")"
   [ -f "$seed" ] || die "the TODO.md seed is missing from the kit: $seed"
   # The blob of the seed this command wrote before the two-section skeleton, byte for byte. A file
@@ -7133,13 +7154,18 @@ cmd_install() {
 
   if [ ! -f "$REPO_ROOT/$inst_todo" ]; then
     # Seeded with the FORMAT, because an empty file teaches nothing and the format is what makes
-    # the entries countable. Never overwritten: a second install over a file holding real findings
-    # would take them with it.
+    # the entries countable. Only an untouched seed can later be replaced.
     cp "$seed" "$REPO_ROOT/$inst_todo"
-    ok "$inst_todo created from templates/$(basename "$seed") (out-of-scope findings go here — principle 5)"
+    if [ -z "$inst_lang" ]; then
+      seed_hint=". It was seeded in English because OUTPUT_LANG is empty. Set OUTPUT_LANG and run 'sdd install' again while the seed is untouched."
+    fi
+    ok "$inst_todo created from templates/$(basename "$seed") (out-of-scope findings go here — principle 5)${seed_hint}"
   elif [ "$(git hash-object --no-filters "$REPO_ROOT/$inst_todo" 2>/dev/null)" = "$legacy_seed_blob" ]; then
     cp "$seed" "$REPO_ROOT/$inst_todo"
     ok "$inst_todo was the untouched legacy seed — replaced by templates/$(basename "$seed") (it held no finding)"
+  elif other_seed="$(todo_other_language_seed "$REPO_ROOT/$inst_todo" "$seed")"; then
+    cp "$seed" "$REPO_ROOT/$inst_todo"
+    ok "$inst_todo was the untouched seed from templates/$other_seed — replaced by templates/${seed##*/} (it held no finding)"
   elif ! grep -qE '^<!-- sdd:open -->[[:space:]]*$' "$REPO_ROOT/$inst_todo"; then
     warn "$inst_todo predates the two-section skeleton (no <!-- sdd:open --> marker) — preserved; migrate it by hand from templates/$(basename "$seed")"
   else
@@ -7310,6 +7336,11 @@ mission_branch_declared() {
   want="$(frontmatter "$MISSION_DIR/00-missao.md" branch)"
   case "$want" in '<'*) want="" ;; esac
   printf '%s' "$want"
+}
+
+ticket_will_cut_branch() {
+  [ "$JIRA_ENABLED" = true ] && [ ! -f "$MISSION_DIR/10-ticket.md" ] &&
+    [ -z "$(mission_branch_declared)" ]
 }
 
 ensure_mission_branch() {
@@ -7949,7 +7980,15 @@ $todo_first
       *) warn "the shape of TODO_FILE was not measured ($TODO_FILE): check-todo.sh answered rc $todo_rc — $(head -n 1 <<< "$todo_out")" ;;
     esac
   fi
-  [ ! -f "$REPO_ROOT/$TODO_FILE" ] || todo_preamble_say "$TODO_FILE" "$REPO_ROOT/$TODO_FILE" "${OUTPUT_LANG:-}"
+  if [ -f "$REPO_ROOT/$TODO_FILE" ]; then
+    local seed other_seed
+    seed="$(todo_template_for "${OUTPUT_LANG:-}")"
+    if other_seed="$(todo_other_language_seed "$REPO_ROOT/$TODO_FILE" "$seed")"; then
+      warn "$TODO_FILE is still the untouched seed from templates/$other_seed, but OUTPUT_LANG selects templates/${seed##*/} — run 'sdd install' to replace it"
+    else
+      todo_preamble_say "$TODO_FILE" "$REPO_ROOT/$TODO_FILE" "${OUTPUT_LANG:-}"
+    fi
+  fi
 
   # DEFAULT_BRANCH is the base of `gh pr create` in the PR phase — the LAST phase, after EXEC, QA,
   # REVIEW and DOCS have all been paid for. Nothing ever asked the repository whether the branch was
@@ -7993,6 +8032,18 @@ $todo_first
   fi
   # The kit clone itself (L4 item 2): off its default branch, or behind what was last fetched.
   kit_stale_check
+
+  if [ ! -f "$REPO_ROOT/.claude/commands/sdd-plan.md" ] &&
+     { [ -z "${HOME:-}" ] || [ ! -f "$HOME/.claude/commands/sdd-plan.md" ]; }; then
+    local plan_source plan_target
+    printf -v plan_source '%q' "$SDD_HOME/commands/sdd-plan.md"
+    if [ "$REPO_ROOT" = "$SDD_HOME" ]; then
+      warn "/sdd-plan not found — create ~/.claude/commands/ and run 'ln -s $plan_source ~/.claude/commands/'"
+    else
+      printf -v plan_target '%q' "$REPO_ROOT/.claude/commands/"
+      warn "/sdd-plan not found — run 'sdd-link-agents', or create $plan_target and run 'ln -s $plan_source $plan_target'"
+    fi
+  fi
 
   if [ "$PHASE_ENGINE" = claude ]; then
     # --- target repo plugins ---
@@ -9048,10 +9099,18 @@ cmd_status() {
   local next; next="$(current_phase)"
   if [ -z "$next" ]; then
     printf '  %spipeline complete — only the merge is left (the human gate)%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
+    post_merge_hint
   else
     "gate_$next" || true
     printf '  next phase: %s%s%s — %s\n' "$C_BOLD" "$next" "$C_RESET" "$GATE_WHY"
-    printf '  %srun: sdd run %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
+    if [ "$next" = "QA" ] && [ "$GATE_APP_DOWN" = "1" ]; then
+      if [ "$(frontmatter "$MISSION_DIR/30-handoff-qa.md" status)" = "done" ]; then
+        dim "  QA is closed on disk (30-handoff-qa.md: done); its e2e cannot be re-verified now"
+      fi
+      dim "  start the app (or stop the one on its port), then 'sdd status $MISSION' again — 'sdd run' now would only escalate app-down"
+    else
+      printf '  %srun: sdd run %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
+    fi
   fi
 }
 
@@ -9159,7 +9218,7 @@ session_leftovers() {
     [ -n "$line" ] || continue
     LEFTOVER_DIRTY_N=$((LEFTOVER_DIRTY_N + 1))
     if [ "$LEFTOVER_DIRTY_N" -le 10 ]; then LEFTOVER_DIRTY="${LEFTOVER_DIRTY:+$LEFTOVER_DIRTY$'\n'}$line"; fi
-  done < <(hat_status_lines)
+  done < <( GIT_OPTIONAL_LOCKS=0 hat_status_lines )
   return 0
 }
 
@@ -9645,27 +9704,54 @@ adr_check_repo() {
   [ "$ADR_FAILS" -eq 0 ]
 }
 
-# adr_next_id <dir> — the next free id, zero-padded to four. Empty directory ⇒ 0001.
-#
-# MAX+1, and a gap is never reused. Reusing one would hand out a number that a merged branch, a
-# handoff, a commit message or somebody's notes may already cite — the ADR would be gone and the
-# citation would silently point at a different decision, which is the whole defect this section
-# exists to close, inverted.
+adr_max_id() {
+  local file base id max=0
+  while IFS= read -r -d '' file; do
+    base="${file##*/}"
+    [[ "$base" =~ $ADR_FILE_RE ]] || continue
+    # 0008 and 0009 are decimal, not octal. Pad only when publishing the result.
+    id=$((10#${base%%-*}))
+    [ "$id" -le "$max" ] || max="$id"
+  done
+  printf '%d\n' "$max"
+}
+
+adr_disk_max_id() {
+  adr_max_id < <(find "$1" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null || true)
+}
+
+# adr_next_id <root> — publish MAX+1 as ADR_NEXT_ID and the source of the maximum as
+# ADR_NEXT_SOURCE. The checkout on disk wins ties. Reusing a gap could make an existing citation
+# point at a different decision. A branch never pushed from another machine stays invisible.
+ADR_NEXT_ID=""
+ADR_NEXT_SOURCE=""
 adr_next_id() {
-  local dir="$1" f base max=0 id
-  if [ -d "$dir" ]; then
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      base="$(basename -- "$f")"
-      grep -qE "$ADR_FILE_RE" <<< "$base" || continue
-      # `10#` because 0008 is not octal — without it 0008 and 0009 are arithmetic errors, which is
-      # the ordinary way this family of bug arrives and the reason the padding is applied on the
-      # way OUT and never carried through the arithmetic.
-      id=$((10#${base%%-*}))
-      [ "$id" -le "$max" ] || max="$id"
-    done < <(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null)
-  fi
-  printf '%04d\n' "$((max + 1))"
+  local root="$1" dir="${ADR_DIR%/}" max id ref entry worktree
+  ADR_NEXT_SOURCE=""
+  max="$(adr_disk_max_id "$root/$dir")" || max=0
+  while IFS= read -r ref; do
+    # Keep the NUL-terminated paths of regular files, not trees, symlinks or gitlinks.
+    if id="$(adr_max_id < <(
+      git -C "$root" ls-tree -z "$ref" -- "$dir/" 2>/dev/null |
+        sed -zEn 's/^100(644|755) blob [0-9a-f]+\t//p' || true
+    ))" && [ "$id" -gt "$max" ]; then
+      max="$id"
+      ADR_NEXT_SOURCE="$ref"
+    fi
+  done < <(git -C "$root" for-each-ref --format='%(refname)' refs/heads refs/remotes 2>/dev/null || true)
+  # Git before 2.36 only has line-delimited porcelain. Convert its separators for the same reader.
+  while IFS= read -r -d '' entry; do
+    case "$entry" in
+      'worktree '*) worktree="${entry#worktree }" ;;
+      *) continue ;;
+    esac
+    [ "$worktree" != "$root" ] || continue
+    if id="$(adr_disk_max_id "$worktree/$dir")" && [ "$id" -gt "$max" ]; then
+      max="$id"
+      ADR_NEXT_SOURCE="$worktree"
+    fi
+  done < <(git -C "$root" worktree list --porcelain -z 2>/dev/null || git -C "$root" worktree list --porcelain 2>/dev/null | tr '\n' '\000' || true)
+  printf -v ADR_NEXT_ID '%04d' "$((max + 1))"
 }
 
 # adr_reserve <path> — create the file, or fail. THE poka-yoke of this whole mission.
@@ -9823,7 +9909,8 @@ adr_new() {
   grep -qE '^[a-z0-9-]+$' <<< "$slug" \
     || die "sdd adr new: --slug '$slug' is not lower-case letters, digits and hyphens"
   local dir="$root/${ADR_DIR%/}" rel id path
-  id="$(adr_next_id "$dir")"
+  adr_next_id "$root"
+  id="$ADR_NEXT_ID"
   rel="${ADR_DIR%/}/$id-$slug.md"
   path="$root/$rel"
 
@@ -9839,6 +9926,12 @@ adr_new() {
       ''|TBD|none|\<*) : ;;
       *) die "sdd adr new: $spec_rel already declares '$cur' — change it by hand, or point --spec somewhere else" ;;
     esac
+  fi
+
+  if [ -n "$ADR_NEXT_SOURCE" ]; then
+    local previous_id
+    printf -v previous_id '%04d' "$((10#$id - 1))"
+    adr_info "id $previous_id is in use on $ADR_NEXT_SOURCE — allocating $id" >&2
   fi
 
   if [ "$dry" = 1 ]; then
@@ -10626,13 +10719,10 @@ cmd_run() {
   # BEFORE the base-branch warning, and the order is the point: the checkout is what decides where
   # this pipeline will commit, so warning first would cry wolf at a human the runner is about to
   # move off the base branch anyway — and a warning that cries wolf is how people learn to skip
-  # reading them. In a dry run nothing is switched, so the projection still says out loud that you
-  # are standing on `main`.
+  # reading them. A dry run switches nothing but applies the same TICKET exception to the warning.
   ensure_mission_branch
-  # Before the first gate, so it is on screen ahead of anything that could scroll it away. It warns
-  # in a dry run too: the projection is where you look BEFORE spending sessions, which makes it the
-  # cheapest moment to learn you are about to commit into the base branch.
-  warn_if_on_base_branch
+  # A forced phase or budget override can commit a note before TICKET creates the branch.
+  if [[ -n "$force_phase" || "$BUDGET_OVERRIDE" == 1 ]] || ! ticket_will_cut_branch; then warn_if_on_base_branch; fi
   # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The CLI value is kept
   # HERE, before the loop — inside it, force_phase is also set by the runner itself
   # (PUBLISH_ON_REVIEW_BLOCKED=draft), and that is the runner's hand, not the human's. It is consumed
@@ -10715,6 +10805,7 @@ cmd_run() {
       info ""
       printf '%s✓ pipeline complete — only the merge is left (the one human gate)%s\n' \
         "$C_GREEN$C_BOLD" "$C_RESET"
+      post_merge_hint
       local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
       [ -n "$prurl" ] && info "  $prurl"
       kaizen_reminder
@@ -11370,6 +11461,7 @@ cmd_retry() {
   # AFTER ensure_mission_branch, exactly like cmd_run and for the same reason: the checkout is what
   # decides where this retry will commit, so warning first would cry wolf at a human the runner is
   # about to move off the base branch anyway.
+  # The retry intervention note comes before the session that can create the branch in TICKET.
   warn_if_on_base_branch
   local phase
   derive_phase
@@ -12890,7 +12982,17 @@ kaizen_reminder() {
     [ -f "$f" ] || continue
     [ "$(frontmatter "$f" kit_sha_judged)" = "$sha" ] && return 0
   done
-  # WHERE this is being said from decides WHAT is true. The count above is this repo's missions,
+  local kit_config="$SDD_HOME/.sdd/config.sh" kit_todo count budget backlog=''
+  local cost="'sdd kaizen' is one paid session, two when its gate fails"
+  # Do not inherit the settings of the repo whose run just finished.
+  kit_todo="$(unset -v TODO_FILE; config_read_key "$kit_config" TODO_FILE 2>/dev/null)" || kit_todo=''
+  if count="$(bash "$SDD_HOME/tests/check-todo.sh" --count "$SDD_HOME/${kit_todo:-TODO.md}" 2>/dev/null)"; then
+    backlog="the kit backlog holds $count open finding(s); "
+  fi
+  budget="$(unset -v BUDGET_PER_PHASE_USD; config_read_key "$kit_config" BUDGET_PER_PHASE_USD 2>/dev/null)" || budget=''
+  if [ -n "$budget" ]; then cost+=", each capped at US\$ $budget"; fi
+  local suffix=" — ${backlog}${cost}"
+  # WHERE this is being said from decides WHAT is true. The series count is this repo's missions,
   # and it used to be followed, in every repo, by "run 'sdd kaizen' in the kit repo" — a pointer to
   # a judge that reads a DIFFERENT set of numbers. In a target repo the human would open the kit,
   # run the command, and be told something about the kit's own missions that has nothing to do with
@@ -12898,7 +13000,7 @@ kaizen_reminder() {
   local kit_id here_id
   kit_id="$( REPO_ROOT="$SDD_HOME" ledger_repo_root )"; here_id="$( ledger_repo_root )"
   if [ -n "$kit_id" ] && [ "$kit_id" = "$here_id" ]; then
-    dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME), for the next kit mission plan"
+    dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME), for the next kit mission plan$suffix"
     return 0
   fi
   # Outside the kit the pointer is to the kit, and the sentence is the one thing here that had to
@@ -12911,7 +13013,7 @@ kaizen_reminder() {
   # that just finished contributed, `sdd run` carries no ledger option to widen it with, and a
   # reminder that answered with other projects' missions would be reporting somebody else's work
   # as this repo's.
-  dim "  autonomy series: $n mission(s) of this repo on kit $sha are in the ledger. The kaizen judge counts them (ADR 0005) — run 'sdd kaizen' in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME)."
+  dim "  autonomy series: $n mission(s) of this repo on kit $sha are in the ledger. The kaizen judge counts them (ADR 0005) — run 'sdd kaizen' in the kit repo, from a linked worktree of it (ADR 0017; the kit is $SDD_HOME).$suffix"
 }
 
 # KAIZEN gate — same convention as every gate (0/1, reason in GATE_WHY), but NOT in PHASES:
@@ -13182,7 +13284,7 @@ cmd_kaizen() {
     local shared_why q_root q_wt q_base
     q_root="$(printf '%q' "$REPO_ROOT")"; q_wt="$(printf '%q' "../${REPO_ROOT##*/}-kaizen")"
     q_base="$(printf '%q' "origin/$DEFAULT_BRANCH")"
-    shared_why="this is the checkout every target's 'sdd run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git -C $q_root fetch && git -C $q_root worktree add $q_wt -b kaizen/$(date +%Y%m%d) $q_base', then 'sdd kaizen' from there"
+    shared_why="this is the checkout every target's 'sdd run' executes, and a KAIZEN session that commits here stops them with KIT-TOUCHED (ADR 0017) — run 'git -C $q_root fetch && git -C $q_root worktree add $q_wt --no-track -b kaizen/$(date +%Y%m%d) $q_base', then 'sdd kaizen' from there"
     if [ "$DRY_RUN" = 1 ]; then warn "a real run here would refuse: $shared_why"; else die "$shared_why"; fi
   fi
   # A dirty tree does not block (the judge may be invoked mid-work on purpose), but the rows born
@@ -13313,7 +13415,7 @@ sdd — runner for the autonomous development agent pipeline
 
 USAGE
   sdd install [--force]      install the kit into the target repo (.sdd/config.sh + .claude/agents/)
-  sdd link-agents            link an installed target's agents to this kit (sdd-link-agents)
+  sdd link-agents            link an installed target's agents and slash commands to this kit (sdd-link-agents)
   sdd preflight              environment sensor: tools, auth, config, plugins, git
   sdd health                 KIT sensor: suite, mutation, doc and config drift; skips the mutation
                            catalogue over content whose key is already measured green
@@ -13325,8 +13427,11 @@ USAGE
   sdd approve <mission>      show the plan and, on an explicit y, write the human approval into
                              00-missao.md and commit it (the PLAN gate — never a session)
   sdd run <mission>          run from the first unsatisfied phase through to the PR
+                             If the launching session or terminal will close, start it detached.
+                             setsid nohup sdd run <mission> > <log> 2>&1 < /dev/null &
+                             Follow .sdd/logs/<mission>/pipeline.log or use sdd status <mission> --no-gates.
   sdd retry <mission>        retry the current phase with a fresh session
-  sdd close <mission>        post-merge: close the JIRA issue
+  sdd close <mission>        post-merge: update the base, list TODO cleanup, and close JIRA when enabled
   sdd note-manual <mission> <PHASE>
                              record a phase done BY HAND: an intervention note in the checkpoint
                              (committed alone) and a `manual` row in the ledger, which grades nothing
@@ -13356,9 +13461,9 @@ USAGE
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the
                              ledger, with the composition of the slice beside the numbers
   sdd adr new --slug <s> [--ticket <id>] [--spec <path>] [--dry-run]
-                             reserve the next free id in ADR_DIR and write the header stub. The
-                             reservation is O_EXCL: a number is never handed out twice, and an
-                             existing file is never overwritten. --spec writes BOTH sides of the
+                             reserve the next free id in ADR_DIR and write the header stub. Reads
+                             ids in use across the branches and worktrees of this clone. O_EXCL
+                             never overwrites an existing file. --spec writes BOTH sides of the
                              link — the ADR's `Spec:` line and the spec's `adr:` key
   sdd adr check [--repo <root>] [--mission <m>] [--phase plan|exec]
                              read the traceability links back. No scope ⇒ the whole repo; --mission
@@ -13409,7 +13514,8 @@ EOF
 
 # ---------------------------------------------------------------------------
 cmd_link_agents() {
-  local linked already untracked src name target IGNORE MARKER
+  local dir kind linked already untracked src name relative target IGNORE MARKER indexed
+  local previous_planner previous_root command_link
   # It takes no argument, and one is refused before anything is linked (item E): `sdd link-agents
   # --help` used to link the agents. bin/sdd-link-agents enters through main() with the same argv.
   [ $# -eq 0 ] || die "unknown link-agents option: $1 (see 'sdd help')"
@@ -13424,47 +13530,73 @@ cmd_link_agents() {
   [ "$REPO_ROOT" != "$SDD_HOME" ] \
     || die "refusing to link the kit to itself — $REPO_ROOT is the kit."
 
-  mkdir -p "$REPO_ROOT/.claude/agents"
-
-  linked=0; already=0; untracked=0
-  for src in "$SDD_HOME"/agents/sdd-*.md; do
-    name="$(basename "$src")"
-    target="$REPO_ROOT/.claude/agents/$name"
-
-    # Drop it from the index BEFORE replacing it: a tracked path that becomes a symlink shows up as a
-    # content change, and the whole point is that these stop being versioned.
-    if git -C "$REPO_ROOT" ls-files --error-unmatch ".claude/agents/$name" >/dev/null 2>&1; then
-      git -C "$REPO_ROOT" rm --cached --quiet ".claude/agents/$name"
-      untracked=$((untracked + 1))
-    fi
-
-    if [ -L "$target" ] && [ "$(readlink -f "$target")" = "$(readlink -f "$src")" ]; then
-      already=$((already + 1))
-      continue
-    fi
-    ln -sfn "$src" "$target"
-    linked=$((linked + 1))
-  done
-
-  [ "$linked"  -gt 0 ] && ok "$linked agent(s) linked to $SDD_HOME/agents/"
-  [ "$already" -gt 0 ] && dim "  $already already linked"
-  [ "$untracked" -gt 0 ] && ok "$untracked agent(s) removed from the git index (now local-only)"
-
-  # `.gitignore`, appended once. The marker line is what makes the second run a no-op.
   IGNORE="$REPO_ROOT/.gitignore"
-  MARKER='.claude/agents/sdd-*.md'
-  if ! grep -qxF "$MARKER" "$IGNORE" 2>/dev/null; then
-    {
-      [ -s "$IGNORE" ] && printf '\n'
-      printf '# sdd kit agents: local symlinks created by\n'
-      printf '# `sdd install && sdd-link-agents`. These links stay outside Git because they carry\n'
-      printf '# a machine-specific absolute path and would dangle in another checkout.\n'
-      printf '%s\n' "$MARKER"
-    } >> "$IGNORE"
-    ok ".gitignore updated"
-  else
-    dim "  .gitignore already carries the rule"
+  # The sentinel keeps trailing newlines. A shared root alone does not identify a kit:
+  # require the command ignore rule and, if that root still exists, its kit runner.
+  previous_planner="$(readlink -n "$REPO_ROOT/.claude/agents/sdd-planner.md" && printf .)" || previous_planner=""
+  previous_root="${previous_planner%/agents/sdd-planner.md.}"
+  if [[ "$previous_planner" != /*/agents/sdd-planner.md. ]] \
+     || ! grep -qxF '.claude/commands/sdd-*.md' "$IGNORE" 2>/dev/null \
+     || { [ -e "$previous_root" ] && [ ! -f "$previous_root/bin/sdd" ]; }; then
+    previous_root="$SDD_HOME"
   fi
+
+  # Keep the old planner link until the commands are in place, so a failed write is retryable.
+  for dir in commands agents; do
+    kind="${dir%s}"
+    mkdir -p "$REPO_ROOT/.claude/$dir"
+    linked=0; already=0; untracked=0
+    for src in "$SDD_HOME/$dir"/sdd-*.md; do
+      [ -f "$src" ] || continue
+      name="${src##*/}"
+      relative=".claude/$dir/$name"
+      target="$REPO_ROOT/$relative"
+
+      # A retry may see both old and active command links. Preserve other symlinks and
+      # index entries, even when they resolve to identical contents.
+      if [ "$dir" = commands ] && { [ -e "$target" ] || [ -L "$target" ]; } \
+        && ! { [ ! -L "$target" ] && [ -f "$target" ] && cmp -s "$src" "$target"; } \
+        && ! { command_link="$(readlink -n "$target" && printf .)" \
+          && [[ "$command_link" == "$src." || "$command_link" == "$previous_root/commands/$name." ]] \
+          && indexed="$(git -C "$REPO_ROOT" ls-files -- "$relative")" && [ -z "$indexed" ]; }; then
+        warn "preserving local command $relative"
+        continue
+      fi
+
+      # Drop it from the index BEFORE replacing it: a tracked path that becomes a symlink shows up as a
+      # content change, and the whole point is that these stop being versioned.
+      if git -C "$REPO_ROOT" ls-files --error-unmatch "$relative" >/dev/null 2>&1; then
+        git -C "$REPO_ROOT" rm --cached --quiet "$relative"
+        untracked=$((untracked + 1))
+      fi
+
+      if [ -L "$target" ] && [ "$(readlink -f "$target")" = "$(readlink -f "$src")" ]; then
+        already=$((already + 1))
+        continue
+      fi
+      ln -sfn "$src" "$target"
+      linked=$((linked + 1))
+    done
+
+    [ "$linked"  -gt 0 ] && ok "$linked $kind(s) linked to $SDD_HOME/$dir/"
+    [ "$already" -gt 0 ] && dim "  $already $kind(s) already linked"
+    [ "$untracked" -gt 0 ] && ok "$untracked $kind(s) removed from the git index (now local-only)"
+
+    # `.gitignore`, appended once per directory. The marker makes the second run a no-op.
+    MARKER=".claude/$dir/sdd-*.md"
+    if ! grep -qxF "$MARKER" "$IGNORE" 2>/dev/null; then
+      {
+        [ -s "$IGNORE" ] && printf '\n'
+        printf '# sdd kit %s: local symlinks created by\n' "$dir"
+        printf '# `sdd install && sdd-link-agents`. These links stay outside Git because they carry\n'
+        printf '# a machine-specific absolute path and would dangle in another checkout.\n'
+        printf '%s\n' "$MARKER"
+      } >> "$IGNORE"
+      ok ".gitignore updated"
+    else
+      dim "  .gitignore already carries the rule for $dir"
+    fi
+  done
 
   info ""
   dim "Next: $ /sdd-plan   (see $SDD_HOME/docs/plan-only.md)"
@@ -13577,7 +13709,12 @@ main() {
     case "$arg" in -h|--help) cmd_help; return 0 ;; esac
   done
   coordination_enter "$@" || admission=$?
-  [ "$COORDINATION_ADMITTED" = 1 ] || return "$admission"
+  if [ "$COORDINATION_ADMITTED" != 1 ]; then
+    if [ "$admission" -eq 75 ]; then
+      printf '%s\n' 'sdd status <mission> --no-gates reads the mission off the disk with no lock, while the owner runs' >&2
+    fi
+    return "$admission"
+  fi
   local subcmd="${1:-help}"
   shift || true
   case "$subcmd" in
@@ -13726,6 +13863,10 @@ cmd_note_manual() {
   ok "phase $phase of $MISSION recorded as done by hand: $note"
 }
 
+post_merge_hint() {
+  dim "  after the merge: sdd close $MISSION — comes home, fast-forwards $DEFAULT_BRANCH, lists what the merge resolved, and closes the JIRA issue when JIRA_ENABLED=true"
+}
+
 # Post-merge: closes the JIRA issue. Fired by the human after the merge — it is the only thing
 # that happens AFTER the human gate, which is why it is not part of `sdd run`.
 # COMING HOME. `sdd close` is post-merge: the work is in the default branch and the mission branch
@@ -13752,8 +13893,8 @@ cmd_note_manual() {
 # bounded (`timeout 30`, `GIT_TERMINAL_PROMPT=0`): with no timeout(1) it is SKIPPED, because an
 # unbounded fetch could hang the close, and the fast-forward is still tried against the upstream
 # already on the machine — a local merge does not hang. The `ok` says whether anything moved.
-close_return_home() { # close_return_home <verified|unverified> — what cmd_close's merge check saw
-  local seen="${1:-unverified}" current out rc=0 where upstream remote merge before after
+close_return_home() { # close_return_home <verified|unverified> <PR head or empty> <PR number or empty>
+  local seen="${1:-unverified}" pr_head="${2:-}" pr_number="${3:-}" current out rc=0 where
   [ -n "${DEFAULT_BRANCH:-}" ] || return 0
   current="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "" )"
   [ -n "$current" ] || return 0
@@ -13781,6 +13922,17 @@ close_return_home() { # close_return_home <verified|unverified> — what cmd_clo
       where="back on '$DEFAULT_BRANCH' — 50-pr.md names no pr_url, so the merge was not verified"
     fi
   fi
+  close_fast_forward_base "$where"
+  out="$( GIT_OPTIONAL_LOCKS=0 git -C "$REPO_ROOT" status --porcelain 2>/dev/null )" || return 0
+  [ -z "$out" ] || return 0
+  close_list_resolved "$seen" "$pr_head"
+  if [ "$seen" = verified ]; then
+    close_list_open_pr_lines "$pr_number"
+  fi
+}
+
+close_fast_forward_base() {
+  local where="$1" upstream remote merge before after out rc=0
   upstream="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref "$DEFAULT_BRANCH@{upstream}" 2>/dev/null || true )"
   if [ -z "$upstream" ]; then ok "$where; no upstream, nothing to fast-forward"; return 0; fi
   # Remote and branch from the config, never split off the abbreviated name: a remote may carry a
@@ -13814,6 +13966,57 @@ close_return_home() { # close_return_home <verified|unverified> — what cmd_clo
   fi
 }
 
+# A squash proof only covers this mission's PR. If its head is not in the local repository it
+# proves nothing. For another PR, the TODO template describes how to look up its head by hash.
+close_list_resolved() { # close_list_resolved <verified|unverified> <PR head or empty>
+  local seen="$1" pr_head="$2" sensor="$SDD_HOME/tests/check-todo.sh" todo="$REPO_ROOT/$TODO_FILE"
+  local rows line hashes title hash oid proof evidence
+  local -a item_hashes=() findings=()
+  [ -f "$todo" ] && [ -f "$sensor" ] || return 0
+  rows="$(bash "$sensor" --resolved "$todo" 2>/dev/null)" || return 0
+  [ -n "$rows" ] || return 0
+  if ! [[ "$pr_head" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then pr_head=""; fi
+
+  while IFS=$'\t' read -r line hashes title; do
+    [ -n "$hashes" ] || continue
+    IFS=, read -r -a item_hashes <<< "$hashes"
+    evidence=""
+    for hash in "${item_hashes[@]}"; do
+      # Disambiguate in the object database, not the ref namespace. Only a unique commit counts.
+      oid="$(git -C "$REPO_ROOT" rev-parse --disambiguate="$hash" 2>/dev/null)" || continue 2
+      [ "$(git -C "$REPO_ROOT" cat-file -t "$oid" 2>/dev/null)" = commit ] || continue 2
+      if git -C "$REPO_ROOT" merge-base --is-ancestor "$oid" "refs/heads/$DEFAULT_BRANCH" 2>/dev/null; then
+        proof="in $DEFAULT_BRANCH"
+      elif [ "$seen" = verified ] && [ -n "$pr_head" ] &&
+        git -C "$REPO_ROOT" merge-base --is-ancestor "$oid" "$pr_head" 2>/dev/null; then
+        proof="in the head of the merged PR"
+      else
+        continue 2
+      fi
+      evidence+="${evidence:+; }$hash: $proof"
+    done
+    findings+=("$TODO_FILE:$line  $title  ($evidence)")
+  done <<< "$rows"
+  [ -n "${findings[0]:-}" ] || return 0
+  printf '%s finding(s) in %s can go — their RESOLVED by is merged:\n' "${#findings[@]}" "$TODO_FILE"
+  printf '%s\n' "${findings[@]}"
+}
+
+# Handoffs are historical. Only the literal open spellings in tracked text outside them are
+# reported, and the person closing the mission decides whether to update those references.
+close_list_open_pr_lines() { # close_list_open_pr_lines <PR number or empty>
+  local pr_number="$1" rows file line content
+  [ -n "$pr_number" ] || return 0
+  # NUL separates the path and line number so a colon in the path is not a delimiter.
+  rows="$(git -C "$REPO_ROOT" grep -IznE --no-color -e "PR #$pr_number (aberto|open)\b" \
+    -- . ":(exclude,literal)$HANDOFF_DIR" 2>/dev/null |
+    while IFS= read -r -d '' file && IFS= read -r -d '' line && IFS= read -r content; do
+      printf '%s:%s: %s\n' "${file//$'\n'/\\n}" "$line" "$content"
+    done)" || return 0
+  [ -n "$rows" ] || return 0
+  printf '%s line(s) still give PR #%s as open:\n%s\n' "$(grep -c '^' <<< "$rows")" "$pr_number" "$rows"
+}
+
 cmd_close() {
   load_config
   resolve_mission "${1:-}"
@@ -13823,19 +14026,22 @@ cmd_close() {
   # "post-merge" is what makes leaving the mission branch safe (#182: the JIRA-less arm returned
   # early, before both the check and the trip home, and left the human on a spent branch).
   local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
-  local merge_seen=unverified
+  local merge_seen=unverified pr_head="" pr_number=""
   if [ -n "$prurl" ]; then
-    local merged
-    merged="$( cd "$REPO_ROOT" && gh pr view "$prurl" --json state --jq .state 2>/dev/null || true )"
+    local merged pr_view
+    if [[ "$prurl" =~ /([0-9]+)$ ]]; then pr_number="${BASH_REMATCH[1]}"; fi
+    pr_view="$( cd "$REPO_ROOT" && gh pr view "$prurl" --json state,headRefOid --jq '.state, .headRefOid' 2>/dev/null )" || pr_view=""
+    merged="$(sed -n 1p <<< "$pr_view")"
     if [ "$merged" != "MERGED" ]; then
       die "PR $prurl is '$merged', not MERGED — 'sdd close' is post-merge"
     fi
     merge_seen=verified
+    pr_head="$(sed -n 2p <<< "$pr_view")"
   fi
 
   if [ "$JIRA_ENABLED" != "true" ]; then
     info "JIRA_ENABLED=false — nothing to close in JIRA"
-    close_return_home "$merge_seen"
+    close_return_home "$merge_seen" "$pr_head" "$pr_number"
     return 0
   fi
   local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"
@@ -13865,7 +14071,7 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
     # nobody spent would be the same class of lie as the rc this whole function stopped believing.
     pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=none  rc=0  verified=true  log=none"
     ok "$issue is already Done — JIRA confirms it, and no session was spent"
-    close_return_home "$merge_seen"
+    close_return_home "$merge_seen" "$pr_head" "$pr_number"
     return 0
   fi
 
@@ -13994,7 +14200,8 @@ blocks the transition, say what it is and stop — but do not stop to request pe
     # second label ANDed onto the first. A session that fell over after closing the issue closed it.
     if [ "$rc" -ne 0 ]; then dim "  (the close session exited $rc — see $close_logs — but the issue is Done, so the artifact decides)"; fi
     ok "$issue closed — JIRA confirms it is Done"
-    close_return_home "$merge_seen"
+    # The paid arm passes the same merge evidence as the tested already-Done arm.
+    close_return_home "$merge_seen" "$pr_head" "$pr_number"
     return 0
   fi
   # THREE outcomes, not two, and the third is why this branch exists: "I asked and JIRA said no" and

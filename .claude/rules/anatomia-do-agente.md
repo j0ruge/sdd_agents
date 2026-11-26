@@ -344,9 +344,14 @@ máquina não tem **nenhuma linha `session`** da missão: é a forma de uma miss
 computador, e a pergunta fazia o humano gravar como manual o que uma sessão rodou. Presença é
 `session`, nunca "qualquer linha" — a `manual` que a dica manda gravar reabriria a pergunta para
 toda outra fase. Limite declarado: missão feita inteira à mão nesta máquina também cala.
-O `docs/adr/` deixou de ser memória **sem rota**: `sdd adr new` aloca o número com O_EXCL e escreve
-os dois lados do vínculo; `sdd adr check` lê de volta, em dois escopos. A rota do ADR é o
-`sdd-planner` com o humano, e o gate de PLAN é quem cobra. Desde `20261004-lote-4-a-catraca-zera`
+O `docs/adr/` deixou de ser memória **sem rota**. `sdd adr new` escolhe o número seguinte ao
+maior arquivo regular de ADR visível no checkout, nos refs locais e de rastreamento remoto e no
+disco dos demais worktrees. A saída indica a origem do máximo quando ela fica fora do checkout.
+A criação exclusiva protege o arquivo de destino, não serializa alocações entre worktrees e
+não enxerga branches que só existem em outra máquina. Com `--spec`, o comando escreve os dois
+lados do vínculo. `sdd adr check` lê de volta em dois escopos.
+A rota do ADR é o `sdd-planner` com o humano, e o gate de PLAN é quem cobra. Desde
+`20261004-lote-4-a-catraca-zera`
 o próprio kit roda sob `ADR_CHECK=block`: as 14 missões anteriores ao mecanismo declaram `adr:`
 (três apontam para a ADR de que nasceram — 0003, 0004 e 0006, que ganharam `Spec:` —, onze dizem
 `none`), e o `sdd adr check` responde rc 0 sem nenhuma missão indecisa.
@@ -539,7 +544,7 @@ na CLI. O humano que precisa vigiar um `tail -F` para saber que a
 linha parou não tem hook — tem vigília.
 
 **Admissão não é escalada.** `CHECKOUT-BUSY`/75 não abre sessão, não altera checkpoint,
-não escreve ledger de missão e não chama hook; `status --no-gates` expõe o proprietário.
+não escreve ledger de missão e não chama hook. A recusa indica `sdd status --no-gates`, que expõe o proprietário e lê o disco sem disputar a trava.
 O prazo do hook vale para toda a árvore: um subreaper local cancela também filhos em outra
 sessão, com os mesmos 5 s + 1 s; o lock externo só sai depois do reap. Background do hook
 não pode sobreviver indefinidamente. A semântica geral de órfãos da execução é preservada.
@@ -567,7 +572,14 @@ sessão posterior fechar, e até dez caminhos sujos; com outro dono no checkout,
 o stream mais novo como em curso), e o journal ganhou a linha `LEFTOVER <X> streams=<n> dirty=<n>`
 antes da sessão nova que abre sobre essa sobra (no `run_phase`, nunca no retry, que não leva o
 bloco); `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
-fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria: teto por missão
+fase (`phase_budget_usd`).
+O merge do PR é humano. Se a QA for a próxima fase e o app não responder, `sdd status` manda
+restaurá-lo e distingue o handoff `done` em disco da e2e que não pôde revalidar.
+Ao terminar a corrida, `sdd run` e `sdd status` indicam `sdd close` após o merge, com ou sem JIRA.
+De volta à base limpa, o fechamento lista as resoluções comprovadas sem remover itens.
+Se confirmou o PR como `MERGED` e a URL termina com o número do PR, também lista as linhas
+versionadas que ainda o dão como aberto, fora dos handoffs, sem editar os arquivos.
+Desde a auditoria: teto por missão
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
 `ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos
 mais um de encerramento forçado, e a linha `- intervention:` escrita pelo

@@ -132,6 +132,9 @@
 #        tests/check-todo.sh --count <file> (print the parser's item count, even when the lint
 #                                            fails — for tools that mirror the findings elsewhere
 #                                            and must prove their own parser agrees)
+#        tests/check-todo.sh --resolved <file>
+#                                           (valid RESOLVED by values outside code in open items:
+#                                            line<TAB>hash[,hash…]<TAB>title)
 #        tests/check-todo.sh --anchors <file> [<prefix>]
 #                                           (measure the anchors only — ADR 0011 — of every open item,
 #                                            or of those whose anchor starts with <prefix>; one
@@ -292,8 +295,8 @@ WIDTH_CAP=120
 # quotes, alone on its line. The sensor hands it to awk as `rtok`, and the awk program never spells
 # the word itself.
 RECURRED_TOKEN="RECURRED"
-# Beside that token, the two section markers are the ONLY words this sensor reads, and they are
-# English on purpose: the heading above each one is content in OUTPUT_LANG (`## Aberto`, `## Open`,
+# The section markers, like the kit tokens inside an item, are English on purpose. The heading
+# above each one is content in OUTPUT_LANG (`## Aberto`, `## Open`,
 # anything), so a sensor keyed on the heading text would work in one language and go quietly blind
 # in every other one. That is what happened: the previous version located the section by
 # `^## Aberto`, and in a target whose findings live under another heading it fell back to "the
@@ -319,13 +322,13 @@ valid_cap() {
   esac
 }
 
-# todo_awk <file> <cap> <lint|count> — ONE parser, two views.
+# todo_awk <file> <cap> <lint|count|anchors|resolved> — one parser, four views.
 #
 # The count shares this parser instead of getting its own `grep -c`: TODO.md documents its own
 # format inside a ```md block whose example line is itself an unchecked item, so a grep counts one
 # more than the parser sees. Two mechanisms answering the same question is how they drift.
 #
-# ── Why there is no fence tracking here ────────────────────────────────────────────────────────
+# ── Why lint does not track fences ─────────────────────────────────────────────────────────────
 # Six adversarial rounds, and every single fail-open lived in the fence logic: a one-way latch, a
 # four-backtick block closing on an inner marker, an inline code span opening a phantom block, a
 # closer carrying an info string, a 4-space indent that CommonMark calls a code block. The cause
@@ -335,7 +338,8 @@ valid_cap() {
 # So it stopped. The findings section of TODO.md contains NO fenced block — the only one is the
 # format example in the header — so the parser skips the header (everything above the open
 # marker) wholesale and forbids fences after it. Nothing to desync, and every shape that used to hide behind a fence is now judged by
-# a rule that never looks at fences at all.
+# a rule that never looks inside fences. The resolved view is read-only and skips their contents
+# so an example in an invalid file cannot supply a resolution hash.
 # unassignable <path> — the path as grep and awk must be handed it.
 # A bare path shaped like `name=value` is eaten by awk as a variable ASSIGNMENT, and awk then
 # reads stdin instead of the file — the sensor would happily lint whatever it was handed and
@@ -510,9 +514,42 @@ todo_awk() {
         print "  line " at ": an H2 with no section marker on the next line — the skeleton has two, each followed by " omark " or " dmark
       if (oseen || dseen) sect = 3
     }
+    # Mask paired backtick runs with a non-blank byte so their neighbours cannot form a record.
+    function mask_inline_code(text,   prose, delim) {
+      while (match(text, /`+/)) {
+        prose = prose substr(text, 1, RSTART - 1)
+        delim = substr(text, RSTART, RLENGTH)
+        text = substr(text, RSTART + RLENGTH)
+        if (match(prose, /\\+$/) && RLENGTH % 2) { prose = prose "`"; delim = substr(delim, 2) }
+        if (delim != "" && match(" " text, "[^`]" delim "([^`]|$)")) {
+          prose = prose "\034"
+          text = substr(text, RSTART + length(delim))
+        } else prose = prose delim
+      }
+      return prose text
+    }
+    function emit_resolved(   end_title, title, text, hash, hashes, paragraphs, n, i) {
+      if (substr(first, 1, 8) != "- [ ] **") return
+      end_title = index(substr(first, 9), "**")
+      if (end_title <= 1) return
+      title = substr(first, 9, end_title - 1)
+      n = split(substr(body, 9 + end_title + 1), paragraphs, "\n")
+      for (i = 1; i <= n; i++) {
+        text = mask_inline_code(paragraphs[i])
+        while (match(text, /(^|[^[:alnum:]_])RESOLVED by([ \t]+|$)/)) {
+          text = substr(text, RSTART + RLENGTH)
+          hash = text; sub(/[ \t].*$/, "", hash)
+          if (hash !~ /^[0-9a-f]+$/ || length(hash) < 7 || length(hash) > 64) return
+          hashes = (hashes == "" ? hash : hashes "," hash)
+        }
+      }
+      gsub(/\t/, " ", title)
+      if (hashes != "") print start "\t" hashes "\t" title
+    }
     function flush() {
       if (!initem) return
       items++
+      if (mode == "resolved") emit_resolved()
       # The anchors view: one line per open item, its start line and the spans of its HEAD. The
       # tail is the attribution and names an agent, never code, so it is never a symbol. The spans
       # of the bold TITLE come first, each tagged with an \036 byte: they are symbols, never the
@@ -585,7 +622,29 @@ todo_awk() {
       }
       initem = 0
     }
+    function leading_columns(line,   col, i, ch) {
+      for (i = 1; i <= length(line); i++) {
+        ch = substr(line, i, 1)
+        if (ch == " ") col++
+        else if (ch == "\t") col += 4 - col % 4
+        else break
+      }
+      return col
+    }
+    function fence_delimiter(line,   edge) {
+      if (sect != 1 && line !~ /^ ? ? ?(```|~~~)/) return ""
+      edge = line; sub(/^[ \t>]*/, "", edge)
+      if (!match(edge, /^(```+|~~~+)/)) return ""
+      fence_info = substr(edge, RLENGTH + 1)
+      return substr(edge, 1, RLENGTH)
+    }
     { sub(/\r$/, "") }        # CRLF: a trailing \r used to defeat the end-of-line alternations
+    # A fenced example can quote an entire section, including its heading and marker.
+    mode == "resolved" && fence != "" {
+      delim = fence_delimiter($0)
+      if (index(delim, fence) == 1 && fence_info ~ /^[ \t]*$/) fence = ""
+      next
+    }
     # ── The line right under a `##` is judged FIRST, before any rule that says `next` ──────────
     # It used to sit after the rules for a bare CR, a ticked box, an empty list marker and a bare
     # box, and after `/^## /` itself, each of which ends the line with `next`. Two headings back to
@@ -605,6 +664,21 @@ todo_awk() {
         dseen = 1; sect = 2; next
       }
       nomarker(NR - 1)
+    }
+    mode == "resolved" {
+      # Below an item, two columns for the list marker plus four start an indented code block.
+      # Its first line follows a paragraph break. Keep the break until prose resumes, and
+      # skip any literal fence inside the code before considering it as an opener.
+      if (initem && NF && substr(body, length(body), 1) == "\n" && leading_columns($0) >= 6) next
+      delim = fence_delimiter($0)
+      if (delim != "") {
+        if (substr(delim, 1, 1) == "~" || fence_info !~ /`/) {
+          if (leading_columns($0) < 2) flush()
+          else if (initem && substr(body, length(body), 1) != "\n") body = body "\n"
+          fence = delim
+        }
+        next
+      }
     }
     # A BARE CR — one not followed by LF — is a line ending to CommonMark and to GitHub, and not
     # to awk or grep. Everything after it on the same physical line renders as its own line, so a
@@ -777,6 +851,8 @@ todo_awk() {
         print "  line " NR ": a finding must open with `- [ ] **<title>**` at column 0"
       flush(); next
     }
+    # Keep one paragraph separator per blank run. Wrapped lines still join with spaces.
+    mode == "resolved" && initem && !NF { if (substr(body, length(body), 1) != "\n") body = body "\n"; next }
     # Rule 6 holds the line of returns OUT of the item: it never reaches the anchor or the found-by
     # cut, the FIRST one is not one of the content lines the cap counts, and none is ever the last
     # line rule 4 reads, which stays the last line that is not one. That holds for any line that
@@ -880,7 +956,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=15
+RULES_FLOOR=20
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -2578,6 +2654,223 @@ EOF
   # And an unclosed fence above every item must still say WHY, instead of the floor's generic
   # "did the format change?" — the linter runs first for exactly this case.
 
+  rule_begin
+  # The two misplaced boxes look open if the fence or the section guard stops working.
+  cat > "$box/resolved.md" <<'EOF'
+# TODO
+## Open
+<!-- sdd:open -->
+- [ ] **First finding** — `a.sh:1` (`alpha`) — fixed. RESOLVED by 012abcd
+  Source: `handoff` — found by `sdd-qa` (2026-09-24)
+- [ ] **Second finding** — `a.sh:2` (`alpha`) — fixed twice. RESOLVED by abcdef1
+  ```text
+  RESOLVED by 901abcd
+  ```
+  Source: `handoff` RESOLVED by 234abcd — found by `sdd-qa` (2026-09-24)
+- [ ] **Full SHA-1** — RESOLVED by 0123456789abcdef0123456789abcdef01234567
+- [ ] **Full SHA-256** — RESOLVED by 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- [ ] **Oversize hash** — RESOLVED by 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0
+- [ ] **Still open (RESOLVED by 7bcdef1 is an example)** — `a.sh:3` (`alpha`) — UNRESOLVED by 8bcdef1 or RESOLVED by abcdef1x.
+~~~~md
+~~~
+- [ ] **Fenced example** — RESOLVED by 345abcd
+~~~~
+## Decided
+<!-- sdd:decided -->
+- **Decided record** — `a.sh:4` cites RESOLVED by 456abcd (2026-09-24)
+- [ ] **Misplaced finding** — RESOLVED by 567abcd
+EOF
+  local resolved_out resolved_want
+  resolved_want="$(printf '4\t012abcd\tFirst finding\n6\tabcdef1,234abcd\tSecond finding\n11\t%s\tFull SHA-1\n12\t%s\tFull SHA-256' \
+    '0123456789abcdef0123456789abcdef01234567' '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef')"
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
+    printf '  SELFTEST FAIL  --resolved expects exactly these open items:\n%s\n  got:\n%s\n' "$resolved_want" "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/noitems.md" 2>&1)" || [ -n "$resolved_out" ]; then
+    printf '  SELFTEST FAIL  --resolved must exit 0 with no output for an empty backlog, got: %s\n' "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  assert_rc 99 "--resolved refuses a file without the open marker" bash "$SELF" --resolved "$box/rawunmarked.md"
+  rule_end 3 '--resolved prints one line per open item that carries RESOLVED by'
+
+  rule_begin
+  cat > "$box/mixed-resolved.md" <<'EOF'
+# TODO
+## Open
+<!-- sdd:open -->
+- [ ] **Control** — RESOLVED by 012abcd and RESOLVED by abcdef1
+- [ ] **Non-hexadecimal suffix** — RESOLVED by abcdef1 and RESOLVED by abcdef1x
+- [ ] **Joined suffix** — RESOLVED by abcdef1-bad and RESOLVED by abcdef1
+- [ ] **Missing value** — RESOLVED by abcdef1 and RESOLVED by
+- [ ] **Too short** — RESOLVED by abcdef1 and RESOLVED by abcdef
+- [ ] **Too long** — RESOLVED by abcdef1 and RESOLVED by 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0
+## Decided
+<!-- sdd:decided -->
+EOF
+  resolved_want="$(printf '4\t012abcd,abcdef1\tControl')"
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/mixed-resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
+    printf '  SELFTEST FAIL  --resolved must preserve only the fully valid item, got:\n%s\n' "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  rule_end 1 '--resolved refuses a mixed valid and malformed resolution item'
+
+  rule_begin
+  cat > "$box/inline-resolved.md" <<'EOF'
+# TODO
+## Open
+<!-- sdd:open -->
+- [ ] **Example only** — `RESOLVED by 012abcd as an example`
+- [ ] **Real record** — `RESOLVED by abcdef1x` is an example. RESOLVED by 012abcd
+- [ ] **Long delimiters** — ``a ` RESOLVED by abcdef1 example ``` b``
+- [ ] **No joined proof** — RESOLVED by `an explanation` 012abcd and RESOLVED by abcdef1
+- [ ] **Unpaired delimiter** — A literal ``` remains prose. RESOLVED by 012abcd
+- [ ] **Escaped opener** — A literal \` marker. `RESOLVED by abcdef1 as an example`
+- [ ] **Escaped run** — A literal \``RESOLVED by abcdef1 as an example`
+- [ ] **Genuine malformed token** — `RESOLVED by abcdef1 as an example` RESOLVED by invalid and RESOLVED by 012abcd
+- [ ] **Proof before span** — RESOLVED by abcdef1 `an example`
+- [ ] **Even escapes** — \\`RESOLVED by abcdef1 as an example`
+- [ ] **No unmatched join** — RESOLVED by ```012abcd and RESOLVED by abcdef1
+## Decided
+<!-- sdd:decided -->
+EOF
+  resolved_want="$(printf '5\t012abcd\tReal record\n8\t012abcd\tUnpaired delimiter\n12\tabcdef1\tProof before span')"
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/inline-resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
+    printf '  SELFTEST FAIL  --resolved must ignore inline examples and preserve real records, got:\n%s\n' "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  rule_end 1 '--resolved distinguishes inline examples from resolution records'
+
+  rule_begin
+  # Exercise an empty boundary and one with indentation but no content.
+  awk 'NR == 8 { print " \t"; next } { print }' > "$box/paragraph-resolved.md" <<'EOF'
+# TODO
+## Open
+<!-- sdd:open -->
+- [ ] **Example in the next paragraph** — a stray backtick `
+
+  `RESOLVED by abcdef1 as an example` is not a record.
+- [ ] **Record in the next paragraph** — a stray backtick `
+
+  RESOLVED by 012abcd — another stray backtick `
+- [ ] **Wrapped span** — `an example
+  RESOLVED by 012abcd as code` is not a record. RESOLVED by abcdef1
+- [ ] **Wrapped record** — RESOLVED by
+  012abcd
+- [ ] **Split phrase** — RESOLVED
+
+  by abcdef1
+- [ ] **Incomplete record** — RESOLVED by abcdef1
+
+  RESOLVED by
+
+  012abcd
+- [ ] **Records in two paragraphs** — RESOLVED by abcdef1
+
+  RESOLVED by 012abcd
+## Decided
+<!-- sdd:decided -->
+EOF
+  resolved_want="$(printf '7\t012abcd\tRecord in the next paragraph\n10\tabcdef1\tWrapped span\n12\t012abcd\tWrapped record\n22\tabcdef1,012abcd\tRecords in two paragraphs')"
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/paragraph-resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
+    printf '  SELFTEST FAIL  --resolved expects these records from separate TODO paragraphs:\n%s\n  got:\n%s\n' "$resolved_want" "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  rule_end 1 '--resolved keeps inline code within its paragraph'
+
+  rule_begin
+  cat > "$box/block-resolved.md" <<'EOF'
+# TODO
+```markdown
+## Open
+<!-- sdd:open -->
+- [ ] **Example in the preamble** — RESOLVED by 012abcd
+```
+## Open
+<!-- sdd:open -->
+- [ ] **Example inside an item** — still open.
+
+      Some example code
+      RESOLVED by abcdef1
+      ```
+- [ ] **Real record after indented code** — a valid finding.
+
+      RESOLVED by 234abcd
+
+  RESOLVED by
+  345abcd
+- [ ] **Example just after a fence** — still open.
+  ```text
+  Some example code
+  ```
+      RESOLVED by abcdef1
+- [ ] **Phrase interrupted by a fence** — RESOLVED by
+  ```text
+  Some example code
+  ```
+  012abcd
+- [ ] **Real record just after a fence** — a valid finding.
+  ```text
+  Some example code
+  ```
+  RESOLVED by abcdef1
+## Scratch
+```markdown
+An example in an unmarked section.
+```
+- [ ] **Example outside the backlog** — RESOLVED by abcdef1
+## Decided
+<!-- sdd:decided -->
+EOF
+  resolved_want="$(printf '14\t345abcd\tReal record after indented code\n30\tabcdef1\tReal record just after a fence')"
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/block-resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
+    printf '  SELFTEST FAIL  --resolved must ignore code blocks and keep the wrapped record, got:\n%s\n' "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  rule_end 1 '--resolved distinguishes code blocks from resolution records'
+
+  rule_begin
+  cat > "$box/short-gap.expected" <<'EOF'
+# TODO
+## Open
+<!-- sdd:open -->
+- [ ] **Proof after a gap** — `a.sh:1` (`alpha`) — a stray backtick `
+
+  RESOLVED by abcdef1 — another stray backtick `
+
+  — found by `sdd-reviewer` (2026-09-24)
+## Decided
+<!-- sdd:decided -->
+EOF
+  # Expand the first paragraph boundary without moving the start line of the finding.
+  awk 'NR == 5 { for (i = 1; i < 1000000; i++) print "" } { print }' \
+    "$box/short-gap.expected" > "$box/long-gap.expected" || return 92
+  if [ "$(wc -l < "$box/long-gap.expected")" -ne "$(( $(wc -l < "$box/short-gap.expected") + 999999 ))" ]; then
+    printf '  SELFTEST FAIL  --resolved did not get the long blank run\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  local gap gap_rc
+  resolved_want="$(printf '4\tabcdef1\tProof after a gap')"
+  for gap in short long; do
+    cp "$box/$gap-gap.expected" "$box/$gap-gap.md" || return 92
+    PROBES=$((PROBES + 1))
+    gap_rc=0
+    resolved_out="$(timeout -k 2s 10s bash "$SELF" --resolved "$box/$gap-gap.md" 2>&1)" || gap_rc=$?
+    if [ "$gap_rc" -ne 0 ] || [ "$resolved_out" != "$resolved_want" ] ||
+       ! cmp -s "$box/$gap-gap.expected" "$box/$gap-gap.md"; then
+      printf '  SELFTEST FAIL  --resolved needs the same proof and unchanged bytes for the %s blank run (rc %s), got: %s\n' \
+        "$gap" "$gap_rc" "$resolved_out" >&2
+      FAILS=$((FAILS + 1)); fail_rc 92
+    fi
+  done
+  rule_end 2 '--resolved bounds work on consecutive blank lines'
+
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
@@ -3036,6 +3329,10 @@ case "${1:-}" in
     if [ -n "$BASELINE" ]; then baseline_file "$CHECK_FILE" "$CAP" "$BASELINE"; exit $?; fi
     check_file "$CHECK_FILE" "$CAP"; exit $? ;;
   --count)    count_file "${2-}"; exit $? ;;
+  --resolved)
+    [ "$#" -le 2 ] || { printf '  FAIL  too many arguments to --resolved\n' >&2; exit 96; }
+    require_marked_file "${2-}" || exit $?
+    todo_awk "$2" 1 resolved; exit $? ;;
   --anchors)
     [ "$#" -le 3 ] || { printf '  FAIL  too many arguments to --anchors\n' >&2; exit 96; }
     anchors_file "${2-}" "${3-}"; exit $? ;;

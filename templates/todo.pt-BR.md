@@ -23,7 +23,7 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > o `<símbolo>` entre parênteses logo depois dele é **obrigatório**: uma crase de 4+ caracteres que
 > ocorre nesse arquivo a até 10 linhas da linha — em qualquer ponto dele para `:1` ou sem linha. É a
 > única crase medida, e a que o relatório de âncora fora do alvo nomeia. Nenhuma linha física da
-> seção aberta passa de 120 caracteres, fora a `RECURRED` bem formada (abaixo).
+> seção aberta passa de 120 caracteres, salvo `RECURRED` bem formada ou linha recuada só com a âncora.
 > ([ADR 0011 do kit sdd](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
 > **`#N` solto num arquivo que numera.** Quando um item aberto tem o título começando por
@@ -41,8 +41,12 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > ```
 >
 > **Ciclo de vida.** Consertado por commit: o corpo ganha `RESOLVED by <hash>` (token do kit, igual
-> em todo idioma) e o item fica até `git merge-base --is-ancestor <hash> <DEFAULT_BRANCH>` valer;
-> então é **apagado**, nunca marcado. Refutado, decidido, wont-fix ou risco aceito: não há o que
+> em todo idioma). O item é **apagado**, nunca marcado, quando cada hash passa numa das duas provas.
+> Ou `git merge-base --is-ancestor <hash> <DEFAULT_BRANCH>` retorna 0, ou
+> `git merge-base --is-ancestor <hash> <head do PR>` retorna 0 e
+> `gh pr view <PR> --json state,headRefOid` informa `MERGED` para esse head na hora da consulta.
+> Encontre o PR com `gh pr list --search <hash> --state merged --json number,headRefOid`.
+> Uma subseção esvaziada mantém seu título. Refutado, decidido, wont-fix ou risco aceito: não há o que
 > commitar, então sai da seção aberta e vira registro decidido no mesmo commit. Duplicado é
 > apagado, citando o sobrevivente; o que veio de outro projeto ou missão é antes dobrado na
 > `RECURRED` do sobrevivente, como entrada nova (abaixo). Antes de registrar, leia os decididos e os

@@ -141,6 +141,81 @@ EOF
 MDIR="$FIX/docs/handoffs/$MISSION"
 mkdir -p "$MDIR" "$FIX/docs/qa/reports" "$FIX/docs/qa/bugs"
 
+echo "== the read-only status index =="
+# Two distinct mtimes arm the same change in stat data without changing any bytes. The
+# plain status must rewrite the index first, or the query below has nothing to prove.
+NG_INDEX_REPO="$SDD_STATE_FIX/index-repo"
+if ! mkdir -p "$NG_INDEX_REPO/.sdd" "$NG_INDEX_REPO/docs/handoffs/$MISSION" \
+  || ! cp .sdd/config.sh "$NG_INDEX_REPO/.sdd/config.sh" \
+  || ! git init -qb main "$NG_INDEX_REPO" \
+  || ! git -C "$NG_INDEX_REPO" add -f .sdd/config.sh \
+  || ! git -C "$NG_INDEX_REPO" -c user.name=Fixture -c user.email=fixture@example.com commit -qm "index fixture"; then
+  fail "SENSOR-BROKEN: cannot prepare the status index fixture" "a clean committed checkout" "setup failed"
+  exit 1
+fi
+NG_INDEX="$NG_INDEX_REPO/.git/index"
+touch -d '2 minutes ago' "$NG_INDEX_REPO/.sdd/config.sh"
+NG_IX0="$(stat -c '%i' "$NG_INDEX")"
+if ! NG_WITNESS="$(env -u GIT_OPTIONAL_LOCKS git -C "$NG_INDEX_REPO" status --porcelain)" \
+  || ! NG_IX1="$(stat -c '%i' "$NG_INDEX")" \
+  || [ -z "$NG_IX0" ] || [ "$NG_IX0" = "$NG_IX1" ] || [ -n "$NG_WITNESS" ]; then
+  fail "SENSOR-BROKEN: plain status does not rewrite the index of the clean fixture" \
+    "a different inode and no changes" "$NG_IX0 → ${NG_IX1:-missing}; status '${NG_WITNESS:-}'"
+  exit 1
+fi
+touch -d '1 minute ago' "$NG_INDEX_REPO/.sdd/config.sh"
+NG_INDEX_RC=0
+NG_INDEX_OUT="$(CDPATH='' cd "$NG_INDEX_REPO" && env -u GIT_OPTIONAL_LOCKS "$SDD" status "$MISSION" --no-gates 2>&1)" \
+  || NG_INDEX_RC=$?
+assert_eq "sdd status --no-gates reads the tree without rewriting the index of the checkout" \
+  "rc:0 read:1 inode:$NG_IX1" \
+  "rc:$NG_INDEX_RC read:$(grep -cF 'no gate was evaluated' <<< "$NG_INDEX_OUT") inode:$(stat -c '%i' "$NG_INDEX")"
+
+echo "== dash-prefixed mission arguments =="
+DASH_REPO="$SDD_STATE_FIX/dash-repo"
+DASH_L_MISSION=20261020-lote-de-consertos
+DASH_N_MISSION=20261020-narracao
+DASH_HANDOFFS="$DASH_REPO/docs/handoffs"
+if ! mkdir -p "$DASH_REPO/.sdd" "$DASH_HANDOFFS/$DASH_L_MISSION" "$DASH_HANDOFFS/$DASH_N_MISSION" \
+  || ! cp .sdd/config.sh "$DASH_REPO/.sdd/config.sh" \
+  || ! touch "$DASH_HANDOFFS/$DASH_L_MISSION/checkpoint.md" "$DASH_HANDOFFS/$DASH_L_MISSION/checkpoint-notas.md" \
+          "$DASH_HANDOFFS/$DASH_N_MISSION/00-missao.md" \
+  || ! git init -qb main "$DASH_REPO" \
+  || ! git -C "$DASH_REPO" config user.name Fixture \
+  || ! git -C "$DASH_REPO" config user.email fixture@example.com \
+  || ! git -C "$DASH_REPO" add -f .sdd/config.sh docs/handoffs \
+  || ! git -C "$DASH_REPO" commit -qm "dash argument fixture"; then
+  fail "SENSOR-BROKEN: cannot prepare the dash argument fixture" "a clean committed checkout with two matching missions" "setup failed"
+  exit 1
+fi
+dash_head_before="$(git -C "$DASH_REPO" rev-parse HEAD)" || exit 1
+dash_tree_before="$(git -C "$DASH_REPO" status --porcelain)" || exit 1
+dash_not_refused=""
+dash_resolved=""
+for dash_cmd in why phase boot census approve close note-manual; do
+  dash_args=(-l)
+  case "$dash_cmd" in
+    phase) dash_args=(-n) ;;
+    boot|note-manual) dash_args+=("EXEC") ;;
+  esac
+  dash_rc=0
+  dash_out="$(CDPATH='' cd "$DASH_REPO" &&
+    SDD_STATE_DIR="$SDD_STATE_FIX/dash-state" "$SDD" "$dash_cmd" "${dash_args[@]}" </dev/null 2>&1)" || dash_rc=$?
+  if [ "$dash_rc" -eq 0 ] || ! grep -qF -- "'${dash_args[0]}' is an option, not a mission — see 'sdd help'" <<< "$dash_out"; then
+    dash_not_refused+=" $dash_cmd (rc $dash_rc)"
+  fi
+  if [[ "$dash_out" == *"$DASH_L_MISSION"* || "$dash_out" == *"$DASH_N_MISSION"* ]]; then
+    dash_resolved+=" $dash_cmd"
+  fi
+done
+dash_head_after="$(git -C "$DASH_REPO" rev-parse HEAD)" || exit 1
+dash_tree_after="$(git -C "$DASH_REPO" status --porcelain)" || exit 1
+assert_eq "a mission argument that starts with a dash is refused by name in why, phase, boot, census, approve, close and note-manual" \
+  "" "$dash_not_refused"
+assert_eq "the refusal of a dash argument resolves no mission, with a folder whose name contains it on disk" \
+  "head:$dash_head_before tree:$dash_tree_before mentions:" \
+  "head:$dash_head_after tree:$dash_tree_after mentions:$dash_resolved"
+
 # --- PLAN ------------------------------------------------------------------
 # The artifact file names, the frontmatter keys and the checkpoint header below are CONTRACT and
 # stay exactly as templates/ ships them — they are what the runner parses, and this repo's
@@ -1973,6 +2048,32 @@ if [ "$floor_ok" = "1" ]; then
                "nothing is listening at 127\.0\.0\.1:$dead_port"
   assert_why_absent "an app that WAS probed is not reported as unprobed" "QA" "no verdict on"
 
+  status_run="  run: sdd run $MISSION"
+  status_app_help="  start the app (or stop the one on its port), then 'sdd status $MISSION' again — 'sdd run' now would only escalate app-down"
+  status_qa_closed="  QA is closed on disk (30-handoff-qa.md: done); its e2e cannot be re-verified now"
+  status_down="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
+  if grep -qxF "$status_app_help" <<< "$status_down" && ! grep -q '^  run: sdd run ' <<< "$status_down"; then
+    pass "sdd status with the e2e red and the app down names starting the app, never sdd run"
+  else
+    fail "sdd status with the e2e red and the app down names starting the app, never sdd run" "$status_app_help" "$status_down"
+  fi
+  assert_eq "sdd status with the app down says the QA is closed on disk when 30-handoff-qa.md is done" "1" \
+    "$(grep -xcF "$status_qa_closed" <<< "$status_down")"
+
+  # Without the handoff QA refuses before running the e2e, so there is no app verdict to report.
+  mv "$MDIR/30-handoff-qa.md" "$SDD_STATE_FIX/status-qa.md"
+  status_no_qa="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
+  mv "$SDD_STATE_FIX/status-qa.md" "$MDIR/30-handoff-qa.md"
+  assert_eq "sdd status with no QA handoff reports the missing artifact and no app verdict" "1|1|0|0" \
+    "$(grep -c '^  next phase: QA — missing 30-handoff-qa.md$' <<< "$status_no_qa")|$(grep -xcF "$status_run" <<< "$status_no_qa")|$(grep -xcF "$status_qa_closed" <<< "$status_no_qa")|$(grep -xcF "$status_app_help" <<< "$status_no_qa")"
+
+  # The table can mark the app down even when an earlier phase is the one due.
+  mv "$MDIR/20-handoff-exec.md" "$SDD_STATE_FIX/status-exec.md"
+  status_exec="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
+  mv "$SDD_STATE_FIX/status-exec.md" "$MDIR/20-handoff-exec.md"
+  assert_eq "sdd status does not let a later QA refusal replace the advice for EXEC" "1|1|0" \
+    "$(grep -c '^  next phase: EXEC — ' <<< "$status_exec")|$(grep -xcF "$status_run" <<< "$status_exec")|$(grep -xcF "$status_app_help" <<< "$status_exec")"
+
   # The green half, and it is what protects the `example.invalid` fixture above — that one sits
   # beside a GREEN E2E_CMD, and a runner that probed before the gate would block it for a machine
   # state that never mattered. A false BLOCKED costs a person; the loop only costs money.
@@ -2021,6 +2122,9 @@ if [ "$floor_ok" = "1" ]; then
   sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
   assert_why        "an empty APP_URL is not probed" "QA" "no verdict on"
   assert_why_absent "an empty APP_URL never claims a dead app" "QA" "nothing is listening"
+  status_unknown="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
+  assert_eq "sdd status with the e2e red and no app verdict still names sdd run" "1|0" \
+    "$(grep -xcF "$status_run" <<< "$status_unknown")|$(grep -xcF "$status_app_help" <<< "$status_unknown")"
   sed -i 's|^APP_URL=.*|APP_URL="not a url"|' .sdd/config.sh
   assert_why        "an unparseable APP_URL is not probed" "QA" "no verdict on"
   assert_why_absent "an unparseable APP_URL never claims a dead app" "QA" "nothing is listening"
@@ -2044,6 +2148,9 @@ if [ "$floor_ok" = "1" ]; then
     sed -i 's|^APP_EXPECT=.*|APP_EXPECT="Other Product"|' .sdd/config.sh
     assert_why "the same page carrying APP_EXPECT reads as the app answering" "QA" \
                "with the app answering at 127\.0\.0\.1:$PAGE_PORT"
+    status_up="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
+    assert_eq "sdd status with the e2e red and the app answering still names sdd run" "1|0|0" \
+      "$(grep -xcF "$status_run" <<< "$status_up")|$(grep -xcF "$status_app_help" <<< "$status_up")|$(grep -xcF "$status_qa_closed" <<< "$status_up")"
     sed -i '/^APP_EXPECT=/d' .sdd/config.sh
 
     # --- the history of each red e2e case (item 10 of L3) -----------------------------------
@@ -4800,6 +4907,74 @@ else
        "the same rc on both branches, and 0" "main=$BASE_RC feature=$FEAT_RC"
 fi
 
+# On the same base branch, only the pending branch assignment makes the warning premature.
+TW="20260109-ticket-branch-warning"
+TW_DIR="$FIX/docs/handoffs/$TW"
+mkdir -p "$TW_DIR"
+cat > "$TW_DIR/00-missao.md" <<'EOF'
+---
+missao: 20260109-ticket-branch-warning
+versao: 0.1.0
+branch: <working branch>
+aprovacao: auto
+adr: none
+kaizen_log: skipped
+---
+# Mission fixture
+EOF
+: > "$TW_DIR/01-plano.md"
+cat > "$TW_DIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | one slice | `true` → `0` | pending | — |
+EOF
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' .sdd/config.sh
+TW_WARNING='commits straight into it'
+TW_PHASE="$( cd "$FIX" && "$SDD" phase "$TW" )"
+TW_PENDING="$( cd "$FIX" && "$SDD" run --dry-run "$TW" 2>&1 )"; TW_PENDING_RC=$?
+# Retry has no dry run. An unapproved plan reaches the warning site but stops before a session.
+sed -i 's/^aprovacao: auto$/aprovacao:/' "$TW_DIR/00-missao.md"
+TW_RETRY="$( cd "$FIX" && "$SDD" retry "$TW" 2>&1 )"; TW_RETRY_RC=$?
+sed -i 's/^aprovacao:$/aprovacao: auto/' "$TW_DIR/00-missao.md"
+TW_FORCED="$( cd "$FIX" && "$SDD" run --phase EXEC --dry-run "$TW" 2>&1 )"; TW_FORCED_RC=$?
+TW_FORCED_TICKET="$( cd "$FIX" && "$SDD" run --phase TICKET --dry-run "$TW" 2>&1 )"; TW_FORCED_TICKET_RC=$?
+TW_OVERRIDE="$( cd "$FIX" && "$SDD" run --budget-override --dry-run "$TW" 2>&1 )"; TW_OVERRIDE_RC=$?
+assert_eq "sdd run warns on the base before a forced EXEC even when TICKET is pending" "0|1|1" \
+  "$TW_FORCED_RC|$(grep -cF 'DRY RUN: phase EXEC ---' <<< "$TW_FORCED")|$(grep -cF "$TW_WARNING" <<< "$TW_FORCED")"
+assert_eq "sdd run warns on the base before a forced TICKET" "0|1|1" \
+  "$TW_FORCED_TICKET_RC|$(grep -cF 'DRY RUN: phase TICKET ---' <<< "$TW_FORCED_TICKET")|$(grep -cF "$TW_WARNING" <<< "$TW_FORCED_TICKET")"
+assert_eq "sdd run warns that a budget override can commit on the base before TICKET" "0|1|1" \
+  "$TW_OVERRIDE_RC|$(grep -cF 'DRY RUN: phase TICKET ---' <<< "$TW_OVERRIDE")|$(grep -cF "$TW_WARNING" <<< "$TW_OVERRIDE")"
+if [ "$TW_PHASE" = TICKET ] && [ "$TW_PENDING_RC" -eq 0 ] \
+   && ! grep -qF "$TW_WARNING" <<< "$TW_PENDING" \
+   && [ "$TW_RETRY_RC" -eq 1 ] && grep -qF 'PLAN is interactive' <<< "$TW_RETRY" \
+   && [ "$(grep -cF "$TW_WARNING" <<< "$TW_RETRY")" = 1 ]; then
+  pass "sdd run on the base branch is silent about committing into it while the branch field is the placeholder and the TICKET is still to run"
+else
+  fail "sdd run on the base branch is silent about committing into it while the branch field is the placeholder and the TICKET is still to run" \
+       "TICKET is next, projection succeeds silently, retry warns once before its PLAN refusal" \
+       "phase $TW_PHASE; run rc $TW_PENDING_RC, warnings $(grep -cF "$TW_WARNING" <<< "$TW_PENDING"); retry rc $TW_RETRY_RC, warnings $(grep -cF "$TW_WARNING" <<< "$TW_RETRY")"
+fi
+
+printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\nsprint: Sprint 1\n---\n' > "$TW_DIR/10-ticket.md"
+TW_FILE="$( cd "$FIX" && "$SDD" run --dry-run "$TW" 2>&1 )"; TW_FILE_RC=$?
+rm -f "$TW_DIR/10-ticket.md"
+sed -i 's/^branch: <working branch>$/branch: main/' "$TW_DIR/00-missao.md"
+TW_BASE="$( cd "$FIX" && "$SDD" run --dry-run "$TW" 2>&1 )"; TW_BASE_RC=$?
+# Both controls must restore the warning, relative to the otherwise identical pending case.
+if [ "$TW_FILE_RC" -eq 0 ] && [ "$TW_BASE_RC" -eq 0 ] \
+   && ! grep -qF "$TW_WARNING" <<< "$TW_PENDING" \
+   && grep -qF "$TW_WARNING" <<< "$TW_FILE" && grep -qF "$TW_WARNING" <<< "$TW_BASE"; then
+  pass "sdd run on the base branch still warns once 10-ticket.md exists, and when the mission declares the base itself"
+else
+  fail "sdd run on the base branch still warns once 10-ticket.md exists, and when the mission declares the base itself" \
+       "both projections succeed, and the warning is restored by either a handoff or the explicit base" \
+       "warnings pending/file/base: $(grep -cF "$TW_WARNING" <<< "$TW_PENDING")/$(grep -cF "$TW_WARNING" <<< "$TW_FILE")/$(grep -cF "$TW_WARNING" <<< "$TW_BASE"); rc file/base: $TW_FILE_RC/$TW_BASE_RC"
+fi
+rm -f "$TW_DIR/00-missao.md" "$TW_DIR/01-plano.md" "$TW_DIR/checkpoint.md"
+rmdir "$TW_DIR"
+sed -i 's/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' .sdd/config.sh
+
 # --- sdd approve -----------------------------------------------------------
 echo "== sdd approve =="
 # Closing the PLAN gate used to mean typing `aprovacao: humano-YYYY-MM-DD` into the frontmatter by
@@ -6674,11 +6849,15 @@ exit "\$(cat "$CLOSE_RCFILE" 2>/dev/null || echo 0)"
 STUB
 chmod +x "$FIX/.stub/claude"
 
-# cmd_close asks `gh` exactly one thing before it spends anything: is the PR merged?
+# cmd_close asks `gh` once before it spends anything. Only the combined query carries a PR head.
+printf 'MERGED\n' > "$FIX/.sdd/logs/close-pr-state"
 cat > "$FIX/.stub/gh" <<'STUB'
 #!/usr/bin/env bash
 [ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
-printf 'MERGED\n'
+cat .sdd/logs/close-pr-state
+if [ "${4:-}" = --json ] && [ "${5:-}" = state,headRefOid ] && [ -f .sdd/logs/close-pr-head ]; then
+  cat .sdd/logs/close-pr-head
+fi
 STUB
 chmod +x "$FIX/.stub/gh"
 
@@ -7111,12 +7290,7 @@ assert_eq "close: with JIRA off the tree goes back to the default branch" \
 
 # 9c. ...and the trip home is post-merge there too: a PR that is not MERGED is refused with the
 #     JIRA arm's own sentence, and the branch does not move. `gh` answers OPEN for this one regime.
-cat > "$FIX/.stub/gh" <<'STUB'
-#!/usr/bin/env bash
-[ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
-printf 'OPEN\n'
-STUB
-chmod +x "$FIX/.stub/gh"
+printf 'OPEN\n' > "$FIX/.sdd/logs/close-pr-state"
 git -C "$FIX" checkout -q -b LH-15_nojira-open-pr
 rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
 C9C_RC=0
@@ -7144,6 +7318,197 @@ assert_eq "close: without a pr_url the trip home claims no merge it did not chec
   "rc:0 branch:$CLOSE_HOME verified-claims:1 unverified-claims:0 unverified-says:1" \
   "rc:$C9D_RC branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) verified-claims:$(has "$C9B_OUT" 'merged and spent') unverified-claims:$(has "$C9D_OUT" 'merged and spent') unverified-says:$(has "$C9D_OUT" 'merge was not verified')"
 git -C "$FIX" checkout -q "$CLOSE_HOME"
+
+# 9e. The local upstream brings in the findings file and the first fix in a fast-forward. The PR
+#     head and the unrelated fix are on separate lines of history, neither merged into the base.
+printf 'MERGED\n' > "$FIX/.sdd/logs/close-pr-state"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/7\n---\n# PR\n' > "$MDIR/50-pr.md"
+printf 'TODO_FILE="close-findings.md"\n' >> "$FIX/.sdd/config.sh"
+git -C "$FIX" add -A && git -C "$FIX" commit -qm "fixture: configure the close listing" || exit 1
+CLOSE_START="$(git -C "$FIX" rev-parse HEAD)" || exit 1
+CLOSE_TREE="$(git -C "$FIX" rev-parse 'HEAD^{tree}')" || exit 1
+CLOSE_SQUASH_FIX="$(git -C "$FIX" commit-tree "$CLOSE_TREE" -p "$CLOSE_START" -m 'fixture: fix on the PR branch')" || exit 1
+CLOSE_PR_HEAD="$(git -C "$FIX" commit-tree "$CLOSE_TREE" -p "$CLOSE_SQUASH_FIX" -m 'fixture: merged PR head')" || exit 1
+CLOSE_OTHER_FIX="$(git -C "$FIX" commit-tree "$CLOSE_TREE" -p "$CLOSE_START" -m 'fixture: unrelated fix')" || exit 1
+printf '%s\n' "$CLOSE_PR_HEAD" > "$FIX/.sdd/logs/close-pr-head"
+git -C "$FIX" checkout -qb close-resolved-base &&
+  git -C "$FIX" commit -q --allow-empty -m 'fixture: fix on the upstream base' || exit 1
+CLOSE_BASE_FIX="$(git -C "$FIX" rev-parse HEAD)" || exit 1
+cat > "$FIX/close-findings.md" <<EOF
+# Findings
+## Open
+<!-- sdd:open -->
+- [ ] **Base finding** — RESOLVED by $CLOSE_BASE_FIX
+- [ ] **Squash finding** — RESOLVED by $CLOSE_SQUASH_FIX
+- [ ] **Partial finding** — RESOLVED by $CLOSE_BASE_FIX and RESOLVED by $CLOSE_OTHER_FIX
+- [ ] **Unresolved finding**
+- [ ] **Quoted resolution example** — \`RESOLVED by $CLOSE_BASE_FIX as an example\`
+## Decided
+<!-- sdd:decided -->
+EOF
+CLOSE_SUM="$(md5sum "$FIX/close-findings.md")" || exit 1
+# The open-PR lines only arrive with the fast-forward. The handoff is tracked too but historical.
+printf '%s\n' 'Roadmap: PR #7 aberto' 'Other PR: PR #70 aberto' 'Similar word: PR #7 opened' > "$FIX/docs/roadmap.md"
+printf '%s\n' 'Log: PR #7 open' > "$FIX/KAIZEN_LOG.md"
+printf '%s\n' 'Handoff history: PR #7 aberto' > "$MDIR/close-pr-history.md"
+git -C "$FIX" add close-findings.md docs/roadmap.md KAIZEN_LOG.md "$MDIR/close-pr-history.md" &&
+  git -C "$FIX" commit -qm "fixture: backlog and PR references on the upstream base" &&
+  git -C "$FIX" checkout -q "$CLOSE_HOME" &&
+  git -C "$FIX" branch -q --set-upstream-to=close-resolved-base "$CLOSE_HOME" || exit 1
+close_run "done" 0
+CLOSE_NO_JIRA_OUT="$CLOSE_OUT"
+CLOSE_BASE_ROW="close-findings.md:4  Base finding  ($CLOSE_BASE_FIX: in $CLOSE_HOME)"
+CLOSE_SQUASH_ROW="close-findings.md:5  Squash finding  ($CLOSE_SQUASH_FIX: in the head of the merged PR)"
+assert_eq "sdd close lists the open item whose RESOLVED by hash is an ancestor of the base, with file, line, title and proof" \
+  "rc:0 ff:1 header:1 proof:1" \
+  "rc:$CLOSE_RC_OUT ff:$(has "$CLOSE_OUT" 'fast-forwarded') header:$(grep -Fxc '2 finding(s) in close-findings.md can go — their RESOLVED by is merged:' <<< "$CLOSE_OUT") proof:$(grep -Fxc -- "$CLOSE_BASE_ROW" <<< "$CLOSE_OUT")"
+assert_eq "sdd close lists the item whose hash is an ancestor of the head of the mission PR it saw MERGED, the squash case" \
+  "1" "$(grep -Fxc -- "$CLOSE_SQUASH_ROW" <<< "$CLOSE_OUT")"
+CLOSE_NO_JIRA_SUM="$(md5sum "$FIX/close-findings.md")" || exit 1
+assert_eq "sdd close lists the real resolution and omits its quoted example" \
+  "rc:0 base:1 example:0 unchanged:1" \
+  "rc:$CLOSE_RC_OUT base:$(grep -Fxc -- "$CLOSE_BASE_ROW" <<< "$CLOSE_OUT") example:$(has "$CLOSE_OUT" 'Quoted resolution example') unchanged:$([ "$CLOSE_SUM" = "$CLOSE_NO_JIRA_SUM" ] && echo 1 || echo 0)"
+
+git -C "$FIX" branch -q --unset-upstream "$CLOSE_HOME" || exit 1
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$FIX/.sdd/config.sh"
+git -C "$FIX" add -A && git -C "$FIX" commit -qm "fixture: enable JIRA for the same listing" || exit 1
+close_run "done" 0
+assert_eq "sdd close lists the resolved items with and without JIRA, and deletes nothing" \
+  "rc:0 done:1 session:0 listing:match bytes:kept" \
+  "rc:$CLOSE_RC_OUT done:$(has "$CLOSE_OUT" 'already Done') session:$(spent) listing:$(
+    if [ "$(grep '^close-findings[.]md:' <<< "$CLOSE_OUT")" = "$CLOSE_BASE_ROW"$'\n'"$CLOSE_SQUASH_ROW" ]; then echo match; else echo differs; fi
+  ) bytes:$(
+    if [ "$CLOSE_NO_JIRA_SUM" = "$CLOSE_SUM" ] && [ "$(md5sum "$FIX/close-findings.md")" = "$CLOSE_SUM" ]; then echo kept; else echo changed; fi
+  )"
+
+CLOSE_STALE_HEADER='2 line(s) still give PR #7 as open:'
+CLOSE_STALE_RE='still give PR|^docs/roadmap[.]md:[0-9]+:|^KAIZEN_LOG[.]md:[0-9]+:|Handoff history'
+assert_eq "sdd close lists the tracked lines that still give the merged PR as open, outside the handoff directory" \
+  "rc:0 header:1 roadmap:1 log:1 excluded:0 jira:1 unchanged:1" \
+  "rc:$CLOSE_RC_OUT header:$(grep -Fxc "$CLOSE_STALE_HEADER" <<< "$CLOSE_NO_JIRA_OUT") roadmap:$(grep -Fxc 'docs/roadmap.md:1: Roadmap: PR #7 aberto' <<< "$CLOSE_NO_JIRA_OUT") log:$(grep -Fxc 'KAIZEN_LOG.md:1: Log: PR #7 open' <<< "$CLOSE_NO_JIRA_OUT") excluded:$(has "$CLOSE_NO_JIRA_OUT" 'Other PR|Similar word|Handoff history') jira:$(grep -Fxc "$CLOSE_STALE_HEADER" <<< "$CLOSE_OUT") unchanged:$(git -C "$FIX" diff --quiet HEAD && echo 1 || echo 0)"
+
+printf 'draft\n' > "$FIX/close-draft.txt"
+close_run "done" 0
+CLOSE_DIRTY_OUT="$CLOSE_OUT"
+rm "$FIX/close-draft.txt"
+printf '%040d\n' 0 > "$FIX/.sdd/logs/close-pr-head"
+close_run "done" 0
+CLOSE_MISSING_HEAD_OUT="$CLOSE_OUT"
+printf 'OPEN\n' > "$FIX/.sdd/logs/close-pr-state"
+close_run "done" 0
+CLOSE_OPEN_PR="rc:$CLOSE_RC_OUT list:$(has "$CLOSE_OUT" "$CLOSE_STALE_RE")"
+printf 'MERGED\n' > "$FIX/.sdd/logs/close-pr-state"
+sed -i 's@/pull/7$@/pull/8@' "$MDIR/50-pr.md"
+git -C "$FIX" add "$MDIR/50-pr.md" && git -C "$FIX" commit -qm "fixture: select a merged PR with no stale reference" || exit 1
+close_run "done" 0
+CLOSE_NO_MATCH="rc:$CLOSE_RC_OUT list:$(has "$CLOSE_OUT" "$CLOSE_STALE_RE")"
+sed -i 's@/pull/8$@/pull/7x@' "$MDIR/50-pr.md"
+git -C "$FIX" add "$MDIR/50-pr.md" && git -C "$FIX" commit -qm "fixture: use a PR URL without a numeric suffix" || exit 1
+close_run "done" 0
+CLOSE_BAD_URL="rc:$CLOSE_RC_OUT list:$(has "$CLOSE_OUT" "$CLOSE_STALE_RE")"
+printf -- '---\nfase: PR\n---\n# PR\n' > "$MDIR/50-pr.md"
+git -C "$FIX" add -A && git -C "$FIX" commit -qm "fixture: close without a verified PR" || exit 1
+close_run "done" 0
+assert_eq "sdd close lists no item whose hash passes neither proof, and none without RESOLVED by" \
+  "rc:0 listed:2 invalid:0 dirty:0 missing-head:1 unverified:1" \
+  "rc:$CLOSE_RC_OUT listed:$(grep -c '^close-findings[.]md:' <<< "$CLOSE_NO_JIRA_OUT") invalid:$(has "$CLOSE_NO_JIRA_OUT" 'Partial finding|Unresolved finding') dirty:$(has "$CLOSE_DIRTY_OUT" '^close-findings[.]md:') missing-head:$([ "$(grep '^close-findings[.]md:' <<< "$CLOSE_MISSING_HEAD_OUT")" = "$CLOSE_BASE_ROW" ] && echo 1 || echo 0) unverified:$([ "$(grep '^close-findings[.]md:' <<< "$CLOSE_OUT")" = "$CLOSE_BASE_ROW" ] && echo 1 || echo 0)"
+assert_eq "sdd close says nothing about open-PR lines when none is left, or when the merge was not verified" \
+  "control:1 dirty:0 open:[rc:1 list:0] no-match:[rc:0 list:0] bad-url:[rc:0 list:0] no-url:[rc:0 list:0]" \
+  "control:$(grep -Fxc "$CLOSE_STALE_HEADER" <<< "$CLOSE_MISSING_HEAD_OUT") dirty:$(has "$CLOSE_DIRTY_OUT" "$CLOSE_STALE_RE") open:[$CLOSE_OPEN_PR] no-match:[$CLOSE_NO_MATCH] bad-url:[$CLOSE_BAD_URL] no-url:[rc:$CLOSE_RC_OUT list:$(has "$CLOSE_OUT" "$CLOSE_STALE_RE")]"
+
+# The colliding branches point to a valid proof, but the underlying objects do not.
+CLOSE_OTHER_PR_FIX="$(git -C "$FIX" commit-tree "$CLOSE_TREE" -p "$CLOSE_OTHER_FIX" -m 'fixture: second unrelated fix')" || exit 1
+CLOSE_REF_BASE="$(git -C "$FIX" rev-parse --short=12 "$CLOSE_OTHER_FIX")" || exit 1
+CLOSE_REF_PR="$(git -C "$FIX" rev-parse --short=12 "$CLOSE_OTHER_PR_FIX")" || exit 1
+CLOSE_SHORT_BASE="$(git -C "$FIX" rev-parse --short=12 "$CLOSE_BASE_FIX")" || exit 1
+CLOSE_SHORT_PR="$(git -C "$FIX" rev-parse --short=12 "$CLOSE_SQUASH_FIX")" || exit 1
+git -C "$FIX" branch "$CLOSE_REF_BASE" "$CLOSE_BASE_FIX" &&
+  git -C "$FIX" branch "$CLOSE_REF_PR" "$CLOSE_PR_HEAD" &&
+  git -C "$FIX" branch 000000000000 "$CLOSE_BASE_FIX" &&
+  git -C "$FIX" tag -a close-proof-tag "$CLOSE_BASE_FIX" -m 'fixture: tag is not a commit id' || exit 1
+CLOSE_TAG="$(git -C "$FIX" rev-parse --short=12 refs/tags/close-proof-tag)" || exit 1
+printf '%s\n' "$CLOSE_PR_HEAD" > "$FIX/.sdd/logs/close-pr-head"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/7\n---\n# PR\n' > "$MDIR/50-pr.md"
+cat > "$FIX/close-findings.md" <<EOF
+# Findings
+## Open
+<!-- sdd:open -->
+- [ ] **Short base proof** — RESOLVED by $CLOSE_SHORT_BASE
+- [ ] **Short squash proof** — RESOLVED by $CLOSE_SHORT_PR
+- [ ] **Malformed finding** — RESOLVED by $CLOSE_SHORT_BASE and RESOLVED by ${CLOSE_SHORT_PR}x
+- [ ] **Base ref collision** — RESOLVED by $CLOSE_REF_BASE
+- [ ] **PR ref collision** — RESOLVED by $CLOSE_REF_PR
+- [ ] **Ref only** — RESOLVED by 000000000000
+- [ ] **Tag object** — RESOLVED by $CLOSE_TAG
+## Decided
+<!-- sdd:decided -->
+EOF
+git -C "$FIX" add close-findings.md "$MDIR/50-pr.md" &&
+  git -C "$FIX" commit -qm "fixture: separate abbreviated object ids from refs" || exit 1
+close_run "done" 0
+assert_eq "sdd close omits a finding with any malformed resolution token" \
+  "rc:0 control:1 malformed:0" \
+  "rc:$CLOSE_RC_OUT control:$(has "$CLOSE_OUT" 'Short base proof') malformed:$(has "$CLOSE_OUT" 'Malformed finding')"
+assert_eq "sdd close does not use a ref as proof for an abbreviated resolution hash" \
+  "rc:0 base:1 squash:1 collisions:0 ref-only:0 tag:0" \
+  "rc:$CLOSE_RC_OUT base:$(grep -Fxc "close-findings.md:4  Short base proof  ($CLOSE_SHORT_BASE: in $CLOSE_HOME)" <<< "$CLOSE_OUT") squash:$(grep -Fxc "close-findings.md:5  Short squash proof  ($CLOSE_SHORT_PR: in the head of the merged PR)" <<< "$CLOSE_OUT") collisions:$(has "$CLOSE_OUT" 'Base ref collision|PR ref collision') ref-only:$(has "$CLOSE_OUT" 'Ref only') tag:$(has "$CLOSE_OUT" 'Tag object')"
+git -C "$FIX" branch -q -D "$CLOSE_REF_BASE" "$CLOSE_REF_PR" 000000000000 &&
+  git -C "$FIX" tag -d close-proof-tag >/dev/null || exit 1
+printf -- '---\nfase: PR\n---\n# PR\n' > "$MDIR/50-pr.md"
+
+# Reuse the base proof without a PR or JIRA. Only the paragraph boundary separates
+# the two uses of the same hash, and the real close must leave the file untouched.
+sed -i 's/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
+CLOSE_FIXTURE_DATE="$(date '+%Y-%m-%d %H:%M')" || exit 1
+CLOSE_FIXTURE_DATE="${CLOSE_FIXTURE_DATE%% *}"
+cat > "$FIX/close-findings.md" <<EOF
+# Findings
+## Open
+<!-- sdd:open -->
+- [ ] **Plain proof** — \`.sdd/config.sh:1\` (\`DEFAULT_BRANCH\`) — RESOLVED by $CLOSE_SHORT_BASE
+  — found by \`sdd-reviewer\` ($CLOSE_FIXTURE_DATE)
+- [ ] **Example in another paragraph** — \`.sdd/config.sh:1\` (\`DEFAULT_BRANCH\`) — stray backtick \`
+
+  \`RESOLVED by $CLOSE_SHORT_BASE as an example\` is not a record.
+  — found by \`sdd-reviewer\` ($CLOSE_FIXTURE_DATE)
+- [ ] **Proof in another paragraph** — \`.sdd/config.sh:1\` (\`DEFAULT_BRANCH\`) — stray backtick \`
+
+  RESOLVED by $CLOSE_SHORT_BASE — another stray backtick \`
+
+  — found by \`sdd-reviewer\` ($CLOSE_FIXTURE_DATE)
+## Decided
+<!-- sdd:decided -->
+EOF
+cp "$FIX/close-findings.md" "$SDD_STATE_FIX/close-paragraph-backlog" || exit 1
+git -C "$FIX" add close-findings.md "$MDIR/50-pr.md" .sdd/config.sh &&
+  git -C "$FIX" commit -qm "fixture: separate TODO paragraphs for the base proof" || exit 1
+close_run "done" 0
+assert_eq "sdd close distinguishes example and proof in separate TODO paragraphs" \
+  "rc:0 unchanged:1
+close-findings.md:4  Plain proof  ($CLOSE_SHORT_BASE: in $CLOSE_HOME)
+close-findings.md:10  Proof in another paragraph  ($CLOSE_SHORT_BASE: in $CLOSE_HOME)" \
+  "rc:$CLOSE_RC_OUT unchanged:$(if cmp -s "$FIX/close-findings.md" "$SDD_STATE_FIX/close-paragraph-backlog"; then echo 1; else echo 0; fi)
+$(grep '^close-findings[.]md:' <<< "$CLOSE_OUT")"
+
+# Stretch one boundary inside the last finding without changing any proof line number.
+awk '{ print } /^- \[ \] \*\*Proof in another paragraph\*\*/ {
+  for (i = 1; i < 1000000; i++) print ""
+}' "$SDD_STATE_FIX/close-paragraph-backlog" > "$SDD_STATE_FIX/close-long-gap" || exit 1
+cp "$SDD_STATE_FIX/close-long-gap" "$FIX/close-findings.md" &&
+  git -C "$FIX" add close-findings.md &&
+  git -C "$FIX" commit -qm "fixture: stretch one TODO paragraph boundary" || exit 1
+CLOSE_GAP_ADDED=$(( $(wc -l < "$SDD_STATE_FIX/close-long-gap") - $(wc -l < "$SDD_STATE_FIX/close-paragraph-backlog") ))
+CLOSE_LONG_RC=0
+CLOSE_LONG_OUT="$(cd "$FIX" && timeout -k 2s 10s "$SDD" close "$MISSION" 2>&1)" || CLOSE_LONG_RC=$?
+assert_eq "sdd close lists the same proof after consecutive blank TODO lines" \
+  "rc:0 added:999999 unchanged:1
+$(grep '^close-findings[.]md:' <<< "$CLOSE_OUT")" \
+  "rc:$CLOSE_LONG_RC added:$CLOSE_GAP_ADDED unchanged:$(if cmp -s "$FIX/close-findings.md" "$SDD_STATE_FIX/close-long-gap"; then echo 1; else echo 0; fi)
+$(grep '^close-findings[.]md:' <<< "$CLOSE_LONG_OUT")"
+
+sed -i '/^TODO_FILE="close-findings.md"$/d; s/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
+git -C "$FIX" rm -q close-findings.md docs/roadmap.md KAIZEN_LOG.md "$MDIR/close-pr-history.md" && git -C "$FIX" add -A &&
+  git -C "$FIX" commit -qm "fixture: put the close listing inputs back" || exit 1
 
 # The fixture goes back the way it was found. "This block runs last" was the previous version's
 # only defence, and it is not one a sensor can hold: a future author appending below would inherit
