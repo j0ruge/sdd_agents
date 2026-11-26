@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-26
+
+- Locate new Codex campaigns and owner signatures in the primary checkout,
+  where the paid-session guard reads both files.
+- Check the effective pager in the campaign and mission checkouts before
+  asking for a signature, because an unsigned delegation hides missing pagers.
+
 ## 2026-11-25
 
 - Record the required Codex preflight evidence for missions of the kit. The host

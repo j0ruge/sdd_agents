@@ -39,11 +39,20 @@ through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, 
    `delegation.md` (`docs/campaigns/<YYYYMMDD>-<slug>/` in a target, `docs/superpowers/campaigns/…`
    in the kit). No argument, or a directory with no `campaign.md`: stop and ask the owner which
    campaign.
+   **For Codex, put the campaign in the repository's primary checkout** (the first `worktree`
+   entry from `git worktree list --porcelain`). Use that checkout's campaign directory for
+   preparation and signing. The Codex guard reads the campaign and delegation there, even when
+   the mission runs from a linked mission worktree.
 2. **Run `sdd-worker level <campaign-dir>`** and show its line. Under `assisted` nothing is yours
    alone: propose each act, with the exact command you would run, and wait for the owner's yes. The
    reason after ` — ` says why (no delegation, illegible, unsigned, edited after signing, expired,
-   no pager): tell the owner, who fixes it and signs again with `sdd-worker delegate`, in a terminal
-   of his own.
+   no pager): tell the owner what needs fixing. The owner signs with `sdd-worker delegate` in a
+   terminal of his own.
+   For a delegation above `assisted`, **check the pager before asking the owner to sign**. A level
+   of `assisted` with reason `unsigned` is returned before the pager check. Read the effective
+   `ON_ESCALATION_CMD` from `.sdd/config.sh` in the campaign checkout and each existing checkout
+   that holds a mission of the campaign, from each checkout's root. Report any checkout where the
+   value is empty, without printing or invoking the command.
 3. **Read `harness:`, `plan_model:` and `exec_model:`** in the campaign frontmatter. Accept
    `claude` and `codex`. Inspect the mission worktree's effective configuration before opening a
    session. For Claude, EXEC reads `MODEL_EXEC` there. For Codex, pass `PHASE_ENGINE=codex` to the
