@@ -2,9 +2,9 @@
 missao: 20261121-l5-saida-humana-e-contrato-do-runner
 fase: EXEC
 status: done
-sessao: 01a21872-49ba-7cb2-bfda-a21a2a9fc968
-data: 2026-11-26 13:01
-gate: "tests/run-all.sh na árvore de a3518ea → rc 0, suite green, 21 etapas, 2496 linhas ok, zero FAIL, 1165 s. Check R7 → 1 1. Controles R6 → 1 1 1."
+sessao: 01a218bd-1fab-7773-820a-205f8c92cbf0
+data: 2026-11-26 14:17
+gate: "tests/run-all.sh na árvore de 2defd63 → rc 0, suite green, 21 etapas, 2498 linhas ok, zero FAIL, 884 s. Check R8 → 1 1. Controles R7 → 1 1 e R6 → 1 1 1."
 ---
 
 # Handoff — EXEC — L5: saída humana e contrato do runner
@@ -14,19 +14,30 @@ gate: "tests/run-all.sh na árvore de a3518ea → rc 0, suite green, 21 etapas, 
 
 ## TL;DR
 
-O R7 separa os parágrafos ao ler o backlog. O `sdd close` lista a prova real,
-omite o exemplo com o mesmo hash e não altera o arquivo. Os dois sensores e a
-suíte passaram. A QA em disco segue fechada. A próxima REVIEW retesta o delta da r5.
+O R8 reduz cada sequência de linhas vazias a uma fronteira de parágrafo.
+O leitor e o `sdd close` devolvem a mesma prova com uma ou um milhão de
+linhas vazias, dentro de 10 s, sem editar o backlog. A suíte passou.
+A QA em disco segue fechada e a próxima REVIEW retesta o delta da r6.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5-saida-humana-e-contrato-do-runner`, sem upstream configurado. A referência local `origin/main` é ancestral do branch.
-- **Último commit de entrega:** `a3518ea` — delimita o código em linha pelos parágrafos do backlog.
-- **Working tree:** as 261 inserções preexistentes em `checkpoint-notas.md` foram preservadas fora dos commits. Nenhum outro caminho estava alterado na entrada.
-- **Suíte:** `tests/run-all.sh` na árvore de `a3518ea` → rc 0, `suite green`, 21 etapas, 2496 linhas `ok`, zero `FAIL`, 1165 s. O Check R7 foi de `0 0` a `1 1`.
-- **E2E:** `E2E_CMD=""`. A QA original percorreu a CLI. R6 e R7 usaram Git descartável, sem app, PR ou JIRA reais.
+- **Último commit de entrega:** `2defd63` — limita o acúmulo de linhas vazias do backlog.
+- **Working tree:** a entrada tinha apenas 262 inserções locais em `checkpoint-notas.md`. Foram preservadas fora dos commits.
+- **Suíte:** `tests/run-all.sh` na árvore de `2defd63` → rc 0, suite green, 21 etapas, 2498 linhas ok, zero FAIL, 884 s. O Check R8 passou de `0 0` a `1 1`.
+- **E2E:** `E2E_CMD=""`. A QA original percorreu a CLI. O R8 usou Git descartável, sem app, PR ou JIRA reais.
 
 ## O que foi feito
+
+### Conserto da REVIEW r6
+
+- `2defd63` (R8) — O leitor guarda só um separador por sequência de linhas vazias.
+  Quebras simples continuam no mesmo parágrafo. Os dois sensores comparam a
+  prova exata (linha, hash e título), verificam os bytes do backlog e limitam as
+  chamadas da entrada longa a 10 s. Antes da correção, ambas venceram pelo
+  prazo (rc 124). A lista real permaneceu idêntica, com 21 registros.
+  As sabotagens foram executadas em cópia isolada, com grupo próprio,
+  prazo de 60 s e 1 GiB por processo. Base `c69f676` → rc 0, 21 etapas e 2496 linhas ok.
 
 ### Conserto da REVIEW r5
 
@@ -95,6 +106,7 @@ suíte passaram. A QA em disco segue fechada. A próxima REVIEW retesta o delta 
 
 | Arquivo | O que contém |
 |---|---|
+| [REVIEW r6](40-review-r6.md) | Reprodução do custo do R8 e ponto de partida da próxima REVIEW delta. |
 | [`checkpoint.md`](checkpoint.md) | 25 linhas `done`, cada uma com o Check e o hash alcançável. |
 | [Guia PLAN-only](../../plan-only.md#why-the-agents-are-symlinks) | Como reinstalar após mover o kit e quais links ficam intactos. |
 | [`01-plano.md`](01-plano.md) | Em “Verificação end-to-end”, os comandos para rechecagem e a jornada de QA. |
@@ -104,6 +116,16 @@ suíte passaram. A QA em disco segue fechada. A próxima REVIEW retesta o delta 
 | [ADR 0025](../../adr/0025-ids-across-refs-and-the-second-proof-of-a-resolution.md) | Origem dos IDs e segunda prova de resolução. `./bin/sdd adr check --mission 20261121-l5-saida-humana-e-contrato-do-runner --phase plan` passou em `a033008`. |
 
 ## Boot da próxima fase
+
+Leia o achado 1 de [`40-review-r6.md`](40-review-r6.md) e a linha R8 de
+[`checkpoint.md`](checkpoint.md). Rode `bash tests/check-todo.sh --selftest`
+e `bash tests/check-gates.sh`. O leitor deve retornar o mesmo TSV e o
+`sdd close` deve listar as mesmas provas com uma ou um milhão de linhas vazias,
+sem editar o arquivo. Preserve os dois marcadores R7 e os três controles R6.
+Não há app a subir. A QA segue fechada. A próxima REVIEW delta parte de
+`2ab5f3469f61c2db62bbd83d4f86a7d804274c8b`, o `reviewed_head` da r6.
+
+### Reteste da REVIEW r5
 
 Leia o achado 1 de [`40-review-r5.md`](40-review-r5.md) e o R7 de
 [`checkpoint.md`](checkpoint.md). Rode `bash tests/check-todo.sh --selftest` e
@@ -194,6 +216,9 @@ Use fixtures para merge e JIRA, sem abrir, fechar ou mesclar PRs reais.
 - As edições preexistentes de `checkpoint-notas.md` continuam locais. Cada fechamento incluiu somente as notas novas do próprio incremento.
 
 ## Achados fora de escopo
+
+Nenhum achado novo no R8. A contagem histórica de I18 segue no
+[registro existente](../../../TODO.md). O R8 não altera esse Check nem o backlog.
 
 Nenhum achado novo no R7. O exemplo antigo do `sdd close` no README e a contagem
 histórica de I18 continuam nos dois registros abertos pela r5 em [`TODO.md`](../../../TODO.md).

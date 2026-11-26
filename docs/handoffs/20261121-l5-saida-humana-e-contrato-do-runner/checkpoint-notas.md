@@ -156,3 +156,16 @@
 - 2026-11-26 13:01 · `R7` · Controle inicial e restaurado verdes sob grupo próprio, 60 s e 1 GiB por processo. As declarações, chaves, linhas reindentadas sem mudança de lógica e dados dos fixtures não têm comportamento isolado adicional. A documentação preserva o contrato de ancestralidade e de não edição.
 - 2026-11-26 13:01 · `R7` · Baseline verde com 2494 linhas ok. Vermelhos no selftest (rc 92) e na asserção da CLI (rc 1), com exemplo listado no lugar da prova. Em a3518ea, Check R7 de 0 0 para 1 1, controles R6 1 1 1. Suíte final com 21 etapas, 2496 linhas ok, zero FAIL e rc 0. Os 20 registros do backlog real ficaram idênticos e as 261 inserções locais preexistentes nas notas ficaram fora dos commits.
 - 2026-11-26 13:42 · `R8` · Achado 1 da REVIEW r6. Linhas vazias consecutivas tornam o leitor e o fechamento lentos. Check de equivalência e custo pendente nos dois sensores.
+- 2026-11-26 14:17 · `R8` · R8 sabotage: voltar a acumular todas as linhas vazias → limite de 10 s nos dois ensaios (rc 124; selftest rc 92, sensor da CLI rc 1).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: apagar a fronteira de parágrafo → exemplos e provas do R7 trocados no leitor e na CLI, e prova esperada do R8 ausente no leitor (rc 92 e 1).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: guardar só uma fronteira por item → --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: ignorar linhas vazias com indentação → --resolved expects these records from separate TODO paragraphs (rc 92).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: encolher a entrada longa do leitor → --resolved did not get the long blank run (rc 92).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: encolher a entrada longa da CLI → sdd close lists the same proof after consecutive blank TODO lines (rc 1, added:1).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: trocar o TSV retornado pelo leitor → equivalência da prova do R8 (rc 92).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: alterar o backlog após a leitura → preservação dos bytes no selftest do R8 (rc 92).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: apagar o relato da nova regra → piso do selftest (rc 92, 19 de 20 regras).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: esvaziar a listagem da CLI na entrada longa → equivalência da prova no sensor da CLI (rc 1).
+- 2026-11-26 14:17 · `R8` · R8 sabotage: alterar o backlog após o fechamento → preservação dos bytes no sensor da CLI (rc 1, unchanged:0).
+- 2026-11-26 14:17 · `R8` · Controles intactos e restaurados verdes em grupo próprio, com 60 s e 1 GiB por processo. Comentários, delimitadores e dados dos fixtures não têm comportamento isolado do ensaio que os consome.
+- 2026-11-26 14:17 · `R8` · Base verde (rc 0, 21 etapas e 2496 linhas ok). Vermelhos no selftest (rc 92) e na CLI (rc 1), ambos por limite de 10 s na entrada longa. Em 2defd63, Check R8 1 1, R7 1 1 e R6 1 1 1. Suíte final rc 0, suite green, 21 etapas, 2498 linhas ok, zero FAIL, 884 s. Os 21 registros do backlog ficaram idênticos e as 262 inserções locais preexistentes nas notas ficaram fora dos commits.
