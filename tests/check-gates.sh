@@ -7486,6 +7486,22 @@ close-findings.md:10  Proof in another paragraph  ($CLOSE_SHORT_BASE: in $CLOSE_
   "rc:$CLOSE_RC_OUT unchanged:$(if cmp -s "$FIX/close-findings.md" "$SDD_STATE_FIX/close-paragraph-backlog"; then echo 1; else echo 0; fi)
 $(grep '^close-findings[.]md:' <<< "$CLOSE_OUT")"
 
+# Stretch one boundary inside the last finding without changing any proof line number.
+awk '{ print } /^- \[ \] \*\*Proof in another paragraph\*\*/ {
+  for (i = 1; i < 1000000; i++) print ""
+}' "$SDD_STATE_FIX/close-paragraph-backlog" > "$SDD_STATE_FIX/close-long-gap" || exit 1
+cp "$SDD_STATE_FIX/close-long-gap" "$FIX/close-findings.md" &&
+  git -C "$FIX" add close-findings.md &&
+  git -C "$FIX" commit -qm "fixture: stretch one TODO paragraph boundary" || exit 1
+CLOSE_GAP_ADDED=$(( $(wc -l < "$SDD_STATE_FIX/close-long-gap") - $(wc -l < "$SDD_STATE_FIX/close-paragraph-backlog") ))
+CLOSE_LONG_RC=0
+CLOSE_LONG_OUT="$(cd "$FIX" && timeout -k 2s 10s "$SDD" close "$MISSION" 2>&1)" || CLOSE_LONG_RC=$?
+assert_eq "sdd close lists the same proof after consecutive blank TODO lines" \
+  "rc:0 added:999999 unchanged:1
+$(grep '^close-findings[.]md:' <<< "$CLOSE_OUT")" \
+  "rc:$CLOSE_LONG_RC added:$CLOSE_GAP_ADDED unchanged:$(if cmp -s "$FIX/close-findings.md" "$SDD_STATE_FIX/close-long-gap"; then echo 1; else echo 0; fi)
+$(grep '^close-findings[.]md:' <<< "$CLOSE_LONG_OUT")"
+
 sed -i '/^TODO_FILE="close-findings.md"$/d; s/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
 git -C "$FIX" rm -q close-findings.md docs/roadmap.md KAIZEN_LOG.md "$MDIR/close-pr-history.md" && git -C "$FIX" add -A &&
   git -C "$FIX" commit -qm "fixture: put the close listing inputs back" || exit 1

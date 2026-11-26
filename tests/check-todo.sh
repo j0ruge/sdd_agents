@@ -831,8 +831,8 @@ todo_awk() {
         print "  line " NR ": a finding must open with `- [ ] **<title>**` at column 0"
       flush(); next
     }
-    # For the resolved view, keep blank lines as paragraph breaks. Wrapped lines still join with spaces.
-    mode == "resolved" && initem && !NF { body = body "\n"; next }
+    # Keep one paragraph separator per blank run. Wrapped lines still join with spaces.
+    mode == "resolved" && initem && !NF { if (substr(body, length(body), 1) != "\n") body = body "\n"; next }
     # Rule 6 holds the line of returns OUT of the item: it never reaches the anchor or the found-by
     # cut, the FIRST one is not one of the content lines the cap counts, and none is ever the last
     # line rule 4 reads, which stays the last line that is not one. That holds for any line that
@@ -936,7 +936,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=19
+RULES_FLOOR=20
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -2758,6 +2758,42 @@ EOF
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   rule_end 1 '--resolved keeps inline code within its paragraph'
+
+  rule_begin
+  cat > "$box/short-gap.expected" <<'EOF'
+# TODO
+## Open
+<!-- sdd:open -->
+- [ ] **Proof after a gap** — `a.sh:1` (`alpha`) — a stray backtick `
+
+  RESOLVED by abcdef1 — another stray backtick `
+
+  — found by `sdd-reviewer` (2026-09-24)
+## Decided
+<!-- sdd:decided -->
+EOF
+  # Expand the first paragraph boundary without moving the start line of the finding.
+  awk 'NR == 5 { for (i = 1; i < 1000000; i++) print "" } { print }' \
+    "$box/short-gap.expected" > "$box/long-gap.expected" || return 92
+  if [ "$(wc -l < "$box/long-gap.expected")" -ne "$(( $(wc -l < "$box/short-gap.expected") + 999999 ))" ]; then
+    printf '  SELFTEST FAIL  --resolved did not get the long blank run\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  local gap gap_rc
+  resolved_want="$(printf '4\tabcdef1\tProof after a gap')"
+  for gap in short long; do
+    cp "$box/$gap-gap.expected" "$box/$gap-gap.md" || return 92
+    PROBES=$((PROBES + 1))
+    gap_rc=0
+    resolved_out="$(timeout -k 2s 10s bash "$SELF" --resolved "$box/$gap-gap.md" 2>&1)" || gap_rc=$?
+    if [ "$gap_rc" -ne 0 ] || [ "$resolved_out" != "$resolved_want" ] ||
+       ! cmp -s "$box/$gap-gap.expected" "$box/$gap-gap.md"; then
+      printf '  SELFTEST FAIL  --resolved needs the same proof and unchanged bytes for the %s blank run (rc %s), got: %s\n' \
+        "$gap" "$gap_rc" "$resolved_out" >&2
+      FAILS=$((FAILS + 1)); fail_rc 92
+    fi
+  done
+  rule_end 2 '--resolved bounds work on consecutive blank lines'
 
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
