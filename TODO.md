@@ -174,6 +174,24 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   dois, o mundo do `git mv` no `check-gates.sh` e no `check-hat.sh`, um mutante por sítio (censo `diff.*--name-only`).
   — descoberto na r3 da REVIEW do worker na missão `20261121-l3-gates-do-fim-da-linha` (2026-11-21)
 
+- [ ] **Um Check por presença de um ID solto fica verde por outra mudança, e o `--red` não vê o termo cego** —
+  `agents/sdd-planner.md:176` (`Write a Check by the PRESENCE`) — a regra não avisa que um ID curto (`D13`) pode
+  nascer de outro PR entre o plano e o EXEC: num alvo, o `a=$(grep -c 'D13' …)` de um `test "$a" -ge 1 -a …`
+  ficou sempre verdadeiro quando outro PR deu à D13 outro assunto, e o `--check` disse `none blind`, porque o
+  Check inteiro seguia vermelho (faltava o registro): o `--red` prova "not green", não "red for the right reason".
+  Direção: a presença do que só o incremento escreve (ID e texto, `^. D18 . .*texto`); mais caro, o `--red`
+  avaliar cada termo de um `test … -a …`. Fonte: o `checkpoint.md` do alvo `expiry_guardian`, antes da aprovação
+  — descoberto por `claude` na missão `20261124-m0-caracterizacao-do-mvp` (2026-11-25)
+
+- [ ] **Ninguém remede as âncoras `arquivo:linha` do `01-plano.md` entre o plano e o `sdd run`** —
+  `agents/sdd-planner.md:105` (`file:line`) — o planner exige a âncora com o comando que a mediu, mas só o
+  `TODO_FILE` tem quem a remeça (`tests/check-todo.sh --anchors`), e a guarda de plano velho fica com cada plano:
+  num alvo, ela conferia `git diff --stat <sha>..HEAD -- src supabase package.json` e daria vazio, mas as linhas
+  97 e 252 do roadmap que um incremento edita por número tinham ido para 99 e 277 com outro PR (medido com
+  `grep -n -F -x` da linha antiga). Direção: a guarda cobre todo caminho que o plano cita como `path:N`, ou um
+  `--anchors` para o `01-plano.md` que compara o texto da linha no commit do plano com o HEAD. Fonte: o plano
+  — descoberto por `claude` na missão `20261124-m0-caracterizacao-do-mvp` (2026-11-25)
+
 ### Contrato e configuração
 
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
