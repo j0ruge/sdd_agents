@@ -89,3 +89,4 @@
 - 2026-11-26 02:38 · `R3` · R3 sabotage: valor bruto na prova pela base → probe ficou vermelho na colisão com a ref da base (rc 1).
 - 2026-11-26 02:38 · `R3` · R3 sabotage: valor bruto na prova pelo PR → probe ficou vermelho na colisão com a ref que aponta para o head do PR (rc 1).
 - 2026-11-26 02:38 · `R3` · TDD de `0 0 0 0` para `1 1 1 1` em `234b734`. `tests/run-all.sh` verde antes e depois (rc 0, 21 etapas, 2481 linhas ok no final, zero FAIL). Controles e mutantes rodaram em cópias descartáveis, com grupo próprio, teto de 90 s e 1 GiB. A declaração local, os comentários e a reinserção isolada dos recortes antigos do marcador não mudam o resultado. As 259 inserções preexistentes nas notas ficaram fora dos commits.
+- 2026-11-26 03:11 · `R4` · REVIEW r2, achado 1: após mover o kit, link-agents retorna 0 e deixa /sdd-plan quebrado. Check de reinstalação e preservação vai ao EXEC.

@@ -347,6 +347,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   antes decidir a versão mínima do git no kit.
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 3 — descoberto pelo
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
+  RECURRED 1: sdd_agents/20261121-l5-saida-humana-e-contrato-do-runner (2026-11-26)
 
 - [ ] **O `pr_states` descarta o PR de fork depois de o `gh pr list` cortar a lista em 30** —
   `bin/sdd-worker:1182` (`pr_states`) — o `gh pr list --head <branch> --state all` roda sem `--limit` (o padrão é
