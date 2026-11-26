@@ -10721,7 +10721,7 @@ cmd_run() {
   # move off the base branch anyway — and a warning that cries wolf is how people learn to skip
   # reading them. A dry run switches nothing but applies the same TICKET exception to the warning.
   ensure_mission_branch
-  # Fase forçada ou teto sobrescrito podem gravar uma nota antes de TICKET criar a branch.
+  # A forced phase or budget override can commit a note before TICKET creates the branch.
   if [[ -n "$force_phase" || "$BUDGET_OVERRIDE" == 1 ]] || ! ticket_will_cut_branch; then warn_if_on_base_branch; fi
   # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The CLI value is kept
   # HERE, before the loop — inside it, force_phase is also set by the runner itself
@@ -11461,7 +11461,7 @@ cmd_retry() {
   # AFTER ensure_mission_branch, exactly like cmd_run and for the same reason: the checkout is what
   # decides where this retry will commit, so warning first would cry wolf at a human the runner is
   # about to move off the base branch anyway.
-  # A nota de intervenção de retry vem antes da sessão que pode criar a branch em TICKET.
+  # The retry intervention note comes before the session that can create the branch in TICKET.
   warn_if_on_base_branch
   local phase
   derive_phase

@@ -631,26 +631,19 @@ todo_awk() {
       }
       return col
     }
+    function fence_delimiter(line,   edge) {
+      if (sect != 1 && line !~ /^ ? ? ?(```|~~~)/) return ""
+      edge = line; sub(/^[ \t>]*/, "", edge)
+      if (!match(edge, /^(```+|~~~+)/)) return ""
+      fence_info = substr(edge, RLENGTH + 1)
+      return substr(edge, 1, RLENGTH)
+    }
     { sub(/\r$/, "") }        # CRLF: a trailing \r used to defeat the end-of-line alternations
-    # A indentação de código sob um item de lista é de dois espaços do marcador mais quatro.
-    # Depois da linha em branco, o separador permanece até voltar à prosa. Exemplos de código
-    # podem conter cercas literais, portanto são descartados antes de reconhecer uma cerca.
-    mode == "resolved" {
-      if (fence == "" && initem && NF && substr(body, length(body), 1) == "\n" &&
-          leading_columns($0) >= 6) next
-      # Cercas no preâmbulo também podem citar uma seção inteira, inclusive o marcador.
-      edge = $0; sub(/^[ \t>]*/, "", edge)
-      if (match(edge, /^(```+|~~~+)/) && (sect == 1 || $0 ~ /^ ? ? ?(```|~~~)/)) {
-        delim = substr(edge, 1, RLENGTH); info = substr(edge, RLENGTH + 1)
-        if (fence != "") {
-          if (index(delim, fence) == 1 && info ~ /^[ \t]*$/) fence = ""
-        } else if (substr(delim, 1, 1) == "~" || info !~ /`/) {
-          if ($0 !~ /^[ \t]/) flush()
-          fence = delim
-        }
-        next
-      }
-      if (fence != "") next
+    # A fenced example can quote an entire section, including its heading and marker.
+    mode == "resolved" && fence != "" {
+      delim = fence_delimiter($0)
+      if (index(delim, fence) == 1 && fence_info ~ /^[ \t]*$/) fence = ""
+      next
     }
     # ── The line right under a `##` is judged FIRST, before any rule that says `next` ──────────
     # It used to sit after the rules for a bare CR, a ticked box, an empty list marker and a bare
@@ -671,6 +664,21 @@ todo_awk() {
         dseen = 1; sect = 2; next
       }
       nomarker(NR - 1)
+    }
+    mode == "resolved" {
+      # Below an item, two columns for the list marker plus four start an indented code block.
+      # Its first line follows a paragraph break. Keep the break until prose resumes, and
+      # skip any literal fence inside the code before considering it as an opener.
+      if (initem && NF && substr(body, length(body), 1) == "\n" && leading_columns($0) >= 6) next
+      delim = fence_delimiter($0)
+      if (delim != "") {
+        if (substr(delim, 1, 1) == "~" || fence_info !~ /`/) {
+          if (leading_columns($0) < 2) flush()
+          else if (initem && substr(body, length(body), 1) != "\n") body = body "\n"
+          fence = delim
+        }
+        next
+      }
     }
     # A BARE CR — one not followed by LF — is a line ending to CommonMark and to GitHub, and not
     # to awk or grep. Everything after it on the same physical line renders as its own line, so a
@@ -2796,10 +2804,30 @@ EOF
 
   RESOLVED by
   345abcd
+- [ ] **Example just after a fence** — still open.
+  ```text
+  Some example code
+  ```
+      RESOLVED by abcdef1
+- [ ] **Phrase interrupted by a fence** — RESOLVED by
+  ```text
+  Some example code
+  ```
+  012abcd
+- [ ] **Real record just after a fence** — a valid finding.
+  ```text
+  Some example code
+  ```
+  RESOLVED by abcdef1
+## Scratch
+```markdown
+An example in an unmarked section.
+```
+- [ ] **Example outside the backlog** — RESOLVED by abcdef1
 ## Decided
 <!-- sdd:decided -->
 EOF
-  resolved_want="$(printf '14\t345abcd\tReal record after indented code')"
+  resolved_want="$(printf '14\t345abcd\tReal record after indented code\n30\tabcdef1\tReal record just after a fence')"
   PROBES=$((PROBES + 1))
   if ! resolved_out="$(bash "$SELF" --resolved "$box/block-resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
     printf '  SELFTEST FAIL  --resolved must ignore code blocks and keep the wrapped record, got:\n%s\n' "$resolved_out" >&2

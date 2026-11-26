@@ -67,7 +67,6 @@ A mission that fixes findings writes `RESOLVED by <hash>` in each item and leave
 where it was (the decided record "`RESOLVED by` does not let the ratchet go down in the mission
 that fixes"). Once the PR merges, run `sdd close <mission>` from a clean checkout to update
 the base and list proven resolutions for review. The command does not remove any item.
-On a new chore branch from `origin/main`:
 
 1. Prove every hash with `git merge-base --is-ancestor <hash> origin/main` → rc 0. This kit
    uses merge commits. Where squash is used, read `gh pr view <PR> --json state,headRefOid` and
@@ -76,7 +75,8 @@ On a new chore branch from `origin/main`:
    reported `headRefOid`, then check `git merge-base --is-ancestor <hash> <PR-head>` → rc 0.
    Run `sdd close <mission>` again to use the fetched history. Leave an item if any of its
    hashes is unproven.
-2. Delete each proven item from `TODO.md`.
+2. Cut a new chore branch from `origin/main` after the last `sdd close` and delete each proven
+   item from `TODO.md` on that branch.
 3. `tests/check-todo.sh --count TODO.md` gives the new count; write it as `todo-findings <N>` in
    `tests/health-baseline.txt`, and run the three measures of step 4 above.
 4. Commit both files, push, open the PR, and merge it through steps 6 and 7 above. When other

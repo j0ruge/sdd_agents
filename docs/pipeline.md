@@ -697,11 +697,11 @@ The failure this closes was measured: in the SQ-97 pilot five phases committed i
 branch — 16 commits over somebody else's work, ~US$ 45 of `rebase --onto` to undo. Committing on
 the wrong branch is loud now in **all five doors that can end up committing** — `sdd run`,
 `sdd retry`, `sdd approve`, `sdd kaizen` and `sdd preflight` — each warning when you are standing
-on the base branch. For `sdd run` and `sdd retry` only, the warning is skipped when Jira is enabled,
-`branch:` is empty or still the placeholder, and `10-ticket.md` does not exist yet. The branch
-assignment is left to TICKET. If `sdd run --phase` forces a different phase, it warns because the
-run bypasses that assignment. The warning has one definition, so sabotaging it silences all five
-at once and the suite dies. The two call sites added last (`sdd retry` and `sdd approve`) carry a
+on the base branch. An ordinary `sdd run` skips the warning when Jira is enabled, `branch:` is
+empty or still the placeholder, and `10-ticket.md` does not exist yet. TICKET will assign the branch.
+`sdd retry`, `sdd run --phase`, and `sdd run --budget-override` can write an intervention note on
+the base before TICKET assigns the branch, so they still warn. The warning has one definition, so
+sabotaging it silences all five at once and the suite dies. The two call sites added last (`sdd retry` and `sdd approve`) carry a
 mutation of their own, because for those two the defect was the missing call, not the missing warning.
 
 The branch checkout **never runs in `--dry-run`**. A checkout changes the working tree, which the
