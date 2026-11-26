@@ -118,7 +118,7 @@ sdd run <mission> --dry-run         # project the whole pipeline without spendin
 sdd run <mission> --phase EXEC      # force one specific phase
 sdd run <mission> --max-phases 2    # stop after N phases
 
-sdd adr new --slug <s> --spec <path>  # reserve the next free ADR id (O_EXCL) and write both sides of the link
+sdd adr new --slug <s> --spec <path>  # reserve the id after the highest visible ADR and write both sides of the link
 sdd adr check [--mission <m>]         # read the links back; rc 0 clean, 1 violation, 2 bad configuration
 
 sdd-worker <verb> <dir> [args]        # the campaign worker's verbs (delegate, level, allows, budget, next, pr-ready);
@@ -138,12 +138,9 @@ said no" from "nobody was asked". On a plan born of `sdd kaizen` it is the **onl
 refused there, because nobody was in the room
 ([why](docs/pipeline.md#plan--the-only-one-the-runner-does-not-execute)).
 
-`sdd adr new` is the only way a number should be handed out. It reserves the file under `set -C`
-— O_EXCL, one syscall — so two writers racing for the same id get one file and one error instead
-of two files and a silent overwrite, and a freed number is never reused: it may already be cited
-by a merged branch, a handoff or somebody's notes. `--spec` writes **both** sides in one call, the
-mission's `adr:` and the ADR's `Spec:`, because one direction proves nothing — an `adr:` pointing
-at a real file is satisfied by *every* real file.
+Use `sdd adr new` to allocate IDs and `--spec` to write both sides of the mission link. See
+[ADR traceability](docs/pipeline.md#adr-traceability) for where the allocator looks and what its
+reservation protects.
 
 **Adoption is gradual, and it is your repo's decision.** `ADR_CHECK` ships as `off`: a repo that
 just installed the kit has no `adr:` in any mission on disk, and a default that spoke would make

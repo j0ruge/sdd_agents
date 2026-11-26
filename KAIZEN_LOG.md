@@ -4,6 +4,69 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-11-26 — L5: a CLI diz o próximo passo e comprova a limpeza pós-merge
+
+**Missão:** `20261121-l5-saida-humana-e-contrato-do-runner`, L5 da campanha `20261117-zerar-as-issues`.
+A [missão](docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/00-missao.md#métrica)
+fixa a métrica. As referências abaixo são os Checks do
+[checkpoint](docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/checkpoint.md).
+
+| Check | Antes | Depois |
+|---|---|---|
+| I1 | O maior ADR do checkout mascarava IDs já usados fora dele. | O próximo ID considera branches e worktrees visíveis e informa a origem externa. |
+| I2 | O link dos agentes não instalava `/sdd-plan` e o preflight não avisava. | Os comandos do kit ganham links e o preflight avisa quando falta `/sdd-plan`. |
+| I3 | A ajuda não dizia como deixar a corrida viva fora da sessão. | Mostra `setsid nohup`, o log por missão e `sdd status --no-gates`. |
+| I4 | O Git podia regravar o índice durante uma consulta. | Status e prontidão do PR consultam com `GIT_OPTIONAL_LOCKS=0` nas portas medidas. |
+| I5 | Um argumento como `-l` podia casar uma pasta por substring. | Opções não viram nomes de missão. A ajuda já funcionava antes. |
+| I6 | A receita de Kaizen criava branch que rastreava a base. | O remédio inclui `--no-track`. |
+| I7 | A recusa por checkout ocupado não apontava a leitura sem trava. | `CHECKOUT-BUSY` indica `sdd status --no-gates`. |
+| I8 | Com app fora, o status mandava rodar de novo e escondia a QA já fechada em disco. | Manda restaurar o app, distingue o relatório fechado da e2e não revalidada e só indica retomar se o app responder. |
+| I9 | A orientação acabava no merge. | Corrida concluída, status e corpo do PR indicam `sdd close` pós-merge, mesmo sem JIRA. |
+| I10 | Só a ancestralidade da base liberava a limpeza. | Templates e juiz também aceitam ancestralidade do head de um PR confirmado `MERGED`. |
+| I11 | O fechamento não dizia quais achados podiam sair. | Lista arquivo, linha, título e prova sem alterar o TODO. Sob squash só usa o PR da própria missão. |
+| I12 | As referências a PR aberto envelheciam sem aviso. | O fechamento lista as linhas versionadas do PR confirmado como mergeado, fora dos handoffs. |
+| I13 | O aviso de commit na base aparecia antes da TICKET que ainda ia cortar o branch. | Run e retry omitem o aviso nesse caso e o preservam quando podem executar na base. |
+| I14 | O lembrete do juiz não mostrava o tamanho do backlog nem o custo possível. | Informa a contagem quando disponível e o teto configurado por sessão. |
+| I15 | A instalação inicial sem idioma deixava a semente inglesa sem orientação. | Diz como trocar e substitui uma semente atual intocada de outro idioma, preservando arquivos editados. |
+| I16 | A regra de âncora e a largura do TODO eram mais estritas na prosa que no sensor. | Os textos refletem o marcador do runner, a contagem que espera só zeros e a exceção da linha só de âncora. |
+| I17 | Uma citação só pelo número podia parecer ADR do alvo. | Chapéus, comandos e templates citam o kit. `check-hat.sh` mede a regra. |
+
+**Entrega medida.** Os 17 títulos do Gemba têm os hashes esperados de I1–I17 no TODO, todos
+ancestrais de `04376a7`. A DOCS conferiu os pares um a um, sem usar a contagem global de I18.
+A [QA em `9127882`](docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/30-handoff-qa.md#o-que-foi-feito)
+registrou as 46 asserções do plano e os 28 mutantes catalogados. O reteste do R8
+[comparado pela REVIEW r7](docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r7.md#o-que-virou-incremento)
+mostrou o leitor e a CLI antes vencendo o prazo de 10 s com um milhão de linhas vazias.
+Depois foram 0,53 s e 0,74 s, com a mesma prova e sem editar o backlog. Ao fim da revisão,
+o checkpoint continha 26 incrementos `done`, de I1–I18 e R1–R8.
+
+**Padronização.** As reincidências de alocação, instalação do comando, corrida destacada e
+consulta do índice viraram comportamento ou ajuda da CLI, cobertos pelos Checks I1–I4.
+A segunda prova e o alcance da alocação têm o [ADR 0025](docs/adr/0025-ids-across-refs-and-the-second-proof-of-a-resolution.md).
+Não há regra de memória adicional para repetir esses mecanismos. A frase divergente do
+`CLAUDE.md` e a regra da anatomia ficam para o dono no PR, como previsto na missão.
+
+**Custo da EXEC na série da campanha.** L1–L4 vêm das entradas respectivas deste log. Para L5,
+foram somados os campos `dur=` das linhas `EXEC agent=sdd-executor` de
+`.sdd/logs/20261121-l5-saida-humana-e-contrato-do-runner/pipeline.log`, que registra
+`engine=codex`, `effort=medium` e `cost_usd=?`. Uma das 19 sessões do plano esgotou o prazo
+(`rc=124`), e o tempo dela está no total. As outras oito sessões trataram R1–R8.
+Os recibos `EXEC-*.json` não trazem cobrança nem estimativa numérica. Não dá para comparar em dólares.
+
+| Lote | Effort da EXEC | Sessões (plano + R) | Duração total | Por sessão | Por item | US$ da EXEC | US$ por sessão | US$ por item | `R<n>` |
+|---|---|---|---|---|---|---|---|---|---|
+| L1 | `medium` | 10 (9 + 1) | 13 697 s | 1 370 s | 978 s | 13,21 | 1,32 | 0,94 (14) | 1 |
+| L2 | `xhigh` | 7 (6 + 1) | 15 501 s | 2 214 s | 1 107 s | 24,04 | 3,43 | 1,72 (14) | 1 |
+| L3 | `medium` | 10 (9 + 1) | 30 819 s | 3 082 s | 2 371 s | 27,32 | 2,73 | 2,10 (13) | 1 |
+| L4 | `medium` | 14 (13 + 1) | 28 733 s | 2 052 s | 1 916 s | 34,51 | 2,47 | 2,30 (15) | 1 |
+| L5 | `medium` | 27 (19 + 8) | 63 467 s | 2 351 s | 3 733 s | não aferido | não aferido | não aferido (17) | 8 |
+
+O tempo acima é de sessão, sem as esperas entre elas. O lote, o motor e a quantidade de
+rodadas mudaram juntos. A série não isola o efeito do effort. A remoção dos itens resolvidos
+e o ajuste correspondente da catraca ficam no chore pós-merge.
+
+---
+
 ## 2026-11-22 — O L4: o preflight mede o que afirma, e o `sdd run` para antes da sessão que será negada
 
 **Missão:** `20261121-l4-preflight-health-e-sensores`, o L4 da campanha `20261117-zerar-as-issues`

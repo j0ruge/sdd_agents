@@ -824,13 +824,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   reservaram 0001 com rc 0 em ambos os worktrees. A exclusividade por caminho não serializa a
   escolha do número entre checkouts. Direção: desenhar uma reserva compartilhada por ID.
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r1.md`
-  — descoberto por `sdd-reviewer` (2026-11-26)
+  — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)
 
 - [ ] **A ajuda do sdd close descreve apenas o fechamento no JIRA** — `bin/sdd:13433`
   (`post-merge: update the base`) — `sdd help` não diz por que rodar o comando sem JIRA,
   embora o fechamento volte à base, tente o fast-forward e liste pendências pós-merge. RESOLVED by 269ecc7
+  Direção: descrever na ajuda o retorno à base e a listagem mesmo sem JIRA.
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r1.md`
-  — descoberto por `sdd-reviewer` (2026-11-26)
+  — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)
 
 - [ ] **O exemplo de sdd close no README ainda promete uma sessão paga de JIRA** — `README.md:94`
   (`list TODO cleanup`) — a CLI já descreve a volta à base, a lista do backlog e o JIRA opcional.

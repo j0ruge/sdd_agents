@@ -833,6 +833,13 @@ person who followed it: a note declared "ADR 0030" for one decision the day befo
 `docs/adr/0030-…` was accepted for another. [ADR 0008](adr/0008-adr-ids-are-allocated-and-links-are-checked.md)
 is the decision; this is how to use it.
 
+**Allocation.** `sdd adr new` takes the highest regular ADR file number visible in
+`ADR_DIR` on disk, in local and remote-tracking branches, or on disk in another worktree of the
+same repository. It allocates the next number without filling gaps and reports the source when
+the maximum comes from outside the checkout. The exclusive create protects the destination file
+in that checkout. It does not serialize concurrent allocations across worktrees or see branches
+only present on another machine. See [ADR 0025](adr/0025-ids-across-refs-and-the-second-proof-of-a-resolution.md).
+
 **One grammar, two dialects.** The rule is a KEY on a line, never a section:
 `^(- )?(\*\*)?(ADR|Spec)(\*\*)?:`. That reads `Spec: <path>` and `- **Spec**: <path>` the same
 way, so a repo already writing either keeps writing it. The **id comes from the file name** —

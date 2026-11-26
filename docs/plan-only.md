@@ -174,6 +174,8 @@ Symlinking costs nothing to the runner: `sdd install` and `sdd preflight` compar
 which reads **through** the link and compares content, so a symlink reports as identical to the
 source. `sdd-link-agents` also links the kit's slash commands under `.claude/commands/`, so
 `/sdd-plan` is available when you open a Claude Code session at the target root.
+If neither the target nor your user command directory provides `/sdd-plan`, `sdd preflight`
+warns and tells you how to link it. PLAN-only adoption does not require running preflight.
 
 After moving the kit, rerun `sdd-link-agents` from the new installation. It refreshes an untracked
 command symlink whose absolute destination matches the old installation still named by the
