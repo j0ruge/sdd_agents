@@ -102,7 +102,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **Nenhum ato do worker resolve os threads de review, e o item `threads` do `pr-ready` fica sem dono** —
-  `commands/sdd-worker.md:216` (`merge`) — um rc 1 do `pr-ready` manda voltar "to the act that fixes it", e
+  `commands/sdd-worker.md:230` (`merge`) — um rc 1 do `pr-ready` manda voltar "to the act that fixes it", e
   para `not-ready threads` não há ato: o `review` conserta o que a rodada acha e pede o `@codex review`, mas nada
   resolve o thread de bot cujo achado um commit já fechou. No PR #414 os R6–R10 consertaram os achados do
   CodeRabbit e os 20 threads seguiram abertos (princípio 1: item que nenhum ato escreve). Direção: o `review`
@@ -137,7 +137,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — registrado a pedido do dono na parada `conflict` do L4, campanha `20261117-zerar-as-issues` (2026-11-22)
 
 - [ ] **O `/sdd-worker` chamado com argumento entrega o trecho do `sdd run` com o `$1` trocado** —
-  `commands/sdd-worker.md:175` (`bash -c`) — o carregador de comando do Claude Code troca `$0`, `$1` e `$2` (base
+  `commands/sdd-worker.md:188` (`bash -c`) — o carregador de comando do Claude Code troca `$0`, `$1` e `$2` (base
   zero) pelas palavras do argumento, também dentro de aspas, e deixa `${1}`, `$@`, `$?`, `$!` e o `$N` sem argumento.
   Medido em 2.1.327: a sonda `/subst-probe alfa beta gama` deu `"$1"` → `"beta"` e `${1}` intacto, e o `/sdd-worker`
   chamado com "Continuar a campanha …" mostrou `sdd run "a"`. Quem copia o trecho roda a missão errada. Direção: o
@@ -532,7 +532,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo dono e pelo relay na missão `20261116-plano-7-b-o-palco-3d` (2026-11-17)
 
 - [ ] **A missão pedida fora da fila da campanha não tem rota, e a linha nova derruba a delegação** —
-  `commands/sdd-worker.md:117` (`lot: <L>`) — o ato `plan` só conhece lote da tabela, e nada diz o que fazer
+  `commands/sdd-worker.md:128` (`lot: <L>`) — o ato `plan` só conhece lote da tabela, e nada diz o que fazer
   quando o dono pede uma missão fora dela: sem `lot:` o `allows` dá `assisted`, com um `lot:` alheio o merge dá
   aquele lote por feito, e uma linha nova no `campaign.md` depois da assinatura muda o digest. Medido, diferencial
   sobre a delegação assinada de `cc8509a` com e sem a linha `L1b`: o L1 em voo passa a `edited after signing`.
@@ -581,7 +581,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   substituição antes e apagar o caminho literal), com asserção no `tests/check-dry-run.sh`.
   — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
-- [ ] **O ato `run` do worker lança o `sdd run` sem rodar o `sdd preflight`** — `commands/sdd-worker.md:174`
+- [ ] **O ato `run` do worker lança o `sdd run` sem rodar o `sdd preflight`** — `commands/sdd-worker.md:187`
   (`setsid`) — e o `cmd_run` também não o chama, então a corrida de uma noite descobre na primeira fase o que as
   sondas achariam em segundos: sessão expirada, chapéu velho, skill ausente, hook quebrado. Custo a decidir no
   grill: o preflight roda o `TEST_CMD` inteiro, que no kit é a suíte toda. Direção, pedida pelo dono: o ato `run`
@@ -589,7 +589,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
 - [ ] **O worker lê o `budget-exhausted` como o teto da missão, e o runner grava o mesmo `kind` no teto da fase** —
-  `commands/sdd-worker.md:189` (`the mission ceiling`) — o `bin/sdd` grava `budget-exhausted` para os dois tetos e
+  `commands/sdd-worker.md:204` (`the mission ceiling`) — o `bin/sdd` grava `budget-exhausted` para os dois tetos e
   deixa o `gate_why` dizer qual (`bin/sdd:6637`). O ato `run` e a parada 4 do comando leem o `kind` sozinho como
   `mission-ceiling`. No L2, às 23:56, a fase PR esgotou as sessões dela (2 publishers sem `pr_url:`) com US$ 37 de
   60 gastos, e o ledger diz `budget-exhausted`. Um worker que lesse o ledger pararia a campanha pelo teto errado.
