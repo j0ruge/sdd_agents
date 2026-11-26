@@ -169,3 +169,4 @@
 - 2026-11-26 14:17 · `R8` · R8 sabotage: alterar o backlog após o fechamento → preservação dos bytes no sensor da CLI (rc 1, unchanged:0).
 - 2026-11-26 14:17 · `R8` · Controles intactos e restaurados verdes em grupo próprio, com 60 s e 1 GiB por processo. Comentários, delimitadores e dados dos fixtures não têm comportamento isolado do ensaio que os consome.
 - 2026-11-26 14:17 · `R8` · Base verde (rc 0, 21 etapas e 2496 linhas ok). Vermelhos no selftest (rc 92) e na CLI (rc 1), ambos por limite de 10 s na entrada longa. Em 2defd63, Check R8 1 1, R7 1 1 e R6 1 1 1. Suíte final rc 0, suite green, 21 etapas, 2498 linhas ok, zero FAIL, 884 s. Os 21 registros do backlog ficaram idênticos e as 262 inserções locais preexistentes nas notas ficaram fora dos commits.
+- 2026-11-26 14:58 · `REVIEW r7` · R8 verificado no leitor e no sdd close, suíte verde e nenhum R9. Dois achados de prosa registrados no backlog.

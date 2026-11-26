@@ -846,6 +846,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r5.md`
   — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)
 
+- [ ] **O handoff final do L5 ficou com a contagem de incrementos anterior ao R8** —
+  `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/20-handoff-exec.md:110`
+  (`linhas`) — a tabela no HEAD tem 26 linhas done, e o inventário diz 25.
+  Direção: gerar a contagem pelo checkpoint ou apontar para ele sem repetir um total.
+  Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r7.md`
+  — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)
+
+- [ ] **Os tempos intermediários da REVIEW r6 do L5 ficaram sem saída de medição** —
+  `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r6.md:86`
+  (`250 mil`) — os TSVs dos ensaios de 250 mil e 500 mil linhas guardam as provas, mas não os quatro tempos citados.
+  Direção: guardar a saída de cada medição ou citar só os tempos comprovados.
+  Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r7.md`
+  — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
