@@ -447,6 +447,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Comentário e registro
 
+- [ ] **Documentar as quatro verificações da retro do worker Codex** —
+  `commands/sdd-worker.md:220` (`before pushing`) — o piloto de j0ruge/skills#12 mostrou quatro lacunas.
+  Em revisão pontual, `--max-phases 1` saiu 0 com REVIEW em B. Ler o veredito de `sdd why <missão> REVIEW`.
+  No executor, fixtures Git do alvo herdaram `GIT_DIR` e `GIT_WORK_TREE`. Isolar o subprocesso, além do escopo da #226.
+  Antes do PR, checar `TODO_FILE` sem baseline após DOCS e reancorar as referências movidas pela missão.
+  Antes de devolver um Check ao executor, conferir o esperado da célula com os controles da reprodução.
+  Atualizar `commands/sdd-worker.md` e `skills/sdd-worker/CHANGELOG.md` em modo lean.
+  — descoberto por `worker` no piloto de j0ruge/skills#12 (2026-11-26)
+
 ### Idioma
 
 ### Custo e escala
