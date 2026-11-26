@@ -849,14 +849,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O handoff final do L5 ficou com a contagem de incrementos anterior ao R8** —
   `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/20-handoff-exec.md:110`
   (`linhas`) — a tabela no HEAD tem 26 linhas done, e o inventário diz 25.
-  Direção: gerar a contagem pelo checkpoint ou apontar para ele sem repetir um total.
+  Direção: gerar a contagem pelo checkpoint ou apontar para ele sem repetir um total. RESOLVED by dfd2197
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r7.md`
   — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)
 
 - [ ] **Os tempos intermediários da REVIEW r6 do L5 ficaram sem saída de medição** —
   `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r6.md:86`
   (`250 mil`) — os TSVs dos ensaios de 250 mil e 500 mil linhas guardam as provas, mas não os tempos iniciais.
-  Direção: guardar a saída de cada medição ou citar só os tempos comprovados.
+  Direção: guardar a saída de cada medição ou citar só os tempos comprovados. RESOLVED by dfd2197
   Fonte: `docs/handoffs/20261121-l5-saida-humana-e-contrato-do-runner/40-review-r7.md`
   — descoberto por `sdd-reviewer` na missão `20261121-l5-saida-humana-e-contrato-do-runner` (2026-11-26)
 
