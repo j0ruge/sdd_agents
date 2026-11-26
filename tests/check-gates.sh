@@ -4939,9 +4939,10 @@ sed -i 's/^aprovacao:$/aprovacao: auto/' "$TW_DIR/00-missao.md"
 TW_FORCED="$( cd "$FIX" && "$SDD" run --phase EXEC --dry-run "$TW" 2>&1 )"; TW_FORCED_RC=$?
 TW_FORCED_TICKET="$( cd "$FIX" && "$SDD" run --phase TICKET --dry-run "$TW" 2>&1 )"; TW_FORCED_TICKET_RC=$?
 TW_OVERRIDE="$( cd "$FIX" && "$SDD" run --budget-override --dry-run "$TW" 2>&1 )"; TW_OVERRIDE_RC=$?
-assert_eq "sdd run warns on the base before a forced phase even when TICKET is pending" \
-  "exec:0 projected:1 warned:1 ticket:0 projected:1 warned:1" \
-  "exec:$TW_FORCED_RC projected:$(grep -cF 'DRY RUN: phase EXEC ---' <<< "$TW_FORCED") warned:$(grep -cF "$TW_WARNING" <<< "$TW_FORCED") ticket:$TW_FORCED_TICKET_RC projected:$(grep -cF 'DRY RUN: phase TICKET ---' <<< "$TW_FORCED_TICKET") warned:$(grep -cF "$TW_WARNING" <<< "$TW_FORCED_TICKET")"
+assert_eq "sdd run warns on the base before a forced EXEC even when TICKET is pending" "0|1|1" \
+  "$TW_FORCED_RC|$(grep -cF 'DRY RUN: phase EXEC ---' <<< "$TW_FORCED")|$(grep -cF "$TW_WARNING" <<< "$TW_FORCED")"
+assert_eq "sdd run warns on the base before a forced TICKET" "0|1|1" \
+  "$TW_FORCED_TICKET_RC|$(grep -cF 'DRY RUN: phase TICKET ---' <<< "$TW_FORCED_TICKET")|$(grep -cF "$TW_WARNING" <<< "$TW_FORCED_TICKET")"
 assert_eq "sdd run warns that a budget override can commit on the base before TICKET" "0|1|1" \
   "$TW_OVERRIDE_RC|$(grep -cF 'DRY RUN: phase TICKET ---' <<< "$TW_OVERRIDE")|$(grep -cF "$TW_WARNING" <<< "$TW_OVERRIDE")"
 if [ "$TW_PHASE" = TICKET ] && [ "$TW_PENDING_RC" -eq 0 ] \

@@ -20,12 +20,12 @@ fixa a métrica. As referências abaixo são os Checks do
 | I5 | Um argumento como `-l` podia casar uma pasta por substring. | Opções não viram nomes de missão. A ajuda já funcionava antes. |
 | I6 | A receita de Kaizen criava branch que rastreava a base. | O remédio inclui `--no-track`. |
 | I7 | A recusa por checkout ocupado não apontava a leitura sem trava. | `CHECKOUT-BUSY` indica `sdd status --no-gates`. |
-| I8 | Com app fora, o status mandava rodar de novo e escondia a QA já fechada em disco. | Ao detectar app fora ou errado, manda restaurar o app e distingue o relatório fechado da e2e não revalidada. Sem esse diagnóstico, segue indicando retomada. |
+| I8 | Com app fora, o status mandava rodar de novo e escondia a QA já fechada em disco. | Ao detectar app fora ou errado, manda restaurar o app, dá o comando de status com a missão e distingue o relatório fechado da e2e não revalidada. Sem esse diagnóstico, segue indicando retomada. |
 | I9 | A orientação acabava no merge. | Corrida concluída, status e corpo do PR indicam `sdd close` pós-merge, mesmo sem JIRA. |
 | I10 | Só a ancestralidade da base liberava a limpeza. | Templates e juiz também aceitam ancestralidade do head de um PR confirmado `MERGED`. |
 | I11 | O fechamento não dizia quais achados podiam sair. | Lista arquivo, linha, título e prova sem alterar o TODO. Sob squash só usa o PR da própria missão. |
 | I12 | As referências a PR aberto envelheciam sem aviso. | O fechamento lista as linhas versionadas do PR confirmado como mergeado, fora dos handoffs. |
-| I13 | O aviso de commit na base aparecia antes da TICKET que ainda ia cortar o branch. | Run e retry omitem o aviso nesse caso e o preservam quando podem executar na base. |
+| I13 | O aviso de commit na base aparecia antes da TICKET que ainda ia cortar o branch. | O `run` derivado sem intervenção omite o aviso nesse caso. `retry`, `--phase` e `--budget-override` preservam o aviso porque podem commitar uma nota antes da TICKET. |
 | I14 | O lembrete do juiz não mostrava o tamanho do backlog nem o custo possível. | Informa a contagem quando disponível e o teto configurado por sessão. |
 | I15 | A instalação inicial sem idioma deixava a semente inglesa sem orientação. | Diz como trocar e substitui uma semente atual intocada de outro idioma, preservando arquivos editados. |
 | I16 | A regra de âncora e a largura do TODO eram mais estritas na prosa que no sensor. | Os textos refletem o marcador do runner, a contagem que espera só zeros e a exceção da linha só de âncora. |

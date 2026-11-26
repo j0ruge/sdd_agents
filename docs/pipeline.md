@@ -701,8 +701,9 @@ on the base branch. An ordinary `sdd run` skips the warning when Jira is enabled
 empty or still the placeholder, and `10-ticket.md` does not exist yet. TICKET will assign the branch.
 `sdd retry`, `sdd run --phase`, and `sdd run --budget-override` can write an intervention note on
 the base before TICKET assigns the branch, so they still warn. The warning has one definition, so
-sabotaging it silences all five at once and the suite dies. The two call sites added last (`sdd retry` and `sdd approve`) carry a
-mutation of their own, because for those two the defect was the missing call, not the missing warning.
+sabotaging it silences all five at once and the suite dies. The two call sites added last
+(`sdd retry` and `sdd approve`) carry a mutation of their own, because for those two the defect
+was the missing call, not the missing warning.
 
 The branch checkout **never runs in `--dry-run`**. A checkout changes the working tree, which the
 projection promises not to touch (below).
