@@ -2049,7 +2049,7 @@ if [ "$floor_ok" = "1" ]; then
   assert_why_absent "an app that WAS probed is not reported as unprobed" "QA" "no verdict on"
 
   status_run="  run: sdd run $MISSION"
-  status_app_help="  start the app (or stop the one on its port), then 'sdd status' again — 'sdd run' now would only escalate app-down"
+  status_app_help="  start the app (or stop the one on its port), then 'sdd status $MISSION' again — 'sdd run' now would only escalate app-down"
   status_qa_closed="  QA is closed on disk (30-handoff-qa.md: done); its e2e cannot be re-verified now"
   status_down="$(cd "$FIX" && "$SDD" status "$MISSION" 2>&1)"
   if grep -qxF "$status_app_help" <<< "$status_down" && ! grep -q '^  run: sdd run ' <<< "$status_down"; then
@@ -4938,17 +4938,20 @@ TW_RETRY="$( cd "$FIX" && "$SDD" retry "$TW" 2>&1 )"; TW_RETRY_RC=$?
 sed -i 's/^aprovacao:$/aprovacao: auto/' "$TW_DIR/00-missao.md"
 TW_FORCED="$( cd "$FIX" && "$SDD" run --phase EXEC --dry-run "$TW" 2>&1 )"; TW_FORCED_RC=$?
 TW_FORCED_TICKET="$( cd "$FIX" && "$SDD" run --phase TICKET --dry-run "$TW" 2>&1 )"; TW_FORCED_TICKET_RC=$?
-assert_eq "sdd run warns on the base before a forced EXEC even when TICKET is pending" \
-  "exec:0 projected:1 warned:1 ticket:0 projected:1 warned:0" \
+TW_OVERRIDE="$( cd "$FIX" && "$SDD" run --budget-override --dry-run "$TW" 2>&1 )"; TW_OVERRIDE_RC=$?
+assert_eq "sdd run warns on the base before a forced phase even when TICKET is pending" \
+  "exec:0 projected:1 warned:1 ticket:0 projected:1 warned:1" \
   "exec:$TW_FORCED_RC projected:$(grep -cF 'DRY RUN: phase EXEC ---' <<< "$TW_FORCED") warned:$(grep -cF "$TW_WARNING" <<< "$TW_FORCED") ticket:$TW_FORCED_TICKET_RC projected:$(grep -cF 'DRY RUN: phase TICKET ---' <<< "$TW_FORCED_TICKET") warned:$(grep -cF "$TW_WARNING" <<< "$TW_FORCED_TICKET")"
+assert_eq "sdd run warns that a budget override can commit on the base before TICKET" "0|1|1" \
+  "$TW_OVERRIDE_RC|$(grep -cF 'DRY RUN: phase TICKET ---' <<< "$TW_OVERRIDE")|$(grep -cF "$TW_WARNING" <<< "$TW_OVERRIDE")"
 if [ "$TW_PHASE" = TICKET ] && [ "$TW_PENDING_RC" -eq 0 ] \
    && ! grep -qF "$TW_WARNING" <<< "$TW_PENDING" \
    && [ "$TW_RETRY_RC" -eq 1 ] && grep -qF 'PLAN is interactive' <<< "$TW_RETRY" \
-   && ! grep -qF "$TW_WARNING" <<< "$TW_RETRY"; then
+   && [ "$(grep -cF "$TW_WARNING" <<< "$TW_RETRY")" = 1 ]; then
   pass "sdd run on the base branch is silent about committing into it while the branch field is the placeholder and the TICKET is still to run"
 else
   fail "sdd run on the base branch is silent about committing into it while the branch field is the placeholder and the TICKET is still to run" \
-       "TICKET is next, projection succeeds, retry stops at PLAN, neither issues the warning" \
+       "TICKET is next, projection succeeds silently, retry warns once before its PLAN refusal" \
        "phase $TW_PHASE; run rc $TW_PENDING_RC, warnings $(grep -cF "$TW_WARNING" <<< "$TW_PENDING"); retry rc $TW_RETRY_RC, warnings $(grep -cF "$TW_WARNING" <<< "$TW_RETRY")"
 fi
 

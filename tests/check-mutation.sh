@@ -4385,7 +4385,7 @@ mut_RUN_branch_option_name() {
 #
 # The sed is ADDRESSED to cmd_retry's body so it does not also silence cmd_run.
 mut_RETRY_base_branch_warn_dead() {
-  sed -i '/^cmd_retry() {/,/^}/ s@^  if ! ticket_will_cut_branch; then warn_if_on_base_branch; fi$@  :@' "$1"
+  sed -i '/^cmd_retry() {/,/^}/ s@^  warn_if_on_base_branch$@  :@' "$1"
 }
 
 # `sdd approve` goes back to being the silent fifth door: it still prints the plan, still asks, and
@@ -4448,7 +4448,7 @@ mut_APPROVE_adr_file_left_out() {
 mut_RUN_branch_order_swap() {
   sed -i '/^cmd_run() {/,/^}/ {
     /^  ensure_mission_branch$/d
-    s/^  if ! ticket_will_cut_branch; then warn_if_on_base_branch; fi$/&\n  ensure_mission_branch/
+    s/^  if .*ticket_will_cut_branch; then warn_if_on_base_branch; fi$/&\n  ensure_mission_branch/
   }' "$1"
 }
 

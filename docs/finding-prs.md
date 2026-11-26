@@ -69,10 +69,13 @@ that fixes"). Once the PR merges, run `sdd close <mission>` from a clean checkou
 the base and list proven resolutions for review. The command does not remove any item.
 On a new chore branch from `origin/main`:
 
-1. Prove every hash with `git merge-base --is-ancestor <hash> origin/main` → rc 0. Where squash
-   is used, the other proof requires both `git merge-base --is-ancestor <hash> <PR-head>` → rc 0
-   and `gh pr view <PR> --json state,headRefOid` showing `MERGED` for that same head. Leave an
-   item if any of its hashes is unproven. This kit still uses merge commits.
+1. Prove every hash with `git merge-base --is-ancestor <hash> origin/main` → rc 0. This kit
+   uses merge commits. Where squash is used, read `gh pr view <PR> --json state,headRefOid` and
+   require `MERGED`. In a fresh clone, fetch the merged PR head and its history with
+   `git fetch origin refs/pull/<PR>/head`. Require `git rev-parse FETCH_HEAD` to match the
+   reported `headRefOid`, then check `git merge-base --is-ancestor <hash> <PR-head>` → rc 0.
+   Run `sdd close <mission>` again to use the fetched history. Leave an item if any of its
+   hashes is unproven.
 2. Delete each proven item from `TODO.md`.
 3. `tests/check-todo.sh --count TODO.md` gives the new count; write it as `todo-findings <N>` in
    `tests/health-baseline.txt`, and run the three measures of step 4 above.

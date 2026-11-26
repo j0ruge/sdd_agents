@@ -9107,7 +9107,7 @@ cmd_status() {
       if [ "$(frontmatter "$MISSION_DIR/30-handoff-qa.md" status)" = "done" ]; then
         dim "  QA is closed on disk (30-handoff-qa.md: done); its e2e cannot be re-verified now"
       fi
-      dim "  start the app (or stop the one on its port), then 'sdd status' again — 'sdd run' now would only escalate app-down"
+      dim "  start the app (or stop the one on its port), then 'sdd status $MISSION' again — 'sdd run' now would only escalate app-down"
     else
       printf '  %srun: sdd run %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
     fi
@@ -10721,8 +10721,8 @@ cmd_run() {
   # move off the base branch anyway — and a warning that cries wolf is how people learn to skip
   # reading them. A dry run switches nothing but applies the same TICKET exception to the warning.
   ensure_mission_branch
-  # Before the first gate. A forced lap other than TICKET bypasses branch assignment.
-  if [[ -n "$force_phase" && "$force_phase" != TICKET ]] || ! ticket_will_cut_branch; then warn_if_on_base_branch; fi
+  # Fase forçada ou teto sobrescrito podem gravar uma nota antes de TICKET criar a branch.
+  if [[ -n "$force_phase" || "$BUDGET_OVERRIDE" == 1 ]] || ! ticket_will_cut_branch; then warn_if_on_base_branch; fi
   # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The CLI value is kept
   # HERE, before the loop — inside it, force_phase is also set by the runner itself
   # (PUBLISH_ON_REVIEW_BLOCKED=draft), and that is the runner's hand, not the human's. It is consumed
@@ -11460,8 +11460,9 @@ cmd_retry() {
   #
   # AFTER ensure_mission_branch, exactly like cmd_run and for the same reason: the checkout is what
   # decides where this retry will commit, so warning first would cry wolf at a human the runner is
-  # about to move off the base branch anyway. TICKET can still be the one to create the branch.
-  if ! ticket_will_cut_branch; then warn_if_on_base_branch; fi
+  # about to move off the base branch anyway.
+  # A nota de intervenção de retry vem antes da sessão que pode criar a branch em TICKET.
+  warn_if_on_base_branch
   local phase
   derive_phase
   phase="$CURRENT_PHASE"
