@@ -809,9 +809,10 @@ succeeded, and nothing is forced. Before this the base stayed behind the PR just
 next mission was cut from it (SQ-145, SQ-146).
 
 Back on a clean base, `sdd close` lists findings in `TODO_FILE` whose `RESOLVED by` hashes are
-all proven. It ignores examples in inline or fenced code. A malformed value outside code excludes
-the entire finding. Each row shows the file, line, title and
-proof for each hash. A hash must identify a unique commit object, not a ref with the same spelling.
+all proven. It ignores examples in fenced code and in inline code, which can span a wrapped line
+but not a blank line between paragraphs. A malformed value outside code excludes the entire
+finding. Each row shows the file, line, title and proof for each hash.
+A hash must identify a unique commit object, not a ref with the same spelling.
 The commit must be an ancestor of the base or, after a squash, of the locally available head of
 this mission's PR that the command confirmed as `MERGED`. Without a verified PR or a local head,
 only base ancestry counts. The command lists findings for review and never edits the file.

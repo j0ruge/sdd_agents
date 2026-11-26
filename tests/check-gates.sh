@@ -7452,6 +7452,40 @@ git -C "$FIX" branch -q -D "$CLOSE_REF_BASE" "$CLOSE_REF_PR" 000000000000 &&
   git -C "$FIX" tag -d close-proof-tag >/dev/null || exit 1
 printf -- '---\nfase: PR\n---\n# PR\n' > "$MDIR/50-pr.md"
 
+# Reuse the base proof without a PR or JIRA. Only the paragraph boundary separates
+# the two uses of the same hash, and the real close must leave the file untouched.
+sed -i 's/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
+CLOSE_FIXTURE_DATE="$(date '+%Y-%m-%d %H:%M')" || exit 1
+CLOSE_FIXTURE_DATE="${CLOSE_FIXTURE_DATE%% *}"
+cat > "$FIX/close-findings.md" <<EOF
+# Findings
+## Open
+<!-- sdd:open -->
+- [ ] **Plain proof** — \`.sdd/config.sh:1\` (\`DEFAULT_BRANCH\`) — RESOLVED by $CLOSE_SHORT_BASE
+  — found by \`sdd-reviewer\` ($CLOSE_FIXTURE_DATE)
+- [ ] **Example in another paragraph** — \`.sdd/config.sh:1\` (\`DEFAULT_BRANCH\`) — stray backtick \`
+
+  \`RESOLVED by $CLOSE_SHORT_BASE as an example\` is not a record.
+  — found by \`sdd-reviewer\` ($CLOSE_FIXTURE_DATE)
+- [ ] **Proof in another paragraph** — \`.sdd/config.sh:1\` (\`DEFAULT_BRANCH\`) — stray backtick \`
+
+  RESOLVED by $CLOSE_SHORT_BASE — another stray backtick \`
+
+  — found by \`sdd-reviewer\` ($CLOSE_FIXTURE_DATE)
+## Decided
+<!-- sdd:decided -->
+EOF
+cp "$FIX/close-findings.md" "$SDD_STATE_FIX/close-paragraph-backlog" || exit 1
+git -C "$FIX" add close-findings.md "$MDIR/50-pr.md" .sdd/config.sh &&
+  git -C "$FIX" commit -qm "fixture: separate TODO paragraphs for the base proof" || exit 1
+close_run "done" 0
+assert_eq "sdd close distinguishes example and proof in separate TODO paragraphs" \
+  "rc:0 unchanged:1
+close-findings.md:4  Plain proof  ($CLOSE_SHORT_BASE: in $CLOSE_HOME)
+close-findings.md:10  Proof in another paragraph  ($CLOSE_SHORT_BASE: in $CLOSE_HOME)" \
+  "rc:$CLOSE_RC_OUT unchanged:$(if cmp -s "$FIX/close-findings.md" "$SDD_STATE_FIX/close-paragraph-backlog"; then echo 1; else echo 0; fi)
+$(grep '^close-findings[.]md:' <<< "$CLOSE_OUT")"
+
 sed -i '/^TODO_FILE="close-findings.md"$/d; s/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
 git -C "$FIX" rm -q close-findings.md docs/roadmap.md KAIZEN_LOG.md "$MDIR/close-pr-history.md" && git -C "$FIX" add -A &&
   git -C "$FIX" commit -qm "fixture: put the close listing inputs back" || exit 1

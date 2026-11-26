@@ -528,17 +528,20 @@ todo_awk() {
       }
       return prose text
     }
-    function emit_resolved(   end_title, title, text, hash, hashes) {
+    function emit_resolved(   end_title, title, text, hash, hashes, paragraphs, n, i) {
       if (substr(first, 1, 8) != "- [ ] **") return
       end_title = index(substr(first, 9), "**")
       if (end_title <= 1) return
       title = substr(first, 9, end_title - 1)
-      text = mask_inline_code(substr(body, 9 + end_title + 1))
-      while (match(text, /(^|[^[:alnum:]_])RESOLVED by([ \t]+|$)/)) {
-        text = substr(text, RSTART + RLENGTH)
-        hash = text; sub(/[ \t].*$/, "", hash)
-        if (hash !~ /^[0-9a-f]+$/ || length(hash) < 7 || length(hash) > 40) return
-        hashes = (hashes == "" ? hash : hashes "," hash)
+      n = split(substr(body, 9 + end_title + 1), paragraphs, "\n")
+      for (i = 1; i <= n; i++) {
+        text = mask_inline_code(paragraphs[i])
+        while (match(text, /(^|[^[:alnum:]_])RESOLVED by([ \t]+|$)/)) {
+          text = substr(text, RSTART + RLENGTH)
+          hash = text; sub(/[ \t].*$/, "", hash)
+          if (hash !~ /^[0-9a-f]+$/ || length(hash) < 7 || length(hash) > 40) return
+          hashes = (hashes == "" ? hash : hashes "," hash)
+        }
       }
       gsub(/\t/, " ", title)
       if (hashes != "") print start "\t" hashes "\t" title
@@ -828,6 +831,8 @@ todo_awk() {
         print "  line " NR ": a finding must open with `- [ ] **<title>**` at column 0"
       flush(); next
     }
+    # For the resolved view, keep blank lines as paragraph breaks. Wrapped lines still join with spaces.
+    mode == "resolved" && initem && !NF { body = body "\n"; next }
     # Rule 6 holds the line of returns OUT of the item: it never reaches the anchor or the found-by
     # cut, the FIRST one is not one of the content lines the cap counts, and none is ever the last
     # line rule 4 reads, which stays the last line that is not one. That holds for any line that
@@ -931,7 +936,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=18
+RULES_FLOOR=19
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -2715,6 +2720,44 @@ EOF
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   rule_end 1 '--resolved distinguishes inline examples from resolution records'
+
+  rule_begin
+  # Exercise an empty boundary and one with indentation but no content.
+  awk 'NR == 8 { print " \t"; next } { print }' > "$box/paragraph-resolved.md" <<'EOF'
+# TODO
+## Open
+<!-- sdd:open -->
+- [ ] **Example in the next paragraph** — a stray backtick `
+
+  `RESOLVED by abcdef1 as an example` is not a record.
+- [ ] **Record in the next paragraph** — a stray backtick `
+
+  RESOLVED by 012abcd — another stray backtick `
+- [ ] **Wrapped span** — `an example
+  RESOLVED by 012abcd as code` is not a record. RESOLVED by abcdef1
+- [ ] **Wrapped record** — RESOLVED by
+  012abcd
+- [ ] **Split phrase** — RESOLVED
+
+  by abcdef1
+- [ ] **Incomplete record** — RESOLVED by abcdef1
+
+  RESOLVED by
+
+  012abcd
+- [ ] **Records in two paragraphs** — RESOLVED by abcdef1
+
+  RESOLVED by 012abcd
+## Decided
+<!-- sdd:decided -->
+EOF
+  resolved_want="$(printf '7\t012abcd\tRecord in the next paragraph\n10\tabcdef1\tWrapped span\n12\t012abcd\tWrapped record\n22\tabcdef1,012abcd\tRecords in two paragraphs')"
+  PROBES=$((PROBES + 1))
+  if ! resolved_out="$(bash "$SELF" --resolved "$box/paragraph-resolved.md" 2>&1)" || [ "$resolved_out" != "$resolved_want" ]; then
+    printf '  SELFTEST FAIL  --resolved expects these records from separate TODO paragraphs:\n%s\n  got:\n%s\n' "$resolved_want" "$resolved_out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  rule_end 1 '--resolved keeps inline code within its paragraph'
 
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
