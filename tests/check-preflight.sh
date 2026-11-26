@@ -3069,6 +3069,45 @@ assert_eq "preflight says nothing about /sdd-plan when the repo or the user dire
   "missing=1 repo=0 user=0" \
   "missing=$(grep -cF '  warn  /sdd-plan not found' <<< "$lc_missing") repo=$(grep -cF '  warn  /sdd-plan not found' <<< "$lc_repo_present") user=$(grep -cF '  warn  /sdd-plan not found' <<< "$lc_home_present")"
 
+LC_LOCAL="$FIX/link-local-commands"
+help_repo "$LC_LOCAL" || exit 1
+( cd "$LC_LOCAL" && "$SDD" install >/dev/null 2>&1 ) || exit 1
+lc_plan=.claude/commands/sdd-plan.md
+lc_worker=.claude/commands/sdd-worker.md
+mkdir -p "$LC_LOCAL/.claude/commands" || exit 1
+cp "$ROOT/commands/sdd-plan.md" "$LC_LOCAL/$lc_plan" || exit 1
+git -C "$LC_LOCAL" add -f "$lc_plan" && git -C "$LC_LOCAL" commit -qm 'track a command' || exit 1
+printf '\n# Local edits\n' >> "$LC_LOCAL/$lc_plan"
+printf '# Untracked draft\n' > "$LC_LOCAL/$lc_worker"
+cp "$LC_LOCAL/$lc_plan" "$FIX/local-plan.want" && cp "$LC_LOCAL/$lc_worker" "$FIX/local-worker.want" || exit 1
+lc_index="$(git -C "$LC_LOCAL" ls-files --stage -- .claude/commands)" || exit 1
+lc_local_link() ( cd "$LC_LOCAL" && HOME="$LC_HOME" "$SDD" link-agents 2>&1 )
+lc_plan_preserved() {
+  [ ! -L "$LC_LOCAL/$lc_plan" ] && cmp -s "$FIX/local-plan.want" "$LC_LOCAL/$lc_plan" \
+    && [ "$(git -C "$LC_LOCAL" ls-files --stage -- .claude/commands)" = "$lc_index" ]
+}
+lc_rc=0; lc_first="$(lc_local_link)" || lc_rc=$?
+if [ "$lc_rc" -eq 0 ] && lc_plan_preserved && [ ! -L "$LC_LOCAL/$lc_worker" ] \
+   && cmp -s "$FIX/local-worker.want" "$LC_LOCAL/$lc_worker" \
+   && [[ "$lc_first" == *"preserving local command $lc_plan"* && "$lc_first" == *"preserving local command $lc_worker"* ]]; then
+  pass "link-agents preserves conflicting tracked edits and untracked local commands"
+else
+  fail "link-agents preserves conflicting tracked edits and untracked local commands" \
+       "rc 0, both drafts byte-identical and named, and no change to their index entries" "$lc_first"
+fi
+
+rm -- "$LC_LOCAL/$lc_worker" || exit 1
+lc_rc=0; lc_first="$(lc_local_link)" || lc_rc=$?
+lc_rc2=0; lc_second="$(lc_local_link)" || lc_rc2=$?
+if [ "$lc_rc/$lc_rc2" = 0/0 ] && lc_plan_preserved \
+   && [ "$(readlink "$LC_LOCAL/$lc_worker")" = "$ROOT/commands/sdd-worker.md" ] \
+   && [[ "$lc_first" == *"1 command(s) linked to "* && "$lc_second" != *"command(s) linked to "* ]]; then
+  pass "link-agents still installs missing kit commands and is idempotent"
+else
+  fail "link-agents still installs missing kit commands and is idempotent" \
+       "only the missing worker command linked once, with the local plan and index unchanged" "$lc_first / $lc_second"
+fi
+
 # Run the copied binary from its own kit root to exercise the self-link refusal's counterpart.
 rm -f "$LC_HOME/.claude/commands/sdd-plan.md"
 help_repo "$KP_KIT" || exit 1

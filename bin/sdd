@@ -13535,6 +13535,12 @@ cmd_link_agents() {
       relative=".claude/$dir/$name"
       target="$REPO_ROOT/$relative"
 
+      # Leave a conflicting command and its index entry untouched.
+      if [ "$dir" = commands ] && { [ -e "$target" ] || [ -L "$target" ]; } && ! { [ -f "$target" ] && cmp -s "$src" "$target"; }; then
+        warn "preserving local command $relative (differs from the kit)"
+        continue
+      fi
+
       # Drop it from the index BEFORE replacing it: a tracked path that becomes a symlink shows up as a
       # content change, and the whole point is that these stop being versioned.
       if git -C "$REPO_ROOT" ls-files --error-unmatch "$relative" >/dev/null 2>&1; then
