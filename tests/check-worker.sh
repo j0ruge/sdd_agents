@@ -53,7 +53,7 @@
 #       first witnessed allowing approve, so the ask is the break's and nothing else's
 #   R14 with --lot, the lot's ceiling is the act's: under full, approve is asked on a lot capped at
 #       merge and allowed on the lots that are not, and a lot with no row asks for it
-#   R15 `budget` sums the cost_usd of the ledger lines whose mission is one of the campaign's — the
+#   R15 `budget` sums legacy cost_usd rows for discovered missions of the campaign — the
 #       folders under the repo's HANDOFF_DIR whose 00-missao.md declares exactly that campaign:, in
 #       the checkout of the campaign AND in every linked worktree of its repo, each mission once —
 #       and no other line: not another campaign's, not a longer id's, not a mission of no campaign;
@@ -315,15 +315,9 @@
 #       table asks, assisted, naming its file, never read as no lot; a folder with no 00-missao.md,
 #       and none, are rc 2 naming the file; plan --lot answers as before, its lot not covered naming
 #       no mission (decision 3 of the owner on the r6)
-#   R69 budget leaves out of the sum the spend of a mission of the campaign that never reached the
-#       base and whose worktree was removed, rc 0, and the limit is declared where its reader reads:
-#       in a repo whose main tracks a bare origin, a mission merged into the base is still counted
-#       after its worktree goes, while one whose branch was pushed and never merged (a pull request
-#       closed without merge) and one never pushed (a mission dropped) each take their spend out of
-#       the sum as their worktree goes, the answer of today pinned whole; the comments right above
-#       campaign_set and cmd_budget, the Declared limits of docs/pipeline.md and the section of the
-#       campaign ceiling in templates/delegation.md write the limit and what the owner does until a
-#       source exists (achado #1 of the r7)
+#   R69 budget keeps explicitly attributed spend when a worktree goes, counts the overlap with
+#       mission discovery once, and excludes foreign repos and campaigns. Legacy rows without a
+#       campaign still count while the mission is discoverable.
 #   R70 HANDOFF_DIR is compared as the runner reads it, every leading ./ and every trailing /
 #       dropped (load_config): `./docs/handoffs/` in the campaign checkout and `docs/handoffs` in the
 #       worktree of its mission, the inverse with the ./ and the / repeated, and each written on one
@@ -341,9 +335,7 @@
 # which the catalogue does reach (mut_WORKER_reuse_*, mut_WORKER_blind_*, mut_WORKER_ceiling_*); R63
 # and R66 read the command and docs/pipeline.md alone, so their controls are all they have. R68
 # reads the command, docs/pipeline.md and the comment of cmd_allows, and mut_WORKER_derived_* reach
-# the code of cmd_allows, never that comment, so its controls are all its prose has. R69
-# carries the same control over its four places, and two of them are comments of bin/sdd-worker,
-# which mut_WORKER_discarded_* reach.
+# the code of cmd_allows, never that comment, so its controls are all its prose has.
 #
 # Declared limit, no probe: the review item stops when `git rev-list <reviewed_head>..<head>` does
 # not run, and no world here makes it fail — it walks the commits `git merge-base --is-ancestor` has
@@ -397,8 +389,6 @@
 # - The regex guard has no world of its own: of the 23 names tried, every one a glob does not read
 #   as itself a regex does not either, so a poison a regex reads as itself stops at the glob guard.
 #   It stays for the name it prints.
-# - spent() writes event and repo as the runner does, and budget reads only mission and cost_usd:
-#   a constant in either changes no answer.
 # - not_under serves two fixture checks over a constant prefix, `docs/handoffs/20990300-ready/`,
 #   with no character a regex reads, and git prints names relative to the root, so the prefix is
 #   only ever at the start: a filter that drops every line, one that drops a line holding the
@@ -459,35 +449,6 @@
 # - derived_missing reads through tree_primitive too, and its call dropped alone is green (the
 #   pass of the R15), the limit of R63 to R66 above.
 #
-# Declared limits of R69, no probe:
-# - The family pins a limit, not a rule: the day a source finds the two missions (the session line
-#   of the ledger carrying campaign:, in TODO.md), its world turns red, since the three ledger lines
-#   of the fixture carry campaign: "di-gone" already, and the declaration and the pinned answers
-#   change in that commit.
-# - Each place is read by its limit and its remedy alone, the template by fragments (its prose is
-#   pt-BR, and this file is English surface): the cases, the reason, the ceiling passed by that
-#   spend and the ledger sum the owner reads, around them, are unread, and so are the two sentences
-#   that say the campaign passes the signed ceiling only by three spends: the runner's overrun, this
-#   spend, and the orchestrating session's and its subagents' (the paragraph of docs/pipeline.md
-#   that opens on `**The campaign ceiling is a hard limit.**`, and the template's), connecting prose
-#   as in R63 to R66.
-# - next is not asked. Measured once for the R16, in a copy with a gh stub: the closed mission
-#   found answers `stop L1 <id> — pull request closed without merge: #7`, rc 1, and once its
-#   worktree goes, `plan L1 - — no mission of campaign <id> declares lot: L1`, rc 0. That is the
-#   same limit seen by another verb (a lot whose mission went is planned again, the owner's way to
-#   replan it), and budget is the verb of the finding.
-# - disc_is compares the whole line and the rc 0, and neither has a world of its own here (the pass
-#   of the R16, measured in pairs): a prefix comparison stays green alone, and with a suffix on the
-#   campaign line ceiling:, cwd:, gone:, narrow:, spend: and worktree: go red; the rc unread stays
-#   green alone, and with the campaign line at rc 1 budget:, cap:, ceiling: and six more go red.
-# - The fixture's three witnesses (main tracks origin/main, the base carries neither of the two
-#   missions, their branches still carry them after the worktrees go) name its shape, and none has a
-#   world: a main that tracked nothing, or a base that carried one, changes the pinned answers, and
-#   git worktree remove never deletes a branch.
-# - budget is asked from the cwd of the fixture repo, and asked from the campaign's checkout it
-#   answers the same: that cwd matters to a git call that lost its -C, which is gone:'s world.
-# - discarded_missing reads through tree_primitive too, and its call dropped alone is green (the
-#   pass of the R16), the limit of R63 to R66 above.
 #
 # Declared limit of the starter probe of budget_is, no probe:
 # - Its config is written by `sed -e "s|<SDD_HOME>|$ROOT|g"`, and a kit path that holds a `|` ends
@@ -520,7 +481,7 @@
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
 # `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `narrow: `, `listed: `,
 # `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `criteria: `, `gone: `,
-# `stamp: `, `reuse: `, `blind: `, `cut: `, `ceiling: `, `derived: `, `discarded: `, `spelling: `, `command: ` and
+# `stamp: `, `reuse: `, `blind: `, `cut: `, `ceiling: `, `derived: `, `spelling: `, `command: ` and
 # `docs: `) prints exactly the assertions the mission plan or the fix increment that opened it names —
 # the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
 # the census in check-health.sh holds that clause.
@@ -1283,13 +1244,13 @@ mission() {
   fi
 }
 
-# spent <mission> <event> <cost> — one line of the ledger in the shape the runner writes it (a
+# spent <mission> <event> <cost> [<repo>] — one line of the ledger in the shape the runner writes it (a
 # session line of the real ledger, trimmed to the keys around the two a reader of the spend reads);
 # <cost> is raw JSON: a number, or the null the runner writes for the events that carry none. Built
 # by jq, never by printf: the repo is a path of the box, and a quote in it (R58) would make every
 # line malformed, which the reader skips and the sum reads as nothing spent.
 spent() {
-  jq -cn --arg e "$2" --arg r "$REPO" --arg m "$1" --argjson c "$3" \
+  jq -cn --arg e "$2" --arg r "${4:-$REPO}" --arg m "$1" --argjson c "$3" \
     '{v: 1, ts: "2099-01-01T00:00:00-03:00", event: $e, invocation: "run", project: "fixture",
       repo: $r, mission: $m, phase: "EXEC", rc: 0, cost_usd: $c}'
 }
@@ -1346,7 +1307,7 @@ mkdir -p "$BOX/state" "$BOX/home/.sdd"
   printf '{"v":1,"event":"session","mission":"20990101-b-one","cost_usd":\n'
   spent 20990103-b-other session 40; spent 20990104-b-longer session 100
   spent 20990105-b-none session 30; spent 20990106-b-wt session 4
-  spent 20990107-b-hd-in session 2; spent 20990108-b-hd-decoy session 16
+  spent 20990107-b-hd-in session 2 "$HD"; spent 20990108-b-hd-decoy session 16 "$HD"
 } > "$BOX/state/autonomy-log.jsonl"
 cp "$BOX/state/autonomy-log.jsonl" "$BOX/home/.sdd/"
 want='campaign US$ 8.50 of 100.00 — 3 mission(s); mission cap US$ 25'
@@ -4142,8 +4103,8 @@ cp "$ROOT/templates/missao.md" "$GN-l1/$H/"'20990906-g-a\b/00-missao.md'
 git -C "$GN-l1" add -A "$H"
 git -C "$GN-l1" -c user.name=fixture -c user.email=fixture@example.com commit -q -m l1
 prs gone-l1 '[{"number":90,"state":"MERGED"}]'
-{ spent "$M1" session 85; spent 20990903-g-deep session 7; spent 20990904-g-notes session 3
-  spent 20990905-g-other session 11; } >> "$SDD_STATE_DIR/autonomy-log.jsonl"
+{ spent "$M1" session 85 "$GNT"; spent 20990903-g-deep session 7 "$GNT"; spent 20990904-g-notes session 3 "$GNT"
+  spent 20990905-g-other session 11 "$GNT"; } >> "$SDD_STATE_DIR/autonomy-log.jsonl"
 mkdir -p "$BOX/stub-gone"
 { printf '#!/usr/bin/env bash\nroot=%q\n' "$(CDPATH='' cd "$GN" && pwd -P)"; tail -n +3 "$BOX/stub/gh"; } > "$BOX/stub-gone/gh"
 chmod +x "$BOX/stub-gone/gh"
@@ -4553,7 +4514,7 @@ git init -q -b main "$k"
 printf 'HANDOFF_DIR="docs/handoffs"\nON_ESCALATION_CMD="true"\nBUDGET_MISSION_USD=12.5\n' > "$k/.sdd/config.sh"
 cp -a "$(campaign ce-strict-src/ce-strict pr "$FAR" 40 100)" "$k/docs/campaigns/"
 mission "$k" "$H" 20991106-ce-strict ce-strict
-spent 20991106-ce-strict session 80 >> "$BOX/state/autonomy-log.jsonl"
+spent 20991106-ce-strict session 80 "$k" >> "$BOX/state/autonomy-log.jsonl"
 want="$(room_line 80.00 100.00 20.00 40)"
 budget_is strict 1 "$want" "$k/docs/campaigns/ce-strict"
 [ "$W_OUT" = "$want" ] || got="${got:+$got; }strict: the line is '$W_OUT'"
@@ -4843,27 +4804,10 @@ else
     'each ask its whole line, each refusal rc 2 naming its flag or file, plan --lot as before' "$got"
 fi
 
-# --- R69: the spend of a mission that never reached the base and whose worktree went -------------
-# A mission of the campaign that never reached the base, its pull request closed without merge or the
-# mission dropped, is in the set only while its worktree is there: once the owner removes it, no
-# source of the set keeps it (the disk and the base), and budget reads no campaign in the ledger, so it
-# answers a smaller sum with rc 0 (achado #1 of the review r7). The source is the owner's decision
-# (pending 1 of the r7: the session line of the ledger carries campaign:, which the runner reads from
-# the 00-missao.md, a change to bin/sdd), and it is in TODO.md; until it lands the limit is declared,
-# and this family pins it. One repo with a bare origin, its main tracking origin/main, and a campaign
-# of three missions, each in a worktree of its own:
-#   merged   pushed to origin's main: in the base, so it is still counted after its worktree goes
-#   closed   its branch pushed to origin under its own name and never merged, a pull request closed
-#            without merge: after its worktree goes the mission is still in git, in its branch and in
-#            origin's, and nowhere the set reads
-#   dropped  never pushed, a mission left after a budget-exhausted
-# Each spends in one session line of the ledger carrying campaign: "di-gone", as the runner will write
-# it from that source; budget reads no campaign today, so the field changes no answer pinned here.
-# budget is asked with the three alive (102.00, 3 missions), with merged's worktree removed (the
-# same), then closed's (17.00, 2) and dropped's (10.00, 1): each removal of a mission that never
-# reached the base takes its spend out of the sum, rc 0 throughout, the answer of today written HERE
-# and compared whole. A source that finds the two missions turns this red, and the declaration moves
-# with it in that commit.
+# --- R69: campaign spend survives removal of unmerged worktrees ---------------------------------
+# The base retains the merged mission. Only the ledger identifies the closed and dropped missions
+# after removal. One legacy row is still identifiable in the base, another becomes unattributable
+# when its worktree goes. Decoys share the slug, repo or campaign, but not all required keys.
 got=""
 DO="$BOX/disc-origin.git"
 DN="$BOX/disc"
@@ -4891,8 +4835,19 @@ for x in merged:L1:10 closed:L2:85 dropped:L3:7; do
   lot_mission "$DN-$w" "2099120$n-di-$w" di-gone "$l" "di-$w" humano-2099-01-01
   git -C "$DN-$w" add -A "$H"
   git -C "$DN-$w" -c user.name=fixture -c user.email=fixture@example.com commit -q -m "$w"
-  spent "2099120$n-di-$w" session "$c" | jq -c '. + {campaign: "di-gone"}' >> "$SDD_STATE_DIR/autonomy-log.jsonl"
+  if [ "$w" = merged ]; then
+    spent "2099120$n-di-$w" session "$c" "$DN"
+  else
+    spent "2099120$n-di-$w" session "$c" "$DN" | jq -c '. + {campaign: "di-gone"}'
+  fi >> "$SDD_STATE_DIR/autonomy-log.jsonl"
 done
+{
+  spent 20991202-di-closed close 5 "$DN" | jq -c '. + {campaign: "di-gone"}'
+  spent 20991203-di-dropped session 1 "$DN"
+  spent 20991201-di-merged session 19 "$REPO"
+  spent 20991202-di-closed session 23 "$REPO" | jq -c '. + {campaign: "di-gone"}'
+  spent 20991201-di-merged session 29 "$DN" | jq -c '. + {campaign: "another-campaign"}'
+} >> "$SDD_STATE_DIR/autonomy-log.jsonl"
 git -C "$DN-merged" push -q origin HEAD:main 2> /dev/null || got="${got:+$got; }fixture: di-merged was not pushed to origin's main"
 git -C "$DN-closed" push -q origin HEAD:refs/heads/di-closed 2> /dev/null \
   || got="${got:+$got; }fixture: di-closed was not pushed to origin"
@@ -4901,111 +4856,25 @@ git -C "$DN" cat-file -e "$DUP:$H/20991201-di-merged/00-missao.md" 2> /dev/null 
 for x in 20991202-di-closed 20991203-di-dropped; do
   if git -C "$DN" cat-file -e "$DUP:$H/$x/00-missao.md" 2> /dev/null; then got="${got:+$got; }fixture: the base carries $x"; fi
 done
-# disc_is <label> <want> — budget of the campaign asked from the cwd of the fixture repo, whose main
-# tracks nothing, under NUM_POISON; appends to got unless it left rc 0 and the one line <want>, whole.
+# disc_is <label> <rc> <want> — require the entire answer, not just the printed spend.
 disc_is() {
   LC_ALL="$NUM_POISON" W_CWD="$REPO" worker budget "$d"
-  { [ "$W_RC" = 0 ] && [ "$W_OUT" = "$2" ]; } || got="${got:+$got; }$1: rc $W_RC, '$W_OUT' (want rc 0, '$2')"
+  { [ "$W_RC" = "$2" ] && [ "$W_OUT" = "$3" ]; } || got="${got:+$got; }$1: rc $W_RC, '$W_OUT' (want rc $2, '$3')"
 }
-disc_is alive "$(camp_line 102.00 200.00 3 40)"
-for x in merged:102.00:3 closed:17.00:2 dropped:10.00:1; do
+disc_is alive 0 "$(camp_line 108.00 200.00 3 40)"
+for x in merged:108.00:3 closed:108.00:2 dropped:107.00:1; do
   IFS=: read -r w s c <<< "$x"
   dn worktree remove "$DN-$w" || got="${got:+$got; }fixture: the worktree of $w was not removed"
   [ ! -e "$DN-$w" ] || got="${got:+$got; }fixture: the worktree of $w is still on disk"
-  disc_is "$w removed" "$(camp_line "$s" 200.00 "$c" 40)"
+  disc_is "$w removed" 0 "$(camp_line "$s" 200.00 "$c" 40)"
 done
-git -C "$DN" cat-file -e "refs/heads/di-closed:$H/20991202-di-closed/00-missao.md" 2> /dev/null \
-  && git -C "$DN" cat-file -e "refs/remotes/origin/di-closed:$H/20991202-di-closed/00-missao.md" 2> /dev/null \
-  && git -C "$DN" cat-file -e "refs/heads/di-dropped:$H/20991203-di-dropped/00-missao.md" 2> /dev/null \
-  || got="${got:+$got; }fixture: the branches no longer carry the two missions"
-# The prose. discarded_missing <root> — `discarded: <where> limit` and `discarded: <where> remedy` for
-# each place that does not write the limit (DISC_LIMIT) or what the owner does until a source exists
-# (DISC_REMEDY): where is campaign_set or cmd_budget (the comment right above each in bin/sdd-worker),
-# pipeline (the Declared limits of docs/pipeline.md) or template (the section of the campaign ceiling
-# in templates/delegation.md). The template is written in this repo's OUTPUT_LANG, and this file is
-# English surface: it is read by fragments, every one of DISC_TPL_LIMIT for the limit and every one
-# of DISC_TPL_REMEDY for the remedy, none carrying a word tests/check-lang.sh reads as Portuguese.
-DISC_LIMIT='never reached the base and whose worktree was removed is found nowhere, and its spend leaves the sum'
-DISC_REMEDY='remove the worktree of a mission that will not reach the base only after signing a campaign ceiling lower by what it spent'
-DISC_TPL_LIMIT=('cujo worktree foi removido' 'o gasto dela sai da soma')
-DISC_TPL_REMEDY=('remova o worktree' 'assinar um teto de campanha menor')
-discarded_missing() {
-  local s x f
-  for f in campaign_set cmd_budget; do
-    s="$(comment_of "$1/bin/sdd-worker" "$f")"
-    grep -qF "$DISC_LIMIT" <<< "$s" || printf 'discarded: %s limit\n' "$f"
-    grep -qF "$DISC_REMEDY" <<< "$s" || printf 'discarded: %s remedy\n' "$f"
-  done
-  s="$(awk '$0 == "### Declared limits (ADR 0022)" { on = 1; next } on && /^#/ { exit } on' "$1/docs/pipeline.md" 2>/dev/null \
-       | squeeze)"
-  grep -qF "$DISC_LIMIT" <<< "$s" || printf 'discarded: pipeline limit\n'
-  grep -qF "$DISC_REMEDY" <<< "$s" || printf 'discarded: pipeline remedy\n'
-  s="$(section "$1/templates/delegation.md" 'O teto da campanha' 2>/dev/null | squeeze)"
-  for x in "${DISC_TPL_LIMIT[@]}"; do grep -qF -- "$x" <<< "$s" || { printf 'discarded: template limit\n'; break; }; done
-  for x in "${DISC_TPL_REMEDY[@]}"; do grep -qF -- "$x" <<< "$s" || { printf 'discarded: template remedy\n'; break; }; done
-}
-m="$(discarded_missing "$ROOT")"
-[ -z "$m" ] || got="${got:+$got; }missing: ${m//$'\n'/, }"
-SETC='/^# campaign_set <root> <id>/,/^campaign_set() {$/'
-BUDC='/^# budget <campaign-dir>/,/^cmd_budget() {$/'
-tree_control 'campaign_set: no limit' discarded_missing 'discarded: campaign_set limit' "$W13" \
-  "$SETC s/is found nowhere, and its spend leaves the/is found later, and its spend leaves the/"
-tree_control 'campaign_set: no remedy' discarded_missing 'discarded: campaign_set remedy' "$W13" \
-  "$SETC s/only after signing a\$/before signing a/"
-tree_control 'campaign_set: the limit only inside the function' discarded_missing 'discarded: campaign_set limit' "$W13" \
-  "$SETC s/is found nowhere, and its spend leaves the/is found later, and its spend leaves the/
-/^campaign_set() {\$/a\\
-  # never reached the base and whose worktree was removed is found nowhere, and its spend leaves the sum"
-tree_control 'campaign_set: cut off by a blank line' discarded_missing \
-  $'discarded: campaign_set limit\ndiscarded: campaign_set remedy' "$W13" 's/^campaign_set() {$/\n&/'
-tree_control 'cmd_budget: no limit' discarded_missing 'discarded: cmd_budget limit' "$W13" \
-  "$BUDC s/is found\$/is found later/"
-tree_control 'cmd_budget: no remedy' discarded_missing 'discarded: cmd_budget remedy' "$W13" \
-  "$BUDC s/remove the worktree of a mission that will not reach/remove the worktree of a mission that may reach/"
-tree_control 'cmd_budget: the remedy only above campaign_set' discarded_missing 'discarded: cmd_budget remedy' "$W13" \
-  "$BUDC s/remove the worktree of a mission that will not reach/remove the worktree of a mission that may reach/
-/^# campaign_set <root> <id>/i\\
-# remove the worktree of a mission that will not reach the base only after signing a campaign ceiling lower by what it spent"
-tree_control 'cmd_budget: cut off by a blank line' discarded_missing \
-  $'discarded: cmd_budget limit\ndiscarded: cmd_budget remedy' "$W13" 's/^cmd_budget() {$/\n&/'
-tree_control 'pipeline: no limit' discarded_missing 'discarded: pipeline limit' docs/pipeline.md \
-  's/^  nowhere, and its spend leaves the sum:/  later, and its spend leaves the sum:/'
-tree_control 'pipeline: no remedy' discarded_missing 'discarded: pipeline remedy' docs/pipeline.md \
-  's/only after signing a campaign$/after signing a campaign/'
-tree_control 'pipeline: the two only above the limits' discarded_missing \
-  $'discarded: pipeline limit\ndiscarded: pipeline remedy' docs/pipeline.md \
-  "s/^  nowhere, and its spend leaves the sum:/  later, and its spend leaves the sum:/
-s/only after signing a campaign\$/after signing a campaign/
-/^### Declared limits (ADR 0022)\$/i\\
-A mission that $DISC_LIMIT; $DISC_REMEDY.\\
-"
-tree_control 'template: the removal not named' discarded_missing 'discarded: template limit' "$T13" \
-  's/cujo worktree foi removido/cujo worktree saiu/'
-tree_control 'template: the spend kept in the sum' discarded_missing 'discarded: template limit' "$T13" \
-  's/o gasto dela sai da soma/o gasto dela fica na soma/'
-tree_control 'template: no remedy' discarded_missing 'discarded: template remedy' "$T13" \
-  's/remova o worktree/apague o worktree/'
-tree_control 'template: no lower ceiling' discarded_missing 'discarded: template remedy' "$T13" \
-  's/assinar um teto de campanha menor/assinar um teto de campanha maior/'
-tree_control 'template: every fragment gone' discarded_missing $'discarded: template limit\ndiscarded: template remedy' "$T13" \
-  's/cujo worktree foi removido/cujo worktree saiu/
-s/o gasto dela sai da soma/o gasto dela fica na soma/
-s/remova o worktree/apague o worktree/
-s/assinar um teto de campanha menor/assinar um teto de campanha maior/'
-tree_control 'template: the two only in another section' discarded_missing \
-  $'discarded: template limit\ndiscarded: template remedy' "$T13" \
-  "s/cujo worktree foi removido/cujo worktree saiu/
-s/remova o worktree/apague o worktree/
-/^## Como assinar\$/a\\
-${DISC_TPL_LIMIT[*]}, ${DISC_TPL_REMEDY[*]}"
-tree_primitive discarded_missing 'discarded: pipeline limit' docs/pipeline.md \
-  's/^  nowhere, and its spend leaves the sum:/  later, and its spend leaves the sum:/
-s/only after signing a campaign$/after signing a campaign/'
+sed -i 's/^budget_campaign_usd: 200$/budget_campaign_usd: 107/' "$d/delegation.md"
+disc_is 'ceiling after removal' 1 "$(camp_line 107.00 107.00 1 40)"
 if [ -z "$got" ]; then
-  pass 'discarded: a mission that never reached the base and whose worktree was removed leaves the sum of budget, rc 0, and campaign_set, cmd_budget, docs/pipeline.md and the template declare it with what the owner does'
+  pass 'removed mission spend is counted once'
 else
-  fail 'discarded: a mission that never reached the base and whose worktree was removed leaves the sum of budget, rc 0, and campaign_set, cmd_budget, docs/pipeline.md and the template declare it with what the owner does' \
-    'each removal its whole line and rc 0, the limit and the remedy in the four places, and each sabotaged copy naming what it lost' "$got"
+  fail 'removed mission spend is counted once' \
+    'attributed spend survives removal without duplicates, legacy spend needs a mission, and the ceiling stops' "$got"
 fi
 
 # --- R70: HANDOFF_DIR read as the runner reads it -----------------------------------------------
@@ -5152,13 +5021,19 @@ cp "$cdxl/autonomy-log.jsonl" "$cdxl/before-planning-probe"
   jq -cn --arg mission "codex-cost-mission" '{event:"session",repo:"/other-repository",mission:$mission,cost_usd:90}'
   jq -cn --arg repo "$REPO" '{event:"codex_launch",engine:"codex",phase:"PLAN",repo:$repo,campaign:"codex-cost",launch_id:"plan-test",cost_usd:null}'
   jq -cn --arg repo "$REPO" '{event:"codex_plan_usage",engine:"codex",phase:"PLAN",repo:$repo,campaign:"codex-cost",launch_id:"plan-test",cost_usd:null,estimated_cost_usd:1.50}'
+  jq -cn --arg repo "$REPO" '{event:"codex_launch",engine:"codex",phase:"EXEC",repo:$repo,campaign:"codex-cost",
+    mission:"removed-unfinished",launch_id:"unfinished-test",cost_usd:null}'
+  jq -cn --arg repo "$REPO" '{event:"codex_launch",engine:"codex",phase:"EXEC",repo:$repo,campaign:"codex-cost",
+    mission:"removed-finished",launch_id:"finished-test",cost_usd:null}'
+  jq -cn --arg repo "$REPO" '{event:"session",engine:"codex",phase:"EXEC",repo:$repo,campaign:"codex-cost",
+    mission:"removed-finished",launch_id:"finished-test",cost_usd:2}'
 } >>"$cdxl/autonomy-log.jsonl"
 cdx_worker budget "$cdx"
-if [ "$W_RC" = 0 ] && [[ "$W_OUT" == 'campaign known US$ 4.00 of 30.00'*'3 unknown session(s)'*'estimated subtotal US$ 43.75'* ]]; then
-  pass 'codex cost: planner receipts count once before a mission exists and explicitly foreign rows do not count'
+if [ "$W_RC" = 0 ] && [[ "$W_OUT" == 'campaign known US$ 6.00 of 30.00'*'4 unknown session(s)'*'estimated subtotal US$ 43.75'* ]]; then
+  pass 'codex cost: planner receipts and archived launches keep their cost attribution'
 else
-  fail 'codex cost: planner receipts count once before a mission exists and explicitly foreign rows do not count' \
-    'rc 0, known US$ 4.00, 3 unknown sessions and estimated US$ 43.75' "rc $W_RC: $W_OUT $W_ERR"
+  fail 'codex cost: planner receipts and archived launches keep their cost attribution' \
+    'rc 0, known US$ 6.00, 4 unknown sessions and estimated US$ 43.75' "rc $W_RC: $W_OUT $W_ERR"
 fi
 mv "$cdxl/before-planning-probe" "$cdxl/autonomy-log.jsonl"
 

@@ -7254,8 +7254,8 @@ mut_WORKER_allows_merge_at_plan() {
 mut_WORKER_allows_ignores_lot() {
   sed -i '/^cmd_allows() {/,/^}/ s@^    effective_level "\$1" "\$lot" @    effective_level "$1" "" @' "${1%/*}/sdd-worker"
 }
-# The filter of the campaign's missions dropped from the sum: every line of the ledger counts, other
-# campaigns' and other repos' included. Caught by "budget: the sum counts the campaign's missions and
+# The legacy mission filter is dropped: a row can count without a mission in the inventory.
+# Caught by "budget: the sum counts the campaign's missions and
 # no other" (check-worker.sh).
 mut_WORKER_budget_counts_every_mission() {
   sed -i '/^cmd_budget() {/,/^}/ s@(\.mission | IN(\$ARGS\.positional\[\]))@true@' "${1%/*}/sdd-worker"
@@ -7814,23 +7814,6 @@ mut_WORKER_derived_plan_by_mission() {
 # worlds no 00-missao.md and no folder.
 mut_WORKER_derived_missing_file_asks() {
   sed -i '/^cmd_allows() {/,/^}/ s@^    if \[ ! -f "\$mf" \]; then$@    if false; then@' "${1%/*}/sdd-worker"
-}
-# The header of campaign_set stops declaring that a mission of the campaign that never reached the
-# base and whose worktree was removed is found nowhere, and that its spend leaves the sum (achado #1
-# of the mission's review r7): the limit is kept, and silent. Caught by "discarded: a mission that
-# never reached the base and whose worktree was removed leaves the sum of budget, rc 0, and
-# campaign_set, cmd_budget, docs/pipeline.md and the template declare it with what the owner does"
-# (check-worker.sh).
-mut_WORKER_discarded_limit_dropped() {
-  sed -i '/^# campaign_set <root> <id>/,/^campaign_set() {$/ { /^# never reached the base and whose worktree was removed is found nowhere/d }' \
-    "${1%/*}/sdd-worker"
-}
-# The comment of cmd_budget stops telling the owner what to do until a source of that mission
-# exists: remove its worktree only after signing a campaign ceiling lower by what it spent. Caught
-# by "discarded: …" (check-worker.sh).
-mut_WORKER_discarded_remedy_dropped() {
-  sed -i '/^# budget <campaign-dir>/,/^cmd_budget() {$/ s/remove the worktree of a mission that will not reach the base only after/remove the worktree of a mission that will not reach the base after/' \
-    "${1%/*}/sdd-worker"
 }
 # campaign_set compares the HANDOFF_DIR of a worktree of the set as written again, and the runner
 # reads it normalised (load_config): `././docs/handoffs//` there and `docs/handoffs` in the campaign
@@ -8949,8 +8932,6 @@ CATALOG=(
   WORKER_derived_from_unnamed
   WORKER_derived_plan_by_mission
   WORKER_derived_missing_file_asks
-  WORKER_discarded_limit_dropped
-  WORKER_discarded_remedy_dropped
   WORKER_handoff_dir_unnormalized
 )
 

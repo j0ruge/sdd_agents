@@ -6769,6 +6769,7 @@ echo "== sdd close spends a session, so it writes a row =="
 kitguard_reset
 CLW="$OUTSIDE/close-ledger"
 kitguard_world "$CLW"
+sed -i '2i campaign: fixture-campaign' "$CLW/docs/handoffs/$MISSION/00-missao.md"
 sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$CLW/.sdd/config.sh"
 printf -- '---\nfase: TICKET\nissue: SQ-9\n---\n# TICKET\n' > "$CLW/docs/handoffs/$MISSION/10-ticket.md"
 # An issue that is NOT Done: the pre-check finds acli reachable, so the session runs.
@@ -6820,6 +6821,8 @@ assert_eq "close writes a row that is not a session row wearing a CLOSE label" "
 assert_eq "close row carries cost_usd, and the turns, cache and harness beside it" \
   "0.0362104 1 18134 2.1.260 true" \
   "$(rows 'select(.event == "close") | "\(.cost_usd) \(.turns) \(.cache_read) \(.harness) \(.dur_s != null and (.dur_s | type) == "number")"')"
+assert_eq "close row names the campaign of the paid session" "fixture-campaign" \
+  "$(rows 'select(.event == "close") | .campaign')"
 # The close door's DENIED lines (ADR 0019): cmd_close reads its session through the same
 # hat_init_facts as run_phase and names the denials right after it, as run_phase does — two doors
 # and one probe each, since a call removed from either one is invisible to the other's probe. The

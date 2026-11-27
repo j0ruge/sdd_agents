@@ -5606,14 +5606,14 @@ autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verifie
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
     --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
-    --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
+    --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" --arg campaign "$LAST_PHASE_CAMPAIGN" \
     '{v: 1, ts: $ts, event: "close",
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
       kit_rev: (if $rev == "" then null else $rev end),
       kit_rev_dirty: (if $rdirty == "" then null else ($rdirty == "true") end),
-      project: $project, repo: $repo, mission: $mission,
+      project: $project, repo: $repo, mission: $mission, campaign: (if $campaign == "" then null else $campaign end),
       issue: $issue, session: $session,
       dur_s: ($dur | tonumber? // null), cost_usd: ($cost | tonumber? // null),
       turns: ($turns | tonumber? // null), cache_read: ($cache | tonumber? // null),
@@ -5658,7 +5658,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
     --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
-    --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
+    --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" --arg campaign "$LAST_PHASE_CAMPAIGN" \
     --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
@@ -5675,7 +5675,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
       kit_rev: (if $rev == "" then null else $rev end),
       kit_rev_dirty: (if $rdirty == "" then null else ($rdirty == "true") end),
-      project: $project, repo: $repo, mission: $mission,
+      project: $project, repo: $repo, mission: $mission, campaign: (if $campaign == "" then null else $campaign end),
       phase: $phase, step: $step,
       step_after: (if $step_after == "" then null else $step_after end),
       agent: $agent, model: $model,
@@ -6014,6 +6014,16 @@ read_extra_dir_ok() {
 # The 8 hex are the invocation's own id, the one the session's log file is named after.
 session_git_label() { printf 'sdd:%s:%s\n' "$1" "${2:0:8}"; }
 
+# Capture once before dispatch so a launch and its eventual session agree even if the file changes.
+mission_campaign() {
+  local campaign
+  campaign="$(frontmatter "$MISSION_DIR/00-missao.md" campaign)"
+  case "$campaign" in
+    '<'* ) ;; # An unfilled mission template does not name a campaign.
+    * ) printf '%s' "$campaign" ;;
+  esac
+}
+
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
   # ZEROED ON ENTRY, above every other statement of this function — above the `die`
@@ -6176,12 +6186,13 @@ $role_context"
   step "phase $pstep — ${agent:-skill} ($model, effort ${effort:-<settings>}) — session ${resume_sid:-$sid}"
 
   local rc=0
+  LAST_PHASE_CAMPAIGN="$(mission_campaign)"
   if [ "$PHASE_ENGINE" = codex ]; then
     # The final session row may never arrive if the runner is interrupted before the gate.
     autonomy_append "$(jq -cn --arg ts "$(date -Iseconds)" --arg mission "$MISSION" \
-      --arg repo "$(ledger_repo_root)" --arg phase "$phase" --arg id "$sid" \
+      --arg repo "$(ledger_repo_root)" --arg phase "$phase" --arg id "$sid" --arg campaign "$LAST_PHASE_CAMPAIGN" \
       '{v:1, ts:$ts, event:"codex_launch", engine:"codex", mission:$mission, repo:$repo,
-        phase:$phase, launch_id:$id, cost_usd:null}')"
+        campaign:(if $campaign == "" then null else $campaign end), phase:$phase, launch_id:$id, cost_usd:null}')"
   fi
   # The session writes STRAIGHT to the stream file, one JSON event per line, as it happens. Under
   # the old `--output-format json` this file was a single blob printed at exit: it sat at 0 bytes
@@ -6324,6 +6335,7 @@ $role_context"
 LAST_PHASE_SID=""
 LAST_PHASE_RC=""
 LAST_PHASE_COST=""
+LAST_PHASE_CAMPAIGN=""
 LAST_PHASE_TURNS=""
 LAST_PHASE_CACHE_READ=""
 LAST_PHASE_DUR=""
@@ -14147,6 +14159,7 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   local -a close_effort=() close_read_rules=()
   if [ -n "$EFFORT_TICKET" ]; then close_effort=(--effort "$EFFORT_TICKET"); fi
   mapfile -t close_read_rules < <(kit_read_rules)
+  LAST_PHASE_CAMPAIGN="$(mission_campaign)"
   ( cd "$REPO_ROOT" && env -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$close_prompt" \
       --model "$MODEL_TICKET" ${close_effort[@]+"${close_effort[@]}"} --permission-mode "$PERMISSION_MODE" \
       --output-format stream-json --verbose \

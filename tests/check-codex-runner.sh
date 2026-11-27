@@ -88,6 +88,7 @@ MDIR="$REPO/docs/handoffs/$MISSION"
 cat > "$MDIR/00-missao.md" <<'MISSION'
 ---
 missao: 20260101-codex-fixture
+campaign: fixture-campaign
 branch: develop
 aprovacao: auto
 ---
@@ -181,6 +182,11 @@ assert 'the Codex launch is recorded before the provider starts' test ! -e "$FIX
 assert 'each finished session refers to one earlier launch' jq -es '
   (map(select(.event == "session")) | map(.launch_id) | sort) ==
   (map(select(.event == "codex_launch")) | map(.launch_id) | sort)
+' "$SDD_STATE_DIR/autonomy-log.jsonl"
+
+assert 'campaign attribution is recorded on each paid session and its launch' jq -es '
+  map(select(.event == "session" or .event == "codex_launch"))
+  | length == 4 and all(.[]; .campaign == "fixture-campaign")
 ' "$SDD_STATE_DIR/autonomy-log.jsonl"
 
 touch "$FIX/hat-cross"

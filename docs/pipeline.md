@@ -1548,6 +1548,7 @@ escalation records a refusal before launch.
 | `project` | string | on Codex launch receipts | `PROJECT_NAME` from the target repo's `.sdd/config.sh`. |
 | `repo` | string | never | Absolute path of the target repo — the directory holding the **shared** `.git`, as `ledger_repo_root` in `bin/sdd` resolves it (`git rev-parse --git-common-dir`, normalized). Can carry client-identifying paths, which is why the ledger stays in `$HOME` and is never committed. It is also the **only** field the readers filter on before anything else: see "The file is global; the READING is per repo" above. Compared verbatim, with no normalization at read time on either side, so a repo reached through a symlink is a different repo. |
 | `mission` | string | never | The mission slug. |
+| `campaign` | string or null | legacy rows and events without campaign attribution | Campaign captured from the mission frontmatter before a session, paid close or Codex launch. The Codex planner uses the campaign it was launched for. The worker uses this field with `repo` to retain spend after worktree removal. |
 | `phase` | string | never | The pipeline phase (`EXEC`, `QA`, …). `PLAN` never appears — the interactive phase spends no session. |
 | `step` | string | on escalation rows | The sub-step actually run (`QA:plan`, `QA:exec`, `QA:close`); equal to `phase` outside QA. |
 | `step_after` | string \| `null` | on escalation rows; never absent on a session row, but `null` outside `QA` | The QA sub-step `phase_step QA` derives **after** the gate — where the session left the loop, as `step` is where it entered. Written at the three doors that write a QA session row (`cmd_run`'s first pass, its inline retry, `cmd_retry`), each behind its own phase guard. It exists because `gate_QA` refuses on its first line (`missing 30-handoff-qa.md`) every session before `close`, so a `QA:exec` that closed the report and one that did not leave the same `gate_why`: the second judge window read 7 of its 9 `churned` sessions off that sentence (`20260930-a-sub-etapa-que-andou`). |
@@ -2217,11 +2218,16 @@ provided and retains older mission rows without a repository field.
 Claude and legacy campaigns continue to sum the measured costs without applying the Codex
 unknown-cost gate.
 
-**`budget`** sums, with `jq` (never `awk`: under pt-BR the `mawk` reads `1.99` as 1), the `cost_usd`
-of the ledger rows (`${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`) whose `mission` is one of the
-campaign's: the folders under the repo's `HANDOFF_DIR` whose `00-missao.md` declares exactly that
-`campaign:`, in the campaign's checkout, in every linked worktree of the repo and in the base (the
-tree of the upstream of the branch that checkout has checked out), each mission once (a
+**`budget`** sums, with `jq` (never `awk`), the selected `cost_usd` rows in
+`${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`. Session, paid close and Codex launch rows
+record the campaign from the mission frontmatter captured before dispatch. Codex PLAN receipts
+already carry it. An explicitly attributed row must match the Git repository and campaign even
+if its mission is no longer on disk. Legacy rows without a campaign count only for discovered
+missions, and never if they name another repository. Both paths select each row at most once.
+
+The displayed mission count is the inventory, not the number of historical missions in the
+ledger. The inventory reads folders under the repo's `HANDOFF_DIR` whose `00-missao.md` declares
+that campaign, in the checkout, linked worktrees and the locally recorded upstream (a
 `git worktree list --porcelain -z` that fails is `no spend — <the call> failed (rc <n>)` with
 the required Git capability, and an upstream that does
 not read is one of three lines: `no spend — the upstream of <checkout> does not read: git
@@ -2352,7 +2358,6 @@ tolerance for prose), and the worker's round is what applies it. Its review act 
   runner reads its spend before a phase opens, so a phase may spend past `BUDGET_MISSION_USD`, and
   the campaign past its ceiling by that much. The room `budget` keeps is one run's, and the loop
   launches one run at a time.
-- A campaign's missions are matched by id, not by repository.
 - `budget`, `level` above `assisted`, and `next` source the `.sdd/config.sh` of the campaign's
   checkout and of each linked worktree that holds a mission of the campaign, and of no other (the
   narrow set, the owner's choice in the r5): a worktree with none runs no `sdd run` of the
@@ -2365,14 +2370,9 @@ tolerance for prose), and the worker's round is what applies it. Its review act 
   sourced, since no `sdd run` runs in it. A detached HEAD or a branch with no upstream reads no base,
   and a merged mission whose worktree was removed is then found nowhere until the checkout takes the
   base in; a branch whose upstream is not the base reads that branch's tree.
-- A mission of the campaign that never reached the base and whose worktree was removed is found
-  nowhere, and its spend leaves the sum: a pull request closed without merge, or a mission dropped
-  after a `budget-exhausted`, is on disk in its worktree alone, its branch is no base, and the
-  ledger names no campaign. So `budget` answers a smaller sum, rc 0, and the campaign may pass its
-  ceiling by that spend. Until the ledger carries the campaign (the direction is in `TODO.md`),
-  remove the worktree of a mission that will not reach the base only after signing a campaign
-  ceiling lower by what it spent, the sum of the `cost_usd` of the ledger lines whose `mission` is
-  its id.
+- Old ledger rows with no campaign cannot be attributed after the mission disappears from the
+  worktrees and upstream. No historical rows are rewritten. If a legacy row also has no
+  repository identity, a discoverable mission with the same id is the only available match.
 - In a target whose `.sdd/config.sh` assigns `BUDGET_MISSION_USD` above the signed cap, or leaves
   `ON_ESCALATION_CMD` empty, the worker only fails closed (`no mission cap`, `assisted — no pager`):
   the file wins over the environment, and making the signed values win there needs the runner's

@@ -770,15 +770,8 @@ base_copies() {
 # `git fetch`, was fetched first); a root on a branch whose upstream is not the base reads that
 # branch's tree; and a base that keeps the missions outside the root's HANDOFF_DIR holds none the set
 # sees, as a worktree whose HANDOFF_DIR is not the root's.
-# A mission that never reached the base, its pull request closed without merge or the mission
-# dropped, is on disk in its worktree and in no other place the set reads: a mission that
-# never reached the base and whose worktree was removed is found nowhere, and its spend leaves the
-# sum budget answers, rc 0 (achado #1 of the r7). Its branch may still carry it, here and in the
-# remote, and no branch but the root's upstream is read; the ledger names no campaign, so no reader
-# of the spend finds it another way. The source the owner chose is in TODO.md (the session line of
-# the ledger carrying campaign:, which the runner reads from the 00-missao.md); until it lands,
-# remove the worktree of a mission that will not reach the base only after signing a
-# campaign ceiling lower by what it spent.
+# Spending with explicit campaign attribution does not depend on this inventory. Only old rows
+# without a campaign still need a mission that this set can discover.
 campaign_set() {
   local root="$1" id="$2" hd whd wt m held
   SET_DIRS=(); SET_CHECKOUTS=("$root"); SET_WHY=""
@@ -851,9 +844,10 @@ budget_repo_key() {
   printf '%s' "$common"
 }
 
-# budget <campaign-dir> — what the campaign spent against its ceiling: the cost_usd of every ledger
-# line whose mission is one of the campaign's (the delegation's campaign:, campaign_set), summed by jq
-# — never by awk, whose mawk reads 1.99 as 1 under pt-BR — against budget_campaign_usd, and the
+# budget <campaign-dir> — the campaign's spend against its ceiling. A row with explicit campaign
+# attribution must match both repo and campaign. A legacy row may match a discovered mission
+# (campaign_set) unless it names a different repo. Each selected row contributes at most once.
+# Sum with jq — never awk, whose mawk reads 1.99 as 1 under pt-BR — against budget_campaign_usd, and the
 # mission cap the worker passes to `sdd run` as BUDGET_MISSION_USD. Money is counted in cents: the
 # sum and the ceiling each go through `* 100 | round` before they are compared, so 0.10 + 0.70, a
 # binary 0.7999999999999999, reaches a ceiling of 0.80; both are printed from those cents, and the
@@ -901,20 +895,16 @@ budget_repo_key() {
 # run is over among them.
 # Declared limits: the runner reads its own spend before a phase opens, so a phase may spend past
 # BUDGET_MISSION_USD, and the campaign past its ceiling by that much; the room is one run's, and the
-# loop of commands/sdd-worker.md launches one run at a time; a line is matched by its mission id
-# alone, so a mission of the same id in another repo is counted too (the fail-safe side: more
-# spend, an earlier stop); a malformed line is skipped
+# loop of commands/sdd-worker.md launches one run at a time; a legacy row with no repository
+# cannot be distinguished from a homonym if its mission is discoverable; a malformed line is skipped
 # (`fromjson?`, as the runner reads the ledger), and its cost with it; the ceiling is read whether or
 # not the delegation is signed — whether the worker may act on it is the level's question; an empty
 # BUDGET_MISSION_USD in the file stops, though the runner fills it with its default, which may be
 # below the signed cap (the fail-safe side: the owner deletes the line); a worktree made after this
 # call is not read, and the loop of commands/sdd-worker.md calls budget on every turn, so the turn
 # that runs a mission reads the worktree its plan made.
-# And a mission of the campaign that never reached the base and whose worktree was removed is found
-# nowhere, and its spend leaves the sum (campaign_set says why): budget answers a smaller sum, rc 0,
-# and the campaign may pass its ceiling by that spend. Until the ledger carries the campaign
-# (TODO.md), remove the worktree of a mission that will not reach the base only after signing a
-# campaign ceiling lower by what it spent.
+# Historical spend without a campaign cannot be attributed after the mission disappears from
+# disk and the base. The ledger is not backfilled by guessing its campaign.
 cmd_budget() {
   [ -d "$1" ] || { usage; return 2; }
   local dir="${1%/}" f root cap mcap run wt p ledger out spent ceiling reached short left
@@ -953,11 +943,8 @@ cmd_budget() {
   if [ -z "$root" ]; then printf 'no spend — %s is not inside a git checkout\n' "$dir"; return 1; fi
   campaign="$(fm_value "$f" campaign)"
   harness="$(fm_value "${f%/*}/campaign.md" harness)"
-  repo_key=""
-  if [ "$harness" = codex ]; then
-    repo_key="$(budget_repo_key "$root")" \
-      || { printf 'no spend — cannot resolve the campaign Git common directory\n'; return 1; }
-  fi
+  repo_key="$(budget_repo_key "$root")" \
+    || { printf 'no spend — cannot resolve the campaign Git common directory\n'; return 1; }
   if ! campaign_set "$root" "$campaign"; then printf 'no spend — %s\n' "$SET_WHY"; return 1; fi
   for wt in "${SET_CHECKOUTS[@]}"; do
     run="$(config_key "$wt" BUDGET_MISSION_USD "$mcap")"
@@ -992,10 +979,12 @@ cmd_budget() {
          def measured: type == "number" and . >= 0;
          [inputs | if $strict then fromjson else fromjson? end
            | select(type == "object")
-           | select(($repo == "" or .repo == $repo or .repo == null) and
-             ((.mission | IN($ARGS.positional[])) or ($repo != "" and .repo == $repo and
-               .campaign == $campaign and (.event == "codex_plan_usage" or
-                 (.event == "codex_launch" and .phase == "PLAN")))))] as $rows
+           | select(if (.campaign // "") == "" then
+               (.repo == $repo or .repo == null) and (.mission | IN($ARGS.positional[]))
+             else
+               .repo == $repo and .campaign == $campaign and
+               (.event | IN("session", "close", "codex_plan_usage", "codex_launch"))
+             end)] as $rows
          | (INDEX($rows[] | select((.event == "session" or .event == "codex_plan_usage") and (.launch_id | type == "string")); .launch_id)) as $finished
          | [$rows[] | select(.event == "session" or .event == "close" or
              .event == "codex_plan_usage" or
