@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-27 08:51
+atualizado: 2026-11-27 09:35
 ---
 
 # Checkpoint — O worker e os verbos dele
@@ -18,7 +18,7 @@ atualizado: 2026-11-27 08:51
 | I9 | Tratamento dos achados | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    review findings have verified dispositions$' <<< "$o"` → `1` | done | 2d81fe7 |
 | I10 | Escolhas e consentimento | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    merge binds answers and consent to head$' <<< "$o"` → `1` | done | 4edda89 |
 | I11 | Base de revisão | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    review preserves the eligible delta$' <<< "$o"` → `1` | done | 20ffaab |
-| I12 | Fila e pós-merge | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    queue changes and followup reviews resume safely$' <<< "$o"` → `1` | pending | — |
+| I12 | Fila e pós-merge | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    queue changes and followup reviews resume safely$' <<< "$o"` → `1` | done | f3b4056 |
 | I13 | Preflight antes do run | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    run launch requires successful worktree preflight$' <<< "$o"` → `1` | pending | — |
 | I14 | Planejamento antecipado | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | pending | — |
 

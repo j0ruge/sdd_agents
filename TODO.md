@@ -388,7 +388,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `commands/sdd-worker.md:521` (`postmerge`) — o `next` não deriva esse ato, e a frase não exige o número do PR de
   acompanhamento nem o estado da revisão dele: a sessão que retoma do journal não sabe se o PR abriu nem se a
   rodada dele fechou. Direção: a linha do merge traz o número do PR e `review pendente`, e a sessão retomada o
-  conclui antes de chamar o `next`.
+  conclui antes de chamar o `next`. RESOLVED by f3b4056
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 8 — descoberto pelo
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
@@ -539,7 +539,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   aquele lote por feito, e uma linha nova no `campaign.md` depois da assinatura muda o digest. Medido, diferencial
   sobre a delegação assinada de `cc8509a` com e sem a linha `L1b`: o L1 em voo passa a `edited after signing`.
   Com o L1b já planejado (17:58), o `next` responde `ahead plan L2` sem derivar o `approve` dele.
-  Direção: o ato `plan` diz a rota (a linha e o `lots:` no mesmo commit, assinados antes de chegar à `main`).
+  Direção: publicar fila e `lots:` com a assinatura no mesmo commit. RESOLVED by f3b4056
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-19)
 
 - [ ] **O ato `review` do worker mergeia a base antes da rodada, e o `review-base` dá `full` quando a `main` andou** —
