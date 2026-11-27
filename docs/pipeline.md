@@ -2146,6 +2146,10 @@ Under `assisted` the session proposes each act and waits for the owner's yes.
    ceiling never raises the level, and one that is not a level caps the lot at `assisted`;
 9. otherwise the signed level, `— signed until <expires>`.
 
+Before granting a level above `assisted` in either of the last two cases, the worker checks the
+clock again. A delegation that expires while the worker reads the checkouts returns
+`assisted — expired`, even if the lot would otherwise cap the level.
+
 Every rule reads ONE copy of the two files, made before the first: the digest is checked over the
 copy and the level, the lots and the ceiling granted are read from it, so an edit landing while the
 verb reads is never granted under the old signature, and the next call reads it as edited after
@@ -2236,7 +2240,8 @@ assigns the key wins (the starter assigns `150`). The session runs it in the mis
 and a worktree cut from a commit that still has the line keeps it after the owner deletes it in the
 campaign's checkout. So `budget` reads the file of the campaign's checkout and of each worktree
 that holds a mission of the campaign (the narrow set), each from its own checkout, the way the
-runner does, with the signed cap in the environment, and answers `no mission cap — <file> sets
+runner does, with the signed cap exported so child processes started by the config also see it.
+It answers `no mission cap — <file> sets
 BUDGET_MISSION_USD=<value>, …`, rc 1, naming the first file whose value the runner would apply
 above the signed cap or at zero (no ceiling), or would refuse — the runner takes digits and at most
 one dot, so `1e2`, `+5` and a blank, which `jq` reads as numbers, are `… which sdd run refuses as no

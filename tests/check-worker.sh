@@ -5528,6 +5528,60 @@ else
     'exact checkout paths reach all consumers; partial listings refuse with the Git status' "$got"
 fi
 
+# The config's child must see the signed cap, just as it would under the runner's launch.
+# Advance the clock when the worker sources the pager config, after the first expiry check.
+got=""
+d="$(cap_world child-cap '')"
+cat > "$BOX/cap-child-cap/.sdd/config.sh" <<'EOF'
+BUDGET_MISSION_USD=$(bash -c 'printf %s "${BUDGET_MISSION_USD:-150}"')
+EOF
+budget_is 'cap read by a child' 0 'campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 40' "$d"
+
+d="$(cap_world final-clock '')"
+sed -i 's/^level: pr$/level: full/' "$d/delegation.md"
+set_lots "$d/campaign.md" L1:- L2:plan
+sign "$d"
+cat > "$BOX/cap-final-clock/.sdd/config.sh" <<'EOF'
+ON_ESCALATION_CMD=true
+: > "$SDD_CLOCK_MARK"
+EOF
+clock_mark="$BOX/clock-mark"
+mkdir "$BOX/clock"
+{ printf '#!/usr/bin/env bash\nreal=%q\n' "$(command -v date)"
+  cat <<'SHIM'
+if [ "$#" -eq 1 ] && [ "$1" = '+%Y-%m-%d %H:%M' ]; then
+  if [ -e "$SDD_CLOCK_MARK" ]; then printf '%s\n' "$SDD_CLOCK_AFTER"
+  else printf '%s\n' '2099-12-31 23:57'; fi
+  exit 0
+fi
+exec "$real" "$@"
+SHIM
+} > "$BOX/clock/date"
+chmod +x "$BOX/clock/date"
+for entry in L1:full L2:plan; do
+  lot="${entry%:*}"; lv="${entry#*:}"
+  rm -f "$clock_mark"
+  PATH="$BOX/clock:$PATH" SDD_CLOCK_MARK="$clock_mark" SDD_CLOCK_AFTER='2099-12-31 23:58' \
+    allows_is "$lot still valid" 0 "allowed plan at $lv" "$d" plan --lot "$lot"
+  [ -f "$clock_mark" ] || got="${got:+$got; }$lot valid: pager config was not read"
+  rm -f "$clock_mark"
+  PATH="$BOX/clock:$PATH" SDD_CLOCK_MARK="$clock_mark" SDD_CLOCK_AFTER="$FAR" \
+    allows_is "$lot expires during the read" 1 \
+      "ask plan needs plan, effective assisted — expired: $FAR is not after $FAR" "$d" plan --lot "$lot"
+  [ -f "$clock_mark" ] || got="${got:+$got; }$lot at expiry: pager config was not read"
+done
+rm -f "$clock_mark"
+PATH="$BOX/clock:$PATH" SDD_CLOCK_MARK="$clock_mark" SDD_CLOCK_AFTER="$FAR" SDD_WORKER_NOW="$FAR" \
+  level_is 'already expired' "level assisted — expired: $FAR is not after $FAR" "$d"
+[ ! -e "$clock_mark" ] || got="${got:+$got; }already expired: pager config was read"
+
+if [ -z "$got" ]; then
+  pass 'permission reflects exported cap and final clock'
+else
+  fail 'permission reflects exported cap and final clock' \
+    'the child sees the signed cap; both lots allow before expiry and ask at expiry; already expired skips the config' "$got"
+fi
+
 # --- verdict ------------------------------------------------------------------------------------
 if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then
   printf '  FAIL  probe floor shrank to %d, expected at least %d — did a block stop being dispatched?\n' \

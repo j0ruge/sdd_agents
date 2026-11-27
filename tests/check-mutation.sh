@@ -7383,7 +7383,7 @@ mut_WORKER_cap_file_unread() {
 # budget. Caught by "cap: a repo config that sets BUDGET_MISSION_USD above the signed mission cap,
 # or to 0, stops budget and names the key" (check-worker.sh).
 mut_WORKER_cap_caller_env_leaks() {
-  sed -i '/^config_key() {/,/^}/ s@^    \[ "\$#" -lt 3 \] || printf -v "\$key" .%s. "\$3"$@    :@' "${1%/*}/sdd-worker"
+  sed -i '/^config_key() {/,/^}/ s@^    \[ "\$#" -lt 3 \] || export "\$key=\$3"$@    :@' "${1%/*}/sdd-worker"
 }
 # A zero in the repo's config holds as a cap: BUDGET_MISSION_USD=0 is no ceiling for the runner, and
 # the worker would launch a mission with none. Caught by "cap: a repo config that sets

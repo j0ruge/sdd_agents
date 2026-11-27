@@ -374,7 +374,7 @@ config_key() {
   if [ -z "$1" ] || [ ! -f "$cfg" ]; then [ "$#" -lt 3 ] || printf '%s' "$3"; return 0; fi
   # shellcheck disable=SC1090,SC1091
   ( set +eu; CDPATH='' cd -- "$1" || exit 0
-    [ "$#" -lt 3 ] || printf -v "$key" '%s' "$3"
+    [ "$#" -lt 3 ] || export "$key=$3"
     . ./.sdd/config.sh > /dev/null 2>&1 < /dev/null; printf '%s' "${!key-}" ) || true
 }
 
@@ -464,7 +464,7 @@ tmp_sweep() {
 # LEVEL_SIGNED_TERMS is set only when the signature and lot scope hold. Budget's internal
 # signed-scope mode does not ask about paging, since a spend query never delegates an act.
 effective_level() {
-  local dir="${1%/}" lot="${2:-}" from="${3:+, $3}" src f signed want exp lv root wt lots w found="" l c cr sr
+  local dir="${1%/}" lot="${2:-}" from="${3:+, $3}" src f signed want exp lv why root wt lots w found="" l c cr sr
   local -a words=()
   LEVEL=assisted
   LEVEL_STOP=""
@@ -486,6 +486,7 @@ effective_level() {
   exp="$(fm_value "$f" expires)"
   if expired "$exp"; then LEVEL_WHY="expired: $exp is not after $(now)"; return 0; fi
   lv="$(fm_value "$f" level)"
+  why="signed until $exp"
   repo_root "$dir" root
   if [ "${4:-}" != signed-scope ] && [ "$lv" != assisted ] && [ -z "$root" ]; then
     LEVEL_WHY="no pager: ON_ESCALATION_CMD is empty in (no repo)/.sdd/config.sh"; return 0
@@ -528,14 +529,15 @@ effective_level() {
       fi
       sr="$(ladder_rank "$lv")"
       if [ "$cr" -lt "$sr" ]; then
-        LEVEL_SIGNED_TERMS="$f"
-        LEVEL="$c"; LEVEL_WHY="capped by the lot: the ceiling of $lot is $c"; return 0
+        lv="$c"
+        why="capped by the lot: the ceiling of $lot is $c"
       fi
     fi
   fi
+  if [ "$lv" != assisted ] && expired "$exp"; then LEVEL_WHY="expired: $exp is not after $(now)"; return 0; fi
   LEVEL_SIGNED_TERMS="$f"
   LEVEL="$lv"
-  LEVEL_WHY="signed until $exp"
+  LEVEL_WHY="$why"
 }
 
 # level <campaign-dir> [--lot L<n>] — the effective level, and why, on one line; rc 0 whatever the
