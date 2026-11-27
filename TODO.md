@@ -362,7 +362,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd-worker:660` (`checkouts_of`) — o git 2.43 imprime o caminho cru, e o `sed 's/^worktree //p'` parte
   `…/wt` + `nl` em `…/wt` e uma linha solta (reproduzido): a missão desse worktree some calada do `budget`, do
   `level` e do `next`. Direção: `--porcelain -z`, lido por NUL e com o rc guardado; o `-z` pede git 2.36+, então
-  antes decidir a versão mínima do git no kit.
+  antes decidir a versão mínima do git no kit. RESOLVED by 064098e
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 3 — descoberto pelo
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
   RECURRED 1: sdd_agents/20261121-l5-saida-humana-e-contrato-do-runner (2026-11-26)
