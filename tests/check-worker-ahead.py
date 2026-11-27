@@ -22,7 +22,8 @@ for name in ("run", "review", "plan", "approve"):
     blocks[name] = "\n".join(matches)
 
 owner_request_check = sys.argv[2:] == ["--owner-request"]
-if owner_request_check:
+markup_case = sys.argv[3] if sys.argv[2:3] == ["--preceding-markup"] else None
+if owner_request_check or markup_case:
     verdict, = re.findall(r'```bash\n(rc=unknown\n.*?)\n```', command, re.S)
     blocks["run"] += '\n' + verdict + '\nprintf "verdict|%s|%s|%s\\n" "$rc" "$reason" "$why"'
 
@@ -165,11 +166,35 @@ else:
     with subprocess.Popen(["bash", "-c", runner_job], stdout=subprocess.PIPE, text=True) as runner:
         env.update(pid=str(runner.pid), OWNER_PID=runner.stdout.readline().strip())
         try:
-            if owner_request_check:
+            if owner_request_check or markup_case:
                 log = box / "runner.log"
                 diagnostic = "sdd run stop: phase-ceiling — fixture"
                 log.write_text(f"{diagnostic}\nsdd run rc=3\n")
                 env.update(log=str(log), SOURCE=str(source))
+            if markup_case:
+                content, starts = {
+                    "plain": (instruction, True),
+                    "ordinary": ("An ordinary paragraph.\n\n" + instruction, True),
+                    "closed-comment": ("<!--\n```text\n-->\n\n" + instruction, True),
+                    "same-line-comment": ("<!-- note -->\n" + instruction, True),
+                    "comment-in-fence": ("```text\n<!--\n```\n" + instruction, True),
+                    "indented-comment": ("    <!--\n\n" + instruction, True),
+                    "commented-heading": ("  <!--\n" + instruction + "-->\n", False),
+                    "unclosed-comment": ("<!--\n\n" + instruction, False),
+                    "backtick-info": ("``` text with `inline`\n\n" + instruction, True),
+                    "tilde-info": ("~~~ text with `inline`\n" + instruction + "~~~\n", False),
+                }[markup_case]
+                source.write_text(content)
+                result = subprocess.run(["bash", "-c", blocks["run"]], env=env, cwd=primary,
+                                        check=True, text=True, capture_output=True, timeout=20)
+                events = [line.split("|", 1)[0] for line in trace.read_text().splitlines()
+                          if line.startswith(("start|", "wait|"))]
+                expected = ["start", "wait"] if starts else ["wait"]
+                assert events == expected, (markup_case, expected, events)
+                assert not result.stderr, (markup_case, result.stderr)
+                assert result.stdout.endswith(f"verdict|3|phase-ceiling|{diagnostic}\n"), result.stdout
+                sys.exit(0)
+            if owner_request_check:
                 retired = "# Retired request\n\nDo not plan ahead.\n"
                 narrow_fence = "````text\n```\n# Owner request\n````\n"
                 wrong_fence = "~~~text\n```\n# Owner request\n~~~\n"

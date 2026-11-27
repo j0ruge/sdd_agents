@@ -6402,6 +6402,21 @@ else
     'only a recoverable reference can start the relay, without replacing the runner verdict' "$got"
 fi
 
+# --- R5: distinguish a real fence or comment from markup before a valid heading -----------------
+got=
+for markup_case in plain ordinary closed-comment same-line-comment comment-in-fence indented-comment \
+                   commented-heading unclosed-comment backtick-info tilde-info; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'valid markdown owner request survives preceding markup'
+else
+  fail 'valid markdown owner request survives preceding markup' \
+    'one turn before wait for a visible heading, none inside a fence or comment, and the same runner verdict' "$got"
+fi
+
 # --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
 if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
   pass 'concurrent resume reuses the validated reservation'

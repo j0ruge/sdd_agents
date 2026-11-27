@@ -59,10 +59,19 @@ def owns_checkout(worktree, mission, launch_pid, launch):
 
 def local_anchors(content):
     fence = ""
+    in_comment = False
     anchors = []
-    for marker, suffix, title in re.findall(r"^ {0,3}(?:(`{3,}|~{3,})([^\n]*)|#{1,6}[ \t]+(.+))$", content, re.M):
+    for line in content.split("\n"):
+        if not fence and (in_comment or re.match(r" {0,3}<!--", line)):
+            in_comment = "-->" not in line
+            continue
+        if not (match := re.fullmatch(r" {0,3}(?:(`{3,}|~{3,})(.*)|#{1,6}[ \t]+(.+))", line)):
+            continue
+        marker, suffix, title = match.groups()
         if marker:
             if not fence:
+                if marker[0] == "`" and "`" in suffix:
+                    continue
                 fence = marker
             elif marker.startswith(fence) and not suffix.strip():
                 fence = ""
