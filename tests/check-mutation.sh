@@ -7297,7 +7297,7 @@ mut_WORKER_ready_codex_any_sha() {
 # An unresolved review thread no longer stops the merge. Caught by "pr-ready: one open thread fails
 # threads" (check-worker.sh).
 mut_WORKER_ready_threads_unread() {
-  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$open" -ne 0 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+  sed -i '/^review_findings_ready() {/,/^}/ s@^  if \[ "\$open" -ne 0 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
 # The state and the mergeability are no longer read: a conflicting or closed pull request is ready.
 # Caught by "pr-ready: a conflicting or closed pull request fails mergeable" (check-worker.sh).
@@ -7723,13 +7723,10 @@ mut_WORKER_gone_copy_shown() {
 mut_WORKER_reuse_limit_dropped() {
   sed -i '/^# a merged pull request of an earlier use of the same branch name makes the lot done/d' "${1%/*}/sdd-worker"
 }
-# The comment of cmd_pr_ready stops naming the CHANGES_REQUESTED review with no inline comment among
-# what the verb does not read (decision 1 of the owner on the mission's review r6). Caught by
-# "blind: cmd_pr_ready and docs/pipeline.md name review bodies and CHANGES_REQUESTED without
-# inline comments, and point at TODO.md"
-# (check-worker.sh).
-mut_WORKER_blind_limit_dropped() {
-  sed -i '/^# .*`CHANGES_REQUESTED` that carries no inline comment/d' "${1%/*}/sdd-worker"
+# Skipping the review body check clears a finding with no disposition.
+# Caught by "review findings have verified dispositions" (check-worker.sh).
+mut_WORKER_body_disposition_unchecked() {
+  sed -i '/^review_findings_ready() {/,/^}/ s@^    if ! jq -e .*review_disposition_commit .*; then$@    if false; then@' "${1%/*}/sdd-worker"
 }
 # Without the status verdict, an untested head can merge.
 # Caught by "merge requires local ci on the tested head" (check-worker.sh).
@@ -8924,7 +8921,7 @@ CATALOG=(
   WORKER_gone_failure_swallowed
   WORKER_gone_copy_shown
   WORKER_reuse_limit_dropped
-  WORKER_blind_limit_dropped
+  WORKER_body_disposition_unchecked
   WORKER_local_ci_ignored
   WORKER_ceiling_room_unchecked
   WORKER_ceiling_cap_rounded

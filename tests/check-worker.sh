@@ -80,7 +80,7 @@
 #       two missions on one lot, an approved mission with no branch, no campaign.md and an empty
 #       queue stop (rc 1); a call of the wrong shape is rc 2. gh runs at the repo root, or the stub
 #       refuses it
-#   R23 `pr-ready` answers `ready <the full head sha>` when the five items hold on one sha: the
+#   R23 `pr-ready` answers `ready <the full head sha>` when the seven items hold on one sha: the
 #       newest round (by number: r10 after an r9 graded B) grades A in every row, the bold Overall
 #       one included, and names a reviewed head after which only the mission folder changed — a file
 #       whose name git quotes by default among them, and the commit right under the round's when it
@@ -100,7 +100,7 @@
 #       older good one is never read in its place, R48), and a receipt for the head posted by somebody
 #       other than the bot — anybody can comment on a public repo; the receipt is the real one of PR
 #       409
-#   R26 the threads item fails for one unresolved thread, and for more threads than the hundred read
+#   R26 the threads item fails for one unresolved thread; I9 also exercises later and missing pages
 #   R27 the mergeable item fails for a conflicting pull request, a closed one GitHub calls
 #       mergeable, and a merged one (the answer of PR 409, copied)
 #   R28 the head item fails for a local HEAD ahead of the pull request head, and for one behind it
@@ -285,10 +285,6 @@
 #   R64 the comment right above cmd_next and the paragraph of `next` in docs/pipeline.md declare that
 #       a merged pull request of an earlier use of the same branch name makes the lot done, each with
 #       the measure of the reuse (achado #5 of the r6)
-#   R65 the comment right above cmd_pr_ready and the paragraph `**What `pr-ready` does not read.**`
-#       of docs/pipeline.md name the body of a review, the `CHANGES_REQUESTED` review with no inline
-#       comment and the `local/ci` status of the head, and point at TODO.md, where the sixth item
-#       waits (decision 1 of the owner on the r6)
 #   R66 the plan act has the session cut the mission's worktree in a target before `/sdd-plan`, the
 #       `git worktree add` with a provisional branch and its rename to the mission's branch written,
 #       says that in the kit `/sdd-plan` cuts it, and the approve act runs `sdd approve` in that
@@ -1791,8 +1787,10 @@ serve() {
   printf '[%s,%s]' "$(comment "$CODEX" "$Z1" '')" '{"user":{"login":"j0ruge"},"body":"thanks"}' \
     > "$fx/comments.1"
   printf '[%s]' "$(comment "$CODEX" "$h" '')" > "$fx/comments.2"
-  printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"nodes":[{"isResolved":true},{"isResolved":true}]}}}}}' \
+  printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"id":"thread_1","isResolved":true},{"id":"thread_2","isResolved":true}]}}}}}' \
     > "$fx/threads"
+  printf '[]\n' > "$fx/reviews.1"
+  printf '[]\n' > "$fx/reviews.2"
   printf '42\n' > "$fx/producer"
   printf '[{"context":"local/ci","state":"success","creator":{"id":42}}]\n' > "$fx/status.$h"
   printf '[]\n' > "$fx/status-extra"
@@ -1849,7 +1847,44 @@ case "$*" in
     printf '%s\n' "$status"
     exit 0
     ;;
-  "api graphql -f query="*"owner:\"${repo%%/*}\",name:\"${repo#*/}\""*"pullRequest(number:$n)"*) give threads "$fx/threads" ;;
+  "api --paginate repos/$repo/pulls/$n/reviews"*) give reviews "$fx/reviews.1" "$fx/reviews.2" ;;
+  "api user --jq .login") printf 'worker-account\n'; exit 0 ;;
+  "api graphql -f query="*"owner:\"${repo%%/*}\",name:\"${repo#*/}\""*"pullRequest(number:$n)"*)
+    if [[ "$*" == *" -f cursor=next" ]]; then
+      give threads.fail-next-page "$fx/threads.next"
+    else
+      give threads "$fx/threads"
+    fi
+    ;;
+  "api graphql -f query="*"addPullRequestReviewThreadReply"*)
+    id="${6#id=}"; body="${8#body=}"
+    read -r _ _ sha _ <<< "$body"
+    printf 'reply %s %s\n' "$id" "$sha" >> "$fx/review-events"
+    if [ -f "$fx/reply-bad" ]; then printf '{"data":{}}\n'; exit 0; fi
+    reply="$(jq -cn --arg body "$body" '{id:"worker_reply",body:$body,author:{login:"worker-account",__typename:"User"}}')"
+    jq --arg id "$id" --argjson reply "$reply" '
+      .data.repository.pullRequest.reviewThreads.nodes[] |=
+        if .id == $id then (.comments.totalCount += 1 | .comments.nodes += [$reply]) else . end
+    ' "$fx/threads" > "$fx/next"
+    mv "$fx/next" "$fx/threads"
+    if [ -f "$fx/reply-race" ]; then
+      jq '.data.repository.pullRequest.reviewThreads.nodes[0].comments.nodes[0].body += " Edited."' \
+        "$fx/threads" > "$fx/next"
+      mv "$fx/next" "$fx/threads"
+    fi
+    jq -cn --argjson reply "$reply" '{data:{addPullRequestReviewThreadReply:{comment:$reply}}}'
+    exit 0
+    ;;
+  "api graphql -f query="*"resolveReviewThread"*)
+    id="${6#id=}"
+    printf 'resolve %s\n' "$id" >> "$fx/review-events"
+    [ ! -f "$fx/resolve-fail" ] || exit 1
+    jq --arg id "$id" '.data.repository.pullRequest.reviewThreads.nodes[] |=
+      if .id == $id then .isResolved = true else . end' "$fx/threads" > "$fx/next"
+    mv "$fx/next" "$fx/threads"
+    jq -cn --arg id "$id" '{data:{resolveReviewThread:{thread:{id:$id,isResolved:true}}}}'
+    exit 0
+    ;;
 esac
 echo "gh stub: unexpected call: $*" >&2
 exit 9
@@ -1867,14 +1902,14 @@ ready_is() {
     || got="${got:+$got; }$1: rc $W_RC, '${W_OUT//$'\n'/ / }' (want rc $2, '$3…'; stderr '${W_ERR%%$'\n'*}')"
 }
 
-# --- R23: all five true at one sha --------------------------------------------------------------
+# --- R23: all seven true at one sha --------------------------------------------------------------
 # The good world; the same world with its rounds renamed r9 and r10 and the r9 graded B (the newest
 # is r10 by number, and a glob, which sorts r10 first, would read the B); and a round naming the
 # commit under it, committed on top of B — the worker's own flow: the round names the HEAD it read,
 # and the commit that carries it is the head. Each world's rounds are committed (land): the review
 # item reads the round the head carries.
 serve good
-ready_is 'all five true' 0 "ready $B" good
+ready_is 'all seven true' 0 "ready $B" good
 [ "$W_OUT" = "ready $B" ] || got="${got:+$got; }the line is '$W_OUT', not 'ready $B'"
 mv "$MD/40-review-r2.md" "$MD/40-review-r10.md"; mv "$MD/40-review-r1.md" "$MD/40-review-r9.md"
 sed -i 's@^| Security | A |@| Security | B |@' "$MD/40-review-r9.md"
@@ -1888,9 +1923,9 @@ ready_is 'a round naming the commit under it' 0 "ready $HEADNOW" good-under
 [ "$(git -C "$RR" rev-parse "$HEADNOW^")" = "$B" ] || got="${got:+$got; }fixture: the round's commit is not on B"
 ready_reset
 if [ -z "$got" ]; then
-  pass 'pr-ready: all five true at one sha answers ready with the full sha'
+  pass 'pr-ready: all seven true at one sha answers ready with the full sha'
 else
-  fail 'pr-ready: all five true at one sha answers ready with the full sha' "ready $B, rc 0" "$got"
+  fail 'pr-ready: all seven true at one sha answers ready with the full sha' "ready $B, rc 0" "$got"
 fi
 
 # The supplier writes to the pinned head, and the consumer reads the newest applicable result.
@@ -2096,18 +2131,159 @@ fi
 # --- R26: the threads item ----------------------------------------------------------------------
 got=""
 serve t-open
-printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"nodes":[{"isResolved":true},{"isResolved":false}]}}}}}' \
+printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"id":"thread_1","isResolved":true},{"id":"thread_2","isResolved":false,"comments":{"totalCount":1,"nodes":[{"id":"comment_2","body":"finding","author":{"login":"reviewer","__typename":"Bot"}}]}}]}}}}}' \
   > "$BOX/ghfx/t-open/threads"
 ready_is 'one open thread' 1 'not-ready threads: ' t-open
-serve t-unseen
-jq -cn '{data: {repository: {pullRequest: {reviewThreads: {totalCount: 101, nodes: [range(100) | {isResolved: true}]}}}}}' \
-  > "$BOX/ghfx/t-unseen/threads"
-ready_is 'a thread past the hundred read' 1 'not-ready threads: ' t-unseen
 if [ -z "$got" ]; then
   pass 'pr-ready: one open thread fails threads'
 else
   fail 'pr-ready: one open thread fails threads' 'rc 1 and not-ready threads: … for each world' "$got"
 fi
+
+
+# Body findings and change requests are independent of inline threads.
+got=""
+for world in f-info f-body f-request f-commented f-foreign f-approved f-dismissed f-malformed f-partial f-thread f-missing f-human f-reply-bad f-reply-race f-resume f-page f-page-fail; do
+  serve "$world"
+done
+review_fixture() {
+  jq -cn --argjson id "$1" --arg state "$2" --arg body "$3" --arg type "${4:-Bot}" --arg sha "$A" \
+    '[{id:$id,state:$state,body:$body,commit_id:$sha,submitted_at:"2026-01-01T00:00:00Z",user:{id:71,login:"reviewer",type:$type}}]'
+}
+review_fixture 11 COMMENTED 'Looks good.' > "$BOX/ghfx/f-info/reviews.2"
+review_fixture 11 COMMENTED 'Finding A: validate an empty value.' > "$BOX/ghfx/f-body/reviews.2"
+review_fixture 11 CHANGES_REQUESTED '' User > "$BOX/ghfx/f-request/reviews.1"
+for world in f-commented f-foreign f-approved; do
+  cp "$BOX/ghfx/f-request/reviews.1" "$BOX/ghfx/$world/reviews.1"
+done
+review_fixture 12 COMMENTED 'Thanks.' User > "$BOX/ghfx/f-commented/reviews.2"
+review_fixture 12 APPROVED '' User > "$BOX/ghfx/f-approved/reviews.2"
+jq '.[0].user.id = 72 | .[0].user.login = "other"' "$BOX/ghfx/f-approved/reviews.2" > "$BOX/ghfx/f-foreign/reviews.2"
+review_fixture 11 DISMISSED '' User > "$BOX/ghfx/f-dismissed/reviews.2"
+printf '%s\n' '{"message":"broken"}' > "$BOX/ghfx/f-malformed/reviews.2"
+touch "$BOX/ghfx/f-partial/reviews.partial"
+ready_is 'purely informational body' 0 "ready $B" f-info
+ready_is 'body finding on later page' 1 'not-ready findings: review 11 ' f-body
+ready_is 'request without inline comments' 1 'not-ready findings: changes requested by reviewer' f-request
+ready_is 'ordinary comment does not withdraw request' 1 'not-ready findings: changes requested by reviewer' f-commented
+ready_is 'approval by another reviewer cannot supersede' 1 'not-ready findings: changes requested by reviewer' f-foreign
+ready_is 'approval by the same reviewer replaces request' 0 "ready $B" f-approved
+ready_is 'dismissed request' 0 "ready $B" f-dismissed
+ready_is 'unreadable review page' 3 '' f-malformed
+ready_is 'failed later review page' 3 '' f-partial
+
+thread_fixture() {
+  jq -cn --arg type "$1" '{data:{repository:{pullRequest:{reviewThreads:{
+    totalCount:1,pageInfo:{hasNextPage:false,endCursor:null},
+    nodes:[{id:"thread_A",isResolved:false,comments:{totalCount:1,
+      nodes:[{id:"comment_A",body:"Finding B: handle the missing value.",author:{login:"reviewer",__typename:$type}}]}}]
+  }}}}}'
+}
+for world in f-thread f-missing f-human f-reply-bad f-reply-race f-resume; do
+  type=Bot
+  [ "$world" != f-human ] || type=User
+  thread_fixture "$type" > "$BOX/ghfx/$world/threads"
+done
+jq '.data.repository.pullRequest.reviewThreads |=
+    (.totalCount = 2 | .pageInfo = {hasNextPage:true,endCursor:"next"} | .nodes = [{id:"thread_first",isResolved:true}])' \
+    "$BOX/ghfx/f-thread/threads" > "$BOX/ghfx/f-page/threads"
+jq '.data.repository.pullRequest.reviewThreads.totalCount = 2' "$BOX/ghfx/f-thread/threads" > "$BOX/ghfx/f-page/threads.next"
+cp "$BOX/ghfx/f-page/threads" "$BOX/ghfx/f-page-fail/threads"
+touch "$BOX/ghfx/f-page-fail/threads.fail-next-page.fail"
+ready_is 'unresolved thread on second page' 1 'not-ready threads: ' f-page
+ready_is 'missing thread page' 3 '' f-page-fail
+
+finding_worker() {
+  export GHFX="$BOX/ghfx/$1"
+  PATH="$BOX/stub-ready:$PATH" worker review-findings "$MD" "$PRN" "${@:2}"
+}
+record_finding() {
+  local id="$1" kind="$2" commit="$3" fingerprint
+  fingerprint="$(jq -r --arg id "$id" 'select(.id == $id).fingerprint' <<< "$W_OUT")"
+  if [ "$W_RC" != 0 ] || ! [[ "$fingerprint" =~ ^[0-9a-f]{40}$ ]]; then
+    got="${got:+$got; }inventory did not identify $kind $id (rc $W_RC)"
+    return
+  fi
+  printf '\nreview-disposition %s %s %s %s %s\n' "$kind" "$id" "$fingerprint" "$commit" \
+    'The cited change handles the missing value in the finding.' >> "$MD/40-review-r2.md"
+}
+finding_worker f-body
+record_finding 11 review 1111111111111111111111111111111111111111
+land f-body-bad-sha
+cp "$BOX/ghfx/f-body/reviews.2" "$BOX/ghfx/f-body-bad-sha/reviews.2"
+ready_is 'missing evidence commit' 1 'not-ready findings: review 11 ' f-body-bad-sha
+ready_reset
+finding_worker f-body
+printf '\n~~~text\n' >> "$MD/40-review-r2.md"
+record_finding 11 review "$Z1"
+printf '~~~\n' >> "$MD/40-review-r2.md"
+land f-body-fenced
+cp "$BOX/ghfx/f-body/reviews.2" "$BOX/ghfx/f-body-fenced/reviews.2"
+ready_is 'a quoted example is not evidence' 1 'not-ready findings: review 11 ' f-body-fenced
+ready_reset
+finding_worker f-body
+record_finding 11 review "$Z1"
+land f-body-handled
+cp "$BOX/ghfx/f-body/reviews.2" "$BOX/ghfx/f-body-handled/reviews.2"
+ready_is 'body finding has committed evidence' 0 "ready $HEADNOW" f-body-handled
+review_fixture 11 COMMENTED 'Finding A revised: validate two values.' > "$BOX/ghfx/f-body-handled/reviews.2"
+ready_is 'body edited after disposition' 1 'not-ready findings: review 11 ' f-body-handled
+cp "$BOX/ghfx/f-body/reviews.2" "$BOX/ghfx/f-body-handled/reviews.1"
+review_fixture 13 COMMENTED 'Finding C: check the default.' > "$BOX/ghfx/f-body-handled/reviews.2"
+ready_is 'new body finding after disposition' 1 'not-ready findings: review 13 ' f-body-handled
+ready_reset
+
+finding_worker f-missing --resolve
+[[ "$W_RC" == 1 && ! -e "$GHFX/review-events" ]] || got="${got:+$got; }unhandled thread: rc $W_RC or write"
+for world in f-thread f-human f-reply-bad f-reply-race f-resume; do
+  finding_worker "$world"
+  record_finding thread_A thread "$Z1"
+  land "f-write-$world"
+  fx="$BOX/ghfx/f-write-$world"
+  cp "$BOX/ghfx/$world/threads" "$fx/threads"
+  case "$world" in
+    f-reply-bad) touch "$fx/reply-bad" ;;
+    f-reply-race) touch "$fx/reply-race" ;;
+    f-resume) touch "$fx/resolve-fail" ;;
+  esac
+  finding_worker "f-write-$world" --resolve
+  events="$(cat "$fx/review-events" 2>/dev/null || true)"
+  case "$world" in
+    f-thread)
+      expected="reply thread_A $Z1"$'\n''resolve thread_A'
+      [[ "$W_RC" == 0 && "$events" == "$expected" ]] || got="${got:+$got; }treated bot thread: rc $W_RC, '$events'"
+      ready_is 'verified bot thread now resolved' 0 "ready $HEADNOW" "f-write-$world"
+      finding_worker "f-write-$world" --resolve
+      [[ "$W_RC" == 0 && "$(cat "$fx/review-events" 2>/dev/null)" == "$expected" ]] \
+        || got="${got:+$got; }resumed thread acted twice"
+      jq '.data.repository.pullRequest.reviewThreads.nodes[0].comments.nodes[0].body += " New finding."' \
+        "$fx/threads" > "$fx/next"
+      mv "$fx/next" "$fx/threads"
+      ready_is 'edit after the thread was resolved invalidates its disposition' 1 'not-ready threads: ' "f-write-$world"
+      ;;
+    f-resume)
+      expected="reply thread_A $Z1"$'\n''resolve thread_A'
+      [[ "$W_RC" == 3 && "$events" == "$expected" ]] || got="${got:+$got; }failed resolve: rc $W_RC, '$events'"
+      rm "$fx/resolve-fail"
+      finding_worker "f-write-$world" --resolve
+      [[ "$W_RC" == 0 && "$(cat "$fx/review-events" 2>/dev/null)" == "$expected"$'\n''resolve thread_A' ]] \
+        || got="${got:+$got; }resume after a verified reply: rc $W_RC or duplicate reply"
+      ;;
+    f-human) [[ "$W_RC" == 1 && -z "$events" ]] || got="${got:+$got; }human thread: rc $W_RC, '$events'" ;;
+    f-reply-bad|f-reply-race)
+      [[ "$W_RC" != 0 && "$events" == "reply thread_A $Z1" ]] \
+        || got="${got:+$got; }unverified or raced reply: rc $W_RC, '$events'"
+      ;;
+  esac
+  ready_reset
+done
+if [ -z "$got" ]; then
+  pass 'review findings have verified dispositions'
+else
+  fail 'review findings have verified dispositions' \
+    'complete pages, evidence for the current finding, and only verified fixes auto-resolve bot threads' "$got"
+fi
+
 
 # --- R27: the mergeable item --------------------------------------------------------------------
 got=""
@@ -4364,6 +4540,7 @@ fi
 # what the edit took out. Each checker prints one item per line. The fourth file is R67's: the
 # ceiling's rule is written in the delegation's template too, and the copy carries it for that family.
 R13_FILES=(commands/sdd-worker.md docs/pipeline.md bin/sdd-worker templates/delegation.md)
+W13=bin/sdd-worker
 
 # squeeze — stdin's lines as one line, every run of blanks one space: a phrase wrapped across two
 # lines is read as written.
@@ -4509,52 +4686,6 @@ if [ -z "$got" ]; then
 else
   fail 'reuse: cmd_next and docs/pipeline.md declare that a merged pull request of an earlier use of the branch name makes the lot done, with the measure' \
     'the limit and its measure in the comment above cmd_next and in the paragraph of next, and each sabotaged copy naming what it lost' "$got"
-fi
-
-# --- R65: what pr-ready does not read -----------------------------------------------------------
-# <item>|<phrase>: the remaining limits on review findings, and the backlog pointer.
-BLIND_PHRASES=('body|body of a review' 'changes-requested|`CHANGES_REQUESTED`' 'todo|TODO.md')
-# blind_missing <root> — `blind: <where> <item>` for each phrase of BLIND_PHRASES that the comment
-# right above cmd_pr_ready (where is cmd_pr_ready) or the paragraph `**What `pr-ready` does not
-# read.**` of the worker's section of docs/pipeline.md (where is pipeline) does not write.
-blind_missing() {
-  local c p x
-  c="$(comment_of "$1/bin/sdd-worker" cmd_pr_ready)"
-  p="$(para_of "$(section "$1/docs/pipeline.md" 'The worker' 2>/dev/null)" '**What `pr-ready` does not read.**')"
-  for x in "${BLIND_PHRASES[@]}"; do grep -qF -- "${x#*|}" <<< "$c" || printf 'blind: cmd_pr_ready %s\n' "${x%%|*}"; done
-  for x in "${BLIND_PHRASES[@]}"; do grep -qF -- "${x#*|}" <<< "$p" || printf 'blind: pipeline %s\n' "${x%%|*}"; done
-}
-got=""
-m="$(blind_missing "$ROOT")"
-[ -z "$m" ] || got="missing: ${m//$'\n'/, }"
-W13=bin/sdd-worker
-tree_control 'comment: no body' blind_missing 'blind: cmd_pr_ready body' "$W13" 's/the body of a review (/the review (/'
-tree_control 'comment: CHANGES_REQUESTED line deleted' blind_missing 'blind: cmd_pr_ready changes-requested' "$W13" \
-  '/^# .*`CHANGES_REQUESTED`/d'
-tree_control 'comment: no TODO.md' blind_missing 'blind: cmd_pr_ready todo' "$W13" \
-  '/^cmd_pr_ready() {$/,$ !s/TODO\.md/the backlog/'
-tree_control 'comment: cut off by a blank line' blind_missing \
-  $'blind: cmd_pr_ready body\nblind: cmd_pr_ready changes-requested\nblind: cmd_pr_ready todo' "$W13" \
-  's/^cmd_pr_ready() {$/\n&/'
-tree_control 'pipeline: no body' blind_missing 'blind: pipeline body' docs/pipeline.md \
-  's/^\(\*\*What `pr-ready` does not read\.\*\*\) The body of a review,/\1 The text of a review,/'
-tree_control 'pipeline: no CHANGES_REQUESTED' blind_missing 'blind: pipeline changes-requested' docs/pipeline.md \
-  's/a review in state `CHANGES_REQUESTED` that/a review that/'
-tree_control 'pipeline: no TODO.md' blind_missing 'blind: pipeline todo' docs/pipeline.md \
-  '/^\*\*What `pr-ready` does not read\.\*\*/,/^$/ s/`TODO\.md`/the backlog/'
-tree_control 'pipeline: no such paragraph' blind_missing \
-  $'blind: pipeline body\nblind: pipeline changes-requested\nblind: pipeline todo' docs/pipeline.md \
-  's/^\*\*What `pr-ready` does not read\.\*\*/**What it leaves out.**/'
-tree_control 'pipeline: the paragraph quoted' blind_missing \
-  $'blind: pipeline body\nblind: pipeline changes-requested\nblind: pipeline todo' docs/pipeline.md \
-  's/^\*\*What `pr-ready` does not read\.\*\*/> &/'
-tree_primitive blind_missing 'blind: cmd_pr_ready body' "$W13" 's/the body of a review (/the review (/
-/^cmd_pr_ready() {$/,$ !s/TODO\.md/the backlog/'
-if [ -z "$got" ]; then
-  pass 'blind: cmd_pr_ready and docs/pipeline.md name review bodies and CHANGES_REQUESTED without inline comments, and point at TODO.md'
-else
-  fail 'blind: cmd_pr_ready and docs/pipeline.md name review bodies and CHANGES_REQUESTED without inline comments, and point at TODO.md' \
-    'each phrase in the comment above cmd_pr_ready and in the paragraph of pipeline.md, and each sabotaged copy naming what it lost' "$got"
 fi
 
 # --- R66: the worktree of a target's mission is cut in the plan act ------------------------------

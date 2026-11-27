@@ -2066,8 +2066,10 @@ directory containing a newline as a ledger identity.
 
 Any directory of the target repo — the convention is `docs/campaigns/<YYYYMMDD>-<slug>/`, and the
 kit's own live under `docs/superpowers/campaigns/` — holding three files. No config key names it:
-every verb except `pr-ready` and the internal `codex-run` guard takes it as its first argument and finds the repo root by
-`git -C <dir> rev-parse --show-toplevel`; `HANDOFF_DIR` comes from that root's `.sdd/config.sh`,
+the campaign verbs take it as the first argument. `pr-ready`, `review-ci` and `review-findings`
+take the mission directory, and the internal `codex-run` guard takes `--mission <dir>`. The
+worker finds the repo root by `git -C <dir> rev-parse --show-toplevel`. `HANDOFF_DIR` comes
+from that root's `.sdd/config.sh`,
 read in a subshell that stands in the root, so a relative include resolves against its own
 checkout. `ON_ESCALATION_CMD` and `BUDGET_MISSION_USD` are read the same way, but in the
 `.sdd/config.sh` of the root and of each linked worktree that holds a mission of the campaign at the
@@ -2213,6 +2215,7 @@ stderr and leaves rc 2 for ordinary calls. A Codex guard can refuse an unavailab
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts or the base do not read); 3 when `gh` did not answer |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
 | `sdd-worker review-ci <mission-dir> <pr>` | suite output and `local/ci <head sha> <result> (TEST_CMD rc <code>)` after publication | 0 suite passed and status published; 1 refused or suite failed; 3 GitHub evidence unreadable or write unverified |
+| `sdd-worker review-findings <mission-dir> <pr> [--resolve]` | review and thread records as JSON lines, or a reason why findings remain | 0 complete inventory or no findings left after resolution; 1 refused or pending; 3 incomplete GitHub evidence or unverified write |
 
 For Codex campaigns with incomplete billing the normal total starts with `campaign known US$`, also used after
 `no room —`. When legible terms opt into `allow_unknown_cost: true` but lack a valid signature,
@@ -2308,12 +2311,12 @@ mission with no branch, no `campaign.md`, a `campaign:` in it that is not the di
 empty one and the template's placeholder among them, both values named) and an empty queue stop,
 with rc 1.
 
-**`pr-ready`** reads the pull request head (`headRefOid`) and requires six items on that one sha,
+**`pr-ready`** reads the pull request head (`headRefOid`) and requires seven items on that one sha,
 naming the first that fails:
 
 1. `review`: the round is the one **committed at the head**, never a copy on disk: the mission
-   folder holds nothing `git status` lists (modified, staged, untracked or ignored), and with
-   item 5 the round read is the round the merge takes. The newest `40-review-r<N>.md` of the
+   folder holds nothing `git status` lists (modified, staged, untracked or ignored), and
+   the local head check ties the round to the merge. The newest `40-review-r<N>.md` of the
    mission folder, by number, names `reviewed_head: <sha>` in its frontmatter; every `Grade` cell
    under `### Overall Grade`, the row split as `gate_REVIEW` splits it (a `\|` is a pipe of its
    cell), is exactly `A`, the header and the separator known by the shape of the line (the
@@ -2333,12 +2336,20 @@ naming the first that fails:
 2. `codex`: of the comments of `chatgpt-codex-connector[bot]`, read with `--paginate`, the newest
    one carrying `codex-review-state:v1` parses and is for the head, `completed`, with
    `has_unresolved_findings` false; a newest one that does not parse is not ready, never an older
-   one read in its place. A receipt anybody else posts does not count, and no other bot's review is
-   read, so a bot out of quota neither blocks nor counts as a review;
-3. `threads`: no review thread unresolved, and no more of them than the hundred read;
-4. `mergeable`: the pull request is `OPEN` and `MERGEABLE`;
-5. `head`: the local `HEAD` is that sha;
-6. `local/ci`: the newest status on that sha in this context from the authenticated GitHub
+   one read in its place. A receipt anybody else posts does not count. Another bot's absence
+   neither blocks nor counts as a review, but any submitted review is checked below;
+3. `findings`: no active `CHANGES_REQUESTED` for any reviewer, even with no inline comments,
+   and no review body with an unhandled finding. An approval from another reviewer or a later
+   plain comment does not clear a request. A later approval by the same reviewer or dismissal
+   of the request in GitHub can clear it. Blank bodies and simple acknowledgments need no disposition.
+   Other bot bodies require a disposition in the committed round with the review ID, the
+   current fingerprint, an evidence commit in the head's history and an explanation. A new
+   finding or edited body does not reuse an old disposition;
+4. `threads`: every page was read and every review thread is resolved. A resolved thread
+   with a disposition in the round still has to match the finding recorded there;
+5. `mergeable`: the pull request is `OPEN` and `MERGEABLE`;
+6. `head`: the local `HEAD` is that sha;
+7. `local/ci`: the newest status on that sha in this context from the authenticated GitHub
    account used by the worker is `success`. The worker reads all status pages. Missing,
    pending, failed or unreadable evidence does not allow a merge, and neither does a success
    from a different account or sha.
@@ -2355,10 +2366,16 @@ method — a merge commit, never a squash — belongs to the command that merges
 `commands/sdd-worker.md` writes it. The items are read one after the other, never at once, so
 the session reads `pr-ready` again immediately before `gh pr merge`.
 
-**What `pr-ready` does not read.** The body of a review, where 18 of the 38 findings CodeRabbit
-left on PR #414 lived, and a review in state `CHANGES_REQUESTED` that carries no inline comment.
-For review findings outside the Codex receipt, the worker still checks only threads. Reading and
-handling findings outside threads remains open in `TODO.md`.
+The `review` act runs `sdd-worker review-findings <mission-dir> <pr>` to collect the complete
+review and thread inventory before the round. It records dispositions as
+`review-disposition <review|thread> <id> <fingerprint> <full-evidence-commit> <finding and evidence>`
+in the round. `sdd-worker review-findings <mission-dir> <pr> --resolve` uses the round on the
+clean, published PR head. For a single bot finding in an open thread with verified evidence, it
+replies with the commit and verifies the reply and the unchanged finding before resolving the
+thread. An exact reply already present from the authenticated worker can be reused after
+interruption. Human or ambiguous findings stay pending. An unreadable page or failed verification
+stops the act. GitHub does not make the read and write atomic, so the merge act still reads the
+evidence again immediately before merging.
 
 **`reviewed_head:` is one key for two programs (ADR 0023).** Since `20261119-l1b-a-rodada-delta`
 `templates/review.md` names it, the REVIEW rounds of `sdd run` write it, and `gate_REVIEW` checks it.

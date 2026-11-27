@@ -15,9 +15,10 @@
 #   next       the next act of the campaign
 #   pr-ready   whether a pull request meets the owner's bar on its head sha
 #   review-ci  test the published review head and record local/ci on that sha
+#   review-findings  inventory review findings and resolve verified bot threads
 #
-# Only delegate and review-ci write. Launching sdd run, opening the pull request and merging stay
-# with the session, through the commands that already exist.
+# Only delegate, review-ci and review-findings --resolve write. Launching sdd run, opening the
+# pull request and merging stay with the session, through the commands that already exist.
 # The runner (`bin/sdd`) owns ONE mission; this program owns the campaign and never writes what the
 # runner owns. The sensor is tests/check-worker.sh.
 set -euo pipefail
@@ -58,6 +59,7 @@ usage: sdd-worker <verb> <args>
   next     <campaign-dir>                      the next act of the campaign
   pr-ready <mission-dir> <pr>                  whether the pull request is ready on its head sha
   review-ci <mission-dir> <pr>                 run TEST_CMD and publish local/ci for the PR head
+  review-findings <mission-dir> <pr> [--resolve]  list findings or reply to and resolve verified bot threads
 USAGE
 }
 
@@ -1543,13 +1545,13 @@ gh_ci_producer() {
 }
 
 ci_clean_head() {
-  local root="$1" head="$2" here dirty
+  local root="$1" head="$2" label="${3:-local/ci}" here dirty
   if ! here="$(git -C "$root" rev-parse --verify HEAD)" || [ "$here" != "$head" ]; then
-    printf 'sdd-worker: local/ci requires local HEAD to match the pull request head %s\n' "$head" >&2
+    printf 'sdd-worker: %s requires local HEAD to match the pull request head %s\n' "$label" "$head" >&2
     return 1
   fi
   if ! dirty="$(GIT_OPTIONAL_LOCKS=0 git -C "$root" status --porcelain --untracked-files=all)" || [ -n "$dirty" ]; then
-    printf 'sdd-worker: local/ci requires a clean checkout on %s\n' "$head" >&2
+    printf 'sdd-worker: %s requires a clean checkout on %s\n' "$label" "$head" >&2
     return 1
   fi
 }
@@ -1605,8 +1607,277 @@ cmd_review_ci() {
   [ "$rc" -eq 0 ]
 }
 
+gh_pr_reviews() {
+  local root="$1" endpoint="repos/$2/pulls/$3/reviews"
+  if ! gh_at "$root" api --paginate "$endpoint"; then
+    gh_unread "gh api --paginate $endpoint failed (rc $GH_RC)"; return 3
+  fi
+  if ! GH_REVIEWS="$(jq -ces '
+    def posint: type == "number" and . > 0 and floor == .;
+    if length == 0 or any(.[]; type != "array") then error("missing review pages") else add end
+    | if any(.[]; (.id | posint | not) or (.body | type) != "string" or
+        (.state | IN("PENDING","COMMENTED","APPROVED","CHANGES_REQUESTED","DISMISSED") | not) or
+        (.state != "PENDING" and ((.user.id | posint | not) or
+          (.user.login | test("^[A-Za-z0-9_-]+(\\[bot\\])?$") | not) or
+          (.user.type | IN("Bot","User") | not) or
+          (.commit_id | test("^[a-f0-9]{40}$") | not) or
+          (.submitted_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$") | not)))) or
+        (map(.id) | unique | length) != length then error("invalid review") else . end
+    | map(select(.state != "PENDING"))
+    | (group_by(.user.id) | map(
+        map(select(.state | IN("APPROVED","CHANGES_REQUESTED"))) | sort_by(.submitted_at, .id) | last
+        | select(.state == "CHANGES_REQUESTED") | .id)) as $requests
+    | map(.id as $id | {
+        id: (.id | tostring), body, commit: .commit_id, state, author: .user.login,
+        actor: .user.type, authorId: .user.id, activeRequest: ($requests | index($id) != null),
+        finding: (.state != "DISMISSED" and
+          (.body | gsub("^\\s+|\\s+$"; "") | ascii_downcase |
+            test("^(|lgtm\\.?|looks good\\.?|thanks\\.?|no findings\\.?)$") | not))
+      })' 2>/dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh api --paginate $endpoint answered invalid review pages"; return 3
+  fi
+}
+
+gh_review_threads() {
+  local root="$1" repo="$2" pr="$3" query page page_total count more next
+  local cursor="" total=-1 seen=0 pages=""
+  local -a args
+  query='query($cursor:String){repository(owner:"'"${repo%%/*}"'",name:"'"${repo#*/}"'"){pullRequest(number:'"$pr"'){'
+  query+='reviewThreads(first:100,after:$cursor){totalCount pageInfo{hasNextPage endCursor}'
+  query+=' nodes{id isResolved comments(first:2){totalCount nodes{id body author{login __typename}}}}}}}}'
+  while :; do
+    args=(api graphql -f "query=$query")
+    if [ -n "$cursor" ]; then args+=(-f "cursor=$cursor"); fi
+    if ! gh_at "$root" "${args[@]}" ||
+       ! page="$(jq -ces '
+      def node_id: type == "string" and test("^[A-Za-z0-9_+/=-]+$");
+      def count: type == "number" and . >= 0 and floor == .;
+      if length != 1 or (.[0].errors // [] | length) != 0 then error("bad response") else .[0] end
+      | .data.repository.pullRequest.reviewThreads
+      | select((.totalCount | count) and (.nodes | type) == "array" and
+          (.pageInfo.hasNextPage | type) == "boolean" and
+          (if .pageInfo.hasNextPage then (.pageInfo.endCursor | node_id) else true end) and
+          all(.nodes[]; (.id | node_id) and (.isResolved | type) == "boolean" and
+            (.isResolved or ((.comments.totalCount | count) and .comments.totalCount > 0 and
+              (.comments.nodes | type) == "array" and
+              (.comments.nodes | length) == ([.comments.totalCount, 2] | min) and
+              all(.comments.nodes[]; (.id | node_id) and (.body | type) == "string" and
+                (.author == null or ((.author.login | type) == "string" and
+                  (.author.__typename | type) == "string")))))))' 2>/dev/null <<< "$GH_OUT")"; then
+      gh_unread "gh api graphql (review threads of #$pr) failed or answered an invalid page"; return 3
+    fi
+    read -r page_total count more next <<< "$(jq -r '
+      [.totalCount, (.nodes | length), .pageInfo.hasNextPage, (.pageInfo.endCursor // "-")] | @tsv' <<< "$page")"
+    if [ "$total" -eq -1 ]; then total="$page_total"; fi
+    seen=$((seen + count))
+    if [ "$page_total" -ne "$total" ] || [ "$seen" -gt "$total" ] ||
+       { [ "$more" = true ] && { [ "$count" -eq 0 ] || [ "$seen" -eq "$total" ] || [ "$next" = "$cursor" ]; }; }; then
+      gh_unread "gh api graphql answered inconsistent review thread pages for #$pr"; return 3
+    fi
+    pages+="$(jq -c '.nodes' <<< "$page")"$'\n'
+    if [ "$more" = false ]; then break; fi
+    cursor="$next"
+  done
+  if [ "$seen" -ne "$total" ] ||
+     ! GH_THREADS="$(jq -ces 'add | select((map(.id) | unique | length) == length)' <<< "$pages")"; then
+    gh_unread "gh api graphql answered incomplete or duplicate review thread pages for #$pr"; return 3
+  fi
+}
+
+# Hash only the finding, not the PR head or a subsequent reply. The record survives a fix commit,
+# but neither an edit of the finding nor a copy into another PR inherits its disposition.
+review_finding_record() {
+  local root="$1" repo="$2" pr="$3" kind="$4" item="$5" identity fingerprint
+  if [ "$kind" = thread ]; then
+    identity="$(jq -cS '{id, comment: .comments.nodes[0]}' <<< "$item")" || return 3
+  else
+    identity="$(jq -cS 'del(.activeRequest)' <<< "$item")" || return 3
+  fi
+  fingerprint="$(printf '%s\n' "$repo#$pr:$kind" "$identity" | git -C "$root" hash-object --stdin)" || return 3
+  jq -c --arg kind "$kind" --arg fingerprint "$fingerprint" '. + {$kind, $fingerprint}' <<< "$item"
+}
+
+review_round_text() {
+  local prefix
+  prefix="$(git -C "$1" rev-parse --show-prefix)" || return 1
+  git -C "$1" show "$2:$prefix${3##*/}" 2>/dev/null
+}
+
+review_dispositions() {
+  awk '
+    {
+      text = $0
+      sub(/^ ? ? ?/, "", text)
+      if (match(text, /^(```+|~~~+)/)) {
+        mark = substr(text, 1, 1)
+        if (!width) { fence = mark; width = RLENGTH; next }
+        if (mark == fence && RLENGTH >= width && substr(text, RLENGTH + 1) ~ /^[ \t]*$/) {
+          width = 0; next
+        }
+      }
+    }
+    !width && /^review-disposition / { print }
+  ' <<< "$1"
+}
+
+review_disposition_commit() {
+  local root="$1" head="$2" dispositions="$3" record="$4" kind id fingerprint line sha reason
+  read -r kind id fingerprint <<< "$(jq -r '[.kind, .id, .fingerprint] | @tsv' <<< "$record")"
+  line="$(awk -v k="$kind" -v id="$id" -v hash="$fingerprint" \
+    '$2 == k && $3 == id && $4 == hash { print }' <<< "$dispositions")" || return 1
+  [[ "$line" != *$'\n'* ]] || return 1
+  read -r _ _ _ _ sha reason <<< "$line"
+  [[ "$sha" =~ ^[a-f0-9]{40}$ && -n "$reason" ]] || return 1
+  [ "$(git -C "$root" cat-file -t "$sha" 2>/dev/null)" = commit ] &&
+    git -C "$root" merge-base --is-ancestor "$sha" "$head" || return 1
+  printf '%s\n' "$sha"
+}
+
+review_findings_ready() {
+  local root="$1" repo="$2" pr="$3" head="$4" dispositions="$5" request items item record id open total ids sha body
+  request="$(jq -r '[.[] | select(.activeRequest)][0] | if . == null then "" else "\(.author) (review \(.id))" end' <<< "$GH_REVIEWS")"
+  if [ -n "$request" ]; then printf 'not-ready findings: changes requested by %s\n' "$request"; return 1; fi
+  items="$(jq -c '.[] | select(.finding)' <<< "$GH_REVIEWS")"
+  while IFS= read -r item && [ -n "$item" ]; do
+    record="$(review_finding_record "$root" "$repo" "$pr" review "$item")" || return 3
+    if ! jq -e '.actor == "Bot"' >/dev/null <<< "$record" || ! review_disposition_commit "$root" "$head" "$dispositions" "$record" >/dev/null; then
+      id="$(jq -r .id <<< "$record")"
+      printf 'not-ready findings: review %s has no verified disposition\n' "$id"; return 1
+    fi
+  done <<< "$items"
+  read -r open total <<< "$(jq -r '"\([.[] | select(.isResolved == false)] | length) \(length)"' <<< "$GH_THREADS")"
+  if [ "$open" -ne 0 ]; then
+    printf 'not-ready threads: %s of %s review thread(s) not resolved\n' "$open" "$total"; return 1
+  fi
+
+  # A GitHub resolution with no local record is left alone. A disposition this round does
+  # claim cannot keep an edited or newly discussed finding closed.
+  ids="$(awk '$2 == "thread" { print $3 }' <<< "$dispositions" | jq -Rsc 'split("\n")')" || return 3
+  items="$(jq -c --argjson ids "$ids" '.[] | select(.isResolved and (.id as $id | $ids | index($id) != null))' <<< "$GH_THREADS")"
+  while IFS= read -r item && [ -n "$item" ]; do
+    record="$(review_finding_record "$root" "$repo" "$pr" thread "$item")" || return 3
+    id="$(jq -r .id <<< "$record")"
+    if sha="$(review_disposition_commit "$root" "$head" "$dispositions" "$record")"; then
+      body="$(review_reply_body "$sha" "$record")"
+      if jq -e --arg body "$body" '
+          .comments.totalCount == 1 or (.comments.totalCount == 2 and .comments.nodes[1].body == $body)
+        ' >/dev/null <<< "$record"; then continue; fi
+    fi
+    printf 'not-ready threads: resolved thread %s changed after its disposition\n' "$id"; return 1
+  done <<< "$items"
+}
+
+review_reply_body() {
+  printf 'Fixed in %s (finding %s).\n' "$1" "$(jq -r .fingerprint <<< "$2")"
+}
+
+review_thread_stage() {
+  jq -r --argjson before "$1" --arg login "$2" --arg body "$3" '
+    map(select(.id == $before.id))[0]
+    | if . == null then "changed"
+      elif .isResolved then "resolved"
+      elif .comments.nodes[0] != $before.comments.nodes[0] then "changed"
+      elif .comments.totalCount == 1 then "new"
+      elif .comments.totalCount == 2 and
+        (.comments.nodes[1] | .author.login == $login and .body == $body) then "replied"
+      else "changed" end' <<< "$GH_THREADS"
+}
+
+review_pr_still_open() {
+  gh_pr_snapshot "$1" "$2" || return $?
+  if [[ "$PR_SNAPSHOT" != "$3 OPEN "* ]]; then
+    printf 'sdd-worker: pull request head or state changed while handling review findings on %s\n' "$3" >&2
+    return 1
+  fi
+}
+
+review_resolve_thread() {
+  local root="$1" repo="$2" pr="$3" head="$4" login="$5" record="$6" sha="$7" id body stage
+  id="$(jq -r .id <<< "$record")"
+  body="$(review_reply_body "$sha" "$record")"
+  stage="$(review_thread_stage "$record" "$login" "$body")" || return 3
+  if [ "$stage" = resolved ] || [ "$stage" = changed ]; then return 0; fi
+  review_pr_still_open "$root" "$pr" "$head" || return $?
+  if [ "$stage" = new ]; then
+    if ! gh_at "$root" api graphql -f \
+         'query=mutation($id:ID!,$body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$id,body:$body}){comment{id body author{login}}}}' \
+         -f "id=$id" -f "body=$body" ||
+       ! jq -es --arg login "$login" --arg body "$body" '
+         length == 1 and (.[0] | (.errors // [] | length) == 0 and (.data.addPullRequestReviewThreadReply.comment |
+           (.id | type) == "string" and .id != "" and .author.login == $login and .body == $body))
+       ' >/dev/null 2>&1 <<< "$GH_OUT"; then
+      gh_unread "gh api graphql could not verify reply to thread $id"; return 3
+    fi
+    gh_review_threads "$root" "$repo" "$pr" || return $?
+    stage="$(review_thread_stage "$record" "$login" "$body")" || return 3
+    if [ "$stage" != replied ]; then
+      printf 'not-ready threads: reply or finding on thread %s changed before resolution\n' "$id"
+      return 1
+    fi
+    review_pr_still_open "$root" "$pr" "$head" || return $?
+  fi
+  if ! gh_at "$root" api graphql -f \
+       'query=mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}' -f "id=$id" ||
+     ! jq -es --arg id "$id" 'length == 1 and (.[0] | (.errors // [] | length) == 0 and
+       (.data.resolveReviewThread.thread | .id == $id and .isResolved == true))
+     ' >/dev/null 2>&1 <<< "$GH_OUT"; then
+    gh_unread "gh api graphql could not verify resolution of thread $id"; return 3
+  fi
+  gh_review_threads "$root" "$repo" "$pr" || return $?
+  if ! jq -e --arg id "$id" 'any(.[]; .id == $id and .isResolved)' >/dev/null <<< "$GH_THREADS"; then
+    gh_unread "gh api graphql did not read back thread $id as resolved"; return 3
+  fi
+}
+
+cmd_review_findings() {
+  { [ "$#" -eq 2 ] || { [ "$#" -eq 3 ] && [ "$3" = --resolve ]; }; } &&
+    [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
+  local dir="$1" pr="$2" root head state repo round round_text dispositions items item record sha login=""
+  repo_root "$dir" root
+  if [ -z "$root" ]; then printf 'sdd-worker: review findings require a git checkout\n' >&2; return 1; fi
+  gh_pr_snapshot "$root" "$pr" || return $?
+  read -r head state _ <<< "$PR_SNAPSHOT"
+  if [ "$state" != OPEN ]; then printf 'sdd-worker: review findings require an open pull request\n' >&2; return 1; fi
+  gh_repository "$root" || return $?
+  repo="$GH_OUT"
+  gh_pr_reviews "$root" "$repo" "$pr" || return $?
+  gh_review_threads "$root" "$repo" "$pr" || return $?
+  if [ "$#" -eq 2 ]; then
+    items="$(jq -c '.[] | select(.state != "DISMISSED")' <<< "$GH_REVIEWS")"
+    while IFS= read -r item && [ -n "$item" ]; do
+      review_finding_record "$root" "$repo" "$pr" review "$item" || return 3
+    done <<< "$items"
+  else
+    ci_clean_head "$root" "$head" "review findings" || return 1
+    round="$(newest_round "$dir")"
+    if [ -z "$round" ] || [ -L "$round" ] ||
+       ! round_text="$(review_round_text "$dir" "$head" "$round")"; then
+      printf 'sdd-worker: review resolution requires a committed round on %s\n' "$head" >&2; return 1
+    fi
+    dispositions="$(review_dispositions "$round_text")" || return 1
+  fi
+  items="$(jq -c '.[]' <<< "$GH_THREADS")"
+  while IFS= read -r item && [ -n "$item" ]; do
+    record="$(review_finding_record "$root" "$repo" "$pr" thread "$item")" || return 3
+    if [ "$#" -eq 2 ]; then printf '%s\n' "$record"; continue; fi
+    if ! jq -e '.isResolved == false and .comments.nodes[0].author.__typename == "Bot"' >/dev/null <<< "$record" ||
+       ! sha="$(review_disposition_commit "$root" "$head" "$dispositions" "$record")"; then continue; fi
+    if [ -z "$login" ]; then
+      if ! gh_at "$root" api user --jq .login || ! [[ "$GH_OUT" =~ ^[A-Za-z0-9_-]+(\[bot\])?$ ]]; then
+        gh_unread 'gh api user could not identify the review reply author'; return 3
+      fi
+      login="$GH_OUT"
+    fi
+    review_resolve_thread "$root" "$repo" "$pr" "$head" "$login" "$record" "$sha" || return $?
+  done <<< "$items"
+  if [ "$#" -eq 3 ]; then
+    review_pr_still_open "$root" "$pr" "$head" || return $?
+    review_findings_ready "$root" "$repo" "$pr" "$head" "$dispositions"
+  fi
+}
+
 # pr-ready <mission-dir> <pr> — whether pull request <pr> meets the owner's bar on its head sha:
-# `ready <sha>` and rc 0 when the six items hold, else `not-ready <item>: <reason>` and rc 1 for the
+# `ready <sha>` and rc 0 when the seven items hold, else `not-ready <item>: <reason>` and rc 1 for the
 # first that fails, in this order:
 #   review     the newest 40-review-r<N>.md of the mission folder (by number) grades A in every row
 #              of `### Overall Grade` (its header and its separator known by the shape of the line,
@@ -1622,31 +1893,29 @@ cmd_review_ci() {
 #              read is the round the head carries;
 #   codex      the newest comment of the Codex bot that carries `codex-review-state:v1`, read from
 #              every page, parses and is for the head, completed, with no unresolved finding;
+#   findings   no active change request or undisposed review body in the complete review pages;
 #   threads    every review thread is resolved, and every one was read;
 #   mergeable  the pull request is OPEN and MERGEABLE;
 #   head       the local HEAD of the mission's checkout is the head;
 #   local/ci   the newest status in this context from the review producer on the head is success.
 # rc 3, and nothing on stdout, when gh failed or answered off its contract. The `ready` line carries
 # the sha the caller passes to `gh pr merge --merge --match-head-commit`; the method (a merge commit,
-# never a squash) is the merging command's, not this verb's. No bot's review is read but the Codex
-# state, so a bot with no quota neither blocks nor counts as a review. Both programs write `reviewed_head:`
+# never a squash) is the merging command's, not this verb's. A missing review from another bot
+# neither blocks nor counts as a review. Both programs write `reviewed_head:`
 # (ADR 0023); a runner round with a DOCS commit after it, outside the mission folder, is not ready.
 # Declared limits: the items are read one after the other, never at once — a status, a receipt, a thread
 # or the mergeability can change between two reads on the same sha, which --match-head-commit does
 # not see (achado #13 of the mission's review r5) —, so whoever merges reads pr-ready again
 # immediately before `gh pr merge`, and a ready read earlier is no ready; a path git still quotes
 # under core.quotePath=false (a control byte, a quote or a backslash in its name) never matches the
-# mission folder, the fail-safe side; and only the first hundred threads are read, which is why a
-# pull request with more is not ready.
-# What it does not read: the body of a review (18 of the 38 findings CodeRabbit left on PR #414
-# lived there), or a review in state `CHANGES_REQUESTED` that carries no inline comment.
-# Reading and handling findings outside threads remains open in TODO.md.
+# mission folder, the fail-safe side. Human or ambiguous threads are left for the owner rather
+# than resolved automatically by review-findings.
 cmd_pr_ready() {
   [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
-  local dir="${1%/}" pr="$2" root head state mergeable round rh g unjust missing gv prefix changed p repo verdict
+  local dir="${1%/}" pr="$2" root head state mergeable round rh g unjust missing gv prefix changed p repo verdict round_text dispositions
   local producer statuses ci
   local anc commits c dirty
-  local threads open total seen unseen here
+  local here
   local -a grades=()
   repo_root "$dir" root
   if [ -z "$root" ]; then printf 'not-ready review: %s is not inside a git checkout\n' "$dir"; return 1; fi
@@ -1769,24 +2038,13 @@ cmd_pr_ready() {
   fi
   if [ "$verdict" != ok ]; then printf 'not-ready codex: %s\n' "$verdict"; return 1; fi
 
-  if ! gh_at "$root" api graphql -f \
-       "query=query{repository(owner:\"${repo%%/*}\",name:\"${repo#*/}\"){pullRequest(number:$pr){reviewThreads(first:100){totalCount nodes{isResolved}}}}}"; then
-    gh_unread "gh api graphql (the review threads of #$pr) failed (rc $GH_RC)"; return 3
+  gh_pr_reviews "$root" "$repo" "$pr" || return $?
+  gh_review_threads "$root" "$repo" "$pr" || return $?
+  if ! round_text="$(review_round_text "$dir" "$head" "$round")"; then
+    printf 'not-ready findings: no committed round on %s\n' "$head"; return 1
   fi
-  if ! threads="$(jq -rn 'input | .data.repository.pullRequest.reviewThreads
-         | if (.totalCount | type) == "number" and (.nodes | type) == "array"
-              and all(.nodes[]; (.isResolved | type) == "boolean")
-           then "\([.nodes[] | select(.isResolved == false)] | length) \(.totalCount) \(.nodes | length) \((.nodes | length) < .totalCount)"
-           else error("off the contract") end' 2> /dev/null <<< "$GH_OUT")"; then
-    gh_unread "gh api graphql answered no review threads of #$pr: '${GH_OUT:0:80}'"; return 3
-  fi
-  read -r open total seen unseen <<< "$threads"
-  if [ "$open" -ne 0 ]; then
-    printf 'not-ready threads: %s of %s review thread(s) not resolved\n' "$open" "$total"; return 1
-  fi
-  if [ "$unseen" != false ]; then
-    printf 'not-ready threads: %s of %s review threads read, the rest unseen\n' "$seen" "$total"; return 1
-  fi
+  dispositions="$(review_dispositions "$round_text")" || return 1
+  review_findings_ready "$root" "$repo" "$pr" "$head" "$dispositions" || return $?
 
   if [ "$state" != OPEN ] || [ "$mergeable" != MERGEABLE ]; then
     printf 'not-ready mergeable: the pull request is %s and %s, not OPEN and MERGEABLE\n' "$state" "$mergeable"
@@ -1833,6 +2091,7 @@ main() {
     next) shift; cmd_next "$@" ;;
     pr-ready) shift; cmd_pr_ready "$@" ;;
     review-ci) shift; cmd_review_ci "$@" ;;
+    review-findings) shift; cmd_review_findings "$@" ;;
     *) usage; return 2 ;;
   esac
 }
