@@ -548,7 +548,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   do worker, a mais cara, só é delta quando a `main` não andou. Medido na r3 do #452: `full — merge 59be5eb
   entered after 40-review-r2.md`, 30 arquivos e 2 086 linhas, onde a branch andara 11 commits desde o
   `reviewed_head:` da r2. Direção: o `review-base` aceita o merge cujo lado da base não toca caminho que a
-  branch mudou, ou o ato só mergeia a base quando o PR não é `MERGEABLE`.
+  branch mudou, ou o ato só mergeia a base quando o PR não é `MERGEABLE`. RESOLVED by 20ffaab
   — descoberto pela sessão orquestradora na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
 - [ ] **O merge delegado não confere que o corpo do PR lista as escolhas do grill** —
