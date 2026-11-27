@@ -13,8 +13,8 @@ questions are now answered by `bin/sdd-worker`, from artifacts. This command giv
 loop, the stops, and the way to cross a night without spending its own context window
 (ADR 0022 of the sdd kit).
 
-**You are the worker.** `sdd-worker` only answers, and signs; it never acts. Every act is yours,
-through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, `gh`. Its verbs:
+**You are the worker.** You coordinate each act through `/sdd-plan`, `sdd approve`, `sdd run`,
+`gh` and the commands below. `review-ci` publishes evidence for the review act you authorize.
 
 - `sdd-worker delegate <campaign-dir>` is the owner's, never yours: it shows the delegation, asks,
   and signs it. You never answer its question.
@@ -28,8 +28,10 @@ through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, 
   `sdd-worker allows <campaign-dir> plan --lot L<n>`. Any other call is rc 2.
 - `sdd-worker budget <campaign-dir>`: the campaign's spend against its ceiling, and the mission cap.
 - `sdd-worker next <campaign-dir>`: the next act of the campaign, derived from the disk and `gh`.
-- `sdd-worker pr-ready <mission-dir> <pr>`: `ready <sha>` only when the five-item bar holds on the
+- `sdd-worker pr-ready <mission-dir> <pr>`: `ready <sha>` only when the merge bar holds on the
   pull request's head.
+- `sdd-worker review-ci <mission-dir> <pr>`: run the configured suite and publish its status on
+  the pushed head, as part of the authorized `review` act.
 
 `sdd-worker` lives beside the runner, in the kit's `bin/`:
 `"$(dirname "$(readlink -f "$(command -v sdd)")")/sdd-worker"`. Below, `sdd-worker` is that path.
@@ -319,9 +321,14 @@ its frontmatter, the `git rev-parse HEAD` the round read, and the suite's result
 `pr-ready` refuses a round whose rationale or `gate:` is still a fill-in of `templates/review.md`,
 and one whose grade table leaves out the row of any of its eight criteria.
 The runner's REVIEW rounds write `reviewed_head:` too, but a commit after it outside the mission
-folder (the DOCS phase's) leaves `pr-ready` waiting for this one. Fix what the round finds and review again, until every criterion is A. Commit and push the
-round, then ask `@codex review` on the pull request, always, and wait for its receipt on the new
-head.
+folder (the DOCS phase's) leaves `pr-ready` waiting for this one. Fix what the round finds and review
+again, until every criterion is A. Commit and push the round, then run
+`sdd-worker review-ci <mission-dir> <pr>` in its worktree. The earlier suite run does not count as
+evidence on the pushed head. Use the same authenticated GitHub account for this step and for
+`pr-ready`, with permission to write commit statuses for this step. If the suite fails, the head
+moves, or the status cannot be published, record the diagnostic and stop the act. Do not proceed
+on a previously read verdict. After a successful publication, ask `@codex review` on the pull
+request, always, and wait for its receipt on the new head.
 
 ### `merge`
 

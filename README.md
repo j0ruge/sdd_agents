@@ -121,8 +121,7 @@ sdd run <mission> --max-phases 2    # stop after N phases
 sdd adr new --slug <s> --spec <path>  # reserve the id after the highest visible ADR and write both sides of the link
 sdd adr check [--mission <m>]         # read the links back; rc 0 clean, 1 violation, 2 bad configuration
 
-sdd-worker <verb> <dir> [args]        # the campaign worker's verbs (delegate, level, allows, budget, next, pr-ready);
-                                      #   they answer from artifacts and never act — see below
+sdd-worker <verb> <dir> [args]        # the campaign worker's verbs (delegate, level, allows, budget, next, pr-ready, review-ci)
 ```
 
 For `setsid nohup sdd run`, see `sdd help` and the [detached-run guide](docs/failure-modes.md#the-sdd-run-process-itself-disappeared).

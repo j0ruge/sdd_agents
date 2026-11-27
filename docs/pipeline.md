@@ -2212,6 +2212,7 @@ stderr and leaves rc 2 for ordinary calls. A Codex guard can refuse an unavailab
 | `sdd-worker codex-plan <campaign-dir> --lot L<n>` | no output on success | 0 when signed Codex terms permit planning that lot and the strict ledger check passes; 1 on refusal (reason on stderr); 2 on a malformed call |
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts or the base do not read); 3 when `gh` did not answer |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
+| `sdd-worker review-ci <mission-dir> <pr>` | suite output and `local/ci <head sha> <result> (TEST_CMD rc <code>)` after publication | 0 suite passed and status published; 1 refused or suite failed; 3 GitHub evidence unreadable or write unverified |
 
 For Codex campaigns with incomplete billing the normal total starts with `campaign known US$`, also used after
 `no room —`. When legible terms opt into `allow_unknown_cost: true` but lack a valid signature,
@@ -2307,7 +2308,7 @@ mission with no branch, no `campaign.md`, a `campaign:` in it that is not the di
 empty one and the template's placeholder among them, both values named) and an empty queue stop,
 with rc 1.
 
-**`pr-ready`** reads the pull request head (`headRefOid`) and requires five items on that one sha,
+**`pr-ready`** reads the pull request head (`headRefOid`) and requires six items on that one sha,
 naming the first that fails:
 
 1. `review`: the round is the one **committed at the head**, never a copy on disk: the mission
@@ -2336,21 +2337,28 @@ naming the first that fails:
    read, so a bot out of quota neither blocks nor counts as a review;
 3. `threads`: no review thread unresolved, and no more of them than the hundred read;
 4. `mergeable`: the pull request is `OPEN` and `MERGEABLE`;
-5. `head`: the local `HEAD` is that sha.
+5. `head`: the local `HEAD` is that sha;
+6. `local/ci`: the newest status on that sha in this context from the authenticated GitHub
+   account used by the worker is `success`. The worker reads all status pages. Missing,
+   pending, failed or unreadable evidence does not allow a merge, and neither does a success
+   from a different account or sha.
+
+The `review` act supplies this status with `sdd-worker review-ci <mission-dir> <pr>` after pushing
+the finished round. It checks that the open PR head equals the clean local checkout, writes
+`pending` to that sha, and runs `TEST_CMD` in the checkout. Only if the PR and local checkout still
+match does it publish `success` or `failure` according to the suite's exit code. A different sha
+requires a fresh run. Use the same GitHub account to publish and verify the status. If GitHub
+refuses the write or its result cannot be verified, the review act stops with a diagnostic.
 
 The `ready <sha>` line is what the session passes to `gh pr merge --merge --match-head-commit`. The
 method — a merge commit, never a squash — belongs to the command that merges, and
-`commands/sdd-worker.md` writes it. The five items are read one after the other, never at once, so
+`commands/sdd-worker.md` writes it. The items are read one after the other, never at once, so
 the session reads `pr-ready` again immediately before `gh pr merge`.
 
 **What `pr-ready` does not read.** The body of a review, where 18 of the 38 findings CodeRabbit
-left on PR #414 lived; a review in state `CHANGES_REQUESTED` that carries no inline comment; and the
-`local/ci` status of the head, the suite's result published as a commit status. The bar it applies
-(§3 of `docs/superpowers/specs/2026-11-16-o-worker-merge-delegado.md`, decision 9 of the mission)
-names review threads alone, so none of the three keeps a pull request from `ready` once its five
-items hold. Reading them is a sixth item, which changes the bar: it is open in `TODO.md`, with the
-question of who writes `local/ci` in the worker's loop, since an item that no act writes would be a
-gate nobody can satisfy.
+left on PR #414 lived, and a review in state `CHANGES_REQUESTED` that carries no inline comment.
+For review findings outside the Codex receipt, the worker still checks only threads. Reading and
+handling findings outside threads remains open in `TODO.md`.
 
 **`reviewed_head:` is one key for two programs (ADR 0023).** Since `20261119-l1b-a-rodada-delta`
 `templates/review.md` names it, the REVIEW rounds of `sdd run` write it, and `gate_REVIEW` checks it.
@@ -2390,7 +2398,7 @@ tolerance for prose), and the worker's round is what applies it. Its review act 
   `ON_ESCALATION_CMD` empty, the worker only fails closed (`no mission cap`, `assisted — no pager`):
   the file wins over the environment, and making the signed values win there needs the runner's
   config precedence, which ADR 0022 does not change.
-- `pr-ready` reads its five items one after the other: a receipt, a thread or the mergeability can
+- `pr-ready` reads its items one after the other: a status, a receipt, a thread or the mergeability can
   change between two reads on the same sha, and `--match-head-commit` holds the sha only. A ready
   is good for the merge that follows it at once, never for one later.
 - `sdd approve` under `full` still writes `humano-YYYY-MM-DD`; the trail is the campaign journal.

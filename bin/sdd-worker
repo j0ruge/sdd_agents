@@ -13,10 +13,11 @@
 #   allows     whether one act fits that level, the lot of an act on a mission read from the mission
 #   budget     what the campaign spent against its two ceilings
 #   next       the next act of the campaign
-#   pr-ready   whether a pull request meets the owner's five-item bar on its head sha
+#   pr-ready   whether a pull request meets the owner's bar on its head sha
+#   review-ci  test the published review head and record local/ci on that sha
 #
-# Every verb but `delegate` only reads. None of them acts: launching `sdd run`, opening the pull
-# request and merging stay with the session, through the commands that already exist.
+# Only delegate and review-ci write. Launching sdd run, opening the pull request and merging stay
+# with the session, through the commands that already exist.
 # The runner (`bin/sdd`) owns ONE mission; this program owns the campaign and never writes what the
 # runner owns. The sensor is tests/check-worker.sh.
 set -euo pipefail
@@ -56,6 +57,7 @@ usage: sdd-worker <verb> <args>
                                                (EXEC requires its selected model)
   next     <campaign-dir>                      the next act of the campaign
   pr-ready <mission-dir> <pr>                  whether the pull request is ready on its head sha
+  review-ci <mission-dir> <pr>                 run TEST_CMD and publish local/ci for the PR head
 USAGE
 }
 
@@ -1514,8 +1516,97 @@ gh_unread() {
   printf 'sdd-worker: %s — no item is named: an answer that was not read is never ready\n' "$1" >&2
 }
 
+gh_pr_snapshot() {
+  local root="$1" pr="$2"
+  if ! gh_at "$root" pr view "$pr" --json headRefOid,mergeable,state; then
+    gh_unread "gh pr view $pr failed (rc $GH_RC)"; return 3
+  fi
+  if ! PR_SNAPSHOT="$(jq -rn 'input | if (.headRefOid | test("^[0-9a-f]{40}$"))
+           then "\(.headRefOid) \(.state) \(.mergeable)" else error("off the contract") end' 2>/dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh pr view $pr answered no pull request with a full head sha: '${GH_OUT:0:80}'"; return 3
+  fi
+}
+
+gh_repository() {
+  if ! gh_at "$1" repo view --json nameWithOwner -q .nameWithOwner; then
+    gh_unread "gh repo view failed (rc $GH_RC)"; return 3
+  fi
+  if ! [[ "$GH_OUT" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    gh_unread "gh repo view answered '${GH_OUT:0:80}', not <owner>/<name>"; return 3
+  fi
+}
+
+gh_ci_producer() {
+  if ! gh_at "$1" api user --jq .id || ! [[ "$GH_OUT" =~ ^[1-9][0-9]*$ ]]; then
+    gh_unread 'local/ci: could not identify the authenticated GitHub producer'; return 3
+  fi
+}
+
+ci_clean_head() {
+  local root="$1" head="$2" here dirty
+  if ! here="$(git -C "$root" rev-parse --verify HEAD)" || [ "$here" != "$head" ]; then
+    printf 'sdd-worker: local/ci requires local HEAD to match the pull request head %s\n' "$head" >&2
+    return 1
+  fi
+  if ! dirty="$(GIT_OPTIONAL_LOCKS=0 git -C "$root" status --porcelain --untracked-files=all)" || [ -n "$dirty" ]; then
+    printf 'sdd-worker: local/ci requires a clean checkout on %s\n' "$head" >&2
+    return 1
+  fi
+}
+
+ci_publish() {
+  local root="$1" repo="$2" head="$3" producer="$4" state="$5"
+  if ! gh_at "$root" api --method POST "repos/$repo/statuses/$head" -f context=local/ci -f "state=$state" ||
+     ! jq -e --arg producer "$producer" --arg state "$state" \
+       '.context == "local/ci" and .state == $state and (.creator.id | tostring) == $producer' \
+       >/dev/null 2>&1 <<< "$GH_OUT"; then
+    printf 'sdd-worker: could not verify publication of local/ci %s on %s\n' "$state" "$head" >&2
+    return 3
+  fi
+}
+
+cmd_review_ci() {
+  [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
+  local root pr="$2" head pr_state repo producer result=success rc=0
+  repo_root "$1" root
+  if [ -z "$root" ]; then
+    printf 'sdd-worker: local/ci requires a git checkout\n' >&2; return 1
+  fi
+  gh_pr_snapshot "$root" "$pr" || return $?
+  read -r head pr_state _ <<< "$PR_SNAPSHOT"
+  if [ "$pr_state" != OPEN ]; then
+    printf 'sdd-worker: local/ci requires an open pull request\n' >&2; return 1
+  fi
+  ci_clean_head "$root" "$head" || return 1
+  gh_repository "$root" || return $?
+  repo="$GH_OUT"
+  gh_ci_producer "$root" || return $?
+  producer="$GH_OUT"
+  ci_publish "$root" "$repo" "$head" "$producer" pending || return $?
+  (
+    CDPATH='' cd -- "$root" || exit 1
+    unset TEST_CMD
+    # shellcheck disable=SC1091
+    . ./.sdd/config.sh || exit 1
+    if [ -z "${TEST_CMD:-}" ]; then
+      printf 'sdd-worker: TEST_CMD is empty in .sdd/config.sh\n' >&2; exit 1
+    fi
+    ci_clean_head "$root" "$head" || exit 1
+    eval "$TEST_CMD"
+  ) </dev/null || rc=$?
+  gh_pr_snapshot "$root" "$pr" || return $?
+  if [[ "$PR_SNAPSHOT" != "$head OPEN "* ]]; then
+    printf 'sdd-worker: pull request head or state changed during TEST_CMD on %s\n' "$head" >&2; return 1
+  fi
+  ci_clean_head "$root" "$head" || return 1
+  if [ "$rc" -ne 0 ]; then result=failure; fi
+  ci_publish "$root" "$repo" "$head" "$producer" "$result" || return $?
+  printf 'local/ci %s %s (TEST_CMD rc %s)\n' "$head" "$result" "$rc"
+  [ "$rc" -eq 0 ]
+}
+
 # pr-ready <mission-dir> <pr> — whether pull request <pr> meets the owner's bar on its head sha:
-# `ready <sha>` and rc 0 when the five items hold, else `not-ready <item>: <reason>` and rc 1 for the
+# `ready <sha>` and rc 0 when the six items hold, else `not-ready <item>: <reason>` and rc 1 for the
 # first that fails, in this order:
 #   review     the newest 40-review-r<N>.md of the mission folder (by number) grades A in every row
 #              of `### Overall Grade` (its header and its separator known by the shape of the line,
@@ -1533,44 +1624,34 @@ gh_unread() {
 #              every page, parses and is for the head, completed, with no unresolved finding;
 #   threads    every review thread is resolved, and every one was read;
 #   mergeable  the pull request is OPEN and MERGEABLE;
-#   head       the local HEAD of the mission's checkout is the head.
+#   head       the local HEAD of the mission's checkout is the head;
+#   local/ci   the newest status in this context from the review producer on the head is success.
 # rc 3, and nothing on stdout, when gh failed or answered off its contract. The `ready` line carries
 # the sha the caller passes to `gh pr merge --merge --match-head-commit`; the method (a merge commit,
 # never a squash) is the merging command's, not this verb's. No bot's review is read but the Codex
 # state, so a bot with no quota neither blocks nor counts as a review. Both programs write `reviewed_head:`
 # (ADR 0023); a runner round with a DOCS commit after it, outside the mission folder, is not ready.
-# Declared limits: the five items are read one after the other, never at once — a receipt, a thread
+# Declared limits: the items are read one after the other, never at once — a status, a receipt, a thread
 # or the mergeability can change between two reads on the same sha, which --match-head-commit does
 # not see (achado #13 of the mission's review r5) —, so whoever merges reads pr-ready again
 # immediately before `gh pr merge`, and a ready read earlier is no ready; a path git still quotes
 # under core.quotePath=false (a control byte, a quote or a backslash in its name) never matches the
 # mission folder, the fail-safe side; and only the first hundred threads are read, which is why a
 # pull request with more is not ready.
-# What it does not read, since the bar it applies (§3 of
-# docs/superpowers/specs/2026-11-16-o-worker-merge-delegado.md, decision 9 of the mission) names
-# review threads alone: the body of a review (18 of the 38 findings CodeRabbit left on PR #414
-# lived there), a review in state `CHANGES_REQUESTED` that carries no inline comment, and the
-# `local/ci` status of the head, so none of them keeps a pull request from ready. A sixth item that
-# reads them changes the bar, and it is open in TODO.md with the question of who writes `local/ci`
-# in the worker's loop: an item that no act writes would be a gate nobody can satisfy.
+# What it does not read: the body of a review (18 of the 38 findings CodeRabbit left on PR #414
+# lived there), or a review in state `CHANGES_REQUESTED` that carries no inline comment.
+# Reading and handling findings outside threads remains open in TODO.md.
 cmd_pr_ready() {
   [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
-  local dir="${1%/}" pr="$2" root view head state mergeable round rh g unjust missing gv prefix changed p repo verdict
+  local dir="${1%/}" pr="$2" root head state mergeable round rh g unjust missing gv prefix changed p repo verdict
+  local producer statuses ci
   local anc commits c dirty
   local threads open total seen unseen here
   local -a grades=()
   repo_root "$dir" root
   if [ -z "$root" ]; then printf 'not-ready review: %s is not inside a git checkout\n' "$dir"; return 1; fi
-  if ! gh_at "$root" pr view "$pr" --json headRefOid,mergeable,state; then
-    gh_unread "gh pr view $pr failed (rc $GH_RC)"; return 3
-  fi
-  # A head that is not a full sha, or no object at all, makes jq fail; a state or a mergeability
-  # that is absent reads null, which the mergeable item refuses.
-  if ! view="$(jq -rn 'input | if (.headRefOid | test("^[0-9a-f]{40}$"))
-           then "\(.headRefOid) \(.state) \(.mergeable)" else error("off the contract") end' 2> /dev/null <<< "$GH_OUT")"; then
-    gh_unread "gh pr view $pr answered no pull request with a full head sha: '${GH_OUT:0:80}'"; return 3
-  fi
-  read -r head state mergeable <<< "$view"
+  gh_pr_snapshot "$root" "$pr" || return $?
+  read -r head state mergeable <<< "$PR_SNAPSHOT"
 
   round="$(newest_round "$dir")"
   if [ -z "$round" ]; then printf 'not-ready review: no 40-review-r<N>.md in %s\n' "$dir"; return 1; fi
@@ -1662,13 +1743,8 @@ cmd_pr_ready() {
     return 1
   fi
 
-  if ! gh_at "$root" repo view --json nameWithOwner -q .nameWithOwner; then
-    gh_unread "gh repo view failed (rc $GH_RC)"; return 3
-  fi
+  gh_repository "$root" || return $?
   repo="$GH_OUT"
-  if ! [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
-    gh_unread "gh repo view answered '${repo:0:80}', not <owner>/<name>"; return 3
-  fi
   if ! gh_at "$root" api --paginate "repos/$repo/issues/$pr/comments"; then
     gh_unread "gh api --paginate repos/$repo/issues/$pr/comments failed (rc $GH_RC)"; return 3
   fi
@@ -1721,6 +1797,28 @@ cmd_pr_ready() {
   if [ "$here" != "$head" ]; then
     printf 'not-ready head: the local HEAD %s is not the pull request head %s\n' "${here:-(none)}" "$head"; return 1
   fi
+  gh_ci_producer "$root" || return $?
+  producer="$GH_OUT"
+  statuses="repos/$repo/commits/$head/statuses"
+  if ! gh_at "$root" api --paginate "$statuses"; then
+    gh_unread "gh api --paginate $statuses failed (rc $GH_RC)"; return 3
+  fi
+  # GitHub returns the statuses newest first, including across page boundaries.
+  if ! ci="$(jq -ers --arg producer "$producer" '
+    if length == 0 or any(.[]; type != "array") then error("no pages") else
+      add | if any(.[]; (.context | type) != "string" or
+        (.context == "local/ci" and (.creator.id | type) != "number")) then error("invalid status") else
+        [ .[] | select(.context == "local/ci" and (.creator.id | tostring) == $producer) ][0]
+        | if . == null then "missing"
+          elif (.state | IN("success", "pending", "failure", "error")) then .state
+          else error("invalid state") end
+      end
+    end' 2>/dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh api --paginate $statuses answered invalid status pages"; return 3
+  fi
+  if [ "$ci" != success ]; then
+    printf 'not-ready local/ci: %s on %s for the review producer\n' "$ci" "$head"; return 1
+  fi
   printf 'ready %s\n' "$head"
 }
 
@@ -1734,6 +1832,7 @@ main() {
     codex-run) shift; cmd_codex_run "$@" ;;
     next) shift; cmd_next "$@" ;;
     pr-ready) shift; cmd_pr_ready "$@" ;;
+    review-ci) shift; cmd_review_ci "$@" ;;
     *) usage; return 2 ;;
   esac
 }

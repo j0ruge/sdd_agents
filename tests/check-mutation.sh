@@ -7725,11 +7725,16 @@ mut_WORKER_reuse_limit_dropped() {
 }
 # The comment of cmd_pr_ready stops naming the CHANGES_REQUESTED review with no inline comment among
 # what the verb does not read (decision 1 of the owner on the mission's review r6). Caught by
-# "blind: cmd_pr_ready and docs/pipeline.md declare what pr-ready does not read — the body of a
-# review, a CHANGES_REQUESTED with no inline comment, local/ci — and point at TODO.md"
+# "blind: cmd_pr_ready and docs/pipeline.md name review bodies and CHANGES_REQUESTED without
+# inline comments, and point at TODO.md"
 # (check-worker.sh).
 mut_WORKER_blind_limit_dropped() {
   sed -i '/^# .*`CHANGES_REQUESTED` that carries no inline comment/d' "${1%/*}/sdd-worker"
+}
+# Without the status verdict, an untested head can merge.
+# Caught by "merge requires local ci on the tested head" (check-worker.sh).
+mut_WORKER_local_ci_ignored() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$ci" != success \]; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
 # The campaign ceiling is read between acts again (achado #3 of the mission's review r6): with
 # 9.50 left of 200 and a mission cap of 40, budget answers rc 0 and the next run may end past the
@@ -8920,6 +8925,7 @@ CATALOG=(
   WORKER_gone_copy_shown
   WORKER_reuse_limit_dropped
   WORKER_blind_limit_dropped
+  WORKER_local_ci_ignored
   WORKER_ceiling_room_unchecked
   WORKER_ceiling_cap_rounded
   WORKER_ceiling_float_compare

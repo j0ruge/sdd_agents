@@ -1723,8 +1723,17 @@ round() {
   [ "$2" != - ] || sed -i '2,/^---$/ { /^reviewed_head:/d }' "$1"
 }
 
-mkdir -p "$RR/src"
+mkdir -p "$RR/src" "$RR/.sdd"
 git init -q -b main "$RR"
+cat > "$RR/.sdd/config.sh" <<'CONFIG'
+TEST_CMD='bash src/test-ci.sh'
+CONFIG
+cat > "$RR/src/test-ci.sh" <<'SUITE'
+set -eu
+git rev-parse HEAD >> "$GHFX/events"
+if [ -f "$GHFX/move-to" ]; then cp "$GHFX/move-to" "$GHFX/view"; fi
+[ ! -f "$GHFX/suite-fail" ]
+SUITE
 printf 'one\n' > "$RR/src/app.txt"; printf 'old\n' > "$RR/src/old.txt"
 lot_mission "$RR" 20990300-ready r-camp L1 ready-b humano-2099-01-01
 gitc add -A; gitc commit -q -m z0; Z0="$(git -C "$RR" rev-parse HEAD)"
@@ -1784,6 +1793,9 @@ serve() {
   printf '[%s]' "$(comment "$CODEX" "$h" '')" > "$fx/comments.2"
   printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"nodes":[{"isResolved":true},{"isResolved":true}]}}}}}' \
     > "$fx/threads"
+  printf '42\n' > "$fx/producer"
+  printf '[{"context":"local/ci","state":"success","creator":{"id":42}}]\n' > "$fx/status.$h"
+  printf '[]\n' > "$fx/status-extra"
 }
 
 # land <world> — the mission folder committed as the disk now has it, on top of the checkout's HEAD,
@@ -1798,7 +1810,7 @@ land() {
   serve "$1" "$HEADNOW"
 }
 
-# The gh stub of pr-ready answers the four questions the verb asks, from the world GHFX names, and
+# The gh stub of pr-ready and review-ci answers from the world GHFX names, and
 # only from the root of the ready repo: `pr view <n> --json headRefOid,mergeable,state`, `repo view
 # --json nameWithOwner -q .nameWithOwner`, the comments (both pages under --paginate, the first page
 # alone without it, as the real gh does) and the graphql query of the review threads, which has to
@@ -1822,6 +1834,21 @@ case "$*" in
   "repo view --json nameWithOwner -q .nameWithOwner") give repo "$fx/repo" ;;
   "api --paginate repos/$repo/issues/$n/comments") give comments "$fx/comments.1" "$fx/comments.2" ;;
   "api repos/$repo/issues/$n/comments") give comments "$fx/comments.1" ;;
+  "api user --jq .id") give producer "$fx/producer" ;;
+  "api --paginate repos/$repo/commits/"*"/statuses")
+    head="${3%/statuses}"; head="${head##*/}"
+    give status "$fx/status.$head" "$fx/status-extra"
+    ;;
+  "api --method POST repos/$repo/statuses/"*" -f context=local/ci -f state="*)
+    head="${4##*/}"; state="${8#state=}"
+    printf '%s %s\n' "$head" "$state" >> "$fx/events"
+    [ ! -e "$fx/write-$state.fail" ] || { echo "HTTP 403: Forbidden" >&2; exit 1; }
+    status="$(jq -cn --arg state "$state" '{context:"local/ci", state:$state, creator:{id:42}}')"
+    jq --argjson status "$status" '[$status] + .' "$fx/status.$head" > "$fx/next"
+    mv "$fx/next" "$fx/status.$head"
+    printf '%s\n' "$status"
+    exit 0
+    ;;
   "api graphql -f query="*"owner:\"${repo%%/*}\",name:\"${repo#*/}\""*"pullRequest(number:$n)"*) give threads "$fx/threads" ;;
 esac
 echo "gh stub: unexpected call: $*" >&2
@@ -1864,6 +1891,72 @@ if [ -z "$got" ]; then
   pass 'pr-ready: all five true at one sha answers ready with the full sha'
 else
   fail 'pr-ready: all five true at one sha answers ready with the full sha' "ready $B, rc 0" "$got"
+fi
+
+# The supplier writes to the pinned head, and the consumer reads the newest applicable result.
+got=""
+for state in missing pending failure foreign wrong-context wrong-head second-page; do
+  serve "ci-$state"
+  fx="$BOX/ghfx/ci-$state"
+  case "$state" in
+    missing) printf '[]\n' > "$fx/status.$B" ;;
+    pending|failure)
+      cp "$fx/status.$B" "$fx/status-extra"
+      jq --arg state "$state" '.[0].state = $state' "$fx/status-extra" > "$fx/status.$B" ;;
+    foreign) jq '.[0].creator.id = 43' "$fx/status.$B" > "$fx/status-extra"
+      printf '[]\n' > "$fx/status.$B" ;;
+    wrong-context) jq '.[0].context = "external/ci"' "$fx/status.$B" > "$fx/status-extra"
+      printf '[]\n' > "$fx/status.$B" ;;
+    wrong-head) mv "$fx/status.$B" "$fx/status.$A"; printf '[]\n' > "$fx/status.$B" ;;
+    second-page) cp "$fx/status.$B" "$fx/status-extra"
+      jq '.[0].creator.id = 43 | .[0].state = "failure"' "$fx/status-extra" > "$fx/status.$B" ;;
+  esac
+  if [ "$state" = second-page ]; then
+    ready_is "$state" 0 "ready $B" "ci-$state"
+  else
+    ready_is "$state" 1 'not-ready local/ci: ' "ci-$state"
+  fi
+done
+serve ci-incomplete
+: > "$BOX/ghfx/ci-incomplete/status.partial"
+ready_is 'incomplete status read' 3 '' ci-incomplete
+[ -z "$W_OUT" ] && [[ "$W_ERR" == *"statuses"* ]] || got="${got:+$got; }no incomplete-read diagnostic"
+
+for mode in success suite-fail moved dirty producer-denied write-pending write-success; do
+  serve "ci-$mode"
+  export GHFX="$BOX/ghfx/ci-$mode"
+  case "$mode" in
+    moved|suite-fail|write-success) ;;
+    *) printf '[]\n' > "$GHFX/status.$B" ;;
+  esac
+  want_rc=1 want="not-ready local/ci: " events="$B pending"$'\n'"$B"
+  case "$mode" in
+    success) want_rc=0 want="ready $B"; events+=$'\n'"$B success" ;;
+    suite-fail) : > "$GHFX/suite-fail"; events+=$'\n'"$B failure" ;;
+    moved) jq --arg head "$A" '.headRefOid = $head' "$GHFX/view" > "$GHFX/move-to" ;;
+    dirty) printf 'dirty\n' >> "$RR/src/app.txt"; events="" ;;
+    producer-denied) : > "$GHFX/producer.fail"; want_rc=3; events="" ;;
+    write-pending) : > "$GHFX/write-pending.fail"; want_rc=3; events="$B pending" ;;
+    write-success) : > "$GHFX/write-success.fail"; want_rc=3; events+=$'\n'"$B success" ;;
+  esac
+  PATH="$BOX/stub-ready:$PATH" worker review-ci "$MD" "$PRN"
+  [ "$W_RC" = "$want_rc" ] && [ "$(cat "$GHFX/events" 2>/dev/null || true)" = "$events" ] \
+    || got="${got:+$got; }writer $mode: rc $W_RC, events '$(cat "$GHFX/events" 2>/dev/null || true)', stderr '$W_ERR'"
+  case "$mode" in
+    dirty) gitc reset -q --hard "$B" ;;
+    moved) [[ "$W_ERR" == *"pull request head"* ]] || got="${got:+$got; }head change not diagnosed"
+      jq --arg head "$B" '.headRefOid = $head' "$GHFX/view" > "$GHFX/restored"
+      mv "$GHFX/restored" "$GHFX/view" ;;
+    producer-denied) [[ "$W_ERR" == *"producer"* ]] || got="${got:+$got; }producer failure not diagnosed"
+      rm "$GHFX/producer.fail" ;;
+    write-*) [[ "$W_ERR" == *"local/ci"* ]] || got="${got:+$got; }write failure not diagnosed" ;;
+  esac
+  ready_is "after $mode" "$([ "$mode" = success ] && echo 0 || echo 1)" "$want" "ci-$mode"
+done
+if [ -z "$got" ]; then
+  pass 'merge requires local ci on the tested head'
+else
+  fail 'merge requires local ci on the tested head' 'only the latest applicable success on the tested head allows merge' "$got"
 fi
 
 # The mission scope stays clean. Touch only a tracked file outside it, and prove that the
@@ -4419,8 +4512,8 @@ else
 fi
 
 # --- R65: what pr-ready does not read -----------------------------------------------------------
-# <item>|<phrase>: the three things the bar does not read, and the pointer at the sixth item.
-BLIND_PHRASES=('body|body of a review' 'changes-requested|`CHANGES_REQUESTED`' 'local/ci|`local/ci`' 'todo|TODO.md')
+# <item>|<phrase>: the remaining limits on review findings, and the backlog pointer.
+BLIND_PHRASES=('body|body of a review' 'changes-requested|`CHANGES_REQUESTED`' 'todo|TODO.md')
 # blind_missing <root> — `blind: <where> <item>` for each phrase of BLIND_PHRASES that the comment
 # right above cmd_pr_ready (where is cmd_pr_ready) or the paragraph `**What `pr-ready` does not
 # read.**` of the worker's section of docs/pipeline.md (where is pipeline) does not write.
@@ -4438,33 +4531,29 @@ W13=bin/sdd-worker
 tree_control 'comment: no body' blind_missing 'blind: cmd_pr_ready body' "$W13" 's/the body of a review (/the review (/'
 tree_control 'comment: CHANGES_REQUESTED line deleted' blind_missing 'blind: cmd_pr_ready changes-requested' "$W13" \
   '/^# .*`CHANGES_REQUESTED`/d'
-tree_control 'comment: no local/ci' blind_missing 'blind: cmd_pr_ready local/ci' "$W13" \
-  '/^cmd_pr_ready() {$/,$ !s/`local\/ci`/the suite/g'
 tree_control 'comment: no TODO.md' blind_missing 'blind: cmd_pr_ready todo' "$W13" \
   '/^cmd_pr_ready() {$/,$ !s/TODO\.md/the backlog/'
 tree_control 'comment: cut off by a blank line' blind_missing \
-  $'blind: cmd_pr_ready body\nblind: cmd_pr_ready changes-requested\nblind: cmd_pr_ready local/ci\nblind: cmd_pr_ready todo' "$W13" \
+  $'blind: cmd_pr_ready body\nblind: cmd_pr_ready changes-requested\nblind: cmd_pr_ready todo' "$W13" \
   's/^cmd_pr_ready() {$/\n&/'
 tree_control 'pipeline: no body' blind_missing 'blind: pipeline body' docs/pipeline.md \
   's/^\(\*\*What `pr-ready` does not read\.\*\*\) The body of a review,/\1 The text of a review,/'
 tree_control 'pipeline: no CHANGES_REQUESTED' blind_missing 'blind: pipeline changes-requested' docs/pipeline.md \
   's/a review in state `CHANGES_REQUESTED` that/a review that/'
-tree_control 'pipeline: no local/ci' blind_missing 'blind: pipeline local/ci' docs/pipeline.md \
-  '/^\*\*What `pr-ready` does not read\.\*\*/,/^$/ s/`local\/ci`/the suite/g'
 tree_control 'pipeline: no TODO.md' blind_missing 'blind: pipeline todo' docs/pipeline.md \
   '/^\*\*What `pr-ready` does not read\.\*\*/,/^$/ s/`TODO\.md`/the backlog/'
 tree_control 'pipeline: no such paragraph' blind_missing \
-  $'blind: pipeline body\nblind: pipeline changes-requested\nblind: pipeline local/ci\nblind: pipeline todo' docs/pipeline.md \
+  $'blind: pipeline body\nblind: pipeline changes-requested\nblind: pipeline todo' docs/pipeline.md \
   's/^\*\*What `pr-ready` does not read\.\*\*/**What it leaves out.**/'
 tree_control 'pipeline: the paragraph quoted' blind_missing \
-  $'blind: pipeline body\nblind: pipeline changes-requested\nblind: pipeline local/ci\nblind: pipeline todo' docs/pipeline.md \
+  $'blind: pipeline body\nblind: pipeline changes-requested\nblind: pipeline todo' docs/pipeline.md \
   's/^\*\*What `pr-ready` does not read\.\*\*/> &/'
 tree_primitive blind_missing 'blind: cmd_pr_ready body' "$W13" 's/the body of a review (/the review (/
 /^cmd_pr_ready() {$/,$ !s/TODO\.md/the backlog/'
 if [ -z "$got" ]; then
-  pass 'blind: cmd_pr_ready and docs/pipeline.md declare what pr-ready does not read — the body of a review, a CHANGES_REQUESTED with no inline comment, local/ci — and point at TODO.md'
+  pass 'blind: cmd_pr_ready and docs/pipeline.md name review bodies and CHANGES_REQUESTED without inline comments, and point at TODO.md'
 else
-  fail 'blind: cmd_pr_ready and docs/pipeline.md declare what pr-ready does not read — the body of a review, a CHANGES_REQUESTED with no inline comment, local/ci — and point at TODO.md' \
+  fail 'blind: cmd_pr_ready and docs/pipeline.md name review bodies and CHANGES_REQUESTED without inline comments, and point at TODO.md' \
     'each phrase in the comment above cmd_pr_ready and in the paragraph of pipeline.md, and each sabotaged copy naming what it lost' "$got"
 fi
 

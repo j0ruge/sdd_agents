@@ -26,7 +26,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Prioridade — resolver logo
 
-- [ ] **Missão: fazer o worker de campanhas funcionar também no Codex** — `commands/sdd-worker.md:48`
+- [ ] **Missão: fazer o worker de campanhas funcionar também no Codex** — `commands/sdd-worker.md:59`
   (`harness:`) — só aceita `claude`, embora o Codex já consiga chamar os verbos de `bin/sdd-worker`.
   Direção: aceitar `harness: codex`, retomar planner e grill e definir a integração com `sdd run` (hoje `claude -p`).
   Preservar o fluxo Claude e as regras de delegação, orçamento, aprovação e retomada.
@@ -93,11 +93,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
-  `bin/sdd-worker:1547` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
-  nomeia threads: 18 dos 38 achados do CodeRabbit no PR #414 moravam no corpo das revisões, e um PR com eles,
-  com uma `CHANGES_REQUESTED` sem inline ou com o `local/ci` vermelho dá `ready`. Ler os três é um sexto item,
-  que muda a régua e não tem dono: nenhum ato do laço publica o `local/ci`, e sem quem o escreva o item é gate
-  insatisfazível (princípio 1). Direção: decidir quem o publica (o ato `review`, que já roda a suíte?).
+  `bin/sdd-worker:1644` (`cmd_pr_ready`) — a régua original só nomeava threads. No PR #414, 18 dos 38
+  achados do CodeRabbit estavam no corpo da revisão. O I8 da L5b já exige `local/ci` no SHA testado e
+  atribui a publicação ao ato `review`. Falta ler o corpo da revisão e a `CHANGES_REQUESTED` sem inline.
+  Direção: o I9 registra o tratamento dos achados e bloqueia o merge quando resta pendência.
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r6.md` — descoberto por `sdd-reviewer` na
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
@@ -120,7 +119,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
 
 - [ ] **O `pr-ready` conta como fechado o thread que o próprio bot resolveu, sem resposta do worker** —
-  `bin/sdd-worker:1688` (`reviewThreads`) — o item `threads` lê só o `isResolved`. No PR #458, 14 dos 16
+  `bin/sdd-worker:1773` (`reviewThreads`) — o item `threads` lê só o `isResolved`. No PR #458, 14 dos 16
   threads foram resolvidos pelo `coderabbitai[bot]`, 12 sem resposta do worker, com o bot sem cota (`Review
   limit reached` sobre `4ef8e23..f2559cb`), e o verbo deu `ready`. Os 12 eram consertos reais, mas o thread
   que o bot fecha porque a linha mudou passa calado. Vizinho de "Nenhum ato do worker resolve os threads".
@@ -179,7 +178,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **Os probes de nota do `pr-ready` passariam pelo item `dirty` com o leitor de nota frouxo** —
-  `tests/check-worker.sh:1920` (`grade_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
+  `tests/check-worker.sh:2013` (`grade_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
   tabela sem linha editam o `40-review-r2.md` sem `land` e casam só `not-ready review: `, e o `dirty` também
   reprova a árvore suja com esse prefixo: um `pr-ready` que aceitasse B ou A- seguiria vermelho pelo motivo
   errado. Direção: `land` depois de cada edição e exigir o texto do ramo (`grades B`, `has no row for`), como a
@@ -751,7 +750,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
 
 - [ ] **O `ahead plan` não lê a intenção do dono de planejar o lote só depois do merge do anterior** —
-  `bin/sdd-worker:1319` (`ahead plan`) — o `next` dá `ahead plan <lote seguinte>` sempre que o lote atual está em
+  `bin/sdd-worker:1330` (`ahead plan`) — o `next` dá `ahead plan <lote seguinte>` sempre que o lote atual está em
   `run` ou `review` e o seguinte não tem missão. No `curso-ddd` respondeu `ahead plan L2`, e o `campaign.md` diz só
   na prosa "A missão do L2 se planeja depois do merge do L1". Nenhuma chave do frontmatter nem coluna da tabela
   (`templates/campaign.md:30`) diz isso, e o `lots_table` lê só `Lot` e `Ceiling`. Direção: uma coluna ou valor
@@ -759,7 +758,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
 
 - [ ] **No `ListAgents` do worker, a fase do próprio `sdd run` parece outra sessão interativa do checkout** —
-  `commands/sdd-worker.md:55` (`names who holds a checkout`) — o worker leu `curso-ddd-bf` e `curso-ddd-dc` como
+  `commands/sdd-worker.md:66` (`names who holds a checkout`) — o worker leu `curso-ddd-bf` e `curso-ddd-dc` como
   outro worker. Medido: o run tem um só filho `claude -p` por vez, e o `~/.claude/sessions/<pid>.json` dele diz
   `kind interactive`, nome `curso-ddd-<2 hex>` novo a cada fase e o `sessionId` da fase no log (PID 3041580,
   `20cac683…`). Em 2026-11-24, `curso-ddd-1c` era a fase `DOCS` (`7cb194af…`), e o dono perguntou se ela parara.
