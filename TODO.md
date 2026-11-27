@@ -175,9 +175,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `cmd_pr_ready`, e o `"$anc" -ne 0` logo abaixo recusa o mesmo rc 1 com outra frase: o catálogo o pega pela
   mensagem, e o mundo que o comentário dele promete (uma rodada sobre um commit que o PR largou) nunca é montado.
   Direção: trocar também o `-ne 0` por `-gt 1`, provado por `--only WORKER_range_ancestry_unchecked check-worker.sh`.
-  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 13 — descoberto pelo
-  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
-  RESOLVED by f7b8071
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 13 RESOLVED by f7b8071
+  — descoberto pelo `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **Os probes de nota do `pr-ready` passariam pelo item `dirty` com o leitor de nota frouxo** —
   `tests/check-worker.sh:1920` (`grade_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
@@ -185,9 +184,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   reprova a árvore suja com esse prefixo: um `pr-ready` que aceitasse B ou A- seguiria vermelho pelo motivo
   errado. Direção: `land` depois de cada edição e exigir o texto do ramo (`grades B`, `has no row for`), como a
   sonda do `deadbeefdead` já faz.
-  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 16 — descoberto pelo
-  `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
-  RESOLVED by f7b8071
+  Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 16 RESOLVED by f7b8071
+  — descoberto pelo `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **Dois leitores de "o que mudou" listam com detecção de rename, e um `git mv` esconde o caminho que saiu** —
   `bin/sdd:14422` (`review_head_ok`) — e `hat_diff_names`, a guarda do chapéu: `git diff --name-only` sem
