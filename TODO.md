@@ -149,7 +149,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   PR fechado sem merge ou a missão largada e o worktree removido, o `budget` dá US$ 0.00 no lugar dos US$ 85 do
   ledger, rc 0, e o teto que o R14 chama de limite duro passa por esse gasto. O R16 só o declara. Direção
   (decisão do dono na pendência 1 da r7): a linha `session` do ledger ganha `campaign:`, que o runner lê do
-  `00-missao.md`, e o `budget` soma o gasto da campanha por esse campo, achando a missão que o conjunto perde.
+  `00-missao.md`, e o `budget` soma o gasto da campanha por esse campo. RESOLVED by 1af340a
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r7.md` — descoberto por `sdd-reviewer` na
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
