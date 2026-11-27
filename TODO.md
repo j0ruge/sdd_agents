@@ -404,7 +404,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   a sessão que grava `BUDGET_MISSION_USD=0` desliga o teto nas voltas seguintes; o `budget` só roda entre atos. O
   template diz que a campanha só passa do assinado por três gastos, e este é um quarto. Direção: declarar o limite
   já, no `bin/sdd-worker` e no template; o conserto de verdade (o runner guardar o teto do lançamento) muda a
-  precedência do `config_reload` e é decisão do dono.
+  precedência do `config_reload` e é decisão do dono. RESOLVED by ac581c8
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 12 — descoberto pelo
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 

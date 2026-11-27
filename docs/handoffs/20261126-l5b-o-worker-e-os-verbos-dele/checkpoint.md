@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-26 22:17
+atualizado: 2026-11-26 23:10
 ---
 
 # Checkpoint — O worker e os verbos dele
@@ -10,7 +10,7 @@ atualizado: 2026-11-26 22:17
 | I1 | Inventário de worktrees | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    nul worktree inventory is complete$' <<< "$o"` → `1` | done | 064098e |
 | I2 | Config e validade | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    permission reflects exported cap and final clock$' <<< "$o"` → `1` | done | d1e8d0f |
 | I3 | Gasto por campanha | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    removed mission spend is counted once$' <<< "$o"` → `1` | done | 1af340a |
-| I4 | Teto em voo | `o=$(bash tests/check-codex-runner.sh 2>&1); grep -c '^  ok    delegated sessions respect cap changes$' <<< "$o"` → `1` | pending | — |
+| I4 | Teto em voo | `o=$(bash tests/check-codex-runner.sh 2>&1); grep -c '^  ok    delegated sessions respect cap changes$' <<< "$o"` → `1` | done | ac581c8 |
 | I5 | Diagnóstico de parada | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    stop preserves cause and original line$' <<< "$o"` → `1` | pending | — |
 | I6 | Histórico de PRs | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    fork pages cannot hide the mission pull request$' <<< "$o"` → `1` | pending | — |
 | I7 | Medição da revisão | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    grade and ancestry failures have distinct witnesses$' <<< "$o"` → `1` | pending | — |
