@@ -66,7 +66,8 @@ trap 'rm -rf "$WORK"' EXIT
 # same commit: commands/sdd-plan.md is the kit's /sdd-plan, and its "verbatim" message was pt-BR.
 SURFACE_SPECS=(bin/sdd bin/sdd-link-agents bin/sdd-worker bin/sdd-worker-ahead bin/sdd-coordination.py 'agents/sdd-*.md'
   '.claude/agents/sdd-*.md' 'commands/*.md' 'docs/*.md' 'docs/adr/*.md' README.md config/schema.md
-  config/starter.conf 'tests/*.sh' tests/check-worker-ahead.py tests/health-baseline.txt tests/lang-allowlist.txt)
+  config/starter.conf 'tests/*.sh' tests/check-worker-ahead.py tests/check-worker-lookahead-race.py
+  tests/health-baseline.txt tests/lang-allowlist.txt)
 # The docs/ subtrees that are content in OUTPUT_LANG, not kit surface (CLAUDE.md § Idioma) — the
 # same three `health --release` in bin/sdd leaves out of its line 5. The two lists answer different
 # questions (language here, client identifiers there) and nothing asserts their parity: declared.

@@ -6223,6 +6223,14 @@ else
     'one reserved planner before wait, resume before materialization, and approval only after revalidation' "$got"
 fi
 
+# --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
+if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
+  pass 'concurrent resume reuses the validated reservation'
+else
+  fail 'concurrent resume reuses the validated reservation' \
+    'one relay start, status on resume, and no relay calls for a missing or mismatched reservation' "$got"
+fi
+
 # --- verdict ------------------------------------------------------------------------------------
 if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then
   printf '  FAIL  probe floor shrank to %d, expected at least %d — did a block stop being dispatched?\n' \

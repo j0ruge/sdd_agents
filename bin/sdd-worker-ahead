@@ -144,7 +144,9 @@ def main(args):
     if not reservation.exists():
         authorize()
         reservation.parent.mkdir(mode=0o700, exist_ok=True)
-        if target.exists() or target.is_symlink() or git(primary, "for-each-ref", "--format=%(refname)", branch):
+        # A concurrent dispatcher may have reserved the successor during authorization.
+        if (target.exists() or target.is_symlink()
+                or git(primary, "for-each-ref", "--format=%(refname)", branch)) and not reservation.exists():
             raise ValueError(f"unreserved successor worktree or branch already exists: {target}")
         try:
             reservation.mkdir(mode=0o700)
