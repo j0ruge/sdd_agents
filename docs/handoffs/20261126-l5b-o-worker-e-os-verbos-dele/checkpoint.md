@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-27 12:30
+atualizado: 2026-11-27 13:13
 ---
 
 # Checkpoint — O worker e os verbos dele
@@ -22,7 +22,7 @@ atualizado: 2026-11-27 12:30
 | I13 | Preflight antes do run | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    run launch requires successful worktree preflight$' <<< "$o"` → `1` | done | 2e8bd53 |
 | I14 | Planejamento antecipado | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | done | 6344f01 |
 | F1 | Reutilizar a reserva que outra retomada concluiu durante a consulta de orçamento | `if python3 tests/check-worker-ahead.py "$PWD" && python3 e2e/check-worker-lookahead-race.py "$PWD" >/dev/null; then echo 1; else echo 0; fi` → `1` | done | 5ac9b42 |
-| F2 | Fazer a sonda medir a seleção do delta e reprovar quando o bloco não carrega | `if python3 e2e/check-worker-review-probe.py "$PWD" >/dev/null; then echo 1; else echo 0; fi` → `1` | pending | — |
+| F2 | Fazer a sonda medir a seleção do delta e reprovar quando o bloco não carrega | `if python3 e2e/check-worker-review-probe.py "$PWD" >/dev/null; then echo 1; else echo 0; fi` → `1` | done | 9837b00 |
 
 ## Incrementos de fix (QA e REVIEW)
 
