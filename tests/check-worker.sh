@@ -6303,6 +6303,14 @@ else
     'the first relay turn points to the primary campaign file and names the reserved lot' "$got"
 fi
 
+# --- R3: the local source must remain recoverable up to dispatch --------------------------------
+if got="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --owner-request 2>&1)"; then
+  pass 'ahead planning refuses stale owner request references'
+else
+  fail 'ahead planning refuses stale owner request references' \
+    'only a recoverable reference can start the relay, without replacing the runner verdict' "$got"
+fi
+
 # --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
 if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
   pass 'concurrent resume reuses the validated reservation'

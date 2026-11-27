@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the worker's public post-launch, review-resume and approval blocks."""
+import json
 import os
 from pathlib import Path
 import re
@@ -19,6 +20,11 @@ for name in ("run", "review", "plan", "approve"):
     if len(matches) != (2 if name == "run" else 1):
         sys.exit(f"{name}: no unique executable lookahead path in the public act")
     blocks[name] = "\n".join(matches)
+
+owner_request_check = sys.argv[2:] == ["--owner-request"]
+if owner_request_check:
+    verdict, = re.findall(r'```bash\n(rc=unknown\n.*?)\n```', command, re.S)
+    blocks["run"] += '\n' + verdict + '\nprintf "verdict|%s|%s|%s\\n" "$rc" "$reason" "$why"'
 
 with tempfile.TemporaryDirectory(prefix="worker-ahead-") as temp:
     box = Path(temp)
@@ -58,7 +64,8 @@ with tempfile.TemporaryDirectory(prefix="worker-ahead-") as temp:
     queue.write_text("## Lots\n\n### L2\nScope only available in the primary queue.\n\n### L3\nNext scope.\n")
     handoff = box / "resume.md"
     source = box / "record-I1.md"
-    source.write_text("# Owner request\n\nPlan the next lot during the run.\n")
+    instruction = "# Owner request\n\nPlan the next lot during the run.\n"
+    source.write_text(instruction)
     request = f"ahead-request: 20990101-fixture {source}#owner-request\n"
     handoff.write_text(request)
     trace = box / "trace"
@@ -107,6 +114,9 @@ elif name == "sdd-worker":
             print('unexpected extra line')
     else:
         mark(act, *args[1:])
+        if act == "budget" and world.startswith("changes-"):
+            heading = "# Owner request" if world == "changes-text" else "# Retired request"
+            pathlib.Path(e["SOURCE"]).write_text(heading + "\n\nDo not plan ahead.\n")
         if (act, world) in (("allows", "expired"), ("budget", "poor"), ("codex-plan", "no-cost-consent")):
             sys.exit("fixture refusal")
 elif name == "sdd-codex":
@@ -128,7 +138,12 @@ elif name == "check-checkpoint.sh":
         if world == "red-plan":
             sys.exit(1)
 elif name == "tail":
-    mark('wait', args[0])
+    if act == "-n":
+        assert args == ["1", "--", e["log"]]
+        print(pathlib.Path(args[-1]).read_text().splitlines()[-1])
+    else:
+        assert act == "--pid=" + e["pid"]
+        mark('wait', args[0])
 else:
     sys.exit(92)
 """
@@ -150,6 +165,61 @@ else:
     with subprocess.Popen(["bash", "-c", runner_job], stdout=subprocess.PIPE, text=True) as runner:
         env.update(pid=str(runner.pid), OWNER_PID=runner.stdout.readline().strip())
         try:
+            if owner_request_check:
+                log = box / "runner.log"
+                diagnostic = "sdd run stop: phase-ceiling — fixture"
+                log.write_text(f"{diagnostic}\nsdd run rc=3\n")
+                env.update(log=str(log), SOURCE=str(source))
+                retired = "# Retired request\n\nDo not plan ahead.\n"
+                narrow_fence = "````text\n```\n# Owner request\n````\n"
+                wrong_fence = "~~~text\n```\n# Owner request\n~~~\n"
+                fence_with_info = "```text\n```still-code\n# Owner request\n```\n"
+                negative = (
+                    ("stale", request, retired),
+                    ("missing-file", request, None),
+                    ("absent", None, instruction),
+                    ("indented-code", request, "    # Owner request\n" + retired),
+                    ("fenced", request, narrow_fence + retired),
+                    ("wrong-fence", request, wrong_fence + retired),
+                    ("fence-with-info", request, fence_with_info + retired),
+                    ("duplicate", request, instruction + instruction),
+                    ("empty-fragment", request.replace("#owner-request", "#"), "# !\n" + retired),
+                    ("empty-file", request.replace("#owner-request", ""), "\n"),
+                    ("relative", request.replace(str(source), "../record-I1.md"), instruction),
+                    ("changes-fragment", request, instruction),
+                    ("changes-text", request, instruction),
+                )
+                for world, reference, contents in negative:
+                    for file, data in ((handoff, reference), (source, contents)):
+                        if data is None:
+                            file.unlink(missing_ok=True)
+                        else:
+                            file.write_text(data)
+                    env["WORLD"] = world
+                    trace.write_text("")
+                    result = subprocess.run(["bash", "-c", blocks["run"]], env=env, cwd=primary,
+                                            check=True, text=True, capture_output=True, timeout=20)
+                    assert not lines("start"), f"{world}: a planner turn started"
+                    assert lines("wait") == ["wait|-f"], (world, lines("wait"))
+                    assert result.stdout.splitlines()[-1] == f"verdict|3|phase-ceiling|{diagnostic}", result
+                    if world.startswith("changes-"):
+                        assert "budget" in trace.read_text().splitlines() and "owner request changed" in result.stderr, result
+                    else:
+                        assert "budget" not in trace.read_text().splitlines() and not result.stderr, result
+                env["WORLD"] = "ok"
+                source.write_text(wrong_fence + "  ## Owner request! ##\n\nPlan the next lot.\n")
+                handoff.write_text(request)
+                out = action("run")
+                receipt = next(line for line in out.splitlines() if line.startswith("lookahead "))
+                assert json.loads(receipt.removeprefix("lookahead "))["request"] == f"{source}#owner-request"
+                assert len(lines("start")) == 1 and out.endswith(f"verdict|3|phase-ceiling|{diagnostic}\n"), out
+                env.update(ROUND="2", worktree=lines("start")[0].split("|", 1)[1],
+                           mission="20990101-fixture-ahead-l2", lot="L2")
+                link = "https://example.invalid/campaign#owner-request"
+                handoff.write_text(f"ahead-request: {campaign.name} {link}\n")
+                out = action("run")
+                assert len(lines("start")) == 2 and json.dumps(link) in out, out
+                sys.exit(0)
             for world in ("absent", "ambiguous", "wrong-campaign", "no-successor",
                           "changed-next", "wrong-owner", "expired", "poor", "no-cost-consent",
                           "foreign-owner", "dead"):

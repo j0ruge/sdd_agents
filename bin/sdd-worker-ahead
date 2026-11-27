@@ -57,6 +57,21 @@ def owns_checkout(worktree, mission, launch_pid, launch):
     return False
 
 
+def local_anchors(content):
+    fence = ""
+    anchors = []
+    for marker, suffix, title in re.findall(r"^ {0,3}(?:(`{3,}|~{3,})([^\n]*)|#{1,6}[ \t]+(.+))$", content, re.M):
+        if marker:
+            if not fence:
+                fence = marker
+            elif marker.startswith(fence) and not suffix.strip():
+                fence = ""
+        elif not fence:
+            heading = re.sub(r"[ \t]+#+[ \t]*$", "", title).strip().lower()
+            anchors.append(re.sub(r"[ \t]+", "-", re.sub(r"[^\w \t-]", "", heading)))
+    return anchors
+
+
 def request(handoff, campaign):
     if not handoff or not Path(handoff).is_file():
         return None
@@ -68,10 +83,16 @@ def request(handoff, campaign):
     if not match:
         return None
     ref = match[1]
-    path = Path(ref.split("#", 1)[0])
-    if (path.is_absolute() and path.is_file()) or re.fullmatch(r"https://[^/\s]+/\S+", ref):
-        return ref
-    return None
+    if re.fullmatch(r"https://[^/\s]+/\S+", ref):
+        return ref, None
+    filename, separator, fragment = ref.partition("#")
+    path = Path(filename)
+    if not path.is_absolute() or not path.is_file():
+        return None
+    content = path.read_text(encoding="utf-8")
+    if not content.strip() or (separator and (not fragment or local_anchors(content).count(fragment) != 1)):
+        return None
+    return ref, content
 
 
 def inventory(primary):
@@ -178,7 +199,7 @@ def main(args):
             raise ValueError(f"ambiguous or missing reserved checkout: {target}")
         (reservation / "worktree").touch(exist_ok=True)
         print("lookahead " + json.dumps({"campaign": str(campaign), "lot": lot, "mission": successor,
-                                         "worktree": str(target), "request": source}), flush=True)
+                                         "worktree": str(target), "request": source[0]}), flush=True)
         record = Path(git(target, "rev-parse", "--absolute-git-dir")) / "sdd-codex-planner" / f"{successor}.json"
         relay = BIN / "sdd-plan-codex"
         if record.is_file():
@@ -190,12 +211,12 @@ def main(args):
         if mode == "review":
             raise ValueError("reserved planner has no relay record; reconcile it through the plan act")
         authorize()
-        if request(handoff, campaign_id) != source:
-            raise ValueError("owner request changed before planner start")
         if capture([*worker, "next", campaign], primary).split("\n") != current:
             raise ValueError("campaign queue changed before planner start")
         if mode == "run" and not owns_checkout(worktree, mission, launch_pid, launch):
             raise ValueError("runner no longer owns its checkout")
+        if request(handoff, campaign_id) != source:
+            raise ValueError("owner request changed before planner start")
         check([relay, "start", successor, f"Plan lot {lot} of campaign {campaign_id} from its signed queue.",
                "--campaign", campaign, "--lot", lot], target)
 

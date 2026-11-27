@@ -328,14 +328,17 @@ After every successful launch, use the block below with its PID and log. Set `ki
 installed kit root, `campaign_dir` to the primary checkout's campaign path and `base` to its
 effective `DEFAULT_BRANCH`. For a signed Codex campaign, supply `resume_handoff` only after
 verifying the owner's identifiable written request for this campaign. Record one line in
-that handoff in the form `ahead-request: <campaign-id> <source>`. Use an absolute local file
-reference (with an optional fragment) or a durable HTTPS link to the original request.
+that handoff in the form `ahead-request: <campaign-id> <source>`. Use an absolute path to a
+nonempty UTF-8 file or a durable HTTPS link to the original request. A local `#fragment` must
+match a unique Markdown heading written with `#` outside fenced code. Use the lowercase heading
+text, omitting punctuation other than hyphens and underscores and replacing whitespace with hyphens.
 Do not infer a request from `next`, a recommendation or the signature alone. Without an
 unambiguous matching reference, the line stays a suggestion. Other harnesses keep their manual route.
 
 The helper rereads `next`, requires the predecessor's live checkout owner to belong to this
-launch, checks the successor's budget and authority and reserves one worktree before starting
-the Codex relay. Save its `lookahead` receipt and source reference in the run handoff and journal.
+launch, checks the successor's budget and authority and reserves one worktree. Before starting
+the Codex relay, it rechecks the reference and the local file contents. Save its `lookahead`
+receipt and source reference in the run handoff and journal.
 Keep them outside the guarded checkout until the run exits, as in step 5. The reservation under
 the primary Git directory can reconstruct the worktree and mission even before `00-missao.md`
 exists. The worktree lives beside the primary. Keep its provisional branch until the relay
