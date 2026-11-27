@@ -346,7 +346,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd-worker:372` (`config_key`) — o `printf -v "$key"` vale só para o shell que sourceia o `.sdd/config.sh`,
   e o runner lançado com a chave no ambiente a recebe exportada: um config que escolhe o teto num `bash -c` ou
   num `$(…)` dá o default (150) ao `budget` e o 40 ao `sdd run` (reproduzido: o filho lê `[]`, e com `export`
-  antes, `[40]`). Direção: `export "$key"` depois do `printf -v`, antes de sourcear.
+  antes, `[40]`). Direção: `export "$key"` depois do `printf -v`, antes de sourcear. RESOLVED by d1e8d0f
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 1 — descoberto pelo
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
@@ -355,6 +355,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `LEVEL` acima de `assisted`, o teto do lote incluso, sai depois: a delegação que vence nessa janela (de
   milissegundos, não reproduzida) ainda dá o nível assinado. O laço pergunta `allows` antes de cada ato, o que
   estreita a janela sem fechá-la. Direção: reler o `expired` logo antes de publicar um `LEVEL` acima de `assisted`.
+  RESOLVED by d1e8d0f
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 2 — descoberto pelo
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 

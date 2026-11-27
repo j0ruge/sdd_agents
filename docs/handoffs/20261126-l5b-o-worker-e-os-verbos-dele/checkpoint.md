@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-26 21:01
+atualizado: 2026-11-26 21:37
 ---
 
 # Checkpoint — O worker e os verbos dele
@@ -8,7 +8,7 @@ atualizado: 2026-11-26 21:01
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | Inventário de worktrees | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    nul worktree inventory is complete$' <<< "$o"` → `1` | done | 064098e |
-| I2 | Config e validade | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    permission reflects exported cap and final clock$' <<< "$o"` → `1` | pending | — |
+| I2 | Config e validade | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    permission reflects exported cap and final clock$' <<< "$o"` → `1` | done | d1e8d0f |
 | I3 | Gasto por campanha | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    removed mission spend is counted once$' <<< "$o"` → `1` | pending | — |
 | I4 | Teto em voo | `o=$(bash tests/check-codex-runner.sh 2>&1); grep -c '^  ok    delegated sessions respect cap changes$' <<< "$o"` → `1` | pending | — |
 | I5 | Diagnóstico de parada | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    stop preserves cause and original line$' <<< "$o"` → `1` | pending | — |

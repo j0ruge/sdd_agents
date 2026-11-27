@@ -51,3 +51,4 @@
 
 
 - 2026-11-26 21:01 · `I1` · TDD em cópia descartável do HEAD: o sensor falhou quando o orçamento mostrou 0 missões e o next voltou a propor PLAN para L1. Com a correção, o sensor passou, inclusive com uma quebra de linha no fim do caminho e saída parcial do Git (rc 17). Na árvore da missão, tests/run-all.sh passou antes e depois (89 → 90 sondas do worker), e o Check imprimiu 1. As 100 âncoras do TODO passaram.
+- 2026-11-26 21:37 · `I2` · No HEAD anterior, o filho do config recebeu o padrão de US$ 150 e os lotes com e sem teto concederam permissão no instante do vencimento (Check 0). Com a correção, o filho recebeu US$ 40, os dois lotes concederam um minuto antes e recusaram no vencimento (Check 1). tests/run-all.sh passou antes e depois, com 90 e 91 sondas do worker.
