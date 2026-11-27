@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""Dispatch or reconcile the worker's delegated Codex lookahead plan."""
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+
+
+BIN = Path(__file__).resolve().parent
+MISSION = r"[0-9]{8}-[a-z0-9-]+"
+LOT = r"L[0-9]+[a-z]?"
+
+
+def capture(args, cwd, timeout=None):
+    return subprocess.check_output(args, cwd=cwd, text=True, timeout=timeout).removesuffix("\n")
+
+
+def git(cwd, *args):
+    return capture(["git", *args], cwd)
+
+
+def check(args, cwd):
+    subprocess.run(args, cwd=cwd, check=True)
+
+
+def process(pid):
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        return (fields[19], int(fields[1])) if fields[0] != "Z" else None
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def owns_checkout(worktree, mission, launch_pid, launch):
+    if launch is None or process(launch_pid) != launch:
+        return False
+    status = capture([BIN / "sdd", "status", mission, "--no-gates"], worktree, timeout=3)
+    prefix = f"CHECKOUT-OWNER checkout={worktree} owner="
+    owners = [line.removeprefix(prefix) for line in status.split("\n") if line.startswith(prefix)]
+    if len(owners) != 1:
+        return False
+    owner = re.fullmatch(rf"([1-9][0-9]*) supervisor=[1-9][0-9]* command=run mission={mission} started=\S+", owners[0])
+    if not owner:
+        return False
+    pid = int(owner[1])
+    while pid > 1:
+        if pid == launch_pid:
+            return process(pid) == launch
+        parent = process(pid)
+        if parent is None:
+            return False
+        pid = parent[1]
+    return False
+
+
+def request(handoff, campaign):
+    if not handoff or not Path(handoff).is_file():
+        return None
+    with Path(handoff).open(encoding="utf-8") as stream:
+        lines = [line.rstrip("\n") for line in stream if line.startswith("ahead-request:")]
+    if len(lines) != 1:
+        return None
+    match = re.fullmatch(rf"ahead-request: {campaign} (.+\S|\S)", lines[0])
+    if not match:
+        return None
+    ref = match[1]
+    path = Path(ref.split("#", 1)[0])
+    if (path.is_absolute() and path.is_file()) or re.fullmatch(r"https://[^/\s]+/\S+", ref):
+        return ref
+    return None
+
+
+def inventory(primary):
+    return [entry.split("\0") for entry in git(primary, "worktree", "list", "--porcelain", "-z").split("\0\0")
+            if entry]
+
+
+def main(args):
+    mode, raw_campaign, handoff, base, *rest = args
+    if ((mode == "run" and len(rest) != 3) or (mode == "review" and len(rest) != 1)
+            or (mode == "plan" and len(rest) != 1) or mode not in ("run", "review", "plan")):
+        raise ValueError("expected run <checkout> <mission> <pid>, review <mission>, or plan <lot>")
+    campaign = Path(raw_campaign).resolve(strict=True)
+    campaign_id = campaign.name
+    if not re.fullmatch(MISSION, campaign_id):
+        raise ValueError("invalid campaign ID")
+    source = request(handoff, campaign_id)
+    if mode == "run" and not source:
+        return
+    primary = Path(inventory(campaign)[0][0].removeprefix("worktree "))
+    if campaign.parent not in (primary / "docs/campaigns", primary / "docs/superpowers/campaigns"):
+        raise ValueError("use the campaign directory in the primary worktree")
+    worker = [BIN / "sdd-worker"]
+    current = capture([*worker, "next", campaign], primary).split("\n")
+    if mode == "plan":
+        lot, = rest
+        if not re.fullmatch(LOT, lot) or not current[0].startswith(f"plan {lot} - — "):
+            raise ValueError("the reserved lot is not the current plan")
+    else:
+        mission = rest[1] if mode == "run" else rest[0]
+        if not re.fullmatch(MISSION, mission):
+            raise ValueError("invalid predecessor mission")
+        if len(current) != 2 or not re.fullmatch(rf"{mode} {LOT} {mission} — .+", current[0]):
+            return
+        ahead = re.fullmatch(rf"ahead plan ({LOT})", current[1])
+        if not ahead:
+            return
+        lot = ahead[1]
+    successor = f"{campaign_id}-ahead-{lot.lower()}"
+    branch = f"refs/heads/plan/{successor}"
+    target = primary.with_name(f".sdd-ahead-{primary.name}-{successor}")
+    meta = Path(git(primary, "rev-parse", "--absolute-git-dir"))
+    reservation = meta / "sdd-worker-ahead" / successor
+    if not reservation.exists() and mode == "plan":
+        print("manual")
+        return
+    if mode == "review" and (not source or not reservation.exists()):
+        return
+    if not source:
+        raise ValueError("owner request missing for the reserved lot")
+    if mode == "run":
+        worktree = Path(rest[0]).resolve(strict=True)
+        launch_pid = int(rest[2])
+        if worktree == primary or not any(row[0] == f"worktree {worktree}" for row in inventory(primary)):
+            raise ValueError("runner must own a separate worktree of the campaign repository")
+        launch = process(launch_pid)
+        deadline = time.monotonic() + 10
+        while not owns_checkout(worktree, mission, launch_pid, launch):
+            if launch is None or process(launch_pid) != launch:
+                return
+            if time.monotonic() >= deadline:
+                raise ValueError("runner did not confirm checkout ownership")
+            time.sleep(.25)
+
+    def authorize():
+        check([*worker, "budget", campaign], primary)
+        check([*worker, "allows", campaign, "plan", "--lot", lot], primary)
+        check([*worker, "codex-plan", campaign, "--lot", lot], primary)
+
+    if not reservation.exists():
+        authorize()
+        reservation.parent.mkdir(mode=0o700, exist_ok=True)
+        if target.exists() or target.is_symlink() or git(primary, "for-each-ref", "--format=%(refname)", branch):
+            raise ValueError(f"unreserved successor worktree or branch already exists: {target}")
+        try:
+            reservation.mkdir(mode=0o700)
+        except FileExistsError:
+            pass
+    if not reservation.is_dir() or reservation.is_symlink():
+        raise ValueError(f"ambiguous reservation: {reservation}")
+    with (reservation / "dispatch.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(f"lookahead busy {lot} {successor} {target}")
+            return
+        paths = [row for row in inventory(primary) if row[0] == f"worktree {target}" or f"branch {branch}" in row]
+        if not paths and not target.exists() and not target.is_symlink() and not (reservation / "worktree").exists():
+            if mode == "review":
+                raise ValueError("reserved planner has no worktree; reconcile it through the plan act")
+            authorize()
+            base_ref = f"refs/remotes/origin/{base}"
+            git(primary, "check-ref-format", base_ref)
+            check(["git", "fetch", "--quiet", "--no-tags", "origin", f"+refs/heads/{base}:{base_ref}"], primary)
+            check(["git", "worktree", "add", "--quiet", "--no-track", "-b", branch.removeprefix("refs/heads/"),
+                   str(target), base_ref], primary)
+            paths = [row for row in inventory(primary) if row[0] == f"worktree {target}" or f"branch {branch}" in row]
+        if (len(paths) != 1 or paths[0][0] != f"worktree {target}" or f"branch {branch}" not in paths[0]
+                or target.resolve(strict=True) != target or target == primary
+                or Path(git(target, "rev-parse", "--path-format=absolute", "--git-common-dir")) != meta
+                or (mode == "run" and target == worktree)):
+            raise ValueError(f"ambiguous or missing reserved checkout: {target}")
+        (reservation / "worktree").touch(exist_ok=True)
+        print("lookahead " + json.dumps({"campaign": str(campaign), "lot": lot, "mission": successor,
+                                         "worktree": str(target), "request": source}), flush=True)
+        record = Path(git(target, "rev-parse", "--absolute-git-dir")) / "sdd-codex-planner" / f"{successor}.json"
+        relay = BIN / "sdd-plan-codex"
+        if record.is_file():
+            state = json.loads(record.read_text(encoding="utf-8"))
+            if state.get("campaign") != str(campaign) or state.get("lot") != lot:
+                raise ValueError("planner record does not match the reserved campaign and lot")
+            check([relay, "status", successor], target)
+            return
+        if mode == "review":
+            raise ValueError("reserved planner has no relay record; reconcile it through the plan act")
+        authorize()
+        if request(handoff, campaign_id) != source:
+            raise ValueError("owner request changed before planner start")
+        if capture([*worker, "next", campaign], primary).split("\n") != current:
+            raise ValueError("campaign queue changed before planner start")
+        if mode == "run" and not owns_checkout(worktree, mission, launch_pid, launch):
+            raise ValueError("runner no longer owns its checkout")
+        check([relay, "start", successor, f"Plan lot {lot} of campaign {campaign_id} from its signed queue.",
+               "--campaign", campaign, "--lot", lot], target)
+
+
+if __name__ == "__main__":
+    keep = {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM"}
+    for key in tuple(os.environ):
+        if key.startswith("GIT_") and key not in keep:
+            del os.environ[key]
+    try:
+        main(sys.argv[1:])
+    except (OSError, ValueError, AttributeError, IndexError, subprocess.SubprocessError) as error:
+        if getattr(error, "output", None):
+            print(error.output, file=sys.stderr, end="")
+        sys.exit(f"sdd-worker-ahead: {error}")

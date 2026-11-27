@@ -64,9 +64,9 @@ trap 'rm -rf "$WORK"' EXIT
 # a glob since ADR 0015 §4: the list used to ENUMERATE the docs, and docs/plan-only.md was born
 # outside it, carrying a pt-BR block while this file printed `0 of 56`. `commands/*.md` joined in the
 # same commit: commands/sdd-plan.md is the kit's /sdd-plan, and its "verbatim" message was pt-BR.
-SURFACE_SPECS=(bin/sdd bin/sdd-link-agents bin/sdd-worker bin/sdd-coordination.py 'agents/sdd-*.md'
+SURFACE_SPECS=(bin/sdd bin/sdd-link-agents bin/sdd-worker bin/sdd-worker-ahead bin/sdd-coordination.py 'agents/sdd-*.md'
   '.claude/agents/sdd-*.md' 'commands/*.md' 'docs/*.md' 'docs/adr/*.md' README.md config/schema.md
-  config/starter.conf 'tests/*.sh' tests/health-baseline.txt tests/lang-allowlist.txt)
+  config/starter.conf 'tests/*.sh' tests/check-worker-ahead.py tests/health-baseline.txt tests/lang-allowlist.txt)
 # The docs/ subtrees that are content in OUTPUT_LANG, not kit surface (CLAUDE.md § Idioma) — the
 # same three `health --release` in bin/sdd leaves out of its line 5. The two lists answer different
 # questions (language here, client identifiers there) and nothing asserts their parity: declared.

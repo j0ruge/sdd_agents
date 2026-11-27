@@ -6069,7 +6069,7 @@ stop_example() {
 }
 stop_capture="$(section "$COMMAND" 'The loop' | stop_example 1)"
 stop_report="$(section "$COMMAND" 'The five stops' | stop_example 1)"
-stop_run="$(act_of "$COMMAND" run | stop_example 2)"
+stop_run="$(act_of "$COMMAND" run | stop_example 4)"
 stop_box="$BOX/stop"
 mkdir -p "$stop_box/.sdd" "$stop_box/campaign"
 cat > "$stop_box/.sdd/config.sh" <<'STOP_CONFIG'
@@ -6213,6 +6213,14 @@ if [ -z "$got" ]; then
 else
   fail 'run launch requires successful worktree preflight' \
     'preflight in the mission worktree and engine, with one PID and the signed cap only on success' "$got"
+fi
+
+# --- I14: run the dispatch and wait from the public command -------------------------------------
+if got="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" 2>&1)"; then
+  pass 'authorized ahead planning starts once before wait'
+else
+  fail 'authorized ahead planning starts once before wait' \
+    'one reserved planner before wait, resume before materialization, and approval only after revalidation' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

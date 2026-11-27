@@ -15,6 +15,9 @@ and stop at the command's escalation points.
 
 Use the `run` act's shared launch block for either harness and for a permitted restart. It runs
 preflight in the mission worktree before starting a runner.
+Follow its post-launch lookahead block before waiting on that PID. Pass the recoverable
+owner request only when verified for this campaign. Resume the reserved relay from the
+same worktree and use the command's post-merge revalidation before approving its draft.
 
 ## Codex preflight for the kit itself
 

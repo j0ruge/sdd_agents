@@ -2280,6 +2280,14 @@ Codex does not reload a changed file in the existing runner. The worker only con
 invocation for a verified cap-only reduction, after rechecking permission, both budgets and
 preflight. See the [worker's run procedure](../commands/sdd-worker.md#run).
 
+For delegated Codex lookahead, the worker treats `ahead plan <lot>` as a suggestion unless a
+resume handoff references the owner's written request for this campaign. The run procedure
+checks the live checkout owner against the launch PID and rereads the queue, budget and
+authority before starting the relay. The reservation is per campaign and lot in the primary
+Git directory. It binds one separate worktree and relay mission before a draft exists.
+Concurrent and resumed workers reuse that identity. The successor is only a draft until the
+predecessor merges, the updated base and plan are checked and approval is authorized.
+
 **The campaign ceiling is a hard limit.** Below the ceiling, `budget` holds what is left of it, the
 ceiling's cents less the sum's, against the signed mission cap, in cents from its text: a fraction
 of a cent rounds up, and nothing goes through a `%.2f` or a binary product (`1.10 * 100` is

@@ -149,6 +149,18 @@ act into a proposal to the owner, whatever `next` answered.
 
 `sdd-worker allows <campaign-dir> plan --lot <L>`
 
+Before cutting a worktree for the current `plan` lot of a Codex campaign, run the following.
+Use the canonical `campaign_dir`, installed `kit` root, effective default branch `base`, queue
+`lot` and the `resume_handoff` defined under `run` (an empty path if none). Continue with the
+manual planning instructions only on `manual`. If a reservation exists, resume it in the
+reported checkout. On refusal or `lookahead busy`, keep the identity and report or retry
+that reservation. Do not cut a second checkout.
+
+```bash
+  # Lookahead: reconcile before starting the ordinary plan act.
+"$kit/bin/sdd-worker-ahead" plan "$campaign_dir" "${resume_handoff:-}" "$base" "$lot"
+```
+
 Run `/sdd-plan` for the lot, with the planner on the campaign's `plan_model:`: the strongest model
 plans. The mission's `00-missao.md` declares `campaign: <id>` and `lot: <L>` in its frontmatter,
 which is how `next` finds it. Under delegation the relay answers the grill with the recommended
@@ -198,8 +210,60 @@ Measure again before approving: `tests/check-checkpoint.sh --check <checkpoint>`
 `--red <checkpoint>` by the kit's path, the `--red` in the background and waited for its last line.
 A `FAIL`, or a run without the line `<n> pending Check(s), every one red at HEAD`, goes back to
 `plan`. Write the extract of the plan the owner would have read to a file in the mission's
-directory, then run `printf 'y\n' | sdd approve <mission>` in the mission's worktree. It writes
+directory. For plans that were not made ahead, run
+`printf 'y\n' | sdd approve <mission>` in the mission's worktree. It writes
 `humano-YYYY-MM-DD` even under delegation: the journal line is the trail of who approved.
+
+For a plan made ahead, wait for the predecessor's verified merge and finish its post-merge
+transition before advancing. Refresh the target base, integrate it in the reserved checkout
+and have the planner revalidate the draft against it. Follow the normal conflict policy.
+Write the approval extract as above. Use the following block *instead of* the direct approval
+command for this delegated path. Use the lot, mission and worktree of the reserved plan,
+its absolute `mission_dir`, and the `predecessor_merge` SHA verified from its merged PR and
+recorded in the journal. Run with the same Git context as the reserved worktree.
+
+```bash
+  # Lookahead: revalidate the successor before delegated approval.
+(
+  cd -- "$worktree" || exit 1
+  handoffs="$(bash -ec '. .sdd/config.sh; printf "%s" "${HANDOFF_DIR:-docs/handoffs}"')" || exit 1
+  selected_dir="$(realpath -e -- "$handoffs/$mission")" || exit 1
+  if ! [[ "$selected_dir" == "$(pwd -P)/"* && "$selected_dir" == "$(realpath -e -- "$mission_dir")" ]]; then
+    printf '%s\n' 'Approval must use the selected mission directory in its worktree.' >&2
+    exit 1
+  fi
+  mission_dir="$selected_dir"
+  current_approval() {
+    local answer
+    answer="$(sdd-worker next "$campaign_dir")" &&
+      [[ "$answer" == "approve $lot $mission — "* && "$answer" != *$'\n'* ]]
+  }
+  base_ref="refs/remotes/origin/$base"
+  refresh_base() {
+    git fetch --quiet --no-tags origin "+refs/heads/$base:$base_ref"
+  }
+  git check-ref-format "$base_ref" && refresh_base || exit 1
+  [[ "$predecessor_merge" =~ ^([a-f0-9]{40}|[a-f0-9]{64})$ ]] &&
+    git merge-base --is-ancestor "$predecessor_merge" "$base_ref" &&
+    git merge-base --is-ancestor "$base_ref" HEAD && current_approval || exit 1
+  checked_base="$(git rev-parse "$base_ref")" && checked_head="$(git rev-parse HEAD)" || exit 1
+  "$kit/tests/check-checkpoint.sh" --check "$mission_dir/checkpoint.md" || exit 1
+  red="$("$kit/tests/check-checkpoint.sh" --red "$mission_dir/checkpoint.md" 2>&1)" || {
+    printf '%s\n' "$red" >&2
+    exit 1
+  }
+  printf '%s\n' "$red"
+  grep -Eq '^  ok    .*: [1-9][0-9]* pending Check\(s\), every one red at HEAD$' <<< "$red" &&
+    refresh_base && [ "$(git rev-parse "$base_ref")" = "$checked_base" ] &&
+    [ "$(git rev-parse HEAD)" = "$checked_head" ] && current_approval &&
+    sdd-worker budget "$campaign_dir" &&
+    sdd-worker allows "$campaign_dir" approve --mission "$mission_dir" &&
+    printf 'y\n' | sdd approve "$mission"
+)
+```
+
+If any check fails, keep the draft and report the failed gate. Reenter the normal loop after
+approval. The separate `run` act still needs its own authority, budget and preflight.
 
 ### `run`
 
@@ -257,6 +321,42 @@ echo "$!"
 The `-w` keeps that PID alive until the runner exits. In a shell with job control the background
 job leads its own process group, and `setsid` then forks; without `-w` its parent, the `$!`, exits
 at once, and a wait on it ends before the run does.
+
+After every successful launch, use the block below with its PID and log. Set `kit` to the
+installed kit root, `campaign_dir` to the primary checkout's campaign path and `base` to its
+effective `DEFAULT_BRANCH`. For a signed Codex campaign, supply `resume_handoff` only after
+verifying the owner's identifiable written request for this campaign. Record one line in
+that handoff in the form `ahead-request: <campaign-id> <source>`. Use an absolute local file
+reference (with an optional fragment) or a durable HTTPS link to the original request.
+Do not infer a request from `next`, a recommendation or the signature alone. Without an
+unambiguous matching reference, the line stays a suggestion. Other harnesses keep their manual route.
+
+The helper rereads `next`, requires the predecessor's live checkout owner to belong to this
+launch, checks the successor's budget and authority and reserves one worktree before starting
+the Codex relay. Save its `lookahead` receipt and source reference in the run handoff and journal.
+Keep them outside the guarded checkout until the run exits, as in step 5. The reservation under
+the primary Git directory can reconstruct the worktree and mission even before `00-missao.md`
+exists. The worktree lives beside the primary. Keep its provisional branch until the relay
+finishes. Do not replace a missing or ambiguous reserved checkout with a new one.
+
+```bash
+  # Lookahead: try the authorized dispatch before waiting for the runner.
+if [ "${engine:-}" = codex ]; then
+  "$kit/bin/sdd-worker-ahead" run "$campaign_dir" "${resume_handoff:-}" "$base" "$worktree" "$mission" "$pid" ||
+    printf '%s\n' 'Lookahead stopped; retain its diagnostic and collect the original runner result.' >&2
+fi
+```
+
+A refused lookahead does not kill the runner or replace its verdict. Collect the runner result,
+then report the refusal at the appropriate stop before advancing. While the runner works, use
+the relay's `answer` command in the reserved worktree for a returned question. Use `recover` only
+for an interrupted turn and `finish` to materialize the draft. Each paid turn checks the signed terms again.
+Never approve or launch the successor during lookahead. Then wait for the original launch.
+
+```bash
+  # Lookahead: wait for the original launch, even if lookahead was skipped or refused.
+tail --pid="$pid" -f /dev/null
+```
 
 Wait on that PID (`tail --pid=<pid> -f /dev/null`, or a monitor whose condition is
 `! kill -0 <pid>`), never on `pgrep -f`, which matches its own command line (M23). Then read the
@@ -376,6 +476,16 @@ by a push to the base.
 ### `review`
 
 `sdd-worker allows <campaign-dir> review --mission <mission-dir>`
+
+On a resumed Codex campaign, reconcile an already reserved lookahead before opening a review
+round. Pass the same verified request handoff and campaign paths used by `run`, and the mission
+slug of the current review. A pending relay returns its existing question or stage. Do not start
+a planner from the review signal alone.
+
+```bash
+  # Lookahead: rejoin the existing relay during review.
+"$kit/bin/sdd-worker-ahead" review "$campaign_dir" "${resume_handoff:-}" "$base" "$mission"
+```
 
 After the loop's budget and permission checks, run `review_scope "$pr" "$mission"` below from the
 mission worktree. A base that advanced does not on its own require integration.
