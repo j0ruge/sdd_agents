@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-27 10:17
+atualizado: 2026-11-27 10:58
 ---
 
 # Checkpoint — O worker e os verbos dele
@@ -20,7 +20,7 @@ atualizado: 2026-11-27 10:17
 | I11 | Base de revisão | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    review preserves the eligible delta$' <<< "$o"` → `1` | done | 20ffaab |
 | I12 | Fila e pós-merge | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    queue changes and followup reviews resume safely$' <<< "$o"` → `1` | done | f3b4056 |
 | I13 | Preflight antes do run | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    run launch requires successful worktree preflight$' <<< "$o"` → `1` | done | 2e8bd53 |
-| I14 | Planejamento antecipado | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | pending | — |
+| I14 | Planejamento antecipado | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | done | 6344f01 |
 
 ## Incrementos de fix (QA e REVIEW)
 
