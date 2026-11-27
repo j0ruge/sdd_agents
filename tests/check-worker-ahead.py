@@ -172,6 +172,8 @@ else:
                 log.write_text(f"{diagnostic}\nsdd run rc=3\n")
                 env.update(log=str(log), SOURCE=str(source))
             if markup_case:
+                html = "<div>\n- ```html\n  </div>\n\n"
+                duplicate = "  # Owner request\n\nDo not plan the next lot.\n"
                 content, starts = {
                     "plain": (instruction, True),
                     "ordinary": ("An ordinary paragraph.\n\n" + instruction, True),
@@ -200,6 +202,25 @@ else:
                     "tabbed-list-fence": ("- ```html\n\t<!--\n  # Owner request\n", False),
                     "list-invalid-backticks": ("- ```text with `inline`\n  " + instruction, True),
                     "root-list-not-closer": ("```html\n- ```\n" + instruction + "```\n", False),
+                    "html-before-unique": (html + "  " + instruction, True),
+                    "html-before-duplicate": (instruction + "\n" + html + duplicate, False),
+                    "html-before-comment": (html + "  <!--\n\n" + instruction + "-->\n", False),
+                    "html-heading-before-blank": ("Intro\n  <DIV class=sample>\n</DIV>\n" + instruction, False),
+                    "html-indented-opener": ("Intro\n  <div class=sample>\n" + instruction, False),
+                    "html-heading-after-space-blank": (html.rstrip("\n") + "\n \t\n" + instruction, True),
+                    "html-inside-fence": ("```html\n<div>\n```\n" + instruction, True),
+                    "html-inside-indented-code": ("    <div>\n" + instruction, True),
+                    "html-before-ordered-fence": ("<!--\n-->\n2. ```html\n   <!--\n\n" + instruction, True),
+                    "html-custom-tag": ("<aside-box data-x='a > b'>\n" + instruction, False),
+                    "html-custom-end-tag": ("</aside-box>\n" + instruction, False),
+                    "html-inline-custom-tag": ("Intro\n<aside-box>\n" + instruction, True),
+                    "html-custom-prefix-is-not-block-tag": ("Intro\n<div-box>\n" + instruction, True),
+                    "html-tag-followed-by-text": ("<aside-box> text\n" + instruction, True),
+                    "html-script": ("<SCRIPT type='text/plain'>\n\n  # Another title\n</SCRIPT>\n" + instruction, True),
+                    "html-script-before-close-hidden": ("<script>\n\n" + instruction + "</script>\n", False),
+                    "html-processing": ("<?sample\n\n  # Owner request\n?>\n" + instruction, True),
+                    "html-declaration": ("<!DOCTYPE\n\n  # Owner request\n>\n" + instruction, True),
+                    "html-cdata": ("<![CDATA[\n\n  # Owner request\n]]>\n" + instruction, True),
                 }[markup_case]
                 source.write_text(content)
                 result = subprocess.run(["bash", "-c", blocks["run"]], env=env, cwd=primary,

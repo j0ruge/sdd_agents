@@ -6434,6 +6434,24 @@ else
     'one turn before wait for a unique visible heading, none for hidden or duplicate headings, and the same runner verdict' "$got"
 fi
 
+# --- R7: raw HTML can contain apparent fences without opening fenced code -----------------------
+got=
+for markup_case in html-before-unique html-before-duplicate html-before-comment html-heading-before-blank \
+                   html-indented-opener \
+                   html-heading-after-space-blank html-inside-fence html-inside-indented-code html-before-ordered-fence \
+                   html-custom-tag html-custom-end-tag html-inline-custom-tag html-custom-prefix-is-not-block-tag \
+                   html-tag-followed-by-text html-script html-script-before-close-hidden html-processing html-declaration html-cdata; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request ignores list fence lookalikes in raw html'
+else
+  fail 'owner request ignores list fence lookalikes in raw html' \
+    'one turn before wait for a unique visible heading, none for hidden or duplicate headings, and the same runner verdict' "$got"
+fi
+
 # --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
 if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
   pass 'concurrent resume reuses the validated reservation'

@@ -57,9 +57,31 @@ def owns_checkout(worktree, mission, launch_pid, launch):
     return False
 
 
+def raw_html_end(line, in_paragraph):
+    # HTML blocks take precedence over Markdown fences and headings inside them.
+    if not (tag := re.match(r" {0,3}(<.*)", line)):
+        return None
+    tag = tag[1]
+    for opener, closer in (
+        (r"(?i)<(?:pre|script|style|textarea)(?=[ >]|$)", r"(?i)</(?:pre|script|style|textarea)>"),
+        (r"<!--", r"-->"),
+        (r"<\?", r"\?>"),
+        (r"<![A-Z]", r">"),
+        (r"<!\[CDATA\[", r"\]\]>"),
+        (r"(?i)</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?= |/?>|$)", r"^ *$"),
+    ):
+        if re.match(opener, tag):
+            return closer
+    # An otherwise unrecognized tag must be complete and cannot interrupt a paragraph.
+    if not in_paragraph and re.fullmatch(
+        r'''(?:</[a-zA-Z][a-zA-Z0-9-]* *>|<[a-zA-Z][a-zA-Z0-9-]*(?: +[a-zA-Z_:][a-zA-Z0-9:._-]*(?: *= *(?:[^"'=<>`\x00-\x20]+|'[^']*'|"[^"]*"))?)* */?>) *''', tag,
+    ):
+        return r"^ *$"
+
+
 def local_anchors(content):
     fence, fence_indent = "", 0
-    in_comment = False
+    html_end = None
     in_paragraph = False
     anchors = []
     for raw_line in content.split("\n"):
@@ -69,8 +91,9 @@ def local_anchors(content):
                 line = line[fence_indent:]
             else:
                 fence = ""
-        if not fence and (in_comment or re.match(r" {0,3}<!--", line)):
-            in_comment = "-->" not in line
+        if not fence and (html_end or (html_end := raw_html_end(line, in_paragraph))):
+            if re.search(html_end, line):
+                html_end = None
             in_paragraph = False
             continue
         if not (match := re.fullmatch(
