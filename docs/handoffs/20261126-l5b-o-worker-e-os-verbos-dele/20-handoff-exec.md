@@ -2,9 +2,9 @@
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
 fase: EXEC
 status: done
-sessao: 01a21da1-b535-7f20-adb4-122585336b56
-data: 2026-11-27 13:13
-gate: tests/run-all.sh em 9837b00 → suite green, 21 etapas, 101 sondas do worker, 100 âncoras do TODO e 1.017 do catálogo. Checks F1 e F2 do checkpoint → 1 cada.
+sessao: 01a21e80-43e7-72c3-8fc4-8b56e10a96ab
+data: 2026-11-27 17:18
+gate: tests/run-all.sh no conteúdo de 4d5bdb4 → rc 0, suite green, 21 etapas e 106 sondas do worker. Check R4 do checkpoint → 1.
 ---
 
 # Handoff — EXEC — O worker e os verbos dele
@@ -15,16 +15,17 @@ gate: tests/run-all.sh em 9837b00 → suite green, 21 etapas, 101 sondas do work
 
 ## TL;DR
 
-Os 16 incrementos estão concluídos. F1 corrige a retomada concorrente e F2 restaura a medição dos 13 cenários de revisão.
-Os dois Checks imprimiram `1` e `tests/run-all.sh` passou. QA deve repassar as jornadas e reescrever `30-handoff-qa.md`.
+Os 20 incrementos estão concluídos, incluindo as quatro correções da REVIEW r1.
+R4 deixa passar uma aprovação simples e recusa threads com metadados ilegíveis, mesmo se constarem como resolvidas.
+O Check de R4 imprimiu `1` e `tests/run-all.sh` ficou verde. A próxima rodada deve revalidar a jornada no novo head.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5b-o-worker-e-os-verbos-dele` — sem upstream configurado.
-- **Último commit de implementação:** `9837b00` — fix(tests): faz a sonda de revisão reprovar casos abortados.
-- **Working tree:** o commit de fechamento registra apenas o checkpoint, a nota e este handoff.
-- **Suíte:** `tests/run-all.sh` → `suite green`, 21 etapas e 101 sondas do worker.
-- **E2E:** não há `E2E_CMD` configurado. A fixture do worker usa Git local e simula runner, relay, fila e aprovação.
+- **Último commit de implementação:** `4d5bdb4` — correção do inventário e da prontidão de review.
+- **Árvore de trabalho:** o commit de fechamento registra apenas o checkpoint, as notas e este handoff.
+- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas e 106 sondas do worker.
+- **E2E:** não há `E2E_CMD` configurado. As jornadas usam Git local e simulam GitHub, runner, relay, fila e aprovação.
 
 ## O que foi feito
 
@@ -48,11 +49,18 @@ Os dois Checks imprimiram `1` e `tests/run-all.sh` passou. QA deve repassar as j
 - `5ac9b42` — F1 (BUG-01) — Reutilizou a reserva concorrente validada durante a leitura do orçamento. A jornada simulada registrou um único `start` e a retomada via `status`.
 - `9837b00` — F2 (BUG-02) — Passou a extrair o bloco que define `review_scope` e a exigir que cada cenário termine depois de conferir o código de saída, a resposta e a ordem das chamadas. Os controles rejeitaram um carregamento interrompido e uma rodada `full` no lugar do delta elegível.
 
+## Correções da REVIEW r1
+
+- `297f072` — R1 — Só publica sucesso em `local/ci` quando `TEST_CMD` termina no SHA testado.
+- `a83df3e` — R2 — Identifica o lote e aponta o relay para a fila canônica no primário.
+- `9b0e168` — R3 — Exige referência local recuperável e estável antes do despacho antecipado.
+- `4d5bdb4` — R4 — Distingue aprovação informativa de corpo acionável e valida metadados de comentários presentes também em threads resolvidas. Inventário e prontidão recusam a mesma página inválida.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
-| `checkpoint.md` | Checks e commits de implementação dos 16 incrementos. |
+| `checkpoint.md` | Checks e commits de implementação dos 20 incrementos. |
 | `commands/sdd-worker.md` | Procedimentos de despacho, retomada, aprovação e espera. |
 | `bin/sdd-worker-ahead` | Confirmação do dono do checkout, reserva do sucessor e chamada ao relay. |
 | `tests/check-worker-ahead.py` | Jornada de três lotes, concorrência, recusas e revalidação. |
@@ -61,9 +69,11 @@ Os dois Checks imprimiram `1` e `tests/run-all.sh` passou. QA deve repassar as j
 
 ## Boot da próxima fase
 
-Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Refaça os Checks F1 e F2 do checkpoint e rode `tests/run-all.sh` neste checkout. Repita as jornadas CLI de planejamento e retomada, parada e merge, e reescreva `30-handoff-qa.md` com o reteste. Em F2, confira o delta sem integração em PR mergeável, a integração apenas no conflito e a nova leitura no head integrado. Use `bash tests/check-worker.sh` para isolar as jornadas de planning, parada e merge, e `python3 tests/check-worker-ahead.py "$PWD"` para reproduzir só I14. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago para reproduzir essas sondas.
+Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e a seção da REVIEW r1 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R4 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
 
-Reveja concorrência e retomada antes de `00-missao.md`, a ordem runner → relay → espera, as recusas de orçamento e delegação, e o bloqueio de aprovação até integração da base e revalidação do plano. No merge, confira evidência no SHA e tratamento dos achados. Para a campanha `20261117-zerar-as-issues`, aponte com `ahead-request` no handoff de retomada para a instrução original do dono, identificada nas decisões 1 e 7 de `00-missao.md`. A delegação e o orçamento devem ser relidos no primário quando cada ato for autorizado.
+Na jornada de merge, confira que só chega a `ready <sha>` um PR cujo `local/ci` resulta da suíte completa naquele head. No mesmo SHA, uma aprovação curta é informativa, mas um corpo acionável ou pedido vigente bloqueia. Inventário e prontidão recusam um campo `comments` presente e inválido, sem reabrir uma thread resolvida válida.
+
+Na jornada de retomada, confirme a ordem runner → relay → espera, a reserva única e o acesso do relay à fila canônica sem cópia na base. Para a campanha `20261117-zerar-as-issues`, `ahead-request` referencia o pedido original do dono, identificado nas decisões 1 e 7 de `00-missao.md`. Referência local vencida ou alterada antes do despacho mantém a sugestão e preserva o resultado da espera. Aprovar o sucessor ainda depende de merge, revalidação e autoridade própria.
 
 ## Pendências / Decisions for a Human
 
@@ -77,4 +87,4 @@ Reveja concorrência e retomada antes de `00-missao.md`, a ordem runner → rela
 
 ## Achados fora de escopo
 
-- Nenhum achado novo no ciclo de correções de QA.
+- Nenhum achado novo no ciclo de correções de QA nem no R4.
