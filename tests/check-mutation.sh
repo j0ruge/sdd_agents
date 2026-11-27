@@ -7733,6 +7733,11 @@ mut_WORKER_body_disposition_unchecked() {
 mut_WORKER_local_ci_ignored() {
   sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$ci" != success \]; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
+# Skipping the grill check lets the PR body misstate a committed decision.
+# Caught by "merge binds answers and consent to head" (check-worker.sh).
+mut_WORKER_grill_body_unchecked() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s/^  pr_grill_ready .*$/  :/' "${1%/*}/sdd-worker"
+}
 # The campaign ceiling is read between acts again (achado #3 of the mission's review r6): with
 # 9.50 left of 200 and a mission cap of 40, budget answers rc 0 and the next run may end past the
 # ceiling. Caught by "ceiling: budget stops on a no room line when what is left of the campaign
@@ -8923,6 +8928,7 @@ CATALOG=(
   WORKER_reuse_limit_dropped
   WORKER_body_disposition_unchecked
   WORKER_local_ci_ignored
+  WORKER_grill_body_unchecked
   WORKER_ceiling_room_unchecked
   WORKER_ceiling_cap_rounded
   WORKER_ceiling_float_compare

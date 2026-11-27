@@ -13,6 +13,7 @@
 #   allows     whether one act fits that level, the lot of an act on a mission read from the mission
 #   budget     what the campaign spent against its two ceilings
 #   next       the next act of the campaign
+#   pr-grill   render the grill choices committed in the mission
 #   pr-ready   whether a pull request meets the owner's bar on its head sha
 #   review-ci  test the published review head and record local/ci on that sha
 #   review-findings  inventory review findings and resolve verified bot threads
@@ -57,6 +58,7 @@ usage: sdd-worker <verb> <args>
                                                the mission's delegated Codex phase and known ceilings
                                                (EXEC requires its selected model)
   next     <campaign-dir>                      the next act of the campaign
+  pr-grill <mission-dir>                       render the committed grill choices for the PR body
   pr-ready <mission-dir> <pr>                  whether the pull request is ready on its head sha
   review-ci <mission-dir> <pr>                 run TEST_CMD and publish local/ci for the PR head
   review-findings <mission-dir> <pr> [--resolve]  list findings or reply to and resolve verified bot threads
@@ -1876,8 +1878,47 @@ cmd_review_findings() {
   fi
 }
 
+# Read the numbered decisions as written, not as a list of distinct answer strings.
+grill_section() {
+  local mission
+  mission="$(git -C "$1" show "$2:./00-missao.md")" || return 1
+  awk '
+    /^## (Decis[^\n]* do grill|Grill decisions)([[:blank:](]|$)/ {
+      if (++seen > 1) exit 1
+      heading = $0; section = 1; next
+    }
+    /^#{1,2} / { section = 0 }
+    section && !started && /^[0-9]+[.] / { print heading "\n"; started = 1 }
+    section && started { print }
+  ' <<< "$mission"
+}
+
+cmd_pr_grill() {
+  [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
+  local grill
+  grill="$(grill_section "$1" HEAD)" || return 1
+  [ -z "$grill" ] || printf '%s\n' "$grill"
+}
+
+pr_grill_ready() {
+  local root="$1" pr="$2" dir="$3" head="$4" grill body
+  if ! grill="$(grill_section "$dir" "$head")"; then
+    printf 'not-ready grill: cannot read the choices committed on %s\n' "$head"
+    return 1
+  fi
+  [ -n "$grill" ] || return 0
+  if ! gh_at "$root" pr view "$pr" --json body ||
+     ! body="$(jq -er '.body | strings' 2> /dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh pr view $pr did not return a readable body"; return 3
+  fi
+  if [[ "$body" != "$grill" && "$body" != "$grill"$'\n\n'* ]]; then
+    printf 'not-ready grill: the PR body must start with the committed choices from the pr act\n'
+    return 1
+  fi
+}
+
 # pr-ready <mission-dir> <pr> — whether pull request <pr> meets the owner's bar on its head sha:
-# `ready <sha>` and rc 0 when the seven items hold, else `not-ready <item>: <reason>` and rc 1 for the
+# `ready <sha>` and rc 0 when the eight items hold, else `not-ready <item>: <reason>` and rc 1 for the
 # first that fails, in this order:
 #   review     the newest 40-review-r<N>.md of the mission folder (by number) grades A in every row
 #              of `### Overall Grade` (its header and its separator known by the shape of the line,
@@ -1897,14 +1938,15 @@ cmd_review_findings() {
 #   threads    every review thread is resolved, and every one was read;
 #   mergeable  the pull request is OPEN and MERGEABLE;
 #   head       the local HEAD of the mission's checkout is the head;
-#   local/ci   the newest status in this context from the review producer on the head is success.
+#   local/ci   the newest status in this context from the review producer on the head is success;
+#   grill      the pr act published the exact numbered decisions from the committed mission.
 # rc 3, and nothing on stdout, when gh failed or answered off its contract. The `ready` line carries
 # the sha the caller passes to `gh pr merge --merge --match-head-commit`; the method (a merge commit,
 # never a squash) is the merging command's, not this verb's. A missing review from another bot
 # neither blocks nor counts as a review. Both programs write `reviewed_head:`
 # (ADR 0023); a runner round with a DOCS commit after it, outside the mission folder, is not ready.
-# Declared limits: the items are read one after the other, never at once — a status, a receipt, a thread
-# or the mergeability can change between two reads on the same sha, which --match-head-commit does
+# Declared limits: the items are read one after the other, never at once — a status, a receipt, a thread,
+# the PR body or the mergeability can change between two reads on the same sha, which --match-head-commit does
 # not see (achado #13 of the mission's review r5) —, so whoever merges reads pr-ready again
 # immediately before `gh pr merge`, and a ready read earlier is no ready; a path git still quotes
 # under core.quotePath=false (a control byte, a quote or a backslash in its name) never matches the
@@ -2077,6 +2119,7 @@ cmd_pr_ready() {
   if [ "$ci" != success ]; then
     printf 'not-ready local/ci: %s on %s for the review producer\n' "$ci" "$head"; return 1
   fi
+  pr_grill_ready "$root" "$pr" "$dir" "$head" || return $?
   printf 'ready %s\n' "$head"
 }
 
@@ -2089,6 +2132,7 @@ main() {
     codex-plan) shift; cmd_codex_plan "$@" ;;
     codex-run) shift; cmd_codex_run "$@" ;;
     next) shift; cmd_next "$@" ;;
+    pr-grill) shift; cmd_pr_grill "$@" ;;
     pr-ready) shift; cmd_pr_ready "$@" ;;
     review-ci) shift; cmd_review_ci "$@" ;;
     review-findings) shift; cmd_review_findings "$@" ;;

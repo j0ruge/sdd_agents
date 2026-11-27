@@ -28,6 +28,7 @@ loop, the stops, and the way to cross a night without spending its own context w
   `sdd-worker allows <campaign-dir> plan --lot L<n>`. Any other call is rc 2.
 - `sdd-worker budget <campaign-dir>`: the campaign's spend against its ceiling, and the mission cap.
 - `sdd-worker next <campaign-dir>`: the next act of the campaign, derived from the disk and `gh`.
+- `sdd-worker pr-grill <mission-dir>`: render the committed grill choices for the PR body.
 - `sdd-worker pr-ready <mission-dir> <pr>`: `ready <sha>` only when the merge bar holds on the
   pull request's head.
 - `sdd-worker review-ci <mission-dir> <pr>`: run the configured suite and publish its status on
@@ -102,7 +103,8 @@ again to explain a stop.
    `next` named, or `sdd-worker allows <campaign-dir> plan --lot <lot>` for a plan: rc 0, the act is
    yours; rc 1, propose it to the owner, with the exact command, and wait for his yes. The yes is
    for that act alone: with it, go back to 1, and when steps 1 and 2 bring the same act again, the
-   yes stands for this step's rc 0; another act asks again.
+   yes stands for this step's rc 0 on acts other than `merge`; another act asks again. For `merge`,
+   use only the exact request and revalidation in the merge act below.
 4. The act, as the section below writes it.
 5. One line in `<campaign-dir>/journal.md`, append-only: `- <instant> · <lot> · <act> · <outcome>`,
    the instant from `date '+%Y-%m-%d %H:%M'` run in the same batch of commands, never from memory.
@@ -300,12 +302,34 @@ already open, apply the kit-specific exception above. On any other refusal, stop
 to review and resolve or report the reason. Merge remains a separate act
 requiring `allows … merge` and `pr-ready`.
 
-After the PR opens, this act completes the information its body owes the owner. It lists the
-grill answers that touch his rules, and declares every bot but Codex that did not review (no quota,
-no plan, a rate limit) as "did not review": such a bot neither blocks nor counts as a review. Codex
-is never one of them: its receipt on the head is an item of `pr-ready`, so a Codex that does not
-answer is the `no-receipt` stop. When the run left no pull request, open it from the mission's
-branch with `gh pr create`, never by a push to the base.
+After the PR opens, read its existing body. Prepare the body file with the product summary,
+evidence and bot participation, leaving out any older grill section. The same renderer provides
+all grill answers and their decisions, including ◆ choices, from the committed mission. Publish
+with this block as `publish_grill "$mission_dir" "$pr" "$body_file"`. It puts the decisions first,
+where they cannot be part of an earlier quote or code block.
+
+```bash
+publish_grill() (
+  [ "$#" -eq 3 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || return 2
+  local mission="$1" pr="$2" remainder="$3" root repo grill body
+  root="$(git -C "$mission" rev-parse --show-toplevel)" || return
+  grill="$(sdd-worker pr-grill "$mission")" || return
+  body="$(mktemp "${TMPDIR:-/tmp}/sdd-worker-pr.XXXXXX")" || return
+  trap 'rm -f -- "$body"' EXIT
+  if [ -n "$grill" ]; then printf '%s\n\n' "$grill" > "$body" || return; fi
+  cat -- "$remainder" >> "$body" || return
+  CDPATH='' cd -- "$root" || return
+  repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)" || return
+  [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || return 2
+  gh api -X PATCH "repos/$repo/pulls/$pr" -F "body=@$body" > /dev/null
+)
+```
+
+Declare every bot but Codex that did not review (no quota, no plan, a rate limit) as "did not
+review": such a bot neither blocks nor counts as a review. Codex is never one of them: its receipt
+on the head is an item of `pr-ready`, so a Codex that does not answer is the `no-receipt` stop.
+When the run left no pull request, open it from the mission's branch with `gh pr create`, never
+by a push to the base.
 
 ### `review`
 
@@ -360,12 +384,61 @@ and wait for its receipt on the new head. Re-read findings if a review arrives d
 
 `sdd-worker allows <campaign-dir> merge --mission <mission-dir>`
 
-Run `sdd-worker pr-ready <mission-dir> <pr>`, on the folder its `allows` call read. Only
-`ready <sha>` (rc 0) merges, and the merge is
-`gh pr merge <pr> --merge --match-head-commit <sha>` with that very sha: always a merge commit, never
-a squash or a rebase, which would orphan every `RESOLVED by <hash>` the branch wrote. An rc 1 names
-the item that failed: go back to the act that fixes it, never around it. An rc 3 is a `gh` that did
-not answer: wait and ask again.
+Use the block below as `merge_checked "$campaign_dir" "$mission_dir" "$pr"` on the mission and PR
+selected by the loop. If the assisted path prints a request, show the complete line to the owner.
+After an explicit yes, start again at steps 1 and 2. On the same selected act, call the block with
+that exact request as the fourth argument. A different request needs a new yes, including when
+the PR number is unchanged and the sha moved. Discard the request if the act changes or if you
+cannot recover what the owner approved. Treat the request as text and never evaluate it.
+
+```bash
+merge_checked() (
+  { [ "$#" -eq 3 ] || [ "$#" -eq 4 ]; } && [[ "$3" =~ ^[1-9][0-9]*$ ]] || return 2
+  local campaign mission root repo manifest identity declared lot
+  local pr="$3" consent="${4:-}" ready sha request command_line rc=0
+  local -a command
+  campaign="$(CDPATH='' cd -- "$1" && pwd -P)" || return 2
+  mission="$(CDPATH='' cd -- "$2" && pwd -P)" || return 2
+  root="$(git -C "$mission" rev-parse --show-toplevel)" || return 2
+  CDPATH='' cd -- "$root" || return 2
+  sdd-worker budget "$campaign" >&2 || return
+  sdd-worker allows "$campaign" merge --mission "$mission" >&2 || rc=$?
+  [ "$rc" -le 1 ] || return "$rc"
+  repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)" || return 3
+  [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || return 3
+  ready="$(sdd-worker pr-ready "$mission" "$pr")" || {
+    rc=$?; printf '%s\n' "$ready" >&2; return "$rc"
+  }
+  [[ "$ready" =~ ^ready\ ([0-9a-f]{40})$ ]] || return 3
+  sha="${BASH_REMATCH[1]}"
+  manifest="$(git -C "$mission" show "$sha:./00-missao.md")" || return 2
+  identity="$(awk '
+    NR == 1 { if ($0 != "---") exit 1; next }
+    $0 == "---" { print campaign, lot; exit }
+    /^campaign: / && !campaign { campaign = $2 }
+    /^lot: / && !lot { lot = $2 }
+  ' <<< "$manifest")" || return 2
+  read -r declared lot <<< "$identity"
+  [[ "$declared" == "${campaign##*/}" && -n "$lot" ]] || return 2
+  command=(gh pr merge "$pr" --merge --match-head-commit "$sha" --repo "$repo")
+  printf -v command_line '%q ' "${command[@]}"
+  printf -v request 'campaign=%q lot=%q mission=%q command=%s' \
+    "$campaign" "$lot" "$mission" "${command_line% }"
+  if [ "$rc" -eq 1 ] || [ "$#" -eq 4 ]; then
+    if [ "$consent" != "$request" ]; then
+      printf '%s\n' "$request"
+      return 1
+    fi
+  fi
+  "${command[@]}"
+)
+```
+
+The block runs `sdd-worker pr-ready <mission-dir> <pr>`, on the folder its `allows` call read. Only
+`ready <sha>` (rc 0) can merge. Use a merge commit, never a squash or a rebase, which would
+orphan every `RESOLVED by <hash>` the branch wrote. If `pr-ready` names an item, return to the act
+that fixes it. If GitHub did not answer, wait and ask again. If the final command rejects the
+head, restart the loop rather than retrying against a newly observed sha.
 
 ### `postmerge`
 

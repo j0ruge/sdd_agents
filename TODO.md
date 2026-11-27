@@ -93,7 +93,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
-  `bin/sdd-worker:1913` (`cmd_pr_ready`) — a régua original só nomeava threads. No PR #414, 18 dos 38
+  `bin/sdd-worker:1955` (`cmd_pr_ready`) — a régua original só nomeava threads. No PR #414, 18 dos 38
   achados do CodeRabbit estavam no corpo da revisão. O I8 da L5b já exige `local/ci` no SHA testado e
   atribui a publicação ao ato `review`. Faltava ler o corpo da revisão e a `CHANGES_REQUESTED` sem inline.
   Direção: o I9 registra o tratamento dos achados e bloqueia o merge com pendência. RESOLVED by 2d81fe7
@@ -101,7 +101,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **Nenhum ato do worker resolve os threads de review, e o item `threads` do `pr-ready` fica sem dono** —
-  `commands/sdd-worker.md:359` (`merge`) — um rc 1 do `pr-ready` manda voltar "to the act that fixes it", e
+  `commands/sdd-worker.md:383` (`merge`) — um rc 1 do `pr-ready` manda voltar "to the act that fixes it", e
   para `not-ready threads` não havia ato: o `review` conserta o que a rodada acha e pede o `@codex review`, mas nada
   resolve o thread de bot cujo achado um commit já fechou. No PR #414 os R6–R10 consertaram os achados do
   CodeRabbit e os 20 threads seguiram abertos (princípio 1: item que nenhum ato escreve). Direção: o `review`
@@ -110,7 +110,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-19)
 
 - [ ] **O LOW de comportamento que a rodada do worker manda ao chore volta como achado do Codex** —
-  `commands/sdd-worker.md:344` (`Fix what the round finds`) — sob a régua A (decisão do dono, 2026-11-18) o
+  `commands/sdd-worker.md:368` (`Fix what the round finds`) — sob a régua A (decisão do dono, 2026-11-18) o
   LOW vai ao chore, mas o item `codex` do `pr-ready` pede recibo sem achado aberto. Duas vezes o Codex deu P2
   a um LOW deixado ao chore e a rodada voltou ao PR: no PR #457 (`af6d490`, um dos LOW da r4) e no PR #458
   (`f2559cb`, o LOW 3 da r3, consertado em `3000409`; 38 min do recibo ao merge). Os três LOW só de
@@ -128,7 +128,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
 
 - [ ] **A parada `conflict` do worker leva ao dono a linha de estado que os dois lados reescreveram** —
-  `commands/sdd-worker.md:421` (`conflict`) — só o conflito no `TODO.md` e na catraca fica com o worker. No L4
+  `commands/sdd-worker.md:494` (`conflict`) — só o conflito no `TODO.md` e na catraca fica com o worker. No L4
   (`20261121-l4-preflight-health-e-sensores`) o publisher parou (`b03993b`) num conflito com a `main` do PR #460 na
   linha F6 da gaveta, que todo lote reescreve: cada lado com a sua frase, e a união resolveu (`67d69db`), mas a
   campanha esperou o dono das 04:25 às 07:49. Direção (decisão do dono): a parada lista, com o `TODO.md` e a
@@ -178,7 +178,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **Os probes de nota do `pr-ready` passariam pelo item `dirty` com o leitor de nota frouxo** —
-  `tests/check-worker.sh:2048` (`grade_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
+  `tests/check-worker.sh:2060` (`grade_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
   tabela sem linha editam o `40-review-r2.md` sem `land` e casam só `not-ready review: `, e o `dirty` também
   reprova a árvore suja com esse prefixo: um `pr-ready` que aceitasse B ou A- seguiria vermelho pelo motivo
   errado. Direção: `land` depois de cada edição e exigir o texto do ramo (`grades B`, `has no row for`), como a
@@ -376,7 +376,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O yes do dono no passo 3 do laço do worker vale para o ato e não amarra o sha do merge** —
-  `commands/sdd-worker.md:97` (`sdd-worker allows`) — "the yes stands for this step's rc 0" deixa o yes de um
+  `commands/sdd-worker.md:102` (`sdd-worker allows`) — "the yes stands for this step's rc 0" deixa o yes de um
   `merge` dado sobre o head A valer para o head B, quando os passos 1 e 2 trazem o mesmo ato. O `pr-ready` ainda
   exige rodada A e recibo do Codex no B; o risco é o dono não ter visto o B. Direção: o yes só se reaproveita com
   campanha, lote, missão, PR e comando iguais, e no `merge` também o sha.
@@ -384,7 +384,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O `postmerge` manda a linha do journal nomear o PR do que sobra para a base, sem dizer o que ela leva** —
-  `commands/sdd-worker.md:370` (`postmerge`) — o `next` não deriva esse ato, e a frase não exige o número do PR de
+  `commands/sdd-worker.md:443` (`postmerge`) — o `next` não deriva esse ato, e a frase não exige o número do PR de
   acompanhamento nem o estado da revisão dele: a sessão que retoma do journal não sabe se o PR abriu nem se a
   rodada dele fechou. Direção: a linha do merge traz o número do PR e `review pendente`, e a sessão retomada o
   conclui antes de chamar o `next`.
@@ -542,7 +542,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-19)
 
 - [ ] **O ato `review` do worker mergeia a base antes da rodada, e o `review-base` dá `full` quando a `main` andou** —
-  `commands/sdd-worker.md:332` (`bring the base in`) — o ato manda `git merge origin/<base>` e só depois
+  `commands/sdd-worker.md:356` (`bring the base in`) — o ato manda `git merge origin/<base>` e só depois
   pergunta ao `sdd review-base`, que lê um merge depois da última rodada como rodada inteira; então a rodada
   do worker, a mais cara, só é delta quando a `main` não andou. Medido na r3 do #452: `full — merge 59be5eb
   entered after 40-review-r2.md`, 30 arquivos e 2 086 linhas, onde a branch andara 11 commits desde o
@@ -551,7 +551,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
 - [ ] **O merge delegado não confere que o corpo do PR lista as escolhas do grill** —
-  `commands/sdd-worker.md:299` (`grill answers that touch his rules`) — sob delegação o aceite do dono sobre as
+  `commands/sdd-worker.md:307` (`including ◆ choices`) — sob delegação o aceite do dono sobre as
   escolhas do grill vem depois do merge, pelo corpo do PR, e quem o escreve é o ato `pr`, que o `next` não deriva
   (todo PR aberto vira `review`). O `cmd_pr_ready` lê do PR só `headRefOid,mergeable,state`, e o único `.body`
   dele é o dos comentários do Codex: um lote pode mergear sem o registro que o dono aceitaria.
@@ -767,7 +767,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
 
 - [ ] **O ato `pr` do worker não diz que o `gh pr edit` falha, e o aviso mora só no chapéu do publisher** —
-  `commands/sdd-worker.md:299` (`grill answers`) — o ato manda pôr no corpo do PR as respostas do grill e os bots
+  `commands/sdd-worker.md:307` (`grill answers`) — o ato manda pôr no corpo do PR as respostas do grill e os bots
   que não revisaram, sem dizer como. O `agents/sdd-publisher.md:100` manda o `gh api -X PATCH`, com o corpo num
   arquivo, e proíbe o `gh pr edit`, que falha no gh 2.45; o worker não lê esse chapéu. Medido no PR
   j0ruge/curso-ddd#1, gh 2.45.0: o `gh pr edit 1 --body-file …` saiu rc 1 com `GraphQL: Projects (classic) is being

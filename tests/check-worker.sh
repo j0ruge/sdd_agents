@@ -1732,6 +1732,8 @@ if [ -f "$GHFX/move-to" ]; then cp "$GHFX/move-to" "$GHFX/view"; fi
 SUITE
 printf 'one\n' > "$RR/src/app.txt"; printf 'old\n' > "$RR/src/old.txt"
 lot_mission "$RR" 20990300-ready r-camp L1 ready-b humano-2099-01-01
+# These worlds have no grill receipts, so remove the unfilled template section.
+sed -i '/^## Decis.* do grill/,/^## / { /^## Decis.* do grill/d; /^## /!d; }' "$MD/00-missao.md"
 gitc add -A; gitc commit -q -m z0; Z0="$(git -C "$RR" rev-parse HEAD)"
 printf 'two\n' > "$RR/src/app.txt"; gitc commit -q -am z1; Z1="$(git -C "$RR" rev-parse HEAD)"
 gitc mv src/old.txt "$H/20990300-ready/old.txt"; gitc commit -q -m a; A="$(git -C "$RR" rev-parse HEAD)"
@@ -1829,6 +1831,16 @@ give() {
 }
 case "$*" in
   "pr view $n --json headRefOid,mergeable,state") give view "$fx/view" ;;
+  "pr view $n --json body") give body "$fx/body" ;;
+  "api -X PATCH repos/$repo/pulls/$n -F body=@"*)
+    jq -cn --rawfile body "${6#body=@}" '{body:$body}' > "$fx/body"
+    exit $?
+    ;;
+  "pr merge $n --merge --match-head-commit "*" --repo $repo")
+    [ "$6" = "$(jq -r .headRefOid "$fx/view")" ] || exit 1
+    printf '%s\n' "$6" >> "$fx/merges"
+    exit 0
+    ;;
   "repo view --json nameWithOwner -q .nameWithOwner") give repo "$fx/repo" ;;
   "api --paginate repos/$repo/issues/$n/comments") give comments "$fx/comments.1" "$fx/comments.2" ;;
   "api repos/$repo/issues/$n/comments") give comments "$fx/comments.1" ;;
@@ -2284,6 +2296,116 @@ else
     'complete pages, evidence for the current finding, and only verified fixes auto-resolve bot threads' "$got"
 fi
 
+
+# I10: materialized decisions and one consent for the exact merge request.
+got=""
+ready_reset
+# The heading, multiline ◆ decision and recommended receipt follow the L5 mission.
+# Question IDs and escaped inline text follow record_grill in bin/sdd-plan-codex.
+cat > "$BOX/grill" <<'GRILL'
+## Grill decisions
+
+1. Question 0123456789abcdef0123456789abcdef
+   - question: Use the first setting?
+   - answer: (other: Keep &lt;x&gt; and \[brackets\]&#10;on two lines)
+
+2. Question fedcba9876543210fedcba9876543210
+   - question: Use the second setting?
+   - answer: (other: Keep &lt;x&gt; and \[brackets\]&#10;on two lines)
+
+3. **◆ Keep the owner's option.**
+   Apply it only to this lot.
+   - answer: (recommended)
+GRILL
+{ printf '\n'; cat "$BOX/grill"; printf '\n## Next section\n\nNot a grill choice.\n'; } >> "$MD/00-missao.md"
+land grill-good
+grill_head="$HEADNOW"
+grill_body="$(cat "$BOX/grill")"
+serve_grill_body() {
+  jq -cn --arg body "$2" '{body:$body}' > "$BOX/ghfx/$1/body"
+}
+printf '## Summary\nPublished changes.\n' > "$BOX/pr-remainder"
+awk '/^### `pr`$/ { on=1; next } on && /^### / { exit }
+  on && /^\x60\x60\x60bash$/ { code=1; next } code && /^\x60\x60\x60$/ { exit } code' \
+  "$ROOT/commands/sdd-worker.md" > "$BOX/pr-procedure"
+if ! (
+  [ -s "$BOX/pr-procedure" ] || exit 1
+  # shellcheck disable=SC1090 # Run the exact shell block the worker follows.
+  . "$BOX/pr-procedure"
+  sdd-worker() { "$WORKER" "$@"; }
+  export GHFX="$BOX/ghfx/grill-good" PATH="$BOX/stub-ready:$PATH"
+  publish_grill "$MD" "$PRN" "$BOX/pr-remainder"
+) || [[ "$(jq -r .body "$BOX/ghfx/grill-good/body" 2>/dev/null)" != "$grill_body"$'\n\n## Summary\nPublished changes.' ]]; then
+  got='pr act did not publish the materialized grill and preserve the rest of the body'
+  serve_grill_body grill-good "$grill_body"
+fi
+worker pr-grill "$MD"
+[[ "$W_RC" == 0 && "$W_OUT" == "$grill_body" ]] || got="${got:+$got; }publisher: rc $W_RC or decisions changed"
+ready_is 'every published decision matches its receipt' 0 "ready $grill_head" grill-good
+for grill_case in answer identity diamond absent unread; do
+  serve "grill-$grill_case" "$grill_head"
+  case "$grill_case" in
+    answer) body="$(sed '0,/Keep/{s/Keep/Change/;}' "$BOX/grill")" ;;
+    identity) body="${grill_body/fedcba9876543210fedcba9876543210/0123456789abcdef0123456789abcdef}" ;;
+    diamond) body="$(sed "s/Keep the owner's option/Change the owner's option/" "$BOX/grill")" ;;
+    absent|unread) body=$'## Grill decisions\n\n## Summary\n\nNo receipts here.' ;;
+  esac
+  serve_grill_body "grill-$grill_case" "$body"
+  if [ "$grill_case" = unread ]; then
+    touch "$BOX/ghfx/grill-unread/body.partial"
+    ready_is 'unreadable body' 3 '' grill-unread
+  else
+    ready_is "$grill_case" 1 'not-ready grill: ' "grill-$grill_case"
+  fi
+done
+
+awk '/^### `merge`$/ { on=1; next } on && /^### / { exit }
+  on && /^\x60\x60\x60bash$/ { code=1; next } code && /^\x60\x60\x60$/ { exit } code' \
+  "$ROOT/commands/sdd-worker.md" > "$BOX/merge-procedure"
+if [ -s "$BOX/merge-procedure" ]; then
+  campaign_dir="$BOX/r-camp"
+  mkdir -p "$campaign_dir"
+  merge_path="$BOX/stub-ready:$PATH"
+  # shellcheck disable=SC1090 # Run the exact shell block the worker follows.
+  . "$BOX/merge-procedure"
+  sdd-worker() {
+    case "$1" in
+      budget) printf 'budget\n' >> "$GHFX/guards"; return "${I10_BUDGET:-0}" ;;
+      allows) printf 'allows\n' >> "$GHFX/guards"; return 1 ;;
+      *) "$WORKER" "$@" ;;
+    esac
+  }
+  consent=""
+  merge_rc=0
+  export GHFX="$BOX/ghfx/grill-good"
+  consent="$(PATH="$merge_path" merge_checked "$campaign_dir" "$MD" "$PRN")" || merge_rc=$?
+  [[ "$merge_rc" == 1 && "$consent" == *"$grill_head"* && ! -e "$GHFX/merges" ]] \
+    || got="${got:+$got; }assisted proposal did not bind the first head or attempted a merge"
+  land grill-next-head
+  serve_grill_body grill-next-head "$grill_body"
+  export GHFX="$BOX/ghfx/grill-next-head"
+  merge_rc=0
+  next_consent="$(PATH="$merge_path" merge_checked "$campaign_dir" "$MD" "$PRN" "$consent")" || merge_rc=$?
+  [[ "$merge_rc" == 1 && "$next_consent" == *"$HEADNOW"* && ! -e "$GHFX/merges" ]] \
+    || got="${got:+$got; }old consent was not rejected on the new head of the same PR"
+  merge_rc=0
+  I10_BUDGET=1 PATH="$merge_path" merge_checked "$campaign_dir" "$MD" "$PRN" "$next_consent" || merge_rc=$?
+  [[ "$merge_rc" != 0 && ! -e "$GHFX/merges" ]] || got="${got:+$got; }yes bypassed a budget refusal"
+  merge_rc=0
+  PATH="$merge_path" merge_checked "$campaign_dir" "$MD" "$PRN" "$next_consent" || merge_rc=$?
+  [[ "$merge_rc" == 0 && "$(cat "$GHFX/merges" 2>/dev/null)" == "$HEADNOW" &&
+     "$(cat "$GHFX/guards")" == $'budget\nallows\nbudget\nbudget\nallows' ]] \
+    || got="${got:+$got; }the new yes did not revalidate gates and merge only the reviewed head"
+  unset -f sdd-worker merge_checked
+else
+  got="${got:+$got; }no executable assisted consent procedure"
+fi
+ready_reset
+if [ -z "$got" ]; then
+  pass 'merge binds answers and consent to head'
+else
+  fail 'merge binds answers and consent to head' 'exact decisions in the PR and fresh consent after a head change' "$got"
+fi
 
 # --- R27: the mergeable item --------------------------------------------------------------------
 got=""

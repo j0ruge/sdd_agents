@@ -2213,6 +2213,7 @@ stderr and leaves rc 2 for ordinary calls. A Codex guard can refuse an unavailab
 | `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling, with room for one run; 1 at or above it, with less of it left than the signed mission cap (`no room — …`), no ceiling or spend to read (`no spend — …`, the checkouts or the base that do not read among them), or `no mission cap — …` when the signed mission cap is zero or below one cent, or the config of the campaign's checkout or of a mission's worktree would beat it |
 | `sdd-worker codex-plan <campaign-dir> --lot L<n>` | no output on success | 0 when signed Codex terms permit planning that lot and the strict ledger check passes; 1 on refusal (reason on stderr); 2 on a malformed call |
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts or the base do not read); 3 when `gh` did not answer |
+| `sdd-worker pr-grill <mission-dir>` | numbered grill decisions from the committed mission, or no output when there are none | 0 rendered; 1 unreadable mission or choices; 2 invalid arguments |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
 | `sdd-worker review-ci <mission-dir> <pr>` | suite output and `local/ci <head sha> <result> (TEST_CMD rc <code>)` after publication | 0 suite passed and status published; 1 refused or suite failed; 3 GitHub evidence unreadable or write unverified |
 | `sdd-worker review-findings <mission-dir> <pr> [--resolve]` | review and thread records as JSON lines, or a reason why findings remain | 0 complete inventory or no findings left after resolution; 1 refused or pending; 3 incomplete GitHub evidence or unverified write |
@@ -2311,7 +2312,7 @@ mission with no branch, no `campaign.md`, a `campaign:` in it that is not the di
 empty one and the template's placeholder among them, both values named) and an empty queue stop,
 with rc 1.
 
-**`pr-ready`** reads the pull request head (`headRefOid`) and requires seven items on that one sha,
+**`pr-ready`** reads the pull request head (`headRefOid`) and requires eight items on that one sha,
 naming the first that fails:
 
 1. `review`: the round is the one **committed at the head**, never a copy on disk: the mission
@@ -2352,7 +2353,11 @@ naming the first that fails:
 7. `local/ci`: the newest status on that sha in this context from the authenticated GitHub
    account used by the worker is `success`. The worker reads all status pages. Missing,
    pending, failed or unreadable evidence does not allow a merge, and neither does a success
-   from a different account or sha.
+   from a different account or sha;
+8. `grill`: if the committed mission has numbered grill decisions, the PR body starts with
+   the same section. The `pr` act publishes it using `sdd-worker pr-grill`. The gate compares the
+   actual numbered decisions and their recorded answers, including repeated answers to different
+   questions, ◆ choices and Markdown escapes.
 
 The `review` act supplies this status with `sdd-worker review-ci <mission-dir> <pr>` after pushing
 the finished round. It checks that the open PR head equals the clean local checkout, writes
@@ -2364,7 +2369,10 @@ refuses the write or its result cannot be verified, the review act stops with a 
 The `ready <sha>` line is what the session passes to `gh pr merge --merge --match-head-commit`. The
 method — a merge commit, never a squash — belongs to the command that merges, and
 `commands/sdd-worker.md` writes it. The items are read one after the other, never at once, so
-the session reads `pr-ready` again immediately before `gh pr merge`.
+the session reads `pr-ready` again immediately before `gh pr merge`. In assisted mode the
+owner's yes is for the exact campaign, lot, mission and repository-specific PR command including
+its head sha. After the wait the merge procedure rechecks budget, authority and readiness and
+requires a new yes if that request changes.
 
 The `review` act runs `sdd-worker review-findings <mission-dir> <pr>` to collect the complete
 review and thread inventory before the round. It records dispositions as
@@ -2415,7 +2423,7 @@ tolerance for prose), and the worker's round is what applies it. Its review act 
   `ON_ESCALATION_CMD` empty, the worker only fails closed (`no mission cap`, `assisted — no pager`):
   the file wins over the environment, and making the signed values win there needs the runner's
   config precedence, which ADR 0022 does not change.
-- `pr-ready` reads its items one after the other: a status, a receipt, a thread or the mergeability can
+- `pr-ready` reads its items one after the other: a status, a receipt, a thread, the PR body or the mergeability can
   change between two reads on the same sha, and `--match-head-commit` holds the sha only. A ready
   is good for the merge that follows it at once, never for one later.
 - `sdd approve` under `full` still writes `humano-YYYY-MM-DD`; the trail is the campaign journal.
