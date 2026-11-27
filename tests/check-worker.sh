@@ -2148,9 +2148,8 @@ prose_missing() {
     || printf 'stops: SDD_GATE_WHY by variable\n'
   # The pager call passes the fields the runner's escalation_hook passes (bin/sdd), the project and
   # the phase among them: a hook that reads ${SDD_PROJECT:?} aborts on a stop of the worker, and the
-  # owner is not paged (P2 of the Codex on PR #414). Read in the call, from its why= line to the
-  # closing fence, never anywhere in the section.
-  items="$(awk '/^why="\$\(sdd-worker budget/ { c = 1 } c && /^```/ { exit } c' <<< "$s")"
+  # owner is not paged (P2 of the Codex on PR #414). Read inside the code fence, not in prose.
+  items="$(awk '/^```/ { c = !c; next } c' <<< "$s")"
   for p in 'SDD_PROJECT=' 'SDD_PHASE='; do
     grep -qF "$p" <<< "$items" || printf 'stops: %s in the pager call\n' "$p"
   done
@@ -2234,7 +2233,7 @@ control 'stop 1 deleted' prose_missing $'stops: not five numbered lines\nstops: 
 control 'a sixth stop' prose_missing 'stops: not five numbered lines' '/^5\. /a\
 6. **Another.** One more stop.'
 control 'stop 4 not numbered' prose_missing $'stops: not five numbered lines\nstops: BUDGET_MISSION_USD' 's/^4\. \(.*BUDGET_MISSION_USD\)/\1/'
-control 'no pager' prose_missing $'stops: ON_ESCALATION_CMD\nstops: journal.md' '/ON_ESCALATION_CMD/d'
+control 'no pager' prose_missing $'stops: ON_ESCALATION_CMD\nstops: journal.md' '/ON_ESCALATION_CMD/d; />> .*journal\.md/d'
 control 'never: main checkout' prose_missing "never: kit's main checkout" "/^- Move the kit's main checkout/d"
 control 'never: not a bullet' prose_missing 'never: visual acceptance' 's/^- \(Give the visual acceptance\)/\1/'
 control 'context: handoff' prose_missing 'context: a handoff to a file' '/^- .*a handoff to a file/d'
@@ -2254,7 +2253,7 @@ control 'why pasted' prose_missing 'stops: SDD_GATE_WHY by variable' "s/SDD_GATE
 control 'why pasted beside the variable' prose_missing 'stops: SDD_GATE_WHY by variable' "/SDD_GATE_WHY=\"\\\$why\"/ s/\$/ SDD_GATE_WHY='<line>'/"
 control 'why pasted between double quotes' prose_missing 'stops: SDD_GATE_WHY by variable' 's/SDD_GATE_WHY="\$why"/SDD_GATE_WHY="<line>"/'
 control 'no project in the call' prose_missing 'stops: SDD_PROJECT= in the pager call' 's/ SDD_PROJECT="\${PROJECT_NAME:-}"//'
-control 'no phase in the call' prose_missing 'stops: SDD_PHASE= in the pager call' 's/ SDD_PHASE=<act>//'
+control 'no phase in the call' prose_missing 'stops: SDD_PHASE= in the pager call' 's/ SDD_PHASE="\$act"//'
 control 'project only beside the call' prose_missing 'stops: SDD_PROJECT= in the pager call' 's/ SDD_PROJECT="\${PROJECT_NAME:-}"//
 /^## The five stops$/a\
 SDD_PROJECT="${PROJECT_NAME:-}"'
@@ -2312,9 +2311,9 @@ $a\
 control 'step 2 reads next alone' transitions_missing 'loop: step 2' 's/has a move in \*\*The transitions\*\* (below)/has a move below/'
 control 'step 6 forgets the waits' transitions_missing 'loop: step 6' 's/^6\. Back to 1, and after every wait too:/6. Back to 1:/'
 control 'launch without -w' transitions_missing $'setsid: launch\nsetsid: bare' 's/setsid -w nohup/setsid nohup/'
-control 'a bare setsid in another block' transitions_missing 'setsid: bare' 's/^why="\$(sdd-worker budget <campaign-dir>)"$/&\nsetsid true/'
+control 'a bare setsid in another block' transitions_missing 'setsid: bare' 's/^if \[ "\$act" != run \]/&\nsetsid true/'
 control 'setsid -w only in another block' transitions_missing $'setsid: launch\nsetsid: bare' 's/setsid -w nohup/setsid nohup/
-s/^why="\$(sdd-worker budget <campaign-dir>)"$/&\nsetsid -w true/'
+s/^if \[ "\$act" != run \]/&\nsetsid -w true/'
 control 'setsid -w only in prose' transitions_missing $'setsid: launch\nsetsid: bare' 's/setsid -w nohup/setsid nohup/
 $a\
 setsid -w nohup'
@@ -5455,6 +5454,86 @@ if [ -z "$got" ]; then
 else
   fail 'permission reflects exported cap and final clock' \
     'the child sees the signed cap; both lots allow before expiry and ask at expiry; already expired skips the config' "$got"
+fi
+
+# --- I5: the public stop procedure ------------------------------------------------------------
+# Run the examples from the command with a changing verb and a pager that only records its input.
+stop_example() {
+  awk -v want="$1" '
+    /^```bash$/ { n++; on = (n == want); next }
+    /^```$/ { on = 0; next }
+    on'
+}
+stop_capture="$(section "$COMMAND" 'The loop' | stop_example 1)"
+stop_report="$(section "$COMMAND" 'The five stops' | stop_example 1)"
+stop_run="$(act_of "$COMMAND" run | stop_example 2)"
+stop_box="$BOX/stop"
+mkdir -p "$stop_box/.sdd" "$stop_box/campaign"
+cat > "$stop_box/.sdd/config.sh" <<'STOP_CONFIG'
+PROJECT_NAME=stop-fixture
+ON_ESCALATION_CMD='printf "%s\n" "$SDD_REASON" "$SDD_PHASE" "$SDD_MISSION" "$SDD_PROJECT" "$SDD_GATE_WHY" >> pager'
+STOP_CONFIG
+got=""
+if [ -z "$stop_capture" ] || [ -z "$stop_run" ]; then
+  got='the public loop does not capture its verdict, or run does not classify its retained log'
+else
+  for stop_case in budget next mission phase unreadable ambiguous; do
+    case "$stop_case" in
+      budget) stop_act=budget; stop_reason=no-room; stop_rc=1; stop_why="no room — the owner's settings leave US\$ 10" ;;
+      next) stop_act=next; stop_reason=next-stop; stop_rc=1; stop_why='stop L1 — missing mission' ;;
+      mission) stop_act=run; stop_reason='mission-ceiling'; stop_rc=3
+        stop_why='sdd run stop: mission-ceiling — mission budget: US$ 60.00 spent against BUDGET_MISSION_USD=60' ;;
+      phase) stop_act=run; stop_reason='phase-ceiling'; stop_rc=3
+        stop_why='sdd run stop: phase-ceiling — PR: missing pr_url' ;;
+      unreadable|ambiguous) stop_act=run; stop_reason=indeterminate; stop_rc=3
+        stop_why='runner stop cause indeterminate (run.log)' ;;
+    esac
+    if ! (
+      CDPATH='' cd "$stop_box" || exit 1
+      act="$stop_act" campaign_dir=campaign lot=L1 mission=stop-mission log=run.log
+      : > calls; : > pager; : > "$campaign_dir/journal.md"
+      sdd-worker() {
+        printf '%s\n' "$*" >> calls
+        if [ "$(wc -l < calls)" -eq 1 ]; then
+          printf '%s\n' "$stop_why" 'secondary diagnostic' >&2
+          return "$stop_rc"
+        fi
+        printf '%s\n' 'campaign US$ 0 of 500'
+      }
+      if [ "$act" = run ]; then
+        case "$stop_case" in
+          unreadable) printf '%s\n' 'budget-exhausted' 'sdd run stop: mission-ceiling —   ' ;;
+          ambiguous) printf '%s\n' 'sdd run stop: phase-ceiling — PR: missing pr_url' \
+                                  'sdd run stop: mission-ceiling — mission budget: US$ 60.00' ;;
+          *) printf '%s\n' "$stop_why" ;;
+        esac > "$log"
+        printf 'sdd run rc=%s\n' "$stop_rc" >> "$log"
+        eval "$stop_run" || exit 1
+        [ ! -s calls ] && [ "$reason" = "$stop_reason" ] || exit 1
+      else
+        eval "$stop_capture" || exit 1
+        reason="$stop_reason"
+      fi
+      [ "$rc" = "$stop_rc" ] && [ "$why" = "$stop_why" ] || exit 1
+      eval "$stop_report" || exit 1
+      [ "$(wc -l < campaign/journal.md)" -eq 1 ] &&
+        [[ "$(cat campaign/journal.md)" == *" · L1 · $act · $reason (rc $rc) — $stop_why" ]] || exit 1
+      if [ "$act" = run ]; then
+        [ ! -s pager ]
+      else
+        [ "$(cat calls)" = "$act campaign" ] &&
+          [ "$(cat pager)" = "$(printf '%s\n' "$reason" "$act" "$mission" stop-fixture "$stop_why")" ]
+      fi
+    ); then
+      got="${got:+$got; }$stop_case"
+    fi
+  done
+fi
+if [ -z "$got" ]; then
+  pass 'stop preserves cause and original line'
+else
+  fail 'stop preserves cause and original line' \
+    'one decision per verb, same line in journal and pager, distinct run causes and no duplicate page' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

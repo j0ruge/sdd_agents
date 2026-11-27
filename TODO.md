@@ -102,7 +102,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **Nenhum ato do worker resolve os threads de review, e o item `threads` do `pr-ready` fica sem dono** —
-  `commands/sdd-worker.md:247` (`merge`) — um rc 1 do `pr-ready` manda voltar "to the act that fixes it", e
+  `commands/sdd-worker.md:333` (`merge`) — um rc 1 do `pr-ready` manda voltar "to the act that fixes it", e
   para `not-ready threads` não há ato: o `review` conserta o que a rodada acha e pede o `@codex review`, mas nada
   resolve o thread de bot cujo achado um commit já fechou. No PR #414 os R6–R10 consertaram os achados do
   CodeRabbit e os 20 threads seguiram abertos (princípio 1: item que nenhum ato escreve). Direção: o `review`
@@ -111,7 +111,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-19)
 
 - [ ] **O LOW de comportamento que a rodada do worker manda ao chore volta como achado do Codex** —
-  `commands/sdd-worker.md:263` (`Fix what the round finds`) — sob a régua A (decisão do dono, 2026-11-18) o
+  `commands/sdd-worker.md:321` (`Fix what the round finds`) — sob a régua A (decisão do dono, 2026-11-18) o
   LOW vai ao chore, mas o item `codex` do `pr-ready` pede recibo sem achado aberto. Duas vezes o Codex deu P2
   a um LOW deixado ao chore e a rodada voltou ao PR: no PR #457 (`af6d490`, um dos LOW da r4) e no PR #458
   (`f2559cb`, o LOW 3 da r3, consertado em `3000409`; 38 min do recibo ao merge). Os três LOW só de
@@ -129,7 +129,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
 
 - [ ] **A parada `conflict` do worker leva ao dono a linha de estado que os dois lados reescreveram** —
-  `commands/sdd-worker.md:331` (`conflict`) — só o conflito no `TODO.md` e na catraca fica com o worker. No L4
+  `commands/sdd-worker.md:387` (`conflict`) — só o conflito no `TODO.md` e na catraca fica com o worker. No L4
   (`20261121-l4-preflight-health-e-sensores`) o publisher parou (`b03993b`) num conflito com a `main` do PR #460 na
   linha F6 da gaveta, que todo lote reescreve: cada lado com a sua frase, e a união resolveu (`67d69db`), mas a
   campanha esperou o dono das 04:25 às 07:49. Direção (decisão do dono): a parada lista, com o `TODO.md` e a
@@ -137,7 +137,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — registrado a pedido do dono na parada `conflict` do L4, campanha `20261117-zerar-as-issues` (2026-11-22)
 
 - [ ] **O `/sdd-worker` chamado com argumento entrega o trecho do `sdd run` com o `$1` trocado** —
-  `commands/sdd-worker.md:188` (`bash -c`) — o carregador de comando do Claude Code troca `$0`, `$1` e `$2` (base
+  `commands/sdd-worker.md:204` (`bash -c`) — o carregador de comando do Claude Code troca `$0`, `$1` e `$2` (base
   zero) pelas palavras do argumento, também dentro de aspas, e deixa `${1}`, `$@`, `$?`, `$!` e o `$N` sem argumento.
   Medido em 2.1.327: a sonda `/subst-probe alfa beta gama` deu `"$1"` → `"beta"` e `${1}` intacto, e o `/sdd-worker`
   chamado com "Continuar a campanha …" mostrou `sdd run "a"`. Quem copia o trecho roda a missão errada. Direção: o
@@ -376,7 +376,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O yes do dono no passo 3 do laço do worker vale para o ato e não amarra o sha do merge** —
-  `commands/sdd-worker.md:77` (`sdd-worker allows`) — "the yes stands for this step's rc 0" deixa o yes de um
+  `commands/sdd-worker.md:97` (`sdd-worker allows`) — "the yes stands for this step's rc 0" deixa o yes de um
   `merge` dado sobre o head A valer para o head B, quando os passos 1 e 2 trazem o mesmo ato. O `pr-ready` ainda
   exige rodada A e recibo do Codex no B; o risco é o dono não ter visto o B. Direção: o yes só se reaproveita com
   campanha, lote, missão, PR e comando iguais, e no `merge` também o sha.
@@ -384,7 +384,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O `postmerge` manda a linha do journal nomear o PR do que sobra para a base, sem dizer o que ela leva** —
-  `commands/sdd-worker.md:278` (`postmerge`) — o `next` não deriva esse ato, e a frase não exige o número do PR de
+  `commands/sdd-worker.md:336` (`postmerge`) — o `next` não deriva esse ato, e a frase não exige o número do PR de
   acompanhamento nem o estado da revisão dele: a sessão que retoma do journal não sabe se o PR abriu nem se a
   rodada dele fechou. Direção: a linha do merge traz o número do PR e `review pendente`, e a sessão retomada o
   conclui antes de chamar o `next`.
@@ -392,7 +392,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **A parada do worker roda o `budget` de novo para montar o `SDD_GATE_WHY` do pager** —
-  `commands/sdd-worker.md:298` (`sdd-worker budget`) — o `why` sai de rodar outra vez o verbo cuja linha parou o
+  `commands/sdd-worker.md:85` (`sdd-worker budget`) — o `why` sai de rodar outra vez o verbo cuja linha parou o
   laço, e entre as duas leituras o teto pode ter subido ou um gasto entrado: o pager recebe uma linha que não é a
   que parou. Direção: guardar a saída do verbo no momento da parada (arquivo ou variável do mesmo lote) e reusá-la
   no journal e no `SDD_GATE_WHY`.
@@ -533,7 +533,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo dono e pelo relay na missão `20261116-plano-7-b-o-palco-3d` (2026-11-17)
 
 - [ ] **A missão pedida fora da fila da campanha não tem rota, e a linha nova derruba a delegação** —
-  `commands/sdd-worker.md:128` (`lot: <L>`) — o ato `plan` só conhece lote da tabela, e nada diz o que fazer
+  `commands/sdd-worker.md:143` (`lot: <L>`) — o ato `plan` só conhece lote da tabela, e nada diz o que fazer
   quando o dono pede uma missão fora dela: sem `lot:` o `allows` dá `assisted`, com um `lot:` alheio o merge dá
   aquele lote por feito, e uma linha nova no `campaign.md` depois da assinatura muda o digest. Medido, diferencial
   sobre a delegação assinada de `cc8509a` com e sem a linha `L1b`: o L1 em voo passa a `edited after signing`.
@@ -542,7 +542,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-19)
 
 - [ ] **O ato `review` do worker mergeia a base antes da rodada, e o `review-base` dá `full` quando a `main` andou** —
-  `commands/sdd-worker.md:251` (`bring the base in`) — o ato manda `git merge origin/<base>` e só depois
+  `commands/sdd-worker.md:309` (`bring the base in`) — o ato manda `git merge origin/<base>` e só depois
   pergunta ao `sdd review-base`, que lê um merge depois da última rodada como rodada inteira; então a rodada
   do worker, a mais cara, só é delta quando a `main` não andou. Medido na r3 do #452: `full — merge 59be5eb
   entered after 40-review-r2.md`, 30 arquivos e 2 086 linhas, onde a branch andara 11 commits desde o
@@ -551,7 +551,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
 - [ ] **O merge delegado não confere que o corpo do PR lista as escolhas do grill** —
-  `commands/sdd-worker.md:241` (`grill answers that touch his rules`) — sob delegação o aceite do dono sobre as
+  `commands/sdd-worker.md:299` (`grill answers that touch his rules`) — sob delegação o aceite do dono sobre as
   escolhas do grill vem depois do merge, pelo corpo do PR, e quem o escreve é o ato `pr`, que o `next` não deriva
   (todo PR aberto vira `review`). O `cmd_pr_ready` lê do PR só `headRefOid,mergeable,state`, e o único `.body`
   dele é o dos comentários do Codex: um lote pode mergear sem o registro que o dono aceitaria.
@@ -582,7 +582,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   substituição antes e apagar o caminho literal), com asserção no `tests/check-dry-run.sh`.
   — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
-- [ ] **O ato `run` do worker lança o `sdd run` sem rodar o `sdd preflight`** — `commands/sdd-worker.md:187`
+- [ ] **O ato `run` do worker lança o `sdd run` sem rodar o `sdd preflight`** — `commands/sdd-worker.md:203`
   (`setsid`) — e o `cmd_run` também não o chama, então a corrida de uma noite descobre na primeira fase o que as
   sondas achariam em segundos: sessão expirada, chapéu velho, skill ausente, hook quebrado. Custo a decidir no
   grill: o preflight roda o `TEST_CMD` inteiro, que no kit é a suíte toda. Direção, pedida pelo dono: o ato `run`
@@ -590,7 +590,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
 - [ ] **O worker lê o `budget-exhausted` como o teto da missão, e o runner grava o mesmo `kind` no teto da fase** —
-  `commands/sdd-worker.md:205` (`the mission ceiling`) — o `bin/sdd` grava `budget-exhausted` para os dois tetos e
+  `commands/sdd-worker.md:221` (`budget-exhausted`) — o `bin/sdd` grava `budget-exhausted` para os dois tetos e
   deixa o `gate_why` dizer qual (`bin/sdd:6656`). O ato `run` e a parada 4 do comando leem o `kind` sozinho como
   `mission-ceiling`. No L2, às 23:56, a fase PR esgotou as sessões dela (2 publishers sem `pr_url:`) com US$ 37 de
   60 gastos, e o ledger diz `budget-exhausted`. Um worker que lesse o ledger pararia a campanha pelo teto errado.
@@ -725,7 +725,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo relay da missão `20261123-curso-ddd-l1-base-e-aulas-1-4` do `curso-ddd` (2026-11-23)
 
 - [ ] **No alvo, o checkout da campanha é o da missão, e uma linha do journal durante o run para a fase** —
-  `commands/sdd-worker.md:79` (`journal.md`) — o passo 5 só proíbe o journal no checkout do kit, e a seção do
+  `commands/sdd-worker.md:103` (`journal.md`) — o passo 5 só proíbe o journal no checkout do kit, e a seção do
   worktree (linha 122) supõe a missão fora do checkout da campanha. No `curso-ddd` os dois são o mesmo, no ramo da
   missão. Medido numa fixture com o `hat_guard_check` (`bin/sdd:5106`): uma linha nova num journal limpo durante a
   REVIEW dá `touched 1 path(s) outside its writes`, o `hat-crossed`; com o journal já sujo antes da fase, nada; na
@@ -766,7 +766,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
 
 - [ ] **O ato `pr` do worker não diz que o `gh pr edit` falha, e o aviso mora só no chapéu do publisher** —
-  `commands/sdd-worker.md:241` (`grill answers`) — o ato manda pôr no corpo do PR as respostas do grill e os bots
+  `commands/sdd-worker.md:299` (`grill answers`) — o ato manda pôr no corpo do PR as respostas do grill e os bots
   que não revisaram, sem dizer como. O `agents/sdd-publisher.md:100` manda o `gh api -X PATCH`, com o corpo num
   arquivo, e proíbe o `gh pr edit`, que falha no gh 2.45; o worker não lê esse chapéu. Medido no PR
   j0ruge/curso-ddd#1, gh 2.45.0: o `gh pr edit 1 --body-file …` saiu rc 1 com `GraphQL: Projects (classic) is being

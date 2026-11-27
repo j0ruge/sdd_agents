@@ -1975,8 +1975,14 @@ Two files make it:
 
 - `commands/sdd-worker.md` is the loop the session follows: before every act it asks the program,
   then acts through the commands that already exist (`/sdd-plan`, `sdd approve`, `sdd run`, `gh`),
-  and appends one line to the campaign's `journal.md`. It also writes the five stops, what no level
-  grants, and how the session keeps its own context window for a whole night.
+  and appends one line to the campaign's `journal.md`. On a stop, it retains the verb's exit
+  status and original diagnostic for the journal and pager, without taking a second reading.
+  For a finished run it uses that invocation's log. The `sdd run stop:` diagnostic distinguishes
+  `mission-ceiling` (dollars) from `phase-ceiling` (sessions or review rounds), while the ledger
+  still records either as `budget-exhausted`. Missing or ambiguous evidence establishes neither
+  ceiling. A run that exits with rc 3 has its own pager and is not paged again by the worker.
+  The command also writes the five stops, what no level grants, and how the session keeps its
+  own context window for a whole night.
 - `bin/sdd-worker` answers, from artifacts, the questions that used to be the model's reading and
   went wrong four times on record — a review receipt matched by the clock instead of the sha, a
   watcher whose `pgrep -f` matched itself, a bot out of quota read as "reviewed", a checker that

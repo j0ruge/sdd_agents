@@ -68,6 +68,20 @@ through the commands that already exist: `/sdd-plan`, `sdd approve`, `sdd run`, 
 Every turn of the loop, in this order, reading the disk again each time: the delegation can expire,
 or be edited, between two acts, and the answer of the last turn is not the answer of this one.
 
+Capture each verdict when calling the verb that decides the next step. For `budget` and `next`,
+set `act` to the verb and `campaign_dir` to the campaign path:
+
+```bash
+rc=0
+verdict="$(sdd-worker "$act" "$campaign_dir" 2>&1)" || rc=$?
+why="${verdict%%$'\n'*}"
+```
+
+Decide with this `rc` and the saved `verdict`, including any second line from `next`. Keep both
+through the decision and record the original stop line as `why`. If the output is not readable,
+record an indeterminate cause and keep the captured output for the owner. Do not run the verb
+again to explain a stop.
+
 1. `sdd-worker budget <campaign-dir>`: rc 1 is a stop, named by the line it printed (below): the
    campaign ceiling reached, less of it left than the mission cap a run may spend (`no room — …`),
    a mission cap the runner would not apply (`no mission cap — …`), or a ceiling or a spend it
@@ -187,7 +201,7 @@ and an empty one in the mission's worktree answers `ask … — no pager`, namin
 ```bash
 cd <mission-worktree> && BUDGET_MISSION_USD=<cap> SDD_DELEGATED_MISSION_CAP_USD=<cap> \
   setsid -w nohup env -u CLAUDECODE \
-  bash -c 'sdd run "$1"; echo "sdd run rc=$?"' _ <mission> > <log> 2>&1 < /dev/null &
+  bash -c 'rc=0; sdd run "$1" || rc=$?; printf "sdd run rc=%s\n" "$rc"' _ <mission> > <log> 2>&1 < /dev/null &
 echo "$!"
 ```
 
@@ -197,13 +211,48 @@ at once, and a wait on it ends before the run does.
 
 Wait on that PID (`tail --pid=<pid> -f /dev/null`, or a monitor whose condition is
 `! kill -0 <pid>`), never on `pgrep -f`, which matches its own command line (M23). Then read the
-`sdd run rc=` line of the log. An rc 0 is the pull request open; an rc 2 is a human step the runner
+final `sdd run rc=` line of the log retained for this invocation.
+An rc 0 is the pull request open; an rc 2 is a human step the runner
 names, except the rc 2 of a mission of the kit with the pull request open and only the stamp
 missing, which goes on as an rc 0 does (**A mission of the kit**). On `PR needs worker publish`,
-continue at the signed `pr` act. An rc 3 is an escalation the
-runner already paged, with the worktree's pager, which `level` requires as it requires the campaign
-checkout's: write it in the journal and wait for the owner, and `budget-exhausted` among them is a
-stop (the mission ceiling).
+continue at the signed `pr` act. An rc 3 is an escalation the runner already paged, with the
+worktree's pager, which `level` requires as it requires the campaign checkout's.
+
+Read the verdict from that log (with its path in `log`), never from a later invocation or the
+latest row of a shared ledger. The ledger still calls both ceilings `budget-exhausted`. If the
+log has a single readable ceiling diagnostic, use it verbatim in the journal. A missing exit
+record or an unreadable or ambiguous diagnostic does not establish either ceiling. Keep the log
+for the owner and report an indeterminate cause when stopping without clear evidence.
+
+```bash
+rc=unknown
+run_result="$(tail -n 1 -- "$log" 2>/dev/null)" || run_result=
+if [[ "$run_result" =~ ^sdd\ run\ rc=([0-9]+)$ ]]; then
+  rc="${BASH_REMATCH[1]}"
+fi
+if [ "$rc" = unknown ]; then
+  reason=indeterminate
+  why="runner exit status indeterminate ($log)"
+elif [ "$rc" = 3 ]; then
+  why="$(awk '
+    /^sdd run stop: / {
+      n++
+      if ($0 ~ /^sdd run stop: (mission-ceiling|phase-ceiling) — .*[^[:space:]]/) line = $0
+    }
+    END { if (n == 1) print line }
+  ' "$log" 2>/dev/null)" || why=
+  case "$why" in
+    'sdd run stop: mission-ceiling — '*) reason=mission-ceiling ;;
+    'sdd run stop: phase-ceiling — '*) reason=phase-ceiling ;;
+    *) reason=indeterminate; why="runner stop cause indeterminate ($log)" ;;
+  esac
+fi
+```
+
+Record the rc and reason in the journal and wait for the owner after an escalation. For a
+readable non-ceiling escalation, retain its name and original diagnostic from the same log.
+For other stops, use the original diagnostic for the decision (for example the Codex config
+change below). A missing exit record is not permission to continue.
 
 For a Codex campaign, run `PHASE_ENGINE=codex sdd preflight` in that worktree before launching
 `sdd run`. Set `PHASE_ENGINE=codex` alongside `BUDGET_MISSION_USD` in the launch command. Before
@@ -297,23 +346,21 @@ resumes from there.
 
 ## The five stops
 
-Each stop runs `ON_ESCALATION_CMD`, writes one line to `journal.md`, and ends the loop.
-Then the session waits for the owner, whatever the level. Page the way the runner does, from the
-repository root, with the five fields the runner passes: the stop's name in `SDD_REASON`, the act or
-verb whose line stopped the loop in `SDD_PHASE`, the mission in `SDD_MISSION`, the `PROJECT_NAME`
-of that `.sdd/config.sh` in `SDD_PROJECT`, and the line it rests on in `SDD_GATE_WHY`. The pager
-gets five seconds, as the runner gives it:
+Each stop writes one line to `journal.md`, pages via `ON_ESCALATION_CMD` unless the runner
+already paged, and ends the loop. Then the session waits for the owner, whatever the level.
+From the repository root, use the saved `rc` and `why` with `campaign_dir`, `lot`, `mission`,
+`act` and the stop's `reason`. Use the same line in the journal and in `SDD_GATE_WHY`, never text
+pasted between quotes or a new measurement. The pager gets five seconds, as the runner gives it:
 
 ```bash
-why="$(sdd-worker budget <campaign-dir>)"
-( . .sdd/config.sh && SDD_REASON=<stop> SDD_PHASE=<act> SDD_PROJECT="${PROJECT_NAME:-}" \
-  SDD_MISSION=<mission> SDD_GATE_WHY="$why" \
-  timeout -k 1 5 bash -c "$ON_ESCALATION_CMD" < /dev/null )
+printf -- '- %s · %s · %s · %s (rc %s) — %s\n' \
+  "$(date '+%Y-%m-%d %H:%M')" "$lot" "$act" "$reason" "$rc" "$why" >> "$campaign_dir/journal.md"
+if [ "$act" != run ] || [ "$rc" != 3 ]; then
+  ( . .sdd/config.sh && SDD_REASON="$reason" SDD_PHASE="$act" SDD_PROJECT="${PROJECT_NAME:-}" \
+    SDD_MISSION="$mission" SDD_GATE_WHY="$why" \
+    timeout -k 1 5 bash -c "$ON_ESCALATION_CMD" < /dev/null )
+fi
 ```
-
-`why` is set in the same batch of commands, by running again the verb whose line stopped the loop,
-as above, or by reading the file the session wrote the line to: never by pasting the line between
-quotes, which an apostrophe in an id or a path ends.
 
 A line of a verb that measured no stop is paged the same way, named by what the verb printed: a
 `stop …` line of `next` with `SDD_REASON=next-stop`; a `no ceiling — …` line of `budget` (no
@@ -339,8 +386,11 @@ twice.
 1. **`no-receipt`**: no Codex receipt for the head 60 minutes after the explicit `@codex review`.
 2. **`below-a`**: a criterion still graded below A after three rounds of review on one pull request.
 3. **`conflict`**: a merge conflict with the base outside the findings file and its ratchet.
-4. **`mission-ceiling`**: `sdd run` stopped on `budget-exhausted`, the mission spent its `BUDGET_MISSION_USD`; or `sdd-worker budget` answered `no mission cap — …`, the config of the campaign's checkout or of a mission's worktree sets that key over the signed cap, or the delegation signs a mission cap of zero, which the runner reads as no ceiling, or one below one cent.
+4. **`mission-ceiling`**: the saved `sdd run` diagnostic names `mission-ceiling` (the mission spent its `BUDGET_MISSION_USD`); or `sdd-worker budget` answered `no mission cap — …`, the config of the campaign's checkout or of a mission's worktree sets that key over the signed cap, or the delegation signs a mission cap of zero, which the runner reads as no ceiling, or one below one cent.
 5. **`campaign-ceiling`**: `sdd-worker budget` leaves rc 1 on its `campaign US$ <spent> of <ceiling>` or `campaign known US$ <spent> of <ceiling>` line when the measured spend reached the ceiling.
+
+A runner diagnostic naming `phase-ceiling` means a phase ran out of sessions or review rounds,
+not that the mission ran out of money. Record it separately without paging again.
 
 ## Never
 

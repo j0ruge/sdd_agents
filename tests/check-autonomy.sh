@@ -667,12 +667,15 @@ printf '%s\n' \
   "2026-01-01T10:01:00-03:00  REVIEW  agent=sdd-reviewer  model=opus  session=b  rc=1  dur=1s  cost_usd=?  log=/dev/null" \
   "2026-01-01T10:02:00-03:00  EXEC  agent=sdd-executor  model=opus  session=c  rc=0  dur=1s  cost_usd=49.5  log=/dev/null" >> "$PLOG"
 printf 'BUDGET_MISSION_USD=150\n' >> .sdd/config.sh
-"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+mission_stop="$( "$SDD" run "$MISSION" 2>&1 >/dev/null )"; rc=$?
 assert_eq "US\$ 150.00 spent against a ceiling of 150 stops with rc 3: one budget-exhausted row, no session" \
   "3 1 blocked budget-exhausted EXEC yes" \
   "$rc $(nrows) $(rows '.event') $(rows '.kind') $(rows '.phase') $(rows '(.gate_why | test("mission budget"))' | sed 's/true/yes/;s/false/no/')"
 assert_eq "and the journal says why, naming the phase that did not open" "1" \
   "$(grep -c 'BLOCKED  EXEC  mission budget' "$PLOG")"
+assert_eq "mission ceiling diagnostic keeps the blocked row's original reason" \
+  "sdd run stop: mission-ceiling — $(rows '.gate_why')" \
+  "$(grep '^sdd run stop:' <<< "$mission_stop")"
 : > "$LEDGER"
 # Read off the whole mission directory, so a note in either notes file counts.
 mdir_notes() { grep -RhcE '^[[:space:]]*-[[:space:]]*intervention:' "$MDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}'; }
@@ -2081,6 +2084,9 @@ assert_eq "the run came BACK to the blown REVIEW budget — the lap the old runn
 # and writing the row on the fall-through as well as in the branch.
 assert_eq "and it ends on the pair that already existed, with no new event in the enum" \
   "budget-exhausted" "$(jq -r -s '[.[] | select(.event == "blocked")][0].kind' "$LEDGER")"
+assert_eq "phase ceiling diagnostic keeps the blocked row's phase and original reason" \
+  "sdd run stop: phase-ceiling — REVIEW: $(jq -r 'select(.event == "blocked") | .gate_why' "$LEDGER")" \
+  "$(grep '^sdd run stop:' <<< "$err")"
 # The DERIVED-BRANCH-ONLY rule of gate_pass_rows, and THIS is the fixture that reaches it — the
 # only path in cmd_run where `force_phase` survives into a lap that already has a failed phase
 # behind it. The degradation jumps to PR over a REVIEW whose gate is still failing; a writer

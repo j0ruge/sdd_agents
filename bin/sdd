@@ -6917,6 +6917,7 @@ mission_budget_blown() {   # mission_budget_blown <phase> — rc 0 = STOP (row w
   bad "BLOCKED in $phase — $GATE_WHY"
   dim "  Raise BUDGET_MISSION_USD in .sdd/config.sh, or go on once with --budget-override (noted as an intervention)."
   pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+  printf 'sdd %s stop: mission-ceiling — %s\n' "$AUTONOMY_INVOCATION" "$GATE_WHY" >&2
   autonomy_blocked_row "budget-exhausted" "$phase" "$GATE_WHY"
   return 0
 }
@@ -11105,6 +11106,7 @@ cmd_run() {
         warn "  the draft PR did not satisfy its gate either — the run ends here"
       fi
       pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+      printf 'sdd run stop: phase-ceiling — %s: %s\n' "$phase" "$GATE_WHY" >&2
       autonomy_blocked_row "budget-exhausted" "$phase" "$GATE_WHY"
       return 3
     fi

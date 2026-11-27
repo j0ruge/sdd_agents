@@ -616,6 +616,10 @@ pergunta, só `y` assina, e sai 66 sem escrever nada quando não lê resposta, o
 de um worktree que guarda missão dela (o conjunto estreito: worktree sem missão da campanha não é
 lido, e ler o arquivo seria executá-lo). As paradas do worker (sem recibo do Codex 60 min depois do pedido, nota abaixo de A depois de
 3 rodadas, conflito no merge fora do `TODO.md` e da catraca, e os dois tetos) chamam o mesmo pager.
+O worker conserva a saída e o rc do ato que decidiu parar, e leva a mesma linha ao diário e ao
+pager. No `sdd run` com rc 3 ele não pagina de novo. O log da invocação distingue
+`mission-ceiling` de `phase-ceiling`, sem mudar o `budget-exhausted` que o ledger registra nos
+dois casos. Sem diagnóstico legível, o worker não atribui a parada a um teto.
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
 anterior desta seção dizia que não existia, e estava errada (foi o comando do incidente das 18:45).
