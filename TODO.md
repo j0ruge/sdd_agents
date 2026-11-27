@@ -26,6 +26,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Prioridade — resolver logo
 
+- [ ] **O `review-ci` publica `local/ci` verde com `TEST_CMD` só de espaços** — `bin/sdd-worker:1598` (`TEST_CMD`) —
+  Dois espaços passam no teste de vazio. O Bash retorna zero sem executar comando e `pr-ready` lê `ready` no mesmo SHA.
+  Direção: tratar valor composto só de espaços como vazio e testar que a prontidão continua bloqueada.
+  Fonte: `docs/handoffs/20261126-l5b-o-worker-e-os-verbos-dele/40-review-r2.md` — descoberto por `sdd-reviewer`
+  na missão `20261126-l5b-o-worker-e-os-verbos-dele` (2026-11-27)
+
 - [ ] **Missão: fazer o worker de campanhas funcionar também no Codex** — `commands/sdd-worker.md:59`
   (`harness:`) — só aceita `claude`, embora o Codex já consiga chamar os verbos de `bin/sdd-worker`.
   Direção: aceitar `harness: codex`, retomar planner e grill e definir a integração com `sdd run` (hoje `claude -p`).
