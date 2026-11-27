@@ -395,7 +395,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `commands/sdd-worker.md:85` (`sdd-worker budget`) — o `why` sai de rodar outra vez o verbo cuja linha parou o
   laço, e entre as duas leituras o teto pode ter subido ou um gasto entrado: o pager recebe uma linha que não é a
   que parou. Direção: guardar a saída do verbo no momento da parada (arquivo ou variável do mesmo lote) e reusá-la
-  no journal e no `SDD_GATE_WHY`.
+  no journal e no `SDD_GATE_WHY`. RESOLVED by d7ca654
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 9 — descoberto pelo
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
@@ -595,6 +595,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `mission-ceiling`. No L2, às 23:56, a fase PR esgotou as sessões dela (2 publishers sem `pr_url:`) com US$ 37 de
   60 gastos, e o ledger diz `budget-exhausted`. Um worker que lesse o ledger pararia a campanha pelo teto errado.
   Direção: o ato `run` separa os dois pelo `gate_why`, ou o runner ganha um `kind` próprio para o teto da fase.
+  RESOLVED by d7ca654
   — descoberto por `sdd-worker` no pós-merge da missão `20261120-l2-o-sdd-plan-e-o-planner` (2026-11-21)
 
 - [ ] **O `failure-modes.md` só conhece o `blocked` da suíte vermelha, e não o da parada que o plano manda** —
