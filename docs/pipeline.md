@@ -2271,6 +2271,10 @@ zero is no ceiling for the runner too, and one below one cent is no cap the cent
 stops `budget` before any `.sdd/config.sh` is read, naming the delegation: `no mission cap —
 <delegation.md> signs budget_mission_usd: 0, …`.
 
+The worker runs preflight in the mission's worktree with the engine planned for launch. Only
+launch receives the signed cap. A failed preflight starts no runner. For the kit under Codex,
+preflight must also report `TEST_CMD ran green`.
+
 Delegated Claude runs also retain the signed limit from launch when checking each reloaded cap.
 Codex does not reload a changed file in the existing runner. The worker only considers a new
 invocation for a verified cap-only reduction, after rechecking permission, both budgets and

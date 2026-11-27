@@ -13,6 +13,9 @@ launches the selected backend with `PHASE_ENGINE=codex`. Follow the signed terms
 permission to proceed when the actual USD charge is unavailable. Answer the human's questions
 and stop at the command's escalation points.
 
+Use the `run` act's shared launch block for either harness and for a permitted restart. It runs
+preflight in the mission worktree before starting a runner.
+
 ## Codex preflight for the kit itself
 
 Require `PHASE_ENGINE=codex sdd preflight` to exit successfully and report

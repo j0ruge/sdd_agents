@@ -220,10 +220,37 @@ delegation. The cap the line prints is the signed one, as written, and that is t
 The pager is read the same way: `allows run` reads the `ON_ESCALATION_CMD` of the same checkouts,
 and an empty one in the mission's worktree answers `ask … — no pager`, naming that file.
 
+Use this launch block as one Bash invocation. Set `worktree` to the mission checkout, `engine`
+to the campaign harness (`claude` or `codex`), `cap` to the successful budget verdict's mission
+cap, `mission` to the slug, and `log` to the absolute path of the new run log. Set `kit_mission`
+to `false` only for a target other than the kit. Leave `expected_config_hash` unset for the first
+launch. The preflight runs in the same checkout and with the same engine as the runner.
+Only the launch receives the cap so the preflight suite does not inherit a delegated limit.
+A failed preflight stops before `sdd run`. For the kit under Codex, an exit code of zero must
+come with `TEST_CMD ran green`. On refusal, record the preflight diagnostic from stderr in the
+journal and report the stop to the owner.
+
 ```bash
-cd <mission-worktree> && BUDGET_MISSION_USD=<cap> SDD_DELEGATED_MISSION_CAP_USD=<cap> \
+CDPATH='' cd -- "$worktree" || exit 1
+preflight_rc=0
+preflight_output="$(env -u CLAUDECODE -u BUDGET_MISSION_USD -u SDD_DELEGATED_MISSION_CAP_USD \
+  PHASE_ENGINE="$engine" sdd preflight 2>&1)" || preflight_rc=$?
+printf '%s\n' "$preflight_output" >&2
+[ "$preflight_rc" = 0 ] || exit "$preflight_rc"
+if [ "$engine" = codex ] && [ "${kit_mission:-true}" != false ] &&
+   ! grep -Eq '^  ok   TEST_CMD ran green \(.+\)$' <<< "$preflight_output"; then
+  printf '%s\n' 'sdd preflight did not report TEST_CMD ran green for the kit' >&2
+  exit 1
+fi
+if [ -n "${expected_config_hash:-}" ] &&
+   [ "$(git hash-object --no-filters -- .sdd/config.sh)" != "$expected_config_hash" ]; then
+  printf '%s\n' 'mission config changed or could not be read after preflight' >&2
+  exit 1
+fi
+
+PHASE_ENGINE="$engine" BUDGET_MISSION_USD="$cap" SDD_DELEGATED_MISSION_CAP_USD="$cap" \
   setsid -w nohup env -u CLAUDECODE \
-  bash -c 'rc=0; sdd run "$1" || rc=$?; printf "sdd run rc=%s\n" "$rc"' _ <mission> > <log> 2>&1 < /dev/null &
+  bash -c 'rc=0; sdd run "$1" || rc=$?; printf "sdd run rc=%s\n" "$rc"' _ "$mission" > "$log" 2>&1 < /dev/null &
 echo "$!"
 ```
 
@@ -276,9 +303,7 @@ readable non-ceiling escalation, retain its name and original diagnostic from th
 For other stops, use the original diagnostic for the decision (for example the Codex config
 change below). A missing exit record is not permission to continue.
 
-For a Codex campaign, run `PHASE_ENGINE=codex sdd preflight` in that worktree before launching
-`sdd run`. Set `PHASE_ENGINE=codex` alongside `BUDGET_MISSION_USD` in the launch command. Before
-each Codex model session, the runner verifies the signed delegation with
+Before each Codex model session, the runner verifies the signed delegation with
 `sdd-worker codex-run --mission <mission-dir> --phase <phase> [--model <model>]`. The owner must explicitly grant
 `allow_unknown_cost: true` when signing the Codex delegation. If the signature, cost exception,
 or ordinary run authority fails verification, stop and return the diagnostic to the owner.
@@ -289,10 +314,11 @@ When a Codex run exits on a config change, only the runner's
 Wait for that run to exit and retain its PID and log. Check that the diagnostic belongs to this
 mission and worktree and that `git hash-object --no-filters -- .sdd/config.sh` there still matches
 the reported hash. Recheck `sdd-worker allows … run --mission …`, `sdd-worker budget` and the
-phase's `sdd-worker codex-run` (with the configured model for EXEC) for mission headroom. Repeat
-the Codex preflight in that worktree and confirm the hash still matches. Only then launch a fresh
-`sdd run`, with the signed cap from the new budget verdict and no forced phase. Keep that PID and
-log as usual. If any check fails, there is another edit, the cause is uncertain, or the new run
+phase's `sdd-worker codex-run` (with the configured model for EXEC) for mission headroom. Use
+the same launch block with `expected_config_hash` set to the hash in the runner's diagnostic and
+the signed cap from the new budget verdict. This repeats Codex preflight and checks the hash after
+it, before a fresh `sdd run` with no forced phase. Keep that PID and log as usual.
+If any check fails, there is another edit, the cause is uncertain, or the new run
 stops again before the mission advances, stop and report the diagnostic. A generic config-change
 error is not permission to relaunch.
 

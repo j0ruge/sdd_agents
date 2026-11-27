@@ -6139,6 +6139,82 @@ else
     'one decision per verb, same line in journal and pager, distinct run causes and no duplicate page' "$got"
 fi
 
+# --- I13: run the public launch block with a recording sdd --------------------------------------
+launch_block="$(act_of "$COMMAND" run | stop_example 1)"
+launch_box="$BOX/launch"
+launch_campaign="$(cap_world launch '')"
+launch_worktree="$BOX/cap-launch"
+mkdir -p "$launch_box/bin"
+cat > "$launch_box/bin/sdd" <<'SHIM'
+#!/usr/bin/env bash
+printf '%s|%s|%s|%s|%s|%s|%s\n' "$*" "$PWD" "${PHASE_ENGINE:-}" \
+  "${BUDGET_MISSION_USD:-}" "${SDD_DELEGATED_MISSION_CAP_USD:-}" "${CLAUDECODE:-}" "$$" >> "$LAUNCH_TRACE"
+case "$*" in
+  preflight)
+    printf '%s\n' 'fixture preflight' "$PREFLIGHT_MARK"
+    if [ "$PREFLIGHT_DRIFT" = yes ]; then printf '# changed during preflight\n' >> .sdd/config.sh; fi
+    exit "$PREFLIGHT_RC" ;;
+  'run launch-mission') exit 0 ;;
+  *) exit 92 ;;
+esac
+SHIM
+chmod +x "$launch_box/bin/sdd"
+got=""
+sign "$launch_campaign"
+worker budget "$launch_campaign"
+launch_cap="${W_OUT##*mission cap US\$ }"
+[ "$W_RC" -eq 0 ] && [ "$launch_cap" = 40 ] || got="fixture budget: rc $W_RC, $W_OUT"
+# The preflight marker is separate from the sensor's own ok prefix.
+preflight_ok='  ok'
+for launch_case in claude claude-red codex-kit codex-red codex-no-suite codex-target restart drift; do
+  engine=codex kit_mission=true expected_config_hash=
+  preflight_rc=0 marker="$preflight_ok   TEST_CMD ran green (tests/run-all.sh)" drift=no expected_rc=0
+  printf '\n' > "$launch_worktree/.sdd/config.sh"
+  case "$launch_case" in
+    claude) engine=claude; marker= ;;
+    claude-red) engine=claude; marker=; preflight_rc=7; expected_rc=7 ;;
+    codex-red) preflight_rc=7; expected_rc=7 ;;
+    codex-no-suite) marker='warning: no TEST_CMD ran green'; expected_rc=1 ;;
+    codex-target) kit_mission=false; marker= ;;
+    restart|drift)
+      expected_config_hash="$(git hash-object --no-filters -- "$launch_worktree/.sdd/config.sh")"
+      if [ "$launch_case" = drift ]; then drift=yes; expected_rc=1; fi ;;
+  esac
+  : > "$launch_box/trace"
+  rm -f "$launch_box/run.log"
+  launch_rc=0
+  (
+    # Even a broken block must not leave a test child behind.
+    trap 'wait' EXIT
+    export PATH="$launch_box/bin:$PATH" PHASE_ENGINE=claude CLAUDECODE=fixture
+    export BUDGET_MISSION_USD=99 SDD_DELEGATED_MISSION_CAP_USD=99
+    export LAUNCH_TRACE="$launch_box/trace" PREFLIGHT_RC="$preflight_rc" PREFLIGHT_MARK="$marker" PREFLIGHT_DRIFT="$drift"
+    export engine kit_mission expected_config_hash
+    export worktree="$launch_worktree" cap="$launch_cap" mission=launch-mission log="$launch_box/run.log"
+    eval "$launch_block" > "$launch_box/pid" || exit $?
+    pid="$(cat "$launch_box/pid")"
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] && [ "$pid" = "$!" ] && wait "$pid" || exit 92
+    [ "$(cat "$log")" = 'sdd run rc=0' ] || exit 92
+  ) 2> "$launch_box/preflight" || launch_rc=$?
+  expected="preflight|$launch_worktree|$engine|||"
+  if [ "$expected_rc" = 0 ]; then
+    expected+=$'\n'"run launch-mission|$launch_worktree|$engine|40|40|"
+  elif [ -s "$launch_box/pid" ] || [ -e "$launch_box/run.log" ]; then
+    got="${got:+$got; }$launch_case returned a PID or created a run log on refusal"
+  fi
+  trace="$(sed -E 's/\|[1-9][0-9]*$//' "$launch_box/trace")"
+  if [ "$launch_rc" != "$expected_rc" ] || [ "$trace" != "$expected" ] ||
+     ! grep -qxF 'fixture preflight' "$launch_box/preflight"; then
+    got="${got:+$got; }$launch_case (rc $launch_rc, calls: $(cut -d '|' -f 1 "$launch_box/trace" | paste -sd ,))"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'run launch requires successful worktree preflight'
+else
+  fail 'run launch requires successful worktree preflight' \
+    'preflight in the mission worktree and engine, with one PID and the signed cap only on success' "$got"
+fi
+
 # --- verdict ------------------------------------------------------------------------------------
 if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then
   printf '  FAIL  probe floor shrank to %d, expected at least %d — did a block stop being dispatched?\n' \
