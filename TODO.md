@@ -372,6 +372,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd-worker:1209` (`pr_states`) — o `gh pr list --head <branch> --state all` roda sem `--limit` (o padrão é
   30) e o `isCrossRepository` é lido depois do corte: com 30 PRs de fork na mesma branch, o PR da missão fica fora
   e o `next` não o vê. Direção: `--limit 1000`, ou parar com veredito não lido quando a contagem bater no limite.
+  RESOLVED by 9ce1943
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 5 — descoberto pelo
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
