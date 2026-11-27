@@ -1198,28 +1198,35 @@ lot_of() {
 
 # pr_states <root> <branch> — the pull requests of the repository whose head is <branch>, PUBLISHED
 # in PR_STATES as one `<number> <state>` per line, from `gh pr list --head <branch> --state all
-# --json number,state,isCrossRepository` run at <root>, the checkout gh infers the repository from.
+# --limit <limit> --json number,state,isCrossRepository` at <root>, where gh infers the repository.
 # `--head` matches the branch's name alone, and a fork can push a branch of that name: a merged pull
 # request from a fork read as the lot's would make the lot done while it never ran (achado #6 of the
 # r5). So only the elements whose isCrossRepository is false are the repository's own, and the
-# others are left out. Returns 1, with the reason in GH_WHY, when gh failed or answered anything but
-# one array whose every element has a state of OPEN, CLOSED or MERGED and an isCrossRepository that
+# others are left out. A result at the limit may be truncated, so refuse it before filtering forks.
+# Returns 1 with the reason in GH_WHY on truncation, gh failure or anything but an array whose
+# every element has a state of OPEN, CLOSED or MERGED and an isCrossRepository that
 # is a boolean — an empty answer included: an answer that was not read is never "no pull request",
 # which would send a lot to run again, and an element that does not say whose it is is not read as
 # the repository's or as a fork's. An element that is not an object makes jq itself fail on
 # `.state`, so no rule of its own says so; the number is only printed.
 pr_states() {
-  local out rc=0
-  out="$(CDPATH='' cd -- "$1" && gh pr list --head "$2" --state all --json number,state,isCrossRepository)" || rc=$?
+  local out states rc=0 limit=1000
+  out="$(CDPATH='' cd -- "$1" && gh pr list --head "$2" --state all --limit "$limit" --json number,state,isCrossRepository)" || rc=$?
   if [ "$rc" -ne 0 ]; then GH_WHY="gh pr list --head $2 failed (rc $rc)"; return 1; fi
-  if ! PR_STATES="$(jq -rn 'input
-         | if type == "array"
+  if ! states="$(jq -rn --argjson limit "$limit" 'input
+         | if type == "array" and length >= $limit then "incomplete"
+           elif type == "array"
               and all(.[]; (.state | IN("OPEN", "CLOSED", "MERGED")) and (.isCrossRepository | type) == "boolean")
            then .[] | select(.isCrossRepository == false) | "\(.number) \(.state)"
            else error("off the contract") end' 2> /dev/null <<< "$out")"; then
     GH_WHY="gh pr list --head $2 answered no array of pull requests in a known state and repository: '${out:0:80}'"
     return 1
   fi
+  if [ "$states" = incomplete ]; then
+    GH_WHY="gh pr list --head $2 reached the limit of $limit pull requests (incomplete read)"
+    return 1
+  fi
+  PR_STATES="$states"
 }
 
 # next <campaign-dir> — the next act of the campaign, from the queue, the campaign's missions and gh.

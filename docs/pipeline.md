@@ -2285,8 +2285,9 @@ before, so the stop holds before every one, a merge among them.
 a mission whose `aprovacao:` the runner's `gate_PLAN` would not admit (only `auto` and `humano-…`
 pass) → `approve`; approved, with no pull request on its `branch:` → `run`; an open pull request →
 `review`; only closed ones → `stop … pull request closed without merge`; every lot merged →
-`done - -`. The pull requests come from `gh pr list --head <branch> --state all --json
-number,state,isCrossRepository`, and only the repository's own count: `--head` matches a branch's
+`done - -`. The pull requests come from `gh pr list --head <branch> --state all --limit 1000
+--json number,state,isCrossRepository`, run in the campaign's checkout. Only the repository's
+own count: `--head` matches a branch's
 name alone, and a pull request from a fork's branch of the same name (`isCrossRepository` true) is
 never the lot's. The merge is read before the approval: a lot whose pull request merged is done even
 when a copy of its mission left in an old worktree is not approved, and a mission that names a
@@ -2298,9 +2299,10 @@ its 162 pull requests, so it stays a limit and not a fix. The measure is
 select(.state == "MERGED")] as $m | [$m[] | .headRefName as $h | select([$a[] |
 select(.headRefName == $h)] | length > 1)] |
 "\(length) of \($m | length) merged, \($a | length) in all"'`, run in the kit's checkout, which
-printed `0 of 161 merged, 162 in all`. A `gh` that
-fails, or answers off its contract, is rc 3 with no act — "could not read" never becomes "no pull
-request", which would send the session to run the lot again. Two missions on one lot, an approved
+printed `0 of 161 merged, 162 in all`. If any page fails, the answer is malformed, or the list
+reaches the 1,000-entry limit before filtering forks, `next` returns rc 3 with no act. An
+incomplete read never becomes "no pull request", which would send the session to run the lot
+again. Two missions on one lot, an approved
 mission with no branch, no `campaign.md`, a `campaign:` in it that is not the directory's name (an
 empty one and the template's placeholder among them, both values named) and an empty queue stop,
 with rc 1.

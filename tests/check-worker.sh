@@ -1444,7 +1444,7 @@ fi
 
 # --- next: the fixtures -------------------------------------------------------------------------
 # The gh stub answers the one question next asks, `gh pr list --head <branch> --state all --json
-# <fields>`, from $BOX/prs/<branch>: a JSON array in the shape the real gh printed on 2026-11-18 for
+# <fields> [--limit <n>]`, from $BOX/prs/<branch>: a JSON array in the shape the real gh printed on 2026-11-18 for
 # `gh pr list --head feat/o-revisor-so-acha --state all --json number,state,isCrossRepository` in
 # this repo (`[{"isCrossRepository":false,"number":34,"state":"MERGED"}]`; a pull request from a
 # fork, the same call on cli/cli: `{"isCrossRepository":true,"number":15089,"state":"CLOSED"}`), or
@@ -1452,8 +1452,9 @@ fi
 # real gh it prints only the fields --json asks for, so a caller that does not ask for
 # isCrossRepository cannot tell a fork's pull request from one of the repo; a field it does not
 # know is refused. Without --state all it keeps only the OPEN ones, as the real gh does by default.
-# A <branch>.fail beside the file makes it fail, and a <branch>.raw is printed as it is. It answers
-# only from the root of the fixture repo, which is where gh infers the repository from.
+# The list defaults to 30 entries. A <branch>.page-fail simulates a later page failing after
+# partial output. A <branch>.fail makes it fail up front and a <branch>.raw is printed as it is.
+# It answers only from the root of the fixture repo, which is where gh infers the repository from.
 mkdir -p "$BOX/stub" "$BOX/prs"
 REPO_REAL="$(CDPATH='' cd "$REPO" && pwd -P)"
 { printf '#!/usr/bin/env bash\nroot=%q\nbox=%q\n' "$REPO_REAL" "$BOX"
@@ -1461,12 +1462,13 @@ REPO_REAL="$(CDPATH='' cd "$REPO" && pwd -P)"
 [ "$(pwd -P)" = "$root" ] || { echo "gh stub: run from $(pwd -P), not the repo root" >&2; exit 9; }
 [ "${1:-} ${2:-}" = "pr list" ] || { echo "gh stub: unexpected call: $*" >&2; exit 9; }
 shift 2
-head="" all="" fields=""
+head="" all="" fields="" limit=30
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --head) head="$2"; shift 2 ;;
     --state) [ "$2" != all ] || all=1; shift 2 ;;
     --json) fields="$2"; shift 2 ;;
+    --limit) limit="$2"; shift 2 ;;
     *) echo "gh stub: unexpected argument $1" >&2; exit 9 ;;
   esac
 done
@@ -1479,8 +1481,13 @@ f="$box/prs/$head"
 [ ! -e "$f.fail" ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
 [ ! -e "$f.raw" ] || { cat "$f.raw"; exit 0; }
 [ -e "$f" ] || { echo '[]'; exit 0; }
-jq -c --arg f "$fields" --arg all "$all" \
-  '[.[] | select($all != "" or .state == "OPEN") | with_entries(select(.key | IN($f | split(",")[])))]' "$f"
+if [ "$limit" -gt 30 ] && [ -e "$f.page-fail" ]; then
+  jq -c '.[:30]' "$f"
+  echo "HTTP 502: Bad Gateway on the next page" >&2
+  exit 17
+fi
+jq -c --arg f "$fields" --arg all "$all" --argjson limit "$limit" \
+  '[.[] | select($all != "" or .state == "OPEN") | with_entries(select(.key | IN($f | split(",")[])))] | .[:$limit]' "$f"
 STUB
 } > "$BOX/stub/gh"
 chmod +x "$BOX/stub/gh"
@@ -3635,6 +3642,38 @@ if [ -z "$got" ]; then
 else
   fail "fork: a pull request from a fork is not the lot's, and an answer that does not say whose it is is not read" \
     "run past a fork's merged, open or closed one, review on the repo's own beside a fork's, plan L2 past the repo's merged one; rc 3 off the contract" "$got"
+fi
+
+# --- I6: a full page of forks can hide the repository's own pull request --------------------------
+got=""
+fork_world fk-pages
+br=fk-pages-b
+f="$BOX/prs/$br"
+forks="$(jq -cn '[range(1;31) | {number: ., state: "MERGED", isCrossRepository: true}]')"
+for state in OPEN MERGED; do
+  jq -c --arg state "$state" '. + [{number: 31, state: $state, isCrossRepository: false}]' <<< "$forks" > "$f"
+  case "$state" in
+    OPEN) next_is 'open after a page of forks' 0 "review L1 20990801-fk-pages — pull request #31 is open on $br" 'ahead plan L2' "$d" ;;
+    MERGED) next_is 'merged after a page of forks' 0 'plan L2 - — ' '' "$d" ;;
+  esac
+done
+: > "$f.page-fail"
+PATH="$BOX/stub:$PATH" worker next "$d"
+{ [ "$W_RC" = 3 ] && [ -z "$W_OUT" ] && [[ "$W_ERR" == *"gh pr list --head $br failed (rc 17)"* ]]; } \
+  || got="${got:+$got; }later page failed: rc $W_RC, stdout '${W_OUT//$'\n'/ /}', stderr '$W_ERR'"
+rm -- "$f.page-fail"
+printf '%s\n' "$forks" > "$f"
+next_is 'complete list with no own pull request' 0 "run L1 20990801-fk-pages — approved, and no pull request of the repository has the head $br" 'ahead plan L2' "$d"
+jq -cn '[range(1;1001) | {number: ., state: "MERGED", isCrossRepository: true}]
+  + [{number: 1001, state: "OPEN", isCrossRepository: false}]' > "$f"
+PATH="$BOX/stub:$PATH" worker next "$d"
+{ [ "$W_RC" = 3 ] && [ -z "$W_OUT" ] && [[ "$W_ERR" == *"gh pr list --head $br reached the limit of 1000"* ]]; } \
+  || got="${got:+$got; }limit reached: rc $W_RC, stdout '${W_OUT//$'\n'/ /}', stderr '$W_ERR'"
+if [ -z "$got" ]; then
+  pass 'fork pages cannot hide the mission pull request'
+else
+  fail 'fork pages cannot hide the mission pull request' \
+    'review or plan when the own PR is on a later page, run only after a complete list, rc 3 with no act on failure or truncation' "$got"
 fi
 
 # --- R55: a merged lot with a stale copy ----------------------------------------------------------
