@@ -119,7 +119,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
 
 - [ ] **O `pr-ready` conta como fechado o thread que o próprio bot resolveu, sem resposta do worker** —
-  `bin/sdd-worker:1646` (`reviewThreads`) — o item `threads` lê só o `isResolved`. No PR #458, 14 dos 16
+  `bin/sdd-worker:1657` (`reviewThreads`) — o item `threads` lê só o `isResolved`. No PR #458, 14 dos 16
   threads foram resolvidos pelo `coderabbitai[bot]`, 12 sem resposta do worker, com o bot sem cota (`Review
   limit reached` sobre `4ef8e23..f2559cb`), e o verbo deu `ready`. Os 12 eram consertos reais, mas o thread
   que o bot fecha porque a linha mudou passa calado. Vizinho de "Nenhum ato do worker resolve os threads".
@@ -178,7 +178,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pelo `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **Os probes de nota do `pr-ready` passariam pelo item `dirty` com o leitor de nota frouxo** —
-  `tests/check-worker.sh:2060` (`grade_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
+  `tests/check-worker.sh:2103` (`grade_is`) — as sondas `Security B`, `Overall A-`, a da linha recuada e a da
   tabela sem linha editam o `40-review-r2.md` sem `land` e casam só `not-ready review: `, e o `dirty` também
   reprova a árvore suja com esse prefixo: um `pr-ready` que aceitasse B ou A- seguiria vermelho pelo motivo
   errado. Direção: `land` depois de cada edição e exigir o texto do ramo (`grades B`, `has no row for`), como a

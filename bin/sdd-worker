@@ -1587,17 +1587,26 @@ cmd_review_ci() {
   gh_ci_producer "$root" || return $?
   producer="$GH_OUT"
   ci_publish "$root" "$repo" "$head" "$producer" pending || return $?
-  (
-    CDPATH='' cd -- "$root" || exit 1
-    unset TEST_CMD
-    # shellcheck disable=SC1091
-    . ./.sdd/config.sh || exit 1
-    if [ -z "${TEST_CMD:-}" ]; then
-      printf 'sdd-worker: TEST_CMD is empty in .sdd/config.sh\n' >&2; exit 1
-    fi
-    ci_clean_head "$root" "$head" || exit 1
-    eval "$TEST_CMD"
-  ) </dev/null || rc=$?
+  # Keep output visible on fd 3. Only the result after the suite returns goes to fd 4.
+  if ! {
+    rc="$(
+      (
+        CDPATH='' cd -- "$root" || exit 1
+        unset TEST_CMD
+        # shellcheck disable=SC1091
+        . ./.sdd/config.sh 4>&- || exit 1
+        if [ -z "${TEST_CMD:-}" ]; then
+          printf 'sdd-worker: TEST_CMD is empty in .sdd/config.sh\n' >&2; exit 1
+        fi
+        ci_clean_head "$root" "$head" || exit 1
+        (eval "$TEST_CMD") 4>&-
+        printf '%s\n' "$?" >&4
+      ) 4>&1 >&3
+    )"
+  } 3>&1 </dev/null || ! [[ "$rc" =~ ^[0-9]{1,3}$ ]]; then
+    printf 'sdd-worker: TEST_CMD did not complete on %s; local/ci remains pending\n' "$head" >&2
+    return 1
+  fi
   gh_pr_snapshot "$root" "$pr" || return $?
   if [[ "$PR_SNAPSHOT" != "$head OPEN "* ]]; then
     printf 'sdd-worker: pull request head or state changed during TEST_CMD on %s\n' "$head" >&2; return 1

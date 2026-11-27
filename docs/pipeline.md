@@ -2379,10 +2379,12 @@ naming the first that fails:
 
 The `review` act supplies this status with `sdd-worker review-ci <mission-dir> <pr>` after pushing
 the finished round. It checks that the open PR head equals the clean local checkout, writes
-`pending` to that sha, and runs `TEST_CMD` in the checkout. Only if the PR and local checkout still
-match does it publish `success` or `failure` according to the suite's exit code. A different sha
-requires a fresh run. Use the same GitHub account to publish and verify the status. If GitHub
-refuses the write or its result cannot be verified, the review act stops with a diagnostic.
+`pending` to that sha, and runs `TEST_CMD` in the checkout. If the command does not complete, such
+as when the config exits before launching it, the worker stops and leaves `local/ci` pending. Only
+after the command completes and the PR and local checkout still match does it publish `success`
+or `failure` according to the suite's exit code. A different sha requires a fresh run. Use the same
+GitHub account to publish and verify the status. If GitHub refuses the write or its result cannot
+be verified, the review act stops with a diagnostic.
 
 The `ready <sha>` line is what the session passes to `gh pr merge --merge --match-head-commit`. The
 method — a merge commit, never a squash — belongs to the command that merges, and

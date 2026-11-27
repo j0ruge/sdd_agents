@@ -582,9 +582,9 @@ folder (the DOCS phase's) leaves `pr-ready` waiting for this one. Fix what the r
 again, until every criterion is A. Commit and push the round, then run
 `sdd-worker review-ci <mission-dir> <pr>` in its worktree. The earlier suite run does not count as
 evidence on the pushed head. Use the same authenticated GitHub account for this step and for
-`pr-ready`, with permission to write commit statuses for this step. If the suite fails, the head
-moves, or the status cannot be published, record the diagnostic and stop the act. Do not proceed
-on a previously read verdict. After a successful publication, run
+`pr-ready`, with permission to write commit statuses for this step. If the suite fails or never
+completes, the head moves, or the status cannot be published, record the diagnostic and stop the
+act. Do not proceed on a previously read verdict. After a successful publication, run
 `sdd-worker review-findings <mission-dir> <pr> --resolve`
 from the same clean checkout. The verb uses the published round to reply with the fix commit,
 verifies that reply, then resolves and verifies the thread. It only handles a single bot finding

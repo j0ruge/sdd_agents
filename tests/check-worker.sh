@@ -2006,6 +2006,49 @@ else
   fail 'merge requires local ci on the tested head' 'only the latest applicable success on the tested head allows merge' "$got"
 fi
 
+# Commit each config and review its head so readiness reaches the local/ci gate.
+got=""
+printf 'caller input\n' > "$BOX/in"
+for mode in config-exit failed passed; do
+  cat > "$RR/.sdd/config.sh" <<'CONFIG'
+TEST_CMD='if read -r line; then exit 9; fi; if ( : >&4 ) 2>/dev/null; then exit 8; fi; printf "suite output\n"; bash src/test-ci.sh; exit $?'
+CONFIG
+  if [ "$mode" = config-exit ]; then
+    printf '%s\n' 'printf "0\n"' '(printf "0\n" >&4) 2>/dev/null || :' 'exit 0' >> "$RR/.sdd/config.sh"
+  fi
+  gitc commit -qm config -- .sdd/config.sh
+  round "$MD/40-review-r2.md" "$(gitc rev-parse HEAD)"
+  land "ci-completion-$mode"
+  export GHFX="$BOX/ghfx/ci-completion-$mode"
+  printf '[]\n' > "$GHFX/status.$HEADNOW"
+  [ "$mode" = passed ] || : > "$GHFX/suite-fail"
+  events="$HEADNOW pending" want_rc=1 want="not-ready local/ci: "
+  if [ "$mode" = config-exit ]; then
+    output=0
+  else
+    result=failure suite_rc=1
+    if [ "$mode" = passed ]; then
+      result=success suite_rc=0 want_rc=0 want="ready $HEADNOW"
+    fi
+    events+=$'\n'"$HEADNOW"$'\n'"$HEADNOW $result"
+    output="suite output"$'\n'"local/ci $HEADNOW $result (TEST_CMD rc $suite_rc)"
+  fi
+  PATH="$BOX/stub-ready:$PATH" worker_from "$BOX/in" review-ci "$MD" "$PRN" 4>&-
+  [ "$W_RC" = "$want_rc" ] && [ "$W_OUT" = "$output" ] && [ "$(cat "$GHFX/events")" = "$events" ] \
+    || got="${got:+$got; }writer $mode: rc $W_RC, stdout '$W_OUT', events '$(cat "$GHFX/events")', stderr '$W_ERR'"
+  if [ "$mode" = config-exit ] && [[ "$W_ERR" != *'TEST_CMD did not complete'* ]]; then
+    got="${got:+$got; }config exit not diagnosed"
+  fi
+  ready_is "after $mode" "$want_rc" "$want" "ci-completion-$mode"
+  ready_reset
+done
+if [ -z "$got" ]; then
+  pass 'local ci refuses success without a completed test command'
+else
+  fail 'local ci refuses success without a completed test command' \
+    'pending with no suite run, failure after one failed run, success and readiness after one passing run' "$got"
+fi
+
 # The mission scope stays clean. Touch only a tracked file outside it, and prove that the
 # same scoped Git read still rewrites the index before running the read through pr-ready.
 touch -d '2 minutes ago' "$RR/src/app.txt"
