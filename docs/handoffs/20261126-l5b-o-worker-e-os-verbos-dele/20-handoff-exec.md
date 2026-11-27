@@ -2,9 +2,9 @@
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
 fase: EXEC
 status: done
-sessao: 01a21f06-ea40-7652-b94c-2840bd9fbe29
-data: 2026-11-27 19:28
-gate: tests/run-all.sh no conteúdo de 9551b6e3 → rc 0, suite green, 21 etapas. bash tests/check-worker.sh no mesmo conteúdo → rc 0, 108 sondas e Check R6 → 1.
+sessao: 01a21f40-9307-7a82-8725-ae78a2dd5218
+data: 2026-11-27 20:44
+gate: tests/run-all.sh no conteúdo de 9d53509f → rc 0, suite green, 21 etapas. bash tests/check-worker.sh no mesmo conteúdo → rc 0, 109 sondas e Check R7 → 1.
 ---
 
 # Handoff — EXEC — O worker e os verbos dele
@@ -15,16 +15,16 @@ gate: tests/run-all.sh no conteúdo de 9551b6e3 → rc 0, suite green, 21 etapas
 
 ## TL;DR
 
-Os 22 incrementos estão concluídos, incluindo o R6 da REVIEW r3.
-Depois de código cercado em lista, um título visível único inicia o planejamento e dois títulos iguais mantêm apenas a sugestão.
-O Check de R6 imprimiu `1` e a suíte ficou verde. O próximo reteste deve repetir os dois casos antes da revisão do delta.
+Os 23 incrementos estão concluídos, incluindo o R7 da REVIEW r4.
+Uma falsa cerca dentro de HTML bruto não altera a leitura do título do pedido.
+O Check de R7 imprimiu `1` e a suíte ficou verde. O reteste deve repetir os três casos da revisão antes de avaliar o delta.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5b-o-worker-e-os-verbos-dele` — sem upstream configurado.
-- **Último commit de implementação:** `9551b6e3` — distingue títulos após uma cerca aberta em item de lista.
+- **Último commit de implementação:** `9d53509f` — distingue HTML bruto de cerca Markdown.
 - **Árvore de trabalho:** o commit de fechamento registra apenas o checkpoint, as notas e este handoff.
-- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas e 108 sondas do worker.
+- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas e 109 sondas do worker.
 - **E2E:** não há `E2E_CMD` configurado. As jornadas usam Git local e simulam GitHub, runner, relay, fila e aprovação.
 
 ## O que foi feito
@@ -70,11 +70,20 @@ O Check de R6 imprimiu `1` e a suíte ficou verde. O próximo reteste deve repet
   A espera permanece única com `rc=3`, `phase-ceiling` e o diagnóstico original.
   As 21 sabotagens do leitor foram detectadas. Os controles com limite de 12 s e 256 MiB passaram antes e depois.
 
+## Correção da REVIEW r4
+
+- `9d53509f` — R7 — O leitor respeita os limites de blocos HTML brutos antes de interpretar cercas e títulos Markdown.
+  Depois do bloco, um título visível único inicia um turno antes de esperar. Dois títulos iguais ou um título
+  contido em comentário mantêm só a espera. Nos três casos, a espera única conserva `rc=3`, `phase-ceiling`
+  e o diagnóstico original.
+  Passaram os 19 cenários de R7, os controles R5/R6 e a reserva única. As 28 sabotagens do leitor e as 37 dos sensores
+  foram detectadas em cópia descartável, com controles verdes antes e depois sob os mesmos limites.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
-| `checkpoint.md` | Checks e commits de implementação dos 22 incrementos. |
+| `checkpoint.md` | Checks e commits de implementação dos 23 incrementos. |
 | `commands/sdd-worker.md` | Procedimentos de despacho, retomada, aprovação e espera. |
 | `bin/sdd-worker-ahead` | Confirmação do dono do checkout, reserva do sucessor e chamada ao relay. |
 | `tests/check-worker-ahead.py` | Jornada de três lotes, concorrência, recusas, revalidação e leitura do pedido com marcação Markdown. |
@@ -83,7 +92,7 @@ O Check de R6 imprimiu `1` e a suíte ficou verde. O próximo reteste deve repet
 
 ## Boot da próxima fase
 
-Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e as seções da REVIEW r1, r2 e r3 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R6 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
+Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e as seções da REVIEW r1 a r4 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R7 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
 
 Na jornada de merge, confira que só chega a `ready <sha>` um PR cujo `local/ci` resulta da suíte completa naquele head. No mesmo SHA, uma aprovação curta é informativa, mas um corpo acionável ou pedido vigente bloqueia. Inventário e prontidão recusam um campo `comments` presente e inválido, sem reabrir uma thread resolvida válida.
 
@@ -100,16 +109,22 @@ No reteste de R6, rode `bash tests/check-worker.sh` e confira a asserção
 `list-fenced-comment-marker` e `duplicate-after-list-code` reproduzem a REVIEW r3. O primeiro deve
 registrar `start, wait` e o segundo só `wait`. Rode também a jornada de reserva única do mesmo Check.
 
+No reteste de R7, `bash tests/check-worker.sh` deve marcar `owner request ignores list fence lookalikes in raw html`.
+Para isolar a reprodução, rode `python3 tests/check-worker-ahead.py "$PWD" --preceding-markup <caso>`
+com `html-before-unique`, `html-before-duplicate` e `html-before-comment`. Só o primeiro deve registrar
+`start, wait`. Os outros devem registrar apenas `wait`, e todos devem preservar o mesmo diagnóstico do runner.
+
 ## Pendências / Decisions for a Human
 
 - Nenhuma decisão nova de produto em aberto. A emissão de termos assinados continua com o dono.
 
 ## Riscos e não-feitos
 
+- O leitor continua restrito às construções que usa para resolver a âncora. Não substitui um renderizador Markdown.
 - O fluxo real com Codex e GitHub não foi iniciado nesta fase. A fixture não prova permissões de publicação, status ou threads.
 - O despacho automático usa o relay Codex. Sem pedido verificável, ou em outro harness, a rota manual permanece disponível.
 - Não foi alterada a política por lote do `curso-ddd`. Não houve publicação, aprovação externa nem merge real.
 
 ## Achados fora de escopo
 
-- Nenhum achado novo nos incrementos R5 e R6. O falso verde de `local/ci` com `TEST_CMD` só de espaços continua no `TODO.md`, conforme a REVIEW r2.
+- Nenhum achado novo nos incrementos R5 a R7. O falso verde de `local/ci` com `TEST_CMD` só de espaços continua no `TODO.md`, conforme a REVIEW r2.

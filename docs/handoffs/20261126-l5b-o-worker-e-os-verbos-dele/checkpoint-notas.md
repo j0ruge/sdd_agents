@@ -174,3 +174,69 @@
 - 2026-11-27 19:28 · `R6` · Em 7ca1379, título único após a cerca da lista deixou só a espera, e dois títulos iguais abriram turno. Em 9551b6e3, o único título abriu um turno antes da espera e títulos duplicados não abriram. Os 16 cenários de R6 e os 10 de R5 passaram. A espera permaneceu única com rc=3, phase-ceiling e o diagnóstico original. O Check imprimiu 1. tests/run-all.sh ficou verde antes e depois em 21 etapas, com 107 → 108 sondas do worker, 101 âncoras do TODO e 1.017 do catálogo. As sabotagens foram executadas em cópia descartável, com grupo próprio, teto de 12 s e 256 MiB por processo; os controles passaram antes e depois. Sem chamadas reais ao GitHub ou ao Codex.
 - intervention: sdd run --phase REVIEW (the starting phase was forced from the CLI) — REVIEW — 2026-11-27 19:43 · written by the runner
 - 2026-11-27 20:03 · `R7` · REVIEW r4, achado #1. A falsa cerca em HTML bruto inverte o despacho em três casos na fixture e mantém a espera original. R6 confirmado em 9551b6e3. R7 pending.
+- 2026-11-27 20:44 · `R7` · R7 sabotage: leitor de HTML não é aplicado → html-before-unique (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: abertura de HTML aceita recuo de código → html-inside-indented-code (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: linha sem abertura HTML é ocultada → plain (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: recuo válido não é removido na abertura → html-indented-opener (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: nenhuma regra de abertura é percorrida → html-processing (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: bloco de script perde o terminador próprio → html-script (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: linha vazia encerra script antes da tag final → html-script-before-close-hidden (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: abertura de comentário não é reconhecida → html-before-comment (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: instrução de processamento não abre bloco → html-processing (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: declaração não abre bloco → html-declaration (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: CDATA não abre bloco → html-cdata (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: elemento de bloco é interpretado como tag genérica → html-heading-before-blank (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: prefixo de tag personalizada passa por elemento de bloco → html-custom-prefix-is-not-block-tag (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: linha só com espaços não encerra bloco → html-heading-after-space-blank (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: nenhum abridor tem efeito → html-heading-before-blank (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: abridor reconhecido não publica terminador → html-before-duplicate (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: tag genérica interrompe parágrafo → html-inline-custom-tag (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: tag seguida por texto inicia bloco → html-tag-followed-by-text (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: atributo minúsculo descaracteriza tag completa → html-custom-tag (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: tag de fechamento completa é ignorada → html-custom-end-tag (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: tag genérica completa não publica terminador → html-custom-tag (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: documento começa como bloco HTML → plain (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: HTML tem precedência sobre uma cerca já aberta → html-inside-fence (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: estado do bloco não é mantido entre linhas → html-before-comment (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: estado do parágrafo não chega ao leitor → html-inline-custom-tag (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: todo conteúdo encerra o bloco → html-before-unique (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: terminador não limpa o estado do bloco → html-before-unique (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: leitor anterior recolocado integralmente → html-before-unique (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-before-unique → html-before-unique (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-before-duplicate → html-before-duplicate (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-before-comment → html-before-comment (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-heading-before-blank → html-heading-before-blank (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-indented-opener → html-indented-opener (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-heading-after-space-blank → html-heading-after-space-blank (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-inside-fence → html-inside-fence (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-inside-indented-code → html-inside-indented-code (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-before-ordered-fence → html-before-ordered-fence (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-custom-tag → html-custom-tag (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-custom-end-tag → html-custom-end-tag (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-inline-custom-tag → html-inline-custom-tag (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-custom-prefix-is-not-block-tag → html-custom-prefix-is-not-block-tag (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-tag-followed-by-text → html-tag-followed-by-text (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-script → html-script (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-script-before-close-hidden → html-script-before-close-hidden (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-processing → html-processing (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-declaration → html-declaration (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: expectativa da fixture invertida em html-cdata → html-cdata (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: separador após bloco removido da fixture → html-before-unique (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: título duplicado trocado na fixture → html-before-duplicate (rc 1)
+- 2026-11-27 20:44 · `R7` · R7 sabotage: estado da sonda anterior não é limpo → marcador verde do Check R7
+- 2026-11-27 20:44 · `R7` · R7 sabotage: primeira linha do laço omite o título único → inventário dos 19 cenários
+- 2026-11-27 20:44 · `R7` · R7 sabotage: linha do laço omite o recuo válido → inventário dos 19 cenários
+- 2026-11-27 20:44 · `R7` · R7 sabotage: linha do laço omite a linha vazia com espaços → inventário dos 19 cenários
+- 2026-11-27 20:44 · `R7` · R7 sabotage: linha do laço omite a tag personalizada → inventário dos 19 cenários
+- 2026-11-27 20:44 · `R7` · R7 sabotage: última linha do laço omite o script → inventário dos 19 cenários
+- 2026-11-27 20:44 · `R7` · R7 sabotage: retorno da fixture é interpretado ao contrário → marcador verde do Check R7
+- 2026-11-27 20:44 · `R7` · R7 sabotage: mensagem da fixture não é acumulada → diagnóstico vermelho do Check R7
+- 2026-11-27 20:44 · `R7` · R7 sabotage: agregado vermelho pode imprimir sucesso → marcador verde do Check R7
+- 2026-11-27 20:44 · `R7` · R7 sabotage: marcador de sucesso é trocado → marcador verde do Check R7
+- 2026-11-27 20:44 · `R7` · R7 sabotage: ramo de falha também roda com todos os casos verdes → marcador verde do Check R7
+- 2026-11-27 20:44 · `R7` · R7 sabotage: marcador de falha é trocado → diagnóstico vermelho do Check R7
+- 2026-11-27 20:44 · `R7` · R7 sabotage: diagnóstico deixa de explicar o contrato → diagnóstico vermelho do Check R7
+- 2026-11-27 20:44 · `R7` · R7 sabotage: fechamento do ramo interno removido → sintaxe do bloco R7
+- 2026-11-27 20:44 · `R7` · R7 sabotage: fechamento do laço removido → sintaxe do bloco R7
+- 2026-11-27 20:44 · `R7` · R7 sabotage: fechamento do ramo de veredito removido → sintaxe do bloco R7
+- 2026-11-27 20:44 · `R7` · Em 4b886900, os três casos da revisão inverteram o despacho. Em 9d53509f, o título visível único iniciou um turno antes da espera, e título duplicado ou comentado manteve só a espera. Nos três casos ela ficou única, com rc=3, phase-ceiling e o diagnóstico original. Os 19 cenários de R7, os controles R5/R6 e a reserva única passaram. O Check imprimiu 1. tests/run-all.sh ficou verde antes e depois, em 21 etapas, com 108 → 109 sondas do worker. As 28 sabotagens do leitor e as 37 dos sensores foram detectadas em cópias descartáveis, com grupo próprio, teto de 12 s e 256 MiB por processo. Os controles passaram nos mesmos limites antes e depois. As duas atribuições antigas a in_comment, recolocadas sozinhas, seriam inertes porque a variável deixou de ser lida. O leitor anterior inteiro voltou a reprovar. A etapa Codex registrou 3 skipped. Sem chamadas reais ao GitHub ou ao Codex.
