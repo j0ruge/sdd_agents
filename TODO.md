@@ -380,6 +380,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `merge` dado sobre o head A valer para o head B, quando os passos 1 e 2 trazem o mesmo ato. O `pr-ready` ainda
   exige rodada A e recibo do Codex no B; o risco é o dono não ter visto o B. Direção: o yes só se reaproveita com
   campanha, lote, missão, PR e comando iguais, e no `merge` também o sha.
+  RESOLVED by 4edda89
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 7 — descoberto pelo
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
@@ -556,6 +557,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (todo PR aberto vira `review`). O `cmd_pr_ready` lê do PR só `headRefOid,mergeable,state`, e o único `.body`
   dele é o dos comentários do Codex: um lote pode mergear sem o registro que o dono aceitaria.
   Direção: o `pr-ready` confere no corpo uma linha por decisão `- answer:` do `00-missao.md` da missão.
+  RESOLVED by 4edda89
   — descoberto pelo `coderabbitai` no PR #455, na campanha `20261117-zerar-as-issues` (2026-11-20)
 
 - [ ] **A regra do teto da chamada `Bash` mora no revisor, e não no `turn_rule` de toda fase** —
