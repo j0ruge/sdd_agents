@@ -588,7 +588,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`setsid`) — e o `cmd_run` também não o chama, então a corrida de uma noite descobre na primeira fase o que as
   sondas achariam em segundos: sessão expirada, chapéu velho, skill ausente, hook quebrado. Custo a decidir no
   grill: o preflight roda o `TEST_CMD` inteiro, que no kit é a suíte toda. Direção, pedida pelo dono: o ato `run`
-  roda o `sdd preflight` no worktree da missão antes de lançar, e para no `_fail`.
+  roda o `sdd preflight` no worktree da missão antes de lançar, e para no `_fail`. RESOLVED by 2e8bd53
   — descoberto por `sdd-worker` na missão `20261119-l1b-a-rodada-delta` (2026-11-20)
 
 - [ ] **O worker lê o `budget-exhausted` como o teto da missão, e o runner grava o mesmo `kind` no teto da fase** —
