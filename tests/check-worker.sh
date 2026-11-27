@@ -6417,6 +6417,23 @@ else
     'one turn before wait for a visible heading, none inside a fence or comment, and the same runner verdict' "$got"
 fi
 
+# --- R6: a list fence ends with its list item, and its content is not Markdown -------------------
+got=
+for markup_case in list-fenced-comment-marker duplicate-after-list-code list-content-after-blank list-closed-fence \
+                   list-longer-fence ordered-list-fence ordered-cannot-interrupt ordered-can-interrupt \
+                   ordered-after-heading ordered-after-comment ordered-after-code ordered-after-blank \
+                   ordered-after-invalid-fence tabbed-list-fence list-invalid-backticks root-list-not-closer; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request distinguishes unique and duplicate headings after list code'
+else
+  fail 'owner request distinguishes unique and duplicate headings after list code' \
+    'one turn before wait for a unique visible heading, none for hidden or duplicate headings, and the same runner verdict' "$got"
+fi
+
 # --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
 if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
   pass 'concurrent resume reuses the validated reservation'

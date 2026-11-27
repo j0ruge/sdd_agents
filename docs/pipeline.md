@@ -2284,7 +2284,8 @@ For delegated Codex lookahead, the worker treats `ahead plan <lot>` as a suggest
 resume handoff references the owner's written request for this campaign. The run procedure
 checks the live checkout owner against the launch PID and rereads the queue, budget and
 authority before starting the relay. A local fragment must still resolve to a unique heading
-outside fenced code and HTML comments. A local file that changes during dispatch prevents the
+outside fenced code and HTML comments. Markup inside a fence opened by a list marker does not
+hide headings after the list item ends. A local file that changes during dispatch prevents the
 start without replacing the runner's verdict. The reservation is per campaign and lot in the primary
 Git directory. It binds one separate worktree and relay mission before a draft exists.
 The relay's first turn names the lot and points to `campaign.md` in the primary checkout,

@@ -58,26 +58,42 @@ def owns_checkout(worktree, mission, launch_pid, launch):
 
 
 def local_anchors(content):
-    fence = ""
+    fence, fence_indent = "", 0
     in_comment = False
+    in_paragraph = False
     anchors = []
-    for line in content.split("\n"):
+    for raw_line in content.split("\n"):
+        line = raw_line.expandtabs(4)
+        if fence and fence_indent and line.strip():
+            if line.startswith(" " * fence_indent):
+                line = line[fence_indent:]
+            else:
+                fence = ""
         if not fence and (in_comment or re.match(r" {0,3}<!--", line)):
             in_comment = "-->" not in line
+            in_paragraph = False
             continue
-        if not (match := re.fullmatch(r" {0,3}(?:(`{3,}|~{3,})(.*)|#{1,6}[ \t]+(.+))", line)):
+        if not (match := re.fullmatch(
+            r" {0,3}(?:((?:[-+*]|[0-9]{1,9}[.)]) {1,4})?(`{3,}|~{3,})(.*)|#{1,6}[ \t]+(.+))", line,
+        )):
+            if not fence and (not line.startswith("    ") or not line.strip()):
+                in_paragraph = bool(line.strip())
             continue
-        marker, suffix, title = match.groups()
+        list_prefix, marker, suffix, title = match.groups()
         if marker:
             if not fence:
                 if marker[0] == "`" and "`" in suffix:
+                    in_paragraph = True
                     continue
-                fence = marker
-            elif marker.startswith(fence) and not suffix.strip():
+                if list_prefix and list_prefix[0].isdigit() and in_paragraph and int(list_prefix.rstrip()[:-1]) != 1:
+                    continue
+                fence, fence_indent = marker, match.end(1) if list_prefix else 0
+            elif not list_prefix and marker.startswith(fence) and not suffix.strip():
                 fence = ""
         elif not fence:
             heading = re.sub(r"[ \t]+#+[ \t]*$", "", title).strip().lower()
             anchors.append(re.sub(r"[ \t]+", "-", re.sub(r"[^\w \t-]", "", heading)))
+        in_paragraph = False
     return anchors
 
 

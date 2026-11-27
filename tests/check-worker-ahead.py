@@ -183,6 +183,23 @@ else:
                     "unclosed-comment": ("<!--\n\n" + instruction, False),
                     "backtick-info": ("``` text with `inline`\n\n" + instruction, True),
                     "tilde-info": ("~~~ text with `inline`\n" + instruction + "~~~\n", False),
+                    "list-fenced-comment-marker": ("- ```html\n  <!--\n\n" + instruction, True),
+                    "duplicate-after-list-code": (instruction + "\n- ```html\n  <!--\n\n"
+                                                  "# Owner request\n\nDo not plan the next lot.\n", False),
+                    "list-content-after-blank": ("- ```html\n  example\n\n  # Owner request\n", False),
+                    "list-closed-fence": ("- ```html\n  <!--\n    ```\n  " + instruction, True),
+                    "list-longer-fence": ("- ````html\n  ```\n  # Owner request\n", False),
+                    "ordered-list-fence": ("2) ~~~html\n   <!--\n   # Owner request\n\n" + instruction, True),
+                    "ordered-cannot-interrupt": ("Intro\n2. ```html\n   <!--\n\n" + instruction, False),
+                    "ordered-can-interrupt": ("Intro\n1. ```html\n   <!--\n\n" + instruction, True),
+                    "ordered-after-heading": ("Intro\n# Another title\n2. ```html\n   <!--\n\n" + instruction, True),
+                    "ordered-after-comment": ("Intro\n<!-- note -->\n2. ```html\n   <!--\n\n" + instruction, True),
+                    "ordered-after-code": ("    example\n2. ```html\n   <!--\n\n" + instruction, True),
+                    "ordered-after-blank": ("Intro\n\n2. ```html\n   <!--\n\n" + instruction, True),
+                    "ordered-after-invalid-fence": ("```text with `inline`\n2. ```html\n   <!--\n\n" + instruction, False),
+                    "tabbed-list-fence": ("- ```html\n\t<!--\n  # Owner request\n", False),
+                    "list-invalid-backticks": ("- ```text with `inline`\n  " + instruction, True),
+                    "root-list-not-closer": ("```html\n- ```\n" + instruction + "```\n", False),
                 }[markup_case]
                 source.write_text(content)
                 result = subprocess.run(["bash", "-c", blocks["run"]], env=env, cwd=primary,

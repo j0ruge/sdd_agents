@@ -331,7 +331,8 @@ verifying the owner's identifiable written request for this campaign. Record one
 that handoff in the form `ahead-request: <campaign-id> <source>`. Use an absolute path to a
 nonempty UTF-8 file or a durable HTTPS link to the original request. A local `#fragment` must
 match a unique Markdown heading written with `#` outside fenced code and HTML comments. Only a
-valid fence opener starts fenced code. Use the lowercase heading text, omitting punctuation other
+valid fence opener starts fenced code. A fence opened by a list marker can close within its item
+and cannot extend beyond that item. Use the lowercase heading text, omitting punctuation other
 than hyphens and underscores and replacing whitespace with hyphens.
 Do not infer a request from `next`, a recommendation or the signature alone. Without an
 unambiguous matching reference, the line stays a suggestion. Other harnesses keep their manual route.
