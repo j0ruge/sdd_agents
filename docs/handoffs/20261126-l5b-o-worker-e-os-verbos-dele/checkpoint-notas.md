@@ -75,3 +75,18 @@
 - 2026-11-27 14:33 · `R2` · REVIEW r1, achado #2. O relay recebeu o lote, mas o prompt não identificou a fila que só existia no primário.
 - 2026-11-27 14:33 · `R3` · REVIEW r1, achado #3. O relay iniciou mesmo com a seção do pedido ausente ou retirada durante o orçamento.
 - 2026-11-27 14:33 · `R4` · REVIEW r1, achados #4 e #5. Aprovação informativa bloqueou o PR e metadados ilegíveis produziram vereditos divergentes.
+- 2026-11-27 15:12 · `R1` · R1 sabotage: retorno ao bloco original → sonda vermelha: local ci refuses success without a completed test command
+- 2026-11-27 15:12 · `R1` · R1 sabotage: sem execução isolada do TEST_CMD → sonda vermelha: local ci refuses success without a completed test command
+- 2026-11-27 15:12 · `R1` · R1 sabotage: rc da suíte substituído por zero → sonda vermelha: merge requires local ci on the tested head
+- 2026-11-27 15:12 · `R1` · R1 sabotage: rc escrito na saída comum → sonda vermelha: merge requires local ci on the tested head
+- 2026-11-27 15:12 · `R1` · R1 sabotage: canal do rc ligado à saída comum → sonda vermelha: merge requires local ci on the tested head
+- 2026-11-27 15:12 · `R1` · R1 sabotage: saída do comando descartada → sonda vermelha: local ci refuses success without a completed test command
+- 2026-11-27 15:12 · `R1` · R1 sabotage: entrada do chamador chega à suíte → sonda vermelha: local ci refuses success without a completed test command
+- 2026-11-27 15:12 · `R1` · R1 sabotage: saída do chamador não reservada → sonda vermelha: merge requires local ci on the tested head
+- 2026-11-27 15:12 · `R1` · R1 sabotage: recibo vazio aceito → sonda vermelha: local ci refuses success without a completed test command
+- 2026-11-27 15:12 · `R1` · R1 sabotage: condição do subshell invertida → sonda vermelha: merge requires local ci on the tested head
+- 2026-11-27 15:12 · `R1` · R1 sabotage: config herda canal do recibo → sonda vermelha: local ci refuses success without a completed test command
+- 2026-11-27 15:12 · `R1` · R1 sabotage: suíte herda canal do recibo → sonda vermelha: local ci refuses success without a completed test command
+- 2026-11-27 15:12 · `R1` · R1 sabotage: diagnóstico incompleto ocultado → sonda vermelha: local ci refuses success without a completed test command
+- 2026-11-27 15:12 · `R1` · R1 sabotage: recusa incompleta convertida em sucesso → sonda vermelha: local ci refuses success without a completed test command
+- 2026-11-27 15:12 · `R1` · Em `f04609e`, o config saía com zero sem executar a suíte, mas publicava sucesso e liberava o mesmo SHA. Em `297f072`, esse caso conservou `pending` e bloqueou `pr-ready`. As execuções reais da fixture publicaram falha ou sucesso, uma vez cada. O Check deu 1 e `tests/run-all.sh` passou antes e depois em 21 etapas (101 → 102 sondas do worker, 100 âncoras no TODO e 1017 no catálogo). Duas âncoras do TODO acompanharam as linhas deslocadas. As 14 sabotagens usaram grupo próprio, teto de 45 s e 256 MiB por processo. A estrutura sintática foi revertida em bloco e a prosa foi conferida no procedimento e no pipeline. GitHub simulado.
