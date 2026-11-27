@@ -129,12 +129,16 @@ act still passes its own `allows` call (step 3):
 | Codex `run`, rc 2 and `PR needs worker publish` | `pr` | publish under the signed `pr` act before continuing |
 | `pr` | `review` | the body is written, and the round comes next |
 | `review`, every criterion A and the Codex receipt on the head | `merge`: `allows … merge`, then `pr-ready` | `next` answers `review` again for an open pull request; an rc 1 of `pr-ready` names the act that fixes its item |
+| mission `merge`, confirmed, with `followup=pending` | `postmerge` | `next` sees the lot as merged, but does not know its follow-up |
+| follow-up PR with `review=pending` | `review` on that PR, then `merge` under its own gates | the mission PR's review does not cover the follow-up |
 | every wait: the owner's yes, a bot, a deadline, a run | step 1, `budget` | the ceiling read before the wait, and the delegation, may have moved since |
 
 A new session finds the last act of each lot in the journal's tail: a `run` with rc 0, or with
 rc 2 for a mission of the kit with only the stamp missing, and no `pr` line after it is a `pr`
 still to do, though the pull request is open and `next` says `review`. A Codex run journaled
 with `PR needs worker publish` also resumes at `pr`, even if `next` still finds no pull request.
+Recover unresolved post-merge entries before calling `next`, even if a later line from another
+lot appears in the journal. A pending follow-up remains the current act across waits and restarts.
 
 ## The acts
 
@@ -173,6 +177,18 @@ there and `next` finds the mission in that worktree. Once the plan names the mis
 (`branch:` in its `00-missao.md`), the session renames the worktree's branch to it, while the
 branch has no upstream:
 `git -C <mission-worktree> branch -m <provisional> <branch>`.
+
+For an owner's request outside the signed queue, prepare a new lot in a separate checkout from
+the current base. Show its position and ceiling to the owner, update `lots:` in `delegation.md`
+if it names individual lots, and show both proposed files. The owner signs those terms there
+with `sdd-worker delegate <draft-campaign-dir>`. Put `campaign.md` and the signed `delegation.md`
+in the same commit and take them through the normal PR flow. If queue terms change during
+integration, have the owner sign the final pair again before it lands.
+
+Until the pair lands, run the loop against the live queue in the campaign checkout and leave
+the active lot in place. Do not plan the extra request against the draft or assign it another
+lot's identity. Keep the active lot ahead of the new lot, or wait for it to close before
+integrating an insertion ahead of it. After integration, reread the queue, budget and authority.
 
 ### `approve`
 
@@ -507,10 +523,57 @@ head, restart the loop rather than retrying against a newly observed sha.
 `sdd-worker allows <campaign-dir> postmerge --mission <mission-dir>`
 
 What the merge leaves for the base (the roadmap, `TODO.md`, `KAIZEN_LOG.md`) goes in a pull request
-of its own, from a branch cut from the updated base, never a push to it; it gets its own review
-round and its Codex receipt, as `review` writes them. Open it before the loop calls `next` again:
-`next` does not derive this act, so the journal line of the merge names it, and a new session
-resumes from there.
+of its own, from a branch cut from the updated base, never a push to it. Resume it as follows:
+
+1. Confirm the mission PR is `MERGED` and read its merge commit and base from GitHub. Before
+   opening a follow-up, persist the actual merge in the journal as a `merge` entry with
+   `pr=<mission-pr> merge_sha=<sha> followup=pending` and the base and follow-up branch. If the
+   session stopped before writing that entry, recover it from the exact mission PR before
+   proceeding. Keep the existing journal and checkout guards. If there is nothing left for
+   the base, record `followup=none` with the reason instead.
+2. Reuse the recorded branch, or use `chore/postmerge-<mission-pr>` for a new follow-up. Look it
+   up with `postmerge_followup <repo> <base> <branch>` before any publish attempt, including
+   after a lost response or restart. Use the repository and base of the confirmed merge,
+   but check the base after the lookup so a retargeted PR cannot look absent.
+
+```bash
+postmerge_followup() {
+  [[ "$#" -eq 3 && -n "$1" && -n "$2" && -n "$3" ]] || return 2
+  local repo="$1" base="$2" branch="$3" prs verdict
+  if ! prs="$(gh pr list --repo "$repo" --head "$branch" --state all --limit 2 \
+       --json number,url,state,headRefName,baseRefName,isCrossRepository)" ||
+     ! verdict="$(jq -ers --arg base "$base" --arg branch "$branch" '
+       select(length == 1) | .[0] | arrays
+       | if length == 0 then "create"
+         elif length == 1 then .[0] | objects
+           | select(.headRefName == $branch and .baseRefName == $base and .isCrossRepository == false)
+           | select(.number | type == "number" and . > 0 and floor == .)
+           | select(.url | type == "string" and test("^https://[^[:space:]]+$"))
+           | select(.state == "OPEN" or .state == "MERGED")
+           | "\(if .state == "OPEN" then "review" else "merged" end) \(.number) \(.url)"
+         else empty end
+     ' <<< "$prs")"; then
+    printf 'postmerge: cannot confirm an absent, open or merged follow-up for %s on %s\n' "$branch" "$repo" >&2
+    return 3
+  fi
+  printf '%s\n' "$verdict"
+}
+```
+
+3. Only `create` permits opening a PR. After the current budget and `allows postmerge` checks,
+   the session responsible for the lot opens it from that same branch. Include the committed
+   grill choices as the `pr` act requires. Read the result back with the lookup. If publishing
+   failed or the result is unknown, stop and reread GitHub. Do not open from a new branch. An
+   unreadable, closed or ambiguous result is a stop, not permission to create or advance.
+   If the journal already names a PR, require the same PR identity from the lookup. An absent
+   or different PR in that case is also a stop.
+4. On `review <number> <url>`, append a `postmerge` entry with
+   `pr=<number> url=<url> review=pending` unless that same pending entry is already recorded.
+   Finish the review on the follow-up head in its checkout. Use the mission folder there and
+   enforce the `review` and `merge` gates, including fresh permission and budget checks,
+   the round, `local/ci`, the Codex receipt, `pr-ready` and a head-bound merge. Do not reuse
+   the mission PR's evidence. Only a verified `merged <number> <url>` closes the follow-up.
+   Append `pr=<number> url=<url> review=done`, with its merge evidence, before resuming `next`.
 
 ## The five stops
 

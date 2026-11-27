@@ -2833,6 +2833,119 @@ else
   fail 'review preserves the eligible delta' 'delta without integration, integrate only on conflict, reread the new head' "$got"
 fi
 
+# Exercise the signed queue in two checkouts and the follow-up lookup in the procedure itself.
+got=""
+queue="$(campaign queue-extra full "$FAR" 25 200)"
+set_lots "$queue/campaign.md" 'L10:-' 'L12:-'
+sed -i 's/^lots:.*/lots: L10 L12/' "$queue/delegation.md"
+sign "$queue"
+lot_mission "$REPO" 20990601-queue-active queue-extra L10 queue-active-b humano-2099-01-01
+prs queue-active-b '[{"number":70,"state":"OPEN"}]'
+draft_tree="$BOX/queue-draft"
+draft="$draft_tree/docs/campaigns/queue-extra"
+if git -C "$REPO" worktree add -q --detach "$draft_tree" HEAD; then
+  mkdir -p "$draft" "$draft_tree/.sdd"
+  cp "$queue"/{campaign,delegation}.md "$draft/"
+  cp "$REPO/.sdd/config.sh" "$draft_tree/.sdd/config.sh"
+  set_lots "$draft/campaign.md" 'L10:-' 'L11:plan' 'L12:-'
+  sed -i 's/^lots:.*/lots: L10 L11 L12/' "$draft/delegation.md"
+  allows_is 'unsigned proposal' 1 'ask run needs pr, effective assisted — edited after signing' \
+    "$draft" run --mission "$REPO/$H/20990601-queue-active"
+  allows_is 'live authority during draft' 0 'allowed run at full' \
+    "$queue" run --mission "$REPO/$H/20990601-queue-active"
+  next_is 'live queue during draft' 0 'review L10 20990601-queue-active — ' 'ahead plan L12' "$queue"
+  sign "$draft"
+  grep -qx 'ceiling L11: plan' <<< "$W_OUT" || got+="; the owner did not see the new lot ceiling"
+  next_is 'live queue after signing the draft' 0 'review L10 20990601-queue-active — ' 'ahead plan L12' "$queue"
+  cp "$draft"/{campaign,delegation}.md "$queue/"
+  allows_is 'integrated proposal' 0 'allowed plan at plan' "$queue" plan --lot L11
+  next_is 'integration keeps the active lot' 0 'review L10 20990601-queue-active — ' 'ahead plan L11' "$queue"
+  prs queue-active-b '[{"number":70,"state":"MERGED"}]'
+  next_is 'new lot takes its signed position' 0 'plan L11 - — ' '' "$queue"
+  git -C "$REPO" worktree remove --force "$draft_tree" || got+="; cannot remove fixture checkout"
+else
+  got+="; cannot prepare a separate fixture checkout"
+fi
+
+plan_proc="$(section "$COMMAND" 'The acts' | sed -n '/^### `plan`$/,/^### `approve`$/p')"
+post_proc="$(section "$COMMAND" 'The acts' | sed -n '/^### `postmerge`$/,$p')"
+transitions="$(section "$COMMAND" 'The transitions')"
+for term in 'separate checkout' 'position' 'ceiling' '`lots:`' 'owner signs' 'same commit' 'live queue'; do
+  grep -qF "$term" <<< "$plan_proc" || got+="; queue procedure missing $term"
+done
+for term in 'merge_sha=<sha> followup=pending' 'chore/postmerge-<mission-pr>' 'pr=<number> url=<url> review=pending' 'review=done' 'pr-ready'; do
+  grep -qF "$term" <<< "$post_proc" || got+="; postmerge journal/gate missing $term"
+done
+grep -qF 'before calling `next`' <<< "$transitions" || got+="; no journal precedence over next"
+
+awk '/^postmerge_followup\(\) \{$/ { on=1 } on; on && /^\}$/ { exit }' <<< "$post_proc" > "$BOX/postmerge-procedure"
+mkdir "$BOX/postmerge-bin"
+cat > "$BOX/postmerge-bin/gh" <<'EOF_GH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FOLLOWUP_CALLS"
+call="$*"
+[ "${call/ --base main/}" = 'pr list --repo fixture/repo --head chore/postmerge-70 --state all --limit 2 --json number,url,state,headRefName,baseRefName,isCrossRepository' ] || exit 9
+case "$FOLLOWUP_WORLD" in
+  absent) echo '[]' ;;
+  offline) echo '[]'; exit 17 ;;
+  malformed) echo '[{}]' ;;
+  created)
+    if [[ "$call" == *' --base main '* ]]; then
+      jq '[.[] | select(.baseRefName == "main")]' "$FOLLOWUP_REMOTE"
+    else
+      cat "$FOLLOWUP_REMOTE"
+    fi ;;
+esac
+EOF_GH
+chmod +x "$BOX/postmerge-bin/gh"
+
+followup_is() (
+  local world="$1" want_rc="$2" want="$3" rc=0 out
+  export FOLLOWUP_WORLD="$world" FOLLOWUP_CALLS="$BOX/followup-calls" FOLLOWUP_REMOTE="$BOX/followup-remote"
+  : > "$FOLLOWUP_CALLS"
+  export PATH="$BOX/postmerge-bin:$PATH"
+  # shellcheck disable=SC1090 # Run the exact shell block the worker follows.
+  . "$BOX/postmerge-procedure"
+  out="$(postmerge_followup fixture/repo main chore/postmerge-70 2>"$BOX/followup-err")" || rc=$?
+  if [[ "$rc" != "$want_rc" || "$out" != "$want" || "$(wc -l < "$FOLLOWUP_CALLS")" != 1 ]]; then
+    printf '%s: rc=%s, output=%q, calls=%q\n' "$world" "$rc" "$out" "$(cat "$FOLLOWUP_CALLS")"
+  fi
+)
+
+if [ -s "$BOX/postmerge-procedure" ]; then
+  url=https://github.com/fixture/repo/pull/71
+  pr_json='[{"number":71,"url":"https://github.com/fixture/repo/pull/71","state":"OPEN","headRefName":"chore/postmerge-70","baseRefName":"main","isCrossRepository":false}]'
+  followup_got="$(
+    # The lost local session left only the mission merge. No remote PR yet, then creation
+    # succeeded but the session died before journaling the new PR. Both resumes query GitHub.
+    followup_is absent 0 create
+    printf '%s\n' "$pr_json" > "$BOX/followup-remote"
+    followup_is created 0 "review 71 $url"
+    followup_is created 0 "review 71 $url"
+    jq '.[0].state = "MERGED"' <<< "$pr_json" > "$BOX/followup-remote"
+    followup_is created 0 "merged 71 $url"
+    jq '.[0].state = "CLOSED"' <<< "$pr_json" > "$BOX/followup-remote"
+    followup_is created 3 ''
+    jq '.[0].baseRefName = "retargeted"' <<< "$pr_json" > "$BOX/followup-remote"
+    followup_is created 3 ''
+    jq '.[0].isCrossRepository = true' <<< "$pr_json" > "$BOX/followup-remote"
+    followup_is created 3 ''
+    jq '. + .' <<< "$pr_json" > "$BOX/followup-remote"
+    followup_is created 3 ''
+    followup_is offline 3 ''
+    followup_is malformed 3 ''
+  )"
+  got+="$followup_got"
+else
+  got+="; no follow-up lookup in the procedure"
+fi
+if [ -z "$got" ]; then
+  pass 'queue changes and followup reviews resume safely'
+else
+  fail 'queue changes and followup reviews resume safely' \
+    'staged queue leaves the live grant intact; signed order applies on integration; follow-up resumes on the existing PR before next' "$got"
+fi
+
 # --- docs: the documentation and the vocabulary -------------------------------------------------
 # Four documents name the worker, and each is prose no mutant of bin/ reaches, so the checker carries
 # its own negative control, like the command's. What each owes is read from the sensor's ladder and

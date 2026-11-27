@@ -1981,6 +1981,10 @@ Two files make it:
   `mission-ceiling` (dollars) from `phase-ceiling` (sessions or review rounds), while the ledger
   still records either as `budget-exhausted`. Missing or ambiguous evidence establishes neither
   ceiling. A run that exits with rc 3 has its own pager and is not paged again by the worker.
+  An extra lot is proposed in a separate checkout and takes effect only when the queue and the
+  owner's new signature land together. After a merge, the session records the confirmed merge
+  before opening any follow-up PR. It recovers that PR by its branch and finishes its review
+  and merge under their own gates before asking `next` again.
   The command also writes the five stops, what no level grants, and how the session keeps its
   own context window for a whole night.
 - `bin/sdd-worker` answers, from artifacts, the questions that used to be the model's reading and
