@@ -1915,16 +1915,26 @@ fi
 # --- R24: the review item -----------------------------------------------------------------------
 # Each world breaks the newest round (r2) and leaves r1 — graded A, naming A — as it is, so a reader
 # of any round but the newest answers ready. Every other item is true in the good world.
+# Commit the grade edits so a permissive reader cannot hide behind the dirty-tree refusal.
 got=""
+grade_is() {
+  local dirty
+  land grade
+  if ! dirty="$(GIT_OPTIONAL_LOCKS=0 gitc status --porcelain --untracked-files=all --ignored -- "$MD")" || [ -n "$dirty" ]; then
+    got="${got:+$got; }$1: fixture is not clean ($dirty)"
+  fi
+  ready_is "$1" 1 "not-ready review: $MD/40-review-r2.md $2" grade
+  ready_reset
+}
 sed -i 's@^| Security | A |@| Security | B |@' "$MD/40-review-r2.md"
 grep -q '^| Security | B |' "$MD/40-review-r2.md" || got="fixture: r2 was not graded B"
-ready_is 'Security B' 1 'not-ready review: ' good; ready_reset
+grade_is 'Security B' 'grades B, and every row must read A'
 sed -i 's@^| \*\*Overall\*\* | \*\*A\*\* |@| **Overall** | **A-** |@' "$MD/40-review-r2.md"
 grep -qF '| **Overall** | **A-** |' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 Overall was not A-"
-ready_is 'Overall A-' 1 'not-ready review: ' good; ready_reset
+grade_is 'Overall A-' 'grades A-, and every row must read A'
 sed -i 's@^| Security | A |@   | Security | B |@' "$MD/40-review-r2.md"
 grep -q '^   | Security | B |' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 has no indented B"
-ready_is 'an indented row graded B' 1 'not-ready review: ' good; ready_reset
+grade_is 'an indented row graded B' 'grades B, and every row must read A'
 round "$MD/40-review-r2.md" -
 ready_is 'no reviewed head' 1 'not-ready review: the newest round names no head' good; ready_reset
 round "$MD/40-review-r2.md" HEAD
@@ -1939,19 +1949,20 @@ rm -f "$MD"/40-review-r*.md
 ready_is 'no round' 1 'not-ready review: ' good; ready_reset
 sed -i 's@^### Overall Grade@### Grades@' "$MD/40-review-r2.md"
 grep -q '^### Grades' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 kept its grade heading"
-ready_is 'no grade table' 1 'not-ready review: ' good; ready_reset
+grade_is 'no grade table' 'has no grade under ### Overall Grade'
 # The head the pull request names is not in this checkout, receipt and all: only the review item
 # can say so, since the ancestry it reads does not run.
 UNFETCHED=0000000000000000000000000000000000000007
 serve r-unfetched
 printf '{"headRefOid":"%s","mergeable":"MERGEABLE","state":"OPEN"}\n' "$UNFETCHED" > "$BOX/ghfx/r-unfetched/view"
 printf '[%s]' "$(comment "$CODEX" "$UNFETCHED" '')" > "$BOX/ghfx/r-unfetched/comments.2"
-ready_is 'a head not fetched' 1 'not-ready review: git merge-base --is-ancestor ' r-unfetched
+ready_is 'a head not fetched' 1 "not-ready review: git merge-base --is-ancestor $A $UNFETCHED does not run here" r-unfetched
 # The mission folder given as the root of the checkout: every path is under it.
 round "$RR/40-review-r2.md" "$A"
 ready_is 'the root as the mission folder' 1 'not-ready review: the mission folder ' good "$RR"; ready_reset
 mkdir -p "$BOX/loose-ready"; cp -a "$MD" "$BOX/loose-ready/"
 ready_is 'outside a checkout' 1 'not-ready review: ' good "$BOX/loose-ready/20990300-ready"
+review_world_failures="$got"
 if [ -z "$got" ]; then
   pass 'pr-ready: a grade below A, a round that names no head, and code after the reviewed head each fail review'
 else
@@ -3119,6 +3130,7 @@ printf 'dirty\n' > "$RR/src/app.txt"
 ready_is outside 0 "ready $B" good
 [ "$W_OUT" = "ready $B" ] || got="${got:+$got; }outside: the line is '$W_OUT', not 'ready $B'"
 ready_reset
+dirty_world_failures="$got"
 if [ -z "$got" ]; then
   pass 'committed: a mission folder with a change not committed, staged, untracked or ignored fails review'
 else
@@ -3177,6 +3189,8 @@ ready_reset; gitc branch -q -D r-side
 gitc checkout -q --detach "$A"; printf 'e\n' > "$MD/note.md"; gitc add -A; gitc commit -q -m e
 E="$(git -C "$RR" rev-parse HEAD)"; gitc checkout -q main
 round "$R2F" "$E"; land n-sibling; export GHFX="$BOX/ghfx/n-sibling"
+ancestor_rc=0; gitc merge-base --is-ancestor "$E" "$HEADNOW" || ancestor_rc=$?
+[ "$ancestor_rc" = 1 ] || got="${got:+$got; }fixture: sibling: Git returned $ancestor_rc, expected a non-ancestor"
 { [ -z "$(outside_of "$E" "$HEADNOW")" ] \
   && [ -z "$(git -C "$RR" -c core.quotePath=false log --format= --name-only --no-renames "$E..$HEADNOW" | not_under "$pre" | grep -v '^$' || true)" ]; } \
   || got="${got:+$got; }fixture: sibling: E..head leaves the folder"
@@ -3200,6 +3214,7 @@ serve n-tree "$CTH"; (CDPATH='' cd "$CT" && pwd -P) > "$BOX/ghfx/n-tree/root"; e
 PATH="$BOX/stub-ready:$PATH" worker pr-ready "$CT/$H/20990300-ready" "$PRN"
 { [ "$W_RC" = 1 ] && [ "$W_OUT" = "not-ready review: git diff-tree $B does not run here" ]; } \
   || got="${got:+$got; }tree: rc $W_RC '$W_OUT'"
+range_world_failures="$got"
 if [ -z "$got" ]; then
   pass 'range: a commit after the reviewed head that touches code, a merge resolution and a reviewed head the pull request does not carry each fail review'
 else
@@ -4028,6 +4043,9 @@ crit_is() {
   [ "$t" = "$4" ] || got="${got:+$got; }fixture $1: the table reads '$t', not '$4'"
   if [ -n "${6:-}" ] && ! grep -qxF -- "$6" "$R2F"; then got="${got:+$got; }fixture $1: the line '$6' did not land"; fi
   land criteria
+  if ! t="$(GIT_OPTIONAL_LOCKS=0 gitc status --porcelain --untracked-files=all --ignored -- "$MD")" || [ -n "$t" ]; then
+    got="${got:+$got; }fixture $1: the mission folder is not clean ($t)"
+  fi
   if [ "$3" = ready ]; then want="ready $HEADNOW"
   else want="not-ready review: $R2F has no row for $3 under ### Overall Grade — every criterion must read A, and a partial review is not a review"
   fi
@@ -4062,6 +4080,9 @@ if [ -z "$got" ]; then
 else
   fail 'criteria: a round that leaves out the row of a criterion fails review and names it, an A in every row present is not an A in every criterion' \
     'REVIEW_CRITERIA equal to the rows of templates/review.md; not-ready naming the criteria left out for each world that leaves one out, ready for the eight rows, a code span and a ninth row' "$got"
+fi
+if [ -z "$review_world_failures$dirty_world_failures$range_world_failures$got" ]; then
+  pass 'grade and ancestry failures have distinct witnesses'
 fi
 
 # --- R62: a merged mission whose worktree was removed -------------------------------------------

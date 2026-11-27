@@ -7520,11 +7520,11 @@ mut_WORKER_pr_ready_rewrites_index() {
   sed -i '/^cmd_pr_ready() {/,/^}/ s/GIT_OPTIONAL_LOCKS=0 \(git -C "\$dir" -c core\.quotePath=false status\)/\1/' "${1%/*}/sdd-worker"
 }
 # The reviewed head no longer has to be an ancestor of the head: a round over a commit the pull
-# request dropped reads as a review of this history (achado #9 of the mission's review r5). Caught
+# request dropped reads as a review of this history, while Git errors still block. Caught
 # by "range: a commit after the reviewed head that touches code, a merge resolution and a reviewed
 # head the pull request does not carry each fail review" (check-worker.sh).
 mut_WORKER_range_ancestry_unchecked() {
-  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$anc" -eq 1 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  anc=0; git .* || anc=\$?$@&; [ "$anc" -ne 1 ] || anc=0@' "${1%/*}/sdd-worker"
 }
 # Each commit of the range is judged by the diff between the two ends again: a change to code made
 # after the round and reverted before the head is never seen (achado #10 of the mission's review r5).
