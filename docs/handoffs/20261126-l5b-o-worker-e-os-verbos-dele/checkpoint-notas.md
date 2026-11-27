@@ -133,3 +133,19 @@
 - 2026-11-27 17:18 · `R4` · R4 sabotage: ausência de comments aceita em thread aberta → review findings and readiness reject malformed resolved threads
 - 2026-11-27 17:18 · `R4` · Em `4d360e7`, `Aprovado.` bloqueou um PR pronto e `comments: 17` deixou o mesmo SHA pronto apesar do erro no inventário. Em `4d5bdb4`, o inventário e a prontidão distinguem aprovação informativa, corpo acionável e pedido vigente, preservam a thread resolvida válida e recusam metadados inválidos com rc 3. O Check deu 1. `tests/run-all.sh` ficou verde antes e depois em 21 etapas (104 → 106 sondas do worker, 100 âncoras do TODO e 1.017 no catálogo). As oito sabotagens das duas linhas de produto foram detectadas em grupos próprios, com teto de 12 s e 256 MiB por processo. Os controles sob os mesmos limites passaram antes e depois. As demais mudanças são as sondas e a documentação, conferida nos dois pontos de uso. Sem chamadas reais ao GitHub ou ao Codex.
 - 2026-11-27 17:53 · `R5` · REVIEW r2 confirmou que dois títulos Markdown válidos abriam um turno com o despachante de `7ba4bc9` e zero em `65862f3`, sem alterar a espera nem o rc 3 do predecessor. O achado da r2 voltou ao EXEC com regressão e nova caminhada.
+- 2026-11-27 18:28 · `R5` · R5 sabotage: estado inicial já dentro de comentário → plain (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: primeira linha ignorada na varredura → plain (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: abertura de comentário dentro de cerca aceita → comment-in-fence (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: estado não continua na linha seguinte → closed-comment (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: comentário indentado como código aceito → indented-comment (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: estado de comentário sempre fechado → commented-heading (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: fechamento de comentário na mesma linha ignorado → same-line-comment (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: linha interna de comentário chega ao leitor de cerca → closed-comment (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: título indentado como código aceito pelo padrão → r3 (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: linha sem marcação encerra a varredura → ordinary (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: grupo de título atribuído ao marcador → plain (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: cerca de crases aceita informação inválida → backtick-info (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: restrição de crases aplicada à cerca de tils → tilde-info (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: abertura inválida cai na atribuição da cerca → backtick-info (rc 1)
+- 2026-11-27 18:28 · `R5` · R5 sabotage: iterador anterior que não observa comentários recolocado → closed-comment (rc 1)
+- 2026-11-27 18:28 · `R5` · Em `b38b74e`, os dois prefixos descritos na REVIEW r2 deixaram somente a espera, e títulos ocultos em comentários abriram turno. Em `ebeda0b`, os dez cenários passaram com um turno antes da espera para títulos visíveis e zero para títulos ocultos. A espera foi única e manteve `rc=3`, `phase-ceiling` e o diagnóstico original. O Check imprimiu 1. `tests/run-all.sh` ficou verde antes e depois em 21 etapas, com 106 → 107 sondas do worker, 101 âncoras do TODO e 1.017 do catálogo. As 15 sabotagens foram detectadas com grupo próprio, teto de 12 s e 256 MiB por processo, e os controles sob os mesmos limites passaram antes e depois. Sem chamadas reais ao GitHub ou ao Codex.

@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-27 17:53
+atualizado: 2026-11-27 18:28
 ---
 
 # Checkpoint — O worker e os verbos dele
@@ -27,7 +27,7 @@ atualizado: 2026-11-27 17:53
 | R2 | Entregar ao relay o lote e a fonte canônica da fila, mesmo sem cópia na base | `o=$(bash tests/check-worker.sh 2>&1) && grep -c '^  ok    ahead planner receives the canonical queue outside its base$' <<< "$o"` → `1` | done | a83df3e |
 | R3 | Manter a sugestão quando a referência local do pedido não é recuperável | `o=$(bash tests/check-worker.sh 2>&1) && grep -c '^  ok    ahead planning refuses stale owner request references$' <<< "$o"` → `1` | done | 9b0e168 |
 | R4 | Separar aprovação informativa de achado humano e recusar metadados ilegíveis de threads | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    plain human approvals do not hide actionable findings$' <<< "$o")" = 1 ] && grep -c '^  ok    review findings and readiness reject malformed resolved threads$' <<< "$o"` → `1` | done | 4d5bdb4 |
-| R5 | Reconhecer o título do pedido após conteúdo que não abre cerca Markdown | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    valid markdown owner request survives preceding markup$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | pending | — |
+| R5 | Reconhecer o título do pedido após conteúdo que não abre cerca Markdown | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    valid markdown owner request survives preceding markup$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | done | ebeda0b |
 
 ## Incrementos de fix (QA e REVIEW)
 

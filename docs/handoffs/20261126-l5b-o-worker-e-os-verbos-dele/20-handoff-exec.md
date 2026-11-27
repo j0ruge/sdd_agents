@@ -2,9 +2,9 @@
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
 fase: EXEC
 status: done
-sessao: 01a21e80-43e7-72c3-8fc4-8b56e10a96ab
-data: 2026-11-27 17:18
-gate: tests/run-all.sh no conteúdo de 4d5bdb4 → rc 0, suite green, 21 etapas e 106 sondas do worker. Check R4 do checkpoint → 1.
+sessao: 01a21ec9-44a5-7c92-a2d4-9af527b5c0e7
+data: 2026-11-27 18:28
+gate: tests/run-all.sh no conteúdo de ebeda0b → rc 0, suite green, 21 etapas. bash tests/check-worker.sh no mesmo conteúdo → rc 0, 107 sondas e Check R5 → 1.
 ---
 
 # Handoff — EXEC — O worker e os verbos dele
@@ -15,16 +15,16 @@ gate: tests/run-all.sh no conteúdo de 4d5bdb4 → rc 0, suite green, 21 etapas 
 
 ## TL;DR
 
-Os 20 incrementos estão concluídos, incluindo as quatro correções da REVIEW r1.
-R4 deixa passar uma aprovação simples e recusa threads com metadados ilegíveis, mesmo se constarem como resolvidas.
-O Check de R4 imprimiu `1` e `tests/run-all.sh` ficou verde. A próxima rodada deve revalidar a jornada no novo head.
+Os 21 incrementos estão concluídos, incluindo o R5 da REVIEW r2.
+Um exemplo de cerca em comentário HTML ou uma abertura inválida de crases não oculta mais o título do pedido do dono.
+O Check de R5 imprimiu `1` e a suíte ficou verde. O próximo reteste deve repetir a jornada antes da revisão do delta.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5b-o-worker-e-os-verbos-dele` — sem upstream configurado.
-- **Último commit de implementação:** `4d5bdb4` — correção do inventário e da prontidão de review.
+- **Último commit de implementação:** `ebeda0b` — correção da leitura do título do pedido para planejamento antecipado.
 - **Árvore de trabalho:** o commit de fechamento registra apenas o checkpoint, as notas e este handoff.
-- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas e 106 sondas do worker.
+- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas e 107 sondas do worker.
 - **E2E:** não há `E2E_CMD` configurado. As jornadas usam Git local e simulam GitHub, runner, relay, fila e aprovação.
 
 ## O que foi feito
@@ -56,24 +56,37 @@ O Check de R4 imprimiu `1` e `tests/run-all.sh` ficou verde. A próxima rodada d
 - `9b0e168` — R3 — Exige referência local recuperável e estável antes do despacho antecipado.
 - `4d5bdb4` — R4 — Distingue aprovação informativa de corpo acionável e valida metadados de comentários presentes também em threads resolvidas. Inventário e prontidão recusam a mesma página inválida.
 
+## Correção da REVIEW r2
+
+- `ebeda0b` — R5 — Reconhece um título visível depois de comentário HTML ou de linha inválida como abertura de cerca de crases.
+  Os dois casos abrem um turno antes da espera. Títulos em comentários ou cercas reais não abrem turno.
+  A espera continua única e preserva `rc=3`, `phase-ceiling` e o diagnóstico do predecessor na fixture.
+  As 15 sabotagens do leitor foram detectadas. Os controles com as mesmas limitações passaram antes e depois.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
-| `checkpoint.md` | Checks e commits de implementação dos 20 incrementos. |
+| `checkpoint.md` | Checks e commits de implementação dos 21 incrementos. |
 | `commands/sdd-worker.md` | Procedimentos de despacho, retomada, aprovação e espera. |
 | `bin/sdd-worker-ahead` | Confirmação do dono do checkout, reserva do sucessor e chamada ao relay. |
-| `tests/check-worker-ahead.py` | Jornada de três lotes, concorrência, recusas e revalidação. |
+| `tests/check-worker-ahead.py` | Jornada de três lotes, concorrência, recusas, revalidação e leitura do pedido com marcação Markdown. |
 | `tests/check-worker.sh` | Executa o bloco público de seleção da revisão e mede os 13 cenários com controles negativos. |
 | `e2e/check-worker-lookahead-race.py` e `e2e/check-worker-review-probe.py` | Reproduções dos dois achados de QA. |
 
 ## Boot da próxima fase
 
-Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e a seção da REVIEW r1 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R4 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
+Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e as seções da REVIEW r1 e r2 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R5 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
 
 Na jornada de merge, confira que só chega a `ready <sha>` um PR cujo `local/ci` resulta da suíte completa naquele head. No mesmo SHA, uma aprovação curta é informativa, mas um corpo acionável ou pedido vigente bloqueia. Inventário e prontidão recusam um campo `comments` presente e inválido, sem reabrir uma thread resolvida válida.
 
 Na jornada de retomada, confirme a ordem runner → relay → espera, a reserva única e o acesso do relay à fila canônica sem cópia na base. Para a campanha `20261117-zerar-as-issues`, `ahead-request` referencia o pedido original do dono, identificado nas decisões 1 e 7 de `00-missao.md`. Referência local vencida ou alterada antes do despacho mantém a sugestão e preserva o resultado da espera. Aprovar o sucessor ainda depende de merge, revalidação e autoridade própria.
+
+No reteste de R5, a asserção `valid markdown owner request survives preceding markup` exercita o bloco público de `run`
+com um runner simulado. Os casos com título visível, inclusive os dois reproduzidos na REVIEW r2, devem registrar
+`start` antes de `wait`. Os títulos ocultos devem registrar só `wait`. Os controles de R3 ainda recusam referências
+vencidas, ambíguas ou dentro de código real. A asserção `authorized ahead planning starts once before wait` repete
+a jornada de reserva única, retomada e revalidação sem disparar um planner real.
 
 ## Pendências / Decisions for a Human
 
@@ -87,4 +100,4 @@ Na jornada de retomada, confirme a ordem runner → relay → espera, a reserva 
 
 ## Achados fora de escopo
 
-- Nenhum achado novo no ciclo de correções de QA nem no R4.
+- Nenhum achado novo no R5. O falso verde de `local/ci` com `TEST_CMD` só de espaços continua no `TODO.md`, conforme a REVIEW r2.
