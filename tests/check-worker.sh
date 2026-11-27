@@ -2745,10 +2745,19 @@ else
     'the ### `review` subsection names sdd review-base and drops "carry no `reviewed_head:`"' "$rsec"
 fi
 
-# Execute the review act's shell block, recording the order in which it reads and acts.
-awk '/^### `review`$/ { on=1; next } on && /^### / { exit }
-  on && /^\x60\x60\x60bash$/ { code=1; next } code && /^\x60\x60\x60$/ { exit } code' \
-  "$COMMAND" > "$BOX/review-procedure"
+# Select the block defining review_scope, not the earlier lookahead command.
+review_procedure="$BOX/review-procedure"
+awk '
+  !code && /^\x60\x60\x60bash$/ { code=1; block=""; found=0; next }
+  code && /^\x60\x60\x60$/ {
+    if (found) { printf "%s", block; exit }
+    code=0; next
+  }
+  code {
+    block=block $0 "\n"
+    if ($0 ~ /^[[:space:]]*review_scope\(\)/) found=1
+  }
+' <<< "$rsec" > "$review_procedure"
 scope_is() (
   local world="$1" want_rc="$2" want="$3" trace="$4"
   local log="$BOX/review-scope.$1" state=OPEN pr_mergeable=MERGEABLE remote="$B" local_head="$B" rc=0 out
@@ -2791,36 +2800,56 @@ scope_is() (
   sdd() {
     printf 'scope\n' >> "$log"
     [ "$*" = 'review-base fixture' ] || return 9
-    if [ "$world" = updated ]; then
-      printf 'full — merge entered after the previous round\n'
-    else
-      printf 'base=%s — previous round\n' "$A"
-    fi
+    case "$world" in
+      updated) printf 'full — merge entered after the previous round\n' ;;
+      wrong_delta) printf 'full — unexpected full round\n' ;;
+      *) printf 'base=%s — previous round\n' "$A" ;;
+    esac
   }
+  : > "$log"
   printf '%s\n' "$local_head" > "$log.head"
   # shellcheck disable=SC1090 # Run the exact shell block the worker follows.
-  . "$BOX/review-procedure"
+  . "$review_procedure" || exit
+  if ! declare -F review_scope >/dev/null; then
+    printf 'review_scope was not loaded\n' >&2
+    exit 1
+  fi
   out="$(review_scope "$PRN" fixture 2>"$log.err")" || rc=$?
   if [[ "$rc" != "$want_rc" || "$out" != "$want" || "$(cat "$log")" != "$trace" ]]; then
     printf '%s: rc=%s, output=%q, calls=%q\n' "$world" "$rc" "$out" "$(cat "$log")"
+    exit 1
   fi
+  printf 'checked\n'
 )
-if [ -s "$BOX/review-procedure" ]; then
+scope_case() {
+  local witness
+  if witness="$(scope_is "$@" 2>&1)" && [ "$witness" = checked ]; then return 0; fi
+  printf '%s: review scenario did not pass%s\n' "$1" "${witness:+: $witness}"
+}
+delta_case=(0 "$B"$'\n'"base=$A — previous round" $'gh\nhead\nstatus\nscope')
+if [ -s "$review_procedure" ]; then
   got="$(
-    scope_is delta 0 "$B"$'\n'"base=$A — previous round" $'gh\nhead\nstatus\nscope'
-    scope_is integrate 1 "integrated $A" $'gh\nhead\nstatus\nfetch\nhead\nmerge\nhead'
-    scope_is updated 0 "$A"$'\nfull — merge entered after the previous round' $'gh\nhead\nstatus\nscope'
-    scope_is conflict 1 '' $'gh\nhead\nstatus\nfetch\nhead\nmerge'
-    scope_is dirty_conflict 1 '' $'gh\nhead\nstatus'
-    scope_is dirty_mergeable 1 '' $'gh\nhead\nstatus'
-    scope_is fetch_failed 1 '' $'gh\nhead\nstatus\nfetch'
-    scope_is moved_during_fetch 3 '' $'gh\nhead\nstatus\nfetch\nhead'
-    scope_is malformed 3 '' gh
-    scope_is stale 3 '' $'gh\nhead'
-    scope_is unknown 3 '' gh
-    scope_is closed 3 '' gh
-    scope_is offline 3 '' gh
+    scope_case delta "${delta_case[@]}"
+    scope_case integrate 1 "integrated $A" $'gh\nhead\nstatus\nfetch\nhead\nmerge\nhead'
+    scope_case updated 0 "$A"$'\nfull — merge entered after the previous round' $'gh\nhead\nstatus\nscope'
+    scope_case conflict 1 '' $'gh\nhead\nstatus\nfetch\nhead\nmerge'
+    scope_case dirty_conflict 1 '' $'gh\nhead\nstatus'
+    scope_case dirty_mergeable 1 '' $'gh\nhead\nstatus'
+    scope_case fetch_failed 1 '' $'gh\nhead\nstatus\nfetch'
+    scope_case moved_during_fetch 3 '' $'gh\nhead\nstatus\nfetch\nhead'
+    scope_case malformed 3 '' gh
+    scope_case stale 3 '' $'gh\nhead'
+    scope_case unknown 3 '' gh
+    scope_case closed 3 '' gh
+    scope_case offline 3 '' gh
   )"
+  printf 'exit 0\n' > "$BOX/review-aborted-load"
+  if [ -z "$(review_procedure="$BOX/review-aborted-load" scope_case delta "${delta_case[@]}")" ]; then
+    got+=" the probe accepted an aborted load"
+  fi
+  if [ -z "$(scope_case wrong_delta "${delta_case[@]}")" ]; then
+    got+=" the probe accepted a full round instead of the eligible delta"
+  fi
 else
   got='no guarded review block'
   if grep -qF 'bring the base in' <<< "$rsec"; then
