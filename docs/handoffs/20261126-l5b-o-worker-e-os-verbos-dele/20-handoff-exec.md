@@ -2,9 +2,9 @@
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
 fase: EXEC
 status: done
-sessao: 01a21ec9-44a5-7c92-a2d4-9af527b5c0e7
-data: 2026-11-27 18:28
-gate: tests/run-all.sh no conteúdo de ebeda0b → rc 0, suite green, 21 etapas. bash tests/check-worker.sh no mesmo conteúdo → rc 0, 107 sondas e Check R5 → 1.
+sessao: 01a21f06-ea40-7652-b94c-2840bd9fbe29
+data: 2026-11-27 19:28
+gate: tests/run-all.sh no conteúdo de 9551b6e3 → rc 0, suite green, 21 etapas. bash tests/check-worker.sh no mesmo conteúdo → rc 0, 108 sondas e Check R6 → 1.
 ---
 
 # Handoff — EXEC — O worker e os verbos dele
@@ -15,16 +15,16 @@ gate: tests/run-all.sh no conteúdo de ebeda0b → rc 0, suite green, 21 etapas.
 
 ## TL;DR
 
-Os 21 incrementos estão concluídos, incluindo o R5 da REVIEW r2.
-Um exemplo de cerca em comentário HTML ou uma abertura inválida de crases não oculta mais o título do pedido do dono.
-O Check de R5 imprimiu `1` e a suíte ficou verde. O próximo reteste deve repetir a jornada antes da revisão do delta.
+Os 22 incrementos estão concluídos, incluindo o R6 da REVIEW r3.
+Depois de código cercado em lista, um título visível único inicia o planejamento e dois títulos iguais mantêm apenas a sugestão.
+O Check de R6 imprimiu `1` e a suíte ficou verde. O próximo reteste deve repetir os dois casos antes da revisão do delta.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5b-o-worker-e-os-verbos-dele` — sem upstream configurado.
-- **Último commit de implementação:** `ebeda0b` — correção da leitura do título do pedido para planejamento antecipado.
+- **Último commit de implementação:** `9551b6e3` — distingue títulos após uma cerca aberta em item de lista.
 - **Árvore de trabalho:** o commit de fechamento registra apenas o checkpoint, as notas e este handoff.
-- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas e 107 sondas do worker.
+- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas e 108 sondas do worker.
 - **E2E:** não há `E2E_CMD` configurado. As jornadas usam Git local e simulam GitHub, runner, relay, fila e aprovação.
 
 ## O que foi feito
@@ -63,11 +63,18 @@ O Check de R5 imprimiu `1` e a suíte ficou verde. O próximo reteste deve repet
   A espera continua única e preserva `rc=3`, `phase-ceiling` e o diagnóstico do predecessor na fixture.
   As 15 sabotagens do leitor foram detectadas. Os controles com as mesmas limitações passaram antes e depois.
 
+## Correção da REVIEW r3
+
+- `9551b6e3` — R6 — Uma marca de comentário em código cercado não oculta o título que segue o item de lista.
+  Na jornada pública de `run`, um título único gera `start, wait` e dois títulos iguais geram só `wait`.
+  A espera permanece única com `rc=3`, `phase-ceiling` e o diagnóstico original.
+  As 21 sabotagens do leitor foram detectadas. Os controles com limite de 12 s e 256 MiB passaram antes e depois.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
-| `checkpoint.md` | Checks e commits de implementação dos 21 incrementos. |
+| `checkpoint.md` | Checks e commits de implementação dos 22 incrementos. |
 | `commands/sdd-worker.md` | Procedimentos de despacho, retomada, aprovação e espera. |
 | `bin/sdd-worker-ahead` | Confirmação do dono do checkout, reserva do sucessor e chamada ao relay. |
 | `tests/check-worker-ahead.py` | Jornada de três lotes, concorrência, recusas, revalidação e leitura do pedido com marcação Markdown. |
@@ -76,7 +83,7 @@ O Check de R5 imprimiu `1` e a suíte ficou verde. O próximo reteste deve repet
 
 ## Boot da próxima fase
 
-Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e as seções da REVIEW r1 e r2 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R5 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
+Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e as seções da REVIEW r1, r2 e r3 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R6 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
 
 Na jornada de merge, confira que só chega a `ready <sha>` um PR cujo `local/ci` resulta da suíte completa naquele head. No mesmo SHA, uma aprovação curta é informativa, mas um corpo acionável ou pedido vigente bloqueia. Inventário e prontidão recusam um campo `comments` presente e inválido, sem reabrir uma thread resolvida válida.
 
@@ -87,6 +94,11 @@ com um runner simulado. Os casos com título visível, inclusive os dois reprodu
 `start` antes de `wait`. Os títulos ocultos devem registrar só `wait`. Os controles de R3 ainda recusam referências
 vencidas, ambíguas ou dentro de código real. A asserção `authorized ahead planning starts once before wait` repete
 a jornada de reserva única, retomada e revalidação sem disparar um planner real.
+
+No reteste de R6, rode `bash tests/check-worker.sh` e confira a asserção
+`owner request distinguishes unique and duplicate headings after list code`. Os casos
+`list-fenced-comment-marker` e `duplicate-after-list-code` reproduzem a REVIEW r3. O primeiro deve
+registrar `start, wait` e o segundo só `wait`. Rode também a jornada de reserva única do mesmo Check.
 
 ## Pendências / Decisions for a Human
 
@@ -100,4 +112,4 @@ a jornada de reserva única, retomada e revalidação sem disparar um planner re
 
 ## Achados fora de escopo
 
-- Nenhum achado novo no R5. O falso verde de `local/ci` com `TEST_CMD` só de espaços continua no `TODO.md`, conforme a REVIEW r2.
+- Nenhum achado novo nos incrementos R5 e R6. O falso verde de `local/ci` com `TEST_CMD` só de espaços continua no `TODO.md`, conforme a REVIEW r2.
