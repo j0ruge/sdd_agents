@@ -6288,11 +6288,19 @@ else
 fi
 
 # --- I14: run the dispatch and wait from the public command -------------------------------------
-if got="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" 2>&1)"; then
+ahead_rc=0
+got="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" 2>&1)" || ahead_rc=$?
+if grep -qxF 'ahead journey verified' <<< "$got"; then
   pass 'authorized ahead planning starts once before wait'
 else
   fail 'authorized ahead planning starts once before wait' \
     'one reserved planner before wait, resume before materialization, and approval only after revalidation' "$got"
+fi
+if [ "$ahead_rc" -eq 0 ]; then
+  pass 'ahead planner receives the canonical queue outside its base'
+else
+  fail 'ahead planner receives the canonical queue outside its base' \
+    'the first relay turn points to the primary campaign file and names the reserved lot' "$got"
 fi
 
 # --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------

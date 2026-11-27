@@ -102,6 +102,7 @@ def opening_prompt(root, args):
     campaign = ""
     if args.campaign:
         campaign = f"Set campaign to {Path(args.campaign).name} and lot to {args.lot} in the mission frontmatter."
+        campaign += f"\nRead the canonical queue at `{args.campaign / 'campaign.md'}` before planning lot {args.lot}."
     return f"""Act as the registered SDD planner for mission {args.mission} in {root}.
 Read {instructions}, the repository instructions and .sdd/config.sh. Follow the planner contract and OUTPUT_LANG.
 Use these source templates (read all of them):

@@ -24,11 +24,12 @@ with tempfile.TemporaryDirectory(prefix="worker-ahead-") as temp:
     box = Path(temp)
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", PATH=f"{box}/kit/bin:{env['PATH']}", kit=str(box / "kit"), base="main")
-    primary = box / "primary"
+    primary = box / "primary checkout"
     primary.mkdir()
     kit = box / "kit/bin"
     kit.mkdir(parents=True)
     shutil.copy2(root / "bin/sdd-worker-ahead", kit)
+    shutil.copy2(root / "bin/sdd-plan-codex", kit)
     checks = box / "kit/tests"
     checks.mkdir()
 
@@ -53,6 +54,8 @@ with tempfile.TemporaryDirectory(prefix="worker-ahead-") as temp:
     git("worktree", "add", "-qb", "fix/lot-a", str(a))
     campaign = primary / "docs/campaigns/20990101-fixture"
     campaign.mkdir(parents=True)
+    queue = campaign / "campaign.md"
+    queue.write_text("## Lots\n\n### L2\nScope only available in the primary queue.\n\n### L3\nNext scope.\n")
     handoff = box / "resume.md"
     source = box / "record-I1.md"
     source.write_text("# Owner request\n\nPlan the next lot during the run.\n")
@@ -61,11 +64,12 @@ with tempfile.TemporaryDirectory(prefix="worker-ahead-") as temp:
     trace = box / "trace"
     trace.touch()
     env.update(campaign_dir=str(campaign), resume_handoff=str(handoff), TRACE=str(trace),
+               SDD_STATE_DIR=str(box / "state"),
                WORLD="ok", engine="codex", worktree=str(a), mission="20990101-lot-a", lot="L1")
     env["ROUND"] = "1"
 
     stub = r"""#!/usr/bin/env python3
-import json, os, pathlib, subprocess, sys, time
+import json, os, pathlib, sys, time
 name = pathlib.Path(sys.argv[0]).name
 act, *args = sys.argv[1:]
 e = os.environ
@@ -105,25 +109,17 @@ elif name == "sdd-worker":
         mark(act, *args[1:])
         if (act, world) in (("allows", "expired"), ("budget", "poor"), ("codex-plan", "no-cost-consent")):
             sys.exit("fixture refusal")
-elif name == "sdd-plan-codex":
-    mission = args[0]
-    meta = pathlib.Path(subprocess.check_output(
-        ['git', 'rev-parse', '--absolute-git-dir'], text=True).strip()) / 'sdd-codex-planner'
-    record = meta / (mission + '.json')
-    if act == "start":
-        os.kill(int(e['pid']), 0)
-        assert pathlib.Path.cwd() != pathlib.Path(e['worktree'])
-        assert not record.exists()
-        mark('start', mission, os.getcwd())
-        meta.mkdir(exist_ok=True)
-        record.write_text(json.dumps({'campaign': args[args.index('--campaign') + 1],
-                                      'lot': args[args.index('--lot') + 1]}))
-        if world == "slow-start":
-            time.sleep(.4)
-    else:
-        assert act == "status" and record.is_file()
-        mark('status', mission, os.getcwd())
-    print('question fixture-question')
+elif name == "sdd-codex":
+    os.kill(int(e['pid']), 0)
+    assert '--read-only' in args and '--resume' not in args
+    checkout = pathlib.Path.cwd()
+    assert checkout != pathlib.Path(e['worktree'])
+    pathlib.Path(e['TRACE']).with_name(checkout.name + '.prompt').write_text(sys.stdin.read())
+    mark('start', str(checkout))
+    if world == "slow-start":
+        time.sleep(.4)
+    print(json.dumps(dict(type='system', session_id='c0de1234-1234-4234-8234-123456789abc')))
+    print(json.dumps(dict(type='result', is_error=False, result='fixture-question')))
 elif name == "check-checkpoint.sh":
     assert pathlib.Path(args[0]).is_file()
     mark("check", act)
@@ -136,7 +132,7 @@ elif name == "tail":
 else:
     sys.exit(92)
 """
-    for executable in [kit / name for name in ("sdd", "sdd-worker", "sdd-plan-codex", "tail")] + [
+    for executable in [kit / name for name in ("sdd", "sdd-worker", "sdd-codex", "tail")] + [
             checks / "check-checkpoint.sh"]:
         executable.write_text(stub)
         executable.chmod(0o755)
@@ -191,7 +187,10 @@ else:
                 out, err = worker.communicate(timeout=20)
                 assert worker.returncode == 0, (out, err)
             assert runner.poll() is None
-            _, bmission, bpath = lines("start")[0].split("|")
+            question = re.search(r"^question [0-9a-f]{32}\nfixture-question$", out, re.M)
+            assert question, (out, err)
+            bmission = "20990101-fixture-ahead-l2"
+            _, bpath = lines("start")[0].split("|")
             b = Path(bpath)
             assert b != a and b != primary and b.is_dir()
             assert len(lines("start")) == 1
@@ -199,13 +198,13 @@ else:
             assert recent.index(lines("start")[0]) < len(recent) - 1
             assert recent[-1].startswith("wait|")
             env.update(WORLD="ok", ROUND="review")
-            assert "question fixture-question" in action("review")
+            assert question[0] in action("review")
             env.update(ROUND="plan", lot="L2")
-            assert "question fixture-question" in action("plan")
+            assert question[0] in action("plan")
             handoff.unlink()
             action("plan", 1)
             handoff.write_text(request)
-            assert len(lines("start")) == 1 and len(lines("status")) >= 2
+            assert len(lines("start")) == 1
 
             mission_dir = b / "docs/handoffs" / bmission
             mission_dir.mkdir(parents=True)
@@ -241,8 +240,9 @@ else:
             env.update(ROUND="2", lot="L2")
             action("run")
             assert len(lines("start")) == 2
-            _, cmission, cpath = lines("start")[1].split("|")
-            assert cpath not in (bpath, str(a), str(primary)) and cmission.endswith("-ahead-l3")
+            _, cpath = lines("start")[1].split("|")
+            cmission = "20990101-fixture-ahead-l3"
+            assert cpath not in (bpath, str(a), str(primary)) and Path(cpath).name.endswith(cmission)
             env.update(ROUND="3", worktree=cpath, mission=cmission, lot="L3")
             action("run")
             env["ROUND"] = "done"
@@ -250,3 +250,10 @@ else:
             assert len(lines("start")) == 2 and len(lines("approve")) == 1
         finally:
             runner.terminate()
+
+    print("ahead journey verified", flush=True)
+    for checkout, lot_id in ((b, "L2"), (Path(cpath), "L3")):
+        assert not (checkout / queue.relative_to(primary)).exists(), checkout
+        prompt = trace.with_name(checkout.name + ".prompt").read_text()
+        expected = f"Read the canonical queue at `{queue}` before planning lot {lot_id}."
+        assert expected in prompt, f"first turn for {lot_id} did not point to the canonical queue"

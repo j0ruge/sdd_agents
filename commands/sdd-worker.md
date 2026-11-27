@@ -170,6 +170,8 @@ his acceptance. The plan, the grill and the report go to files.
 For delegated Codex planning, run
 `<kit>/bin/sdd-plan-codex start <mission> <topic> --campaign <absolute-campaign-dir> --lot <L>`
 in the mission worktree. Use the same executable for the relay commands below if it is not on PATH.
+The first turn points the planner to `campaign.md` in the primary checkout and names the lot to
+plan. The queue can be absent from the mission worktree's base.
 Before every turn, the relay runs `sdd-worker codex-plan <campaign-dir> --lot <L>` to verify the
 signed Codex terms, the lot's plan authority, and the campaign's known budget. The worker's
 orchestration and the relay's planning turns are not part of the mission-spend ledger.

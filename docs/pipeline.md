@@ -2285,6 +2285,8 @@ resume handoff references the owner's written request for this campaign. The run
 checks the live checkout owner against the launch PID and rereads the queue, budget and
 authority before starting the relay. The reservation is per campaign and lot in the primary
 Git directory. It binds one separate worktree and relay mission before a draft exists.
+The relay's first turn names the lot and points to `campaign.md` in the primary checkout,
+even if the reserved worktree's base has no copy of the queue.
 Concurrent and resumed workers reuse that identity, including when another worker creates
 the reservation during a budget check. A checkout without a reservation or one that does not
 match it is refused. The successor is only a draft until the predecessor merges, the updated
