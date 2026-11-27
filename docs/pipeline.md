@@ -2364,12 +2364,16 @@ naming the first that fails:
 3. `findings`: no active `CHANGES_REQUESTED` for any reviewer, even with no inline comments,
    and no review body with an unhandled finding. An approval from another reviewer or a later
    plain comment does not clear a request. A later approval by the same reviewer or dismissal
-   of the request in GitHub can clear it. Blank bodies and simple acknowledgments need no disposition.
+   of the request in GitHub can clear it. A blank body or a whole-body acknowledgment such as
+   `Approved.` or `Aprovado.` needs no disposition. An approval that also asks for a fix still counts
+   as a finding.
    Other bot bodies require a disposition in the committed round with the review ID, the
    current fingerprint, an evidence commit in the head's history and an explanation. A new
    finding or edited body does not reuse an old disposition;
-4. `threads`: every page was read and every review thread is resolved. A resolved thread
-   with a disposition in the round still has to match the finding recorded there;
+4. `threads`: every page was read and every review thread is resolved. Both inventory and
+   readiness reject malformed comment metadata, even on a resolved thread. Only an already resolved
+   thread may omit the comments field. A resolved thread with a disposition in the round still has to
+   match the finding recorded there.
 5. `mergeable`: the pull request is `OPEN` and `MERGEABLE`;
 6. `head`: the local `HEAD` is that sha;
 7. `local/ci`: the newest status on that sha in this context from the authenticated GitHub

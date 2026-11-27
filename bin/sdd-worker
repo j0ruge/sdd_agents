@@ -1643,7 +1643,7 @@ gh_pr_reviews() {
         actor: .user.type, authorId: .user.id, activeRequest: ($requests | index($id) != null),
         finding: (.state != "DISMISSED" and
           (.body | gsub("^\\s+|\\s+$"; "") | ascii_downcase |
-            test("^(|lgtm\\.?|looks good\\.?|thanks\\.?|no findings\\.?)$") | not))
+            test("^(|lgtm\\.?|looks good\\.?|thanks\\.?|no findings\\.?|approved\\.?|aprovad[oa]\\.?)$") | not))
       })' 2>/dev/null <<< "$GH_OUT")"; then
     gh_unread "gh api --paginate $endpoint answered invalid review pages"; return 3
   fi
@@ -1669,7 +1669,7 @@ gh_review_threads() {
           (.pageInfo.hasNextPage | type) == "boolean" and
           (if .pageInfo.hasNextPage then (.pageInfo.endCursor | node_id) else true end) and
           all(.nodes[]; (.id | node_id) and (.isResolved | type) == "boolean" and
-            (.isResolved or ((.comments.totalCount | count) and .comments.totalCount > 0 and
+            ((.isResolved and (has("comments") | not)) or ((.comments.totalCount | count) and .comments.totalCount > 0 and
               (.comments.nodes | type) == "array" and
               (.comments.nodes | length) == ([.comments.totalCount, 2] | min) and
               all(.comments.nodes[]; (.id | node_id) and (.body | type) == "string" and

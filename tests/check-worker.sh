@@ -2340,6 +2340,97 @@ else
 fi
 
 
+# R4: a whole acknowledgment is informational, not an exemption for actionable text.
+got=""
+for world in plain-en plain-pt plain-case plain-finding plain-request plain-empty-request; do
+  serve "$world"
+  state=APPROVED
+  expected_finding=false
+  expected_request=false
+  expected_rc=0
+  expected_output="ready $B"
+  case "$world" in
+    plain-en) body='Approved.' ;;
+    plain-pt) body='Aprovado.' ;;
+    plain-case) body=$' \nAPROVADA\t' ;;
+    plain-finding)
+      body=$'Aprovado.\nPlease handle the missing value.'
+      expected_finding=true
+      expected_rc=1
+      expected_output='not-ready findings: review 23 '
+      ;;
+    plain-request|plain-empty-request)
+      body='Aprovado.'
+      [ "$world" != plain-empty-request ] || body=''
+      state=CHANGES_REQUESTED
+      expected_request=true
+      expected_rc=1
+      expected_output='not-ready findings: changes requested by reviewer'
+      ;;
+  esac
+  review_fixture 23 "$state" "$body" User > "$BOX/ghfx/$world/reviews.2" \
+    || got="${got:+$got; }$world: could not materialize review fixture"
+  finding_worker "$world"
+  if [ "$W_RC" != 0 ] || ! jq -es --argjson finding "$expected_finding" --argjson request "$expected_request" '
+    map(select(.kind == "review")) | length == 1 and
+    (.[0] | .id == "23" and .actor == "User" and .finding == $finding and .activeRequest == $request)
+  ' >/dev/null <<< "$W_OUT"; then
+    got="${got:+$got; }$world: inventory did not classify review 23 (rc $W_RC)"
+  fi
+  ready_is "$world" "$expected_rc" "$expected_output" "$world"
+  if [ "$expected_rc" = 0 ] && [ "$W_OUT" != "$expected_output" ]; then
+    got="${got:+$got; }$world: expected the exact ready SHA"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'plain human approvals do not hide actionable findings'
+else
+  fail 'plain human approvals do not hide actionable findings' 'acknowledgment ready, actionable text or active request blocked' "$got"
+fi
+
+got=""
+for world in resolved-valid resolved-absent resolved-number resolved-null resolved-bad-count resolved-bad-nodes resolved-bad-body open-absent; do
+  serve "$world"
+  case "$world" in
+    resolved-valid) edit='.isResolved = true' ;;
+    resolved-absent) edit='.isResolved = true | del(.comments)' ;;
+    resolved-number) edit='.isResolved = true | .comments = 17' ;;
+    resolved-null) edit='.isResolved = true | .comments = null' ;;
+    resolved-bad-count) edit='.isResolved = true | .comments.totalCount = 2' ;;
+    resolved-bad-nodes) edit='.isResolved = true | .comments.nodes = {}' ;;
+    resolved-bad-body) edit='.isResolved = true | .comments.nodes[0].body = null' ;;
+    open-absent) edit='del(.comments)' ;;
+  esac
+  thread_fixture User | jq ".data.repository.pullRequest.reviewThreads.nodes[0] |= ($edit)" > "$BOX/ghfx/$world/threads" \
+    || got="${got:+$got; }$world: could not materialize thread fixture"
+  finding_worker "$world"
+  case "$world" in
+    resolved-valid|resolved-absent)
+      if [ "$W_RC" != 0 ] || ! jq -es '
+        length == 1 and (.[0] | .id == "thread_A" and .kind == "thread" and .isResolved)
+      ' >/dev/null <<< "$W_OUT"; then
+        got="${got:+$got; }$world: inventory did not return the resolved thread (rc $W_RC)"
+      fi
+      ready_is "$world" 0 "ready $B" "$world"
+      [[ "$W_OUT" == "ready $B" ]] || got="${got:+$got; }$world: expected the exact ready SHA"
+      ;;
+    *)
+      if [[ "$W_RC" != 3 || -n "$W_OUT" || "$W_ERR" != *"answered an invalid page"* ]]; then
+        got="${got:+$got; }$world: inventory did not reject the page (rc $W_RC, $W_ERR)"
+      fi
+      ready_is "$world" 3 '' "$world"
+      if [[ -n "$W_OUT" || "$W_ERR" != *"answered an invalid page"* ]]; then
+        got="${got:+$got; }$world: readiness did not reject the page (rc $W_RC, $W_ERR)"
+      fi
+      ;;
+  esac
+done
+if [ -z "$got" ]; then
+  pass 'review findings and readiness reject malformed resolved threads'
+else
+  fail 'review findings and readiness reject malformed resolved threads' 'resolved controls ready, malformed pages rejected by both readers' "$got"
+fi
+
 # I10: materialized decisions and one consent for the exact merge request.
 got=""
 ready_reset
