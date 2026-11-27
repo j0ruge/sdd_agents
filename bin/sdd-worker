@@ -1040,13 +1040,16 @@ import json
 from decimal import Decimal
 import sys
 amounts = json.load(sys.stdin, parse_float=Decimal, parse_int=Decimal)
-print(sum(amounts) >= Decimal(sys.argv[1]))
-' "$scope_cap" <<< "$scope_amounts")"; then
+cap = Decimal(sys.argv[1])
+print("Mismatch" if sys.argv[2] and Decimal(sys.argv[2]) != cap else sum(amounts) >= cap)
+' "$scope_cap" "${SDD_CODEX_RUN_CAP:-}" <<< "$scope_amounts")"; then
       printf 'no spend — cannot compare known USD for %s to its mission ceiling\n' "$scope"; return 1
     fi
     case "$scope_reached" in
       False) ;;
       True) printf 'mission ceiling — known USD for %s reached its US$ %s cap\n' "$scope" "$scope_cap"; return 1 ;;
+      Mismatch) printf 'no mission cap — %s/.sdd/config.sh gives %s to the worker, but the runner would use %s\n' \
+        "$scope_wt" "$scope_cap" "$SDD_CODEX_RUN_CAP"; return 1 ;;
       *) printf 'no spend — invalid mission ceiling verdict for %s\n' "$scope"; return 1 ;;
     esac
   fi

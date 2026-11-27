@@ -2256,6 +2256,11 @@ zero is no ceiling for the runner too, and one below one cent is no cap the cent
 stops `budget` before any `.sdd/config.sh` is read, naming the delegation: `no mission cap —
 <delegation.md> signs budget_mission_usd: 0, …`.
 
+Delegated Claude runs also retain the signed limit from launch when checking each reloaded cap.
+Codex does not reload a changed file in the existing runner. The worker only considers a new
+invocation for a verified cap-only reduction, after rechecking permission, both budgets and
+preflight. See the [worker's run procedure](../commands/sdd-worker.md#run).
+
 **The campaign ceiling is a hard limit.** Below the ceiling, `budget` holds what is left of it, the
 ceiling's cents less the sum's, against the signed mission cap, in cents from its text: a fraction
 of a cent rounds up, and nothing goes through a `%.2f` or a binary product (`1.10 * 100` is

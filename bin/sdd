@@ -3400,10 +3400,18 @@ codex_pr_handoff() {
   fi
 }
 
-# Each call that can spend enforces the signed receipt in the actual target checkout. Neither
-# a CLI budget override nor a fake model response changes the worker's decision.
+codex_worker_check() {
+  local phase="$1" cap="$2" state_dir="${SDD_STATE_DIR:-$HOME/.sdd}" model
+  # Match the ledger that the runner writes even when invoked from a subdirectory.
+  [[ "$state_dir" == /* ]] || state_dir="$PWD/$state_dir"
+  model="$(phase_model "$phase")"
+  ( cd "$REPO_ROOT" && SDD_STATE_DIR="$state_dir" SDD_CODEX_RUN_CAP="$cap" \
+      "$SDD_HOME/bin/sdd-worker" codex-run --mission "$MISSION_DIR" --phase "$phase" --model "$model" )
+}
+
+# Each call that can spend enforces the signed receipt in the actual target checkout.
 codex_admit_session() {
-  local phase="$1" state_dir="${SDD_STATE_DIR:-$HOME/.sdd}" ledger repo model
+  local phase="$1" ledger repo
   [ "$PHASE_ENGINE" = codex ] || return 0
   if [ "$phase" = PR ]; then codex_pr_handoff "${2:-0}"; return 2; fi
   [ "$DRY_RUN" != 1 ] || return 0
@@ -3418,15 +3426,14 @@ codex_admit_session() {
   [ -x "$SDD_HOME/bin/sdd-codex" ] || die "Codex adapter not installed at $SDD_HOME/bin/sdd-codex"
   [ -x "$SDD_HOME/bin/sdd-worker" ] || die "Codex requires the worker's delegation check"
   command -v jq >/dev/null 2>&1 || die "Codex requires jq to record its unknown-cost session"
-  # Match the ledger that the runner writes even when invoked from a subdirectory.
-  [[ "$state_dir" == /* ]] || state_dir="$PWD/$state_dir"
-  model="$(phase_model "$phase")"
-  if ! ( cd "$REPO_ROOT" && SDD_STATE_DIR="$state_dir" "$SDD_HOME/bin/sdd-worker" codex-run --mission "$MISSION_DIR" --phase "$phase" --model "$model" ); then
+  codex_config_unchanged "$phase"
+  if ! codex_worker_check "$phase" "$BUDGET_MISSION_USD"; then
     bad "BLOCKED in $phase — the worker did not authorize this Codex session"
     pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  Codex delegation refused"
     autonomy_blocked_row "codex-delegation" "$phase" "the worker did not authorize this Codex session"
     return 3
   fi
+  codex_config_unchanged "$phase"
   # Unlike a standalone Claude mission, delegated budget relies on a writable shared ledger.
   if [ -z "${SDD_STATE_DIR:-}" ]; then
     repo="$(ledger_repo_root)"
@@ -10681,13 +10688,77 @@ codex_config_fingerprint() {
   fi
 }
 
+# A restart candidate only changes or inserts one literal cap assignment.
+codex_cap_shape() {
+  python3 -I - "$CONFIG_FILE" "${1:-}" <<'PY'
+from decimal import Decimal
+import hashlib
+from pathlib import Path
+import re
+import sys
+
+data = Path(sys.argv[1]).read_bytes()
+assignment = rb'^[ \t]*(?:export[ \t]+)?BUDGET_MISSION_USD=(["\x27]?)([0-9]+(?:\.[0-9]*)?|\.[0-9]+)\1(?:[ \t]+(?:#[^\n]*)?)?$'
+hits = list(re.finditer(assignment, data, re.M))
+if not hits:
+    print("-", "-", hashlib.sha256(data).hexdigest())
+elif len(hits) == 1:
+    hit = hits[0]
+    start, end = hit.span(2)
+    line_end = hit.end() + (data[hit.end():hit.end() + 1] == b'\n')
+    cap = hit[2].decode()
+    reduced = bool(sys.argv[2]) and 0 < Decimal(cap) < Decimal(sys.argv[2])
+    print(hashlib.sha256(data[:start] + b'<cap>' + data[end:]).hexdigest(), cap,
+          hashlib.sha256(data[:hit.start()] + data[line_end:]).hexdigest(),
+          "reduced" if reduced else "")
+PY
+}
+
+CODEX_LAUNCH_CONFIG=""
+CODEX_LAUNCH_CAP_SHAPE=""
+codex_config_arm() {
+  CODEX_LAUNCH_CONFIG="$1"
+  CODEX_LAUNCH_CAP_SHAPE="$(codex_cap_shape 2>/dev/null)" || CODEX_LAUNCH_CAP_SHAPE=""
+  codex_config_unchanged
+}
+
 codex_config_unchanged() {
-  local actual
+  local phase="${1:-}" actual candidate old_shape old_cap old_rest new_shape new_cap new_rest reduction
   actual="$(codex_config_fingerprint)" || die "cannot check the Codex launch configuration"
-  [ "$actual" = "$1" ] || die "Codex launch configuration changed — start a new invocation"
+  [ "$actual" != "$CODEX_LAUNCH_CONFIG" ] || return 0
+  if [ -n "$phase" ] && [ "$phase" != PR ] && [ "$DRY_RUN" != 1 ] && [ -n "$CODEX_LAUNCH_CAP_SHAPE" ]; then
+    candidate="$(codex_cap_shape "$BUDGET_MISSION_USD" 2>/dev/null)" || candidate=""
+    read -r old_shape old_cap old_rest <<< "$CODEX_LAUNCH_CAP_SHAPE"
+    read -r new_shape new_cap new_rest reduction <<< "$candidate"
+    if [ -n "$new_cap" ] && [ "$new_cap" != - ] &&
+       { { [ "$old_shape" = "$new_shape" ] && [ "$old_cap" = "$BUDGET_MISSION_USD" ]; } ||
+         { [ "$old_cap" = - ] && [ "$old_rest" = "$new_rest" ]; }; } &&
+       [ "$actual" = "$(codex_config_fingerprint)" ]; then
+      if ! codex_worker_check "$phase" "$new_cap"; then
+        die "Codex launch configuration changed — worker refused the new mission cap"
+      fi
+      if [ "$reduction" = reduced ] && [ "$actual" = "$(codex_config_fingerprint)" ]; then
+        die "Codex mission cap reduced from $BUDGET_MISSION_USD to $new_cap in $CONFIG_FILE (config $actual, phase $phase) — start a new invocation after revalidation"
+      fi
+    fi
+  fi
+  die "Codex launch configuration changed — review $CONFIG_FILE before starting a new invocation"
+}
+
+delegated_claude_cap_check() {
+  local signed="$1"
+  [ -n "$signed" ] && [ "$DRY_RUN" != 1 ] || return 0
+  [ "$BUDGET_OVERRIDE" != 1 ] || die "--budget-override does not apply to delegated campaign sessions"
+  if ! [[ "$signed" =~ ^([0-9]+(\.[0-9]*)?|\.[0-9]+)$ ]] ||
+     ! python3 -I -c 'from decimal import Decimal; import sys; cap, signed = map(Decimal, sys.argv[1:]); sys.exit(not (0 < cap <= signed))' \
+          "$BUDGET_MISSION_USD" "$signed"; then
+    die "$CONFIG_FILE sets BUDGET_MISSION_USD=$BUDGET_MISSION_USD outside the signed mission cap of $signed"
+  fi
 }
 
 cmd_run() {
+  local delegated_cap="${SDD_DELEGATED_MISSION_CAP_USD:-}"
+  unset SDD_DELEGATED_MISSION_CAP_USD
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -10706,6 +10777,7 @@ cmd_run() {
   local codex_config=""
   if [ "$PHASE_ENGINE" = codex ]; then
     codex_config="$(codex_config_fingerprint)" || die "cannot check the Codex launch configuration"
+    codex_config_arm "$codex_config"
   fi
   resolve_mission "$mission_arg"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
@@ -10777,9 +10849,10 @@ cmd_run() {
   while :; do
     # Do not source a checkout's control file again after a Codex phase has written to disk.
     if [ "$launch_engine" = codex ]; then
-      codex_config_unchanged "$codex_config"
+      codex_config_unchanged "${phase:-}"
     else
       config_reload
+      delegated_claude_cap_check "$delegated_cap"
     fi
     [ "$PHASE_ENGINE" = "$launch_engine" ] || die "PHASE_ENGINE changed during a run — start a new invocation"
     # Single use: the first lap takes the CLI's --phase, every later lap — the draft jump included,
@@ -11233,7 +11306,16 @@ cmd_run() {
     # this line. Which mechanism orders it that way was not identified. The direction of the
     # failure without this line is a FALSE hat-crossed stop, loud and not silent.
     hat_guard_arm
-    if [ "$launch_engine" = codex ]; then codex_config_unchanged "$codex_config"; fi
+    if [ "$launch_engine" = claude ] && [ -n "$delegated_cap" ]; then
+      # Apply only the cap on an inline retry. Other config still waits for the next lap.
+      BUDGET_MISSION_USD="$(
+        config_reload >&2
+        [ "$PHASE_ENGINE" = claude ] || die "PHASE_ENGINE changed during a retry — start a new invocation"
+        delegated_claude_cap_check "$delegated_cap"
+        printf '%s' "$BUDGET_MISSION_USD"
+      )" || return $?
+      if mission_budget_blown "$phase"; then return 3; fi
+    fi
     codex_admit_session "$phase" || return $?
     run_phase "$phase" "$LAST_PHASE_SID"
     # The retry gets its own pair of fingerprints. Until now it ran with no measurement at all,
@@ -11433,6 +11515,8 @@ no_work_escalation() {
 }
 
 cmd_retry() {
+  local delegated_cap="${SDD_DELEGATED_MISSION_CAP_USD:-}"
+  unset SDD_DELEGATED_MISSION_CAP_USD
   local mission_arg=""
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -11462,6 +11546,11 @@ cmd_retry() {
   if [ "$target_config" != "$source_config" ]; then
     config_reload
     [ "$HANDOFF_DIR" = "$source_handoffs" ] || die "HANDOFF_DIR changed — retry from the mission branch"
+  fi
+  if [ "$PHASE_ENGINE" = codex ]; then
+    codex_config_arm "$target_config"
+  else
+    delegated_claude_cap_check "$delegated_cap"
   fi
   # Check the skills of the actual harness, before gates or any fresh session.
   if [ "$PHASE_ENGINE" = claude ]; then phase_skills_check run; fi

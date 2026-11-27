@@ -185,7 +185,8 @@ The pager is read the same way: `allows run` reads the `ON_ESCALATION_CMD` of th
 and an empty one in the mission's worktree answers `ask … — no pager`, naming that file.
 
 ```bash
-cd <mission-worktree> && BUDGET_MISSION_USD=<cap> setsid -w nohup env -u CLAUDECODE \
+cd <mission-worktree> && BUDGET_MISSION_USD=<cap> SDD_DELEGATED_MISSION_CAP_USD=<cap> \
+  setsid -w nohup env -u CLAUDECODE \
   bash -c 'sdd run "$1"; echo "sdd run rc=$?"' _ <mission> > <log> 2>&1 < /dev/null &
 echo "$!"
 ```
@@ -211,6 +212,22 @@ each Codex model session, the runner verifies the signed delegation with
 `allow_unknown_cost: true` when signing the Codex delegation. If the signature, cost exception,
 or ordinary run authority fails verification, stop and return the diagnostic to the owner.
 Budget output reports the known subtotal and any reference API estimate separately.
+
+When a Codex run exits on a config change, only the runner's
+`Codex mission cap reduced … (config <hash>, phase <phase>)` diagnostic is a restart candidate.
+Wait for that run to exit and retain its PID and log. Check that the diagnostic belongs to this
+mission and worktree and that `git hash-object --no-filters -- .sdd/config.sh` there still matches
+the reported hash. Recheck `sdd-worker allows … run --mission …`, `sdd-worker budget` and the
+phase's `sdd-worker codex-run` (with the configured model for EXEC) for mission headroom. Repeat
+the Codex preflight in that worktree and confirm the hash still matches. Only then launch a fresh
+`sdd run`, with the signed cap from the new budget verdict and no forced phase. Keep that PID and
+log as usual. If any check fails, there is another edit, the cause is uncertain, or the new run
+stops again before the mission advances, stop and report the diagnostic. A generic config-change
+error is not permission to relaunch.
+
+For a delegated Claude run, pass both cap variables shown above. The runner checks the reloaded
+cap before each phase and inline retry. Zero and values above the signed cap stop the run. A
+valid reduction applies at the next dispatch, with the spend checked against the lower ceiling.
 
 ### `pr`
 

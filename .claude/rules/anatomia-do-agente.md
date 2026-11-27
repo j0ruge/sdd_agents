@@ -420,6 +420,9 @@ do `load_config`. Re-exec do `bin/sdd` entre voltas foi recusado: o runner não 
 julgaria a própria REVIEW. Limites no comentário do `config_reload`: o que o `cmd_run` derivou antes
 do laço (branch da missão, `MISSION_DIR`) fica com o valor do lançamento; edição feita durante a
 sessão chega ao gate da volta **seguinte**; `sdd retry`, `sdd close` e `sdd kaizen` leem uma vez só.
+Para Claude delegado, o runner confere o teto assinado no config recarregado e relê só o valor
+efetivo do teto para decidir a tentativa na mesma volta. Codex mantém a guarda do arquivo inteiro
+e não aplica edição na mesma invocação. O worker revalida uma redução de teto antes de reabrir.
 Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §1 e §2) a permissão que o runner pede ao
 harness para fora do repo do alvo é **só de leitura**: as regras do `kit_read_rules` nos templates do
 kit e nos diretórios que o `READ_EXTRA` do projeto declara. Com a regra, um `Write` no mesmo

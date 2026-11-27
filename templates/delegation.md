@@ -61,6 +61,14 @@ apague-a e commite a remoção antes de cortar os worktrees das missões (um wor
 commit continua com a linha), ou deixe-a, no checkout da campanha e em cada worktree de missão, no
 teto assinado ou abaixo dele.
 
+Durante um `run` delegado com Claude, a releitura do config e a tentativa na mesma volta recusam
+zero e valores acima do teto assinado antes de abrir outra sessão. Uma redução válida passa a
+valer no despacho seguinte. Com Codex, qualquer edição no arquivo encerra a invocação. Uma redução
+isolada, por inclusão de uma atribuição literal ou troca só do número, permite nova invocação
+após conferir o arquivo, revalidar a permissão e o saldo da missão e da campanha e passar no
+preflight. Outra edição,
+procedência incerta ou repetição sem avanço mantém a parada.
+
 ## O teto da campanha
 
 O `budget_campaign_usd:` é limite duro. Abaixo dele, o `bin/sdd-worker budget` compara o que resta
