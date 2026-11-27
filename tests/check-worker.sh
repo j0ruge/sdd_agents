@@ -2745,6 +2745,94 @@ else
     'the ### `review` subsection names sdd review-base and drops "carry no `reviewed_head:`"' "$rsec"
 fi
 
+# Execute the review act's shell block, recording the order in which it reads and acts.
+awk '/^### `review`$/ { on=1; next } on && /^### / { exit }
+  on && /^\x60\x60\x60bash$/ { code=1; next } code && /^\x60\x60\x60$/ { exit } code' \
+  "$COMMAND" > "$BOX/review-procedure"
+scope_is() (
+  local world="$1" want_rc="$2" want="$3" trace="$4"
+  local log="$BOX/review-scope.$1" state=OPEN pr_mergeable=MERGEABLE remote="$B" local_head="$B" rc=0 out
+  case "$world" in
+    stale) local_head="$A" ;;
+    unknown) pr_mergeable=UNKNOWN ;;
+    closed) state=CLOSED ;;
+    integrate|conflict|dirty_conflict|fetch_failed|moved_during_fetch) pr_mergeable=CONFLICTING ;;
+    updated) remote="$A"; local_head="$A" ;;
+  esac
+  gh() {
+    printf 'gh\n' >> "$log"
+    [[ "$*" == "pr view $PRN --json state,headRefOid,mergeable,baseRefName" ]] || return 9
+    [ "$world" != offline ] || return 1
+    if [ "$world" = malformed ]; then
+      printf '%s\n' '{"state":"OPEN"'
+      return 0
+    fi
+    printf '{"state":"%s","headRefOid":"%s","mergeable":"%s","baseRefName":"release/main"}\n' \
+      "$state" "$remote" "$pr_mergeable"
+  }
+  git() {
+    case "$*" in
+      'rev-parse HEAD') printf 'head\n' >> "$log"; cat "$log.head" ;;
+      'status --porcelain')
+        printf 'status\n' >> "$log"
+        case "$world" in dirty_mergeable|dirty_conflict) printf ' M a\n' ;; esac ;;
+      'check-ref-format refs/heads/release/main') : ;;
+      'fetch --no-tags origin refs/heads/release/main')
+        printf 'fetch\n' >> "$log"
+        [ "$world" != fetch_failed ] || return 1
+        if [ "$world" = moved_during_fetch ]; then printf '%s\n' "$A" > "$log.head"; fi ;;
+      'merge --no-edit FETCH_HEAD')
+        printf 'merge\n' >> "$log"
+        [ "$world" != conflict ] || return 1
+        printf '%s\n' "$A" > "$log.head" ;;
+      *) printf 'unexpected git %s\n' "$*" >> "$log"; return 9 ;;
+    esac
+  }
+  sdd() {
+    printf 'scope\n' >> "$log"
+    [ "$*" = 'review-base fixture' ] || return 9
+    if [ "$world" = updated ]; then
+      printf 'full — merge entered after the previous round\n'
+    else
+      printf 'base=%s — previous round\n' "$A"
+    fi
+  }
+  printf '%s\n' "$local_head" > "$log.head"
+  # shellcheck disable=SC1090 # Run the exact shell block the worker follows.
+  . "$BOX/review-procedure"
+  out="$(review_scope "$PRN" fixture 2>"$log.err")" || rc=$?
+  if [[ "$rc" != "$want_rc" || "$out" != "$want" || "$(cat "$log")" != "$trace" ]]; then
+    printf '%s: rc=%s, output=%q, calls=%q\n' "$world" "$rc" "$out" "$(cat "$log")"
+  fi
+)
+if [ -s "$BOX/review-procedure" ]; then
+  got="$(
+    scope_is delta 0 "$B"$'\n'"base=$A — previous round" $'gh\nhead\nstatus\nscope'
+    scope_is integrate 1 "integrated $A" $'gh\nhead\nstatus\nfetch\nhead\nmerge\nhead'
+    scope_is updated 0 "$A"$'\nfull — merge entered after the previous round' $'gh\nhead\nstatus\nscope'
+    scope_is conflict 1 '' $'gh\nhead\nstatus\nfetch\nhead\nmerge'
+    scope_is dirty_conflict 1 '' $'gh\nhead\nstatus'
+    scope_is dirty_mergeable 1 '' $'gh\nhead\nstatus'
+    scope_is fetch_failed 1 '' $'gh\nhead\nstatus\nfetch'
+    scope_is moved_during_fetch 3 '' $'gh\nhead\nstatus\nfetch\nhead'
+    scope_is malformed 3 '' gh
+    scope_is stale 3 '' $'gh\nhead'
+    scope_is unknown 3 '' gh
+    scope_is closed 3 '' gh
+    scope_is offline 3 '' gh
+  )"
+else
+  got='no guarded review block'
+  if grep -qF 'bring the base in' <<< "$rsec"; then
+    got='the review act merges the base before measuring the delta'
+  fi
+fi
+if [ -z "$got" ]; then
+  pass 'review preserves the eligible delta'
+else
+  fail 'review preserves the eligible delta' 'delta without integration, integrate only on conflict, reread the new head' "$got"
+fi
+
 # --- docs: the documentation and the vocabulary -------------------------------------------------
 # Four documents name the worker, and each is prose no mutant of bin/ reaches, so the checker carries
 # its own negative control, like the command's. What each owes is read from the sensor's ladder and

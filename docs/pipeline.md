@@ -2390,9 +2390,12 @@ evidence again immediately before merging.
 `pr-ready` still asks for more: every commit after it touches only the mission folder. The DOCS
 phase writes outside that folder, so after a run `pr-ready` still waits until the session makes its
 own round over the head. The owner's bar is higher than the pipeline's (every criterion A, no
-tolerance for prose), and the worker's round is what applies it. Its review act asks
-`sdd review-base <mission>` for the delta, like the REVIEW phase. A round
-`gate_REVIEW` passes may fail `pr-ready`; never the reverse on the grade alone.
+tolerance for prose), and the worker's round is what applies it. For a mergeable PR, the review
+act asks `sdd review-base <mission>` on the published head without merging the base just because
+it advanced. A conflict takes the authorized integration route, then the act reads GitHub and
+selects the scope again on the published head. Unknown mergeability or an unreadable PR cannot
+start a round. A round `gate_REVIEW` passes may fail `pr-ready`; never the reverse on the grade
+alone.
 
 ### Declared limits (ADR 0022)
 

@@ -110,7 +110,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-19)
 
 - [ ] **O LOW de comportamento que a rodada do worker manda ao chore volta como achado do Codex** —
-  `commands/sdd-worker.md:368` (`Fix what the round finds`) — sob a régua A (decisão do dono, 2026-11-18) o
+  `commands/sdd-worker.md:429` (`Fix what the round finds`) — sob a régua A (decisão do dono, 2026-11-18) o
   LOW vai ao chore, mas o item `codex` do `pr-ready` pede recibo sem achado aberto. Duas vezes o Codex deu P2
   a um LOW deixado ao chore e a rodada voltou ao PR: no PR #457 (`af6d490`, um dos LOW da r4) e no PR #458
   (`f2559cb`, o LOW 3 da r3, consertado em `3000409`; 38 min do recibo ao merge). Os três LOW só de
@@ -128,7 +128,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
 
 - [ ] **A parada `conflict` do worker leva ao dono a linha de estado que os dois lados reescreveram** —
-  `commands/sdd-worker.md:494` (`conflict`) — só o conflito no `TODO.md` e na catraca fica com o worker. No L4
+  `commands/sdd-worker.md:556` (`conflict`) — só o conflito no `TODO.md` e na catraca fica com o worker. No L4
   (`20261121-l4-preflight-health-e-sensores`) o publisher parou (`b03993b`) num conflito com a `main` do PR #460 na
   linha F6 da gaveta, que todo lote reescreve: cada lado com a sua frase, e a união resolveu (`67d69db`), mas a
   campanha esperou o dono das 04:25 às 07:49. Direção (decisão do dono): a parada lista, com o `TODO.md` e a
@@ -385,7 +385,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O `postmerge` manda a linha do journal nomear o PR do que sobra para a base, sem dizer o que ela leva** —
-  `commands/sdd-worker.md:443` (`postmerge`) — o `next` não deriva esse ato, e a frase não exige o número do PR de
+  `commands/sdd-worker.md:505` (`postmerge`) — o `next` não deriva esse ato, e a frase não exige o número do PR de
   acompanhamento nem o estado da revisão dele: a sessão que retoma do journal não sabe se o PR abriu nem se a
   rodada dele fechou. Direção: a linha do merge traz o número do PR e `review pendente`, e a sessão retomada o
   conclui antes de chamar o `next`.
@@ -543,7 +543,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-19)
 
 - [ ] **O ato `review` do worker mergeia a base antes da rodada, e o `review-base` dá `full` quando a `main` andou** —
-  `commands/sdd-worker.md:356` (`bring the base in`) — o ato manda `git merge origin/<base>` e só depois
+  `commands/sdd-worker.md:342` (`review_scope`) — o ato manda `git merge origin/<base>` e só depois
   pergunta ao `sdd review-base`, que lê um merge depois da última rodada como rodada inteira; então a rodada
   do worker, a mais cara, só é delta quando a `main` não andou. Medido na r3 do #452: `full — merge 59be5eb
   entered after 40-review-r2.md`, 30 arquivos e 2 086 linhas, onde a branch andara 11 commits desde o
