@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-27 03:30
+atualizado: 2026-11-27 04:11
 ---
 
 # Checkpoint — O worker e os verbos dele
@@ -15,7 +15,7 @@ atualizado: 2026-11-27 03:30
 | I6 | Histórico de PRs | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    fork pages cannot hide the mission pull request$' <<< "$o"` → `1` | done | 9ce1943 |
 | I7 | Medição da revisão | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    grade and ancestry failures have distinct witnesses$' <<< "$o"` → `1` | done | f7b8071 |
 | I8 | Suíte no head | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    merge requires local ci on the tested head$' <<< "$o"` → `1` | done | 6ed4ddc |
-| I9 | Tratamento dos achados | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    review findings have verified dispositions$' <<< "$o"` → `1` | pending | — |
+| I9 | Tratamento dos achados | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    review findings have verified dispositions$' <<< "$o"` → `1` | done | 2d81fe7 |
 | I10 | Escolhas e consentimento | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    merge binds answers and consent to head$' <<< "$o"` → `1` | pending | — |
 | I11 | Base de revisão | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    review preserves the eligible delta$' <<< "$o"` → `1` | pending | — |
 | I12 | Fila e pós-merge | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    queue changes and followup reviews resume safely$' <<< "$o"` → `1` | pending | — |

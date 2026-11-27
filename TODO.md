@@ -95,17 +95,17 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
   `bin/sdd-worker:1913` (`cmd_pr_ready`) — a régua original só nomeava threads. No PR #414, 18 dos 38
   achados do CodeRabbit estavam no corpo da revisão. O I8 da L5b já exige `local/ci` no SHA testado e
-  atribui a publicação ao ato `review`. Falta ler o corpo da revisão e a `CHANGES_REQUESTED` sem inline.
-  Direção: o I9 registra o tratamento dos achados e bloqueia o merge quando resta pendência.
+  atribui a publicação ao ato `review`. Faltava ler o corpo da revisão e a `CHANGES_REQUESTED` sem inline.
+  Direção: o I9 registra o tratamento dos achados e bloqueia o merge com pendência. RESOLVED by 2d81fe7
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/40-review-r6.md` — descoberto por `sdd-reviewer` na
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **Nenhum ato do worker resolve os threads de review, e o item `threads` do `pr-ready` fica sem dono** —
   `commands/sdd-worker.md:359` (`merge`) — um rc 1 do `pr-ready` manda voltar "to the act that fixes it", e
-  para `not-ready threads` não há ato: o `review` conserta o que a rodada acha e pede o `@codex review`, mas nada
+  para `not-ready threads` não havia ato: o `review` conserta o que a rodada acha e pede o `@codex review`, mas nada
   resolve o thread de bot cujo achado um commit já fechou. No PR #414 os R6–R10 consertaram os achados do
   CodeRabbit e os 20 threads seguiram abertos (princípio 1: item que nenhum ato escreve). Direção: o `review`
-  resolve o thread cujo achado um commit fechou, nomeando o commit na resposta.
+  resolve o thread cujo achado um commit fechou, nomeando o commit na resposta. RESOLVED by 2d81fe7
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/checkpoint-notas.md` — descoberto pela sessão
   orquestradora na missão `20261117-o-worker-orquestrador` (2026-11-19)
 
