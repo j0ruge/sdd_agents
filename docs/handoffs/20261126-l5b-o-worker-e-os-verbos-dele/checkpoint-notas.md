@@ -94,3 +94,32 @@
 - 2026-11-27 15:51 · `R2` · R2 sabotage: caminho canônico trocado por relativo → sonda vermelha: ahead planner receives the canonical queue outside its base (L2)
 - 2026-11-27 15:51 · `R2` · R2 sabotage: lote fixado em L2 → sonda vermelha: ahead planner receives the canonical queue outside its base (L3)
 - 2026-11-27 15:51 · `R2` · Em `37ace76`, a jornada chegou ao primeiro turno de L2 sem apontar para a fila. Em `a83df3e`, o relay real com adaptador falso entregou o caminho absoluto e o lote para L2 e L3, sem cópia da fila nos checkouts reservados. A retomada de L2 devolveu a mesma pergunta sem novo turno. O Check deu 1. `tests/run-all.sh` ficou verde antes e depois em 21 etapas (102 → 103 sondas do worker e 1017 âncoras do catálogo). Os três mutantes rodaram em grupo próprio, com teto de 60 s e 256 MiB por processo, e o controle passou sob os mesmos tetos antes e após a restauração. Procedimento e pipeline conferidos. Sem chamadas reais ao Codex ou ao GitHub.
+- 2026-11-27 16:33 · `R3` · R3 sabotage: indentação de código tratada como título → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: estado inicial da cerca indevidamente ativo → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: detecção de abertura de cerca desligada → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: abertura de cerca reduzida a três marcas → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: fechamento com delimitador de outro tipo aceito → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: fechamento de cerca com sufixo aceito → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: cerca válida não fecha → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: título em exemplo cercado incluído → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: normalização de título ignora caixa → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: normalização mantém marcadores finais → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: normalização mantém pontuação → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: normalização mantém espaços → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: inventário de títulos descartado → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: referência HTTPS válida descartada → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: caminho e fragmento não separados → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: caminho relativo aceito → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: arquivo inexistente tratado como candidato à leitura → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: leitura da fonte suprimida → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: arquivo vazio aceito → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: fragmento vazio aceito → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: fragmento ausente deixa de impedir despacho → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: título duplicado aceito → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: referência a arquivo inteiro recusada → concurrent resume reuses the validated reservation
+- 2026-11-27 16:33 · `R3` · R3 sabotage: conteúdo da fonte omitido da releitura → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: recibo publica conteúdo em vez de só a referência → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: releitura final suprimida → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: recusa por mudança perde o diagnóstico → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · R3 sabotage: validação antiga por existência de arquivo restaurada → ahead planning refuses stale owner request references
+- 2026-11-27 16:33 · `R3` · Em `7ba4bc9`, o fragmento vencido abriu um turno no relay. Em `9b0e168`, fonte ausente, fragmento vencido ou fonte alterada na consulta de orçamento produziram zero turnos e preservaram a espera e o rc 3 com diagnóstico do predecessor. Referências íntegras abriram um turno cada nos controles locais e HTTPS simulados. O Check deu 1 e `tests/run-all.sh` ficou verde antes e depois em 21 etapas (103 → 104 sondas do worker, 100 âncoras do TODO e 1017 no catálogo). As 28 sabotagens rodaram em grupo próprio, com teto de 35 s e 256 MiB por processo. Os controles passaram sob os mesmos limites antes e após a restauração. Procedimento e pipeline conferidos. Sem chamadas reais ao Codex ou ao GitHub.
