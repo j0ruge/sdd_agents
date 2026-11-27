@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-27 01:15
+atualizado: 2026-11-27 01:36
 ---
 
 # Checkpoint — O worker e os verbos dele
@@ -13,7 +13,7 @@ atualizado: 2026-11-27 01:15
 | I4 | Teto em voo | `o=$(bash tests/check-codex-runner.sh 2>&1); grep -c '^  ok    delegated sessions respect cap changes$' <<< "$o"` → `1` | done | ac581c8 |
 | I5 | Diagnóstico de parada | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    stop preserves cause and original line$' <<< "$o"` → `1` | done | d7ca654 |
 | I6 | Histórico de PRs | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    fork pages cannot hide the mission pull request$' <<< "$o"` → `1` | done | 9ce1943 |
-| I7 | Medição da revisão | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    grade and ancestry failures have distinct witnesses$' <<< "$o"` → `1` | done | f7b8071 |
+| I7 | Medição da revisão | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    grade and ancestry failures have distinct witnesses$' <<< "$o"` → `1` | blocked | f7b8071 |
 | I8 | Suíte no head | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    merge requires local ci on the tested head$' <<< "$o"` → `1` | pending | — |
 | I9 | Tratamento dos achados | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    review findings have verified dispositions$' <<< "$o"` → `1` | pending | — |
 | I10 | Escolhas e consentimento | `o=$(bash tests/check-worker.sh 2>&1); grep -c '^  ok    merge binds answers and consent to head$' <<< "$o"` → `1` | pending | — |
