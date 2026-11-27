@@ -93,7 +93,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20261117-o-worker-orquestrador` (2026-11-18)
 
 - [ ] **O `pr-ready` não lê o corpo de uma revisão, a `CHANGES_REQUESTED` sem inline nem o `local/ci`** —
-  `bin/sdd-worker:1532` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
+  `bin/sdd-worker:1555` (`cmd_pr_ready`) — a régua dele (§3 do caderno do merge delegado, decisão 9) só
   nomeia threads: 18 dos 38 achados do CodeRabbit no PR #414 moravam no corpo das revisões, e um PR com eles,
   com uma `CHANGES_REQUESTED` sem inline ou com o `local/ci` vermelho dá `ready`. Ler os três é um sexto item,
   que muda a régua e não tem dono: nenhum ato do laço publica o `local/ci`, e sem quem o escreva o item é gate
@@ -120,7 +120,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-21)
 
 - [ ] **O `pr-ready` conta como fechado o thread que o próprio bot resolveu, sem resposta do worker** —
-  `bin/sdd-worker:1673` (`reviewThreads`) — o item `threads` lê só o `isResolved`. No PR #458, 14 dos 16
+  `bin/sdd-worker:1696` (`reviewThreads`) — o item `threads` lê só o `isResolved`. No PR #458, 14 dos 16
   threads foram resolvidos pelo `coderabbitai[bot]`, 12 sem resposta do worker, com o bot sem cota (`Review
   limit reached` sobre `4ef8e23..f2559cb`), e o verbo deu `ready`. Os 12 eram consertos reais, mas o thread
   que o bot fecha porque a linha mudou passa calado. Vizinho de "Nenhum ato do worker resolve os threads".
@@ -145,7 +145,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261117-zerar-as-issues` (2026-11-22)
 
 - [ ] **O `budget` esquece calado o gasto de uma missão que nunca chegou à base e cujo worktree saiu** —
-  `bin/sdd-worker:711` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
+  `bin/sdd-worker:734` (`campaign_set`) — o conjunto lê o disco e a base, e o ledger não sabe de campanha: com o
   PR fechado sem merge ou a missão largada e o worktree removido, o `budget` dá US$ 0.00 no lugar dos US$ 85 do
   ledger, rc 0, e o teto que o R14 chama de limite duro passa por esse gasto. O R16 só o declara. Direção
   (decisão do dono na pendência 1 da r7): a linha `session` do ledger ganha `campaign:`, que o runner lê do
@@ -163,7 +163,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão que acompanhou o `sdd run` no `magic_tutor` (2026-11-18)
 
 - [ ] **Os leitores da tabela de notas seguem lendo depois da linha em branco, no worker e no runner** —
-  `bin/sdd-worker:1385` (`round_grades`) — ele, o `round_unjustified` e o `round_missing` pulam a linha que não
+  `bin/sdd-worker:1413` (`round_grades`) — ele, o `round_unjustified` e o `round_missing` pulam a linha que não
   é de tabela e seguem até o próximo heading: uma linha de critério solta abaixo da tabela, na mesma seção
   `### Overall Grade`, conta. O `gate_REVIEW` do `bin/sdd` lê igual, e consertar só o worker quebra a paridade
   que o `check-worker.sh` segura. Direção: parar na primeira linha fora da tabela, nos três e no runner, com probe.
@@ -338,12 +338,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `docs/pipeline.md:51` promete que um monitor que o consulte não derruba a run: só vale para a trava do checkout.
   Num repo de rascunho, com um `git status` em laço ao lado, 1505 de 5216 `git add` falharam com `File exists` no
   `index.lock`; com `GIT_OPTIONAL_LOCKS=0`, 0 de 4685. O `kit_guard_tree` (`bin/sdd:4520`) já usa a variável.
-  Direção: a variável em `session_leftovers` e `git status` de `pr-ready` (`bin/sdd-worker:1349`). RESOLVED by 012044b
+  Direção: a variável em `session_leftovers` e `git status` de `pr-ready` (`bin/sdd-worker:1654`). RESOLVED by 012044b
   — descoberto pelo relay da missão `20261115-plano-5-a-espectador-mesa-e-cartas` do `dotp-remake` (2026-11-16)
   RECURRED 1: sdd_agents/20261119-l1b-a-rodada-delta (2026-11-20)
 
 - [ ] **O `config_key` do worker põe o valor do ambiente sem `export`, e o filho que o config abre lê vazio** —
-  `bin/sdd-worker:351` (`config_key`) — o `printf -v "$key"` vale só para o shell que sourceia o `.sdd/config.sh`,
+  `bin/sdd-worker:372` (`config_key`) — o `printf -v "$key"` vale só para o shell que sourceia o `.sdd/config.sh`,
   e o runner lançado com a chave no ambiente a recebe exportada: um config que escolhe o teto num `bash -c` ou
   num `$(…)` dá o default (150) ao `budget` e o 40 ao `sdd run` (reproduzido: o filho lê `[]`, e com `export`
   antes, `[40]`). Direção: `export "$key"` depois do `printf -v`, antes de sourcear.
@@ -351,7 +351,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O `effective_level` confere o `expires:` antes do conjunto e publica o nível depois dele** —
-  `bin/sdd-worker:474` (`expired`) — o `expired "$exp"` roda antes do `campaign_set` e do `checkouts_of`, e o
+  `bin/sdd-worker:487` (`expired`) — o `expired "$exp"` roda antes do `campaign_set` e do `checkouts_of`, e o
   `LEVEL` acima de `assisted`, o teto do lote incluso, sai depois: a delegação que vence nessa janela (de
   milissegundos, não reproduzida) ainda dá o nível assinado. O laço pergunta `allows` antes de cada ato, o que
   estreita a janela sem fechá-la. Direção: reler o `expired` logo antes de publicar um `LEVEL` acima de `assisted`.
@@ -359,7 +359,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `coderabbitai` no PR #414, triado pela sessão orquestradora (2026-11-19)
 
 - [ ] **O `checkouts_of` lê o `worktree list` sem `-z`, e o worktree com quebra de linha no caminho some** —
-  `bin/sdd-worker:652` (`checkouts_of`) — o git 2.43 imprime o caminho cru, e o `sed 's/^worktree //p'` parte
+  `bin/sdd-worker:660` (`checkouts_of`) — o git 2.43 imprime o caminho cru, e o `sed 's/^worktree //p'` parte
   `…/wt` + `nl` em `…/wt` e uma linha solta (reproduzido): a missão desse worktree some calada do `budget`, do
   `level` e do `next`. Direção: `--porcelain -z`, lido por NUL e com o rc guardado; o `-z` pede git 2.36+, então
   antes decidir a versão mínima do git no kit.
@@ -368,7 +368,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   RECURRED 1: sdd_agents/20261121-l5-saida-humana-e-contrato-do-runner (2026-11-26)
 
 - [ ] **O `pr_states` descarta o PR de fork depois de o `gh pr list` cortar a lista em 30** —
-  `bin/sdd-worker:1182` (`pr_states`) — o `gh pr list --head <branch> --state all` roda sem `--limit` (o padrão é
+  `bin/sdd-worker:1217` (`pr_states`) — o `gh pr list --head <branch> --state all` roda sem `--limit` (o padrão é
   30) e o `isCrossRepository` é lido depois do corte: com 30 PRs de fork na mesma branch, o PR da missão fica fora
   e o `next` não o vê. Direção: `--limit 1000`, ou parar com veredito não lido quando a contagem bater no limite.
   Fonte: `docs/handoffs/20261117-o-worker-orquestrador/triagem-coderabbit.md`, item 5 — descoberto pelo
@@ -748,7 +748,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto pela sessão orquestradora na campanha `20261123-curso-ddd` do `curso-ddd` (2026-11-23)
 
 - [ ] **O `ahead plan` não lê a intenção do dono de planejar o lote só depois do merge do anterior** —
-  `bin/sdd-worker:1304` (`ahead plan`) — o `next` dá `ahead plan <lote seguinte>` sempre que o lote atual está em
+  `bin/sdd-worker:1327` (`ahead plan`) — o `next` dá `ahead plan <lote seguinte>` sempre que o lote atual está em
   `run` ou `review` e o seguinte não tem missão. No `curso-ddd` respondeu `ahead plan L2`, e o `campaign.md` diz só
   na prosa "A missão do L2 se planeja depois do merge do L1". Nenhuma chave do frontmatter nem coluna da tabela
   (`templates/campaign.md:30`) diz isso, e o `lots_table` lê só `Lot` e `Ceiling`. Direção: uma coluna ou valor

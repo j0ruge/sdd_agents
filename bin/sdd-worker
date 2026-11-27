@@ -353,8 +353,12 @@ cmd_delegate() {
     "$f" "$f" "$id"
 }
 
-# repo_root <dir> — the top of the git checkout that holds <dir>; empty outside one.
-repo_root() { git -C "$1" rev-parse --show-toplevel 2>/dev/null || true; }
+# repo_root <dir> <var> — publishes the checkout root without dropping trailing newlines.
+repo_root() {
+  local top
+  top="$(git -C "$1" rev-parse --show-toplevel 2>/dev/null && printf .)" || top=""
+  printf -v "$2" '%s' "${top%$'\n.'}"
+}
 
 # config_key <root> <key> [<env>] — the value of <key> in <root>/.sdd/config.sh, read by sourcing the
 # file in a subshell, the way the runner loads it: nothing the file sets leaks into this program.
@@ -482,7 +486,7 @@ effective_level() {
   exp="$(fm_value "$f" expires)"
   if expired "$exp"; then LEVEL_WHY="expired: $exp is not after $(now)"; return 0; fi
   lv="$(fm_value "$f" level)"
-  root="$(repo_root "$dir")"
+  repo_root "$dir" root
   if [ "${4:-}" != signed-scope ] && [ "$lv" != assisted ] && [ -z "$root" ]; then
     LEVEL_WHY="no pager: ON_ESCALATION_CMD is empty in (no repo)/.sdd/config.sh"; return 0
   fi
@@ -651,22 +655,38 @@ cmd_allows() {
 # spelling of autonomy_log_path in bin/sdd, so the two never name two files.
 ledger_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
 
-# checkouts_of <root> — PUBLISHES CHECKOUTS: <root>, then every worktree of its repository, each
-# once. A mission of a campaign runs in a worktree of its own, and its folder reaches the checkout
-# that holds the campaign only with the merge: a reader of <root> alone would not see it in flight.
-# Returns 1, with the call and its rc in CHECKOUTS_WHY, when `git worktree list` does not run —
-# before printing or after: a listing judged by what it printed would leave <root> alone in it, and
-# budget would sum fewer missions, level read fewer pagers and next plan a lot in flight again, in
-# silence. git's own message stays on stderr. Called, never substituted: under `$( )` both globals
-# would die with the subshell.
+# checkouts_of <dir> — publishes the primary checkout and the inventory, with <dir> first
+# for campaign_set, which passes a checkout root. Never use a partial answer from Git.
 checkouts_of() {
-  local out rc=0
-  out="$(git -C "$1" worktree list --porcelain)" || rc=$?
+  local field path primary="" rc=1
+  local -a paths=("$1")
+  CHECKOUTS_WHY=""
+  PRIMARY_CHECKOUT=""
+  CHECKOUTS=()
+  while LC_ALL=C IFS= read -r -d '' field; do
+    case "$field" in
+      'worktree '?*)
+        path="${field#worktree }"
+        primary="${primary:-$path}"
+        [ "$path" = "$1" ] || paths+=("$path") ;;
+      'sdd-status '*) rc="${field#sdd-status }" ;;
+    esac
+  done < <(
+    rc=0
+    git -C "$1" worktree list --porcelain -z || rc=$?
+    # The extra separator also frames the status after a record cut short by Git.
+    printf '\0sdd-status %s\0' "$rc"
+  )
   if [ "$rc" -ne 0 ]; then
-    CHECKOUTS_WHY="git -C $1 worktree list --porcelain failed (rc $rc)"
+    CHECKOUTS_WHY="git -C $1 worktree list --porcelain -z failed (rc $rc); requires Git with --porcelain -z support"
     return 1
   fi
-  mapfile -t CHECKOUTS < <({ printf '%s\n' "$1"; sed -n 's/^worktree //p' <<< "$out"; } | awk '!seen[$0]++')
+  if [ -z "$primary" ]; then
+    CHECKOUTS_WHY="git -C $1 worktree list --porcelain -z returned no checkout"
+    return 1
+  fi
+  PRIMARY_CHECKOUT="$primary"
+  CHECKOUTS=("${paths[@]}")
 }
 
 # base_copies <root> <handoff-dir> <id> — PUBLISHES BASE_DIRS, a copy of the folder of every mission
@@ -927,7 +947,7 @@ cmd_budget() {
       "$delegation" "$mcap"
     return 1
   fi
-  root="$(repo_root "$dir")"
+  repo_root "$dir" root
   if [ -z "$root" ]; then printf 'no spend — %s is not inside a git checkout\n' "$dir"; return 1; fi
   campaign="$(fm_value "$f" campaign)"
   harness="$(fm_value "${f%/*}/campaign.md" harness)"
@@ -1077,9 +1097,10 @@ cmd_codex_plan() {
   if ! dir="$(readlink -f -- "$1")" || [ ! -d "$dir" ]; then
     printf 'no cost exception — cannot resolve campaign directory: %s\n' "$1" >&2; return 1
   fi
-  if ! primary="$(git -C "$dir" worktree list --porcelain | sed -n '1s/^worktree //p')"; then
-    printf 'no cost exception — cannot read the campaign primary worktree\n' >&2; return 1
+  if ! checkouts_of "$dir"; then
+    printf 'no cost exception — %s\n' "$CHECKOUTS_WHY" >&2; return 1
   fi
+  primary="$PRIMARY_CHECKOUT"
   if [ -z "$primary" ] || { [ "${dir%/*}" != "$primary/docs/campaigns" ] &&
        [ "${dir%/*}" != "$primary/docs/superpowers/campaigns" ]; } ||
        [ -L "$dir/campaign.md" ] || [ -L "$dir/delegation.md" ]; then
@@ -1110,7 +1131,7 @@ cmd_codex_run() {
   esac
   mission="$(readlink -f -- "$2")" || return 1
   mf="$mission/00-missao.md"
-  wt="$(repo_root "$mission")"
+  repo_root "$mission" wt
   if [ -z "$wt" ] || [ ! -f "$mf" ]; then
     printf 'no cost exception — %s is not a mission in a git checkout\n' "$mission" >&2; return 1
   fi
@@ -1125,9 +1146,10 @@ cmd_codex_run() {
   if ! [[ "$id" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ ]] || [ -z "$lot" ]; then
     printf 'no cost exception — %s must declare its campaign and lot\n' "$mf" >&2; return 1
   fi
-  if ! primary="$(git -C "$wt" worktree list --porcelain | sed -n '1s/^worktree //p')"; then
-    printf 'no cost exception — cannot read the primary git worktree of %s\n' "$wt" >&2; return 1
+  if ! checkouts_of "$wt"; then
+    printf 'no cost exception — %s\n' "$CHECKOUTS_WHY" >&2; return 1
   fi
+  primary="$PRIMARY_CHECKOUT"
   dir=""
   for candidate in "$primary/docs/campaigns/$id" "$primary/docs/superpowers/campaigns/$id"; do
     if [ -n "$primary" ] && [ -f "$candidate/campaign.md" ]; then
@@ -1246,7 +1268,7 @@ cmd_next() {
   if [ ! -f "$cf" ]; then printf 'stop - - — no campaign: %s does not exist\n' "$cf"; return 1; fi
   if ! id_is_dir "$dir" "$cf"; then printf 'stop - - — illegible: %s\n' "$ID_WHY"; return 1; fi
   id="$(fm_value "$cf" campaign)"
-  root="$(repo_root "$dir")"
+  repo_root "$dir" root
   if [ -z "$root" ]; then printf 'stop - - — %s is not inside a git checkout\n' "$dir"; return 1; fi
   while read -r l _; do lots+=("$l"); done < <(lots_table "$cf")
   if [ "${#lots[@]}" -eq 0 ]; then
@@ -1536,7 +1558,7 @@ cmd_pr_ready() {
   local anc commits c dirty
   local threads open total seen unseen here
   local -a grades=()
-  root="$(repo_root "$dir")"
+  repo_root "$dir" root
   if [ -z "$root" ]; then printf 'not-ready review: %s is not inside a git checkout\n' "$dir"; return 1; fi
   if ! gh_at "$root" pr view "$pr" --json headRefOid,mergeable,state; then
     gh_unread "gh pr view $pr failed (rc $GH_RC)"; return 3

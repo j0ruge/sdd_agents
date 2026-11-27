@@ -287,6 +287,11 @@ no kit agent.
 authenticated `claude` CLI · authenticated `gh` · `bash` 4+ · `git` · `uuidgen` (util-linux) ·
 `jq` · Python 3.9+ · Linux 5.3+ procfs and flock/subreaper/pidfd support · `agent-browser` (only for the QA phase of projects with a UI).
 
+Worker operations that read the worktree inventory require Git with
+`git worktree list --porcelain -z` support (Git 2.36+). If Git cannot list the worktrees,
+the worker reports the failed command and its exit status without acting on a partial list.
+Other operations keep their existing Git requirements.
+
 **Linux with the GNU userland.** The kit calls `md5sum`, `date -Iseconds` and `sort -V`,
 and its own suite calls `sed -i` with no argument and `grep -P`. `sdd preflight` measures these
 behaviours instead of trusting executable names. Installing GNU tools on macOS addresses those

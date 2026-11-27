@@ -3318,13 +3318,13 @@ d="$NR/docs/campaigns/n-narrow"
 # the marks cleared before each; PUBLISHES FOUR, one `<verb>: rc <rc> '<stdout>' marks <names>` line
 # per verb. Called, never substituted: under `$( )` the global would die with the subshell.
 four_ask() {
-  local v f mk
+  local v f mk mission_wt="${2:-$NR-m}"
   FOUR=""
   for v in budget level allows next; do
     rm -f "$BOX"/narrow-mark-*
     case "$v" in
       budget) LC_ALL="$NUM_POISON" W_CWD="$NR" worker budget "$1" ;;
-      allows) W_CWD="$NR" worker allows "$1" run --mission "$NR-m/$H/20990501-n-m" ;;
+      allows) W_CWD="$NR" worker allows "$1" run --mission "$mission_wt/$H/20990501-n-m" ;;
       *) W_CWD="$NR" worker "$v" "$1" ;;
     esac
     mk=""
@@ -3377,6 +3377,13 @@ case " $* " in
     case "${SDD_GIT_SHIM:-}" in
       fail) echo 'fatal: the shim refuses worktree list' >&2; exit 128 ;;
       late) "$real" "$@"; exit 1 ;;
+      partial)
+        if [ "${!#}" = -z ]; then
+          printf 'worktree %s\0HEAD incomplete' "$SDD_GIT_SHIM_PRIMARY"
+        else
+          printf 'worktree %s\n\n' "$SDD_GIT_SHIM_PRIMARY"
+        fi
+        exit 17 ;;
     esac ;;
 esac
 exec "$real" "$@"
@@ -3386,7 +3393,7 @@ chmod +x "$BOX/gitshim/git"
 NRT="$(git -C "$NR" rev-parse --show-toplevel)"
 for w in 'fail|128' 'late|1'; do
   IFS='|' read -r mode rc <<< "$w"
-  why="git -C $NRT worktree list --porcelain failed (rc $rc)"
+  why="git -C $NRT worktree list --porcelain -z failed (rc $rc); requires Git with --porcelain -z support"
   want="budget: rc 1 'no spend — $why' marks
 level: rc 1 'level assisted — unread: $why' marks
 allows: rc 1 'ask run needs pr, effective assisted — unread: $why' marks
@@ -5449,6 +5456,76 @@ if [ "$W_RC" -eq 0 ] && [[ "$W_OUT" == *'4 unknown session(s)'* ]]; then
 else
   fail 'codex cost: interrupted launches are visible and finished launches are not counted twice' \
     'rc 0 with two original unknown sessions plus one interrupted and one finished' "rc $W_RC: $W_OUT $W_ERR"
+fi
+
+# --- I1: publish complete NUL-delimited inventories only -------------------
+got=""
+nul_wt="$NR"$' linked\nmission '
+nul_campaign="$NR/docs/campaigns/n-narrow"
+git -C "$NR" worktree move "$NR-m" "$nul_wt" || got='fixture: cannot move the mission worktree'
+four_ask "$nul_campaign" "$nul_wt"
+want="budget: rc 0 'campaign US\$ 0.00 of 100.00 — 1 mission(s); mission cap US\$ 40' marks m
+level: rc 0 'level pr — signed until $FAR' marks m
+allows: rc 0 'allowed run at pr' marks m
+next: rc 0 'approve L1 20990501-n-m — not approved: $nul_wt/$H/20990501-n-m/00-missao.md has aprovacao: ''' marks m
+"
+[ "$FOUR" = "$want" ] || got="${got:+$got; }complete list: $FOUR"
+
+PATH="$BOX/gitshim:$PATH" SDD_GIT_SHIM=partial SDD_GIT_SHIM_PRIMARY="$NR" four_ask "$nul_campaign" "$nul_wt"
+why="git -C $NR worktree list --porcelain -z failed (rc 17); requires Git with --porcelain -z support"
+want="budget: rc 1 'no spend — $why' marks
+level: rc 1 'level assisted — unread: $why' marks
+allows: rc 1 'ask run needs pr, effective assisted — unread: $why' marks
+next: rc 1 'stop - - — unread: $why' marks
+"
+[ "$FOUR" = "$want" ] || got="${got:+$got; }partial list: $FOUR"
+
+sed -i 's/^level: pr$/level: full/' "$cdx/delegation.md"
+answer $'y\n'
+W_CWD="$REPO" worker_from "$BOX/in" delegate "$cdx"
+[ "$W_RC" -eq 0 ] || got="${got:+$got; }fixture: cannot sign delegation for both paid verbs"
+nul_codex_wt="$BOX/"$'codex linked\nwith trailing newline\n'
+git -C "$REPO" worktree move "$cdxw" "$nul_codex_wt" || got="${got:+$got; }fixture: cannot move the Codex worktree"
+nul_codex_mission="$nul_codex_wt/$H/codex-cost-mission"
+cdx_worker codex-plan "$cdx" --lot L1
+[ "$W_RC" -eq 0 ] || got="${got:+$got; }plan control: rc $W_RC: $W_ERR"
+cdx_worker codex-run --mission "$nul_codex_mission" --phase REVIEW
+[ "$W_RC" -eq 0 ] || got="${got:+$got; }run with newline checkout: rc $W_RC: $W_ERR"
+for verb in codex-plan codex-run; do
+  case "$verb" in
+    codex-plan) args=("$cdx" --lot L1) ;;
+    codex-run) args=(--mission "$nul_codex_mission" --phase REVIEW) ;;
+  esac
+  PATH="$BOX/gitshim:$PATH" SDD_GIT_SHIM=partial SDD_GIT_SHIM_PRIMARY="$REPO" cdx_worker "$verb" "${args[@]}"
+  [ "$W_RC" -eq 1 ] && [[ "$W_ERR" == 'no cost exception — git -C '*'worktree list --porcelain -z failed (rc 17); requires Git with --porcelain -z support' ]] \
+    || got="${got:+$got; }$verb partial list: rc $W_RC: $W_ERR"
+done
+
+# A primary path with a newline must reach the existing ledger identity guard, not be truncated
+# into another checkout or fail as if the authoritative campaign were missing.
+nul_primary="$BOX/"$'codex primary\nwith space '
+nul_primary_campaign="$nul_primary/docs/campaigns/codex-cost"
+nul_primary_mission="$nul_primary/$H/codex-cost-mission"
+git init -q -b main "$nul_primary" || got="${got:+$got; }fixture: cannot create the Codex primary"
+mkdir -p "$nul_primary_campaign" "$nul_primary_mission" "$nul_primary/.sdd"
+cp "$cdx"/{campaign,delegation}.md "$nul_primary_campaign/"
+cp "$cdxm/00-missao.md" "$nul_primary_mission/"
+cp "$REPO/.sdd/config.sh" "$nul_primary/.sdd/config.sh"
+for verb in codex-plan codex-run; do
+  case "$verb" in
+    codex-plan) args=("$nul_primary_campaign" --lot L1) ;;
+    codex-run) args=(--mission "$nul_primary_mission" --phase REVIEW) ;;
+  esac
+  cdx_worker "$verb" "${args[@]}"
+  [ "$W_RC" -eq 1 ] && [ "$W_ERR" = 'no spend — cannot resolve the campaign Git common directory' ] \
+    || got="${got:+$got; }$verb newline primary: rc $W_RC: $W_ERR"
+done
+
+if [ -z "$got" ]; then
+  pass 'nul worktree inventory is complete'
+else
+  fail 'nul worktree inventory is complete' \
+    'exact checkout paths reach all consumers; partial listings refuse with the Git status' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

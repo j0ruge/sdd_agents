@@ -2049,6 +2049,14 @@ from `docs/campaigns/<id>/` or `docs/superpowers/campaigns/<id>/` in the primary
 refuses ambiguous copies and ignores stale delegations in mission worktrees. The worker's user
 commands that take a campaign directory still read the path the caller supplies.
 
+The worker uses `git worktree list --porcelain -z` to read the inventory for budget, queue,
+pager checks that use the inventory, and the `codex-plan` and `codex-run` guards. The
+NUL separators preserve spaces and newlines in checkout paths. Only these reads require
+Git 2.36+ (or a build with equivalent support). A failed listing stops the act, even
+after partial output, and the diagnostic gives the command, its exit status and the
+required capability. The separate Codex budget check still refuses a Git common
+directory containing a newline as a ledger identity.
+
 Any directory of the target repo — the convention is `docs/campaigns/<YYYYMMDD>-<slug>/`, and the
 kit's own live under `docs/superpowers/campaigns/` — holding three files. No config key names it:
 every verb except `pr-ready` and the internal `codex-run` guard takes it as its first argument and finds the repo root by
@@ -2210,7 +2218,8 @@ of the ledger rows (`${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`) whose `mi
 campaign's: the folders under the repo's `HANDOFF_DIR` whose `00-missao.md` declares exactly that
 `campaign:`, in the campaign's checkout, in every linked worktree of the repo and in the base (the
 tree of the upstream of the branch that checkout has checked out), each mission once (a
-`git worktree list` that fails is `no spend — <the call> failed (rc <n>)`, and an upstream that does
+`git worktree list --porcelain -z` that fails is `no spend — <the call> failed (rc <n>)` with
+the required Git capability, and an upstream that does
 not read is one of three lines: `no spend — the upstream of <checkout> does not read: git
 for-each-ref failed (rc <n>)`, with no ref to name, when the branches do not list;
 `no spend — the upstream <upstream> of <checkout> does not read: git ls-tree <upstream> failed
