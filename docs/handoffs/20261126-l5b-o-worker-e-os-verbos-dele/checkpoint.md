@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-28 01:39
+atualizado: 2026-11-28 02:31
 ---
 
 # Checkpoint — O worker e os verbos dele
@@ -34,7 +34,7 @@ atualizado: 2026-11-28 01:39
 | R9 | Encerrar o HTML bruto do item interno quando a lista aninhada começa na mesma linha | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    owner request bounds raw html by its compact nested list item$' <<< "$o")" = 1 ] && [ "$(grep -c '^  ok    owner request bounds raw html by its list item$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | done | 0d33f0d0 |
 | R10 | Preservar o parágrafo do item externo ao sair do HTML de uma lista compacta | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    owner request preserves paragraph after compact nested html$' <<< "$o")" = 1 ] && [ "$(grep -c '^  ok    owner request bounds raw html by its compact nested list item$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | done | 6402cbd8 |
 | R11 | Limitar o custo de reconhecer marcadores compactos sem mudar a decisão do pedido | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    owner request bounds compact list scan before wait$' <<< "$o")" = 1 ] && [ "$(grep -c '^  ok    owner request bounds raw html by its compact nested list item$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | done | 20664af1 |
-| R12 | Tratar o separador temático como limite do parágrafo antes de interpretar o HTML seguinte | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    owner request treats thematic breaks as paragraph boundaries before html$' <<< "$o")" = 1 ] && [ "$(grep -c '^  ok    owner request preserves paragraph after compact nested html$' <<< "$o")" = 1 ] && [ "$(grep -c '^  ok    owner request bounds compact list scan before wait$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | pending | — |
+| R12 | Tratar o separador temático como limite do parágrafo antes de interpretar o HTML seguinte | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    owner request treats thematic breaks as paragraph boundaries before html$' <<< "$o")" = 1 ] && [ "$(grep -c '^  ok    owner request preserves paragraph after compact nested html$' <<< "$o")" = 1 ] && [ "$(grep -c '^  ok    owner request bounds compact list scan before wait$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | done | 8b093116 |
 
 ## Incrementos de fix (QA e REVIEW)
 

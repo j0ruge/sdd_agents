@@ -2,9 +2,9 @@
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
 fase: EXEC
 status: done
-sessao: 01a2202d-12de-7fd2-ab89-290624edb717
-data: 2026-11-28 01:04
-gate: tests/run-all.sh no conteúdo de 20664af1, em cópia isolada com SDD_MUTATION_FIXTURE_ROOT no checkout da missão → rc 0, suite green, 21 etapas, 113 sondas do worker e 3 casos skipped do Codex. Check R11 → 1.
+sessao: 01a22073-8325-78d0-bae5-e185ef2e4864
+data: 2026-11-28 02:31
+gate: SDD_MUTATION_FIXTURE_ROOT="$PWD" tests/run-all.sh no conteúdo de 8b093116 → rc 0, suite green, 21 etapas, 114 sondas do worker e 3 casos skipped do Codex. Check R12 → 1.
 ---
 
 # Handoff — EXEC — O worker e os verbos dele
@@ -15,16 +15,16 @@ gate: tests/run-all.sh no conteúdo de 20664af1, em cópia isolada com SDD_MUTAT
 
 ## TL;DR
 
-Os 27 incrementos estão concluídos, incluindo R10 e R11 da REVIEW r7.
-A lista compacta preserva o parágrafo externo e o leitor não reexamina os sufixos da mesma sequência de marcadores.
-O Check R11 imprimiu `1`. A próxima fase retesta o despacho e a espera com os controles de separador temático.
+Os 28 incrementos estão concluídos. Em R12, um separador temático encerra o parágrafo antes do próximo bloco HTML.
+A suíte e o Check R12 passaram, preservando R10, R11, a reserva única e a retomada concorrente.
+A próxima fase começa pelos casos de título oculto, título visível e duplicatas no procedimento público de `run`.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5b-o-worker-e-os-verbos-dele` — sem upstream configurado.
-- **Último commit de implementação:** `20664af1` — limita a leitura de listas compactas.
+- **Último commit de implementação:** `8b093116` — encerra o parágrafo no separador temático.
 - **Árvore de trabalho:** o commit de fechamento registra apenas o checkpoint, as notas e este handoff.
-- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas, 113 sondas do worker e 3 casos `skipped` do Codex.
+- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas, 114 sondas do worker e 3 casos `skipped` do Codex.
 - **E2E:** não há `E2E_CMD` configurado. As jornadas usam Git local e simulam GitHub, runner, relay, fila e aprovação.
 
 ## O que foi feito
@@ -114,11 +114,20 @@ O Check R11 imprimiu `1`. A próxima fase retesta o despacho e a espera com os c
   Todas mantêm uma espera, `rc=3`, `phase-ceiling` e o diagnóstico original.
   Os Checks R8–R10, a reserva única e a retomada concorrente continuam verdes.
 
+## Correção da REVIEW r8
+
+- `8b093116` — R12 — O separador temático não abre nem prolonga um parágrafo. O próximo bloco HTML
+  oculta seus títulos, sem invalidar um título visível anterior. A fixture pública cobre os dois
+  vermelhos da revisão e seus controles, além de hífens, sublinhados e separador na linha que
+  abre o item. Cada caso conserva uma espera e o mesmo veredito. R10, R11, a reserva única
+  e a retomada concorrente mantiveram seus resultados. A sonda R11 voltou a medir 4.023 e 8.023 caracteres
+  para 2.000 e 4.000 marcadores iguais, tanto com hífens quanto com sinais de mais.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
-| `checkpoint.md` | Checks e commits de implementação dos 27 incrementos. |
+| `checkpoint.md` | Checks e commits de implementação dos 28 incrementos. |
 | `commands/sdd-worker.md` | Procedimentos de despacho, retomada, aprovação e espera. |
 | `bin/sdd-worker-ahead` | Confirmação do dono do checkout, reserva do sucessor e chamada ao relay. |
 | `tests/check-worker-ahead.py` | Jornada de três lotes, concorrência, recusas, revalidação e leitura do pedido com marcação Markdown. |
@@ -127,7 +136,7 @@ O Check R11 imprimiu `1`. A próxima fase retesta o despacho e a espera com os c
 
 ## Boot da próxima fase
 
-Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e as seções da REVIEW r1 a r7 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R11 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
+Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e a seção da REVIEW r8 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R12 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
 
 Na jornada de merge, confira que só chega a `ready <sha>` um PR cujo `local/ci` resulta da suíte completa naquele head. No mesmo SHA, uma aprovação curta é informativa, mas um corpo acionável ou pedido vigente bloqueia. Inventário e prontidão recusam um campo `comments` presente e inválido, sem reabrir uma thread resolvida válida.
 
@@ -168,6 +177,13 @@ com `compact-scale-hyphens`, `compact-scale-pluses`, `compact-scale-thematic` e
 `compact-scale-thematic-in-item`. Os dois primeiros também comparam o volume de trabalho ao
 dobrar a entrada, sem depender do relógio. Confira a jornada de reserva única da mesma suíte.
 
+No reteste de R12, rode `python3 tests/check-worker-ahead.py "$PWD" --preceding-markup <caso>`.
+Com o prefixo `thematic-after-html-`, os casos `visible` e `duplicate` devem registrar
+`start, wait`. Os casos `hidden`, `root-duplicate`, `hyphens`, `underscores` e `in-item`
+devem registrar só `wait`. Todos exigem stderr vazio e o mesmo diagnóstico `phase-ceiling`.
+O Check R12 também exige as marcas de R10, R11 e da reserva única. Use a fixture local, sem
+subir aplicação, chamar GitHub ou iniciar Codex real.
+
 ## Pendências / Decisions for a Human
 
 - Nenhuma decisão nova de produto em aberto. A emissão de termos assinados continua com o dono.
@@ -181,6 +197,7 @@ dobrar a entrada, sem depender do relógio. Confira a jornada de reserva única 
 
 ## Achados fora de escopo
 
+- Nenhum achado novo fora de escopo em R12.
 - Nenhum achado novo na execução de R9. A lacuna histórica na evidência das sabotagens do EXEC
   segue em `TODO.md`, conforme a REVIEW r6. O falso verde de `local/ci` com `TEST_CMD` só de
   espaços continua no mesmo backlog, conforme a REVIEW r2.
