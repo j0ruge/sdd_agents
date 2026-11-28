@@ -1638,7 +1638,7 @@ chmod +x "$OUTSIDE/stub/claude"
 # session whose gate REFUSED, so the round below is the designed loop advancing and not a passing
 # gate wearing new fields. Read as three bare numbers this would go green over a gate that passed,
 # where `outcome` never needed the new arm at all.
-assert_eq "the REVIEW row carries rounds_before, rounds_after and rounds_max" "REVIEW fail 0 1 3" \
+assert_eq "the REVIEW row carries rounds_before, rounds_after and rounds_max" "REVIEW fail 0 1 0" \
   "$(jq -r -s '.[0] | "\(.phase) \(.gate) \(.rounds_before) \(.rounds_after) \(.rounds_max)"' "$LEDGER")"
 # Anti-vacuity of the regime: one lap, one session. A run that took a second lap would put another
 # row here and the reading above would be about a session this block never described.
@@ -1691,7 +1691,7 @@ chmod +x "$OUTSIDE/stub/claude"
 "$SDD" run "$MISSION" >/dev/null 2>&1
 # The floor is the REVIEW row itself: it proves the gate really did pass in the parent shell and
 # really did publish, so the nulls one row later are a guard doing its job and not an empty ledger.
-assert_eq "the REVIEW row of the round that satisfied the gate says so" "REVIEW pass 0 1 3" \
+assert_eq "the REVIEW row of the round that satisfied the gate says so" "REVIEW pass 0 1 0" \
   "$(jq -r -s '.[0] | "\(.phase) \(.gate) \(.rounds_before) \(.rounds_after) \(.rounds_max)"' "$LEDGER")"
 assert_eq "a non-REVIEW row carries the three round fields as null" "DOCS true" \
   "$(jq -r -s '.[1] | "\(.phase) \(.rounds_before == null and .rounds_after == null

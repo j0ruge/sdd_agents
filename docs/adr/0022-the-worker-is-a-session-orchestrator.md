@@ -103,8 +103,10 @@ a `bin/sdd` the mission does not edit. Only `sdd kaizen` refuses that checkout
    the five, so it is required: a Codex that does not answer is a stop, never a pass. Any other bot
    that did not review (quota, plan, rate limit) is "did not review", declared in the pull request,
    and does not block.
-   Three stops: no receipt for the head 60 minutes after an explicit request, a grade below A after
-   three rounds, a merge conflict outside the findings file and its ratchet.
+   Three review stops: no receipt for the head 60 minutes after an explicit request, a grade
+   below A when a configured positive round ceiling is reached or further review has no actionable
+   change, and a merge conflict outside the findings file and its ratchet. The default leaves the
+   round count uncapped and preserves the budget checks.
 
 6. **Planning and approval are delegated at `plan` and `full`** (amends D1). The planner still runs
    on the strongest model, and the campaign declares the harness and the two models. Under

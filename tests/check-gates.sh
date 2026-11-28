@@ -26,6 +26,7 @@ fails=0
 # armed first, so dropping the clear turns the close pair red on every machine.
 export EFFORT_TICKET=xhigh
 while IFS= read -r effort_var; do unset "$effort_var"; done < <(compgen -v EFFORT_)
+unset REVIEW_MAX_ITER
 
 # The Jidoka assertion below runs a REAL (non-dry) `sdd run`, which writes an autonomy ledger row
 # on the blocked-increment path. run-all.sh already exports SDD_STATE_DIR for every test it runs,
@@ -2690,14 +2691,31 @@ assert_why_absent "and the reason does not name the separator as a criterion" "R
 # ever, on the most expensive phase in the kit. The rounds are on disk as `40-review-r<N>.md`, which
 # is where the whole kit derives its state from.
 #
-# The fixture already carries r1, r2, r3, r10 and r11, so the count on disk is 11 against a
-# REVIEW_MAX_ITER of 3. r11 goes red so REVIEW is the DERIVED phase again.
+# The fixture already carries r1, r2, r3, r10 and r11. Make r11 red so REVIEW is derived again.
 sed -i 's/^| Security | A | clean |/| Security | C | injection left open |/;s/^| \*\*Overall\*\* .*/| **Overall** | **C** | one HIGH left open |/' \
   "$MDIR/40-review-r11.md"
 git add -A && git commit -qm "chore: review r11 red again"
 assert_phase "fixture: REVIEW is the derived phase again" "REVIEW"
 
 review_sessions_spent() { phase_sessions_spent REVIEW; }
+for review_settings in default zero; do
+  rv_before="$(review_sessions_spent)"
+  if [ "$review_settings" = default ]; then
+    out_uncapped="$( cd "$FIX" && "$SDD" run "$MISSION" --max-phases 1 2>&1 )"
+  else
+    out_uncapped="$( cd "$FIX" && REVIEW_MAX_ITER=0 "$SDD" run "$MISSION" --max-phases 1 2>&1 )"
+  fi
+  rv_after="$(review_sessions_spent)"
+  if [ "$rv_after" -gt "$rv_before" ] && ! grep -qF 'rounds IN TOTAL' <<< "$out_uncapped"; then
+    pass "uncapped REVIEW ($review_settings) opens a session after round 11"
+  else
+    fail "uncapped REVIEW ($review_settings) opens a session after round 11" \
+         'a new REVIEW session without a round-ceiling stop' "$rv_before → $rv_after log(s): $(tail -3 <<< "$out_uncapped")"
+  fi
+done
+
+printf 'REVIEW_MAX_ITER=3\n' >> .sdd/config.sh
+git add -- .sdd/config.sh && git commit -qm "chore: configure a positive review ceiling"
 rv_before="$(review_sessions_spent)"
 out_rv="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; rc_rv=$?
 rv_after="$(review_sessions_spent)"
@@ -2770,6 +2788,8 @@ sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* .*/
   "$MDIR/40-review-r11.md"
 git add -A && git commit -qm "chore: review r11 green"
 assert_phase "with the ceiling fixture gone the mission is back at DOCS" "DOCS"
+sed -i '/^REVIEW_MAX_ITER=3$/d' .sdd/config.sh
+git add -- .sdd/config.sh && git commit -qm "chore: restore the default review setting"
 
 # --- the Rationale column ---------------------------------------------------
 #

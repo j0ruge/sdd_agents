@@ -283,7 +283,7 @@ QA session reads `advanced` when its **sub-step** advanced (`step_after` later t
 `plan < exec < close`) or when its close wrote `F<n>` increments — slice `5b98087` went from
 `44 advanced · 9 churned` to `47 advanced · 6 churned` over the same rows. The reason is the same
 one each time: a gate that refuses **by design** until the phase is done (`gate_EXEC` until the
-last increment, `gate_REVIEW` until Grade A within `REVIEW_MAX_ITER`, `gate_QA` until the close) had the pipeline's own designed loop counted as waste. Every reading is
+last increment, `gate_REVIEW` until Grade A within any configured round ceiling, `gate_QA` until the close) had the pipeline's own designed loop counted as waste. Every reading is
 computed by TODAY's binary over the whole ledger, so any single `sdd autonomy` run is internally
 consistent — what is not comparable is a number on your screen against a number frozen in prose.
 
@@ -740,6 +740,7 @@ there; after the merge, `git worktree remove` it.
 
 **Symptom:** `BLOCKED in REVIEW` with `N review round(s) already on disk, REVIEW_MAX_ITER=M`.
 
+A positive `REVIEW_MAX_ITER` enables this ceiling. The default is zero.
 **The ceiling counts rounds IN TOTAL**, derived from the `40-review-r<N>.md` files — not sessions
 per invocation. Re-running `sdd run` does **not** hand out a fresh set of rounds, which is exactly
 what it used to do: 4 REVIEW sessions over 3 invocations, ~US$ 107, and no `BLOCKED` anywhere. So
@@ -776,9 +777,8 @@ items visible, instead of hiding the problem.
 
 **To run one more round anyway**, two ways, and they mean different things. `sdd run <mission>
 --phase REVIEW` is exempt from the disk-derived ceiling — a human asking for one specific round
-with their eyes on it — and is the right one when you know what that round has to fix. Raising
-`REVIEW_MAX_ITER` in `.sdd/config.sh` lifts the ceiling for every future round of every mission in
-the repo, which is a decision about the project and not about this mission.
+with their eyes on it — and is the right one when you know what that round has to fix. Changing
+`REVIEW_MAX_ITER` in `.sdd/config.sh` raises or removes the ceiling for every mission in the repo, which is a decision about the project and not about this mission.
 
 **Never:** edit the report to put an A there. That switches off the mission's only quality sensor.
 
@@ -1156,7 +1156,7 @@ reopens the phase (`review_later_code_ok`): a commit that is not a merge, newer 
 added the round, touched a path outside the `writes:` of the REVIEW and DOCS hats. The round did not
 see that code.
 
-**What you do:** below `REVIEW_MAX_ITER`, nothing by hand — the next derived lap opens a delta round
+**What you do:** with the default or below a positive `REVIEW_MAX_ITER`, nothing by hand — the next derived lap opens a delta round
 (ADR 0023) over that code, and that round, a fresh review of the head, is what clears the refusal.
 Reverting the commit does **not** clear it: the gate reads each commit after the round, never the
 net diff, so the commit and its revert both stay in the range, and the head after the revert still

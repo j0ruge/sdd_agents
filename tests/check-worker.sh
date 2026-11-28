@@ -2170,7 +2170,7 @@ prose_missing() {
   s="$(section "$1" 'The five stops' 2>/dev/null)"
   items="$(grep -E '^[0-9]+\. ' <<< "$s")"
   [ "$(grep -c . <<< "$items")" = 5 ] || printf 'stops: not five numbered lines\n'
-  for p in '60 minutes' 'three rounds' 'merge conflict' 'BUDGET_MISSION_USD' 'sdd-worker budget'; do
+  for p in '60 minutes' 'positive `REVIEW_MAX_ITER`' 'no round ceiling' 'merge conflict' 'BUDGET_MISSION_USD' 'sdd-worker budget'; do
     grep -qF "$p" <<< "$items" || printf 'stops: %s\n' "$p"
   done
   for p in ON_ESCALATION_CMD journal.md; do grep -qF "$p" <<< "$s" || printf 'stops: %s\n' "$p"; done
