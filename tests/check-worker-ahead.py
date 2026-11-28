@@ -175,6 +175,8 @@ else:
                 html = "<div>\n- ```html\n  </div>\n\n"
                 duplicate = "  # Owner request\n\nDo not plan the next lot.\n"
                 item_html = "- Sample item\n  <div>\n  Sample content\n"
+                compact = "- - <script>\n    <div>\n  "
+                expanded = "- Outer item\n  - <script>\n    <div>\n  "
                 content, starts = {
                     "plain": (instruction, True),
                     "ordinary": ("An ordinary paragraph.\n\n" + instruction, True),
@@ -237,6 +239,12 @@ else:
                     "html-root-after-fenced-list": ("```\n- Sample item\n  ```\n  <script>\n" + instruction, False),
                     "html-root-contains-fake-list": ("<div>\n- Sample item\n" + instruction, False),
                     "html-nested-list-dedent": ("- Outer item\n  - Inner item\n    <script>\n  <div>\n" + instruction, True),
+                    "compact-nested-unique": (compact + instruction, True),
+                    "compact-nested-duplicate": (instruction + "\n" + compact + instruction, False),
+                    "compact-nested-closed": (compact[:-2] + "    </script>\n  " + instruction, True),
+                    "compact-nested-still-inside": (compact + "  " + instruction, False),
+                    "expanded-nested-unique": (expanded + instruction, True),
+                    "expanded-nested-duplicate": (instruction + "\n" + expanded + instruction, False),
                 }[markup_case]
                 source.write_text(content)
                 result = subprocess.run(["bash", "-c", blocks["run"]], env=env, cwd=primary,

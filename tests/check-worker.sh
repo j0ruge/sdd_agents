@@ -6470,6 +6470,21 @@ else
     'one turn before wait only for a unique visible heading, with the same runner verdict' "$got"
 fi
 
+# --- R9: compact nested items end their own raw HTML ------------------------------------------
+got=
+for markup_case in compact-nested-unique compact-nested-duplicate compact-nested-closed compact-nested-still-inside \
+                   expanded-nested-unique expanded-nested-duplicate; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request bounds raw html by its compact nested list item'
+else
+  fail 'owner request bounds raw html by its compact nested list item' \
+    'one turn before wait only for a unique visible heading, with the same runner verdict' "$got"
+fi
+
 # --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
 if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
   pass 'concurrent resume reuses the validated reservation'

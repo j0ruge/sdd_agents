@@ -97,7 +97,7 @@ def local_anchors(content):
                 list_indents.pop()
                 html_end = None
             html_line = line[list_indents[-1]:]
-            if not html_end and (item := re.match(r" {0,3}([-+*]|[0-9]{1,9}[.)]) {1,4}(?=\S)", html_line)) and (
+            while not html_end and (item := re.match(r" {0,3}([-+*]|[0-9]{1,9}[.)]) {1,4}(?=\S)", html_line)) and (
                 not in_paragraph or not item[1][0].isdigit() or int(item[1][:-1]) == 1
             ) and not re.fullmatch(r" *(?:-(?: *-){2,}|\*(?: *\*){2,}) *", html_line):
                 list_indents.append(list_indents[-1] + item.end())
