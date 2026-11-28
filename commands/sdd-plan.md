@@ -113,6 +113,8 @@ you), the config values from step 3, and the absolute template paths from step 4
 templates to start from, never as examples.
 
 Pass the model too, as the model of the subagent call: the campaign's `plan_model:` when `/sdd-worker` runs this command, else the `model:` of the hat (`fable`).
+When the worker invokes this command, include the campaign and lot in the briefing so the planner
+applies the Ponytail sizing review in §4 of `agents/sdd-planner.md`.
 Measured by the relay in the kit's lots L1b and L2 (2026-11-19 and 2026-11-20), while the hat
 carried no `model:` in its frontmatter and only its prose said Fable: without the model in the call
 the subagent inherited the model of this session, and both planners opened on `claude-opus-5-5`

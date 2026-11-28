@@ -131,6 +131,10 @@ which is how `next` finds it. Under delegation the relay answers the grill with 
 option, and every answer that touches a rule of the owner is listed in the pull request body, for
 his acceptance. The plan, the grill and the report go to files.
 
+Pass campaign and lot when calling `/sdd-plan`. Both that command and the Codex relay use the
+Ponytail sizing review in §4 of `agents/sdd-planner.md`. Have the planner load the original
+`DietrichGebert/ponytail` and record the sizing decisions in `01-plano.md` before approval.
+
 For delegated Codex planning, run
 `<kit>/bin/sdd-plan-codex start <mission> <topic> --campaign <absolute-campaign-dir> --lot <L>`
 in the mission worktree. Use the same executable for the relay commands below if it is not on PATH.
@@ -157,6 +161,11 @@ branch has no upstream:
 ### `approve`
 
 `sdd-worker allows <campaign-dir> approve --mission <mission-dir>`
+
+Read the sizing note in `01-plano.md` against the increments in `checkpoint.md`. Return a plan
+without the note or with unaddressed sizing problems to `plan`. If the original Ponytail is
+unavailable, report the reason to the owner and follow the target's planning instructions before
+approving. A target that requires the skill waits for the sizing review.
 
 Measure again before approving: `tests/check-checkpoint.sh --check <checkpoint>` and
 `--red <checkpoint>` by the kit's path, the `--red` in the background and waited for its last line.
