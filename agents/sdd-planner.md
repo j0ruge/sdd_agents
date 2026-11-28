@@ -145,6 +145,19 @@ named in Portuguese against the target's `<CRITICAL>` rule, caught only by a bot
 
 ## 4. Slice into increments with sensors
 
+For a mission planned by `sdd-worker`, load the original `DietrichGebert/ponytail` skill before
+slicing. Use the harness's verified upstream installation. On Codex, read
+`$HOME/.codex/skills/ponytail/SKILL.md` when that is the upstream install. Use the installed
+original and skip Hermes or fork copies. If the original cannot be read, report that to the
+worker and record the reason in `01-plano.md`.
+
+Before handing the plan back, use what you read to review `01-plano.md` and `checkpoint.md`
+together. Remove work outside the agreed scope, combine steps that deliver and prove one change
+in one session, and split a step that cannot reach a checked commit in one session. Keep the
+ordering and acceptance criteria intact, with an executable Check for each resulting increment.
+In the increments section of `01-plano.md`, name the skill source and record what changed or
+why the original split already fits. A note saying only that Ponytail was applied is insufficient.
+
 Every increment needs:
 
 - **an executable Check**: command → expected result. "Verify that it works" is not a Check.

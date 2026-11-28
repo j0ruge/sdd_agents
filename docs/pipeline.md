@@ -1984,6 +1984,11 @@ Two files make it:
   ledger, `gh` and the review bot's machine comment. Its sensor is `tests/check-worker.sh`, with the
   `mut_WORKER_*` entries of the mutation catalogue.
 
+In worker planning, `/sdd-plan` and the Codex relay use the planner's original Ponytail review
+to size each increment for one execution session. `01-plano.md` records the source and the
+sizing decisions; `checkpoint.md` keeps an executable Check for each increment. The worker reads
+both before approval and reports an unavailable skill according to the target's instructions.
+
 ### Codex campaigns
 
 Set `harness: codex`, `plan_model: gpt-6.2-astra`, and `exec_model: gpt-6.2-sol`.
