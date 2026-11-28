@@ -332,8 +332,8 @@ that handoff in the form `ahead-request: <campaign-id> <source>`. Use an absolut
 nonempty UTF-8 file or a durable HTTPS link to the original request. A local `#fragment` must
 match a unique Markdown heading written with `#` outside fenced code and raw HTML blocks.
 Only valid fence openers start fenced code. Fence lookalikes inside raw HTML are ignored.
-Raw HTML stops at its item's end, even if it starts on its parent's line. A custom tag can
-continue the outer paragraph. A run of equal markers needs one thematic-break check.
+Raw HTML stops at its item's end, even on its parent's line. A thematic break ends the
+paragraph a custom tag could continue. The list scan tests for breaks only at the start of equal-marker runs.
 A list fence closes within its item or ends with it. Use the lowercase heading text, omitting
 punctuation other than hyphens and underscores and replacing whitespace with hyphens.
 Do not infer a request from `next`, a recommendation or the signature alone. Without an

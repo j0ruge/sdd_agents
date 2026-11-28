@@ -81,7 +81,7 @@ def raw_html_end(line, in_paragraph):
 
 def local_anchors(content):
     list_item = re.compile(r" {0,3}([-+*]|[0-9]{1,9}[.)]) {1,4}(?=\S)")
-    thematic = re.compile(r" *(?:-(?: *-){2,}|\*(?: *\*){2,}) *")
+    thematic = re.compile(r" *(?:-(?: *-){2,}|\*(?: *\*){2,}|_(?: *_){2,}) *")
     fence, fence_indent = "", 0
     html_end = None
     list_indents = [0]
@@ -117,7 +117,7 @@ def local_anchors(content):
             r" {0,3}(?:((?:[-+*]|[0-9]{1,9}[.)]) {1,4})?(`{3,}|~{3,})(.*)|#{1,6}[ \t]+(.+))", line,
         )):
             if not fence and (not html_line.startswith("    ") or not line.strip()):
-                in_paragraph = bool(line.strip())
+                in_paragraph = bool(line.strip()) and not thematic.fullmatch(line, offset)
             continue
         list_prefix, marker, suffix, title = match.groups()
         if marker:

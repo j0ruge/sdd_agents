@@ -6514,6 +6514,20 @@ else
     'bounded scan work and unchanged dispatch, wait and runner verdict' "$got"
 fi
 
+# --- R12: a thematic break ends the paragraph before the next HTML block -----------------------
+thematic_failures=
+for markup_case in thematic-after-html-{hidden,visible,duplicate,root-duplicate,hyphens,underscores,in-item}; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    thematic_failures="${thematic_failures:+$thematic_failures$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$thematic_failures" ]; then
+  pass 'owner request treats thematic breaks as paragraph boundaries before html'
+else
+  fail 'owner request treats thematic breaks as paragraph boundaries before html' \
+    'one turn before wait only for a unique visible heading, with the same runner verdict' "$thematic_failures"
+fi
+
 # --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
 if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
   pass 'concurrent resume reuses the validated reservation'

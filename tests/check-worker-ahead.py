@@ -206,6 +206,7 @@ else:
                 compact = "- - <script>\n    <div>\n  "
                 expanded = "- Outer item\n  - <script>\n    <div>\n  "
                 paragraph = "10. - <script>\n    Text\n<sample-box>\n"
+                thematic = "10. - <script></script>\n\n    ***\n<sample-box>\n"
                 content, starts = {
                     "plain": (instruction, True),
                     "ordinary": ("An ordinary paragraph.\n\n" + instruction, True),
@@ -283,6 +284,13 @@ else:
                     "compact-scale-pluses": ("+ " * 4000 + "<script>\n\n" + instruction, True),
                     "compact-scale-thematic": ("* " * 4000 + "\n  <script>\n" + instruction, False),
                     "compact-scale-thematic-in-item": ("+ - - -\n    <script>\n  " + instruction, False),
+                    "thematic-after-html-hidden": (thematic + instruction, False),
+                    "thematic-after-html-visible": (thematic + "\n" + instruction, True),
+                    "thematic-after-html-duplicate": (instruction + "\n" + thematic + instruction, True),
+                    "thematic-after-html-root-duplicate": (instruction + "\n" + thematic + "\n" + instruction, False),
+                    "thematic-after-html-hyphens": (thematic.replace("***", "- - -") + instruction, False),
+                    "thematic-after-html-in-item": ("10. ***\n<sample-box>\n" + instruction, False),
+                    "thematic-after-html-underscores": (thematic.replace("***", "_ _ _") + instruction, False),
                 }[markup_case]
                 source.write_text(content)
                 result = subprocess.run(["bash", "-c", blocks["run"]], env=env, cwd=primary,
