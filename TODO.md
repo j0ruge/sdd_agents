@@ -477,6 +477,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Comentário e registro
 
+- [ ] **O handoff de R8 da L5b não vincula a saída das sabotagens aos resultados** —
+  `docs/handoffs/20261126-l5b-o-worker-e-os-verbos-dele/20-handoff-exec.md:88`
+  (`sabotagens do leitor`) — a contagem resume o resultado, mas não aponta a saída de cada mutante e controle.
+  Direção: guardar os resultados por caso e vincular o comando, seu SHA, rc e saída ao resumo do handoff.
+  Fonte: `docs/handoffs/20261126-l5b-o-worker-e-os-verbos-dele/40-review-r6.md`
+  — descoberto por `sdd-reviewer` na missão `20261126-l5b-o-worker-e-os-verbos-dele` (2026-11-27)
+
 ### Idioma
 
 ### Custo e escala
