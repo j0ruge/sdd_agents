@@ -491,6 +491,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261126-l5b-o-worker-e-os-verbos-dele/40-review-r6.md`
   — descoberto por `sdd-reviewer` na missão `20261126-l5b-o-worker-e-os-verbos-dele` (2026-11-27)
 
+- [ ] **O manual do pipeline acumula o guia completo do worker** — `docs/pipeline.md:1964` (`The worker`) —
+  A seção do worker tem 507 linhas. Consultar só os verbos ou a prontidão de merge exige navegar pelo manual inteiro.
+  Direção: extrair a seção para um guia do worker, manter um link no índice e verificar os links para os headings.
+  Fonte: `docs/handoffs/20261126-l5b-o-worker-e-os-verbos-dele/45-docs.md`
+  — descoberto por `sdd-docs` na missão `20261126-l5b-o-worker-e-os-verbos-dele` (2026-11-28)
+
 ### Idioma
 
 ### Custo e escala

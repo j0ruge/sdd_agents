@@ -1990,9 +1990,9 @@ Two files make it:
 - `bin/sdd-worker` answers, from artifacts, the questions that used to be the model's reading and
   went wrong four times on record — a review receipt matched by the clock instead of the sha, a
   watcher whose `pgrep -f` matched itself, a bot out of quota read as "reviewed", a checker that
-  read 20 of 21 units. It answers and signs; it never launches a run, opens a pull request or
-  merges, and it never writes what the runner owns: it reads the frontmatter of `00-missao.md`, the
-  ledger, `gh` and the review bot's machine comment. Its sensor is `tests/check-worker.sh`, with the
+  read 20 of 21 units. It never launches the mission runner, opens a pull request or merges.
+  Its write verbs sign terms, publish `local/ci`, or record verified review dispositions.
+  The session coordinates when to call them. Its sensor is `tests/check-worker.sh`, with the
   `mut_WORKER_*` entries of the mutation catalogue.
 
 ### Codex campaigns
@@ -2070,7 +2070,7 @@ directory containing a newline as a ledger identity.
 
 Any directory of the target repo — the convention is `docs/campaigns/<YYYYMMDD>-<slug>/`, and the
 kit's own live under `docs/superpowers/campaigns/` — holding three files. No config key names it:
-the campaign verbs take it as the first argument. `pr-ready`, `review-ci` and `review-findings`
+the campaign verbs take it as the first argument. `pr-grill`, `pr-ready`, `review-ci` and `review-findings`
 take the mission directory, and the internal `codex-run` guard takes `--mission <dir>`. The
 worker finds the repo root by `git -C <dir> rev-parse --show-toplevel`. `HANDOFF_DIR` comes
 from that root's `.sdd/config.sh`,
