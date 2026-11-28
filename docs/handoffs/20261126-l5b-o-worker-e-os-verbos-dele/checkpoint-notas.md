@@ -440,3 +440,4 @@
 - 2026-11-28 02:31 · `R12` · A primeira repetição da suíte passou no worker e reprovou três âncoras de TODO.md deslocadas pela quebra de linha em commands/sdd-worker.md. A correção conservou as linhas do procedimento e o reteste confirmou as 103 âncoras.
 - 2026-11-28 02:31 · `R12` · Check R12 → 1. SDD_MUTATION_FIXTURE_ROOT no checkout da missão, tests/run-all.sh → rc 0, 21 etapas, 114 sondas do worker e 3 casos skipped do Codex. R10, R11, reserva única e retomada concorrente verdes. Nenhum GitHub ou planner Codex real foi acionado no reteste.
 - intervention: sdd run --phase REVIEW (the starting phase was forced from the CLI) — REVIEW — 2026-11-28 02:49 · written by the runner
+- 2026-11-28 03:06 · `R12` · REVIEW r9: cinco asserções vermelhas no blob anterior e sete casos verdes no head, com o veredito do runner preservado. Check R12 → 1. Suíte verde em 21 etapas, 114 sondas do worker e 3 casos skipped do Codex. Nota A em todos os critérios, sem novo incremento.

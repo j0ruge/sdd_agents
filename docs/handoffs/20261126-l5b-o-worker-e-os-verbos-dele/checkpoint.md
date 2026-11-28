@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-28 02:31
+atualizado: 2026-11-28 03:06
 ---
 
 # Checkpoint — O worker e os verbos dele
