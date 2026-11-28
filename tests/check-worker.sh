@@ -6485,6 +6485,21 @@ else
     'one turn before wait only for a unique visible heading, with the same runner verdict' "$got"
 fi
 
+# --- R10: paragraph indentation is relative to its list item ---------------------------------
+got=
+for markup_case in compact-paragraph-unique compact-paragraph-duplicate \
+                   compact-html-after-blank compact-html-after-indented-code; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request preserves paragraph after compact nested html'
+else
+  fail 'owner request preserves paragraph after compact nested html' \
+    'one turn before wait for a unique visible heading, with the same runner verdict' "$got"
+fi
+
 # --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
 if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
   pass 'concurrent resume reuses the validated reservation'

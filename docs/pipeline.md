@@ -2286,8 +2286,8 @@ checks the live checkout owner against the launch PID and rereads the queue, bud
 authority before starting the relay. A local fragment must still resolve to a unique heading
 outside fenced code and raw HTML blocks, including comments. A fence lookalike inside raw HTML
 does not hide headings after the block. Raw HTML stops at the end of its list item, even when
-the item starts on the same line as its parent. A fence opened by a list marker cannot hide
-headings after that item ends either. A local file that changes during
+the item starts on the same line as its parent. A custom tag can continue the outer item's
+paragraph. A list fence cannot hide headings after its item ends. A local file that changes during
 dispatch prevents the start without replacing the runner's verdict. The reservation is per campaign
 and lot in the primary Git directory. It binds one separate worktree and relay mission before a draft exists.
 The relay's first turn names the lot and points to `campaign.md` in the primary checkout,

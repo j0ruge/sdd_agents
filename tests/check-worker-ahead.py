@@ -177,6 +177,7 @@ else:
                 item_html = "- Sample item\n  <div>\n  Sample content\n"
                 compact = "- - <script>\n    <div>\n  "
                 expanded = "- Outer item\n  - <script>\n    <div>\n  "
+                paragraph = "10. - <script>\n    Text\n<sample-box>\n"
                 content, starts = {
                     "plain": (instruction, True),
                     "ordinary": ("An ordinary paragraph.\n\n" + instruction, True),
@@ -245,6 +246,11 @@ else:
                     "compact-nested-still-inside": (compact + "  " + instruction, False),
                     "expanded-nested-unique": (expanded + instruction, True),
                     "expanded-nested-duplicate": (instruction + "\n" + expanded + instruction, False),
+                    "compact-paragraph-unique": (paragraph + instruction, True),
+                    "compact-paragraph-duplicate": (instruction + "\n" + paragraph + instruction, False),
+                    "compact-html-after-blank": (paragraph.replace("Text\n", "Text\n        \n") + instruction, False),
+                    "compact-html-after-indented-code": ("10. - <script></script>\n\n          Code\n<sample-box>\n"
+                                                         + instruction, False),
                 }[markup_case]
                 source.write_text(content)
                 result = subprocess.run(["bash", "-c", blocks["run"]], env=env, cwd=primary,

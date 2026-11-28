@@ -111,7 +111,7 @@ def local_anchors(content):
         if not (match := re.fullmatch(
             r" {0,3}(?:((?:[-+*]|[0-9]{1,9}[.)]) {1,4})?(`{3,}|~{3,})(.*)|#{1,6}[ \t]+(.+))", line,
         )):
-            if not fence and (not line.startswith("    ") or not line.strip()):
+            if not fence and (not html_line.startswith("    ") or not line.strip()):
                 in_paragraph = bool(line.strip())
             continue
         list_prefix, marker, suffix, title = match.groups()
