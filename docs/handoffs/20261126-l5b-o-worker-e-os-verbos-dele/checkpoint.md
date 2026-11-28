@@ -1,6 +1,6 @@
 ---
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
-atualizado: 2026-11-27 20:44
+atualizado: 2026-11-27 21:26
 ---
 
 # Checkpoint — O worker e os verbos dele
@@ -30,6 +30,7 @@ atualizado: 2026-11-27 20:44
 | R5 | Reconhecer o título do pedido após conteúdo que não abre cerca Markdown | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    valid markdown owner request survives preceding markup$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | done | ebeda0b |
 | R6 | Distinguir títulos únicos e duplicados depois de cerca em lista contendo marca de comentário | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    owner request distinguishes unique and duplicate headings after list code$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | done | 9551b6e3 |
 | R7 | Distinguir cerca de lista real de marcador dentro de HTML ao resolver o título do pedido | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    owner request ignores list fence lookalikes in raw html$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | done | 9d53509f |
+| R8 | Encerrar o HTML bruto com o item de lista sem ocultar o título visível seguinte | `o=$(bash tests/check-worker.sh 2>&1) && [ "$(grep -c '^  ok    owner request bounds raw html by its list item$' <<< "$o")" = 1 ] && grep -c '^  ok    authorized ahead planning starts once before wait$' <<< "$o"` → `1` | pending | — |
 
 ## Incrementos de fix (QA e REVIEW)
 
