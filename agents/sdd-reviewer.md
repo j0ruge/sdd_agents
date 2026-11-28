@@ -140,7 +140,7 @@ Append to `docs/handoffs/<mission>/checkpoint-notas.md` (APPEND one line with `>
 
 The runner sees a pending increment and hands the ball to `sdd-executor` on its own. It repeats
 until a round closes at Grade A on every criterion with a sensor and at least B on the rest,
-subject to progress and budget checks. A positive `REVIEW_MAX_ITER` optionally caps rounds **of finding**.
+subject to progress and budget checks. A positive `REVIEW_MAX_ITER` caps the total by report number, including rounds without findings.
 
 **Receive criticism with rigour, not with deference.** A finding you believe is wrong is not
 resolved by writing an `R<n>` to please it: verify, and if it is wrong, record in the round's
