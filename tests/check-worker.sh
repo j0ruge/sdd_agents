@@ -53,7 +53,7 @@
 #       first witnessed allowing approve, so the ask is the break's and nothing else's
 #   R14 with --lot, the lot's ceiling is the act's: under full, approve is asked on a lot capped at
 #       merge and allowed on the lots that are not, and a lot with no row asks for it
-#   R15 `budget` sums the cost_usd of the ledger lines whose mission is one of the campaign's — the
+#   R15 `budget` sums legacy cost_usd rows for discovered missions of the campaign — the
 #       folders under the repo's HANDOFF_DIR whose 00-missao.md declares exactly that campaign:, in
 #       the checkout of the campaign AND in every linked worktree of its repo, each mission once —
 #       and no other line: not another campaign's, not a longer id's, not a mission of no campaign;
@@ -80,7 +80,7 @@
 #       two missions on one lot, an approved mission with no branch, no campaign.md and an empty
 #       queue stop (rc 1); a call of the wrong shape is rc 2. gh runs at the repo root, or the stub
 #       refuses it
-#   R23 `pr-ready` answers `ready <the full head sha>` when the five items hold on one sha: the
+#   R23 `pr-ready` answers `ready <the full head sha>` when the seven items hold on one sha: the
 #       newest round (by number: r10 after an r9 graded B) grades A in every row, the bold Overall
 #       one included, and names a reviewed head after which only the mission folder changed — a file
 #       whose name git quotes by default among them, and the commit right under the round's when it
@@ -100,7 +100,7 @@
 #       older good one is never read in its place, R48), and a receipt for the head posted by somebody
 #       other than the bot — anybody can comment on a public repo; the receipt is the real one of PR
 #       409
-#   R26 the threads item fails for one unresolved thread, and for more threads than the hundred read
+#   R26 the threads item fails for one unresolved thread; I9 also exercises later and missing pages
 #   R27 the mergeable item fails for a conflicting pull request, a closed one GitHub calls
 #       mergeable, and a merged one (the answer of PR 409, copied)
 #   R28 the head item fails for a local HEAD ahead of the pull request head, and for one behind it
@@ -285,10 +285,6 @@
 #   R64 the comment right above cmd_next and the paragraph of `next` in docs/pipeline.md declare that
 #       a merged pull request of an earlier use of the same branch name makes the lot done, each with
 #       the measure of the reuse (achado #5 of the r6)
-#   R65 the comment right above cmd_pr_ready and the paragraph `**What `pr-ready` does not read.**`
-#       of docs/pipeline.md name the body of a review, the `CHANGES_REQUESTED` review with no inline
-#       comment and the `local/ci` status of the head, and point at TODO.md, where the sixth item
-#       waits (decision 1 of the owner on the r6)
 #   R66 the plan act has the session cut the mission's worktree in a target before `/sdd-plan`, the
 #       `git worktree add` with a provisional branch and its rename to the mission's branch written,
 #       says that in the kit `/sdd-plan` cuts it, and the approve act runs `sdd approve` in that
@@ -315,15 +311,9 @@
 #       table asks, assisted, naming its file, never read as no lot; a folder with no 00-missao.md,
 #       and none, are rc 2 naming the file; plan --lot answers as before, its lot not covered naming
 #       no mission (decision 3 of the owner on the r6)
-#   R69 budget leaves out of the sum the spend of a mission of the campaign that never reached the
-#       base and whose worktree was removed, rc 0, and the limit is declared where its reader reads:
-#       in a repo whose main tracks a bare origin, a mission merged into the base is still counted
-#       after its worktree goes, while one whose branch was pushed and never merged (a pull request
-#       closed without merge) and one never pushed (a mission dropped) each take their spend out of
-#       the sum as their worktree goes, the answer of today pinned whole; the comments right above
-#       campaign_set and cmd_budget, the Declared limits of docs/pipeline.md and the section of the
-#       campaign ceiling in templates/delegation.md write the limit and what the owner does until a
-#       source exists (achado #1 of the r7)
+#   R69 budget keeps explicitly attributed spend when a worktree goes, counts the overlap with
+#       mission discovery once, and excludes foreign repos and campaigns. Legacy rows without a
+#       campaign still count while the mission is discoverable.
 #   R70 HANDOFF_DIR is compared as the runner reads it, every leading ./ and every trailing /
 #       dropped (load_config): `./docs/handoffs/` in the campaign checkout and `docs/handoffs` in the
 #       worktree of its mission, the inverse with the ./ and the / repeated, and each written on one
@@ -341,9 +331,7 @@
 # which the catalogue does reach (mut_WORKER_reuse_*, mut_WORKER_blind_*, mut_WORKER_ceiling_*); R63
 # and R66 read the command and docs/pipeline.md alone, so their controls are all they have. R68
 # reads the command, docs/pipeline.md and the comment of cmd_allows, and mut_WORKER_derived_* reach
-# the code of cmd_allows, never that comment, so its controls are all its prose has. R69
-# carries the same control over its four places, and two of them are comments of bin/sdd-worker,
-# which mut_WORKER_discarded_* reach.
+# the code of cmd_allows, never that comment, so its controls are all its prose has.
 #
 # Declared limit, no probe: the review item stops when `git rev-list <reviewed_head>..<head>` does
 # not run, and no world here makes it fail — it walks the commits `git merge-base --is-ancestor` has
@@ -397,8 +385,6 @@
 # - The regex guard has no world of its own: of the 23 names tried, every one a glob does not read
 #   as itself a regex does not either, so a poison a regex reads as itself stops at the glob guard.
 #   It stays for the name it prints.
-# - spent() writes event and repo as the runner does, and budget reads only mission and cost_usd:
-#   a constant in either changes no answer.
 # - not_under serves two fixture checks over a constant prefix, `docs/handoffs/20990300-ready/`,
 #   with no character a regex reads, and git prints names relative to the root, so the prefix is
 #   only ever at the start: a filter that drops every line, one that drops a line holding the
@@ -459,35 +445,6 @@
 # - derived_missing reads through tree_primitive too, and its call dropped alone is green (the
 #   pass of the R15), the limit of R63 to R66 above.
 #
-# Declared limits of R69, no probe:
-# - The family pins a limit, not a rule: the day a source finds the two missions (the session line
-#   of the ledger carrying campaign:, in TODO.md), its world turns red, since the three ledger lines
-#   of the fixture carry campaign: "di-gone" already, and the declaration and the pinned answers
-#   change in that commit.
-# - Each place is read by its limit and its remedy alone, the template by fragments (its prose is
-#   pt-BR, and this file is English surface): the cases, the reason, the ceiling passed by that
-#   spend and the ledger sum the owner reads, around them, are unread, and so are the two sentences
-#   that say the campaign passes the signed ceiling only by three spends: the runner's overrun, this
-#   spend, and the orchestrating session's and its subagents' (the paragraph of docs/pipeline.md
-#   that opens on `**The campaign ceiling is a hard limit.**`, and the template's), connecting prose
-#   as in R63 to R66.
-# - next is not asked. Measured once for the R16, in a copy with a gh stub: the closed mission
-#   found answers `stop L1 <id> — pull request closed without merge: #7`, rc 1, and once its
-#   worktree goes, `plan L1 - — no mission of campaign <id> declares lot: L1`, rc 0. That is the
-#   same limit seen by another verb (a lot whose mission went is planned again, the owner's way to
-#   replan it), and budget is the verb of the finding.
-# - disc_is compares the whole line and the rc 0, and neither has a world of its own here (the pass
-#   of the R16, measured in pairs): a prefix comparison stays green alone, and with a suffix on the
-#   campaign line ceiling:, cwd:, gone:, narrow:, spend: and worktree: go red; the rc unread stays
-#   green alone, and with the campaign line at rc 1 budget:, cap:, ceiling: and six more go red.
-# - The fixture's three witnesses (main tracks origin/main, the base carries neither of the two
-#   missions, their branches still carry them after the worktrees go) name its shape, and none has a
-#   world: a main that tracked nothing, or a base that carried one, changes the pinned answers, and
-#   git worktree remove never deletes a branch.
-# - budget is asked from the cwd of the fixture repo, and asked from the campaign's checkout it
-#   answers the same: that cwd matters to a git call that lost its -C, which is gone:'s world.
-# - discarded_missing reads through tree_primitive too, and its call dropped alone is green (the
-#   pass of the R16), the limit of R63 to R66 above.
 #
 # Declared limit of the starter probe of budget_is, no probe:
 # - Its config is written by `sed -e "s|<SDD_HOME>|$ROOT|g"`, and a kit path that holds a `|` ends
@@ -520,7 +477,7 @@
 # verbs, `seal: `, `legible: `, `cap: `, `rationale: `, `lot: `, `shown: `, `worktree: `, `pipe: `,
 # `zero: `, `pager: `, `sep: `, `committed: `, `range: `, `receipt: `, `narrow: `, `listed: `,
 # `spend: `, `cwd: `, `lots: `, `fork: `, `stale: `, `kept: `, `once: `, `criteria: `, `gone: `,
-# `stamp: `, `reuse: `, `blind: `, `cut: `, `ceiling: `, `derived: `, `discarded: `, `spelling: `, `command: ` and
+# `stamp: `, `reuse: `, `blind: `, `cut: `, `ceiling: `, `derived: `, `spelling: `, `command: ` and
 # `docs: `) prints exactly the assertions the mission plan or the fix increment that opened it names —
 # the checkpoint counts them. Inside a mutant (SDD_MUTANT set) fail() ends the sensor at the first red, after printing it;
 # the census in check-health.sh holds that clause.
@@ -1283,13 +1240,13 @@ mission() {
   fi
 }
 
-# spent <mission> <event> <cost> — one line of the ledger in the shape the runner writes it (a
+# spent <mission> <event> <cost> [<repo>] — one line of the ledger in the shape the runner writes it (a
 # session line of the real ledger, trimmed to the keys around the two a reader of the spend reads);
 # <cost> is raw JSON: a number, or the null the runner writes for the events that carry none. Built
 # by jq, never by printf: the repo is a path of the box, and a quote in it (R58) would make every
 # line malformed, which the reader skips and the sum reads as nothing spent.
 spent() {
-  jq -cn --arg e "$2" --arg r "$REPO" --arg m "$1" --argjson c "$3" \
+  jq -cn --arg e "$2" --arg r "${4:-$REPO}" --arg m "$1" --argjson c "$3" \
     '{v: 1, ts: "2099-01-01T00:00:00-03:00", event: $e, invocation: "run", project: "fixture",
       repo: $r, mission: $m, phase: "EXEC", rc: 0, cost_usd: $c}'
 }
@@ -1346,7 +1303,7 @@ mkdir -p "$BOX/state" "$BOX/home/.sdd"
   printf '{"v":1,"event":"session","mission":"20990101-b-one","cost_usd":\n'
   spent 20990103-b-other session 40; spent 20990104-b-longer session 100
   spent 20990105-b-none session 30; spent 20990106-b-wt session 4
-  spent 20990107-b-hd-in session 2; spent 20990108-b-hd-decoy session 16
+  spent 20990107-b-hd-in session 2 "$HD"; spent 20990108-b-hd-decoy session 16 "$HD"
 } > "$BOX/state/autonomy-log.jsonl"
 cp "$BOX/state/autonomy-log.jsonl" "$BOX/home/.sdd/"
 want='campaign US$ 8.50 of 100.00 — 3 mission(s); mission cap US$ 25'
@@ -1483,7 +1440,7 @@ fi
 
 # --- next: the fixtures -------------------------------------------------------------------------
 # The gh stub answers the one question next asks, `gh pr list --head <branch> --state all --json
-# <fields>`, from $BOX/prs/<branch>: a JSON array in the shape the real gh printed on 2026-11-18 for
+# <fields> [--limit <n>]`, from $BOX/prs/<branch>: a JSON array in the shape the real gh printed on 2026-11-18 for
 # `gh pr list --head feat/o-revisor-so-acha --state all --json number,state,isCrossRepository` in
 # this repo (`[{"isCrossRepository":false,"number":34,"state":"MERGED"}]`; a pull request from a
 # fork, the same call on cli/cli: `{"isCrossRepository":true,"number":15089,"state":"CLOSED"}`), or
@@ -1491,8 +1448,9 @@ fi
 # real gh it prints only the fields --json asks for, so a caller that does not ask for
 # isCrossRepository cannot tell a fork's pull request from one of the repo; a field it does not
 # know is refused. Without --state all it keeps only the OPEN ones, as the real gh does by default.
-# A <branch>.fail beside the file makes it fail, and a <branch>.raw is printed as it is. It answers
-# only from the root of the fixture repo, which is where gh infers the repository from.
+# The list defaults to 30 entries. A <branch>.page-fail simulates a later page failing after
+# partial output. A <branch>.fail makes it fail up front and a <branch>.raw is printed as it is.
+# It answers only from the root of the fixture repo, which is where gh infers the repository from.
 mkdir -p "$BOX/stub" "$BOX/prs"
 REPO_REAL="$(CDPATH='' cd "$REPO" && pwd -P)"
 { printf '#!/usr/bin/env bash\nroot=%q\nbox=%q\n' "$REPO_REAL" "$BOX"
@@ -1500,12 +1458,13 @@ REPO_REAL="$(CDPATH='' cd "$REPO" && pwd -P)"
 [ "$(pwd -P)" = "$root" ] || { echo "gh stub: run from $(pwd -P), not the repo root" >&2; exit 9; }
 [ "${1:-} ${2:-}" = "pr list" ] || { echo "gh stub: unexpected call: $*" >&2; exit 9; }
 shift 2
-head="" all="" fields=""
+head="" all="" fields="" limit=30
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --head) head="$2"; shift 2 ;;
     --state) [ "$2" != all ] || all=1; shift 2 ;;
     --json) fields="$2"; shift 2 ;;
+    --limit) limit="$2"; shift 2 ;;
     *) echo "gh stub: unexpected argument $1" >&2; exit 9 ;;
   esac
 done
@@ -1518,8 +1477,13 @@ f="$box/prs/$head"
 [ ! -e "$f.fail" ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
 [ ! -e "$f.raw" ] || { cat "$f.raw"; exit 0; }
 [ -e "$f" ] || { echo '[]'; exit 0; }
-jq -c --arg f "$fields" --arg all "$all" \
-  '[.[] | select($all != "" or .state == "OPEN") | with_entries(select(.key | IN($f | split(",")[])))]' "$f"
+if [ "$limit" -gt 30 ] && [ -e "$f.page-fail" ]; then
+  jq -c '.[:30]' "$f"
+  echo "HTTP 502: Bad Gateway on the next page" >&2
+  exit 17
+fi
+jq -c --arg f "$fields" --arg all "$all" --argjson limit "$limit" \
+  '[.[] | select($all != "" or .state == "OPEN") | with_entries(select(.key | IN($f | split(",")[])))] | .[:$limit]' "$f"
 STUB
 } > "$BOX/stub/gh"
 chmod +x "$BOX/stub/gh"
@@ -1755,10 +1719,21 @@ round() {
   [ "$2" != - ] || sed -i '2,/^---$/ { /^reviewed_head:/d }' "$1"
 }
 
-mkdir -p "$RR/src"
+mkdir -p "$RR/src" "$RR/.sdd"
 git init -q -b main "$RR"
+cat > "$RR/.sdd/config.sh" <<'CONFIG'
+TEST_CMD='bash src/test-ci.sh'
+CONFIG
+cat > "$RR/src/test-ci.sh" <<'SUITE'
+set -eu
+git rev-parse HEAD >> "$GHFX/events"
+if [ -f "$GHFX/move-to" ]; then cp "$GHFX/move-to" "$GHFX/view"; fi
+[ ! -f "$GHFX/suite-fail" ]
+SUITE
 printf 'one\n' > "$RR/src/app.txt"; printf 'old\n' > "$RR/src/old.txt"
 lot_mission "$RR" 20990300-ready r-camp L1 ready-b humano-2099-01-01
+# These worlds have no grill receipts, so remove the unfilled template section.
+sed -i '/^## Decis.* do grill/,/^## / { /^## Decis.* do grill/d; /^## /!d; }' "$MD/00-missao.md"
 gitc add -A; gitc commit -q -m z0; Z0="$(git -C "$RR" rev-parse HEAD)"
 printf 'two\n' > "$RR/src/app.txt"; gitc commit -q -am z1; Z1="$(git -C "$RR" rev-parse HEAD)"
 gitc mv src/old.txt "$H/20990300-ready/old.txt"; gitc commit -q -m a; A="$(git -C "$RR" rev-parse HEAD)"
@@ -1814,8 +1789,13 @@ serve() {
   printf '[%s,%s]' "$(comment "$CODEX" "$Z1" '')" '{"user":{"login":"j0ruge"},"body":"thanks"}' \
     > "$fx/comments.1"
   printf '[%s]' "$(comment "$CODEX" "$h" '')" > "$fx/comments.2"
-  printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"nodes":[{"isResolved":true},{"isResolved":true}]}}}}}' \
+  printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"id":"thread_1","isResolved":true},{"id":"thread_2","isResolved":true}]}}}}}' \
     > "$fx/threads"
+  printf '[]\n' > "$fx/reviews.1"
+  printf '[]\n' > "$fx/reviews.2"
+  printf '42\n' > "$fx/producer"
+  printf '[{"context":"local/ci","state":"success","creator":{"id":42}}]\n' > "$fx/status.$h"
+  printf '[]\n' > "$fx/status-extra"
 }
 
 # land <world> — the mission folder committed as the disk now has it, on top of the checkout's HEAD,
@@ -1830,7 +1810,7 @@ land() {
   serve "$1" "$HEADNOW"
 }
 
-# The gh stub of pr-ready answers the four questions the verb asks, from the world GHFX names, and
+# The gh stub of pr-ready and review-ci answers from the world GHFX names, and
 # only from the root of the ready repo: `pr view <n> --json headRefOid,mergeable,state`, `repo view
 # --json nameWithOwner -q .nameWithOwner`, the comments (both pages under --paginate, the first page
 # alone without it, as the real gh does) and the graphql query of the review threads, which has to
@@ -1851,10 +1831,72 @@ give() {
 }
 case "$*" in
   "pr view $n --json headRefOid,mergeable,state") give view "$fx/view" ;;
+  "pr view $n --json body") give body "$fx/body" ;;
+  "api -X PATCH repos/$repo/pulls/$n -F body=@"*)
+    jq -cn --rawfile body "${6#body=@}" '{body:$body}' > "$fx/body"
+    exit $?
+    ;;
+  "pr merge $n --merge --match-head-commit "*" --repo $repo")
+    [ "$6" = "$(jq -r .headRefOid "$fx/view")" ] || exit 1
+    printf '%s\n' "$6" >> "$fx/merges"
+    exit 0
+    ;;
   "repo view --json nameWithOwner -q .nameWithOwner") give repo "$fx/repo" ;;
   "api --paginate repos/$repo/issues/$n/comments") give comments "$fx/comments.1" "$fx/comments.2" ;;
   "api repos/$repo/issues/$n/comments") give comments "$fx/comments.1" ;;
-  "api graphql -f query="*"owner:\"${repo%%/*}\",name:\"${repo#*/}\""*"pullRequest(number:$n)"*) give threads "$fx/threads" ;;
+  "api user --jq .id") give producer "$fx/producer" ;;
+  "api --paginate repos/$repo/commits/"*"/statuses")
+    head="${3%/statuses}"; head="${head##*/}"
+    give status "$fx/status.$head" "$fx/status-extra"
+    ;;
+  "api --method POST repos/$repo/statuses/"*" -f context=local/ci -f state="*)
+    head="${4##*/}"; state="${8#state=}"
+    printf '%s %s\n' "$head" "$state" >> "$fx/events"
+    [ ! -e "$fx/write-$state.fail" ] || { echo "HTTP 403: Forbidden" >&2; exit 1; }
+    status="$(jq -cn --arg state "$state" '{context:"local/ci", state:$state, creator:{id:42}}')"
+    jq --argjson status "$status" '[$status] + .' "$fx/status.$head" > "$fx/next"
+    mv "$fx/next" "$fx/status.$head"
+    printf '%s\n' "$status"
+    exit 0
+    ;;
+  "api --paginate repos/$repo/pulls/$n/reviews"*) give reviews "$fx/reviews.1" "$fx/reviews.2" ;;
+  "api user --jq .login") printf 'worker-account\n'; exit 0 ;;
+  "api graphql -f query="*"owner:\"${repo%%/*}\",name:\"${repo#*/}\""*"pullRequest(number:$n)"*)
+    if [[ "$*" == *" -f cursor=next" ]]; then
+      give threads.fail-next-page "$fx/threads.next"
+    else
+      give threads "$fx/threads"
+    fi
+    ;;
+  "api graphql -f query="*"addPullRequestReviewThreadReply"*)
+    id="${6#id=}"; body="${8#body=}"
+    read -r _ _ sha _ <<< "$body"
+    printf 'reply %s %s\n' "$id" "$sha" >> "$fx/review-events"
+    if [ -f "$fx/reply-bad" ]; then printf '{"data":{}}\n'; exit 0; fi
+    reply="$(jq -cn --arg body "$body" '{id:"worker_reply",body:$body,author:{login:"worker-account",__typename:"User"}}')"
+    jq --arg id "$id" --argjson reply "$reply" '
+      .data.repository.pullRequest.reviewThreads.nodes[] |=
+        if .id == $id then (.comments.totalCount += 1 | .comments.nodes += [$reply]) else . end
+    ' "$fx/threads" > "$fx/next"
+    mv "$fx/next" "$fx/threads"
+    if [ -f "$fx/reply-race" ]; then
+      jq '.data.repository.pullRequest.reviewThreads.nodes[0].comments.nodes[0].body += " Edited."' \
+        "$fx/threads" > "$fx/next"
+      mv "$fx/next" "$fx/threads"
+    fi
+    jq -cn --argjson reply "$reply" '{data:{addPullRequestReviewThreadReply:{comment:$reply}}}'
+    exit 0
+    ;;
+  "api graphql -f query="*"resolveReviewThread"*)
+    id="${6#id=}"
+    printf 'resolve %s\n' "$id" >> "$fx/review-events"
+    [ ! -f "$fx/resolve-fail" ] || exit 1
+    jq --arg id "$id" '.data.repository.pullRequest.reviewThreads.nodes[] |=
+      if .id == $id then .isResolved = true else . end' "$fx/threads" > "$fx/next"
+    mv "$fx/next" "$fx/threads"
+    jq -cn --arg id "$id" '{data:{resolveReviewThread:{thread:{id:$id,isResolved:true}}}}'
+    exit 0
+    ;;
 esac
 echo "gh stub: unexpected call: $*" >&2
 exit 9
@@ -1872,14 +1914,14 @@ ready_is() {
     || got="${got:+$got; }$1: rc $W_RC, '${W_OUT//$'\n'/ / }' (want rc $2, '$3…'; stderr '${W_ERR%%$'\n'*}')"
 }
 
-# --- R23: all five true at one sha --------------------------------------------------------------
+# --- R23: all seven true at one sha --------------------------------------------------------------
 # The good world; the same world with its rounds renamed r9 and r10 and the r9 graded B (the newest
 # is r10 by number, and a glob, which sorts r10 first, would read the B); and a round naming the
 # commit under it, committed on top of B — the worker's own flow: the round names the HEAD it read,
 # and the commit that carries it is the head. Each world's rounds are committed (land): the review
 # item reads the round the head carries.
 serve good
-ready_is 'all five true' 0 "ready $B" good
+ready_is 'all seven true' 0 "ready $B" good
 [ "$W_OUT" = "ready $B" ] || got="${got:+$got; }the line is '$W_OUT', not 'ready $B'"
 mv "$MD/40-review-r2.md" "$MD/40-review-r10.md"; mv "$MD/40-review-r1.md" "$MD/40-review-r9.md"
 sed -i 's@^| Security | A |@| Security | B |@' "$MD/40-review-r9.md"
@@ -1893,9 +1935,118 @@ ready_is 'a round naming the commit under it' 0 "ready $HEADNOW" good-under
 [ "$(git -C "$RR" rev-parse "$HEADNOW^")" = "$B" ] || got="${got:+$got; }fixture: the round's commit is not on B"
 ready_reset
 if [ -z "$got" ]; then
-  pass 'pr-ready: all five true at one sha answers ready with the full sha'
+  pass 'pr-ready: all seven true at one sha answers ready with the full sha'
 else
-  fail 'pr-ready: all five true at one sha answers ready with the full sha' "ready $B, rc 0" "$got"
+  fail 'pr-ready: all seven true at one sha answers ready with the full sha' "ready $B, rc 0" "$got"
+fi
+
+# The supplier writes to the pinned head, and the consumer reads the newest applicable result.
+got=""
+for state in missing pending failure foreign wrong-context wrong-head second-page; do
+  serve "ci-$state"
+  fx="$BOX/ghfx/ci-$state"
+  case "$state" in
+    missing) printf '[]\n' > "$fx/status.$B" ;;
+    pending|failure)
+      cp "$fx/status.$B" "$fx/status-extra"
+      jq --arg state "$state" '.[0].state = $state' "$fx/status-extra" > "$fx/status.$B" ;;
+    foreign) jq '.[0].creator.id = 43' "$fx/status.$B" > "$fx/status-extra"
+      printf '[]\n' > "$fx/status.$B" ;;
+    wrong-context) jq '.[0].context = "external/ci"' "$fx/status.$B" > "$fx/status-extra"
+      printf '[]\n' > "$fx/status.$B" ;;
+    wrong-head) mv "$fx/status.$B" "$fx/status.$A"; printf '[]\n' > "$fx/status.$B" ;;
+    second-page) cp "$fx/status.$B" "$fx/status-extra"
+      jq '.[0].creator.id = 43 | .[0].state = "failure"' "$fx/status-extra" > "$fx/status.$B" ;;
+  esac
+  if [ "$state" = second-page ]; then
+    ready_is "$state" 0 "ready $B" "ci-$state"
+  else
+    ready_is "$state" 1 'not-ready local/ci: ' "ci-$state"
+  fi
+done
+serve ci-incomplete
+: > "$BOX/ghfx/ci-incomplete/status.partial"
+ready_is 'incomplete status read' 3 '' ci-incomplete
+[ -z "$W_OUT" ] && [[ "$W_ERR" == *"statuses"* ]] || got="${got:+$got; }no incomplete-read diagnostic"
+
+for mode in success suite-fail moved dirty producer-denied write-pending write-success; do
+  serve "ci-$mode"
+  export GHFX="$BOX/ghfx/ci-$mode"
+  case "$mode" in
+    moved|suite-fail|write-success) ;;
+    *) printf '[]\n' > "$GHFX/status.$B" ;;
+  esac
+  want_rc=1 want="not-ready local/ci: " events="$B pending"$'\n'"$B"
+  case "$mode" in
+    success) want_rc=0 want="ready $B"; events+=$'\n'"$B success" ;;
+    suite-fail) : > "$GHFX/suite-fail"; events+=$'\n'"$B failure" ;;
+    moved) jq --arg head "$A" '.headRefOid = $head' "$GHFX/view" > "$GHFX/move-to" ;;
+    dirty) printf 'dirty\n' >> "$RR/src/app.txt"; events="" ;;
+    producer-denied) : > "$GHFX/producer.fail"; want_rc=3; events="" ;;
+    write-pending) : > "$GHFX/write-pending.fail"; want_rc=3; events="$B pending" ;;
+    write-success) : > "$GHFX/write-success.fail"; want_rc=3; events+=$'\n'"$B success" ;;
+  esac
+  PATH="$BOX/stub-ready:$PATH" worker review-ci "$MD" "$PRN"
+  [ "$W_RC" = "$want_rc" ] && [ "$(cat "$GHFX/events" 2>/dev/null || true)" = "$events" ] \
+    || got="${got:+$got; }writer $mode: rc $W_RC, events '$(cat "$GHFX/events" 2>/dev/null || true)', stderr '$W_ERR'"
+  case "$mode" in
+    dirty) gitc reset -q --hard "$B" ;;
+    moved) [[ "$W_ERR" == *"pull request head"* ]] || got="${got:+$got; }head change not diagnosed"
+      jq --arg head "$B" '.headRefOid = $head' "$GHFX/view" > "$GHFX/restored"
+      mv "$GHFX/restored" "$GHFX/view" ;;
+    producer-denied) [[ "$W_ERR" == *"producer"* ]] || got="${got:+$got; }producer failure not diagnosed"
+      rm "$GHFX/producer.fail" ;;
+    write-*) [[ "$W_ERR" == *"local/ci"* ]] || got="${got:+$got; }write failure not diagnosed" ;;
+  esac
+  ready_is "after $mode" "$([ "$mode" = success ] && echo 0 || echo 1)" "$want" "ci-$mode"
+done
+if [ -z "$got" ]; then
+  pass 'merge requires local ci on the tested head'
+else
+  fail 'merge requires local ci on the tested head' 'only the latest applicable success on the tested head allows merge' "$got"
+fi
+
+# Commit each config and review its head so readiness reaches the local/ci gate.
+got=""
+printf 'caller input\n' > "$BOX/in"
+for mode in config-exit failed passed; do
+  cat > "$RR/.sdd/config.sh" <<'CONFIG'
+TEST_CMD='if read -r line; then exit 9; fi; if ( : >&4 ) 2>/dev/null; then exit 8; fi; printf "suite output\n"; bash src/test-ci.sh; exit $?'
+CONFIG
+  if [ "$mode" = config-exit ]; then
+    printf '%s\n' 'printf "0\n"' '(printf "0\n" >&4) 2>/dev/null || :' 'exit 0' >> "$RR/.sdd/config.sh"
+  fi
+  gitc commit -qm config -- .sdd/config.sh
+  round "$MD/40-review-r2.md" "$(gitc rev-parse HEAD)"
+  land "ci-completion-$mode"
+  export GHFX="$BOX/ghfx/ci-completion-$mode"
+  printf '[]\n' > "$GHFX/status.$HEADNOW"
+  [ "$mode" = passed ] || : > "$GHFX/suite-fail"
+  events="$HEADNOW pending" want_rc=1 want="not-ready local/ci: "
+  if [ "$mode" = config-exit ]; then
+    output=0
+  else
+    result=failure suite_rc=1
+    if [ "$mode" = passed ]; then
+      result=success suite_rc=0 want_rc=0 want="ready $HEADNOW"
+    fi
+    events+=$'\n'"$HEADNOW"$'\n'"$HEADNOW $result"
+    output="suite output"$'\n'"local/ci $HEADNOW $result (TEST_CMD rc $suite_rc)"
+  fi
+  PATH="$BOX/stub-ready:$PATH" worker_from "$BOX/in" review-ci "$MD" "$PRN" 4>&-
+  [ "$W_RC" = "$want_rc" ] && [ "$W_OUT" = "$output" ] && [ "$(cat "$GHFX/events")" = "$events" ] \
+    || got="${got:+$got; }writer $mode: rc $W_RC, stdout '$W_OUT', events '$(cat "$GHFX/events")', stderr '$W_ERR'"
+  if [ "$mode" = config-exit ] && [[ "$W_ERR" != *'TEST_CMD did not complete'* ]]; then
+    got="${got:+$got; }config exit not diagnosed"
+  fi
+  ready_is "after $mode" "$want_rc" "$want" "ci-completion-$mode"
+  ready_reset
+done
+if [ -z "$got" ]; then
+  pass 'local ci refuses success without a completed test command'
+else
+  fail 'local ci refuses success without a completed test command' \
+    'pending with no suite run, failure after one failed run, success and readiness after one passing run' "$got"
 fi
 
 # The mission scope stays clean. Touch only a tracked file outside it, and prove that the
@@ -1947,16 +2098,26 @@ fi
 # --- R24: the review item -----------------------------------------------------------------------
 # Each world breaks the newest round (r2) and leaves r1 — graded A, naming A — as it is, so a reader
 # of any round but the newest answers ready. Every other item is true in the good world.
+# Commit the grade edits so a permissive reader cannot hide behind the dirty-tree refusal.
 got=""
+grade_is() {
+  local dirty
+  land grade
+  if ! dirty="$(GIT_OPTIONAL_LOCKS=0 gitc status --porcelain --untracked-files=all --ignored -- "$MD")" || [ -n "$dirty" ]; then
+    got="${got:+$got; }$1: fixture is not clean ($dirty)"
+  fi
+  ready_is "$1" 1 "not-ready review: $MD/40-review-r2.md $2" grade
+  ready_reset
+}
 sed -i 's@^| Security | A |@| Security | B |@' "$MD/40-review-r2.md"
 grep -q '^| Security | B |' "$MD/40-review-r2.md" || got="fixture: r2 was not graded B"
-ready_is 'Security B' 1 'not-ready review: ' good; ready_reset
+grade_is 'Security B' 'grades B, and every row must read A'
 sed -i 's@^| \*\*Overall\*\* | \*\*A\*\* |@| **Overall** | **A-** |@' "$MD/40-review-r2.md"
 grep -qF '| **Overall** | **A-** |' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 Overall was not A-"
-ready_is 'Overall A-' 1 'not-ready review: ' good; ready_reset
+grade_is 'Overall A-' 'grades A-, and every row must read A'
 sed -i 's@^| Security | A |@   | Security | B |@' "$MD/40-review-r2.md"
 grep -q '^   | Security | B |' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 has no indented B"
-ready_is 'an indented row graded B' 1 'not-ready review: ' good; ready_reset
+grade_is 'an indented row graded B' 'grades B, and every row must read A'
 round "$MD/40-review-r2.md" -
 ready_is 'no reviewed head' 1 'not-ready review: the newest round names no head' good; ready_reset
 round "$MD/40-review-r2.md" HEAD
@@ -1971,19 +2132,20 @@ rm -f "$MD"/40-review-r*.md
 ready_is 'no round' 1 'not-ready review: ' good; ready_reset
 sed -i 's@^### Overall Grade@### Grades@' "$MD/40-review-r2.md"
 grep -q '^### Grades' "$MD/40-review-r2.md" || got="${got:+$got; }fixture: r2 kept its grade heading"
-ready_is 'no grade table' 1 'not-ready review: ' good; ready_reset
+grade_is 'no grade table' 'has no grade under ### Overall Grade'
 # The head the pull request names is not in this checkout, receipt and all: only the review item
 # can say so, since the ancestry it reads does not run.
 UNFETCHED=0000000000000000000000000000000000000007
 serve r-unfetched
 printf '{"headRefOid":"%s","mergeable":"MERGEABLE","state":"OPEN"}\n' "$UNFETCHED" > "$BOX/ghfx/r-unfetched/view"
 printf '[%s]' "$(comment "$CODEX" "$UNFETCHED" '')" > "$BOX/ghfx/r-unfetched/comments.2"
-ready_is 'a head not fetched' 1 'not-ready review: git merge-base --is-ancestor ' r-unfetched
+ready_is 'a head not fetched' 1 "not-ready review: git merge-base --is-ancestor $A $UNFETCHED does not run here" r-unfetched
 # The mission folder given as the root of the checkout: every path is under it.
 round "$RR/40-review-r2.md" "$A"
 ready_is 'the root as the mission folder' 1 'not-ready review: the mission folder ' good "$RR"; ready_reset
 mkdir -p "$BOX/loose-ready"; cp -a "$MD" "$BOX/loose-ready/"
 ready_is 'outside a checkout' 1 'not-ready review: ' good "$BOX/loose-ready/20990300-ready"
+review_world_failures="$got"
 if [ -z "$got" ]; then
   pass 'pr-ready: a grade below A, a round that names no head, and code after the reviewed head each fail review'
 else
@@ -2024,17 +2186,359 @@ fi
 # --- R26: the threads item ----------------------------------------------------------------------
 got=""
 serve t-open
-printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"nodes":[{"isResolved":true},{"isResolved":false}]}}}}}' \
+printf '%s\n' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":2,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"id":"thread_1","isResolved":true},{"id":"thread_2","isResolved":false,"comments":{"totalCount":1,"nodes":[{"id":"comment_2","body":"finding","author":{"login":"reviewer","__typename":"Bot"}}]}}]}}}}}' \
   > "$BOX/ghfx/t-open/threads"
 ready_is 'one open thread' 1 'not-ready threads: ' t-open
-serve t-unseen
-jq -cn '{data: {repository: {pullRequest: {reviewThreads: {totalCount: 101, nodes: [range(100) | {isResolved: true}]}}}}}' \
-  > "$BOX/ghfx/t-unseen/threads"
-ready_is 'a thread past the hundred read' 1 'not-ready threads: ' t-unseen
 if [ -z "$got" ]; then
   pass 'pr-ready: one open thread fails threads'
 else
   fail 'pr-ready: one open thread fails threads' 'rc 1 and not-ready threads: … for each world' "$got"
+fi
+
+
+# Body findings and change requests are independent of inline threads.
+got=""
+for world in f-info f-body f-request f-commented f-foreign f-approved f-dismissed f-malformed f-partial f-thread f-missing f-human f-reply-bad f-reply-race f-resume f-page f-page-fail; do
+  serve "$world"
+done
+review_fixture() {
+  jq -cn --argjson id "$1" --arg state "$2" --arg body "$3" --arg type "${4:-Bot}" --arg sha "$A" \
+    '[{id:$id,state:$state,body:$body,commit_id:$sha,submitted_at:"2026-01-01T00:00:00Z",user:{id:71,login:"reviewer",type:$type}}]'
+}
+review_fixture 11 COMMENTED 'Looks good.' > "$BOX/ghfx/f-info/reviews.2"
+review_fixture 11 COMMENTED 'Finding A: validate an empty value.' > "$BOX/ghfx/f-body/reviews.2"
+review_fixture 11 CHANGES_REQUESTED '' User > "$BOX/ghfx/f-request/reviews.1"
+for world in f-commented f-foreign f-approved; do
+  cp "$BOX/ghfx/f-request/reviews.1" "$BOX/ghfx/$world/reviews.1"
+done
+review_fixture 12 COMMENTED 'Thanks.' User > "$BOX/ghfx/f-commented/reviews.2"
+review_fixture 12 APPROVED '' User > "$BOX/ghfx/f-approved/reviews.2"
+jq '.[0].user.id = 72 | .[0].user.login = "other"' "$BOX/ghfx/f-approved/reviews.2" > "$BOX/ghfx/f-foreign/reviews.2"
+review_fixture 11 DISMISSED '' User > "$BOX/ghfx/f-dismissed/reviews.2"
+printf '%s\n' '{"message":"broken"}' > "$BOX/ghfx/f-malformed/reviews.2"
+touch "$BOX/ghfx/f-partial/reviews.partial"
+ready_is 'purely informational body' 0 "ready $B" f-info
+ready_is 'body finding on later page' 1 'not-ready findings: review 11 ' f-body
+ready_is 'request without inline comments' 1 'not-ready findings: changes requested by reviewer' f-request
+ready_is 'ordinary comment does not withdraw request' 1 'not-ready findings: changes requested by reviewer' f-commented
+ready_is 'approval by another reviewer cannot supersede' 1 'not-ready findings: changes requested by reviewer' f-foreign
+ready_is 'approval by the same reviewer replaces request' 0 "ready $B" f-approved
+ready_is 'dismissed request' 0 "ready $B" f-dismissed
+ready_is 'unreadable review page' 3 '' f-malformed
+ready_is 'failed later review page' 3 '' f-partial
+
+thread_fixture() {
+  jq -cn --arg type "$1" '{data:{repository:{pullRequest:{reviewThreads:{
+    totalCount:1,pageInfo:{hasNextPage:false,endCursor:null},
+    nodes:[{id:"thread_A",isResolved:false,comments:{totalCount:1,
+      nodes:[{id:"comment_A",body:"Finding B: handle the missing value.",author:{login:"reviewer",__typename:$type}}]}}]
+  }}}}}'
+}
+for world in f-thread f-missing f-human f-reply-bad f-reply-race f-resume; do
+  type=Bot
+  [ "$world" != f-human ] || type=User
+  thread_fixture "$type" > "$BOX/ghfx/$world/threads"
+done
+jq '.data.repository.pullRequest.reviewThreads |=
+    (.totalCount = 2 | .pageInfo = {hasNextPage:true,endCursor:"next"} | .nodes = [{id:"thread_first",isResolved:true}])' \
+    "$BOX/ghfx/f-thread/threads" > "$BOX/ghfx/f-page/threads"
+jq '.data.repository.pullRequest.reviewThreads.totalCount = 2' "$BOX/ghfx/f-thread/threads" > "$BOX/ghfx/f-page/threads.next"
+cp "$BOX/ghfx/f-page/threads" "$BOX/ghfx/f-page-fail/threads"
+touch "$BOX/ghfx/f-page-fail/threads.fail-next-page.fail"
+ready_is 'unresolved thread on second page' 1 'not-ready threads: ' f-page
+ready_is 'missing thread page' 3 '' f-page-fail
+
+finding_worker() {
+  export GHFX="$BOX/ghfx/$1"
+  PATH="$BOX/stub-ready:$PATH" worker review-findings "$MD" "$PRN" "${@:2}"
+}
+record_finding() {
+  local id="$1" kind="$2" commit="$3" fingerprint
+  fingerprint="$(jq -r --arg id "$id" 'select(.id == $id).fingerprint' <<< "$W_OUT")"
+  if [ "$W_RC" != 0 ] || ! [[ "$fingerprint" =~ ^[0-9a-f]{40}$ ]]; then
+    got="${got:+$got; }inventory did not identify $kind $id (rc $W_RC)"
+    return
+  fi
+  printf '\nreview-disposition %s %s %s %s %s\n' "$kind" "$id" "$fingerprint" "$commit" \
+    'The cited change handles the missing value in the finding.' >> "$MD/40-review-r2.md"
+}
+finding_worker f-body
+record_finding 11 review 1111111111111111111111111111111111111111
+land f-body-bad-sha
+cp "$BOX/ghfx/f-body/reviews.2" "$BOX/ghfx/f-body-bad-sha/reviews.2"
+ready_is 'missing evidence commit' 1 'not-ready findings: review 11 ' f-body-bad-sha
+ready_reset
+finding_worker f-body
+printf '\n~~~text\n' >> "$MD/40-review-r2.md"
+record_finding 11 review "$Z1"
+printf '~~~\n' >> "$MD/40-review-r2.md"
+land f-body-fenced
+cp "$BOX/ghfx/f-body/reviews.2" "$BOX/ghfx/f-body-fenced/reviews.2"
+ready_is 'a quoted example is not evidence' 1 'not-ready findings: review 11 ' f-body-fenced
+ready_reset
+finding_worker f-body
+record_finding 11 review "$Z1"
+land f-body-handled
+cp "$BOX/ghfx/f-body/reviews.2" "$BOX/ghfx/f-body-handled/reviews.2"
+ready_is 'body finding has committed evidence' 0 "ready $HEADNOW" f-body-handled
+review_fixture 11 COMMENTED 'Finding A revised: validate two values.' > "$BOX/ghfx/f-body-handled/reviews.2"
+ready_is 'body edited after disposition' 1 'not-ready findings: review 11 ' f-body-handled
+cp "$BOX/ghfx/f-body/reviews.2" "$BOX/ghfx/f-body-handled/reviews.1"
+review_fixture 13 COMMENTED 'Finding C: check the default.' > "$BOX/ghfx/f-body-handled/reviews.2"
+ready_is 'new body finding after disposition' 1 'not-ready findings: review 13 ' f-body-handled
+ready_reset
+
+finding_worker f-missing --resolve
+[[ "$W_RC" == 1 && ! -e "$GHFX/review-events" ]] || got="${got:+$got; }unhandled thread: rc $W_RC or write"
+for world in f-thread f-human f-reply-bad f-reply-race f-resume; do
+  finding_worker "$world"
+  record_finding thread_A thread "$Z1"
+  land "f-write-$world"
+  fx="$BOX/ghfx/f-write-$world"
+  cp "$BOX/ghfx/$world/threads" "$fx/threads"
+  case "$world" in
+    f-reply-bad) touch "$fx/reply-bad" ;;
+    f-reply-race) touch "$fx/reply-race" ;;
+    f-resume) touch "$fx/resolve-fail" ;;
+  esac
+  finding_worker "f-write-$world" --resolve
+  events="$(cat "$fx/review-events" 2>/dev/null || true)"
+  case "$world" in
+    f-thread)
+      expected="reply thread_A $Z1"$'\n''resolve thread_A'
+      [[ "$W_RC" == 0 && "$events" == "$expected" ]] || got="${got:+$got; }treated bot thread: rc $W_RC, '$events'"
+      ready_is 'verified bot thread now resolved' 0 "ready $HEADNOW" "f-write-$world"
+      finding_worker "f-write-$world" --resolve
+      [[ "$W_RC" == 0 && "$(cat "$fx/review-events" 2>/dev/null)" == "$expected" ]] \
+        || got="${got:+$got; }resumed thread acted twice"
+      jq '.data.repository.pullRequest.reviewThreads.nodes[0].comments.nodes[0].body += " New finding."' \
+        "$fx/threads" > "$fx/next"
+      mv "$fx/next" "$fx/threads"
+      ready_is 'edit after the thread was resolved invalidates its disposition' 1 'not-ready threads: ' "f-write-$world"
+      ;;
+    f-resume)
+      expected="reply thread_A $Z1"$'\n''resolve thread_A'
+      [[ "$W_RC" == 3 && "$events" == "$expected" ]] || got="${got:+$got; }failed resolve: rc $W_RC, '$events'"
+      rm "$fx/resolve-fail"
+      finding_worker "f-write-$world" --resolve
+      [[ "$W_RC" == 0 && "$(cat "$fx/review-events" 2>/dev/null)" == "$expected"$'\n''resolve thread_A' ]] \
+        || got="${got:+$got; }resume after a verified reply: rc $W_RC or duplicate reply"
+      ;;
+    f-human) [[ "$W_RC" == 1 && -z "$events" ]] || got="${got:+$got; }human thread: rc $W_RC, '$events'" ;;
+    f-reply-bad|f-reply-race)
+      [[ "$W_RC" != 0 && "$events" == "reply thread_A $Z1" ]] \
+        || got="${got:+$got; }unverified or raced reply: rc $W_RC, '$events'"
+      ;;
+  esac
+  ready_reset
+done
+if [ -z "$got" ]; then
+  pass 'review findings have verified dispositions'
+else
+  fail 'review findings have verified dispositions' \
+    'complete pages, evidence for the current finding, and only verified fixes auto-resolve bot threads' "$got"
+fi
+
+
+# R4: a whole acknowledgment is informational, not an exemption for actionable text.
+got=""
+for world in plain-en plain-pt plain-case plain-finding plain-request plain-empty-request; do
+  serve "$world"
+  state=APPROVED
+  expected_finding=false
+  expected_request=false
+  expected_rc=0
+  expected_output="ready $B"
+  case "$world" in
+    plain-en) body='Approved.' ;;
+    plain-pt) body='Aprovado.' ;;
+    plain-case) body=$' \nAPROVADA\t' ;;
+    plain-finding)
+      body=$'Aprovado.\nPlease handle the missing value.'
+      expected_finding=true
+      expected_rc=1
+      expected_output='not-ready findings: review 23 '
+      ;;
+    plain-request|plain-empty-request)
+      body='Aprovado.'
+      [ "$world" != plain-empty-request ] || body=''
+      state=CHANGES_REQUESTED
+      expected_request=true
+      expected_rc=1
+      expected_output='not-ready findings: changes requested by reviewer'
+      ;;
+  esac
+  review_fixture 23 "$state" "$body" User > "$BOX/ghfx/$world/reviews.2" \
+    || got="${got:+$got; }$world: could not materialize review fixture"
+  finding_worker "$world"
+  if [ "$W_RC" != 0 ] || ! jq -es --argjson finding "$expected_finding" --argjson request "$expected_request" '
+    map(select(.kind == "review")) | length == 1 and
+    (.[0] | .id == "23" and .actor == "User" and .finding == $finding and .activeRequest == $request)
+  ' >/dev/null <<< "$W_OUT"; then
+    got="${got:+$got; }$world: inventory did not classify review 23 (rc $W_RC)"
+  fi
+  ready_is "$world" "$expected_rc" "$expected_output" "$world"
+  if [ "$expected_rc" = 0 ] && [ "$W_OUT" != "$expected_output" ]; then
+    got="${got:+$got; }$world: expected the exact ready SHA"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'plain human approvals do not hide actionable findings'
+else
+  fail 'plain human approvals do not hide actionable findings' 'acknowledgment ready, actionable text or active request blocked' "$got"
+fi
+
+got=""
+for world in resolved-valid resolved-absent resolved-number resolved-null resolved-bad-count resolved-bad-nodes resolved-bad-body open-absent; do
+  serve "$world"
+  case "$world" in
+    resolved-valid) edit='.isResolved = true' ;;
+    resolved-absent) edit='.isResolved = true | del(.comments)' ;;
+    resolved-number) edit='.isResolved = true | .comments = 17' ;;
+    resolved-null) edit='.isResolved = true | .comments = null' ;;
+    resolved-bad-count) edit='.isResolved = true | .comments.totalCount = 2' ;;
+    resolved-bad-nodes) edit='.isResolved = true | .comments.nodes = {}' ;;
+    resolved-bad-body) edit='.isResolved = true | .comments.nodes[0].body = null' ;;
+    open-absent) edit='del(.comments)' ;;
+  esac
+  thread_fixture User | jq ".data.repository.pullRequest.reviewThreads.nodes[0] |= ($edit)" > "$BOX/ghfx/$world/threads" \
+    || got="${got:+$got; }$world: could not materialize thread fixture"
+  finding_worker "$world"
+  case "$world" in
+    resolved-valid|resolved-absent)
+      if [ "$W_RC" != 0 ] || ! jq -es '
+        length == 1 and (.[0] | .id == "thread_A" and .kind == "thread" and .isResolved)
+      ' >/dev/null <<< "$W_OUT"; then
+        got="${got:+$got; }$world: inventory did not return the resolved thread (rc $W_RC)"
+      fi
+      ready_is "$world" 0 "ready $B" "$world"
+      [[ "$W_OUT" == "ready $B" ]] || got="${got:+$got; }$world: expected the exact ready SHA"
+      ;;
+    *)
+      if [[ "$W_RC" != 3 || -n "$W_OUT" || "$W_ERR" != *"answered an invalid page"* ]]; then
+        got="${got:+$got; }$world: inventory did not reject the page (rc $W_RC, $W_ERR)"
+      fi
+      ready_is "$world" 3 '' "$world"
+      if [[ -n "$W_OUT" || "$W_ERR" != *"answered an invalid page"* ]]; then
+        got="${got:+$got; }$world: readiness did not reject the page (rc $W_RC, $W_ERR)"
+      fi
+      ;;
+  esac
+done
+if [ -z "$got" ]; then
+  pass 'review findings and readiness reject malformed resolved threads'
+else
+  fail 'review findings and readiness reject malformed resolved threads' 'resolved controls ready, malformed pages rejected by both readers' "$got"
+fi
+
+# I10: materialized decisions and one consent for the exact merge request.
+got=""
+ready_reset
+# The heading, multiline ◆ decision and recommended receipt follow the L5 mission.
+# Question IDs and escaped inline text follow record_grill in bin/sdd-plan-codex.
+cat > "$BOX/grill" <<'GRILL'
+## Grill decisions
+
+1. Question 0123456789abcdef0123456789abcdef
+   - question: Use the first setting?
+   - answer: (other: Keep &lt;x&gt; and \[brackets\]&#10;on two lines)
+
+2. Question fedcba9876543210fedcba9876543210
+   - question: Use the second setting?
+   - answer: (other: Keep &lt;x&gt; and \[brackets\]&#10;on two lines)
+
+3. **◆ Keep the owner's option.**
+   Apply it only to this lot.
+   - answer: (recommended)
+GRILL
+{ printf '\n'; cat "$BOX/grill"; printf '\n## Next section\n\nNot a grill choice.\n'; } >> "$MD/00-missao.md"
+land grill-good
+grill_head="$HEADNOW"
+grill_body="$(cat "$BOX/grill")"
+serve_grill_body() {
+  jq -cn --arg body "$2" '{body:$body}' > "$BOX/ghfx/$1/body"
+}
+printf '## Summary\nPublished changes.\n' > "$BOX/pr-remainder"
+awk '/^### `pr`$/ { on=1; next } on && /^### / { exit }
+  on && /^\x60\x60\x60bash$/ { code=1; next } code && /^\x60\x60\x60$/ { exit } code' \
+  "$ROOT/commands/sdd-worker.md" > "$BOX/pr-procedure"
+if ! (
+  [ -s "$BOX/pr-procedure" ] || exit 1
+  # shellcheck disable=SC1090 # Run the exact shell block the worker follows.
+  . "$BOX/pr-procedure"
+  sdd-worker() { "$WORKER" "$@"; }
+  export GHFX="$BOX/ghfx/grill-good" PATH="$BOX/stub-ready:$PATH"
+  publish_grill "$MD" "$PRN" "$BOX/pr-remainder"
+) || [[ "$(jq -r .body "$BOX/ghfx/grill-good/body" 2>/dev/null)" != "$grill_body"$'\n\n## Summary\nPublished changes.' ]]; then
+  got='pr act did not publish the materialized grill and preserve the rest of the body'
+  serve_grill_body grill-good "$grill_body"
+fi
+worker pr-grill "$MD"
+[[ "$W_RC" == 0 && "$W_OUT" == "$grill_body" ]] || got="${got:+$got; }publisher: rc $W_RC or decisions changed"
+ready_is 'every published decision matches its receipt' 0 "ready $grill_head" grill-good
+for grill_case in answer identity diamond absent unread; do
+  serve "grill-$grill_case" "$grill_head"
+  case "$grill_case" in
+    answer) body="$(sed '0,/Keep/{s/Keep/Change/;}' "$BOX/grill")" ;;
+    identity) body="${grill_body/fedcba9876543210fedcba9876543210/0123456789abcdef0123456789abcdef}" ;;
+    diamond) body="$(sed "s/Keep the owner's option/Change the owner's option/" "$BOX/grill")" ;;
+    absent|unread) body=$'## Grill decisions\n\n## Summary\n\nNo receipts here.' ;;
+  esac
+  serve_grill_body "grill-$grill_case" "$body"
+  if [ "$grill_case" = unread ]; then
+    touch "$BOX/ghfx/grill-unread/body.partial"
+    ready_is 'unreadable body' 3 '' grill-unread
+  else
+    ready_is "$grill_case" 1 'not-ready grill: ' "grill-$grill_case"
+  fi
+done
+
+awk '/^### `merge`$/ { on=1; next } on && /^### / { exit }
+  on && /^\x60\x60\x60bash$/ { code=1; next } code && /^\x60\x60\x60$/ { exit } code' \
+  "$ROOT/commands/sdd-worker.md" > "$BOX/merge-procedure"
+if [ -s "$BOX/merge-procedure" ]; then
+  campaign_dir="$BOX/r-camp"
+  mkdir -p "$campaign_dir"
+  merge_path="$BOX/stub-ready:$PATH"
+  # shellcheck disable=SC1090 # Run the exact shell block the worker follows.
+  . "$BOX/merge-procedure"
+  sdd-worker() {
+    case "$1" in
+      budget) printf 'budget\n' >> "$GHFX/guards"; return "${I10_BUDGET:-0}" ;;
+      allows) printf 'allows\n' >> "$GHFX/guards"; return 1 ;;
+      *) "$WORKER" "$@" ;;
+    esac
+  }
+  consent=""
+  merge_rc=0
+  export GHFX="$BOX/ghfx/grill-good"
+  consent="$(PATH="$merge_path" merge_checked "$campaign_dir" "$MD" "$PRN")" || merge_rc=$?
+  [[ "$merge_rc" == 1 && "$consent" == *"$grill_head"* && ! -e "$GHFX/merges" ]] \
+    || got="${got:+$got; }assisted proposal did not bind the first head or attempted a merge"
+  land grill-next-head
+  serve_grill_body grill-next-head "$grill_body"
+  export GHFX="$BOX/ghfx/grill-next-head"
+  merge_rc=0
+  next_consent="$(PATH="$merge_path" merge_checked "$campaign_dir" "$MD" "$PRN" "$consent")" || merge_rc=$?
+  [[ "$merge_rc" == 1 && "$next_consent" == *"$HEADNOW"* && ! -e "$GHFX/merges" ]] \
+    || got="${got:+$got; }old consent was not rejected on the new head of the same PR"
+  merge_rc=0
+  I10_BUDGET=1 PATH="$merge_path" merge_checked "$campaign_dir" "$MD" "$PRN" "$next_consent" || merge_rc=$?
+  [[ "$merge_rc" != 0 && ! -e "$GHFX/merges" ]] || got="${got:+$got; }yes bypassed a budget refusal"
+  merge_rc=0
+  PATH="$merge_path" merge_checked "$campaign_dir" "$MD" "$PRN" "$next_consent" || merge_rc=$?
+  [[ "$merge_rc" == 0 && "$(cat "$GHFX/merges" 2>/dev/null)" == "$HEADNOW" &&
+     "$(cat "$GHFX/guards")" == $'budget\nallows\nbudget\nbudget\nallows' ]] \
+    || got="${got:+$got; }the new yes did not revalidate gates and merge only the reviewed head"
+  unset -f sdd-worker merge_checked
+else
+  got="${got:+$got; }no executable assisted consent procedure"
+fi
+ready_reset
+if [ -z "$got" ]; then
+  pass 'merge binds answers and consent to head'
+else
+  fail 'merge binds answers and consent to head' 'exact decisions in the PR and fresh consent after a head change' "$got"
 fi
 
 # --- R27: the mergeable item --------------------------------------------------------------------
@@ -2187,9 +2691,8 @@ prose_missing() {
     || printf 'stops: SDD_GATE_WHY by variable\n'
   # The pager call passes the fields the runner's escalation_hook passes (bin/sdd), the project and
   # the phase among them: a hook that reads ${SDD_PROJECT:?} aborts on a stop of the worker, and the
-  # owner is not paged (P2 of the Codex on PR #414). Read in the call, from its why= line to the
-  # closing fence, never anywhere in the section.
-  items="$(awk '/^why="\$\(sdd-worker budget/ { c = 1 } c && /^```/ { exit } c' <<< "$s")"
+  # owner is not paged (P2 of the Codex on PR #414). Read inside the code fence, not in prose.
+  items="$(awk '/^```/ { c = !c; next } c' <<< "$s")"
   for p in 'SDD_PROJECT=' 'SDD_PHASE='; do
     grep -qF "$p" <<< "$items" || printf 'stops: %s in the pager call\n' "$p"
   done
@@ -2273,7 +2776,7 @@ control 'stop 1 deleted' prose_missing $'stops: not five numbered lines\nstops: 
 control 'a sixth stop' prose_missing 'stops: not five numbered lines' '/^5\. /a\
 6. **Another.** One more stop.'
 control 'stop 4 not numbered' prose_missing $'stops: not five numbered lines\nstops: BUDGET_MISSION_USD' 's/^4\. \(.*BUDGET_MISSION_USD\)/\1/'
-control 'no pager' prose_missing $'stops: ON_ESCALATION_CMD\nstops: journal.md' '/ON_ESCALATION_CMD/d'
+control 'no pager' prose_missing $'stops: ON_ESCALATION_CMD\nstops: journal.md' '/ON_ESCALATION_CMD/d; />> .*journal\.md/d'
 control 'never: main checkout' prose_missing "never: kit's main checkout" "/^- Move the kit's main checkout/d"
 control 'never: not a bullet' prose_missing 'never: visual acceptance' 's/^- \(Give the visual acceptance\)/\1/'
 control 'context: handoff' prose_missing 'context: a handoff to a file' '/^- .*a handoff to a file/d'
@@ -2293,7 +2796,7 @@ control 'why pasted' prose_missing 'stops: SDD_GATE_WHY by variable' "s/SDD_GATE
 control 'why pasted beside the variable' prose_missing 'stops: SDD_GATE_WHY by variable' "/SDD_GATE_WHY=\"\\\$why\"/ s/\$/ SDD_GATE_WHY='<line>'/"
 control 'why pasted between double quotes' prose_missing 'stops: SDD_GATE_WHY by variable' 's/SDD_GATE_WHY="\$why"/SDD_GATE_WHY="<line>"/'
 control 'no project in the call' prose_missing 'stops: SDD_PROJECT= in the pager call' 's/ SDD_PROJECT="\${PROJECT_NAME:-}"//'
-control 'no phase in the call' prose_missing 'stops: SDD_PHASE= in the pager call' 's/ SDD_PHASE=<act>//'
+control 'no phase in the call' prose_missing 'stops: SDD_PHASE= in the pager call' 's/ SDD_PHASE="\$act"//'
 control 'project only beside the call' prose_missing 'stops: SDD_PROJECT= in the pager call' 's/ SDD_PROJECT="\${PROJECT_NAME:-}"//
 /^## The five stops$/a\
 SDD_PROJECT="${PROJECT_NAME:-}"'
@@ -2351,9 +2854,9 @@ $a\
 control 'step 2 reads next alone' transitions_missing 'loop: step 2' 's/has a move in \*\*The transitions\*\* (below)/has a move below/'
 control 'step 6 forgets the waits' transitions_missing 'loop: step 6' 's/^6\. Back to 1, and after every wait too:/6. Back to 1:/'
 control 'launch without -w' transitions_missing $'setsid: launch\nsetsid: bare' 's/setsid -w nohup/setsid nohup/'
-control 'a bare setsid in another block' transitions_missing 'setsid: bare' 's/^why="\$(sdd-worker budget <campaign-dir>)"$/&\nsetsid true/'
+control 'a bare setsid in another block' transitions_missing 'setsid: bare' 's/^if \[ "\$act" != run \]/&\nsetsid true/'
 control 'setsid -w only in another block' transitions_missing $'setsid: launch\nsetsid: bare' 's/setsid -w nohup/setsid nohup/
-s/^why="\$(sdd-worker budget <campaign-dir>)"$/&\nsetsid -w true/'
+s/^if \[ "\$act" != run \]/&\nsetsid -w true/'
 control 'setsid -w only in prose' transitions_missing $'setsid: launch\nsetsid: bare' 's/setsid -w nohup/setsid nohup/
 $a\
 setsid -w nohup'
@@ -2374,6 +2877,236 @@ if grep -qF 'sdd review-base' <<< "$rsec" && ! grep -qF 'carry no `reviewed_head
 else
   fail 'command: the review act passes the line of sdd review-base to its subagent' \
     'the ### `review` subsection names sdd review-base and drops "carry no `reviewed_head:`"' "$rsec"
+fi
+
+# Select the block defining review_scope, not the earlier lookahead command.
+review_procedure="$BOX/review-procedure"
+awk '
+  !code && /^\x60\x60\x60bash$/ { code=1; block=""; found=0; next }
+  code && /^\x60\x60\x60$/ {
+    if (found) { printf "%s", block; exit }
+    code=0; next
+  }
+  code {
+    block=block $0 "\n"
+    if ($0 ~ /^[[:space:]]*review_scope\(\)/) found=1
+  }
+' <<< "$rsec" > "$review_procedure"
+scope_is() (
+  local world="$1" want_rc="$2" want="$3" trace="$4"
+  local log="$BOX/review-scope.$1" state=OPEN pr_mergeable=MERGEABLE remote="$B" local_head="$B" rc=0 out
+  case "$world" in
+    stale) local_head="$A" ;;
+    unknown) pr_mergeable=UNKNOWN ;;
+    closed) state=CLOSED ;;
+    integrate|conflict|dirty_conflict|fetch_failed|moved_during_fetch) pr_mergeable=CONFLICTING ;;
+    updated) remote="$A"; local_head="$A" ;;
+  esac
+  gh() {
+    printf 'gh\n' >> "$log"
+    [[ "$*" == "pr view $PRN --json state,headRefOid,mergeable,baseRefName" ]] || return 9
+    [ "$world" != offline ] || return 1
+    if [ "$world" = malformed ]; then
+      printf '%s\n' '{"state":"OPEN"'
+      return 0
+    fi
+    printf '{"state":"%s","headRefOid":"%s","mergeable":"%s","baseRefName":"release/main"}\n' \
+      "$state" "$remote" "$pr_mergeable"
+  }
+  git() {
+    case "$*" in
+      'rev-parse HEAD') printf 'head\n' >> "$log"; cat "$log.head" ;;
+      'status --porcelain')
+        printf 'status\n' >> "$log"
+        case "$world" in dirty_mergeable|dirty_conflict) printf ' M a\n' ;; esac ;;
+      'check-ref-format refs/heads/release/main') : ;;
+      'fetch --no-tags origin refs/heads/release/main')
+        printf 'fetch\n' >> "$log"
+        [ "$world" != fetch_failed ] || return 1
+        if [ "$world" = moved_during_fetch ]; then printf '%s\n' "$A" > "$log.head"; fi ;;
+      'merge --no-edit FETCH_HEAD')
+        printf 'merge\n' >> "$log"
+        [ "$world" != conflict ] || return 1
+        printf '%s\n' "$A" > "$log.head" ;;
+      *) printf 'unexpected git %s\n' "$*" >> "$log"; return 9 ;;
+    esac
+  }
+  sdd() {
+    printf 'scope\n' >> "$log"
+    [ "$*" = 'review-base fixture' ] || return 9
+    case "$world" in
+      updated) printf 'full — merge entered after the previous round\n' ;;
+      wrong_delta) printf 'full — unexpected full round\n' ;;
+      *) printf 'base=%s — previous round\n' "$A" ;;
+    esac
+  }
+  : > "$log"
+  printf '%s\n' "$local_head" > "$log.head"
+  # shellcheck disable=SC1090 # Run the exact shell block the worker follows.
+  . "$review_procedure" || exit
+  if ! declare -F review_scope >/dev/null; then
+    printf 'review_scope was not loaded\n' >&2
+    exit 1
+  fi
+  out="$(review_scope "$PRN" fixture 2>"$log.err")" || rc=$?
+  if [[ "$rc" != "$want_rc" || "$out" != "$want" || "$(cat "$log")" != "$trace" ]]; then
+    printf '%s: rc=%s, output=%q, calls=%q\n' "$world" "$rc" "$out" "$(cat "$log")"
+    exit 1
+  fi
+  printf 'checked\n'
+)
+scope_case() {
+  local witness
+  if witness="$(scope_is "$@" 2>&1)" && [ "$witness" = checked ]; then return 0; fi
+  printf '%s: review scenario did not pass%s\n' "$1" "${witness:+: $witness}"
+}
+delta_case=(0 "$B"$'\n'"base=$A — previous round" $'gh\nhead\nstatus\nscope')
+if [ -s "$review_procedure" ]; then
+  got="$(
+    scope_case delta "${delta_case[@]}"
+    scope_case integrate 1 "integrated $A" $'gh\nhead\nstatus\nfetch\nhead\nmerge\nhead'
+    scope_case updated 0 "$A"$'\nfull — merge entered after the previous round' $'gh\nhead\nstatus\nscope'
+    scope_case conflict 1 '' $'gh\nhead\nstatus\nfetch\nhead\nmerge'
+    scope_case dirty_conflict 1 '' $'gh\nhead\nstatus'
+    scope_case dirty_mergeable 1 '' $'gh\nhead\nstatus'
+    scope_case fetch_failed 1 '' $'gh\nhead\nstatus\nfetch'
+    scope_case moved_during_fetch 3 '' $'gh\nhead\nstatus\nfetch\nhead'
+    scope_case malformed 3 '' gh
+    scope_case stale 3 '' $'gh\nhead'
+    scope_case unknown 3 '' gh
+    scope_case closed 3 '' gh
+    scope_case offline 3 '' gh
+  )"
+  printf 'exit 0\n' > "$BOX/review-aborted-load"
+  if [ -z "$(review_procedure="$BOX/review-aborted-load" scope_case delta "${delta_case[@]}")" ]; then
+    got+=" the probe accepted an aborted load"
+  fi
+  if [ -z "$(scope_case wrong_delta "${delta_case[@]}")" ]; then
+    got+=" the probe accepted a full round instead of the eligible delta"
+  fi
+else
+  got='no guarded review block'
+  if grep -qF 'bring the base in' <<< "$rsec"; then
+    got='the review act merges the base before measuring the delta'
+  fi
+fi
+if [ -z "$got" ]; then
+  pass 'review preserves the eligible delta'
+else
+  fail 'review preserves the eligible delta' 'delta without integration, integrate only on conflict, reread the new head' "$got"
+fi
+
+# Exercise the signed queue in two checkouts and the follow-up lookup in the procedure itself.
+got=""
+queue="$(campaign queue-extra full "$FAR" 25 200)"
+set_lots "$queue/campaign.md" 'L10:-' 'L12:-'
+sed -i 's/^lots:.*/lots: L10 L12/' "$queue/delegation.md"
+sign "$queue"
+lot_mission "$REPO" 20990601-queue-active queue-extra L10 queue-active-b humano-2099-01-01
+prs queue-active-b '[{"number":70,"state":"OPEN"}]'
+draft_tree="$BOX/queue-draft"
+draft="$draft_tree/docs/campaigns/queue-extra"
+if git -C "$REPO" worktree add -q --detach "$draft_tree" HEAD; then
+  mkdir -p "$draft" "$draft_tree/.sdd"
+  cp "$queue"/{campaign,delegation}.md "$draft/"
+  cp "$REPO/.sdd/config.sh" "$draft_tree/.sdd/config.sh"
+  set_lots "$draft/campaign.md" 'L10:-' 'L11:plan' 'L12:-'
+  sed -i 's/^lots:.*/lots: L10 L11 L12/' "$draft/delegation.md"
+  allows_is 'unsigned proposal' 1 'ask run needs pr, effective assisted — edited after signing' \
+    "$draft" run --mission "$REPO/$H/20990601-queue-active"
+  allows_is 'live authority during draft' 0 'allowed run at full' \
+    "$queue" run --mission "$REPO/$H/20990601-queue-active"
+  next_is 'live queue during draft' 0 'review L10 20990601-queue-active — ' 'ahead plan L12' "$queue"
+  sign "$draft"
+  grep -qx 'ceiling L11: plan' <<< "$W_OUT" || got+="; the owner did not see the new lot ceiling"
+  next_is 'live queue after signing the draft' 0 'review L10 20990601-queue-active — ' 'ahead plan L12' "$queue"
+  cp "$draft"/{campaign,delegation}.md "$queue/"
+  allows_is 'integrated proposal' 0 'allowed plan at plan' "$queue" plan --lot L11
+  next_is 'integration keeps the active lot' 0 'review L10 20990601-queue-active — ' 'ahead plan L11' "$queue"
+  prs queue-active-b '[{"number":70,"state":"MERGED"}]'
+  next_is 'new lot takes its signed position' 0 'plan L11 - — ' '' "$queue"
+  git -C "$REPO" worktree remove --force "$draft_tree" || got+="; cannot remove fixture checkout"
+else
+  got+="; cannot prepare a separate fixture checkout"
+fi
+
+plan_proc="$(section "$COMMAND" 'The acts' | sed -n '/^### `plan`$/,/^### `approve`$/p')"
+post_proc="$(section "$COMMAND" 'The acts' | sed -n '/^### `postmerge`$/,$p')"
+transitions="$(section "$COMMAND" 'The transitions')"
+for term in 'separate checkout' 'position' 'ceiling' '`lots:`' 'owner signs' 'same commit' 'live queue'; do
+  grep -qF "$term" <<< "$plan_proc" || got+="; queue procedure missing $term"
+done
+for term in 'merge_sha=<sha> followup=pending' 'chore/postmerge-<mission-pr>' 'pr=<number> url=<url> review=pending' 'review=done' 'pr-ready'; do
+  grep -qF "$term" <<< "$post_proc" || got+="; postmerge journal/gate missing $term"
+done
+grep -qF 'before calling `next`' <<< "$transitions" || got+="; no journal precedence over next"
+
+awk '/^postmerge_followup\(\) \{$/ { on=1 } on; on && /^\}$/ { exit }' <<< "$post_proc" > "$BOX/postmerge-procedure"
+mkdir "$BOX/postmerge-bin"
+cat > "$BOX/postmerge-bin/gh" <<'EOF_GH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FOLLOWUP_CALLS"
+call="$*"
+[ "${call/ --base main/}" = 'pr list --repo fixture/repo --head chore/postmerge-70 --state all --limit 2 --json number,url,state,headRefName,baseRefName,isCrossRepository' ] || exit 9
+case "$FOLLOWUP_WORLD" in
+  absent) echo '[]' ;;
+  offline) echo '[]'; exit 17 ;;
+  malformed) echo '[{}]' ;;
+  created)
+    if [[ "$call" == *' --base main '* ]]; then
+      jq '[.[] | select(.baseRefName == "main")]' "$FOLLOWUP_REMOTE"
+    else
+      cat "$FOLLOWUP_REMOTE"
+    fi ;;
+esac
+EOF_GH
+chmod +x "$BOX/postmerge-bin/gh"
+
+followup_is() (
+  local world="$1" want_rc="$2" want="$3" rc=0 out
+  export FOLLOWUP_WORLD="$world" FOLLOWUP_CALLS="$BOX/followup-calls" FOLLOWUP_REMOTE="$BOX/followup-remote"
+  : > "$FOLLOWUP_CALLS"
+  export PATH="$BOX/postmerge-bin:$PATH"
+  # shellcheck disable=SC1090 # Run the exact shell block the worker follows.
+  . "$BOX/postmerge-procedure"
+  out="$(postmerge_followup fixture/repo main chore/postmerge-70 2>"$BOX/followup-err")" || rc=$?
+  if [[ "$rc" != "$want_rc" || "$out" != "$want" || "$(wc -l < "$FOLLOWUP_CALLS")" != 1 ]]; then
+    printf '%s: rc=%s, output=%q, calls=%q\n' "$world" "$rc" "$out" "$(cat "$FOLLOWUP_CALLS")"
+  fi
+)
+
+if [ -s "$BOX/postmerge-procedure" ]; then
+  url=https://github.com/fixture/repo/pull/71
+  pr_json='[{"number":71,"url":"https://github.com/fixture/repo/pull/71","state":"OPEN","headRefName":"chore/postmerge-70","baseRefName":"main","isCrossRepository":false}]'
+  followup_got="$(
+    # The lost local session left only the mission merge. No remote PR yet, then creation
+    # succeeded but the session died before journaling the new PR. Both resumes query GitHub.
+    followup_is absent 0 create
+    printf '%s\n' "$pr_json" > "$BOX/followup-remote"
+    followup_is created 0 "review 71 $url"
+    followup_is created 0 "review 71 $url"
+    jq '.[0].state = "MERGED"' <<< "$pr_json" > "$BOX/followup-remote"
+    followup_is created 0 "merged 71 $url"
+    jq '.[0].state = "CLOSED"' <<< "$pr_json" > "$BOX/followup-remote"
+    followup_is created 3 ''
+    jq '.[0].baseRefName = "retargeted"' <<< "$pr_json" > "$BOX/followup-remote"
+    followup_is created 3 ''
+    jq '.[0].isCrossRepository = true' <<< "$pr_json" > "$BOX/followup-remote"
+    followup_is created 3 ''
+    jq '. + .' <<< "$pr_json" > "$BOX/followup-remote"
+    followup_is created 3 ''
+    followup_is offline 3 ''
+    followup_is malformed 3 ''
+  )"
+  got+="$followup_got"
+else
+  got+="; no follow-up lookup in the procedure"
+fi
+if [ -z "$got" ]; then
+  pass 'queue changes and followup reviews resume safely'
+else
+  fail 'queue changes and followup reviews resume safely' \
+    'staged queue leaves the live grant intact; signed order applies on integration; follow-up resumes on the existing PR before next' "$got"
 fi
 
 # --- docs: the documentation and the vocabulary -------------------------------------------------
@@ -3152,6 +3885,7 @@ printf 'dirty\n' > "$RR/src/app.txt"
 ready_is outside 0 "ready $B" good
 [ "$W_OUT" = "ready $B" ] || got="${got:+$got; }outside: the line is '$W_OUT', not 'ready $B'"
 ready_reset
+dirty_world_failures="$got"
 if [ -z "$got" ]; then
   pass 'committed: a mission folder with a change not committed, staged, untracked or ignored fails review'
 else
@@ -3210,6 +3944,8 @@ ready_reset; gitc branch -q -D r-side
 gitc checkout -q --detach "$A"; printf 'e\n' > "$MD/note.md"; gitc add -A; gitc commit -q -m e
 E="$(git -C "$RR" rev-parse HEAD)"; gitc checkout -q main
 round "$R2F" "$E"; land n-sibling; export GHFX="$BOX/ghfx/n-sibling"
+ancestor_rc=0; gitc merge-base --is-ancestor "$E" "$HEADNOW" || ancestor_rc=$?
+[ "$ancestor_rc" = 1 ] || got="${got:+$got; }fixture: sibling: Git returned $ancestor_rc, expected a non-ancestor"
 { [ -z "$(outside_of "$E" "$HEADNOW")" ] \
   && [ -z "$(git -C "$RR" -c core.quotePath=false log --format= --name-only --no-renames "$E..$HEADNOW" | not_under "$pre" | grep -v '^$' || true)" ]; } \
   || got="${got:+$got; }fixture: sibling: E..head leaves the folder"
@@ -3233,6 +3969,7 @@ serve n-tree "$CTH"; (CDPATH='' cd "$CT" && pwd -P) > "$BOX/ghfx/n-tree/root"; e
 PATH="$BOX/stub-ready:$PATH" worker pr-ready "$CT/$H/20990300-ready" "$PRN"
 { [ "$W_RC" = 1 ] && [ "$W_OUT" = "not-ready review: git diff-tree $B does not run here" ]; } \
   || got="${got:+$got; }tree: rc $W_RC '$W_OUT'"
+range_world_failures="$got"
 if [ -z "$got" ]; then
   pass 'range: a commit after the reviewed head that touches code, a merge resolution and a reviewed head the pull request does not carry each fail review'
 else
@@ -3318,13 +4055,13 @@ d="$NR/docs/campaigns/n-narrow"
 # the marks cleared before each; PUBLISHES FOUR, one `<verb>: rc <rc> '<stdout>' marks <names>` line
 # per verb. Called, never substituted: under `$( )` the global would die with the subshell.
 four_ask() {
-  local v f mk
+  local v f mk mission_wt="${2:-$NR-m}"
   FOUR=""
   for v in budget level allows next; do
     rm -f "$BOX"/narrow-mark-*
     case "$v" in
       budget) LC_ALL="$NUM_POISON" W_CWD="$NR" worker budget "$1" ;;
-      allows) W_CWD="$NR" worker allows "$1" run --mission "$NR-m/$H/20990501-n-m" ;;
+      allows) W_CWD="$NR" worker allows "$1" run --mission "$mission_wt/$H/20990501-n-m" ;;
       *) W_CWD="$NR" worker "$v" "$1" ;;
     esac
     mk=""
@@ -3377,6 +4114,13 @@ case " $* " in
     case "${SDD_GIT_SHIM:-}" in
       fail) echo 'fatal: the shim refuses worktree list' >&2; exit 128 ;;
       late) "$real" "$@"; exit 1 ;;
+      partial)
+        if [ "${!#}" = -z ]; then
+          printf 'worktree %s\0HEAD incomplete' "$SDD_GIT_SHIM_PRIMARY"
+        else
+          printf 'worktree %s\n\n' "$SDD_GIT_SHIM_PRIMARY"
+        fi
+        exit 17 ;;
     esac ;;
 esac
 exec "$real" "$@"
@@ -3386,7 +4130,7 @@ chmod +x "$BOX/gitshim/git"
 NRT="$(git -C "$NR" rev-parse --show-toplevel)"
 for w in 'fail|128' 'late|1'; do
   IFS='|' read -r mode rc <<< "$w"
-  why="git -C $NRT worktree list --porcelain failed (rc $rc)"
+  why="git -C $NRT worktree list --porcelain -z failed (rc $rc); requires Git with --porcelain -z support"
   want="budget: rc 1 'no spend — $why' marks
 level: rc 1 'level assisted — unread: $why' marks
 allows: rc 1 'ask run needs pr, effective assisted — unread: $why' marks
@@ -3668,6 +4412,38 @@ if [ -z "$got" ]; then
 else
   fail "fork: a pull request from a fork is not the lot's, and an answer that does not say whose it is is not read" \
     "run past a fork's merged, open or closed one, review on the repo's own beside a fork's, plan L2 past the repo's merged one; rc 3 off the contract" "$got"
+fi
+
+# --- I6: a full page of forks can hide the repository's own pull request --------------------------
+got=""
+fork_world fk-pages
+br=fk-pages-b
+f="$BOX/prs/$br"
+forks="$(jq -cn '[range(1;31) | {number: ., state: "MERGED", isCrossRepository: true}]')"
+for state in OPEN MERGED; do
+  jq -c --arg state "$state" '. + [{number: 31, state: $state, isCrossRepository: false}]' <<< "$forks" > "$f"
+  case "$state" in
+    OPEN) next_is 'open after a page of forks' 0 "review L1 20990801-fk-pages — pull request #31 is open on $br" 'ahead plan L2' "$d" ;;
+    MERGED) next_is 'merged after a page of forks' 0 'plan L2 - — ' '' "$d" ;;
+  esac
+done
+: > "$f.page-fail"
+PATH="$BOX/stub:$PATH" worker next "$d"
+{ [ "$W_RC" = 3 ] && [ -z "$W_OUT" ] && [[ "$W_ERR" == *"gh pr list --head $br failed (rc 17)"* ]]; } \
+  || got="${got:+$got; }later page failed: rc $W_RC, stdout '${W_OUT//$'\n'/ /}', stderr '$W_ERR'"
+rm -- "$f.page-fail"
+printf '%s\n' "$forks" > "$f"
+next_is 'complete list with no own pull request' 0 "run L1 20990801-fk-pages — approved, and no pull request of the repository has the head $br" 'ahead plan L2' "$d"
+jq -cn '[range(1;1001) | {number: ., state: "MERGED", isCrossRepository: true}]
+  + [{number: 1001, state: "OPEN", isCrossRepository: false}]' > "$f"
+PATH="$BOX/stub:$PATH" worker next "$d"
+{ [ "$W_RC" = 3 ] && [ -z "$W_OUT" ] && [[ "$W_ERR" == *"gh pr list --head $br reached the limit of 1000"* ]]; } \
+  || got="${got:+$got; }limit reached: rc $W_RC, stdout '${W_OUT//$'\n'/ /}', stderr '$W_ERR'"
+if [ -z "$got" ]; then
+  pass 'fork pages cannot hide the mission pull request'
+else
+  fail 'fork pages cannot hide the mission pull request' \
+    'review or plan when the own PR is on a later page, run only after a complete list, rc 3 with no act on failure or truncation' "$got"
 fi
 
 # --- R55: a merged lot with a stale copy ----------------------------------------------------------
@@ -4022,6 +4798,9 @@ crit_is() {
   [ "$t" = "$4" ] || got="${got:+$got; }fixture $1: the table reads '$t', not '$4'"
   if [ -n "${6:-}" ] && ! grep -qxF -- "$6" "$R2F"; then got="${got:+$got; }fixture $1: the line '$6' did not land"; fi
   land criteria
+  if ! t="$(GIT_OPTIONAL_LOCKS=0 gitc status --porcelain --untracked-files=all --ignored -- "$MD")" || [ -n "$t" ]; then
+    got="${got:+$got; }fixture $1: the mission folder is not clean ($t)"
+  fi
   if [ "$3" = ready ]; then want="ready $HEADNOW"
   else want="not-ready review: $R2F has no row for $3 under ### Overall Grade — every criterion must read A, and a partial review is not a review"
   fi
@@ -4056,6 +4835,9 @@ if [ -z "$got" ]; then
 else
   fail 'criteria: a round that leaves out the row of a criterion fails review and names it, an A in every row present is not an A in every criterion' \
     'REVIEW_CRITERIA equal to the rows of templates/review.md; not-ready naming the criteria left out for each world that leaves one out, ready for the eight rows, a code span and a ninth row' "$got"
+fi
+if [ -z "$review_world_failures$dirty_world_failures$range_world_failures$got" ]; then
+  pass 'grade and ancestry failures have distinct witnesses'
 fi
 
 # --- R62: a merged mission whose worktree was removed -------------------------------------------
@@ -4135,8 +4917,8 @@ cp "$ROOT/templates/missao.md" "$GN-l1/$H/"'20990906-g-a\b/00-missao.md'
 git -C "$GN-l1" add -A "$H"
 git -C "$GN-l1" -c user.name=fixture -c user.email=fixture@example.com commit -q -m l1
 prs gone-l1 '[{"number":90,"state":"MERGED"}]'
-{ spent "$M1" session 85; spent 20990903-g-deep session 7; spent 20990904-g-notes session 3
-  spent 20990905-g-other session 11; } >> "$SDD_STATE_DIR/autonomy-log.jsonl"
+{ spent "$M1" session 85 "$GNT"; spent 20990903-g-deep session 7 "$GNT"; spent 20990904-g-notes session 3 "$GNT"
+  spent 20990905-g-other session 11 "$GNT"; } >> "$SDD_STATE_DIR/autonomy-log.jsonl"
 mkdir -p "$BOX/stub-gone"
 { printf '#!/usr/bin/env bash\nroot=%q\n' "$(CDPATH='' cd "$GN" && pwd -P)"; tail -n +3 "$BOX/stub/gh"; } > "$BOX/stub-gone/gh"
 chmod +x "$BOX/stub-gone/gh"
@@ -4244,6 +5026,7 @@ fi
 # what the edit took out. Each checker prints one item per line. The fourth file is R67's: the
 # ceiling's rule is written in the delegation's template too, and the copy carries it for that family.
 R13_FILES=(commands/sdd-worker.md docs/pipeline.md bin/sdd-worker templates/delegation.md)
+W13=bin/sdd-worker
 
 # squeeze — stdin's lines as one line, every run of blanks one space: a phrase wrapped across two
 # lines is read as written.
@@ -4391,56 +5174,6 @@ else
     'the limit and its measure in the comment above cmd_next and in the paragraph of next, and each sabotaged copy naming what it lost' "$got"
 fi
 
-# --- R65: what pr-ready does not read -----------------------------------------------------------
-# <item>|<phrase>: the three things the bar does not read, and the pointer at the sixth item.
-BLIND_PHRASES=('body|body of a review' 'changes-requested|`CHANGES_REQUESTED`' 'local/ci|`local/ci`' 'todo|TODO.md')
-# blind_missing <root> — `blind: <where> <item>` for each phrase of BLIND_PHRASES that the comment
-# right above cmd_pr_ready (where is cmd_pr_ready) or the paragraph `**What `pr-ready` does not
-# read.**` of the worker's section of docs/pipeline.md (where is pipeline) does not write.
-blind_missing() {
-  local c p x
-  c="$(comment_of "$1/bin/sdd-worker" cmd_pr_ready)"
-  p="$(para_of "$(section "$1/docs/pipeline.md" 'The worker' 2>/dev/null)" '**What `pr-ready` does not read.**')"
-  for x in "${BLIND_PHRASES[@]}"; do grep -qF -- "${x#*|}" <<< "$c" || printf 'blind: cmd_pr_ready %s\n' "${x%%|*}"; done
-  for x in "${BLIND_PHRASES[@]}"; do grep -qF -- "${x#*|}" <<< "$p" || printf 'blind: pipeline %s\n' "${x%%|*}"; done
-}
-got=""
-m="$(blind_missing "$ROOT")"
-[ -z "$m" ] || got="missing: ${m//$'\n'/, }"
-W13=bin/sdd-worker
-tree_control 'comment: no body' blind_missing 'blind: cmd_pr_ready body' "$W13" 's/the body of a review (/the review (/'
-tree_control 'comment: CHANGES_REQUESTED line deleted' blind_missing 'blind: cmd_pr_ready changes-requested' "$W13" \
-  '/^# .*`CHANGES_REQUESTED`/d'
-tree_control 'comment: no local/ci' blind_missing 'blind: cmd_pr_ready local/ci' "$W13" \
-  '/^cmd_pr_ready() {$/,$ !s/`local\/ci`/the suite/g'
-tree_control 'comment: no TODO.md' blind_missing 'blind: cmd_pr_ready todo' "$W13" \
-  '/^cmd_pr_ready() {$/,$ !s/TODO\.md/the backlog/'
-tree_control 'comment: cut off by a blank line' blind_missing \
-  $'blind: cmd_pr_ready body\nblind: cmd_pr_ready changes-requested\nblind: cmd_pr_ready local/ci\nblind: cmd_pr_ready todo' "$W13" \
-  's/^cmd_pr_ready() {$/\n&/'
-tree_control 'pipeline: no body' blind_missing 'blind: pipeline body' docs/pipeline.md \
-  's/^\(\*\*What `pr-ready` does not read\.\*\*\) The body of a review,/\1 The text of a review,/'
-tree_control 'pipeline: no CHANGES_REQUESTED' blind_missing 'blind: pipeline changes-requested' docs/pipeline.md \
-  's/a review in state `CHANGES_REQUESTED` that/a review that/'
-tree_control 'pipeline: no local/ci' blind_missing 'blind: pipeline local/ci' docs/pipeline.md \
-  '/^\*\*What `pr-ready` does not read\.\*\*/,/^$/ s/`local\/ci`/the suite/g'
-tree_control 'pipeline: no TODO.md' blind_missing 'blind: pipeline todo' docs/pipeline.md \
-  '/^\*\*What `pr-ready` does not read\.\*\*/,/^$/ s/`TODO\.md`/the backlog/'
-tree_control 'pipeline: no such paragraph' blind_missing \
-  $'blind: pipeline body\nblind: pipeline changes-requested\nblind: pipeline local/ci\nblind: pipeline todo' docs/pipeline.md \
-  's/^\*\*What `pr-ready` does not read\.\*\*/**What it leaves out.**/'
-tree_control 'pipeline: the paragraph quoted' blind_missing \
-  $'blind: pipeline body\nblind: pipeline changes-requested\nblind: pipeline local/ci\nblind: pipeline todo' docs/pipeline.md \
-  's/^\*\*What `pr-ready` does not read\.\*\*/> &/'
-tree_primitive blind_missing 'blind: cmd_pr_ready body' "$W13" 's/the body of a review (/the review (/
-/^cmd_pr_ready() {$/,$ !s/TODO\.md/the backlog/'
-if [ -z "$got" ]; then
-  pass 'blind: cmd_pr_ready and docs/pipeline.md declare what pr-ready does not read — the body of a review, a CHANGES_REQUESTED with no inline comment, local/ci — and point at TODO.md'
-else
-  fail 'blind: cmd_pr_ready and docs/pipeline.md declare what pr-ready does not read — the body of a review, a CHANGES_REQUESTED with no inline comment, local/ci — and point at TODO.md' \
-    'each phrase in the comment above cmd_pr_ready and in the paragraph of pipeline.md, and each sabotaged copy naming what it lost' "$got"
-fi
-
 # --- R66: the worktree of a target's mission is cut in the plan act ------------------------------
 # cut_missing <root> — what the plan and approve acts of the command do not write: `cut: target`
 # (the session cuts the worktree before /sdd-plan in a target), `cut: add` (the `git worktree add`
@@ -4546,7 +5279,7 @@ git init -q -b main "$k"
 printf 'HANDOFF_DIR="docs/handoffs"\nON_ESCALATION_CMD="true"\nBUDGET_MISSION_USD=12.5\n' > "$k/.sdd/config.sh"
 cp -a "$(campaign ce-strict-src/ce-strict pr "$FAR" 40 100)" "$k/docs/campaigns/"
 mission "$k" "$H" 20991106-ce-strict ce-strict
-spent 20991106-ce-strict session 80 >> "$BOX/state/autonomy-log.jsonl"
+spent 20991106-ce-strict session 80 "$k" >> "$BOX/state/autonomy-log.jsonl"
 want="$(room_line 80.00 100.00 20.00 40)"
 budget_is strict 1 "$want" "$k/docs/campaigns/ce-strict"
 [ "$W_OUT" = "$want" ] || got="${got:+$got; }strict: the line is '$W_OUT'"
@@ -4836,27 +5569,10 @@ else
     'each ask its whole line, each refusal rc 2 naming its flag or file, plan --lot as before' "$got"
 fi
 
-# --- R69: the spend of a mission that never reached the base and whose worktree went -------------
-# A mission of the campaign that never reached the base, its pull request closed without merge or the
-# mission dropped, is in the set only while its worktree is there: once the owner removes it, no
-# source of the set keeps it (the disk and the base), and budget reads no campaign in the ledger, so it
-# answers a smaller sum with rc 0 (achado #1 of the review r7). The source is the owner's decision
-# (pending 1 of the r7: the session line of the ledger carries campaign:, which the runner reads from
-# the 00-missao.md, a change to bin/sdd), and it is in TODO.md; until it lands the limit is declared,
-# and this family pins it. One repo with a bare origin, its main tracking origin/main, and a campaign
-# of three missions, each in a worktree of its own:
-#   merged   pushed to origin's main: in the base, so it is still counted after its worktree goes
-#   closed   its branch pushed to origin under its own name and never merged, a pull request closed
-#            without merge: after its worktree goes the mission is still in git, in its branch and in
-#            origin's, and nowhere the set reads
-#   dropped  never pushed, a mission left after a budget-exhausted
-# Each spends in one session line of the ledger carrying campaign: "di-gone", as the runner will write
-# it from that source; budget reads no campaign today, so the field changes no answer pinned here.
-# budget is asked with the three alive (102.00, 3 missions), with merged's worktree removed (the
-# same), then closed's (17.00, 2) and dropped's (10.00, 1): each removal of a mission that never
-# reached the base takes its spend out of the sum, rc 0 throughout, the answer of today written HERE
-# and compared whole. A source that finds the two missions turns this red, and the declaration moves
-# with it in that commit.
+# --- R69: campaign spend survives removal of unmerged worktrees ---------------------------------
+# The base retains the merged mission. Only the ledger identifies the closed and dropped missions
+# after removal. One legacy row is still identifiable in the base, another becomes unattributable
+# when its worktree goes. Decoys share the slug, repo or campaign, but not all required keys.
 got=""
 DO="$BOX/disc-origin.git"
 DN="$BOX/disc"
@@ -4884,8 +5600,19 @@ for x in merged:L1:10 closed:L2:85 dropped:L3:7; do
   lot_mission "$DN-$w" "2099120$n-di-$w" di-gone "$l" "di-$w" humano-2099-01-01
   git -C "$DN-$w" add -A "$H"
   git -C "$DN-$w" -c user.name=fixture -c user.email=fixture@example.com commit -q -m "$w"
-  spent "2099120$n-di-$w" session "$c" | jq -c '. + {campaign: "di-gone"}' >> "$SDD_STATE_DIR/autonomy-log.jsonl"
+  if [ "$w" = merged ]; then
+    spent "2099120$n-di-$w" session "$c" "$DN"
+  else
+    spent "2099120$n-di-$w" session "$c" "$DN" | jq -c '. + {campaign: "di-gone"}'
+  fi >> "$SDD_STATE_DIR/autonomy-log.jsonl"
 done
+{
+  spent 20991202-di-closed close 5 "$DN" | jq -c '. + {campaign: "di-gone"}'
+  spent 20991203-di-dropped session 1 "$DN"
+  spent 20991201-di-merged session 19 "$REPO"
+  spent 20991202-di-closed session 23 "$REPO" | jq -c '. + {campaign: "di-gone"}'
+  spent 20991201-di-merged session 29 "$DN" | jq -c '. + {campaign: "another-campaign"}'
+} >> "$SDD_STATE_DIR/autonomy-log.jsonl"
 git -C "$DN-merged" push -q origin HEAD:main 2> /dev/null || got="${got:+$got; }fixture: di-merged was not pushed to origin's main"
 git -C "$DN-closed" push -q origin HEAD:refs/heads/di-closed 2> /dev/null \
   || got="${got:+$got; }fixture: di-closed was not pushed to origin"
@@ -4894,111 +5621,25 @@ git -C "$DN" cat-file -e "$DUP:$H/20991201-di-merged/00-missao.md" 2> /dev/null 
 for x in 20991202-di-closed 20991203-di-dropped; do
   if git -C "$DN" cat-file -e "$DUP:$H/$x/00-missao.md" 2> /dev/null; then got="${got:+$got; }fixture: the base carries $x"; fi
 done
-# disc_is <label> <want> — budget of the campaign asked from the cwd of the fixture repo, whose main
-# tracks nothing, under NUM_POISON; appends to got unless it left rc 0 and the one line <want>, whole.
+# disc_is <label> <rc> <want> — require the entire answer, not just the printed spend.
 disc_is() {
   LC_ALL="$NUM_POISON" W_CWD="$REPO" worker budget "$d"
-  { [ "$W_RC" = 0 ] && [ "$W_OUT" = "$2" ]; } || got="${got:+$got; }$1: rc $W_RC, '$W_OUT' (want rc 0, '$2')"
+  { [ "$W_RC" = "$2" ] && [ "$W_OUT" = "$3" ]; } || got="${got:+$got; }$1: rc $W_RC, '$W_OUT' (want rc $2, '$3')"
 }
-disc_is alive "$(camp_line 102.00 200.00 3 40)"
-for x in merged:102.00:3 closed:17.00:2 dropped:10.00:1; do
+disc_is alive 0 "$(camp_line 108.00 200.00 3 40)"
+for x in merged:108.00:3 closed:108.00:2 dropped:107.00:1; do
   IFS=: read -r w s c <<< "$x"
   dn worktree remove "$DN-$w" || got="${got:+$got; }fixture: the worktree of $w was not removed"
   [ ! -e "$DN-$w" ] || got="${got:+$got; }fixture: the worktree of $w is still on disk"
-  disc_is "$w removed" "$(camp_line "$s" 200.00 "$c" 40)"
+  disc_is "$w removed" 0 "$(camp_line "$s" 200.00 "$c" 40)"
 done
-git -C "$DN" cat-file -e "refs/heads/di-closed:$H/20991202-di-closed/00-missao.md" 2> /dev/null \
-  && git -C "$DN" cat-file -e "refs/remotes/origin/di-closed:$H/20991202-di-closed/00-missao.md" 2> /dev/null \
-  && git -C "$DN" cat-file -e "refs/heads/di-dropped:$H/20991203-di-dropped/00-missao.md" 2> /dev/null \
-  || got="${got:+$got; }fixture: the branches no longer carry the two missions"
-# The prose. discarded_missing <root> — `discarded: <where> limit` and `discarded: <where> remedy` for
-# each place that does not write the limit (DISC_LIMIT) or what the owner does until a source exists
-# (DISC_REMEDY): where is campaign_set or cmd_budget (the comment right above each in bin/sdd-worker),
-# pipeline (the Declared limits of docs/pipeline.md) or template (the section of the campaign ceiling
-# in templates/delegation.md). The template is written in this repo's OUTPUT_LANG, and this file is
-# English surface: it is read by fragments, every one of DISC_TPL_LIMIT for the limit and every one
-# of DISC_TPL_REMEDY for the remedy, none carrying a word tests/check-lang.sh reads as Portuguese.
-DISC_LIMIT='never reached the base and whose worktree was removed is found nowhere, and its spend leaves the sum'
-DISC_REMEDY='remove the worktree of a mission that will not reach the base only after signing a campaign ceiling lower by what it spent'
-DISC_TPL_LIMIT=('cujo worktree foi removido' 'o gasto dela sai da soma')
-DISC_TPL_REMEDY=('remova o worktree' 'assinar um teto de campanha menor')
-discarded_missing() {
-  local s x f
-  for f in campaign_set cmd_budget; do
-    s="$(comment_of "$1/bin/sdd-worker" "$f")"
-    grep -qF "$DISC_LIMIT" <<< "$s" || printf 'discarded: %s limit\n' "$f"
-    grep -qF "$DISC_REMEDY" <<< "$s" || printf 'discarded: %s remedy\n' "$f"
-  done
-  s="$(awk '$0 == "### Declared limits (ADR 0022)" { on = 1; next } on && /^#/ { exit } on' "$1/docs/pipeline.md" 2>/dev/null \
-       | squeeze)"
-  grep -qF "$DISC_LIMIT" <<< "$s" || printf 'discarded: pipeline limit\n'
-  grep -qF "$DISC_REMEDY" <<< "$s" || printf 'discarded: pipeline remedy\n'
-  s="$(section "$1/templates/delegation.md" 'O teto da campanha' 2>/dev/null | squeeze)"
-  for x in "${DISC_TPL_LIMIT[@]}"; do grep -qF -- "$x" <<< "$s" || { printf 'discarded: template limit\n'; break; }; done
-  for x in "${DISC_TPL_REMEDY[@]}"; do grep -qF -- "$x" <<< "$s" || { printf 'discarded: template remedy\n'; break; }; done
-}
-m="$(discarded_missing "$ROOT")"
-[ -z "$m" ] || got="${got:+$got; }missing: ${m//$'\n'/, }"
-SETC='/^# campaign_set <root> <id>/,/^campaign_set() {$/'
-BUDC='/^# budget <campaign-dir>/,/^cmd_budget() {$/'
-tree_control 'campaign_set: no limit' discarded_missing 'discarded: campaign_set limit' "$W13" \
-  "$SETC s/is found nowhere, and its spend leaves the/is found later, and its spend leaves the/"
-tree_control 'campaign_set: no remedy' discarded_missing 'discarded: campaign_set remedy' "$W13" \
-  "$SETC s/only after signing a\$/before signing a/"
-tree_control 'campaign_set: the limit only inside the function' discarded_missing 'discarded: campaign_set limit' "$W13" \
-  "$SETC s/is found nowhere, and its spend leaves the/is found later, and its spend leaves the/
-/^campaign_set() {\$/a\\
-  # never reached the base and whose worktree was removed is found nowhere, and its spend leaves the sum"
-tree_control 'campaign_set: cut off by a blank line' discarded_missing \
-  $'discarded: campaign_set limit\ndiscarded: campaign_set remedy' "$W13" 's/^campaign_set() {$/\n&/'
-tree_control 'cmd_budget: no limit' discarded_missing 'discarded: cmd_budget limit' "$W13" \
-  "$BUDC s/is found\$/is found later/"
-tree_control 'cmd_budget: no remedy' discarded_missing 'discarded: cmd_budget remedy' "$W13" \
-  "$BUDC s/remove the worktree of a mission that will not reach/remove the worktree of a mission that may reach/"
-tree_control 'cmd_budget: the remedy only above campaign_set' discarded_missing 'discarded: cmd_budget remedy' "$W13" \
-  "$BUDC s/remove the worktree of a mission that will not reach/remove the worktree of a mission that may reach/
-/^# campaign_set <root> <id>/i\\
-# remove the worktree of a mission that will not reach the base only after signing a campaign ceiling lower by what it spent"
-tree_control 'cmd_budget: cut off by a blank line' discarded_missing \
-  $'discarded: cmd_budget limit\ndiscarded: cmd_budget remedy' "$W13" 's/^cmd_budget() {$/\n&/'
-tree_control 'pipeline: no limit' discarded_missing 'discarded: pipeline limit' docs/pipeline.md \
-  's/^  nowhere, and its spend leaves the sum:/  later, and its spend leaves the sum:/'
-tree_control 'pipeline: no remedy' discarded_missing 'discarded: pipeline remedy' docs/pipeline.md \
-  's/only after signing a campaign$/after signing a campaign/'
-tree_control 'pipeline: the two only above the limits' discarded_missing \
-  $'discarded: pipeline limit\ndiscarded: pipeline remedy' docs/pipeline.md \
-  "s/^  nowhere, and its spend leaves the sum:/  later, and its spend leaves the sum:/
-s/only after signing a campaign\$/after signing a campaign/
-/^### Declared limits (ADR 0022)\$/i\\
-A mission that $DISC_LIMIT; $DISC_REMEDY.\\
-"
-tree_control 'template: the removal not named' discarded_missing 'discarded: template limit' "$T13" \
-  's/cujo worktree foi removido/cujo worktree saiu/'
-tree_control 'template: the spend kept in the sum' discarded_missing 'discarded: template limit' "$T13" \
-  's/o gasto dela sai da soma/o gasto dela fica na soma/'
-tree_control 'template: no remedy' discarded_missing 'discarded: template remedy' "$T13" \
-  's/remova o worktree/apague o worktree/'
-tree_control 'template: no lower ceiling' discarded_missing 'discarded: template remedy' "$T13" \
-  's/assinar um teto de campanha menor/assinar um teto de campanha maior/'
-tree_control 'template: every fragment gone' discarded_missing $'discarded: template limit\ndiscarded: template remedy' "$T13" \
-  's/cujo worktree foi removido/cujo worktree saiu/
-s/o gasto dela sai da soma/o gasto dela fica na soma/
-s/remova o worktree/apague o worktree/
-s/assinar um teto de campanha menor/assinar um teto de campanha maior/'
-tree_control 'template: the two only in another section' discarded_missing \
-  $'discarded: template limit\ndiscarded: template remedy' "$T13" \
-  "s/cujo worktree foi removido/cujo worktree saiu/
-s/remova o worktree/apague o worktree/
-/^## Como assinar\$/a\\
-${DISC_TPL_LIMIT[*]}, ${DISC_TPL_REMEDY[*]}"
-tree_primitive discarded_missing 'discarded: pipeline limit' docs/pipeline.md \
-  's/^  nowhere, and its spend leaves the sum:/  later, and its spend leaves the sum:/
-s/only after signing a campaign$/after signing a campaign/'
+sed -i 's/^budget_campaign_usd: 200$/budget_campaign_usd: 107/' "$d/delegation.md"
+disc_is 'ceiling after removal' 1 "$(camp_line 107.00 107.00 1 40)"
 if [ -z "$got" ]; then
-  pass 'discarded: a mission that never reached the base and whose worktree was removed leaves the sum of budget, rc 0, and campaign_set, cmd_budget, docs/pipeline.md and the template declare it with what the owner does'
+  pass 'removed mission spend is counted once'
 else
-  fail 'discarded: a mission that never reached the base and whose worktree was removed leaves the sum of budget, rc 0, and campaign_set, cmd_budget, docs/pipeline.md and the template declare it with what the owner does' \
-    'each removal its whole line and rc 0, the limit and the remedy in the four places, and each sabotaged copy naming what it lost' "$got"
+  fail 'removed mission spend is counted once' \
+    'attributed spend survives removal without duplicates, legacy spend needs a mission, and the ceiling stops' "$got"
 fi
 
 # --- R70: HANDOFF_DIR read as the runner reads it -----------------------------------------------
@@ -5145,13 +5786,19 @@ cp "$cdxl/autonomy-log.jsonl" "$cdxl/before-planning-probe"
   jq -cn --arg mission "codex-cost-mission" '{event:"session",repo:"/other-repository",mission:$mission,cost_usd:90}'
   jq -cn --arg repo "$REPO" '{event:"codex_launch",engine:"codex",phase:"PLAN",repo:$repo,campaign:"codex-cost",launch_id:"plan-test",cost_usd:null}'
   jq -cn --arg repo "$REPO" '{event:"codex_plan_usage",engine:"codex",phase:"PLAN",repo:$repo,campaign:"codex-cost",launch_id:"plan-test",cost_usd:null,estimated_cost_usd:1.50}'
+  jq -cn --arg repo "$REPO" '{event:"codex_launch",engine:"codex",phase:"EXEC",repo:$repo,campaign:"codex-cost",
+    mission:"removed-unfinished",launch_id:"unfinished-test",cost_usd:null}'
+  jq -cn --arg repo "$REPO" '{event:"codex_launch",engine:"codex",phase:"EXEC",repo:$repo,campaign:"codex-cost",
+    mission:"removed-finished",launch_id:"finished-test",cost_usd:null}'
+  jq -cn --arg repo "$REPO" '{event:"session",engine:"codex",phase:"EXEC",repo:$repo,campaign:"codex-cost",
+    mission:"removed-finished",launch_id:"finished-test",cost_usd:2}'
 } >>"$cdxl/autonomy-log.jsonl"
 cdx_worker budget "$cdx"
-if [ "$W_RC" = 0 ] && [[ "$W_OUT" == 'campaign known US$ 4.00 of 30.00'*'3 unknown session(s)'*'estimated subtotal US$ 43.75'* ]]; then
-  pass 'codex cost: planner receipts count once before a mission exists and explicitly foreign rows do not count'
+if [ "$W_RC" = 0 ] && [[ "$W_OUT" == 'campaign known US$ 6.00 of 30.00'*'4 unknown session(s)'*'estimated subtotal US$ 43.75'* ]]; then
+  pass 'codex cost: planner receipts and archived launches keep their cost attribution'
 else
-  fail 'codex cost: planner receipts count once before a mission exists and explicitly foreign rows do not count' \
-    'rc 0, known US$ 4.00, 3 unknown sessions and estimated US$ 43.75' "rc $W_RC: $W_OUT $W_ERR"
+  fail 'codex cost: planner receipts and archived launches keep their cost attribution' \
+    'rc 0, known US$ 6.00, 4 unknown sessions and estimated US$ 43.75' "rc $W_RC: $W_OUT $W_ERR"
 fi
 mv "$cdxl/before-planning-probe" "$cdxl/autonomy-log.jsonl"
 
@@ -5449,6 +6096,444 @@ if [ "$W_RC" -eq 0 ] && [[ "$W_OUT" == *'4 unknown session(s)'* ]]; then
 else
   fail 'codex cost: interrupted launches are visible and finished launches are not counted twice' \
     'rc 0 with two original unknown sessions plus one interrupted and one finished' "rc $W_RC: $W_OUT $W_ERR"
+fi
+
+# --- I1: publish complete NUL-delimited inventories only -------------------
+got=""
+nul_wt="$NR"$' linked\nmission '
+nul_campaign="$NR/docs/campaigns/n-narrow"
+git -C "$NR" worktree move "$NR-m" "$nul_wt" || got='fixture: cannot move the mission worktree'
+four_ask "$nul_campaign" "$nul_wt"
+want="budget: rc 0 'campaign US\$ 0.00 of 100.00 — 1 mission(s); mission cap US\$ 40' marks m
+level: rc 0 'level pr — signed until $FAR' marks m
+allows: rc 0 'allowed run at pr' marks m
+next: rc 0 'approve L1 20990501-n-m — not approved: $nul_wt/$H/20990501-n-m/00-missao.md has aprovacao: ''' marks m
+"
+[ "$FOUR" = "$want" ] || got="${got:+$got; }complete list: $FOUR"
+
+PATH="$BOX/gitshim:$PATH" SDD_GIT_SHIM=partial SDD_GIT_SHIM_PRIMARY="$NR" four_ask "$nul_campaign" "$nul_wt"
+why="git -C $NR worktree list --porcelain -z failed (rc 17); requires Git with --porcelain -z support"
+want="budget: rc 1 'no spend — $why' marks
+level: rc 1 'level assisted — unread: $why' marks
+allows: rc 1 'ask run needs pr, effective assisted — unread: $why' marks
+next: rc 1 'stop - - — unread: $why' marks
+"
+[ "$FOUR" = "$want" ] || got="${got:+$got; }partial list: $FOUR"
+
+sed -i 's/^level: pr$/level: full/' "$cdx/delegation.md"
+answer $'y\n'
+W_CWD="$REPO" worker_from "$BOX/in" delegate "$cdx"
+[ "$W_RC" -eq 0 ] || got="${got:+$got; }fixture: cannot sign delegation for both paid verbs"
+nul_codex_wt="$BOX/"$'codex linked\nwith trailing newline\n'
+git -C "$REPO" worktree move "$cdxw" "$nul_codex_wt" || got="${got:+$got; }fixture: cannot move the Codex worktree"
+nul_codex_mission="$nul_codex_wt/$H/codex-cost-mission"
+cdx_worker codex-plan "$cdx" --lot L1
+[ "$W_RC" -eq 0 ] || got="${got:+$got; }plan control: rc $W_RC: $W_ERR"
+cdx_worker codex-run --mission "$nul_codex_mission" --phase REVIEW
+[ "$W_RC" -eq 0 ] || got="${got:+$got; }run with newline checkout: rc $W_RC: $W_ERR"
+for verb in codex-plan codex-run; do
+  case "$verb" in
+    codex-plan) args=("$cdx" --lot L1) ;;
+    codex-run) args=(--mission "$nul_codex_mission" --phase REVIEW) ;;
+  esac
+  PATH="$BOX/gitshim:$PATH" SDD_GIT_SHIM=partial SDD_GIT_SHIM_PRIMARY="$REPO" cdx_worker "$verb" "${args[@]}"
+  [ "$W_RC" -eq 1 ] && [[ "$W_ERR" == 'no cost exception — git -C '*'worktree list --porcelain -z failed (rc 17); requires Git with --porcelain -z support' ]] \
+    || got="${got:+$got; }$verb partial list: rc $W_RC: $W_ERR"
+done
+
+# A primary path with a newline must reach the existing ledger identity guard, not be truncated
+# into another checkout or fail as if the authoritative campaign were missing.
+nul_primary="$BOX/"$'codex primary\nwith space '
+nul_primary_campaign="$nul_primary/docs/campaigns/codex-cost"
+nul_primary_mission="$nul_primary/$H/codex-cost-mission"
+git init -q -b main "$nul_primary" || got="${got:+$got; }fixture: cannot create the Codex primary"
+mkdir -p "$nul_primary_campaign" "$nul_primary_mission" "$nul_primary/.sdd"
+cp "$cdx"/{campaign,delegation}.md "$nul_primary_campaign/"
+cp "$cdxm/00-missao.md" "$nul_primary_mission/"
+cp "$REPO/.sdd/config.sh" "$nul_primary/.sdd/config.sh"
+for verb in codex-plan codex-run; do
+  case "$verb" in
+    codex-plan) args=("$nul_primary_campaign" --lot L1) ;;
+    codex-run) args=(--mission "$nul_primary_mission" --phase REVIEW) ;;
+  esac
+  cdx_worker "$verb" "${args[@]}"
+  [ "$W_RC" -eq 1 ] && [ "$W_ERR" = 'no spend — cannot resolve the campaign Git common directory' ] \
+    || got="${got:+$got; }$verb newline primary: rc $W_RC: $W_ERR"
+done
+
+if [ -z "$got" ]; then
+  pass 'nul worktree inventory is complete'
+else
+  fail 'nul worktree inventory is complete' \
+    'exact checkout paths reach all consumers; partial listings refuse with the Git status' "$got"
+fi
+
+# The config's child must see the signed cap, just as it would under the runner's launch.
+# Advance the clock when the worker sources the pager config, after the first expiry check.
+got=""
+d="$(cap_world child-cap '')"
+cat > "$BOX/cap-child-cap/.sdd/config.sh" <<'EOF'
+BUDGET_MISSION_USD=$(bash -c 'printf %s "${BUDGET_MISSION_USD:-150}"')
+EOF
+budget_is 'cap read by a child' 0 'campaign US$ 0.00 of 100.00 — 0 mission(s); mission cap US$ 40' "$d"
+
+d="$(cap_world final-clock '')"
+sed -i 's/^level: pr$/level: full/' "$d/delegation.md"
+set_lots "$d/campaign.md" L1:- L2:plan
+sign "$d"
+cat > "$BOX/cap-final-clock/.sdd/config.sh" <<'EOF'
+ON_ESCALATION_CMD=true
+: > "$SDD_CLOCK_MARK"
+EOF
+clock_mark="$BOX/clock-mark"
+mkdir "$BOX/clock"
+{ printf '#!/usr/bin/env bash\nreal=%q\n' "$(command -v date)"
+  cat <<'SHIM'
+if [ "$#" -eq 1 ] && [ "$1" = '+%Y-%m-%d %H:%M' ]; then
+  if [ -e "$SDD_CLOCK_MARK" ]; then printf '%s\n' "$SDD_CLOCK_AFTER"
+  else printf '%s\n' '2099-12-31 23:57'; fi
+  exit 0
+fi
+exec "$real" "$@"
+SHIM
+} > "$BOX/clock/date"
+chmod +x "$BOX/clock/date"
+for entry in L1:full L2:plan; do
+  lot="${entry%:*}"; lv="${entry#*:}"
+  rm -f "$clock_mark"
+  PATH="$BOX/clock:$PATH" SDD_CLOCK_MARK="$clock_mark" SDD_CLOCK_AFTER='2099-12-31 23:58' \
+    allows_is "$lot still valid" 0 "allowed plan at $lv" "$d" plan --lot "$lot"
+  [ -f "$clock_mark" ] || got="${got:+$got; }$lot valid: pager config was not read"
+  rm -f "$clock_mark"
+  PATH="$BOX/clock:$PATH" SDD_CLOCK_MARK="$clock_mark" SDD_CLOCK_AFTER="$FAR" \
+    allows_is "$lot expires during the read" 1 \
+      "ask plan needs plan, effective assisted — expired: $FAR is not after $FAR" "$d" plan --lot "$lot"
+  [ -f "$clock_mark" ] || got="${got:+$got; }$lot at expiry: pager config was not read"
+done
+rm -f "$clock_mark"
+PATH="$BOX/clock:$PATH" SDD_CLOCK_MARK="$clock_mark" SDD_CLOCK_AFTER="$FAR" SDD_WORKER_NOW="$FAR" \
+  level_is 'already expired' "level assisted — expired: $FAR is not after $FAR" "$d"
+[ ! -e "$clock_mark" ] || got="${got:+$got; }already expired: pager config was read"
+
+if [ -z "$got" ]; then
+  pass 'permission reflects exported cap and final clock'
+else
+  fail 'permission reflects exported cap and final clock' \
+    'the child sees the signed cap; both lots allow before expiry and ask at expiry; already expired skips the config' "$got"
+fi
+
+# --- I5: the public stop procedure ------------------------------------------------------------
+# Run the examples from the command with a changing verb and a pager that only records its input.
+stop_example() {
+  awk -v want="$1" '
+    /^```bash$/ { n++; on = (n == want); next }
+    /^```$/ { on = 0; next }
+    on'
+}
+stop_capture="$(section "$COMMAND" 'The loop' | stop_example 1)"
+stop_report="$(section "$COMMAND" 'The five stops' | stop_example 1)"
+stop_run="$(act_of "$COMMAND" run | stop_example 4)"
+stop_box="$BOX/stop"
+mkdir -p "$stop_box/.sdd" "$stop_box/campaign"
+cat > "$stop_box/.sdd/config.sh" <<'STOP_CONFIG'
+PROJECT_NAME=stop-fixture
+ON_ESCALATION_CMD='printf "%s\n" "$SDD_REASON" "$SDD_PHASE" "$SDD_MISSION" "$SDD_PROJECT" "$SDD_GATE_WHY" >> pager'
+STOP_CONFIG
+got=""
+if [ -z "$stop_capture" ] || [ -z "$stop_run" ]; then
+  got='the public loop does not capture its verdict, or run does not classify its retained log'
+else
+  for stop_case in budget next mission phase unreadable ambiguous; do
+    case "$stop_case" in
+      budget) stop_act=budget; stop_reason=no-room; stop_rc=1; stop_why="no room — the owner's settings leave US\$ 10" ;;
+      next) stop_act=next; stop_reason=next-stop; stop_rc=1; stop_why='stop L1 — missing mission' ;;
+      mission) stop_act=run; stop_reason='mission-ceiling'; stop_rc=3
+        stop_why='sdd run stop: mission-ceiling — mission budget: US$ 60.00 spent against BUDGET_MISSION_USD=60' ;;
+      phase) stop_act=run; stop_reason='phase-ceiling'; stop_rc=3
+        stop_why='sdd run stop: phase-ceiling — PR: missing pr_url' ;;
+      unreadable|ambiguous) stop_act=run; stop_reason=indeterminate; stop_rc=3
+        stop_why='runner stop cause indeterminate (run.log)' ;;
+    esac
+    if ! (
+      CDPATH='' cd "$stop_box" || exit 1
+      act="$stop_act" campaign_dir=campaign lot=L1 mission=stop-mission log=run.log
+      : > calls; : > pager; : > "$campaign_dir/journal.md"
+      sdd-worker() {
+        printf '%s\n' "$*" >> calls
+        if [ "$(wc -l < calls)" -eq 1 ]; then
+          printf '%s\n' "$stop_why" 'secondary diagnostic' >&2
+          return "$stop_rc"
+        fi
+        printf '%s\n' 'campaign US$ 0 of 500'
+      }
+      if [ "$act" = run ]; then
+        case "$stop_case" in
+          unreadable) printf '%s\n' 'budget-exhausted' 'sdd run stop: mission-ceiling —   ' ;;
+          ambiguous) printf '%s\n' 'sdd run stop: phase-ceiling — PR: missing pr_url' \
+                                  'sdd run stop: mission-ceiling — mission budget: US$ 60.00' ;;
+          *) printf '%s\n' "$stop_why" ;;
+        esac > "$log"
+        printf 'sdd run rc=%s\n' "$stop_rc" >> "$log"
+        eval "$stop_run" || exit 1
+        [ ! -s calls ] && [ "$reason" = "$stop_reason" ] || exit 1
+      else
+        eval "$stop_capture" || exit 1
+        reason="$stop_reason"
+      fi
+      [ "$rc" = "$stop_rc" ] && [ "$why" = "$stop_why" ] || exit 1
+      eval "$stop_report" || exit 1
+      [ "$(wc -l < campaign/journal.md)" -eq 1 ] &&
+        [[ "$(cat campaign/journal.md)" == *" · L1 · $act · $reason (rc $rc) — $stop_why" ]] || exit 1
+      if [ "$act" = run ]; then
+        [ ! -s pager ]
+      else
+        [ "$(cat calls)" = "$act campaign" ] &&
+          [ "$(cat pager)" = "$(printf '%s\n' "$reason" "$act" "$mission" stop-fixture "$stop_why")" ]
+      fi
+    ); then
+      got="${got:+$got; }$stop_case"
+    fi
+  done
+fi
+if [ -z "$got" ]; then
+  pass 'stop preserves cause and original line'
+else
+  fail 'stop preserves cause and original line' \
+    'one decision per verb, same line in journal and pager, distinct run causes and no duplicate page' "$got"
+fi
+
+# --- I13: run the public launch block with a recording sdd --------------------------------------
+launch_block="$(act_of "$COMMAND" run | stop_example 1)"
+launch_box="$BOX/launch"
+launch_campaign="$(cap_world launch '')"
+launch_worktree="$BOX/cap-launch"
+mkdir -p "$launch_box/bin"
+cat > "$launch_box/bin/sdd" <<'SHIM'
+#!/usr/bin/env bash
+printf '%s|%s|%s|%s|%s|%s|%s\n' "$*" "$PWD" "${PHASE_ENGINE:-}" \
+  "${BUDGET_MISSION_USD:-}" "${SDD_DELEGATED_MISSION_CAP_USD:-}" "${CLAUDECODE:-}" "$$" >> "$LAUNCH_TRACE"
+case "$*" in
+  preflight)
+    printf '%s\n' 'fixture preflight' "$PREFLIGHT_MARK"
+    if [ "$PREFLIGHT_DRIFT" = yes ]; then printf '# changed during preflight\n' >> .sdd/config.sh; fi
+    exit "$PREFLIGHT_RC" ;;
+  'run launch-mission') exit 0 ;;
+  *) exit 92 ;;
+esac
+SHIM
+chmod +x "$launch_box/bin/sdd"
+got=""
+sign "$launch_campaign"
+worker budget "$launch_campaign"
+launch_cap="${W_OUT##*mission cap US\$ }"
+[ "$W_RC" -eq 0 ] && [ "$launch_cap" = 40 ] || got="fixture budget: rc $W_RC, $W_OUT"
+# The preflight marker is separate from the sensor's own ok prefix.
+preflight_ok='  ok'
+for launch_case in claude claude-red codex-kit codex-red codex-no-suite codex-target restart drift; do
+  engine=codex kit_mission=true expected_config_hash=
+  preflight_rc=0 marker="$preflight_ok   TEST_CMD ran green (tests/run-all.sh)" drift=no expected_rc=0
+  printf '\n' > "$launch_worktree/.sdd/config.sh"
+  case "$launch_case" in
+    claude) engine=claude; marker= ;;
+    claude-red) engine=claude; marker=; preflight_rc=7; expected_rc=7 ;;
+    codex-red) preflight_rc=7; expected_rc=7 ;;
+    codex-no-suite) marker='warning: no TEST_CMD ran green'; expected_rc=1 ;;
+    codex-target) kit_mission=false; marker= ;;
+    restart|drift)
+      expected_config_hash="$(git hash-object --no-filters -- "$launch_worktree/.sdd/config.sh")"
+      if [ "$launch_case" = drift ]; then drift=yes; expected_rc=1; fi ;;
+  esac
+  : > "$launch_box/trace"
+  rm -f "$launch_box/run.log"
+  launch_rc=0
+  (
+    # Even a broken block must not leave a test child behind.
+    trap 'wait' EXIT
+    export PATH="$launch_box/bin:$PATH" PHASE_ENGINE=claude CLAUDECODE=fixture
+    export BUDGET_MISSION_USD=99 SDD_DELEGATED_MISSION_CAP_USD=99
+    export LAUNCH_TRACE="$launch_box/trace" PREFLIGHT_RC="$preflight_rc" PREFLIGHT_MARK="$marker" PREFLIGHT_DRIFT="$drift"
+    export engine kit_mission expected_config_hash
+    export worktree="$launch_worktree" cap="$launch_cap" mission=launch-mission log="$launch_box/run.log"
+    eval "$launch_block" > "$launch_box/pid" || exit $?
+    pid="$(cat "$launch_box/pid")"
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] && [ "$pid" = "$!" ] && wait "$pid" || exit 92
+    [ "$(cat "$log")" = 'sdd run rc=0' ] || exit 92
+  ) 2> "$launch_box/preflight" || launch_rc=$?
+  expected="preflight|$launch_worktree|$engine|||"
+  if [ "$expected_rc" = 0 ]; then
+    expected+=$'\n'"run launch-mission|$launch_worktree|$engine|40|40|"
+  elif [ -s "$launch_box/pid" ] || [ -e "$launch_box/run.log" ]; then
+    got="${got:+$got; }$launch_case returned a PID or created a run log on refusal"
+  fi
+  trace="$(sed -E 's/\|[1-9][0-9]*$//' "$launch_box/trace")"
+  if [ "$launch_rc" != "$expected_rc" ] || [ "$trace" != "$expected" ] ||
+     ! grep -qxF 'fixture preflight' "$launch_box/preflight"; then
+    got="${got:+$got; }$launch_case (rc $launch_rc, calls: $(cut -d '|' -f 1 "$launch_box/trace" | paste -sd ,))"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'run launch requires successful worktree preflight'
+else
+  fail 'run launch requires successful worktree preflight' \
+    'preflight in the mission worktree and engine, with one PID and the signed cap only on success' "$got"
+fi
+
+# --- I14: run the dispatch and wait from the public command -------------------------------------
+ahead_rc=0
+got="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" 2>&1)" || ahead_rc=$?
+if grep -qxF 'ahead journey verified' <<< "$got"; then
+  pass 'authorized ahead planning starts once before wait'
+else
+  fail 'authorized ahead planning starts once before wait' \
+    'one reserved planner before wait, resume before materialization, and approval only after revalidation' "$got"
+fi
+if [ "$ahead_rc" -eq 0 ]; then
+  pass 'ahead planner receives the canonical queue outside its base'
+else
+  fail 'ahead planner receives the canonical queue outside its base' \
+    'the first relay turn points to the primary campaign file and names the reserved lot' "$got"
+fi
+
+# --- R3: the local source must remain recoverable up to dispatch --------------------------------
+if got="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --owner-request 2>&1)"; then
+  pass 'ahead planning refuses stale owner request references'
+else
+  fail 'ahead planning refuses stale owner request references' \
+    'only a recoverable reference can start the relay, without replacing the runner verdict' "$got"
+fi
+
+# --- R5: distinguish a real fence or comment from markup before a valid heading -----------------
+got=
+for markup_case in plain ordinary closed-comment same-line-comment comment-in-fence indented-comment \
+                   commented-heading unclosed-comment backtick-info tilde-info; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'valid markdown owner request survives preceding markup'
+else
+  fail 'valid markdown owner request survives preceding markup' \
+    'one turn before wait for a visible heading, none inside a fence or comment, and the same runner verdict' "$got"
+fi
+
+# --- R6: a list fence ends with its list item, and its content is not Markdown -------------------
+got=
+for markup_case in list-fenced-comment-marker duplicate-after-list-code list-content-after-blank list-closed-fence \
+                   list-longer-fence ordered-list-fence ordered-cannot-interrupt ordered-can-interrupt \
+                   ordered-after-heading ordered-after-comment ordered-after-code ordered-after-blank \
+                   ordered-after-invalid-fence tabbed-list-fence list-invalid-backticks root-list-not-closer; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request distinguishes unique and duplicate headings after list code'
+else
+  fail 'owner request distinguishes unique and duplicate headings after list code' \
+    'one turn before wait for a unique visible heading, none for hidden or duplicate headings, and the same runner verdict' "$got"
+fi
+
+# --- R7: raw HTML can contain apparent fences without opening fenced code -----------------------
+got=
+for markup_case in html-before-unique html-before-duplicate html-before-comment html-heading-before-blank \
+                   html-indented-opener \
+                   html-heading-after-space-blank html-inside-fence html-inside-indented-code html-before-ordered-fence \
+                   html-custom-tag html-custom-end-tag html-inline-custom-tag html-custom-prefix-is-not-block-tag \
+                   html-tag-followed-by-text html-script html-script-before-close-hidden html-processing html-declaration html-cdata; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request ignores list fence lookalikes in raw html'
+else
+  fail 'owner request ignores list fence lookalikes in raw html' \
+    'one turn before wait for a unique visible heading, none for hidden or duplicate headings, and the same runner verdict' "$got"
+fi
+
+# --- R8: raw HTML cannot consume a heading after its list item ends ------------------------------
+got=
+for markup_case in html-list-end-unique html-list-end-duplicate html-list-end-script html-list-still-inside \
+                   html-list-ordered-dedent html-list-after-blank html-list-indented-script html-list-start-custom-tag \
+                   html-list-ordered-cannot-interrupt html-list-ordered-can-interrupt html-root-after-list \
+                   html-nested-list-dedent html-root-after-thematic-break html-root-after-fenced-list \
+                   html-root-contains-fake-list; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request bounds raw html by its list item'
+else
+  fail 'owner request bounds raw html by its list item' \
+    'one turn before wait only for a unique visible heading, with the same runner verdict' "$got"
+fi
+
+# --- R9: compact nested items end their own raw HTML ------------------------------------------
+got=
+for markup_case in compact-nested-unique compact-nested-duplicate compact-nested-closed compact-nested-still-inside \
+                   expanded-nested-unique expanded-nested-duplicate; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request bounds raw html by its compact nested list item'
+else
+  fail 'owner request bounds raw html by its compact nested list item' \
+    'one turn before wait only for a unique visible heading, with the same runner verdict' "$got"
+fi
+
+# --- R10: paragraph indentation is relative to its list item ---------------------------------
+got=
+for markup_case in compact-paragraph-unique compact-paragraph-duplicate \
+                   compact-html-after-blank compact-html-after-indented-code; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request preserves paragraph after compact nested html'
+else
+  fail 'owner request preserves paragraph after compact nested html' \
+    'one turn before wait for a unique visible heading, with the same runner verdict' "$got"
+fi
+
+# --- R11: compact list scanning must not revisit every suffix --------------------------------
+got=
+for markup_case in compact-scale-hyphens compact-scale-pluses compact-scale-thematic compact-scale-thematic-in-item; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request bounds compact list scan before wait'
+else
+  fail 'owner request bounds compact list scan before wait' \
+    'bounded scan work and unchanged dispatch, wait and runner verdict' "$got"
+fi
+
+# --- R12: a thematic break ends the paragraph before the next HTML block -----------------------
+thematic_failures=
+for markup_case in thematic-after-html-{hidden,visible,duplicate,root-duplicate,hyphens,underscores,in-item}; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    thematic_failures="${thematic_failures:+$thematic_failures$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$thematic_failures" ]; then
+  pass 'owner request treats thematic breaks as paragraph boundaries before html'
+else
+  fail 'owner request treats thematic breaks as paragraph boundaries before html' \
+    'one turn before wait only for a unique visible heading, with the same runner verdict' "$thematic_failures"
+fi
+
+# --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
+if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
+  pass 'concurrent resume reuses the validated reservation'
+else
+  fail 'concurrent resume reuses the validated reservation' \
+    'one relay start, status on resume, and no relay calls for a missing or mismatched reservation' "$got"
 fi
 
 # --- verdict ------------------------------------------------------------------------------------

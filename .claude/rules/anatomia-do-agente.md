@@ -420,6 +420,9 @@ do `load_config`. Re-exec do `bin/sdd` entre voltas foi recusado: o runner não 
 julgaria a própria REVIEW. Limites no comentário do `config_reload`: o que o `cmd_run` derivou antes
 do laço (branch da missão, `MISSION_DIR`) fica com o valor do lançamento; edição feita durante a
 sessão chega ao gate da volta **seguinte**; `sdd retry`, `sdd close` e `sdd kaizen` leem uma vez só.
+Para Claude delegado, o runner confere o teto assinado no config recarregado e relê só o valor
+efetivo do teto para decidir a tentativa na mesma volta. Codex mantém a guarda do arquivo inteiro
+e não aplica edição na mesma invocação. O worker revalida uma redução de teto antes de reabrir.
 Desde `20261020-a-sessao-le-o-que-o-boot-manda` (ADR 0019 §1 e §2) a permissão que o runner pede ao
 harness para fora do repo do alvo é **só de leitura**: as regras do `kit_read_rules` nos templates do
 kit e nos diretórios que o `READ_EXTRA` do projeto declara. Com a regra, um `Write` no mesmo
@@ -613,6 +616,10 @@ pergunta, só `y` assina, e sai 66 sem escrever nada quando não lê resposta, o
 de um worktree que guarda missão dela (o conjunto estreito: worktree sem missão da campanha não é
 lido, e ler o arquivo seria executá-lo). As paradas do worker (sem recibo do Codex 60 min depois do pedido, nota abaixo de A depois de
 3 rodadas, conflito no merge fora do `TODO.md` e da catraca, e os dois tetos) chamam o mesmo pager.
+O worker conserva a saída e o rc do ato que decidiu parar, e leva a mesma linha ao diário e ao
+pager. No `sdd run` com rc 3 ele não pagina de novo. O log da invocação distingue
+`mission-ceiling` de `phase-ceiling`, sem mudar o `budget-exhausted` que o ledger registra nos
+dois casos. Sem diagnóstico legível, o worker não atribui a parada a um teto.
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
 anterior desta seção dizia que não existia, e estava errada (foi o comando do incidente das 18:45).

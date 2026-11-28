@@ -333,6 +333,14 @@ carry it.
 | `PERMISSION_MODE` | `acceptEdits` | The ceiling. `bypassPermissions` is **never** the kit's default. |
 | `ALLOWED_TOOLS` | `Bash` | Goes into `--allowedTools`, as a **single argument**. **Required in practice**: `acceptEdits` auto-approves file edits, but **not** `Bash` — without this key the phase session cannot run the suite nor commit, and the EXEC phase becomes unsatisfiable. Verified in the fixture mission `20260814-dry-run-completo`. The kit has only exercised the default; if you need more than one tool, check the format your `claude` accepts before trusting the gate. Since 2026-09-03 the runner also passes `--disallowedTools` (the hat's `disallowedTools:` line plus `HAT_DENY_BASE`) and `--strict-mcp-config` (unless the hat's `mcp:` names servers); a deny beats this allow, so `Bash` stays on while `Bash(git push:*)` is off for every hat but the publisher. The `writes:` globs accept `$HANDOFF_DIR`, `$MISSION`, `$TODO_FILE`, `$QA_DOCS_PATH` and `$E2E_DIR`, expanded from this file. Since ADR 0019 the runner appends, right after this value and as arguments of their own, the read-only rules of `kit_read_rules` — `Read(/$SDD_HOME/templates/**)`, then one per `READ_EXTRA` entry — so a phase may read the kit templates its boot prompt names and still may not write them; `--add-dir` is not used, because it grants writing too. The `sdd close` session, which does not go through `run_phase`, gets the same lines from the same function. The template probe of `sdd preflight` gets the templates' rule **alone** (`kit_template_rules`), never this value nor the `READ_EXTRA` rules — a broad `Read` here, or an entry that covers the kit, would read the template by itself and turn the probe green over an empty or broken rule —, runs with no settings, and fails when the harness still denies the read or the read comes back with an error. |
 
+The worker's launch sets `SDD_DELEGATED_MISSION_CAP_USD` to the signed mission limit as well as
+passing the `BUDGET_MISSION_USD` default. Standalone Claude runs keep their existing precedence.
+Delegated Claude runs reject zero and values above the signed limit after a reload and before
+retrying. Codex checks that the cap read by the worker matches the runner's loaded cap and stops
+the current invocation if any config bytes change. The worker can relaunch for a verified reduction
+that edits or adds a single literal cap assignment, once permission, budget and preflight
+are rechecked. See the [worker's run procedure](../commands/sdd-worker.md#run).
+
 ⚠️ Trade-off, declared: raising `BUDGET_PER_PHASE_USD` does **not** raise EXEC, QA or REVIEW —
 they read their own key. One number for every phase was either too low for REVIEW, where the
 session dies mid-round and the money is spent with nothing on disk, or too high for PR, where it

@@ -13,10 +13,13 @@
 #   allows     whether one act fits that level, the lot of an act on a mission read from the mission
 #   budget     what the campaign spent against its two ceilings
 #   next       the next act of the campaign
-#   pr-ready   whether a pull request meets the owner's five-item bar on its head sha
+#   pr-grill   render the grill choices committed in the mission
+#   pr-ready   whether a pull request meets the owner's bar on its head sha
+#   review-ci  test the published review head and record local/ci on that sha
+#   review-findings  inventory review findings and resolve verified bot threads
 #
-# Every verb but `delegate` only reads. None of them acts: launching `sdd run`, opening the pull
-# request and merging stay with the session, through the commands that already exist.
+# Only delegate, review-ci and review-findings --resolve write. Launching sdd run, opening the
+# pull request and merging stay with the session, through the commands that already exist.
 # The runner (`bin/sdd`) owns ONE mission; this program owns the campaign and never writes what the
 # runner owns. The sensor is tests/check-worker.sh.
 set -euo pipefail
@@ -55,7 +58,10 @@ usage: sdd-worker <verb> <args>
                                                the mission's delegated Codex phase and known ceilings
                                                (EXEC requires its selected model)
   next     <campaign-dir>                      the next act of the campaign
+  pr-grill <mission-dir>                       render the committed grill choices for the PR body
   pr-ready <mission-dir> <pr>                  whether the pull request is ready on its head sha
+  review-ci <mission-dir> <pr>                 run TEST_CMD and publish local/ci for the PR head
+  review-findings <mission-dir> <pr> [--resolve]  list findings or reply to and resolve verified bot threads
 USAGE
 }
 
@@ -353,8 +359,12 @@ cmd_delegate() {
     "$f" "$f" "$id"
 }
 
-# repo_root <dir> — the top of the git checkout that holds <dir>; empty outside one.
-repo_root() { git -C "$1" rev-parse --show-toplevel 2>/dev/null || true; }
+# repo_root <dir> <var> — publishes the checkout root without dropping trailing newlines.
+repo_root() {
+  local top
+  top="$(git -C "$1" rev-parse --show-toplevel 2>/dev/null && printf .)" || top=""
+  printf -v "$2" '%s' "${top%$'\n.'}"
+}
 
 # config_key <root> <key> [<env>] — the value of <key> in <root>/.sdd/config.sh, read by sourcing the
 # file in a subshell, the way the runner loads it: nothing the file sets leaks into this program.
@@ -370,7 +380,7 @@ config_key() {
   if [ -z "$1" ] || [ ! -f "$cfg" ]; then [ "$#" -lt 3 ] || printf '%s' "$3"; return 0; fi
   # shellcheck disable=SC1090,SC1091
   ( set +eu; CDPATH='' cd -- "$1" || exit 0
-    [ "$#" -lt 3 ] || printf -v "$key" '%s' "$3"
+    [ "$#" -lt 3 ] || export "$key=$3"
     . ./.sdd/config.sh > /dev/null 2>&1 < /dev/null; printf '%s' "${!key-}" ) || true
 }
 
@@ -460,7 +470,7 @@ tmp_sweep() {
 # LEVEL_SIGNED_TERMS is set only when the signature and lot scope hold. Budget's internal
 # signed-scope mode does not ask about paging, since a spend query never delegates an act.
 effective_level() {
-  local dir="${1%/}" lot="${2:-}" from="${3:+, $3}" src f signed want exp lv root wt lots w found="" l c cr sr
+  local dir="${1%/}" lot="${2:-}" from="${3:+, $3}" src f signed want exp lv why root wt lots w found="" l c cr sr
   local -a words=()
   LEVEL=assisted
   LEVEL_STOP=""
@@ -482,7 +492,8 @@ effective_level() {
   exp="$(fm_value "$f" expires)"
   if expired "$exp"; then LEVEL_WHY="expired: $exp is not after $(now)"; return 0; fi
   lv="$(fm_value "$f" level)"
-  root="$(repo_root "$dir")"
+  why="signed until $exp"
+  repo_root "$dir" root
   if [ "${4:-}" != signed-scope ] && [ "$lv" != assisted ] && [ -z "$root" ]; then
     LEVEL_WHY="no pager: ON_ESCALATION_CMD is empty in (no repo)/.sdd/config.sh"; return 0
   fi
@@ -524,14 +535,15 @@ effective_level() {
       fi
       sr="$(ladder_rank "$lv")"
       if [ "$cr" -lt "$sr" ]; then
-        LEVEL_SIGNED_TERMS="$f"
-        LEVEL="$c"; LEVEL_WHY="capped by the lot: the ceiling of $lot is $c"; return 0
+        lv="$c"
+        why="capped by the lot: the ceiling of $lot is $c"
       fi
     fi
   fi
+  if [ "$lv" != assisted ] && expired "$exp"; then LEVEL_WHY="expired: $exp is not after $(now)"; return 0; fi
   LEVEL_SIGNED_TERMS="$f"
   LEVEL="$lv"
-  LEVEL_WHY="signed until $exp"
+  LEVEL_WHY="$why"
 }
 
 # level <campaign-dir> [--lot L<n>] — the effective level, and why, on one line; rc 0 whatever the
@@ -651,22 +663,38 @@ cmd_allows() {
 # spelling of autonomy_log_path in bin/sdd, so the two never name two files.
 ledger_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
 
-# checkouts_of <root> — PUBLISHES CHECKOUTS: <root>, then every worktree of its repository, each
-# once. A mission of a campaign runs in a worktree of its own, and its folder reaches the checkout
-# that holds the campaign only with the merge: a reader of <root> alone would not see it in flight.
-# Returns 1, with the call and its rc in CHECKOUTS_WHY, when `git worktree list` does not run —
-# before printing or after: a listing judged by what it printed would leave <root> alone in it, and
-# budget would sum fewer missions, level read fewer pagers and next plan a lot in flight again, in
-# silence. git's own message stays on stderr. Called, never substituted: under `$( )` both globals
-# would die with the subshell.
+# checkouts_of <dir> — publishes the primary checkout and the inventory, with <dir> first
+# for campaign_set, which passes a checkout root. Never use a partial answer from Git.
 checkouts_of() {
-  local out rc=0
-  out="$(git -C "$1" worktree list --porcelain)" || rc=$?
+  local field path primary="" rc=1
+  local -a paths=("$1")
+  CHECKOUTS_WHY=""
+  PRIMARY_CHECKOUT=""
+  CHECKOUTS=()
+  while LC_ALL=C IFS= read -r -d '' field; do
+    case "$field" in
+      'worktree '?*)
+        path="${field#worktree }"
+        primary="${primary:-$path}"
+        [ "$path" = "$1" ] || paths+=("$path") ;;
+      'sdd-status '*) rc="${field#sdd-status }" ;;
+    esac
+  done < <(
+    rc=0
+    git -C "$1" worktree list --porcelain -z || rc=$?
+    # The extra separator also frames the status after a record cut short by Git.
+    printf '\0sdd-status %s\0' "$rc"
+  )
   if [ "$rc" -ne 0 ]; then
-    CHECKOUTS_WHY="git -C $1 worktree list --porcelain failed (rc $rc)"
+    CHECKOUTS_WHY="git -C $1 worktree list --porcelain -z failed (rc $rc); requires Git with --porcelain -z support"
     return 1
   fi
-  mapfile -t CHECKOUTS < <({ printf '%s\n' "$1"; sed -n 's/^worktree //p' <<< "$out"; } | awk '!seen[$0]++')
+  if [ -z "$primary" ]; then
+    CHECKOUTS_WHY="git -C $1 worktree list --porcelain -z returned no checkout"
+    return 1
+  fi
+  PRIMARY_CHECKOUT="$primary"
+  CHECKOUTS=("${paths[@]}")
 }
 
 # base_copies <root> <handoff-dir> <id> — PUBLISHES BASE_DIRS, a copy of the folder of every mission
@@ -748,15 +776,8 @@ base_copies() {
 # `git fetch`, was fetched first); a root on a branch whose upstream is not the base reads that
 # branch's tree; and a base that keeps the missions outside the root's HANDOFF_DIR holds none the set
 # sees, as a worktree whose HANDOFF_DIR is not the root's.
-# A mission that never reached the base, its pull request closed without merge or the mission
-# dropped, is on disk in its worktree and in no other place the set reads: a mission that
-# never reached the base and whose worktree was removed is found nowhere, and its spend leaves the
-# sum budget answers, rc 0 (achado #1 of the r7). Its branch may still carry it, here and in the
-# remote, and no branch but the root's upstream is read; the ledger names no campaign, so no reader
-# of the spend finds it another way. The source the owner chose is in TODO.md (the session line of
-# the ledger carrying campaign:, which the runner reads from the 00-missao.md); until it lands,
-# remove the worktree of a mission that will not reach the base only after signing a
-# campaign ceiling lower by what it spent.
+# Spending with explicit campaign attribution does not depend on this inventory. Only old rows
+# without a campaign still need a mission that this set can discover.
 campaign_set() {
   local root="$1" id="$2" hd whd wt m held
   SET_DIRS=(); SET_CHECKOUTS=("$root"); SET_WHY=""
@@ -829,9 +850,10 @@ budget_repo_key() {
   printf '%s' "$common"
 }
 
-# budget <campaign-dir> — what the campaign spent against its ceiling: the cost_usd of every ledger
-# line whose mission is one of the campaign's (the delegation's campaign:, campaign_set), summed by jq
-# — never by awk, whose mawk reads 1.99 as 1 under pt-BR — against budget_campaign_usd, and the
+# budget <campaign-dir> — the campaign's spend against its ceiling. A row with explicit campaign
+# attribution must match both repo and campaign. A legacy row may match a discovered mission
+# (campaign_set) unless it names a different repo. Each selected row contributes at most once.
+# Sum with jq — never awk, whose mawk reads 1.99 as 1 under pt-BR — against budget_campaign_usd, and the
 # mission cap the worker passes to `sdd run` as BUDGET_MISSION_USD. Money is counted in cents: the
 # sum and the ceiling each go through `* 100 | round` before they are compared, so 0.10 + 0.70, a
 # binary 0.7999999999999999, reaches a ceiling of 0.80; both are printed from those cents, and the
@@ -879,20 +901,16 @@ budget_repo_key() {
 # run is over among them.
 # Declared limits: the runner reads its own spend before a phase opens, so a phase may spend past
 # BUDGET_MISSION_USD, and the campaign past its ceiling by that much; the room is one run's, and the
-# loop of commands/sdd-worker.md launches one run at a time; a line is matched by its mission id
-# alone, so a mission of the same id in another repo is counted too (the fail-safe side: more
-# spend, an earlier stop); a malformed line is skipped
+# loop of commands/sdd-worker.md launches one run at a time; a legacy row with no repository
+# cannot be distinguished from a homonym if its mission is discoverable; a malformed line is skipped
 # (`fromjson?`, as the runner reads the ledger), and its cost with it; the ceiling is read whether or
 # not the delegation is signed — whether the worker may act on it is the level's question; an empty
 # BUDGET_MISSION_USD in the file stops, though the runner fills it with its default, which may be
 # below the signed cap (the fail-safe side: the owner deletes the line); a worktree made after this
 # call is not read, and the loop of commands/sdd-worker.md calls budget on every turn, so the turn
 # that runs a mission reads the worktree its plan made.
-# And a mission of the campaign that never reached the base and whose worktree was removed is found
-# nowhere, and its spend leaves the sum (campaign_set says why): budget answers a smaller sum, rc 0,
-# and the campaign may pass its ceiling by that spend. Until the ledger carries the campaign
-# (TODO.md), remove the worktree of a mission that will not reach the base only after signing a
-# campaign ceiling lower by what it spent.
+# Historical spend without a campaign cannot be attributed after the mission disappears from
+# disk and the base. The ledger is not backfilled by guessing its campaign.
 cmd_budget() {
   [ -d "$1" ] || { usage; return 2; }
   local dir="${1%/}" f root cap mcap run wt p ledger out spent ceiling reached short left
@@ -927,15 +945,12 @@ cmd_budget() {
       "$delegation" "$mcap"
     return 1
   fi
-  root="$(repo_root "$dir")"
+  repo_root "$dir" root
   if [ -z "$root" ]; then printf 'no spend — %s is not inside a git checkout\n' "$dir"; return 1; fi
   campaign="$(fm_value "$f" campaign)"
   harness="$(fm_value "${f%/*}/campaign.md" harness)"
-  repo_key=""
-  if [ "$harness" = codex ]; then
-    repo_key="$(budget_repo_key "$root")" \
-      || { printf 'no spend — cannot resolve the campaign Git common directory\n'; return 1; }
-  fi
+  repo_key="$(budget_repo_key "$root")" \
+    || { printf 'no spend — cannot resolve the campaign Git common directory\n'; return 1; }
   if ! campaign_set "$root" "$campaign"; then printf 'no spend — %s\n' "$SET_WHY"; return 1; fi
   for wt in "${SET_CHECKOUTS[@]}"; do
     run="$(config_key "$wt" BUDGET_MISSION_USD "$mcap")"
@@ -970,10 +985,12 @@ cmd_budget() {
          def measured: type == "number" and . >= 0;
          [inputs | if $strict then fromjson else fromjson? end
            | select(type == "object")
-           | select(($repo == "" or .repo == $repo or .repo == null) and
-             ((.mission | IN($ARGS.positional[])) or ($repo != "" and .repo == $repo and
-               .campaign == $campaign and (.event == "codex_plan_usage" or
-                 (.event == "codex_launch" and .phase == "PLAN")))))] as $rows
+           | select(if (.campaign // "") == "" then
+               (.repo == $repo or .repo == null) and (.mission | IN($ARGS.positional[]))
+             else
+               .repo == $repo and .campaign == $campaign and
+               (.event | IN("session", "close", "codex_plan_usage", "codex_launch"))
+             end)] as $rows
          | (INDEX($rows[] | select((.event == "session" or .event == "codex_plan_usage") and (.launch_id | type == "string")); .launch_id)) as $finished
          | [$rows[] | select(.event == "session" or .event == "close" or
              .event == "codex_plan_usage" or
@@ -1029,13 +1046,16 @@ import json
 from decimal import Decimal
 import sys
 amounts = json.load(sys.stdin, parse_float=Decimal, parse_int=Decimal)
-print(sum(amounts) >= Decimal(sys.argv[1]))
-' "$scope_cap" <<< "$scope_amounts")"; then
+cap = Decimal(sys.argv[1])
+print("Mismatch" if sys.argv[2] and Decimal(sys.argv[2]) != cap else sum(amounts) >= cap)
+' "$scope_cap" "${SDD_CODEX_RUN_CAP:-}" <<< "$scope_amounts")"; then
       printf 'no spend — cannot compare known USD for %s to its mission ceiling\n' "$scope"; return 1
     fi
     case "$scope_reached" in
       False) ;;
       True) printf 'mission ceiling — known USD for %s reached its US$ %s cap\n' "$scope" "$scope_cap"; return 1 ;;
+      Mismatch) printf 'no mission cap — %s/.sdd/config.sh gives %s to the worker, but the runner would use %s\n' \
+        "$scope_wt" "$scope_cap" "$SDD_CODEX_RUN_CAP"; return 1 ;;
       *) printf 'no spend — invalid mission ceiling verdict for %s\n' "$scope"; return 1 ;;
     esac
   fi
@@ -1077,9 +1097,10 @@ cmd_codex_plan() {
   if ! dir="$(readlink -f -- "$1")" || [ ! -d "$dir" ]; then
     printf 'no cost exception — cannot resolve campaign directory: %s\n' "$1" >&2; return 1
   fi
-  if ! primary="$(git -C "$dir" worktree list --porcelain | sed -n '1s/^worktree //p')"; then
-    printf 'no cost exception — cannot read the campaign primary worktree\n' >&2; return 1
+  if ! checkouts_of "$dir"; then
+    printf 'no cost exception — %s\n' "$CHECKOUTS_WHY" >&2; return 1
   fi
+  primary="$PRIMARY_CHECKOUT"
   if [ -z "$primary" ] || { [ "${dir%/*}" != "$primary/docs/campaigns" ] &&
        [ "${dir%/*}" != "$primary/docs/superpowers/campaigns" ]; } ||
        [ -L "$dir/campaign.md" ] || [ -L "$dir/delegation.md" ]; then
@@ -1110,7 +1131,7 @@ cmd_codex_run() {
   esac
   mission="$(readlink -f -- "$2")" || return 1
   mf="$mission/00-missao.md"
-  wt="$(repo_root "$mission")"
+  repo_root "$mission" wt
   if [ -z "$wt" ] || [ ! -f "$mf" ]; then
     printf 'no cost exception — %s is not a mission in a git checkout\n' "$mission" >&2; return 1
   fi
@@ -1125,9 +1146,10 @@ cmd_codex_run() {
   if ! [[ "$id" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ ]] || [ -z "$lot" ]; then
     printf 'no cost exception — %s must declare its campaign and lot\n' "$mf" >&2; return 1
   fi
-  if ! primary="$(git -C "$wt" worktree list --porcelain | sed -n '1s/^worktree //p')"; then
-    printf 'no cost exception — cannot read the primary git worktree of %s\n' "$wt" >&2; return 1
+  if ! checkouts_of "$wt"; then
+    printf 'no cost exception — %s\n' "$CHECKOUTS_WHY" >&2; return 1
   fi
+  primary="$PRIMARY_CHECKOUT"
   dir=""
   for candidate in "$primary/docs/campaigns/$id" "$primary/docs/superpowers/campaigns/$id"; do
     if [ -n "$primary" ] && [ -f "$candidate/campaign.md" ]; then
@@ -1182,28 +1204,35 @@ lot_of() {
 
 # pr_states <root> <branch> — the pull requests of the repository whose head is <branch>, PUBLISHED
 # in PR_STATES as one `<number> <state>` per line, from `gh pr list --head <branch> --state all
-# --json number,state,isCrossRepository` run at <root>, the checkout gh infers the repository from.
+# --limit <limit> --json number,state,isCrossRepository` at <root>, where gh infers the repository.
 # `--head` matches the branch's name alone, and a fork can push a branch of that name: a merged pull
 # request from a fork read as the lot's would make the lot done while it never ran (achado #6 of the
 # r5). So only the elements whose isCrossRepository is false are the repository's own, and the
-# others are left out. Returns 1, with the reason in GH_WHY, when gh failed or answered anything but
-# one array whose every element has a state of OPEN, CLOSED or MERGED and an isCrossRepository that
+# others are left out. A result at the limit may be truncated, so refuse it before filtering forks.
+# Returns 1 with the reason in GH_WHY on truncation, gh failure or anything but an array whose
+# every element has a state of OPEN, CLOSED or MERGED and an isCrossRepository that
 # is a boolean — an empty answer included: an answer that was not read is never "no pull request",
 # which would send a lot to run again, and an element that does not say whose it is is not read as
 # the repository's or as a fork's. An element that is not an object makes jq itself fail on
 # `.state`, so no rule of its own says so; the number is only printed.
 pr_states() {
-  local out rc=0
-  out="$(CDPATH='' cd -- "$1" && gh pr list --head "$2" --state all --json number,state,isCrossRepository)" || rc=$?
+  local out states rc=0 limit=1000
+  out="$(CDPATH='' cd -- "$1" && gh pr list --head "$2" --state all --limit "$limit" --json number,state,isCrossRepository)" || rc=$?
   if [ "$rc" -ne 0 ]; then GH_WHY="gh pr list --head $2 failed (rc $rc)"; return 1; fi
-  if ! PR_STATES="$(jq -rn 'input
-         | if type == "array"
+  if ! states="$(jq -rn --argjson limit "$limit" 'input
+         | if type == "array" and length >= $limit then "incomplete"
+           elif type == "array"
               and all(.[]; (.state | IN("OPEN", "CLOSED", "MERGED")) and (.isCrossRepository | type) == "boolean")
            then .[] | select(.isCrossRepository == false) | "\(.number) \(.state)"
            else error("off the contract") end' 2> /dev/null <<< "$out")"; then
     GH_WHY="gh pr list --head $2 answered no array of pull requests in a known state and repository: '${out:0:80}'"
     return 1
   fi
+  if [ "$states" = incomplete ]; then
+    GH_WHY="gh pr list --head $2 reached the limit of $limit pull requests (incomplete read)"
+    return 1
+  fi
+  PR_STATES="$states"
 }
 
 # next <campaign-dir> — the next act of the campaign, from the queue, the campaign's missions and gh.
@@ -1246,7 +1275,7 @@ cmd_next() {
   if [ ! -f "$cf" ]; then printf 'stop - - — no campaign: %s does not exist\n' "$cf"; return 1; fi
   if ! id_is_dir "$dir" "$cf"; then printf 'stop - - — illegible: %s\n' "$ID_WHY"; return 1; fi
   id="$(fm_value "$cf" campaign)"
-  root="$(repo_root "$dir")"
+  repo_root "$dir" root
   if [ -z "$root" ]; then printf 'stop - - — %s is not inside a git checkout\n' "$dir"; return 1; fi
   while read -r l _; do lots+=("$l"); done < <(lots_table "$cf")
   if [ "${#lots[@]}" -eq 0 ]; then
@@ -1491,8 +1520,414 @@ gh_unread() {
   printf 'sdd-worker: %s — no item is named: an answer that was not read is never ready\n' "$1" >&2
 }
 
+gh_pr_snapshot() {
+  local root="$1" pr="$2"
+  if ! gh_at "$root" pr view "$pr" --json headRefOid,mergeable,state; then
+    gh_unread "gh pr view $pr failed (rc $GH_RC)"; return 3
+  fi
+  if ! PR_SNAPSHOT="$(jq -rn 'input | if (.headRefOid | test("^[0-9a-f]{40}$"))
+           then "\(.headRefOid) \(.state) \(.mergeable)" else error("off the contract") end' 2>/dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh pr view $pr answered no pull request with a full head sha: '${GH_OUT:0:80}'"; return 3
+  fi
+}
+
+gh_repository() {
+  if ! gh_at "$1" repo view --json nameWithOwner -q .nameWithOwner; then
+    gh_unread "gh repo view failed (rc $GH_RC)"; return 3
+  fi
+  if ! [[ "$GH_OUT" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    gh_unread "gh repo view answered '${GH_OUT:0:80}', not <owner>/<name>"; return 3
+  fi
+}
+
+gh_ci_producer() {
+  if ! gh_at "$1" api user --jq .id || ! [[ "$GH_OUT" =~ ^[1-9][0-9]*$ ]]; then
+    gh_unread 'local/ci: could not identify the authenticated GitHub producer'; return 3
+  fi
+}
+
+ci_clean_head() {
+  local root="$1" head="$2" label="${3:-local/ci}" here dirty
+  if ! here="$(git -C "$root" rev-parse --verify HEAD)" || [ "$here" != "$head" ]; then
+    printf 'sdd-worker: %s requires local HEAD to match the pull request head %s\n' "$label" "$head" >&2
+    return 1
+  fi
+  if ! dirty="$(GIT_OPTIONAL_LOCKS=0 git -C "$root" status --porcelain --untracked-files=all)" || [ -n "$dirty" ]; then
+    printf 'sdd-worker: %s requires a clean checkout on %s\n' "$label" "$head" >&2
+    return 1
+  fi
+}
+
+ci_publish() {
+  local root="$1" repo="$2" head="$3" producer="$4" state="$5"
+  if ! gh_at "$root" api --method POST "repos/$repo/statuses/$head" -f context=local/ci -f "state=$state" ||
+     ! jq -e --arg producer "$producer" --arg state "$state" \
+       '.context == "local/ci" and .state == $state and (.creator.id | tostring) == $producer' \
+       >/dev/null 2>&1 <<< "$GH_OUT"; then
+    printf 'sdd-worker: could not verify publication of local/ci %s on %s\n' "$state" "$head" >&2
+    return 3
+  fi
+}
+
+cmd_review_ci() {
+  [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
+  local root pr="$2" head pr_state repo producer result=success rc=0
+  repo_root "$1" root
+  if [ -z "$root" ]; then
+    printf 'sdd-worker: local/ci requires a git checkout\n' >&2; return 1
+  fi
+  gh_pr_snapshot "$root" "$pr" || return $?
+  read -r head pr_state _ <<< "$PR_SNAPSHOT"
+  if [ "$pr_state" != OPEN ]; then
+    printf 'sdd-worker: local/ci requires an open pull request\n' >&2; return 1
+  fi
+  ci_clean_head "$root" "$head" || return 1
+  gh_repository "$root" || return $?
+  repo="$GH_OUT"
+  gh_ci_producer "$root" || return $?
+  producer="$GH_OUT"
+  ci_publish "$root" "$repo" "$head" "$producer" pending || return $?
+  # Keep output visible on fd 3. Only the result after the suite returns goes to fd 4.
+  if ! {
+    rc="$(
+      (
+        CDPATH='' cd -- "$root" || exit 1
+        unset TEST_CMD
+        # shellcheck disable=SC1091
+        . ./.sdd/config.sh 4>&- || exit 1
+        if [ -z "${TEST_CMD:-}" ]; then
+          printf 'sdd-worker: TEST_CMD is empty in .sdd/config.sh\n' >&2; exit 1
+        fi
+        ci_clean_head "$root" "$head" || exit 1
+        (eval "$TEST_CMD") 4>&-
+        printf '%s\n' "$?" >&4
+      ) 4>&1 >&3
+    )"
+  } 3>&1 </dev/null || ! [[ "$rc" =~ ^[0-9]{1,3}$ ]]; then
+    printf 'sdd-worker: TEST_CMD did not complete on %s; local/ci remains pending\n' "$head" >&2
+    return 1
+  fi
+  gh_pr_snapshot "$root" "$pr" || return $?
+  if [[ "$PR_SNAPSHOT" != "$head OPEN "* ]]; then
+    printf 'sdd-worker: pull request head or state changed during TEST_CMD on %s\n' "$head" >&2; return 1
+  fi
+  ci_clean_head "$root" "$head" || return 1
+  if [ "$rc" -ne 0 ]; then result=failure; fi
+  ci_publish "$root" "$repo" "$head" "$producer" "$result" || return $?
+  printf 'local/ci %s %s (TEST_CMD rc %s)\n' "$head" "$result" "$rc"
+  [ "$rc" -eq 0 ]
+}
+
+gh_pr_reviews() {
+  local root="$1" endpoint="repos/$2/pulls/$3/reviews"
+  if ! gh_at "$root" api --paginate "$endpoint"; then
+    gh_unread "gh api --paginate $endpoint failed (rc $GH_RC)"; return 3
+  fi
+  if ! GH_REVIEWS="$(jq -ces '
+    def posint: type == "number" and . > 0 and floor == .;
+    if length == 0 or any(.[]; type != "array") then error("missing review pages") else add end
+    | if any(.[]; (.id | posint | not) or (.body | type) != "string" or
+        (.state | IN("PENDING","COMMENTED","APPROVED","CHANGES_REQUESTED","DISMISSED") | not) or
+        (.state != "PENDING" and ((.user.id | posint | not) or
+          (.user.login | test("^[A-Za-z0-9_-]+(\\[bot\\])?$") | not) or
+          (.user.type | IN("Bot","User") | not) or
+          (.commit_id | test("^[a-f0-9]{40}$") | not) or
+          (.submitted_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$") | not)))) or
+        (map(.id) | unique | length) != length then error("invalid review") else . end
+    | map(select(.state != "PENDING"))
+    | (group_by(.user.id) | map(
+        map(select(.state | IN("APPROVED","CHANGES_REQUESTED"))) | sort_by(.submitted_at, .id) | last
+        | select(.state == "CHANGES_REQUESTED") | .id)) as $requests
+    | map(.id as $id | {
+        id: (.id | tostring), body, commit: .commit_id, state, author: .user.login,
+        actor: .user.type, authorId: .user.id, activeRequest: ($requests | index($id) != null),
+        finding: (.state != "DISMISSED" and
+          (.body | gsub("^\\s+|\\s+$"; "") | ascii_downcase |
+            test("^(|lgtm\\.?|looks good\\.?|thanks\\.?|no findings\\.?|approved\\.?|aprovad[oa]\\.?)$") | not))
+      })' 2>/dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh api --paginate $endpoint answered invalid review pages"; return 3
+  fi
+}
+
+gh_review_threads() {
+  local root="$1" repo="$2" pr="$3" query page page_total count more next
+  local cursor="" total=-1 seen=0 pages=""
+  local -a args
+  query='query($cursor:String){repository(owner:"'"${repo%%/*}"'",name:"'"${repo#*/}"'"){pullRequest(number:'"$pr"'){'
+  query+='reviewThreads(first:100,after:$cursor){totalCount pageInfo{hasNextPage endCursor}'
+  query+=' nodes{id isResolved comments(first:2){totalCount nodes{id body author{login __typename}}}}}}}}'
+  while :; do
+    args=(api graphql -f "query=$query")
+    if [ -n "$cursor" ]; then args+=(-f "cursor=$cursor"); fi
+    if ! gh_at "$root" "${args[@]}" ||
+       ! page="$(jq -ces '
+      def node_id: type == "string" and test("^[A-Za-z0-9_+/=-]+$");
+      def count: type == "number" and . >= 0 and floor == .;
+      if length != 1 or (.[0].errors // [] | length) != 0 then error("bad response") else .[0] end
+      | .data.repository.pullRequest.reviewThreads
+      | select((.totalCount | count) and (.nodes | type) == "array" and
+          (.pageInfo.hasNextPage | type) == "boolean" and
+          (if .pageInfo.hasNextPage then (.pageInfo.endCursor | node_id) else true end) and
+          all(.nodes[]; (.id | node_id) and (.isResolved | type) == "boolean" and
+            ((.isResolved and (has("comments") | not)) or ((.comments.totalCount | count) and .comments.totalCount > 0 and
+              (.comments.nodes | type) == "array" and
+              (.comments.nodes | length) == ([.comments.totalCount, 2] | min) and
+              all(.comments.nodes[]; (.id | node_id) and (.body | type) == "string" and
+                (.author == null or ((.author.login | type) == "string" and
+                  (.author.__typename | type) == "string")))))))' 2>/dev/null <<< "$GH_OUT")"; then
+      gh_unread "gh api graphql (review threads of #$pr) failed or answered an invalid page"; return 3
+    fi
+    read -r page_total count more next <<< "$(jq -r '
+      [.totalCount, (.nodes | length), .pageInfo.hasNextPage, (.pageInfo.endCursor // "-")] | @tsv' <<< "$page")"
+    if [ "$total" -eq -1 ]; then total="$page_total"; fi
+    seen=$((seen + count))
+    if [ "$page_total" -ne "$total" ] || [ "$seen" -gt "$total" ] ||
+       { [ "$more" = true ] && { [ "$count" -eq 0 ] || [ "$seen" -eq "$total" ] || [ "$next" = "$cursor" ]; }; }; then
+      gh_unread "gh api graphql answered inconsistent review thread pages for #$pr"; return 3
+    fi
+    pages+="$(jq -c '.nodes' <<< "$page")"$'\n'
+    if [ "$more" = false ]; then break; fi
+    cursor="$next"
+  done
+  if [ "$seen" -ne "$total" ] ||
+     ! GH_THREADS="$(jq -ces 'add | select((map(.id) | unique | length) == length)' <<< "$pages")"; then
+    gh_unread "gh api graphql answered incomplete or duplicate review thread pages for #$pr"; return 3
+  fi
+}
+
+# Hash only the finding, not the PR head or a subsequent reply. The record survives a fix commit,
+# but neither an edit of the finding nor a copy into another PR inherits its disposition.
+review_finding_record() {
+  local root="$1" repo="$2" pr="$3" kind="$4" item="$5" identity fingerprint
+  if [ "$kind" = thread ]; then
+    identity="$(jq -cS '{id, comment: .comments.nodes[0]}' <<< "$item")" || return 3
+  else
+    identity="$(jq -cS 'del(.activeRequest)' <<< "$item")" || return 3
+  fi
+  fingerprint="$(printf '%s\n' "$repo#$pr:$kind" "$identity" | git -C "$root" hash-object --stdin)" || return 3
+  jq -c --arg kind "$kind" --arg fingerprint "$fingerprint" '. + {$kind, $fingerprint}' <<< "$item"
+}
+
+review_round_text() {
+  local prefix
+  prefix="$(git -C "$1" rev-parse --show-prefix)" || return 1
+  git -C "$1" show "$2:$prefix${3##*/}" 2>/dev/null
+}
+
+review_dispositions() {
+  awk '
+    {
+      text = $0
+      sub(/^ ? ? ?/, "", text)
+      if (match(text, /^(```+|~~~+)/)) {
+        mark = substr(text, 1, 1)
+        if (!width) { fence = mark; width = RLENGTH; next }
+        if (mark == fence && RLENGTH >= width && substr(text, RLENGTH + 1) ~ /^[ \t]*$/) {
+          width = 0; next
+        }
+      }
+    }
+    !width && /^review-disposition / { print }
+  ' <<< "$1"
+}
+
+review_disposition_commit() {
+  local root="$1" head="$2" dispositions="$3" record="$4" kind id fingerprint line sha reason
+  read -r kind id fingerprint <<< "$(jq -r '[.kind, .id, .fingerprint] | @tsv' <<< "$record")"
+  line="$(awk -v k="$kind" -v id="$id" -v hash="$fingerprint" \
+    '$2 == k && $3 == id && $4 == hash { print }' <<< "$dispositions")" || return 1
+  [[ "$line" != *$'\n'* ]] || return 1
+  read -r _ _ _ _ sha reason <<< "$line"
+  [[ "$sha" =~ ^[a-f0-9]{40}$ && -n "$reason" ]] || return 1
+  [ "$(git -C "$root" cat-file -t "$sha" 2>/dev/null)" = commit ] &&
+    git -C "$root" merge-base --is-ancestor "$sha" "$head" || return 1
+  printf '%s\n' "$sha"
+}
+
+review_findings_ready() {
+  local root="$1" repo="$2" pr="$3" head="$4" dispositions="$5" request items item record id open total ids sha body
+  request="$(jq -r '[.[] | select(.activeRequest)][0] | if . == null then "" else "\(.author) (review \(.id))" end' <<< "$GH_REVIEWS")"
+  if [ -n "$request" ]; then printf 'not-ready findings: changes requested by %s\n' "$request"; return 1; fi
+  items="$(jq -c '.[] | select(.finding)' <<< "$GH_REVIEWS")"
+  while IFS= read -r item && [ -n "$item" ]; do
+    record="$(review_finding_record "$root" "$repo" "$pr" review "$item")" || return 3
+    if ! jq -e '.actor == "Bot"' >/dev/null <<< "$record" || ! review_disposition_commit "$root" "$head" "$dispositions" "$record" >/dev/null; then
+      id="$(jq -r .id <<< "$record")"
+      printf 'not-ready findings: review %s has no verified disposition\n' "$id"; return 1
+    fi
+  done <<< "$items"
+  read -r open total <<< "$(jq -r '"\([.[] | select(.isResolved == false)] | length) \(length)"' <<< "$GH_THREADS")"
+  if [ "$open" -ne 0 ]; then
+    printf 'not-ready threads: %s of %s review thread(s) not resolved\n' "$open" "$total"; return 1
+  fi
+
+  # A GitHub resolution with no local record is left alone. A disposition this round does
+  # claim cannot keep an edited or newly discussed finding closed.
+  ids="$(awk '$2 == "thread" { print $3 }' <<< "$dispositions" | jq -Rsc 'split("\n")')" || return 3
+  items="$(jq -c --argjson ids "$ids" '.[] | select(.isResolved and (.id as $id | $ids | index($id) != null))' <<< "$GH_THREADS")"
+  while IFS= read -r item && [ -n "$item" ]; do
+    record="$(review_finding_record "$root" "$repo" "$pr" thread "$item")" || return 3
+    id="$(jq -r .id <<< "$record")"
+    if sha="$(review_disposition_commit "$root" "$head" "$dispositions" "$record")"; then
+      body="$(review_reply_body "$sha" "$record")"
+      if jq -e --arg body "$body" '
+          .comments.totalCount == 1 or (.comments.totalCount == 2 and .comments.nodes[1].body == $body)
+        ' >/dev/null <<< "$record"; then continue; fi
+    fi
+    printf 'not-ready threads: resolved thread %s changed after its disposition\n' "$id"; return 1
+  done <<< "$items"
+}
+
+review_reply_body() {
+  printf 'Fixed in %s (finding %s).\n' "$1" "$(jq -r .fingerprint <<< "$2")"
+}
+
+review_thread_stage() {
+  jq -r --argjson before "$1" --arg login "$2" --arg body "$3" '
+    map(select(.id == $before.id))[0]
+    | if . == null then "changed"
+      elif .isResolved then "resolved"
+      elif .comments.nodes[0] != $before.comments.nodes[0] then "changed"
+      elif .comments.totalCount == 1 then "new"
+      elif .comments.totalCount == 2 and
+        (.comments.nodes[1] | .author.login == $login and .body == $body) then "replied"
+      else "changed" end' <<< "$GH_THREADS"
+}
+
+review_pr_still_open() {
+  gh_pr_snapshot "$1" "$2" || return $?
+  if [[ "$PR_SNAPSHOT" != "$3 OPEN "* ]]; then
+    printf 'sdd-worker: pull request head or state changed while handling review findings on %s\n' "$3" >&2
+    return 1
+  fi
+}
+
+review_resolve_thread() {
+  local root="$1" repo="$2" pr="$3" head="$4" login="$5" record="$6" sha="$7" id body stage
+  id="$(jq -r .id <<< "$record")"
+  body="$(review_reply_body "$sha" "$record")"
+  stage="$(review_thread_stage "$record" "$login" "$body")" || return 3
+  if [ "$stage" = resolved ] || [ "$stage" = changed ]; then return 0; fi
+  review_pr_still_open "$root" "$pr" "$head" || return $?
+  if [ "$stage" = new ]; then
+    if ! gh_at "$root" api graphql -f \
+         'query=mutation($id:ID!,$body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$id,body:$body}){comment{id body author{login}}}}' \
+         -f "id=$id" -f "body=$body" ||
+       ! jq -es --arg login "$login" --arg body "$body" '
+         length == 1 and (.[0] | (.errors // [] | length) == 0 and (.data.addPullRequestReviewThreadReply.comment |
+           (.id | type) == "string" and .id != "" and .author.login == $login and .body == $body))
+       ' >/dev/null 2>&1 <<< "$GH_OUT"; then
+      gh_unread "gh api graphql could not verify reply to thread $id"; return 3
+    fi
+    gh_review_threads "$root" "$repo" "$pr" || return $?
+    stage="$(review_thread_stage "$record" "$login" "$body")" || return 3
+    if [ "$stage" != replied ]; then
+      printf 'not-ready threads: reply or finding on thread %s changed before resolution\n' "$id"
+      return 1
+    fi
+    review_pr_still_open "$root" "$pr" "$head" || return $?
+  fi
+  if ! gh_at "$root" api graphql -f \
+       'query=mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}' -f "id=$id" ||
+     ! jq -es --arg id "$id" 'length == 1 and (.[0] | (.errors // [] | length) == 0 and
+       (.data.resolveReviewThread.thread | .id == $id and .isResolved == true))
+     ' >/dev/null 2>&1 <<< "$GH_OUT"; then
+    gh_unread "gh api graphql could not verify resolution of thread $id"; return 3
+  fi
+  gh_review_threads "$root" "$repo" "$pr" || return $?
+  if ! jq -e --arg id "$id" 'any(.[]; .id == $id and .isResolved)' >/dev/null <<< "$GH_THREADS"; then
+    gh_unread "gh api graphql did not read back thread $id as resolved"; return 3
+  fi
+}
+
+cmd_review_findings() {
+  { [ "$#" -eq 2 ] || { [ "$#" -eq 3 ] && [ "$3" = --resolve ]; }; } &&
+    [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
+  local dir="$1" pr="$2" root head state repo round round_text dispositions items item record sha login=""
+  repo_root "$dir" root
+  if [ -z "$root" ]; then printf 'sdd-worker: review findings require a git checkout\n' >&2; return 1; fi
+  gh_pr_snapshot "$root" "$pr" || return $?
+  read -r head state _ <<< "$PR_SNAPSHOT"
+  if [ "$state" != OPEN ]; then printf 'sdd-worker: review findings require an open pull request\n' >&2; return 1; fi
+  gh_repository "$root" || return $?
+  repo="$GH_OUT"
+  gh_pr_reviews "$root" "$repo" "$pr" || return $?
+  gh_review_threads "$root" "$repo" "$pr" || return $?
+  if [ "$#" -eq 2 ]; then
+    items="$(jq -c '.[] | select(.state != "DISMISSED")' <<< "$GH_REVIEWS")"
+    while IFS= read -r item && [ -n "$item" ]; do
+      review_finding_record "$root" "$repo" "$pr" review "$item" || return 3
+    done <<< "$items"
+  else
+    ci_clean_head "$root" "$head" "review findings" || return 1
+    round="$(newest_round "$dir")"
+    if [ -z "$round" ] || [ -L "$round" ] ||
+       ! round_text="$(review_round_text "$dir" "$head" "$round")"; then
+      printf 'sdd-worker: review resolution requires a committed round on %s\n' "$head" >&2; return 1
+    fi
+    dispositions="$(review_dispositions "$round_text")" || return 1
+  fi
+  items="$(jq -c '.[]' <<< "$GH_THREADS")"
+  while IFS= read -r item && [ -n "$item" ]; do
+    record="$(review_finding_record "$root" "$repo" "$pr" thread "$item")" || return 3
+    if [ "$#" -eq 2 ]; then printf '%s\n' "$record"; continue; fi
+    if ! jq -e '.isResolved == false and .comments.nodes[0].author.__typename == "Bot"' >/dev/null <<< "$record" ||
+       ! sha="$(review_disposition_commit "$root" "$head" "$dispositions" "$record")"; then continue; fi
+    if [ -z "$login" ]; then
+      if ! gh_at "$root" api user --jq .login || ! [[ "$GH_OUT" =~ ^[A-Za-z0-9_-]+(\[bot\])?$ ]]; then
+        gh_unread 'gh api user could not identify the review reply author'; return 3
+      fi
+      login="$GH_OUT"
+    fi
+    review_resolve_thread "$root" "$repo" "$pr" "$head" "$login" "$record" "$sha" || return $?
+  done <<< "$items"
+  if [ "$#" -eq 3 ]; then
+    review_pr_still_open "$root" "$pr" "$head" || return $?
+    review_findings_ready "$root" "$repo" "$pr" "$head" "$dispositions"
+  fi
+}
+
+# Read the numbered decisions as written, not as a list of distinct answer strings.
+grill_section() {
+  local mission
+  mission="$(git -C "$1" show "$2:./00-missao.md")" || return 1
+  awk '
+    /^## (Decis[^\n]* do grill|Grill decisions)([[:blank:](]|$)/ {
+      if (++seen > 1) exit 1
+      heading = $0; section = 1; next
+    }
+    /^#{1,2} / { section = 0 }
+    section && !started && /^[0-9]+[.] / { print heading "\n"; started = 1 }
+    section && started { print }
+  ' <<< "$mission"
+}
+
+cmd_pr_grill() {
+  [ "$#" -eq 1 ] && [ -d "$1" ] || { usage; return 2; }
+  local grill
+  grill="$(grill_section "$1" HEAD)" || return 1
+  [ -z "$grill" ] || printf '%s\n' "$grill"
+}
+
+pr_grill_ready() {
+  local root="$1" pr="$2" dir="$3" head="$4" grill body
+  if ! grill="$(grill_section "$dir" "$head")"; then
+    printf 'not-ready grill: cannot read the choices committed on %s\n' "$head"
+    return 1
+  fi
+  [ -n "$grill" ] || return 0
+  if ! gh_at "$root" pr view "$pr" --json body ||
+     ! body="$(jq -er '.body | strings' 2> /dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh pr view $pr did not return a readable body"; return 3
+  fi
+  if [[ "$body" != "$grill" && "$body" != "$grill"$'\n\n'* ]]; then
+    printf 'not-ready grill: the PR body must start with the committed choices from the pr act\n'
+    return 1
+  fi
+}
+
 # pr-ready <mission-dir> <pr> — whether pull request <pr> meets the owner's bar on its head sha:
-# `ready <sha>` and rc 0 when the five items hold, else `not-ready <item>: <reason>` and rc 1 for the
+# `ready <sha>` and rc 0 when the eight items hold, else `not-ready <item>: <reason>` and rc 1 for the
 # first that fails, in this order:
 #   review     the newest 40-review-r<N>.md of the mission folder (by number) grades A in every row
 #              of `### Overall Grade` (its header and its separator known by the shape of the line,
@@ -1508,46 +1943,35 @@ gh_unread() {
 #              read is the round the head carries;
 #   codex      the newest comment of the Codex bot that carries `codex-review-state:v1`, read from
 #              every page, parses and is for the head, completed, with no unresolved finding;
+#   findings   no active change request or undisposed review body in the complete review pages;
 #   threads    every review thread is resolved, and every one was read;
 #   mergeable  the pull request is OPEN and MERGEABLE;
-#   head       the local HEAD of the mission's checkout is the head.
+#   head       the local HEAD of the mission's checkout is the head;
+#   local/ci   the newest status in this context from the review producer on the head is success;
+#   grill      the pr act published the exact numbered decisions from the committed mission.
 # rc 3, and nothing on stdout, when gh failed or answered off its contract. The `ready` line carries
 # the sha the caller passes to `gh pr merge --merge --match-head-commit`; the method (a merge commit,
-# never a squash) is the merging command's, not this verb's. No bot's review is read but the Codex
-# state, so a bot with no quota neither blocks nor counts as a review. Both programs write `reviewed_head:`
+# never a squash) is the merging command's, not this verb's. A missing review from another bot
+# neither blocks nor counts as a review. Both programs write `reviewed_head:`
 # (ADR 0023); a runner round with a DOCS commit after it, outside the mission folder, is not ready.
-# Declared limits: the five items are read one after the other, never at once — a receipt, a thread
-# or the mergeability can change between two reads on the same sha, which --match-head-commit does
+# Declared limits: the items are read one after the other, never at once — a status, a receipt, a thread,
+# the PR body or the mergeability can change between two reads on the same sha, which --match-head-commit does
 # not see (achado #13 of the mission's review r5) —, so whoever merges reads pr-ready again
 # immediately before `gh pr merge`, and a ready read earlier is no ready; a path git still quotes
 # under core.quotePath=false (a control byte, a quote or a backslash in its name) never matches the
-# mission folder, the fail-safe side; and only the first hundred threads are read, which is why a
-# pull request with more is not ready.
-# What it does not read, since the bar it applies (§3 of
-# docs/superpowers/specs/2026-11-16-o-worker-merge-delegado.md, decision 9 of the mission) names
-# review threads alone: the body of a review (18 of the 38 findings CodeRabbit left on PR #414
-# lived there), a review in state `CHANGES_REQUESTED` that carries no inline comment, and the
-# `local/ci` status of the head, so none of them keeps a pull request from ready. A sixth item that
-# reads them changes the bar, and it is open in TODO.md with the question of who writes `local/ci`
-# in the worker's loop: an item that no act writes would be a gate nobody can satisfy.
+# mission folder, the fail-safe side. Human or ambiguous threads are left for the owner rather
+# than resolved automatically by review-findings.
 cmd_pr_ready() {
   [ "$#" -eq 2 ] && [ -d "$1" ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { usage; return 2; }
-  local dir="${1%/}" pr="$2" root view head state mergeable round rh g unjust missing gv prefix changed p repo verdict
+  local dir="${1%/}" pr="$2" root head state mergeable round rh g unjust missing gv prefix changed p repo verdict round_text dispositions
+  local producer statuses ci
   local anc commits c dirty
-  local threads open total seen unseen here
+  local here
   local -a grades=()
-  root="$(repo_root "$dir")"
+  repo_root "$dir" root
   if [ -z "$root" ]; then printf 'not-ready review: %s is not inside a git checkout\n' "$dir"; return 1; fi
-  if ! gh_at "$root" pr view "$pr" --json headRefOid,mergeable,state; then
-    gh_unread "gh pr view $pr failed (rc $GH_RC)"; return 3
-  fi
-  # A head that is not a full sha, or no object at all, makes jq fail; a state or a mergeability
-  # that is absent reads null, which the mergeable item refuses.
-  if ! view="$(jq -rn 'input | if (.headRefOid | test("^[0-9a-f]{40}$"))
-           then "\(.headRefOid) \(.state) \(.mergeable)" else error("off the contract") end' 2> /dev/null <<< "$GH_OUT")"; then
-    gh_unread "gh pr view $pr answered no pull request with a full head sha: '${GH_OUT:0:80}'"; return 3
-  fi
-  read -r head state mergeable <<< "$view"
+  gh_pr_snapshot "$root" "$pr" || return $?
+  read -r head state mergeable <<< "$PR_SNAPSHOT"
 
   round="$(newest_round "$dir")"
   if [ -z "$round" ]; then printf 'not-ready review: no 40-review-r<N>.md in %s\n' "$dir"; return 1; fi
@@ -1639,13 +2063,8 @@ cmd_pr_ready() {
     return 1
   fi
 
-  if ! gh_at "$root" repo view --json nameWithOwner -q .nameWithOwner; then
-    gh_unread "gh repo view failed (rc $GH_RC)"; return 3
-  fi
+  gh_repository "$root" || return $?
   repo="$GH_OUT"
-  if ! [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
-    gh_unread "gh repo view answered '${repo:0:80}', not <owner>/<name>"; return 3
-  fi
   if ! gh_at "$root" api --paginate "repos/$repo/issues/$pr/comments"; then
     gh_unread "gh api --paginate repos/$repo/issues/$pr/comments failed (rc $GH_RC)"; return 3
   fi
@@ -1670,24 +2089,13 @@ cmd_pr_ready() {
   fi
   if [ "$verdict" != ok ]; then printf 'not-ready codex: %s\n' "$verdict"; return 1; fi
 
-  if ! gh_at "$root" api graphql -f \
-       "query=query{repository(owner:\"${repo%%/*}\",name:\"${repo#*/}\"){pullRequest(number:$pr){reviewThreads(first:100){totalCount nodes{isResolved}}}}}"; then
-    gh_unread "gh api graphql (the review threads of #$pr) failed (rc $GH_RC)"; return 3
+  gh_pr_reviews "$root" "$repo" "$pr" || return $?
+  gh_review_threads "$root" "$repo" "$pr" || return $?
+  if ! round_text="$(review_round_text "$dir" "$head" "$round")"; then
+    printf 'not-ready findings: no committed round on %s\n' "$head"; return 1
   fi
-  if ! threads="$(jq -rn 'input | .data.repository.pullRequest.reviewThreads
-         | if (.totalCount | type) == "number" and (.nodes | type) == "array"
-              and all(.nodes[]; (.isResolved | type) == "boolean")
-           then "\([.nodes[] | select(.isResolved == false)] | length) \(.totalCount) \(.nodes | length) \((.nodes | length) < .totalCount)"
-           else error("off the contract") end' 2> /dev/null <<< "$GH_OUT")"; then
-    gh_unread "gh api graphql answered no review threads of #$pr: '${GH_OUT:0:80}'"; return 3
-  fi
-  read -r open total seen unseen <<< "$threads"
-  if [ "$open" -ne 0 ]; then
-    printf 'not-ready threads: %s of %s review thread(s) not resolved\n' "$open" "$total"; return 1
-  fi
-  if [ "$unseen" != false ]; then
-    printf 'not-ready threads: %s of %s review threads read, the rest unseen\n' "$seen" "$total"; return 1
-  fi
+  dispositions="$(review_dispositions "$round_text")" || return 1
+  review_findings_ready "$root" "$repo" "$pr" "$head" "$dispositions" || return $?
 
   if [ "$state" != OPEN ] || [ "$mergeable" != MERGEABLE ]; then
     printf 'not-ready mergeable: the pull request is %s and %s, not OPEN and MERGEABLE\n' "$state" "$mergeable"
@@ -1698,6 +2106,29 @@ cmd_pr_ready() {
   if [ "$here" != "$head" ]; then
     printf 'not-ready head: the local HEAD %s is not the pull request head %s\n' "${here:-(none)}" "$head"; return 1
   fi
+  gh_ci_producer "$root" || return $?
+  producer="$GH_OUT"
+  statuses="repos/$repo/commits/$head/statuses"
+  if ! gh_at "$root" api --paginate "$statuses"; then
+    gh_unread "gh api --paginate $statuses failed (rc $GH_RC)"; return 3
+  fi
+  # GitHub returns the statuses newest first, including across page boundaries.
+  if ! ci="$(jq -ers --arg producer "$producer" '
+    if length == 0 or any(.[]; type != "array") then error("no pages") else
+      add | if any(.[]; (.context | type) != "string" or
+        (.context == "local/ci" and (.creator.id | type) != "number")) then error("invalid status") else
+        [ .[] | select(.context == "local/ci" and (.creator.id | tostring) == $producer) ][0]
+        | if . == null then "missing"
+          elif (.state | IN("success", "pending", "failure", "error")) then .state
+          else error("invalid state") end
+      end
+    end' 2>/dev/null <<< "$GH_OUT")"; then
+    gh_unread "gh api --paginate $statuses answered invalid status pages"; return 3
+  fi
+  if [ "$ci" != success ]; then
+    printf 'not-ready local/ci: %s on %s for the review producer\n' "$ci" "$head"; return 1
+  fi
+  pr_grill_ready "$root" "$pr" "$dir" "$head" || return $?
   printf 'ready %s\n' "$head"
 }
 
@@ -1710,7 +2141,10 @@ main() {
     codex-plan) shift; cmd_codex_plan "$@" ;;
     codex-run) shift; cmd_codex_run "$@" ;;
     next) shift; cmd_next "$@" ;;
+    pr-grill) shift; cmd_pr_grill "$@" ;;
     pr-ready) shift; cmd_pr_ready "$@" ;;
+    review-ci) shift; cmd_review_ci "$@" ;;
+    review-findings) shift; cmd_review_findings "$@" ;;
     *) usage; return 2 ;;
   esac
 }

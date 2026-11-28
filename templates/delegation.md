@@ -61,6 +61,14 @@ apague-a e commite a remoção antes de cortar os worktrees das missões (um wor
 commit continua com a linha), ou deixe-a, no checkout da campanha e em cada worktree de missão, no
 teto assinado ou abaixo dele.
 
+Durante um `run` delegado com Claude, a releitura do config e a tentativa na mesma volta recusam
+zero e valores acima do teto assinado antes de abrir outra sessão. Uma redução válida passa a
+valer no despacho seguinte. Com Codex, qualquer edição no arquivo encerra a invocação. Uma redução
+isolada, por inclusão de uma atribuição literal ou troca só do número, permite nova invocação
+após conferir o arquivo, revalidar a permissão e o saldo da missão e da campanha e passar no
+preflight. Outra edição,
+procedência incerta ou repetição sem avanço mantém a parada.
+
 ## O teto da campanha
 
 O `budget_campaign_usd:` é limite duro. Abaixo dele, o `bin/sdd-worker budget` compara o que resta
@@ -71,20 +79,16 @@ do da campanha. Resto igual ao teto de missão ainda abre o `run`, e a campanha 
 comparação é com o teto assinado, porque o que o runner aplica nunca passa dele (o `budget` já para
 num `.sdd/config.sh` que o passa). Assim a campanha pode acabar com até um teto de missão sem usar,
 e só passa do assinado por três gastos: o que o runner gasta além do próprio teto (ele lê o gasto
-antes de abrir cada fase, e uma fase pode gastar além do `BUDGET_MISSION_USD`), o de uma missão que
-o `budget` não acha, no parágrafo abaixo, e o da sessão que orquestra a campanha e dos subagentes
-dela, que fica fora dos dois tetos: eles somam o ledger que o runner escreve nesta máquina, e essa
-sessão não roda pelo runner. A parada vale antes de todo ato, o merge incluso; para
-seguir, assine um teto de campanha maior ou um teto de missão de no máximo o que resta.
+antes de abrir cada fase, e uma fase pode gastar além do `BUDGET_MISSION_USD`), o de uma missão
+sem atribuição no histórico, e o da sessão que orquestra a campanha e dos subagentes dela, fora
+dos dois tetos. O ledger que o runner escreve nesta máquina não inclui essa sessão. A parada vale
+antes de todo ato, inclusive o merge. Para seguir, assine um teto de campanha maior ou um teto de
+missão de no máximo o que resta.
 
-Uma missão da campanha que nunca chegou à base e cujo worktree foi removido não é achada, e
-o gasto dela sai da soma: um PR fechado sem merge, ou uma missão largada depois de um
-`budget-exhausted`, fica no disco só no worktree dela, a branch dela não é a base, e o ledger não
-sabe de campanha. O `budget` responde então uma soma menor, com rc 0, e a campanha pode passar do
-teto por esse gasto. Até o ledger saber de campanha (a direção está no `TODO.md` do kit),
-remova o worktree de uma missão que não vai chegar à base só depois de
-assinar um teto de campanha menor pelo que ela gastou: a soma do `cost_usd` das linhas do ledger
-com o id dela.
+O `budget` soma os registros atribuídos ao repositório e à campanha mesmo depois de remover
+o worktree, sem duplicar um evento quando a missão também está visível. Um registro antigo sem
+campanha só entra enquanto a missão estiver no disco ou na base consultada. Sem essa evidência,
+o gasto histórico fica sem atribuição.
 
 ## Sessões Codex sem valor faturado
 

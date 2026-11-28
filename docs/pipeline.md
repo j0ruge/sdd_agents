@@ -1548,6 +1548,7 @@ escalation records a refusal before launch.
 | `project` | string | on Codex launch receipts | `PROJECT_NAME` from the target repo's `.sdd/config.sh`. |
 | `repo` | string | never | Absolute path of the target repo — the directory holding the **shared** `.git`, as `ledger_repo_root` in `bin/sdd` resolves it (`git rev-parse --git-common-dir`, normalized). Can carry client-identifying paths, which is why the ledger stays in `$HOME` and is never committed. It is also the **only** field the readers filter on before anything else: see "The file is global; the READING is per repo" above. Compared verbatim, with no normalization at read time on either side, so a repo reached through a symlink is a different repo. |
 | `mission` | string | never | The mission slug. |
+| `campaign` | string or null | legacy rows and events without campaign attribution | Campaign captured from the mission frontmatter before a session, paid close or Codex launch. The Codex planner uses the campaign it was launched for. The worker uses this field with `repo` to retain spend after worktree removal. |
 | `phase` | string | never | The pipeline phase (`EXEC`, `QA`, …). `PLAN` never appears — the interactive phase spends no session. |
 | `step` | string | on escalation rows | The sub-step actually run (`QA:plan`, `QA:exec`, `QA:close`); equal to `phase` outside QA. |
 | `step_after` | string \| `null` | on escalation rows; never absent on a session row, but `null` outside `QA` | The QA sub-step `phase_step QA` derives **after** the gate — where the session left the loop, as `step` is where it entered. Written at the three doors that write a QA session row (`cmd_run`'s first pass, its inline retry, `cmd_retry`), each behind its own phase guard. It exists because `gate_QA` refuses on its first line (`missing 30-handoff-qa.md`) every session before `close`, so a `QA:exec` that closed the report and one that did not leave the same `gate_why`: the second judge window read 7 of its 9 `churned` sessions off that sentence (`20260930-a-sub-etapa-que-andou`). |
@@ -1974,14 +1975,24 @@ Two files make it:
 
 - `commands/sdd-worker.md` is the loop the session follows: before every act it asks the program,
   then acts through the commands that already exist (`/sdd-plan`, `sdd approve`, `sdd run`, `gh`),
-  and appends one line to the campaign's `journal.md`. It also writes the five stops, what no level
-  grants, and how the session keeps its own context window for a whole night.
+  and appends one line to the campaign's `journal.md`. On a stop, it retains the verb's exit
+  status and original diagnostic for the journal and pager, without taking a second reading.
+  For a finished run it uses that invocation's log. The `sdd run stop:` diagnostic distinguishes
+  `mission-ceiling` (dollars) from `phase-ceiling` (sessions or review rounds), while the ledger
+  still records either as `budget-exhausted`. Missing or ambiguous evidence establishes neither
+  ceiling. A run that exits with rc 3 has its own pager and is not paged again by the worker.
+  An extra lot is proposed in a separate checkout and takes effect only when the queue and the
+  owner's new signature land together. After a merge, the session records the confirmed merge
+  before opening any follow-up PR. It recovers that PR by its branch and finishes its review
+  and merge under their own gates before asking `next` again.
+  The command also writes the five stops, what no level grants, and how the session keeps its
+  own context window for a whole night.
 - `bin/sdd-worker` answers, from artifacts, the questions that used to be the model's reading and
   went wrong four times on record — a review receipt matched by the clock instead of the sha, a
   watcher whose `pgrep -f` matched itself, a bot out of quota read as "reviewed", a checker that
-  read 20 of 21 units. It answers and signs; it never launches a run, opens a pull request or
-  merges, and it never writes what the runner owns: it reads the frontmatter of `00-missao.md`, the
-  ledger, `gh` and the review bot's machine comment. Its sensor is `tests/check-worker.sh`, with the
+  read 20 of 21 units. It never launches the mission runner, opens a pull request or merges.
+  Its write verbs sign terms, publish `local/ci`, or record verified review dispositions.
+  The session coordinates when to call them. Its sensor is `tests/check-worker.sh`, with the
   `mut_WORKER_*` entries of the mutation catalogue.
 
 ### Codex campaigns
@@ -2049,10 +2060,20 @@ from `docs/campaigns/<id>/` or `docs/superpowers/campaigns/<id>/` in the primary
 refuses ambiguous copies and ignores stale delegations in mission worktrees. The worker's user
 commands that take a campaign directory still read the path the caller supplies.
 
+The worker uses `git worktree list --porcelain -z` to read the inventory for budget, queue,
+pager checks that use the inventory, and the `codex-plan` and `codex-run` guards. The
+NUL separators preserve spaces and newlines in checkout paths. Only these reads require
+Git 2.36+ (or a build with equivalent support). A failed listing stops the act, even
+after partial output, and the diagnostic gives the command, its exit status and the
+required capability. The separate Codex budget check still refuses a Git common
+directory containing a newline as a ledger identity.
+
 Any directory of the target repo — the convention is `docs/campaigns/<YYYYMMDD>-<slug>/`, and the
 kit's own live under `docs/superpowers/campaigns/` — holding three files. No config key names it:
-every verb except `pr-ready` and the internal `codex-run` guard takes it as its first argument and finds the repo root by
-`git -C <dir> rev-parse --show-toplevel`; `HANDOFF_DIR` comes from that root's `.sdd/config.sh`,
+the campaign verbs take it as the first argument. `pr-grill`, `pr-ready`, `review-ci` and `review-findings`
+take the mission directory, and the internal `codex-run` guard takes `--mission <dir>`. The
+worker finds the repo root by `git -C <dir> rev-parse --show-toplevel`. `HANDOFF_DIR` comes
+from that root's `.sdd/config.sh`,
 read in a subshell that stands in the root, so a relative include resolves against its own
 checkout. `ON_ESCALATION_CMD` and `BUDGET_MISSION_USD` are read the same way, but in the
 `.sdd/config.sh` of the root and of each linked worktree that holds a mission of the campaign at the
@@ -2138,6 +2159,10 @@ Under `assisted` the session proposes each act and waits for the owner's yes.
    ceiling never raises the level, and one that is not a level caps the lot at `assisted`;
 9. otherwise the signed level, `— signed until <expires>`.
 
+Before granting a level above `assisted` in either of the last two cases, the worker checks the
+clock again. A delegation that expires while the worker reads the checkouts returns
+`assisted — expired`, even if the lot would otherwise cap the level.
+
 Every rule reads ONE copy of the two files, made before the first: the digest is checked over the
 copy and the level, the lots and the ceiling granted are read from it, so an edit landing while the
 verb reads is never granted under the old signature, and the next call reads it as edited after
@@ -2192,7 +2217,10 @@ stderr and leaves rc 2 for ordinary calls. A Codex guard can refuse an unavailab
 | `sdd-worker budget <campaign-dir>` | `campaign US$ <spent> of <ceiling> — <n> mission(s); mission cap US$ <cap>` | 0 below the campaign ceiling, with room for one run; 1 at or above it, with less of it left than the signed mission cap (`no room — …`), no ceiling or spend to read (`no spend — …`, the checkouts or the base that do not read among them), or `no mission cap — …` when the signed mission cap is zero or below one cent, or the config of the campaign's checkout or of a mission's worktree would beat it |
 | `sdd-worker codex-plan <campaign-dir> --lot L<n>` | no output on success | 0 when signed Codex terms permit planning that lot and the strict ledger check passes; 1 on refusal (reason on stderr); 2 on a malformed call |
 | `sdd-worker next <campaign-dir>` | `<act> <lot> <mission or -> — <reason>`, and `ahead plan <lot>` when the lot after a run or a review has no mission yet | 0; 1 on a `stop` line (`stop - - — unread: …` when the checkouts or the base do not read); 3 when `gh` did not answer |
+| `sdd-worker pr-grill <mission-dir>` | numbered grill decisions from the committed mission, or no output when there are none | 0 rendered; 1 unreadable mission or choices; 2 invalid arguments |
 | `sdd-worker pr-ready <mission-dir> <pr>` | `ready <full head sha>`, or `not-ready <item>: <reason>` | 0 ready; 1 not ready; 3 when `gh` did not answer |
+| `sdd-worker review-ci <mission-dir> <pr>` | suite output and `local/ci <head sha> <result> (TEST_CMD rc <code>)` after publication | 0 suite passed and status published; 1 refused or suite failed; 3 GitHub evidence unreadable or write unverified |
+| `sdd-worker review-findings <mission-dir> <pr> [--resolve]` | review and thread records as JSON lines, or a reason why findings remain | 0 complete inventory or no findings left after resolution; 1 refused or pending; 3 incomplete GitHub evidence or unverified write |
 
 For Codex campaigns with incomplete billing the normal total starts with `campaign known US$`, also used after
 `no room —`. When legible terms opt into `allow_unknown_cost: true` but lack a valid signature,
@@ -2205,12 +2233,18 @@ provided and retains older mission rows without a repository field.
 Claude and legacy campaigns continue to sum the measured costs without applying the Codex
 unknown-cost gate.
 
-**`budget`** sums, with `jq` (never `awk`: under pt-BR the `mawk` reads `1.99` as 1), the `cost_usd`
-of the ledger rows (`${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`) whose `mission` is one of the
-campaign's: the folders under the repo's `HANDOFF_DIR` whose `00-missao.md` declares exactly that
-`campaign:`, in the campaign's checkout, in every linked worktree of the repo and in the base (the
-tree of the upstream of the branch that checkout has checked out), each mission once (a
-`git worktree list` that fails is `no spend — <the call> failed (rc <n>)`, and an upstream that does
+**`budget`** sums, with `jq` (never `awk`), the selected `cost_usd` rows in
+`${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`. Session, paid close and Codex launch rows
+record the campaign from the mission frontmatter captured before dispatch. Codex PLAN receipts
+already carry it. An explicitly attributed row must match the Git repository and campaign even
+if its mission is no longer on disk. Legacy rows without a campaign count only for discovered
+missions, and never if they name another repository. Both paths select each row at most once.
+
+The displayed mission count is the inventory, not the number of historical missions in the
+ledger. The inventory reads folders under the repo's `HANDOFF_DIR` whose `00-missao.md` declares
+that campaign, in the checkout, linked worktrees and the locally recorded upstream (a
+`git worktree list --porcelain -z` that fails is `no spend — <the call> failed (rc <n>)` with
+the required Git capability, and an upstream that does
 not read is one of three lines: `no spend — the upstream of <checkout> does not read: git
 for-each-ref failed (rc <n>)`, with no ref to name, when the branches do not list;
 `no spend — the upstream <upstream> of <checkout> does not read: git ls-tree <upstream> failed
@@ -2227,7 +2261,8 @@ assigns the key wins (the starter assigns `150`). The session runs it in the mis
 and a worktree cut from a commit that still has the line keeps it after the owner deletes it in the
 campaign's checkout. So `budget` reads the file of the campaign's checkout and of each worktree
 that holds a mission of the campaign (the narrow set), each from its own checkout, the way the
-runner does, with the signed cap in the environment, and answers `no mission cap — <file> sets
+runner does, with the signed cap exported so child processes started by the config also see it.
+It answers `no mission cap — <file> sets
 BUDGET_MISSION_USD=<value>, …`, rc 1, naming the first file whose value the runner would apply
 above the signed cap or at zero (no ceiling), or would refuse — the runner takes digits and at most
 one dot, so `1e2`, `+5` and a blank, which `jq` reads as numbers, are `… which sdd run refuses as no
@@ -2235,6 +2270,33 @@ number`; one at or below it is the stricter ceiling, and holds. A signed `budget
 zero is no ceiling for the runner too, and one below one cent is no cap the cents can hold: each
 stops `budget` before any `.sdd/config.sh` is read, naming the delegation: `no mission cap —
 <delegation.md> signs budget_mission_usd: 0, …`.
+
+The worker runs preflight in the mission's worktree with the engine planned for launch. Only
+launch receives the signed cap. A failed preflight starts no runner. For the kit under Codex,
+preflight must also report `TEST_CMD ran green`.
+
+Delegated Claude runs also retain the signed limit from launch when checking each reloaded cap.
+Codex does not reload a changed file in the existing runner. The worker only considers a new
+invocation for a verified cap-only reduction, after rechecking permission, both budgets and
+preflight. See the [worker's run procedure](../commands/sdd-worker.md#run).
+
+For delegated Codex lookahead, the worker treats `ahead plan <lot>` as a suggestion unless a
+resume handoff references the owner's written request for this campaign. The run procedure
+checks the live checkout owner against the launch PID and rereads the queue, budget and
+authority before starting the relay. A local fragment must still resolve to a unique heading
+outside fenced code and raw HTML blocks, including comments. A fence lookalike inside raw HTML
+does not hide headings after the block. Raw HTML stops at its item's end, even when it starts
+on its parent's line. A custom tag can continue the outer item's paragraph, but a thematic break
+ends it. During list scanning, only the start of each run of equal markers is tested for a thematic
+break. A list fence cannot hide headings after its item ends.
+A local file that changes during dispatch prevents the start without replacing the runner's verdict.
+The primary Git directory binds one separate worktree and relay mission per campaign and lot before a draft exists.
+The relay's first turn names the lot and points to `campaign.md` in the primary checkout,
+even if the reserved worktree's base has no copy of the queue.
+Concurrent and resumed workers reuse that identity, including when another worker creates
+the reservation during a budget check. A checkout without a reservation or one that does not
+match it is refused. The successor is only a draft until the predecessor merges, the updated
+base and plan are checked and approval is authorized.
 
 **The campaign ceiling is a hard limit.** Below the ceiling, `budget` holds what is left of it, the
 ceiling's cents less the sum's, against the signed mission cap, in cents from its text: a fraction
@@ -2254,8 +2316,9 @@ before, so the stop holds before every one, a merge among them.
 a mission whose `aprovacao:` the runner's `gate_PLAN` would not admit (only `auto` and `humano-…`
 pass) → `approve`; approved, with no pull request on its `branch:` → `run`; an open pull request →
 `review`; only closed ones → `stop … pull request closed without merge`; every lot merged →
-`done - -`. The pull requests come from `gh pr list --head <branch> --state all --json
-number,state,isCrossRepository`, and only the repository's own count: `--head` matches a branch's
+`done - -`. The pull requests come from `gh pr list --head <branch> --state all --limit 1000
+--json number,state,isCrossRepository`, run in the campaign's checkout. Only the repository's
+own count: `--head` matches a branch's
 name alone, and a pull request from a fork's branch of the same name (`isCrossRepository` true) is
 never the lot's. The merge is read before the approval: a lot whose pull request merged is done even
 when a copy of its mission left in an old worktree is not approved, and a mission that names a
@@ -2267,19 +2330,20 @@ its 162 pull requests, so it stays a limit and not a fix. The measure is
 select(.state == "MERGED")] as $m | [$m[] | .headRefName as $h | select([$a[] |
 select(.headRefName == $h)] | length > 1)] |
 "\(length) of \($m | length) merged, \($a | length) in all"'`, run in the kit's checkout, which
-printed `0 of 161 merged, 162 in all`. A `gh` that
-fails, or answers off its contract, is rc 3 with no act — "could not read" never becomes "no pull
-request", which would send the session to run the lot again. Two missions on one lot, an approved
+printed `0 of 161 merged, 162 in all`. If any page fails, the answer is malformed, or the list
+reaches the 1,000-entry limit before filtering forks, `next` returns rc 3 with no act. An
+incomplete read never becomes "no pull request", which would send the session to run the lot
+again. Two missions on one lot, an approved
 mission with no branch, no `campaign.md`, a `campaign:` in it that is not the directory's name (an
 empty one and the template's placeholder among them, both values named) and an empty queue stop,
 with rc 1.
 
-**`pr-ready`** reads the pull request head (`headRefOid`) and requires five items on that one sha,
+**`pr-ready`** reads the pull request head (`headRefOid`) and requires eight items on that one sha,
 naming the first that fails:
 
 1. `review`: the round is the one **committed at the head**, never a copy on disk: the mission
-   folder holds nothing `git status` lists (modified, staged, untracked or ignored), and with
-   item 5 the round read is the round the merge takes. The newest `40-review-r<N>.md` of the
+   folder holds nothing `git status` lists (modified, staged, untracked or ignored), and
+   the local head check ties the round to the merge. The newest `40-review-r<N>.md` of the
    mission folder, by number, names `reviewed_head: <sha>` in its frontmatter; every `Grade` cell
    under `### Overall Grade`, the row split as `gate_REVIEW` splits it (a `\|` is a pipe of its
    cell), is exactly `A`, the header and the separator known by the shape of the line (the
@@ -2299,34 +2363,71 @@ naming the first that fails:
 2. `codex`: of the comments of `chatgpt-codex-connector[bot]`, read with `--paginate`, the newest
    one carrying `codex-review-state:v1` parses and is for the head, `completed`, with
    `has_unresolved_findings` false; a newest one that does not parse is not ready, never an older
-   one read in its place. A receipt anybody else posts does not count, and no other bot's review is
-   read, so a bot out of quota neither blocks nor counts as a review;
-3. `threads`: no review thread unresolved, and no more of them than the hundred read;
-4. `mergeable`: the pull request is `OPEN` and `MERGEABLE`;
-5. `head`: the local `HEAD` is that sha.
+   one read in its place. A receipt anybody else posts does not count. Another bot's absence
+   neither blocks nor counts as a review, but any submitted review is checked below;
+3. `findings`: no active `CHANGES_REQUESTED` for any reviewer, even with no inline comments,
+   and no review body with an unhandled finding. An approval from another reviewer or a later
+   plain comment does not clear a request. A later approval by the same reviewer or dismissal
+   of the request in GitHub can clear it. A blank body or a whole-body acknowledgment such as
+   `Approved.` or `Aprovado.` needs no disposition. An approval that also asks for a fix still counts
+   as a finding.
+   Other bot bodies require a disposition in the committed round with the review ID, the
+   current fingerprint, an evidence commit in the head's history and an explanation. A new
+   finding or edited body does not reuse an old disposition;
+4. `threads`: every page was read and every review thread is resolved. Both inventory and
+   readiness reject malformed comment metadata, even on a resolved thread. Only an already resolved
+   thread may omit the comments field. A resolved thread with a disposition in the round still has to
+   match the finding recorded there.
+5. `mergeable`: the pull request is `OPEN` and `MERGEABLE`;
+6. `head`: the local `HEAD` is that sha;
+7. `local/ci`: the newest status on that sha in this context from the authenticated GitHub
+   account used by the worker is `success`. The worker reads all status pages. Missing,
+   pending, failed or unreadable evidence does not allow a merge, and neither does a success
+   from a different account or sha;
+8. `grill`: if the committed mission has numbered grill decisions, the PR body starts with
+   the same section. The `pr` act publishes it using `sdd-worker pr-grill`. The gate compares the
+   actual numbered decisions and their recorded answers, including repeated answers to different
+   questions, ◆ choices and Markdown escapes.
+
+The `review` act supplies this status with `sdd-worker review-ci <mission-dir> <pr>` after pushing
+the finished round. It checks that the open PR head equals the clean local checkout, writes
+`pending` to that sha, and runs `TEST_CMD` in the checkout. If the command does not complete, such
+as when the config exits before launching it, the worker stops and leaves `local/ci` pending. Only
+after the command completes and the PR and local checkout still match does it publish `success`
+or `failure` according to the suite's exit code. A different sha requires a fresh run. Use the same
+GitHub account to publish and verify the status. If GitHub refuses the write or its result cannot
+be verified, the review act stops with a diagnostic.
 
 The `ready <sha>` line is what the session passes to `gh pr merge --merge --match-head-commit`. The
 method — a merge commit, never a squash — belongs to the command that merges, and
-`commands/sdd-worker.md` writes it. The five items are read one after the other, never at once, so
-the session reads `pr-ready` again immediately before `gh pr merge`.
+`commands/sdd-worker.md` writes it. The items are read one after the other, never at once, so
+the session reads `pr-ready` again immediately before `gh pr merge`. In assisted mode the
+owner's yes is for the exact campaign, lot, mission and repository-specific PR command including
+its head sha. After the wait the merge procedure rechecks budget, authority and readiness and
+requires a new yes if that request changes.
 
-**What `pr-ready` does not read.** The body of a review, where 18 of the 38 findings CodeRabbit
-left on PR #414 lived; a review in state `CHANGES_REQUESTED` that carries no inline comment; and the
-`local/ci` status of the head, the suite's result published as a commit status. The bar it applies
-(§3 of `docs/superpowers/specs/2026-11-16-o-worker-merge-delegado.md`, decision 9 of the mission)
-names review threads alone, so none of the three keeps a pull request from `ready` once its five
-items hold. Reading them is a sixth item, which changes the bar: it is open in `TODO.md`, with the
-question of who writes `local/ci` in the worker's loop, since an item that no act writes would be a
-gate nobody can satisfy.
+The `review` act runs `sdd-worker review-findings <mission-dir> <pr>` to collect the complete
+review and thread inventory before the round. It records dispositions as
+`review-disposition <review|thread> <id> <fingerprint> <full-evidence-commit> <finding and evidence>`
+in the round. `sdd-worker review-findings <mission-dir> <pr> --resolve` uses the round on the
+clean, published PR head. For a single bot finding in an open thread with verified evidence, it
+replies with the commit and verifies the reply and the unchanged finding before resolving the
+thread. An exact reply already present from the authenticated worker can be reused after
+interruption. Human or ambiguous findings stay pending. An unreadable page or failed verification
+stops the act. GitHub does not make the read and write atomic, so the merge act still reads the
+evidence again immediately before merging.
 
 **`reviewed_head:` is one key for two programs (ADR 0023).** Since `20261119-l1b-a-rodada-delta`
 `templates/review.md` names it, the REVIEW rounds of `sdd run` write it, and `gate_REVIEW` checks it.
 `pr-ready` still asks for more: every commit after it touches only the mission folder. The DOCS
 phase writes outside that folder, so after a run `pr-ready` still waits until the session makes its
 own round over the head. The owner's bar is higher than the pipeline's (every criterion A, no
-tolerance for prose), and the worker's round is what applies it. Its review act asks
-`sdd review-base <mission>` for the delta, like the REVIEW phase. A round
-`gate_REVIEW` passes may fail `pr-ready`; never the reverse on the grade alone.
+tolerance for prose), and the worker's round is what applies it. For a mergeable PR, the review
+act asks `sdd review-base <mission>` on the published head without merging the base just because
+it advanced. A conflict takes the authorized integration route, then the act reads GitHub and
+selects the scope again on the published head. Unknown mergeability or an unreadable PR cannot
+start a round. A round `gate_REVIEW` passes may fail `pr-ready`; never the reverse on the grade
+alone.
 
 ### Declared limits (ADR 0022)
 
@@ -2338,7 +2439,6 @@ tolerance for prose), and the worker's round is what applies it. Its review act 
   runner reads its spend before a phase opens, so a phase may spend past `BUDGET_MISSION_USD`, and
   the campaign past its ceiling by that much. The room `budget` keeps is one run's, and the loop
   launches one run at a time.
-- A campaign's missions are matched by id, not by repository.
 - `budget`, `level` above `assisted`, and `next` source the `.sdd/config.sh` of the campaign's
   checkout and of each linked worktree that holds a mission of the campaign, and of no other (the
   narrow set, the owner's choice in the r5): a worktree with none runs no `sdd run` of the
@@ -2351,19 +2451,14 @@ tolerance for prose), and the worker's round is what applies it. Its review act 
   sourced, since no `sdd run` runs in it. A detached HEAD or a branch with no upstream reads no base,
   and a merged mission whose worktree was removed is then found nowhere until the checkout takes the
   base in; a branch whose upstream is not the base reads that branch's tree.
-- A mission of the campaign that never reached the base and whose worktree was removed is found
-  nowhere, and its spend leaves the sum: a pull request closed without merge, or a mission dropped
-  after a `budget-exhausted`, is on disk in its worktree alone, its branch is no base, and the
-  ledger names no campaign. So `budget` answers a smaller sum, rc 0, and the campaign may pass its
-  ceiling by that spend. Until the ledger carries the campaign (the direction is in `TODO.md`),
-  remove the worktree of a mission that will not reach the base only after signing a campaign
-  ceiling lower by what it spent, the sum of the `cost_usd` of the ledger lines whose `mission` is
-  its id.
+- Old ledger rows with no campaign cannot be attributed after the mission disappears from the
+  worktrees and upstream. No historical rows are rewritten. If a legacy row also has no
+  repository identity, a discoverable mission with the same id is the only available match.
 - In a target whose `.sdd/config.sh` assigns `BUDGET_MISSION_USD` above the signed cap, or leaves
   `ON_ESCALATION_CMD` empty, the worker only fails closed (`no mission cap`, `assisted — no pager`):
   the file wins over the environment, and making the signed values win there needs the runner's
   config precedence, which ADR 0022 does not change.
-- `pr-ready` reads its five items one after the other: a receipt, a thread or the mergeability can
+- `pr-ready` reads its items one after the other: a status, a receipt, a thread, the PR body or the mergeability can
   change between two reads on the same sha, and `--match-head-commit` holds the sha only. A ready
   is good for the merge that follows it at once, never for one later.
 - `sdd approve` under `full` still writes `humano-YYYY-MM-DD`; the trail is the campaign journal.

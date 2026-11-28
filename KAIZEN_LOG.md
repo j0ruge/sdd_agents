@@ -4,6 +4,34 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-11-28 — L5b: o worker antecipa o próximo plano e exige prova para o merge
+
+**Missão:** `20261126-l5b-o-worker-e-os-verbos-dele`, L5b da campanha `20261117-zerar-as-issues`.
+O [checkpoint](docs/handoffs/20261126-l5b-o-worker-e-os-verbos-dele/checkpoint.md) liga cada
+incremento ao comando, ao resultado esperado e ao commit.
+
+| Medida | Antes | Depois |
+|---|---|---|
+| Disparos do sucessor antes da espera | 0 no procedimento de `run` em `8a56249f`. `next` só emitia a sugestão. | 1 com pedido válido e autorização, 0 sem os requisitos. A retomada concorrente reutilizou o plano e a fila simulada percorreu três lotes até `done`. |
+| Retomada durante a leitura de orçamento | Em `283b863`, a segunda retomada recusava a reserva concluída e não consultava `status`. | Em `ada1e29`, a trilha foi `start, wait, status, wait`, com um único `start`. |
+| Sonda do escopo de revisão | Em `283b863`, 13 cenários abortavam antes das asserções, mas a sonda anunciava verde. | Em `ada1e29`, os 13 passaram com verificação de resposta, código de saída e ordem das chamadas. |
+| Pedido escrito depois de separador temático | A REVIEW r9 reproduziu 5 asserções vermelhas no blob anterior a R12. | 7 casos verdes no conteúdo de `8b093116`, com o resultado do runner preservado. |
+
+A [QA](docs/handoffs/20261126-l5b-o-worker-e-os-verbos-dele/30-handoff-qa.md#o-que-foi-feito)
+conferiu os 18 marcadores locais dos pares TODO/issue. A suíte medida em
+`8b093116` com `SDD_MUTATION_FIXTURE_ROOT="$PWD" tests/run-all.sh` passou em 21 etapas,
+com 114 sondas do worker e 3 casos Codex em `skipped`, conforme a
+[REVIEW r9](docs/handoffs/20261126-l5b-o-worker-e-os-verbos-dele/40-review-r9.md).
+As jornadas usaram serviços simulados e não verificaram permissões reais no GitHub.
+
+**Padronização.** As regressões de leitura do pedido escrito ficam na jornada pública de
+`run`, com controles de título visível, oculto e duplicado e com a espera medida nos dois
+resultados. Os Checks F1, F2 e R5–R12 exercitam o comportamento pelo procedimento que a
+sessão usa. A regra operacional já está no procedimento e sua decisão na
+[ADR 0027](docs/adr/0027-worker-campaign-evidence.md).
+
+---
+
 ## 2026-11-26 — L5: a CLI diz o próximo passo e comprova a limpeza pós-merge
 
 **Missão:** `20261121-l5-saida-humana-e-contrato-do-runner`, L5 da campanha `20261117-zerar-as-issues`.

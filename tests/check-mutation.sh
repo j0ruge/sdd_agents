@@ -7254,8 +7254,8 @@ mut_WORKER_allows_merge_at_plan() {
 mut_WORKER_allows_ignores_lot() {
   sed -i '/^cmd_allows() {/,/^}/ s@^    effective_level "\$1" "\$lot" @    effective_level "$1" "" @' "${1%/*}/sdd-worker"
 }
-# The filter of the campaign's missions dropped from the sum: every line of the ledger counts, other
-# campaigns' and other repos' included. Caught by "budget: the sum counts the campaign's missions and
+# The legacy mission filter is dropped: a row can count without a mission in the inventory.
+# Caught by "budget: the sum counts the campaign's missions and
 # no other" (check-worker.sh).
 mut_WORKER_budget_counts_every_mission() {
   sed -i '/^cmd_budget() {/,/^}/ s@(\.mission | IN(\$ARGS\.positional\[\]))@true@' "${1%/*}/sdd-worker"
@@ -7297,7 +7297,7 @@ mut_WORKER_ready_codex_any_sha() {
 # An unresolved review thread no longer stops the merge. Caught by "pr-ready: one open thread fails
 # threads" (check-worker.sh).
 mut_WORKER_ready_threads_unread() {
-  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$open" -ne 0 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+  sed -i '/^review_findings_ready() {/,/^}/ s@^  if \[ "\$open" -ne 0 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
 }
 # The state and the mergeability are no longer read: a conflicting or closed pull request is ready.
 # Caught by "pr-ready: a conflicting or closed pull request fails mergeable" (check-worker.sh).
@@ -7383,7 +7383,7 @@ mut_WORKER_cap_file_unread() {
 # budget. Caught by "cap: a repo config that sets BUDGET_MISSION_USD above the signed mission cap,
 # or to 0, stops budget and names the key" (check-worker.sh).
 mut_WORKER_cap_caller_env_leaks() {
-  sed -i '/^config_key() {/,/^}/ s@^    \[ "\$#" -lt 3 \] || printf -v "\$key" .%s. "\$3"$@    :@' "${1%/*}/sdd-worker"
+  sed -i '/^config_key() {/,/^}/ s@^    \[ "\$#" -lt 3 \] || export "\$key=\$3"$@    :@' "${1%/*}/sdd-worker"
 }
 # A zero in the repo's config holds as a cap: BUDGET_MISSION_USD=0 is no ceiling for the runner, and
 # the worker would launch a mission with none. Caught by "cap: a repo config that sets
@@ -7520,11 +7520,11 @@ mut_WORKER_pr_ready_rewrites_index() {
   sed -i '/^cmd_pr_ready() {/,/^}/ s/GIT_OPTIONAL_LOCKS=0 \(git -C "\$dir" -c core\.quotePath=false status\)/\1/' "${1%/*}/sdd-worker"
 }
 # The reviewed head no longer has to be an ancestor of the head: a round over a commit the pull
-# request dropped reads as a review of this history (achado #9 of the mission's review r5). Caught
+# request dropped reads as a review of this history, while Git errors still block. Caught
 # by "range: a commit after the reviewed head that touches code, a merge resolution and a reviewed
 # head the pull request does not carry each fail review" (check-worker.sh).
 mut_WORKER_range_ancestry_unchecked() {
-  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$anc" -eq 1 \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  anc=0; git .* || anc=\$?$@&; [ "$anc" -ne 1 ] || anc=0@' "${1%/*}/sdd-worker"
 }
 # Each commit of the range is judged by the diff between the two ends again: a change to code made
 # after the round and reverted before the head is never seen (achado #10 of the mission's review r5).
@@ -7723,13 +7723,20 @@ mut_WORKER_gone_copy_shown() {
 mut_WORKER_reuse_limit_dropped() {
   sed -i '/^# a merged pull request of an earlier use of the same branch name makes the lot done/d' "${1%/*}/sdd-worker"
 }
-# The comment of cmd_pr_ready stops naming the CHANGES_REQUESTED review with no inline comment among
-# what the verb does not read (decision 1 of the owner on the mission's review r6). Caught by
-# "blind: cmd_pr_ready and docs/pipeline.md declare what pr-ready does not read — the body of a
-# review, a CHANGES_REQUESTED with no inline comment, local/ci — and point at TODO.md"
-# (check-worker.sh).
-mut_WORKER_blind_limit_dropped() {
-  sed -i '/^# .*`CHANGES_REQUESTED` that carries no inline comment/d' "${1%/*}/sdd-worker"
+# Skipping the review body check clears a finding with no disposition.
+# Caught by "review findings have verified dispositions" (check-worker.sh).
+mut_WORKER_body_disposition_unchecked() {
+  sed -i '/^review_findings_ready() {/,/^}/ s@^    if ! jq -e .*review_disposition_commit .*; then$@    if false; then@' "${1%/*}/sdd-worker"
+}
+# Without the status verdict, an untested head can merge.
+# Caught by "merge requires local ci on the tested head" (check-worker.sh).
+mut_WORKER_local_ci_ignored() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s@^  if \[ "\$ci" != success \]; then$@  if false; then@' "${1%/*}/sdd-worker"
+}
+# Skipping the grill check lets the PR body misstate a committed decision.
+# Caught by "merge binds answers and consent to head" (check-worker.sh).
+mut_WORKER_grill_body_unchecked() {
+  sed -i '/^cmd_pr_ready() {/,/^}/ s/^  pr_grill_ready .*$/  :/' "${1%/*}/sdd-worker"
 }
 # The campaign ceiling is read between acts again (achado #3 of the mission's review r6): with
 # 9.50 left of 200 and a mission cap of 40, budget answers rc 0 and the next run may end past the
@@ -7814,23 +7821,6 @@ mut_WORKER_derived_plan_by_mission() {
 # worlds no 00-missao.md and no folder.
 mut_WORKER_derived_missing_file_asks() {
   sed -i '/^cmd_allows() {/,/^}/ s@^    if \[ ! -f "\$mf" \]; then$@    if false; then@' "${1%/*}/sdd-worker"
-}
-# The header of campaign_set stops declaring that a mission of the campaign that never reached the
-# base and whose worktree was removed is found nowhere, and that its spend leaves the sum (achado #1
-# of the mission's review r7): the limit is kept, and silent. Caught by "discarded: a mission that
-# never reached the base and whose worktree was removed leaves the sum of budget, rc 0, and
-# campaign_set, cmd_budget, docs/pipeline.md and the template declare it with what the owner does"
-# (check-worker.sh).
-mut_WORKER_discarded_limit_dropped() {
-  sed -i '/^# campaign_set <root> <id>/,/^campaign_set() {$/ { /^# never reached the base and whose worktree was removed is found nowhere/d }' \
-    "${1%/*}/sdd-worker"
-}
-# The comment of cmd_budget stops telling the owner what to do until a source of that mission
-# exists: remove its worktree only after signing a campaign ceiling lower by what it spent. Caught
-# by "discarded: …" (check-worker.sh).
-mut_WORKER_discarded_remedy_dropped() {
-  sed -i '/^# budget <campaign-dir>/,/^cmd_budget() {$/ s/remove the worktree of a mission that will not reach the base only after/remove the worktree of a mission that will not reach the base after/' \
-    "${1%/*}/sdd-worker"
 }
 # campaign_set compares the HANDOFF_DIR of a worktree of the set as written again, and the runner
 # reads it normalised (load_config): `././docs/handoffs//` there and `docs/handoffs` in the campaign
@@ -8936,7 +8926,9 @@ CATALOG=(
   WORKER_gone_failure_swallowed
   WORKER_gone_copy_shown
   WORKER_reuse_limit_dropped
-  WORKER_blind_limit_dropped
+  WORKER_body_disposition_unchecked
+  WORKER_local_ci_ignored
+  WORKER_grill_body_unchecked
   WORKER_ceiling_room_unchecked
   WORKER_ceiling_cap_rounded
   WORKER_ceiling_float_compare
@@ -8949,8 +8941,6 @@ CATALOG=(
   WORKER_derived_from_unnamed
   WORKER_derived_plan_by_mission
   WORKER_derived_missing_file_asks
-  WORKER_discarded_limit_dropped
-  WORKER_discarded_remedy_dropped
   WORKER_handoff_dir_unnormalized
 )
 

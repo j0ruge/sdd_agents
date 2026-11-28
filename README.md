@@ -121,8 +121,7 @@ sdd run <mission> --max-phases 2    # stop after N phases
 sdd adr new --slug <s> --spec <path>  # reserve the id after the highest visible ADR and write both sides of the link
 sdd adr check [--mission <m>]         # read the links back; rc 0 clean, 1 violation, 2 bad configuration
 
-sdd-worker <verb> <dir> [args]        # the campaign worker's verbs (delegate, level, allows, budget, next, pr-ready);
-                                      #   they answer from artifacts and never act — see below
+sdd-worker <verb> <dir> [args]        # the campaign worker's verbs (delegate, level, allows, budget, next, pr-grill, pr-ready, review-ci, review-findings)
 ```
 
 For `setsid nohup sdd run`, see `sdd help` and the [detached-run guide](docs/failure-modes.md#the-sdd-run-process-itself-disappeared).
@@ -286,6 +285,11 @@ no kit agent.
 
 authenticated `claude` CLI · authenticated `gh` · `bash` 4+ · `git` · `uuidgen` (util-linux) ·
 `jq` · Python 3.9+ · Linux 5.3+ procfs and flock/subreaper/pidfd support · `agent-browser` (only for the QA phase of projects with a UI).
+
+Worker operations that read the worktree inventory require Git with
+`git worktree list --porcelain -z` support (Git 2.36+). If Git cannot list the worktrees,
+the worker reports the failed command and its exit status without acting on a partial list.
+Other operations keep their existing Git requirements.
 
 **Linux with the GNU userland.** The kit calls `md5sum`, `date -Iseconds` and `sort -V`,
 and its own suite calls `sed -i` with no argument and `grep -P`. `sdd preflight` measures these

@@ -21,6 +21,22 @@ export PATH="$FIX/path:$PATH"
 cat > "$FIX/path/claude" <<'STUB'
 #!/usr/bin/env bash
 touch "$FIX/claude.called"
+if [ -f "$FIX/claude-cap-change" ]; then
+  if [ -n "${SDD_DELEGATED_MISSION_CAP_USD:-}" ]; then touch "$FIX/delegated-cap-leaked"; fi
+  printf '%s\n' "$BUDGET_MISSION_USD" >> "$FIX/claude-caps"
+  replacement="$(cat "$FIX/claude-cap-change")"
+  if [ -n "$replacement" ]; then
+    : > "$FIX/claude-cap-change"
+    commit="$(git rev-parse --short HEAD)"
+    if [[ "$replacement" != *' inline' ]]; then
+      sed -i "s/^| I1 .*$/| I1 | slice one | true → 0 | done | $commit |/" \
+        docs/handoffs/20260101-codex-fixture/checkpoint.md
+    fi
+    sed -i "s/^BUDGET_MISSION_USD=.*/BUDGET_MISSION_USD=${replacement%% *}/" .sdd/config.sh
+  fi
+  printf '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"num_turns":1}\n'
+  exit 0
+fi
 exit 97
 STUB
 cat > "$FIX/path/gh" <<'STUB'
@@ -54,6 +70,24 @@ if [ "${1:-}" = --sandbox-check ]; then
 fi
 printf '%s\n' "$PWD|$*|${GIT_REFLOG_ACTION:-}" >> "$FIX/provider"
 cat >> "$FIX/prompt"
+if [ -f "$FIX/change-cap" ]; then
+  printf '%s\n' "$BUDGET_MISSION_USD" >> "$FIX/provider-caps"
+  replacement="$(cat "$FIX/change-cap")"
+  if [ -n "$replacement" ]; then
+    : > "$FIX/change-cap"
+    if [[ "$replacement" == *' added'* ]]; then
+      printf 'BUDGET_MISSION_USD="%s"\n' "${replacement%% *}" >> .sdd/config.sh
+    else
+      sed -i "s/^BUDGET_MISSION_USD=\"[0-9.]*\"/BUDGET_MISSION_USD=\"${replacement%% *}\"/" .sdd/config.sh
+    fi
+    if [[ "$replacement" == *' mixed' ]]; then printf '\n# Unrelated edit\n' >> .sdd/config.sh; fi
+    if [[ "$replacement" == *' progress' ]]; then
+      commit="$(git rev-parse --short HEAD)"
+      sed -i "s/^| I1 .*$/| I1 | slice one | true → 0 | done | $commit |/" \
+        docs/handoffs/20260101-codex-fixture/checkpoint.md
+    fi
+  fi
+fi
 jq -se 'last | .event == "codex_launch" and (.launch_id | type == "string")' \
   "$SDD_STATE_DIR/autonomy-log.jsonl" > /dev/null || touch "$FIX/missing-launch"
 native=3a80f12a-8f18-4077-8358-558cd54c75ff
@@ -88,6 +122,7 @@ MDIR="$REPO/docs/handoffs/$MISSION"
 cat > "$MDIR/00-missao.md" <<'MISSION'
 ---
 missao: 20260101-codex-fixture
+campaign: fixture-campaign
 branch: develop
 aprovacao: auto
 ---
@@ -181,6 +216,11 @@ assert 'the Codex launch is recorded before the provider starts' test ! -e "$FIX
 assert 'each finished session refers to one earlier launch' jq -es '
   (map(select(.event == "session")) | map(.launch_id) | sort) ==
   (map(select(.event == "codex_launch")) | map(.launch_id) | sort)
+' "$SDD_STATE_DIR/autonomy-log.jsonl"
+
+assert 'campaign attribution is recorded on each paid session and its launch' jq -es '
+  map(select(.event == "session" or .event == "codex_launch"))
+  | length == 4 and all(.[]; .campaign == "fixture-campaign")
 ' "$SDD_STATE_DIR/autonomy-log.jsonl"
 
 touch "$FIX/hat-cross"
@@ -311,6 +351,113 @@ assert 'The judge extracts Codex receipts from the unknown event bucket' jq -e \
     and any(.latest.detail[]; .mission == "cost-mixed" and .cost_usd == 2.5 and .unknown_cost_sessions == 1)
     and any(.latest.detail[]; .mission == "cost-all-unknown" and .cost_usd == 0 and .unknown_cost_sessions == 1)
   ' "$FIX/out"
+)
+
+# The live worker validates the signed cap. Only the model and host checks are fixtures.
+(
+  export SDD_STATE_DIR="$FIX/cap-state"
+  mkdir "$SDD_STATE_DIR"
+  git switch -qc cap-fixture "$(git rev-list --max-parents=0 HEAD)"
+  sed -i 's/^branch:.*/branch: cap-fixture/; /^campaign:/a lot: L1' "$MDIR/00-missao.md"
+  printf '%s\n' '| I2 | slice two | true | pending | — |' >> "$MDIR/checkpoint.md"
+  printf '%s\n' 'ON_ESCALATION_CMD=true' 'BUDGET_MISSION_USD="60"  # Fixture mission cap' >> .sdd/config.sh
+  cp .sdd/config.sh "$FIX/launch-config"
+  d="$REPO/docs/campaigns/fixture-campaign"
+  mkdir -p "$d"
+  sed -e 's/^campaign:.*/campaign: fixture-campaign/' -e 's/^harness:.*/harness: codex/' \
+    -e 's/^exec_model:.*/exec_model: gpt-6.2-sol/' "$ROOT/templates/campaign.md" > "$d/campaign.md"
+  sed -e 's/^campaign:.*/campaign: fixture-campaign/' -e 's/^level:.*/level: pr/' \
+    -e 's/^lots:.*/lots: all/' -e 's/^expires:.*/expires: 2099-01-01 00:00/' \
+    -e 's/^budget_mission_usd:.*/budget_mission_usd: 60/' \
+    -e 's/^budget_campaign_usd:.*/budget_campaign_usd: 500/' \
+    -e 's/^allow_unknown_cost:.*/allow_unknown_cost: true/' "$ROOT/templates/delegation.md" > "$d/delegation.md"
+  rm "$KIT/bin/sdd-worker"
+  ln -s "$ROOT/bin/sdd-worker" "$KIT/bin/sdd-worker"
+  "$KIT/bin/sdd-worker" delegate "$d" <<< y > "$FIX/out" 2>&1
+  git add .sdd/config.sh "$d" "$MDIR" && git commit -qm 'Sign the campaign fixture'
+  export BUDGET_MISSION_USD=60
+
+  for replacement in '100 added' 0 '40 mixed' '40 added' 40; do
+    cp "$FIX/launch-config" .sdd/config.sh
+    git show HEAD:"docs/handoffs/$MISSION/checkpoint.md" > "$MDIR/checkpoint.md"
+    if [[ "$replacement" == *' added' ]]; then sed -i '/^BUDGET_MISSION_USD=/d' .sdd/config.sh; fi
+    case "$replacement" in
+      '100 added') printf '%s progress\n' "$replacement" ;;
+      *) printf '%s\n' "$replacement" ;;
+    esac > "$FIX/change-cap"
+    : > "$FIX/provider-caps"
+    rc=0; run || rc=$?
+    assert "changed config stops the original run ($replacement)" test "$rc" -ne 0
+    assert "no second session under the old invocation ($replacement)" test "$(cat "$FIX/provider-caps")" = 60
+    case "$replacement" in
+      '100 added'|0)
+        assert "refusal names the file and both caps ($replacement)" \
+          grep -Fq "$REPO/.sdd/config.sh sets BUDGET_MISSION_USD=${replacement%% *}, which sdd run applies over the signed budget_mission_usd: 60" "$FIX/out"
+        rc=0; PHASE_ENGINE=codex "$SDD" retry "$MISSION" > "$FIX/out" 2>&1 || rc=$?
+        assert "fresh retry revalidates signed cap ($replacement)" test "$rc" -eq 3
+        assert "fresh retry launches nothing ($replacement)" test "$(cat "$FIX/provider-caps")" = 60
+        ;;
+      '40 mixed')
+        assert 'mixed edit still requires manual review' grep -Fq 'Codex launch configuration changed' "$FIX/out"
+        assert 'mixed edit offers no automatic resume' bash -c '! grep -Fq "Codex mission cap reduced" "$1"' bash "$FIX/out"
+        ;;
+      '40 added'|40)
+        assert 'pure reduction allows only a new invocation' \
+          grep -Fq "Codex mission cap reduced from 60 to 40 in $REPO/.sdd/config.sh" "$FIX/out"
+        assert 'restart diagnostic pins the reduced file and phase' \
+          grep -Fq "(config $(git hash-object --no-filters -- .sdd/config.sh), phase EXEC)" "$FIX/out"
+        ;;
+    esac
+  done
+  rc=0; PHASE_ENGINE=codex "$SDD" preflight > "$FIX/out" 2>&1 || rc=$?
+  assert 'dirty reduction cannot pass preflight' test "$rc" -ne 0
+  assert 'failed preflight opens no provider session' test "$(cat "$FIX/provider-caps")" = 60
+  git add .sdd/config.sh && git commit -qm 'Record the reduced config in the fixture'
+  "$KIT/bin/sdd-worker" allows "$d" run --mission "$MDIR" > "$FIX/out" 2>&1
+  "$KIT/bin/sdd-worker" budget "$d" >> "$FIX/out" 2>&1
+  rc=0; PHASE_ENGINE=codex "$SDD" preflight > "$FIX/out" 2>&1 || rc=$?
+  assert 'reduced cap relaunch passes Codex preflight' test "$rc" -eq 0
+  cp "$SDD_STATE_DIR/autonomy-log.jsonl" "$FIX/ledger-before-known-spend"
+  printf '{"event":"session","mission":"%s","cost_usd":40}\n' "$MISSION" >> "$SDD_STATE_DIR/autonomy-log.jsonl"
+  rc=0; run || rc=$?
+  assert 'relaunch checks spend against the reduced cap' grep -Fq 'reached its US$ 40 cap' "$FIX/out"
+  assert 'relaunch at the new cap launches nothing' test "$(cat "$FIX/provider-caps")" = 60
+  cp "$FIX/ledger-before-known-spend" "$SDD_STATE_DIR/autonomy-log.jsonl"
+  rc=0; run --max-phases 1 || rc=$?
+  assert 'new Codex invocation opens one session at the reduced cap' test "$(cat "$FIX/provider-caps")" = $'60\n40'
+
+  mkdir -p .claude/agents
+  cp "$ROOT/agents/sdd-executor.md" .claude/agents/
+
+  for world in 100 0 '0 inline' 40 standalone; do
+    cp "$FIX/launch-config" .sdd/config.sh
+    git show HEAD:"docs/handoffs/$MISSION/checkpoint.md" > "$MDIR/checkpoint.md"
+    : > "$FIX/claude-caps"
+    signed_cap=60; replacement="$world"
+    if [ "$world" = standalone ]; then signed_cap=""; replacement=100; fi
+    printf '%s\n' "$replacement" > "$FIX/claude-cap-change"
+    rc=0
+    SDD_DELEGATED_MISSION_CAP_USD="$signed_cap" PHASE_ENGINE=claude \
+      "$SDD" run "$MISSION" --max-phases 2 > "$FIX/out" 2>&1 || rc=$?
+    case "$world" in
+      100|0|'0 inline')
+        assert "delegated Claude rejects the reloaded cap ($world)" \
+          grep -Fq "$REPO/.sdd/config.sh sets BUDGET_MISSION_USD=${world%% *} outside the signed mission cap of 60" "$FIX/out"
+        assert "invalid Claude reload opens no second session ($world)" test "$(cat "$FIX/claude-caps")" = 60
+        ;;
+      *)
+        assert "Claude preserves valid config precedence ($world)" \
+          test "$(cat "$FIX/claude-caps")" = "60"$'\n'"$replacement"
+        ;;
+    esac
+  done
+  assert 'the launch constraint does not turn child runs into delegated runs' test ! -e "$FIX/delegated-cap-leaked"
+  sed -i '/^BUDGET_MISSION_USD=/d' .sdd/config.sh
+  rc=0; BUDGET_MISSION_USD=100 run || rc=$?
+  assert 'Codex refuses a launch whose cap differs from the worker check' \
+    grep -Fq 'gives 60 to the worker, but the runner would use 100' "$FIX/out"
+  assert 'mismatched cap opens no further Codex session' test "$(cat "$FIX/provider-caps")" = $'60\n40'
+  printf '  ok    delegated sessions respect cap changes\n'
 )
 
 python3 "$ROOT/tests/check-codex-adapter.py"
