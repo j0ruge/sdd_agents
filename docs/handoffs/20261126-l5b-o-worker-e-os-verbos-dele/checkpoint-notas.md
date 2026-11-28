@@ -411,3 +411,4 @@
 - 2026-11-28 01:04 · `R11` · A primeira execução na cópia sob /tmp recusou o controle externo da sonda de ledger. A repetição usou SDD_MUTATION_FIXTURE_ROOT no checkout da missão, como o sensor prevê, sem alterar a sonda.
 - 2026-11-28 01:04 · `R11` · Check R11 → 1. tests/run-all.sh → rc 0, 21 etapas, 112 → 113 sondas do worker e 3 casos skipped do Codex. As 103 âncoras do TODO ficaram no alvo. Nenhum GitHub nem Codex real foi acionado.
 - intervention: sdd run --phase REVIEW (the starting phase was forced from the CLI) — REVIEW — 2026-11-28 01:21 · written by the runner
+- 2026-11-28 01:39 · `R12` · REVIEW r8, achado #1. Separador temático após HTML de lista não abre parágrafo. O head conta título oculto e inverte o despacho em dois casos. Os controles, R10, R11 e a suíte passaram.
