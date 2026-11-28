@@ -2,9 +2,9 @@
 missao: 20261126-l5b-o-worker-e-os-verbos-dele
 fase: EXEC
 status: done
-sessao: 01a21f8c-a507-76f0-9f25-a1f577298024
-data: 2026-11-27 22:04
-gate: tests/run-all.sh no conteúdo de 1a50dd42 → rc 0, suite green, 21 etapas. bash tests/check-worker.sh no mesmo conteúdo → rc 0, 110 sondas e Check R8 → 1.
+sessao: 01a21fd0-eb9b-7280-a855-7a6f8bcace12
+data: 2026-11-27 23:14
+gate: tests/run-all.sh no conteúdo de 0d33f0d0 → rc 0, suite green, 21 etapas e 3 casos skipped do Codex. bash tests/check-worker.sh no mesmo conteúdo → rc 0, 111 sondas e Check R9 → 1.
 ---
 
 # Handoff — EXEC — O worker e os verbos dele
@@ -15,16 +15,16 @@ gate: tests/run-all.sh no conteúdo de 1a50dd42 → rc 0, suite green, 21 etapas
 
 ## TL;DR
 
-Os 24 incrementos estão concluídos, incluindo R8 da REVIEW r5.
-O título visível após um item de lista volta a contar, inclusive quando torna o pedido ambíguo.
-O Check R8 imprimiu `1` e a suíte ficou verde. O reteste começa pelos três casos da r5 e seu controle.
+Os 25 incrementos estão concluídos, incluindo R9 da REVIEW r6.
+O HTML de um item interno não oculta o título do item externo quando os marcadores começam na mesma linha.
+O Check R9 imprimiu `1` e a suíte ficou verde. O reteste começa pelos casos compactos e os controles expandidos.
 
 ## Estado do repo
 
 - **Branch:** `fix/l5b-o-worker-e-os-verbos-dele` — sem upstream configurado.
-- **Último commit de implementação:** `1a50dd42` — encerra o HTML bruto junto com o item de lista.
+- **Último commit de implementação:** `0d33f0d0` — respeita o item interno na lista compacta.
 - **Árvore de trabalho:** o commit de fechamento registra apenas o checkpoint, as notas e este handoff.
-- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas e 110 sondas do worker.
+- **Suíte:** `tests/run-all.sh` → rc 0, `suite green`, 21 etapas, 111 sondas do worker e 3 casos `skipped` do Codex.
 - **E2E:** não há `E2E_CMD` configurado. As jornadas usam Git local e simulam GitHub, runner, relay, fila e aprovação.
 
 ## O que foi feito
@@ -89,11 +89,23 @@ O Check R8 imprimiu `1` e a suíte ficou verde. O reteste começa pelos três ca
   descartáveis. Os controles rodaram verdes antes e depois, em grupo próprio, com 256 MiB por processo
   e teto de 12 s por sonda. A jornada de reserva usou 40 s com o mesmo limite de memória.
 
+## Correção da REVIEW r6
+
+- `0d33f0d0` — R9 — O leitor consome os marcadores de lista aninhados na mesma linha antes de
+  classificar o HTML bruto. A marca `<div>` dentro do `<script>` do item interno não abre outro
+  bloco HTML. Ao sair só desse item, o título do item externo volta a contar.
+  Os seis casos rodaram pelo bloco público de `run`. Título visível único gera `start, wait`.
+  Título duplicado ou ainda no HTML do item interno gera só `wait`. Todos preservaram a espera
+  única, `rc=3`, `phase-ceiling` e o diagnóstico original. Os Checks R5–R8 e a reserva única passaram.
+  A reversão `while` → `if` repetiu as três inversões. Os 24 mutantes dos sensores foram detectados.
+  Cada saída decisiva está na nota da respectiva execução em `checkpoint-notas.md`. As sabotagens
+  rodaram em cópias descartáveis com grupo próprio, teto de 25 s e 256 MiB por processo.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
-| `checkpoint.md` | Checks e commits de implementação dos 24 incrementos. |
+| `checkpoint.md` | Checks e commits de implementação dos 25 incrementos. |
 | `commands/sdd-worker.md` | Procedimentos de despacho, retomada, aprovação e espera. |
 | `bin/sdd-worker-ahead` | Confirmação do dono do checkout, reserva do sucessor e chamada ao relay. |
 | `tests/check-worker-ahead.py` | Jornada de três lotes, concorrência, recusas, revalidação e leitura do pedido com marcação Markdown. |
@@ -102,7 +114,7 @@ O Check R8 imprimiu `1` e a suíte ficou verde. O reteste começa pelos três ca
 
 ## Boot da próxima fase
 
-Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e as seções da REVIEW r1 a r5 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R8 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
+Leia `00-missao.md`, `01-plano.md`, `checkpoint.md` e as seções da REVIEW r1 a r6 neste handoff. Rode `tests/run-all.sh` neste checkout e refaça os Checks R1–R9 do checkpoint com `bash tests/check-worker.sh`. Para reteste de QA, use também os registros BUG-01 e BUG-02 de `30-handoff-qa.md`. Não é necessário subir uma aplicação, chamar o GitHub ou iniciar um planner pago.
 
 Na jornada de merge, confira que só chega a `ready <sha>` um PR cujo `local/ci` resulta da suíte completa naquele head. No mesmo SHA, uma aprovação curta é informativa, mas um corpo acionável ou pedido vigente bloqueia. Inventário e prontidão recusam um campo `comments` presente e inválido, sem reabrir uma thread resolvida válida.
 
@@ -131,6 +143,12 @@ e a jornada de reserva única. Para isolar R8, rode
 de `script` devem registrar `start, wait`. O duplicado e o título ainda recuado devem registrar só `wait`.
 O runner simulado conserva `phase-ceiling` e `sdd run stop: phase-ceiling — fixture` nos quatro.
 
+No reteste de R9, use `python3 tests/check-worker-ahead.py "$PWD" --preceding-markup <caso>`.
+`compact-nested-unique`, `compact-nested-closed` e `expanded-nested-unique` devem registrar
+`start, wait`. `compact-nested-duplicate`, `compact-nested-still-inside` e
+`expanded-nested-duplicate` devem registrar só `wait`. O Check do checkpoint confirma também
+R8 e a reserva única, sem iniciar serviços reais.
+
 ## Pendências / Decisions for a Human
 
 - Nenhuma decisão nova de produto em aberto. A emissão de termos assinados continua com o dono.
@@ -144,4 +162,6 @@ O runner simulado conserva `phase-ceiling` e `sdd run stop: phase-ceiling — fi
 
 ## Achados fora de escopo
 
-- Nenhum achado novo nos incrementos R5 a R8. O falso verde de `local/ci` com `TEST_CMD` só de espaços continua no `TODO.md`, conforme a REVIEW r2.
+- Nenhum achado novo na execução de R9. A lacuna histórica na evidência das sabotagens do EXEC
+  segue em `TODO.md`, conforme a REVIEW r6. O falso verde de `local/ci` com `TEST_CMD` só de
+  espaços continua no mesmo backlog, conforme a REVIEW r2.
