@@ -220,6 +220,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **O leitor de lookahead não conta o título ATX na linha de um marcador de lista** —
+  `bin/sdd-worker-ahead:112` (`re.fullmatch`) — o título de `- # Owner request` não entra na contagem.
+  A sonda pública reproduziu a recusa do título único e o disparo com dois títulos na base e no head.
+  Direção: provar os dois casos e resolver o título pelo conteúdo Markdown do item.
+  Fonte: `docs/handoffs/20261126-l5b-o-worker-e-os-verbos-dele/40-review-r7.md`
+  — descoberto por `sdd-reviewer` na missão `20261126-l5b-o-worker-e-os-verbos-dele` (2026-11-27)
+
 - [ ] **O plano manda o EXEC editar em `.claude/`, o `claude -p` recusa, e a sessão contorna pelo Bash** —
   `config/schema.md:149` (`claude -p`) — no I6 da missão `20261020-narracao-com-dicas` do `magic_tutor`
   (`49d2c89`) o "Onde" listava `.claude/skills/revisar-partida/`; o `Edit` foi recusado e o executor trocou o
