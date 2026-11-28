@@ -242,3 +242,54 @@
 - 2026-11-27 20:44 · `R7` · Em 4b886900, os três casos da revisão inverteram o despacho. Em 9d53509f, o título visível único iniciou um turno antes da espera, e título duplicado ou comentado manteve só a espera. Nos três casos ela ficou única, com rc=3, phase-ceiling e o diagnóstico original. Os 19 cenários de R7, os controles R5/R6 e a reserva única passaram. O Check imprimiu 1. tests/run-all.sh ficou verde antes e depois, em 21 etapas, com 108 → 109 sondas do worker. As 28 sabotagens do leitor e as 37 dos sensores foram detectadas em cópias descartáveis, com grupo próprio, teto de 12 s e 256 MiB por processo. Os controles passaram nos mesmos limites antes e depois. As duas atribuições antigas a in_comment, recolocadas sozinhas, seriam inertes porque a variável deixou de ser lida. O leitor anterior inteiro voltou a reprovar. A etapa Codex registrou 3 skipped. Sem chamadas reais ao GitHub ou ao Codex.
 - intervention: sdd run --phase REVIEW (the starting phase was forced from the CLI) — REVIEW — 2026-11-27 21:06 · written by the runner
 - 2026-11-27 21:26 · `R8` · Achado #1 da REVIEW r5. Ao sair de um item de lista, o HTML bruto oculta o título seguinte. As três regressões falharam em 0c4cd137 e passaram em 13103d36. Os três casos de R7 fizeram o inverso. R8 fica pending.
+- 2026-11-27 22:04 · `R8` · R8 sabotage: degrada a raiz da pilha de recuos → html-list-end-unique
+- 2026-11-27 22:04 · `R8` · R8 sabotage: rastreia itens também dentro de cerca → html-root-after-fenced-list
+- 2026-11-27 22:04 · `R8` · R8 sabotage: abandona só um nível de lista por linha → html-root-after-list
+- 2026-11-27 22:04 · `R8` · R8 sabotage: trata linha vazia como saída do item → html-list-after-blank
+- 2026-11-27 22:04 · `R8` · R8 sabotage: não retira da pilha o item encerrado → teto de 12 s
+- 2026-11-27 22:04 · `R8` · R8 sabotage: deixa o HTML ativo ao sair do item → html-list-end-unique
+- 2026-11-27 22:04 · `R8` · R8 sabotage: usa margem absoluta para reconhecer HTML → html-list-indented-script
+- 2026-11-27 22:04 · `R8` · R8 sabotage: identifica item falso dentro de HTML → html-root-contains-fake-list
+- 2026-11-27 22:04 · `R8` · R8 sabotage: deixa de reconhecer marcadores de itens → html-list-end-unique
+- 2026-11-27 22:04 · `R8` · R8 sabotage: permite lista numerada diferente de 1 interromper parágrafo → html-list-ordered-cannot-interrupt
+- 2026-11-27 22:04 · `R8` · R8 sabotage: nega item numerado 1 após parágrafo → html-list-ordered-can-interrupt
+- 2026-11-27 22:04 · `R8` · R8 sabotage: trata quebra temática como marcador de lista → html-root-after-thematic-break
+- 2026-11-27 22:04 · `R8` · R8 sabotage: não registra o recuo do novo item → html-list-end-unique
+- 2026-11-27 22:04 · `R8` · R8 sabotage: deixa marcador na linha inicial do HTML → html-list-start-custom-tag
+- 2026-11-27 22:04 · `R8` · R8 sabotage: herda parágrafo anterior ao abrir item novo → html-list-start-custom-tag
+- 2026-11-27 22:04 · `R8` · R8 sabotage: recoloca a chamada antiga sem a margem relativa → html-list-indented-script
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira o HTML comum às quatro fixtures da revisão → html-list-end-unique
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-list-end-unique → html-list-end-unique
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-list-end-duplicate → html-list-end-duplicate
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-list-end-script → html-list-end-script
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-list-still-inside → html-list-still-inside
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-list-ordered-dedent → html-list-ordered-dedent
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-list-after-blank → html-list-after-blank
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-list-indented-script → html-list-indented-script
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-list-start-custom-tag → html-list-start-custom-tag
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-list-ordered-cannot-interrupt → html-list-ordered-cannot-interrupt
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-list-ordered-can-interrupt → html-list-ordered-can-interrupt
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-root-after-list → html-root-after-list
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-nested-list-dedent → html-nested-list-dedent
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-root-after-thematic-break → html-root-after-thematic-break
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-root-after-fenced-list → html-root-after-fenced-list
+- 2026-11-27 22:04 · `R8` · R8 sabotage: inverte a expectativa de despacho de html-root-contains-fake-list → html-root-contains-fake-list
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `got=` → marcador verde do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `for markup_case in html-list-end-unique html-list-end-duplicate html` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `html-list-ordered-dedent html-list-after-blank html-list-indented-sc` → censo dos casos do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `html-list-ordered-cannot-interrupt html-list-ordered-can-interrupt h` → censo dos casos do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `html-nested-list-dedent html-root-after-thematic-break html-root-aft` → censo dos casos do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `html-root-contains-fake-list; do` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" -` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `got="${got:+$got$'\n'}$markup_case: $result"` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `fi` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `done` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `if [ -z "$got" ]; then` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `pass 'owner request bounds raw html by its list item'` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `else` → marcador verde do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `fail 'owner request bounds raw html by its list item' \` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `'one turn before wait only for a unique visible heading, with the sa` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: retira linha do sensor `fi` → sintaxe ou execução do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: troca o marcador literal de sucesso → marcador verde do Check R8
+- 2026-11-27 22:04 · `R8` · R8 sabotage: troca o marcador literal de falha → diagnóstico vermelho do Check R8
+- 2026-11-27 22:04 · `R8` · Em 0c4cd137, os três casos da REVIEW r5 inverteram o despacho e o Check agregado reprovou sozinho. Em 1a50dd42, um título visível único inicia um turno antes da espera. Título duplicado ou ainda oculto mantém só a espera. Todos preservaram a espera única, rc=3, phase-ceiling e o diagnóstico original. Passaram os 15 cenários de R8, os controles R5–R7 e a reserva única. O Check imprimiu 1. tests/run-all.sh ficou verde antes e depois, em 21 etapas, com 109 → 110 sondas do worker e 3 casos skipped na etapa Codex. As 16 sabotagens do leitor e as 34 dos sensores foram detectadas em cópias descartáveis. Os controles passaram antes e depois com 256 MiB por processo, grupo próprio e teto de 12 s por sonda, ou 40 s para a jornada de reserva. O cabeçalho do bloco R8 é comentário e não muda a execução. Sem chamadas reais ao GitHub ou ao Codex.
