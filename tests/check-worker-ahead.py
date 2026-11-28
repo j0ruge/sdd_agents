@@ -174,6 +174,7 @@ else:
             if markup_case:
                 html = "<div>\n- ```html\n  </div>\n\n"
                 duplicate = "  # Owner request\n\nDo not plan the next lot.\n"
+                item_html = "- Sample item\n  <div>\n  Sample content\n"
                 content, starts = {
                     "plain": (instruction, True),
                     "ordinary": ("An ordinary paragraph.\n\n" + instruction, True),
@@ -221,6 +222,21 @@ else:
                     "html-processing": ("<?sample\n\n  # Owner request\n?>\n" + instruction, True),
                     "html-declaration": ("<!DOCTYPE\n\n  # Owner request\n>\n" + instruction, True),
                     "html-cdata": ("<![CDATA[\n\n  # Owner request\n]]>\n" + instruction, True),
+                    "html-list-end-unique": (item_html + instruction, True),
+                    "html-list-end-duplicate": (instruction + "\n" + item_html + instruction, False),
+                    "html-list-end-script": (item_html.replace("<div>", "<script>") + instruction, True),
+                    "html-list-still-inside": (item_html + "  " + instruction, False),
+                    "html-list-ordered-dedent": ("1. Sample item\n   <div>\n  " + instruction, True),
+                    "html-list-after-blank": ("- Sample item\n\n  <script>\n" + instruction, True),
+                    "html-list-indented-script": ("1. Sample item\n    <script>\n   " + instruction, False),
+                    "html-list-start-custom-tag": ("Intro\n- <sample-box>\n  " + instruction, False),
+                    "html-list-ordered-cannot-interrupt": ("Intro\n2. <script>\n   " + instruction, True),
+                    "html-list-ordered-can-interrupt": ("Intro\n1. <script>\n   " + instruction, False),
+                    "html-root-after-list": ("- Outer item\n  - Inner item\n<script>\n" + instruction, False),
+                    "html-root-after-thematic-break": ("- - -\n  <script>\n" + instruction, False),
+                    "html-root-after-fenced-list": ("```\n- Sample item\n  ```\n  <script>\n" + instruction, False),
+                    "html-root-contains-fake-list": ("<div>\n- Sample item\n" + instruction, False),
+                    "html-nested-list-dedent": ("- Outer item\n  - Inner item\n    <script>\n  <div>\n" + instruction, True),
                 }[markup_case]
                 source.write_text(content)
                 result = subprocess.run(["bash", "-c", blocks["run"]], env=env, cwd=primary,

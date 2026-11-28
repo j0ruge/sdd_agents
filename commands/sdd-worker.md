@@ -332,7 +332,8 @@ that handoff in the form `ahead-request: <campaign-id> <source>`. Use an absolut
 nonempty UTF-8 file or a durable HTTPS link to the original request. A local `#fragment` must
 match a unique Markdown heading written with `#` outside fenced code and raw HTML blocks. Only a
 valid Markdown fence opener starts fenced code. Fence lookalikes inside raw HTML are ignored.
-A fence opened by a list marker can close within its item and cannot extend beyond that item.
+Raw HTML started inside a list item ends no later than the item. A fence opened by a list
+marker can close within its item and cannot extend beyond it either.
 Use the lowercase heading text, omitting punctuation other than hyphens and underscores and
 replacing whitespace with hyphens.
 Do not infer a request from `next`, a recommendation or the signature alone. Without an

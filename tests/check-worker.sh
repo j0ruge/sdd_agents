@@ -6452,6 +6452,24 @@ else
     'one turn before wait for a unique visible heading, none for hidden or duplicate headings, and the same runner verdict' "$got"
 fi
 
+# --- R8: raw HTML cannot consume a heading after its list item ends ------------------------------
+got=
+for markup_case in html-list-end-unique html-list-end-duplicate html-list-end-script html-list-still-inside \
+                   html-list-ordered-dedent html-list-after-blank html-list-indented-script html-list-start-custom-tag \
+                   html-list-ordered-cannot-interrupt html-list-ordered-can-interrupt html-root-after-list \
+                   html-nested-list-dedent html-root-after-thematic-break html-root-after-fenced-list \
+                   html-root-contains-fake-list; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request bounds raw html by its list item'
+else
+  fail 'owner request bounds raw html by its list item' \
+    'one turn before wait only for a unique visible heading, with the same runner verdict' "$got"
+fi
+
 # --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
 if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
   pass 'concurrent resume reuses the validated reservation'
