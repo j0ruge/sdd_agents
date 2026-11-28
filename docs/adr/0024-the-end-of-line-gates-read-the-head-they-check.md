@@ -88,7 +88,7 @@ mission directory.
 - A fix pushed while the pull request is open now buys two sessions: a delta round of REVIEW, and
   a publisher session that runs step 2 on the new head. In the kit, the stop with rc 2 for the
   mutation stamp comes after both.
-- The rounds of REVIEW count in total against `REVIEW_MAX_ITER`. A mission at the ceiling that
+- With positive `REVIEW_MAX_ITER`, REVIEW counts rounds in total. A mission at the ceiling that
   gets later code stops as `BLOCKED` in REVIEW, and the human forces the round as before, now
   with the reason written.
 - `pr-ready` does not change. It stays stricter than the runner: after `reviewed_head:` it accepts

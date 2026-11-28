@@ -140,7 +140,7 @@ Append to `docs/handoffs/<mission>/checkpoint-notas.md` (APPEND one line with `>
 
 The runner sees a pending increment and hands the ball to `sdd-executor` on its own. It repeats
 until a round closes at Grade A on every criterion with a sensor and at least B on the rest,
-capped at `REVIEW_MAX_ITER` rounds **of finding**.
+subject to progress and budget checks. A positive `REVIEW_MAX_ITER` caps the total by report number, including rounds without findings.
 
 **Receive criticism with rigour, not with deference.** A finding you believe is wrong is not
 resolved by writing an `R<n>` to please it: verify, and if it is wrong, record in the round's
@@ -272,7 +272,7 @@ A round that found something **does not close**, and that is the healthy case no
 `R<n>` rows go to the checkpoint, the executor closes them, and r2 re-grades independently. Write
 the `40-review-r<N>.md` with the real grade — not the grade you wish for. The runner sees the gate
 did not pass, hands the ball to EXEC for the pending rows and then opens a **fresh** review session,
-up to `REVIEW_MAX_ITER` rounds in total.
+while the gate requires it and progress and budget permit.
 
 A grade inflated to "pass the gate" is the worst possible failure here: it switches off the
 mission's only quality sensor and the defect travels to the PR with a fake seal of approval.

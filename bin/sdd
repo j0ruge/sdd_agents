@@ -176,7 +176,8 @@ load_config() {
       *) die "$effort_key must be empty (the human's settings decide) or one of low|medium|high|xhigh|max|auto, got: '${!effort_key}'" ;;
     esac
   done
-  : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
+  : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=0}"; : "${EXEC_MAX_RETRY:=1}"
+  [[ "$REVIEW_MAX_ITER" =~ ^[0-9]+$ ]] || die "REVIEW_MAX_ITER must be a non-negative integer (0 means no round ceiling)"
   # L1 of the 2026-09-03 audit: Grade A is required where the codereview skill has a SENSOR (code,
   # types, errors, security, performance, tests) and a floor is tolerated where it grades PROSE.
   # Measured on 20260902-o-rascunho-legado-fala-cru: four rounds, ~US$ 133, zero functional findings,
@@ -4397,7 +4398,7 @@ ledger_row_is_local() {
 # reading "the number changed" would call a checkpoint that GREW — the fix increments QA writes —
 # progress, which is the opposite of what it is.
 #
-# REVIEW is a loop by design too: REVIEW_MAX_ITER rounds, each landing its own `40-review-r<N>.md`.
+# REVIEW is a loop by design too, with each round landing its own `40-review-r<N>.md`.
 # With `pending_after < pending_before` as the only progress the readers knew, an r1 that landed
 # with real findings and did not reach Grade A read `churned` — the runner charging the phase for
 # the refusal its own design schedules, which is letter for letter the defect the arm above closed
@@ -6847,7 +6848,7 @@ review_rounds_on_disk() {
   printf '%s\n' "$n"
 }
 
-# How many sessions a phase may consume before turning BLOCKED.
+# How many sessions a phase may consume before turning BLOCKED (empty for uncapped REVIEW).
 # L2 (2026-09-03 audit) — the mission ceiling. Measured: 20260902-o-rascunho-legado-fala-cru cost
 # US$ 174.11 against a ceiling of US$ 150 that lived in the PLAN'S PROSE; the runner capped each
 # session (--max-budget-usd) and never the mission, so a loop of cheap rounds never met a number.
@@ -6918,7 +6919,7 @@ phase_budget() {
   case "$1" in
     EXEC)   printf '%s\n' "$(( $(checkpoint_rows | wc -l) + EXEC_MAX_RETRY + 2 ))" ;;
     QA)     printf '%s\n' "$(( QA_MAX_ITER * 3 ))" ;;   # 3 sub-steps per round
-    REVIEW) printf '%s\n' "$REVIEW_MAX_ITER" ;;
+    REVIEW) [ "$REVIEW_MAX_ITER" -eq 0 ] || printf '%s\n' "$REVIEW_MAX_ITER" ;;
     *)      printf '%s\n' "$(( EXEC_MAX_RETRY + 1 ))" ;;
   esac
 }
@@ -10951,7 +10952,7 @@ cmd_run() {
     # happens once per lap and a lap already admitted may still buy its retry. Said out loud
     # instead of hidden — exact accounting would need a second ceiling inside the lap, which is a
     # second door, and this file pays for that shape in four places already.
-    [ "${sessions[$phase]:-0}" -ge "$budget" ] && over_ceiling=1
+    [ -n "$budget" ] && [ "${sessions[$phase]:-0}" -ge "$budget" ] && over_ceiling=1
     # REVIEW's ceiling counts rounds IN TOTAL, and the total is on disk. `attempts` dies with the
     # process, so `sdd run` after a blown REVIEW used to hand out a fresh set of rounds, and the
     # most expensive phase in the kit had no ceiling at all across invocations. `phase_budget
@@ -10962,7 +10963,7 @@ cmd_run() {
     # on it, and refusing that would leave no way to run the round that unblocks the mission.
     # `force_phase` is also how the PUBLISH_ON_REVIEW_BLOCKED=draft jump reaches PR, and it is
     # empty again by the time REVIEW is re-derived — so that degradation keeps its one chance.
-    if [ "$phase" = "REVIEW" ] && [ -z "$force_phase" ]; then
+    if [ "$phase" = "REVIEW" ] && [ -n "$budget" ] && [ -z "$force_phase" ]; then
       local rounds; rounds="$(review_rounds_on_disk)"
       if [ "$rounds" -ge "$REVIEW_MAX_ITER" ]; then
         over_ceiling=1

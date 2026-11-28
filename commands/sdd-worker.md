@@ -320,7 +320,7 @@ the worktree it runs in, whose pager `level` reads as it reads this one: that st
 twice.
 
 1. **`no-receipt`**: no Codex receipt for the head 60 minutes after the explicit `@codex review`.
-2. **`below-a`**: a criterion still graded below A after three rounds of review on one pull request.
+2. **`below-a`**: a criterion still graded below A when a positive `REVIEW_MAX_ITER` in the mission checkout is reached, or when the findings leave no actionable change for another round. By default review has no round ceiling. Recheck budget before each round.
 3. **`conflict`**: a merge conflict with the base outside the findings file and its ratchet.
 4. **`mission-ceiling`**: `sdd run` stopped on `budget-exhausted`, the mission spent its `BUDGET_MISSION_USD`; or `sdd-worker budget` answered `no mission cap — …`, the config of the campaign's checkout or of a mission's worktree sets that key over the signed cap, or the delegation signs a mission cap of zero, which the runner reads as no ceiling, or one below one cent.
 5. **`campaign-ceiling`**: `sdd-worker budget` leaves rc 1 on its `campaign US$ <spent> of <ceiling>` or `campaign known US$ <spent> of <ceiling>` line when the measured spend reached the ceiling.

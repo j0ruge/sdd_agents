@@ -433,7 +433,7 @@ needs a human. The session commits **only** the round report, the checkpoint and
 opens with the round's name (`40-review-r<N>.md: status: blocked`). The word means a round that could
 not be done or that waits for a human decision — never a round with findings, which is `done` with
 its real grades (`templates/review.md`, `agents/sdd-reviewer.md` § 4). Only `blocked` is read; any
-other value passes as before. Above the `REVIEW_MAX_ITER` ceiling the marker is not read, and the
+other value passes as before. Above a configured positive `REVIEW_MAX_ITER` ceiling the marker is not read, and the
 round ends in `budget-exhausted` (or a draft PR under `PUBLISH_ON_REVIEW_BLOCKED=draft`).
 
 **From the second round on, the round reviews the delta (ADR 0023).** Each round writes the
@@ -524,8 +524,9 @@ reads the literal `^###[[:space:]]+Overall Grade`. `tests/check-templates.sh` de
 assertions from that same regex rather than restating it.
 
 The find→`R<n>`→fix→re-review loop happens **across** sessions: the round ends when the report is
-committed, EXEC closes the increments, and the runner opens a fresh round, up to `REVIEW_MAX_ITER`
-rounds in total. Blown →
+committed, EXEC closes the increments, and the runner opens a fresh round. The default
+`REVIEW_MAX_ITER=0` relies on the gate, progress checks and budgets. A positive `REVIEW_MAX_ITER`
+caps the total across invocations. On reaching that ceiling, the runner returns
 `BLOCKED`, or a draft PR when `PUBLISH_ON_REVIEW_BLOCKED=draft` — one of the two places the runner
 lowers its **own** bar instead of stopping, and it records the fact once per run
 (`event:"degraded"`, kind `review-to-draft`, in the ledger's field reference below). The other is
@@ -1573,7 +1574,7 @@ escalation records a refusal before launch.
 | `increments_total` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `EXEC` | Every row of the checkpoint table, `GATE_EXEC_TOTAL`. It grows when QA writes a fix increment, which is why the pair above is read as a difference within one row and never as a running total across rows. |
 | `rounds_before` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `REVIEW` | How many `40-review-r<N>.md` files were on disk when the session opened, from `review_rounds_on_disk()` — a PHOTOGRAPH, taken by `cmd_run`/`cmd_retry` before `run_phase`, for the same reason as `pending_before`: once the reviewer has written the round, the question is unanswerable. ⚠️ Taken **outside** the `[ -z "$force_phase" ]` guard the round ceiling sits behind. `sdd run --phase REVIEW` is how a human asks for the one round that unblocks a mission, and a photograph taken inside that guard would write `null` on exactly those. ⚠️ It is also `null` on every REVIEW row written before `20260831-a-rodada-que-andou` added the three fields — 25 of 25 rows of the real ledger on the day it landed — and those are **not** left reading as churn: `historic_rounds` in `ledger_outcome_defs` recovers the same fact from the `gate_why` the row already carries, because `gate_REVIEW` has always written the round file's own name into it. Two spellings, both anchored: `^40-review-r<N>.md` gives `N`, and the fixed string `no 40-review-r<N>.md` gives **0** — the session landed no round file, which is a measurement and the reason the ledger's most expensive churned cell stays churned. `rounds_before` is the previous REVIEW row's recovered count for the same `(repo, mission)` in FILE order, seeded at 0, and the annotation carries `rounds_source: "gate_why"` so the reading is never mistaken for a measurement. ⚠️ It inherits **neither** of `historic_progress`'s two memory rules, and the second refusal is the load-bearing one: a passing gate does **not** clear the count, because `review_rounds_on_disk()` counts FILES and files are never deleted, so the count carries across a pass — copying EXEC's reset would read `1 > 0` as progress over a reopened phase whose session landed nothing. The guard is `.rounds_before == null` **and** `.rounds_after == null`: a row carrying only the second is not pre-schema, it is a row this runner wrote whose photograph went missing, and repairing it from prose would launder the very defect the non-`null` guard in `outcome` exists to catch. Declared limits: `rounds_max` is not recovered (it is config, absent from the prose), and the two refusals that name no file (`TEST_CMD failed`, `working tree dirty after the review`) are left where they were rather than guessed at — 1 row of 25. `sdd autonomy` prints how many rows it read that way (`(N REVIEW row(s) older than the round fields read their round from gate_why)`), counted over the **comparable** rows the table above it is made of, and the path is deletable the day that number reaches zero. |
 | `rounds_after` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `REVIEW` | The rounds on disk once the phase has run, from `GATE_REVIEW_ROUNDS`. ⚠️ Published by `gate_REVIEW` as soon as the round file is **resolved**, not after the gate approves — deliberately asymmetric with `pending_after`, which waits for validation. EXEC's count is a verdict because the checkpoint is a label the executor writes about itself (`done` with no commit); the `N` of `40-review-r<N>.md` is **structural** — it is the file name, read by the same `latest_matching` the gate itself uses, and nobody self-declares it. Publishing at the resolve is exactly what lets an r1 that landed with real findings and did **not** reach Grade A count as a round that advanced, which is why these fields exist. No round file at all publishes `0`, not `null`: zero rounds on disk is a measurement. |
-| `rounds_max` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `REVIEW` | `REVIEW_MAX_ITER`, the ceiling the rounds run against. A third field and not decoration: without it, "3 of 3, the phase is out of budget" cannot be told from "3 of 10" — the reading `increments_total` exists to close for EXEC. |
+| `rounds_max` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `REVIEW` | `REVIEW_MAX_ITER`, the ceiling the rounds run against, or zero for uncapped review. A third field and not decoration: without it, "3 of 3, the phase is out of budget" cannot be told from "3 of 10" — the reading `increments_total` exists to close for EXEC. |
 | `gate` | string enum: `pass` \| `fail` | on escalation rows | The gate's verdict, evaluated right after the session ended — the row is born after the gate, never before it. |
 | `gate_why` | string | on rows other than `session`, `blocked` and `degraded` | The gate reason on sessions. On blocked or degraded rows, the escalation reason. |
 
@@ -1794,7 +1795,7 @@ by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and
   ⚠️ `20260831-a-rodada-que-andou` carried the same reading one phase on, to `REVIEW`. The worked
   example is the most expensive cell of measurement window 2 (`kit_sha bf001fe`): the REVIEW of
   `20260830-a-tela-que-mente-o-pagamento`, US$ 47.81, `1 advanced · 1 churned`, stamped `leve` for
-  running the two rounds `REVIEW_MAX_ITER` exists to allow — in the phase that consumes 41% of the
+  running both rounds of the planned review-and-fix cycle — in the phase that consumes 41% of the
   slice's spend. It reads `ok` today because both of its rounds landed.
   ⚠️ `20260930-a-sub-etapa-que-andou` carried it to `QA`, which is a designed loop too:
   `qa_substep` routes `plan → exec → close` and `gate_QA` refuses with `missing 30-handoff-qa.md`
