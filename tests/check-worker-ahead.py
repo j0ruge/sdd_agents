@@ -4,11 +4,13 @@ import json
 import os
 from pathlib import Path
 import re
+import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
 
 root = Path(sys.argv[1])
 command = (root / "commands/sdd-worker.md").read_text()
@@ -26,6 +28,32 @@ markup_case = sys.argv[3] if sys.argv[2:3] == ["--preceding-markup"] else None
 if owner_request_check or markup_case:
     verdict, = re.findall(r'```bash\n(rc=unknown\n.*?)\n```', command, re.S)
     blocks["run"] += '\n' + verdict + '\nprintf "verdict|%s|%s|%s\\n" "$rc" "$reason" "$why"'
+
+def compact_scan_work(marker):
+    scan = runpy.run_path(str(root / "bin/sdd-worker-ahead"))["local_anchors"]
+
+    def measure(n):
+        work = 0
+
+        def counted(fullmatch, line, pos=0):
+            nonlocal work
+            work += len(line) - pos
+            return fullmatch(line, pos)
+
+        def compiled(pattern):
+            regex = re.compile(pattern)
+            return SimpleNamespace(match=regex.match, fullmatch=lambda *args: counted(regex.fullmatch, *args))
+
+        scan.__globals__["re"] = SimpleNamespace(
+            match=re.match, search=re.search, sub=re.sub, compile=compiled,
+            fullmatch=lambda pattern, line: counted(re.compile(pattern).fullmatch, line),
+        )
+        assert scan(marker * n + "<script>\n\n# Owner request\n") == ["owner-request"]
+        return work
+
+    small, large = measure(2000), measure(4000)
+    assert 0 < small and large <= 3 * small, (marker, small, large)
+
 
 with tempfile.TemporaryDirectory(prefix="worker-ahead-") as temp:
     box = Path(temp)
@@ -251,6 +279,10 @@ else:
                     "compact-html-after-blank": (paragraph.replace("Text\n", "Text\n        \n") + instruction, False),
                     "compact-html-after-indented-code": ("10. - <script></script>\n\n          Code\n<sample-box>\n"
                                                          + instruction, False),
+                    "compact-scale-hyphens": ("- " * 4000 + "<script>\n\n" + instruction, True),
+                    "compact-scale-pluses": ("+ " * 4000 + "<script>\n\n" + instruction, True),
+                    "compact-scale-thematic": ("* " * 4000 + "\n  <script>\n" + instruction, False),
+                    "compact-scale-thematic-in-item": ("+ - - -\n    <script>\n  " + instruction, False),
                 }[markup_case]
                 source.write_text(content)
                 result = subprocess.run(["bash", "-c", blocks["run"]], env=env, cwd=primary,
@@ -261,6 +293,8 @@ else:
                 assert events == expected, (markup_case, expected, events)
                 assert not result.stderr, (markup_case, result.stderr)
                 assert result.stdout.endswith(f"verdict|3|phase-ceiling|{diagnostic}\n"), result.stdout
+                if markup_case in ("compact-scale-hyphens", "compact-scale-pluses"):
+                    compact_scan_work(content[:2])
                 sys.exit(0)
             if owner_request_check:
                 retired = "# Retired request\n\nDo not plan ahead.\n"

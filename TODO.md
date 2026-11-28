@@ -221,7 +221,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **O leitor de lookahead não conta o título ATX na linha de um marcador de lista** —
-  `bin/sdd-worker-ahead:112` (`re.fullmatch`) — o título de `- # Owner request` não entra na contagem.
+  `bin/sdd-worker-ahead:116` (`re.fullmatch`) — o título de `- # Owner request` não entra na contagem.
   A sonda pública reproduziu a recusa do título único e o disparo com dois títulos na base e no head.
   Direção: provar os dois casos e resolver o título pelo conteúdo Markdown do item.
   Fonte: `docs/handoffs/20261126-l5b-o-worker-e-os-verbos-dele/40-review-r7.md`

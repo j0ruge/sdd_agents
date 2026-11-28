@@ -80,6 +80,8 @@ def raw_html_end(line, in_paragraph):
 
 
 def local_anchors(content):
+    list_item = re.compile(r" {0,3}([-+*]|[0-9]{1,9}[.)]) {1,4}(?=\S)")
+    thematic = re.compile(r" *(?:-(?: *-){2,}|\*(?: *\*){2,}) *")
     fence, fence_indent = "", 0
     html_end = None
     list_indents = [0]
@@ -93,16 +95,19 @@ def local_anchors(content):
             else:
                 fence = ""
         if not fence:
-            while line.strip() and not line.startswith(" " * list_indents[-1]):
+            indent = len(line) - len(line.lstrip(" ")) if line.strip() else list_indents[-1]
+            while list_indents[-1] > indent:
                 list_indents.pop()
                 html_end = None
-            html_line = line[list_indents[-1]:]
-            while not html_end and (item := re.match(r" {0,3}([-+*]|[0-9]{1,9}[.)]) {1,4}(?=\S)", html_line)) and (
+            offset, previous_marker = list_indents[-1], ""
+            # A suffix of the same marker run cannot become thematic if the whole run was not.
+            while not html_end and (item := list_item.match(line, offset)) and (
                 not in_paragraph or not item[1][0].isdigit() or int(item[1][:-1]) == 1
-            ) and not re.fullmatch(r" *(?:-(?: *-){2,}|\*(?: *\*){2,}) *", html_line):
-                list_indents.append(list_indents[-1] + item.end())
-                html_line = html_line[item.end():]
+            ) and not (item[1] != previous_marker and thematic.fullmatch(line, offset)):
+                offset, previous_marker = item.end(), item[1]
+                list_indents.append(offset)
                 in_paragraph = False
+            html_line = line[offset:]
         if not fence and (html_end or (html_end := raw_html_end(html_line, in_paragraph))):
             if re.search(html_end, line):
                 html_end = None

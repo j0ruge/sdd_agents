@@ -6500,6 +6500,20 @@ else
     'one turn before wait for a unique visible heading, with the same runner verdict' "$got"
 fi
 
+# --- R11: compact list scanning must not revisit every suffix --------------------------------
+got=
+for markup_case in compact-scale-hyphens compact-scale-pluses compact-scale-thematic compact-scale-thematic-in-item; do
+  if ! result="$(python3 "$ROOT/tests/check-worker-ahead.py" "$ROOT" --preceding-markup "$markup_case" 2>&1)"; then
+    got="${got:+$got$'\n'}$markup_case: $result"
+  fi
+done
+if [ -z "$got" ]; then
+  pass 'owner request bounds compact list scan before wait'
+else
+  fail 'owner request bounds compact list scan before wait' \
+    'bounded scan work and unchanged dispatch, wait and runner verdict' "$got"
+fi
+
 # --- F1: both resumes must reach the same relay if a peer reserves it during authorization -------
 if got="$(python3 "$ROOT/tests/check-worker-lookahead-race.py" "$ROOT" 2>&1)"; then
   pass 'concurrent resume reuses the validated reservation'

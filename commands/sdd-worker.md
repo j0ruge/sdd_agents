@@ -330,12 +330,12 @@ effective `DEFAULT_BRANCH`. For a signed Codex campaign, supply `resume_handoff`
 verifying the owner's identifiable written request for this campaign. Record one line in
 that handoff in the form `ahead-request: <campaign-id> <source>`. Use an absolute path to a
 nonempty UTF-8 file or a durable HTTPS link to the original request. A local `#fragment` must
-match a unique Markdown heading written with `#` outside fenced code and raw HTML blocks. Only a
-valid Markdown fence opener starts fenced code. Fence lookalikes inside raw HTML are ignored.
-Raw HTML stops at its list item's end, even when it starts on its parent's line. A custom tag
-can continue the outer item's paragraph. A list fence closes within its item or ends with it.
-Use the lowercase heading text, omitting punctuation other than hyphens and underscores and
-replacing whitespace with hyphens.
+match a unique Markdown heading written with `#` outside fenced code and raw HTML blocks.
+Only valid fence openers start fenced code. Fence lookalikes inside raw HTML are ignored.
+Raw HTML stops at its item's end, even if it starts on its parent's line. A custom tag can
+continue the outer paragraph. A run of equal markers needs one thematic-break check.
+A list fence closes within its item or ends with it. Use the lowercase heading text, omitting
+punctuation other than hyphens and underscores and replacing whitespace with hyphens.
 Do not infer a request from `next`, a recommendation or the signature alone. Without an
 unambiguous matching reference, the line stays a suggestion. Other harnesses keep their manual route.
 
